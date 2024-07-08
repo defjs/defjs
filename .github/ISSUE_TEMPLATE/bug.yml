@@ -1,0 +1,56 @@
+name: "Bug report"
+description: Create a report to help us improve
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please ensure you have checked the [issues](https://github.com/defjs/defjs/issues) and [documentation](https://defjs.org) before asking any questions.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+    validations:
+      required: true
+  - type: input
+    id: reproduction-link
+    attributes:
+      label: Link to minimal reproduction
+      description: |
+        You can choose to use platforms like [StackBlitz](https://stackblitz.com) or a Github repository to create a minimal reproducible example.
+      placeholder: Reproduction Link
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: |
+        Please provide a concise description of how to reproduce this issue.
+      placeholder: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What is expected?
+    validations:
+      required: true
+  - type: textarea
+    id: actually-happening
+    attributes:
+      label: What is actually happening?
+    validations:
+      required: true
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: |
+        Please provide details about your system, such as the operating system and browser version.
+      render: shell
+      placeholder: System, Binaries, Browsers
+  - type: textarea
+    id: additional-comments
+    attributes:
+      label: Any additional comments?
+      description: e.g. some background/context of how you ran into this bug.

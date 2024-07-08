@@ -1,0 +1,23 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "baseUrl": ".",
+    "outDir": "./dist",
+    "declaration": true,
+    "noEmit": false,
+    "emitDeclarationOnly": false,
+    "esModuleInterop": false,
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": true
+  },
+  "include": ["src/index.ts"]
+}

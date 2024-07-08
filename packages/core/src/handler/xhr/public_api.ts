@@ -1,0 +1,1 @@
+export { xhrHandler } from './xhr'

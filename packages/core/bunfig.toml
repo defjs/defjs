@@ -1,0 +1,9 @@
+[run]
+bun = true
+
+[test]
+coverageReporter = ["text", "lcov"]
+coverage = true
+coverageThreshold = 0.2
+coverageReporter = "text"
+coverageDir = "coverage"

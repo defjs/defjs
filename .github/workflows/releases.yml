@@ -1,0 +1,25 @@
+name: Releases lib
+
+on:
+  workflow_dispatch:
+
+jobs:
+  releases-core:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org/
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run --filter '@defjs/core' lint
+      - run: bun run --filter '@defjs/core' test
+      - run: bun run --filter '@defjs/core' build
+      - run: bun run --filter '@defjs/core' pub
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
