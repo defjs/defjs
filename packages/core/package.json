@@ -1,0 +1,25 @@
+{
+	"name": "@defjs/defjs",
+	"version": "0.0.0-test-0005",
+	"type": "module",
+	"scripts": {
+		"build": "bun run ./scripts/build.ts",
+		"test": "bun test",
+		"lint": "biome check",
+		"lint:fix": "biome check --write",
+		"pub": "npm publish"
+	},
+	"peerDependencies": {
+		"typescript": "^5.0"
+	},
+	"files": ["dist"],
+	"module": "dist/index.js",
+	"typings": "dist/index.d.ts",
+	"exports": {
+		"./package.json": "./package.json",
+		".": {
+			"types": "./index.d.ts",
+			"default": "./index.js"
+		}
+	}
+}

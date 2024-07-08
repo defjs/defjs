@@ -1,0 +1,26 @@
+{
+	"name": "defjs",
+	"version": "0.0.0",
+	"type": "module",
+	"workspaces": [
+		"doc",
+		"packages/*"
+	],
+	"scripts": {
+		"dev:doc": "bun run --filter @defjs/doc start",
+    "lint": "bun run --filter '@defjs/*' lint",
+    "lint:fix": "bun run --filter '@defjs/*' lint:fix",
+    "build:doc": "bun run --filter @defjs/doc build",
+    "build:lib": "bun run --filter './packages/*' build",
+    "pub:lib": "bun run --filter './packages/*' pub",
+		"test": "bun test",
+		"changeset": "changeset"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "1.8.3",
+		"@changesets/cli": "^2.27.7",
+		"@types/bun": "^1.1.6",
+		"bun-plugin-dts": "^0.2.3",
+		"typescript": "^5.5.4"
+	}
+}

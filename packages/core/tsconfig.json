@@ -1,0 +1,13 @@
+{
+	"extends": "../../tsconfig.json",
+	"compileOnSave": false,
+	"compilerOptions": {
+		"baseUrl": ".",
+		"outDir": "./dist",
+		"declaration": true,
+		"noEmit": false,
+		"emitDeclarationOnly": false,
+		"esModuleInterop": false
+	},
+	"include": ["src/index.ts"]
+}

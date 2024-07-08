@@ -1,0 +1,7 @@
+[run]
+bun = true
+
+[test]
+coverage = true
+coverageThreshold = 0.2
+coverageReporter = "text"
