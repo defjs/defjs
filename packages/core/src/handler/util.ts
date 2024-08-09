@@ -1,6 +1,6 @@
 import type { HttpRequest } from '../request'
 
-export function getContentLength(headers: Headers): number {
+export function __getContentLength(headers: Headers): number {
   const value = headers.get('Content-Length')
   if (!value) {
     return 0
@@ -14,11 +14,11 @@ export function getContentLength(headers: Headers): number {
   return num
 }
 
-export function getContentType(headers: Headers): string {
+export function __getContentType(headers: Headers): string {
   return headers.get('Content-Type') || ''
 }
 
-export function parseBody(params: {
+export function __parseBody(params: {
   request: HttpRequest
   contentType: string
   content: Uint8Array
@@ -49,7 +49,7 @@ export function parseBody(params: {
   }
 }
 
-export function concatChunks(chunks: Uint8Array[], totalLength: number): Uint8Array {
+export function __concatChunks(chunks: Uint8Array[], totalLength: number): Uint8Array {
   const chunksAll = new Uint8Array(totalLength)
   let position = 0
   for (const chunk of chunks) {
