@@ -34,49 +34,33 @@ Defjs is a library that helps you define and initiate requests, aiming to make i
 import { createGlobalClient, defineRequest, field } from 'https://unpkg.com/@defjs/core/index.min.js';
 
 /**
- * Step 1
- * Setting up a global client
+ * @title Step 1
+ * @file src/main.ts
+ * @description Setting up a global client
  */
-
-// file: src/main.ts
 createGlobalClient({
   host: 'https://example.com',
 });
 
 /**
- * Step 2
- * Define the request api request in the lib/api directory of the project
+ * @title Step 2
+ * @file src/lib/api/user.ts
+ * @description Define the request api request in the lib/api directory of the project
  */
-// file: src/lib/api/user.ts
 const useGetUser = defineRequest({
   method: 'GET',
-  endpoint: '/v1/user',
-  input: {
-    id: field(1).withQuery('uid'),
-    name: field('Jack').withQuery(),
-  },
+  endpoint: '/v1/user/:id',
+  input: field(0).withParam()
 });
 
 /** 
- * Step 3
- * Use defined requests in business code
+ * @title Step 3
+ * @file src/pages/home.ts
+ * @description Use defined requests in business code
  */
-// file: src/pages/home.ts
-const { doRequest, inputValue } = useGetUser();
+const { doRequest } = useGetUser();
 
-inputValue.name = 'wunonglin';
-inputValue.ids = [1, 2];
-
-try {
-  const data = await doRequest(inputValue);
-  console.log(data)
-} catch (e) {
-  if (isHttpResponseError(e)){
-    console.error(e.error);
-  }else {
-    console.error(e); 
-  }
-}
+await doRequest(1);
 ```
 
 ## Documentation

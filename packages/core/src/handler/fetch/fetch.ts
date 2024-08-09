@@ -1,7 +1,8 @@
 import { makeHttpContextToken } from '../../context'
+import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '../../error'
 import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '../../request'
-import { type HttpResponse, type HttpResponseBody, makeResponse } from '../../response'
-import { concatChunks, getContentLength, getContentType, parseBody } from '../util'
+import { type HttpResponse, type HttpResponseBody, __makeResponse } from '../../response'
+import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '../util'
 
 export interface FetchConfig {
   /** A string indicating how the request will interact with the browser's cache to set request's cache. */
@@ -59,10 +60,25 @@ export function __createRequest(request: HttpRequest): Request {
 export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpResponse<unknown>> {
   const downloadProgress = httpRequest.downloadProgress
   const request = __createRequest(httpRequest)
-  const response: Response = await (globalThis || window).fetch(request)
-  const { headers, status, statusText, url } = response
-  const contentLength = getContentLength(headers)
-  const contentType = getContentType(headers)
+  let response: Response
+
+  try {
+    response = await (globalThis || window).fetch(request)
+  } catch (error) {
+    if (error instanceof DOMException) {
+      switch (true) {
+        case error.name === 'AbortError' || error.code === error.ABORT_ERR:
+          throw new HttpErrorResponse({ error: ERR_ABORTED })
+        case error.name === 'TimeoutError' || error.code === error.TIMEOUT_ERR:
+          throw new HttpErrorResponse({ error: ERR_TIMEOUT })
+      }
+    }
+    throw new HttpErrorResponse({ error })
+  }
+
+  const { ok, headers, status, statusText, url } = response
+  const contentLength = __getContentLength(headers)
+  const contentType = __getContentType(headers)
   let body: HttpResponseBody = null
 
   if (response.body) {
@@ -87,16 +103,36 @@ export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpRespon
       })
     }
 
-    const chunksAll = concatChunks(chunks, receivedLength)
+    const chunksAll = __concatChunks(chunks, receivedLength)
 
-    body = parseBody({
-      request: httpRequest,
-      content: chunksAll,
-      contentType,
+    try {
+      body = __parseBody({
+        request: httpRequest,
+        content: chunksAll,
+        contentType,
+      })
+    } catch (error) {
+      throw new HttpErrorResponse({
+        error,
+        status,
+        statusText,
+        headers,
+        url,
+      })
+    }
+  }
+
+  if (!ok) {
+    throw new HttpErrorResponse({
+      status,
+      statusText,
+      headers,
+      url,
+      body,
     })
   }
 
-  return makeResponse({
+  return __makeResponse({
     url,
     status,
     statusText,

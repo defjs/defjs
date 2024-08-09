@@ -1,6 +1,7 @@
+import { ERR_ABORTED, ERR_NETWORK, ERR_TIMEOUT, ERR_UNKNOWN, HttpErrorResponse } from '../../error'
 import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '../../request'
-import { type HttpResponse, makeResponse } from '../../response'
-import { getContentType, parseBody } from '../util'
+import { type HttpResponse, __makeResponse } from '../../response'
+import { __getContentType, __parseBody } from '../util'
 
 export function extractHeaders(value: string): Headers {
   const headers = new Headers()
@@ -57,15 +58,15 @@ export function xhrHandler(httpRequest: HttpRequest): Promise<HttpResponse<unkno
       const status = xhr.status
       const statusText = xhr.statusText
       const headers = extractHeaders(xhr.getAllResponseHeaders())
-      const contentType = getContentType(headers)
-      const body = parseBody({
+      const contentType = __getContentType(headers)
+      const body = __parseBody({
         request: httpRequest,
         contentType,
         content: xhr.response,
       })
 
       resolve(
-        makeResponse({
+        __makeResponse({
           body,
           headers,
           status,
@@ -79,21 +80,21 @@ export function xhrHandler(httpRequest: HttpRequest): Promise<HttpResponse<unkno
 
       switch (event.type) {
         case 'error':
-          error = new Error('Network error')
+          error = ERR_NETWORK
           break
         case 'timeout':
-          error = new Error('Timeout')
+          error = ERR_TIMEOUT
           break
         case 'abort':
-          error = new Error('Abort')
+          error = ERR_ABORTED
           break
         default:
-          error = new Error('Unknown error')
+          error = ERR_UNKNOWN
           break
       }
 
       reject(
-        makeResponse({
+        new HttpErrorResponse({
           error,
           status: xhr.status,
           statusText: xhr.statusText,

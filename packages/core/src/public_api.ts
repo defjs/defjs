@@ -39,9 +39,6 @@ export {
   type MakeResponseOptions,
   type HttpResponse,
   type HttpResponseBody,
-  makeResponse,
-  isHttpResponse,
-  isHttpResponseError,
 } from './response'
 
 export * from './interceptor'
@@ -72,12 +69,12 @@ export {
   ERR_TIMEOUT,
   ERR_NETWORK,
   ERR_NOT_FOUND_HANDLER,
-  ERR_TRANSFORM_RESPONSE,
-  ERR_STREAMING_NOT_IMPLEMENTED,
   ERR_OBSERVE,
   ERR_NOT_SET_ALIAS,
   ERR_UNSUPPORTED_FIELD_TYPE,
   ERR_INVALID_CLIENT,
   ERR_NOT_FOUND_GLOBAL_CLIENT,
   ERR_INVALID_HTTP_CONTEXT_TOKEN,
+  ERR_UNKNOWN,
+  HttpErrorResponse,
 } from './error'
