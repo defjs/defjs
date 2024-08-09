@@ -4,7 +4,6 @@ import { z } from 'zod'
 import { type Client, createClient } from './client'
 import { field } from './field'
 import { type HttpRequest, __detectContentTypeHeader, __fillRequestFromField, __fillUrl, __serializeBody, defineRequest } from './request'
-import { isHttpResponse } from './response'
 
 describe('detect Content-Type', () => {
   test('should FormData is multipart/form-data', () => {
@@ -53,6 +52,10 @@ describe('serialize body', () => {
 
   test('should Blob is Blob', () => {
     expect(__serializeBody(new Blob())).toBeInstanceOf(Blob)
+  })
+
+  test('should URLSearchParams is String', () => {
+    expect(__serializeBody(new URLSearchParams())).toBeInstanceOf(URLSearchParams)
   })
 
   test('should ArrayBuffer is ArrayBuffer', () => {
@@ -122,11 +125,12 @@ describe('define request', () => {
         },
         transformResponse: res => schema.parse(res.body),
       })
-      const { doRequest, inputValue } = useRequest()
+      const { doRequest, getInitValue } = useRequest()
       const user = { id: 1, name: 'Jack' }
-      inputValue.id = user.id
-      inputValue.name = user.name
-      const res = await doRequest(inputValue, { client })
+      const data = getInitValue()
+      data.id = user.id
+      data.name = user.name
+      const res = await doRequest(data, { client })
       expect(res).toEqual(user)
     })
 
@@ -140,15 +144,7 @@ describe('define request', () => {
       try {
         await doRequest({ client })
       } catch (e) {
-        if (!isHttpResponse(e)) {
-          expect(true).toBeTrue()
-          return
-        }
-        if (e.ok) {
-          expect(true).toBeFalse()
-          return
-        }
-        expect(e.error).toBeInstanceOf(Error)
+        expect(e).toBeInstanceOf(Error)
       }
     })
   })
@@ -168,6 +164,26 @@ describe('define request', () => {
         host: 'https://example.com',
         endpoint: '/v1/:uid/:username',
       }) as HttpRequest
+
+    test('should fill fieldGroup is working', async () => {
+      const data = { id: 1, name: 'Jack' }
+      const hq = baseHttpRequest()
+      const fields = {
+        id: field(1).withParam('uid'),
+        name: field('John').withParam('username'),
+        data: field(data).withUrlForm('form_data'),
+      }
+
+      await __fillRequestFromField(hq, fields, {})
+
+      expect(hq.endpoint).toEqual('/v1/1/John')
+      expect(__detectContentTypeHeader(hq.body)).toBe('application/x-www-form-urlencoded;charset=UTF-8')
+
+      const body = hq.body as URLSearchParams
+      expect(body.toString()).toBe(new URLSearchParams([['form_data', JSON.stringify(data)]]).toString())
+      console.log(body.toString())
+      console.log(new URLSearchParams([['form_data', JSON.stringify(data)]]).toString())
+    })
 
     test('should fill fieldGroup is working', async () => {
       const hq = baseHttpRequest()
