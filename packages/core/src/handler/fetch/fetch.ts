@@ -1,6 +1,6 @@
 import { makeHttpContextToken } from '../../context'
 import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '../../request'
-import { type HttpResponse, type HttpResponseBody, makeResponse } from '../../response'
+import { type HttpResponse, type HttpResponseBody, __makeResponse } from '../../response'
 import { concatChunks, getContentLength, getContentType, parseBody } from '../util'
 
 export interface FetchConfig {
@@ -96,7 +96,7 @@ export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpRespon
     })
   }
 
-  return makeResponse({
+  return __makeResponse({
     url,
     status,
     statusText,

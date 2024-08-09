@@ -1,9 +1,11 @@
+import { ERR_TIMEOUT, HttpErrorResponse } from '../error'
 import type { HttpRequest } from '../request'
-import { makeResponse } from '../response'
+import { type HttpResponse, __makeResponse } from '../response'
 import type { HttpHandler } from './handler'
 
 export function makeFakeHandler(init: {
   onRequestBefore?: (req: HttpRequest) => void
+  onRequestAfter?: (resp: HttpResponse<unknown>) => void
   response?: {
     timeout?: number
     status?: number
@@ -12,7 +14,8 @@ export function makeFakeHandler(init: {
     body?: unknown
   }
 }): HttpHandler {
-  const { onRequestBefore, response } = init
+  const { onRequestBefore, onRequestAfter, response } = init
+  const { timeout, status, statusText, body, headers } = response
   return (req: HttpRequest) => {
     return new Promise((resolve, reject) => {
       const url = new URL(req.endpoint, req.host)
@@ -20,26 +23,28 @@ export function makeFakeHandler(init: {
       onRequestBefore?.(req)
 
       // todo
-      if (response?.timeout && response.timeout > 0) {
+      if (timeout && timeout > 0) {
         setTimeout(() => {
           reject(
-            makeResponse({
+            new HttpErrorResponse({
+              error: ERR_TIMEOUT,
               url: url.toString(),
-              statusText: 'Timeout',
             }),
           )
-        }, response.timeout)
+        }, timeout)
       }
 
-      return resolve(
-        makeResponse({
-          url: url.toString(),
-          status: response?.status || 0,
-          statusText: response?.statusText || '',
-          headers: response?.headers || new Headers(),
-          body: response?.body || undefined,
-        }),
-      )
+      const resp = __makeResponse({
+        url: url.toString(),
+        status: status || 0,
+        statusText: statusText || '',
+        headers: headers || new Headers(),
+        body: body || undefined,
+      })
+
+      onRequestAfter?.(resp)
+
+      return resolve(resp)
     })
   }
 }

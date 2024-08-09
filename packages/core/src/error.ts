@@ -22,7 +22,33 @@ export const ERR_NOT_FOUND_GLOBAL_CLIENT = new Error('ERR_NOT_FOUND_GLOBAL_CLIEN
 
 export const ERR_INVALID_HTTP_CONTEXT_TOKEN = new Error('ERR_INVALID_HTTP_CONTEXT_TOKEN')
 
+export const ERR_UNKNOWN = new Error('ERR_UNKNOWN')
+
 export function __withErrorCause<T>(err: Error, cause: T): Error {
   err.cause = cause
   return err
+}
+
+export class HttpErrorResponse extends Error {
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: unknown
+
+  constructor(init: {
+    error?: unknown
+    status?: number
+    statusText?: string
+    url?: string
+    headers?: Headers
+    body?: unknown
+  }) {
+    super('HttpErrorResponse', { cause: init.error })
+    this.url = init.url ?? ''
+    this.status = init.status ?? 0
+    this.statusText = init.statusText ?? ''
+    this.headers = init.headers ?? new Headers()
+    this.body = init.body
+  }
 }
