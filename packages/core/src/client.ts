@@ -1,4 +1,4 @@
-import { ERR_INVALID_CLIENT, ERR_NOT_FOUND_GLOBAL_CLIENT } from 'src/error'
+import { ERR_INVALID_CLIENT, ERR_NOT_FOUND_GLOBAL_CLIENT } from './error'
 import type { HttpHandler } from './handler'
 import { fetchHandler } from './handler'
 import type { InterceptorFn } from './interceptor'

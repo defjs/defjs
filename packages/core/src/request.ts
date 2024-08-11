@@ -1,23 +1,12 @@
-import {
-  ERR_ABORTED,
-  ERR_NETWORK,
-  ERR_NOT_FOUND_HANDLER,
-  ERR_NOT_SET_ALIAS,
-  ERR_OBSERVE,
-  ERR_STREAMING_NOT_IMPLEMENTED,
-  ERR_TIMEOUT,
-  ERR_TRANSFORM_RESPONSE,
-  ERR_UNSUPPORTED_FIELD_TYPE,
-  __withErrorCause,
-} from 'src/error'
 import { type Client, getClientConfig, getGlobalClient, isClient } from './client'
 import { type HttpContext, makeHttpContext } from './context'
+import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_OBSERVE, ERR_UNSUPPORTED_FIELD_TYPE, HttpErrorResponse } from './error'
 import { type Field, FieldType, __getFieldMetadata, isField, isFieldGroup } from './field'
 import type { HttpHandler } from './handler'
 import { getGlobalHttpHandler } from './handler/handler'
 import type { InterceptorFn } from './interceptor'
 import { makeInterceptorChain } from './interceptor/interceptor'
-import { type HttpResponse, makeResponse } from './response'
+import { type HttpResponse, __makeResponse } from './response'
 import type { AsyncValidatorFn, ValidatorFn } from './validator'
 
 export type HttpResponseType = 'arraybuffer' | 'blob' | 'json' | 'text'
@@ -51,7 +40,7 @@ export interface HttpRequest {
 
   endpoint: string
 
-  body?: Blob | ArrayBuffer | FormData | object | string | number | boolean | null
+  body?: Blob | ArrayBuffer | FormData | URLSearchParams | object | string | number | boolean | null
 
   headers?: Headers
 
@@ -73,19 +62,18 @@ export interface HttpRequest {
 
   /**
    * default：body
-   *
-   * @todo Implement streaming response
    */
-  observe?: 'body' | 'stream' | 'response'
+  observe?: 'body' | 'response'
 
   abort?: AbortSignal
 }
 
-export function __serializeBody(body: HttpRequest['body']): ArrayBuffer | Blob | FormData | string | null {
+export function __serializeBody(body: HttpRequest['body']): ArrayBuffer | Blob | FormData | URLSearchParams | string | null {
   switch (true) {
     case body instanceof FormData:
     case body instanceof Blob:
     case body instanceof ArrayBuffer:
+    case body instanceof URLSearchParams:
     case typeof body === 'string':
       return body
     case typeof body === 'object':
@@ -154,7 +142,7 @@ type DoRequestFn<Input = unknown, Output = unknown> = Input extends undefined
 
 export type UseRequestFn<Output = unknown, Input = unknown> = () => {
   doRequest: DoRequestFn<Input, Output>
-  inputValue: Input extends Field<infer V>
+  getInitValue: () => Input extends Field<infer V>
     ? V
     : Input extends { [K in keyof Input]: Field<any> }
       ? { [K in keyof Input]: RequestInputValue<Input[K]> }
@@ -163,7 +151,7 @@ export type UseRequestFn<Output = unknown, Input = unknown> = () => {
   setDownloadProgress: (fn: HttpProgressFn) => void
 }
 
-export function __buildFieldValue<Input>(input?: Input): RequestInputValue<Input> {
+export function __buildFieldDefaultValue<Input>(input?: Input): RequestInputValue<Input> {
   if (isField(input)) {
     return input() as RequestInputValue<Input>
   }
@@ -313,6 +301,8 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
     let abortController: AbortController | undefined
     let abortSignal: AbortSignal
 
+    const getInitValue = () => __buildFieldDefaultValue(requestOptions.input)
+
     const setUploadProgress = (fn: HttpProgressFn) => {
       uploadProgress = fn
     }
@@ -338,6 +328,7 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
       }
 
       if (requiredInput && !input) {
+        // todo 打印缺失的字段
         throw new Error(`Because the request has input, the first argument must be the input value`)
       }
 
@@ -387,45 +378,22 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
       }
 
       const chain = makeInterceptorChain([...(clientOptions?.interceptors || []), ...(requestOptions?.interceptors || [])])
-
-      let res: HttpResponse<unknown>
-
-      try {
-        res = await chain(req, handler)
-      } catch (error) {
-        if (error instanceof DOMException) {
-          switch (true) {
-            case error.name === 'AbortError' || error.code === error.ABORT_ERR:
-              throw ERR_ABORTED
-            case error.name === 'TimeoutError' || error.code === error.TIMEOUT_ERR:
-              throw ERR_TIMEOUT
-          }
-        }
-        throw makeResponse({
-          error: __withErrorCause(ERR_NETWORK, error),
-        })
-      }
+      let res = await chain(req, handler)
 
       if (typeof requestOptions.transformResponse === 'function') {
         try {
-          res = makeResponse({
+          res = __makeResponse({
             ...res,
             body: requestOptions.transformResponse(res),
-            error: undefined,
           })
         } catch (error) {
-          throw makeResponse({
-            ...res,
-            error: __withErrorCause(ERR_TRANSFORM_RESPONSE, error),
-          })
+          throw new HttpErrorResponse({ error })
         }
       }
 
       switch (req.observe) {
         case 'body':
           return res.body
-        case 'stream':
-          throw ERR_STREAMING_NOT_IMPLEMENTED
         case 'response':
           return res
         default:
@@ -435,7 +403,7 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
 
     return {
       doRequest,
-      inputValue: __buildFieldValue(requestOptions.input),
+      getInitValue,
       setUploadProgress,
       setDownloadProgress,
     }
@@ -464,13 +432,28 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
     return typeof input === 'object' && input !== null
   }
 
+  function serializeToString(value: unknown): string {
+    switch (true) {
+      case Array.isArray(value):
+      case typeof value === 'object' && value !== null:
+        return JSON.stringify(value)
+      case typeof value === 'object' && value === null:
+      case typeof value === 'boolean':
+      case typeof value === 'number':
+      case typeof value === 'string':
+        return String(value)
+      default:
+        throw new Error('Unsupported value type')
+    }
+  }
+
   function appendValue<T extends URLSearchParams | Headers | FormData>(sp: T, key: string, value: unknown): T {
     if (Array.isArray(value)) {
       for (const v of value) {
-        sp.append(key, String(v))
+        sp.append(key, serializeToString(v))
       }
     } else {
-      sp.set(key, String(value))
+      sp.set(key, serializeToString(value))
     }
     return sp
   }
@@ -478,11 +461,11 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
   function setValue(sp: Map<string, string>, key: string, value: unknown): Map<string, string> {
     if (Array.isArray(value)) {
       for (const v of value) {
-        sp.set(key, String(v))
+        setValue(sp, key, serializeToString(v))
       }
-    } else {
-      sp.set(key, String(value))
     }
+
+    sp.set(key, serializeToString(value))
     return sp
   }
 
@@ -529,6 +512,13 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
           body = appendValue(new FormData(), aliasName, fieldValue)
           break
         }
+        case FieldType.UrlForm: {
+          if (!aliasName) {
+            throw ERR_NOT_SET_ALIAS
+          }
+          body = appendValue(new URLSearchParams(), aliasName, fieldValue)
+          break
+        }
         case FieldType.Json:
         case FieldType.Body:
           body = fieldValue
@@ -551,9 +541,11 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
     let params = new Map<string, string>()
     let queryParams = new URLSearchParams()
     let headers = new Headers()
+    let urlForm = new URLSearchParams()
     let formData = new FormData()
     const json = {}
-    let body: any = undefined
+    let body = undefined
+    let lastBodyField: FieldType.Body | FieldType.UrlForm | FieldType.Json | FieldType.Form | undefined
 
     for (const [propertyKey, field] of Object.entries(fieldOrFieldGroup)) {
       const meta = __getFieldMetadata(field)
@@ -567,13 +559,15 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
         }
 
         switch (type) {
-          case FieldType.Json:
+          case FieldType.Json: {
             Object.defineProperty(json, valueKey, {
               value,
               writable: true,
               enumerable: true,
             })
+            lastBodyField = FieldType.Json
             break
+          }
           case FieldType.Query:
             queryParams = appendValue(queryParams, valueKey, value)
             break
@@ -583,12 +577,21 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
           case FieldType.Header:
             headers = appendValue(headers, valueKey, value)
             break
-          case FieldType.Form:
+          case FieldType.Form: {
             formData = appendValue(formData, valueKey, value)
+            lastBodyField = FieldType.Form
             break
-          case FieldType.Body:
+          }
+          case FieldType.UrlForm: {
+            urlForm = appendValue(urlForm, valueKey, value)
+            lastBodyField = FieldType.UrlForm
+            break
+          }
+          case FieldType.Body: {
             body = value
+            lastBodyField = FieldType.Body
             break
+          }
         }
       }
     }
@@ -596,12 +599,20 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
     request.endpoint = __fillUrl(request.endpoint, params)
     request.queryParams = queryParams
     request.headers = headers
-    if (body) {
-      request.body = body
-    } else if (Array.from(formData.keys()).length > 0) {
-      request.body = formData
-    } else if (Object.keys(json).length) {
-      request.body = json
+
+    switch (lastBodyField) {
+      case FieldType.Body:
+        request.body = body
+        break
+      case FieldType.Form:
+        request.body = formData
+        break
+      case FieldType.UrlForm:
+        request.body = urlForm
+        break
+      case FieldType.Json:
+        request.body = json
+        break
     }
 
     return
@@ -609,11 +620,3 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
 
   throw ERR_UNSUPPORTED_FIELD_TYPE
 }
-
-/**
- * @todo Implement streaming requests
- */
-// function doRequestStream(req: HttpRequest): void {
-//   console.log(req)
-//   return void 0
-// }

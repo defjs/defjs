@@ -44,6 +44,12 @@ describe('test field', () => {
     expect(meta.alias.has(FieldType.Header)).toBeTrue()
   })
 
+  test('should field with url form', () => {
+    const id = field(1).withUrlForm('id')
+    const meta = __getFieldMetadata(id)
+    expect(meta.alias.has(FieldType.UrlForm)).toBeTrue()
+  })
+
   test('should field with body', () => {
     const id = field(1).withBody()
     const meta = __getFieldMetadata(id)

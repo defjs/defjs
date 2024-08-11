@@ -9,6 +9,7 @@ export enum FieldType {
   Header,
   Form,
   Body,
+  UrlForm,
 }
 
 export interface FieldMetadata<T = undefined> {
@@ -23,6 +24,7 @@ export type Field<T = undefined> = (() => T) & {
   withQuery(alias?: string): Field<T>
   withParam(alias?: string): Field<T>
   withHeader(alias?: string): Field<T>
+  withUrlForm(alias?: string): Field<T>
   withBody(): Field<T>
   withValidators(...fn: ValidatorFn<T>[]): Field<T>
   withAsyncValidators(...fn: AsyncValidatorFn<T>[]): Field<T>
@@ -62,6 +64,10 @@ export function field<T = undefined>(defaultValue?: T): Field<T> {
   }
   getter.withHeader = alias => {
     meta.alias.set(FieldType.Header, alias)
+    return getter
+  }
+  getter.withUrlForm = alias => {
+    meta.alias.set(FieldType.UrlForm, alias)
     return getter
   }
   getter.withBody = () => {

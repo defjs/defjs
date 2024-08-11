@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { HttpErrorResponse } from '../error'
 import { makeFakeHandler } from './test_handler'
 
 describe('Test handler', () => {
@@ -27,5 +28,24 @@ describe('Test handler', () => {
     expect(response.statusText).toEqual('OK')
     expect(response.headers.get('Content-Type')).toEqual('application/json')
     expect(response.body).toEqual(body)
+  })
+
+  test('should create a fake handler with timeout', async () => {
+    const handler = makeFakeHandler({
+      response: {
+        timeout: 100,
+      },
+    })
+
+    try {
+      await handler({
+        host: 'https://example.com',
+        endpoint: '/v1/user',
+        method: 'GET',
+      })
+    } catch (error) {
+      expect(error).toBeInstanceOf(HttpErrorResponse)
+      expect(error).toBeInstanceOf(Error)
+    }
   })
 })

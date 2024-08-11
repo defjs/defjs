@@ -1,4 +1,4 @@
-import { ERR_INVALID_HTTP_CONTEXT_TOKEN } from 'src/error'
+import { ERR_INVALID_HTTP_CONTEXT_TOKEN } from './error'
 
 export const HTTP_CONTEXT_TOKEN = Symbol('HttpContextToken')
 
