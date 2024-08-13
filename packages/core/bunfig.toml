@@ -2,6 +2,7 @@
 bun = true
 
 [test]
+preload = ["./test-setup.ts"]
 coverageReporter = ["text", "lcov"]
 coverage = true
 coverageThreshold = 0.2

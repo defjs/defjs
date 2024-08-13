@@ -63,13 +63,10 @@ export const max = (max: number) => {
   }) as ValidatorFn
 }
 
-export const pattern = (pattern: string | RegExp) => {
+export const pattern = (pattern: RegExp) => {
   return ((value: unknown) => {
     if (typeof value !== 'string') {
       return new Error('invalid string')
-    }
-    if (typeof pattern === 'string') {
-      pattern = new RegExp(pattern)
     }
     if (!pattern.test(value)) {
       return new Error('pattern')

@@ -1,45 +1,11 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import * as bun from 'bun'
+import { describe, expect, test } from 'bun:test'
+import { testServer } from '../../../test-setup'
 import { makeHttpContext } from '../../context'
+import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '../../error'
 import type { HttpRequest } from '../../request'
 import { FETCH_CONFIG_KEY, __createRequest, fetchHandler } from './fetch'
 
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
-
 describe('Fetch handler', () => {
-  let svr: bun.Server
-
-  beforeEach(() => {
-    svr = bun.serve({
-      port: 0,
-      fetch: async request => {
-        const url = new URL(request.url)
-
-        switch (url.pathname) {
-          case '/text': {
-            return new Response('Hello World!')
-          }
-          case '/json': {
-            return Response.json({ id: 1 })
-          }
-          case '/null': {
-            return new Response()
-          }
-          case '/delay': {
-            await delay(10000)
-            return new Response()
-          }
-        }
-
-        return new Response(request.body)
-      },
-    })
-  })
-
-  afterEach(() => {
-    svr.stop()
-  })
-
   test('should create a request', () => {
     const headers = new Headers()
     headers.set('Content-Type', 'application/json')
@@ -90,7 +56,7 @@ describe('Fetch handler', () => {
   test('should response is null', async () => {
     const abort = new AbortController()
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/json',
       method: 'GET',
       abort: abort.signal,
@@ -100,18 +66,58 @@ describe('Fetch handler', () => {
     expect(body).toBeNull()
   })
 
-  test('should throw network error', async () => {
+  test('should abort network', async () => {
     const abort = new AbortController()
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/delay',
       method: 'GET',
       abort: abort.signal,
+      queryParams: new URLSearchParams({ ms: '5000' }),
     }
 
     setTimeout(() => {
       abort.abort()
-    }, 500)
+    }, 0)
+
+    try {
+      await fetchHandler(hq)
+    } catch (e) {
+      if (!(e instanceof HttpErrorResponse)) {
+        throw new Error('Not HttpErrorResponse')
+      }
+      expect(e.cause).toBe(ERR_ABORTED)
+    }
+  })
+
+  test('should timeout network', async () => {
+    const signal = AbortSignal.timeout(100)
+    const hq: HttpRequest = {
+      host: testServer.url.origin,
+      endpoint: '/delay',
+      method: 'GET',
+      abort: signal,
+      queryParams: new URLSearchParams({ ms: '5000' }),
+    }
+
+    try {
+      await fetchHandler(hq)
+    } catch (e) {
+      if (!(e instanceof HttpErrorResponse)) {
+        throw new Error('Not HttpErrorResponse')
+      }
+      expect(e.cause).toBe(ERR_TIMEOUT)
+    }
+  })
+
+  test('should throw error when post request set body', async () => {
+    const hq: HttpRequest = {
+      host: testServer.url.origin,
+      endpoint: '/delay',
+      method: 'GET',
+      body: 'Hello World!',
+    }
+
     try {
       await fetchHandler(hq)
     } catch (e) {
@@ -121,7 +127,7 @@ describe('Fetch handler', () => {
 
   test('should body is json', async () => {
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/json',
       method: 'GET',
       responseType: 'json',
@@ -133,7 +139,7 @@ describe('Fetch handler', () => {
 
   test('should body is text', async () => {
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/json',
       method: 'GET',
       responseType: 'text',
@@ -143,9 +149,24 @@ describe('Fetch handler', () => {
     expect(body).toEqual(JSON.stringify({ id: 1 }))
   })
 
+  test('should throw error when http statusCode not ok', async () => {
+    const hq: HttpRequest = {
+      host: testServer.url.origin,
+      endpoint: '/500',
+      method: 'GET',
+      responseType: 'text',
+    }
+
+    try {
+      await fetchHandler(hq)
+    } catch (e) {
+      expect(e).toBeInstanceOf(Error)
+    }
+  })
+
   test('should body is arraybuffer', async () => {
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/json',
       method: 'GET',
       responseType: 'arraybuffer',
@@ -157,7 +178,7 @@ describe('Fetch handler', () => {
 
   test('should body is blob', async () => {
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/json',
       method: 'GET',
       responseType: 'blob',
@@ -167,10 +188,25 @@ describe('Fetch handler', () => {
     expect(body).toBeInstanceOf(Blob)
   })
 
+  test('should throw error when need json but return text', async () => {
+    const hq: HttpRequest = {
+      host: testServer.url.origin,
+      endpoint: '/text',
+      method: 'GET',
+      responseType: 'json',
+    }
+
+    try {
+      await fetchHandler(hq)
+    } catch (e) {
+      expect(e).toBeInstanceOf(Error)
+    }
+  })
+
   test('should call downloadProgress', async () => {
     let called = false
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/json',
       method: 'GET',
       responseType: 'text',
@@ -185,7 +221,7 @@ describe('Fetch handler', () => {
 
   test('should parse body throw error', async () => {
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/',
       method: 'GET',
       responseType: 'json',
@@ -205,7 +241,7 @@ describe('Fetch handler', () => {
     context.set(FETCH_CONFIG_KEY, { credentials })
 
     const hq: HttpRequest = {
-      host: svr.url.origin,
+      host: testServer.url.origin,
       endpoint: '/',
       method: 'GET',
       context,

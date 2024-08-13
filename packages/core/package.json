@@ -1,6 +1,6 @@
 {
   "name": "@defjs/core",
-  "version": "0.0.0-test-001",
+  "version": "0.0.0-test-002",
   "type": "module",
   "module": "dist/index.js",
   "typings": "dist/index.d.ts",

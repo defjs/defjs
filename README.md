@@ -5,11 +5,11 @@
 </p>
 <br/>
 <p align="center">
-  <a href="https://npmjs.com/package/@defjs/core"><img src="https://img.shields.io/npm/v/%40defjs%2Fcore" alt="npm package"></a>
-  <a href="https://npmjs.com/package/@defjs/core"><img src="https://img.shields.io/npm/dm/%40defjs%2Fcore" alt="monthly downloads"></a>
-  <a href="https://github.com/defjs/defjs/actions/workflows/ci.yml"><img src="https://github.com/defjs/defjs/actions/workflows/ci.yml/badge.svg?branch=main" alt="build status"></a>
-  <a href="https://github.com/defjs/defjs/blob/main/LICENSE"><img src="https://img.shields.io/github/license/defjs/defjs" alt="license"></a>
-  <a href="https://codecov.io/gh/defjs/defjs"><img src="https://codecov.io/gh/defjs/defjs/graph/badge.svg?token=2XYK7Y67ZK" alt="codecov"/></a>
+  <a href="https://npmjs.com/package/@defjs/core"><img src="https://img.shields.io/npm/v/%40defjs%2Fcore?color=%23000&style=flat-square" alt="npm package"></a>
+  <a href="https://npmjs.com/package/@defjs/core"><img src="https://img.shields.io/npm/dm/%40defjs%2Fcore?color=%23000&style=flat-square" alt="monthly downloads"></a>
+  <a href="https://github.com/defjs/defjs/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/defjs/defjs/ci.yml?branch=main&color=%23000&style=flat-square" alt="build status"></a>
+  <a href="https://github.com/defjs/defjs/blob/main/LICENSE"><img src="https://img.shields.io/github/license/defjs/defjs?color=%23000&style=flat-square" alt="license"></a>
+  <a href="https://codecov.io/gh/defjs/defjs"><img src="https://img.shields.io/codecov/c/gh/defjs/defjs?color=%23000&style=flat-square" alt="codecov"/></a>
 </p>
 <br/>
 
@@ -25,42 +25,59 @@ Defjs is a library that helps you define and initiate requests, aiming to make i
 -	Supports JS/TS with complete type.
 -	Supports any JS runtime.
 -	Supports Interceptors.
--	ESM Only
+-	Supports ESM
 -	🚧 Supports Mini Programs. (WIP)
 
 ## Quick Start
 
-```typescript
-import { createGlobalClient, defineRequest, field } from 'https://unpkg.com/@defjs/core/index.min.js';
+> Use for package manager
+```shell
+npm install @defjs/core
+// or
+yarn install @defjs/core
+// or
+pnpm install @defjs/core
+// or
+bun install @defjs/core
+```
 
-/**
- * @title Step 1
- * @file src/main.ts
- * @description Setting up a global client
- */
-createGlobalClient({
-  host: 'https://example.com',
-});
+> Use for CDN
 
-/**
- * @title Step 2
- * @file src/lib/api/user.ts
- * @description Define the request api request in the lib/api directory of the project
- */
-const useGetUser = defineRequest({
-  method: 'GET',
-  endpoint: '/v1/user/:id',
-  input: field(0).withParam()
-});
+**Only can use ES modules**
 
-/** 
- * @title Step 3
- * @file src/pages/home.ts
- * @description Use defined requests in business code
- */
-const { doRequest } = useGetUser();
+```html
+<script type="module">
+  import {
+    createGlobalClient,
+    defineRequest,
+    field
+  } from 'https://unpkg.com/@defjs/core/index.es.min.js';
 
-await doRequest(1);
+  /**
+   * @title Step 1
+   * @file src/main.ts
+   * @description Setting up a global client
+   */
+  createGlobalClient({
+    host: 'https://example.com',
+  });
+
+  /**
+   * @title Step 2
+   * @file src/lib/api/user.ts
+   * @description Define the request api request in the lib/api directory of the project
+   */
+  const useGetUser = defineRequest('GET', '/v1/user/:id').withField(field(0).withParam());
+
+  /**
+   * @title Step 3
+   * @file src/pages/home.ts
+   * @description Use defined requests in business code
+   */
+  const { doRequest } = useGetUser();
+
+  await doRequest(1);
+</script>
 ```
 
 ## Documentation
@@ -71,7 +88,7 @@ Check out the [defjs.org](https://defjs.org) to get started.
 
 | Package                      | Version                                                        |
 |------------------------------|:---------------------------------------------------------------|
-| [@defjs/core](packages/core) | ![core version](https://img.shields.io/npm/v/%40defjs%2Fcore) |
+| [@defjs/core](packages/core) | ![core version](https://img.shields.io/npm/v/%40defjs%2Fcore?color=%23000&style=flat-square) |
 
 ## Todo
 
@@ -94,3 +111,4 @@ Check out the [defjs.org](https://defjs.org) to get started.
 - [tRPC](https://trpc.io)
 - [Google API design guide](https://cloud.google.com/apis/design)
 - [Tanstack Query](https://tanstack.com/query)
+- [Rxjs](https://rxjs.dev)

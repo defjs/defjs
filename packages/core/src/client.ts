@@ -48,7 +48,7 @@ export function createClient(options: ClientOptions): Client {
   }
 }
 
-export function cloneClient(client: Client, options: ClientOptions): Client {
+export function cloneClient(client: Client, options: Partial<ClientOptions>): Client {
   const preConf = getClientConfig(client)
   const conf: ClientConfig = {
     ...preConf,
