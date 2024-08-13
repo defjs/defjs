@@ -18,8 +18,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": true,
-    "nullishCoalescing": true
+    "noPropertyAccessFromIndexSignature": true
   },
   "include": ["src/index.ts", "src/**/*.spec.ts"]
 }
