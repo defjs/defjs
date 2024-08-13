@@ -30,7 +30,8 @@ export interface HttpProgressEvent {
 
 export type HttpProgressFn = (event: HttpProgressEvent) => void
 
-export type TransformRequestFn<Input = unknown> = (input: Input, request: HttpRequest) => HttpRequest['body']
+// No suitable scenario was found.
+// export type TransformRequestFn<Input = unknown> = (input: Input, request: HttpRequest) => HttpRequest['body']
 export type TransformResponseFn<Output = unknown> = (response: HttpResponse<unknown>) => Output
 
 export interface HttpRequest {
@@ -115,40 +116,11 @@ export type RequestInputValue<T> = T extends Field<infer V>
     ? { [K in keyof T]: RequestInputValue<T[K]> }
     : never
 
-export type RequestOptions<Output = unknown, Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined> = {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType?: HttpResponseType
-  context?: HttpContext
-  observe?: 'body' | 'response'
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn
-  transformResponse?: TransformResponseFn<Output>
-}
-
 export type DoRequestOptions = {
   abort?: AbortSignal
   handler?: HttpHandler
   client?: Client
   timeout?: number
-}
-
-type DoRequestFn<Input = unknown, Output = unknown> = Input extends undefined
-  ? (options?: DoRequestOptions) => Promise<Output>
-  : (input: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<Output>
-
-export type UseRequestFn<Output = unknown, Input = unknown> = () => {
-  doRequest: DoRequestFn<Input, Output>
-  getInitValue: () => Input extends Field<infer V>
-    ? V
-    : Input extends { [K in keyof Input]: Field<any> }
-      ? { [K in keyof Input]: RequestInputValue<Input[K]> }
-      : undefined
-  setUploadProgress: (fn: HttpProgressFn) => void
-  setDownloadProgress: (fn: HttpProgressFn) => void
 }
 
 export function __buildFieldDefaultValue<Input>(input?: Input): RequestInputValue<Input> {
@@ -167,141 +139,71 @@ export function __buildFieldDefaultValue<Input>(input?: Input): RequestInputValu
   return undefined as RequestInputValue<Input>
 }
 
-/** Observe: Body */
+export type ObserveType<Observe, Output> = Observe extends 'body' ? Output : Observe extends 'response' ? HttpResponse<Output> : never
 
-export function defineRequest<
-  Output = unknown,
+export type UseRequestFn<Input, Output, Observe> = {
+  doRequest: Input extends undefined
+    ? (options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
+    : (input: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
+
+  getInitValue: () => Input extends Field<infer V>
+    ? V
+    : Input extends { [K in keyof Input]: Field<any> }
+      ? { [K in keyof Input]: RequestInputValue<Input[K]> }
+      : undefined
+
+  setUploadProgress: (fn: HttpProgressFn) => void
+
+  setDownloadProgress: (fn: HttpProgressFn) => void
+}
+
+export interface DefineRequest<
   Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined,
->(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType?: 'json'
-  observe?: 'body'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn<Output>
-}): UseRequestFn<Output, Input>
-
-export function defineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined>(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType: 'text'
-  observe?: 'body'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn
-}): UseRequestFn<string, Input>
-
-export function defineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined>(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType: 'blob'
-  observe?: 'body'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn
-}): UseRequestFn<Blob, Input>
-
-export function defineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined>(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType: 'arraybuffer'
-  observe?: 'body'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn
-}): UseRequestFn<ArrayBuffer, Input>
-
-/** Observe: Response */
-
-export function defineRequest<
   Output = unknown,
-  Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined,
->(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType?: 'json'
-  observe: 'response'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn<Output>
-}): UseRequestFn<HttpResponse<Output>, Input>
+  Observe extends 'body' | 'response' = 'body',
+> {
+  (): UseRequestFn<Input, Output, Observe>
 
-export function defineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined>(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType?: 'text'
-  observe: 'response'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn
-}): UseRequestFn<HttpResponse<string>, Input>
+  withField<I extends Field<any> | Record<PropertyKey, Field<any>>>(value: I): DefineRequest<I, Output, Observe>
 
-export function defineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined>(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType: 'blob'
-  observe: 'response'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn
-}): UseRequestFn<HttpResponse<Blob>, Input>
+  withInterceptors(value: InterceptorFn[]): DefineRequest<Input, Output, Observe>
 
-export function defineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined>(options: {
-  method: string
-  endpoint: string
-  input?: Input
-  interceptors?: InterceptorFn[]
-  responseType?: 'arraybuffer'
-  observe: 'response'
-  context?: HttpContext
-  withCredentials?: boolean
-  validators?: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
-  transformRequest?: TransformRequestFn<RequestInputValue<Input>>
-  transformResponse?: TransformResponseFn
-}): UseRequestFn<HttpResponse<ArrayBuffer>, Input>
+  withContext(value: HttpContext): DefineRequest<Input, Output, Observe>
 
-export function defineRequest(options: RequestOptions): UseRequestFn {
-  const requestOptions: RequestOptions = {
-    ...options,
-  }
-  const requiredInput: boolean = !!requestOptions.input
+  withCredentials(value: boolean): DefineRequest<Input, Output, Observe>
 
-  return () => {
+  withValidators(
+    value: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[],
+  ): DefineRequest<Input, Output, Observe>
+
+  withTransformResponse<O>(fn: TransformResponseFn<O>): DefineRequest<Input, O, Observe>
+
+  withObserve(value: 'body'): DefineRequest<Input, Output, 'body'>
+  withObserve(value: 'response'): DefineRequest<Input, Output, 'response'>
+
+  withResponseType(value: 'json'): DefineRequest<Input, Output, Observe>
+  withResponseType(value: 'text'): DefineRequest<Input, string, Observe>
+  withResponseType(value: 'blob'): DefineRequest<Input, Blob, Observe>
+  withResponseType(value: 'arraybuffer'): DefineRequest<Input, ArrayBuffer, Observe>
+}
+
+export function defineRequest<Output>(method: string, endpoint: string): DefineRequest<undefined, Output> {
+  let requiredInput = false
+  let field: Field<any> | Record<PropertyKey, Field<any>> | undefined
+  let interceptors: InterceptorFn[] = []
+  let responseType: HttpResponseType = 'json'
+  let context: HttpContext | undefined
+  let observe: 'body' | 'response' = 'body'
+  let withCredentials = false
+  let validators: (ValidatorFn | AsyncValidatorFn)[] = []
+  let transformResponse: TransformResponseFn | undefined
+
+  const fn: DefineRequest<any, any, any> = () => {
     let uploadProgress: HttpProgressFn | undefined
     let downloadProgress: HttpProgressFn | undefined
-    let abortController: AbortController | undefined
     let abortSignal: AbortSignal
 
-    const getInitValue = () => __buildFieldDefaultValue(requestOptions.input)
+    const getInitValue = () => __buildFieldDefaultValue(field)
 
     const setUploadProgress = (fn: HttpProgressFn) => {
       uploadProgress = fn
@@ -332,15 +234,18 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
         throw new Error(`Because the request has input, the first argument must be the input value`)
       }
 
+      if (validators.length > 0) {
+        for (const fn of validators) {
+          fn(input)
+        }
+      }
+
       const timeout = doRequestOptions?.timeout || 0
 
       if (doRequestOptions?.abort) {
         abortSignal = doRequestOptions.abort
       } else if (timeout > 0) {
         abortSignal = AbortSignal.timeout(timeout)
-      } else {
-        abortController = new AbortController()
-        abortSignal = abortController.signal
       }
 
       const client = isClient(doRequestOptions?.client) ? doRequestOptions.client : getGlobalClient()
@@ -348,15 +253,15 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
 
       const req: HttpRequest = {
         host: clientOptions?.host,
-        method: requestOptions.method,
-        endpoint: requestOptions.endpoint,
+        method,
+        endpoint,
         queryParams: new URLSearchParams(),
         headers: new Headers(),
         body: undefined,
-        withCredentials: requestOptions.withCredentials,
-        responseType: requestOptions.responseType ?? 'json',
-        context: requestOptions.context || makeHttpContext(),
-        observe: requestOptions.observe ?? 'body',
+        withCredentials,
+        responseType,
+        context: context || makeHttpContext(),
+        observe,
         uploadProgress,
         downloadProgress,
         timeout,
@@ -369,22 +274,17 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
       }
 
       if (requiredInput) {
-        await __fillRequestFromField(req, requestOptions.input, input)
+        await __fillRequestFromField(req, field, input)
       }
 
-      // todo 待优化
-      if (typeof requestOptions.transformRequest === 'function') {
-        req.body = requestOptions.transformRequest(input, req)
-      }
-
-      const chain = makeInterceptorChain([...(clientOptions?.interceptors || []), ...(requestOptions?.interceptors || [])])
+      const chain = makeInterceptorChain([...interceptors])
       let res = await chain(req, handler)
 
-      if (typeof requestOptions.transformResponse === 'function') {
+      if (typeof transformResponse === 'function') {
         try {
           res = __makeResponse({
             ...res,
-            body: requestOptions.transformResponse(res),
+            body: transformResponse(res),
           })
         } catch (error) {
           throw new HttpErrorResponse({ error })
@@ -408,6 +308,50 @@ export function defineRequest(options: RequestOptions): UseRequestFn {
       setDownloadProgress,
     }
   }
+
+  fn.withField = value => {
+    field = value
+    requiredInput = true
+    return fn
+  }
+
+  fn.withInterceptors = value => {
+    interceptors = value
+    return fn
+  }
+
+  fn.withContext = value => {
+    context = value
+    return fn
+  }
+
+  fn.withCredentials = value => {
+    withCredentials = value
+    return fn
+  }
+
+  fn.withValidators = value => {
+    validators = value
+    console.log(validators)
+    return fn
+  }
+
+  fn.withTransformResponse = value => {
+    transformResponse = value
+    return fn
+  }
+
+  fn.withObserve = value => {
+    observe = value
+    return fn
+  }
+
+  fn.withResponseType = value => {
+    responseType = value
+    return fn
+  }
+
+  return fn
 }
 
 export function __fillUrl(endpoint: string, params: Map<string, string>): string {

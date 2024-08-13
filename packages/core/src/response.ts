@@ -23,8 +23,6 @@ export function __makeResponse<R>(options: MakeResponseOptions<R>): HttpResponse
   const headers = options.headers ?? new Headers()
   const body = options.body ?? null
 
-  // const error = options.error || new Error(`Http failure response for ${options.url}: ${status} ${statusText}`)
-
   return {
     status,
     statusText,

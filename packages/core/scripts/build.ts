@@ -20,7 +20,7 @@ async function build() {
   await Bun.build({
     entrypoints: ['./src/index.ts'],
     outdir: './dist',
-    naming: '[dir]/[name].min.[ext]',
+    naming: '[dir]/[name].es.min.[ext]',
     format: 'esm',
     target: 'browser',
     minify: true,

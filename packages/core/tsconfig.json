@@ -13,11 +13,13 @@
     "moduleDetection": "force",
     "moduleResolution": "bundler",
     "strict": true,
+    "strictNullChecks": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": true
+    "noPropertyAccessFromIndexSignature": true,
+    "nullishCoalescing": true
   },
-  "include": ["src/index.ts"]
+  "include": ["src/index.ts", "src/**/*.spec.ts"]
 }
