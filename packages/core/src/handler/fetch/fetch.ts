@@ -1,7 +1,7 @@
-import { makeHttpContextToken } from '../../context'
-import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '../../error'
-import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '../../request'
-import { type HttpResponse, type HttpResponseBody, __makeResponse } from '../../response'
+import { makeHttpContextToken } from 'src/context'
+import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from 'src/error'
+import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from 'src/request'
+import { type HttpResponse, type HttpResponseBody, __makeResponse } from 'src/response'
 import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '../util'
 
 export interface FetchConfig {

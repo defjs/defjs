@@ -35,7 +35,6 @@ export function __parseBody(params: {
       if (text === '') {
         return null
       }
-      console.log(text)
       return JSON.parse(text) as object
     }
     case 'text':

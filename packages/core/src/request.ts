@@ -332,7 +332,6 @@ export function defineRequest<Output>(method: string, endpoint: string): DefineR
 
   fn.withValidators = value => {
     validators = value
-    console.log(validators)
     return fn
   }
 
@@ -413,15 +412,26 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
     return sp
   }
 
+  function getValidValue(value: unknown, defaultValue: unknown): unknown {
+    switch (true) {
+      case typeof value === 'undefined':
+        return defaultValue
+      case typeof value === 'object' && value === null:
+        return value
+      default:
+        return value
+    }
+  }
+
   if (isField(fieldOrFieldGroup)) {
     let params: Map<string, string> | undefined
     let queryParams: URLSearchParams | undefined
     let headers: Headers | undefined
     let body: any = undefined
-    const fieldValue: unknown = input ?? fieldOrFieldGroup()
+    const validValue: unknown = getValidValue(input, fieldOrFieldGroup())
     const meta = __getFieldMetadata(fieldOrFieldGroup)
 
-    const err = await doValid([...meta.validators, ...meta.asyncValidator], fieldValue)
+    const err = await doValid([...meta.validators, ...meta.asyncValidator], validValue)
     if (err) {
       throw err
     }
@@ -432,40 +442,40 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
           if (!aliasName) {
             throw ERR_NOT_SET_ALIAS
           }
-          queryParams = appendValue(new URLSearchParams(), aliasName, fieldValue)
+          queryParams = appendValue(new URLSearchParams(), aliasName, validValue)
           break
         }
         case FieldType.Param: {
           if (!aliasName) {
             throw ERR_NOT_SET_ALIAS
           }
-          params = setValue(new Map<string, string>(), aliasName, fieldValue)
+          params = setValue(new Map<string, string>(), aliasName, validValue)
           break
         }
         case FieldType.Header: {
           if (!aliasName) {
             throw ERR_NOT_SET_ALIAS
           }
-          headers = appendValue(new Headers(), aliasName, fieldValue)
+          headers = appendValue(new Headers(), aliasName, validValue)
           break
         }
         case FieldType.Form: {
           if (!aliasName) {
             throw ERR_NOT_SET_ALIAS
           }
-          body = appendValue(new FormData(), aliasName, fieldValue)
+          body = appendValue(new FormData(), aliasName, validValue)
           break
         }
         case FieldType.UrlForm: {
           if (!aliasName) {
             throw ERR_NOT_SET_ALIAS
           }
-          body = appendValue(new URLSearchParams(), aliasName, fieldValue)
+          body = appendValue(new URLSearchParams(), aliasName, validValue)
           break
         }
         case FieldType.Json:
         case FieldType.Body:
-          body = fieldValue
+          body = validValue
           break
       }
     }
@@ -488,7 +498,7 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
     let urlForm = new URLSearchParams()
     let formData = new FormData()
     const json = {}
-    let body = undefined
+    let body: any = undefined
     let lastBodyField: FieldType.Body | FieldType.UrlForm | FieldType.Json | FieldType.Form | undefined
 
     for (const [propertyKey, field] of Object.entries(fieldOrFieldGroup)) {
@@ -496,7 +506,7 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
 
       for (const [type, aliasName] of meta.alias) {
         const valueKey = aliasName || propertyKey
-        const value = input[propertyKey] || field()
+        const value = getValidValue(input[propertyKey], field())
         const err = await doValid([...meta.validators, ...meta.asyncValidator], value)
         if (err) {
           throw err

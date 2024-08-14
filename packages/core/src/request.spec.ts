@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { makeHttpContext } from 'src/context'
 import { z } from 'zod'
 import { testClient } from '../test-setup'
 import { cloneClient } from './client'
-import { ERR_NOT_FOUND_HANDLER, ERR_TIMEOUT, HttpErrorResponse } from './error'
+import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_TIMEOUT, HttpErrorResponse } from './error'
 import { field } from './field'
 import { setGlobalHttpHandler } from './handler/handler'
 import {
@@ -256,6 +257,102 @@ describe('Request', () => {
       await doRequest({ id: 5 }, { client: testClient })
     })
 
+    test('should valid input value', async () => {
+      const err = new Error('Invalid value')
+      const useRequest = defineRequest('POST', '/')
+        .withField({
+          id: field<number>().withJson(),
+          name: field<string>().withJson(),
+        })
+        .withValidators([
+          value => {
+            if (!value.id || !value.name) {
+              return err
+            }
+            if (value.id < 10) {
+              return err
+            }
+            return null
+          },
+        ])
+      const { doRequest } = useRequest()
+      try {
+        await doRequest({ id: 5, name: 'Jack' }, { client: testClient })
+      } catch (e) {
+        expect(e).toBe(err)
+      }
+    })
+
+    test('should request with interceptors', async () => {
+      let isSet = false
+      const useRequest = defineRequest('GET', '/').withInterceptors([
+        (req, next) => {
+          isSet = true
+          return next(req)
+        },
+      ])
+      const { doRequest } = useRequest()
+      expect(isSet).toBeFalse()
+      await doRequest({ client: testClient })
+      expect(isSet).toBeTrue()
+    })
+
+    test('should request with context', async () => {
+      let isSet = false
+      const useRequest = defineRequest('GET', '/')
+        .withContext(makeHttpContext())
+        .withInterceptors([
+          (req, next) => {
+            isSet = !!req.context
+            return next(req)
+          },
+        ])
+      const { doRequest } = useRequest()
+      expect(isSet).toBeFalse()
+      await doRequest({ client: testClient })
+      expect(isSet).toBeTrue()
+    })
+
+    test('should request with credentials', async () => {
+      let isSet = false
+      const useRequest = defineRequest('GET', '/')
+        .withCredentials(true)
+        .withInterceptors([
+          (req, next) => {
+            isSet = !!req.withCredentials
+            return next(req)
+          },
+        ])
+      const { doRequest } = useRequest()
+      expect(isSet).toBeFalse()
+      await doRequest({ client: testClient })
+      expect(isSet).toBeTrue()
+    })
+
+    test('should request with response type', async () => {
+      let isSet = false
+      const useRequest = defineRequest('GET', '/')
+        .withResponseType('text')
+        .withInterceptors([
+          (req, next) => {
+            isSet = req.responseType === 'text'
+            return next(req)
+          },
+        ])
+      const { doRequest } = useRequest()
+      expect(isSet).toBeFalse()
+      await doRequest({ client: testClient })
+      expect(isSet).toBeTrue()
+    })
+
+    test('should fillUrl return url', () => {
+      const map = new Map<string, string>()
+      map.set('id', '1')
+      map.set('name', 'John')
+      const endpoint = 'https://example.com/:id/:name'
+      expect(__fillUrl(endpoint, map)).toEqual('https://example.com/1/John')
+    })
+
     describe('with zod.js', () => {
       const schema = z.object({
         id: z.number(),
@@ -287,14 +384,6 @@ describe('Request', () => {
           expect(e).toBeInstanceOf(Error)
         }
       })
-    })
-
-    test('should fillUrl return url', () => {
-      const map = new Map<string, string>()
-      map.set('id', '1')
-      map.set('name', 'John')
-      const endpoint = 'https://example.com/:id/:name'
-      expect(__fillUrl(endpoint, map)).toEqual('https://example.com/1/John')
     })
 
     describe('should fillRequestFromField', () => {
@@ -346,10 +435,114 @@ describe('Request', () => {
 
       test('should fill field is working', async () => {
         const hq = baseHttpRequest()
-        await __fillRequestFromField(hq, field(1).withParam('uid').withBody().withQuery('id'), 10)
+        await __fillRequestFromField(hq, field(1).withParam('uid').withBody().withQuery('id').withHeader('id'), 10)
 
         expect(hq.endpoint).toEqual('/v1/10/undefined')
         expect(hq.queryParams?.toString()).toEqual('id=10')
+        expect(hq.headers?.get('id')).toEqual('10')
+      })
+
+      test('should fill single field to body with form', async () => {
+        const hq = baseHttpRequest()
+        await __fillRequestFromField(hq, field(1).withForm('id'), 10)
+
+        expect(hq.body).toBeInstanceOf(FormData)
+        expect((hq.body as FormData).get('id')).toEqual('10')
+      })
+
+      test('should fill single field to body with url form', async () => {
+        const hq = baseHttpRequest()
+        await __fillRequestFromField(hq, field(1).withUrlForm('id'), 10)
+
+        expect(hq.body).toBeInstanceOf(URLSearchParams)
+        expect((hq.body as URLSearchParams).get('id')).toEqual('10')
+      })
+
+      test('should fill single field to body with json', async () => {
+        const hq = baseHttpRequest()
+        await __fillRequestFromField(hq, field<{ id: number }>().withJson(), { id: 1 })
+
+        expect(hq.body).toBeObject()
+        expect((hq.body as { id: number }).id).toEqual(1)
+      })
+
+      test('should fill field group to body with body', async () => {
+        const hq = baseHttpRequest()
+        await __fillRequestFromField(hq, { id: field<number>().withBody() }, { id: 1 })
+
+        expect(hq.body).toBeNumber()
+        expect(hq.body as number).toEqual(1)
+      })
+
+      test('should fill field group to body with body', async () => {
+        const hq = baseHttpRequest()
+        await __fillRequestFromField(hq, { id: field<number>().withForm() }, { id: 1 })
+
+        expect(hq.body).toBeInstanceOf(FormData)
+        expect((hq.body as FormData).get('id')).toEqual('1')
+      })
+
+      test('should field value is null', async () => {
+        const hq = baseHttpRequest()
+        const fieldGroup = {
+          uid: field<{ id: number }>().withQuery().withParam().withForm().withUrlForm().withHeader(),
+          username: field<{ id: number }[]>().withQuery().withParam().withForm().withUrlForm().withHeader(),
+        }
+
+        await __fillRequestFromField(hq, fieldGroup, { uid: null, username: [{ id: 1 }, { id: 2 }] })
+      })
+
+      test('should field value is null', async () => {
+        const hq = baseHttpRequest()
+        const err = new Error('Invalid value')
+        const fieldGroup = field<{ id: number }>()
+          .withQuery()
+          .withValidators(value => {
+            if (value && value?.id < 10) {
+              return err
+            }
+            return null
+          })
+
+        try {
+          await __fillRequestFromField(hq, fieldGroup, { id: null })
+        } catch (e) {
+          expect(e).toBe(err)
+        }
+      })
+
+      test('should throw error when field not set alias', async () => {
+        const hq = baseHttpRequest()
+
+        try {
+          await __fillRequestFromField(hq, field<{ id: number }>({ id: 1 }).withQuery(), undefined)
+        } catch (e) {
+          expect(e).toBe(ERR_NOT_SET_ALIAS)
+        }
+
+        try {
+          await __fillRequestFromField(hq, field<{ id: number }>({ id: 1 }).withParam(), undefined)
+        } catch (e) {
+          expect(e).toBe(ERR_NOT_SET_ALIAS)
+        }
+
+        try {
+          await __fillRequestFromField(hq, field<{ id: number }>({ id: 1 }).withHeader(), undefined)
+        } catch (e) {
+          expect(e).toBe(ERR_NOT_SET_ALIAS)
+        }
+
+        try {
+          await __fillRequestFromField(hq, field<{ id: number }>({ id: 1 }).withForm(), undefined)
+        } catch (e) {
+          expect(e).toBe(ERR_NOT_SET_ALIAS)
+        }
+
+        try {
+          await __fillRequestFromField(hq, field<{ id: number }>({ id: 1 }).withUrlForm(), undefined)
+        } catch (e) {
+          expect(e).toBe(ERR_NOT_SET_ALIAS)
+        }
       })
     })
   })
