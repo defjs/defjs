@@ -1,10 +1,13 @@
 {
   "name": "@defjs/core",
-  "version": "0.0.0-test-003",
+  "version": "0.0.0-test-004",
   "type": "module",
   "module": "dist/index.js",
   "typings": "dist/index.d.ts",
   "license": "MIT",
+  "publishConfig": {
+    "directory": "dist"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/defjs/defjs.git"
@@ -13,13 +16,8 @@
     "url": "https://github.com/defjs/defjs/issues"
   },
   "scripts": {
-    "build": "bun run ./scripts/build.ts",
-    "test": "bun test",
+    "build": "node scripts/build.js",
     "lint": "biome check",
-    "lint:fix": "biome check --write",
-    "pub": "cd dist && npm publish --provenance"
-  },
-  "peerDependencies": {
-    "typescript": "^5.0.0"
+    "lint:fix": "biome check --write"
   }
 }

@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test'
-import { __makeResponse } from './response'
+import { __makeResponse } from '@src/response'
+import { describe, expect, test } from 'vitest'
 
 describe('Response', () => {
   test('should make response', () => {
@@ -22,5 +22,11 @@ describe('Response', () => {
     expect(res.status).toBe(500)
     expect(res.statusText).toBe('Server Error')
     expect(res.body).toBe('Server Error')
+  })
+
+  test('should make network error response', () => {
+    const res = __makeResponse()
+    expect(res.status).toBe(0)
+    expect(res.statusText).toBe('')
   })
 })

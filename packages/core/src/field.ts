@@ -3,7 +3,7 @@ import type { AsyncValidatorFn, ValidatorFn } from './validator'
 const FIELD = Symbol('field')
 
 export enum FieldType {
-  Json = 1,
+  Json,
   Query,
   Param,
   Header,
@@ -13,6 +13,7 @@ export enum FieldType {
 }
 
 export interface FieldMetadata<T = undefined> {
+  required: boolean
   alias: Map<FieldType, string | undefined>
   validators: ValidatorFn<T>[]
   asyncValidator: AsyncValidatorFn<T>[]
@@ -36,6 +37,8 @@ export function field<T>(): Field<T | undefined>
 export function field<T>(defaultValue: T): Field<T>
 export function field<T = undefined>(defaultValue?: T): Field<T> {
   const meta: FieldMetadata<T> = {
+    // todo
+    required: typeof defaultValue !== 'undefined',
     alias: new Map<FieldType, string>(),
     validators: [],
     asyncValidator: [],
@@ -95,22 +98,8 @@ export function __getFieldMetadata<T>(field: Field<T>): FieldMetadata<ExtractFie
   return field[FIELD] as any
 }
 
-export function validatorField(validators: ValidatorFn<any>[], value: unknown): void {
-  for (const fn of validators) {
-    const err = fn(value)
-    if (err) {
-      throw err
-    }
-  }
-}
-
-export async function asyncValidatorField(asyncValidator: AsyncValidatorFn<any>[], value: unknown): Promise<void> {
-  for (const fn of asyncValidator) {
-    const err = await fn(value)
-    if (err) {
-      throw err
-    }
-  }
+export async function doValid<T>(validators: (ValidatorFn<T> | AsyncValidatorFn<T>)[], value: T): Promise<void> {
+  await Promise.all(validators.map(validator => validator(value)))
 }
 
 export function isField(value: unknown): value is Field {

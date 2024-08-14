@@ -1,28 +1,7 @@
-import { makeHttpContextToken } from 'src/context'
-import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from 'src/error'
-import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from 'src/request'
-import { type HttpResponse, type HttpResponseBody, __makeResponse } from 'src/response'
-import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '../util'
-
-export interface FetchConfig {
-  /** A string indicating how the request will interact with the browser's cache to set request's cache. */
-  cache?: RequestCache
-  /** A string indicating whether credentials will be sent with the request always, never, or only when sent to a same-origin URL. Sets request's credentials. */
-  credentials?: RequestCredentials
-  /** A boolean to set request's keepalive. */
-  keepalive?: boolean
-  /** A string to indicate whether the request will use CORS, or will be restricted to same-origin URLs. Sets request's mode. */
-  mode?: RequestMode
-  priority?: RequestPriority
-  /** A string indicating whether request follows redirects, results in an error upon encountering a redirect, or returns the redirect (in an opaque fashion). Sets request's redirect. */
-  redirect?: RequestRedirect
-  /** A string whose value is a same-origin URL, "about:client", or the empty string, to set request's referrer. */
-  referrer?: string
-  /** A referrer policy to set request's referrerPolicy. */
-  referrerPolicy?: ReferrerPolicy
-}
-
-export const FETCH_CONFIG_KEY = makeHttpContextToken<FetchConfig>(() => ({}))
+import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '@src/error'
+import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '@src/handler/util'
+import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '@src/request'
+import { type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
 
 export function __createRequest(request: HttpRequest): Request {
   const url = new URL(request.endpoint, request.host)
@@ -45,10 +24,7 @@ export function __createRequest(request: HttpRequest): Request {
 
   const credentials = request.withCredentials ? 'include' : undefined
 
-  const fetchConfig = request.context?.get(FETCH_CONFIG_KEY) || {}
-
   return new Request(url, {
-    ...fetchConfig,
     headers,
     method: request.method,
     body: __serializeBody(request.body),
@@ -60,19 +36,23 @@ export function __createRequest(request: HttpRequest): Request {
 export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpResponse<unknown>> {
   const downloadProgress = httpRequest.downloadProgress
   const request = __createRequest(httpRequest)
+  const abortSignal = httpRequest.abort
   let response: Response
 
   try {
-    response = await (globalThis || window).fetch(request)
+    response = await globalThis.fetch(request)
   } catch (error) {
-    if (error instanceof DOMException) {
+    // Because Safari throws an AbortError instead of a TimeoutError when using AbortSignal.timeout.
+    // So when handling an `AbortError`, one needs to determine whether the reason for the abort is a `TimeoutError` or another `AbortError`.
+    if (abortSignal?.aborted && abortSignal.reason instanceof Error) {
       switch (true) {
-        case error.name === 'AbortError' || error.code === error.ABORT_ERR:
+        case abortSignal.reason.name === 'AbortError':
           throw new HttpErrorResponse({ error: ERR_ABORTED })
-        case error.name === 'TimeoutError' || error.code === error.TIMEOUT_ERR:
+        case abortSignal.reason.name === 'TimeoutError':
           throw new HttpErrorResponse({ error: ERR_TIMEOUT })
       }
     }
+
     throw new HttpErrorResponse({ error })
   }
 

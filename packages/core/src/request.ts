@@ -1,7 +1,7 @@
 import { type Client, getClientConfig, getGlobalClient, isClient } from './client'
 import { type HttpContext, makeHttpContext } from './context'
 import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_OBSERVE, ERR_UNSUPPORTED_FIELD_TYPE, HttpErrorResponse } from './error'
-import { type Field, FieldType, __getFieldMetadata, isField, isFieldGroup } from './field'
+import { type Field, FieldType, __getFieldMetadata, doValid, isField, isFieldGroup } from './field'
 import type { HttpHandler } from './handler'
 import { getGlobalHttpHandler } from './handler/handler'
 import type { InterceptorFn } from './interceptor'
@@ -144,7 +144,9 @@ export type ObserveType<Observe, Output> = Observe extends 'body' ? Output : Obs
 export type UseRequestFn<Input, Output, Observe> = {
   doRequest: Input extends undefined
     ? (options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
-    : (input: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
+    : RequestInputValue<Input> extends RequestInputValue<Input> | undefined
+      ? (input?: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
+      : (input: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
 
   getInitValue: () => Input extends Field<infer V>
     ? V
@@ -230,7 +232,6 @@ export function defineRequest<Output>(method: string, endpoint: string): DefineR
       }
 
       if (requiredInput && !input) {
-        // todo 打印缺失的字段
         throw new Error(`Because the request has input, the first argument must be the input value`)
       }
 
@@ -273,7 +274,7 @@ export function defineRequest<Output>(method: string, endpoint: string): DefineR
         throw ERR_NOT_FOUND_HANDLER
       }
 
-      if (requiredInput) {
+      if (requiredInput && field) {
         await __fillRequestFromField(req, field, input)
       }
 
@@ -359,18 +360,11 @@ export function __fillUrl(endpoint: string, params: Map<string, string>): string
   })
 }
 
-export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldGroup: unknown, input: unknown): Promise<void> {
-  async function doValid(validators: (ValidatorFn<any> | AsyncValidatorFn<any>)[], value: unknown): Promise<Error | null | undefined> {
-    for (const validator of validators) {
-      const err = await validator(value)
-      if (err) {
-        return err
-      }
-    }
-
-    return undefined
-  }
-
+export async function __fillRequestFromField(
+  request: HttpRequest,
+  fieldOrFieldGroup: Field<any> | Record<PropertyKey, Field<any>>,
+  input: unknown,
+): Promise<void> {
   function inputIsObject(input: unknown): input is Record<PropertyKey, unknown> {
     return typeof input === 'object' && input !== null
   }
@@ -428,13 +422,10 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
     let queryParams: URLSearchParams | undefined
     let headers: Headers | undefined
     let body: any = undefined
-    const validValue: unknown = getValidValue(input, fieldOrFieldGroup())
+    const validValue: any = getValidValue(input, fieldOrFieldGroup())
     const meta = __getFieldMetadata(fieldOrFieldGroup)
 
-    const err = await doValid([...meta.validators, ...meta.asyncValidator], validValue)
-    if (err) {
-      throw err
-    }
+    await doValid([...meta.validators, ...meta.asyncValidator], validValue)
 
     for (const [type, aliasName] of meta.alias) {
       switch (type) {
@@ -506,11 +497,9 @@ export async function __fillRequestFromField(request: HttpRequest, fieldOrFieldG
 
       for (const [type, aliasName] of meta.alias) {
         const valueKey = aliasName || propertyKey
-        const value = getValidValue(input[propertyKey], field())
-        const err = await doValid([...meta.validators, ...meta.asyncValidator], value)
-        if (err) {
-          throw err
-        }
+        const value: any = getValidValue(input[propertyKey], field())
+
+        await doValid([...meta.validators, ...meta.asyncValidator], value)
 
         switch (type) {
           case FieldType.Json: {

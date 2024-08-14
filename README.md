@@ -19,7 +19,7 @@
 
 Defjs is a library that helps you define and initiate requests, aiming to make it easier for you to define requests without worrying about the details.
 
--	Supports multiple request methods such as [Fetch](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API), [🚧 XMLHttpRequest](https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest), custom, etc.
+-	Supports multiple request methods such as [Fetch](https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API), [XMLHttpRequest](https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest), custom, etc.
 -	Functional API.
 -	🚧 Supports streaming. (WIP)
 -	Supports JS/TS with complete type.
@@ -51,7 +51,7 @@ bun install @defjs/core
     createGlobalClient,
     defineRequest,
     field
-  } from 'https://unpkg.com/@defjs/core/index.es.min.js';
+  } from 'https://unpkg.com/@defjs/core/index.min.js';
 
   /**
    * @title Step 1
@@ -67,7 +67,10 @@ bun install @defjs/core
    * @file src/lib/api/user.ts
    * @description Define the request api request in the lib/api directory of the project
    */
-  const useGetUser = defineRequest('GET', '/v1/user/:id').withField(field(0).withParam());
+  const useGetUser = defineRequest('GET', '/v1/user/:id')
+    .withField(
+      field(0).withParam()
+    )
 
   /**
    * @title Step 3

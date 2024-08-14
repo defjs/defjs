@@ -15,16 +15,45 @@ export function isHttpContextToken(value: unknown): value is HttpContextToken<un
   return typeof value === 'function' && HTTP_CONTEXT_TOKEN in value
 }
 
+const HTTP_CONTEXT = Symbol('HttpContext')
+
 export type HttpContext = {
   set<T>(token: HttpContextToken<T>, value: T): HttpContext
   get<T>(token: HttpContextToken<T>): T
   del(token: HttpContextToken<unknown>): HttpContext
   has(token: HttpContextToken<unknown>): boolean
   keys(): IterableIterator<HttpContextToken<unknown>>
+  get length(): number
+
+  readonly [HTTP_CONTEXT]: Map<HttpContextToken<unknown>, unknown>
 }
 
-export function makeHttpContext(): HttpContext {
+export function isHttpContext(value: unknown): value is HttpContext {
+  return typeof value === 'object' && value !== null && HTTP_CONTEXT in value
+}
+
+export function makeHttpContext(): HttpContext
+export function makeHttpContext(entries?: readonly (readonly [HttpContextToken<unknown>, unknown])[]): HttpContext
+export function makeHttpContext(context?: HttpContext): HttpContext
+export function makeHttpContext(entries?: readonly (readonly [HttpContextToken<unknown>, unknown])[] | HttpContext | null): HttpContext {
   const ctx = new Map<HttpContextToken<unknown>, unknown>()
+
+  switch (true) {
+    case Array.isArray(entries): {
+      for (const [token, value] of entries) {
+        if (isHttpContextToken(token)) {
+          ctx.set(token, value)
+        }
+      }
+      break
+    }
+    case isHttpContext(entries): {
+      for (const [token, value] of entries[HTTP_CONTEXT]) {
+        ctx.set(token, value)
+      }
+      break
+    }
+  }
 
   return {
     set<T>(token: HttpContextToken<T>, value: T) {
@@ -53,5 +82,10 @@ export function makeHttpContext(): HttpContext {
     keys() {
       return ctx.keys()
     },
+    get length(): number {
+      return Array.from(ctx.keys()).length
+    },
+
+    [HTTP_CONTEXT]: ctx,
   }
 }

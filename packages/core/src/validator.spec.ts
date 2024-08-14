@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test'
-import { max, maxLength, min, minLength, pattern, required, requiredTrue } from './validator'
+import { max, maxLength, min, minLength, pattern, required, requiredTrue } from '@src/validator'
+import { describe, expect, test } from 'vitest'
 
 describe('Validator', () => {
   test('should required', () => {
@@ -51,6 +51,7 @@ describe('Validator', () => {
 
   test('should pattern', () => {
     const fn = pattern(/^[0-9]+$/)
+    expect(fn(1)).toBeInstanceOf(Error)
     expect(fn('')).toBeInstanceOf(Error)
     expect(fn('1')).toBeNull()
     expect(fn('a')).toBeInstanceOf(Error)

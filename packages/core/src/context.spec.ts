@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test'
-import { isHttpContextToken, makeHttpContext, makeHttpContextToken } from './context'
+import { isHttpContext, isHttpContextToken, makeHttpContext, makeHttpContextToken } from '@src/context'
+import { describe, expect, test } from 'vitest'
 
 describe('Context', () => {
   test('should throw error when set other token', () => {
@@ -32,14 +32,14 @@ describe('Context', () => {
     const token = makeHttpContextToken(() => 'default')
     context.set(token, 'value')
     context.del(token)
-    expect(context.has(token)).toBeFalse()
+    expect(context.has(token)).toBeFalsy()
   })
 
   test('should check if value exists', () => {
     const context = makeHttpContext()
     const token = makeHttpContextToken(() => 'default')
     context.set(token, 'value')
-    expect(context.has(token)).toBeTrue()
+    expect(context.has(token)).toBeTruthy()
   })
 
   test('should return keys', () => {
@@ -54,7 +54,35 @@ describe('Context', () => {
 
   test('should check if value is HttpContextToken', () => {
     const token = makeHttpContextToken(() => 'default')
-    expect(isHttpContextToken(token)).toBeTrue()
-    expect(isHttpContextToken({})).toBeFalse()
+    expect(isHttpContextToken(token)).toBeTruthy()
+    expect(isHttpContextToken({})).toBeFalsy()
+  })
+
+  test('should check if value is HttpContext', () => {
+    const context = makeHttpContext()
+    expect(isHttpContext(context)).toBeTruthy()
+    expect(isHttpContext({})).toBeFalsy()
+  })
+
+  test('should make context with HttpContext', () => {
+    const token = makeHttpContextToken(() => 1)
+
+    const oldContext = makeHttpContext()
+    oldContext.set(token, 1)
+
+    const newContext = makeHttpContext(oldContext)
+
+    expect(newContext.get(token)).toBe(1)
+  })
+
+  test('should make context with entries', () => {
+    const token = makeHttpContextToken(() => 1)
+    const context = makeHttpContext([[token, 1]])
+    expect(context.get(token)).toBe(1)
+  })
+
+  test('should unset un token key', () => {
+    const context = makeHttpContext([[{} as any, 1]])
+    expect(context.length).toBe(0)
   })
 })

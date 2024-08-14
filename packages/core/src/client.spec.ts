@@ -1,4 +1,3 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
 import {
   type Client,
   type ClientConfig,
@@ -10,12 +9,15 @@ import {
   isClient,
   restGlobalClient,
   setGlobalClient,
-} from './client'
-import { fetchHandler } from './handler'
+} from '@src/client'
+import { ERR_NOT_FOUND_GLOBAL_CLIENT } from '@src/error'
+import { fetchHandler } from '@src/handler'
+import { beforeEach, describe, expect, test } from 'vitest'
 
 describe('Client', () => {
   const clientConfig: ClientConfig = {
     host: 'https://example.com',
+    strict: true,
     handler: fetchHandler,
     interceptors: [],
   }
@@ -26,11 +28,11 @@ describe('Client', () => {
   })
 
   test('should isClient return true for client', () => {
-    expect(isClient(baseClient)).toBeTrue()
+    expect(isClient(baseClient)).toBeTruthy()
   })
 
   test('should isClient return false for non-client', () => {
-    expect(isClient({})).toBeFalse()
+    expect(isClient({})).toBeFalsy()
   })
 
   test('should getClientConfig return client config', () => {
@@ -45,25 +47,27 @@ describe('Client', () => {
   test('should createGlobalClient set global client', () => {
     createGlobalClient(clientConfig)
     const client = getGlobalClient()
-    expect(isClient(client)).toBeTrue()
+    expect(isClient(client)).toBeTruthy()
     restGlobalClient()
+    expect(() => getGlobalClient()).toThrowError(ERR_NOT_FOUND_GLOBAL_CLIENT)
   })
 
   test('should setGlobalClient set global client', () => {
     setGlobalClient(baseClient)
     const client = getGlobalClient()
-    expect(isClient(client)).toBeTrue()
+    expect(isClient(client)).toBeTruthy()
     restGlobalClient()
   })
 
   test('should cloneClient return new client', () => {
     const newConfig: ClientConfig = {
       host: 'https://example.com',
+      strict: false,
       handler: fetchHandler,
       interceptors: [],
     }
     const newClient = cloneClient(baseClient, newConfig)
-    expect(isClient(newClient)).toBeTrue()
+    expect(isClient(newClient)).toBeTruthy()
     expect(getClientConfig(newClient)).toEqual(newConfig)
   })
 })
