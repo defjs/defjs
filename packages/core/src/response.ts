@@ -16,12 +16,12 @@ export type MakeResponseOptions<R> = {
   body?: R | null
 }
 
-export function __makeResponse<R>(options: MakeResponseOptions<R>): HttpResponse<R> {
-  const status = options.status ?? 0
-  const statusText = options.statusText ?? ''
-  const url = options.url ?? ''
-  const headers = options.headers ?? new Headers()
-  const body = options.body ?? null
+export function __makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R> {
+  const status = options?.status ?? 0
+  const statusText = options?.statusText ?? ''
+  const url = options?.url ?? ''
+  const headers = options?.headers ?? new Headers()
+  const body = options?.body ?? null
 
   return {
     status,

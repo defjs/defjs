@@ -34,8 +34,7 @@
         "noUselessFragments": "error",
         "noUselessRename": "error",
         "useArrowFunction": "error",
-        "useFlatMap": "error",
-        "useLiteralKeys": "error"
+        "useFlatMap": "error"
       },
       "correctness": {
         "noConstAssign": "error",

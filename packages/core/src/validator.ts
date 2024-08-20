@@ -1,5 +1,5 @@
-export type ValidatorFn<T = unknown> = (value: T) => Error | null | undefined
-export type AsyncValidatorFn<T = unknown> = (value: T) => Promise<Error | null | undefined>
+export type ValidatorFn<T = unknown> = (value: T) => void
+export type AsyncValidatorFn<T = unknown> = (value: T) => Promise<void>
 
 export const required: ValidatorFn = value => {
   if (!value) {

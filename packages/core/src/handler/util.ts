@@ -25,9 +25,6 @@ export function __parseBody(params: {
 }): string | ArrayBuffer | Blob | object | null {
   const { request, content, contentType } = params
   const responseType = request.responseType
-  if (!responseType) {
-    return null
-  }
 
   switch (responseType) {
     case 'json': {

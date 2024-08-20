@@ -1,9 +1,8 @@
-import { ERR_TIMEOUT, HttpErrorResponse } from '../error'
 import type { HttpRequest } from '../request'
 import { type HttpResponse, __makeResponse } from '../response'
 import type { HttpHandler } from './handler'
 
-export function makeFakeHandler(init: {
+export function makeFakeHandler(init?: {
   onRequestBefore?: (req: HttpRequest) => void
   onRequestAfter?: (resp: HttpResponse<unknown>) => void
   response?: {
@@ -14,25 +13,13 @@ export function makeFakeHandler(init: {
     body?: unknown
   }
 }): HttpHandler {
-  const { onRequestBefore, onRequestAfter, response } = init
-  const { timeout, status, statusText, body, headers } = response
+  const { onRequestBefore, onRequestAfter, response } = init ?? {}
+  const { status, statusText, body, headers } = response ?? {}
   return (req: HttpRequest) => {
-    return new Promise((resolve, reject) => {
+    return new Promise(resolve => {
       const url = new URL(req.endpoint, req.host)
 
       onRequestBefore?.(req)
-
-      // todo
-      if (timeout && timeout > 0) {
-        setTimeout(() => {
-          reject(
-            new HttpErrorResponse({
-              error: ERR_TIMEOUT,
-              url: url.toString(),
-            }),
-          )
-        }, timeout)
-      }
 
       const resp = __makeResponse({
         url: url.toString(),

@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test'
-import { getGlobalHttpHandler, setGlobalHttpHandler } from './handler'
-import { makeFakeHandler } from './test_handler'
+import { getGlobalHttpHandler, setGlobalHttpHandler } from '@src/handler/handler'
+import { makeFakeHandler } from '@src/handler/test_handler'
+import { describe, expect, test } from 'vitest'
 
 describe('Handler', () => {
   test('should set and get global http handler', () => {

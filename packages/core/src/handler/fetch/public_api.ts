@@ -1,1 +1,1 @@
-export { fetchHandler, FETCH_CONFIG_KEY } from './fetch'
+export { fetchHandler } from './fetch'

@@ -13,7 +13,7 @@ export function basicAuthInterceptor(fn: () => BasicCredential, options?: BasicA
   let encode = options?.encode
 
   if (!encode) {
-    const btoa = (globalThis || window).btoa
+    const btoa = globalThis.btoa
     if (typeof btoa !== 'function') {
       throw new Error('BasicAuthInterceptor is not supported in this environment')
     }

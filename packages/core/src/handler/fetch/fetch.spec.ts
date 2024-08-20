@@ -1,28 +1,27 @@
-import { describe, expect, test } from 'bun:test'
-import { testServer } from '../../../test-setup'
-import { makeHttpContext } from '../../context'
-import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '../../error'
-import type { HttpRequest } from '../../request'
-import { FETCH_CONFIG_KEY, __createRequest, fetchHandler } from './fetch'
+import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '@src/error'
+import { __createRequest, fetchHandler } from '@src/handler/fetch/fetch'
+import type { HttpRequest } from '@src/request'
+import { describe, expect, inject, test } from 'vitest'
 
 describe('Fetch handler', () => {
-  test('should create a request', () => {
+  test('should create a request', async () => {
     const headers = new Headers()
     headers.set('Content-Type', 'application/json')
     const body = { id: 1 }
     const hq: HttpRequest = {
       host: 'https://example.com',
       endpoint: '/v1/user',
-      method: 'GET',
+      method: 'POST',
       headers,
-      body,
+      body: { id: 1 },
+      withCredentials: true,
     }
     const request = __createRequest(hq)
 
     expect(request.url).toEqual(new URL(hq.endpoint, hq.host).toString())
-    expect(request.body).toBeInstanceOf(ReadableStream)
+    expect(await request.json()).toEqual(body)
     expect(request.headers.get('Content-Type')).toEqual('application/json')
-    expect(request.method).toEqual('GET')
+    expect(request.method).toEqual('POST')
     expect(request.credentials).toEqual('include')
   })
 
@@ -43,7 +42,7 @@ describe('Fetch handler', () => {
     const hq: HttpRequest = {
       host: 'https://example.com',
       endpoint: '/v1/user',
-      method: 'GET',
+      method: 'POST',
       body: {
         id: 1,
       },
@@ -56,7 +55,7 @@ describe('Fetch handler', () => {
   test('should response is null', async () => {
     const abort = new AbortController()
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/json',
       method: 'GET',
       abort: abort.signal,
@@ -69,7 +68,7 @@ describe('Fetch handler', () => {
   test('should abort network', async () => {
     const abort = new AbortController()
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/delay',
       method: 'GET',
       abort: abort.signal,
@@ -93,11 +92,11 @@ describe('Fetch handler', () => {
   test('should timeout network', async () => {
     const signal = AbortSignal.timeout(100)
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/delay',
       method: 'GET',
       abort: signal,
-      queryParams: new URLSearchParams({ ms: '5000' }),
+      queryParams: new URLSearchParams({ ms: '10000' }),
     }
 
     try {
@@ -112,7 +111,7 @@ describe('Fetch handler', () => {
 
   test('should throw error when post request set body', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/delay',
       method: 'GET',
       body: 'Hello World!',
@@ -127,7 +126,7 @@ describe('Fetch handler', () => {
 
   test('should body is json', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/json',
       method: 'GET',
       responseType: 'json',
@@ -139,7 +138,7 @@ describe('Fetch handler', () => {
 
   test('should body is text', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/json',
       method: 'GET',
       responseType: 'text',
@@ -151,22 +150,18 @@ describe('Fetch handler', () => {
 
   test('should throw error when http statusCode not ok', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/500',
       method: 'GET',
       responseType: 'text',
     }
 
-    try {
-      await fetchHandler(hq)
-    } catch (e) {
-      expect(e).toBeInstanceOf(Error)
-    }
+    await expect(fetchHandler(hq)).rejects.toThrowError(Error)
   })
 
   test('should body is arraybuffer', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/json',
       method: 'GET',
       responseType: 'arraybuffer',
@@ -178,7 +173,7 @@ describe('Fetch handler', () => {
 
   test('should body is blob', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/json',
       method: 'GET',
       responseType: 'blob',
@@ -190,7 +185,7 @@ describe('Fetch handler', () => {
 
   test('should throw error when need json but return text', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/text',
       method: 'GET',
       responseType: 'json',
@@ -206,7 +201,7 @@ describe('Fetch handler', () => {
   test('should call downloadProgress', async () => {
     let called = false
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/json',
       method: 'GET',
       responseType: 'text',
@@ -216,12 +211,12 @@ describe('Fetch handler', () => {
     }
 
     await fetchHandler(hq)
-    expect(called).toBeTrue()
+    expect(called).toBeTruthy()
   })
 
   test('should parse body throw error', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/',
       method: 'GET',
       responseType: 'json',
@@ -235,20 +230,27 @@ describe('Fetch handler', () => {
     }
   })
 
-  test('should set fetch config', () => {
-    const credentials = 'include'
-    const context = makeHttpContext()
-    context.set(FETCH_CONFIG_KEY, { credentials })
-
+  test('should has accept', async () => {
     const hq: HttpRequest = {
-      host: testServer.url.origin,
+      host: inject('testServerHost'),
       endpoint: '/',
-      method: 'GET',
-      context,
+      method: 'POST',
+      responseType: 'json',
+      headers: new Headers([['Accept', 'application/json']]),
+      body: { id: 1 },
     }
 
-    const request = __createRequest(hq)
+    await expect(fetchHandler(hq)).resolves.not.toThrowError()
+  })
 
-    expect(request.credentials).toBe(credentials)
+  test('should response body is null', async () => {
+    const hq: HttpRequest = {
+      host: inject('testServerHost'),
+      endpoint: '/head',
+      method: 'HEAD',
+    }
+
+    const res = await fetchHandler(hq)
+    expect(res.body).toBeNull()
   })
 })

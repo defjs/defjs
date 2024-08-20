@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test'
-import { HttpErrorResponse } from '../error'
-import { makeFakeHandler } from './test_handler'
+import { makeFakeHandler } from '@src/handler/test_handler'
+import type { HttpRequest } from '@src/request'
+import { describe, expect, test } from 'vitest'
 
 describe('Test handler', () => {
   test('should create a fake handler', async () => {
@@ -30,22 +30,16 @@ describe('Test handler', () => {
     expect(response.body).toEqual(body)
   })
 
-  test('should create a fake handler with timeout', async () => {
-    const handler = makeFakeHandler({
-      response: {
-        timeout: 100,
-      },
-    })
-
-    try {
-      await handler({
-        host: 'https://example.com',
-        endpoint: '/v1/user',
-        method: 'GET',
-      })
-    } catch (error) {
-      expect(error).toBeInstanceOf(HttpErrorResponse)
-      expect(error).toBeInstanceOf(Error)
+  test('should make empty response', async () => {
+    const handler = makeFakeHandler()
+    const hq: HttpRequest = {
+      host: 'https://example.com',
+      endpoint: '/v1/user',
+      method: 'GET',
     }
+
+    const res = await handler(hq)
+    expect(res.status).toBe(0)
+    expect(res.statusText).toBe('')
   })
 })

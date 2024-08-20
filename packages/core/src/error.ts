@@ -28,12 +28,11 @@ export function __withErrorCause<T>(err: Error, cause: T): Error {
 export class HttpErrorResponse extends Error {
   readonly status: number
   readonly statusText: string
-  readonly url: string | null
+  readonly url: string
   readonly headers: Headers
-  readonly ok: boolean
   readonly body: unknown
 
-  constructor(init: {
+  constructor(init?: {
     error?: Error | string | unknown
     status?: number
     statusText?: string
@@ -41,28 +40,30 @@ export class HttpErrorResponse extends Error {
     headers?: Headers
     body?: unknown
   }) {
-    const status: number = init.status ?? 0
-    const statusText = init.statusText ?? ''
+    const status: number = init?.status ?? 0
+    const statusText = init?.statusText ?? ''
     const ok = status >= 200 && status < 300
-    const headers = init.headers ?? new Headers()
-    const url = init.url ?? null
-    const body = init.body ?? null
+    const headers = init?.headers ?? new Headers()
+    const url = init?.url ?? ''
+    const body = init?.body ?? null
     let message: string
 
     if (ok) {
-      message = `Http failure during parsing for ${init.url || '(unknown url)'}`
+      message = `Http failure during parsing for ${url}`
     } else {
-      message = `Http failure response for ${init.url || '(unknown url)'}: ${init.status} ${init.statusText}`
+      message = `Http failure response for ${url || '(unknown url)'}: ${status}`
+      if (statusText) {
+        message += ` - ${statusText}`
+      }
     }
 
-    super(message, { cause: init.error })
+    super(message, { cause: init?.error })
 
     super.name = 'HttpErrorResponse'
     this.statusText = statusText
     this.url = url
     this.headers = headers
     this.status = status
-    this.ok = ok
     this.body = body
   }
 }

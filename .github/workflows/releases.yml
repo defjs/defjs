@@ -14,12 +14,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          registry-url: https://registry.npmjs.org/
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run --filter '@defjs/core' lint
-      - run: bun run --filter '@defjs/core' test
-      - run: bun run --filter '@defjs/core' build
-      - run: bun run --filter '@defjs/core' pub
+      - uses: pnpm/action-setup@v4
+        with:
+          version: latest
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps
+      - run: pnpm run lint
+      - run: pnpm run test
+      - run: pnpm run build
+      - run: pnpm run pub
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}

@@ -1,5 +1,5 @@
-import { describe, expect, test } from 'bun:test'
-import { FieldType, __getFieldMetadata, asyncValidatorField, field, isField, isFieldGroup, validatorField } from './field'
+import { FieldType, __getFieldMetadata, doValid, field, isField, isFieldGroup } from '@src/field'
+import { describe, expect, test } from 'vitest'
 
 describe('test field', () => {
   test('should create field with default value', () => {
@@ -17,48 +17,70 @@ describe('test field', () => {
   test('should field with json', () => {
     const id = field(1).withJson('id')
     const meta = __getFieldMetadata(id)
-    expect(meta.alias.has(FieldType.Json)).toBeTrue()
+    expect(meta.alias.has(FieldType.Json)).toBeTruthy()
   })
 
   test('should field with query', () => {
     const id = field(1).withQuery('id')
     const meta = __getFieldMetadata(id)
-    expect(meta.alias.has(FieldType.Query)).toBeTrue()
+    expect(meta.alias.has(FieldType.Query)).toBeTruthy()
   })
 
   test('should field with param', () => {
     const id = field(1).withParam('id')
     const meta = __getFieldMetadata(id)
-    expect(meta.alias.has(FieldType.Param)).toBeTrue()
+    expect(meta.alias.has(FieldType.Param)).toBeTruthy()
   })
 
   test('should field with form', () => {
     const id = field(1).withForm('id')
     const meta = __getFieldMetadata(id)
-    expect(meta.alias.has(FieldType.Form)).toBeTrue()
+    expect(meta.alias.has(FieldType.Form)).toBeTruthy()
   })
 
   test('should field with header', () => {
     const id = field(1).withHeader('id')
     const meta = __getFieldMetadata(id)
-    expect(meta.alias.has(FieldType.Header)).toBeTrue()
+    expect(meta.alias.has(FieldType.Header)).toBeTruthy()
   })
 
   test('should field with url form', () => {
     const id = field(1).withUrlForm('id')
     const meta = __getFieldMetadata(id)
-    expect(meta.alias.has(FieldType.UrlForm)).toBeTrue()
+    expect(meta.alias.has(FieldType.UrlForm)).toBeTruthy()
   })
 
   test('should field with body', () => {
     const id = field(1).withBody()
     const meta = __getFieldMetadata(id)
-    expect(meta.alias.has(FieldType.Body)).toBeTrue()
+    expect(meta.alias.has(FieldType.Body)).toBeTruthy()
+  })
+
+  test('should field with validators', async () => {
+    const err = new Error('value must be less than 10')
+    const id = field(1).withValidators(value => {
+      if (value > 10) {
+        throw err
+      }
+    })
+
+    const idMeta = __getFieldMetadata(id)
+    await expect(doValid(idMeta.validators, 1)).resolves.not.toThrowError(err)
+    await expect(doValid(idMeta.validators, 20)).rejects.toThrowError(err)
+
+    const name = field('').withAsyncValidators(async value => {
+      if (value.length > 10) {
+        throw err
+      }
+    })
+    const nameMeta = __getFieldMetadata(name)
+    await expect(doValid(nameMeta.asyncValidator, 'Hello')).resolves.not.toThrowError(err)
+    await expect(doValid(nameMeta.asyncValidator, 'Hello World!')).rejects.toThrowError(err)
   })
 
   test("should isField function it's work", () => {
-    expect(isField(field())).toBeTrue()
-    expect(isField({})).toBeFalse()
+    expect(isField(field())).toBeTruthy()
+    expect(isField({})).toBeFalsy()
   })
 
   test("should isFieldGroup function it's work", () => {
@@ -67,36 +89,13 @@ describe('test field', () => {
         id: field(),
         name: field(),
       }),
-    ).toBeTrue()
-    expect(isFieldGroup({})).toBeTrue()
+    ).toBeTruthy()
+    expect(isFieldGroup({})).toBeTruthy()
     expect(
       isFieldGroup({
         id: 1,
         name: field(),
       }),
-    ).toBeFalse()
-  })
-
-  test('should validatorField is working', () => {
-    const idField = field(0).withValidators(value => {
-      return value < 10 ? new Error('min 10') : null
-    })
-    const meta = __getFieldMetadata(idField)
-    expect(() => validatorField(meta.validators, 1)).toThrowError()
-    expect(() => validatorField(meta.validators, 10)).toBeEmpty()
-  })
-
-  test('should asyncValidatorField is working', async () => {
-    const idField = field(0).withAsyncValidators(async value => {
-      return value < 10 ? new Error('min 10') : null
-    })
-    const meta = __getFieldMetadata(idField)
-    try {
-      await asyncValidatorField(meta.asyncValidator, 1)
-    } catch (e) {
-      expect(e).toBeInstanceOf(Error)
-    }
-
-    await asyncValidatorField(meta.asyncValidator, 10)
+    ).toBeFalsy()
   })
 })

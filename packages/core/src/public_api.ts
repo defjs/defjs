@@ -45,8 +45,7 @@ export {
   field,
   isField,
   isFieldGroup,
-  validatorField,
-  asyncValidatorField,
+  doValid,
 } from './field'
 
 export {

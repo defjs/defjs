@@ -1,6 +1,6 @@
-import { describe, expect, test } from 'bun:test'
-import type { HttpRequest } from '../request'
-import { __concatChunks, __getContentLength, __getContentType, __parseBody } from './util'
+import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '@src/handler/util'
+import type { HttpRequest } from '@src/request'
+import { describe, expect, test } from 'vitest'
 
 describe('Handler util', () => {
   test('should concatenate chunks', () => {
@@ -11,22 +11,29 @@ describe('Handler util', () => {
   })
 
   describe('test parse body', async () => {
-    const request: HttpRequest = {
-      endpoint: '/v1/user',
-      method: 'GET',
-    }
-
     test('should be null when the response type is not set', async () => {
+      const request: HttpRequest = {
+        endpoint: '/v1/user',
+        method: 'GET',
+      }
       expect(__parseBody({ request, contentType: '', content: new Uint8Array([]) })).toBeNull()
     })
 
     test('should be null when content is set to empty', async () => {
-      request.responseType = 'json'
+      const request: HttpRequest = {
+        endpoint: '/v1/user',
+        method: 'GET',
+        responseType: 'json',
+      }
       expect(__parseBody({ request, contentType: '', content: new Uint8Array([]) })).toBeNull()
     })
 
     test('should be json when content and response type set', async () => {
-      request.responseType = 'json'
+      const request: HttpRequest = {
+        endpoint: '/v1/user',
+        method: 'GET',
+        responseType: 'json',
+      }
       const responseBody = { id: 1 }
       const response = Response.json(responseBody)
       const content = await response.arrayBuffer().then(buffer => new Uint8Array(buffer))
@@ -34,7 +41,11 @@ describe('Handler util', () => {
     })
 
     test('should be text when content and response type set', async () => {
-      request.responseType = 'text'
+      const request: HttpRequest = {
+        endpoint: '/v1/user',
+        method: 'GET',
+        responseType: 'text',
+      }
       const responseText = 'Hello Word!'
       const response = new Response(responseText)
       const content = await response.arrayBuffer().then(buffer => new Uint8Array(buffer))
@@ -42,7 +53,11 @@ describe('Handler util', () => {
     })
 
     test('should be blob when content and response type set', async () => {
-      request.responseType = 'blob'
+      const request: HttpRequest = {
+        endpoint: '/v1/user',
+        method: 'GET',
+        responseType: 'blob',
+      }
       const responseText = 'Hello Word!'
       const response = new Response(responseText, {
         headers: {
@@ -55,7 +70,11 @@ describe('Handler util', () => {
     })
 
     test('should be arrayBuffer when content and response type set', async () => {
-      request.responseType = 'arraybuffer'
+      const request: HttpRequest = {
+        endpoint: '/v1/user',
+        method: 'GET',
+        responseType: 'arraybuffer',
+      }
       const responseText = 'Hello Word!'
       const response = new Response(responseText, {
         headers: {
@@ -65,6 +84,21 @@ describe('Handler util', () => {
       const contentType = __getContentType(response.headers)
       const content = await response.arrayBuffer().then(buffer => new Uint8Array(buffer))
       expect(__parseBody({ request, contentType, content })).toBeInstanceOf(ArrayBuffer)
+    })
+
+    test('should be null when content and response type set', async () => {
+      const request: HttpRequest = {
+        endpoint: '/v1/user',
+        method: 'GET',
+      }
+      const responseText = 'Hello Word!'
+      const response = new Response(responseText, {
+        headers: {
+          'Content-Type': 'text/plain',
+        },
+      })
+      const contentType = __getContentType(response.headers)
+      expect(__parseBody({ request, contentType, content: new Uint8Array(0) })).toBeNull()
     })
   })
 

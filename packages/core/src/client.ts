@@ -1,10 +1,11 @@
 import { ERR_INVALID_CLIENT, ERR_NOT_FOUND_GLOBAL_CLIENT } from './error'
-import type { HttpHandler } from './handler'
-import { fetchHandler } from './handler'
+import { type HttpHandler, fetchHandler } from './handler'
 import type { InterceptorFn } from './interceptor'
 
 export interface ClientOptions {
   host: string
+  /** Default: true  */
+  strict?: boolean
   interceptors?: InterceptorFn[]
   handler?: HttpHandler
   /** @todo: Add support for query params serializer */
@@ -13,13 +14,15 @@ export interface ClientOptions {
 
 export interface ClientConfig {
   host: string
+  // todo
+  strict: boolean
   handler: HttpHandler
   interceptors?: InterceptorFn[]
 }
 
 const CLIENT = Symbol('Client')
 
-export type Client = {} & {
+export type Client = {
   readonly [CLIENT]: ClientConfig
 }
 
@@ -39,6 +42,7 @@ export function getClientConfig(client: Client): ClientConfig {
 export function createClient(options: ClientOptions): Client {
   const conf: ClientConfig = {
     host: options.host,
+    strict: options.strict ?? true,
     interceptors: options.interceptors ?? [],
     handler: options.handler || fetchHandler,
   }

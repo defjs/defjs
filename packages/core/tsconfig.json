@@ -14,11 +14,15 @@
     "moduleResolution": "bundler",
     "strict": true,
     "strictNullChecks": true,
+    "isolatedModules": true,
     "skipLibCheck": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": true
+    "noPropertyAccessFromIndexSignature": true,
+    "paths": {
+      "@src/*": ["src/*"]
+    }
   },
-  "include": ["src/index.ts", "src/**/*.spec.ts"]
+  "include": ["src/**/*.ts", "test-setup.ts"]
 }

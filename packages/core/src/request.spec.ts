@@ -1,11 +1,8 @@
-import { describe, expect, test } from 'bun:test'
-import { makeHttpContext } from 'src/context'
-import { z } from 'zod'
-import { testClient } from '../test-setup'
-import { cloneClient } from './client'
-import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_TIMEOUT, HttpErrorResponse } from './error'
-import { field } from './field'
-import { setGlobalHttpHandler } from './handler/handler'
+import { cloneClient, createClient, restGlobalClient, setGlobalClient } from '@src/client'
+import { makeHttpContext } from '@src/context'
+import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, HttpErrorResponse } from '@src/error'
+import { field } from '@src/field'
+import { setGlobalHttpHandler } from '@src/handler/handler'
 import {
   type HttpRequest,
   __buildFieldDefaultValue,
@@ -14,14 +11,18 @@ import {
   __fillUrl,
   __serializeBody,
   defineRequest,
-} from './request'
+} from '@src/request'
+import { describe, expect, inject, test, vi } from 'vitest'
+import { z } from 'zod'
 
 describe('Request', () => {
+  const testClient = createClient({ host: inject('testServerHost') })
+
   test('should build field default value', () => {
     expect(__buildFieldDefaultValue(field(1))).toBe(1)
     expect(__buildFieldDefaultValue(field('Hello World!'))).toBe('Hello World!')
-    expect(__buildFieldDefaultValue(field(true))).toBe(true)
-    expect(__buildFieldDefaultValue(field(false))).toBe(false)
+    expect(__buildFieldDefaultValue(field(true))).toBeTruthy()
+    expect(__buildFieldDefaultValue(field(false))).toBeFalsy()
     expect(__buildFieldDefaultValue(field([]))).toEqual([])
     expect(__buildFieldDefaultValue(field({}))).toEqual({})
     expect(__buildFieldDefaultValue(field(null))).toBeNull()
@@ -133,12 +134,11 @@ describe('Request', () => {
       setDownloadProgress(() => void 0)
     })
 
-    test('should throw error when define input but not use', () => {
+    test('should throw error when define input but not use', async () => {
       const useRequest = defineRequest('POST', '/').withField(field<number>())
       const { doRequest } = useRequest()
 
-      // @ts-ignore
-      expect(() => doRequest()).toThrowError()
+      await expect(doRequest()).rejects.toThrowError()
     })
 
     test('should throw error when use abort signal timeout', async () => {
@@ -146,28 +146,25 @@ describe('Request', () => {
       const useRequest = defineRequest('POST', '/')
       const { doRequest } = useRequest()
 
-      try {
-        await doRequest({ abort: signal, client: testClient })
-      } catch (e) {
-        if (!(e instanceof HttpErrorResponse)) {
-          throw new Error('Not HttpErrorResponse')
-        }
-        expect(e.cause).toBe(ERR_TIMEOUT)
-      }
+      await expect(doRequest({ abort: signal, client: testClient })).rejects.toThrowError(HttpErrorResponse)
     })
 
     test('should throw error when set timeout option', async () => {
       const useRequest = defineRequest('POST', '/')
       const { doRequest } = useRequest()
 
-      try {
-        await doRequest({ client: testClient, timeout: 100 })
-      } catch (e) {
-        if (!(e instanceof HttpErrorResponse)) {
-          throw new Error('Not HttpErrorResponse')
-        }
-        expect(e.cause).toBe(ERR_TIMEOUT)
-      }
+      await expect(doRequest({ timeout: 100, client: testClient })).rejects.toThrowError(HttpErrorResponse)
+    })
+
+    test('should throw error when offline', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Fetch failed'))
+
+      const useRequest = defineRequest('GET', '/')
+      const { doRequest } = useRequest()
+
+      await expect(doRequest({ timeout: 100, client: testClient })).rejects.toThrowError(HttpErrorResponse)
+
+      fetchSpy.mockRestore()
     })
 
     test('should throw error when not found handler', async () => {
@@ -221,10 +218,10 @@ describe('Request', () => {
       const { doRequest } = useRequest()
       const resp = await doRequest({ client: testClient })
 
-      expect('headers' in resp).toBeTrue()
-      expect('url' in resp).toBeTrue()
-      expect('status' in resp).toBeTrue()
-      expect('statusText' in resp).toBeTrue()
+      expect('headers' in resp).toBeTruthy()
+      expect('url' in resp).toBeTruthy()
+      expect('status' in resp).toBeTruthy()
+      expect('statusText' in resp).toBeTruthy()
     })
 
     test('should throw error when field valid error', async () => {
@@ -234,9 +231,8 @@ describe('Request', () => {
           .withJson()
           .withValidators(value => {
             if (value < 10) {
-              return err
+              throw err
             }
-            return null
           }),
       })
       const { doRequest } = useRequest()
@@ -267,10 +263,10 @@ describe('Request', () => {
         .withValidators([
           value => {
             if (!value.id || !value.name) {
-              return err
+              throw err
             }
             if (value.id < 10) {
-              return err
+              throw err
             }
             return null
           },
@@ -292,9 +288,9 @@ describe('Request', () => {
         },
       ])
       const { doRequest } = useRequest()
-      expect(isSet).toBeFalse()
+      expect(isSet).toBeFalsy()
       await doRequest({ client: testClient })
-      expect(isSet).toBeTrue()
+      expect(isSet).toBeTruthy()
     })
 
     test('should request with context', async () => {
@@ -308,9 +304,9 @@ describe('Request', () => {
           },
         ])
       const { doRequest } = useRequest()
-      expect(isSet).toBeFalse()
+      expect(isSet).toBeFalsy()
       await doRequest({ client: testClient })
-      expect(isSet).toBeTrue()
+      expect(isSet).toBeTruthy()
     })
 
     test('should request with credentials', async () => {
@@ -324,9 +320,9 @@ describe('Request', () => {
           },
         ])
       const { doRequest } = useRequest()
-      expect(isSet).toBeFalse()
+      expect(isSet).toBeFalsy()
       await doRequest({ client: testClient })
-      expect(isSet).toBeTrue()
+      expect(isSet).toBeTruthy()
     })
 
     test('should request with response type', async () => {
@@ -340,9 +336,25 @@ describe('Request', () => {
           },
         ])
       const { doRequest } = useRequest()
-      expect(isSet).toBeFalse()
+      expect(isSet).toBeFalsy()
       await doRequest({ client: testClient })
-      expect(isSet).toBeTrue()
+      expect(isSet).toBeTruthy()
+    })
+
+    test('should throw error when set error observe', async () => {
+      const useRequest = defineRequest('GET', '/').withObserve('123' as any)
+
+      const { doRequest } = useRequest()
+      await expect(doRequest({ client: testClient })).rejects.toThrowError()
+    })
+
+    test('should use global client', async () => {
+      setGlobalClient(testClient)
+      const useRequest = defineRequest('GET', '/')
+
+      const { doRequest } = useRequest()
+      await expect(doRequest()).resolves.not.toThrow()
+      restGlobalClient()
     })
 
     test('should fillUrl return url', () => {
@@ -462,7 +474,7 @@ describe('Request', () => {
         const hq = baseHttpRequest()
         await __fillRequestFromField(hq, field<{ id: number }>().withJson(), { id: 1 })
 
-        expect(hq.body).toBeObject()
+        expect(hq.body).toBeInstanceOf(Object)
         expect((hq.body as { id: number }).id).toEqual(1)
       })
 
@@ -470,11 +482,10 @@ describe('Request', () => {
         const hq = baseHttpRequest()
         await __fillRequestFromField(hq, { id: field<number>().withBody() }, { id: 1 })
 
-        expect(hq.body).toBeNumber()
-        expect(hq.body as number).toEqual(1)
+        expect(hq.body).toEqual(1)
       })
 
-      test('should fill field group to body with body', async () => {
+      test('should fill field group to body with form', async () => {
         const hq = baseHttpRequest()
         await __fillRequestFromField(hq, { id: field<number>().withForm() }, { id: 1 })
 
@@ -499,9 +510,8 @@ describe('Request', () => {
           .withQuery()
           .withValidators(value => {
             if (value && value?.id < 10) {
-              return err
+              throw err
             }
-            return null
           })
 
         try {
@@ -543,6 +553,17 @@ describe('Request', () => {
         } catch (e) {
           expect(e).toBe(ERR_NOT_SET_ALIAS)
         }
+      })
+
+      test('should throw error when field not Field', async () => {
+        const hq = baseHttpRequest()
+        await expect(__fillRequestFromField(hq, {}, undefined)).rejects.toThrowError()
+      })
+
+      test('should throw error when field value not supported', async () => {
+        const hq = baseHttpRequest()
+        await expect(__fillRequestFromField(hq, field({ id: Symbol('') }).withHeader(), { id: Symbol('') })).rejects.toThrowError()
+        await expect(__fillRequestFromField(hq, { id: field(Symbol('')).withHeader() }, { id: Symbol('') })).rejects.toThrowError()
       })
     })
   })
