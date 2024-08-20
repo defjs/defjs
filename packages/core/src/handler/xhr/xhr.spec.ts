@@ -75,7 +75,7 @@ describe('XHR Handler', () => {
 
     await xhrHandler(hq)
 
-    expect(abort.signal.aborted).toBeFalsy
+    expect(abort.signal.aborted).toBeFalsy()
     abort.abort()
     expect(abort.signal.aborted).toBeTruthy()
   })
