@@ -96,8 +96,6 @@ Check out the [defjs.org](https://defjs.org) to get started.
 ## Todo
 
 - Wechat mini programs handler
-- XMLHttpRequest handler
-- 100% test coverage
 - CLI Tool
   - Generate API from OpenAPI
 
