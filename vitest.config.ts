@@ -6,7 +6,7 @@ export default defineConfig({
     coverage: {
       enabled: true,
       provider: 'istanbul',
-      reporter: ['lcov'],
+      reporter: ['lcov', 'json', 'html', 'text'],
       reportsDirectory: 'coverage',
       include: ['**/src/**/*.ts'],
       exclude: ['**/node_modules/**', '**/test/**', '**/src/**/*.spec.ts'],
