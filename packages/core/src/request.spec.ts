@@ -365,6 +365,18 @@ describe('Request', () => {
       expect(__fillUrl(endpoint, map)).toEqual('https://example.com/1/John')
     })
 
+    test('should use doRequest when input one param', async () => {
+      setGlobalClient(testClient)
+      const useRequest = defineRequest('POST', '/').withField(field(0).withJson())
+      const { doRequest, getInitValue } = useRequest()
+      let input = getInitValue()
+      input = 10
+      await expect(doRequest(input)).resolves.toBe(10)
+
+      await expect(doRequest()).rejects.toThrowError()
+      restGlobalClient()
+    })
+
     describe('with zod.js', () => {
       const schema = z.object({
         id: z.number(),
