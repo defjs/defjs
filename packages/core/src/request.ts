@@ -221,7 +221,11 @@ export function defineRequest<Output>(method: string, endpoint: string): DefineR
 
       switch (args.length) {
         case 1: {
-          doRequestOptions = args[0] as any
+          if (requiredInput) {
+            input = args[0] as any
+          } else {
+            doRequestOptions = args[0] as any
+          }
           break
         }
         case 2: {
