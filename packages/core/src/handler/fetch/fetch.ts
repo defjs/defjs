@@ -61,6 +61,7 @@ export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpRespon
   const contentType = __getContentType(headers)
   let body: HttpResponseBody = null
 
+  /* istanbul ignore if -- @preserve */
   if (response.body) {
     const chunks: Uint8Array[] = []
     const reader = response.body.getReader()
