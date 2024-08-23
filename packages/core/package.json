@@ -16,8 +16,9 @@
     "url": "https://github.com/defjs/defjs/issues"
   },
   "scripts": {
-    "build": "node scripts/build.js",
+    "build": "bun scripts/build.ts",
     "lint": "biome check",
-    "lint:fix": "biome check --write"
+    "lint:fix": "biome check --write",
+    "pub": "cd dist && npm publish --provenance"
   }
 }

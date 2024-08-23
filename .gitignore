@@ -44,3 +44,5 @@ test-out
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+junit.xml

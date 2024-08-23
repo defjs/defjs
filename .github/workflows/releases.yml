@@ -15,14 +15,9 @@ jobs:
         with:
           registry-url: https://registry.npmjs.org/
           node-version: 20
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps
-      - run: pnpm run lint
-      - run: pnpm run test
-      - run: pnpm run build
-      - run: pnpm run pub
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun run pub
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}

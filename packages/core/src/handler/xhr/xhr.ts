@@ -1,6 +1,6 @@
-import { ERR_ABORTED, ERR_NETWORK, ERR_TIMEOUT, ERR_UNKNOWN, HttpErrorResponse } from '../../error'
-import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '../../request'
-import { type HttpResponse, type HttpResponseBody, __makeResponse } from '../../response'
+import { ERR_ABORTED, ERR_NETWORK, ERR_TIMEOUT, ERR_UNKNOWN, HttpErrorResponse } from '@src/error'
+import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '@src/request'
+import { type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
 import { __getContentType, __parseBody } from '../util'
 
 export function extractHeaders(value: string): Headers {
@@ -113,6 +113,7 @@ export function xhrHandler(httpRequest: HttpRequest): Promise<HttpResponse<unkno
 
       switch (event.type) {
         case 'error':
+          // todo 检查返回类型
           error = ERR_NETWORK
           break
         case 'timeout':

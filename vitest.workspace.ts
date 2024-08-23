@@ -13,8 +13,8 @@ export default defineWorkspace([
       include: ['packages/core/src/**/*.spec.ts'],
       browser: {
         enabled: true,
-        name: 'chromium',
-        provider: 'playwright',
+        name: 'chrome',
+        provider: 'webdriverio',
       },
       globalSetup: 'packages/core/test-setup.ts',
     },
@@ -31,7 +31,7 @@ export default defineWorkspace([
       browser: {
         enabled: true,
         name: 'firefox',
-        provider: 'playwright',
+        provider: 'webdriverio',
       },
       globalSetup: 'packages/core/test-setup.ts',
     },
@@ -43,12 +43,12 @@ export default defineWorkspace([
       },
     },
     test: {
-      name: 'webkit',
+      name: 'edge',
       include: ['packages/core/src/**/*.spec.ts'],
       browser: {
         enabled: true,
-        name: 'webkit',
-        provider: 'playwright',
+        name: 'edge',
+        provider: 'webdriverio',
       },
       globalSetup: 'packages/core/test-setup.ts',
     },
