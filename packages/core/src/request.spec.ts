@@ -122,6 +122,17 @@ describe('Request', () => {
       expect(defineRequest('', '')).toBeTypeOf('function')
     })
 
+    test('should set endpoint without method', () => {
+      expect(defineRequest('/v1/user')).toBeTypeOf('function')
+    })
+
+    test('should throw error when input quantity does not meet the requirements', () => {
+      // @ts-ignore
+      expect(() => defineRequest('', '', '')).toThrowError()
+      // @ts-ignore
+      expect(() => defineRequest()).toThrowError()
+    })
+
     test('should set upload progress', () => {
       const useRequest = defineRequest('POST', '/')
       const { setUploadProgress } = useRequest()

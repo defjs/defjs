@@ -22,6 +22,7 @@
   "scripts": {
     "build": "bun --filter '@defjs/*' build",
     "test": "vitest",
+    "test:core": "vitest --project=chrome --watch",
     "lint": "bun --filter '@defjs/*' lint",
     "lint:fix": "bun --filter '@defjs/*' lint:fix",
     "pub": "bun --filter '@defjs/*' pub"
