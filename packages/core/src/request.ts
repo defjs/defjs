@@ -189,7 +189,11 @@ export interface DefineRequest<
   withResponseType(value: 'arraybuffer'): DefineRequest<Input, ArrayBuffer, Observe>
 }
 
-export function defineRequest<Output>(method: string, endpoint: string): DefineRequest<undefined, Output> {
+export function defineRequest<Output>(endpoint: string): DefineRequest<undefined, Output>
+export function defineRequest<Output>(method: string, endpoint: string): DefineRequest<undefined, Output>
+export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefined, Output> {
+  let method: string
+  let endpoint: string
   let requiredInput = false
   let field: Field<any> | Record<PropertyKey, Field<any>> | undefined
   let interceptors: InterceptorFn[] = []
@@ -199,6 +203,21 @@ export function defineRequest<Output>(method: string, endpoint: string): DefineR
   let withCredentials = false
   let validators: (ValidatorFn | AsyncValidatorFn)[] = []
   let transformResponse: TransformResponseFn | undefined
+
+  switch (args.length) {
+    case 1: {
+      method = 'GET'
+      endpoint = args[0] as string
+      break
+    }
+    case 2: {
+      method = args[0] as string
+      endpoint = args[1] as string
+      break
+    }
+    default:
+      throw new Error('Invalid arguments')
+  }
 
   const fn: DefineRequest<any, any, any> = () => {
     let uploadProgress: HttpProgressFn | undefined
