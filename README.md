@@ -47,11 +47,7 @@ bun install @defjs/core
 
 ```html
 <script type="module">
-  import {
-    createGlobalClient,
-    defineRequest,
-    field
-  } from 'https://unpkg.com/@defjs/core/index.min.js';
+  import {createGlobalClient, defineRequest, field} from 'https://unpkg.com/@defjs/core/index.min.js';
 
   /**
    * @title Step 1
@@ -67,7 +63,7 @@ bun install @defjs/core
    * @file src/lib/api/user.ts
    * @description Define the request api request in the lib/api directory of the project
    */
-  const useGetUser = defineRequest('GET', '/v1/user/:id')
+  const useGetUser = defineRequest('/v1/user/:id')
     .withField(
       field(0).withParam()
     )
@@ -93,17 +89,20 @@ Check out the [defjs.org](https://defjs.org) to get started.
 |------------------------------|:---------------------------------------------------------------|
 | [@defjs/core](packages/core) | ![core version](https://img.shields.io/npm/v/%40defjs%2Fcore?color=%23000&style=flat-square) |
 
-## Todo
+## Roadmap
 
+- The error handling mechanism for `doRequest` needs reconsideration
+- Documentation official website
 - Wechat mini programs handler
 - CLI Tool
   - Generate API from OpenAPI
+  - Generate Full SDK Package (Like the [S3 SDK](https://www.npmjs.com/package/@aws-sdk/client-s3))
 
 ## License
 
 [MIT](LICENSE)
 
-## Idea Reference
+## Reference
 
 - [Angular HttpClient](https://angular.dev/guide/http)
 - [Axios](https://axios-http.com)
