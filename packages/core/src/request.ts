@@ -144,7 +144,7 @@ export type ObserveType<Observe, Output> = Observe extends 'body' ? Output : Obs
 export type UseRequestFn<Input, Output, Observe> = {
   doRequest: Input extends undefined
     ? (options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
-    : RequestInputValue<Input> extends RequestInputValue<Input> | undefined
+    : undefined extends RequestInputValue<Input>
       ? (input?: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
       : (input: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
 
