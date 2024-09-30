@@ -81,7 +81,7 @@ bun install @defjs/core
 
 ## Documentation
 
-Check out the [defjs.org](https://defjs.org) to get started.
+Check out the [🚧 defjs.org](https://defjs.org) to get started.
 
 ## Packages
 
