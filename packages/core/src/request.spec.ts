@@ -133,21 +133,27 @@ describe('Request', () => {
       expect(() => defineRequest()).toThrowError()
     })
 
+    test('should be use global client', () => {
+      setGlobalClient(testClient)
+      const useRequest = defineRequest('POST', '/')
+      useRequest()
+    })
+
     test('should set upload progress', () => {
       const useRequest = defineRequest('POST', '/')
-      const { setUploadProgress } = useRequest()
+      const { setUploadProgress } = useRequest({ client: testClient })
       setUploadProgress(() => void 0)
     })
 
     test('should set download progress', () => {
       const useRequest = defineRequest('POST', '/')
-      const { setDownloadProgress } = useRequest()
+      const { setDownloadProgress } = useRequest({ client: testClient })
       setDownloadProgress(() => void 0)
     })
 
     test('should throw error when define input but not use', async () => {
       const useRequest = defineRequest('POST', '/').withField(field<number>())
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
 
       await expect(doRequest()).rejects.toThrowError()
     })
@@ -155,25 +161,36 @@ describe('Request', () => {
     test('should throw error when use abort signal timeout', async () => {
       const signal = AbortSignal.timeout(100)
       const useRequest = defineRequest('POST', '/')
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ abort: signal, client: testClient })
 
-      await expect(doRequest({ abort: signal, client: testClient })).rejects.toThrowError(HttpErrorResponse)
+      await expect(doRequest()).rejects.toThrowError(HttpErrorResponse)
+    })
+
+    test('should throw error when cancel', async () => {
+      const useRequest = defineRequest('GET', '/delay').withField(field<number>().withQuery('ms'))
+      const { doRequest, cancel } = useRequest({ client: testClient })
+
+      setTimeout(() => {
+        cancel()
+      }, 500)
+
+      await expect(doRequest(10000)).rejects.toThrowError(HttpErrorResponse)
     })
 
     test('should throw error when set timeout option', async () => {
       const useRequest = defineRequest('POST', '/')
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ timeout: 100, client: testClient })
 
-      await expect(doRequest({ timeout: 100, client: testClient })).rejects.toThrowError(HttpErrorResponse)
+      await expect(doRequest()).rejects.toThrowError(HttpErrorResponse)
     })
 
     test('should throw error when offline', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('Fetch failed'))
 
       const useRequest = defineRequest('GET', '/')
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ timeout: 100, client: testClient })
 
-      await expect(doRequest({ timeout: 100, client: testClient })).rejects.toThrowError(HttpErrorResponse)
+      await expect(doRequest()).rejects.toThrowError(HttpErrorResponse)
 
       fetchSpy.mockRestore()
     })
@@ -185,10 +202,9 @@ describe('Request', () => {
       // @ts-ignore
       setGlobalHttpHandler(undefined)
       const useRequest = defineRequest('POST', '/')
-      const { doRequest } = useRequest()
 
       try {
-        await doRequest({ client, timeout: 100 })
+        useRequest({ client, timeout: 100 })
       } catch (e) {
         expect(e).toBe(ERR_NOT_FOUND_HANDLER)
       }
@@ -196,38 +212,28 @@ describe('Request', () => {
 
     test('should transform response', async () => {
       const useRequest = defineRequest('GET', '/').withTransformResponse(response => response.body)
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
 
-      await doRequest({ client: testClient })
+      await doRequest()
     })
 
     test('should throw error when transform fail', async () => {
       const useRequest = defineRequest('GET', '/').withTransformResponse(() => {
         throw new Error('Transform fail')
       })
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
 
       try {
-        await doRequest({ client: testClient })
+        await doRequest()
       } catch (e) {
         expect(e).toBeInstanceOf(Error)
       }
     })
 
-    test('should observe is body', async () => {
-      const useRequest = defineRequest<{ id: number }>('POST', '/').withField({
-        id: field(1).withJson(),
-      })
-      const { doRequest, getInitValue } = useRequest()
-      const resp = await doRequest(getInitValue(), { client: testClient })
-
-      expect(resp).toEqual({ id: 1 })
-    })
-
     test('should observe is response', async () => {
-      const useRequest = defineRequest('GET', '/').withObserve('response')
-      const { doRequest } = useRequest()
-      const resp = await doRequest({ client: testClient })
+      const useRequest = defineRequest('GET', '/')
+      const { doRequest } = useRequest({ client: testClient })
+      const resp = await doRequest()
 
       expect('headers' in resp).toBeTruthy()
       expect('url' in resp).toBeTruthy()
@@ -246,22 +252,22 @@ describe('Request', () => {
             }
           }),
       })
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
       try {
-        await doRequest({ id: 5 }, { client: testClient })
+        await doRequest({ id: 5 })
       } catch (e) {
         expect(e).toBe(err)
       }
 
-      await doRequest({ id: 20 }, { client: testClient })
+      await doRequest({ id: 20 })
     })
 
     test('should field value is null', async () => {
       const useRequest = defineRequest('POST', '/').withField({
         id: field<number | null>().withJson(),
       })
-      const { doRequest } = useRequest()
-      await doRequest({ id: 5 }, { client: testClient })
+      const { doRequest } = useRequest({ client: testClient })
+      await doRequest({ id: 5 })
     })
 
     test('should valid input value', async () => {
@@ -282,9 +288,9 @@ describe('Request', () => {
             return null
           },
         ])
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
       try {
-        await doRequest({ id: 5, name: 'Jack' }, { client: testClient })
+        await doRequest({ id: 5, name: 'Jack' })
       } catch (e) {
         expect(e).toBe(err)
       }
@@ -298,9 +304,9 @@ describe('Request', () => {
           return next(req)
         },
       ])
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
       expect(isSet).toBeFalsy()
-      await doRequest({ client: testClient })
+      await doRequest()
       expect(isSet).toBeTruthy()
     })
 
@@ -314,9 +320,9 @@ describe('Request', () => {
             return next(req)
           },
         ])
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
       expect(isSet).toBeFalsy()
-      await doRequest({ client: testClient })
+      await doRequest()
       expect(isSet).toBeTruthy()
     })
 
@@ -330,9 +336,9 @@ describe('Request', () => {
             return next(req)
           },
         ])
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
       expect(isSet).toBeFalsy()
-      await doRequest({ client: testClient })
+      await doRequest()
       expect(isSet).toBeTruthy()
     })
 
@@ -346,24 +352,17 @@ describe('Request', () => {
             return next(req)
           },
         ])
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
       expect(isSet).toBeFalsy()
-      await doRequest({ client: testClient })
+      await doRequest()
       expect(isSet).toBeTruthy()
-    })
-
-    test('should throw error when set error observe', async () => {
-      const useRequest = defineRequest('GET', '/').withObserve('123' as any)
-
-      const { doRequest } = useRequest()
-      await expect(doRequest({ client: testClient })).rejects.toThrowError()
     })
 
     test('should use global client', async () => {
       setGlobalClient(testClient)
       const useRequest = defineRequest('GET', '/')
 
-      const { doRequest } = useRequest()
+      const { doRequest } = useRequest({ client: testClient })
       await expect(doRequest()).resolves.not.toThrow()
       restGlobalClient()
     })
@@ -378,11 +377,11 @@ describe('Request', () => {
 
     test('should use doRequest when input one param', async () => {
       setGlobalClient(testClient)
-      const useRequest = defineRequest('POST', '/').withField(field(0).withJson())
-      const { doRequest, getInitValue } = useRequest()
+      const useRequest = defineRequest('POST', '/').withField(field<number>().withJson())
+      const { doRequest, getInitValue } = useRequest({ client: testClient })
       let input = getInitValue()
       input = 10
-      await expect(doRequest(input)).resolves.toBe(10)
+      await expect(doRequest(input).then(r => r.body)).resolves.toBe(10)
 
       await expect(doRequest()).rejects.toThrowError()
       restGlobalClient()
@@ -401,20 +400,20 @@ describe('Request', () => {
             name: field('').withJson(),
           })
           .withTransformResponse(res => schema.parse(res.body))
-        const { doRequest, getInitValue } = useRequest()
+        const { doRequest, getInitValue } = useRequest({ client: testClient })
         const user = { id: 1, name: 'Jack' }
         const data = getInitValue()
         data.id = user.id
         data.name = user.name
-        const res = await doRequest(data, { client: testClient })
-        expect(res).toEqual(user)
+        const res = await doRequest(data)
+        expect(res.body).toEqual(user)
       })
 
       test('should be throw error when transform response body', async () => {
         const useRequest = defineRequest('POST', '/account').withTransformResponse(res => schema.parse(res.body))
-        const { doRequest } = useRequest()
+        const { doRequest } = useRequest({ client: testClient })
         try {
-          await doRequest({ client: testClient })
+          await doRequest()
         } catch (e) {
           expect(e).toBeInstanceOf(Error)
         }

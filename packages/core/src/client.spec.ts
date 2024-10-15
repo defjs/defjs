@@ -17,7 +17,6 @@ import { beforeEach, describe, expect, test } from 'vitest'
 describe('Client', () => {
   const clientConfig: ClientConfig = {
     host: 'https://example.com',
-    strict: true,
     handler: fetchHandler,
     interceptors: [],
   }
@@ -62,7 +61,6 @@ describe('Client', () => {
   test('should cloneClient return new client', () => {
     const newConfig: ClientConfig = {
       host: 'https://example.com',
-      strict: false,
       handler: fetchHandler,
       interceptors: [],
     }

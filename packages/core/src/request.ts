@@ -1,6 +1,6 @@
-import { type Client, getClientConfig, getGlobalClient, isClient } from './client'
+import { type Client, getClientConfig, getGlobalClient } from './client'
 import { type HttpContext, makeHttpContext } from './context'
-import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_OBSERVE, ERR_UNSUPPORTED_FIELD_TYPE, HttpErrorResponse } from './error'
+import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_UNSUPPORTED_FIELD_TYPE, HttpErrorResponse } from './error'
 import { type Field, FieldType, __getFieldMetadata, doValid, isField, isFieldGroup } from './field'
 import type { HttpHandler } from './handler'
 import { getGlobalHttpHandler } from './handler/handler'
@@ -61,11 +61,6 @@ export interface HttpRequest {
 
   downloadProgress?: HttpProgressFn
 
-  /**
-   * default：body
-   */
-  observe?: 'body' | 'response'
-
   abort?: AbortSignal
 }
 
@@ -116,7 +111,7 @@ export type RequestInputValue<T> = T extends Field<infer V>
     ? { [K in keyof T]: RequestInputValue<T[K]> }
     : never
 
-export type DoRequestOptions = {
+export type UseRequestOptions = {
   abort?: AbortSignal
   handler?: HttpHandler
   client?: Client
@@ -139,14 +134,12 @@ export function __buildFieldDefaultValue<Input>(input?: Input): RequestInputValu
   return undefined as RequestInputValue<Input>
 }
 
-export type ObserveType<Observe, Output> = Observe extends 'body' ? Output : Observe extends 'response' ? HttpResponse<Output> : never
+export type UseRequestFn<Input, Output> = {
+  doRequest: undefined extends RequestInputValue<Input>
+    ? (input?: RequestInputValue<Input>) => Promise<HttpResponse<Output>>
+    : (input: RequestInputValue<Input>) => Promise<HttpResponse<Output>>
 
-export type UseRequestFn<Input, Output, Observe> = {
-  doRequest: Input extends undefined
-    ? (options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
-    : undefined extends RequestInputValue<Input>
-      ? (input?: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
-      : (input: RequestInputValue<Input>, options?: DoRequestOptions) => Promise<ObserveType<Observe, Output>>
+  cancel: () => void
 
   getInitValue: () => Input extends Field<infer V>
     ? V
@@ -159,34 +152,27 @@ export type UseRequestFn<Input, Output, Observe> = {
   setDownloadProgress: (fn: HttpProgressFn) => void
 }
 
-export interface DefineRequest<
-  Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined,
-  Output = unknown,
-  Observe extends 'body' | 'response' = 'body',
-> {
-  (): UseRequestFn<Input, Output, Observe>
+export interface DefineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined, Output = unknown> {
+  (options?: UseRequestOptions): UseRequestFn<Input, Output>
 
-  withField<I extends Field<any> | Record<PropertyKey, Field<any>>>(value: I): DefineRequest<I, Output, Observe>
+  withField<I extends Field<any> | Record<PropertyKey, Field<any>>>(value: I): DefineRequest<I, Output>
 
-  withInterceptors(value: InterceptorFn[]): DefineRequest<Input, Output, Observe>
+  withInterceptors(value: InterceptorFn[]): DefineRequest<Input, Output>
 
-  withContext(value: HttpContext): DefineRequest<Input, Output, Observe>
+  withContext(value: HttpContext): DefineRequest<Input, Output>
 
-  withCredentials(value: boolean): DefineRequest<Input, Output, Observe>
+  withCredentials(value: boolean): DefineRequest<Input, Output>
 
   withValidators(
     value: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[],
-  ): DefineRequest<Input, Output, Observe>
+  ): DefineRequest<Input, Output>
 
-  withTransformResponse<O>(fn: TransformResponseFn<O>): DefineRequest<Input, O, Observe>
+  withTransformResponse<O>(fn: TransformResponseFn<O>): DefineRequest<Input, O>
 
-  withObserve(value: 'body'): DefineRequest<Input, Output, 'body'>
-  withObserve(value: 'response'): DefineRequest<Input, Output, 'response'>
-
-  withResponseType(value: 'json'): DefineRequest<Input, Output, Observe>
-  withResponseType(value: 'text'): DefineRequest<Input, string, Observe>
-  withResponseType(value: 'blob'): DefineRequest<Input, Blob, Observe>
-  withResponseType(value: 'arraybuffer'): DefineRequest<Input, ArrayBuffer, Observe>
+  withResponseType(value: 'json'): DefineRequest<Input, Output>
+  withResponseType(value: 'text'): DefineRequest<Input, string>
+  withResponseType(value: 'blob'): DefineRequest<Input, Blob>
+  withResponseType(value: 'arraybuffer'): DefineRequest<Input, ArrayBuffer>
 }
 
 export function defineRequest<Output>(endpoint: string): DefineRequest<undefined, Output>
@@ -199,7 +185,6 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
   let interceptors: InterceptorFn[] = []
   let responseType: HttpResponseType = 'json'
   let context: HttpContext | undefined
-  let observe: 'body' | 'response' = 'body'
   let withCredentials = false
   let validators: (ValidatorFn | AsyncValidatorFn)[] = []
   let transformResponse: TransformResponseFn | undefined
@@ -219,10 +204,34 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
       throw new Error('Invalid arguments')
   }
 
-  const fn: DefineRequest<any, any, any> = () => {
+  const fn: DefineRequest<any, any> = (options?: UseRequestOptions) => {
+    const timeout = options?.timeout || 0
+    const client = options?.client || getGlobalClient()
+    const clientOptions = getClientConfig(client)
+    const handler = options?.handler || clientOptions?.handler || getGlobalHttpHandler()
+    if (!handler) {
+      throw ERR_NOT_FOUND_HANDLER
+    }
+
     let uploadProgress: HttpProgressFn | undefined
     let downloadProgress: HttpProgressFn | undefined
-    let abortSignal: AbortSignal
+    let abortController: AbortController | undefined
+    const abortSignal: AbortSignal[] = []
+
+    if (options?.abort) {
+      abortSignal.push(options.abort)
+    } else {
+      abortController = new AbortController()
+      abortSignal.push(abortController.signal)
+    }
+
+    if (timeout > 0) {
+      abortSignal.push(AbortSignal.timeout(timeout))
+    }
+
+    const cancel = () => {
+      abortController?.abort()
+    }
 
     const getInitValue = () => __buildFieldDefaultValue(field)
 
@@ -236,26 +245,13 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
 
     const doRequest = async (...args: unknown[]) => {
       let input: unknown
-      let doRequestOptions: DoRequestOptions | undefined
 
-      switch (args.length) {
-        case 1: {
-          if (requiredInput) {
-            input = args[0] as any
-          } else {
-            doRequestOptions = args[0] as any
-          }
-          break
-        }
-        case 2: {
-          input = args[0] as any
-          doRequestOptions = args[1] as any
-          break
-        }
+      if (requiredInput && args.length === 1) {
+        input = args[0]
       }
 
       if (requiredInput && !input) {
-        throw new Error(`Because the request has input, the first argument must be the input value`)
+        throw new Error(`Because the request has input, the argument must be the input value`)
       }
 
       if (validators.length > 0) {
@@ -263,17 +259,6 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
           fn(input)
         }
       }
-
-      const timeout = doRequestOptions?.timeout || 0
-
-      if (doRequestOptions?.abort) {
-        abortSignal = doRequestOptions.abort
-      } else if (timeout > 0) {
-        abortSignal = AbortSignal.timeout(timeout)
-      }
-
-      const client = isClient(doRequestOptions?.client) ? doRequestOptions.client : getGlobalClient()
-      const clientOptions = getClientConfig(client)
 
       const req: HttpRequest = {
         host: clientOptions?.host,
@@ -285,23 +270,17 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
         withCredentials,
         responseType,
         context: context || makeHttpContext(),
-        observe,
         uploadProgress,
         downloadProgress,
         timeout,
-        abort: abortSignal,
-      }
-
-      const handler = doRequestOptions?.handler || clientOptions?.handler || getGlobalHttpHandler()
-      if (!handler) {
-        throw ERR_NOT_FOUND_HANDLER
+        abort: AbortSignal.any(abortSignal),
       }
 
       if (requiredInput && field) {
         await __fillRequestFromField(req, field, input)
       }
 
-      const chain = makeInterceptorChain([...interceptors])
+      const chain = makeInterceptorChain([...clientOptions.interceptors, ...interceptors])
       let res = await chain(req, handler)
 
       if (typeof transformResponse === 'function') {
@@ -315,18 +294,12 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
         }
       }
 
-      switch (req.observe) {
-        case 'body':
-          return res.body
-        case 'response':
-          return res
-        default:
-          throw ERR_OBSERVE
-      }
+      return res
     }
 
     return {
       doRequest,
+      cancel,
       getInitValue,
       setUploadProgress,
       setDownloadProgress,
@@ -361,11 +334,6 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
 
   fn.withTransformResponse = value => {
     transformResponse = value
-    return fn
-  }
-
-  fn.withObserve = value => {
-    observe = value
     return fn
   }
 
