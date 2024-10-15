@@ -1,6 +1,6 @@
 <p align="center">
-  <a href="https://vitejs.dev" target="_blank" rel="noopener noreferrer">
-    <img width="200" src="logo.jpg" alt="Vite logo">
+  <a href="https://github.com/defjs/defjs" target="_blank" rel="noopener noreferrer">
+    <img width="200" src="logo.jpg" alt="logo">
   </a>
 </p>
 <br/>
@@ -45,38 +45,35 @@ bun install @defjs/core
 
 **Only can use ES modules**
 
-```html
-<script type="module">
-  import {createGlobalClient, defineRequest, field} from 'https://unpkg.com/@defjs/core/index.min.js';
+```javascript
+import {createGlobalClient, defineRequest, field} from 'https://unpkg.com/@defjs/core/index.min.js';
 
-  /**
-   * @title Step 1
-   * @file src/main.ts
-   * @description Setting up a global client
-   */
-  createGlobalClient({
-    host: 'https://example.com',
-  });
+/**
+ * @title Step 1
+ * @file src/main.ts
+ * @description Setting up a global client
+ */
+createGlobalClient({
+  host: 'https://example.com',
+});
 
-  /**
-   * @title Step 2
-   * @file src/lib/api/user.ts
-   * @description Define the request api request in the lib/api directory of the project
-   */
-  const useGetUser = defineRequest('/v1/user/:id')
-    .withField(
-      field(0).withParam()
-    )
+/**
+ * @title Step 2
+ * @file src/lib/api/user.ts
+ * @description Define the request api request in the lib/api directory of the project
+ */
+const useGetUser = defineRequest('/v1/user/:id')
+  .withField(
+    field<number>().withParam()
+  )
 
-  /**
-   * @title Step 3
-   * @file src/pages/home.ts
-   * @description Use defined requests in business code
-   */
-  const { doRequest } = useGetUser();
-
-  await doRequest(1);
-</script>
+/**
+ * @title Step 3
+ * @file src/pages/home.ts
+ * @description Use defined requests in business code
+ */
+const { doRequest } = useGetUser();
+const { body } = await doRequest(1);
 ```
 
 ## Documentation

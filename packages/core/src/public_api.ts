@@ -28,7 +28,7 @@ export {
   type HttpRequest,
   type UseRequestFn,
   type RequestInputValue,
-  type DoRequestOptions,
+  type UseRequestOptions,
   defineRequest,
 } from './request'
 
