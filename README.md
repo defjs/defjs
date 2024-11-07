@@ -88,7 +88,6 @@ Check out the [🚧 defjs.org](https://defjs.org) to get started.
 
 ## Roadmap
 
-- The error handling mechanism for `doRequest` needs reconsideration
 - Documentation official website
 - Wechat mini programs handler
 - CLI Tool

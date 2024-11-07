@@ -1,12 +1,11 @@
 import { type Client, getClientConfig, getGlobalClient } from './client'
 import { type HttpContext, makeHttpContext } from './context'
-import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_UNSUPPORTED_FIELD_TYPE, HttpErrorResponse } from './error'
 import { type Field, FieldType, __getFieldMetadata, doValid, isField, isFieldGroup } from './field'
 import type { HttpHandler } from './handler'
 import { getGlobalHttpHandler } from './handler/handler'
 import type { InterceptorFn } from './interceptor'
 import { makeInterceptorChain } from './interceptor/interceptor'
-import { type HttpResponse, __makeResponse } from './response'
+import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_UNSUPPORTED_FIELD_TYPE, type HttpResponse, __makeResponse } from './response'
 import type { AsyncValidatorFn, ValidatorFn } from './validator'
 
 export type HttpResponseType = 'arraybuffer' | 'blob' | 'json' | 'text'
@@ -244,57 +243,57 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
     }
 
     const doRequest = async (...args: unknown[]) => {
-      let input: unknown
+      try {
+        let input: unknown
 
-      if (requiredInput && args.length === 1) {
-        input = args[0]
-      }
-
-      if (requiredInput && !input) {
-        throw new Error(`Because the request has input, the argument must be the input value`)
-      }
-
-      if (validators.length > 0) {
-        for (const fn of validators) {
-          fn(input)
+        if (requiredInput && args.length === 1) {
+          input = args[0]
         }
-      }
 
-      const req: HttpRequest = {
-        host: clientOptions?.host,
-        method,
-        endpoint,
-        queryParams: new URLSearchParams(),
-        headers: new Headers(),
-        body: undefined,
-        withCredentials,
-        responseType,
-        context: context || makeHttpContext(),
-        uploadProgress,
-        downloadProgress,
-        timeout,
-        abort: AbortSignal.any(abortSignal),
-      }
+        if (requiredInput && !input) {
+          throw new Error(`Because the request has input, the argument must be the input value`)
+        }
 
-      if (requiredInput && field) {
-        await __fillRequestFromField(req, field, input)
-      }
+        if (validators.length > 0) {
+          for (const fn of validators) {
+            fn(input)
+          }
+        }
 
-      const chain = makeInterceptorChain([...clientOptions.interceptors, ...interceptors])
-      let res = await chain(req, handler)
+        const req: HttpRequest = {
+          host: clientOptions?.host,
+          method,
+          endpoint,
+          queryParams: new URLSearchParams(),
+          headers: new Headers(),
+          body: undefined,
+          withCredentials,
+          responseType,
+          context: context || makeHttpContext(),
+          uploadProgress,
+          downloadProgress,
+          timeout,
+          abort: AbortSignal.any(abortSignal),
+        }
 
-      if (typeof transformResponse === 'function') {
-        try {
+        if (requiredInput && field) {
+          await __fillRequestFromField(req, field, input)
+        }
+
+        const chain = makeInterceptorChain([...clientOptions.interceptors, ...interceptors])
+        let res = await chain(req, handler)
+
+        if (typeof transformResponse === 'function') {
           res = __makeResponse({
             ...res,
             body: transformResponse(res),
           })
-        } catch (error) {
-          throw new HttpErrorResponse({ error })
         }
-      }
 
-      return res
+        return res
+      } catch (error) {
+        return __makeResponse({ error })
+      }
     }
 
     return {

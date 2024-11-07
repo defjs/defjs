@@ -1,6 +1,5 @@
 import { cloneClient, createClient, restGlobalClient, setGlobalClient } from '@src/client'
 import { makeHttpContext } from '@src/context'
-import { ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, HttpErrorResponse } from '@src/error'
 import { field } from '@src/field'
 import { setGlobalHttpHandler } from '@src/handler/handler'
 import {
@@ -12,6 +11,7 @@ import {
   __serializeBody,
   defineRequest,
 } from '@src/request'
+import { ERR_ABORTED, ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_TIMEOUT } from '@src/response'
 import { describe, expect, inject, test, vi } from 'vitest'
 import { z } from 'zod'
 
@@ -155,15 +155,16 @@ describe('Request', () => {
       const useRequest = defineRequest('POST', '/').withField(field<number>())
       const { doRequest } = useRequest({ client: testClient })
 
-      await expect(doRequest()).rejects.toThrowError()
+      const { error } = await doRequest()
+      expect(error).toBeInstanceOf(Error)
     })
 
     test('should throw error when use abort signal timeout', async () => {
       const signal = AbortSignal.timeout(100)
-      const useRequest = defineRequest('POST', '/')
+      const useRequest = defineRequest('GET', '/delay').withField(field<number>().withQuery('ms'))
       const { doRequest } = useRequest({ abort: signal, client: testClient })
-
-      await expect(doRequest()).rejects.toThrowError(HttpErrorResponse)
+      const { error } = await doRequest(500)
+      expect(error).toBe(ERR_TIMEOUT)
     })
 
     test('should throw error when cancel', async () => {
@@ -174,14 +175,15 @@ describe('Request', () => {
         cancel()
       }, 500)
 
-      await expect(doRequest(10000)).rejects.toThrowError(HttpErrorResponse)
+      const { error } = await doRequest(10000)
+      expect(error).toBe(ERR_ABORTED)
     })
 
     test('should throw error when set timeout option', async () => {
-      const useRequest = defineRequest('POST', '/')
+      const useRequest = defineRequest('GET', '/delay').withField(field<number>().withQuery('ms'))
       const { doRequest } = useRequest({ timeout: 100, client: testClient })
-
-      await expect(doRequest()).rejects.toThrowError(HttpErrorResponse)
+      const { error } = await doRequest(500)
+      expect(error).toBe(ERR_TIMEOUT)
     })
 
     test('should throw error when offline', async () => {
@@ -189,8 +191,8 @@ describe('Request', () => {
 
       const useRequest = defineRequest('GET', '/')
       const { doRequest } = useRequest({ timeout: 100, client: testClient })
-
-      await expect(doRequest()).rejects.toThrowError(HttpErrorResponse)
+      const { error } = await doRequest()
+      expect(error).toBeInstanceOf(Error)
 
       fetchSpy.mockRestore()
     })
@@ -381,9 +383,14 @@ describe('Request', () => {
       const { doRequest, getInitValue } = useRequest({ client: testClient })
       let input = getInitValue()
       input = 10
-      await expect(doRequest(input).then(r => r.body)).resolves.toBe(10)
-
-      await expect(doRequest()).rejects.toThrowError()
+      {
+        const { body } = await doRequest(input)
+        expect(body).toBe(10)
+      }
+      {
+        const { error } = await doRequest()
+        expect(error).toBeInstanceOf(Error)
+      }
       restGlobalClient()
     })
 

@@ -1,5 +1,6 @@
 import { extractHeaders, xhrHandler } from '@src/handler/xhr/xhr'
 import type { HttpRequest } from '@src/request'
+import { ERR_ABORTED, ERR_TIMEOUT } from '@src/response'
 import { describe, expect, inject, test, vi } from 'vitest'
 
 describe('XHR Handler', () => {
@@ -42,8 +43,8 @@ describe('XHR Handler', () => {
       queryParams: new URLSearchParams({ ms: '1000' }),
       timeout: 100,
     }
-
-    await expect(xhrHandler(hq)).rejects.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBe(ERR_TIMEOUT)
   })
 
   test('should cancel when abort', async () => {
@@ -59,7 +60,8 @@ describe('XHR Handler', () => {
 
     setTimeout(() => abort.abort(), 100)
 
-    await expect(xhrHandler(hq)).rejects.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBe(ERR_ABORTED)
   })
 
   test('should cancel when request done', async () => {
@@ -80,7 +82,7 @@ describe('XHR Handler', () => {
     expect(abort.signal.aborted).toBeTruthy()
   })
 
-  test('should throw error when not supported', () => {
+  test('should throw error when not supported', async () => {
     vi.stubGlobal('XMLHttpRequest', undefined)
 
     const hq: HttpRequest = {
@@ -89,7 +91,8 @@ describe('XHR Handler', () => {
       method: 'GET',
     }
 
-    expect(() => xhrHandler(hq)).toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBeInstanceOf(Error)
 
     vi.unstubAllGlobals()
   })
@@ -102,7 +105,8 @@ describe('XHR Handler', () => {
       withCredentials: true,
     }
 
-    await expect(xhrHandler(hq)).resolves.not.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBeUndefined()
   })
 
   test('should set content type header', async () => {
@@ -113,7 +117,8 @@ describe('XHR Handler', () => {
       body: new ArrayBuffer(0),
     }
 
-    await expect(xhrHandler(hq)).resolves.not.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBeUndefined()
   })
 
   test('should set accept header', async () => {
@@ -125,7 +130,8 @@ describe('XHR Handler', () => {
       body: new Blob([], { type: 'image/png' }),
     }
 
-    await expect(xhrHandler(hq)).resolves.not.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBeUndefined()
   })
 
   test('should throw error when unparse body', async () => {
@@ -137,7 +143,8 @@ describe('XHR Handler', () => {
       body: 'Hello World!',
     }
 
-    await expect(xhrHandler(hq)).rejects.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBeInstanceOf(Error)
   })
 
   test('should throw error when status not ok', async () => {
@@ -147,7 +154,8 @@ describe('XHR Handler', () => {
       method: 'GET',
     }
 
-    await expect(xhrHandler(hq)).rejects.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBeInstanceOf(Error)
   })
 
   test('should throw when network error', async () => {
@@ -158,7 +166,8 @@ describe('XHR Handler', () => {
       responseType: 'json',
     }
 
-    await expect(xhrHandler(hq)).rejects.toThrowError()
+    const { error } = await xhrHandler(hq)
+    expect(error).toBeInstanceOf(Error)
   })
 
   test('should call progress', async () => {

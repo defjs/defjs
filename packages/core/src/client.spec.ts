@@ -10,8 +10,8 @@ import {
   restGlobalClient,
   setGlobalClient,
 } from '@src/client'
-import { ERR_NOT_FOUND_GLOBAL_CLIENT } from '@src/error'
 import { fetchHandler } from '@src/handler'
+import { ERR_NOT_FOUND_GLOBAL_CLIENT } from '@src/response'
 import { beforeEach, describe, expect, test } from 'vitest'
 
 describe('Client', () => {
