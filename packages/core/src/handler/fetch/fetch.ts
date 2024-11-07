@@ -1,7 +1,6 @@
-import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '@src/error'
 import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '@src/handler/util'
 import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '@src/request'
-import { type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
+import { ERR_ABORTED, ERR_TIMEOUT, type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
 
 export function __createRequest(request: HttpRequest): Request {
   const url = new URL(request.endpoint, request.host)
@@ -47,16 +46,16 @@ export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpRespon
     if (abortSignal?.aborted && abortSignal.reason instanceof Error) {
       switch (true) {
         case abortSignal.reason.name === 'AbortError':
-          throw new HttpErrorResponse({ error: ERR_ABORTED })
+          return __makeResponse({ error: ERR_ABORTED })
         case abortSignal.reason.name === 'TimeoutError':
-          throw new HttpErrorResponse({ error: ERR_TIMEOUT })
+          return __makeResponse({ error: ERR_TIMEOUT })
       }
     }
 
-    throw new HttpErrorResponse({ error })
+    return __makeResponse({ error })
   }
 
-  const { ok, headers, status, statusText, url } = response
+  const { headers, status, statusText, url } = response
   const contentLength = __getContentLength(headers)
   const contentType = __getContentType(headers)
   let body: HttpResponseBody = null
@@ -93,7 +92,7 @@ export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpRespon
         contentType,
       })
     } catch (error) {
-      throw new HttpErrorResponse({
+      return __makeResponse({
         error,
         status,
         statusText,
@@ -103,21 +102,11 @@ export async function fetchHandler(httpRequest: HttpRequest): Promise<HttpRespon
     }
   }
 
-  if (!ok) {
-    throw new HttpErrorResponse({
-      status,
-      statusText,
-      headers,
-      url,
-      body,
-    })
-  }
-
   return __makeResponse({
-    url,
     status,
     statusText,
     headers,
+    url,
     body,
   })
 }

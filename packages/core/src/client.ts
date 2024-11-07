@@ -1,6 +1,6 @@
-import { ERR_INVALID_CLIENT, ERR_NOT_FOUND_GLOBAL_CLIENT } from './error'
 import { type HttpHandler, fetchHandler } from './handler'
 import type { InterceptorFn } from './interceptor'
+import { ERR_INVALID_CLIENT, ERR_NOT_FOUND_GLOBAL_CLIENT } from './response'
 
 export interface ClientOptions {
   host: string

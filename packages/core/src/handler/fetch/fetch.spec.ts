@@ -1,6 +1,6 @@
-import { ERR_ABORTED, ERR_TIMEOUT, HttpErrorResponse } from '@src/error'
 import { __createRequest, fetchHandler } from '@src/handler/fetch/fetch'
 import type { HttpRequest } from '@src/request'
+import { ERR_ABORTED, ERR_TIMEOUT } from '@src/response'
 import { describe, expect, inject, test } from 'vitest'
 
 describe('Fetch handler', () => {
@@ -79,14 +79,8 @@ describe('Fetch handler', () => {
       abort.abort()
     }, 0)
 
-    try {
-      await fetchHandler(hq)
-    } catch (e) {
-      if (!(e instanceof HttpErrorResponse)) {
-        throw new Error('Not HttpErrorResponse')
-      }
-      expect(e.cause).toBe(ERR_ABORTED)
-    }
+    const { error } = await fetchHandler(hq)
+    expect(error).toBe(ERR_ABORTED)
   })
 
   test('should timeout network', async () => {
@@ -99,14 +93,8 @@ describe('Fetch handler', () => {
       queryParams: new URLSearchParams({ ms: '10000' }),
     }
 
-    try {
-      await fetchHandler(hq)
-    } catch (e) {
-      if (!(e instanceof HttpErrorResponse)) {
-        throw new Error('Not HttpErrorResponse')
-      }
-      expect(e.cause).toBe(ERR_TIMEOUT)
-    }
+    const { error } = await fetchHandler(hq)
+    expect(error).toBe(ERR_TIMEOUT)
   })
 
   test('should throw error when post request set body', async () => {
@@ -156,7 +144,8 @@ describe('Fetch handler', () => {
       responseType: 'text',
     }
 
-    await expect(fetchHandler(hq)).rejects.toThrowError(Error)
+    const { error } = await fetchHandler(hq)
+    expect(error).toBeInstanceOf(Error)
   })
 
   test('should body is arraybuffer', async () => {

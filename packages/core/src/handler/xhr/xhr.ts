@@ -1,6 +1,5 @@
-import { ERR_ABORTED, ERR_NETWORK, ERR_TIMEOUT, ERR_UNKNOWN, HttpErrorResponse } from '@src/error'
 import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '@src/request'
-import { type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
+import { ERR_ABORTED, ERR_NETWORK, ERR_TIMEOUT, ERR_UNKNOWN, type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
 import { __getContentType, __parseBody } from '../util'
 
 export function extractHeaders(value: string): Headers {
@@ -17,11 +16,12 @@ export function extractHeaders(value: string): Headers {
 }
 
 export function xhrHandler(httpRequest: HttpRequest): Promise<HttpResponse<unknown>> {
-  if (typeof globalThis.XMLHttpRequest !== 'function') {
-    throw new Error('XMLHttpRequest is not supported')
-  }
+  return new Promise(resolve => {
+    if (typeof globalThis.XMLHttpRequest !== 'function') {
+      resolve(__makeResponse({ error: new Error('XMLHttpRequest is not supported') }))
+      return
+    }
 
-  return new Promise((resolve, reject) => {
     const xhr = new globalThis.XMLHttpRequest()
     const uploadProgress = httpRequest.uploadProgress
     const downloadProgress = httpRequest.downloadProgress
@@ -62,7 +62,6 @@ export function xhrHandler(httpRequest: HttpRequest): Promise<HttpResponse<unkno
 
     const onLoad = () => {
       const { status, statusText, responseURL, response } = xhr
-      const ok = status >= 200 && status < 300
       const headers = extractHeaders(xhr.getAllResponseHeaders())
       const contentType = __getContentType(headers)
       let body: HttpResponseBody = null
@@ -74,21 +73,9 @@ export function xhrHandler(httpRequest: HttpRequest): Promise<HttpResponse<unkno
           content: response,
         })
       } catch (error) {
-        reject(
-          new HttpErrorResponse({
+        resolve(
+          __makeResponse({
             error,
-            status,
-            statusText,
-            url: responseURL,
-          }),
-        )
-      }
-
-      if (!ok) {
-        reject(
-          new HttpErrorResponse({
-            body,
-            headers,
             status,
             statusText,
             url: responseURL,
@@ -124,8 +111,8 @@ export function xhrHandler(httpRequest: HttpRequest): Promise<HttpResponse<unkno
           break
       }
 
-      reject(
-        new HttpErrorResponse({
+      resolve(
+        __makeResponse({
           error,
           status: xhr.status,
           statusText: xhr.statusText,
