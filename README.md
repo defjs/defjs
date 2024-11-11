@@ -46,7 +46,11 @@ bun install @defjs/core
 **Only can use ES modules**
 
 ```javascript
-import {createGlobalClient, defineRequest, field} from 'https://unpkg.com/@defjs/core/index.min.js';
+import {
+  createGlobalClient,
+  defineRequest, 
+  field
+} from 'https://unpkg.com/@defjs/core/index.min.js';
 
 /**
  * @title Step 1
@@ -63,9 +67,9 @@ createGlobalClient({
  * @description Define the request api request in the lib/api directory of the project
  */
 const useGetUser = defineRequest('/v1/user/:id')
-  .withField(
-    field<number>().withParam()
-  )
+  .withField({
+    id: field<number>().withParam()
+  })
 
 /**
  * @title Step 3
@@ -73,7 +77,12 @@ const useGetUser = defineRequest('/v1/user/:id')
  * @description Use defined requests in business code
  */
 const { doRequest } = useGetUser();
-const { body } = await doRequest(1);
+const { error, body } = await doRequest({id: 1});
+if (error) {
+  console.error(error);
+  return;
+}
+console.log(body);
 ```
 
 ## Documentation

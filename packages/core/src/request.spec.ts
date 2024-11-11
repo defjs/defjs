@@ -19,13 +19,13 @@ describe('Request', () => {
   const testClient = createClient({ host: inject('testServerHost') })
 
   test('should build field default value', () => {
-    expect(__buildFieldDefaultValue(field(1))).toBe(1)
-    expect(__buildFieldDefaultValue(field('Hello World!'))).toBe('Hello World!')
-    expect(__buildFieldDefaultValue(field(true))).toBeTruthy()
-    expect(__buildFieldDefaultValue(field(false))).toBeFalsy()
-    expect(__buildFieldDefaultValue(field([]))).toEqual([])
-    expect(__buildFieldDefaultValue(field({}))).toEqual({})
-    expect(__buildFieldDefaultValue(field(null))).toBeNull()
+    expect(__buildFieldDefaultValue(field(1))).toBeUndefined()
+    expect(__buildFieldDefaultValue(field('Hello World!'))).toBeUndefined()
+    expect(__buildFieldDefaultValue(field(true))).toBeUndefined()
+    expect(__buildFieldDefaultValue(field(false))).toBeUndefined()
+    expect(__buildFieldDefaultValue(field([]))).toBeUndefined()
+    expect(__buildFieldDefaultValue(field({}))).toBeUndefined()
+    expect(__buildFieldDefaultValue(field(null))).toBeUndefined()
     expect(__buildFieldDefaultValue(field(undefined))).toBeUndefined()
 
     expect(__buildFieldDefaultValue({ id: field(1), name: field('Hello World!') })).toEqual({ id: 1, name: 'Hello World!' })
@@ -152,37 +152,46 @@ describe('Request', () => {
     })
 
     test('should throw error when define input but not use', async () => {
-      const useRequest = defineRequest('POST', '/').withField(field<number>())
+      const useRequest = defineRequest('POST', '/').withField({
+        id: field<number>(),
+      })
       const { doRequest } = useRequest({ client: testClient })
 
+      // @ts-ignore
       const { error } = await doRequest()
       expect(error).toBeInstanceOf(Error)
     })
 
     test('should throw error when use abort signal timeout', async () => {
       const signal = AbortSignal.timeout(100)
-      const useRequest = defineRequest('GET', '/delay').withField(field<number>().withQuery('ms'))
+      const useRequest = defineRequest('GET', '/delay').withField({
+        ms: field<number>().withQuery(),
+      })
       const { doRequest } = useRequest({ abort: signal, client: testClient })
-      const { error } = await doRequest(500)
+      const { error } = await doRequest({ ms: 500 })
       expect(error).toBe(ERR_TIMEOUT)
     })
 
     test('should throw error when cancel', async () => {
-      const useRequest = defineRequest('GET', '/delay').withField(field<number>().withQuery('ms'))
+      const useRequest = defineRequest('GET', '/delay').withField({
+        ms: field<number>().withQuery(),
+      })
       const { doRequest, cancel } = useRequest({ client: testClient })
 
       setTimeout(() => {
         cancel()
       }, 500)
 
-      const { error } = await doRequest(10000)
+      const { error } = await doRequest({ ms: 10000 })
       expect(error).toBe(ERR_ABORTED)
     })
 
     test('should throw error when set timeout option', async () => {
-      const useRequest = defineRequest('GET', '/delay').withField(field<number>().withQuery('ms'))
+      const useRequest = defineRequest('GET', '/delay').withField({
+        ms: field<number>().withQuery(),
+      })
       const { doRequest } = useRequest({ timeout: 100, client: testClient })
-      const { error } = await doRequest(500)
+      const { error } = await doRequest({ ms: 500 })
       expect(error).toBe(ERR_TIMEOUT)
     })
 
@@ -279,17 +288,15 @@ describe('Request', () => {
           id: field<number>().withJson(),
           name: field<string>().withJson(),
         })
-        .withValidators([
-          value => {
-            if (!value.id || !value.name) {
-              throw err
-            }
-            if (value.id < 10) {
-              throw err
-            }
-            return null
-          },
-        ])
+        .withValidators(value => {
+          if (!value.id || !value.name) {
+            throw err
+          }
+          if (value.id < 10) {
+            throw err
+          }
+          return null
+        })
       const { doRequest } = useRequest({ client: testClient })
       try {
         await doRequest({ id: 5, name: 'Jack' })
@@ -379,15 +386,18 @@ describe('Request', () => {
 
     test('should use doRequest when input one param', async () => {
       setGlobalClient(testClient)
-      const useRequest = defineRequest('POST', '/').withField(field<number>().withJson())
+      const useRequest = defineRequest<{ id: number }>('POST', '/').withField({
+        id: field<number>().withJson(),
+      })
       const { doRequest, getInitValue } = useRequest({ client: testClient })
-      let input = getInitValue()
-      input = 10
+      const input = getInitValue()
+      input.id = 10
       {
         const { body } = await doRequest(input)
-        expect(body).toBe(10)
+        expect(body?.id).toBe(10)
       }
       {
+        // @ts-ignore
         const { error } = await doRequest()
         expect(error).toBeInstanceOf(Error)
       }
