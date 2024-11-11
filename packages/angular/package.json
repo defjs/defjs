@@ -1,0 +1,26 @@
+{
+  "name": "@defjs/angular",
+  "version": "18.0.6",
+  "type": "module",
+  "module": "dist/index.js",
+  "typings": "dist/index.d.ts",
+  "license": "MIT",
+  "peerDependencies": {
+    "@angular/common": "^18.0.0",
+    "@angular/core": "^18.0.0",
+    "@defjs/core": "*"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/defjs/defjs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/defjs/defjs/issues"
+  },
+  "scripts": {
+    "build": "bun scripts/build.ts",
+    "lint": "biome check",
+    "lint:fix": "biome check --write",
+    "pub": "cd dist && npm publish --provenance"
+  }
+}

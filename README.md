@@ -91,9 +91,10 @@ Check out the [🚧 defjs.org](https://defjs.org) to get started.
 
 ## Packages
 
-| Package                      | Version                                                        |
-|------------------------------|:---------------------------------------------------------------|
+| Package                      | Version                                                                                      |
+|------------------------------|:---------------------------------------------------------------------------------------------|
 | [@defjs/core](packages/core) | ![core version](https://img.shields.io/npm/v/%40defjs%2Fcore?color=%23000&style=flat-square) |
+| [@defjs/angular](packages/angular) | ![core version](https://img.shields.io/npm/v/%40defjs%2Fangular?color=%23000&style=flat-square)     |
 
 ## Roadmap
 
