@@ -104,11 +104,11 @@ export function __detectContentTypeHeader(body: HttpRequest['body']): string | n
   }
 }
 
-export type RequestInputValue<T> = T extends Field<infer V>
-  ? V
-  : T extends { [K in keyof T]: Field<any> }
-    ? { [K in keyof T]: RequestInputValue<T[K]> }
-    : never
+export type RequestInputValue<T> = T extends { [K in keyof T]: Field<any> }
+  ? {
+      [K in keyof T]: T[K] extends Field<infer V> ? V : never
+    }
+  : never
 
 export type UseRequestOptions = {
   abort?: AbortSignal
@@ -118,10 +118,6 @@ export type UseRequestOptions = {
 }
 
 export function __buildFieldDefaultValue<Input>(input?: Input): RequestInputValue<Input> {
-  if (isField(input)) {
-    return input() as RequestInputValue<Input>
-  }
-
   if (isFieldGroup(input)) {
     const obj: Record<string, unknown> = {}
     for (const [key, field] of Object.entries(input)) {
@@ -130,7 +126,7 @@ export function __buildFieldDefaultValue<Input>(input?: Input): RequestInputValu
     return obj as RequestInputValue<Input>
   }
 
-  return undefined as RequestInputValue<Input>
+  return undefined as unknown as RequestInputValue<Input>
 }
 
 export type UseRequestFn<Input, Output> = {
@@ -140,21 +136,17 @@ export type UseRequestFn<Input, Output> = {
 
   cancel: () => void
 
-  getInitValue: () => Input extends Field<infer V>
-    ? V
-    : Input extends { [K in keyof Input]: Field<any> }
-      ? { [K in keyof Input]: RequestInputValue<Input[K]> }
-      : undefined
+  getInitValue: () => RequestInputValue<Input>
 
   setUploadProgress: (fn: HttpProgressFn) => void
 
   setDownloadProgress: (fn: HttpProgressFn) => void
 }
 
-export interface DefineRequest<Input extends Field<any> | Record<PropertyKey, Field<any>> | undefined = undefined, Output = unknown> {
+export interface DefineRequest<Input extends Record<PropertyKey, Field<any>> | undefined = undefined, Output = unknown> {
   (options?: UseRequestOptions): UseRequestFn<Input, Output>
 
-  withField<I extends Field<any> | Record<PropertyKey, Field<any>>>(value: I): DefineRequest<I, Output>
+  withField<I extends Record<PropertyKey, Field<any>>>(value: I): DefineRequest<I, Output>
 
   withInterceptors(value: InterceptorFn[]): DefineRequest<Input, Output>
 
@@ -163,7 +155,7 @@ export interface DefineRequest<Input extends Field<any> | Record<PropertyKey, Fi
   withCredentials(value: boolean): DefineRequest<Input, Output>
 
   withValidators(
-    value: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[],
+    ...fn: (ValidatorFn<RequestInputValue<Input>> | AsyncValidatorFn<RequestInputValue<Input>>)[]
   ): DefineRequest<Input, Output>
 
   withTransformResponse<O>(fn: TransformResponseFn<O>): DefineRequest<Input, O>
@@ -185,7 +177,7 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
   let responseType: HttpResponseType = 'json'
   let context: HttpContext | undefined
   let withCredentials = false
-  let validators: (ValidatorFn | AsyncValidatorFn)[] = []
+  let validators: (ValidatorFn<any> | AsyncValidatorFn<any>)[] = []
   let transformResponse: TransformResponseFn | undefined
 
   switch (args.length) {
@@ -326,8 +318,8 @@ export function defineRequest<Output>(...args: unknown[]): DefineRequest<undefin
     return fn
   }
 
-  fn.withValidators = value => {
-    validators = value
+  fn.withValidators = (...fns) => {
+    validators = fns
     return fn
   }
 
