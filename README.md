@@ -103,6 +103,9 @@ Check out the [🚧 defjs.org](https://defjs.org) to get started.
 - CLI Tool
   - Generate API from OpenAPI
   - Generate Full SDK Package (Like the [S3 SDK](https://www.npmjs.com/package/@aws-sdk/client-s3))
+- Vue wrapper package
+- React wrapper package
+- Think about simplifying useXXX and doRequest
 
 ## License
 

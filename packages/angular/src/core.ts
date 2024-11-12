@@ -41,29 +41,28 @@ function factoryClient(): Client {
   })
 }
 
-export function provideGlobalClient(...feature: EnvironmentProviders[]): EnvironmentProviders {
-  return makeEnvironmentProviders([
-    ...feature,
-    {
-      provide: APP_INITIALIZER,
-      useFactory: () => {
-        const client = factoryClient()
-        return () => {
-          setGlobalClient(client)
-        }
-      },
-      deps: [HTTP_HOST, HTTP_INTERCEPTOR_FNS],
-      multi: true,
-    },
-  ])
-}
-
 export function provideClient(...feature: EnvironmentProviders[]): EnvironmentProviders {
   return makeEnvironmentProviders([
     ...feature,
     {
       provide: HTTP_CLIENT,
       useFactory: factoryClient,
+    },
+  ])
+}
+
+export function provideGlobalClient(...feature: EnvironmentProviders[]): EnvironmentProviders {
+  return makeEnvironmentProviders([
+    provideClient(...feature),
+    {
+      provide: APP_INITIALIZER,
+      useFactory: () => {
+        const client = inject(HTTP_CLIENT)
+        return () => {
+          setGlobalClient(client)
+        }
+      },
+      multi: true,
     },
   ])
 }
