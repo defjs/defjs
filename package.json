@@ -16,15 +16,13 @@
     "vite": "^5.4.11",
     "vite-plugin-dts": "^4.3.0",
     "vitest": "^2.1.4",
-    "webdriverio": "^9.2.11",
+    "webdriverio": "^9.2.12",
     "zod": "^3.23.8"
   },
   "scripts": {
     "build": "bun --filter '@defjs/*' build",
     "test": "vitest",
-    "test:core": "vitest watch --project=chrome",
     "lint": "bun --filter '@defjs/*' lint",
-    "lint:fix": "bun --filter '@defjs/*' lint:fix",
-    "pub": "bun --filter '@defjs/*' pub"
+    "lint:fix": "bun --filter '@defjs/*' lint:fix"
   }
 }

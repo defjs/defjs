@@ -1,6 +1,6 @@
 {
   "name": "@defjs/angular",
-  "version": "18.0.6",
+  "version": "18.0.7",
   "type": "module",
   "module": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -8,7 +8,7 @@
   "peerDependencies": {
     "@angular/common": "^18.0.0",
     "@angular/core": "^18.0.0",
-    "@defjs/core": "*"
+    "@defjs/core": "^0.3.0"
   },
   "repository": {
     "type": "git",
@@ -21,6 +21,13 @@
     "build": "bun scripts/build.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
-    "pub": "cd dist && npm publish --provenance"
+    "pub": "cd dist && bun publish"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
   }
 }

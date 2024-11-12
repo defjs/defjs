@@ -1,5 +1,5 @@
-import { __makeResponse } from '@src/response'
 import { describe, expect, test } from 'vitest'
+import { __makeResponse } from './response'
 
 describe('Response', () => {
   test('should make response', () => {

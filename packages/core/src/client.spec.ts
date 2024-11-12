@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, test } from 'vitest'
 import {
   type Client,
   type ClientConfig,
@@ -9,10 +10,9 @@ import {
   isClient,
   restGlobalClient,
   setGlobalClient,
-} from '@src/client'
-import { fetchHandler } from '@src/handler'
-import { ERR_NOT_FOUND_GLOBAL_CLIENT } from '@src/response'
-import { beforeEach, describe, expect, test } from 'vitest'
+} from './client'
+import { fetchHandler } from './handler'
+import { ERR_NOT_FOUND_GLOBAL_CLIENT } from './response'
 
 describe('Client', () => {
   const clientConfig: ClientConfig = {

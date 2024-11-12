@@ -1,5 +1,5 @@
-import { max, maxLength, min, minLength, pattern, required, requiredTrue } from '@src/validator'
 import { describe, expect, test } from 'vitest'
+import { max, maxLength, min, minLength, pattern, required, requiredTrue } from './validator'
 
 describe('Validator', () => {
   test('should required', () => {

@@ -1,7 +1,7 @@
-import { makeFakeHandler } from '@src/handler/test_handler'
-import { type InterceptorFn, makeInterceptorChain } from '@src/interceptor/interceptor'
-import type { HttpRequest } from '@src/request'
 import { describe, expect, it } from 'vitest'
+import { makeFakeHandler } from '../handler/test_handler'
+import { type InterceptorFn, makeInterceptorChain } from '../interceptor/interceptor'
+import type { HttpRequest } from '../request'
 
 describe('interceptor', () => {
   it('should work', async () => {

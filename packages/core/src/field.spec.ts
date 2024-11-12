@@ -1,5 +1,5 @@
-import { FieldType, __getFieldMetadata, doValid, field, isField, isFieldGroup } from '@src/field'
 import { describe, expect, test } from 'vitest'
+import { FieldType, __getFieldMetadata, doValid, field, isField, isFieldGroup } from './field'
 
 describe('test field', () => {
   test('should create field with default value', () => {

@@ -1,5 +1,13 @@
-import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '@src/request'
-import { ERR_ABORTED, ERR_NETWORK, ERR_TIMEOUT, ERR_UNKNOWN, type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
+import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '../../request'
+import {
+  ERR_ABORTED,
+  ERR_NETWORK,
+  ERR_TIMEOUT,
+  ERR_UNKNOWN,
+  type HttpResponse,
+  type HttpResponseBody,
+  __makeResponse,
+} from '../../response'
 import { __getContentType, __parseBody } from '../util'
 
 export function extractHeaders(value: string): Headers {

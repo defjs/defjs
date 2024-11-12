@@ -2,6 +2,14 @@ name: Releases lib
 
 on:
   workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to release'
+        required: true
+        default: 'core'
+        options:
+          - 'core'
+          - 'angular'
 
 jobs:
   releases-core:
@@ -11,13 +19,18 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          registry-url: https://registry.npmjs.org/
-          node-version: 20
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run pub
+      - if: github.event.inputs.package == 'core'
+        run: |
+          bun run --filter "@defjs/core" build
+          bun run --filter "@defjs/core" pub
         env:
-          NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+          NPM_CONFIG_TOKEN: ${{secrets.NPM_TOKEN}}
+      - if: github.event.inputs.package == 'angular'
+        run: |
+          bun run --filter "@defjs/angular" build
+          bun run --filter "@defjs/angular" pub
+        env:
+          NPM_CONFIG_TOKEN: ${{secrets.NPM_TOKEN}}

@@ -1,6 +1,6 @@
-import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '@src/handler/util'
-import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '@src/request'
-import { ERR_ABORTED, ERR_TIMEOUT, type HttpResponse, type HttpResponseBody, __makeResponse } from '@src/response'
+import { type HttpRequest, __detectContentTypeHeader, __serializeBody } from '../../request'
+import { ERR_ABORTED, ERR_TIMEOUT, type HttpResponse, type HttpResponseBody, __makeResponse } from '../../response'
+import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '../util'
 
 export function __createRequest(request: HttpRequest): Request {
   const url = new URL(request.endpoint, request.host)
