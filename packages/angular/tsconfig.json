@@ -19,10 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noPropertyAccessFromIndexSignature": true,
-    "paths": {
-      "@src/*": ["src/*"]
-    }
+    "noPropertyAccessFromIndexSignature": true
   },
   "include": ["src/**/*.ts", "test-setup.ts"]
 }

@@ -1,7 +1,7 @@
-import { extractHeaders, xhrHandler } from '@src/handler/xhr/xhr'
-import type { HttpRequest } from '@src/request'
-import { ERR_ABORTED, ERR_TIMEOUT } from '@src/response'
 import { describe, expect, inject, test, vi } from 'vitest'
+import { extractHeaders, xhrHandler } from '../../handler/xhr/xhr'
+import type { HttpRequest } from '../../request'
+import { ERR_ABORTED, ERR_TIMEOUT } from '../../response'
 
 describe('XHR Handler', () => {
   test('should extract headers', () => {

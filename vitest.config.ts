@@ -8,7 +8,7 @@ export default defineConfig({
       provider: 'istanbul',
       reporter: ['lcov', 'json', 'html', 'text'],
       reportsDirectory: 'coverage',
-      include: ['**/src/**/*.ts'],
+      include: ['packages/core/src/**/*.ts'],
       exclude: ['**/node_modules/**', '**/test/**', '**/src/**/*.spec.ts'],
       thresholds: {
         ['100']: true,

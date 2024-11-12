@@ -1,8 +1,8 @@
-import { makeFakeHandler } from '@src/handler/test_handler'
-import { type BasicCredential, basicAuthInterceptor } from '@src/interceptor/authorization/basic_auth_interceptor'
-import { makeInterceptorChain } from '@src/interceptor/interceptor'
-import type { HttpRequest } from '@src/request'
 import { describe, expect, test } from 'vitest'
+import { makeFakeHandler } from '../../handler/test_handler'
+import { type BasicCredential, basicAuthInterceptor } from '../../interceptor/authorization/basic_auth_interceptor'
+import { makeInterceptorChain } from '../../interceptor/interceptor'
+import type { HttpRequest } from '../../request'
 
 describe('Basic Auth Interceptor', () => {
   test('should use basic auth', async () => {

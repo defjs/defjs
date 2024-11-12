@@ -2,8 +2,8 @@
   "name": "@defjs/core",
   "version": "0.3.0",
   "type": "module",
-  "module": "dist/index.js",
-  "typings": "dist/index.d.ts",
+  "module": "src/index.ts",
+  "typings": "src/index.ts",
   "license": "MIT",
   "publishConfig": {
     "directory": "dist"
@@ -19,6 +19,6 @@
     "build": "bun scripts/build.ts",
     "lint": "biome check",
     "lint:fix": "biome check --write",
-    "pub": "cd dist && npm publish --provenance"
+    "pub": "cd dist && bun publish"
   }
 }

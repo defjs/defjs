@@ -1,6 +1,6 @@
-import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '@src/handler/util'
-import type { HttpRequest } from '@src/request'
 import { describe, expect, test } from 'vitest'
+import { __concatChunks, __getContentLength, __getContentType, __parseBody } from '../handler/util'
+import type { HttpRequest } from '../request'
 
 describe('Handler util', () => {
   test('should concatenate chunks', () => {

@@ -1,6 +1,6 @@
-import { makeFakeHandler } from '@src/handler/test_handler'
-import type { HttpRequest } from '@src/request'
 import { describe, expect, test } from 'vitest'
+import { makeFakeHandler } from '../handler/test_handler'
+import type { HttpRequest } from '../request'
 
 describe('Test handler', () => {
   test('should create a fake handler', async () => {

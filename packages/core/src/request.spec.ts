@@ -1,7 +1,9 @@
-import { cloneClient, createClient, restGlobalClient, setGlobalClient } from '@src/client'
-import { makeHttpContext } from '@src/context'
-import { field } from '@src/field'
-import { setGlobalHttpHandler } from '@src/handler/handler'
+import { describe, expect, inject, test, vi } from 'vitest'
+import { z } from 'zod'
+import { cloneClient, createClient, restGlobalClient, setGlobalClient } from './client'
+import { makeHttpContext } from './context'
+import { field } from './field'
+import { setGlobalHttpHandler } from './handler/handler'
 import {
   type HttpRequest,
   __buildFieldDefaultValue,
@@ -10,10 +12,8 @@ import {
   __fillUrl,
   __serializeBody,
   defineRequest,
-} from '@src/request'
-import { ERR_ABORTED, ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_TIMEOUT } from '@src/response'
-import { describe, expect, inject, test, vi } from 'vitest'
-import { z } from 'zod'
+} from './request'
+import { ERR_ABORTED, ERR_NOT_FOUND_HANDLER, ERR_NOT_SET_ALIAS, ERR_TIMEOUT } from './response'
 
 describe('Request', () => {
   const testClient = createClient({ host: inject('testServerHost') })

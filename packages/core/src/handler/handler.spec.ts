@@ -1,6 +1,6 @@
-import { getGlobalHttpHandler, setGlobalHttpHandler } from '@src/handler/handler'
-import { makeFakeHandler } from '@src/handler/test_handler'
 import { describe, expect, test } from 'vitest'
+import { getGlobalHttpHandler, setGlobalHttpHandler } from '../handler/handler'
+import { makeFakeHandler } from '../handler/test_handler'
 
 describe('Handler', () => {
   test('should set and get global http handler', () => {

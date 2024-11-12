@@ -15,30 +15,14 @@ export function withHost(host: string): EnvironmentProviders {
   ])
 }
 
-export function withInterceptors(...fns: InterceptorFn[]): EnvironmentProviders {
+export function withInterceptors(...fns: (() => InterceptorFn)[]): EnvironmentProviders {
   return makeEnvironmentProviders(
     fns.map(fn => ({
       provide: HTTP_INTERCEPTOR_FNS,
-      useValue: () => fn,
+      useFactory: fn,
       multi: true,
     })),
   )
-}
-
-function factoryClient(): Client {
-  let host = inject(HTTP_HOST, { optional: true })
-
-  if (!host) {
-    const document: Document | null = inject(DOCUMENT, { optional: true })
-    host = document?.location.origin ?? ''
-  }
-
-  const interceptors = inject(HTTP_INTERCEPTOR_FNS, { optional: true }) ?? []
-
-  return createClient({
-    host,
-    interceptors,
-  })
 }
 
 export function provideClient(...feature: EnvironmentProviders[]): EnvironmentProviders {
@@ -46,7 +30,22 @@ export function provideClient(...feature: EnvironmentProviders[]): EnvironmentPr
     ...feature,
     {
       provide: HTTP_CLIENT,
-      useFactory: factoryClient,
+      useFactory: () => {
+        let host = inject(HTTP_HOST, { optional: true })
+
+        if (!host) {
+          const document: Document | null = inject(DOCUMENT, { optional: true })
+
+          host = document?.location.origin ?? ''
+        }
+
+        const interceptors = inject(HTTP_INTERCEPTOR_FNS, { optional: true }) ?? []
+
+        return createClient({
+          host,
+          interceptors,
+        })
+      },
     },
   ])
 }
@@ -58,6 +57,7 @@ export function provideGlobalClient(...feature: EnvironmentProviders[]): Environ
       provide: APP_INITIALIZER,
       useFactory: () => {
         const client = inject(HTTP_CLIENT)
+
         return () => {
           setGlobalClient(client)
         }

@@ -1,5 +1,5 @@
-import { isHttpContext, isHttpContextToken, makeHttpContext, makeHttpContextToken } from '@src/context'
 import { describe, expect, test } from 'vitest'
+import { isHttpContext, isHttpContextToken, makeHttpContext, makeHttpContextToken } from './context'
 
 describe('Context', () => {
   test('should throw error when set other token', () => {

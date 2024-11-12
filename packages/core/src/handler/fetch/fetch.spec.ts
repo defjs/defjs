@@ -1,7 +1,7 @@
-import { __createRequest, fetchHandler } from '@src/handler/fetch/fetch'
-import type { HttpRequest } from '@src/request'
-import { ERR_ABORTED, ERR_TIMEOUT } from '@src/response'
 import { describe, expect, inject, test } from 'vitest'
+import type { HttpRequest } from '../../request'
+import { ERR_ABORTED, ERR_TIMEOUT } from '../../response'
+import { __createRequest, fetchHandler } from './fetch'
 
 describe('Fetch handler', () => {
   test('should create a request', async () => {
