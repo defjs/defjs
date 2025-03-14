@@ -83,16 +83,14 @@ export function __serializeBody(body: HttpRequest['body']): ArrayBuffer | Blob |
 
 export function __detectContentTypeHeader(body: HttpRequest['body']): string | null {
   switch (true) {
+    /** The browser can automatically add content-type and boundary */
     case body instanceof FormData:
-      return 'multipart/form-data'
+    case body instanceof URLSearchParams:
+      return null
     case body instanceof ArrayBuffer:
       return 'application/octet-stream'
-    case body instanceof Blob: {
+    case body instanceof Blob:
       return body.type || 'application/octet-stream'
-    }
-    case body instanceof URLSearchParams: {
-      return 'application/x-www-form-urlencoded;charset=UTF-8'
-    }
     case typeof body === 'string':
       return 'text/plain'
     case typeof body === 'object' && body !== null:

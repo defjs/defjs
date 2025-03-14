@@ -43,7 +43,7 @@ describe('Request', () => {
     })
 
     test('should FormData is multipart/form-data', () => {
-      expect(__detectContentTypeHeader(new FormData())).toBe('multipart/form-data')
+      expect(__detectContentTypeHeader(new FormData())).toBeNull()
     })
 
     test('should ArrayBuffer is application/octet-stream', () => {
@@ -51,7 +51,7 @@ describe('Request', () => {
     })
 
     test('should URLSearchParams is application/x-www-form-urlencoded', () => {
-      expect(__detectContentTypeHeader(new URLSearchParams())).toBe('application/x-www-form-urlencoded;charset=UTF-8')
+      expect(__detectContentTypeHeader(new URLSearchParams())).toBeNull()
     })
 
     test('should String is text/plain', () => {
@@ -457,7 +457,7 @@ describe('Request', () => {
         await __fillRequestFromField(hq, fields, {})
 
         expect(hq.endpoint).toEqual('/v1/1/John')
-        expect(__detectContentTypeHeader(hq.body)).toBe('application/x-www-form-urlencoded;charset=UTF-8')
+        expect(__detectContentTypeHeader(hq.body)).toBeNull()
 
         const body = hq.body as URLSearchParams
         expect(body.toString()).toBe(new URLSearchParams([['form_data', JSON.stringify(data)]]).toString())
