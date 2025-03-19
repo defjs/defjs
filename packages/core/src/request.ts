@@ -358,9 +358,10 @@ export async function __fillRequestFromField(
       case typeof value === 'boolean':
       case typeof value === 'number':
       case typeof value === 'string':
+      case typeof value === 'undefined':
         return String(value)
       default:
-        throw new Error('Unsupported value type')
+        throw new Error(`Unsupported value type: ${typeof value}`)
     }
   }
 
@@ -369,7 +370,11 @@ export async function __fillRequestFromField(
       for (const v of value) {
         sp.append(key, serializeToString(v))
       }
-    } else {
+
+      return sp
+    }
+
+    if (typeof value !== 'undefined') {
       sp.set(key, serializeToString(value))
     }
     return sp
@@ -380,9 +385,12 @@ export async function __fillRequestFromField(
       for (const v of value) {
         setValue(sp, key, serializeToString(v))
       }
+      return sp
     }
 
-    sp.set(key, serializeToString(value))
+    if (typeof value !== 'undefined') {
+      sp.set(key, serializeToString(value))
+    }
     return sp
   }
 
