@@ -1,3 +1,9 @@
+## 🚧 Coming soon 1.0 design
+
+[design.md](design.md)
+
+---
+
 <p align="center">
   <a href="https://github.com/defjs/defjs" target="_blank" rel="noopener noreferrer">
     <img width="200" src="logo.jpg" alt="logo">
