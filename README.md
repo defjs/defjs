@@ -32,7 +32,6 @@ Defjs is a library that helps you define and initiate requests, aiming to make i
 -	Supports any JS runtime.
 -	Supports Interceptors.
 -	Supports ESM
--	🚧 Supports Mini Programs. (WIP)
 
 ## Quick Start
 
