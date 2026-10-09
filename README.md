@@ -45,7 +45,7 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/v1/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({
       id: struct.number(),
     }),

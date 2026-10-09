@@ -140,7 +140,11 @@ export function createLineParser(
       }
 
       const currentFieldLength = fieldLength === -1 && lineEnd > lineStart ? lineEnd - lineStart : fieldLength
-      await onLine(buffer.subarray(lineStart, lineEnd), currentFieldLength)
+      // Most lines only update parser state. Awaiting them anyway costs a promise and a microtask per line.
+      const pending = onLine(buffer.subarray(lineStart, lineEnd), currentFieldLength)
+      if (pending) {
+        await pending
+      }
       lineStart = position
       fieldLength = -1
     }
@@ -167,7 +171,7 @@ export function createMessageParser(
   onRetry: (retry: number) => void,
   onMessage?: (message: EventStreamMessage) => void | Promise<void>,
   options?: MessageParserOptions,
-): (line: Uint8Array, fieldLength: number) => Promise<void> {
+): (line: Uint8Array, fieldLength: number) => void | Promise<void> {
   const maxBufferSize = validateMaxBufferSize(options?.maxBufferSize)
   let lastEventId = ''
   let event = ''
@@ -176,7 +180,7 @@ export function createMessageParser(
   let hasData = false
   const decoder = new TextDecoder()
 
-  return async (line: Uint8Array, fieldLength: number) => {
+  return (line: Uint8Array, fieldLength: number) => {
     if (line.length === 0) {
       const message = hasData
         ? {
@@ -191,10 +195,7 @@ export function createMessageParser(
       dataBytes = 0
       hasData = false
 
-      if (message) {
-        await onMessage?.(message)
-      }
-      return
+      return message ? onMessage?.(message) : undefined
     }
 
     // createLineParser emits a negative field length only for empty lines, which return above.
@@ -204,7 +205,10 @@ export function createMessageParser(
     }
 
     const hasColon = fieldLength < line.length && line[fieldLength] === ControlChar.Colon
-    const field = decoder.decode(line.subarray(0, fieldLength))
+    const field = fieldName(line, fieldLength)
+    if (field === undefined) {
+      return
+    }
     let valueOffset = hasColon ? fieldLength + 1 : line.length
     if (hasColon && line[valueOffset] === ControlChar.Space) {
       valueOffset += 1
@@ -236,6 +240,37 @@ export function createMessageParser(
         }
         break
     }
+  }
+}
+
+const DATA = [0x64, 0x61, 0x74, 0x61]
+const EVENT = [0x65, 0x76, 0x65, 0x6e, 0x74]
+const RETRY = [0x72, 0x65, 0x74, 0x72, 0x79]
+
+function sameBytes(line: Uint8Array, start: number, expected: readonly number[]): boolean {
+  for (let index = 0; index < expected.length; index += 1) {
+    if (line[start + index] !== expected[index]) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * The four field names SSE acts on, matched as bytes so a line does not decode its name.
+ * Decoding dropped one leading BOM, so one is skipped here too. Any other name is ignored.
+ */
+function fieldName(line: Uint8Array, length: number): 'data' | 'event' | 'id' | 'retry' | undefined {
+  const start = length >= 3 && line[0] === 0xef && line[1] === 0xbb && line[2] === 0xbf ? 3 : 0
+  switch (length - start) {
+    case 2:
+      return line[start] === 0x69 && line[start + 1] === 0x64 ? 'id' : undefined
+    case 4:
+      return sameBytes(line, start, DATA) ? 'data' : undefined
+    case 5:
+      return sameBytes(line, start, EVENT) ? 'event' : sameBytes(line, start, RETRY) ? 'retry' : undefined
+    default:
+      return undefined
   }
 }
 

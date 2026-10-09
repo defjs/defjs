@@ -1,0 +1,25 @@
+## bun build --minify --target=browser; bytes. 'http-only' = createClient + defineRequest + struct + withEndpoint.
+base	full	min=82570	gzip=25266	brotli=22606
+base	http-only	min=80113	gzip=24621	brotli=21989
+base	struct-only	min=17647	gzip=5515	brotli=5054
+final	full	min=84161	gzip=25874	brotli=23132
+final	http-only	min=50189	gzip=15445	brotli=13839
+final	struct-only	min=17685	gzip=5546	brotli=5086
+
+## per-module minified bytes in the baseline http-only bundle
+total 80112; SSE/WebSocket-only modules 30269 (37.8%)
+ 12849  web_socket/web_socket.ts
+  8221  internal/outbound_request.ts
+  7382  sse/transport/event_stream.ts
+  4980  struct/constructors.ts
+  4675  struct/parse.ts
+  4299  http/transport/fetch.ts
+  3669  http/http.ts
+  3361  sse/sse.ts
+  2763  struct/utils.ts
+  2683  internal/url.ts
+  2294  struct/encode.ts
+  1957  sse/transport/parser.ts
+  1701  internal/abort.ts
+  1496  http/transport/body.ts
+  1291  struct/match.ts

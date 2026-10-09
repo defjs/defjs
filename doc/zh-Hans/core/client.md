@@ -55,13 +55,14 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
@@ -74,11 +75,13 @@ if (!error) console.log(user.name)
 | Helper                                                                                                        | 作用                                                  |
 | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | 所有传输的绝对 base endpoint                          |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE 的静态默认 headers；command headers 覆盖     |
+| `withTimeout(ms)`                                                                                             | 只当 HTTP `execute` 的默认 timeout（SSE/WS 忽略）     |
 | `withHTTPHandle(fetch)`                                                                                       | 替换 HTTP 的 Fetch                                    |
 | `withSSEHandle(fetch)`                                                                                        | 替换 SSE 的 Fetch                                     |
 | `withWebSocketHandle(WebSocket)`                                                                              | 替换 WebSocket 构造函数                               |
 | `withInterceptors(...items)`                                                                                  | 追加混合 interceptor                                  |
-| `withQueryParamsSerializer(fn)`                                                                               | 替换 query 序列化                                     |
+| `withQuerySerializer(fn)`                                                                                     | 把已经 alias 过的 query 对象编成 query string         |
 | `withCredentials(boolean)`                                                                                    | 为 true 时 HTTP/SSE 用 Fetch `credentials: 'include'` |
 | `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                             |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 旋钮                                              |

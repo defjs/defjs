@@ -37,7 +37,7 @@ Defjs 不会帮你缓存结果、自动重试，也不会在你忘了关流时�
 
 | 包                            | 什么时候用                                                                       |
 | ----------------------------- | -------------------------------------------------------------------------------- |
-| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）或 `createClient`（只要 HTTP）           |
+| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）                                         |
 | `@defjs/react`                | `ClientProvider` / `useClient` — 见 [React](./plugins/react.md)                  |
 | `@defjs/vue`                  | Plugin + `injectClient` — 见 [Vue](./plugins/vue.md)                             |
 | `@defjs/opentelemetry-server` | 出站 span/metrics — 见 [OpenTelemetry Server](./plugins/opentelemetry-server.md) |

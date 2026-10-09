@@ -1,15 +1,15 @@
 ---
 title: OpenTelemetry server
-description: Включи исходящую инструментализацию транспорта Defjs своим Tracer и опциональным Meter.
+description: Включи исходящую инструментировку транспортов Defjs своим Tracer и необязательным Meter.
 ---
 
 # OpenTelemetry server
 
-Включай outbound instrumentation при создании клиента. `@defjs/opentelemetry-server` дописывает interceptors HTTP, SSE и WebSocket. Это **не** inbound server instrumentation и **не** инициализация OpenTelemetry SDK.
+Включай исходящую инструментировку, когда создаёшь клиент. `@defjs/opentelemetry-server` дописывает interceptors HTTP, SSE и WebSocket. Это **не** inbound server instrumentation, и OpenTelemetry SDK он **не** инициализирует.
 
 ## Базовая настройка
 
-Инициализируй SDK в другом месте. Передай его API-объекты:
+SDK инициализируй в другом месте. Передай его API-объекты:
 
 ```typescript twoslash
 import { createClient, defineRequest, withEndpoint } from '@defjs/core'
@@ -30,23 +30,23 @@ const [error] = await client.execute(readOrders())
 if (error) console.error(error.code)
 ```
 
-`tracer` обязателен. `meter` опционален — опусти, чтобы выключить metrics пакета. Нет `propagator` → adapter собирает composite W3C Trace Context + W3C Baggage propagator. Он не читает и не инициализирует global SDK config за тебя.
+`tracer` обязателен. `meter` опционален — опусти его, чтобы выключить пакетные metrics. Нет `propagator` → адаптер собирает композитный propagator W3C Trace Context + W3C Baggage. Глобальный конфиг SDK он за тебя не читает и не инициализирует.
 
-`withOpenTelemetryServer(options)` возвращает core `ClientOption`. Применяй его в момент `createClient`, чтобы на каждый включённый транспорт дописался один interceptor. HTTP, SSE и WebSocket включены по умолчанию; `{ enabled: false }` выключает один транспорт.
+`withOpenTelemetryServer(options)` возвращает core `ClientOption`. Клади его в `createClient`, чтобы на каждый включённый транспорт дописался один interceptor. HTTP, SSE и WebSocket включены по умолчанию; `{ enabled: false }` выключает один транспорт.
 
-Adapter может создать transport telemetry даже когда запрос падает на transport layer. Экспортируется ли что-то — зависит от твоего SDK и exporters.
+Адаптер может создать телеметрию транспорта, даже когда запрос падает на слое транспорта. Уедет ли что-нибудь наружу, зависит от твоего SDK и exporter’ов.
 
 ## Scope
 
-Ты владеешь SDK init, providers, exporters, processors, context, sampling, redaction, flush и shutdown. Этот пакет потребляет `Tracer`, опциональный `Meter` и опциональный `TextMapPropagator`, которые ты передал. В нём нет встроенного redactor или политики sensitive keys.
+SDK init, провайдеры, exporter’ы, процессоры, context, sampling, redaction, flush и shutdown — на тебе. Этот пакет потребляет `Tracer`, необязательный `Meter` и необязательный `TextMapPropagator`, которые ты передал. Redactor и политики sensitive keys в нём нет.
 
-Нет кеширования, ретраев, message-level spans или application command-outcome policy. Рассчитан на server-side Node.js. Published package нуждается в Node.js 22+, peers `@defjs/core`, `@opentelemetry/api` 1.x, `@opentelemetry/core` 2.x.
+Нет кеша, ретраев, span на уровне сообщений или политики исхода прикладной команды. Задуман для серверного Node.js. Опубликованный пакет хочет Node.js 22+, peers `@defjs/core`, `@opentelemetry/api` 1.x, `@opentelemetry/core` 2.x.
 
-Public API: `withOpenTelemetryServer` плюс `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
+Публичное API: `withOpenTelemetryServer` плюс `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
 
 ## Опции и hooks
 
-Hooks сидят рядом с транспортом, который меняют. Синхронный `startSpanHook(request)` выполняется до создания span и возвращает начальные `Attributes`; application attributes применяются последними и могут переопределить встроенные значения. `requestHook` и `responseHook` получают уже созданный span и могут вернуть `void` или promise. Сбой hook записывает `defjs.otel.hook.error` и **не** останавливает операцию клиента; при сбое start hook используются встроенные начальные attributes.
+Hooks сидят рядом с транспортом, который меняют. Синхронный `startSpanHook(request)` бежит до создания span и возвращает начальные `Attributes`; атрибуты приложения применяются последними, так что могут перекрыть встроенные значения. `requestHook` и `responseHook` получают уже созданный span и могут вернуть `void` или promise. Провал hook записывает `defjs.otel.hook.error` и **не** останавливает операцию клиента; упавший start hook откатывается к встроенным начальным атрибутам.
 
 ```typescript twoslash
 import { createClient, createResolvedRequestUrl, withEndpoint } from '@defjs/core'
@@ -82,18 +82,18 @@ const client = createClient(
 void client
 ```
 
-Сигнатуры hooks:
+Сигнатуры hook:
 
 - Все три транспорта: `startSpanHook(request): Attributes` (синхронно, до создания span)
 - HTTP: `requestHook(span, request)` и `responseHook(span, response, request)`
 - SSE: `requestHook(span, request)` и `responseHook(span, stream, request)`
 - WebSocket: `requestHook(span, request)` и `responseHook(span, session, request)`
 
-Пустой transport object включает этот транспорт. Старые boolean transport switches и старые top-level hooks отклоняются — используй transport option objects и transport-scoped hooks.
+Пустой объект транспорта включает этот транспорт. Старые булевы переключатели транспорта и старые top-level hooks отвергаются — используй объекты опций транспорта и hooks в его scope.
 
 ## Идентичность операции и propagation
 
-Ставь статический `operation` на `defineRequest`, `defineEventStream` или `defineWebSocket`, когда у команды стабильная идентичность. Adapter использует его в именах spans и как `defjs.operation`. Он никогда не выводит identity из resolved path, identifier, tenant или query string:
+Поставь статический `operation` на `defineRequest`, `defineEventStream` или `defineWebSocket`, когда у команды стабильная идентичность. Адаптер использует его в именах span и как `defjs.operation`. Идентичность он никогда не выводит из резолвнутого path, идентификатора, tenant или query-строки:
 
 ```typescript twoslash
 import { defineEventStream, defineRequest, defineWebSocket, struct } from '@defjs/core'
@@ -108,13 +108,13 @@ const orderEvents = defineEventStream({
   maxQueueSize: 100,
   operation: 'orders.watch',
   path: '/orders/events',
-  events: { update: struct.json(struct.object({ id: struct.number() })) },
+  events: { update: struct.object({ id: struct.number() }) },
 })
 const orderSocket = defineWebSocket({
   maxIncomingQueueSize: 100,
   operation: 'orders.connect',
   path: '/orders/socket',
-  incoming: { update: struct.object({ id: struct.number() }) },
+  incoming: struct.object({ id: struct.number() }),
 })
 
 void readOrders
@@ -122,9 +122,9 @@ void orderEvents
 void orderSocket
 ```
 
-Имена spans становятся `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`. Без `operation` fallback — method / `SSE` / `WebSocket`, а `defjs.operation` опускается.
+Имена span становятся `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`. Без `operation` fallback — method / `SSE` / `WebSocket`, а `defjs.operation` опускается.
 
-HTTP и SSE инжектят propagated fields в request headers. Существующие `Headers` instances переиспользуются и мутируются; иначе создаётся новый `Headers`. WebSocket query propagation — **opt-in** (браузеры не могут добавить произвольные handshake headers):
+HTTP и SSE инжектят propagated-поля в заголовки запроса. Существующие экземпляры `Headers` переиспользуются и мутируются; иначе создаётся новый `Headers`. Query propagation WebSocket — **opt-in** (браузеры не могут добавить произвольные handshake-заголовки):
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -141,17 +141,17 @@ const client = createClient(
 )
 ```
 
-С `queryPropagation` поля propagator дописываются в connection query string. Сначала проверь URL logging, proxy visibility, access logs, baggage и retention. `requireParentSpan: true` пропускает создание span, propagation, hooks и metrics, когда нет active parent, потом вызывает `next` без изменений.
+С `queryPropagation` поля propagator дописываются к query-строке соединения. Сначала проверь логирование URL, видимость прокси, access logs, baggage и retention. `requireParentSpan: true` пропускает создание span, propagation, hooks и metrics, когда нет активного родителя, потом зовёт `next` без изменений.
 
 ## Семантика HTTP, SSE и WebSocket
 
-Adapter измеряет transport lifetimes, не каждую стадию интерпретации команды.
+Адаптер меряет времена жизни транспорта, а не каждый этап интерпретации команды.
 
-- **HTTP** — span начинается в HTTP-interceptor и заканчивается, когда тот получает Defjs-`HttpResponse`. Проверка media type, чтение representation и декодирование Struct происходят уже после, так что более поздний `RES_*` fault не может обновить завершённый transport-span. А поскольку span живёт внутри цепочки, reject транспорта записывается классом исключения по конвенции OTel, а не тем fault-кодом, который выполнение присвоит позже.
-- **SSE** — span открыт, пока не settles `stream.closed`. Записывает `sse.connected`, потом `sse.closed` / `sse.aborted` / `sse.error`. Один логический стрим (включая reconnects) → один span. Нет per-event spans.
-- **WebSocket** — span открыт, пока не settles `session.closed`. Events: `websocket.connected`, `websocket.closed`, `websocket.error`. Reconnecting physical sockets остаются частью логической сессии. Нет per-message spans.
+- **HTTP** — span начинается в HTTP interceptor и кончается, когда тот получает Defjs `HttpResponse`. Проверка media type, чтение representation и decode Struct — всё после. Поздний fault `RES_*` не может обновить уже конченный span транспорта. Поскольку span живёт внутри цепочки, rejection транспорта записывается классом исключения по соглашению OTel, а не кодом fault, который execution назначит позже.
+- **SSE** — span остаётся открытым, пока не осядет `stream.closed`. Пишет `sse.connected`, потом `sse.closed` / `sse.aborted` / `sse.error`. Один логический стрим (включая reconnect) → один span. Span на событие нет.
+- **WebSocket** — span остаётся открытым, пока не осядет `session.closed`. События: `websocket.connected`, `websocket.closed`, `websocket.error`. Переподключающиеся физические сокеты остаются частью логической сессии. Span на сообщение нет.
 
-Нужен финальный результат команды, не только transport? Оберни `client.execute(...)` в application span:
+Нужен итоговый исход команды, а не только транспорт? Оберни `client.execute(...)` в span приложения:
 
 ```typescript twoslash
 import { createClient, defineRequest, withEndpoint } from '@defjs/core'
@@ -179,33 +179,33 @@ const outcome = await tracer.startActiveSpan('orders.command', async (span) => {
 void outcome
 ```
 
-Outer span — твой. Плагин всё равно репортит lower-level transport span — два разных вопроса.
+Внешний span — твой. Плагин всё ещё сообщает нижний span транспорта — это два разных вопроса.
 
 ## Справка
 
 Когда передан `meter`:
 
-| Metric                                       | Meaning                                          |
-| -------------------------------------------- | ------------------------------------------------ |
-| `http.client.request.duration`               | HTTP request duration (seconds)                  |
-| `defjs.client.sse.connect.duration`          | Time until SSE handle returned                   |
-| `defjs.client.sse.connection.duration`       | Handle return → terminal close                   |
-| `defjs.client.sse.active_streams`            | Logical SSE handles with pending `closed`        |
-| `defjs.client.websocket.connect.duration`    | Time until WebSocket session returned            |
-| `defjs.client.websocket.connection.duration` | Session return → terminal close                  |
-| `defjs.client.websocket.active_connections`  | Logical WebSocket sessions with pending `closed` |
+| Метрика                                      | Смысл                                           |
+| -------------------------------------------- | ----------------------------------------------- |
+| `http.client.request.duration`               | Длительность HTTP-запроса (секунды)             |
+| `defjs.client.sse.connect.duration`          | Время до возврата SSE handle                    |
+| `defjs.client.sse.connection.duration`       | Возврат handle → терминальный close             |
+| `defjs.client.sse.active_streams`            | Логические SSE handle с висящим `closed`        |
+| `defjs.client.websocket.connect.duration`    | Время до возврата WebSocket session             |
+| `defjs.client.websocket.connection.duration` | Возврат session → терминальный close            |
+| `defjs.client.websocket.active_connections`  | Логические WebSocket session с висящим `closed` |
 
-Active SSE/WebSocket instruments считают логические ресурсы (включая reconnect gaps), не physical sockets или отдельные HTTP attempts.
+Активные инструменты SSE/WebSocket считают логические ресурсы (включая щели reconnect), не физические сокеты и не отдельные HTTP-попытки.
 
-HTTP spans записывают method, resolved `url.full`, server address/port когда доступны, и response status когда получен. Default `url.full` resolve’ит `request.endpoint` относительно опционального `request.baseEndpoint` и не добавляет независимый `request.queryString`. Это граница построения, не sanitization. Используй `startSpanHook`, когда нужно собрать полный или отредактированный application-owned URL. Status `400+` → span status `ERROR` со status string как `error.type`. Status `100..399` оставляет span status unset. Status-zero transport outcome без response status; cancel оставляет status unset; timeout/other transport failures используют `NET_TIMEOUT` или `NET_UNREACHABLE`. Metrics используют стабильные dimensions: method, static operation, server address/port, response status, low-cardinality error type.
+HTTP span пишут method, резолвнутый `url.full`, адрес/порт сервера когда есть, и status ответа когда получен. `url.full` по умолчанию резолвит `request.endpoint` относительно необязательного `request.baseEndpoint`; отдельный `request.queryString` он не дописывает. Это граница сборки, не санитизация. Используй `startSpanHook`, чтобы собрать полный или отредактированный URL, которым владеет приложение, когда нужно. Status `400+` → status span `ERROR` со строкой status как `error.type`. Status `100..399` оставляет status span незаданным. Исход транспорта со status ноль не имеет status ответа; cancel оставляет status незаданным; timeout и прочие сбои транспорта используют `NET_TIMEOUT` или `NET_UNREACHABLE`. Metrics используют стабильные измерения: method, статический operation, адрес/порт сервера, status ответа, тип ошибки низкой кардинальности.
 
-SSE/WebSocket connection metrics записывают connect time, logical connection duration, active resource count, `defjs.result`, operation, server address/port и low-cardinality failure types. По умолчанию нет request/response bodies, message payloads, queue lengths или per-message spans.
+Метрики соединения SSE/WebSocket пишут время connect, длительность логического соединения, число активных ресурсов, `defjs.result`, operation, адрес/порт сервера и типы провала низкой кардинальности. По умолчанию нет тел запроса/ответа, payload сообщений, длин очередей или span на сообщение.
 
-Считай `url.full` и `recordException(...)` потенциально чувствительными. Defjs не редактирует их за тебя. Держи имена операций и hook attributes allowlisted; redact через `startSpanHook` или SDK processors/exporters. Не копируй raw URL, query strings, headers, baggage или payloads в custom telemetry без review privacy, cardinality, retention и redaction.
+Считай `url.full` и `recordException(...)` потенциально чувствительными. Defjs их за тебя не редактирует. Держи имена операций и атрибуты hook в allowlist; редактируй в `startSpanHook` или в процессорах/exporter’ах SDK. Не копируй сырые URL, query-строки, заголовки, baggage или payload в свою телеметрию, не проверив приватность, кардинальность, retention и redaction.
 
-WebSocket query propagation может раскрыть trace context и baggage браузерам, proxies, access logs и телеметрии. Это не credential channel. `withCredentials(true)` — Fetch credentials для HTTP/SSE — не WebSocket auth.
+Query propagation WebSocket может раскрыть trace context и baggage браузерам, прокси, access logs и телеметрии. Это не канал credentials. `withCredentials(true)` — Fetch credentials для HTTP/SSE, не auth WebSocket.
 
-Adapter не init/shut down SDK и не dispose’ит core клиент или transport handles. Ты flush’ишь telemetry и закрываешь HTTP/SSE/WebSocket работу. См. [Interceptors](../core/interceptors.md), [SSE](../core/sse.md) и [WebSocket](../core/web-socket.md).
+Адаптер не init/shutdown’ит SDK и не dispose’ит core client или handle транспорта. Телеметрию flush’ишь ты, и ты закрываешь работу HTTP/SSE/WebSocket. См. [Interceptors](../core/interceptors.md), [SSE](../core/sse.md) и [WebSocket](../core/web-socket.md).
 
 ## Связанные рецепты
 

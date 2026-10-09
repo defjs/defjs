@@ -62,7 +62,7 @@ describe('heartbeat', () => {
     const session = createMockSession(socket)
     const message = vi.fn().mockReturnValue({ type: 'ping' })
 
-    startHeartbeat(socket, session, { intervalMs: 100, message }, { ping: struct.object({}) }, vi.fn(), WebSocket.OPEN)
+    startHeartbeat(socket, session, { intervalMs: 100, message }, struct.object({ type: struct.literal('ping') }), vi.fn(), WebSocket.OPEN)
 
     vi.advanceTimersByTime(200)
     expect(message).toHaveBeenCalledTimes(2)
@@ -77,10 +77,10 @@ describe('heartbeat', () => {
     const onFatal = vi.fn()
     function message(this: unknown) {
       expect(this).toBeUndefined()
-      return { type: 'ping' }
+      return { type: 'ping' as const }
     }
 
-    startHeartbeat(socket, session, { intervalMs: 100, message }, { ping: struct.object({}) }, onFatal, WebSocket.OPEN)
+    startHeartbeat(socket, session, { intervalMs: 100, message }, struct.object({ type: struct.literal('ping') }), onFatal, WebSocket.OPEN)
 
     vi.advanceTimersByTime(100)
     expect(onFatal).not.toHaveBeenCalled()
@@ -117,7 +117,7 @@ describe('heartbeat', () => {
       socket,
       session,
       { intervalMs: 100, message: () => message, timeoutMs: 200 },
-      { ping: struct.object({ text: struct.string() }) },
+      struct.object({ type: struct.literal('ping'), text: struct.string() }),
       vi.fn(),
       WebSocket.OPEN,
     )
@@ -137,8 +137,8 @@ describe('heartbeat', () => {
     startHeartbeat(
       socket,
       session,
-      { intervalMs: 100, message: () => ({ type: 'ping' }), timeoutMs: 200 },
-      { ping: struct.object({}) },
+      { intervalMs: 100, message: () => ({ type: 'ping' as const }), timeoutMs: 200 },
+      struct.object({ type: struct.literal('ping') }),
       vi.fn(),
       WebSocket.OPEN,
     )
@@ -156,7 +156,14 @@ describe('heartbeat', () => {
     const closedSession = createMockSession(closedSocket)
     const openSession = createMockSession(openSocket)
 
-    startHeartbeat(closedSocket, closedSession, { intervalMs: 100, message: () => ({ type: 'ping' }) }, undefined, vi.fn(), WebSocket.OPEN)
+    startHeartbeat(
+      closedSocket,
+      closedSession,
+      { intervalMs: 100, message: () => ({ type: 'ping' }) as never },
+      undefined,
+      vi.fn(),
+      WebSocket.OPEN,
+    )
     startHeartbeat(openSocket, openSession, { intervalMs: 100 }, undefined, vi.fn(), WebSocket.OPEN)
 
     vi.advanceTimersByTime(100)
@@ -176,13 +183,17 @@ describe('heartbeat', () => {
         outgoing: undefined,
         socket: createMockSocket(),
       }),
-      () => ({ message: () => ({ type: 'unknown' }), outgoing: { ping: struct.object({}) }, socket: createMockSocket() }),
+      () => ({
+        message: () => ({ type: 'unknown' }) as unknown as { type: 'ping' },
+        outgoing: struct.object({ type: struct.literal('ping') }),
+        socket: createMockSocket(),
+      }),
       () => {
         const socket = createMockSocket()
         socket.send = vi.fn(() => {
           throw new Error('send failed')
         })
-        return { message: () => ({ type: 'ping' }), outgoing: { ping: struct.object({}) }, socket }
+        return { message: () => ({ type: 'ping' as const }), outgoing: struct.object({ type: struct.literal('ping') }), socket }
       },
     ]) {
       const onFatal = vi.fn()
@@ -204,8 +215,8 @@ describe('heartbeat', () => {
     startHeartbeat(
       socket,
       session,
-      { intervalMs: 100, timeoutMs: 50, message: () => ({ type: 'ping' }) },
-      { ping: struct.object({}) },
+      { intervalMs: 100, timeoutMs: 50, message: () => ({ type: 'ping' as const }) },
+      struct.object({ type: struct.literal('ping') }),
       onFatal,
       WebSocket.OPEN,
     )
@@ -224,8 +235,8 @@ describe('heartbeat', () => {
     startHeartbeat(
       socket,
       session,
-      { intervalMs: 5, timeoutMs: 20, message: () => ({ type: 'ping' }) },
-      { ping: struct.object({}) },
+      { intervalMs: 5, timeoutMs: 20, message: () => ({ type: 'ping' as const }) },
+      struct.object({ type: struct.literal('ping') }),
       onFatal,
       WebSocket.OPEN,
     )
@@ -254,8 +265,8 @@ describe('heartbeat', () => {
     startHeartbeat(
       socket,
       session,
-      { intervalMs: 100, isAck, timeoutMs: 200, message: () => ({ type: 'ping' }) },
-      { ping: struct.object({}) },
+      { intervalMs: 100, isAck, timeoutMs: 200, message: () => ({ type: 'ping' as const }) },
+      struct.object({ type: struct.literal('ping') }),
       onFatal,
       WebSocket.OPEN,
     )
@@ -275,7 +286,7 @@ describe('heartbeat', () => {
     const socket = createMockSocket()
     const session = createMockSession(socket)
 
-    startHeartbeat(socket, session, { intervalMs: 100, message: () => ({ type: 'ping' }) }, undefined, vi.fn(), WebSocket.OPEN)
+    startHeartbeat(socket, session, { intervalMs: 100, message: () => ({ type: 'ping' }) as never }, undefined, vi.fn(), WebSocket.OPEN)
     stopHeartbeat(session)
 
     expect(session.heartbeat).toBeUndefined()
@@ -293,8 +304,8 @@ describe('heartbeat', () => {
     startHeartbeat(
       socket,
       createMockSession(socket),
-      { intervalMs: 100, message: () => ({ type: 'ping' }) },
-      { ping: struct.object({}) },
+      { intervalMs: 100, message: () => ({ type: 'ping' as const }) },
+      struct.object({ type: struct.literal('ping') }),
       onFatal,
       1,
     )

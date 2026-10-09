@@ -1,18 +1,22 @@
 import type { HttpRequest } from '../../internal/http_request'
+import { isBlob, isFormData, isReadableStream, isURLSearchParams } from '../../internal/type_guards'
 
 const BODY_CONTENT_TYPE_SOURCE = 'bodyContentTypeSource'
 
 export function serializeHttpBody(
   body: HttpRequest['body'],
-): ArrayBuffer | Blob | FormData | URLSearchParams | ReadableStream<Uint8Array> | string | null {
+): ArrayBuffer | Uint8Array<ArrayBuffer> | Blob | FormData | URLSearchParams | ReadableStream<Uint8Array> | string | null {
   switch (true) {
-    case isFormDataBody(body):
-    case isBlobBody(body):
+    case isFormData(body):
+    case isBlob(body):
     case body instanceof ArrayBuffer:
-    case body instanceof URLSearchParams:
-    case typeof ReadableStream !== 'undefined' && body instanceof ReadableStream:
+    case isURLSearchParams(body):
+    case isReadableStream(body):
     case typeof body === 'string':
       return body
+    case ArrayBuffer.isView(body):
+      // DOM BodyInit excludes SharedArrayBuffer views; the value itself is unchanged.
+      return body as Uint8Array<ArrayBuffer>
     case typeof body === 'object':
     case typeof body === 'boolean':
     case typeof body === 'number':
@@ -29,7 +33,7 @@ export function applyRequestContentType(request: HttpRequest, headers: Headers):
     return
   }
 
-  if (isFormDataBody(body)) {
+  if (isFormData(body)) {
     headers.delete('Content-Type')
     return
   }
@@ -47,6 +51,11 @@ export function applyRequestContentType(request: HttpRequest, headers: Headers):
     return
   }
 
+  // A builder-declared header wins over detection. Requests without source metadata still recompute.
+  if (hasBodyContentTypeSource && request.bodyContentTypeSource === body && headers.has('content-type')) {
+    return
+  }
+
   const detectedType = resolveHttpBodyContentType(body)
   if (detectedType) {
     headers.set('Content-Type', detectedType)
@@ -55,15 +64,16 @@ export function applyRequestContentType(request: HttpRequest, headers: Headers):
 
 export function resolveHttpBodyContentType(body: HttpRequest['body']): string | null {
   switch (true) {
-    case isFormDataBody(body):
+    case isFormData(body):
       return null
     case body instanceof ArrayBuffer:
+    case ArrayBuffer.isView(body):
       return 'application/octet-stream'
-    case isBlobBody(body):
+    case isBlob(body):
       return body.type || 'application/octet-stream'
-    case body instanceof URLSearchParams:
+    case isURLSearchParams(body):
       return 'application/x-www-form-urlencoded;charset=UTF-8'
-    case typeof ReadableStream !== 'undefined' && body instanceof ReadableStream:
+    case isReadableStream(body):
       return 'application/octet-stream'
     case typeof body === 'string':
       return 'text/plain;charset=UTF-8'
@@ -75,12 +85,4 @@ export function resolveHttpBodyContentType(body: HttpRequest['body']): string | 
     default:
       return null
   }
-}
-
-function isBlobBody(value: unknown): value is Blob {
-  return typeof Blob !== 'undefined' && value instanceof Blob
-}
-
-function isFormDataBody(value: unknown): value is FormData {
-  return typeof FormData !== 'undefined' && value instanceof FormData
 }

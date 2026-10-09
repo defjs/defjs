@@ -1,0 +1,383 @@
+From 4f8930381cf26646cbba502f9cd6e549cd2ecb46 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:22:07 +0800
+Subject: [PATCH 06/10] perf(sse): synchronous per-event path
+
+---
+ packages/core/src/sse/sse.ts                  | 22 +++---
+ .../src/sse/transport/event_stream.spec.ts    | 44 ++++++++++++
+ .../core/src/sse/transport/event_stream.ts    | 67 ++++++++++++-------
+ .../core/src/sse/transport/parser.spec.ts     |  8 +++
+ packages/core/src/sse/transport/parser.ts     | 51 +++++++++++---
+ 5 files changed, 149 insertions(+), 43 deletions(-)
+
+diff --git a/packages/core/src/sse/sse.ts b/packages/core/src/sse/sse.ts
+index 9f543ec..5164fe7 100644
+--- a/packages/core/src/sse/sse.ts
++++ b/packages/core/src/sse/sse.ts
+@@ -334,8 +334,8 @@ async function runEventStreamCommand<
+         {
+           fetch: clientConfig.sse.handle,
+           handshakeError: endpoint.error,
+-          async transformMessage(message, signal) {
+-            return await transformStreamMessage(endpoint.events, message, clientConfig.sse.onInvalidEvent, signal)
++          transformMessage(message, signal) {
++            return transformStreamMessage(endpoint.events, message, clientConfig.sse.onInvalidEvent, signal)
+           },
+           reconnect: clientConfig.sse.reconnect,
+           maxBufferSize: endpoint.maxBufferSize,
+@@ -392,17 +392,18 @@ async function runEventStreamCommand<
+   }
+ }
+ 
+-async function transformStreamMessage<TEvents extends EventStructs>(
++// Synchronous on the valid path. Only an invalid event awaits the observer.
++function transformStreamMessage<TEvents extends EventStructs>(
+   events: TEvents,
+   message: EventStreamMessage,
+   onInvalidEvent: ClientSSEOptions['onInvalidEvent'],
+   signal: AbortSignal,
+-): Promise<EventStreamData<TEvents> | undefined> {
++): EventStreamData<TEvents> | Promise<undefined> {
+   const eventName = message.event || 'message'
+   const eventStruct = resolveEventStruct(events, eventName)
+ 
+   if (!eventStruct) {
+-    await notifyInvalidEvent(onInvalidEvent, {
++    return notifyInvalidEvent(onInvalidEvent, {
+       reason: 'missing-struct',
+       message: {
+         id: message.id || '',
+@@ -411,18 +412,17 @@ async function transformStreamMessage<TEvents extends EventStructs>(
+       },
+       signal,
+     })
+-    return undefined
+   }
+ 
+   try {
+     return {
+-      data: await decodeSSEEventData(eventStruct, message.data),
++      data: decodeSSEEventData(eventStruct, message.data),
+       event: eventName,
+       id: message.id || undefined,
+       // Type boundary: decodeSSEEventData validates against the resolved event struct; the shape matches EventStreamData<TEvents>.
+     } as EventStreamData<TEvents>
+   } catch (error) {
+-    await notifyInvalidEvent(onInvalidEvent, {
++    return notifyInvalidEvent(onInvalidEvent, {
+       reason: 'validation-failed',
+       message: {
+         id: message.id || '',
+@@ -432,7 +432,6 @@ async function transformStreamMessage<TEvents extends EventStructs>(
+       cause: error,
+       signal,
+     })
+-    return undefined
+   }
+ }
+ 
+@@ -444,9 +443,9 @@ async function notifyInvalidEvent(
+     cause?: unknown
+     signal: AbortSignal
+   },
+-): Promise<void> {
++): Promise<undefined> {
+   if (!onInvalidEvent) {
+-    return
++    return undefined
+   }
+ 
+   try {
+@@ -457,6 +456,7 @@ async function notifyInvalidEvent(
+     }
+     // onInvalidEvent is an observer; observer failures must not tear down the stream.
+   }
++  return undefined
+ }
+ 
+ function validateEventStreamLimits(endpoint: { maxBufferSize: number; maxQueueSize: number }): void {
+diff --git a/packages/core/src/sse/transport/event_stream.spec.ts b/packages/core/src/sse/transport/event_stream.spec.ts
+index a3546a5..bf8db39 100644
+--- a/packages/core/src/sse/transport/event_stream.spec.ts
++++ b/packages/core/src/sse/transport/event_stream.spec.ts
+@@ -96,6 +96,50 @@ describe('fetchEventStream', () => {
+     await expect(stream.closed).resolves.toEqual({ kind: 'eof' })
+   })
+ 
++  test('should drop last-event-id on reconnect after an empty id field', async () => {
++    const request: HttpRequest = {
++      baseEndpoint: 'https://example.com',
++      endpoint: '/events',
++      method: 'GET',
++    }
++    const seen: (string | null)[] = []
++    const fetch = async (input: RequestInfo | URL) => {
++      seen.push(new Request(input).headers.get('last-event-id'))
++      if (seen.length === 1) {
++        let pulled = false
++        return new Response(
++          new ReadableStream<Uint8Array>({
++            pull(controller) {
++              if (!pulled) {
++                pulled = true
++                controller.enqueue(new TextEncoder().encode('id: 1\ndata: first\n\nid:\ndata: second\n\n'))
++                return
++              }
++              controller.error(new Error('connection lost'))
++            },
++          }),
++          { headers: { 'content-type': 'text/event-stream' } },
++        )
++      }
++      return new Response('data: third\n\n', { headers: { 'content-type': 'text/event-stream' } })
++    }
++
++    const stream = await fetchEventStream(request, {
++      fetch: fetch as typeof globalThis.fetch,
++      onerror() {
++        return 0
++      },
++      reconnect: { attempts: 3, delayMs: 0 },
++    })
++    const messages: string[] = []
++    for await (const event of stream) {
++      messages.push(event.data)
++    }
++
++    expect(messages).toEqual(['first', 'second', 'third'])
++    expect(seen).toEqual([null, null])
++  })
++
+   test('should close stream manually', async () => {
+     const request: HttpRequest = {
+       baseEndpoint: inject('testServerHost'),
+diff --git a/packages/core/src/sse/transport/event_stream.ts b/packages/core/src/sse/transport/event_stream.ts
+index a9b9a6a..32a099a 100644
+--- a/packages/core/src/sse/transport/event_stream.ts
++++ b/packages/core/src/sse/transport/event_stream.ts
+@@ -164,6 +164,8 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
+   let retryInterval = options.retryInterval ?? options.reconnect?.delayMs ?? DEFAULT_RETRY_INTERVAL
+   let retryCount = 0
+   let lastEventId = ''
++  // Headers validate every write. The id only matters to the next attempt, so it is applied there.
++  let lastEventIdDirty = false
+   let latestOpen: EventStreamOpenInfo | undefined
+   let disposeTask: Promise<void> | undefined
+ 
+@@ -244,6 +246,14 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
+ 
+   async function start(): Promise<void> {
+     while (!closeController.signal.aborted) {
++      if (lastEventIdDirty) {
++        lastEventIdDirty = false
++        if (lastEventId) {
++          headers.set(LAST_EVENT_ID_HEADER, lastEventId)
++        } else {
++          headers.delete(LAST_EVENT_ID_HEADER)
++        }
++      }
+       const attemptAbort = mergeAbortSignals(closeController.signal, [request.abort])
+       let response: Response | undefined
+       let readerStarted = false
+@@ -344,41 +354,44 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
+     const parseMessage = createMessageParser(
+       (id) => {
+         lastEventId = id
+-        if (id) {
+-          headers.set(LAST_EVENT_ID_HEADER, id)
+-        } else {
+-          headers.delete(LAST_EVENT_ID_HEADER)
+-        }
++        lastEventIdDirty = true
+       },
+       (retry) => {
+         retryInterval = retry
+       },
+-      async (message) => {
+-        let transformed: TEvent | undefined
++      (message) => {
++        let result: Promise<TEvent | undefined> | TEvent | undefined
+         try {
+-          transformed = options.transformMessage
+-            ? await awaitWithSignal(() => options.transformMessage?.(message, signal), signal)
+-            : (message as TEvent)
++          signal.throwIfAborted()
++          result = options.transformMessage ? options.transformMessage(message, signal) : (message as TEvent)
+         } catch (error) {
+-          if (signal.aborted) {
+-            throw error
+-          }
+-          throw new EventStreamFatalError('EXT_OBSERVER_FAILED', 'Failed to process event stream message', { cause: error })
++          throw toTransformFailure(error, signal)
+         }
+-
+-        if (typeof transformed !== 'undefined') {
+-          try {
+-            queue.push(transformed)
+-          } catch (error) {
+-            // AsyncQueue.push has one failure mode: exceeding its configured bound.
+-            throw new EventStreamFatalError('CAP_QUEUE_OVERFLOW', 'Event stream queue exceeded maxQueueSize', {
+-              cause: error,
+-            })
+-          }
++        // A synchronous transform is already done. Only a pending one needs the signal race.
++        if (result instanceof Promise) {
++          const pending = result
++          return awaitWithSignal(() => pending, signal).then(enqueue, (error: unknown) => {
++            throw toTransformFailure(error, signal)
++          })
+         }
++        enqueue(result)
++        return undefined
+       },
+       { maxBufferSize: options.maxBufferSize },
+     )
++
++    function enqueue(transformed: TEvent | undefined): void {
++      if (typeof transformed !== 'undefined') {
++        try {
++          queue.push(transformed)
++        } catch (error) {
++          // AsyncQueue.push has one failure mode: exceeding its configured bound.
++          throw new EventStreamFatalError('CAP_QUEUE_OVERFLOW', 'Event stream queue exceeded maxQueueSize', {
++            cause: error,
++          })
++        }
++      }
++    }
+     const parseLine = createLineParser(parseMessage, { maxBufferSize: options.maxBufferSize })
+ 
+     try {
+@@ -532,6 +545,12 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
+   }
+ }
+ 
++function toTransformFailure(error: unknown, signal: AbortSignal): unknown {
++  return signal.aborted
++    ? error
++    : new EventStreamFatalError('EXT_OBSERVER_FAILED', 'Failed to process event stream message', { cause: error })
++}
++
+ function getEventStreamFaultCode(error: unknown): EventStreamFaultCode {
+   return getEventStreamFatalCode(error) ?? (error === ERR_TIMEOUT ? 'NET_TIMEOUT' : 'NET_UNREACHABLE')
+ }
+diff --git a/packages/core/src/sse/transport/parser.spec.ts b/packages/core/src/sse/transport/parser.spec.ts
+index c01ca38..3c98163 100644
+--- a/packages/core/src/sse/transport/parser.spec.ts
++++ b/packages/core/src/sse/transport/parser.spec.ts
+@@ -311,6 +311,14 @@ describe('sse parser', () => {
+     ])
+   })
+ 
++  test('should match field names as bytes, skip one leading BOM, and ignore near misses', async () => {
++    const { ids, messages, retries } = await parseEvents('ix: 1\ndat4: x\nevenx: y\nretrx: 5\n\uFEFFdata: bom\n\n')
++
++    expect(ids).toEqual([])
++    expect(retries).toEqual([])
++    expect(messages).toEqual([{ id: '', event: '', data: 'bom' }])
++  })
++
+   test('should not dispatch messages for frames without data fields', async () => {
+     const ids: string[] = []
+     const retries: number[] = []
+diff --git a/packages/core/src/sse/transport/parser.ts b/packages/core/src/sse/transport/parser.ts
+index cedc31a..1a37315 100644
+--- a/packages/core/src/sse/transport/parser.ts
++++ b/packages/core/src/sse/transport/parser.ts
+@@ -140,7 +140,11 @@ export function createLineParser(
+       }
+ 
+       const currentFieldLength = fieldLength === -1 && lineEnd > lineStart ? lineEnd - lineStart : fieldLength
+-      await onLine(buffer.subarray(lineStart, lineEnd), currentFieldLength)
++      // Most lines only update parser state. Awaiting them anyway costs a promise and a microtask per line.
++      const pending = onLine(buffer.subarray(lineStart, lineEnd), currentFieldLength)
++      if (pending) {
++        await pending
++      }
+       lineStart = position
+       fieldLength = -1
+     }
+@@ -167,7 +171,7 @@ export function createMessageParser(
+   onRetry: (retry: number) => void,
+   onMessage?: (message: EventStreamMessage) => void | Promise<void>,
+   options?: MessageParserOptions,
+-): (line: Uint8Array, fieldLength: number) => Promise<void> {
++): (line: Uint8Array, fieldLength: number) => void | Promise<void> {
+   const maxBufferSize = validateMaxBufferSize(options?.maxBufferSize)
+   let lastEventId = ''
+   let event = ''
+@@ -176,7 +180,7 @@ export function createMessageParser(
+   let hasData = false
+   const decoder = new TextDecoder()
+ 
+-  return async (line: Uint8Array, fieldLength: number) => {
++  return (line: Uint8Array, fieldLength: number) => {
+     if (line.length === 0) {
+       const message = hasData
+         ? {
+@@ -191,10 +195,7 @@ export function createMessageParser(
+       dataBytes = 0
+       hasData = false
+ 
+-      if (message) {
+-        await onMessage?.(message)
+-      }
+-      return
++      return message ? onMessage?.(message) : undefined
+     }
+ 
+     // createLineParser emits a negative field length only for empty lines, which return above.
+@@ -204,7 +205,10 @@ export function createMessageParser(
+     }
+ 
+     const hasColon = fieldLength < line.length && line[fieldLength] === ControlChar.Colon
+-    const field = decoder.decode(line.subarray(0, fieldLength))
++    const field = fieldName(line, fieldLength)
++    if (field === undefined) {
++      return
++    }
+     let valueOffset = hasColon ? fieldLength + 1 : line.length
+     if (hasColon && line[valueOffset] === ControlChar.Space) {
+       valueOffset += 1
+@@ -239,6 +243,37 @@ export function createMessageParser(
+   }
+ }
+ 
++const DATA = [0x64, 0x61, 0x74, 0x61]
++const EVENT = [0x65, 0x76, 0x65, 0x6e, 0x74]
++const RETRY = [0x72, 0x65, 0x74, 0x72, 0x79]
++
++function sameBytes(line: Uint8Array, start: number, expected: readonly number[]): boolean {
++  for (let index = 0; index < expected.length; index += 1) {
++    if (line[start + index] !== expected[index]) {
++      return false
++    }
++  }
++  return true
++}
++
++/**
++ * The four field names SSE acts on, matched as bytes so a line does not decode its name.
++ * Decoding dropped one leading BOM, so one is skipped here too. Any other name is ignored.
++ */
++function fieldName(line: Uint8Array, length: number): 'data' | 'event' | 'id' | 'retry' | undefined {
++  const start = length >= 3 && line[0] === 0xef && line[1] === 0xbb && line[2] === 0xbf ? 3 : 0
++  switch (length - start) {
++    case 2:
++      return line[start] === 0x69 && line[start + 1] === 0x64 ? 'id' : undefined
++    case 4:
++      return sameBytes(line, start, DATA) ? 'data' : undefined
++    case 5:
++      return sameBytes(line, start, EVENT) ? 'event' : sameBytes(line, start, RETRY) ? 'retry' : undefined
++    default:
++      return undefined
++  }
++}
++
+ function validateMaxBufferSize(maxBufferSize: number | undefined): number | undefined {
+   if (maxBufferSize === undefined) {
+     return undefined
+-- 
+2.55.0
+

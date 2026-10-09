@@ -16,8 +16,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session, startupConnection] = await client.execute(room())
@@ -28,6 +28,7 @@ if (error) {
   const unsubscribe = ownedSession.onRuntimeError((cause) => console.error('runtime', cause))
   try {
     ownedSession.send({ type: 'send', text: 'Hello' })
+    // wire: {"type":"send","text":"Hello"}
     for await (const message of ownedSession.receive) {
       console.log(message.type, message.text)
       break
@@ -38,25 +39,17 @@ if (error) {
 }
 ```
 
-## The JSON envelope
+## One struct per direction
 
-`defineWebSocket(...)` describes a JSON-message endpoint. Required `incoming` map selects a Struct by message type; optional `outgoing` does the same for `session.send(...)`. Every wire message is an object with a non-empty string `type`.
-
-Object payload fields sit beside `type`. Scalar and array payloads use the envelope’s `data` field:
+`incoming` is one struct for every text frame. `outgoing` is one struct for `session.send(...)`. Model several kinds with `struct.discriminatedUnion`. Alias on those fields is the wire name in both directions. There is no separate type envelope and no normalizer.
 
 ```json
-{ "type": "message", "userId": 7, "text": "Hello" }
+{ "type": "message", "text": "Hello" }
 ```
 
-```json
-{ "type": "count", "data": 3 }
-```
+Incoming text, `ArrayBuffer`, typed-array, and `Blob` frames are read as UTF-8, JSON-parsed, then checked against `incoming`. Malformed JSON and struct failures go to `session.onRuntimeError` and are not queued. The session stays up. Frames that are not text, bytes, or a `Blob` are ignored. There is no `withWebSocketOnInvalidEvent`.
 
-The message map controls the payload, not the envelope discriminator. `incoming.default` accepts otherwise undeclared type names; without it, unknown types notify `withWebSocketOnInvalidEvent({ reason: 'missing-struct' })` (or are ignored when no observer is installed) and do **not** tear down the session. Incoming text, `ArrayBuffer`, typed-array, and `Blob` frames decode as UTF-8 JSON. Malformed JSON and Struct failures go to runtime-error observers — not to `receive`.
-
-If an object payload has a field named `data`, it stays beside `type` after encoding (not a nested envelope). Example: `write` with `{ data: string, source: string }` wires as `{ type: 'write', data: string, source: string }`. Caller-side value is still `{ type: 'write', data: { data, source } }` because `data` carries the object payload before serialization. Aliases apply to payload fields. The `type` discriminator belongs to the envelope, not the Struct.
-
-`session.send(...)` validates and serializes synchronously. Sends immediately when open, queues during `reconnecting` when an outgoing queue is enabled, throws `InvalidStateError` when not writable. Also throws when there’s no outgoing map, undeclared type, payload validation failure, disabled/full outgoing queue, or native send failure.
+`session.send(...)` validates and serializes synchronously: struct encode, then `JSON.stringify`. It sends immediately when open, queues during `reconnecting` when an outgoing queue is enabled, and throws `InvalidStateError` when not writable. It also throws when there’s no outgoing struct, the payload fails the struct, the outgoing queue is disabled or full, or the native send fails. A static `protocols` list on the definition is the endpoint contract (for example `graphql-transport-ws`). Execute options and `withWebSocketProtocols` can still override it; a token-in-subprotocol belongs in `beforeConnect` or an interceptor, not in the builder. The builder may return only `path` and `query`.
 
 `receive` is one-consumer. A second iterator is rejected.
 
@@ -110,7 +103,7 @@ const client = createClient(
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { ready: struct.object({ ok: struct.boolean() }) },
+  incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
 })
 const [error, session] = await client.execute(room())
 if (!error) {
@@ -127,7 +120,7 @@ WebSocket backoff jitter is **multiplicative** (`jitter: 0.2` → delay between 
 
 ## Heartbeat
 
-Opt-in at execute or client scope. Interval sends `message()` through the outgoing Struct map. Optional `isAck(message)` recognizes an ack — that message clears the timeout and is **not** delivered to `receive`.
+Opt-in at execute or client scope. Interval sends `message()` through the outgoing struct. Optional `isAck(message)` recognizes an ack — that message clears the timeout and is **not** delivered to `receive`.
 
 ```ts
 import { createClient, defineWebSocket, struct, withEndpoint } from '@defjs/core'
@@ -136,8 +129,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { pong: struct.object({ ok: struct.boolean() }) },
-  outgoing: { ping: struct.object({}) },
+  incoming: struct.discriminatedUnion('type', [struct.object({ type: struct.literal('pong'), ok: struct.boolean() })]),
+  outgoing: struct.object({ type: struct.literal('ping') }),
 })
 
 const [error, session] = await client.execute(room(), {
@@ -154,7 +147,7 @@ if (!error) {
 }
 ```
 
-`intervalMs` and `timeoutMs` must be positive finite timers ≤ `2_147_483_647`. Heartbeat message must be valid for the outgoing map. Serialization, native send, ack classification, and timeout failures are fatal to the logical session — they don’t become ordinary reconnects.
+`intervalMs` and `timeoutMs` must be positive finite timers ≤ `2_147_483_647`. Heartbeat message must be valid for the outgoing struct. Serialization, native send, ack classification, and timeout failures are fatal to the logical session — they don’t become ordinary reconnects.
 
 ## Queues
 
@@ -171,7 +164,7 @@ Incoming overflow clears the pending sequence, fails `receive`, stops the sessio
 
 Definition `protocols`, client `withWebSocketProtocols(...)`, and execute `protocols` set the constructor subprotocol list. Precedence: execution → client → definition. First defined list is copied for the logical session and reused on reconnect.
 
-Browser WebSocket constructors don’t accept arbitrary handshake headers. Defjs converts `http:` → `ws:` and `https:` → `wss:`, encodes path placeholders once, uses the configured query serializer. WebSocket query building also serializes complex query values as JSON (unlike default HTTP scalar-only query).
+Browser WebSocket constructors don’t accept arbitrary handshake headers, and the builder cannot return `headers` or `body`. Defjs converts `http:` → `ws:` and `https:` → `wss:`, encodes path placeholders once, and uses the same query rules as HTTP: scalars and repeated keys by default, `withQuerySerializer` for nested objects, and no serializer call when there is no query.
 
 `withCredentials(true)` is Fetch credentials for HTTP/SSE — not WebSocket auth. Use reviewed cookie/session policy, subprotocol, or a short-lived connection ticket. Don’t put general credentials or long-lived secrets in the query string.
 
@@ -196,9 +189,9 @@ The standard async disposer requests best-effort native close, then waits for De
 
 ## GraphQL boundary
 
-Defjs supplies a typed JSON envelope and a logical session lifecycle. It does **not** implement a WebSocket application protocol. GraphQL-over-WebSocket features — connection init, operation IDs, `next`/`error`/`complete`, disposal, subscription replay — are outside the core contract.
+Defjs supplies one incoming struct, one outgoing struct, and a logical session lifecycle. It does **not** implement a WebSocket application protocol. GraphQL-over-WebSocket features — connection init, operation IDs, `next`/`error`/`complete`, disposal, subscription replay — are outside the core contract.
 
-Use a protocol client like `graphql-ws` when the server requires that protocol, or model your own envelope with `defineWebSocket(...)`. A message map alone does not negotiate GraphQL semantics.
+Use a protocol client like `graphql-ws` when the server requires that protocol, or model the frames with `defineWebSocket(...)`. Put a static subprotocol such as `graphql-transport-ws` on `protocols`. A struct alone does not negotiate GraphQL semantics.
 
 ## Related recipes
 

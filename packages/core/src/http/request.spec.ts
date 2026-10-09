@@ -1,29 +1,23 @@
 import { describe, expect, test } from 'vitest'
+import { parseEndpointInput } from '../internal/endpoint_input'
+import type { OutboundBuilder } from '../internal/outbound_request'
 import { struct } from '../struct'
-import { createHttpRequest, resolveDefaultResponseType } from './request'
+import { createHttpRequest } from './request'
+
+async function formBlob(value: unknown): Promise<{ text: string; type: string }> {
+  expect(value).toBeInstanceOf(Blob)
+  const blob = value as Blob
+  return { text: await blob.text(), type: blob.type }
+}
+
+const options = {
+  abort: new AbortController().signal,
+  baseEndpoint: 'https://api.example.com',
+}
 
 describe('http request helpers', () => {
-  test('should create http request with builder helpers params query headers and custom serializer', () => {
+  test('should create http request with builder params query headers and custom serializer', () => {
     const abort = new AbortController()
-
-    const input = struct.request({
-      body: struct.json(
-        struct.object({
-          nickname: struct.string(),
-        }),
-      ),
-      headers: struct.object({
-        token: struct.string(),
-      }),
-      path: struct.object({
-        id: struct.number(),
-      }),
-      query: struct.object({
-        include: struct.boolean(),
-        tags: struct.array(struct.string()),
-      }),
-    })
-
     const request = createHttpRequest(
       'POST',
       '/user/:id',
@@ -33,27 +27,34 @@ describe('http request helpers', () => {
         path: { id: 7 },
         query: { include: true, tags: ['a', 'b'] },
       },
-      (builder, input) => {
-        builder.setHeaders({
-          'x-token': input.headers.token,
-        })
-        builder.setPathParams({
-          id: input.path.id,
-        })
-        builder.setQueryParams({
-          include: input.query.include,
-          tags: input.query.tags,
-        })
-        builder.setJson({
-          nickname: input.body.nickname,
-        })
-      },
+      ((input: {
+        body: { nickname: string }
+        headers: { token: string }
+        path: { id: number }
+        query: { include: boolean; tags: string[] }
+      }) => ({
+        body: { nickname: input.body.nickname },
+        headers: { 'x-token': input.headers.token },
+        path: { id: input.path.id },
+        query: { include: input.query.include, tags: input.query.tags },
+      })) as OutboundBuilder,
       {
         abort: abort.signal,
         baseEndpoint: 'https://api.example.com/v1',
-        input,
         operation: 'users.update',
-        queryParamsSerializer: (params) => `custom=${params.toString()}`,
+        querySerializer: (query) => {
+          const params = new URLSearchParams()
+          for (const [key, value] of Object.entries(query)) {
+            if (Array.isArray(value)) {
+              for (const item of value) {
+                params.append(key, String(item))
+              }
+              continue
+            }
+            params.set(key, String(value))
+          }
+          return `custom=${params.toString()}`
+        },
         responseType: 'json',
         withCredentials: true,
       },
@@ -62,7 +63,7 @@ describe('http request helpers', () => {
     expect(request.baseEndpoint).toBe('https://api.example.com/v1')
     expect(request.endpoint).toBe('/user/7')
     expect(request.operation).toBe('users.update')
-    expect(request.queryParams?.get('include')).toBe('true')
+    expect(request.queryParams?.get('custom')).toBe('include=true')
     expect(request.queryParams?.getAll('tags')).toEqual(['a', 'b'])
     expect(request.queryString).toBe('custom=include=true&tags=a&tags=b')
     expect(request.headers?.get('x-token')).toBe('secret')
@@ -73,81 +74,52 @@ describe('http request helpers', () => {
   })
 
   test('should reject request-shaped missing path params', () => {
-    const input = struct.request({
-      path: struct.object({
-        id: struct.string().optional(),
-      }),
-    })
-
     expect(() =>
       createHttpRequest('GET', '/user/:id', { path: {} }, undefined, {
         abort: new AbortController().signal,
         baseEndpoint: 'https://api.example.com',
-        input,
-        queryParamsSerializer: (params) => params.toString(),
       }),
     ).toThrow('Missing path param: id')
   })
 
-  test('should pass request-shaped query values to custom queryParamsSerializer', () => {
-    const input = struct.request({
-      query: struct.object({
-        filter: struct.array(struct.string()),
-        include: struct.boolean(),
-      }),
-    })
-
+  test('should pass encoded query values to a custom querySerializer', () => {
     const request = createHttpRequest('GET', '/search', { query: { filter: ['active'], include: true } }, undefined, {
       abort: new AbortController().signal,
       baseEndpoint: 'https://api.example.com',
-      input,
-      queryParamsSerializer: (params, rawParams) => {
-        expect(params.get('include')).toBe('true')
-        return `include=${params.get('include')}&filter=${encodeURIComponent(JSON.stringify(rawParams?.['filter']))}`
+      querySerializer: (query) => {
+        expect(query).toEqual({ filter: ['active'], include: true })
+        return `include=${String(query['include'])}&filter=${encodeURIComponent(JSON.stringify(query['filter']))}`
       },
     })
 
     expect(request.queryString).toBe(`include=true&filter=${encodeURIComponent(JSON.stringify(['active']))}`)
   })
 
-  test('should build default request from struct.request shape', () => {
+  test('should encode aliases from parsed endpoint input', async () => {
     const profile = struct.object({
       displayName: struct.string().alias('display_name'),
       internalNote: struct.string(),
     })
-    const input = struct.request({
-      body: struct.json(
-        struct.object({
-          profile: profile.alias('profile'),
-        }),
-      ),
+    const input = struct.object({
+      body: struct.object({
+        profile: profile.alias('profile'),
+      }),
       path: struct.object({
         orgId: struct.string().alias('org_id'),
       }),
     })
-
-    const request = createHttpRequest(
-      'POST',
-      '/orgs/:org_id/users',
-      {
-        body: {
-          profile: {
-            displayName: 'Miao',
-            internalNote: 'local',
-          },
-        },
-        path: {
-          orgId: 'org_1',
+    const parsed = await parseEndpointInput(input, {
+      body: {
+        profile: {
+          displayName: 'Miao',
+          internalNote: 'local',
         },
       },
-      undefined,
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input,
-        queryParamsSerializer: (params) => params.toString(),
+      path: {
+        orgId: 'org_1',
       },
-    )
+    })
+    const request = createHttpRequest('POST', '/orgs/:org_id/users', parsed, undefined, options)
 
     expect(request.endpoint).toBe('/orgs/org_1/users')
     expect(request.queryString).toBe('')
@@ -155,14 +127,12 @@ describe('http request helpers', () => {
     expect(request.headers?.get('content-type')).toBe('application/json')
   })
 
-  test('should model path query and json body conflicts with request sections', () => {
-    const input = struct.request({
-      body: struct.json(
-        struct.object({
-          bodyName: struct.string().alias('name'),
-          bodyUid: struct.number().alias('uid'),
-        }),
-      ),
+  test('should encode path query and json body aliases independently', async () => {
+    const input = struct.object({
+      body: struct.object({
+        bodyName: struct.string().alias('name'),
+        bodyUid: struct.number().alias('uid'),
+      }),
       path: struct.object({
         pathUid: struct.number().alias('uid'),
       }),
@@ -170,224 +140,88 @@ describe('http request helpers', () => {
         queryName: struct.string().alias('name'),
       }),
     })
-
-    const request = createHttpRequest(
-      'POST',
-      '/users/:uid',
-      {
-        body: {
-          bodyName: 'baby',
-          bodyUid: 1,
-        },
-        path: {
-          pathUid: 7,
-        },
-        query: {
-          queryName: 'Jack',
-        },
+    const parsed = await parseEndpointInput(input, {
+      body: {
+        bodyName: 'baby',
+        bodyUid: 1,
       },
-      undefined,
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input,
-        queryParamsSerializer: (params) => params.toString(),
+      path: {
+        pathUid: 7,
       },
-    )
+      query: {
+        queryName: 'Jack',
+      },
+    })
+    const request = createHttpRequest('POST', '/users/:uid', parsed, undefined, options)
 
     expect(request.endpoint).toBe('/users/7')
     expect(request.queryString).toBe('name=Jack')
     expect(JSON.parse(request.body as string)).toEqual({ name: 'baby', uid: 1 })
   })
 
-  test('should support text xml form-url-encoded and raw body helpers', () => {
-    const textInput = struct.request({
-      body: struct.text(),
-    })
-    const textRequest = createHttpRequest(
-      'POST',
-      '/text',
-      { body: 'hello' },
-      (builder, input) => {
-        builder.setText(input.body)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: textInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
+  test('should support text xml form-url-encoded and raw bodies', async () => {
+    const textRequest = createHttpRequest('POST', '/text', undefined, (() => ({ body: 'hello' })) as OutboundBuilder, options)
 
     expect(textRequest.body).toBe('hello')
     expect(textRequest.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
 
-    const xmlInput = struct.request({
-      body: struct.text(),
-    })
     const xmlRequest = createHttpRequest(
       'POST',
       '/xml',
-      { body: '<root />' },
-      (builder, input) => {
-        builder.setText(input.body, { contentType: 'text/xml;charset=UTF-8' })
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: xmlInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
+      undefined,
+      (() => ({
+        body: '<root />',
+        headers: { 'content-type': 'text/xml;charset=UTF-8' },
+      })) as OutboundBuilder,
+      options,
     )
 
     expect(xmlRequest.body).toBe('<root />')
     expect(xmlRequest.headers?.get('content-type')).toBe('text/xml;charset=UTF-8')
 
-    const formInput = struct.request({
-      body: struct.urlencoded({
-        ids: struct.array(struct.number()),
-      }),
+    const Form = struct.urlencoded({
+      ids: struct.array(struct.number()),
     })
-    const encodedRequest = createHttpRequest(
-      'POST',
-      '/form',
-      { body: { ids: [1, 2] } },
-      (builder, input) => {
-        builder.setFormUrlEncoded({
-          ids: input.body.ids,
-        })
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: formInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
+    const parsed = await parseEndpointInput(Form, { ids: [1, 2] })
+    const encodedRequest = createHttpRequest('POST', '/form', undefined, (() => ({ body: parsed })) as OutboundBuilder, options)
 
     expect(encodedRequest.body).toBeInstanceOf(URLSearchParams)
     expect((encodedRequest.body as URLSearchParams).toString()).toBe('ids=1&ids=2')
     expect(encodedRequest.headers?.get('content-type')).toBe('application/x-www-form-urlencoded;charset=UTF-8')
 
-    const rawInput = struct.request({
-      body: struct.arrayBuffer(),
-    })
     const rawRequest = createHttpRequest(
       'POST',
       '/raw',
-      { body: new Uint8Array([1, 2, 3]).buffer },
-      (builder, input) => {
-        builder.setArrayBuffer(input.body)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: rawInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
+      undefined,
+      (() => ({ body: new Uint8Array([1, 2, 3]).buffer })) as OutboundBuilder,
+      options,
     )
 
     expect(rawRequest.body).toBeInstanceOf(ArrayBuffer)
     expect(rawRequest.headers?.get('content-type')).toBe('application/octet-stream')
   })
 
-  test('should let final body stage decide Content-Type after headers', () => {
-    const jsonInput = struct.request({
-      body: struct.json(struct.object({ ok: struct.boolean() })),
-      headers: struct.object({ ct: struct.string().optional() }),
-    })
+  test('should let a declared content-type win and classify each body once', async () => {
     const jsonRequest = createHttpRequest(
       'POST',
       '/json',
-      { body: { ok: true }, headers: { ct: 'text/plain' } },
-      (builder, input) => {
-        builder.setHeaders({ 'content-type': input.headers.ct })
-        builder.setJson({ ok: input.body.ok })
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: jsonInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
+      undefined,
+      (() => ({
+        body: { ok: true },
+        headers: { 'content-type': 'text/plain' },
+      })) as OutboundBuilder,
+      options,
     )
+    const textRequest = createHttpRequest('POST', '/text', undefined, (() => ({ body: 'hello' })) as OutboundBuilder, options)
+    const Form = struct.urlencoded({ id: struct.string() })
+    const parsed = await parseEndpointInput(Form, { id: '1' })
+    const urlencodedRequest = createHttpRequest('POST', '/urlencoded', undefined, (() => ({ body: parsed })) as OutboundBuilder, options)
+    const nullBodyRequest = createHttpRequest('POST', '/raw-null', undefined, (() => ({ body: null })) as OutboundBuilder, options)
+    const noBodyRequest = createHttpRequest('POST', '/json-undefined', undefined, (() => ({})) as OutboundBuilder, options)
 
-    const textInput = struct.request({
-      body: struct.text(),
-      headers: struct.object({ ct: struct.string().optional() }),
-    })
-    const suppressedRequest = createHttpRequest(
-      'POST',
-      '/text',
-      { body: 'hello', headers: { ct: 'text/plain' } },
-      (builder, input) => {
-        builder.setHeaders({ 'content-type': input.headers.ct })
-        builder.setText(input.body, { contentType: null })
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: textInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    const formInput = struct.request({
-      body: struct.urlencoded({ id: struct.string() }),
-    })
-    const urlencodedRequest = createHttpRequest(
-      'POST',
-      '/urlencoded',
-      { body: { id: '1' } },
-      (builder, input) => {
-        builder.setFormUrlEncoded({ id: input.body.id })
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: formInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    const nullInput = struct.request({
-      body: struct.json(struct.null()),
-    })
-    const nullBodyRequest = createHttpRequest(
-      'POST',
-      '/raw-null',
-      { body: null },
-      (builder, input) => {
-        builder.setJson(input.body)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: nullInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    const noBodyInput = struct.request({
-      body: struct.json(struct.string().optional()),
-    })
-    const noBodyRequest = createHttpRequest(
-      'POST',
-      '/json-undefined',
-      { body: undefined },
-      (builder, input) => {
-        builder.setJson(input.body)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: noBodyInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    expect(jsonRequest.headers?.get('content-type')).toBe('application/json')
-    expect(suppressedRequest.headers?.has('content-type')).toBe(false)
+    expect(jsonRequest.body).toBe('{"ok":true}')
+    expect(jsonRequest.headers?.get('content-type')).toBe('text/plain')
+    expect(textRequest.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
     expect(urlencodedRequest.headers?.get('content-type')).toBe('application/x-www-form-urlencoded;charset=UTF-8')
     expect(nullBodyRequest.body).toBe('null')
     expect(nullBodyRequest.headers?.get('content-type')).toBe('application/json')
@@ -395,197 +229,59 @@ describe('http request helpers', () => {
     expect(noBodyRequest.headers?.has('content-type')).toBe(false)
   })
 
-  test('should serialize json scalar values in request.json helper', () => {
-    const stringInput = struct.request({ body: struct.json(struct.string()) })
-    const stringRequest = createHttpRequest(
-      'POST',
-      '/json-string',
-      { body: 'hello' },
-      (builder, input) => {
-        builder.setJson(input.body as never)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: stringInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
+  test('should classify scalar bodies by the body table', () => {
+    const stringRequest = createHttpRequest('POST', '/json-string', undefined, (() => ({ body: 'hello' })) as OutboundBuilder, options)
+    const numberRequest = createHttpRequest('POST', '/json-number', undefined, (() => ({ body: 1 })) as OutboundBuilder, options)
+    const booleanRequest = createHttpRequest('POST', '/json-boolean', undefined, (() => ({ body: true })) as OutboundBuilder, options)
+    const nullRequest = createHttpRequest('POST', '/json-null', undefined, (() => ({ body: null })) as OutboundBuilder, options)
 
-    const numberInput = struct.request({ body: struct.json(struct.number()) })
-    const numberRequest = createHttpRequest(
-      'POST',
-      '/json-number',
-      { body: 1 },
-      (builder, input) => {
-        builder.setJson(input.body as never)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: numberInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    const booleanInput = struct.request({ body: struct.json(struct.boolean()) })
-    const booleanRequest = createHttpRequest(
-      'POST',
-      '/json-boolean',
-      { body: true },
-      (builder, input) => {
-        builder.setJson(input.body as never)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: booleanInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    const nullInput = struct.request({ body: struct.json(struct.null()) })
-    const nullRequest = createHttpRequest(
-      'POST',
-      '/json-null',
-      { body: null },
-      (builder, input) => {
-        builder.setJson(input.body as never)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input: nullInput,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    expect(stringRequest.body).toBe('"hello"')
+    expect(stringRequest.body).toBe('hello')
+    expect(stringRequest.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
     expect(numberRequest.body).toBe('1')
     expect(booleanRequest.body).toBe('true')
     expect(nullRequest.body).toBe('null')
-    expect(stringRequest.headers?.get('content-type')).toBe('application/json')
+    expect(numberRequest.headers?.get('content-type')).toBe('application/json')
   })
 
-  test('should build form data bodies and reject unsupported nested values', () => {
-    const input = struct.request({
-      body: struct.formData({
-        age: struct.number(),
-        avatar: struct.blob(),
-        files: struct.array(struct.blob()),
-        name: struct.string(),
-      }),
+  test('should build form data bodies and reject unsupported nested values', async () => {
+    const avatar = new Blob(['avatar'], { type: 'image/png' })
+    const files = [new Blob(['a']), new Blob(['b'])]
+    const Form = struct.formData({
+      age: struct.number(),
+      avatar: struct.blob(),
+      files: struct.array(struct.blob()),
+      name: struct.string(),
+    })
+    const parsed = await parseEndpointInput(Form, {
+      age: 18,
+      avatar,
+      files,
+      name: 'Miao',
     })
     const request = createHttpRequest(
       'POST',
       '/upload',
-      {
-        body: {
-          age: 18,
-          avatar: new Blob(['avatar'], { type: 'image/png' }),
-          files: [new Blob(['a']), new Blob(['b'])],
-          name: 'Miao',
-        },
-      },
-      (builder, input) => {
-        builder.setFormData({
-          age: input.body.age,
-          avatar: input.body.avatar,
-          files: input.body.files,
-          name: input.body.name,
-        })
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input,
-        queryParamsSerializer: (params) => params.toString(),
-      },
+      undefined,
+      (() => ({
+        body: parsed,
+        headers: { 'content-type': 'multipart/form-data' },
+      })) as OutboundBuilder,
+      options,
     )
 
     expect(request.body).toBeInstanceOf(FormData)
     expect(request.headers?.has('content-type')).toBe(false)
-
-    const badInput = struct.request({
-      body: struct.formData({
-        profile: struct.object({ nested: struct.boolean() }),
-      }),
-    })
-    expect(() =>
-      createHttpRequest(
-        'POST',
-        '/upload',
-        { body: { profile: { nested: true } } },
-        (builder, input) => {
-          builder.setFormData({ profile: input.body.profile as never })
-        },
-        {
-          abort: new AbortController().signal,
-          baseEndpoint: 'https://api.example.com',
-          input: badInput,
-          queryParamsSerializer: (params) => params.toString(),
-        },
-      ),
-    ).toThrowError('formData binding does not support nested object for key "profile"')
-  })
-
-  test('should drop Content-Type for FormData body', () => {
-    const input = struct.request({
-      body: struct.formData({
-        name: struct.string(),
-      }),
-    })
-    const request = createHttpRequest(
-      'POST',
-      '/upload',
-      { body: { name: 'Miao' } },
-      (builder, input) => {
-        builder.setFormData({ name: input.body.name })
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input,
-        queryParamsSerializer: (params) => params.toString(),
-      },
+    expect((request.body as FormData).get('age')).toBe('18')
+    expect((request.body as FormData).get('name')).toBe('Miao')
+    expect(await formBlob((request.body as FormData).get('avatar'))).toEqual(await formBlob(avatar))
+    expect(await Promise.all((request.body as FormData).getAll('files').map((entry) => formBlob(entry)))).toEqual(
+      await Promise.all(files.map((entry) => formBlob(entry))),
     )
 
-    expect(request.body).toBeInstanceOf(FormData)
-    expect(request.headers?.has('content-type')).toBe(false)
-  })
-
-  test('should use the last request body write', () => {
-    const input = struct.request({
-      body: struct.json(
-        struct.object({
-          msg: struct.string(),
-        }),
-      ),
+    const Nested = struct.formData({
+      profile: struct.object({ nested: struct.boolean() }),
     })
-    const request = createHttpRequest(
-      'POST',
-      '/conflict',
-      { body: { msg: 'hello' } },
-      (builder, input) => {
-        builder.setJson({ msg: input.body.msg })
-        builder.setText(input.body.msg)
-      },
-      {
-        abort: new AbortController().signal,
-        baseEndpoint: 'https://api.example.com',
-        input,
-        queryParamsSerializer: (params) => params.toString(),
-      },
-    )
-
-    expect(request.body).toBe('hello')
-    expect(request.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
-  })
-
-  test('should resolve default response types from output declarations', () => {
-    expect(resolveDefaultResponseType(false)).toBeUndefined()
-    expect(resolveDefaultResponseType(true)).toBe('json')
-    expect(resolveDefaultResponseType(false, 'blob')).toBe('blob')
-    expect(resolveDefaultResponseType(true, 'text')).toBe('text')
+    const bad = await parseEndpointInput(Nested, { profile: { nested: true } })
+    expect(() => createHttpRequest('POST', '/upload', undefined, (() => ({ body: bad })) as OutboundBuilder, options)).toThrow(/profile/)
   })
 })

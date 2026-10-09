@@ -173,7 +173,7 @@ export function makeHttpRequest(headers?: Headers): HttpRequest {
   }
 }
 
-export function makeHttpResponse<R = unknown>(body: R | null = null): HttpResponse<R> {
+export function makeHttpResponse<R = unknown>(body?: R | null): HttpResponse<R> {
   return makeResponse({
     body,
     headers: new Headers(),
@@ -196,7 +196,7 @@ function makeSSEHandleBase(closed: Promise<EventStreamCloseInfo>, close: (reason
   let disposeTask: Promise<void> | undefined
   const handle: EventStreamHandle<unknown> = {
     open: {
-      response: makeHttpResponse<null>(),
+      response: makeHttpResponse(null),
       url: 'https://api.example.com/events',
     },
     closed,

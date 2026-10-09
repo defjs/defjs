@@ -5,7 +5,7 @@ description: 定义端点，打出 opaque command，映射输入，推断传输�
 
 # Commands
 
-一份 definition → builder → opaque command → `client.execute`。HTTP、SSE、WebSocket 同一条管线。
+一份 definition → endpoint → opaque command → `client.execute`。HTTP、SSE、WebSocket 同一条管线。
 
 ## 基本用法
 
@@ -20,54 +20,72 @@ if (!error) console.log(data, response.status)
 
 ## 选哪种 definition
 
-| Definition               | 契约                                              | 成功值                               |
-| ------------------------ | ------------------------------------------------- | ------------------------------------ |
-| `defineRequest(...)`     | Method、相对 path、可选 input、可选状态 output    | 解码数据 + `HttpResponse`            |
-| `defineEventStream(...)` | Path、buffer/queue 上限、事件名 → Struct 映射     | `EventStreamHandle` + open 快照      |
-| `defineWebSocket(...)`   | Path、incoming 映射、可选 outgoing 映射、队列上限 | `WebSocketSession` + connection 快照 |
+| Definition               | 契约                                                       | 成功值                               |
+| ------------------------ | ---------------------------------------------------------- | ------------------------------------ |
+| `defineRequest(...)`     | Method、相对 path、可选 input、可选 `output` / `error`     | 解码数据 + 响应                      |
+| `defineEventStream(...)` | Path、buffer/queue 上限、事件名 → Struct 映射              | `EventStreamHandle` + open 快照      |
+| `defineWebSocket(...)`   | Path、一个 incoming struct、可选 outgoing struct、队列上限 | `WebSocketSession` + connection 快照 |
 
-没有 `input` → builder 不收参。有 `input` → 就算嵌套字段全可选也要传 Struct 值。可选的 `path` / `query` / `headers` 段可以省略；段里有必填字段就不能省。Body wrapper 一旦出现，body 就是必填。
+没有 `input` → endpoint 不收参，`builder` 可以是 `() => request`。有 `input` → 传 struct 值。可选字段可以省；必填字段不能省。
 
 保持 command 不透明。别去扒标签或 symbol。
 
-## 自动请求映射
+## 值放哪
 
-逻辑输入已经是 path / query / headers / body 时，用 `struct.request(...)`：
+Struct 决定值怎么编码。`builder` 决定它放哪。`builder` 是**已 parse** input 的同步纯函数。它在 execute 时跑。抛错会变成 tuple 上的 `REQ_BUILD_FAILED`——调用 endpoint 本身不抛。
+
+input struct 已经是 `{ path?, query?, headers?, body? }` 时，省略 `builder`。那就是恒等 `(input) => input`。parse 后的 input 不能赋给这个形状时，TypeScript 会要求一个 `builder`。
+
+把带类型的值交过去。Alias、`Date` → ISO、`bigint` → string 会作用在这个 struct 用到的每一处：请求摆放、响应解码、SSE 事件、WebSocket frame。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
+const User = struct.object({
+  displayName: struct.string().alias('display_name'),
+  email: struct.string(),
+})
+
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(struct.object({ name: struct.string() })),
-  }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  input: struct.object({ user: User }),
+  builder: (input) => ({ body: input.user }),
+  output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })
 void createUser
 ```
 
-Alias 只改写出线上的 key。解析值和 command 输入仍用逻辑名。
+Body 是 JSON `{"display_name":"…","email":"…"}`。手写的 key 是逃生口：`body: { name: input.user.displayName }` 发出去的是 `name`，因为外层对象是匿名的，alias 不生效。
 
-## 自定义 `build`
+## 形状对不上时
 
-调用方形状和线上形状不一致时再上 `build(request, input)`。这是受限投影——别在这儿按鉴权政策分支，也别搞副作用。
+path 占位符、字面量、分支，用 `builder`。它收到的是真值，所以 `if`、`??`、模板字符串、`switch` 都能用。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
 const search = defineRequest({
   method: 'GET',
-  path: '/search',
-  input: struct.object({ q: struct.string(), page: struct.number().optional() }),
-  build(request, input) {
-    request.setQueryParams({ q: input.q, page: input.page })
-  },
+  path: '/orgs/:org_id/users',
+  input: struct.object({
+    orgId: struct.number(),
+    query: struct.object({
+      keyword: struct.string(),
+      pageSize: struct.number().alias('page_size'),
+    }),
+  }),
+  builder: (input) => ({
+    path: { org_id: input.orgId },
+    query: input.query,
+    headers: { 'x-api-version': '2' },
+  }),
   output: struct.object({ items: struct.array(struct.string()) }),
 })
 void search
 ```
+
+`query: input.query` 发出 `page_size`。`headers: { 'x-api-version': '2' }` 是字面量。鉴权和追踪仍归 interceptor：builder 跑完之后，它们看到的是原生请求。
 
 ## `output` 和 `error` 的形状
 

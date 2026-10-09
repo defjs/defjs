@@ -11,16 +11,13 @@ import {
   createFileStruct,
   createFormDataBodyStruct,
   createIntersectionStruct,
-  createJsonBodyStruct,
   createLiteralStruct,
   createNullStruct,
   createNumberStruct,
   createObjectEnumStruct,
   createObjectStruct,
   createRecordStruct,
-  createRequestStruct,
   createStringStruct,
-  createTextBodyStruct,
   createTupleStruct,
   createUnionStruct,
   createUnknownStruct,
@@ -53,8 +50,8 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(...opt
  * Facade for building protocol-boundary structs and parsing values.
  *
  * Prefer this entry point over internal constructors. Compose shapes with
- * `struct.object` / `struct.request`, then parse with `struct.parse` or let
- * HTTP/SSE/WebSocket endpoints apply the same contracts at the wire boundary.
+ * `struct.object`, then parse with `struct.parse` or let HTTP/SSE/WebSocket
+ * endpoints apply the same contracts at the wire boundary.
  *
  * @example
  * ```ts
@@ -63,8 +60,12 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(...opt
  *   displayName: struct.string().alias('display_name'),
  * })
  *
- * const getUserInput = struct.request({
- *   path: struct.object({ id: struct.number() }),
+ * const getUser = defineRequest({
+ *   method: 'GET',
+ *   path: '/users/:id',
+ *   input: struct.object({ id: struct.number() }),
+ *   builder: (input) => ({ path: input }),
+ *   output: User,
  * })
  *
  * const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
@@ -83,7 +84,6 @@ export const struct = {
   file: createFileStruct,
   formData: createFormDataBodyStruct,
   intersection: createIntersectionStruct,
-  json: createJsonBodyStruct,
   literal: createLiteralStruct,
   null: createNullStruct,
   number: createNumberStruct,
@@ -91,9 +91,7 @@ export const struct = {
   or: structOr,
   parse: parseStructTuple,
   record: createRecordStruct,
-  request: createRequestStruct,
   string: createStringStruct,
-  text: createTextBodyStruct,
   tuple: createTupleStruct,
   unknown: createUnknownStruct,
   urlencoded: createUrlencodedBodyStruct,

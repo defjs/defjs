@@ -1,5 +1,7 @@
 import type { FetchHandle } from '../../client/config'
+import { DEFAULT_FETCH, resolveGlobalFetch } from '../../client/config'
 import { awaitWithSignal, resolveAbortCause } from '../../internal/abort'
+import { fetchWithSignal } from '../../internal/fetch'
 import type { HttpProgressFn, HttpRequest } from '../../internal/http_request'
 import type { HttpMeta, HttpResponse } from '../../internal/http_response'
 import { makeResponse } from '../../internal/http_response'
@@ -187,22 +189,8 @@ function cancelWrappedUploadBody(request: HttpRequest, body: unknown, reason: un
   }
 }
 
-async function fetchWithSignal(fetchImpl: FetchHandle, request: Request, signal: AbortSignal | undefined): Promise<Response> {
-  if (!signal) {
-    return await fetchImpl(request)
-  }
-
-  return await awaitWithSignal(() => {
-    const pending = Promise.resolve(fetchImpl(request))
-    void pending
-      .then((response) => {
-        if (signal.aborted && response.body) {
-          void response.body.cancel(signal.reason).catch(() => undefined)
-        }
-      })
-      .catch(() => undefined)
-    return pending
-  }, signal)
+function cancelLateResponseBody(body: ReadableStream<Uint8Array>, signal: AbortSignal): void {
+  void body.cancel(signal.reason).catch(() => undefined)
 }
 
 export function createFetchRequestInit(request: HttpRequest): RequestInit & { duplex?: 'half' } {
@@ -239,39 +227,79 @@ function discardBody(body: ReadableStream<Uint8Array>): void {
   void body.cancel().catch(() => undefined)
 }
 
-async function parseFetchResponse(httpRequest: HttpRequest, response: Response, fallbackUrl: string): Promise<HttpResponse<unknown>> {
+/**
+ * Reads a whole body in one call. Only for a response that the platform fetch returned for `signal`: the fetch spec binds that
+ * body to the signal, so an abort errors the stream and frees the connection, and the race only makes this call settle promptly.
+ */
+async function readWholeBody(response: Response, signal: AbortSignal | undefined, meta: HttpMeta): Promise<Uint8Array> {
+  try {
+    return new Uint8Array(await (signal ? awaitWithSignal(() => response.arrayBuffer(), signal) : response.arrayBuffer()))
+  } catch (error) {
+    // Cancellation outranks body classification, and `fetchHandler` turns it into an abort result.
+    if (signal?.aborted) {
+      throw error
+    }
+    throw new BodyFailure('NET_BODY_INCOMPLETE', error, meta)
+  }
+}
+
+/** @param platform - `response` came straight from the platform fetch called with the request signal. */
+async function parseFetchResponse(
+  httpRequest: HttpRequest,
+  response: Response,
+  fallbackUrl: string,
+  platform: boolean,
+): Promise<HttpResponse<unknown>> {
   const downloadProgress = httpRequest.downloadProgress
   const { headers, status, statusText } = response
   const url = response.url || fallbackUrl
+  // 2xx uses responseType; every other status uses errorResponseType.
+  // Either one being unset means that side was not declared, so the body is cancelled unread.
+  const responseType = status >= 200 && status < 300 ? httpRequest.responseType : httpRequest.errorResponseType
 
-  if (response.body && httpRequest.responseType === undefined) {
+  if (response.body && responseType === undefined) {
     discardBody(response.body)
-    return makeResponse({ status, statusText, headers, url, body: null })
+    return makeResponse({ status, statusText, headers, url })
   }
 
   const contentLength = getContentLength(headers)
   const contentType = getContentType(headers)
   const meta: HttpMeta = { headers, ok: status >= 200 && status < 300, status, statusText, url }
-  let body: unknown = null
+  // No stream is an absent body. A parsed JSON null stays null.
+  let body: unknown = undefined
 
   // Philosophy 3: the declared representation is part of the assertion. Checking it before the
   // body is read turns "I asked for JSON and got HTML" into one precise fault, and skips the
   // read, the parse, and the struct entirely.
-  if (response.body && httpRequest.responseType === 'json' && !isJsonMediaType(contentType)) {
+  if (response.body && responseType === 'json' && !isJsonMediaType(contentType)) {
     discardBody(response.body)
     const cause = new TypeError(`Expected a JSON media type, received ${contentType || '<none>'}`)
     throw new BodyFailure('RES_MEDIA_TYPE_INVALID', cause, meta)
   }
 
-  if (response.body) {
+  // Progress needs the chunks, so only an unobserved read takes the bulk path.
+  if (response.body && platform && !downloadProgress) {
+    const bytes = await readWholeBody(response, httpRequest.abort, meta)
+    try {
+      body = parseBytesBody(responseType, bytes, contentType)
+    } catch (error) {
+      throw new BodyFailure('RES_DECODE_FAILED', error, meta)
+    }
+  } else if (response.body) {
     const chunks: Uint8Array[] = []
     const reader = response.body.getReader()
     const signal = httpRequest.abort
+    // One listener covers every read: cancelling settles a pending read as done, and the loop then
+    // reports the abort. Racing each read would add a listener and three promises per chunk.
+    const cancelRead = () => void reader.cancel(signal?.reason).catch(() => undefined)
+    signal?.addEventListener('abort', cancelRead, { once: true })
     let receivedLength = 0
 
     try {
       while (true) {
-        const result = signal ? await awaitWithSignal(() => reader.read(), signal) : await reader.read()
+        signal?.throwIfAborted()
+        const result = await reader.read()
+        signal?.throwIfAborted()
         if (result.done) {
           break
         }
@@ -297,11 +325,12 @@ async function parseFetchResponse(httpRequest: HttpRequest, response: Response, 
       }
       throw isBodyFailure(error) ? error : new BodyFailure('NET_BODY_INCOMPLETE', error, meta)
     } finally {
+      signal?.removeEventListener('abort', cancelRead)
       reader.releaseLock()
     }
 
     try {
-      body = parseBytesBody(httpRequest.responseType, concatChunks(chunks, receivedLength), contentType)
+      body = parseBytesBody(responseType, concatChunks(chunks, receivedLength), contentType)
     } catch (error) {
       throw new BodyFailure('RES_DECODE_FAILED', error, meta)
     }
@@ -321,30 +350,46 @@ async function parseFetchResponse(httpRequest: HttpRequest, response: Response, 
  * Used by the client unless `withHTTPHandle` replaces it; also usable in tests and custom handlers.
  *
  * @param httpRequest - Normalized request (URL, headers, body, abort, progress hooks).
- * @param fetchImpl - Fetch implementation; defaults to global `fetch`.
+ * @param fetchImpl - Fetch implementation; defaults to global `fetch`. The library default handle is called as
+ *   `(url, init)` and its body is read in one piece unless download progress is observed. Any other handle receives a
+ *   `Request` and its body is read chunk by chunk.
  * @returns Parsed `HttpResponse`. Rejects when no response reached the client, or when reading the
  *   body failed — a transport failure is a fault, never a response.
  */
 export async function fetchHandler(
   httpRequest: HttpRequest,
-  fetchImpl: FetchHandle = globalThis.fetch.bind(globalThis),
+  fetchImpl: FetchHandle = resolveGlobalFetch(),
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.abort
+  const platform = fetchImpl === DEFAULT_FETCH
   let prepared = httpRequest
   let request: Request | undefined
+  let platformBody: RequestInit['body']
+  let fallbackUrl = ''
   let response: Response
 
   try {
     prepared = await prepareUploadProgressRequest(httpRequest)
-    request = createFetchRequest(prepared)
-    response = await fetchWithSignal(fetchImpl, request, abortSignal)
+    if (platform) {
+      // fetch(url, init) builds the Request itself, so building one here would only do that work twice.
+      const url = resolveRequestUrl(prepared)
+      const init = createFetchRequestInit(prepared)
+      platformBody = init.body
+      fallbackUrl = url.href
+      response = await fetchWithSignal(() => fetchImpl(url, init), abortSignal, cancelLateResponseBody)
+    } else {
+      const built = createFetchRequest(prepared)
+      request = built
+      fallbackUrl = built.url
+      response = await fetchWithSignal(() => fetchImpl(built), abortSignal, cancelLateResponseBody)
+    }
   } catch (error) {
-    cancelWrappedUploadBody(prepared, request?.body, error)
+    cancelWrappedUploadBody(prepared, request?.body ?? platformBody, error)
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error
   }
 
   try {
-    return await parseFetchResponse(httpRequest, response, request.url)
+    return await parseFetchResponse(httpRequest, response, fallbackUrl, platform)
   } catch (error) {
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error
   }

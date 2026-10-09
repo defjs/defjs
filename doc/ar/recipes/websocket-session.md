@@ -5,7 +5,7 @@ description: اتصل، أرسل غلافًا مُنوَّعًا واحدًا، 
 
 # فتح جلسة WebSocket
 
-أغلفة JSON تستخدم `type` سلسلة غير فارغة. أنت تملك إلغاء الاشتراك و`close` و`await session.closed`.
+كل اتجاه هو struct واحد. أنت تملك إلغاء الاشتراك و`close` و`await session.closed`. الإطارات غير الصالحة تذهب إلى `onRuntimeError`.
 
 انظر [WebSocket](../core/web-socket.md) للتفاصيل.
 
@@ -17,8 +17,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session] = await client.execute(room())

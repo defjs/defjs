@@ -35,7 +35,7 @@ import { useEffect, useState } from 'react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -102,7 +102,7 @@ Der Hook liefert nur den Client. Er startet keine Arbeit, subscribed keinen Tran
 
 ## Query-Arbeit besitzen
 
-Eine Query-Library kann Caching, Retries, Stale-Result-Suppression und Cancellation besitzen. Gib ihr das Signal, das sie liefert:
+Eine Query-Library kann Caching, Retries, Stale-Result-Suppression und Cancellation besitzen. Gib ihr das Signal, das sie liefert. Für List-Pages wrappe `client.execute(...)` mit TanStack Query (oder ähnlich) — `@defjs/react` bleibt nur DI und liefert **kein** `useRequest`.
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -112,7 +112,7 @@ import { useClient } from '@defjs/react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -146,9 +146,7 @@ import { useEffect } from 'react'
 const notifications = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/notifications',
-  incoming: {
-    message: struct.object({ text: struct.string() }),
-  },
+  incoming: struct.object({ text: struct.string() }),
 })
 
 export function Notifications() {

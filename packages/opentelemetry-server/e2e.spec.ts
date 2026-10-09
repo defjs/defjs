@@ -51,6 +51,7 @@ describe('e2e: opentelemetry-server with real test server', () => {
     const client = createClient(withEndpoint(host), withOpenTelemetryServer({ tracer, propagator }))
 
     const useEchoHeaders = defineRequest({
+      builder: () => ({}),
       method: 'POST',
       path: '/echo-headers',
       input: struct.object({}),
@@ -86,7 +87,7 @@ describe('e2e: opentelemetry-server with real test server', () => {
       path: '/500',
     })
 
-    const [error] = await client.execute(useFail(undefined))
+    const [error] = await client.execute(useFail())
 
     expect(error).not.toBeNull()
     const span = onlySpan(spans)
@@ -200,11 +201,7 @@ describe('e2e: opentelemetry-server with real test server', () => {
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        traceparent: struct.object({
-          value: struct.string(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('traceparent'), value: struct.string() }),
       path: '/ws',
     })
 
@@ -253,11 +250,7 @@ describe('e2e: opentelemetry-server with real test server', () => {
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        traceparent: struct.object({
-          value: struct.string(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('traceparent'), value: struct.string() }),
       path: '/ws',
     })
 

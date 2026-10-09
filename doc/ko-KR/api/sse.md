@@ -1,6 +1,6 @@
 ---
 title: SSE
-description: defineEventStream, 실행 옵션, 스트림 핸들이에요.
+description: defineEventStream, 실행 options, stream handle이에요.
 ---
 
 # SSE
@@ -10,11 +10,11 @@ description: defineEventStream, 실행 옵션, 스트림 핸들이에요.
 ## defineEventStream() {#defineEventStream}
 
 ```ts
-function defineEventStream(definition: EventStreamDefinition): EventStreamCommandBuilder
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`, `events` 맵, 선택 `method` (기본 `'GET'`), `input`, `build`, buffer/queue 한도예요.
-- **Returns** 빌더예요. 입력을 넣으면 `EventStreamCommand`가 나와요.
+- **definition** — `path`, `events` map, 선택 `method`(기본 `'GET'`), 선택 `input`, `builder`, `error`, buffer/queue 한도예요.
+- **반환** 엔드포인트예요. 입력을 넣어 호출하면 `EventStreamCommand`가 나와요.
 
 ```ts twoslash
 import { defineEventStream, struct } from '@defjs/core'
@@ -37,9 +37,9 @@ function executeEventStreamCommand(
 ): Promise<StreamAwaitResult>
 ```
 
-`client.execute`의 저수준 진입점이에요. 앱 코드에서는 클라이언트를 쓰세요.
+`client.execute`의 저수준 진입점이에요. 애플리케이션 코드에서는 클라이언트를 쓰는 편이 좋아요.
 
-- **Returns** `[null, stream, open]` 또는 `[error, undefined, open?]`예요.
+- **반환** `[null, stream, open]` 또는 `[error, undefined, open?]`예요. `error`를 선언하면 fault는 그 struct의 `Fault`이고, 아니면 `Fault<undefined>`예요.
 
 ## 실행 options
 
@@ -53,7 +53,7 @@ type EventStreamExecuteOptions = {
 }
 ```
 
-HTTP와 같은 취소 규칙이에요. `abort` 또는 `timeout`이지, 둘 다는 아니에요.
+취소 규칙은 HTTP와 같아요. `abort` 또는 `timeout`이지, 둘 다가 아니에요.
 
 ## EventStreamHandle {#EventStreamHandle}
 
@@ -66,7 +66,7 @@ interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposab
 }
 ```
 
-`open`은 시작 스냅샷이에요. 재연결 후 바뀔 수 있어요 — `stream.open`도 읽어요. 소유한 범위는 `await using stream = handle`로 정리하세요. disposer는 Defjs의 읽기와 재연결 작업을 멈추고 reader lock이 해제될 때까지 기다리지만, provider가 제어하고 멈춰 버린 `ReadableStream.cancel()` 프로미스의 완료까지 보장하지는 않아요. 수동 `close()` / `closed`도 그대로 쓸 수 있어요.
+`open`은 시작 스냅샷이에요. 재연결 뒤에는 바뀔 수 있으니 `stream.open`도 읽으세요. 소유한 범위를 정리할 때는 `await using stream = handle`을 선호해요. disposer는 Defjs의 읽기와 재연결 작업을 멈추고 reader lock이 풀릴 때까지 기다려요. provider가 붙잡고 끝나지 않는 `ReadableStream.cancel()` promise가 끝난다고 약속하지는 않아요. 수동 `close()` / `closed`도 그대로 쓸 수 있어요.
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
@@ -75,7 +75,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-`EventStreamHandle`을 구조적으로 직접 구현한 코드는 이제 `[Symbol.asyncDispose]()`도 구현해 같은 소유 teardown 경로를 반환해야 해요. 커스텀 핸들 구현자에게는 컴파일 타임 breaking change지만, Defjs가 반환한 핸들을 받기만 하는 코드는 런타임에 새 호출을 추가할 필요가 없어요.
+`EventStreamHandle`의 구조적 구현은 이제 `[Symbol.asyncDispose]()`를 구현하고 같은 소유 teardown 경로를 돌려줘야 해요. 커스텀 handle에는 컴파일 타임 breaking change예요. Defjs가 돌려준 handle만 받는 코드는 런타임에 새 호출이 필요 없어요.
 
 ### EventStreamOpenInfo {#EventStreamOpenInfo}
 
@@ -90,11 +90,12 @@ interface EventStreamOpenInfo {
 
 ```ts
 type EventStreamCloseInfo =
-  | { code: 'eof' | 'aborted'; reason?: string; cause?: unknown }
-  | { code: 'error'; errorCode: EventStreamFaultCode; reason?: string; cause?: unknown }
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamFaultCode`: `'RES_MEDIA_TYPE_INVALID' | 'EXT_OBSERVER_FAILED' | 'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'NET_TIMEOUT' | 'TRANSPORT_ERROR'`.
+`EventStreamFaultCode`: `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
 
 ## 이벤트 map
 
@@ -104,23 +105,31 @@ type EventStreamCloseInfo =
 type EventStructs = { [eventName: string]: AnyStruct }
 ```
 
-자세한 내용은 [SSE 가이드](../core/sse.md)와 [SSE 스트림 소비하기](../recipes/consume-sse.md)를 보세요.
+`string` 이벤트 struct는 raw `data` 텍스트를 유지해요. 그 밖의 kind는 JSON 텍스트예요. `JSON.parse`한 뒤 struct를 적용해요. 그래서 bare `struct.literal`에는 따옴표 없는 토큰이 아니라 JSON 텍스트가 필요해요. 핸드셰이크 `error` body는 HTTP와 같은 kind 규칙을 써요. `string`은 텍스트, `blob` / `file`은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON이에요.
+
+재연결은 클라이언트에 있어요 (`withSSEReconnect`). SSE `jitter`는 WebSocket과 같은 **0–1 곱셈 계수**예요.
+
+[SSE 가이드](/core/sse)와 [SSE 스트림 소비하기](/recipes/consume-sse)를 보세요.
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`, `events`, 선택 `method` / `input` / `build`, 버퍼와 큐 한도예요.
+`path`, `events`, 선택 `method` / `input` / `builder` / `error`, buffer와 queue 한도예요. 요청 모양은 `body`를 포함해 HTTP와 같아요. `GET`과 `HEAD`는 body를 돌려줄 수 없어요.
 
-## EventStreamCommandBuilder {#EventStreamCommandBuilder}
+## EventStreamEndpoint {#EventStreamEndpoint}
 
-`defineEventStream`가 돌려주는 값이에요. input을 넣어 호출하면 `EventStreamCommand`가 나와요.
+`defineEventStream`이 돌려줘요. 입력을 넣어 호출하면 `EventStreamCommand`가 나와요.
+
+## EventStreamRequestShape {#EventStreamRequestShape}
+
+스트림의 method와 path에 대한 `HttpRequestShape`와 같은 필드예요.
 
 ## EventStreamCommand {#EventStreamCommand}
 
-불투명 SSE command예요. `client.execute`에 넣어요.
+opaque SSE 명령이에요. `client.execute`에 넘기세요.
 
 ## StreamAwaitResult {#StreamAwaitResult}
 
-`[null, stream, open]` or `[error, undefined, open?]`.
+`[null, stream, open]` 또는 `[error, undefined, open?]`예요.
 
 ## EventStreamData {#EventStreamData}
 

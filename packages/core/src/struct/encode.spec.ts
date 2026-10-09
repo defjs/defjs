@@ -296,6 +296,12 @@ describe('encode.ts', () => {
     expect(encode(s, true)).toBe(true)
   })
 
+  test('struct.or returns an unmatched value when a branch is not identity-encoded', () => {
+    // A date branch skips the uniform-identity fast path, so the shared miss still returns the input.
+    const s = struct.or(struct.date(), struct.string())
+    expect(encode(s, true)).toBe(true)
+  })
+
   test('matchesRuntimeValue uses neutral runtime guards for date and bigint', () => {
     const dateStruct = struct.date() as unknown as RuntimeStruct
     const bigintStruct = struct.bigint() as unknown as RuntimeStruct

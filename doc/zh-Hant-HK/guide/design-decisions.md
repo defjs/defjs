@@ -7,7 +7,7 @@ description: 點解 Defjs 要將 contracts、commands、transport results、deco
 
 Defjs 刻意做咗幾個 trade-offs。Convenience APIs 好多時會隱藏邊個 own 住 request、stream 或者 session。Defjs 要呢條 boundary 睇得見，等你可以 reuse 同一個 endpoint contract，又唔會靜靜雞拎住 cache、retry scheduler 或者 resource manager。
 
-## 聲明即斷言
+## 聲明即斷言 {#declaration-is-an-assertion}
 
 呢六條規則決定咗「response 點讀」嘅所有問題。編咗號，方便日後討論時直接引用，唔使重新推導一次。
 
@@ -41,13 +41,15 @@ body **就係**解碼之後嘅值。解碼失敗就冇值——唔存在半成�
 
 ## Explicit clients
 
-代價：冇 process-wide default。呢個代價喺 server 上面好有用 — 當 options 或者 closures capture auth、cookies、users、tenants 或者 request metadata 時，喺 request boundary 入面 create client。Explicit client 都唔會 isolate interceptor capture 嘅 state，而 `struct.parse(..., { errorMap })` 只覆蓋嗰一次 parse 嘅文案。Client identity 本身唔係 security boundary。
+`createClient(...)` 將 endpoint config 變成一個明確嘅 value。唔同 environment 或者 request scope 用唔同 endpoints、credentials、interceptors、serializers 同 transport handles。
+
+代價：冇 process-wide default。呢個代價喺 server 上面好有用 — 當 options 或者 closures capture auth、cookies、users、tenants 或者 request metadata 時，喺 request boundary 入面 create client。Explicit client 仍然唔會 isolate interceptor capture 嘅 state。Client identity 本身唔係 security boundary。
 
 Client 負責 dispatch commands。佢唔 own 住 active work。邊個開始 HTTP request、SSE stream 或者 WebSocket session，就要 cancel 或者 close，再 await terminal promise。
 
-## Definitions、builders 同 commands
+## Definitions、endpoints 同 commands
 
-Definition 係穩定嘅 contract：method、path、input Struct、output mapping、transport limits。Builder 係 callable view。Call 佢會 create 一個 opaque command，畀單次 execution 用。
+Definition 係穩定嘅 contract：method、path、input struct、decode `ok` 兩邊嘅 structs、transport limits。`defineRequest` return 一個 endpoint。Call 佢會為單次 execution create 一個 opaque command。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -55,14 +57,13 @@ import { defineRequest, struct } from '@defjs/core'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 ```
 
 Background job 同 UI owner 可以用唔同 cancel/retry policy 去 execute 同一個 `getUser` 形狀。Command 保持 opaque，就唔會令 app code 依賴 internal transport tags 或者 symbols。
@@ -71,15 +72,17 @@ Background job 同 UI owner 可以用唔同 cancel/retry policy 去 execute 同�
 
 三種傳輸都用 error-first tuple。如果淨係一個 generic「response」，lifecycle facts 就會被抹走。
 
-- HTTP → `[error, data, response]` — decoded output + `HttpResponse`
-- SSE → `[error, stream, open]` — 一條 logical stream + startup response snapshot
-- WebSocket → `[error, session, connection]` — logical session + startup connection snapshot
+- HTTP → `[err, data, response]` — decoded output + 產生佢嘅 response
+- SSE → `[err, stream, open]` — 一條 logical stream + startup response snapshot
+- WebSocket → `[err, session, connection]` — logical session + startup connection snapshot
 
-第三個 value 係 snapshot，唔係保證之後 reconnect 都係同一條 physical connection 嘅 promise。Startup 失敗時，如果 transport 已經先產出 response/snapshot，第三項仍然可以有。Startup 之後，lifecycle control 屬於 return 出嚟嘅 handle 或者 session。
+成功時第三個 value 一定存在。HTTP 失敗係 `[error, undefined, undefined]`：fault 已經帶住 response metadata，而傳去 handler、寫 log 或者重新拋出嘅就係嗰個 fault。SSE 同 WebSocket 嘅 startup 失敗，如果已經 capture 到 open 或者 connection snapshot，第三項仍然可以有。
+
+對 SSE 同 WebSocket 嚟講，第三個 value 係 snapshot，唔係保證之後 reconnect 都係同一條 physical connection 嘅 promise。Startup 之後，lifecycle control 屬於 return 出嚟嘅 handle 或者 session。
 
 ## Runtime decoding
 
-TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check server response。Struct parsing 係 contract 嘅另一半。Defjs 會喺 request construction 之前 validate command input，decode 揀中嘅 representation，再 parse 對應嘅 Struct。
+TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check server response。Struct parsing 係 contract 嘅另一半。Defjs 會喺 request construction 之前 validate command input，檢查 representation，再 parse `ok` 適用嗰邊嘅 struct。
 
 解碼**只發生一次，而且係喺 interceptor chain 之後**。Interceptor 用 `makeResponse(...)` 造出嚟嘅 response，同線上真實嚟嘅 response 會被一模一樣地解讀：response 由邊嚟，唔影響佢點被讀，所以唔存在「信 interceptor」呢條要考慮嘅岔路。
 
@@ -95,9 +98,11 @@ TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check ser
 
 先查 media type，就係將「我要 JSON，收到 HTML」變成一個精確嘅 fault，而唔係一個 parser error，而且完全跳過讀取、解析同 Struct。
 
-## `build` 嘅界限
+## Builder、encoder 同 alias
 
-當 input 已經有 path/query/headers/body 時，automatic `struct.request(...)` mapping 係 default。Custom `build(request, input)` 係 constrained projection，用喺 caller shape 同 wire shape 唔一樣：
+Struct 係 field contract，兩個方向都係。`.alias(name)` 係 wire name。Struct 決定一個 value 點 encode。`builder` 決定個 value 去邊。
+
+`builder` 可選、synchronous，而且 pure。佢收到 parsed input——真實 value，唔係 binding view——再 return request：`path`、`query`、`headers` 同 `body`。Command execute 嗰陣先 run。Throw 會變成 tuple 上面嘅 `REQ_BUILD_FAILED`；call endpoint 本身唔會 throw。當 input struct 已經係嗰個 request shape，就 omit `builder`。省略就係 `(input) => input`；input 唔 assignable 嘅時候 TypeScript 會要求有 builder。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -107,22 +112,20 @@ const createBatch = defineRequest({
   path: '/accounts/:account_id/users',
   input: struct.object({
     accountId: struct.number(),
+    draft: struct.boolean().optional(),
     users: struct.array(
       struct.object({
-        displayName: struct.string(),
+        displayName: struct.string().alias('display_name'),
         email: struct.string(),
       }),
     ),
   }),
-  build(request, input) {
-    request.setPathParams({ account_id: input.accountId })
-    request.setJson({
-      users: input.users.map((user) => ({
-        display_name: user.displayName,
-        email: user.email,
-      })),
-    })
-  },
+  builder: (input) => ({
+    path: { account_id: input.accountId },
+    query: { draft: input.draft ? 1 : undefined },
+    headers: { 'x-api-version': '2' },
+    body: { users: input.users },
+  }),
   output: struct.object({ accepted: struct.number() }),
 })
 
@@ -130,9 +133,24 @@ const command = createBatch({
   accountId: 42,
   users: [{ displayName: 'Ada', email: 'ada@example.com' }],
 })
+void command
 ```
 
-`input` 係 schema-bound view，唔係 caller 嘅 runtime object。Projection 可以 select declared fields、rename targets，同將一個 source array item map 去一個 output item。佢唔可以按 values branch、inject literals，或者改 cardinality。Normalize business data，同做 value-dependent validation，都要喺 create command 之前搞掂。
+Default 路徑係交 typed value 過去。`body: { users: input.users }` 會保留每個 user 嘅 alias，所以 wire field 係 `display_name`。你自己寫嘅 key（`account_id`、`x-api-version`）係 literal。Spread 一個 typed object 會保留佢嘅 struct；logical field 旁邊再加 wire key 就係 `REQ_BUILD_FAILED`。
+
+Query nesting 係 backend 嘅性質，所以住喺 client：`withQuerySerializer((query) => string)` 見到嘅係已經 encode 嘅 wire object，包括 aliases。冇 query 嘅時候唔會 call。Builder return 嘅 `URLSearchParams` 會 skip 佢。冇 serializer 嘅時候，arrays 會重複 keys，nested object 會失敗。Interceptors 見到嘅 `queryParams` 係 `new URLSearchParams(queryString)`。
+
+Body kind 由 value 決定，第一個 match 贏：
+
+- 冇 `body` → 咩都唔送
+- body root 有 `urlencoded` 或者 `formData` codec → 用嗰種 form encoding；value nest 喺 JSON 入面時個 tag 唔生效
+- `FormData`、`URLSearchParams`、`Blob`、`File`、bytes，或者 `ReadableStream` → 原樣送
+- string → `text/plain;charset=UTF-8`
+- 其他 → JSON
+
+`undefined` fields 會被 omit。Nullable field 嘅 `null` 會送出。String 唔係 JSON，除非你 stringify 佢再 set `content-type`。你自己 serialize（`JSON.stringify`、qs、protobuf）就離開 struct encoder，所以 aliases 唔會套用。冇 public `struct.encode`。
+
+`GET` 同 `HEAD` 唔可以帶 body。WebSocket builders 唔可以 return headers 或者 body。Static WebSocket subprotocols 留喺 definition（`protocols`），唔係 builder。Invalid WebSocket frames 去 session runtime-error listener。SSE `error` struct 會 type 住 startup fault，handshake body 跟 HTTP body 同一套 kind rule：`string` 係 text，blobs 同 files 係 blobs，`arrayBuffer` 係 bytes，其他就係 JSON。
 
 ## Observers 同 policy placement
 

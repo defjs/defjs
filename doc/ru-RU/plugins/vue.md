@@ -1,15 +1,15 @@
 ---
 title: Vue
-description: Поставь плагин, provide клиент, fetch’ни пользователя и abort при reactive change.
+description: Поставь плагин, отдай клиент, запроси пользователя и abort на реактивной смене.
 ---
 
 # Vue
 
-Врежь существующий клиент `@defjs/core` в Vue. Получаешь плагин, injection key и `injectClient()`. Пакет **не** создаёт клиентов, не кеширует результаты, не ретраит команды и не закрывает transport resources на unmount.
+Подключи существующий `@defjs/core` client к Vue. Получаешь плагин, injection key и `injectClient()`. Пакет **не** создаёт клиентов, не кеширует результаты, не ретраит команды и не закрывает ресурсы транспорта на unmount.
 
 ## Базовая настройка
 
-Поставь `@defjs/core`, `@defjs/vue` и Vue 3+. ESM; Node.js 22+, когда бежишь в Node:
+Поставь `@defjs/core`, `@defjs/vue` и Vue 3+. ESM; Node.js 22+, если гоняешь в Node:
 
 `bun add @defjs/core @defjs/vue vue`
 
@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -74,13 +74,13 @@ watch(
 </template>
 ```
 
-`createClientPlugin(client)` provides ровно тот объект, который ты передал. Без clone, без disposal hook. Настраивай core options и interceptors при создании клиента.
+`createClientPlugin(client)` отдаёт ровно тот объект, который ты передал. Без clone, без хука disposal. Опции core и interceptors настраивай, когда создаёшь клиент.
 
-`onCleanup` бежит до re-run watcher и когда он останавливается. Зарегистрируй его до старта async работы. Error-first кортеж остаётся application data.
+`onCleanup` бежит до повторного запуска watcher и когда он останавливается. Зарегистрируй его до старта async-работы. Error-first кортеж остаётся данными приложения.
 
 ## Inject и override
 
-`injectClient()` читает ближайший provider `HTTP_CLIENT` и throws, когда его нет. Override subtree через Vue `provide(HTTP_CLIENT, childClient)`:
+`injectClient()` читает ближайший провайдер `HTTP_CLIENT` и бросает, если его нет. Поддерево переопредели через Vue `provide(HTTP_CLIENT, childClient)`:
 
 ```vue twoslash
 <script setup lang="ts">
@@ -104,17 +104,17 @@ provide(HTTP_CLIENT, childClient)
 </template>
 ```
 
-Ближайший provider побеждает. Descendants получают `childClient`; siblings вне subtree держат app-level клиент.
+Побеждает ближайший провайдер. Потомки получают `childClient`; сиблинги вне поддерева держат клиент уровня приложения.
 
 ## Владей HTTP-работой вне watcher
 
-Для работы, стартованной composable или component вне watcher, используй `AbortController` + `onScopeDispose`. Abort startup и active work; проверяй signal до присвоения reactive state. Plugin или injection scope не угадывает, кто владеет командой.
+Для работы, которую стартует composable или компонент вне watcher, используй `AbortController` + `onScopeDispose`. Abort старта и активной работы; проверь signal, прежде чем писать в реактивное состояние. Плагин или injection scope не выводит, кто владеет командой. Для страниц-списков оберни `execute` в Vue Query (или похожее) — `@defjs/vue` остаётся только DI и `useRequest` **не** везёт.
 
-Когда scope владеет клиентом, держи его request-independent для browser-wide reuse. Если он захватывает headers, cookies, users, tenants или credentials, создай его в relevant app/SSR request boundary и provide этот instance там.
+Когда scope владеет клиентом, держи его независимым от запроса для переиспользования на весь браузер. Если он захватывает заголовки, cookies, пользователей, tenants или credentials, создай его на релевантной границе запроса app/SSR и отдай этот экземпляр там.
 
 ## Чисти realtime scope
 
-Закрой стрим или сессию даже когда scope исчезает mid-connect. Abort startup, закрой late-arriving handle, consume единственный iterator, await terminal promise:
+Закрой стрим или сессию, даже если scope исчез посреди connect. Abort старта, закрой поздно приехавший handle, потреби единственный iterator, дождись терминального promise:
 
 ```vue twoslash
 <script setup lang="ts">
@@ -171,17 +171,17 @@ void (async () => {
 </template>
 ```
 
-WebSocket: та же последовательность — abort prep, закрой late session, consume `session.receive`, unsubscribe `onStateChange` / `onRuntimeError`, close, await `session.closed`. Держи cleanup idempotent; disposal и iterator completion могут встретиться.
+WebSocket: та же последовательность — abort подготовки, закрой позднюю сессию, потреби `session.receive`, отпиши `onStateChange` / `onRuntimeError`, close, await `session.closed`. Держи cleanup идемпотентным; disposal и завершение iterator могут встретиться.
 
-## SSR scope
+## Scope SSR
 
-`createClientPlugin(client)` provides один instance одному Vue app. В браузере шарь его, когда endpoint, interceptors и captured state безопасно шарить. Во время SSR создавай и ставь отдельный клиент на запрос, когда headers, cookies, users, tenants или credentials различаются.
+`createClientPlugin(client)` отдаёт один экземпляр одному Vue-приложению. В браузере дели его, когда эндпоинт, interceptors и захваченное состояние безопасно делить. Во время SSR создавай и ставь отдельный клиент на запрос, когда различаются заголовки, cookies, пользователи, tenants или credentials.
 
-App unmount, удаление плагина и disposal component scope **не** abort’ят HTTP, не закрывают SSE/WebSocket, не unsubscribe’ят listeners и не dispose’ят core клиент. Владелец, который стартует работу, должен её закончить.
+Unmount приложения, снятие плагина и disposal scope компонента **не** abort’ят HTTP, не закрывают SSE/WebSocket, не отписывают listener’ы и не dispose’ят core client. Владелец, который стартовал работу, должен её закончить.
 
 ## Справка
 
-Публичные exports из `@defjs/vue`:
+Публичные экспорты `@defjs/vue`:
 
 ```typescript twoslash
 import { HTTP_CLIENT, createClientPlugin, injectClient } from '@defjs/vue'
@@ -196,11 +196,11 @@ const api: VueApi = { HTTP_CLIENT, createClientPlugin, injectClient }
 void api
 ```
 
-- `HTTP_CLIENT` — `InjectionKey<Client>` для native `provide` / `inject`
-- `createClientPlugin(client)` — Vue `Plugin`, который provides этот клиент
-- `injectClient()` — ближайший `Client`, или throws
+- `HTTP_CLIENT` — `InjectionKey<Client>` для нативных `provide` / `inject`
+- `createClientPlugin(client)` — Vue `Plugin`, который отдаёт этот клиент
+- `injectClient()` — ближайший `Client`, или бросает
 
-Создавай клиентов и опции в `@defjs/core`. См. [Клиент](../core/client.md), [Команды](../core/commands.md), [Interceptors](../core/interceptors.md), [SSE](../core/sse.md) и [WebSocket](../core/web-socket.md).
+Клиентов и опции создавай в `@defjs/core`. См. [Клиент](../core/client.md), [Команды](../core/commands.md), [Interceptors](../core/interceptors.md), [SSE](../core/sse.md) и [WebSocket](../core/web-socket.md).
 
 ## Связанные рецепты
 

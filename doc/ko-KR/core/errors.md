@@ -1,9 +1,9 @@
 ---
-title: Errors
+title: 오류
 description: 404, 타임아웃, 읽을 수 없는 body, 전송 실패를 닫힌 fault 코드 집합으로 분기해요.
 ---
 
-# Errors
+# 오류
 
 404, 타임아웃, 읽을 수 없는 body는 throw를 catch하는 게 아니라 error-first 튜플을 읽어서 처리해요. `Fault`는 네이티브 `Error`이고(`instanceof Error`가 참), 판별에 쓰는 필드는 `code` 하나예요.
 
@@ -18,12 +18,13 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const [err, user, response] = await client.execute(getUser({ path: { id: 7 } }))
+const [err, user, response] = await client.execute(getUser({ id: 7 }))
 if (err?.code === 'HTTP_STATUS' && err.status === 404) {
   console.log(err.data.message)
 } else if (err?.code === 'NET_TIMEOUT') {

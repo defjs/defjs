@@ -602,7 +602,11 @@ const frNavigation: NavigationCopy = {
 export default defineConfig({
   title: 'Defjs',
   description: 'Typed APIs across HTTP, SSE, and WebSocket',
-  cleanUrls: true,
+  // Relocatable build: every page references assets and other pages relative to its own location,
+  // so the same dist/ works from any domain or sub path without a rebuild — the host isn't decided
+  // yet. Requires cleanUrls off: portable output needs links that end in `.html`, since there is no
+  // server to rewrite pretty URLs. https://vitepress.dev/guide/deploy#relocatable-builds-relative-base
+  base: './',
 
   markdown: {
     config(md) {

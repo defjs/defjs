@@ -5,7 +5,7 @@ description: 連線、送一個型別化 envelope、收一次，然後 close 並
 
 # 開啟 WebSocket session
 
-JSON envelopes 用非空字串 `type`。Unsubscribe、`close`、`await session.closed` 由你負責。
+每個方向各一個 struct。Unsubscribe、`close`、`await session.closed` 由你負責。無效 frames 走 `onRuntimeError`。
 
 細節見 [WebSocket](../core/web-socket.md)。
 
@@ -17,8 +17,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session] = await client.execute(room())

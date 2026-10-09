@@ -1,6 +1,6 @@
 ---
 title: SSE-Stream konsumieren
-description: Typisierten Event-Stream öffnen, einmal iterieren, dann schließen und closed abwarten.
+description: Typisierten Event-Stream öffnen, einmal iterieren, dann schließen und closed awaiten.
 ---
 
 # SSE-Stream konsumieren
@@ -19,7 +19,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -45,4 +45,4 @@ if (error) {
 hello from the server
 ```
 
-SSE wiederholt Netzwerk- und Lesefehler standardmäßig nicht. Aktiviere Wiederholungen ausdrücklich mit `withSSEReconnect(...)`. Bei konfiguriertem Reconnect ist der Standardwert für `attempts` gleich `3`; `attempts: 0` deaktiviert Wiederholungen.
+SSE retried Network-/Read-Failures nicht, außer du aktivierst `withSSEReconnect(...)`. Mit einem Reconnect-Object ist der Default für `attempts` `3`; `attempts: 0` disabled Retry.

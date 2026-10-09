@@ -2,14 +2,21 @@ import type { FetchHandle } from '../../client/config'
 import type { FaultCode } from '../../error'
 import { ERR_TIMEOUT } from '../../error'
 import { createFetchInitBase } from '../../http/transport/fetch_init'
-import { awaitWithSignal, mergeAbortSignals, resolveAbortedCause } from '../../internal/abort'
+import { concatChunks, parseBytesBody } from '../../internal/bytes'
+import { parseMediaTypeEssence } from '../../internal/media_type'
+import { isMediaTypeParametersWellFormed } from '../../internal/media_type_parameters'
+import { getContentType, isJsonMediaType } from '../../http/transport/utils'
+import { awaitWithSignal, mergeAbortSignals, releaseAbortSignal, resolveAbortedCause } from '../../internal/abort'
 import { AsyncQueue } from '../../internal/async_queue'
 import { computeReconnectDelay, wait } from '../../internal/backoff'
-import type { HttpRequest } from '../../internal/http_request'
+import { fetchWithSignal } from '../../internal/fetch'
+import type { HttpRequest, HttpResponseType } from '../../internal/http_request'
 import type { HttpResponse } from '../../internal/http_response'
 import { makeResponse } from '../../internal/http_response'
+import { resolveInboundRepresentation } from '../../internal/inbound_representation'
 import { resolveRequestUrl } from '../../internal/url'
 import type { AnyStruct } from '../../struct'
+import { decodeJson } from '../../struct/codec/json'
 import { parseStructValue } from '../../struct/introspection'
 import type { EventStreamMessage } from './parser'
 import { createLineParser, createMessageParser, readStreamBytes, SSEParserLimitError } from './parser'
@@ -103,18 +110,32 @@ type EventStreamFatalCode = Exclude<EventStreamFaultCode, 'NET_TIMEOUT' | 'NET_U
 
 class EventStreamFatalError extends Error {
   readonly code: EventStreamFatalCode
+  readonly statusSignal: boolean
   cause?: unknown
 
-  constructor(code: EventStreamFatalCode, message: string, options?: { cause?: unknown }) {
+  constructor(code: EventStreamFatalCode, message: string, options?: { cause?: unknown; statusSignal?: boolean }) {
     super(message)
     this.name = 'EventStreamFatalError'
     this.code = code
     this.cause = options?.cause
+    // A non-2xx status is not itself a decode failure. Real body failures leave this unset.
+    this.statusSignal = options?.statusSignal === true
   }
 }
 
 export function getEventStreamFatalCode(error: unknown): EventStreamFatalCode | undefined {
   return error instanceof EventStreamFatalError ? error.code : undefined
+}
+
+export function isHandshakeStatusSignal(error: unknown): boolean {
+  return error instanceof EventStreamFatalError && error.statusSignal
+}
+
+export function handshakeDecodeCause(error: unknown): unknown {
+  if (error instanceof EventStreamFatalError && error.cause !== undefined) {
+    return error.cause
+  }
+  return error
 }
 
 function toEventStreamFatalError(error: unknown): EventStreamFatalError | undefined {
@@ -147,6 +168,8 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   let retryInterval = options.retryInterval ?? options.reconnect?.delayMs ?? DEFAULT_RETRY_INTERVAL
   let retryCount = 0
   let lastEventId = ''
+  // Headers validate every write. The id only matters to the next attempt, so it is applied there.
+  let lastEventIdDirty = false
   let latestOpen: EventStreamOpenInfo | undefined
   let disposeTask: Promise<void> | undefined
 
@@ -227,17 +250,28 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
 
   async function start(): Promise<void> {
     while (!closeController.signal.aborted) {
+      if (lastEventIdDirty) {
+        lastEventIdDirty = false
+        if (lastEventId) {
+          headers.set(LAST_EVENT_ID_HEADER, lastEventId)
+        } else {
+          headers.delete(LAST_EVENT_ID_HEADER)
+        }
+      }
       const attemptAbort = mergeAbortSignals(closeController.signal, [request.abort])
       let response: Response | undefined
       let readerStarted = false
 
       try {
-        response = await fetchWithSignal(
-          fetchImpl,
-          new Request(resolveRequestUrl(request), createEventStreamRequestInit(request, headers, attemptAbort)),
-          attemptAbort,
-        )
-        const open = await createOpenInfo(response, options.handshakeError)
+        const eventRequest = new Request(resolveRequestUrl(request), createEventStreamRequestInit(request, headers, attemptAbort))
+        response = await fetchWithSignal(() => fetchImpl(eventRequest), attemptAbort, cancelLateResponseBody)
+        // The JSON media-type precheck throws before an open info exists. Attach the response
+        // first so the startup fault can still report that status.
+        const handshakeResponse = response
+        const open = await createOpenInfo(handshakeResponse, options.handshakeError, attemptAbort).catch((error: unknown) => {
+          latestOpen = toOpenInfo(handshakeResponse, null, false)
+          throw error
+        })
         latestOpen = open
 
         validateOpenResponse(open)
@@ -313,6 +347,8 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           }
           return
         }
+      } finally {
+        releaseAbortSignal(attemptAbort)
       }
     }
   }
@@ -321,41 +357,49 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     const parseMessage = createMessageParser(
       (id) => {
         lastEventId = id
-        if (id) {
-          headers.set(LAST_EVENT_ID_HEADER, id)
-        } else {
-          headers.delete(LAST_EVENT_ID_HEADER)
-        }
+        lastEventIdDirty = true
       },
       (retry) => {
         retryInterval = retry
       },
-      async (message) => {
-        let transformed: TEvent | undefined
+      (message) => {
+        let result: Promise<TEvent | undefined> | TEvent | undefined
         try {
-          transformed = options.transformMessage
-            ? await awaitWithSignal(() => options.transformMessage?.(message, signal), signal)
-            : (message as TEvent)
+          signal.throwIfAborted()
+          result = options.transformMessage ? options.transformMessage(message, signal) : (message as TEvent)
         } catch (error) {
-          if (signal.aborted) {
-            throw error
-          }
-          throw new EventStreamFatalError('EXT_OBSERVER_FAILED', 'Failed to process event stream message', { cause: error })
+          throw toTransformFailure(error, signal)
         }
-
-        if (typeof transformed !== 'undefined') {
-          try {
-            queue.push(transformed)
-          } catch (error) {
-            // AsyncQueue.push has one failure mode: exceeding its configured bound.
-            throw new EventStreamFatalError('CAP_QUEUE_OVERFLOW', 'Event stream queue exceeded maxQueueSize', {
-              cause: error,
-            })
-          }
+        // A synchronous transform is already done. Only a pending one needs the signal race.
+        if (result instanceof Promise) {
+          const pending = result
+          // The signal may have aborted before awaitWithSignal gets to subscribe. Keep observing
+          // the transform so a late rejection cannot become unhandled.
+          void pending.catch(() => undefined)
+          signal.throwIfAborted()
+          return awaitWithSignal(() => pending, signal).then(enqueue, (error: unknown) => {
+            throw toTransformFailure(error, signal)
+          })
         }
+        signal.throwIfAborted()
+        enqueue(result)
+        return undefined
       },
       { maxBufferSize: options.maxBufferSize },
     )
+
+    function enqueue(transformed: TEvent | undefined): void {
+      if (typeof transformed !== 'undefined') {
+        try {
+          queue.push(transformed)
+        } catch (error) {
+          // AsyncQueue.push has one failure mode: exceeding its configured bound.
+          throw new EventStreamFatalError('CAP_QUEUE_OVERFLOW', 'Event stream queue exceeded maxQueueSize', {
+            cause: error,
+          })
+        }
+      }
+    }
     const parseLine = createLineParser(parseMessage, { maxBufferSize: options.maxBufferSize })
 
     try {
@@ -509,22 +553,18 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   }
 }
 
+function toTransformFailure(error: unknown, signal: AbortSignal): unknown {
+  return signal.aborted
+    ? error
+    : new EventStreamFatalError('EXT_OBSERVER_FAILED', 'Failed to process event stream message', { cause: error })
+}
+
 function getEventStreamFaultCode(error: unknown): EventStreamFaultCode {
   return getEventStreamFatalCode(error) ?? (error === ERR_TIMEOUT ? 'NET_TIMEOUT' : 'NET_UNREACHABLE')
 }
 
-async function fetchWithSignal(fetchImpl: FetchHandle, request: Request, signal: AbortSignal): Promise<Response> {
-  return await awaitWithSignal(() => {
-    const pending = Promise.resolve(fetchImpl(request))
-    void pending
-      .then((response) => {
-        if (signal.aborted && response.body) {
-          discardStreamBody(response.body, signal.reason)
-        }
-      })
-      .catch(() => undefined)
-    return pending
-  }, signal)
+function cancelLateResponseBody(body: ReadableStream<Uint8Array>, signal: AbortSignal): void {
+  discardStreamBody(body, signal.reason)
 }
 
 /** Release a body we will not read, ignoring a cancellation the provider refuses. */
@@ -532,33 +572,83 @@ function discardStreamBody(body: ReadableStream<Uint8Array>, reason?: unknown): 
   void body.cancel(reason).catch(() => undefined)
 }
 
-async function createOpenInfo(response: Response, handshakeError?: AnyStruct): Promise<EventStreamOpenInfo> {
-  let body: unknown = null
-
+async function createOpenInfo(
+  response: Response,
+  handshakeError: AnyStruct | undefined,
+  signal: AbortSignal,
+): Promise<EventStreamOpenInfo> {
   if (!response.ok && handshakeError) {
-    try {
-      body = parseStructValue(handshakeError, await response.json())
-    } catch {
-      // Philosophy 5 at the handshake: a body we could not read as declared is reported as an
-      // undecoded status fault, not as a second failure about the body.
-      body = null
+    const representation = resolveInboundRepresentation(handshakeError)
+    // No bytes arrived. Text is the empty string; every other representation failed to decode.
+    // A decoded JSON null still requires a body, so null stays reserved for that value.
+    if (!response.body && representation !== 'text') {
+      throw new EventStreamFatalError('RES_DECODE_FAILED', 'Failed to decode event stream handshake body')
     }
-  } else if (!response.ok && response.body) {
+
+    // Philosophy 3, same as HTTP: a JSON declaration is an assertion about the media type.
+    // A mismatch is a decode fault, not an undecoded status, and the body stays unread.
+    if (response.body && representation === 'json') {
+      const contentType = getContentType(response.headers)
+      if (!isJsonMediaType(contentType)) {
+        discardStreamBody(response.body)
+        throw new EventStreamFatalError('RES_MEDIA_TYPE_INVALID', `Expected a JSON media type, received ${contentType || '<none>'}`)
+      }
+    }
+
+    try {
+      const raw = response.body ? await readHandshakeBody(response.body, representation, signal, getContentType(response.headers)) : ''
+      // JSON uses the same alias-aware decoder as HTTP. Other kinds stay raw values.
+      const body = representation === 'json' ? decodeJson(handshakeError, raw) : parseStructValue(handshakeError, raw)
+      return toOpenInfo(response, body, true)
+    } catch (error) {
+      if (signal.aborted) {
+        throw error
+      }
+      // The published contract: a declared handshake body that cannot be read is RES_DECODE_FAILED.
+      throw new EventStreamFatalError('RES_DECODE_FAILED', 'Failed to decode event stream handshake body', { cause: error })
+    }
+  }
+
+  if (!response.ok && response.body) {
     discardStreamBody(response.body)
   }
 
-  const openResponse = makeResponse<unknown>({
+  return toOpenInfo(response, null, false)
+}
+
+function toOpenInfo(response: Response, body: unknown, decoded: boolean): EventStreamOpenInfo {
+  const http = makeResponse<unknown>({
     status: response.status,
     statusText: response.statusText,
     headers: response.headers,
     url: response.url,
-    body,
+    // An unread handshake stays absent. A decoded JSON null stays null.
+    body: decoded ? body : undefined,
   })
-
   return {
-    response: openResponse,
+    response: http,
     url: response.url,
   }
+}
+
+async function readHandshakeBody(
+  stream: ReadableStream<Uint8Array>,
+  representation: HttpResponseType,
+  signal: AbortSignal,
+  contentType: string,
+): Promise<unknown> {
+  const chunks: Uint8Array[] = []
+  let totalLength = 0
+  await readStreamBytes(
+    stream,
+    (chunk) => {
+      chunks.push(chunk)
+      totalLength += chunk.byteLength
+    },
+    signal,
+  )
+  const bytes = concatChunks(chunks, totalLength)
+  return parseBytesBody(representation, bytes, contentType)
 }
 
 function createEventStreamRequestInit(request: HttpRequest, headers: Headers, abort?: AbortSignal): RequestInit & { duplex?: 'half' } {
@@ -575,122 +665,16 @@ function validateOpenResponse(open: EventStreamOpenInfo): void {
   // A non-2xx handshake is a status fault, which `executeEventStreamCommand` builds from the open
   // info; the code here is only the fallback for a response that never carried a status.
   if (!response.ok) {
-    throw new EventStreamFatalError('RES_DECODE_FAILED', 'Event stream request failed')
+    throw new EventStreamFatalError('RES_DECODE_FAILED', 'Event stream request failed', { statusSignal: true })
   }
 
   const contentType = response.headers.get('content-type') || ''
-  if (parseMediaTypeEssence(contentType) !== EVENT_STREAM_CONTENT_TYPE) {
+  if (parseMediaTypeEssence(contentType) !== EVENT_STREAM_CONTENT_TYPE || !isMediaTypeParametersWellFormed(contentType)) {
     throw new EventStreamFatalError(
       'RES_MEDIA_TYPE_INVALID',
       `Expected content-type to start with ${EVENT_STREAM_CONTENT_TYPE}, got ${contentType || '(empty)'}`,
     )
   }
-}
-
-function parseMediaTypeEssence(value: string): string | undefined {
-  let position = 0
-  const readToken = (): string | undefined => {
-    const start = position
-    while (position < value.length && isHttpTokenChar(value.charCodeAt(position))) {
-      position += 1
-    }
-    return position > start ? value.slice(start, position) : undefined
-  }
-  const skipWhitespace = () => {
-    while (value[position] === ' ' || value[position] === '\t') {
-      position += 1
-    }
-  }
-
-  const type = readToken()
-  if (!type || value[position] !== '/') {
-    return undefined
-  }
-  position += 1
-  const subtype = readToken()
-  if (!subtype) {
-    return undefined
-  }
-
-  while (true) {
-    skipWhitespace()
-    if (position === value.length) {
-      return `${type.toLowerCase()}/${subtype.toLowerCase()}`
-    }
-    if (value[position] !== ';') {
-      return undefined
-    }
-    position += 1
-    skipWhitespace()
-
-    if (!readToken()) {
-      return undefined
-    }
-    skipWhitespace()
-    if (value[position] !== '=') {
-      return undefined
-    }
-    position += 1
-    skipWhitespace()
-
-    if (value[position] === '"') {
-      position += 1
-      let closed = false
-      while (position < value.length) {
-        const code = value.charCodeAt(position)
-        if (code === 0x22) {
-          position += 1
-          closed = true
-          break
-        }
-        if (code === 0x5c) {
-          position += 1
-          if (position >= value.length || !isQuotedPairChar(value.charCodeAt(position))) {
-            return undefined
-          }
-        } else if (!isQuotedTextChar(code)) {
-          return undefined
-        }
-        position += 1
-      }
-      if (!closed) {
-        return undefined
-      }
-    } else if (!readToken()) {
-      return undefined
-    }
-  }
-}
-
-function isHttpTokenChar(code: number): boolean {
-  return (
-    (code >= 0x30 && code <= 0x39) ||
-    (code >= 0x41 && code <= 0x5a) ||
-    (code >= 0x61 && code <= 0x7a) ||
-    code === 0x21 ||
-    code === 0x23 ||
-    code === 0x24 ||
-    code === 0x25 ||
-    code === 0x26 ||
-    code === 0x27 ||
-    code === 0x2a ||
-    code === 0x2b ||
-    code === 0x2d ||
-    code === 0x2e ||
-    code === 0x5e ||
-    code === 0x5f ||
-    code === 0x60 ||
-    code === 0x7c ||
-    code === 0x7e
-  )
-}
-
-function isQuotedTextChar(code: number): boolean {
-  return code === 0x09 || code === 0x20 || code === 0x21 || (code >= 0x23 && code <= 0x5b) || (code >= 0x5d && code <= 0x7e) || code >= 0x80
-}
-
-function isQuotedPairChar(code: number): boolean {
-  return code === 0x09 || code === 0x20 || (code >= 0x21 && code <= 0x7e) || code >= 0x80
 }
 
 function normalizeAbortError(error: unknown, requestAbort?: AbortSignal, closeAbort?: AbortSignal): unknown {

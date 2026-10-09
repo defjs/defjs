@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### Примитивы и контейнеры
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | Unions                                                                          |
 | `struct.enum(values)`                                                       | Список строк или карта `{ Name: value }`                                        |
 
-### Хелперы request / body
+### Кодеки тела и бинарные значения
 
-| Хелпер                                                                         | Роль                     |
-| ------------------------------------------------------------------------------ | ------------------------ |
-| `struct.request({ path?, query?, headers?, body? })`                           | Секции input HTTP/SSE/WS |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | Закодированные bodies    |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | Binary                   |
+| Хелпер                                         | Роль                                                                                                  |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | Object struct плюс тег кодека. Тег применяется, только когда это значение — корень тела запроса       |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | Бинарные значения. Как корень тела уходят байтами; как `output` / `error` выбирают эту representation |
+| `struct.string()`                              | Текст. Как корень тела или входящий `string` struct байты остаются текстом                            |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **Возвращает** `[null, value]` или `[StructError, undefined]`.
+- Опциональный `errorMap` переписывает сообщения issue только для этого parse.
+- По умолчанию читает **логические** ключи (`displayName`). Передай `{ aliases: true }`, чтобы читать wire-ключи (`display_name`) так же, как кодеки HTTP/JSON.
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`: `path`, `code`, `expected`, `received`, `message`.
+`StructIssue`: `path`, `code`, `expected`, `received`, `message`. `code` — это `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` или `missing_key`.
 
-Подробности — в [гайде Struct](../core/struct.md).
+См. [гайд Struct](/core/struct).
 
 ## Struct {#Struct}
 
-Разбираемая форма: типы input/output плюс `.optional()`, `.null()`, `.nullish()`, `.alias()`.
+Разбираемая форма: типы input/output плюс `.optional()`, `.null()` / `.nullable()`, `.nullish()`, `.alias()`.
 
 ## StructLike {#StructLike}
 
@@ -97,19 +99,15 @@ class StructError extends Error {
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
 ## ObjectStruct {#ObjectStruct}
 
 Объектная форма от `struct.object`.
 
-## RequestStruct {#RequestStruct}
-
-Секционированный HTTP/SSE/WS input от `struct.request`.
-
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`, `code`, `expected`, `received`, `message`. `code` — это `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` или `missing_key`.
 
 ## FormattedStructError {#FormattedStructError}
 

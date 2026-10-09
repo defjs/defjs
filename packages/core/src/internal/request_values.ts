@@ -19,5 +19,5 @@ export function isRequestScalarValue(value: unknown): value is RequestScalarValu
 }
 
 export function serializeRequestScalarValue(value: RequestScalarValue): string {
-  return value === null ? 'null' : String(value)
+  return String(value)
 }

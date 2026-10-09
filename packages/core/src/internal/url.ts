@@ -1,3 +1,5 @@
+import type { QuerySerializer } from '../client/config'
+import { isPlainObject } from '../struct/utils'
 import type { HttpRequest } from './http_request'
 import type { RequestBuildValue, RequestScalarValue } from './request_values'
 import { isRequestScalarValue, serializeRequestScalarValue } from './request_values'
@@ -50,21 +52,42 @@ function encodePathSegment(key: string, value: string): string {
   return encodeURIComponent(value)
 }
 
-export interface SearchParamsOptions {
-  allowComplex?: boolean
-}
-
-export function createSearchParams(query?: { [key: string]: RequestBuildValue }, options: SearchParamsOptions = {}): URLSearchParams {
+export function createSearchParams(query?: { [key: string]: unknown }): URLSearchParams {
   const searchParams = new URLSearchParams()
   if (!query) {
     return searchParams
   }
 
   for (const [key, value] of Object.entries(query)) {
-    appendToSearchParams(searchParams, key, value, options)
+    appendToSearchParams(searchParams, key, value)
   }
 
   return searchParams
+}
+
+export function resolveTransportQuery(
+  query: URLSearchParams | { [key: string]: unknown } | undefined,
+  serializer?: QuerySerializer,
+): { queryParams: URLSearchParams; queryString: string } {
+  if (typeof URLSearchParams !== 'undefined' && query instanceof URLSearchParams) {
+    return { queryParams: query, queryString: query.toString() }
+  }
+
+  if (!isPlainObject(query)) {
+    const queryParams = createSearchParams()
+    return { queryParams, queryString: queryParams.toString() }
+  }
+
+  if (!serializer) {
+    const queryParams = createSearchParams(query)
+    return { queryParams, queryString: queryParams.toString() }
+  }
+
+  const queryString = serializer(query)
+  return {
+    queryParams: new URLSearchParams(queryString),
+    queryString,
+  }
 }
 
 export function appendRecordToHeaders(headers: Headers, value?: HeadersInit | { [key: string]: RequestBuildValue }): void {
@@ -113,7 +136,10 @@ export function createResolvedRequestUrl(baseEndpoint: string, path: string, que
   const base = createEndpointDirectoryBase(baseEndpoint)
   const normalizedPath = normalizeEndpointPath(path)
   const url = new URL(normalizedPath, base)
-  url.search = queryString
+  // The normalized path carries no query, so an empty string would only reassign an empty search.
+  if (queryString) {
+    url.search = queryString
+  }
   return url
 }
 
@@ -128,7 +154,7 @@ export function resolveRequestUrl(request: HttpRequest): URL {
   return createResolvedRequestUrl(request.baseEndpoint, request.endpoint, queryString)
 }
 
-function appendToSearchParams(searchParams: URLSearchParams, key: string, value: RequestBuildValue, options: SearchParamsOptions): void {
+function appendToSearchParams(searchParams: URLSearchParams, key: string, value: unknown): void {
   if (typeof value === 'undefined') {
     return
   }
@@ -138,34 +164,37 @@ function appendToSearchParams(searchParams: URLSearchParams, key: string, value:
       if (typeof item === 'undefined') {
         continue
       }
-
-      if (isUrlScalarValue(item)) {
-        searchParams.append(key, serializeRequestScalarValue(item))
-        continue
-      }
-
-      if (!options.allowComplex) {
-        throw new TypeError(`query value for "${key}" requires queryParamsSerializer or a scalar value`)
-      }
+      appendQueryLeaf(searchParams, key, item)
     }
     return
   }
 
-  if (!isUrlScalarValue(value)) {
-    if (!options.allowComplex) {
-      throw new TypeError(`query value for "${key}" requires queryParamsSerializer or a scalar value`)
-    }
+  appendQueryLeaf(searchParams, key, value)
+}
+
+function appendQueryLeaf(searchParams: URLSearchParams, key: string, value: unknown): void {
+  if (value === null) {
+    throw new TypeError(`query value for "${key}" must not be null`)
+  }
+  if (isRequestScalarValue(value)) {
+    searchParams.append(key, serializeRequestScalarValue(value))
     return
   }
-
-  searchParams.set(key, serializeRequestScalarValue(value))
+  throw new TypeError(`a query serializer is required for nested query value "${key}"`)
 }
 
 function isUrlScalarValue(value: unknown): value is UrlScalarValue {
   return isRequestScalarValue(value) && typeof value !== 'bigint'
 }
 
+// One client usually talks to one endpoint. `new URL(path, base)` only reads the base, so it is shared.
+let lastEndpoint: string | undefined
+let lastBase: URL | undefined
+
 function createEndpointDirectoryBase(baseEndpoint: string): URL {
+  if (baseEndpoint === lastEndpoint) {
+    return lastBase as URL
+  }
   let base: URL
   try {
     base = new URL(baseEndpoint)
@@ -180,6 +209,8 @@ function createEndpointDirectoryBase(baseEndpoint: string): URL {
     base.pathname = `${base.pathname}/`
   }
 
+  lastEndpoint = baseEndpoint
+  lastBase = base
   return base
 }
 

@@ -10,11 +10,11 @@ description: defineWebSocket、session，以及 execute options。
 ## defineWebSocket() {#defineWebSocket}
 
 ```ts
-function defineWebSocket(definition: WebSocketDefinition): WebSocketCommandBuilder
+function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`、`incoming` structs，可选 `outgoing`、`input`、`build`、queue 上限。
-- **返回** 一个 builder。塞 input 调用，得到 `WebSocketCommand`。
+- **definition** — `path`、一个 `incoming` struct，可选 `outgoing` struct，可选 `input`、`builder`、静态 `protocols`、queue 上限。
+- **返回** 一个 endpoint。塞 input 调用，得到 `WebSocketCommand`。
 
 ```ts twoslash
 import { defineWebSocket, struct } from '@defjs/core'
@@ -22,8 +22,9 @@ import { defineWebSocket, struct } from '@defjs/core'
 const chat = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { message: struct.object({ text: struct.string() }) },
+  protocols: ['chat.v1'],
+  incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+  outgoing: struct.object({ text: struct.string(), type: struct.literal('message') }),
 })
 ```
 
@@ -81,6 +82,13 @@ async function consume(session: WebSocketSession<unknown, never>): Promise<void>
 
 ### WebSocketCloseInfo {#WebSocketCloseInfo}
 
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
 socket 结束后的关闭快照（code、reason、clean 标记、可选 cause）。手动 close 可以带 `ManualSocketCloseReason`。
 
 ## 执行 options
@@ -101,67 +109,31 @@ type WebSocketExecuteOptions = {
 
 `WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。
 
-## 消息 map
+设了 `reconnect` 时，`attempts` 默认 3；`0` 禁用。省略 `attempts` 不是无限次。
 
-## SocketStructs {#SocketStructs}
+## 消息
 
-```ts
-type SocketStructs = { [typeName: string]: AnyStruct }
-```
+`incoming` 是一个 struct。文本、`ArrayBuffer`、typed-array、`Blob` frame 都按 UTF-8 读，JSON parse，再拿这个 struct 校验。JSON parse 或 struct 失败的 frame 报到 `session.onRuntimeError`，不进队列。没有 client 级的非法 frame option。
 
-入站/出站 payload 带 `type` tag（字段摊平还是包一层 `data`，看 struct 形状）。
-
-### Provider envelope adapters
-
-endpoint 可以在 transport 前选择两个同步、definition-local 的边界：
-
-- `normalizeIncoming(decoded)` 接收已经解码的 wire JSON，返回 `{ type, data }`。`type` 是声明过的静态 dispatch tag，`data` 再交给对应 incoming Struct 校验；返回 `undefined` 表示主动忽略该 frame。
-- `normalizeOutgoing(type, encodedPayload)` 接收逻辑 outgoing tag，以及已经通过 Struct 校验和 alias 编码的 payload，再返回 provider 要求的精确 wire value。
+`outgoing` 是一个 struct。`session.send` 接受该 struct 的 `StructInput`，编码 alias，再 `JSON.stringify`。好几种消息用 `struct.discriminatedUnion`。
 
 ```ts
-const kraken = defineWebSocket({
-  incoming: {
-    'method.subscribe': struct.object({ method: struct.literal('subscribe'), success: struct.boolean() }),
-  },
-  maxIncomingQueueSize: 16,
-  normalizeIncoming(decoded) {
-    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) return undefined
-    if (Reflect.get(decoded, 'method') !== 'subscribe') return undefined
-    return { data: decoded, type: 'method.subscribe' }
-  },
-  normalizeOutgoing(_type, encodedPayload) {
-    if (typeof encodedPayload !== 'object' || encodedPayload === null || Array.isArray(encodedPayload)) {
-      throw new TypeError('Expected encoded command')
-    }
-    return encodedPayload as { readonly [key: string]: unknown }
-  },
-  outgoing: {
-    subscribe: struct.object({
-      method: struct.literal('subscribe'),
-      params: struct.object({ channel: struct.string() }),
-      reqId: struct.number().alias('req_id'),
-    }),
-  },
-  path: '/v2',
-})
-
-session.send({ type: 'subscribe', method: 'subscribe', params: { channel: 'ticker' }, reqId: 1 })
-// wire: {"method":"subscribe","params":{"channel":"ticker"},"req_id":1}
+session.send({ type: 'message', text: 'Hello' })
 ```
 
-两个 hook 都必须同步。outgoing hook 抛出的异常会同步逃出 `send()`；heartbeat 失败沿用现有 fatal runtime 路径。重连队列保存的是已经 normalize 和序列化的字符串。provider payload 自己也有 wire `type` 时，用 `providerType: struct.literal('update').alias('type')` 之类的非 dispatch 本地属性；公开的 `type` 仍是 Defjs dispatch tag。
-
-这些 adapters 不替代 Struct 校验、subprotocol、reconnect policy 或 session lifecycle。不配置时，现有 incoming 结果和 outgoing bytes 都不变。
-
-见 [WebSocket 指南](../core/web-socket.md) 和[打开 WebSocket 会话](../recipes/websocket-session.md)。
+见 [WebSocket 指南](/core/web-socket) 和[打开 WebSocket 会话](/recipes/websocket-session)。
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`、`incoming`，可选 `outgoing` / `input` / `build` / `normalizeIncoming` / `normalizeOutgoing`，还有 queue 上限。
+`path`、`incoming`，可选 `outgoing` / `input` / `builder` / `protocols`，还有 queue 上限。builder 只能返回 `path` 和 `query`。
 
-## WebSocketCommandBuilder {#WebSocketCommandBuilder}
+## WebSocketEndpoint {#WebSocketEndpoint}
 
 `defineWebSocket` 的返回值。拿 input 调一下就得到 `WebSocketCommand`。
+
+## WebSocketRequestShape {#WebSocketRequestShape}
+
+只有 `path` 和 `query`。`headers` 和 `body` 是 `never`。
 
 ## WebSocketCommand {#WebSocketCommand}
 
@@ -173,7 +145,7 @@ heartbeat、reconnect、`beforeConnect`、protocols，再加上取消。`WebSock
 
 ## SocketAwaitResult {#SocketAwaitResult}
 
-`[null, session, connection]` or `[error, undefined, connection?]`.
+`[null, session, connection]` 或 `[error, undefined, connection?]`。
 
 ## ManualSocketCloseReason {#ManualSocketCloseReason}
 
@@ -181,15 +153,15 @@ heartbeat、reconnect、`beforeConnect`、protocols，再加上取消。`WebSock
 
 ## WebSocketHeartbeatConfig {#WebSocketHeartbeatConfig}
 
-`intervalMs`, optional `message`, `isAck`, `timeoutMs`.
+`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。
 
 ## WebSocketIncomingData {#WebSocketIncomingData}
 
-从 incoming `SocketStructs` map 推出来的入站消息形状。
+解码后的入站 frame：`incoming` struct 的 `Infer`。
 
 ## WebSocketOutgoingData {#WebSocketOutgoingData}
 
-从 outgoing `SocketStructs` map 推出来的出站消息形状。
+`session.send` 接受的值：`outgoing` struct 的 `StructInput`；没声明时是 `never`。
 
 ## SocketLifecycleOutcome {#SocketLifecycleOutcome}
 

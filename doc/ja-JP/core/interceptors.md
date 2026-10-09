@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,17 +108,17 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-コマンド層はそれでも status で振り分けます。呼び出し側が型付き `error.data` を要する場合は、`output` に `503` を宣言してください。SSE や WebSocket のショートサーキットには、互換な完全なハンドル/セッション（閉鎖 promise、ライブ状態、所有権）が要ります。部分オブジェクトは有効な方針ではありません。
+コマンド層はそれでも status で振り分けます。呼び出し側が型付き `error.data` を要する場合は、非 2xx 側を一つの `error` struct で宣言してください。SSE や WebSocket のショートサーキットには、互換な完全なハンドル/セッション（閉鎖 promise、ライブ状態、所有権、`[Symbol.asyncDispose]`）が要ります。部分オブジェクトは有効な方針ではありません。構造的な `EventStreamHandle` と `WebSocketSessionLike` の実装には、今やコンパイル時にその標準 disposer が要ります。Defjs のハンドルを受け取るだけの利用者には、新しい実行時呼び出しは要りません。
 
 ## 安全な読み取りをリトライする
 
-リトライは振る舞いを変えます。方針は狭く保ってください — この例は再生可能な `GET` / `HEAD` / `OPTIONS` を status `0`、`502`、`503`、`504` でリトライし、`Retry-After` を 30s で上限し、2 回のリトライ後または abort で止めます。
+リトライは振る舞いを変えます。方針は狭く保ってください — この例は再生可能な `GET` / `HEAD` / `OPTIONS` を status `0`、`429`、`502`、`503`、`504` でリトライし、`Retry-After` を 30s で上限し、2 回のリトライ後または abort で止めます。
 
 ```typescript twoslash
 import { createHttpInterceptor, type HttpRequest, type HttpResponse } from '@defjs/core'
 
 const retryableMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
-const retryableStatuses = new Set([0, 502, 503, 504])
+const retryableStatuses = new Set([0, 429, 502, 503, 504])
 
 function isReplayable(request: HttpRequest): boolean {
   return typeof ReadableStream === 'undefined' || !(request.body instanceof ReadableStream)
@@ -222,7 +223,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 })
 ```
 
-セッションを spread すると、`state` / `connection` / `bufferedAmount` は一度スナップショットされます。所有権を意図的に変えない限り、`closed`、`receive`、`close`、`[Symbol.asyncDispose]()`、リスナー cleanup を保ってください。wrapper は例のように同じ内側の disposer を返し、別 Promise を作らないでください。独自の構造的 `WebSocketSessionLike` 実装にはコンパイル時 breaking です。Defjs session を受け取るだけなら追加 runtime 呼び出しはありません。
+セッションを spread すると、`state` / `connection` / `bufferedAmount` は一度スナップショットされます。所有権を意図的に変えない限り、`closed`、`receive`、`close`、正確な `[Symbol.asyncDispose]()` の委譲、リスナー cleanup を保ってください。wrapper は内側セッションの teardown promise を返さなければならず、無関係な解決済み promise では足りません。鎖が作ったセッションが渡されなかったとき、Core はそれを settle して閉じます。成功したインターセプターが別のセッションを返したとき、Core は作られた方を捨てます。
 
 ## Reference
 
@@ -234,7 +235,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP の Basic 資格情報
 - `basicAuthSSEInterceptor(provider, options?)` — SSE の Basic 資格情報
 
-`HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。コマンド検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
+`HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。`queryParams` はシリアライズ後の `new URLSearchParams(queryString)` です。ビルダーが query を作らなかったとき、設定済みの query シリアライザは呼ばれません。ビルダーの `URLSearchParams` はそのまま使われます。コマンド検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
 
 SSE/WebSocket のオブザーバーはライフサイクルフックであり、制御フローではありません。所有者が終わるとき WebSocket リスナーを購読解除してください。オブザーバーの失敗はトランスポート契約に従います。インターセプター自体は throw や reject できます。
 
@@ -246,5 +247,7 @@ Basic 資格情報は base64 であり、暗号化ではありません。TLS �
 
 ## 関連レシピ
 
+- [401 で Bearer トークンを一度だけ更新する](../recipes/refresh-bearer-once.md)
+- [execute を隠さずに HTTP SDK を公開する](../recipes/publish-http-sdk.md)
 - [ローカル Fetch ハンドルでテストする](../recipes/test-with-handle.md)
 - [HTTP 呼び出しをキャンセルする](../recipes/cancel-http.md)

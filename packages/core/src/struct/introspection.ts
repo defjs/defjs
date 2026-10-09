@@ -60,10 +60,10 @@ export function parseStructTuple<S extends StructLike<unknown, unknown, boolean>
 export function parseStructValue(
   struct: StructLike<unknown, unknown, boolean>,
   value: unknown,
-  options?: { useAliases?: boolean },
+  options?: { tagObjects?: boolean; useAliases?: boolean },
 ): unknown {
   assertStruct(struct, 'struct')
-  const result = parseRootValue(struct as unknown as RuntimeStruct, value, 'value', options?.useAliases)
+  const result = parseRootValue(struct as unknown as RuntimeStruct, value, 'value', options?.useAliases, options?.tagObjects === true)
   if (!result.ok) {
     throw new StructError([result.issue])
   }

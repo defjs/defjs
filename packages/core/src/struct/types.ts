@@ -1,6 +1,6 @@
 import type { StructError } from './errors'
 import type { ResolvedStructField } from './fields'
-import type { DEFINITION } from './symbols'
+import type { DEFINITION, FAILED } from './symbols'
 
 export type Path = Array<number | string>
 export type ParseMode = 'field' | 'value'
@@ -42,7 +42,7 @@ export type OptionalOutputStruct = {
  */
 export interface StructIssue {
   /** Machine-readable failure category. */
-  code: 'custom' | 'invalid_enum' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
   /** Human-readable description of the expected type or value. */
   expected: string
   /** Final message after optional `ErrorMap` rewriting. */
@@ -83,7 +83,7 @@ export interface StructMethods<I, O, OO extends boolean> {
    * @param name - Wire / protocol field name.
    * @returns The same struct branded with the alias.
    */
-  alias(name: string): Struct<I, O, OO>
+  alias(name: string): this
   /**
    * Allow `null` in addition to the current input and output types.
    *
@@ -119,6 +119,23 @@ export type Struct<Input = unknown, Output = Input, OptionalOut extends boolean 
   StructLike<Input, Output, OptionalOut>
 
 export type PresentValue = NonNullable<unknown>
+
+declare const carriedStruct: unique symbol
+
+/** Keeps the struct that a nullish modifier wrapped, so builders still see its fields. */
+export type CarriedStruct<T> = { readonly [carriedStruct]: T }
+
+declare const unionStructOptions: unique symbol
+declare const intersectionStructOptions: unique symbol
+declare const discriminatedUnionOptions: unique symbol
+
+// A later modifier must keep the struct the first one carried, or builders fall back to Infer.
+interface PreservedStruct<T, I, O, OO extends boolean> extends Struct<I, O, OO>, CarriedStruct<T> {
+  null(): PreservedStruct<T, I | null, O | null, OO>
+  nullable(): PreservedStruct<T, I | null, O | null, OO>
+  nullish(): PreservedStruct<T, I | null | undefined, O | null | undefined, true>
+  optional(): PreservedStruct<T, I | undefined, O | undefined, true>
+}
 
 /**
  * Broad struct constraint for endpoint and client generics.
@@ -232,6 +249,10 @@ export interface ArrayStructTypes<S extends StructLike<unknown, unknown, boolean
 export interface ArrayStruct<S extends StructLike<unknown, unknown, boolean>>
   extends StructMethods<ArrayInput<S>, ArrayOutput<S>, false>, StructLike<ArrayInput<S>, ArrayOutput<S>, false> {
   readonly _struct: ArrayStructTypes<S>
+  null(): PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null, ArrayOutput<S> | null, false>
+  nullable(): PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null, ArrayOutput<S> | null, false>
+  nullish(): PreservedStruct<ArrayStruct<S>, ArrayInput<S> | null | undefined, ArrayOutput<S> | null | undefined, true>
+  optional(): PreservedStruct<ArrayStruct<S>, ArrayInput<S> | undefined, ArrayOutput<S> | undefined, true>
 }
 
 export interface ObjectStructTypes<T extends ObjectShape> extends StructTypes<ObjectInput<T>, ObjectOutput<T>, false> {
@@ -249,91 +270,88 @@ export interface ObjectStructTypes<T extends ObjectShape> extends StructTypes<Ob
 export interface ObjectStruct<T extends ObjectShape>
   extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
   readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
 }
 
-export type RequestBodyCodec = 'arrayBuffer' | 'blob' | 'formData' | 'json' | 'text' | 'urlencoded'
-export const REQUEST_SECTION_KEYS = ['path', 'query', 'headers', 'body'] as const
+declare const recordValueStruct: unique symbol
+declare const tupleItemStructs: unique symbol
 
-export type RequestBodyDescriptor = {
-  codec: RequestBodyCodec
-  contentType?: string | null
-  struct: RuntimeStruct
-}
-export interface RequestBodyStructTypes<C extends RequestBodyCodec, S extends StructLike<unknown, unknown, boolean>> extends StructTypes<
-  Exclude<StructInput<S>, undefined>,
-  Exclude<StructOutput<S>, undefined>,
-  false
-> {
-  codec: C
-  input: Exclude<StructInput<S>, undefined>
-  optionalOut: undefined
-  output: Exclude<StructOutput<S>, undefined>
-}
-
-export interface RequestBodyStruct<C extends RequestBodyCodec, S extends StructLike<unknown, unknown, boolean>>
-  extends
-    StructMethods<Exclude<StructInput<S>, undefined>, Exclude<StructOutput<S>, undefined>, false>,
-    StructLike<Exclude<StructInput<S>, undefined>, Exclude<StructOutput<S>, undefined>, false> {
-  readonly _struct: RequestBodyStructTypes<C, S>
-}
-
-export type RequestBinaryBodyStruct = Struct<ArrayBuffer, ArrayBuffer> | Struct<Blob, Blob>
-export type RequestBodyShapeStruct = RequestBinaryBodyStruct | RequestBodyStruct<RequestBodyCodec, StructLike<unknown, unknown, boolean>>
-
-export type RequestShape = {
-  body?: RequestBodyShapeStruct
-  headers?: ObjectStruct<ObjectShape>
-  path?: ObjectStruct<ObjectShape>
-  query?: ObjectStruct<ObjectShape>
-}
-
-type RequestObjectSectionInput<TKey extends 'headers' | 'path' | 'query', TSection> =
-  TSection extends ObjectStruct<ObjectShape>
-    ? {} extends StructInput<TSection>
-      ? { [K in TKey]?: StructInput<TSection> }
-      : { [K in TKey]: StructInput<TSection> }
-    : {}
-
-export type RequestInput<T extends RequestShape> = Simplify<
-  RequestObjectSectionInput<'path', T['path']> &
-    RequestObjectSectionInput<'query', T['query']> &
-    RequestObjectSectionInput<'headers', T['headers']> &
-    (T['body'] extends StructLike<unknown, unknown, boolean> ? { body: StructInput<T['body']> } : {})
->
-
-export type RequestOutput<T extends RequestShape> = Simplify<
-  (T['path'] extends ObjectStruct<ObjectShape> ? { path: StructOutput<T['path']> } : {}) &
-    (T['query'] extends ObjectStruct<ObjectShape> ? { query: StructOutput<T['query']> } : {}) &
-    (T['headers'] extends ObjectStruct<ObjectShape> ? { headers: StructOutput<T['headers']> } : {}) &
-    (T['body'] extends StructLike<unknown, unknown, boolean> ? { body: StructOutput<T['body']> } : {})
->
-
-export interface RequestStructTypes<T extends RequestShape> extends StructTypes<RequestInput<T>, RequestOutput<T>, false> {
-  input: RequestInput<T>
-  optionalOut: undefined
-  output: RequestOutput<T>
-}
+type RecordInput<S extends StructLike<unknown, unknown, boolean>> = { [key: string]: StructInput<S> }
+type RecordOutput<S extends StructLike<unknown, unknown, boolean>> = { [key: string]: FieldOutput<S> }
 
 /**
- * Request-section struct produced by `struct.request({ path, query, headers, body })`.
- *
- * Groups path, query, headers, and body contracts used by HTTP/SSE/WebSocket builders.
+ * Value struct carried by `struct.record`.
+ * Tagged parsing stores this struct on the record object itself. `null` and `undefined` are not tagged.
  */
-export interface RequestStruct<T extends RequestShape>
-  extends StructMethods<RequestInput<T>, RequestOutput<T>, false>, StructLike<RequestInput<T>, RequestOutput<T>, false> {
-  readonly _struct: RequestStructTypes<T>
+export interface RecordStruct<S extends StructLike<unknown, unknown, boolean>> extends Struct<RecordInput<S>, RecordOutput<S>> {
+  readonly [recordValueStruct]: S
+  null(): PreservedStruct<RecordStruct<S>, RecordInput<S> | null, RecordOutput<S> | null, false>
+  nullable(): PreservedStruct<RecordStruct<S>, RecordInput<S> | null, RecordOutput<S> | null, false>
+  nullish(): PreservedStruct<RecordStruct<S>, RecordInput<S> | null | undefined, RecordOutput<S> | null | undefined, true>
+  optional(): PreservedStruct<RecordStruct<S>, RecordInput<S> | undefined, RecordOutput<S> | undefined, true>
 }
 
-export type RecordStruct<S extends StructLike<unknown, unknown, boolean>> = Struct<
-  { [key: string]: StructInput<S> },
-  { [key: string]: FieldOutput<S> }
->
-export type TupleStruct<T extends readonly StructLike<unknown, unknown, boolean>[]> = Struct<TupleInput<T>, TupleOutput<T>>
-export type UnionStruct<T extends readonly StructLike<unknown, unknown, boolean>[]> = Struct<UnionInput<T>, UnionOutput<T>>
-export type DiscriminatedUnionStruct<TOptions extends readonly ObjectStruct<ObjectShape>[]> = Struct<
+/** Item structs carried by `struct.tuple`, so builders tag each position. The tuple itself is not tagged. */
+export interface TupleStruct<T extends readonly StructLike<unknown, unknown, boolean>[]> extends Struct<TupleInput<T>, TupleOutput<T>> {
+  readonly [tupleItemStructs]: T
+  null(): PreservedStruct<TupleStruct<T>, TupleInput<T> | null, TupleOutput<T> | null, false>
+  nullable(): PreservedStruct<TupleStruct<T>, TupleInput<T> | null, TupleOutput<T> | null, false>
+  nullish(): PreservedStruct<TupleStruct<T>, TupleInput<T> | null | undefined, TupleOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<TupleStruct<T>, TupleInput<T> | undefined, TupleOutput<T> | undefined, true>
+}
+
+export interface UnionStruct<T extends readonly StructLike<unknown, unknown, boolean>[]> extends Struct<UnionInput<T>, UnionOutput<T>> {
+  readonly [unionStructOptions]: T
+  null(): PreservedStruct<UnionStruct<T>, UnionInput<T> | null, UnionOutput<T> | null, false>
+  nullable(): PreservedStruct<UnionStruct<T>, UnionInput<T> | null, UnionOutput<T> | null, false>
+  nullish(): PreservedStruct<UnionStruct<T>, UnionInput<T> | null | undefined, UnionOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<UnionStruct<T>, UnionInput<T> | undefined, UnionOutput<T> | undefined, true>
+}
+
+export interface DiscriminatedUnionStruct<TOptions extends readonly ObjectStruct<ObjectShape>[]> extends Struct<
   StructInput<TOptions[number]>,
   StructOutput<TOptions[number]>
->
+> {
+  readonly [discriminatedUnionOptions]: TOptions
+  null(): PreservedStruct<
+    DiscriminatedUnionStruct<TOptions>,
+    StructInput<TOptions[number]> | null,
+    StructOutput<TOptions[number]> | null,
+    false
+  >
+  nullable(): PreservedStruct<
+    DiscriminatedUnionStruct<TOptions>,
+    StructInput<TOptions[number]> | null,
+    StructOutput<TOptions[number]> | null,
+    false
+  >
+  nullish(): PreservedStruct<
+    DiscriminatedUnionStruct<TOptions>,
+    StructInput<TOptions[number]> | null | undefined,
+    StructOutput<TOptions[number]> | null | undefined,
+    true
+  >
+  optional(): PreservedStruct<
+    DiscriminatedUnionStruct<TOptions>,
+    StructInput<TOptions[number]> | undefined,
+    StructOutput<TOptions[number]> | undefined,
+    true
+  >
+}
+
+export interface IntersectionStruct<T extends readonly StructLike<unknown, unknown, boolean>[]> extends Struct<
+  IntersectionInput<T>,
+  IntersectionOutput<T>
+> {
+  readonly [intersectionStructOptions]: T
+  null(): PreservedStruct<IntersectionStruct<T>, IntersectionInput<T> | null, IntersectionOutput<T> | null, false>
+  nullable(): PreservedStruct<IntersectionStruct<T>, IntersectionInput<T> | null, IntersectionOutput<T> | null, false>
+  nullish(): PreservedStruct<IntersectionStruct<T>, IntersectionInput<T> | null | undefined, IntersectionOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<IntersectionStruct<T>, IntersectionInput<T> | undefined, IntersectionOutput<T> | undefined, true>
+}
 
 export type StructFlags = {
   nullable: boolean
@@ -347,8 +365,16 @@ export type BaseDefinition = {
 
 export type PrimitiveKind = 'arrayBuffer' | 'bigint' | 'blob' | 'boolean' | 'date' | 'file' | 'null' | 'number' | 'string'
 
+/** What a decode hook returns for a value it rejects; the parser that calls the hook hands over its own. */
+export type DecodeFailure = (issue: StructIssue) => typeof FAILED
+
 export type PrimitiveDefinition<K extends PrimitiveKind, TInput, TOutput = TInput> = BaseDefinition & {
-  decode?: (value: TInput, path: Path) => InternalParseResult<TOutput>
+  /**
+   * Returns the decoded value, or what `fail` returns for a value it rejects. `path` is a copy the hook may keep or change.
+   * `fail` comes from the parser, not from the module that defined the hook, so a struct built by another copy of this
+   * package reports its failures to the copy that is parsing.
+   */
+  decode?: (value: TInput, path: Path, fail: DecodeFailure) => TOutput | typeof FAILED
   encode?: (value: TOutput) => unknown
   expected: string
   is: (value: unknown) => value is TInput
@@ -390,24 +416,9 @@ export type ObjectDefinitionCache = {
 
 export type ObjectDefinition = BaseDefinition & {
   readonly cache: ObjectDefinitionCache
+  codec?: 'formData' | 'urlencoded'
   kind: 'object'
   shape: ObjectShape
-}
-
-export type RequestBodyDefinition = BaseDefinition & {
-  codec: RequestBodyCodec
-  contentType?: string | null
-  kind: 'requestBody'
-  struct: StructLike<unknown, unknown, boolean>
-}
-
-export type RequestDefinition = BaseDefinition & {
-  body?: StructLike<unknown, unknown, boolean>
-  bodyDescriptor?: RequestBodyDescriptor
-  headers?: ObjectStruct<ObjectShape>
-  kind: 'request'
-  path?: ObjectStruct<ObjectShape>
-  query?: ObjectStruct<ObjectShape>
 }
 
 export type RecordDefinition = BaseDefinition & {
@@ -454,8 +465,6 @@ export type StructDefinition =
   | ObjectDefinition
   | PrimitiveDefinition<PrimitiveKind, unknown, unknown>
   | RecordDefinition
-  | RequestBodyDefinition
-  | RequestDefinition
   | TupleDefinition
   | UnknownDefinition
   | UnionDefinition

@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: Outbound instrumentation option：`withOpenTelemetryServer`。
+description: withOpenTelemetryServer 同 per-transport options。
 ---
 
 # OpenTelemetry server {#page}
 
-Create client 嗰陣打開 outbound instrumentation。Append HTTP、SSE、WebSocket interceptors。**唔係** inbound server instrumentation，亦 **唔會** initialize OpenTelemetry SDK。
+Outbound HTTP / SSE / WebSocket instrumentation，以 core interceptors 形式提供。呢個 package 唔會 initialize OpenTelemetry SDK，亦唔係 inbound server instrumentation。
 
-見 [OpenTelemetry server 指南](../plugins/opentelemetry-server.md)。
+見 [OpenTelemetry server guide](/plugins/opentelemetry-server)。
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 
@@ -15,7 +15,7 @@ Create client 嗰陣打開 outbound instrumentation。Append HTTP、SSE、WebSoc
 function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
 ```
 
-每個 enabled transport append 一條 interceptor。疊喺 `createClient`。
+每個 enabled transport append 一條 interceptor。喺 `createClient` 時 apply。
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -67,7 +67,7 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 
 `startSpanHook` 會喺相應 HTTP、SSE 或 WebSocket transport create span 之前同步 run。Return 嘅 attributes 會喺 built-in attributes 之後 apply，所以 application 可以 override `url.full` 或其他 initial value。Hook throw 時，Defjs 會用 built-in attributes create span、record `defjs.otel.hook.error`，再繼續個 request；`requestHook` 同 `responseHook` 保持 create span 之後先 run 嘅 semantics。
 
-預設 `url.full` 淨係會將 `request.endpoint` resolve against optional `request.baseEndpoint`，唔會 append 獨立嘅 `request.queryString`。呢條 boundary 唔係 redaction；package 冇 built-in redactor 或 sensitive-key policy。要 explicit build application-owned URL，再按需要 delete sensitive params：
+預設 `url.full` 淨係會將 `request.endpoint` resolve against optional `request.baseEndpoint`；獨立嘅 `request.queryString` 唔會 append。呢條 boundary 唔係 redaction，package 亦冇 built-in redactor 或 sensitive-key policy。要明確砌一條 application-owned URL，需要嘅話再 redact：
 
 ```ts
 import { createResolvedRequestUrl, type HttpRequest } from '@defjs/core'
@@ -84,4 +84,4 @@ const http = {
 }
 ```
 
-`queryPropagation` 預設 `false`。除非你接受將 trace context 放進 WebSocket URL，否則唔好開。
+`queryPropagation` 預設 `false`。只有你接受 trace context 出現喺 WebSocket URL 先至開。

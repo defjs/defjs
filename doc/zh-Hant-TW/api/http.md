@@ -10,11 +10,11 @@ description: defineRequest、execute options，以及 HTTP request／response �
 ## defineRequest() {#defineRequest}
 
 ```ts
-function defineRequest(definition: RequestDefinition): RequestCommandBuilder
+function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`、`path`，可選 `input` struct，可選 `output` 與 `error` struct，可選 `operation` 與 `build`。
-- **回傳** builder。帶 input 呼叫就得到 `HttpCommand`。
+- **definition** — `method`、`path`，可選 `input` struct，可選 `builder`，可選 `output` 與 `error` struct，可選 `operation`。
+- **回傳** endpoint。帶 input 呼叫就得到 `HttpCommand`。
 
 ```ts
 import { defineRequest, struct } from '@defjs/core'
@@ -22,15 +22,14 @@ import { defineRequest, struct } from '@defjs/core'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 ```
 
-`output` 是 2xx body 的單一 struct；`error` 是每個非 2xx body 的單一 struct。兩者都不按狀態碼分鍵。省略哪個，那個 body 就根本不會被讀——見 [宣告即斷言](/zh-Hant-TW/guide/design-decisions#宣告即斷言)。
+`output` 是 2xx body 的單一 struct；`error` 是每個非 2xx body 的單一 struct。兩者都不按狀態碼分鍵。省略哪個，那個 body 就根本不會被讀——見 [宣告即斷言](/guide/design-decisions#declaration-is-an-assertion)。
 
 ## executeHttpCommand() {#executeHttpCommand}
 
@@ -50,7 +49,7 @@ function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, op
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: typeof fetch): Promise<HttpResponse<unknown>>
 ```
 
-預設 HTTP 傳輸。除非被 `withHTTPHandle` 換掉。 它在沒有回應到達 client 時會 reject，而不是回傳一個合成回應。
+預設 HTTP 傳輸。除非被 `withHTTPHandle` 換掉。它在沒有回應到達 client 時會 reject，而不是 resolve 成一個合成回應。
 
 ## makeResponse() {#makeResponse}
 
@@ -58,7 +57,7 @@ function fetchHandler(httpRequest: HttpRequest, fetchImpl?: typeof fetch): Promi
 function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
 ```
 
-不打網路也能組出 `HttpResponse`（interceptors、測試）。預設 status 是 `0`。2xx 時 `ok` 為 true。 它回傳的值會走和線上回應完全一樣的媒體類型檢查與宣告 struct；不存在受信任的短路。
+不打網路也能組出 `HttpResponse`（interceptors、測試）。預設 status 是 `0`。2xx 時 `ok` 為 true。它回傳的值會走和線上回應完全一樣的媒體類型檢查與宣告 struct；不存在受信任的短路。
 
 ## 執行 options
 
@@ -80,7 +79,7 @@ type HttpExecuteOptions = {
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`、`path`，可選 `input`、`output`、`error`、`responseType`（`'json' | 'text' | 'blob' | 'arraybuffer'`）、`operation`，可選 `build`（自己組請求；需要 `input`）。
+`method`、`path`，可選 `input`、`builder`、`output`、`error`、`operation`。沒有 `responseType`：struct kind 決定已宣告的 body 怎麼讀。
 
 ### ResponseDeclaration {#ResponseDeclaration}
 
@@ -88,7 +87,7 @@ type HttpExecuteOptions = {
 type ResponseDeclaration<TOutput, TError> = { output?: TOutput; error?: TError }
 ```
 
-`RequestDefinition` 裡 `output` / `error` 那一半。兩個都不寫時 `responseType` 也不允許：什麼都不解碼，它就沒什麼可選的。
+`RequestDefinition` 裡 `output`／`error` 那一半。兩個都不在時，body 根本不會被讀。
 
 ### HttpAwaitResult {#HttpAwaitResult}
 
@@ -102,7 +101,7 @@ type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
 
 ### HttpRequest {#HttpRequest}
 
-正規化後的外送 request：`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、progress hooks、`baseEndpoint`、query metadata。
+正規化後的外送 request：`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、progress hooks、`baseEndpoint`、`queryString`、`queryParams`。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。Builder 回傳 `URLSearchParams` 時會把那個實例傳下去。`responseType` 與 `errorResponseType` 是唯讀的：它們由端點的 `output` 與 `error` struct kind 推導而來，不能修改。
 
 ### HttpMeta {#HttpMeta}
 
@@ -139,19 +138,36 @@ type HttpResponse<R> = {
 }
 ```
 
-傳輸產出、interceptor 看到的線上形狀：`body` 是文字或已解析的 JSON，不是解碼後的值。到達呼叫方的是 `DecodedResponse`。
+傳輸產出、interceptor 看到的線上形狀：`body` 是文字或已解析的 JSON，不是解碼後的值。對於 JSON 表示，字串是 JSON 字串根，不會再次解析；位元組和 blob 仍是原始資料，只解析一次。到達呼叫方的是 `DecodedResponse`。
 
 ### HttpProgressEvent {#HttpProgressEvent}
 
 ### HttpProgressFn {#HttpProgressFn}
 
-`loaded`、`total`、`lengthComputable`。Callbacks 可以是 async。
+`loaded`、`total`、`lengthComputable`。Callbacks 可以是 async。回呼丟出錯誤就是 `EXT_OBSERVER_FAILED`。
 
-見 [HTTP 指南](../core/http.md) 與 [Commands](../core/commands.md)。 回呼丟出錯誤就是 `EXT_OBSERVER_FAILED`。
+見 [HTTP 指南](/core/http) 與 [Commands](/core/commands)。
 
-## RequestCommandBuilder {#RequestCommandBuilder}
+## RequestEndpoint {#RequestEndpoint}
 
-`defineRequest` 的回傳值。拿 input 呼叫就得到 `HttpCommand`。
+`defineRequest` 的回傳值。帶 input 呼叫就得到 `HttpCommand`。
+
+## BuilderInput {#BuilderInput}
+
+`builder` 看到的、已剖析的 endpoint input。物件節點帶著產出它們的 struct，所以 alias、`Date`、`bigint` 編碼跟著值走。
+
+## HttpRequestShape {#HttpRequestShape}
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+  headers?: HeadersInit | FlatRecord
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+}
+```
+
+`GET` 與 `HEAD` 不能回傳 body。`path` 與 `headers` 必須是扁平 scalars；`query` 可以巢狀，巢狀物件在執行階段需要 `withQuerySerializer`。
 
 ## HttpCommand {#HttpCommand}
 
@@ -159,7 +175,7 @@ type HttpResponse<R> = {
 
 ## UseRequestConfig {#UseRequestConfig}
 
-進度、取消。`HttpExecuteOptions` 再加一個 `signal`。
+進度與取消欄位。`HttpExecuteOptions` 再加一個 `signal`。
 
 ## RequestSuccessData {#RequestSuccessData}
 
@@ -172,6 +188,8 @@ type HttpResponse<R> = {
 ## HttpResponseType {#HttpResponseType}
 
 `'arraybuffer' | 'blob' | 'json' | 'text'`
+
+由宣告的 struct kind 決定（`string` → `text`，`blob`／`file` → `blob`，`arrayBuffer` → `arraybuffer`，其餘 → `json`）。不是 `defineRequest` 上的欄位。
 
 ## MakeResponseOptions {#MakeResponseOptions}
 

@@ -5,7 +5,7 @@ description: Define endpoints, build opaque commands, map inputs, and infer tran
 
 # Commands
 
-One definition → builder → opaque command → `client.execute`. Same pipeline for HTTP, SSE, and WebSocket.
+One definition → endpoint → opaque command → `client.execute`. Same pipeline for HTTP, SSE, and WebSocket.
 
 ## Basic Setup
 
@@ -20,54 +20,72 @@ if (!error) console.log(data, response.status)
 
 ## Choose a definition
 
-| Definition               | Contract                                                      | Successful value                         |
-| ------------------------ | ------------------------------------------------------------- | ---------------------------------------- |
-| `defineRequest(...)`     | Method, relative path, optional input, optional status output | Decoded data + `HttpResponse`            |
-| `defineEventStream(...)` | Path, buffer/queue limits, event-name → Struct map            | `EventStreamHandle` + open snapshot      |
-| `defineWebSocket(...)`   | Path, incoming map, optional outgoing map, queue limit        | `WebSocketSession` + connection snapshot |
+| Definition               | Contract                                                           | Successful value                         |
+| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------- |
+| `defineRequest(...)`     | Method, relative path, optional input, optional `output` / `error` | Decoded data + response                  |
+| `defineEventStream(...)` | Path, buffer/queue limits, event-name → Struct map                 | `EventStreamHandle` + open snapshot      |
+| `defineWebSocket(...)`   | Path, one incoming struct, optional outgoing struct, queue limit   | `WebSocketSession` + connection snapshot |
 
-No `input` → builder takes no argument. With `input` → pass the Struct value even if every nested field is optional. Optional `path` / `query` / `headers` sections may be omitted; a section with a required field may not. A body wrapper present means the body is required.
+No `input` → the endpoint takes no argument, and `builder` may be `() => request`. With `input` → pass the struct value. An optional field may be omitted; a required field may not.
 
 Keep commands opaque. Don’t dig into tags or symbols.
 
-## Automatic request mapping
+## Where values go
 
-Use `struct.request(...)` when logical input already has path / query / headers / body:
+The struct decides how a value is encoded. The `builder` decides where it goes. `builder` is a synchronous pure function of the **parsed** input. It runs at execute time. A throw becomes `REQ_BUILD_FAILED` on the tuple — the endpoint call itself does not throw.
+
+Omit `builder` when the input struct is already `{ path?, query?, headers?, body? }`. That is the identity `(input) => input`. If the parsed input is not assignable to that shape, TypeScript requires a `builder`.
+
+Hand the typed value through. Alias, `Date` → ISO, and `bigint` → string then apply everywhere that struct is used: request placement, response decoding, SSE events, and WebSocket frames.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
+const User = struct.object({
+  displayName: struct.string().alias('display_name'),
+  email: struct.string(),
+})
+
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(struct.object({ name: struct.string() })),
-  }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  input: struct.object({ user: User }),
+  builder: (input) => ({ body: input.user }),
+  output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })
 void createUser
 ```
 
-Aliases rewrite outbound wire keys only. Parsed values and command inputs keep logical names.
+The body is JSON `{"display_name":"…","email":"…"}`. A hand-written key is the escape hatch: `body: { name: input.user.displayName }` sends `name`, because the parent object is anonymous and the alias does not apply.
 
-## Custom `build`
+## When the shapes differ
 
-Reach for `build(request, input)` when the caller shape and wire shape differ. It’s a constrained projection — not a place to branch on auth policy or invent side effects.
+Use `builder` for path placeholders, literals, and branches. It receives the real value, so `if`, `??`, templates, and `switch` work.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
 const search = defineRequest({
   method: 'GET',
-  path: '/search',
-  input: struct.object({ q: struct.string(), page: struct.number().optional() }),
-  build(request, input) {
-    request.setQueryParams({ q: input.q, page: input.page })
-  },
+  path: '/orgs/:org_id/users',
+  input: struct.object({
+    orgId: struct.number(),
+    query: struct.object({
+      keyword: struct.string(),
+      pageSize: struct.number().alias('page_size'),
+    }),
+  }),
+  builder: (input) => ({
+    path: { org_id: input.orgId },
+    query: input.query,
+    headers: { 'x-api-version': '2' },
+  }),
   output: struct.object({ items: struct.array(struct.string()) }),
 })
 void search
 ```
+
+`query: input.query` sends `page_size`. `headers: { 'x-api-version': '2' }` is a literal. Auth and tracing still belong in interceptors: they see the native request after the builder runs.
 
 ## Output and error shapes
 

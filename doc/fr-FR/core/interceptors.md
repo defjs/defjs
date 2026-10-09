@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,17 +108,17 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-La couche commande dispatche encore par statut. Déclare `503` dans `output` quand les appelants ont besoin d’`error.data` typé. Short-circuiter SSE ou WebSocket demande un handle/session compatible complet (promesses de fermeture, état live, propriété). Les objets partiels ne sont pas une politique valide.
+La couche commande dispatche encore par statut. Déclare un seul struct `error` pour le côté non-2xx quand les appelants ont besoin d’`error.data` typé. Short-circuiter SSE ou WebSocket demande un handle/session compatible complet (promesses de fermeture, état live, propriété, et `[Symbol.asyncDispose]`). Les objets partiels ne sont pas une politique valide. Les implémentations structurelles d’`EventStreamHandle` et de `WebSocketSessionLike` exigent maintenant ce disposer standard à la compilation ; les consommateurs qui ne reçoivent que des handles Defjs n’ont aucun nouvel appel runtime à faire.
 
 ## Relancer des lectures safe
 
-Les retries changent le comportement. Garde la politique étroite — cet exemple relance les `GET` / `HEAD` / `OPTIONS` rejouables pour les statuts `0`, `502`, `503`, `504`, plafonne `Retry-After` à 30s, et s’arrête après deux retries ou sur abort :
+Les retries changent le comportement. Garde la politique étroite — cet exemple relance les `GET` / `HEAD` / `OPTIONS` rejouables pour les statuts `0`, `429`, `502`, `503`, `504`, plafonne `Retry-After` à 30s, et s’arrête après deux retries ou sur abort :
 
 ```typescript twoslash
 import { createHttpInterceptor, type HttpRequest, type HttpResponse } from '@defjs/core'
 
 const retryableMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
-const retryableStatuses = new Set([0, 502, 503, 504])
+const retryableStatuses = new Set([0, 429, 502, 503, 504])
 
 function isReplayable(request: HttpRequest): boolean {
   return typeof ReadableStream === 'undefined' || !(request.body instanceof ReadableStream)
@@ -222,7 +223,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 })
 ```
 
-Spreader une session snapshot `state` / `connection` / `bufferedAmount` une fois. Préserve `closed`, `receive`, `close`, `[Symbol.asyncDispose]()` et le cleanup des écouteurs sauf si tu changes délibérément la propriété. Le wrapper doit renvoyer le même disposer interne que l’exemple, pas une autre Promise. C’est un changement breaking à la compilation pour les implémentations structurelles personnalisées de `WebSocketSessionLike` ; recevoir seulement des sessions Defjs n’ajoute aucun appel runtime.
+Spreader une session fige `state` / `connection` / `bufferedAmount` une fois. Préserve `closed`, `receive`, `close`, la délégation exacte de `[Symbol.asyncDispose]()`, et le cleanup des écouteurs, sauf si tu changes délibérément la propriété. Un wrapper doit renvoyer la promesse de teardown de la session interne, pas une promesse résolue sans rapport. Si une chaîne crée une session qui n’est pas livrée, Core la règle et la ferme ; si un intercepteur réussi renvoie une autre session, Core jette celle qui a été créée.
 
 ## Référence
 
@@ -234,7 +235,7 @@ Les factories renvoient des valeurs de transport taguées :
 - `basicAuthHttpInterceptor(provider, options?)` — credentials Basic sur HTTP
 - `basicAuthSSEInterceptor(provider, options?)` — credentials Basic sur SSE
 
-`HttpRequest` peut inclure `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` et `operation` statique. C’est une valeur d’intégration transport — pas l’entrée parsée de l’appelant. Garde la validation de commande, la validation de sortie et le mapping d’erreurs de domaine dans leurs couches.
+`HttpRequest` peut inclure `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` et `operation` statique. C’est une valeur d’intégration transport — pas l’entrée parsée de l’appelant. `queryParams` est `new URLSearchParams(queryString)` après sérialisation. Un serializer de query configuré n’est pas appelé quand le builder n’a produit aucune query, et un `URLSearchParams` du builder est utilisé tel quel. Garde la validation de commande, la validation de sortie et le mapping d’erreurs de domaine dans leurs couches.
 
 Les observateurs SSE/WebSocket sont des hooks de cycle de vie, pas du contrôle de flux. Désabonne les écouteurs WebSocket quand le propriétaire se termine. Les échecs d’observateur suivent le contrat du transport ; un intercepteur lui-même peut throw ou reject.
 
@@ -246,5 +247,7 @@ Un intercepteur peut appliquer une politique de transport. Ce n’est pas de la 
 
 ## Recettes liées
 
+- [Rafraîchir un Bearer une fois sur 401](../recipes/refresh-bearer-once.md)
+- [Publier un SDK HTTP sans cacher execute](../recipes/publish-http-sdk.md)
 - [Tester avec un handle Fetch local](../recipes/test-with-handle.md)
 - [Annuler un appel HTTP](../recipes/cancel-http.md)

@@ -1,6 +1,6 @@
 ---
 title: Struct
-description: واجهة struct، Infer، وStructError.
+description: واجهة struct، وInfer، وStructError.
 ---
 
 # Struct {#page}
@@ -17,14 +17,14 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### البدائيات والحاويات
 
 | المساعد                                                                     | الدور                                                                      |
 | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `struct.string()` / `number()` / `boolean()` / `bigint()`                   | بدائيات                                                                    |
+| `struct.string()` / `number()` / `boolean()` / `bigint()`                   | قيم قياسية                                                                 |
 | `struct.literal(value)`                                                     | حرفي مطابق                                                                 |
 | `struct.null()` / `any()` / `unknown()`                                     | Null / any / unknown                                                       |
 | `struct.date()`                                                             | `Date`                                                                     |
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | اتحادات                                                                    |
 | `struct.enum(values)`                                                       | قائمة سلاسل أو خريطة `{ Name: value }`                                     |
 
-### مساعدات الطلب / الجسم
+### ترميزات الجسم والقيم الثنائية
 
-| المساعد                                                                        | الدور                  |
-| ------------------------------------------------------------------------------ | ---------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                           | أقسام مدخل HTTP/SSE/WS |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | أجسام مرمّزة           |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | ثنائي                  |
+| المساعد                                        | الدور                                                                         |
+| ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | struct كائن مع وسم ترميز. الوسم ينطبق فقط عندما تكون تلك القيمة جذر جسم الطلب |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | قيم ثنائية. كجذر جسم تُرسَل بايتات؛ وكـ `output` / `error` تختار ذلك التمثيل  |
+| `struct.string()`                              | نص. كجذر جسم أو struct `string` وارد، تبقى البايتات نصًا                      |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **يُرجع** `[null, value]` أو `[StructError, undefined]`.
+- `errorMap` الاختياري يعيد كتابة رسائل المشاكل لهذا التحليل فقط.
+- الافتراضي يقرأ المفاتيح **المنطقية** (`displayName`). مرّر `{ aliases: true }` لتقرأ مفاتيح السلك (`display_name`) بالطريقة نفسها التي تفعلها ترميزات HTTP/JSON.
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`: `path`، `code`، `expected`، `received`، `message`.
+`StructIssue`: `path`، `code`، `expected`، `received`، `message`. `code` هو `custom` أو `invalid_enum` أو `invalid_intersection` أو `invalid_literal` أو `invalid_type` أو `invalid_union` أو `missing_key`.
 
-انظر [دليل Struct](../core/struct.md).
+انظر [دليل Struct](/core/struct).
 
 ## Struct {#Struct}
 
-شكل قابل للتحليل: أنواع الإدخال/الإخراج مع `.optional()` و`.null()` و`.nullish()` و`.alias()`.
+شكل قابل للتحليل: أنواع الإدخال/الإخراج مع `.optional()` و`.null()` / `.nullable()` و`.nullish()` و`.alias()`.
 
 ## StructLike {#StructLike}
 
@@ -97,19 +99,15 @@ class StructError extends Error {
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()` و`.null()` / `.nullable()` و`.nullish()` و`.optional()`.
 
 ## ObjectStruct {#ObjectStruct}
 
-شكل كائن من `struct.object`.
-
-## RequestStruct {#RequestStruct}
-
-إدخال HTTP/SSE/WS مقسّم من `struct.request`.
+struct بشكل كائن من `struct.object`.
 
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`، `code`، `expected`، `received`، `message`. `code` هو `custom` أو `invalid_enum` أو `invalid_intersection` أو `invalid_literal` أو `invalid_type` أو `invalid_union` أو `missing_key`.
 
 ## FormattedStructError {#FormattedStructError}
 

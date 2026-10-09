@@ -5,7 +5,7 @@ description: Fachada struct, Infer y StructError.
 
 # Struct {#page}
 
-Construye formas del límite de cable, parsea valores, infiere tipos TypeScript.
+Construye formas del límite de cable, parsea valores e infiere tipos TypeScript.
 
 ## struct {#struct}
 
@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### Primitivos y contenedores
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | Uniones                                                                             |
 | `struct.enum(values)`                                                       | Lista de strings o mapa `{ Name: value }`                                           |
 
-### Helpers de request / body
+### Códecs de body y valores binarios
 
-| Helper                                                                         | Rol                            |
-| ------------------------------------------------------------------------------ | ------------------------------ |
-| `struct.request({ path?, query?, headers?, body? })`                           | Secciones de input HTTP/SSE/WS |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | Cuerpos codificados            |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | Binario                        |
+| Helper                                         | Rol                                                                                                              |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | Struct de objeto más un tag de códec. El tag solo aplica cuando ese valor es la raíz del body de la solicitud    |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | Valores binarios. Como raíz de body se envían como bytes; como `output` / `error` seleccionan esa representación |
+| `struct.string()`                              | Texto. Como raíz de body o como struct `string` de entrada, los bytes siguen siendo texto                        |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **Devuelve** `[null, value]` o `[StructError, undefined]`.
+- `errorMap` opcional reescribe los mensajes de issue solo para este parse.
+- Por defecto lee claves **lógicas** (`displayName`). Pasa `{ aliases: true }` para leer claves de cable (`display_name`) igual que los códecs HTTP/JSON.
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`: `path`, `code`, `expected`, `received`, `message`.
+`StructIssue`: `path`, `code`, `expected`, `received`, `message`. `code` es `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` o `missing_key`.
 
-Ver [guía de Struct](../core/struct.md).
+Mira la [guía de Struct](/core/struct).
 
 ## Struct {#Struct}
 
-Forma parseable: tipos input/output más `.optional()`, `.null()`, `.nullish()`, `.alias()`.
+Forma parseable: tipos input/output más `.optional()`, `.null()` / `.nullable()`, `.nullish()`, `.alias()`.
 
 ## StructLike {#StructLike}
 
@@ -97,19 +99,15 @@ Cualquier cosa con un payload de tipo `_struct`.
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
 ## ObjectStruct {#ObjectStruct}
 
 Struct con forma de objeto, de `struct.object`.
 
-## RequestStruct {#RequestStruct}
-
-Input HTTP/SSE/WS seccionado de `struct.request`.
-
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`, `code`, `expected`, `received`, `message`. `code` es `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` o `missing_key`.
 
 ## FormattedStructError {#FormattedStructError}
 

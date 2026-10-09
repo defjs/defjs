@@ -55,13 +55,14 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
@@ -80,7 +81,7 @@ On a server, create the client inside the request boundary when options or inter
 | `withSSEHandle(fetch)`                                                                                        | Replace Fetch for SSE                                         |
 | `withWebSocketHandle(WebSocket)`                                                                              | Replace WebSocket constructor                                 |
 | `withInterceptors(...items)`                                                                                  | Append mixed interceptors                                     |
-| `withQueryParamsSerializer(fn)`                                                                               | Replace query serialization                                   |
+| `withQuerySerializer(fn)`                                                                                     | Encode an already-aliased query object into a query string    |
 | `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` for HTTP/SSE when true         |
 | `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                     |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE knobs                                                     |

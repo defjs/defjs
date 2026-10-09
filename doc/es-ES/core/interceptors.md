@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,17 +108,17 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-La capa de comando sigue despachando por estado. Declara `503` en `output` cuando los llamadores necesiten `error.data` tipado. Cortocircuitar SSE o WebSocket necesita un handle/sesión compatible completo (promesas de cierre, estado en vivo, ownership). Los objetos parciales no son política válida.
+La capa de comando sigue despachando por estado. Declara un único struct `error` para el lado no-2xx cuando los llamadores necesiten `error.data` tipado. Cortocircuitar SSE o WebSocket necesita un handle/sesión compatible completo (promesas de cierre, estado en vivo, ownership y `[Symbol.asyncDispose]`). Los objetos parciales no son política válida. Las implementaciones estructurales de `EventStreamHandle` y `WebSocketSessionLike` ahora necesitan ese disposer estándar en tiempo de compilación; quien solo recibe handles de Defjs no tiene un requisito nuevo de llamada en runtime.
 
 ## Reintentar lecturas seguras
 
-Los reintentos cambian el comportamiento. Mantén la política estrecha — este ejemplo reintenta `GET` / `HEAD` / `OPTIONS` reproducibles para estados `0`, `502`, `503`, `504`, limita `Retry-After` a 30s y para tras dos reintentos o en abort:
+Los reintentos cambian el comportamiento. Mantén la política estrecha — este ejemplo reintenta `GET` / `HEAD` / `OPTIONS` reproducibles para estados `0`, `429`, `502`, `503`, `504`, limita `Retry-After` a 30s y para tras dos reintentos o en abort:
 
 ```typescript twoslash
 import { createHttpInterceptor, type HttpRequest, type HttpResponse } from '@defjs/core'
 
 const retryableMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
-const retryableStatuses = new Set([0, 502, 503, 504])
+const retryableStatuses = new Set([0, 429, 502, 503, 504])
 
 function isReplayable(request: HttpRequest): boolean {
   return typeof ReadableStream === 'undefined' || !(request.body instanceof ReadableStream)
@@ -222,7 +223,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 })
 ```
 
-Expandir una sesión congela `state` / `connection` / `bufferedAmount` una vez. Conserva `closed`, `receive`, `close`, `[Symbol.asyncDispose]()` y la limpieza de listeners salvo que cambies deliberadamente el ownership. El wrapper debe devolver el mismo disposer interno del ejemplo, no otra Promise. Es un cambio breaking en compilación para implementaciones estructurales propias de `WebSocketSessionLike`; quien solo recibe sesiones Defjs no necesita otra llamada runtime.
+Expandir una sesión congela `state` / `connection` / `bufferedAmount` una vez. Conserva `closed`, `receive`, `close`, la delegación exacta de `[Symbol.asyncDispose]()` y la limpieza de listeners salvo que cambies deliberadamente el ownership. Un wrapper debe devolver la promise de teardown de la sesión interna, no una promise resuelta ajena. Si una cadena crea una sesión que no se entrega, Core la asienta y la cierra; si un interceptor con éxito devuelve otra sesión, Core descarta la creada.
 
 ## Reference
 
@@ -234,7 +235,7 @@ Las factories devuelven valores de transporte etiquetados:
 - `basicAuthHttpInterceptor(provider, options?)` — credenciales Basic en HTTP
 - `basicAuthSSEInterceptor(provider, options?)` — credenciales Basic en SSE
 
-`HttpRequest` puede incluir `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` y `operation` estático. Es un valor de integración de transporte — no la entrada parseada del llamador. Mantén la validación del comando, la validación de salida y el mapeo de errores de dominio en sus capas.
+`HttpRequest` puede incluir `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` y `operation` estático. Es un valor de integración de transporte — no la entrada parseada del llamador. `queryParams` es `new URLSearchParams(queryString)` después de la serialización. Un serializador de query configurado no se llama cuando el builder no produjo query, y un `URLSearchParams` del builder se usa tal cual. Mantén la validación del comando, la validación de salida y el mapeo de errores de dominio en sus capas.
 
 Los observadores SSE/WebSocket son hooks de ciclo de vida, no control de flujo. Haz unsubscribe de los listeners WebSocket cuando termine el dueño. Los fallos del observador siguen el contrato del transporte; un interceptor en sí puede lanzar o rechazar.
 
@@ -242,9 +243,11 @@ Registra un allowlist revisado: `operation` estático, método, estado, duració
 
 Las credenciales Basic son base64, no cifrado. Usa TLS, mantén los providers de credenciales acotados a la solicitud en un servidor, nunca registres la cabecera generada. El encoder por defecto es `globalThis.btoa`; pasa `BasicAuthInterceptorOptions.encode` cuando el runtime no tenga `btoa` o necesite un encoder revisado.
 
-Un interceptor puede imponer política de transporte. No es validación de entrada, autorización ni ownership de recursos. El código que arranca trabajo SSE/WebSocket de larga duración sigue usando `await using` o cancelando, cerrando y esperando manualmente la promesa terminal. HTTP ordinario sigue siendo request-scoped y se gestiona con timeout / `AbortSignal`; `Client` no es `AsyncDisposable`.
+Un interceptor puede imponer política de transporte. No es validación de entrada, autorización ni ownership de recursos. El código que arranca trabajo de larga duración sigue usando `await using` o cierra y espera manualmente la promesa terminal. HTTP ordinario sigue siendo request-scoped y se gestiona con su timeout / `AbortSignal`; `Client` no es `AsyncDisposable`.
 
 ## Recetas relacionadas
 
+- [Refrescar un token Bearer una vez ante un 401](../recipes/refresh-bearer-once.md)
+- [Publicar un SDK HTTP sin ocultar execute](../recipes/publish-http-sdk.md)
 - [Probar con un handle Fetch local](../recipes/test-with-handle.md)
 - [Cancelar una llamada HTTP](../recipes/cancel-http.md)

@@ -15,6 +15,8 @@ import { createClient, withEndpoint } from '@defjs/core'
 const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
+`createClient(...)` devuelve sobrecargas para cada tipo de comando.
+
 ## Componer opciones
 
 Las opciones se aplican de izquierda a derecha. Los setters reemplazan; `withInterceptors(...items)` añade.
@@ -53,13 +55,14 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
@@ -69,18 +72,20 @@ En un servidor, crea el cliente dentro del límite de la solicitud cuando las op
 
 ## Reference
 
-| Helper                                                                                                        | Efecto                                                      |
-| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | Endpoint base absoluto para todos los transportes           |
-| `withHTTPHandle(fetch)`                                                                                       | Reemplazar Fetch para HTTP                                  |
-| `withSSEHandle(fetch)`                                                                                        | Reemplazar Fetch para SSE                                   |
-| `withWebSocketHandle(WebSocket)`                                                                              | Reemplazar el constructor WebSocket                         |
-| `withInterceptors(...items)`                                                                                  | Añadir interceptores mixtos                                 |
-| `withQueryParamsSerializer(fn)`                                                                               | Reemplazar la serialización de query                        |
-| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` para HTTP/SSE cuando es true |
-| `withXSRF(options?)`                                                                                          | Cookie XSRF HTTP → cabecera                                 |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Controles SSE                                               |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Controles WebSocket                                         |
+| Helper                                                                                                        | Efecto                                                               |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Endpoint base absoluto para todos los transportes                    |
+| `withHeaders(HeadersInit)`                                                                                    | Cabeceras estáticas por defecto para HTTP/SSE; las del comando ganan |
+| `withTimeout(ms)`                                                                                             | Timeout por defecto solo de `execute` HTTP (SSE/WS lo ignoran)       |
+| `withHTTPHandle(fetch)`                                                                                       | Reemplazar Fetch para HTTP                                           |
+| `withSSEHandle(fetch)`                                                                                        | Reemplazar Fetch para SSE                                            |
+| `withWebSocketHandle(WebSocket)`                                                                              | Reemplazar el constructor WebSocket                                  |
+| `withInterceptors(...items)`                                                                                  | Añadir interceptores mixtos                                          |
+| `withQuerySerializer(fn)`                                                                                     | Codifica un objeto de query ya con alias en un query string          |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` para HTTP/SSE cuando es true          |
+| `withXSRF(options?)`                                                                                          | Cookie XSRF HTTP → cabecera                                          |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Controles SSE                                                        |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Controles WebSocket                                                  |
 
 ## Recetas relacionadas
 

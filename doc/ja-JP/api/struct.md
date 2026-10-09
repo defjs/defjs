@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### プリミティブとコンテナ
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | ユニオン                                                                                       |
 | `struct.enum(values)`                                                       | 文字列リスト、または `{ Name: value }` マップ                                                  |
 
-### リクエスト / body ヘルパー
+### ボディコーデックとバイナリ値
 
-| ヘルパー                                                                       | 役割                         |
-| ------------------------------------------------------------------------------ | ---------------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                           | HTTP/SSE/WS の入力セクション |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | エンコード済みボディ         |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | バイナリ                     |
+| ヘルパー                                       | 役割                                                                                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | コーデックタグ付きのオブジェクト struct。タグが適用されるのは、その値がリクエストボディのルートであるときだけ |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | バイナリ値。ボディのルートではバイト列として送られ、`output` / `error` ではその表現を選ぶ                     |
+| `struct.string()`                              | テキスト。ボディのルート、または受信側の `string` struct では、バイト列はテキストのまま                       |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
-- **戻り値** — `[null, value]`、または `[StructError, undefined]` です。
+- **戻り値** `[null, value]`、または `[StructError, undefined]` です。
+- 任意の `errorMap` は、このパースだけの issue メッセージを書き換えます。
+- デフォルトは**論理**キー（`displayName`）を読みます。HTTP/JSON コーデックと同じようにワイヤキー（`display_name`）を読むには `{ aliases: true }` を渡します。
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue` は `path`、`code`、`expected`、`received`、`message` です。
+`StructIssue` は `path`、`code`、`expected`、`received`、`message` です。`code` は `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union`、`missing_key` のいずれかです。
 
-[Struct ガイド](../core/struct.md) を見てください。
+[Struct ガイド](/core/struct) を見てください。
 
 ## Struct {#Struct}
 
-parse できる形です。input/output の型に `.optional()`、`.null()`、`.nullish()`、`.alias()` が付きます。
+パースできる形です。input/output の型に加え、`.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias()` を持ちます。
 
 ## StructLike {#StructLike}
 
@@ -97,23 +99,19 @@ parse できる形です。input/output の型に `.optional()`、`.null()`、`.
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()` です。
 
 ## ObjectStruct {#ObjectStruct}
 
-`struct.object` が作るオブジェクト形です。
-
-## RequestStruct {#RequestStruct}
-
-`struct.request` が切った HTTP / SSE / WS の input です。
+`struct.object` が作る、オブジェクト形の struct です。
 
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`、`code`、`expected`、`received`、`message` です。`code` は `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union`、`missing_key` のいずれかです。
 
 ## FormattedStructError {#FormattedStructError}
 
-`StructError.format()` が出す入れ子の `{ _errors, [key]: … }` です。
+`StructError.format()` が出す、入れ子の `{ _errors, [key]: … }` の木です。
 
 ## FlattenedStructError {#FlattenedStructError}
 

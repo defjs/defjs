@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -108,7 +108,7 @@ provide(HTTP_CLIENT, childClient)
 
 ## 在 watcher 外擁有 HTTP 工作
 
-由 composable 或元件在 watcher 外啟動的工作，用 `AbortController` + `onScopeDispose`。Abort 啟動與進行中的工作；在賦值響應式狀態前檢查 signal。Plugin 或 injection scope 不會推斷誰擁有 command。
+由 composable 或元件在 watcher 外啟動的工作，用 `AbortController` + `onScopeDispose`。Abort 啟動與進行中的工作；在賦值響應式狀態前檢查 signal。Plugin 或 injection scope 不會推斷誰擁有 command。列表頁請把 `execute` 包進 Vue Query（或類似方案）——`@defjs/vue` 只做 DI，**不會**附帶 `useRequest`。
 
 當某個 scope 擁有 client 時，若要瀏覽器全域重用，保持它與請求無關。若它捕捉 headers、cookies、users、tenants 或 credentials，請在對應的 app／SSR 請求邊界建立，並在那裡 provide 該實例。
 

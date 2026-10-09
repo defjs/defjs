@@ -65,9 +65,9 @@ The cost: no process-wide default. That cost helps on a server — create the cl
 
 A client dispatches commands. It doesn’t own active work. Whoever starts an HTTP request, SSE stream, or WebSocket session must cancel or close it and await the terminal promise.
 
-## Definitions, builders, and commands
+## Definitions, endpoints, and commands
 
-The definition is the stable contract: method, path, input Struct, the structs that decode each side of `ok`, transport limits. The builder is the callable view. Calling it creates one opaque command for a single execution.
+The definition is the stable contract: method, path, input struct, the structs that decode each side of `ok`, transport limits. `defineRequest` returns an endpoint. Calling it creates one opaque command for a single execution.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -75,14 +75,13 @@ import { defineRequest, struct } from '@defjs/core'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 ```
 
 A background job and a UI owner can execute the same `getUser` shape with different cancel/retry policies. Keeping the command opaque stops app code from depending on internal transport tags or symbols.
@@ -95,9 +94,10 @@ All three transports use an error-first tuple. A single generic “response” w
 - SSE → `[err, stream, open]` — one logical stream + startup response snapshot
 - WebSocket → `[err, session, connection]` — logical session + startup connection snapshot
 
-On success the third value is always present. On failure it is `undefined`, because a fault
-already carries whatever response metadata existed — and a fault is what gets passed to a handler,
-logged, or rethrown, so the metadata has to travel with it rather than beside it.
+On success the third value is always present. An HTTP failure is `[error, undefined, undefined]`:
+the fault already carries the response metadata, and that fault is what gets passed to a handler,
+logged, or rethrown. SSE and WebSocket startup failures may still include the open or connection
+snapshot when one was captured.
 
 For SSE and WebSocket the third value is a snapshot, not a promise that future reconnects keep the
 same physical connection. After startup, lifecycle control belongs to the returned handle or
@@ -124,9 +124,11 @@ The order is: media type, then representation, then struct.
 Checking the media type first is what turns "I asked for JSON and received HTML" into one precise
 fault instead of a parser error, and it skips the read, the parse, and the struct entirely.
 
-## The limits of `build`
+## Builder, encoder, and alias
 
-Automatic `struct.request(...)` mapping is the default when input already has path/query/headers/body. Custom `build(request, input)` is a constrained projection when caller shape and wire shape differ:
+A struct is the field contract, in both directions. `.alias(name)` is the wire name. The struct decides how a value is encoded. The `builder` decides where that value goes.
+
+`builder` is optional, synchronous, and pure. It receives the parsed input — the real value, not a binding view — and returns the request: `path`, `query`, `headers`, and `body`. It runs when the command executes. A throw becomes `REQ_BUILD_FAILED` on the tuple; calling the endpoint does not throw. Omit `builder` when the input struct is already that request shape. That omission is `(input) => input`, and TypeScript requires a builder when the input is not assignable.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -136,22 +138,20 @@ const createBatch = defineRequest({
   path: '/accounts/:account_id/users',
   input: struct.object({
     accountId: struct.number(),
+    draft: struct.boolean().optional(),
     users: struct.array(
       struct.object({
-        displayName: struct.string(),
+        displayName: struct.string().alias('display_name'),
         email: struct.string(),
       }),
     ),
   }),
-  build(request, input) {
-    request.setPathParams({ account_id: input.accountId })
-    request.setJson({
-      users: input.users.map((user) => ({
-        display_name: user.displayName,
-        email: user.email,
-      })),
-    })
-  },
+  builder: (input) => ({
+    path: { account_id: input.accountId },
+    query: { draft: input.draft ? 1 : undefined },
+    headers: { 'x-api-version': '2' },
+    body: { users: input.users },
+  }),
   output: struct.object({ accepted: struct.number() }),
 })
 
@@ -159,9 +159,24 @@ const command = createBatch({
   accountId: 42,
   users: [{ displayName: 'Ada', email: 'ada@example.com' }],
 })
+void command
 ```
 
-`input` is a schema-bound view, not the caller’s runtime object. The projection can select declared fields, rename targets, and map one source array item to one output item. It can’t branch on values, inject literals, or change cardinality. Normalize business data and do value-dependent validation before creating the command.
+The default path is to hand the typed value over. `body: { users: input.users }` keeps each user's alias, so the wire field is `display_name`. A key you write yourself (`account_id`, `x-api-version`) is literal. Spreading a typed object keeps its struct; adding the wire key beside the logical field is `REQ_BUILD_FAILED`.
+
+Query nesting is a property of the backend, so it lives on the client: `withQuerySerializer((query) => string)` sees the encoded wire object, aliases included. It is not called when there is no query. A `URLSearchParams` returned by the builder skips it. Without a serializer, arrays repeat keys and a nested object fails. Interceptors observe `queryParams` as `new URLSearchParams(queryString)`.
+
+Body kind is decided from the value, first match:
+
+- no `body` → nothing is sent
+- a `urlencoded` or `formData` codec on the body root → that form encoding; the tag does not apply when the value is nested inside JSON
+- `FormData`, `URLSearchParams`, `Blob`, `File`, bytes, or a `ReadableStream` → sent as-is
+- a string → `text/plain;charset=UTF-8`
+- anything else → JSON
+
+`undefined` fields are omitted. `null` on a nullable field is sent. A string is not JSON unless you stringify it and set `content-type`. Serializing yourself (`JSON.stringify`, qs, protobuf) leaves the struct encoder, so aliases do not apply. There is no public `struct.encode`.
+
+`GET` and `HEAD` cannot carry a body. WebSocket builders cannot return headers or a body. Static WebSocket subprotocols stay on the definition (`protocols`), not in the builder. Invalid WebSocket frames go to the session runtime-error listener. An SSE `error` struct types the startup fault, and its handshake body follows the same kind rule as an HTTP body: `string` is text, blobs and files are blobs, `arrayBuffer` is bytes, and everything else is JSON.
 
 ## Observers and policy placement
 

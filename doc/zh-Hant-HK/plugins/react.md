@@ -35,7 +35,7 @@ import { useEffect, useState } from 'react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -102,7 +102,7 @@ Hook 淨係供應 client。佢唔會開始工作、subscribe transport，或者�
 
 ## Own query work
 
-Query library 可以 own caching、retries、stale-result suppression 同 cancellation。將佢提供嘅 signal 傳過去：
+Query library 可以 own caching、retries、stale-result suppression 同 cancellation。將佢提供嘅 signal 傳過去。List pages 用 TanStack Query（或者類似嘅）包住 `client.execute(...)`——`@defjs/react` 只做 DI，**唔會** ship `useRequest`。
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -112,7 +112,7 @@ import { useClient } from '@defjs/react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -146,9 +146,7 @@ import { useEffect } from 'react'
 const notifications = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/notifications',
-  incoming: {
-    message: struct.object({ text: struct.string() }),
-  },
+  incoming: struct.object({ text: struct.string() }),
 })
 
 export function Notifications() {

@@ -1,11 +1,11 @@
 ---
 title: POST JSON
-description: struct.json で JSON ボディを送り、宣言済み 201 をデコードします。
+description: 型付きの JSON ボディを送り、宣言済みの 201 をデコードします。
 ---
 
 # POST JSON
 
-ボディは `struct.json(...)` で包みます。論理フィールド名は TypeScript 側に置き、ワイヤの別名は Struct に載せます。
+型付きのボディをビルダーに渡します。論理フィールド名は TypeScript 側に残り、struct 上のワイヤエイリアスが JSON のキーになります。オブジェクトのボディは `application/json` です。
 
 詳細は [Commands](../core/commands.md) と [HTTP](../core/http.md) を見てください。
 
@@ -28,13 +28,11 @@ const ApiError = struct.object({
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    body: struct.object({
+      name: struct.string(),
+      email: struct.string(),
+    }),
   }),
   output: User,
   error: ApiError,

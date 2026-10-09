@@ -18,6 +18,26 @@ function fetchEventStream<T = EventStreamMessage>(request: HttpRequest, options:
   } as FetchEventStreamOptions<T>)
 }
 
+// One scripted connection: the chunks it sends, then either a lost connection or a clean end.
+function scriptedConnection(chunks: readonly string[], end: 'drop' | 'eof'): Response {
+  let index = 0
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[index++]
+        if (chunk !== undefined) {
+          controller.enqueue(new TextEncoder().encode(chunk))
+        } else if (end === 'eof') {
+          controller.close()
+        } else {
+          controller.error(new Error('connection lost'))
+        }
+      },
+    }),
+    { headers: { 'content-type': 'text/event-stream' } },
+  )
+}
+
 describe('fetchEventStream', () => {
   test('should read basic sse messages with open and closed info', async () => {
     const request: HttpRequest = {
@@ -93,6 +113,98 @@ describe('fetchEventStream', () => {
 
     expect(messages.map((event) => event.data)).toEqual(['first', 'second'])
     expect(stream.open.response.headers.get('x-request-id')).toBe('attempt-2')
+    await expect(stream.closed).resolves.toEqual({ kind: 'eof' })
+  })
+
+  test('should drop last-event-id on reconnect after an empty id field', async () => {
+    const request: HttpRequest = {
+      baseEndpoint: 'https://example.com',
+      endpoint: '/events',
+      method: 'GET',
+    }
+    const seen: (string | null)[] = []
+    const fetch = async (input: RequestInfo | URL) => {
+      seen.push(new Request(input).headers.get('last-event-id'))
+      if (seen.length === 1) {
+        let pulled = false
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (!pulled) {
+                pulled = true
+                controller.enqueue(new TextEncoder().encode('id: 1\ndata: first\n\nid:\ndata: second\n\n'))
+                return
+              }
+              controller.error(new Error('connection lost'))
+            },
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        )
+      }
+      return new Response('data: third\n\n', { headers: { 'content-type': 'text/event-stream' } })
+    }
+
+    const stream = await fetchEventStream(request, {
+      fetch: fetch as typeof globalThis.fetch,
+      onerror() {
+        return 0
+      },
+      reconnect: { attempts: 3, delayMs: 0 },
+    })
+    const messages: string[] = []
+    for await (const event of stream) {
+      messages.push(event.data)
+    }
+
+    expect(messages).toEqual(['first', 'second', 'third'])
+    expect(seen).toEqual([null, null])
+  })
+
+  test('should send the latest event id on every one of several reconnects', async () => {
+    const request: HttpRequest = {
+      baseEndpoint: 'https://example.com',
+      endpoint: '/events',
+      headers: new Headers({ 'Last-Event-ID': 'seed' }),
+      method: 'GET',
+    }
+    const connections: [chunks: string[], end: 'drop' | 'eof'][] = [
+      // The caller's id goes out until the stream sends one of its own.
+      [['data: one\n\n'], 'drop'],
+      [['id: a\ndata: two\n\n'], 'drop'],
+      // A connection without an id leaves the last one in place.
+      [['data: three\n\n'], 'drop'],
+      // An id that contains NUL is ignored.
+      [['id: b\0\ndata: four\n\n'], 'drop'],
+      // The last id of a connection is the one that counts.
+      [['id: c\ndata: five\n\nid: d\ndata: six\n\n'], 'drop'],
+      // An empty id clears the stored one, and the header stays off until a real id arrives.
+      [['id:\ndata: seven\n\n'], 'drop'],
+      [['data: eight\n\n'], 'drop'],
+      [['id: e\ndata: nine\n\n'], 'eof'],
+    ]
+    const seen: (string | null)[] = []
+    const fetch = async (input: RequestInfo | URL) => {
+      seen.push(new Request(input).headers.get('last-event-id'))
+      const [chunks, end] = connections[seen.length - 1] ?? [[], 'eof']
+      return scriptedConnection(chunks, end)
+    }
+
+    const stream = await fetchEventStream(request, {
+      fetch: fetch as typeof globalThis.fetch,
+      onerror() {
+        return 0
+      },
+      reconnect: { attempts: 10, delayMs: 0 },
+    })
+    const messages: string[] = []
+    for await (const event of stream) {
+      messages.push(event.data)
+    }
+
+    expect(messages).toEqual(['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'])
+    expect(seen).toEqual(['seed', 'seed', 'a', 'a', 'a', 'd', null, null])
+    // The request the caller handed in is not edited to carry the stream's ids.
+    expect(request.headers?.get('last-event-id')).toBe('seed')
     await expect(stream.closed).resolves.toEqual({ kind: 'eof' })
   })
 

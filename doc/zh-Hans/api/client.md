@@ -26,6 +26,8 @@ const client = createClient(withEndpoint('https://api.example.com'))
 
 ## 选项 helpers
 
+每个 helper 都返回 `ClientOption`。
+
 ### withEndpoint() {#withEndpoint}
 
 ```ts
@@ -42,13 +44,13 @@ function withInterceptors(...interceptors: Interceptor[]): ClientOption
 
 按注册顺序追加 interceptor。混着的 kind 在 execute 时按传输过滤。
 
-### withQueryParamsSerializer() {#withQueryParamsSerializer}
+### withQuerySerializer() {#withQuerySerializer}
 
 ```ts
-function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-换掉 query 编码。`serializer(params, rawParams?)` 得返回 query string，不要带前导 `?`。
+换掉 HTTP、SSE、WebSocket 的 query 编码。`serializer(query)` 收到的是**已经编码的线上对象**（alias 已应用，`Date` 为 ISO，`bigint` 为 string），必须返回 query string，不要带前导 `?`。请求没有 query 时不会调用。builder 返回 `URLSearchParams` 时会跳过它。
 
 ### withHTTPHandle() {#withHTTPHandle}
 
@@ -132,23 +134,23 @@ type Client = {
 type ClientOption = (config: ClientConfig) => void
 ```
 
-### QueryParamsSerializer {#QueryParamsSerializer}
+### QuerySerializer {#QuerySerializer}
 
 ```ts
-type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
+type QuerySerializer = (query: { [key: string]: unknown }) => string
 ```
 
 ### ClientSSEOptions {#ClientSSEOptions}
 
 ### ClientWebSocketOptions {#ClientWebSocketOptions}
 
-SSE：`handle`、`onInvalidEvent`、`reconnect`（`attempts`、`delayMs`、`factor`、`jitter`、`maxDelayMs`、`shouldReconnect`）。
+SSE：`handle`、`onInvalidEvent`、`reconnect`（`attempts`、`delayMs`、`factor`、`jitter`、`maxDelayMs`、`shouldReconnect`）。SSE `jitter` 是 0–1 的乘性因子，和 WebSocket 一样。设了 SSE `reconnect` 时，`attempts` 默认 **3**；`attempts: 0` 禁用。不写 `withSSEReconnect` 同样禁用重试。
 
-WebSocket：`handle`、`beforeConnect`、`heartbeat`（`intervalMs`、`message`、`isAck`、`timeoutMs`）、`protocols`、`reconnect`（形状和 SSE 一样，再加 close 的 `code` / `reason` / `wasClean`）。
+WebSocket：`handle`、`beforeConnect`、`heartbeat`（`intervalMs`、`message`、`isAck`、`timeoutMs`）、`protocols`、`reconnect`（形状和 SSE 一样，再加 close 的 `code` / `reason` / `wasClean`）。设了 WebSocket `reconnect` 时，`attempts` 默认 **3**；`0` 禁用。省略 `attempts` 不是无限次。WebSocket `jitter` 是 0–1 的乘性因子。
 
 `ClientConfig` 是解析完的快照（`endpoint`、`http`、`sse`、`webSocket`、`interceptors`、…）。`ClientOptions` 是输入形状那一侧。
 
-见 [Client 指南](../core/client.md)。
+见 [Client 指南](/core/client)。
 
 ## ClientOptions {#ClientOptions}
 

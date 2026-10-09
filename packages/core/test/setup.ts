@@ -8,6 +8,8 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { streamSSE } from 'hono/streaming'
 import type { TestProject } from 'vitest/node'
+import { registerBodyRoutes } from './body-routes'
+import { registerE2eProbe, registerE2eRoutes } from './e2e-routes'
 import { registerXsrfRoutes } from './xsrf-middleware'
 
 declare module 'vitest' {
@@ -31,6 +33,7 @@ type ServerConnectionCleanup = {
 
 export async function setup({ provide }: TestProject) {
   const app = new Hono()
+  registerE2eProbe(app)
   registerXsrfRoutes(app)
   const reconnectAttempts = new Map<string, number>()
 
@@ -128,6 +131,9 @@ export async function setup({ provide }: TestProject) {
     await delay(Number(c.req.query('ms') ?? '0'), c.req.raw.signal)
     return c.body(null, 200)
   })
+
+  // After the cors middleware above, so browsers may read these cross-origin.
+  registerBodyRoutes(app)
 
   const basicSSEHandler = (c: Context) => {
     c.header('x-request-id', 'trace-sse-basic')
@@ -293,6 +299,7 @@ export async function setup({ provide }: TestProject) {
     baseUrl: 'http://127.0.0.1',
   })
   nodeWebSocket = { injectWebSocket, upgradeWebSocket, wss }
+  registerE2eRoutes(app, upgradeWebSocket)
 
   app.get(
     '/ws/basic',
@@ -477,12 +484,17 @@ export async function setup({ provide }: TestProject) {
     '/ws/error-before-close',
     upgradeWebSocket(() => ({
       onOpen(_event, ws) {
+        // 10ms failed once under the full coverage suite: Firefox settled this socket as
+        // "WebSocket closed before open" (2026-09-29). Listeners are attached in the same
+        // turn as `new WebSocket`. Isolated runs, including a 0ms close, were open → message
+        // → close on Chromium and Firefox (15/15) and did not show a library reorder.
+        // 200ms waits out that load race.
         setTimeout(() => {
           if (ws.readyState === 1) {
             ws.send(createSocketMessage('message', { text: 123 }))
             ws.close(1000, 'done')
           }
-        }, 10)
+        }, 200)
       },
     })),
   )
@@ -506,11 +518,12 @@ export async function setup({ provide }: TestProject) {
     upgradeWebSocket(() => ({
       onOpen(_event, ws) {
         ws.send(new TextEncoder().encode(JSON.stringify({ type: 'message', text: 'hello-binary' })))
+        // Same pad as /ws/error-before-close: a 10ms close is not stable under the full coverage suite.
         setTimeout(() => {
           if (ws.readyState === 1) {
             ws.close(1000, 'done')
           }
-        }, 10)
+        }, 200)
       },
     })),
   )

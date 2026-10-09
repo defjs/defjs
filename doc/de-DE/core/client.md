@@ -15,6 +15,8 @@ import { createClient, withEndpoint } from '@defjs/core'
 const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
+`createClient(...)` gibt Overloads für jede Command-Art zurück.
+
 ## Options komponieren
 
 Options gelten von links nach rechts. Setter ersetzen; `withInterceptors(...items)` hängt an.
@@ -53,13 +55,14 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
@@ -69,18 +72,20 @@ Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options o
 
 ## Reference
 
-| Helper                                                                                                        | Effect                                                |
-| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | Absolute Base-Endpoint für alle Transports            |
-| `withHTTPHandle(fetch)`                                                                                       | Fetch für HTTP ersetzen                               |
-| `withSSEHandle(fetch)`                                                                                        | Fetch für SSE ersetzen                                |
-| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket-Constructor ersetzen                        |
-| `withInterceptors(...items)`                                                                                  | Gemischte Interceptors anhängen                       |
-| `withQueryParamsSerializer(fn)`                                                                               | Query-Serialisierung ersetzen                         |
-| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` für HTTP/SSE wenn true |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF Cookie → Header                             |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE-Knobs                                             |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket-Knobs                                       |
+| Helper                                                                                                        | Effect                                                                 |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Absoluter Base-Endpoint für alle Transports                            |
+| `withHeaders(HeadersInit)`                                                                                    | Statische Default-Headers für HTTP/SSE; Command-Headers überschreiben  |
+| `withTimeout(ms)`                                                                                             | Nur Default-HTTP-`execute`-Timeout (SSE/WS ignorieren ihn)             |
+| `withHTTPHandle(fetch)`                                                                                       | Fetch für HTTP ersetzen                                                |
+| `withSSEHandle(fetch)`                                                                                        | Fetch für SSE ersetzen                                                 |
+| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket-Constructor ersetzen                                         |
+| `withInterceptors(...items)`                                                                                  | Gemischte Interceptors anhängen                                        |
+| `withQuerySerializer(fn)`                                                                                     | Ein schon alias-encodiertes Query-Object in einen Query-String encoden |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` für HTTP/SSE wenn true                  |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF Cookie → Header                                              |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE-Knobs                                                              |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket-Knobs                                                        |
 
 ## Verwandte Rezepte
 

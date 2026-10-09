@@ -45,22 +45,12 @@ describe('struct coverage boundary cases', () => {
   test('constructor guards reject invalid enum and object definitions', () => {
     expect(() => struct.enum({} as { [key: string]: never })).toThrow('enum struct requires at least one string or number value')
     expect(() => struct.object(null as never)).toThrow('object struct requires a plain object')
-    expect(() => struct.request(null as never)).toThrow('request struct requires a plain object')
-    expect(() => struct.request({ path: struct.string() as never })).toThrow('request.path must be an object struct')
-    expect(() => struct.request({ query: struct.string() as never })).toThrow('request.query must be an object struct')
-    expect(() => struct.request({ headers: struct.string() as never })).toThrow('request.headers must be an object struct')
-    expect(() =>
-      struct.request({
-        body: struct.object({
-          id: struct.string(),
-        }) as never,
-      }),
-    ).toThrow('body must use a body wrapper struct')
-    expect(definition(struct.request({ body: struct.blob() })).kind).toBe('request')
-    expect(definition(struct.request({ body: struct.arrayBuffer() })).kind).toBe('request')
-    expect(definition(struct.text()).kind).toBe('requestBody')
-    expect(definition(struct.urlencoded({ name: struct.string() })).kind).toBe('requestBody')
-    expect(definition(struct.formData({ name: struct.string() })).kind).toBe('requestBody')
+    const urlencoded = definition(struct.urlencoded({ name: struct.string() }))
+    const formData = definition(struct.formData({ name: struct.string() }))
+    expect(urlencoded.kind).toBe('object')
+    expect(formData.kind).toBe('object')
+    expect(urlencoded.kind === 'object' ? urlencoded.codec : undefined).toBe('urlencoded')
+    expect(formData.kind === 'object' ? formData.codec : undefined).toBe('formData')
   })
 
   test('internal parse tuple returns native struct validation errors', () => {
@@ -92,8 +82,8 @@ describe('struct coverage boundary cases', () => {
       true,
     )
 
-    const request = struct.request({
-      body: struct.json(struct.object({ name: struct.string() })),
+    const request = struct.object({
+      body: struct.object({ name: struct.string() }),
       headers: struct.object({ token: struct.string() }),
       path: struct.object({ id: struct.number() }),
       query: struct.object({ include: struct.boolean() }),
@@ -108,10 +98,19 @@ describe('struct coverage boundary cases', () => {
     expect(encodeValue(runtime(request), requestValue)).toEqual(requestValue)
     expect(encodeValue(runtime(request), { path: { id: 1 } })).toEqual({ path: { id: 1 } })
     expect(encodeValue(runtime(request), {})).toEqual({})
-    expect(encodeValue(runtime(struct.request({})), {})).toEqual({})
-    expect(encodeValue(runtime(struct.json(struct.string())), 'hello')).toBe('hello')
+    expect(encodeValue(runtime(struct.object({})), {})).toEqual({})
     expect(matchesDefinition(definition(request), requestValue, runtime(request))).toBe(true)
-    expect(matchesDefinition(definition(struct.json(struct.string())), 'hello', runtime(struct.json(struct.string())))).toBe(true)
+  })
+
+  test('null falls through to literal, union, and intersection matching', () => {
+    const literalNull = struct.literal(null)
+    expect(matchesRuntimeValue(runtime(literalNull), null)).toBe(true)
+
+    const union = struct.or(struct.string(), struct.number())
+    expect(matchesRuntimeValue(runtime(union), null)).toBe(false)
+
+    const both = struct.intersection(struct.literal(null), struct.null())
+    expect(matchesRuntimeValue(runtime(both), null)).toBe(true)
   })
 
   test('error formatting reuses existing tree nodes and root prettify paths', () => {
@@ -252,9 +251,9 @@ describe('struct coverage boundary cases', () => {
     })
   })
 
-  test('request parsing covers section and body branches', () => {
-    const request = struct.request({
-      body: struct.json(struct.object({ name: struct.string() })),
+  test('object parsing covers nested fields', () => {
+    const request = struct.object({
+      body: struct.object({ name: struct.string() }),
       headers: struct.object({ token: struct.string().optional() }),
       path: struct.object({ id: struct.number() }),
       query: struct.object({ include: struct.boolean().optional() }),
@@ -299,12 +298,12 @@ describe('struct coverage boundary cases', () => {
         'value',
       ).ok,
     ).toBe(false)
-    const optionalSectionRequest = struct.request({
-      query: struct.object({ include: struct.boolean() }).optional() as never,
+    const optionalSection = struct.object({
+      query: struct.object({ include: struct.boolean() }).optional(),
     })
-    expect(parseValue(runtime(optionalSectionRequest), {}, [], 'value').ok).toBe(false)
-    expect(parseValue(runtime(struct.request({})), {}, [], 'value')).toEqual({ ok: true, value: {} })
-    expect(parseValue(runtime(struct.json(struct.string())), 'hello', [], 'value')).toEqual({ ok: true, value: 'hello' })
+    expect(parseValue(runtime(optionalSection), {}, [], 'value')).toEqual({ ok: true, value: {} })
+    expect(parseValue(runtime(struct.object({})), {}, [], 'value')).toEqual({ ok: true, value: {} })
+    expect(parseValue(runtime(struct.string()), 'hello', [], 'value')).toEqual({ ok: true, value: 'hello' })
   })
 
   test('expectedType covers every runtime definition kind', () => {
@@ -328,8 +327,6 @@ describe('struct coverage boundary cases', () => {
       [struct.or(struct.string(), struct.number()), 'string | number'],
       [struct.discriminatedUnion('type', [message]), '"message"'],
       [struct.record(struct.string()), 'record<string>'],
-      [struct.request({ path: struct.object({ id: struct.string() }) }), 'request'],
-      [struct.json(struct.object({ id: struct.string() })), 'json body'],
       [struct.tuple([struct.string()]), 'tuple'],
       [struct.unknown(), 'unknown'],
     ] as const
@@ -449,7 +446,7 @@ describe('struct coverage boundary cases', () => {
       kind: 'date',
     })
     expect(matchesRuntimeValue(dateWithoutRuntimeGuard, new Date(0))).toBe(true)
-    expect(matchesRuntimeValue(runtime(struct.request({ query: struct.object({}) })), 'not-a-request')).toBe(false)
+    expect(matchesRuntimeValue(runtime(struct.object({ query: struct.object({}) })), 'not-a-request')).toBe(false)
 
     const missingDiscriminator = struct.discriminatedUnion('type', [struct.object({ type: struct.literal('text') })])
     expect(matchesRuntimeValue(runtime(missingDiscriminator), {})).toBe(false)

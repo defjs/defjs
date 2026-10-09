@@ -1,12 +1,19 @@
 import { matchesRuntimeValue, selectUnionOptions } from './match'
-import { mapAliasedObjectFields } from './fields'
+import { mapAliasedObjectFields, resolveStructFields } from './fields'
 
 export { matchesDefinition } from './match'
 import { resolveObjectShape } from './shape'
 import { DEFINITION } from './symbols'
-import { REQUEST_SECTION_KEYS } from './types'
 import type { ObjectDefinition, RuntimeStruct } from './types'
-import { hasOwnKey, isPlainObject } from './utils'
+import {
+  hasOwnKey,
+  intersectionEncodeError,
+  isIntersectionIdentity,
+  isPlainObject,
+  mergeIntersectionValues,
+  nullObject,
+  sameWireValue,
+} from './utils'
 
 export interface EncodeOptions {
   encodeObject?: (
@@ -30,27 +37,6 @@ function sameEncodedShape(
   )
 }
 
-function sameWireValue(left: unknown, right: unknown): boolean {
-  if (Object.is(left, right)) {
-    return true
-  }
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return (
-      Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === right.length &&
-      left.every((item, index) => sameWireValue(item, right[index]))
-    )
-  }
-  if (!isPlainObject(left) || !isPlainObject(right)) {
-    return false
-  }
-
-  const leftKeys = Object.keys(left)
-  const rightKeys = Object.keys(right)
-  return leftKeys.length === rightKeys.length && leftKeys.every((key) => hasOwnKey(right, key) && sameWireValue(left[key], right[key]))
-}
-
 function getComparableEncodedValue(struct: RuntimeStruct, value: unknown, options: EncodeOptions): unknown {
   const definition = struct[DEFINITION]
   if (options.encodeObject && definition.alias && (definition.kind === 'array' || definition.kind === 'object')) {
@@ -59,16 +45,54 @@ function getComparableEncodedValue(struct: RuntimeStruct, value: unknown, option
   return value
 }
 
+function writeMergedWire(output: { [key: string]: unknown }, key: string, encoded: unknown): void {
+  if (!hasOwnKey(output, key)) {
+    output[key] = encoded
+    return
+  }
+  const merged = mergeIntersectionValues(output[key], encoded)
+  if (!merged.ok) {
+    throw intersectionEncodeError([key, ...merged.path])
+  }
+  output[key] = merged.value
+}
+
+function writeObjectFieldsMerged(
+  struct: RuntimeStruct,
+  value: { [key: string]: unknown },
+  options: EncodeOptions,
+  output: { [key: string]: unknown },
+): void {
+  const definition = struct[DEFINITION] as ObjectDefinition
+  if (options.encodeObject === mapAliasedObjectFields) {
+    for (const field of resolveStructFields(struct, definition)) {
+      if (!hasOwnKey(value, field.key)) {
+        continue
+      }
+      const fieldValue = value[field.key]
+      if (typeof fieldValue === 'undefined') {
+        continue
+      }
+      writeMergedWire(output, field.wireKey, encodeValue(field.struct, fieldValue, options))
+    }
+    return
+  }
+
+  const shape = resolveObjectShape(struct, definition)
+  for (const key in shape) {
+    if (hasOwnKey(value, key)) {
+      writeMergedWire(output, key, encodeValue(shape[key] as RuntimeStruct, value[key], options))
+    }
+  }
+}
+
 function encodeObjectFields(
   struct: RuntimeStruct,
   definition: ObjectDefinition,
   value: { [key: string]: unknown },
   options: EncodeOptions,
-  output: { [key: string]: unknown } = Object.create(null),
+  output: { [key: string]: unknown } = nullObject(),
 ): { [key: string]: unknown } {
-  if (options.encodeObject === mapAliasedObjectFields) {
-    return mapAliasedObjectFields(struct, value, (fieldStruct, fieldValue) => encodeValue(fieldStruct, fieldValue, options), output)
-  }
   const shape = resolveObjectShape(struct, definition)
   for (const key in shape) {
     if (hasOwnKey(value, key)) {
@@ -136,23 +160,6 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
       return encodeObjectFields(struct, definition, value, options)
     }
 
-    case 'request': {
-      if (!isPlainObject(value)) {
-        return value
-      }
-      const output: { [key: string]: unknown } = Object.create(null)
-      for (const key of REQUEST_SECTION_KEYS) {
-        const sectionStruct = definition[key] as RuntimeStruct | undefined
-        if (sectionStruct && hasOwnKey(value, key)) {
-          output[key] = encodeValue(sectionStruct, value[key], options)
-        }
-      }
-      return output
-    }
-
-    case 'requestBody':
-      return encodeValue(definition.struct as unknown as RuntimeStruct, value, options)
-
     case 'or': {
       if (!options.encodeObject && !options.selectUnionOptions && definition.uniformIdentityEncode) {
         for (const option of definition.options) {
@@ -193,31 +200,41 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
     }
 
     case 'intersection': {
-      if (!definition.objectSides) {
-        return encodeValue(definition.options[definition.options.length - 1] as RuntimeStruct, value, options)
+      const parts: RuntimeStruct[] = []
+      for (const option of definition.options) {
+        const runtime = option as RuntimeStruct
+        if (!isIntersectionIdentity(runtime)) {
+          parts.push(runtime)
+        }
+      }
+      if (parts.length === 0) {
+        return value
+      }
+      if (parts.length === 1) {
+        const only = parts[0] as RuntimeStruct
+        return encodeValue(only, value, options)
       }
 
-      if ((!options.encodeObject || options.encodeObject === mapAliasedObjectFields) && isPlainObject(value)) {
-        const output: { [key: string]: unknown } = Object.create(null)
-        for (const option of definition.options) {
-          const runtime = option as RuntimeStruct
-          encodeObjectFields(runtime, runtime[DEFINITION] as ObjectDefinition, value, options, output)
+      // Each member encodes on its own. One logical key can leave under every wire key it declares.
+      // Disjoint keys stay one assignment. A key that is already present is merged, not overwritten.
+      if (definition.objectSides && (!options.encodeObject || options.encodeObject === mapAliasedObjectFields) && isPlainObject(value)) {
+        const output = nullObject()
+        for (const runtime of parts) {
+          writeObjectFieldsMerged(runtime, value, options, output)
         }
         return output
       }
 
-      const merged: { [key: string]: unknown } = Object.create(null)
-      let merge = true
-      let last: unknown
-      for (const option of definition.options) {
-        last = encodeValue(option as RuntimeStruct, value, options)
-        if (merge && isPlainObject(last)) {
-          Object.assign(merged, last)
-        } else {
-          merge = false
+      let merged: unknown = encodeValue(parts[0] as RuntimeStruct, value, options)
+      for (let index = 1; index < parts.length; index += 1) {
+        const encoded = encodeValue(parts[index] as RuntimeStruct, value, options)
+        const result = mergeIntersectionValues(merged, encoded)
+        if (!result.ok) {
+          throw intersectionEncodeError(result.path)
         }
+        merged = result.value
       }
-      return merge ? merged : last
+      return merged
     }
   }
 }

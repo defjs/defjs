@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: Install provider、讀 client。
+description: ClientProvider、useClient，同 provider props。
 ---
 
 # React {#page}
 
-將現有 `@defjs/core` client wire 入 React tree。Package **唔會** create client、加 cache，或者 dispose transport resources。
+將現有 `@defjs/core` client 提供俾 React tree。呢個 package 唔會 create、cache 或者 dispose client。
 
-見 [React 指南](../plugins/react.md)。
+見 [React guide](/plugins/react)。
 
 ## ClientProvider {#ClientProvider}
 
@@ -15,7 +15,7 @@ description: Install provider、讀 client。
 function ClientProvider(props: ClientProviderProps): ReactElement
 ```
 
-Context provider。將 `createClient` 俾嘅 client 傳入去。
+Context provider。傳入 `createClient` 俾嘅 client。
 
 ```tsx
 import { createClient, withEndpoint } from '@defjs/core'
@@ -37,8 +37,8 @@ function useClient(): Client
 
 讀最近嘅 `ClientProvider`。
 
-- **回傳** 提供嘅 client。
-- **拋出** 喺 `ClientProvider` 外面 call 嗰陣。
+- **Returns** 提供嘅 client。
+- **Throws** 喺 `ClientProvider` 外面 call 嗰陣。
 
 ## ClientProviderProps {#ClientProviderProps}
 

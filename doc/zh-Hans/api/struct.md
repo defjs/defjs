@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### 原语和容器
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | 联合                                                                    |
 | `struct.enum(values)`                                                       | 字符串列表或 `{ Name: value }` map                                      |
 
-### 请求 / body helpers
+### Body codec 和二进制值
 
-| Helper                                                                         | 作用                      |
-| ------------------------------------------------------------------------------ | ------------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                           | HTTP/SSE/WS 的 input 分段 |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | 编码过的 body             |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | 二进制                    |
+| Helper                                         | 作用                                                                       |
+| ---------------------------------------------- | -------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | 对象 struct 再加一个 codec tag。这个 tag 只在该值是请求 body 根时生效      |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | 二进制值。作为 body 根时按字节发送；作为 `output` / `error` 时选出那种表示 |
+| `struct.string()`                              | 文本。作为 body 根，或作为入站 `string` struct 时，字节保持文本            |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **返回** `[null, value]` 或 `[StructError, undefined]`。
+- 可选 `errorMap` 只改这一次 parse 的 issue 文案。
+- 默认读**逻辑** key（`displayName`）。传 `{ aliases: true }` 则读线上 key（`display_name`），和 HTTP/JSON codec 一样。
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`：`path`、`code`、`expected`、`received`、`message`。
+`StructIssue`：`path`、`code`、`expected`、`received`、`message`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。
 
-见 [Struct 指南](../core/struct.md)。
+见 [Struct 指南](/core/struct)。
 
 ## Struct {#Struct}
 
-能 parse 的形状：input/output 类型，加上 `.optional()`、`.null()`、`.nullish()`、`.alias()`。
+能 parse 的形状：input/output 类型，加上 `.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias()`。
 
 ## StructLike {#StructLike}
 
@@ -97,23 +99,19 @@ class StructError extends Error {
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()`。
 
 ## ObjectStruct {#ObjectStruct}
 
 `struct.object` 造出来的对象形状。
 
-## RequestStruct {#RequestStruct}
-
-`struct.request` 分段的 HTTP/SSE/WS input。
-
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`、`code`、`expected`、`received`、`message`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。
 
 ## FormattedStructError {#FormattedStructError}
 
-`StructError.format()` 吐的嵌套 `{ _errors, [key]: … }`。
+`StructError.format()` 吐的嵌套 `{ _errors, [key]: … }` 树。
 
 ## FlattenedStructError {#FlattenedStructError}
 

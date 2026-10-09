@@ -19,7 +19,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -45,4 +45,4 @@ if (error) {
 hello from the server
 ```
 
-По умолчанию SSE не повторяет запросы при сбоях сети или чтения. Включите повторы явно через `withSSEReconnect(...)`. При наличии настройки reconnect значение `attempts` по умолчанию равно `3`; `attempts: 0` отключает повторы.
+SSE не ретраит сбои сети и чтения, пока не включишь `withSSEReconnect(...)`. Если объект reconnect задан, `attempts` по умолчанию `3`; `attempts: 0` отключает ретрай.

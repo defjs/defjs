@@ -5,16 +5,16 @@ description: defineWebSocket, session, et options d’execute.
 
 # WebSocket
 
-Déclare un socket, exécute-le, envoie/reçois des messages typés, puis ferme.
+Déclare un socket, exécute-le, envoie et reçois des messages typés, puis ferme.
 
 ## defineWebSocket() {#defineWebSocket}
 
 ```ts
-function defineWebSocket(definition: WebSocketDefinition): WebSocketCommandBuilder
+function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`, structs `incoming`, `outgoing` optionnel, `input`, `build`, limites de queue.
-- **Renvoie** un builder. Appelle-le avec l’input pour obtenir un `WebSocketCommand`.
+- **definition** — `path`, un struct `incoming`, struct `outgoing` optionnel, `input` optionnel, `builder`, `protocols` statiques, limites de queue.
+- **Renvoie** un endpoint. Appelle avec l’entrée pour obtenir un `WebSocketCommand`.
 
 ```ts twoslash
 import { defineWebSocket, struct } from '@defjs/core'
@@ -22,8 +22,9 @@ import { defineWebSocket, struct } from '@defjs/core'
 const chat = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { message: struct.object({ text: struct.string() }) },
+  protocols: ['chat.v1'],
+  incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+  outgoing: struct.object({ text: struct.string(), type: struct.literal('message') }),
 })
 ```
 
@@ -37,7 +38,7 @@ function executeWebSocketCommand(
 ): Promise<SocketAwaitResult>
 ```
 
-Entrée bas niveau pour `client.execute`. Préfère le client dans le code d’application.
+Point d’entrée bas niveau pour `client.execute`. Préfère le client dans le code applicatif.
 
 - **Renvoie** `[null, session, connection]` ou `[error, undefined, connection?]`.
 
@@ -60,7 +61,16 @@ interface WebSocketSession<TIncoming, TOutgoing> extends AsyncDisposable {
 }
 ```
 
-Tu possèdes le cleanup ; utilise `await using`. `close()` et `closed` restent disponibles. `closed` est l’état terminal logique du lifecycle. Le disposer attend au plus une seconde le teardown Defjs ; sans événement close, il peut rejeter avec une `DOMException` nommée `TimeoutError`. Cela ne prouve pas une fermeture TCP physique.
+Préfère `await using ownedSession = session` pour le nettoyage d’une portée possédée. `session.close()` manuel et `await session.closed` restent disponibles.
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+`closed` rapporte l’état terminal logique. Le disposer async demande la fermeture native et attend le teardown possédé par Defjs, mais borne un événement de close manquant à une seconde et peut reject avec un `DOMException` nommé `TimeoutError`. Il ne peut pas prouver que la connexion TCP physique s’est fermée.
 
 ### WebSocketState {#WebSocketState}
 
@@ -68,11 +78,18 @@ Tu possèdes le cleanup ; utilise `await using`. `close()` et `closed` restent d
 
 ### WebSocketConnectionInfo {#WebSocketConnectionInfo}
 
-`url`, `protocol`, `extensions`, `generation` (s’incrémente au reconnect).
+`url`, `protocol`, `extensions`, `generation` (incrémente au reconnect).
 
 ### WebSocketCloseInfo {#WebSocketCloseInfo}
 
-Instantané de close après la fin du socket (code, reason, flag clean, cause optionnelle). Un close manuel peut porter `ManualSocketCloseReason`.
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
+Instantané de fermeture après la fin du socket (code, reason, flag clean, cause optionnelle). Une fermeture manuelle peut porter `ManualSocketCloseReason`.
 
 ## Options d’execute
 
@@ -92,29 +109,35 @@ type WebSocketExecuteOptions = {
 
 `WebSocketHeartbeatConfig` : `intervalMs`, `message` optionnel, `isAck`, `timeoutMs`.
 
-## Maps de messages
+Quand `reconnect` est posé, `attempts` vaut 3 par défaut ; `0` désactive. Omettre `attempts` n’est pas illimité.
 
-## SocketStructs {#SocketStructs}
+## Messages
+
+`incoming` est un seul struct. Les frames texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UTF-8, parsées en JSON, puis vérifiées contre ce struct. Une frame qui échoue au parse JSON ou au struct est rapportée à `session.onRuntimeError` et n’est pas mise en queue. Il n’y a pas d’option client pour les frames invalides.
+
+`outgoing` est un seul struct. `session.send` accepte le `StructInput` de ce struct, encode les alias, puis `JSON.stringify`. Plusieurs kinds de messages sont un `struct.discriminatedUnion`.
 
 ```ts
-type SocketStructs = { [typeName: string]: AnyStruct }
+session.send({ type: 'message', text: 'Hello' })
 ```
 
-Les payloads incoming/outgoing sont taggés avec `type` (et des champs flatten ou un wrapper `data` selon la forme du struct).
-
-Voir [le guide WebSocket](../core/web-socket.md) et [Ouvrir une session WebSocket](../recipes/websocket-session.md).
+Voir le [guide WebSocket](/core/web-socket) et [Ouvrir une session WebSocket](/recipes/websocket-session).
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`, `incoming`, `outgoing` / `input` / `build` optionnels, plus les plafonds de queue.
+`path`, `incoming`, `outgoing` / `input` / `builder` / `protocols` optionnels, limites de queue. Le builder ne peut renvoyer que `path` et `query`.
 
-## WebSocketCommandBuilder {#WebSocketCommandBuilder}
+## WebSocketEndpoint {#WebSocketEndpoint}
 
-Renvoyé par `defineWebSocket`. Appelle avec l’input, tu obtiens un `WebSocketCommand`.
+Renvoyé par `defineWebSocket`. Appelle avec l’entrée pour obtenir un `WebSocketCommand`.
+
+## WebSocketRequestShape {#WebSocketRequestShape}
+
+`path` et `query` seulement. `headers` et `body` sont `never`.
 
 ## WebSocketCommand {#WebSocketCommand}
 
-Command WebSocket opaque. Passe-la à `client.execute`.
+Commande WebSocket opaque. Passe-la à `client.execute`.
 
 ## UseWebSocketConfig {#UseWebSocketConfig}
 
@@ -122,24 +145,24 @@ Heartbeat, reconnect, `beforeConnect`, protocols, plus l’annulation. `WebSocke
 
 ## SocketAwaitResult {#SocketAwaitResult}
 
-`[null, session, connection]` or `[error, undefined, connection?]`.
+`[null, session, connection]` ou `[error, undefined, connection?]`.
 
 ## ManualSocketCloseReason {#ManualSocketCloseReason}
 
-Raison enregistrée quand tu fermes avec `session.close()`.
+Raison enregistrée quand la session est fermée via `session.close()`.
 
 ## WebSocketHeartbeatConfig {#WebSocketHeartbeatConfig}
 
-`intervalMs`, optional `message`, `isAck`, `timeoutMs`.
+`intervalMs`, `message` optionnel, `isAck`, `timeoutMs`.
 
 ## WebSocketIncomingData {#WebSocketIncomingData}
 
-Forme des messages entrants, inférée d’une map `SocketStructs` incoming.
+Frame entrante décodée : `Infer` du struct `incoming`.
 
 ## WebSocketOutgoingData {#WebSocketOutgoingData}
 
-Forme des messages sortants, inférée d’une map `SocketStructs` outgoing.
+Valeur acceptée par `session.send` : `StructInput` du struct `outgoing`, ou `never` quand aucun n’est déclaré.
 
 ## SocketLifecycleOutcome {#SocketLifecycleOutcome}
 
-Snapshot de fin de vie, une fois le socket terminé.
+Instantané de cycle de vie terminal après la fin du socket.

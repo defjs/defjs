@@ -14,5 +14,5 @@ export async function parseEndpointInput<TInput extends AnyStruct | undefined>(
     return input as ParsedInput<TInput>
   }
 
-  return parseStructValue(struct, input) as ParsedInput<TInput>
+  return parseStructValue(struct, input, { tagObjects: true }) as ParsedInput<TInput>
 }

@@ -1,11 +1,11 @@
 ---
 title: Команды
-description: Опиши эндпоинты, собери непрозрачные команды, смапь input и выведи результаты транспорта.
+description: Опиши эндпоинты, собери непрозрачные команды, разложи input и выведи результаты транспорта.
 ---
 
 # Команды
 
-Одно определение → builder → непрозрачная команда → `client.execute`. Один pipeline для HTTP, SSE и WebSocket.
+Одно определение → эндпоинт → непрозрачная команда → `client.execute`. Один pipeline для HTTP, SSE и WebSocket.
 
 ## Базовая настройка
 
@@ -20,54 +20,72 @@ if (!error) console.log(data, response.status)
 
 ## Выбери определение
 
-| Определение              | Контракт                                                                   | Успешное значение                      |
-| ------------------------ | -------------------------------------------------------------------------- | -------------------------------------- |
-| `defineRequest(...)`     | Method, относительный path, опциональный input, опциональный status output | Декодированные данные + `HttpResponse` |
-| `defineEventStream(...)` | Path, лимиты buffer/queue, map имя события → Struct                        | `EventStreamHandle` + снимок open      |
-| `defineWebSocket(...)`   | Path, incoming map, опциональный outgoing map, лимит очереди               | `WebSocketSession` + снимок connection |
+| Определение              | Контракт                                                                        | Успешное значение                      |
+| ------------------------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| `defineRequest(...)`     | Method, относительный path, опциональный input, опциональные `output` / `error` | Декодированные данные + response       |
+| `defineEventStream(...)` | Path, лимиты buffer/queue, карта имя события → Struct                           | `EventStreamHandle` + снимок open      |
+| `defineWebSocket(...)`   | Path, один incoming struct, опциональный outgoing struct, лимит очереди         | `WebSocketSession` + снимок connection |
 
-Нет `input` → builder без аргумента. С `input` → передай Struct-значение, даже если все вложенные поля optional. Опциональные секции `path` / `query` / `headers` можно опустить; секцию с required полем — нельзя. Если wrapper тела есть, тело обязательно.
+Нет `input` → эндпоинт не принимает аргумент, а `builder` может быть `() => request`. С `input` → передай значение struct. Опциональное поле можно опустить; обязательное — нельзя.
 
 Держи команды непрозрачными. Не копайся в tags или symbols.
 
-## Автоматический mapping запроса
+## Куда ложатся значения
 
-Бери `struct.request(...)`, когда логический input уже имеет path / query / headers / body:
+Struct решает, как значение кодируется. `builder` решает, куда оно ложится. `builder` — синхронная чистая функция от **распарсенного** input. Она бежит в момент execute. Throw становится `REQ_BUILD_FAILED` в кортеже — сам вызов эндпоинта не бросает.
+
+Опусти `builder`, когда input struct уже `{ path?, query?, headers?, body? }`. Это identity `(input) => input`. Если распарсенный input не присваивается этой форме, TypeScript требует `builder`.
+
+Проводи типизированное значение насквозь. Алиас, `Date` → ISO и `bigint` → string применяются везде, где используется этот struct: раскладка запроса, декодирование ответа, события SSE и кадры WebSocket.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
+const User = struct.object({
+  displayName: struct.string().alias('display_name'),
+  email: struct.string(),
+})
+
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(struct.object({ name: struct.string() })),
-  }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  input: struct.object({ user: User }),
+  builder: (input) => ({ body: input.user }),
+  output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })
 void createUser
 ```
 
-Алиасы переписывают только outbound wire-ключи. Распарсенные значения и input команд держат логические имена.
+Тело — JSON `{"display_name":"…","email":"…"}`. Ключ, написанный руками, — запасной выход: `body: { name: input.user.displayName }` шлёт `name`, потому что родительский объект анонимный и алиас не применяется.
 
-## Кастомный `build`
+## Когда формы расходятся
 
-Тянись к `build(request, input)`, когда форма вызывающего и wire-форма расходятся. Это ограниченная проекция — не место ветвиться по auth-политике или изобретать side effects.
+`builder` — для placeholder’ов path, литералов и веток. Он получает настоящее значение, так что работают `if`, `??`, шаблоны и `switch`.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
 const search = defineRequest({
   method: 'GET',
-  path: '/search',
-  input: struct.object({ q: struct.string(), page: struct.number().optional() }),
-  build(request, input) {
-    request.setQueryParams({ q: input.q, page: input.page })
-  },
+  path: '/orgs/:org_id/users',
+  input: struct.object({
+    orgId: struct.number(),
+    query: struct.object({
+      keyword: struct.string(),
+      pageSize: struct.number().alias('page_size'),
+    }),
+  }),
+  builder: (input) => ({
+    path: { org_id: input.orgId },
+    query: input.query,
+    headers: { 'x-api-version': '2' },
+  }),
   output: struct.object({ items: struct.array(struct.string()) }),
 })
 void search
 ```
+
+`query: input.query` шлёт `page_size`. `headers: { 'x-api-version': '2' }` — литерал. Auth и tracing всё ещё живут в interceptors: они видят нативный request после того, как отработал builder.
 
 ## Формы `output` и `error`
 

@@ -13,7 +13,8 @@ export type HttpResponse<R> = {
   readonly status: number
   readonly statusText: string
   readonly headers: Headers
-  readonly body: R | null
+  /** Absent when no body was present. JSON `null` stays `null`. */
+  readonly body: R | null | undefined
   readonly ok: boolean
 }
 
@@ -63,7 +64,8 @@ export function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<
   const statusText = options?.statusText ?? ''
   const url = options?.url ?? requestUrl(options?.request)
   const headers = options?.headers ?? new Headers(options?.request?.headers)
-  const body = options?.body ?? null
+  // Omitted and explicit null are different: only a caller-supplied null is a JSON null.
+  const body = options?.body
 
   return {
     [HTTP_RESPONSE]: true,

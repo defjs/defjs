@@ -7,7 +7,7 @@ description: 為什麼 Defjs 要把契約、command、傳輸結果、解碼與�
 
 Defjs 做了幾項刻意取捨。便利 API 常把「誰擁有 request、stream、session」藏起來。Defjs 把這條邊界留在視線內，讓你能重用同一份 endpoint 契約，卻不會默默多出快取、重試排程器或資源管理器。
 
-## 宣告即斷言
+## 宣告即斷言 {#declaration-is-an-assertion}
 
 這六條規則決定了「回應怎麼讀」的所有問題。編上號，方便以後討論時直接引用，不必重新推導一遍。
 
@@ -43,13 +43,13 @@ body **就是**解碼後的值。解碼失敗就沒有值——不存在半成�
 
 `createClient(...)` 把 endpoint 設定當成明確的值。不同環境或請求範圍可以有不同的 endpoint、憑證、interceptors、serializers、傳輸 handles。
 
-代價：沒有 process-wide 預設。這在伺服器上反而有用 — 當 options 或 closures 會捕捉 auth、cookies、users、tenants 或請求 metadata 時，在請求邊界內建立 client。明確的 client 仍不會隔離 interceptor 捕捉到的狀態，而且 `struct.parse(..., { errorMap })` 只覆蓋那一次 parse 的文案。Client 身分本身不是安全邊界。
+代價：沒有 process-wide 預設。這在伺服器上反而有用 — 當 options 或 closures 會捕捉 auth、cookies、users、tenants 或請求 metadata 時，在請求邊界內建立 client。明確的 client 仍不會隔離 interceptor 捕捉到的狀態。Client 身分本身不是安全邊界。
 
 Client 負責分派 commands。它不擁有進行中的工作。誰啟動 HTTP 請求、SSE 串流或 WebSocket session，誰就要取消或關閉它，並 await 終端 promise。
 
-## 定義、builder 與 commands
+## 定義、endpoints 與 commands
 
-定義是穩定契約：method、path、input Struct、output 對應、傳輸限制。Builder 是可呼叫的視圖。呼叫它會為單次執行建立一個不透明 command。
+定義是穩定契約：method、path、input struct、解碼 `ok` 兩邊的 structs、傳輸限制。`defineRequest` 回傳 endpoint。呼叫它會為單次執行建立一個不透明 command。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -57,14 +57,13 @@ import { defineRequest, struct } from '@defjs/core'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 ```
 
 背景工作與 UI 擁有者可以用不同的取消／重試策略執行同一個 `getUser` 形狀。讓 command 保持不透明，可避免應用程式碼依賴內部傳輸 tags 或 symbols。
@@ -73,33 +72,37 @@ const command = getUser({ path: { id: 7 } })
 
 三種傳輸都用 error-first tuple。若塞成單一泛用「response」，生命週期事實會被抹掉。
 
-- HTTP → `[error, data, response]` — 解碼後的輸出 + `HttpResponse`
-- SSE → `[error, stream, open]` — 一個邏輯串流 + 啟動回應快照
-- WebSocket → `[error, session, connection]` — 邏輯 session + 啟動連線快照
+- HTTP → `[err, data, response]` — 解碼後的輸出 + 產出它的回應
+- SSE → `[err, stream, open]` — 一個邏輯串流 + 啟動回應快照
+- WebSocket → `[err, session, connection]` — 邏輯 session + 啟動連線快照
 
-第三個值是快照，不是「未來重連仍是同一條實體連線」的 promise。啟動失敗時，若傳輸先產出了回應／快照，第三項仍可能存在。啟動之後，生命週期控制權屬於回傳的 handle 或 session。
+成功時第三個值一定在。HTTP 失敗是 `[error, undefined, undefined]`：fault 已經帶著回應 metadata，而傳給 handler、寫 log 或重新丟出的就是這個 fault。SSE 與 WebSocket 的啟動失敗，若已捕捉到 open 或 connection 快照，第三項仍可能包含它。
+
+SSE 與 WebSocket 的第三個值是快照，不是「未來重連仍是同一條實體連線」的 promise。啟動之後，生命週期控制權屬於回傳的 handle 或 session。
 
 ## 執行階段解碼
 
-TypeScript 推導描述的是你期待的形狀；它無法在執行階段檢查伺服器回應。Struct 剖析是契約的另一半。Defjs 會在建構請求前驗證 command input，解碼選定的 representation，再剖析對應的 Struct。
+TypeScript 推導描述的是你期待的形狀；它無法在執行階段檢查伺服器回應。Struct 剖析是契約的另一半。Defjs 會在建構請求前驗證 command input，檢查 representation，再剖析 `ok` 適用那一側的 struct。
 
 解碼**只發生一次，而且在 interceptor 鏈之後**。Interceptor 用 `makeResponse(...)` 造出來的回應，和線上真實來的回應被完全一樣地解讀：回應從哪來，不影響它怎麼被讀，所以不存在「信任 interceptor」這條需要推敲的岔路。
 
-順序是：媒體類型，然後表示，然後 Struct。
+順序是：媒體類型，然後表示，然後 struct。
 
 | 沒守住的是                       | Fault                                              |
 | -------------------------------- | -------------------------------------------------- |
 | 媒體類型不是所宣告表示需要的那個 | `RES_MEDIA_TYPE_INVALID`——在讀 body **之前**就回報 |
 | bytes 不是那個表示               | `RES_DECODE_FAILED`                                |
-| 值不符合那個 Struct              | `RES_STRUCT_MISMATCH`                              |
+| 值不符合那個 struct              | `RES_STRUCT_MISMATCH`                              |
 | 非 2xx，且 `error` 解出來了      | `HTTP_STATUS`，`data` 有型別                       |
 | 非 2xx，且沒宣告 `error`         | `HTTP_STATUS`，`data: undefined`                   |
 
-先檢查媒體類型，就是把「我要的是 JSON，收到的是 HTML」變成一個精確的 fault 而不是一個 parser 錯誤，而且整個跳過讀取、解析和 Struct。
+先檢查媒體類型，就是把「我要的是 JSON，收到的是 HTML」變成一個精確的 fault 而不是一個 parser 錯誤，而且整個跳過讀取、解析和 struct。
 
-## `build` 的界線
+## Builder、encoder 與 alias
 
-當 input 已有 path／query／headers／body 時，預設走自動的 `struct.request(...)` 對應。自訂 `build(request, input)` 是呼叫端形狀與 wire 形狀不同時的受約束投影：
+Struct 是雙向的欄位契約。`.alias(name)` 是 wire 名稱。Struct 決定值怎麼編碼。`builder` 決定值放到哪。
+
+`builder` 是選填的、同步的、純粹的。它收到的是剖析後的 input——真實的值，不是綁定視圖——並回傳 request：`path`、`query`、`headers`、`body`。它在 command 執行時跑。丟出錯誤會變成 tuple 上的 `REQ_BUILD_FAILED`；呼叫 endpoint 本身不會 throw。當 input struct 已經是那個 request 形狀時，省略 `builder`。省略就等於 `(input) => input`；input 不能指派成那個形狀時，TypeScript 會要求 builder。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -109,22 +112,20 @@ const createBatch = defineRequest({
   path: '/accounts/:account_id/users',
   input: struct.object({
     accountId: struct.number(),
+    draft: struct.boolean().optional(),
     users: struct.array(
       struct.object({
-        displayName: struct.string(),
+        displayName: struct.string().alias('display_name'),
         email: struct.string(),
       }),
     ),
   }),
-  build(request, input) {
-    request.setPathParams({ account_id: input.accountId })
-    request.setJson({
-      users: input.users.map((user) => ({
-        display_name: user.displayName,
-        email: user.email,
-      })),
-    })
-  },
+  builder: (input) => ({
+    path: { account_id: input.accountId },
+    query: { draft: input.draft ? 1 : undefined },
+    headers: { 'x-api-version': '2' },
+    body: { users: input.users },
+  }),
   output: struct.object({ accepted: struct.number() }),
 })
 
@@ -132,9 +133,24 @@ const command = createBatch({
   accountId: 42,
   users: [{ displayName: 'Ada', email: 'ada@example.com' }],
 })
+void command
 ```
 
-`input` 是綁定 schema 的視圖，不是呼叫端的執行階段物件。投影可以挑選已宣告欄位、重新命名目標，以及把一個來源陣列項目對到一個輸出項目。它不能依值分支、注入字面量，或改變基數。業務資料正規化與依值驗證，請在建立 command 之前做完。
+預設路徑是把型別化的值交出去。`body: { users: input.users }` 會保留每個使用者的 alias，所以 wire 欄位是 `display_name`。你自己寫的 key（`account_id`、`x-api-version`）是字面。展開型別化物件會保留它的 struct；在邏輯欄位旁邊再加 wire key 是 `REQ_BUILD_FAILED`。
+
+Query 的巢狀形狀是後端的性質，所以放在 client 上：`withQuerySerializer((query) => string)` 看到的是已編碼的 wire 物件，aliases 已套用。沒有 query 時不會呼叫它。Builder 回傳的 `URLSearchParams` 會跳過它。沒有 serializer 時，陣列會重複 key，巢狀物件則失敗。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
+
+Body kind 依值決定，第一個相符者勝出：
+
+- 沒有 `body` → 什麼都不送
+- body 根上有 `urlencoded` 或 `formData` codec → 用那種 form 編碼；值巢在 JSON 裡時這個 tag 不生效
+- `FormData`、`URLSearchParams`、`Blob`、`File`、bytes，或 `ReadableStream` → 原樣送出
+- 字串 → `text/plain;charset=UTF-8`
+- 其他 → JSON
+
+`undefined` 欄位會省略。可為 null 的欄位上的 `null` 會送出。字串不是 JSON，除非你自己 stringify 並設定 `content-type`。自己序列化（`JSON.stringify`、qs、protobuf）就離開 struct encoder，所以 aliases 不套用。沒有公開的 `struct.encode`。
+
+`GET` 與 `HEAD` 不能帶 body。WebSocket builder 不能回傳 headers 或 body。靜態 WebSocket subprotocols 留在定義上（`protocols`），不放進 builder。無效的 WebSocket frames 走 session 的 runtime-error listener。SSE 的 `error` struct 給啟動 fault 定型，握手 body 跟 HTTP body 用同一套 kind 規則：`string` 是文字，blobs 與 files 是 blobs，`arrayBuffer` 是 bytes，其餘是 JSON。
 
 ## Observer 與政策放哪裡
 

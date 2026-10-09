@@ -1,11 +1,11 @@
 ---
 title: WebSocket-Session öffnen
-description: Verbinden, einen typisierten Envelope senden, einmal empfangen, dann schließen und closed abwarten.
+description: Verbinden, einen typisierten Envelope senden, einmal empfangen, dann schließen und closed awaiten.
 ---
 
 # WebSocket-Session öffnen
 
-JSON-Envelopes nutzen einen nicht-leeren String `type`. Du besitzt Unsubscribe, `close` und `await session.closed`.
+Jede Richtung ist ein Struct. Du besitzt Unsubscribe, `close` und `await session.closed`. Invalid Frames gehen an `onRuntimeError`.
 
 Details siehe [WebSocket](../core/web-socket.md).
 
@@ -17,8 +17,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session] = await client.execute(room())

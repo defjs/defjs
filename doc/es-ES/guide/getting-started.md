@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Step 2 — Definir la solicitud
 
-Crea `src/get-user.ts`. `struct.request(...)` mantiene los valores de path separados de query, cabeceras y cuerpo.
+Crea `src/get-user.ts`. El struct de input es el valor de quien llama. `builder` coloca ese valor en la solicitud. Aquí todo el input es el objeto de path, así que los campos escalares sin alias rellenan `:id`.
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,18 +63,19 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` devuelve el builder. Llamar a `getUser(...)` construye el comando opaco que pasarás a `client.execute(...)`.
+`output` es el cuerpo 2xx. `error` es cualquier otro estado. Un struct cada uno. Usa `struct.or(...)` o una unión discriminada cuando esos cuerpos difieran.
+
+`defineRequest(...)` devuelve un endpoint. Llamar a `getUser(...)` construye el comando opaco que pasarás a `client.execute(...)`. El `builder` de arriba es la función que coloca el input; no es el endpoint.
 
 ## Step 3 — Ejecutarlo en local
 
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -175,7 +175,7 @@ Prueba un usuario que falta — cambia el id del path a `8` y vuelve a ejecutar:
 User not found
 ```
 
-En éxito: `error` es `null`, `user` es la salida Struct del `200`, `response` es un `HttpResponse`. En un `404` declarado: `error.code` es `'http'`, `error.status` es `404` y `error.data` está tipado como `NotFound`. El segundo elemento de la tupla es `undefined` en fallo.
+En éxito: `error` es `null`, `user` es la salida Struct del `200`, `response` es un `HttpResponse`. En un `404` declarado: `error.code` es `'HTTP_STATUS'`, `error.status` es `404` y `error.data` está tipado como `NotFound`. El segundo elemento de la tupla es `undefined` en fallo.
 
 ## Step 4 — Apuntar a una API real
 
@@ -205,13 +205,14 @@ Mismo comando. Cliente distinto.
 
 ## Cuando el resultado cambia
 
-- Entrada mala → `REQ_INPUT_INVALID`; opciones de cancel conflictivas → `REQ_OPTIONS_INVALID`; un `build` que falla → `REQ_BUILD_FAILED`
+- Entrada mala → `REQ_INPUT_INVALID`; opciones de cancel conflictivas → `REQ_OPTIONS_INVALID`; un
+  `build` que falla → `REQ_BUILD_FAILED`
 - Cualquier no-2xx → `HTTP_STATUS`, con `err.data` tipado si declaraste `error`
 - Media type incorrecto → `RES_MEDIA_TYPE_INVALID`, avisado antes de leer el cuerpo
 - Cuerpo declarado que no decodifica → `RES_DECODE_FAILED` o `RES_STRUCT_MISMATCH`
 - Fallo de Fetch / cancel / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` debe ser un entero seguro positivo en `1..2_147_483_647`. No pases `abort` y `timeout` juntos; `signal` puede combinarse con cualquiera de los dos. La cancelación te dice lo que vio el llamador — no si una escritura en el servidor se confirmó.
+`timeout` debe ser un entero seguro positivo en `1..2_147_483_647`. Formas de cancel válidas: `{ timeout }`, `{ abort }`, o `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` juntos es inválido. La cancelación te dice lo que vio el llamador — no si una escritura en el servidor se confirmó.
 
 ## Siguientes recetas
 

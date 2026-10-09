@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { afterAll, describe, test, type BenchRunOptions } from 'vitest'
-import { buildRequest } from '../internal/request_builder'
+import { materializeOutboundRequest } from '../internal/outbound_request'
 import { decodeJson, encodeJson } from './codec/json'
 import { encodeStructValue } from './introspection'
 import { StructError, struct } from './index'
@@ -205,8 +205,8 @@ const unionEncodeUnique = struct.or(
 const unionEncodeUniqueValue = { kind: 'number' as const, value: 1 }
 const equivalentUnionFixtures = [2, 8, 32].map((branches) => makeEquivalentUnionFixture(branches, 16))
 const equivalentUnionWidthFixtures = [2, 16, 64].map((width) => makeEquivalentUnionFixture(8, width))
-const requestSchema = struct.request({
-  body: struct.json(struct.object({ active: struct.boolean(), name: struct.string() })),
+const requestSchema = struct.object({
+  body: struct.object({ active: struct.boolean(), name: struct.string() }),
   headers: struct.object({ trace: struct.string() }),
   path: struct.object({ id: struct.string() }),
   query: struct.object({ page: struct.number(), size: struct.number() }),
@@ -520,14 +520,14 @@ describe('Struct performance', () => {
     measure('parse/array length 1000 first item failure', () => record(struct.parse(array.schema, array.payload)), micro)
     const parsed = struct.parse(requestSchema, requestPayload)[1]
     assert.ok(parsed)
-    const built = buildRequest(parsed, undefined, { input: requestSchema })
+    const built = materializeOutboundRequest(parsed, 'http')
     assert.equal(built.body, '{"active":true,"name":"Miao"}')
     measure(
       'request/parse and auto JSON build four sections',
       () => {
         const [error, value] = struct.parse(requestSchema, requestPayload)
         if (error) throw error
-        record(buildRequest(value, undefined, { input: requestSchema }))
+        record(materializeOutboundRequest(value, 'http'))
       },
       micro,
     )

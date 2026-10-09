@@ -1,13 +1,13 @@
 ---
 title: '@defjs/vue'
-description: Плагин, injection key и injectClient.
+description: Плагин Vue, injection key и injectClient.
 ---
 
 # Vue {#page}
 
-Подключи существующий `@defjs/core` client к Vue. Пакет **не** создаёт client, не кэширует результаты и не закрывает транспорт на unmount.
+Отдай существующий `@defjs/core` client Vue-приложению. Этот пакет не создаёт, не кэширует и не dispose’ит client.
 
-См. [гайд Vue](../plugins/vue.md).
+См. [гайд Vue](/plugins/vue).
 
 ## createClientPlugin() {#createClientPlugin}
 

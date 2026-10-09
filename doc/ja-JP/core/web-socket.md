@@ -5,7 +5,7 @@ description: 型付き JSON セッションを開始し、エンベロープを�
 
 # WebSocket
 
-開始 → 受信 → 送信 → close + `await session.closed`。購読解除と破棄は呼び出し側の所有です。クライアント、プロバイダ、インターセプターはセッションを自動 close しません。
+開始 → 受信 → 送信 → `await using` で解放します。購読解除と破棄は呼び出し側の所有です。手動の `close()` / `closed` も残っています。クライアント、プロバイダ、インターセプターはセッションを自動 close しません。
 
 ## Basic Setup
 
@@ -16,19 +16,20 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
-const [error, openedSession, startupConnection] = await client.execute(room())
+const [error, session, startupConnection] = await client.execute(room())
 if (error) {
   console.error(error.code, startupConnection?.generation)
 } else {
-  await using session = openedSession
-  const unsubscribe = session.onRuntimeError((cause) => console.error('runtime', cause))
+  await using ownedSession = session
+  const unsubscribe = ownedSession.onRuntimeError((cause) => console.error('runtime', cause))
   try {
-    session.send({ type: 'send', text: 'Hello' })
-    for await (const message of session.receive) {
+    ownedSession.send({ type: 'send', text: 'Hello' })
+    // wire: {"type":"send","text":"Hello"}
+    for await (const message of ownedSession.receive) {
       console.log(message.type, message.text)
       break
     }
@@ -38,43 +39,35 @@ if (error) {
 }
 ```
 
-## JSON エンベロープ
+## 方向ごとに struct は 1 つ
 
-`defineWebSocket(...)` は JSON メッセージのエンドポイントを記述します。必須の `incoming` マップがメッセージ型で Struct を選び、任意の `outgoing` が `session.send(...)` に対して同じことをします。ワイヤ上のメッセージはすべて、空でない文字列 `type` を持つオブジェクトです。
-
-オブジェクトペイロードのフィールドは `type` の隣に置きます。スカラーと配列のペイロードはエンベロープの `data` フィールドを使います。
+`incoming` はすべてのテキストフレーム用の struct 1 つです。`outgoing` は `session.send(...)` 用の struct 1 つです。種類が複数なら `struct.discriminatedUnion` でモデルします。それらのフィールドのエイリアスが、両方向のワイヤ名です。別の型エンベロープも、ノーマライザもありません。
 
 ```json
-{ "type": "message", "userId": 7, "text": "Hello" }
+{ "type": "message", "text": "Hello" }
 ```
 
-```json
-{ "type": "count", "data": 3 }
-```
+受信したテキスト、`ArrayBuffer`、typed-array、`Blob` のフレームは UTF-8 として読まれ、JSON パースされ、`incoming` に対して検査されます。壊れた JSON と struct の失敗は `session.onRuntimeError` へ行き、キューには入りません。セッションは開いたままです。テキストでもバイト列でも `Blob` でもないフレームは無視されます。`withWebSocketOnInvalidEvent` はありません。
 
-メッセージマップが制御するのはペイロードであり、エンベロープのディスクリミネータではありません。`incoming.default` はそれ以外の未宣言型名を受理します。なければ未知型は落とされます。受信のテキスト、`ArrayBuffer`、typed-array、`Blob` フレームは UTF-8 JSON としてデコードされます。壊れた JSON と Struct 失敗はランタイムエラーオブザーバーへ行き、`receive` には行きません。
+`session.send(...)` は同期的に検証してシリアライズします。struct のエンコード、それから `JSON.stringify` です。open ならすぐ送り、送信キューが有効な `reconnecting` 中はキューし、書けないときは `InvalidStateError` を throw します。outgoing struct が無いとき、ペイロードが struct に失敗したとき、送信キューが無効か満杯のとき、ネイティブ send が失敗したときも throw します。定義上の静的な `protocols` リストはエンドポイント契約です（たとえば `graphql-transport-ws`）。実行 options と `withWebSocketProtocols` はそれでも上書きできます。サブプロトコルに載せるトークンは、ビルダーではなく `beforeConnect` かインターセプターに置きます。ビルダーが返せるのは `path` と `query` だけです。
 
-オブジェクトペイロードに `data` というフィールドがある場合、エンコード後も `type` の隣に残ります（入れ子エンベロープにはなりません）。例: `{ data: string, source: string }` の `write` はワイヤでは `{ type: 'write', data: string, source: string }` になります。呼び出し側の値は、シリアライズ前に `data` がオブジェクトペイロードを運ぶため、まだ `{ type: 'write', data: { data, source } }` です。エイリアスはペイロードフィールドに効きます。`type` ディスクリミネータはエンベロープに属し、Struct には属しません。
+`receive` は消費者 1 人です。2 つ目のイテレータは拒否されます。
 
-`session.send(...)` は同期で検証とシリアライズをします。open ならすぐ送り、outgoing キューが有効なら `reconnecting` 中はキューし、書き込み不可なら `InvalidStateError` を投げます。outgoing マップなし、未宣言型、ペイロード検証失敗、無効/満杯の outgoing キュー、ネイティブ送信失敗でも投げます。
+## 状態のスナップショット
 
-`receive` は単一消費者です。2 つ目のイテレータは拒否されます。
+| メンバー                   | 意味                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------- |
+| `state`                    | `idle`、`connecting`、`open`、`reconnecting`、`closing`、`closed`、`aborted`、`error` |
+| `connection`               | 最新の物理接続。`generation`、URL、交渉した protocol、取れるときの extensions         |
+| `bufferedAmount`           | ネイティブの未送信バイト数。物理ソケットが無ければ `0`                                |
+| `receive`                  | 検証済み受信メッセージの、消費者 1 人の非同期イテラブル                               |
+| `onStateChange(listener)`  | 論理状態の遷移を購読する。購読解除を返す                                              |
+| `onRuntimeError(listener)` | 起動後のランタイムエラーを購読する。購読解除を返す                                    |
+| `closed`                   | 論理的な終端クローズ結果の promise                                                    |
 
-## 状態スナップショット
+`open` は物理ソケットが開いた状態です。`reconnecting` は、置き換え前の準備と待ちを含みます。`connection.generation` は `open` に達した物理ソケットごとに増えます。タプルの `startupConnection` は最初の成功スナップショットのままです。`session.connection` は先へ進みます。
 
-| メンバー                   | 意味                                                                                         |
-| -------------------------- | -------------------------------------------------------------------------------------------- |
-| `state`                    | `idle`、`connecting`、`open`、`reconnecting`、`closing`、`closed`、`aborted`、または `error` |
-| `connection`               | 最新の物理接続: `generation`、URL、交渉プロトコル、利用可能なら拡張                          |
-| `bufferedAmount`           | ネイティブの未送信バイト数。物理ソケットがなければ `0`                                       |
-| `receive`                  | 検証済み受信メッセージの単一消費者非同期イテラブル                                           |
-| `onStateChange(listener)`  | 論理状態遷移を購読。購読解除を返す                                                           |
-| `onRuntimeError(listener)` | 起動以外のランタイムエラーを購読。購読解除を返す                                             |
-| `closed`                   | 論理終端の close 結果の promise                                                              |
-
-`open` = 物理ソケットが open。`reconnecting` は置換前の準備 + 遅延を含みます。`connection.generation` は `open` に達した物理ソケットごとに増えます。タプルの `startupConnection` は最初の成功スナップショットのまま。`session.connection` は先へ進みます。
-
-起動失敗 → `[error, undefined, connection?]`。オープン前のコンストラクタ失敗では接続がないことがあります。起動中のタイムアウト/close ではスナップショットがまだ付くことがあります。セッションが返ったあとのランタイムエラーは、オブザーバー、`receive`、`closed` を通り — 2 つ目の execute タプルではありません。
+起動失敗 → `[error, undefined, connection?]` です。open 前のコンストラクタ失敗では connection が無いことがあります。起動中のタイムアウトや close では、スナップショットがまだ付くことがあります。セッションが返ったあとのランタイムエラーは、オブザーバー、`receive`、`closed` を通ります — 2 つ目の execute タプルにはなりません。
 
 ```typescript twoslash
 import type { Fault, WebSocketConnectionInfo, WebSocketSession } from '@defjs/core'
@@ -89,7 +82,7 @@ void result
 
 ## 再接続
 
-再接続はオプトインです。`reconnect` オブジェクトなし → 物理 close で論理セッションが終わります。設定時のデフォルトは `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` は初回試行のあとのリトライ回数。`attempts: 0` は無効。デフォルト述語はあらゆる close 結果を受理します。
+再接続はオプトインです。`reconnect` オブジェクトが無い → 物理 close で論理セッションは終わります。設定したときのデフォルトは `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0` です。`attempts` は最初の試行のあとのリトライ回数を数えます。`attempts: 0` は無効にします。デフォルトの述語は、あらゆる close 結果を受け入れます。
 
 ```ts
 import { createClient, defineWebSocket, struct, withEndpoint, withWebSocketReconnect } from '@defjs/core'
@@ -110,7 +103,7 @@ const client = createClient(
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { ready: struct.object({ ok: struct.boolean() }) },
+  incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
 })
 const [error, session] = await client.execute(room())
 if (!error) {
@@ -119,15 +112,15 @@ if (!error) {
 }
 ```
 
-`shouldReconnect` は次のリトライ試行、close の cause、code、reason、`wasClean` を受け取ります。手動の `session.close(...)` は述語に入りません。準備/方針の throw は、エラーで論理セッションを終えます。
+`shouldReconnect` は次のリトライ試行、close の cause、code、reason、`wasClean` を受け取ります。手動の `session.close(...)` は述語に入りません。準備や方針が throw すると、論理セッションはエラーで終わります。
 
-WebSocket のバックオフ jitter は**乗法**です（`jitter: 0.2` → 遅延は `0.8x` から `1.2x`）。SSE の jitter は WebSocket と同じ 0–1 の乗法因子です。delay/factor/jitter/attempt の値はコンストラクタ前に検証され、タイマー遅延は `2_147_483_647` ms を超えられません。
+WebSocket のバックオフ jitter は**乗法**です（`jitter: 0.2` → 遅延は `0.8x` から `1.2x`）。SSE の jitter は WebSocket と同じ、0–1 の乗法因子です。delay/factor/jitter/attempt の値はコンストラクタの前に検証されます。タイマー遅延は `2_147_483_647` ms を超えられません。
 
-`beforeConnect({ attempt, signal })` は最初のコンストラクタと毎回の再接続の前に走ります。キャンセルが準備と接続の両方を止めるよう、その signal をトークン更新に渡してください。
+`beforeConnect({ attempt, signal })` は、最初のコンストラクタの前と、再接続のたびに走ります。キャンセルが準備と接続の両方を止めるよう、その signal をトークン更新に渡してください。
 
 ## ハートビート
 
-execute またはクライアントスコープでオプトインします。間隔ごとに `message()` を outgoing Struct マップ経由で送ります。任意の `isAck(message)` が ack を認識すると、そのメッセージはタイムアウトを消し、`receive` には**届けられません**。
+実行時かクライアントスコープでオプトインします。間隔ごとに `message()` を outgoing struct 経由で送ります。任意の `isAck(message)` が ack を認識します — そのメッセージはタイムアウトを消し、`receive` には**届けられません**。
 
 ```ts
 import { createClient, defineWebSocket, struct, withEndpoint } from '@defjs/core'
@@ -136,8 +129,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { pong: struct.object({ ok: struct.boolean() }) },
-  outgoing: { ping: struct.object({}) },
+  incoming: struct.discriminatedUnion('type', [struct.object({ type: struct.literal('pong'), ok: struct.boolean() })]),
+  outgoing: struct.object({ type: struct.literal('ping') }),
 })
 
 const [error, session] = await client.execute(room(), {
@@ -154,40 +147,51 @@ if (!error) {
 }
 ```
 
-`intervalMs` と `timeoutMs` は正の有限タイマーで、`≤ 2_147_483_647` である必要があります。ハートビートメッセージは outgoing マップに対して有効である必要があります。シリアライズ、ネイティブ送信、ack 分類、タイムアウト失敗は論理セッションにとって致命的で — 通常の再接続にはなりません。
+`intervalMs` と `timeoutMs` は、`2_147_483_647` 以下の正の有限タイマーである必要があります。ハートビートのメッセージは outgoing struct に対して妥当である必要があります。シリアライズ、ネイティブ send、ack の分類、タイムアウトの失敗は論理セッションにとって致命的です — 普通の再接続にはなりません。
 
 ## キュー
 
-| 設定                   | 必須の値                               | 振る舞い                                                                                              |
-| ---------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `maxIncomingQueueSize` | 正の安全な整数                         | `receive` 待ちのパース済みメッセージと、変換待ちの生フレームを上限。オーバーフロー → `state: 'error'` |
-| `maxOutgoingQueueSize` | 任意の非負の安全な整数。デフォルト `0` | `state === 'reconnecting'` のあいだだけ FIFO。満杯/無効 → `send(...)` が throw                        |
+| 設定                   | 必要な値                               | 振る舞い                                                                                                  |
+| ---------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `maxIncomingQueueSize` | 正の安全な整数                         | `receive` を待つパース済みメッセージと、変換を待つ生フレームを上限する。オーバーフロー → `state: 'error'` |
+| `maxOutgoingQueueSize` | 任意の非負の安全な整数。デフォルト `0` | `state === 'reconnecting'` のあいだだけ FIFO。満杯か無効 → `send(...)` が throw                           |
 
-キュー済みの outgoing フレームは、置換ソケットが `open` を公開する前に flush されます。以前のソケットで送信済みのフレームは自動再生されません。再接続キューは、再接続中に送るメッセージ向けであり — アプリ状態の再構築向けではありません。
+キューされた送信フレームは、置き換えソケットが `open` を公開する前に流されます。前のソケットですでに送ったフレームが自動再生されることはありません。再接続キューは、再接続中に送るメッセージ用です — アプリ状態の再構成用ではありません。
 
 受信オーバーフローは保留シーケンスを消し、`receive` を失敗させ、セッションを止め、`kind: 'error'` で `session.closed` を解決します。消費者を十分速くするか、測ったサイズ/メモリから上限を上げてください。
 
 ## プロトコルと認証
 
-定義の `protocols`、クライアントの `withWebSocketProtocols(...)`、execute の `protocols` がコンストラクタのサブプロトコル一覧を設定します。優先順位: 実行 → クライアント → 定義。最初に定義された一覧が論理セッション用にコピーされ、再接続でも再利用されます。
+定義の `protocols`、クライアントの `withWebSocketProtocols(...)`、execute の `protocols` が、コンストラクタのサブプロトコルリストを決めます。優先順位は、実行 → クライアント → 定義です。最初に決まったリストは論理セッション用にコピーされ、再接続でも再利用されます。
 
-ブラウザーの WebSocket コンストラクタは任意のハンドシェイクヘッダーを受け付けません。Defjs は `http:` → `ws:`、`https:` → `wss:` に変換し、path プレースホルダを一度エンコードし、設定された query シリアライザを使います。WebSocket の query 組み立ては、複雑な query 値も JSON としてシリアライズします（デフォルト HTTP のスカラー専用 query とは違います）。
+ブラウザーの WebSocket コンストラクタは任意のハンドシェイクヘッダーを受け付けず、ビルダーも `headers` や `body` を返せません。Defjs は `http:` を `ws:` に、`https:` を `wss:` に変換し、path プレースホルダを一度だけエンコードし、query 規則は HTTP と同じです。デフォルトはスカラーと繰り返すキー、入れ子オブジェクトには `withQuerySerializer`、query が無いときはシリアライザを呼びません。
 
-`withCredentials(true)` は HTTP/SSE の Fetch 資格情報であり — WebSocket 認証ではありません。レビュー済みの cookie/セッション方針、サブプロトコル、短命の接続チケットを使ってください。一般的な資格情報や長寿命シークレットを query 文字列に載せないでください。
+`withCredentials(true)` は HTTP/SSE の Fetch credentials であり、WebSocket 認証ではありません。レビュー済みの cookie/セッション方針、サブプロトコル、短命の接続チケットを使ってください。一般的な資格情報や長命の秘密を query 文字列に置かないでください。
 
 ## 閉鎖と所有権
 
-`session.close(code?, reason?)` は終端閉鎖を要求し、ハートビートを止めます。code は `1000` または `3000..4999`。reason は UTF-8 で ≤ 123 バイト。無効な close 引数は状態を変える前に throw します。
+`session.close(code?, reason?)` は終端クローズを要求し、ハートビートを止めます。code は `1000` か `3000..4999`、reason は UTF-8 で 123 バイト以下です。不正な close 引数は、状態を変える前に throw します。手動の close 理由や論理的な終端結果が要るときは、`await session.closed` と一緒に使ってください。
 
-`await using` は close を要求し、Defjs が所有する teardown を待ちます。手動 reason や論理終端結果が必要なら、`close()` と `closed` も引き続き使えます。
+```typescript twoslash
+import type { WebSocketSession } from '@defjs/core'
 
-終端の `kind`: `'closed'`、`'aborted'`、または `'error'`。任意のネイティブ `code` / `reason` / `wasClean` と、aborted/error 用の `cause`。`closed` は論理終端であり、物理 TCP close を証明しません。disposer は teardown を 1 秒に制限します。close event がなければ Defjs cleanup を完了し、`TimeoutError` という名前の `DOMException` を reject できますが、`closed` は論理的な manual close 結果のままです。観測済みのネイティブ close フィールドが owner fallback より優先されます。
+async function observeSession(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  console.log(ownedSession.state)
+}
 
-## GraphQL 境界
+void observeSession
+```
 
-Defjs は型付き JSON エンベロープと論理セッションのライフサイクルを提供します。WebSocket アプリケーションプロトコルは**実装しません**。GraphQL-over-WebSocket の機能 — connection init、operation ID、`next`/`error`/`complete`、破棄、サブスクリプション再生 — はコア契約の外です。
+`session.closed` は論理的な終端スナップショットです。`'closed'`、`'aborted'`、`'error'` と、任意のネイティブ `code` / `reason` / `wasClean`、aborted/error の `cause` です。観測したネイティブ close のフィールドは、所有者が要求したフォールバックより優先されます。
 
-サーバーがそのプロトコルを要するときは `graphql-ws` のようなプロトコルクライアントを使うか、`defineWebSocket(...)` で自分のエンベロープをモデルしてください。メッセージマップだけでは GraphQL 意味論は交渉されません。
+標準の非同期 disposer はベストエフォートでネイティブ close を要求し、それから Defjs が所有するライフサイクル、メッセージポンプ、タイマー、リスナー、キュー、ソケット参照の teardown を待ちます。close イベントが 1 秒以内に観測されなければ teardown は強制され、disposer は `TimeoutError` という名前の `DOMException` で reject することがあります。これは物理 TCP 接続が閉じたことの証明ではありません。disposer を繰り返して呼んでも、同じ teardown を共有します。構造的な独自セッション実装は、今や同じ `[Symbol.asyncDispose](): PromiseLike<void>` 契約を提供する必要があります。
+
+## GraphQL の境界
+
+Defjs が渡すのは、incoming struct 1 つ、outgoing struct 1 つ、論理セッションのライフサイクルです。WebSocket のアプリケーションプロトコルは**実装しません**。GraphQL-over-WebSocket の機能 — connection init、operation ID、`next`/`error`/`complete`、破棄、サブスクリプションの再生 — はコア契約の外です。
+
+サーバーがそのプロトコルを要求するときは `graphql-ws` のようなプロトコルクライアントを使うか、フレームを `defineWebSocket(...)` でモデルしてください。`graphql-transport-ws` のような静的サブプロトコルは `protocols` に置きます。struct だけでは GraphQL の意味論は交渉されません。
 
 ## 関連レシピ
 

@@ -25,7 +25,7 @@ type Product = Infer<typeof Product>
 const readProduct = defineRequest({
   method: 'GET',
   path: '/catalog/:sku',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ sku: struct.string() }),
     headers: struct.object({
       etag: struct.string().optional().alias('If-None-Match'),

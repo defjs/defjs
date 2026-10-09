@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: 'أجهزة صادرة: `withOpenTelemetryServer`.'
+description: withOpenTelemetryServer وخيارات كل وسيلة نقل.
 ---
 
 # OpenTelemetry server {#page}
 
-فعّل الأجهزة الصادرة عندما تنشئ العميل. يُلحق معترضات HTTP وSSE وWebSocket. **ليس** أجهزة خادم واردة، و**لا** يهيئ OpenTelemetry SDK.
+أجهزة صادرة لـ HTTP / SSE / WebSocket كمعترضات أساسية. هذه الحزمة لا تهيئ OpenTelemetry SDK، وليست أجهزة خادم واردة.
 
-انظر [دليل OpenTelemetry server](../plugins/opentelemetry-server.md).
+انظر [دليل خادم OpenTelemetry](/plugins/opentelemetry-server).
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 
@@ -15,7 +15,7 @@ description: 'أجهزة صادرة: `withOpenTelemetryServer`.'
 function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
 ```
 
-يضيف معترضًا لكل نقل مفعّل. طبّقه عند `createClient`.
+يُلحق معترضًا واحدًا لكل وسيلة نقل مفعّلة. طبّقه عند `createClient`.
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -26,7 +26,7 @@ const client = createClient(withEndpoint('https://api.example.com'), withOpenTel
 
 `tracer` مطلوب. `meter` اختياري — احذفه لتخطي مقاييس الحزمة. بلا `propagator` → W3C Trace Context + Baggage.
 
-HTTP وSSE وWebSocket مفعّلة افتراضيًا. `{ enabled: false }` يتخطى نقلًا.
+HTTP وSSE وWebSocket مفعّلة افتراضيًا. مرّر `{ enabled: false }` على وسيلة نقل لتخطيها.
 
 ## OpenTelemetryServerOptions {#OpenTelemetryServerOptions}
 
@@ -65,8 +65,23 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 }
 ```
 
-يعمل `startSpanHook` بشكل متزامن قبل إنشاء span لوسيلة HTTP أو SSE أو WebSocket الخاصة به. تُطبّق سمات التطبيق أخيرًا، لذا يمكنها تجاوز `url.full`. إذا رمى، تسجّل Defjs `defjs.otel.hook.error` وتكمل الطلب بالسمات المدمجة؛ تبقى `requestHook` و`responseHook` بعد إنشاء span.
+يعمل `startSpanHook` بشكل متزامن قبل إنشاء الـ span لوسيلة HTTP أو SSE أو WebSocket الخاصة به. تُطبَّق سماته بعد السمات المدمجة، فيجوز للتطبيق أن يتجاوز `url.full` أو قيمة أولية أخرى. إذا رمى، تنشئ Defjs الـ span بالسمات المدمجة، وتسجّل `defjs.otel.hook.error`، وتكمل الطلب؛ وتُبقي `requestHook` و`responseHook` دلالاتهما القائمة بعد الإنشاء.
 
-افتراضيًا، يحل `url.full` فقط `request.endpoint` مقابل `request.baseEndpoint` الاختياري ولا يضيف `request.queryString` مستقلًا. هذه ليست redaction ولا توجد سياسة redactor مدمجة. ابنِ URL كاملًا أو منقحًا في التطبيق عبر `startSpanHook`.
+افتراضيًا، يحل `url.full` فقط `request.endpoint` مقابل `request.baseEndpoint` الاختياري؛ ولا يُلحَق `request.queryString` مستقل. ذلك الحد ليس حجبًا، والحزمة بلا حاجب مدمج أو سياسة مفاتيح حسّاسة. ابنِ عنوان URL مملوكًا للتطبيق، واحجبه إن لزم، صراحة:
 
-`queryPropagation` افتراضيًا `false`. فعّله فقط إن قبلت وضع سياق التتبع في عنوان WebSocket.
+```ts
+import { createResolvedRequestUrl, type HttpRequest } from '@defjs/core'
+import type { Attributes } from '@opentelemetry/api'
+
+const http = {
+  startSpanHook(request: HttpRequest): Attributes {
+    if (!request.baseEndpoint) return {}
+    const url = createResolvedRequestUrl(request.baseEndpoint, request.endpoint)
+    if (request.queryString) url.search = request.queryString
+    url.searchParams.delete('access_token')
+    return { 'url.full': url.href }
+  },
+}
+```
+
+`queryPropagation` افتراضيًا `false`. فعّله فقط بعد أن تقبل سياق التتبع في عنوان WebSocket.

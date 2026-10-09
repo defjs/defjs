@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -207,4 +207,3 @@ Crea clientes y opciones en `@defjs/core`. Ver [Cliente](../core/client.md), [Co
 - [GET con un 404 declarado](../recipes/get-declared-404.md)
 - [Cancelar una llamada HTTP](../recipes/cancel-http.md)
 - [Consumir un stream SSE](../recipes/consume-sse.md)
-- [Abrir una sesión WebSocket](../recipes/websocket-session.md)

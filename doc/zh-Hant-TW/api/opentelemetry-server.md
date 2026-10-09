@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: 出站探測 option：`withOpenTelemetryServer`。
+description: withOpenTelemetryServer，以及各傳輸的 options。
 ---
 
 # OpenTelemetry server {#page}
 
-建立 client 時打開出站探測。追加 HTTP、SSE、WebSocket interceptor。它**不是**入站伺服器探測，也**不會**初始化 OpenTelemetry SDK。
+以 core interceptors 做 HTTP／SSE／WebSocket 出站 instrumentation。這個套件不會初始化 OpenTelemetry SDK，也不是入站伺服器 instrumentation。
 
-見 [OpenTelemetry server 指南](../plugins/opentelemetry-server.md)。
+見 [OpenTelemetry server 指南](/plugins/opentelemetry-server)。
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 
@@ -15,7 +15,7 @@ description: 出站探測 option：`withOpenTelemetryServer`。
 function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
 ```
 
-每個啟用的傳輸追加一條 interceptor。疊在 `createClient` 上。
+每個啟用的傳輸追加一條 interceptor。在 `createClient` 時套用。
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'

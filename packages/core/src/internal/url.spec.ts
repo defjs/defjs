@@ -77,30 +77,37 @@ describe('url helpers', () => {
       createSearchParams({
         filters: { active: true },
       }),
-    ).toThrow('query value for "filters" requires queryParamsSerializer or a scalar value')
+    ).toThrow('a query serializer is required for nested query value "filters"')
     expect(() =>
       createSearchParams({
         filters: [{ active: true }] as never,
       }),
-    ).toThrow('query value for "filters" requires queryParamsSerializer or a scalar value')
+    ).toThrow('a query serializer is required for nested query value "filters"')
+    expect(() =>
+      createSearchParams({
+        tags: ['a', { active: true } as never],
+      }),
+    ).toThrow('a query serializer is required for nested query value "tags"')
 
-    const params = createSearchParams(
-      {
-        filters: { active: true },
-        include: true,
-        page: 1,
-        skip: undefined,
-        tags: ['a', 'b', { active: true } as never],
-      },
-      { allowComplex: true },
-    )
+    const params = createSearchParams({
+      include: true,
+      page: 1,
+      skip: undefined,
+      tags: ['a', 'b'],
+    })
 
     expect(params.toString()).toBe('include=true&page=1&tags=a&tags=b')
 
-    const paramsWithNull = createSearchParams({
-      empty: null,
-    })
-    expect(paramsWithNull.toString()).toBe('empty=null')
+    expect(() =>
+      createSearchParams({
+        empty: null,
+      }),
+    ).toThrow('query value for "empty" must not be null')
+    expect(() =>
+      createSearchParams({
+        tags: ['a', null],
+      }),
+    ).toThrow('query value for "tags" must not be null')
 
     const paramsWithUndefinedArray = createSearchParams({
       tags: [undefined as never],
@@ -139,5 +146,18 @@ describe('url helpers', () => {
     expect(() => appendRecordToHeaders(new Headers(), { 'x-object': [{ nested: true }] as never })).toThrow(
       'header value for "x-object" requires a scalar value',
     )
+  })
+
+  test('keeps an own __proto__ key in path, query, and header application', () => {
+    const record: { [key: string]: string } = Object.create(null)
+    Object.defineProperty(record, '__proto__', { configurable: true, enumerable: true, value: 'safe', writable: true })
+
+    const headers = new Headers()
+    appendRecordToHeaders(headers, record)
+
+    expect(fillUrl('/files/:__proto__', record)).toBe('/files/safe')
+    expect(createSearchParams(record).get('__proto__')).toBe('safe')
+    expect(headers.get('__proto__')).toBe('safe')
+    expect((Object.prototype as { [key: string]: unknown })['polluted']).toBeUndefined()
   })
 })

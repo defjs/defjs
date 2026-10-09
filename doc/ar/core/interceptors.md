@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,17 +108,17 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-طبقة الأمر ما زالت توزّع حسب الحالة. أعلن `503` في `output` عندما يحتاج المستدعون `error.data` مُنوَّعًا. القطع القصير لـ SSE أو WebSocket يحتاج معالجًا/جلسة متوافقين كاملين (وعود الإغلاق، حالة حية، ملكية). الكائنات الجزئية ليست سياسة صالحة.
+طبقة الأمر ما زالت توزّع حسب الحالة. أعلن struct `error` واحدًا لجانب غير 2xx عندما يحتاج المستدعون `error.data` مُنوَّعًا. القطع القصير لـ SSE أو WebSocket يحتاج مقبضًا/جلسة متوافقين كاملين (وعود الإغلاق، وحالة حية، وملكية، و`[Symbol.asyncDispose]`). الكائنات الجزئية ليست سياسة صالحة. تطبيقات `EventStreamHandle` و`WebSocketSessionLike` الهيكلية تحتاج الآن ذلك المتخلّص القياسي وقت الترجمة؛ والمستهلكون الذين يستقبلون فقط مقابض Defjs بلا متطلب استدعاء وقت تشغيل جديد.
 
 ## أعد محاولة القراءات الآمنة
 
-إعادة المحاولة تغيّر السلوك. أبقِ السياسة ضيقة — هذا المثال يعيد محاولة `GET` / `HEAD` / `OPTIONS` القابلة لإعادة التشغيل للحالات `0` و`502` و`503` و`504`، يحد `Retry-After` عند 30 ثانية، ويتوقف بعد محاولتين أو عند الإلغاء:
+إعادة المحاولة تغيّر السلوك. أبقِ السياسة ضيقة — هذا المثال يعيد محاولة `GET` / `HEAD` / `OPTIONS` القابلة لإعادة التشغيل للحالات `0` و`429` و`502` و`503` و`504`، ويحد `Retry-After` عند 30 ثانية، ويتوقف بعد محاولتين أو عند الإلغاء:
 
 ```typescript twoslash
 import { createHttpInterceptor, type HttpRequest, type HttpResponse } from '@defjs/core'
 
 const retryableMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
-const retryableStatuses = new Set([0, 502, 503, 504])
+const retryableStatuses = new Set([0, 429, 502, 503, 504])
 
 function isReplayable(request: HttpRequest): boolean {
   return typeof ReadableStream === 'undefined' || !(request.body instanceof ReadableStream)
@@ -217,7 +218,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 })
 ```
 
-نشر جلسة يلتقط `state` / `connection` / `bufferedAmount` مرة. احفظ `closed` و`receive` و`close` و`[Symbol.asyncDispose]()` وتنظيف المستمعين ما لم تغيّر الملكية عمدًا. يجب أن يعيد wrapper نفس disposer الداخلي كما في المثال، لا Promise منفصلًا. هذا كسر compile-time للتطبيقات الهيكلية المخصصة لـ `WebSocketSessionLike`؛ الكود الذي يستقبل جلسات Defjs فقط لا يحتاج نداء runtime إضافيًا.
+نشر جلسة يلتقط `state` / `connection` / `bufferedAmount` مرة. احفظ `closed` و`receive` و`close` وتفويض `[Symbol.asyncDispose]()` نفسه وتنظيف المستمعين ما لم تغيّر الملكية عمدًا. يجب أن يُرجع الغلاف وعد teardown الخاص بالجلسة الداخلية، لا وعدًا محلولًا غير مرتبط. إن أنشأت سلسلة جلسة لا تُسلَّم، تستقر Core وتغلقها؛ وإن أرجع معترض ناجح جلسة مختلفة، تتجاهل Core الجلسة التي أُنشئت.
 
 ## المرجع
 
@@ -229,7 +230,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 - `basicAuthHttpInterceptor(provider, options?)` — بيانات اعتماد Basic على HTTP
 - `basicAuthSSEInterceptor(provider, options?)` — بيانات اعتماد Basic على SSE
 
-`HttpRequest` قد يتضمن `endpoint` و`baseEndpoint` و`method` و`headers` و`body` و`queryParams` و`queryString` و`abort` و`timeout` و`operation` ثابتًا. قيمة تكامل نقل — وليست مدخل المستدعي المحلَّل. أبقِ تحقق الأمر وتحقق المخرج وتعيين أخطاء المجال في طبقاتها.
+`HttpRequest` قد يتضمن `endpoint` و`baseEndpoint` و`method` و`headers` و`body` و`queryParams` و`queryString` و`abort` و`timeout` و`operation` ثابتًا. قيمة تكامل نقل — وليست مدخل المستدعي المحلَّل. `queryParams` هو `new URLSearchParams(queryString)` بعد التسلسل. مُسلسِل الاستعلام المضبوط لا يُستدعى عندما لا ينتج الـ builder استعلامًا، و`URLSearchParams` من الـ builder يُستخدم كما هو. أبقِ تحقق الأمر وتحقق المخرج وتعيين أخطاء المجال في طبقاتها.
 
 مراقبو SSE/WebSocket خطافات دورة حياة، وليست تدفق تحكم. ألغِ اشتراك مستمعي WebSocket عندما ينتهي المالك. أعطال المراقب تتبع عقد النقل؛ المعترض نفسه يمكن أن يرمي أو يرفض.
 
@@ -241,5 +242,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 
 ## وصفات ذات صلة
 
+- [حدّث رمز Bearer مرة واحدة عند 401](../recipes/refresh-bearer-once.md)
+- [انشر SDK لـ HTTP دون إخفاء execute](../recipes/publish-http-sdk.md)
 - [الاختبار بـ Fetch محلي](../recipes/test-with-handle.md)
 - [إلغاء استدعاء HTTP](../recipes/cancel-http.md)

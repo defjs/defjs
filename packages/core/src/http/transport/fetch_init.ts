@@ -1,10 +1,11 @@
 import type { HttpRequest } from '../../internal/http_request'
+import { isReadableStream } from '../../internal/type_guards'
 import { serializeHttpBody } from './body'
 
 export const ERR_STREAMING_REQUEST_UNSUPPORTED = new Error('ERR_STREAMING_REQUEST_UNSUPPORTED')
 
 export function isReadableStreamBody(body: HttpRequest['body'] | unknown): body is ReadableStream<Uint8Array> {
-  return typeof ReadableStream !== 'undefined' && body instanceof ReadableStream
+  return isReadableStream(body)
 }
 
 let streamingRequestBodySupport: boolean | undefined

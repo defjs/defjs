@@ -1,6 +1,7 @@
 /**
  * How the HTTP response body should be parsed before struct validation.
- * Defaults to `'json'` when an output shape is declared.
+ * Chosen from the declared struct kind: string is text, blob and file are blobs,
+ * arrayBuffer is bytes, and every other kind is JSON.
  */
 export type HttpResponseType = 'arraybuffer' | 'blob' | 'json' | 'text'
 
@@ -22,9 +23,9 @@ export type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
 /**
  * Normalized outgoing HTTP request used by handlers, interceptors, and `fetchHandler`.
  *
- * After `struct.json(...)` (or another body codec) runs during command build, `body` is
- * already the wire value — for JSON that means a **JSON text string**. Sign HMAC / digests
- * against that string (or other final bytes), not the original Struct input object.
+ * After the request builder runs, `body` is already the wire value — for JSON that means a
+ * **JSON text string**. Sign HMAC / digests against that string (or other final bytes), not the
+ * original struct input.
  */
 export interface HttpRequest {
   abort?: AbortSignal
@@ -41,7 +42,18 @@ export interface HttpRequest {
   operation?: string
   queryParams?: URLSearchParams
   queryString?: string
-  responseType?: HttpResponseType
+  /**
+   * Representation for a 2xx body, derived from the endpoint `output` struct kind.
+   * Set only when `output` is declared. Interceptors that short-circuit with `makeResponse`
+   * read this to match the transport. Must not be changed. `undefined` leaves the 2xx body unread.
+   */
+  readonly responseType?: HttpResponseType
+  /**
+   * Representation for a non-2xx body, derived from the endpoint `error` struct kind.
+   * Set only when `error` is declared. Must not be changed. `undefined` leaves the non-2xx body
+   * unread and does not fall back to `responseType`.
+   */
+  readonly errorResponseType?: HttpResponseType
   timeout?: number
   uploadProgress?: HttpProgressFn
   withCredentials?: boolean

@@ -1,31 +1,37 @@
-import { COMMAND_TYPE, WEB_SOCKET_COMMAND } from '../client/command'
+import { COMMAND_EXECUTE, COMMAND_TYPE, WEB_SOCKET_COMMAND, type CommandExecutor } from '../client/command'
 import type { BaseCommand } from '../client/command'
 import type { ClientConfig, ClientWebSocketOptions, WebSocketHandle } from '../client/config'
 
-import type { AnyFault, Fault } from '../error'
+import type { AnyFault, Fault, PreflightFault } from '../error'
 import { createNetworkFault, createPreflightFault, ERR_ABORTED } from '../error'
 import type { WebSocketSessionLike } from '../interceptor/interceptor'
 import { makeChain, resolveWebSocketInterceptors } from '../interceptor/interceptor'
 import type { UseCancellationConfig } from '../internal/abort'
 import {
+  armTransportDeadline,
   awaitWithSignal,
   createAbortTimeoutConflictFault,
   hasAbortTimeoutConflict,
   mergeAbortSignals,
+  releaseAbortSignal,
+  resolveAbortedFault,
   resolveAbortFault,
+  resolveTransportCancellation,
   snapshotCancellationConfig,
   validateTransportTimeout,
 } from '../internal/abort'
 import { AsyncQueue } from '../internal/async_queue'
-import type { EndpointCommandBuilder } from '../internal/endpoint_command'
+import type { EndpointCallable } from '../internal/endpoint_command'
 import type { EndpointInput, ParsedInput } from '../internal/endpoint_input'
 import { parseEndpointInput } from '../internal/endpoint_input'
 import type { HttpRequest } from '../internal/http_request'
-import type { RequestBuild, RequestBuildHandler } from '../internal/request_builder'
-import { buildRequest } from '../internal/request_builder'
-import type { AnyStruct, Infer } from '../struct'
+import type { RequestBuildValue } from '../internal/request_values'
+import type { BuilderField, WebSocketRequestShape } from '../internal/builder_types'
+import type { MaterializedRequest, OutboundBuilder } from '../internal/outbound_request'
+import { materializeOutboundRequest, runOutboundBuilder } from '../internal/outbound_request'
+import type { AnyStruct, Infer, StructInput } from '../struct'
 import { createWebSocketRequest, createWebSocketUrlFromRequest } from './build'
-import { extractCloseInfo, MissingWebSocketStructError, serializeOutgoingWebSocketMessage, transformWebSocketMessage } from './codec'
+import { decodeWebSocketMessage, extractCloseInfo, serializeOutgoingWebSocketMessage } from './codec'
 import type { WebSocketCloseSnapshot } from './codec'
 import type { HeartbeatRuntime } from './heartbeat'
 import { startHeartbeat, stopHeartbeat, validateHeartbeatConfig } from './heartbeat'
@@ -35,112 +41,33 @@ import { normalizeReconnectConfig, shouldReconnect } from './reconnect'
 /** Lifecycle state of a managed WebSocket session. */
 export type WebSocketState = 'aborted' | 'closed' | 'closing' | 'connecting' | 'error' | 'idle' | 'open' | 'reconnecting'
 
-/** Map of WebSocket message type names to payload structs. */
-export type SocketStructs = { [key: string]: AnyStruct }
+/** Decoded incoming frame. Alias fields use their logical names. */
+export type WebSocketIncomingData<TIncoming extends AnyStruct> = Infer<TIncoming>
 
-export interface NormalizedWebSocketIncoming {
-  data: unknown
-  type: string
-}
+/** Value accepted by `session.send`. `never` when the endpoint declares no outgoing struct. */
+export type WebSocketOutgoingData<TOutgoing extends AnyStruct | undefined> = TOutgoing extends AnyStruct ? StructInput<TOutgoing> : never
 
-export type NormalizedWebSocketOutgoing = boolean | null | number | string | readonly unknown[] | { readonly [key: string]: unknown }
-
-export type WebSocketIncomingNormalizer = (decoded: unknown) => NormalizedWebSocketIncoming | undefined
-
-export type WebSocketOutgoingNormalizer = (type: string, encodedPayload: unknown) => NormalizedWebSocketOutgoing
-
-type SimplifySocket<T> = { [K in keyof T]: T[K] } & {}
-
-type NormalizeSocketMessage<TKey extends string, TPayload> = TPayload extends { [key: string]: unknown }
-  ? SimplifySocket<{ type: TKey } & TPayload>
-  : {
-      data: TPayload
-      type: TKey
-    }
-
-type SocketSendMessage<TKey extends string, TPayload> = TPayload extends { [key: string]: unknown }
-  ?
-      | SimplifySocket<{ type: TKey } & TPayload>
-      | {
-          data: TPayload
-          type: TKey
-        }
-  : {
-      data: TPayload
-      type: TKey
-    }
-
-type KnownIncomingSocketUnion<TIncoming extends SocketStructs> = {
-  [K in keyof TIncoming & string as K extends 'default' ? never : K]: NormalizeSocketMessage<K, Infer<TIncoming[K]>>
-} extends infer O
-  ? O[keyof O]
-  : never
-
-type KnownOutgoingSocketUnion<TOutgoing extends SocketStructs> = {
-  [K in keyof TOutgoing & string as K extends 'default' ? never : K]: SocketSendMessage<K, EndpointInput<TOutgoing[K]>>
-} extends infer O
-  ? O[keyof O]
-  : never
-
-type DefaultIncomingSocketUnion<TIncoming extends SocketStructs> = 'default' extends keyof TIncoming
-  ? NormalizeSocketMessage<string, Infer<TIncoming['default']>>
-  : never
-
-/** Incoming message shape inferred from an incoming `SocketStructs` map. */
-export type WebSocketIncomingData<TIncoming extends SocketStructs> = [
-  KnownIncomingSocketUnion<TIncoming> | DefaultIncomingSocketUnion<TIncoming>,
-] extends [never]
-  ? never
-  : KnownIncomingSocketUnion<TIncoming> | DefaultIncomingSocketUnion<TIncoming>
-
-/** Outgoing message shape inferred from an outgoing `SocketStructs` map. */
-export type WebSocketOutgoingData<TOutgoing extends SocketStructs | undefined> = TOutgoing extends SocketStructs
-  ? [KnownOutgoingSocketUnion<TOutgoing>] extends [never]
-    ? never
-    : KnownOutgoingSocketUnion<TOutgoing>
-  : never
-
-interface WebSocketDefinitionBase<
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
-> {
+interface WebSocketDefinitionBase<TIncoming extends AnyStruct = AnyStruct, TOutgoing extends AnyStruct | undefined = undefined> {
   incoming: TIncoming
   maxIncomingQueueSize: number
   maxOutgoingQueueSize?: number
-  normalizeIncoming?: WebSocketIncomingNormalizer
-  normalizeOutgoing?: WebSocketOutgoingNormalizer
   operation?: string
   outgoing?: TOutgoing
   path: string
   protocols?: readonly string[]
 }
 
-type WebSocketDefinitionWithoutBuild<
-  TInput extends AnyStruct | undefined = undefined,
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
-> = WebSocketDefinitionBase<TIncoming, TOutgoing> & {
-  build?: never
-  input?: TInput
-}
-
-type WebSocketDefinitionWithBuild<
-  TInput extends AnyStruct,
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
-> = WebSocketDefinitionBase<TIncoming, TOutgoing> & {
-  build: RequestBuildHandler<TInput, 'webSocket'>
-  input: TInput
-}
-
 /** Contract describing a WebSocket endpoint: path, message structs, and queue limits. */
 export type WebSocketDefinition<
   TInput extends AnyStruct | undefined = undefined,
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
-> =
-  | WebSocketDefinitionWithoutBuild<TInput, TIncoming, TOutgoing>
-  | (TInput extends AnyStruct ? WebSocketDefinitionWithBuild<TInput, TIncoming, TOutgoing> : never)
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = WebSocketDefinitionBase<TIncoming, TOutgoing> & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+
+export type { WebSocketRequestShape } from '../internal/builder_types'
 
 /** Connection metadata for the current WebSocket generation. */
 export interface WebSocketConnectionInfo {
@@ -191,28 +118,22 @@ export type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = 
   signal?: AbortSignal
 }
 
-/** Executable WebSocket command produced by a `WebSocketCommandBuilder`. */
+/** Executable WebSocket command produced by a `WebSocketEndpoint`. */
 export interface WebSocketCommand<
   TInput extends AnyStruct | undefined,
-  TIncoming extends SocketStructs,
-  TOutgoing extends SocketStructs | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
 > extends BaseCommand<typeof WEB_SOCKET_COMMAND> {
-  readonly endpoint: WebSocketEndpoint<TInput, TIncoming, TOutgoing>
+  readonly endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>
   readonly input: EndpointInput<TInput> | undefined
 }
 
-/** Builder function that creates `WebSocketCommand` values from endpoint input. */
-export type WebSocketCommandBuilder<
+/** Endpoint returned by `defineWebSocket`; call it to create a `WebSocketCommand`. */
+export type WebSocketEndpoint<
   TInput extends AnyStruct | undefined,
-  TIncoming extends SocketStructs,
-  TOutgoing extends SocketStructs | undefined,
-> = EndpointCommandBuilder<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
-
-type WebSocketEndpoint<
-  TInput extends AnyStruct | undefined = undefined,
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
-> = WebSocketDefinition<TInput, TIncoming, TOutgoing>
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
 
 type SocketRefState = {
   connection?: WebSocketConnectionInfo
@@ -236,7 +157,7 @@ export type ManualSocketCloseReason = {
 export interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
   intervalMs: number
   isAck?: (message: TIncoming) => boolean
-  message?: <T = TOutgoing>() => T | unknown
+  message?: () => TOutgoing
   timeoutMs?: number
 }
 
@@ -246,45 +167,41 @@ function castParsedWebSocketInput<TInput extends AnyStruct | undefined>(value: u
 }
 
 /**
- * Declare a typed WebSocket command builder.
+ * Declare a typed WebSocket endpoint.
  *
  * Pass path, incoming (and optional outgoing) message structs, and queue limits.
- * Call the returned builder with input to get a `WebSocketCommand` for `client.execute`.
+ * Call the returned endpoint with input to get a `WebSocketCommand` for `client.execute`.
  *
  * @param definition - WebSocket contract (path, structs, queue limits, optional input).
- * @returns A builder that creates `WebSocketCommand` values from input.
+ * @returns An endpoint that creates `WebSocketCommand` values from input.
  *
  * @example
  * ```ts
  * const useChat = defineWebSocket({
  *   maxIncomingQueueSize: 16,
  *   path: '/ws/chat',
- *   incoming: { message: struct.object({ text: struct.string() }) },
- *   outgoing: { message: struct.object({ text: struct.string() }) },
+ *   incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+ *   outgoing: struct.object({ text: struct.string(), type: struct.literal('message') }),
  * })
  * ```
  */
 export function defineWebSocket<
-  TInput extends AnyStruct,
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
->(definition: WebSocketDefinitionWithBuild<TInput, TIncoming, TOutgoing>): WebSocketCommandBuilder<TInput, TIncoming, TOutgoing>
-export function defineWebSocket<
+  const P extends string,
   TInput extends AnyStruct | undefined = undefined,
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
->(definition: WebSocketDefinitionWithoutBuild<TInput, TIncoming, TOutgoing>): WebSocketCommandBuilder<TInput, TIncoming, TOutgoing>
-export function defineWebSocket<
-  TInput extends AnyStruct | undefined = undefined,
-  TIncoming extends SocketStructs = SocketStructs,
-  TOutgoing extends SocketStructs | undefined = undefined,
->(definition: WebSocketDefinition<TInput, TIncoming, TOutgoing>): WebSocketCommandBuilder<TInput, TIncoming, TOutgoing> {
-  const endpoint: WebSocketEndpoint<TInput, TIncoming, TOutgoing> = {
-    ...definition,
-  }
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, 'path'> & {
+    input?: TInput
+    path: P
+  } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,
+): WebSocketEndpoint<TInput, TIncoming, TOutgoing> {
+  // Snapshot the top-level definition so a later mutation of the caller's object cannot retarget this endpoint.
+  const endpoint = { ...definition } as WebSocketDefinition<TInput, TIncoming, TOutgoing>
 
   function create(input?: EndpointInput<TInput>): WebSocketCommand<TInput, TIncoming, TOutgoing> {
     const command: WebSocketCommand<TInput, TIncoming, TOutgoing> = {
+      [COMMAND_EXECUTE]: executeWebSocketCommand as CommandExecutor,
       [COMMAND_TYPE]: WEB_SOCKET_COMMAND,
       endpoint,
       input,
@@ -293,16 +210,16 @@ export function defineWebSocket<
     return command
   }
 
-  return ((input?: EndpointInput<TInput>) => create(input)) as WebSocketCommandBuilder<TInput, TIncoming, TOutgoing>
+  return ((input?: EndpointInput<TInput>) => create(input)) as WebSocketEndpoint<TInput, TIncoming, TOutgoing>
 }
 
 async function runWebSocketCommand<
   TInput extends AnyStruct | undefined,
-  TIncoming extends SocketStructs,
-  TOutgoing extends SocketStructs | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
 >(
   clientConfig: ClientConfig,
-  endpoint: WebSocketEndpoint<TInput, TIncoming, TOutgoing>,
+  endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>,
   input: EndpointInput<TInput> | undefined,
   config: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
   controller: AbortController,
@@ -334,6 +251,15 @@ async function runWebSocketCommand<
     state.error = definitionError
     setSocketState(state, 'error')
     return [definitionError, undefined, undefined]
+  }
+
+  // Same fast path as HTTP/SSE: an already aborted call does not parse, build, or validate the socket.
+  const preAbortedSignal = [cancellationConfig.abort, cancellationConfig.signal].find((signal) => signal?.aborted)
+  if (preAbortedSignal) {
+    const aborted = resolveAbortedFault(preAbortedSignal)
+    state.error = aborted
+    setSocketState(state, aborted.code === 'NET_ABORTED' ? 'aborted' : 'error')
+    return [aborted, undefined, undefined]
   }
 
   try {
@@ -374,60 +300,67 @@ async function runWebSocketCommand<
     return [definitionError, undefined, undefined]
   }
 
+  // Startup deadline: armed before parse and the synchronous builder, released when startup
+  // settles. A later reconnect does not re-arm it.
+  const deadline = armTransportDeadline(cancellationConfig.timeout)
+  const chainController = new AbortController()
+  const chainSignal = mergeAbortSignals(chainController.signal, [cancellationConfig.abort, cancellationConfig.signal, deadline.signal])
+  const signal = mergeAbortSignals(controller.signal, [chainSignal])
+  deadline.releaseOnAbort(chainSignal)
+  const stopBeforeTransport = (
+    fault: PreflightFault,
+  ): SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>> => {
+    deadline.release()
+    releaseAbortSignal(chainSignal)
+    releaseAbortSignal(signal)
+    state.error = fault
+    setSocketState(state, fault.code === 'NET_ABORTED' ? 'aborted' : 'error')
+    return [fault, undefined, undefined]
+  }
+
   let parsedInput: ParsedInput<TInput>
   try {
     parsedInput = castParsedWebSocketInput<TInput>(await parseEndpointInput(endpoint.input, input))
   } catch (error) {
-    const definitionError = createPreflightFault('REQ_INPUT_INVALID', error)
-    state.error = definitionError
-    setSocketState(state, 'error')
-    return [definitionError, undefined, undefined]
+    return stopBeforeTransport(resolveTransportCancellation(deadline, signal, createPreflightFault('REQ_INPUT_INVALID', error)))
   }
 
-  let built: RequestBuild
+  const parsedCancellation = resolveTransportCancellation(deadline, signal)
+  if (parsedCancellation) {
+    return stopBeforeTransport(parsedCancellation)
+  }
+
+  let built: MaterializedRequest
   try {
-    built = buildRequest(parsedInput, endpoint.build, {
-      input: endpoint.input,
-      transport: 'webSocket',
+    built = materializeOutboundRequest(runOutboundBuilder(parsedInput, endpoint.builder), 'webSocket')
+  } catch (error) {
+    return stopBeforeTransport(resolveTransportCancellation(deadline, signal, createPreflightFault('REQ_BUILD_FAILED', error)))
+  }
+
+  const builtCancellation = resolveTransportCancellation(deadline, signal)
+  if (builtCancellation) {
+    return stopBeforeTransport(builtCancellation)
+  }
+
+  let wsRequest: HttpRequest
+  try {
+    wsRequest = createWebSocketRequest({
+      abort: signal,
+      baseEndpoint: clientConfig.endpoint,
+      operation: endpoint.operation,
+      params: built.params,
+      path: endpoint.path,
+      query: built.query as { [key: string]: RequestBuildValue } | URLSearchParams | undefined,
+      querySerializer: clientConfig.querySerializer,
+      withCredentials: clientConfig.withCredentials,
     })
   } catch (error) {
-    const definitionError = createPreflightFault('REQ_BUILD_FAILED', error)
-    state.error = definitionError
-    setSocketState(state, 'error')
-    return [definitionError, undefined, undefined]
+    return stopBeforeTransport(resolveTransportCancellation(deadline, signal, createPreflightFault('REQ_BUILD_FAILED', error)))
   }
-
-  const chainController = new AbortController()
-  const chainSignal = mergeAbortSignals(
-    chainController.signal,
-    [cancellationConfig.abort, cancellationConfig.signal],
-    cancellationConfig.timeout,
-  )
-  const signal = mergeAbortSignals(controller.signal, [chainSignal])
-  const abortedBeforeStart = resolveAbortFault(signal)
-  if (abortedBeforeStart) {
-    state.error = abortedBeforeStart
-    const nextStatus = abortedBeforeStart.code === 'NET_ABORTED' ? 'aborted' : 'error'
-    setSocketState(state, nextStatus)
-    return [abortedBeforeStart, undefined, undefined]
-  }
-
-  const wsRequest: HttpRequest = createWebSocketRequest({
-    abort: signal,
-    baseEndpoint: clientConfig.endpoint,
-    build: built,
-    operation: endpoint.operation,
-    path: endpoint.path,
-    queryParamsSerializer: clientConfig.queryParamsSerializer,
-    withCredentials: clientConfig.withCredentials,
-  })
 
   const WebSocketCtor = clientConfig.webSocket.handle ?? globalThis.WebSocket
   if (typeof WebSocketCtor !== 'function') {
-    const transportError = createPreflightFault('ENV_UNSUPPORTED', new Error('WebSocket is not supported in current runtime'))
-    state.error = transportError
-    setSocketState(state, 'error')
-    return [transportError, undefined, undefined]
+    return stopBeforeTransport(createPreflightFault('ENV_UNSUPPORTED', new Error('WebSocket is not supported in current runtime')))
   }
   const WebSocketImpl = WebSocketCtor as unknown as new (url: string | URL, protocols?: string | string[]) => WebSocketHandle
 
@@ -449,7 +382,10 @@ async function runWebSocketCommand<
       return rejection
     }
     wsHandlerInvoked = true
+    // Captured before the executor shadows `signal`. Both the caller and an interceptor replacement stay live.
+    const executionSignal = signal
     const pendingSession = new Promise<WebSocketSessionLike>((resolveSession, rejectSession) => {
+      const signal = mergeAbortSignals(executionSignal, [req.abort])
       const incomingQueue = new AsyncQueue<WebSocketIncomingData<TIncoming>>({
         maxSize: endpoint.maxIncomingQueueSize,
       })
@@ -481,7 +417,6 @@ async function runWebSocketCommand<
       const baseProtocols = [...(protocolsOption ?? clientConfig.webSocket.protocols ?? endpoint.protocols ?? [])]
       const session = createWebSocketSession(
         endpoint.outgoing,
-        endpoint.normalizeOutgoing,
         incomingQueue,
         closedDeferred.promise,
         state,
@@ -658,6 +593,16 @@ async function runWebSocketCommand<
       }
 
       async function connectOnce(url: string, protocols: readonly string[]): Promise<SocketLifecycleOutcome> {
+        // Query serialization and interceptors have already run. Do not construct a socket once cancelled.
+        const due = resolveTransportCancellation(deadline, signal)
+        if (due) {
+          return {
+            cause: due,
+            closeInfo: { cause: due, reason: due.message },
+            opened: false,
+          }
+        }
+
         let socket: WebSocketHandle
         try {
           socket = protocols.length > 0 ? new WebSocketImpl(url, [...protocols]) : new WebSocketImpl(url)
@@ -684,7 +629,7 @@ async function runWebSocketCommand<
           let errorCloseTimer: ReturnType<typeof setTimeout> | undefined
           let messagePumpRunning = false
           const messageController = new AbortController()
-          const messageSignal = AbortSignal.any([signal, messageController.signal])
+          const messageSignal = mergeAbortSignals(signal, [messageController.signal])
           const rawMessages: MessageEvent[] = []
           let settled = false
 
@@ -700,6 +645,7 @@ async function runWebSocketCommand<
             clearErrorCloseTimer()
             stopHeartbeat(sessionController)
             messageController.abort()
+            releaseAbortSignal(messageSignal)
             rawMessages.length = 0
             socket.removeEventListener('open', handleOpen)
             socket.removeEventListener('message', onMessage)
@@ -767,6 +713,7 @@ async function runWebSocketCommand<
             if (!startupSettled) {
               startupConnection = latestConnection
               startupSettled = true
+              deadline.release()
               // Type boundary: session is created as WebSocketSession<...> above; resolveSession expects WebSocketSessionLike (structural match).
               resolveSession(session as WebSocketSessionLike)
             }
@@ -780,7 +727,6 @@ async function runWebSocketCommand<
                   finish({ cause, kind: 'error' })
                 },
                 WebSocketCtor.OPEN,
-                endpoint.normalizeOutgoing,
               )
             }
           }
@@ -792,23 +738,14 @@ async function runWebSocketCommand<
             }
             let transformed: WebSocketIncomingData<TIncoming> | undefined
             try {
-              transformed = await awaitWithSignal(
-                () => transformWebSocketMessage(endpoint.incoming, event.data, endpoint.normalizeIncoming),
-                messageSignal,
-              )
+              messageSignal.throwIfAborted()
+              // Text and byte frames decode synchronously. Only a Blob read waits, so only it races the signal.
+              const decoded = decodeWebSocketMessage(endpoint.incoming, event.data)
+              transformed = (decoded instanceof Promise ? await awaitWithSignal(() => decoded, messageSignal) : decoded) as
+                | WebSocketIncomingData<TIncoming>
+                | undefined
             } catch (error) {
               if (finished || messageController.signal.aborted) {
-                return
-              }
-              if (error instanceof MissingWebSocketStructError) {
-                await notifyWebSocketInvalidEvent(
-                  clientConfig.webSocket.onInvalidEvent,
-                  {
-                    reason: 'missing-struct',
-                    message: { type: error.type, data: error.decoded },
-                  },
-                  messageSignal,
-                )
                 return
               }
               emitRuntimeError(state, error)
@@ -960,6 +897,7 @@ async function runWebSocketCommand<
         }
 
         finished = true
+        deadline.release()
         stopHeartbeat(sessionController)
 
         const activeSocket = sessionController.currentSocket
@@ -994,6 +932,7 @@ async function runWebSocketCommand<
         }
 
         closedDeferred.resolve(final)
+        releaseAbortSignal(signal)
         if (!startupSettled) {
           const startupError = options.startupError ?? faultFromCloseInfo(final)
           state.error = startupError
@@ -1101,6 +1040,8 @@ async function runWebSocketCommand<
   try {
     const session = await awaitWithSignal(() => wsChain(wsRequest, wsHandler), chainSignal)
     chainSettled = true
+    deadline.release()
+    releaseAbortSignal(chainSignal)
     let deliveredSession = [...undeliveredSessions].some(
       (createdSession) => createdSession === session || createdSession.closed === session.closed,
     )
@@ -1120,12 +1061,15 @@ async function runWebSocketCommand<
     undeliveredSessions.clear()
     if (!deliveredSession) {
       startupConnection = undefined
+      releaseAbortSignal(signal)
     }
     // Type boundary: interceptor chain returns WebSocketSessionLike; the concrete type matches the endpoint's incoming/outgoing structs.
     const typedSession = session as WebSocketSession<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>
     return [null, typedSession, startupConnection ?? typedSession.connection]
   } catch (error) {
     chainSettled = true
+    deadline.release()
+    releaseAbortSignal(chainSignal)
     const signalError = resolveAbortFault(chainSignal)
     // The startup catch funnels every failure: a value that is already a fault (a refused
     // connection, a bad URL, a rejected hook) crosses unchanged, and only an unclassified throw
@@ -1145,6 +1089,7 @@ async function runWebSocketCommand<
       pendingSessions.clear()
       undeliveredSessions.clear()
     }
+    releaseAbortSignal(signal)
     return [requestError as Fault<undefined>, undefined, state.connection]
   }
 }
@@ -1155,14 +1100,14 @@ async function runWebSocketCommand<
  * Prefer `client.execute(command)` in application code; this is the low-level entry used by the client.
  *
  * @param clientConfig - Resolved client configuration.
- * @param command - WebSocket command from a `WebSocketCommandBuilder`.
+ * @param command - WebSocket command from a `WebSocketEndpoint`.
  * @param options - Optional execute options (heartbeat, reconnect, abort).
  * @returns Await-result tuple of `[error, socket, connection]`.
  */
 export async function executeWebSocketCommand<
   TInput extends AnyStruct | undefined,
-  TIncoming extends SocketStructs,
-  TOutgoing extends SocketStructs | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
 >(
   clientConfig: ClientConfig,
   command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
@@ -1205,9 +1150,8 @@ type FinishOptions = {
 const SOCKET_CLOSE_GRACE_MS = 1_000
 const noop = () => undefined
 
-function createWebSocketSession<TIncoming, TOutgoing extends SocketStructs | undefined>(
+function createWebSocketSession<TIncoming, TOutgoing extends AnyStruct | undefined>(
   outgoing: TOutgoing,
-  normalizeOutgoing: WebSocketOutgoingNormalizer | undefined,
   queue: AsyncQueue<TIncoming>,
   closed: Promise<WebSocketCloseInfo>,
   state: SocketRefState,
@@ -1276,7 +1220,7 @@ function createWebSocketSession<TIncoming, TOutgoing extends SocketStructs | und
         throw new DOMException('WebSocket session is not writable', 'InvalidStateError')
       }
 
-      const serialized = serializeOutgoingWebSocketMessage(outgoing, message, normalizeOutgoing)
+      const serialized = serializeOutgoingWebSocketMessage(outgoing, message)
       if (
         isUnavailable() ||
         state.status !== initialState ||
@@ -1338,25 +1282,6 @@ function setSocketState(state: SocketRefState, next: WebSocketState): void {
 
 function emitRuntimeError(state: SocketRefState, error: unknown): void {
   emitRuntimeErrorToListeners([...state.listeners.runtimeError], error)
-}
-
-async function notifyWebSocketInvalidEvent(
-  onInvalidEvent: ClientWebSocketOptions['onInvalidEvent'],
-  context: {
-    reason: 'missing-struct'
-    message: { type: string; data: unknown }
-  },
-  signal: AbortSignal,
-): Promise<void> {
-  if (!onInvalidEvent) {
-    return
-  }
-
-  try {
-    await awaitWithSignal(() => onInvalidEvent(context), signal)
-  } catch {
-    // onInvalidEvent is an observer; observer failures must not tear down the session.
-  }
 }
 
 function emitRuntimeErrorToListeners(listeners: readonly ((error: unknown) => void)[], error: unknown): void {

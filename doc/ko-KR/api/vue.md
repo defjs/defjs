@@ -5,9 +5,9 @@ description: 플러그인, injection key, injectClient예요.
 
 # Vue {#page}
 
-기존 `@defjs/core` 클라이언트를 Vue에 연결해요. 패키지는 클라이언트를 **만들지 않고**, 결과를 캐시하지 않으며, unmount 때 전송도 닫지 않아요.
+기존 `@defjs/core` 클라이언트를 Vue 앱에 제공해요. 이 패키지는 클라이언트를 만들거나, 캐시하거나, dispose하지 않아요.
 
-[Vue 가이드](../plugins/vue.md)를 보세요.
+[Vue 가이드](/plugins/vue)를 보세요.
 
 ## createClientPlugin() {#createClientPlugin}
 

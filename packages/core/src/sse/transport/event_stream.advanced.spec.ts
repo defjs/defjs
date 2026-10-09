@@ -1359,3 +1359,176 @@ describe('fetchEventStream advanced', () => {
     await expect(iter.next()).rejects.toThrow('SSE parser buffer exceeded maxBufferSize')
   })
 })
+
+describe('fetchEventStream message path', () => {
+  const request: HttpRequest = { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'GET' }
+
+  // The whole text arrives as one chunk.
+  function respondWith(text: string) {
+    return vi.fn(async () => new Response(text, { headers: { 'content-type': 'text/event-stream' } }))
+  }
+
+  function nextTurn(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  test('should transform every message of a chunk in one synchronous pass', async () => {
+    const order: string[] = []
+    const stream = await fetchEventStream(request, {
+      fetch: respondWith('data: a\n\ndata: b\n\ndata: c\n\n'),
+      transformMessage(message) {
+        if (order.length === 0) {
+          queueMicrotask(() => order.push('microtask'))
+        }
+        order.push(`transform ${message.data}`)
+        return message
+      },
+    })
+    for await (const _ of stream) {
+      // consume
+    }
+
+    // The microtask queued by the first transform runs only after the whole chunk has been handled.
+    expect(order).toEqual(['transform a', 'transform b', 'transform c', 'microtask'])
+  })
+
+  test.each([
+    { expected: ['a', 'b!', 'c'], settled: { data: 'b!', event: '', id: '' } },
+    { expected: ['a', 'c'], settled: undefined },
+  ])('should hold later messages back until a pending transform settles ($expected)', async ({ expected, settled }) => {
+    const gate = Promise.withResolvers<EventStreamMessage | undefined>()
+    const transformed: string[] = []
+    const stream = await fetchEventStream(request, {
+      fetch: respondWith('data: a\n\ndata: b\n\ndata: c\n\n'),
+      transformMessage(message) {
+        transformed.push(message.data)
+        return message.data === 'b' ? gate.promise : message
+      },
+    })
+    await nextTurn()
+
+    // "b" is pending, so "c" is neither transformed nor delivered ahead of it.
+    expect(transformed).toEqual(['a', 'b'])
+
+    gate.resolve(settled)
+    const received: string[] = []
+    for await (const event of stream) {
+      received.push(event.data)
+    }
+
+    expect(transformed).toEqual(['a', 'b', 'c'])
+    expect(received).toEqual(expected)
+  })
+
+  test.each(['throws', 'rejects'] as const)('should fail with EXT_OBSERVER_FAILED when a transform %s', async (mode) => {
+    const failure = new Error('transform failed')
+    const transformed: string[] = []
+    const fetch = respondWith('data: a\n\ndata: b\n\n')
+    const onerror = vi.fn(() => 0)
+    const stream = await fetchEventStream(request, {
+      fetch,
+      onerror,
+      reconnect: { attempts: 2, delayMs: 0 },
+      transformMessage(message) {
+        transformed.push(message.data)
+        if (mode === 'throws') {
+          throw failure
+        }
+        return Promise.reject(failure)
+      },
+    })
+
+    const error = await stream[Symbol.asyncIterator]()
+      .next()
+      .catch((reason: unknown) => reason)
+
+    expect(getEventStreamFatalCode(error)).toBe('EXT_OBSERVER_FAILED')
+    expect(error).toMatchObject({ cause: failure })
+    await expect(stream.closed).resolves.toMatchObject({ cause: error, code: 'EXT_OBSERVER_FAILED', kind: 'error' })
+    // The failing message ends the stream: nothing after it is read, and a fatal error is not retried.
+    expect(transformed).toEqual(['a'])
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(onerror).toHaveBeenCalledOnce()
+  })
+
+  test('should keep CAP_QUEUE_OVERFLOW as the failure when the queue overflows after a pending transform', async () => {
+    const stream = await fetchEventStream(request, {
+      fetch: respondWith('data: a\n\ndata: b\n\n'),
+      maxQueueSize: 1,
+      transformMessage: async (message) => message,
+    })
+
+    await expect(stream.closed).resolves.toMatchObject({ code: 'CAP_QUEUE_OVERFLOW', kind: 'error' })
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow('Event stream queue exceeded maxQueueSize')
+  })
+
+  test('should keep an abort as the outcome when a transform throws after aborting', async () => {
+    const controller = new AbortController()
+    const fetch = respondWith('data: a\n\n')
+    const onerror = vi.fn(() => 0)
+    const stream = await fetchEventStream(
+      { ...request, abort: controller.signal },
+      {
+        fetch,
+        onerror,
+        reconnect: { attempts: 2, delayMs: 0 },
+        transformMessage() {
+          controller.abort(ERR_ABORTED)
+          throw new Error('transform failed after the abort')
+        },
+      },
+    )
+
+    await expect(settleWithin(stream[Symbol.asyncIterator]().next())).resolves.toEqual({ done: true, value: undefined })
+    await expect(stream.closed).resolves.toMatchObject({ cause: ERR_ABORTED, kind: 'aborted' })
+    expect(fetch).toHaveBeenCalledOnce()
+    expect(onerror).not.toHaveBeenCalled()
+  })
+
+  test('should observe a transform promise rejection after the transform aborts', async () => {
+    const controller = new AbortController()
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on('unhandledRejection', onUnhandled)
+    const lateFailure = new Error('late transform failure')
+
+    try {
+      const stream = await fetchEventStream(
+        { ...request, abort: controller.signal },
+        {
+          fetch: respondWith('data: a\n\n'),
+          transformMessage() {
+            controller.abort(ERR_ABORTED)
+            return Promise.reject(lateFailure)
+          },
+        },
+      )
+
+      await expect(stream.closed).resolves.toMatchObject({ cause: ERR_ABORTED, kind: 'aborted' })
+      await new Promise((resolve) => setImmediate(resolve))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onUnhandled)
+    }
+  })
+
+  test('should not transform the remaining messages of a chunk once the request is aborted', async () => {
+    const controller = new AbortController()
+    const transformed: string[] = []
+    const stream = await fetchEventStream(
+      { ...request, abort: controller.signal },
+      {
+        fetch: respondWith('data: a\n\ndata: b\n\ndata: c\n\n'),
+        transformMessage(message) {
+          transformed.push(message.data)
+          controller.abort(ERR_ABORTED)
+          return message
+        },
+      },
+    )
+
+    await expect(settleWithin(stream.closed)).resolves.toMatchObject({ cause: ERR_ABORTED, kind: 'aborted' })
+    expect(transformed).toEqual(['a'])
+    await expect(stream[Symbol.asyncIterator]().next()).resolves.toEqual({ done: true, value: undefined })
+  })
+})

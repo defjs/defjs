@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: 出方向の計装 option、`withOpenTelemetryServer` です。
+description: withOpenTelemetryServer と、トランスポートごとの options です。
 ---
 
 # OpenTelemetry server {#page}
 
-クライアント作成時に出方向の計装を足します。HTTP / SSE / WebSocket の interceptor を追加します。入方向のサーバー計装ではなく、OpenTelemetry SDK も初期化しません。
+アウトバウンドの HTTP / SSE / WebSocket 計装を、コアのインターセプターとして足します。このパッケージは OpenTelemetry SDK を初期化せず、インバウンドのサーバー計装でもありません。
 
-[OpenTelemetry server ガイド](../plugins/opentelemetry-server.md) を見てください。
+[OpenTelemetry server ガイド](/plugins/opentelemetry-server) を見てください。
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 
@@ -15,7 +15,7 @@ description: 出方向の計装 option、`withOpenTelemetryServer` です。
 function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
 ```
 
-有効な輸送ごとに interceptor を 1 本足します。`createClient` のときに重ねてください。
+有効なトランスポートごとにインターセプターを 1 本足します。`createClient` のときに当ててください。
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -24,9 +24,9 @@ import { withOpenTelemetryServer } from '@defjs/opentelemetry-server'
 const client = createClient(withEndpoint('https://api.example.com'), withOpenTelemetryServer({ tracer }))
 ```
 
-`tracer` は必須です。`meter` は任意 — 省略するとこのパッケージの metrics は出しません。`propagator` なし → W3C Trace Context + Baggage です。
+`tracer` は必須です。`meter` は任意 — 省略するとこのパッケージのメトリクスは出しません。`propagator` が無い → W3C Trace Context + Baggage です。
 
-HTTP、SSE、WebSocket は既定でオンです。輸送に `{ enabled: false }` を渡すとスキップします。
+HTTP、SSE、WebSocket は既定でオンです。トランスポートに `{ enabled: false }` を渡すとスキップします。
 
 ## OpenTelemetryServerOptions {#OpenTelemetryServerOptions}
 
@@ -65,8 +65,23 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 }
 ```
 
-`startSpanHook` は各 HTTP、SSE、WebSocket transport の span 作成前に同期実行されます。application 属性は最後に適用されるので、`url.full` などを上書きできます。throw すると Defjs は `defjs.otel.hook.error` を記録し、built-in 属性で request を継続します。`requestHook` と `responseHook` は span 作成後のままです。
+`startSpanHook` は、自分の HTTP、SSE、または WebSocket トランスポートについて、span 作成前に同期実行されます。その属性は組み込み属性のあとに適用されるので、アプリケーションは `url.full` や別の初期値を上書きできます。throw すると Defjs は組み込み属性で span を作り、`defjs.otel.hook.error` を記録し、リクエストを続けます。`requestHook` と `responseHook` は、作成後の既存の意味論のままです。
 
-デフォルトの `url.full` は、任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` を追加しません。これは redaction ではなく、組み込み redactor policy もありません。完全またはマスク済み URL は `startSpanHook` で明示的に構築してください。
+デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` は付けません。その境界は redaction ではなく、このパッケージに組み込みの redactor や機微キーの方針もありません。必要なら、アプリケーションが所有する URL を明示的に組み立て、必要に応じて redact してください。
 
-`queryPropagation` の既定は `false` です。WebSocket URL に trace context を載せてよいときだけオンにしてください。
+```ts
+import { createResolvedRequestUrl, type HttpRequest } from '@defjs/core'
+import type { Attributes } from '@opentelemetry/api'
+
+const http = {
+  startSpanHook(request: HttpRequest): Attributes {
+    if (!request.baseEndpoint) return {}
+    const url = createResolvedRequestUrl(request.baseEndpoint, request.endpoint)
+    if (request.queryString) url.search = request.queryString
+    url.searchParams.delete('access_token')
+    return { 'url.full': url.href }
+  },
+}
+```
+
+`queryPropagation` の既定は `false` です。WebSocket URL に trace context を載せてよいと受け入れたあとでのみ、オンにしてください。

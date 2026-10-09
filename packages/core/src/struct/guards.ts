@@ -19,8 +19,6 @@ const KNOWN_KINDS = new Set<StructDefinition['kind']>([
   'object',
   'or',
   'record',
-  'request',
-  'requestBody',
   'string',
   'tuple',
   'unknown',

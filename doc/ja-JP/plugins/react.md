@@ -35,7 +35,7 @@ import { useEffect, useState } from 'react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -102,7 +102,7 @@ export function HealthCheck() {
 
 ## クエリ作業を所有する
 
-クエリライブラリがキャッシュ、リトライ、古い結果の抑制、キャンセルを所有できます。それが渡す signal を渡します。
+クエリライブラリがキャッシュ、リトライ、古い結果の抑制、キャンセルを所有できます。それが渡す signal を渡します。一覧ページでは `client.execute(...)` を TanStack Query（または類似のもの）で包んでください — `@defjs/react` は DI だけのままで、`useRequest` は**出しません**。
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -112,7 +112,7 @@ import { useClient } from '@defjs/react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -146,9 +146,7 @@ import { useEffect } from 'react'
 const notifications = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/notifications',
-  incoming: {
-    message: struct.object({ text: struct.string() }),
-  },
+  incoming: struct.object({ text: struct.string() }),
 })
 
 export function Notifications() {

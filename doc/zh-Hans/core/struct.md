@@ -1,11 +1,11 @@
 ---
 title: Struct
-description: 建模请求和响应形状，解析 unknown，编码线上 body。
+description: 给请求和响应建模，parse 未知值，编码线上 body。
 ---
 
 # Struct
 
-把请求（以及响应）建成 Struct。TypeScript 类型靠 `Infer`，运行时检查靠 `struct.parse(...)`——不抛，错误优先 tuple。
+把请求（和它的响应）建成 Struct。`Infer` 给你 TypeScript 类型，`struct.parse(...)` 做运行时检查——不抛，错误优先 tuple。
 
 ## 基本用法
 
@@ -23,14 +23,11 @@ type User = Infer<typeof User>
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    name: struct.string(),
+    email: struct.string(),
   }),
+  builder: (input) => ({ body: input }),
   output: User,
 })
 
@@ -39,19 +36,19 @@ if (!parseError) console.log(user.name)
 void createUser
 ```
 
-解析输出只保留已声明字段。缺必填、原始类型不对、嵌套坏了、tuple 长度不对、不允许的 `null` → `StructError`，没有半成品。Struct 不可变；`.optional()` 这类方法返回新 Struct。
+Parse 结果只留声明过的字段。缺必填、原语不对、嵌套值坏了、tuple 长度不对、不允许的 `null` → `StructError`，没有半成品。Struct 不可变；`.optional()` 一类方法返回新 Struct。
 
 ## 必填、可选、null
 
-「有没有」和「能不能 null」是两件事：
+在不在，和能不能 null，是两回事：
 
-| 声明                         | 缺失 / `undefined`     | `null` | 合法值      |
-| ---------------------------- | ---------------------- | ------ | ----------- |
-| `struct.string()`            | 拒绝                   | 拒绝   | 接受 string |
-| `struct.string().optional()` | 接受；对象缺字段则省略 | 拒绝   | 接受 string |
-| `struct.string().null()`     | 拒绝                   | 接受   | 接受 string |
-| `struct.string().nullish()`  | 接受；对象缺字段则省略 | 接受   | 接受 string |
-| `struct.null()`              | 拒绝                   | 接受   | 拒绝其他值  |
+| 声明                         | 缺失 / `undefined`           | `null` | 合法值      |
+| ---------------------------- | ---------------------------- | ------ | ----------- |
+| `struct.string()`            | 拒绝                         | 拒绝   | 接受 string |
+| `struct.string().optional()` | 接受；对象里缺的字段保持缺席 | 拒绝   | 接受 string |
+| `struct.string().null()`     | 拒绝                         | 接受   | 接受 string |
+| `struct.string().nullish()`  | 接受；对象里缺的字段保持缺席 | 接受   | 接受 string |
+| `struct.null()`              | 拒绝                         | 接受   | 拒绝其他值  |
 
 ```typescript twoslash
 import { struct } from '@defjs/core'
@@ -72,11 +69,11 @@ if (error) throw error
 console.log(profile.name, profile.nickname, profile.biography, profile.note)
 ```
 
-在根上，optional 可以是 `undefined`。在对象里，省略的 optional/nullish 字段保持缺席。`struct.request(...)` 里全可选的段可以省略（归一成 `{}`）；有必填字段的段仍必填。Body wrapper 一旦出现 → body 必填，哪怕内部字段都 optional。
+在根上，optional 可以是 `undefined`。在对象里，省略的 optional/nullish 字段保持缺席。请求形状的 input 就是普通字段，名叫 `path`、`query`、`headers`、`body`。调用方可以省略时，给那个字段标 `.optional()`。`body` 字段一旦必填，就算里面每个字段都 optional，它仍必填。
 
-## 请求 body wrapper
+## 请求怎么摆
 
-`struct.request(...)` 拆开 `path`、`query`、`headers`、`body`。Body 要显式 codec：
+Path、query、headers、body 是 builder 返回的字段，不是一种 request struct。`input` 已经是这个形状时，省略 `builder`。`struct.urlencoded(shape)` 和 `struct.formData(shape)` 是带 codec tag 的对象 struct。这个 tag 只在该值是 body 根时跑：key 用 alias，数组重复字段名。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -84,15 +81,13 @@ import { defineRequest, struct } from '@defjs/core'
 const createUser = defineRequest({
   method: 'POST',
   path: '/organizations/:organizationId/users',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ organizationId: struct.string() }),
     query: struct.object({ notify: struct.boolean().optional() }),
     headers: struct.object({ requestId: struct.string().alias('x-request-id') }),
-    body: struct.json(
-      struct.object({
-        displayName: struct.string().alias('display_name'),
-      }),
-    ),
+    body: struct.object({
+      displayName: struct.string().alias('display_name'),
+    }),
   }),
 })
 
@@ -105,21 +100,20 @@ const command = createUser({
 void command
 ```
 
-| Wrapper                    | 解析值            | 线上边界                                                             |
-| -------------------------- | ----------------- | -------------------------------------------------------------------- |
-| `struct.json(inner)`       | 来自 `inner` 的值 | JSON 文本，`application/json`                                        |
-| `struct.text()`            | `string`          | 文本，`text/plain;charset=UTF-8`                                     |
-| `struct.urlencoded(shape)` | Shape 的对象      | `URLSearchParams`，`application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)`   | Shape 的对象      | `FormData`；平台设 multipart boundary                                |
-| `struct.blob()`            | `Blob`            | Blob type 或 `application/octet-stream`                              |
-| `struct.file()`            | `File`            | 原生 `File`（name + type）                                           |
-| `struct.arrayBuffer()`     | `ArrayBuffer`     | Buffer，`application/octet-stream`                                   |
+| Body 根                                         | 发出去的是        | 默认 content type                                 |
+| ----------------------------------------------- | ----------------- | ------------------------------------------------- |
+| 带类型的 object、array、number、boolean、`null` | JSON 文本         | `application/json`                                |
+| `string` struct 或原始 string                   | 文本              | `text/plain;charset=UTF-8`                        |
+| 根上的 `struct.urlencoded(shape)`               | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| 根上的 `struct.formData(shape)`                 | `FormData`        | 平台 multipart boundary                           |
+| `Blob` / `File`                                 | 那个 blob         | blob type 或 `application/octet-stream`           |
+| `ArrayBuffer` / view / stream                   | 字节              | `application/octet-stream`                        |
 
-`struct.file()` 是表单字段的值 Struct——不是独立的 `request.body`。二进制 body 用 `struct.blob()` 和 `struct.arrayBuffer()`。裸 object/array/primitive Struct 不能当 `request.body`。SSE 拒绝 `body`。WebSocket 请求输入拒绝 `body` 和 `headers`。
+`struct.file()` 是表单字段和原始 file body 的值 struct。WebSocket builder 不能返回 `headers` 或 `body`。HTTP 和 SSE 可以。`GET` 和 `HEAD` 不行。
 
 ## Alias
 
-`.alias(...)` 把逻辑名和线上名分开。`struct.parse(...)` 用逻辑 key。JSON 和平铺请求 codec 编码 alias；JSON 响应解码把线上 key 映回逻辑字段。
+`.alias(...)` 把逻辑名和线上名分开。`struct.parse(...)` 用逻辑 key。JSON 和扁平请求 codec 编码 alias；JSON 响应解码把线上 key 映回逻辑字段。
 
 ```typescript twoslash
 import { struct } from '@defjs/core'
@@ -138,16 +132,27 @@ console.log(wireError?.issues[0]?.path)
 
 | 边界                                       | 字段                      |
 | ------------------------------------------ | ------------------------- |
-| `struct.parse(User, ...)`                  | 逻辑 `displayName`        |
-| JSON 请求编码                              | 线上 `display_name`       |
-| JSON 响应解码                              | 线上 → 逻辑 `displayName` |
-| Query、header、URL-encoded、multipart 编码 | 线上 alias 当 key         |
+| `struct.parse(User, ...)` 和 command input | 逻辑名 `displayName`      |
+| 交给 builder 的带类型对象                  | 线上 `display_name`       |
+| JSON / SSE / WebSocket 解码                | 线上 → 逻辑 `displayName` |
+| builder 里手写的匿名对象                   | 你写下的那个 key          |
 
-Alias 对嵌套字段、数组、对象、union、discriminator 都管用。业务代码用逻辑名；外部命名写在 Struct 里。
+Alias 对嵌套字段、数组、对象、联合、判别字段都有效。业务代码用逻辑名；外部名字在 struct 上写一次。展开带类型的对象会保住这套编码。同一个对象里既写逻辑字段又写它的线上 key，就是 `REQ_BUILD_FAILED`。你自己 `JSON.stringify` 一个值就离开了这条路：serializer 看到的是逻辑名。
+
+引导按每个节点决定，不只在根上。匿名父对象下面新写的对象保留你写下的 key。带类型的父对象下面，同一个对象改用该字段的 struct。
+
+```ts
+body: { row: { id: '42' } }              // 根匿名：发出 id
+body: { ...input, row: { id: '42' } }    // 根带类型，row 字段声明了 alias：发出 wire_id
+```
+
+union 引导同时命中多个分支时，每个分支都编码再比较。线上结果一致就采用；有差异就是 `REQ_BUILD_FAILED`。
+
+混合 intersection（包含非 object 部分）解析时，标签是各匹配部分已有标签的合取；未经解析、新写的混合 intersection 值按匿名对象处理。
 
 ## 解析失败
 
-`struct.parse(...)` 返回 `[null, value]` 或 `[StructError, undefined]`。`StructError` 继承 `Error`，暴露 `issues`，还有 `format()`、`flatten()`、`prettify()`。
+`struct.parse(...)` 返回 `[null, value]` 或 `[StructError, undefined]`。`StructError` 扩展 `Error`，露出 `issues`，以及 `format()`、`flatten()`、`prettify()`。
 
 ```typescript twoslash
 import { struct, StructError } from '@defjs/core'
@@ -164,13 +169,13 @@ if (error) {
 void value
 ```
 
-`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。Issue 可能带着不可信输入——日志或回传前先脱敏。`struct.parse(..., { errorMap })` 只覆盖那一次 parse 的文案。
+`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。Issue 里可能有不可信输入——打日志或返回前先脱敏。`struct.parse(..., { errorMap })` 只改这一次调用的 issue 文案。
 
-Struct 校验只做结构。没有公开的 range、format、refinement、鉴权或状态迁移规则。那些检查放在打 command 之前。
+Struct 校验只看结构。没有公开的范围、格式、细化、鉴权或状态迁移规则。这些检查放在打 command 之前。
 
 ## 参考
 
-`@defjs/core` 上的公开构造（内部不是 facade API）：
+`@defjs/core` 上的公开构造函数（内部的不是门面 API）：
 
 ```typescript twoslash
 import { struct } from '@defjs/core'
@@ -190,62 +195,46 @@ const Status = struct.enum(['draft', 'published'])
 const FileValue = struct.file()
 const Form = struct.formData({ file: struct.file() })
 const Combined = struct.intersection(struct.object({ id: struct.number() }), struct.object({ name: struct.string() }))
-const JsonBody = struct.json(struct.object({ ok: struct.boolean() }))
 const Literal = struct.literal('ready')
 const NullValue = struct.null()
 const NumberValue = struct.number()
 const ObjectValue = struct.object({ id: struct.number() })
 const Union = struct.or(struct.string(), struct.number())
 const RecordValue = struct.record(struct.number())
-const Request = struct.request({ path: struct.object({ id: struct.number() }) })
 const StringValue = struct.string()
-const TextBody = struct.text()
 const Tuple = struct.tuple([struct.string(), struct.number()])
 const Unknown = struct.unknown()
 const FormUrlEncoded = struct.urlencoded({ name: struct.string() })
 
 void [Any, ArrayOfStrings, Bytes, BigIntValue, BlobValue, BooleanValue, DateValue, Discriminated, Status, FileValue, Form, Combined]
-void [
-  JsonBody,
-  Literal,
-  NullValue,
-  NumberValue,
-  ObjectValue,
-  Union,
-  RecordValue,
-  Request,
-  StringValue,
-  TextBody,
-  Tuple,
-  Unknown,
-  FormUrlEncoded,
-]
+void [Literal, NullValue, NumberValue, ObjectValue, Union, RecordValue, StringValue, Tuple, Unknown, FormUrlEncoded]
 ```
 
-| 构造                             | 输入                                      | 推断输出                 |
-| -------------------------------- | ----------------------------------------- | ------------------------ |
-| `struct.number()`                | 非 `NaN` 的 number                        | `number`，含 ±`Infinity` |
-| `struct.date()`                  | `Date`、number 或日期字符串               | 合法 `Date`              |
-| `struct.bigint()`                | `bigint` 或 `BigInt(...)` 能接受的 string | `bigint`                 |
-| `struct.enum(...)`               | 声明过的 string 或 number 成员            | 该字面量 union           |
-| `struct.discriminatedUnion(...)` | 带必填字面量 discriminator 的对象         | 选中的对象分支           |
-| `struct.or(...)`                 | 第一个匹配的分支；编码会查歧义            | 分支输出的 union         |
-| `struct.intersection(...)`       | 每个成员都接受的值                        | 输出的 intersection      |
-| `struct.record(value)`           | 值匹配 `value` 的普通对象                 | 解析值的 Record          |
-| `struct.tuple(items)`            | 长度恰好等于声明的数组                    | 定长 tuple               |
+| 构造函数                         | 输入                                       | 推断输出                   |
+| -------------------------------- | ------------------------------------------ | -------------------------- |
+| `struct.number()`                | 除 `NaN` 以外的 number                     | `number`，包括 ±`Infinity` |
+| `struct.date()`                  | `Date`、number，或日期 string              | 合法 `Date`                |
+| `struct.bigint()`                | `bigint`，或 `BigInt(...)` 能接受的 string | `bigint`                   |
+| `struct.enum(...)`               | 声明过的 string 或 number 成员             | 那个字面量联合             |
+| `struct.discriminatedUnion(...)` | 带必填字面量判别字段的对象                 | 选中的对象分支             |
+| `struct.or(...)`                 | 第一个匹配的分支；编码时检查歧义           | 各分支输出的联合           |
+| `struct.intersection(...)`       | 每个成员都接受的值                         | 输出的交叉                 |
+| `struct.record(value)`           | 值都匹配 `value` 的普通对象                | parse 后值的 record        |
+| `struct.tuple(items)`            | 长度恰好是声明长度的数组                   | 定长 tuple                 |
 
-每个 Struct 都支持 `.alias(name)`、`.optional()`、`.null()`、`.nullish()`。`struct.discriminatedUnion` 需要带必填字面量 discriminator 的对象选项，并拒绝重复。
+每个 Struct 都支持 `.alias(name)`、`.optional()`、`.null()`、`.nullish()`。`struct.discriminatedUnion` 要对象选项、必填字面量判别字段，并拒绝重复。
 
-从 `@defjs/core` 导入 `struct`、`Infer`、`Struct`、`StructError` 及相关公开类型。解析用 `struct.parse(...)`。别导入 `createObjectStruct`、definition symbol、codec 内部，或 `packages/core/src`。
+从 `@defjs/core` import `struct`、`Infer`、`Struct`、`StructError` 和相关公开类型。解析器用 `struct.parse(...)`。别 import `createObjectStruct`、definition symbol、codec 内部，或 `packages/core/src`。
 
-Facade 的非承诺：
+门面不做的事：
 
-- Object/record 输出用 null prototype——别假定有 `Object.prototype` 方法。
-- 未知对象 key 会丢掉。
-- `struct.number()` 拒绝 `NaN`，接受 infinity。
-- `struct.or(...)` 按顺序试分支；分支编码冲突时拒绝歧义。
-- `struct.intersection(...)` 按声明顺序解析成员。
-- Struct 校验边界；它不缓存、不授权、不拥有传输资源。
+- 对象/record 输出用 null prototype——别假设有 `Object.prototype` 方法。
+- 未知对象 key 会被丢掉。
+- `struct.number()` 拒绝 `NaN`，接受无穷。
+- `struct.or(...)` 按顺序试分支；分支对编码有分歧时拒绝歧义。
+- `struct.intersection(...)` 按声明顺序 parse 成员。
+- intersection 深合并成员输出（`Object.is` 相等的值和时间相同的 Date 保留，普通对象与等长数组递归合并，其余冲突是该 path 上的 `invalid_intersection`），`unknown` / `any` 不贡献输出，同一个逻辑 key 可以对应多个 wire key；只有同一个 wire key 上写入了不相等的值才是冲突。
+- Struct 校验一条边界；它不缓存、不授权、也不拥有传输资源。
 
 ## 相关配方
 

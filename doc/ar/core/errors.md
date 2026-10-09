@@ -5,7 +5,7 @@ description: تفرّع على مجموعة مغلقة من رموز الأخط�
 
 # Errors
 
-تعامَل مع 404 أو مهلة أو جسم غير مقروء بقراءة الصفيف الذي يضع الخطأ أولًا، لا بالتقاط ما يُرمى. `Fault` هو `Error` أصلي (`instanceof Error` صحيح) ويُميَّز بحقل واحد: `code`.
+تعامَل مع 404 أو مهلة أو جسم غير مقروء بقراءة الـ tuple الذي يضع الخطأ أولًا، لا بالتقاط ما يُرمى. `Fault` هو `Error` أصلي (`instanceof Error` صحيح) ويُميَّز بحقل واحد: `code`.
 
 لا يوجد `kind`. فصنف الفشل هو المقطع الذي يسبق أول `_` في رمزه، فـ `NET_TIMEOUT` فشلٌ من صنف `NET` و`RES_STRUCT_MISMATCH` فشلٌ من صنف `RES`. اقرأ البادئة للفرز التقريبي، والرمز كاملًا للحالة الدقيقة.
 
@@ -18,12 +18,13 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const [err, user, response] = await client.execute(getUser({ path: { id: 7 } }))
+const [err, user, response] = await client.execute(getUser({ id: 7 }))
 if (err?.code === 'HTTP_STATUS' && err.status === 404) {
   console.log(err.data.message)
 } else if (err?.code === 'NET_TIMEOUT') {
@@ -97,7 +98,7 @@ console.log(triage(example))
 
 `cause` يحمل القيمة الأساسية: `StructError` عند عدم مطابقة struct، وفشل المحلِّل عند تمثيل غير مقروء، وأيّ شيء رمته إضافة.
 
-## أشكال الصفيف بحسب النقل
+## أشكال الـ tuple بحسب النقل
 
 ```typescript twoslash
 import type {
@@ -125,7 +126,7 @@ void results
 
 عند فشل HTTP يكون العنصر الثالث `undefined`: فالخطأ يحمل أصلًا ما وُجد من بيانات الاستجابة الوصفية. وهذا مهم لأن الخطأ هو ما تمرّره إلى معالِج، أو تسجّله، أو ترميه من جديد، فوجب أن تسافر البيانات الوصفية _معه_ لا بجانبه.
 
-في SSE و WebSocket يكون العنصر الثالث لقطةَ بدءٍ قد تكون موجودة حتى عند فشل البدء. وبعد أن يعود المِقبض أو الجلسة، تعيش حالات الفشل اللاحقة على دورة حياته — ولا تُعيد كتابة صفيف البدء الذي استقرّ.
+في SSE و WebSocket يكون العنصر الثالث لقطةَ بدءٍ قد تكون موجودة حتى عند فشل البدء. وبعد أن يعود المِقبض أو الجلسة، تعيش حالات الفشل اللاحقة على دورة حياته — ولا تُعيد كتابة tuple البدء الذي استقر.
 
 ## كيف يُقرأ الجسم
 

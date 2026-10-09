@@ -10,11 +10,11 @@ Declare a socket, execute it, send/receive typed messages, then close.
 ## defineWebSocket() {#defineWebSocket}
 
 ```ts
-function defineWebSocket(definition: WebSocketDefinition): WebSocketCommandBuilder
+function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`, `incoming` structs, optional `outgoing`, `input`, `build`, queue limits.
-- **Returns** a builder. Call with input to get a `WebSocketCommand`.
+- **definition** — `path`, one `incoming` struct, optional `outgoing` struct, optional `input`, `builder`, static `protocols`, queue limits.
+- **Returns** an endpoint. Call with input to get a `WebSocketCommand`.
 
 ```ts twoslash
 import { defineWebSocket, struct } from '@defjs/core'
@@ -22,8 +22,9 @@ import { defineWebSocket, struct } from '@defjs/core'
 const chat = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { message: struct.object({ text: struct.string() }) },
+  protocols: ['chat.v1'],
+  incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+  outgoing: struct.object({ text: struct.string(), type: struct.literal('message') }),
 })
 ```
 
@@ -81,6 +82,13 @@ async function consume(session: WebSocketSession<unknown, never>): Promise<void>
 
 ### WebSocketCloseInfo {#WebSocketCloseInfo}
 
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
 Close snapshot after the socket ends (code, reason, clean flag, optional cause). Manual close can carry `ManualSocketCloseReason`.
 
 ## Execute options
@@ -103,67 +111,29 @@ type WebSocketExecuteOptions = {
 
 When `reconnect` is set, `attempts` defaults to 3; `0` disables. Omitting `attempts` is not unlimited.
 
-## Message maps
+## Messages
 
-## SocketStructs {#SocketStructs}
+`incoming` is one struct. Text, `ArrayBuffer`, typed-array, and `Blob` frames are read as UTF-8, JSON-parsed, then checked against that struct. A frame that fails JSON parse or the struct is reported to `session.onRuntimeError` and is not queued. There is no client invalid-frame option.
 
-```ts
-type SocketStructs = { [typeName: string]: AnyStruct }
-```
-
-Incoming/outgoing payloads are tagged with `type` (and flattened fields or a `data` wrapper depending on the struct shape).
-
-### Provider envelope adapters
-
-An endpoint can opt into two synchronous, definition-local boundaries before transport:
-
-- `normalizeIncoming(decoded)` receives decoded wire JSON and returns `{ type, data }`, where `type` is a declared static dispatch tag and `data` is validated by its incoming Struct. Returning `undefined` intentionally ignores the frame.
-- `normalizeOutgoing(type, encodedPayload)` receives the logical outgoing tag and the payload after Struct validation and alias encoding, then returns the exact provider wire value.
+`outgoing` is one struct. `session.send` accepts `StructInput` of that struct, encodes aliases, then `JSON.stringify`. Several message kinds are a `struct.discriminatedUnion`.
 
 ```ts
-const kraken = defineWebSocket({
-  incoming: {
-    'method.subscribe': struct.object({ method: struct.literal('subscribe'), success: struct.boolean() }),
-  },
-  maxIncomingQueueSize: 16,
-  normalizeIncoming(decoded) {
-    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) return undefined
-    if (Reflect.get(decoded, 'method') !== 'subscribe') return undefined
-    return { data: decoded, type: 'method.subscribe' }
-  },
-  normalizeOutgoing(_type, encodedPayload) {
-    if (typeof encodedPayload !== 'object' || encodedPayload === null || Array.isArray(encodedPayload)) {
-      throw new TypeError('Expected encoded command')
-    }
-    return encodedPayload as { readonly [key: string]: unknown }
-  },
-  outgoing: {
-    subscribe: struct.object({
-      method: struct.literal('subscribe'),
-      params: struct.object({ channel: struct.string() }),
-      reqId: struct.number().alias('req_id'),
-    }),
-  },
-  path: '/v2',
-})
-
-session.send({ type: 'subscribe', method: 'subscribe', params: { channel: 'ticker' }, reqId: 1 })
-// wire: {"method":"subscribe","params":{"channel":"ticker"},"req_id":1}
+session.send({ type: 'message', text: 'Hello' })
 ```
-
-Both hooks are synchronous. An outgoing hook exception escapes `send()` synchronously, while heartbeat failures use the existing fatal runtime path. Queued sends store the normalized serialized string. For a provider payload whose wire field is named `type`, use a different local property such as `providerType: struct.literal('update').alias('type')`; the public `type` remains the Defjs dispatch tag.
-
-These adapters do not replace Struct validation, subprotocols, reconnect policy, or session lifecycle. Omitting them preserves the existing incoming results and outgoing bytes.
 
 See [WebSocket guide](/core/web-socket) and [Open a WebSocket session](/recipes/websocket-session).
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`, `incoming`, optional `outgoing` / `input` / `build` / `normalizeIncoming` / `normalizeOutgoing`, queue limits.
+`path`, `incoming`, optional `outgoing` / `input` / `builder` / `protocols`, queue limits. The builder may return `path` and `query` only.
 
-## WebSocketCommandBuilder {#WebSocketCommandBuilder}
+## WebSocketEndpoint {#WebSocketEndpoint}
 
 Returned by `defineWebSocket`. Call with input to get a `WebSocketCommand`.
+
+## WebSocketRequestShape {#WebSocketRequestShape}
+
+`path` and `query` only. `headers` and `body` are `never`.
 
 ## WebSocketCommand {#WebSocketCommand}
 
@@ -187,11 +157,11 @@ Reason recorded when the session is closed via `session.close()`.
 
 ## WebSocketIncomingData {#WebSocketIncomingData}
 
-Incoming message shape inferred from an incoming `SocketStructs` map.
+Decoded incoming frame: `Infer` of the `incoming` struct.
 
 ## WebSocketOutgoingData {#WebSocketOutgoingData}
 
-Outgoing message shape inferred from an outgoing `SocketStructs` map.
+Value accepted by `session.send`: `StructInput` of the `outgoing` struct, or `never` when none is declared.
 
 ## SocketLifecycleOutcome {#SocketLifecycleOutcome}
 

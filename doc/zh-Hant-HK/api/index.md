@@ -30,5 +30,5 @@ description: 手寫嘅 workspace package lookup — 你 import 嗰啲 functions�
 
 ## Related
 
-- [Getting Started: 一個 HTTP request](../guide/getting-started.md)
-- [GET 配 declared 404](../recipes/get-declared-404.md)
+- [Getting Started](/guide/getting-started)
+- [GET with a declared 404](/recipes/get-declared-404)

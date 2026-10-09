@@ -35,7 +35,7 @@ import { useEffect, useState } from 'react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -102,7 +102,7 @@ export function HealthCheck() {
 
 ## امتلك عمل الاستعلام
 
-مكتبة استعلام يمكنها امتلاك التخزين المؤقت وإعادة المحاولة وقمع النتائج القديمة والإلغاء. أعطها الإشارة التي توفّرها:
+مكتبة استعلام يمكنها امتلاك التخزين المؤقت وإعادة المحاولة وقمع النتائج القديمة والإلغاء. أعطها الإشارة التي توفّرها. لصفحات القوائم، لفّ `client.execute(...)` بـ TanStack Query (أو ما يشبهها) — `@defjs/react` يبقى حقن اعتماد فقط و**لا** يُشحن مع `useRequest`.
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -112,7 +112,7 @@ import { useClient } from '@defjs/react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -146,9 +146,7 @@ import { useEffect } from 'react'
 const notifications = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/notifications',
-  incoming: {
-    message: struct.object({ text: struct.string() }),
-  },
+  incoming: struct.object({ text: struct.string() }),
 })
 
 export function Notifications() {

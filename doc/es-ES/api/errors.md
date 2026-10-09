@@ -3,7 +3,7 @@ title: Errores
 description: Variantes de fault y helpers de fábrica.
 ---
 
-# Errors
+# Errores
 
 Execute devuelve un `Fault` discriminado en el primer hueco de la tupla, no una excepción lanzada para los fallos declarados.
 
@@ -156,4 +156,4 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 Valores compartidos de `cause` / mensaje para abort y timeout. Lanzar uno desde un interceptor es la forma en que un interceptor expresa la cancelación.
 
-Mira la [guía de Errors](/es-ES/core/errors).
+Mira la [guía de Errores](/core/errors).

@@ -311,6 +311,14 @@ describe('sse parser', () => {
     ])
   })
 
+  test('should match field names as bytes, skip one leading BOM, and ignore near misses', async () => {
+    const { ids, messages, retries } = await parseEvents('ix: 1\ndat4: x\nevenx: y\nretrx: 5\n\uFEFFdata: bom\n\n')
+
+    expect(ids).toEqual([])
+    expect(retries).toEqual([])
+    expect(messages).toEqual([{ id: '', event: '', data: 'bom' }])
+  })
+
   test('should not dispatch messages for frames without data fields', async () => {
     const ids: string[] = []
     const retries: number[] = []
@@ -564,4 +572,291 @@ describe('sse parser', () => {
       expect(() => createMessageParser(noop, noop, noop, { maxBufferSize })).toThrow('SSE maxBufferSize must be a positive safe integer')
     },
   )
+})
+
+type ParsedLine = { fieldLength: number; line: string }
+
+function nextTurn(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+}
+
+function collectLines(options?: { maxBufferSize?: number }) {
+  const lines: ParsedLine[] = []
+  const parse = createLineParser((line, fieldLength) => {
+    lines.push({ fieldLength, line: decoder.decode(line) })
+  }, options)
+  return { lines, parse }
+}
+
+// One char per byte, so a reference computed on text reports the offsets the parser reports.
+function toBinary(bytes: Uint8Array): string {
+  return String.fromCharCode(...bytes)
+}
+
+// The SSE line rules, written apart from the parser so it is checked against the spec and not against itself:
+// LF, CR and CRLF end a line, a field ends at the first colon, and only terminated lines are emitted.
+function referenceLines(source: string): ParsedLine[] {
+  const pieces = source.split(/\r\n|\r|\n/)
+  pieces.pop()
+  return pieces.map((line) => {
+    const colon = line.indexOf(':')
+    return { fieldLength: line === '' ? -1 : colon === -1 ? line.length : colon, line }
+  })
+}
+
+// Feeds `source` in chunks cut at `cuts` and checks after every chunk that exactly the lines of the prefix fed so far came out.
+async function expectReferenceLines(source: string, cuts: readonly number[]): Promise<void> {
+  const bytes = encoder.encode(source)
+  const binarySource = toBinary(bytes)
+  const emitted: ParsedLine[] = []
+  const parse = createLineParser((line, fieldLength) => {
+    emitted.push({ fieldLength, line: toBinary(line) })
+  })
+  let start = 0
+  for (const end of [...cuts, bytes.length]) {
+    await parse(bytes.slice(start, end))
+    expect(emitted).toEqual(referenceLines(binarySource.slice(0, end)))
+    start = end
+  }
+}
+
+const chunkingSources = [
+  // Every terminator, a colonless line, a leading colon, and colons inside values.
+  'data: a:b\r\nid: 1\rretry\n\n:c\r\n\r\r\n',
+  // Blank lines, LF before CR, and a CR that ends the input.
+  'a\r\n\r\nb\n\rc\r',
+  'x:y:z\n::\n\n\n:\r\n',
+  // Multi-byte characters: a colon sits at a byte offset, not a character offset.
+  '猫: 猫\r\ndata\r\r\n',
+]
+
+describe('sse line parser scanning', () => {
+  test('should run the handler for every line of a chunk without yielding while handlers return nothing', async () => {
+    const { lines, parse } = collectLines()
+
+    const done = parse(encoder.encode('data: a\nid: 1\n\n'))
+
+    // Nothing was awaited yet: awaiting each handler result would have stopped after the first line.
+    expect(lines).toHaveLength(3)
+    await done
+  })
+
+  test('should wait for a promise from the handler before it reads the next line', async () => {
+    const gate = Promise.withResolvers<void>()
+    const seen: string[] = []
+    const parse = createLineParser((line) => {
+      seen.push(decoder.decode(line))
+      return seen.length === 1 ? gate.promise : undefined
+    })
+
+    const done = parse(encoder.encode('a\nb\nc\n'))
+    await nextTurn()
+    expect(seen).toEqual(['a'])
+
+    gate.resolve()
+    await done
+    expect(seen).toEqual(['a', 'b', 'c'])
+  })
+
+  test('should stop at the line whose handler promise rejects', async () => {
+    const failure = new Error('handler failed')
+    const seen: string[] = []
+    const parse = createLineParser((line) => {
+      seen.push(decoder.decode(line))
+      return seen.length === 2 ? Promise.reject(failure) : undefined
+    })
+
+    await expect(parse(encoder.encode('a\nb\nc\n'))).rejects.toBe(failure)
+
+    expect(seen).toEqual(['a', 'b'])
+  })
+
+  test.each([
+    ['LF', '\n'],
+    ['CR', '\r'],
+    ['CRLF', '\r\n'],
+  ])('should end lines at %s and report the first colon of each', async (_name, terminator) => {
+    const { lines, parse } = collectLines()
+
+    await parse(encoder.encode(['data: a:b', 'id:1', 'retry', '', ': note'].map((line) => line + terminator).join('')))
+
+    expect(lines).toEqual([
+      { fieldLength: 4, line: 'data: a:b' },
+      { fieldLength: 2, line: 'id:1' },
+      { fieldLength: 5, line: 'retry' },
+      { fieldLength: -1, line: '' },
+      { fieldLength: 0, line: ': note' },
+    ])
+  })
+
+  test('should treat a CRLF split across chunks as one terminator', async () => {
+    const { lines, parse } = collectLines()
+
+    await parse(encoder.encode('data: x\r'))
+    // A CR is a complete terminator: the line is out before the LF that may follow arrives.
+    expect(lines).toEqual([{ fieldLength: 4, line: 'data: x' }])
+
+    await parse(encoder.encode('\nid: 1\r'))
+    await parse(encoder.encode('\n\n'))
+
+    // The first LF of the last chunk closes a CRLF, so only the second one makes a blank line.
+    expect(lines).toEqual([
+      { fieldLength: 4, line: 'data: x' },
+      { fieldLength: 2, line: 'id: 1' },
+      { fieldLength: -1, line: '' },
+    ])
+  })
+
+  test('should start the next line at whatever follows a CR that ends a chunk', async () => {
+    const { lines, parse } = collectLines()
+
+    await parse(encoder.encode('a\r'))
+    await parse(encoder.encode('b\r'))
+    // An empty chunk changes nothing: the LF after it still belongs to the CR before it.
+    await parse(new Uint8Array(0))
+    await parse(encoder.encode('\nc\n'))
+
+    expect(lines).toEqual([
+      { fieldLength: 1, line: 'a' },
+      { fieldLength: 1, line: 'b' },
+      { fieldLength: 1, line: 'c' },
+    ])
+  })
+
+  test('should take the field length from the first colon of the line only', async () => {
+    const { lines, parse } = collectLines()
+
+    await parse(encoder.encode('data: a:b:c\ndata:x:y\n:::\ndata\nid: 7\n\n:\n'))
+
+    expect(lines).toEqual([
+      { fieldLength: 4, line: 'data: a:b:c' },
+      { fieldLength: 4, line: 'data:x:y' },
+      { fieldLength: 0, line: ':::' },
+      // A line without a colon must not borrow the colon of the line after it.
+      { fieldLength: 4, line: 'data' },
+      { fieldLength: 2, line: 'id: 7' },
+      { fieldLength: -1, line: '' },
+      { fieldLength: 0, line: ':' },
+    ])
+  })
+
+  test('should keep the first colon of a line that is split across chunks', async () => {
+    const { lines, parse } = collectLines()
+
+    await parse(encoder.encode('da'))
+    await parse(encoder.encode('ta: a:'))
+    await parse(encoder.encode('b:c\nid'))
+    await parse(encoder.encode(': 1\ndata'))
+    await parse(encoder.encode('\r\nevent: x'))
+    await parse(encoder.encode(':y\n'))
+
+    expect(lines).toEqual([
+      { fieldLength: 4, line: 'data: a:b:c' },
+      { fieldLength: 2, line: 'id: 1' },
+      { fieldLength: 4, line: 'data' },
+      { fieldLength: 5, line: 'event: x:y' },
+    ])
+  })
+
+  test.each([
+    ['LF', '\n'],
+    ['CR', '\r'],
+    ['CRLF', '\r\n'],
+  ])('should not count the %s terminator toward maxBufferSize', async (_name, terminator) => {
+    const { lines, parse } = collectLines({ maxBufferSize: 6 })
+
+    await parse(encoder.encode(`abcdef${terminator}`))
+
+    expect(lines).toEqual([{ fieldLength: 6, line: 'abcdef' }])
+    await expect(parse(encoder.encode(`abcdefg${terminator}`))).rejects.toThrow('SSE parser buffer exceeded maxBufferSize')
+  })
+
+  test('should apply maxBufferSize to a line that completes in a later chunk', async () => {
+    const fits = collectLines({ maxBufferSize: 10 })
+    await fits.parse(encoder.encode('data: a'))
+    await fits.parse(encoder.encode('b\n'))
+    expect(fits.lines).toEqual([{ fieldLength: 4, line: 'data: ab' }])
+
+    const overflows = collectLines({ maxBufferSize: 10 })
+    await overflows.parse(encoder.encode('data: a'))
+    await expect(overflows.parse(encoder.encode('bcdef\n'))).rejects.toThrow('SSE parser buffer exceeded maxBufferSize')
+    expect(overflows.lines).toEqual([])
+  })
+
+  test('should deliver the lines before an oversized one and then fail', async () => {
+    const { lines, parse } = collectLines({ maxBufferSize: 6 })
+
+    await expect(parse(encoder.encode('ok\ndata: toolong\nnext\n'))).rejects.toThrow('SSE parser buffer exceeded maxBufferSize')
+
+    expect(lines).toEqual([{ fieldLength: 2, line: 'ok' }])
+  })
+
+  test('should count only the unterminated tail of a chunk against maxBufferSize', async () => {
+    const { lines, parse } = collectLines({ maxBufferSize: 10 })
+
+    // 25 bytes, but only the 6-byte tail is buffered.
+    await parse(encoder.encode('data: one\ndata: two\nid: 12'))
+    expect(lines.map(({ line }) => line)).toEqual(['data: one', 'data: two'])
+
+    // The tail grows to exactly the limit, which is still allowed, and one more byte is not.
+    await parse(encoder.encode('3456'))
+    await expect(parse(encoder.encode('7'))).rejects.toThrow('SSE parser buffer exceeded maxBufferSize')
+  })
+
+  test.each(chunkingSources)('should emit the lines of the spec however %j is cut into three chunks', async (source) => {
+    const length = encoder.encode(source).length
+    for (let first = 0; first <= length; first += 1) {
+      for (let second = first; second <= length; second += 1) {
+        await expectReferenceLines(source, [first, second])
+      }
+    }
+  })
+
+  test.each(chunkingSources)('should emit the lines of the spec for %j fed one byte at a time', async (source) => {
+    const length = encoder.encode(source).length
+    await expectReferenceLines(
+      source,
+      Array.from({ length: length - 1 }, (_, index) => index + 1),
+    )
+  })
+})
+
+describe('sse message parser hand-off', () => {
+  test('should return nothing for lines that only update parser state or carry no data', () => {
+    const gate = Promise.withResolvers<void>()
+    const parse = createMessageParser(noop, noop, () => gate.promise)
+
+    expect(parse(encoder.encode('data: x'), 4)).toBeUndefined()
+    expect(parse(encoder.encode(': note'), 0)).toBeUndefined()
+    // The blank line dispatches the message above. A second one has no data, so there is nothing to hand back.
+    expect(parse(new Uint8Array(0), -1)).toBe(gate.promise)
+    expect(parse(new Uint8Array(0), -1)).toBeUndefined()
+  })
+
+  test('should hand back the promise of an asynchronous consumer so the line parser can wait for it', async () => {
+    const gate = Promise.withResolvers<void>()
+    const dispatched: string[] = []
+    const parseLine = createLineParser(
+      createMessageParser(noop, noop, (message) => {
+        dispatched.push(message.data)
+        return dispatched.length === 1 ? gate.promise : undefined
+      }),
+    )
+
+    const done = parseLine(encoder.encode('data: one\n\ndata: two\n\n'))
+    await nextTurn()
+    expect(dispatched).toEqual(['one'])
+
+    gate.resolve()
+    await done
+    expect(dispatched).toEqual(['one', 'two'])
+  })
+
+  test('should return nothing when a synchronous consumer takes the message', () => {
+    const parse = createMessageParser(noop, noop, noop)
+
+    parse(encoder.encode('data: x'), 4)
+
+    expect(parse(new Uint8Array(0), -1)).toBeUndefined()
+  })
 })

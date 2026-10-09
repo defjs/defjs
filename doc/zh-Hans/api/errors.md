@@ -156,4 +156,4 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 abort 和 timeout 共享的 `cause` / message 值。从拦截器里抛一个出来，就是拦截器表达取消的方式。
 
-见 [Errors 指南](/zh-Hans/core/errors)。
+见 [Errors 指南](/core/errors)。

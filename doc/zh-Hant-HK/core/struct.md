@@ -23,14 +23,11 @@ type User = Infer<typeof User>
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    name: struct.string(),
+    email: struct.string(),
   }),
+  builder: (input) => ({ body: input }),
   output: User,
 })
 
@@ -72,11 +69,11 @@ if (error) throw error
 console.log(profile.name, profile.nickname, profile.biography, profile.note)
 ```
 
-喺 root，optional 可以係 `undefined`。喺 object 入面，omitted optional/nullish fields 保持 absent。喺 `struct.request(...)`，全部 optional 嘅 section 可以 omit（normalize 成 `{}`）；有 required field 嘅 section 仍然 required。有 body wrapper → body required，即使 inner fields optional。
+喺 root，optional 可以係 `undefined`。喺 object 入面，omitted optional/nullish fields 保持 absent。Request-shaped input 用普通 fields，名叫 `path`、`query`、`headers` 同 `body`。Caller 可以 omit 嗰個就 mark `.optional()`。`body` field required 就仍然 required，即使入面每個 field 都 optional。
 
-## Request body wrappers
+## Request placement
 
-`struct.request(...)` 分開 `path`、`query`、`headers` 同 `body`。Bodies 要 explicit codec：
+Path、query、headers 同 body 係 builder return 嘅 fields，唔係一個 request struct。當 `input` 已經有嗰個 shape，就 omit `builder`。`struct.urlencoded(shape)` 同 `struct.formData(shape)` 係帶 codec tag 嘅 object structs。個 tag 只會喺個 value 係 body root 嘅時候 run：keys 用 aliases，arrays 會重複 field name。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -84,15 +81,13 @@ import { defineRequest, struct } from '@defjs/core'
 const createUser = defineRequest({
   method: 'POST',
   path: '/organizations/:organizationId/users',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ organizationId: struct.string() }),
     query: struct.object({ notify: struct.boolean().optional() }),
     headers: struct.object({ requestId: struct.string().alias('x-request-id') }),
-    body: struct.json(
-      struct.object({
-        displayName: struct.string().alias('display_name'),
-      }),
-    ),
+    body: struct.object({
+      displayName: struct.string().alias('display_name'),
+    }),
   }),
 })
 
@@ -105,17 +100,16 @@ const command = createUser({
 void command
 ```
 
-| Wrapper                    | Parsed value          | Wire boundary                                                        |
-| -------------------------- | --------------------- | -------------------------------------------------------------------- |
-| `struct.json(inner)`       | 嚟自 `inner` 嘅 value | JSON text，`application/json`                                        |
-| `struct.text()`            | `string`              | Text，`text/plain;charset=UTF-8`                                     |
-| `struct.urlencoded(shape)` | Shape 嘅 object       | `URLSearchParams`，`application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)`   | Shape 嘅 object       | `FormData`；platform set multipart boundary                          |
-| `struct.blob()`            | `Blob`                | Blob type 或者 `application/octet-stream`                            |
-| `struct.file()`            | `File`                | Native `File`（name + type）                                         |
-| `struct.arrayBuffer()`     | `ArrayBuffer`         | Buffer，`application/octet-stream`                                   |
+| Body root                                    | 送出點樣          | Default content type                              |
+| -------------------------------------------- | ----------------- | ------------------------------------------------- |
+| typed object、array、number、boolean、`null` | JSON text         | `application/json`                                |
+| `string` struct 或者 raw string              | text              | `text/plain;charset=UTF-8`                        |
+| root 嘅 `struct.urlencoded(shape)`           | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| root 嘅 `struct.formData(shape)`             | `FormData`        | platform multipart boundary                       |
+| `Blob` / `File`                              | 嗰個 blob         | blob type 或者 `application/octet-stream`         |
+| `ArrayBuffer` / view / stream                | bytes             | `application/octet-stream`                        |
 
-`struct.file()` 係 form fields 用嘅 value Struct — 唔係 standalone `request.body`。Binary bodies 係 `struct.blob()` 同 `struct.arrayBuffer()`。Bare object/array/primitive Structs 唔可以用做 `request.body`。SSE reject `body`。WebSocket request input reject `body` 同 `headers`。
+`struct.file()` 係 form field 同 raw file body 用嘅 value struct。WebSocket builders 唔可以 return `headers` 或者 `body`。HTTP 同 SSE 可以。`GET` 同 `HEAD` 唔可以。
 
 ## Aliases
 
@@ -136,14 +130,25 @@ const [wireError] = struct.parse(User, { display_name: 'Ada' })
 console.log(wireError?.issues[0]?.path)
 ```
 
-| Boundary                                       | Field                        |
-| ---------------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)`                      | Logical `displayName`        |
-| JSON request encoding                          | Wire `display_name`          |
-| JSON response decoding                         | Wire → logical `displayName` |
-| Query、header、URL-encoded、multipart encoding | Wire alias 做 key            |
+| Boundary                                   | Field                        |
+| ------------------------------------------ | ---------------------------- |
+| `struct.parse(User, ...)` 同 command input | Logical `displayName`        |
+| 交畀 builder 嘅 typed object               | Wire `display_name`          |
+| JSON / SSE / WebSocket decoding            | Wire → logical `displayName` |
+| Builder 入面手寫嘅 anonymous object        | 你寫嘅嗰個 key               |
 
-Aliases 對 nested fields、arrays、objects、unions 同 discriminators 都有效。App code 用 logical names；external naming 放喺 Struct。
+Aliases 對 nested fields、arrays、objects、unions 同 discriminators 都有效。App code 用 logical names；external name 喺 struct 上面放一次。Spread 一個 typed object 會保留嗰種 encoding。同一個 object 同時 set logical field 同佢嘅 wire key 就係 `REQ_BUILD_FAILED`。你自己 `JSON.stringify` 一個 value 就離開呢條路：serializer 見到嘅係 logical names。
+
+引導喺每個節點決定，唔只喺 root。Anonymous parent 下面新寫嘅 object 保留你寫落嘅 key。Typed parent 下面，同一個 object 改用嗰個 field 嘅 struct。
+
+```ts
+body: { row: { id: '42' } }              // 根匿名：发出 id
+body: { ...input, row: { id: '42' } }    // 根带类型，row 字段声明了 alias：发出 wire_id
+```
+
+union 引導同時 match 多過一個 branch 嘅時候，每個 branch 都 encode 再比較。Wire 結果一樣就採用；有分別就係 `REQ_BUILD_FAILED`。
+
+混合 intersection（包含非 object 部分）解析嗰陣，標籤係各匹配部分已有標籤嘅合取；未經解析、新寫嘅混合 intersection 值就當匿名 object 處理。
 
 ## Parse failures
 
@@ -164,7 +169,7 @@ if (error) {
 void value
 ```
 
-`StructIssue` 有 `code`、`expected`、`message`、`path` 同 `received`。Issues 可以持有 untrusted input — log 或者 return 之前先 redact。`struct.parse(..., { errorMap })` 只覆蓋嗰一次 parse 嘅文案。
+`StructIssue` 有 `code`、`expected`、`message`、`path` 同 `received`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。Issues 可以持有 untrusted input — log 或者 return 之前先 redact。`struct.parse(..., { errorMap })` 只改寫嗰一次 call 嘅 issue messages。
 
 Struct validation 淨係 structural。冇 public range、format、refinement、auth 或者 state-transition rules。嗰啲 checks 喺你 build command 之前自己做。
 
@@ -190,36 +195,19 @@ const Status = struct.enum(['draft', 'published'])
 const FileValue = struct.file()
 const Form = struct.formData({ file: struct.file() })
 const Combined = struct.intersection(struct.object({ id: struct.number() }), struct.object({ name: struct.string() }))
-const JsonBody = struct.json(struct.object({ ok: struct.boolean() }))
 const Literal = struct.literal('ready')
 const NullValue = struct.null()
 const NumberValue = struct.number()
 const ObjectValue = struct.object({ id: struct.number() })
 const Union = struct.or(struct.string(), struct.number())
 const RecordValue = struct.record(struct.number())
-const Request = struct.request({ path: struct.object({ id: struct.number() }) })
 const StringValue = struct.string()
-const TextBody = struct.text()
 const Tuple = struct.tuple([struct.string(), struct.number()])
 const Unknown = struct.unknown()
 const FormUrlEncoded = struct.urlencoded({ name: struct.string() })
 
 void [Any, ArrayOfStrings, Bytes, BigIntValue, BlobValue, BooleanValue, DateValue, Discriminated, Status, FileValue, Form, Combined]
-void [
-  JsonBody,
-  Literal,
-  NullValue,
-  NumberValue,
-  ObjectValue,
-  Union,
-  RecordValue,
-  Request,
-  StringValue,
-  TextBody,
-  Tuple,
-  Unknown,
-  FormUrlEncoded,
-]
+void [Literal, NullValue, NumberValue, ObjectValue, Union, RecordValue, StringValue, Tuple, Unknown, FormUrlEncoded]
 ```
 
 | Constructor                      | Input                                               | Inferred output            |
@@ -245,6 +233,7 @@ Facade non-promises：
 - `struct.number()` reject `NaN`，accept infinities。
 - `struct.or(...)` 按次序試 branches；branches 意見唔同時 reject ambiguous encodings。
 - `struct.intersection(...)` 按 declaration order parse members。
+- intersection 會 deep-merge members 嘅 outputs（`Object.is` 相等嘅 values 同時間相同嘅 Date 保留，plain objects 同等長 arrays 遞迴 merge，其他衝突係該 path 嘅 `invalid_intersection`），`unknown` / `any` 唔貢獻 output，同一個 logical key 可以對應多個 wire key；只有同一個 wire key 上面寫入咗唔相等嘅值先算衝突。
 - Struct validate 一個 boundary；佢唔會 cache、authorize，或者 own transport resource。
 
 ## Related recipes

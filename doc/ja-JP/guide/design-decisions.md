@@ -7,7 +7,7 @@ description: Defjs が契約・コマンド・トランスポート結果・デ�
 
 Defjs はいくつかの意図的なトレードオフを取っています。便利 API は、誰がリクエスト・ストリーム・セッションを所有しているかを隠しがちです。Defjs はその境界を見えるままにして、同じエンドポイント契約を再利用しても、キャッシュやリトライスケジューラやリソースマネージャを黙って抱え込まないようにしています。
 
-## 宣言は断言である
+## 宣言は断言である {#declaration-is-an-assertion}
 
 この六条が、レスポンスの読み方に関するあらゆる問いを決めます。後の議論で導出を繰り返さずに参照できるよう、番号を振ってあります。
 
@@ -41,15 +41,15 @@ Defjs はいくつかの意図的なトレードオフを取っています。�
 
 ## 明示的なクライアント
 
-`createClient(...)` はエンドポイント設定を明示的な値にします。環境やリクエストスコープが違えば、エンドポイント・資格情報・インターセプター・シリアライザ・トランスポートハンドルも違います。`@defjs/core` の `createClient(...)` も、HTTP 専用の利用者向けに同じ考え方です。
+`createClient(...)` はエンドポイント設定を明示的な値にします。環境やリクエストスコープが違えば、エンドポイント・資格情報・インターセプター・シリアライザ・トランスポートハンドルも違います。
 
-代償は、プロセス全体のデフォルトがないことです。その代償はサーバーで効きます — options やクロージャが認証・cookie・ユーザー・テナント・リクエストメタデータを掴むなら、クライアントをリクエスト境界の中で作ります。明示的なクライアントでも、インターセプターが掴んだ状態は隔離されませんクライアントの同一性そのものがセキュリティ境界ではありません。
+代償は、プロセス全体のデフォルトがないことです。その代償はサーバーで効きます — options やクロージャが認証・cookie・ユーザー・テナント・リクエストメタデータを掴むなら、クライアントをリクエスト境界の中で作ります。明示的なクライアントでも、インターセプターが掴んだ状態は隔離されません。クライアントの同一性そのものがセキュリティ境界ではありません。
 
 クライアントはコマンドをディスパッチします。進行中の作業は所有しません。HTTP リクエスト・SSE ストリーム・WebSocket セッションを始めた側が、キャンセルまたは close し、終端の promise を await する必要があります。
 
-## 定義、ビルダー、コマンド
+## 定義、エンドポイント、コマンド
 
-定義は安定した契約です。method、path、入力 Struct、出力マッピング、トランスポートの上限。ビルダーは呼び出し可能なビューです。呼ぶと、1 回の実行用の不透明なコマンドが 1 つできます。
+定義は安定した契約です。method、path、入力 struct、`ok` の両側をデコードする struct、トランスポートの上限。`defineRequest` はエンドポイントを返します。それを呼ぶと、1 回の実行用の不透明なコマンドが 1 つできます。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -57,49 +57,52 @@ import { defineRequest, struct } from '@defjs/core'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 ```
 
-バックグラウンドジョブと UI の所有者は、同じ `getUser` の形を、違うキャンセル/リトライ方針で実行できます。コマンドを不透明にしておくと、アプリコードが内部のトランスポートタグや symbol に依存しにくくなります。
+バックグラウンドジョブと UI の所有者は、同じ `getUser` の形を、違うキャンセル/リトライ方針で実行できます。コマンドを不透明にしておくと、アプリコードが内部のトランスポートタグや symbol に依存しなくなります。
 
 ## トランスポート固有の結果
 
 3 つのトランスポートともエラーファーストのタプルを使います。汎用の単一「レスポンス」だと、ライフサイクルの事実が消えてしまいます。
 
-- HTTP → `[error, data, response]` — デコード済み出力 + `HttpResponse`
-- SSE → `[error, stream, open]` — 1 つの論理ストリーム + 起動時のレスポンススナップショット
-- WebSocket → `[error, session, connection]` — 論理セッション + 起動時の接続スナップショット
+- HTTP → `[err, data, response]` — デコード済み出力 + それを生んだレスポンス
+- SSE → `[err, stream, open]` — 1 つの論理ストリーム + 起動時のレスポンススナップショット
+- WebSocket → `[err, session, connection]` — 論理セッション + 起動時の接続スナップショット
 
-3 番目の値はスナップショットであり、将来の再接続が同じ物理接続を保つという promise ではありません。起動失敗でも、トランスポートが先にレスポンス/スナップショットを出していれば、それが含まれることがあります。起動後のライフサイクル制御は、返されたハンドルまたはセッションに属します。
+成功時、3 番目の値は常にあります。HTTP の失敗は `[error, undefined, undefined]` です。fault がすでにレスポンスのメタデータを抱えており、ハンドラーに渡すもの、ログに出すもの、再 throw するものは、その fault です。SSE と WebSocket の起動失敗では、スナップショットを捕捉できていれば、open または connection がまだ含まれることがあります。
+
+SSE と WebSocket では、3 番目の値はスナップショットであり、将来の再接続が同じ物理接続を保つという promise ではありません。起動後のライフサイクル制御は、返されたハンドルまたはセッションに属します。
 
 ## 実行時デコード
 
-TypeScript の推論は「期待するもの」を記述しますが、サーバーレスポンスを実行時に検査はできません。Struct のパースが契約のもう半分です。Defjs はリクエスト組み立て前にコマンド入力を検証し、選ばれた表現をデコードし、対応する Struct をパースします。
+TypeScript の推論は期待するものを記述しますが、サーバーレスポンスを実行時に検査はできません。Struct のパースが契約のもう半分です。Defjs はリクエスト組み立ての前にコマンド入力を検証し、表現を確かめ、`ok` のどちら側が当てはまるかに応じて struct をパースします。
 
 デコードは**一度だけ、インターセプターチェーンの後で**起きます。インターセプターが `makeResponse(...)` で作ったレスポンスは、回線から来たものとまったく同じに解釈されます。レスポンスがどこから来たかは読み方を変えないので、「インターセプターを信頼する」という考えるべき経路は存在しません。
 
-順序は、メディアタイプ、次に表現、次に Struct です。
+順序は、メディアタイプ、次に表現、次に struct です。
 
 | 守られなかったもの                       | Fault                                               |
 | ---------------------------------------- | --------------------------------------------------- |
 | メディアタイプが宣言した表現の要求と違う | `RES_MEDIA_TYPE_INVALID` — ボディを読む**前**に報告 |
 | バイト列がその表現ではない               | `RES_DECODE_FAILED`                                 |
-| 値がその Struct に合わない               | `RES_STRUCT_MISMATCH`                               |
+| 値がその struct に合わない               | `RES_STRUCT_MISMATCH`                               |
 | non-2xx で `error` がデコードできた      | 型付き `data` を伴う `HTTP_STATUS`                  |
 | non-2xx で `error` を宣言していない      | `data: undefined` の `HTTP_STATUS`                  |
 
-メディアタイプを先に確かめることが、「JSON を要求して HTML が届いた」をパーサーエラーではなく一つの正確な fault に変えます。しかも読み取り・パース・Struct をまとめて省きます。
+メディアタイプを先に確かめることが、「JSON を要求して HTML が届いた」をパーサーエラーではなく一つの正確な fault に変えます。しかも読み取り・パース・struct をまとめて省きます。
 
-## `build` の限界
+## ビルダー、エンコーダ、エイリアス
 
-入力がすでに path/query/headers/body を持つとき、自動の `struct.request(...)` マッピングがデフォルトです。カスタム `build(request, input)` は、呼び出し側の形とワイヤの形が違うときの、制約付きプロジェクションです。
+struct は両方向のフィールド契約です。`.alias(name)` がワイヤ名です。struct が値のエンコード方法を決め、`builder` がその値の行き先を決めます。
+
+`builder` は任意で、同期的で、純粋です。受け取るのはパース済みの入力 — 束縛ビューではなく実値 — で、返すのはリクエストの `path`、`query`、`headers`、`body` です。コマンドの実行時に走ります。throw するとタプル上の `REQ_BUILD_FAILED` になります。エンドポイントを呼ぶこと自体は throw しません。入力 struct がすでにそのリクエスト形なら `builder` は省きます。その省略は `(input) => input` であり、入力がその形に代入できないときは TypeScript が `builder` を要求します。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -109,22 +112,20 @@ const createBatch = defineRequest({
   path: '/accounts/:account_id/users',
   input: struct.object({
     accountId: struct.number(),
+    draft: struct.boolean().optional(),
     users: struct.array(
       struct.object({
-        displayName: struct.string(),
+        displayName: struct.string().alias('display_name'),
         email: struct.string(),
       }),
     ),
   }),
-  build(request, input) {
-    request.setPathParams({ account_id: input.accountId })
-    request.setJson({
-      users: input.users.map((user) => ({
-        display_name: user.displayName,
-        email: user.email,
-      })),
-    })
-  },
+  builder: (input) => ({
+    path: { account_id: input.accountId },
+    query: { draft: input.draft ? 1 : undefined },
+    headers: { 'x-api-version': '2' },
+    body: { users: input.users },
+  }),
   output: struct.object({ accepted: struct.number() }),
 })
 
@@ -132,9 +133,24 @@ const command = createBatch({
   accountId: 42,
   users: [{ displayName: 'Ada', email: 'ada@example.com' }],
 })
+void command
 ```
 
-`input` はスキーマに束縛されたビューであり、呼び出し側の実行時オブジェクトそのものではありません。プロジェクションは宣言フィールドの選択、リネーム、ソース配列 1 要素から出力 1 要素への写像はできます。値で分岐したり、リテラルを差し込んだり、濃度を変えたりはできません。ビジネスデータの正規化と値依存の検証は、コマンドを作る前に行ってください。
+既定の道は、型付きの値をそのまま渡すことです。`body: { users: input.users }` は各ユーザーのエイリアスを保つので、ワイヤのフィールドは `display_name` です。自分で書いたキー（`account_id`、`x-api-version`）はリテラルです。型付きオブジェクトをスプレッドするとその struct が保たれます。論理フィールドの横にワイヤキーを足すと `REQ_BUILD_FAILED` です。
+
+query の入れ子はバックエンドの性質なので、クライアント側に置きます。`withQuerySerializer((query) => string)` はエンコード済みのワイヤオブジェクトを見ます。エイリアスも含まれます。query が無いときは呼ばれません。ビルダーが返した `URLSearchParams` はこれを飛ばします。シリアライザが無ければ、配列はキーを繰り返し、入れ子オブジェクトは失敗します。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。
+
+ボディの種類は値から決まり、最初に一致したものが勝ちます。
+
+- `body` が無い → 何も送らない
+- ボディのルートに `urlencoded` または `formData` のコーデックがある → そのフォームエンコード。値が JSON の中にネストしているときは、このタグは適用されません
+- `FormData`、`URLSearchParams`、`Blob`、`File`、バイト列、`ReadableStream` → そのまま送る
+- 文字列 → `text/plain;charset=UTF-8`
+- それ以外 → JSON
+
+`undefined` のフィールドは省略されます。nullable なフィールドの `null` は送られます。文字列は、自分で文字列化して `content-type` を立てない限り JSON ではありません。自分でシリアライズする（`JSON.stringify`、qs、protobuf）と struct エンコーダから外れるので、エイリアスは適用されません。公開された `struct.encode` はありません。
+
+`GET` と `HEAD` はボディを運べません。WebSocket のビルダーは headers も body も返せません。静的な WebSocket サブプロトコルはビルダーではなく定義の `protocols` に置きます。不正な WebSocket フレームはセッションのランタイムエラーリスナーへ行きます。SSE の `error` struct は起動時の fault に型を付け、ハンドシェイクのボディは HTTP ボディと同じ kind 規則に従います。`string` はテキスト、blob と file は blob、`arrayBuffer` はバイト列、それ以外は JSON です。
 
 ## オブザーバーと方針の置き場所
 

@@ -100,6 +100,38 @@ describe('declaration routing', () => {
     })
   })
 
+  describe('one side declared', () => {
+    test.each([
+      [200, 'error'],
+      [500, 'output'],
+    ] as const)('cancels the HTTP %s body when only %s is declared', async (status, declared) => {
+      let cancelled = false
+      const handle = (async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel() {
+              cancelled = true
+            },
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('{"id":1,"message":"nope"}'))
+              controller.close()
+            },
+          }),
+          { headers: JSON_HEADERS, status },
+        )) as unknown as typeof fetch
+      const endpoint =
+        declared === 'error'
+          ? defineRequest({ error: ApiError, method: 'GET', path: '/x' })
+          : defineRequest({ method: 'GET', output: User, path: '/x' })
+
+      const [fault, data] = await createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle)).execute(endpoint())
+
+      expect(cancelled).toBe(true)
+      expect(data).toBeUndefined()
+      expect(fault?.code ?? null).toBe(status === 200 ? null : 'HTTP_STATUS')
+    })
+  })
+
   describe('neither side declared', () => {
     const useRequest = defineRequest({ method: 'GET', path: '/x' })
 

@@ -1,8 +1,9 @@
 import { DEFINITION } from './symbols'
-import type { InternalParseResult, Path, PrimitiveKind, RuntimeStruct, Struct, StructDefinition, StructFlags, StructLike } from './types'
+import type { FAILED } from './symbols'
+import type { DecodeFailure, Path, PrimitiveKind, RuntimeStruct, Struct, StructDefinition, StructFlags, StructLike } from './types'
 
 export interface PrimitiveDefinitionInput<K extends PrimitiveKind, TInput, TOutput = TInput> {
-  decode?: (value: TInput, path: Path) => InternalParseResult<TOutput>
+  decode?: (value: TInput, path: Path, fail: DecodeFailure) => TOutput | typeof FAILED
   encode?: (value: TOutput) => unknown
   expected: string
   is: (value: unknown) => value is TInput

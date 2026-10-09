@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: الموفر و`useClient()`.
+description: ClientProvider وuseClient وخصائص المزوّد.
 ---
 
 # React {#page}
 
-اربط عميل `@defjs/core` موجودًا بشجرة React. الحزمة **لا** تنشئ عميلًا، ولا تضيف تخزينًا، ولا تتخلص من موارد النقل.
+وفّر عميل `@defjs/core` موجودًا لشجرة React. هذه الحزمة لا تنشئ العميل ولا تخزّنه ولا تتخلّص منه.
 
-انظر [دليل React](../plugins/react.md).
+انظر [دليل React](/plugins/react).
 
 ## ClientProvider {#ClientProvider}
 

@@ -22,29 +22,16 @@ describe('web socket runtime reconnect', () => {
     const useReconnectSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
       maxOutgoingQueueSize: 2,
-      build: (request, input) => {
-        request.setQueryParams({
-          key: input.query.key,
-        })
-      },
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-        reconnected: struct.object({
-          attempt: struct.number(),
-        }),
-      },
-      input: struct.request({
+      incoming: struct.discriminatedUnion('type', [
+        struct.object({ type: struct.literal('message'), text: struct.string() }),
+        struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
+      ]),
+      input: struct.object({
         query: struct.object({
           key: struct.string(),
         }),
       }),
-      outgoing: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/reconnect',
     })
 
@@ -100,7 +87,7 @@ describe('web socket runtime reconnect', () => {
 
     const useRetrySocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/reconnect',
     })
 
@@ -128,11 +115,7 @@ describe('web socket runtime reconnect', () => {
   test('should not consider manual session close for reconnect', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        ready: struct.object({
-          ok: struct.boolean(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
       path: '/ws/echo',
     })
 

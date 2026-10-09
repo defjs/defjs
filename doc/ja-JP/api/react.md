@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: Provider と `useClient()` です。
+description: ClientProvider、useClient、provider の props です。
 ---
 
 # React {#page}
 
-既存の `@defjs/core` クライアントを React ツリーに繋ぎます。このパッケージはクライアントを**作らず**、キャッシュも付けず、トランスポート資源も破棄しません。
+既存の `@defjs/core` クライアントを React ツリーに渡します。このパッケージはクライアントを作らず、キャッシュせず、破棄しません。
 
-[React ガイド](../plugins/react.md) を見てください。
+[React ガイド](/plugins/react) を見てください。
 
 ## ClientProvider {#ClientProvider}
 

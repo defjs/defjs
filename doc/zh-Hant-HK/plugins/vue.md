@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -108,7 +108,7 @@ Nearest provider 贏。Descendants 拎 `childClient`；subtree 外嘅 siblings �
 
 ## 喺 watcher 之外 own HTTP work
 
-Composable 或者 component 喺 watcher 外開始嘅 work，用 `AbortController` + `onScopeDispose`。Abort startup 同 active work；assign reactive state 之前 check signal。Plugin 或者 injection scope 唔會推邊個 own 住 command。
+Composable 或者 component 喺 watcher 外開始嘅 work，用 `AbortController` + `onScopeDispose`。Abort startup 同 active work；assign reactive state 之前 check signal。Plugin 或者 injection scope 唔會推邊個 own 住 command。List pages 用 Vue Query（或者類似嘅）包住 `execute`——`@defjs/vue` 只做 DI，**唔會** ship `useRequest`。
 
 當 scope own 住 client 時，browser-wide reuse 要 keep 佢 request-independent。如果佢 capture headers、cookies、users、tenants 或者 credentials，就喺相關 app/SSR request boundary create，同喺嗰度 provide。
 

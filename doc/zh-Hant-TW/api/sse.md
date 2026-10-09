@@ -10,11 +10,11 @@ description: defineEventStream、execute options，以及 stream handle。
 ## defineEventStream() {#defineEventStream}
 
 ```ts
-function defineEventStream(definition: EventStreamDefinition): EventStreamCommandBuilder
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`、`events` map、選填 `method`（預設 `'GET'`）、`input`、`build`、buffer／queue 限制。
-- **回傳** builder。帶 input 呼叫就得到 `EventStreamCommand`。
+- **definition** — `path`、`events` map、選填 `method`（預設 `'GET'`）、選填 `input`、`builder`、`error`，以及 buffer／queue 限制。
+- **回傳** endpoint。帶 input 呼叫就得到 `EventStreamCommand`。
 
 ```ts twoslash
 import { defineEventStream, struct } from '@defjs/core'
@@ -39,7 +39,7 @@ function executeEventStreamCommand(
 
 `client.execute` 走的低階入口。寫功能時請走 client。
 
-- **回傳** `[null, stream, open]` 或 `[error, undefined, open?]`。
+- **回傳** `[null, stream, open]` 或 `[error, undefined, open?]`。宣告了 `error` 時，fault 是那個 struct 的 `Fault`；否則是 `Fault<undefined>`。
 
 ## 執行 options
 
@@ -66,7 +66,7 @@ interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposab
 }
 ```
 
-`open` 是啟動快照；重連後可能變 — 也讀 `stream.open`。自有作用域優先用 `await using stream = handle` 清理。Disposer 會停止 Defjs 的讀取與重連工作，並等待 reader lock 釋放；它不承諾由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手動 `close()` / `closed` 仍可使用。
+`open` 是啟動快照；重連後可能變 — 也讀 `stream.open`。自有作用域優先用 `await using stream = handle` 清理。Disposer 會停止 Defjs 的讀取與重連工作，並等待 reader lock 釋放；它不承諾由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手動 `close()`／`closed` 仍可使用。
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
@@ -90,11 +90,12 @@ interface EventStreamOpenInfo {
 
 ```ts
 type EventStreamCloseInfo =
-  | { code: 'eof' | 'aborted'; reason?: string; cause?: unknown }
-  | { code: 'error'; errorCode: EventStreamFaultCode; reason?: string; cause?: unknown }
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamFaultCode`：`'RES_MEDIA_TYPE_INVALID' | 'EXT_OBSERVER_FAILED' | 'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'NET_TIMEOUT' | 'TRANSPORT_ERROR'`。
+`EventStreamFaultCode`：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
 
 ## 事件 map
 
@@ -104,15 +105,23 @@ type EventStreamCloseInfo =
 type EventStructs = { [eventName: string]: AnyStruct }
 ```
 
-見 [SSE 指南](../core/sse.md) 與 [消費 SSE 串流](../recipes/consume-sse.md)。
+`string` 事件 struct 保留原始 `data` 文字。其餘 kind 都是 JSON 文字：先 `JSON.parse`，再走 struct。因此裸的 `struct.literal` 需要 JSON 文字，不是沒加引號的 token。握手 `error` body 跟 HTTP 用同一套 kind 規則：`string` 是文字，`blob`／`file` 是 blobs，`arrayBuffer` 是 bytes，其餘是 JSON。
+
+重連放在 client 上（`withSSEReconnect`）。SSE 的 `jitter` 是 **0–1 乘性因子**，跟 WebSocket 一樣。
+
+見 [SSE 指南](/core/sse) 與 [消費 SSE 串流](/recipes/consume-sse)。
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`、`events`，可選 `method`／`input`／`build`，還有 buffer 與 queue 上限。
+`path`、`events`，可選 `method`／`input`／`builder`／`error`，還有 buffer 與 queue 上限。Request 形狀跟 HTTP 一樣，包括 `body`。`GET` 與 `HEAD` 不能回傳 body。
 
-## EventStreamCommandBuilder {#EventStreamCommandBuilder}
+## EventStreamEndpoint {#EventStreamEndpoint}
 
-`defineEventStream` 的回傳值。拿 input 呼叫就得到 `EventStreamCommand`。
+`defineEventStream` 的回傳值。帶 input 呼叫就得到 `EventStreamCommand`。
+
+## EventStreamRequestShape {#EventStreamRequestShape}
+
+欄位跟該串流 method 與 path 的 `HttpRequestShape` 一樣。
 
 ## EventStreamCommand {#EventStreamCommand}
 
@@ -120,7 +129,7 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 ## StreamAwaitResult {#StreamAwaitResult}
 
-`[null, stream, open]` or `[error, undefined, open?]`.
+`[null, stream, open]` 或 `[error, undefined, open?]`。
 
 ## EventStreamData {#EventStreamData}
 

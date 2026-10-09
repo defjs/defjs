@@ -7,7 +7,7 @@ description: 出站埋点 option：`withOpenTelemetryServer`。
 
 创建 Client 时打开出站埋点。追加 HTTP、SSE、WebSocket interceptor。它**不是**入站服务端埋点，也**不会**初始化 OpenTelemetry SDK。
 
-见 [OpenTelemetry server 指南](../plugins/opentelemetry-server.md)。
+见 [OpenTelemetry server 指南](/plugins/opentelemetry-server)。
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 

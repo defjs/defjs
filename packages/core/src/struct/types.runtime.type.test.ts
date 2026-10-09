@@ -176,57 +176,42 @@ void missingKeyMethod
 // @ts-expect-error async parsing is not part of the public struct API.
 struct.string().parseAsync('x')
 
-// @ts-expect-error request body requires a body wrapper or binary body struct.
-struct.request({ body: struct.object({ id: struct.string() }) })
+// @ts-expect-error struct.json was removed; non-string structs are JSON by kind.
+struct.json(struct.string())
 
-const JsonBody = struct.json(
-  struct.object({
-    displayName: struct.string().alias('display_name'),
-    score: struct.number(),
-  }),
-)
-type JsonBodyCase = Expect<StrictEqual<Infer<typeof JsonBody>, { displayName: string; score: number }>>
-expectTypeOf<(typeof JsonBody)['_struct']['input']>().toEqualTypeOf<{ displayName: string; score: number }>()
-expectTypeOf<(typeof JsonBody)['_struct']['output']>().toEqualTypeOf<{ displayName: string; score: number }>()
+// @ts-expect-error struct.text was removed; raw text is struct.string().
+struct.text()
 
-const OptionalInnerJsonBody = struct.json(struct.string().optional())
-expectTypeOf<(typeof OptionalInnerJsonBody)['_struct']['input']>().toEqualTypeOf<string>()
-expectTypeOf<(typeof OptionalInnerJsonBody)['_struct']['output']>().toEqualTypeOf<string>()
-const OptionalJsonBody = OptionalInnerJsonBody.optional()
-expectTypeOf<(typeof OptionalJsonBody)['_struct']['input']>().toEqualTypeOf<string | undefined>()
-
-const RequestWithOptionalInnerBody = struct.request({ body: OptionalInnerJsonBody })
-expectTypeOf<(typeof RequestWithOptionalInnerBody)['_struct']['input']>().toEqualTypeOf<{ body: string }>()
-
-const RequestWithOptionalSections = struct.request({
+const RequestWithOptionalSections = struct.object({
   headers: struct.object({ traceId: struct.string().optional() }),
   path: struct.object({ locale: struct.string().optional() }),
   query: struct.object({ page: struct.number().optional() }),
 })
 expectTypeOf<(typeof RequestWithOptionalSections)['_struct']['input']>().toEqualTypeOf<{
-  headers?: { traceId?: string }
-  path?: { locale?: string }
-  query?: { page?: number }
+  headers: { traceId?: string }
+  path: { locale?: string }
+  query: { page?: number }
 }>()
 expectTypeOf<(typeof RequestWithOptionalSections)['_struct']['output']>().toEqualTypeOf<{
   headers: { traceId?: string }
   path: { locale?: string }
   query: { page?: number }
 }>()
+// @ts-expect-error required object fields stay required when only their inner fields are optional.
 const omittedOptionalSections: (typeof RequestWithOptionalSections)['_struct']['input'] = {}
 void omittedOptionalSections
 
-const RequestWithMixedSection = struct.request({
+const RequestWithMixedSection = struct.object({
   query: struct.object({ page: struct.number().optional(), q: struct.string() }),
 })
-// @ts-expect-error a request section with a required field cannot be omitted.
+// @ts-expect-error an object field with a required inner field cannot be omitted.
 const omittedMixedSection: (typeof RequestWithMixedSection)['_struct']['input'] = {}
 void omittedMixedSection
 
-const RequestWithOptionalBodyFields = struct.request({
-  body: struct.json(struct.object({ note: struct.string().optional() })),
+const RequestWithOptionalBodyFields = struct.object({
+  body: struct.object({ note: struct.string().optional() }),
 })
-// @ts-expect-error request bodies remain required even when every body field is optional.
+// @ts-expect-error an object field stays required even when every inner field is optional.
 const omittedOptionalBody: (typeof RequestWithOptionalBodyFields)['_struct']['input'] = {}
 void omittedOptionalBody
 
@@ -245,19 +230,6 @@ const UrlencodedBody = struct.urlencoded({
 type UrlencodedBodyCase = Expect<StrictEqual<Infer<typeof UrlencodedBody>, { page: number; q: string }>>
 expectTypeOf<(typeof UrlencodedBody)['_struct']['input']>().toEqualTypeOf<{ page: number; q: string }>()
 expectTypeOf<(typeof UrlencodedBody)['_struct']['output']>().toEqualTypeOf<{ page: number; q: string }>()
-
-const TextBody = struct.text()
-type TextBodyCase = Expect<StrictEqual<Infer<typeof TextBody>, string>>
-expectTypeOf<(typeof TextBody)['_struct']['input']>().toEqualTypeOf<string>()
-expectTypeOf<(typeof TextBody)['_struct']['output']>().toEqualTypeOf<string>()
-
-const RequestWithJsonBody = struct.request({ body: JsonBody })
-expectTypeOf<(typeof RequestWithJsonBody)['_struct']['input']>().toEqualTypeOf<{
-  body: { displayName: string; score: number }
-}>()
-expectTypeOf<(typeof RequestWithJsonBody)['_struct']['output']>().toEqualTypeOf<{
-  body: { displayName: string; score: number }
-}>()
 
 // @ts-expect-error default was removed from the Go-style API.
 struct.string().default('default-value')
@@ -280,10 +252,8 @@ export type Cases =
   | DateCase
   | FormDataBodyCase
   | IntersectionCase
-  | JsonBodyCase
   | MatrixCase
   | ProfileCase
   | SingleIntersectionCase
-  | TextBodyCase
   | UnionCase
   | UrlencodedBodyCase

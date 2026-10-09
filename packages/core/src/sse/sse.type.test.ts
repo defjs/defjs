@@ -12,7 +12,20 @@ import type { FetchEventStreamErrorContext } from '../index'
 // @ts-expect-error low-level transport options are not part of the public barrel.
 import type { FetchEventStreamOptions } from '../index'
 
-import { createClient, defineEventStream, struct, type EventStreamData, type EventStreamFaultCode, type EventStructs } from '../index'
+// @ts-expect-error EventStreamCommandBuilder was renamed to EventStreamEndpoint
+import type { EventStreamCommandBuilder } from '../index'
+
+import {
+  createClient,
+  defineEventStream,
+  struct,
+  type AnyStruct,
+  type EventStreamData,
+  type EventStreamEndpoint,
+  type EventStreamFaultCode,
+  type EventStructs,
+  type Fault,
+} from '../index'
 import type { EventStreamHandle, EventStreamOpenInfo } from './transport/event_stream'
 
 // @ts-expect-error SSE definitions require an endpoint-owned queue limit.
@@ -43,28 +56,33 @@ const chatStream = defineEventStream({
   maxQueueSize: 16,
   method: 'POST',
   path: '/v1/chat/completions',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        model: struct.string(),
-        stream: struct.boolean(),
-      }),
-    ),
+  input: struct.object({
+    body: struct.object({
+      model: struct.string(),
+      stream: struct.boolean(),
+    }),
   }),
-  build(request, view) {
-    request.setJson({ model: view.body.model, stream: view.body.stream })
-  },
   events: { message: struct.string() },
 })
 void chatStream
+
+function takesEventStreamEndpoint<TInput extends AnyStruct | undefined, TEvents extends EventStructs>(
+  endpoint: EventStreamEndpoint<TInput, TEvents>,
+): EventStreamEndpoint<TInput, TEvents> {
+  return endpoint
+}
+
+expectTypeOf(takesEventStreamEndpoint(useEvents)).toEqualTypeOf<typeof useEvents>()
 
 const command = useEvents()
 expectTypeOf(command[COMMAND_TYPE]).toEqualTypeOf<typeof EVENT_STREAM_COMMAND>()
 expectTypeOf(command.endpoint.path).toEqualTypeOf<string>()
 
+void (undefined as unknown as EventStreamCommandBuilder<undefined, EventStructs>)
+
 const catalogEventStructs = {
-  'price-updated': struct.json(struct.object({ priceCents: struct.number(), sku: struct.string() })),
-  'product-retired': struct.json(struct.object({ reason: struct.string(), sku: struct.string() })),
+  'price-updated': struct.object({ priceCents: struct.number(), sku: struct.string() }),
+  'product-retired': struct.object({ reason: struct.string(), sku: struct.string() }),
 } satisfies EventStructs
 
 expectTypeOf<EventStreamData<typeof catalogEventStructs>['event']>().toEqualTypeOf<'price-updated' | 'product-retired'>()
@@ -146,7 +164,7 @@ expectTypeOf<EventStreamData<typeof defaultEventStructs>['data']>().toEqualTypeO
 
 const mixedEventStructs = {
   default: struct.string(),
-  message: struct.json(struct.object({ text: struct.string() })),
+  message: struct.object({ text: struct.string() }),
 } satisfies EventStructs
 expectTypeOf<EventStreamData<typeof mixedEventStructs>['event']>().toEqualTypeOf<string>()
 expectTypeOf<EventStreamData<typeof mixedEventStructs>['data']>().toEqualTypeOf<string | { text: string }>()
@@ -175,5 +193,38 @@ expectTypeOf<EventStreamData<typeof numericEventStructs>['data']>().toEqualTypeO
 const prototypeEventStructs = { ['__proto__']: struct.number() } satisfies EventStructs
 expectTypeOf<EventStreamData<typeof prototypeEventStructs>['event']>().toEqualTypeOf<'__proto__'>()
 expectTypeOf<EventStreamData<typeof prototypeEventStructs>['data']>().toEqualTypeOf<number>()
+
+const SseError = struct.object({ code: struct.string() })
+
+const streamWithError = defineEventStream({
+  error: SseError,
+  events: { message: struct.string() },
+  maxBufferSize: 1024,
+  maxQueueSize: 16,
+  path: '/events',
+})
+
+async function assertDeclaredSseStartupFault(): Promise<void> {
+  const [error] = await createClient().execute(streamWithError())
+  if (!error) {
+    return
+  }
+
+  expectTypeOf(error).toEqualTypeOf<Fault<typeof SseError>>()
+  if (error.code === 'HTTP_STATUS') {
+    expectTypeOf(error.data.code).toEqualTypeOf<string>()
+  }
+}
+void assertDeclaredSseStartupFault
+
+async function assertUndeclaredSseStartupFault(): Promise<void> {
+  const [error] = await createClient().execute(useEvents())
+  if (!error) {
+    return
+  }
+
+  expectTypeOf(error).toEqualTypeOf<Fault<undefined>>()
+}
+void assertUndeclaredSseStartupFault
 
 export type Cases = true

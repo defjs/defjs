@@ -22,19 +22,11 @@ describe('web socket browser runtime', () => {
   test('should connect and exchange typed messages in real browsers', async () => {
     const useEchoSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-        ready: struct.object({
-          ok: struct.boolean(),
-        }),
-      },
-      outgoing: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      incoming: struct.discriminatedUnion('type', [
+        struct.object({ type: struct.literal('message'), text: struct.string() }),
+        struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
+      ]),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/echo',
       protocols: ['json'],
     })
@@ -70,11 +62,7 @@ describe('web socket browser runtime', () => {
   test('should receive binary websocket frames as typed messages', async () => {
     const useBinarySocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/binary',
       protocols: ['json'],
     })
@@ -96,11 +84,7 @@ describe('web socket browser runtime', () => {
   test('should report incoming Struct failures in real browsers', async () => {
     const useInvalidSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/error-before-close',
     })
 
@@ -128,17 +112,8 @@ describe('web socket browser runtime', () => {
   test('should reconnect in real browsers', async () => {
     const command = defineWebSocket({
       maxIncomingQueueSize: 16,
-      build: (request, input) => {
-        request.setQueryParams({
-          key: input.query.key,
-        })
-      },
-      incoming: {
-        reconnected: struct.object({
-          attempt: struct.number(),
-        }),
-      },
-      input: struct.request({
+      incoming: struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
+      input: struct.object({
         query: struct.object({
           key: struct.string(),
         }),
@@ -165,7 +140,7 @@ describe('web socket browser runtime', () => {
     const controller = new AbortController()
     const command = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: { ready: struct.object({ ok: struct.boolean() }) },
+      incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
       path: '/ws/echo',
     })()
     const [error, socket] = await run(command, { signal: controller.signal })

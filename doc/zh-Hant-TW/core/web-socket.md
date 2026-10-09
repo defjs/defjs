@@ -5,7 +5,7 @@ description: 啟動型別化的 JSON session、收發 envelopes，然後 close �
 
 # WebSocket
 
-啟動 → 接收 → 傳送 → 用 `await using` 釋放。Unsubscribe 與 disposal 由你負責。手動 `close()` / `closed` 仍可使用；clients、providers、interceptors 不會自動關閉 sessions。
+啟動 → 接收 → 傳送 → 用 `await using` 釋放。Unsubscribe 與 disposal 由你負責。手動 `close()`／`closed` 仍可使用；clients、providers、interceptors 不會自動關閉 sessions。
 
 ## Basic Setup
 
@@ -16,8 +16,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session, startupConnection] = await client.execute(room())
@@ -28,6 +28,7 @@ if (error) {
   const unsubscribe = ownedSession.onRuntimeError((cause) => console.error('runtime', cause))
   try {
     ownedSession.send({ type: 'send', text: 'Hello' })
+    // wire: {"type":"send","text":"Hello"}
     for await (const message of ownedSession.receive) {
       console.log(message.type, message.text)
       break
@@ -38,25 +39,17 @@ if (error) {
 }
 ```
 
-## JSON envelope
+## 每個方向一個 struct
 
-`defineWebSocket(...)` 描述 JSON-message endpoint。必填的 `incoming` map 依訊息型別選 Struct；選填的 `outgoing` 對 `session.send(...)` 做同樣的事。每則 wire 訊息都是帶非空字串 `type` 的物件。
-
-物件 payload 欄位跟 `type` 並排。Scalar 與 array payloads 用 envelope 的 `data` 欄位：
+`incoming` 是每一個文字 frame 的一個 struct。`outgoing` 是 `session.send(...)` 的一個 struct。多種訊息用 `struct.discriminatedUnion`。那些欄位上的 alias 就是雙向的 wire 名稱。沒有另外的 type envelope，也沒有 normalizer。
 
 ```json
-{ "type": "message", "userId": 7, "text": "Hello" }
+{ "type": "message", "text": "Hello" }
 ```
 
-```json
-{ "type": "count", "data": 3 }
-```
+進來的文字、`ArrayBuffer`、typed-array、`Blob` frames 會讀成 UTF-8，再 JSON parse，然後對 `incoming` 檢查。畸形 JSON 與 struct 失敗走 `session.onRuntimeError`，而且不會進 queue。Session 維持開著。不是文字、bytes 或 `Blob` 的 frames 會被忽略。沒有 `withWebSocketOnInvalidEvent`。
 
-訊息 map 控制的是 payload，不是 envelope discriminator。`incoming.default` 接受其他未宣告的 type names；沒有它時，未知型別會被丟掉。進來的文字、`ArrayBuffer`、typed-array、`Blob` frames 會解成 UTF-8 JSON。畸形 JSON 與 Struct 失敗走 runtime-error observers — 不會進 `receive`。
-
-若物件 payload 有名為 `data` 的欄位，編碼後它仍跟 `type` 並排（不是巢狀 envelope）。例如：`write` 帶 `{ data: string, source: string }`，wire 是 `{ type: 'write', data: string, source: string }`。呼叫端的值仍是 `{ type: 'write', data: { data, source } }`，因為序列化前 `data` 帶著物件 payload。Aliases 作用在 payload 欄位。`type` discriminator 屬於 envelope，不屬於 Struct。
-
-`session.send(...)` 同步驗證並序列化。Open 時立刻送；有啟用 outgoing queue 時，在 `reconnecting` 期間會排隊；不可寫時丟 `InvalidStateError`。沒有 outgoing map、未宣告型別、payload 驗證失敗、停用／滿的 outgoing queue，或原生 send 失敗時也會 throw。
+`session.send(...)` 同步驗證並序列化：先 struct encode，再 `JSON.stringify`。Open 時立刻送；有啟用 outgoing queue 時，在 `reconnecting` 期間會排隊；不可寫時丟 `InvalidStateError`。沒有 outgoing struct、payload 驗證失敗、停用／滿的 outgoing queue，或原生 send 失敗時也會 throw。定義上的靜態 `protocols` list 是 endpoint 契約（例如 `graphql-transport-ws`）。Execute options 與 `withWebSocketProtocols` 仍可覆寫它；把 token 放進 subprotocol 屬於 `beforeConnect` 或 interceptor，不屬於 builder。Builder 只能回傳 `path` 與 `query`。
 
 `receive` 是單消費者。第二個 iterator 會被拒絕。
 
@@ -110,7 +103,7 @@ const client = createClient(
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { ready: struct.object({ ok: struct.boolean() }) },
+  incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
 })
 const [error, session] = await client.execute(room())
 if (!error) {
@@ -121,13 +114,13 @@ if (!error) {
 
 `shouldReconnect` 拿到下一次重試 attempt、close cause、code、reason、`wasClean`。手動 `session.close(...)` 不會進 predicate。Preparation／政策 throw 會以錯誤結束邏輯 session。
 
-WebSocket backoff jitter 是**乘法**（`jitter: 0.2` → delay 在 `0.8x` 與 `1.2x` 之間）。SSE jitter 与 WebSocket 相同，是 0–1 乘性因子。Delay／factor／jitter／attempt 值在 constructor 前驗證；timer delays 不能超過 `2_147_483_647` ms。
+WebSocket backoff jitter 是**乘法**（`jitter: 0.2` → delay 在 `0.8x` 與 `1.2x` 之間）。SSE jitter 是 0–1 乘性因子，跟 WebSocket 一樣。Delay／factor／jitter／attempt 值在 constructor 前驗證；timer delays 不能超過 `2_147_483_647` ms。
 
 `beforeConnect({ attempt, signal })` 在初始 constructor 與每次重連前跑。把它的 signal 傳進 token refresh，讓取消同時停掉 prep 與 connect。
 
 ## Heartbeat
 
-在 execute 或 client 範圍選擇性開啟。Interval 透過 outgoing Struct map 送 `message()`。選填的 `isAck(message)` 辨識 ack — 該訊息會清 timeout，且**不會**交付給 `receive`。
+在 execute 或 client 範圍選擇性開啟。Interval 透過 outgoing struct 送 `message()`。選填的 `isAck(message)` 辨識 ack — 該訊息會清 timeout，且**不會**交付給 `receive`。
 
 ```ts
 import { createClient, defineWebSocket, struct, withEndpoint } from '@defjs/core'
@@ -136,8 +129,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { pong: struct.object({ ok: struct.boolean() }) },
-  outgoing: { ping: struct.object({}) },
+  incoming: struct.discriminatedUnion('type', [struct.object({ type: struct.literal('pong'), ok: struct.boolean() })]),
+  outgoing: struct.object({ type: struct.literal('ping') }),
 })
 
 const [error, session] = await client.execute(room(), {
@@ -154,7 +147,7 @@ if (!error) {
 }
 ```
 
-`intervalMs` 與 `timeoutMs` 必須是正的 finite timers，且 ≤ `2_147_483_647`。Heartbeat 訊息必須對 outgoing map 有效。序列化、原生 send、ack 分類、逾時失敗對邏輯 session 是致命的 — 不會變成一般重連。
+`intervalMs` 與 `timeoutMs` 必須是正的 finite timers，且 ≤ `2_147_483_647`。Heartbeat 訊息必須對 outgoing struct 有效。序列化、原生 send、ack 分類、逾時失敗對邏輯 session 是致命的 — 不會變成一般重連。
 
 ## Queues
 
@@ -171,7 +164,7 @@ if (!error) {
 
 定義的 `protocols`、client 的 `withWebSocketProtocols(...)`、execute 的 `protocols` 設定 constructor subprotocol list。優先序：execution → client → definition。第一個定義的 list 會複製給邏輯 session，並在重連時重用。
 
-瀏覽器 WebSocket constructors 不接受任意 handshake headers。Defjs 把 `http:` → `ws:`、`https:` → `wss:`，path placeholders encode 一次，使用設定好的 query serializer。WebSocket query 建構也會把複雜 query 值序列化成 JSON（不像預設 HTTP 只接受 scalars）。
+瀏覽器 WebSocket constructors 不接受任意 handshake headers，而且 builder 不能回傳 `headers` 或 `body`。Defjs 把 `http:` → `ws:`、`https:` → `wss:`，path placeholders encode 一次，並使用跟 HTTP 一樣的 query 規則：預設是 scalars 與重複的 keys，巢狀物件用 `withQuerySerializer`，沒有 query 時不呼叫 serializer。
 
 `withCredentials(true)` 是 HTTP／SSE 的 Fetch credentials — 不是 WebSocket auth。用審過的 cookie／session 政策、subprotocol，或短效 connection ticket。別把一般憑證或長效 secrets 放進 query string。
 
@@ -192,15 +185,13 @@ void observeSession
 
 `session.closed` 是邏輯終端快照：`'closed'`、`'aborted'` 或 `'error'`，可帶選填的原生 `code`／`reason`／`wasClean`，以及 aborted／error 的 `cause`。觀察到的原生 close 欄位勝過擁有者請求的 fallback。
 
-標準 async disposer 會要求 best-effort 原生 close，再等待 Defjs 自有 lifecycle、message pump、timers、listeners、queues 與 socket references teardown。若 1 秒內始終沒有觀察到 close event，邏輯 cleanup 會強制完成，`closed` 以手動 `kind: 'closed'` settle，但 disposer 會用名為 `TimeoutError` 的 `DOMException` reject。若原生 close 呼叫本身丟錯，cleanup 完成後 disposer 會用該錯誤 reject。重複呼叫 disposer 會共用同一個 teardown。這些結果都無法證明實體 TCP 連線已經關閉。
-
-結構化實作 session 的程式碼現在必須提供同一份 `[Symbol.asyncDispose](): PromiseLike<void>` 契約。對實作者而言，這是編譯期 breaking change；只接收 Defjs session 的 consumer 不必新增執行期呼叫。
+標準 async disposer 會要求 best-effort 原生 close，再等待 Defjs 自有 lifecycle、message pump、timers、listeners、queues 與 socket references teardown。若 1 秒內始終沒有觀察到 close event，teardown 會被強制完成，disposer 可能用名為 `TimeoutError` 的 `DOMException` reject；這無法證明實體 TCP 連線已經關閉。重複呼叫 disposer 會共用同一個 teardown。結構化實作 session 的程式碼現在必須提供同一份 `[Symbol.asyncDispose](): PromiseLike<void>` 契約。
 
 ## GraphQL 邊界
 
-Defjs 提供型別化的 JSON envelope 與邏輯 session 生命週期。它**不會**實作 WebSocket 應用協定。GraphQL-over-WebSocket 功能 — connection init、operation IDs、`next`／`error`／`complete`、disposal、subscription replay — 都在核心契約之外。
+Defjs 提供一個 incoming struct、一個 outgoing struct，以及邏輯 session 生命週期。它**不會**實作 WebSocket 應用協定。GraphQL-over-WebSocket 功能 — connection init、operation IDs、`next`／`error`／`complete`、disposal、subscription replay — 都在核心契約之外。
 
-伺服器要求該協定時，用像 `graphql-ws` 這類協定 client，或用 `defineWebSocket(...)` 自建 envelope。單靠訊息 map 協商不出 GraphQL 語意。
+伺服器要求該協定時，用像 `graphql-ws` 這類協定 client，或用 `defineWebSocket(...)` 建模 frames。把 `graphql-transport-ws` 這類靜態 subprotocol 放在 `protocols` 上。單靠 struct 協商不出 GraphQL 語意。
 
 ## 相關 recipes
 

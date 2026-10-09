@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { afterEach, beforeEach, describe, expect, inject, test } from 'vitest'
-import { createClient, withEndpoint, withQueryParamsSerializer, type Client } from '../client'
+import { createClient, withEndpoint, withQuerySerializer, type Client } from '../client'
 import { struct } from '../struct'
 import { defineWebSocket, type SocketAwaitResult } from './index'
 
@@ -34,11 +34,7 @@ describe('web socket runtime lifecycle', () => {
   test('should allow closing websocket before startup', async () => {
     const useEchoSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        ready: struct.object({
-          ok: struct.boolean(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
       path: '/ws/echo',
     })
 
@@ -62,11 +58,7 @@ describe('web socket runtime lifecycle', () => {
   test('should skip unexpected websocket messages after startup', async () => {
     const useInvalidSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          count: struct.number(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('message'), count: struct.number() }),
       path: '/ws/invalid',
     })
 
@@ -89,24 +81,15 @@ describe('web socket runtime lifecycle', () => {
   test('should use request-level beforeConnect hook and client query serializer', async () => {
     const clientWithSerializer = createClient(
       withEndpoint(inject('testServerHost')),
-      withQueryParamsSerializer((params) => {
-        return `token=${params.get('token') ?? 'missing'}&from=serializer`
+      withQuerySerializer((query) => {
+        return `token=${String(query['token'])}&from=serializer`
       }),
     )
 
     const useBeforeConnectSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      build: (request, input) => {
-        request.setQueryParams({
-          token: input.query.token,
-        })
-      },
-      input: struct.request({ query: struct.object({ token: struct.string() }) }),
-      incoming: {
-        connected: struct.object({
-          token: struct.string(),
-        }),
-      },
+      input: struct.object({ query: struct.object({ token: struct.string() }) }),
+      incoming: struct.object({ type: struct.literal('connected'), token: struct.string() }),
       path: '/ws/before-connect',
     })
 

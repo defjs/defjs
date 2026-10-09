@@ -100,4 +100,4 @@ function basicAuthSSEInterceptor(fn: () => { username: string; password: string 
 
 `fn` вызывается на каждый request. Опциональный `encode` в `BasicAuthInterceptorOptions` подменяет значение заголовка `Basic …` по умолчанию.
 
-Подробности — в [гайде Interceptors](../core/interceptors.md).
+См. [гайд Interceptors](/core/interceptors).

@@ -21,7 +21,7 @@ describe('Fetch handler responses', () => {
       async () => new Response(body),
     )
 
-    expect(response.body).toBeNull()
+    expect(response.body).toBeUndefined()
     expect(canceled).toBe(true)
   })
 
@@ -48,7 +48,7 @@ describe('Fetch handler responses', () => {
       async () => new Response(body),
     )
 
-    expect(response.body).toBeNull()
+    expect(response.body).toBeUndefined()
     expect(canceled).toBe(true)
     expect(onProgress).not.toHaveBeenCalled()
   })
@@ -109,7 +109,7 @@ describe('Fetch handler responses', () => {
       async () => new Response(body),
     )
 
-    expect(response.body).toBeNull()
+    expect(response.body).toBeUndefined()
   })
 
   test('should not wait for unused response body cancellation to settle', async () => {
@@ -127,7 +127,7 @@ describe('Fetch handler responses', () => {
       ),
     )
 
-    expect(response.body).toBeNull()
+    expect(response.body).toBeUndefined()
     expect(cancel).toHaveBeenCalledOnce()
   })
 
@@ -190,7 +190,7 @@ describe('Fetch handler responses', () => {
     }
 
     const { body } = await fetchHandler(requestConfig)
-    expect(body).toBeNull()
+    expect(body).toBeUndefined()
   })
 
   test('should abort network', async () => {
@@ -261,6 +261,42 @@ describe('Fetch handler responses', () => {
         abort: controller.signal,
         baseEndpoint: 'https://example.com',
         endpoint: '/stalled-body',
+        method: 'GET',
+        responseType: 'text',
+      },
+      async () => new Response(body),
+    )
+
+    await pullStarted
+    controller.abort()
+
+    await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED)
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason)
+    expect(body.locked).toBe(false)
+  })
+
+  test('should abort a stalled response body read when cancellation rejects', async () => {
+    const controller = new AbortController()
+    const cancel = vi.fn(() => Promise.reject(new Error('cancel failed')))
+    let startPull!: () => void
+    const pullStarted = new Promise<void>((resolve) => {
+      startPull = resolve
+    })
+    const body = new ReadableStream<Uint8Array>(
+      {
+        cancel,
+        pull() {
+          startPull()
+          return new Promise<void>(() => undefined)
+        },
+      },
+      { highWaterMark: 0 },
+    )
+    const pending = fetchHandler(
+      {
+        abort: controller.signal,
+        baseEndpoint: 'https://example.com',
+        endpoint: '/stalled-body-cancel-rejects',
         method: 'GET',
         responseType: 'text',
       },
@@ -440,7 +476,7 @@ describe('Fetch handler responses', () => {
     }
 
     const res = await fetchHandler(requestConfig)
-    expect(res.body).toBeNull()
+    expect(res.body).toBeUndefined()
   })
 
   test('should fill an empty native Response url from the resolved request URL', async () => {
@@ -460,6 +496,35 @@ describe('Fetch handler responses', () => {
 
     expect(response.url).toBe('https://example.com/filled')
     expect(response.body).toEqual({ id: 1 })
+  })
+
+  test('should store an absent stream as undefined and a parsed JSON null as null', async () => {
+    const request = {
+      baseEndpoint: 'https://example.com',
+      endpoint: '/null',
+      method: 'GET',
+      responseType: 'json' as const,
+    }
+    const headers = { 'content-type': 'application/json' }
+    const absent = await fetchHandler(request, async () => new Response(null, { headers, status: 200 }))
+    const parsedNull = await fetchHandler(request, async () => new Response('null', { headers, status: 200 }))
+
+    expect(absent.body).toBeUndefined()
+    expect(parsedNull.body).toBeNull()
+  })
+
+  test('should reject a present zero-length JSON body', async () => {
+    await expect(
+      fetchHandler(
+        {
+          baseEndpoint: 'https://example.com',
+          endpoint: '/empty',
+          method: 'GET',
+          responseType: 'json',
+        },
+        async () => new Response('', { headers: { 'content-type': 'application/json' }, status: 200 }),
+      ),
+    ).rejects.toMatchObject({ code: 'RES_DECODE_FAILED' })
   })
 })
 

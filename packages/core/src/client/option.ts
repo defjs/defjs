@@ -6,7 +6,7 @@ import type {
   ClientWebSocketOptions,
   FetchHandle,
   HttpClientOptions,
-  QueryParamsSerializer,
+  QuerySerializer,
   WebSocketHandleConstructor,
 } from './config'
 
@@ -28,7 +28,7 @@ export function withEndpoint(endpoint: string): ClientOption {
 /**
  * Sets static default headers for HTTP/SSE requests built by this client.
  *
- * Command `struct.request({ headers })` values override the same names. HMAC and
+ * Builder `headers` override the same names. HMAC and
  * dynamic Bearer tokens still belong in interceptors (they need the serialized body
  * or a refreshed credential).
  *
@@ -72,14 +72,18 @@ export function withInterceptors(...interceptors: Interceptor[]): ClientOption {
 }
 
 /**
- * Replaces the serializer used when encoding query parameters.
+ * Sets the query serializer for HTTP, SSE, and WebSocket requests.
  *
- * @param serializer - Function that turns params into a query string.
- * @returns An option that sets `config.queryParamsSerializer`.
+ * The function receives the encoded wire object and its string is used verbatim.
+ * Without this option, queries use `URLSearchParams`: arrays repeat keys and a nested
+ * object fails. A builder that returns `URLSearchParams` skips this serializer.
+ *
+ * @param serializer - Function that turns an encoded query object into a string.
+ * @returns An option that sets `config.querySerializer`.
  */
-export function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption {
+export function withQuerySerializer(serializer: QuerySerializer): ClientOption {
   return (config) => {
-    config.queryParamsSerializer = serializer
+    config.querySerializer = serializer
   }
 }
 
@@ -171,21 +175,6 @@ export function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbea
 export function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption {
   return (config) => {
     config.webSocket.reconnect = options
-  }
-}
-
-/**
- * Handles WebSocket messages whose `type` has no matching incoming struct.
- *
- * JSON/Struct decode failures still go to `session.onRuntimeError`. Unknown types
- * do not tear down the session.
- *
- * @param handler - Observer callback; failures are isolated.
- * @returns An option that sets `config.webSocket.onInvalidEvent`.
- */
-export function withWebSocketOnInvalidEvent(handler: ClientWebSocketOptions['onInvalidEvent']): ClientOption {
-  return (config) => {
-    config.webSocket.onInvalidEvent = handler
   }
 }
 

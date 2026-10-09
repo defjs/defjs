@@ -115,6 +115,23 @@ describe('constructors.ts discriminatedUnion', () => {
     },
   )
 
+  test('reads a getter discriminator while building the union', () => {
+    let reads = 0
+    const event = struct.discriminatedUnion('type', [
+      struct.object({
+        get type() {
+          reads += 1
+          return struct.literal('click')
+        },
+        x: struct.number(),
+      }),
+    ])
+
+    expect(reads).toBe(1)
+    expect(parse(event, { type: 'click', x: 3 })).toEqual([null, { type: 'click', x: 3 }])
+    expect(reads).toBe(2)
+  })
+
   test('accepts an exact null discriminator declaration', () => {
     const NullEvent = struct.discriminatedUnion('type', [struct.object({ payload: struct.string(), type: struct.literal(null).null() })])
 

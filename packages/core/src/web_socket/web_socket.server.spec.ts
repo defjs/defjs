@@ -1,16 +1,8 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
-import {
-  createClient,
-  withEndpoint,
-  withInterceptors,
-  withWebSocketHandle,
-  withWebSocketOnInvalidEvent,
-  withWebSocketReconnect,
-  type Client,
-} from '../client'
+import { createClient, withEndpoint, withInterceptors, withWebSocketHandle, withWebSocketReconnect, type Client } from '../client'
 import { createNetworkFault, createPreflightFault, createUndecodedHttpStatusFault, ERR_ABORTED } from '../error'
 import { createWebSocketInterceptor, type WebSocketSessionLike } from '../interceptor'
-import { struct } from '../struct'
+import { StructError, struct } from '../struct'
 import { defineWebSocket, type SocketAwaitResult } from './index'
 
 let lastMockInstance: MockWebSocketInstance | undefined
@@ -191,7 +183,7 @@ describe('web socket runtime environment edge cases', () => {
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
@@ -203,34 +195,35 @@ describe('web socket runtime environment edge cases', () => {
     expect(error?.code.startsWith('NET_')).toBe(true)
   })
 
-  test('should observe missing-struct for unknown types without tearing down the session', async () => {
+  test('should report invalid incoming frames without tearing down the session', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const onInvalidEvent = vi.fn(async () => {
-      throw new Error('observer boom')
-    })
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        known: struct.object({ ok: struct.boolean() }),
-      },
+      incoming: struct.object({
+        ok: struct.boolean(),
+        type: struct.literal('known'),
+      }),
       path: '/ws/test',
     })
 
-    const client = createClient(withEndpoint('http://localhost'), withWebSocketOnInvalidEvent(onInvalidEvent))
+    const client = createClient(withEndpoint('http://localhost'))
     const [error, socket] = await run(client, useSocket())
     expect(error).toBeNull()
     if (!socket || !lastMockInstance) {
       throw new Error('Expected open session')
     }
 
+    const runtimeErrors: unknown[] = []
+    socket.onRuntimeError((runtimeError) => {
+      runtimeErrors.push(runtimeError)
+    })
+
     lastMockInstance.triggerMessage('{"ok":true}')
     lastMockInstance.triggerMessage('{"type":"unknown","ok":true}')
-    await vi.waitFor(() => expect(onInvalidEvent).toHaveBeenCalledOnce())
-    expect(onInvalidEvent).toHaveBeenCalledWith({
-      reason: 'missing-struct',
-      message: { type: 'unknown', data: { type: 'unknown', ok: true } },
-    })
+    await vi.waitFor(() => expect(runtimeErrors).toHaveLength(2))
+    expect(runtimeErrors[0]).toBeInstanceOf(StructError)
+    expect(runtimeErrors[1]).toBeInstanceOf(StructError)
 
     lastMockInstance.triggerMessage('{"type":"known","ok":true}')
     const iterator = socket.receive[Symbol.asyncIterator]()
@@ -238,6 +231,45 @@ describe('web socket runtime environment edge cases', () => {
       done: false,
       value: { ok: true, type: 'known' },
     })
+
+    socket.close(1000, 'done')
+    await expect(socket.closed).resolves.toMatchObject({ code: 1000 })
+  })
+
+  test('should ignore non-text frames without notifying runtime errors', async () => {
+    vi.stubGlobal('WebSocket', createMockWebSocketClass())
+
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 16,
+      incoming: struct.object({
+        ok: struct.boolean(),
+        type: struct.literal('known'),
+      }),
+      path: '/ws/test',
+    })
+
+    const client = createClient(withEndpoint('http://localhost'))
+    const [error, socket] = await run(client, useSocket())
+    expect(error).toBeNull()
+    if (!socket || !lastMockInstance) {
+      throw new Error('Expected open session')
+    }
+
+    const runtimeErrors: unknown[] = []
+    socket.onRuntimeError((runtimeError) => {
+      runtimeErrors.push(runtimeError)
+    })
+
+    lastMockInstance.triggerMessage(123)
+    lastMockInstance.triggerMessage({ ok: true, type: 'known' })
+    lastMockInstance.triggerMessage('{"type":"known","ok":true}')
+
+    const iterator = socket.receive[Symbol.asyncIterator]()
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { ok: true, type: 'known' },
+    })
+    expect(runtimeErrors).toEqual([])
 
     socket.close(1000, 'done')
     await expect(socket.closed).resolves.toMatchObject({ code: 1000 })
@@ -254,7 +286,7 @@ describe('web socket runtime environment edge cases', () => {
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
@@ -273,7 +305,7 @@ describe('web socket runtime environment edge cases', () => {
     const controller = new AbortController()
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
@@ -294,7 +326,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const controller = new AbortController()
     controller.abort(new DOMException('deadline expired', 'TimeoutError'))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       signal: controller.signal,
@@ -310,7 +342,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const controller = new AbortController()
     controller.abort('caller stopped')
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       signal: controller.signal,
@@ -327,7 +359,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const controller = new AbortController()
     controller.abort(new Error('Request timed out'))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       signal: controller.signal,
@@ -348,7 +380,7 @@ describe('web socket runtime environment edge cases', () => {
         return timeoutReads === 1 ? undefined : Number.POSITIVE_INFINITY
       },
     }
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), options)
 
@@ -367,7 +399,7 @@ describe('web socket runtime environment edge cases', () => {
         throw getterFailure
       },
     }
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const result = await run(createClient(withEndpoint('http://localhost')), useSocket(), options)
 
@@ -385,7 +417,7 @@ describe('web socket runtime environment edge cases', () => {
           throw getterFailure
         },
       })
-      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
       const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), options)
 
@@ -399,7 +431,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should snapshot configured protocols before beforeConnect mutates their source', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const protocols = ['snapshot-protocol']
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       beforeConnect() {
@@ -418,7 +450,7 @@ describe('web socket runtime environment edge cases', () => {
     'should reject invalid websocket timeout %s before constructing a physical socket',
     async (timeout) => {
       vi.stubGlobal('WebSocket', createMockWebSocketClass())
-      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
       const result = await run(createClient(withEndpoint('http://localhost')), useSocket(), { timeout })
 
@@ -434,7 +466,7 @@ describe('web socket runtime environment edge cases', () => {
       controller.abort(ERR_ABORTED)
       return next(request)
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(
       createClient(withEndpoint('http://localhost'), withInterceptors(abortingInterceptor)),
@@ -456,7 +488,7 @@ describe('web socket runtime environment edge cases', () => {
       entered.resolve(undefined)
       return new Promise<WebSocketSessionLike>(() => undefined)
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost'), withInterceptors(hangingInterceptor)), useSocket(), {
       signal: controller.signal,
     })
@@ -483,7 +515,7 @@ describe('web socket runtime environment edge cases', () => {
       entered.resolve(undefined)
       return new Promise<WebSocketSessionLike>(() => undefined)
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost'), withInterceptors(hangingInterceptor)), useSocket(), {
       timeout: 5,
     })
@@ -510,7 +542,7 @@ describe('web socket runtime environment edge cases', () => {
       controller.abort(ERR_ABORTED)
       return pendingSession
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(
       createClient(withEndpoint('http://localhost'), withInterceptors(abortingInterceptor)),
@@ -527,7 +559,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should prefer an abort that follows a pre-open close in the same turn', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
     const controller = new AbortController()
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), { signal: controller.signal })
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
@@ -542,7 +574,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should report a transport error when the peer closes before open without a native cause', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
@@ -556,7 +588,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should surface a startup timeout while waiting for the physical socket to open', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), { timeout: 10 })
 
@@ -571,7 +603,7 @@ describe('web socket runtime environment edge cases', () => {
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
@@ -586,62 +618,62 @@ describe('web socket runtime environment edge cases', () => {
   })
 
   test('should set duplicate open state only once', async () => {
-    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoCloseDelay: 50 }))
+    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
 
     const states: string[] = []
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
-    const client = createClient(withEndpoint('http://localhost'))
-    const executePromise = run(client, useSocket())
-
+    const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
+    const nativeSocket = lastMockInstance
+    nativeSocket?.triggerOpen()
     const [, socket] = await executePromise
 
-    if (!socket) {
+    if (!socket || !nativeSocket) {
       throw new Error('Expected socket')
     }
 
     socket.onStateChange((state: string) => {
       states.push(state)
     })
+    nativeSocket.triggerOpen()
+    nativeSocket.triggerOpen()
 
-    await new Promise((resolve) => setTimeout(resolve, 10))
-
-    lastMockInstance?.triggerOpen()
-    lastMockInstance?.triggerOpen()
-
-    await expect(socket.closed).resolves.toMatchObject({ code: 1000 })
-    // In the command-based API the listener can only be attached after the socket resolves,
-    // so the first 'open' is not observable here. We still verify that duplicate open events
-    // after the socket is already open do not emit additional 'open' states.
+    // The listener is attached after the session is already open, so the first open is not
+    // observable. Duplicate open events on that live session must not emit more open states.
     expect(states.filter((state) => state === 'open')).toHaveLength(0)
+    socket.close(1000, 'done')
+    await expect(socket.closed).resolves.toMatchObject({ code: 1000 })
   })
 
   test('should emit runtime error when send throws during queued flush', async () => {
-    vi.stubGlobal('WebSocket', createMockWebSocketClass({ sendError: new Error('send failed') }))
+    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, sendError: new Error('send failed') }))
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
       maxOutgoingQueueSize: 1,
-      incoming: {},
-      outgoing: {
-        msg: struct.object({ text: struct.string() }),
-      },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('msg'), text: struct.string() }),
       path: '/ws/test',
     })
 
     const client = createClient(
       withEndpoint('http://localhost'),
       withWebSocketHandle(globalThis.WebSocket),
-      withWebSocketReconnect({ attempts: 1, delayMs: 50 }),
+      withWebSocketReconnect({ attempts: 1, delayMs: 0 }),
     )
-    const [error, socket] = await run(client, useSocket())
+    const executePromise = run(client, useSocket())
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
+    const firstSocket = lastMockInstance
+    firstSocket?.triggerOpen()
+    const [error, socket] = await executePromise
 
     expect(error).toBeNull()
-    if (!socket) {
+    if (!socket || !firstSocket) {
       throw new Error('Expected socket')
     }
 
@@ -652,16 +684,26 @@ describe('web socket runtime environment edge cases', () => {
     const pendingReceive = socket.receive[Symbol.asyncIterator]()
       .next()
       .catch((error: unknown) => error)
+    const reconnecting = createDeferred<void>()
+    socket.onStateChange((state) => {
+      if (state !== 'reconnecting') {
+        return
+      }
+      socket.send({ type: 'msg', text: 'queued' })
+      reconnecting.resolve(undefined)
+    })
 
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    lastMockInstance?.triggerClose({ code: 1000, reason: '', wasClean: true })
-    await new Promise((resolve) => setTimeout(resolve, 10))
+    firstSocket.triggerClose({ code: 1000, reason: '', wasClean: true })
+    await reconnecting.promise
+    await vi.waitFor(() => expect(mockInstances).toHaveLength(2))
+    const replacement = mockInstances[1]
+    if (!replacement) {
+      throw new Error('Expected replacement socket')
+    }
+    replacement.triggerOpen()
 
-    socket.send({ type: 'msg', text: 'queued' })
-
-    await new Promise((resolve) => setTimeout(resolve, 120))
-    expect(runtimeError).toBeDefined()
     await expect(socket.closed).resolves.toMatchObject({ kind: 'error' })
+    expect(runtimeError).toBeDefined()
     await expect(pendingReceive).resolves.toMatchObject({ message: 'send failed' })
     expect(socket.state).toBe('error')
   })
@@ -671,7 +713,7 @@ describe('web socket runtime environment edge cases', () => {
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
@@ -683,25 +725,81 @@ describe('web socket runtime environment edge cases', () => {
   })
 
   test('should run heartbeat through an injected handle without global WebSocket', async () => {
-    const InjectedWebSocket = createMockWebSocketClass()
+    vi.useFakeTimers()
+    const InjectedWebSocket = createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false })
     vi.stubGlobal('WebSocket', undefined)
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { ping: struct.object({}) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('ping') }),
       path: '/ws/test',
     })
     const client = createClient(withEndpoint('http://localhost'), withWebSocketHandle(InjectedWebSocket))
-    const [, socket] = await run(client, useSocket(), {
+    const executePromise = run(client, useSocket(), {
       heartbeat: { intervalMs: 5, message: () => ({ type: 'ping' }) },
     })
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
+    lastMockInstance?.triggerOpen()
+    const [, socket] = await executePromise
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
     }
+    const nativeSocket = lastMockInstance
 
-    await vi.waitFor(() => expect(lastMockInstance?.send).toHaveBeenCalled())
+    await vi.advanceTimersByTimeAsync(5)
+    expect(nativeSocket.send).toHaveBeenCalled()
     socket.close(1000, 'done')
+    nativeSocket.triggerClose({ code: 1000, reason: 'done', wasClean: true })
     await socket.closed
+  })
+
+  test('should send the next heartbeat after a decoded pong acknowledges the open cycle', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }))
+    let ackChecks = 0
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 4,
+      incoming: struct.object({ type: struct.literal('pong'), ok: struct.boolean() }),
+      outgoing: struct.object({ type: struct.literal('ping') }),
+      path: '/ws/test',
+    })
+    const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
+      heartbeat: {
+        intervalMs: 20,
+        isAck(message: { type: string }) {
+          ackChecks += 1
+          return message.type === 'pong'
+        },
+        message: () => ({ type: 'ping' }),
+        timeoutMs: 200,
+      },
+    })
+
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
+    lastMockInstance?.triggerOpen()
+    const [, socket] = await executePromise
+    if (!socket || !lastMockInstance) {
+      throw new Error('Expected socket')
+    }
+    const nativeSocket = lastMockInstance
+    const runtimeErrors: unknown[] = []
+    socket.onRuntimeError((runtimeError) => {
+      runtimeErrors.push(runtimeError)
+    })
+
+    await vi.advanceTimersByTimeAsync(20)
+    expect(nativeSocket.send).toHaveBeenCalledTimes(1)
+    nativeSocket.triggerMessage(JSON.stringify({ ok: true, type: 'pong' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(ackChecks).toBe(1)
+    await vi.advanceTimersByTimeAsync(20)
+
+    expect(nativeSocket.send).toHaveBeenCalledTimes(2)
+    expect(runtimeErrors).toEqual([])
+    expect(socket.state).toBe('open')
+    socket.close(1000, 'done')
+    nativeSocket.triggerClose({ code: 1000, reason: 'done', wasClean: true })
+    await expect(socket.closed).resolves.toMatchObject({ code: 1000, kind: 'closed', reason: 'done' })
   })
 
   test('should stop a heartbeat callback that aborts the logical session before send or timeout', async () => {
@@ -710,8 +808,8 @@ describe('web socket runtime environment edge cases', () => {
     const controller = new AbortController()
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { ping: struct.object({}) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('ping') }),
       path: '/ws/test',
     })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -746,7 +844,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should stop heartbeat timers only after accepting a valid manual close request', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
       heartbeat: { intervalMs: 100 },
     })
@@ -775,7 +873,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should preserve an external abort triggered by a closing observer', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ emitCloseEvent: false }))
     const controller = new AbortController()
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       signal: controller.signal,
     })
@@ -805,7 +903,7 @@ describe('web socket runtime environment edge cases', () => {
     const controller = new AbortController()
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { pong: struct.object({ ok: struct.boolean() }) },
+      incoming: struct.object({ type: struct.literal('pong'), ok: struct.boolean() }),
       path: '/ws/test',
     })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -846,7 +944,7 @@ describe('web socket runtime environment edge cases', () => {
     const controller = new AbortController()
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { pong: struct.object({ ok: struct.boolean() }) },
+      incoming: struct.object({ type: struct.literal('pong'), ok: struct.boolean() }),
       path: '/ws/test',
     })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -882,7 +980,8 @@ describe('web socket runtime environment edge cases', () => {
   })
 
   test('should snapshot heartbeat config before beforeConnect can mutate it', async () => {
-    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }))
     let configuredInterval = 20
     let intervalReads = 0
     const heartbeat = {
@@ -895,8 +994,8 @@ describe('web socket runtime environment edge cases', () => {
     let socketExistedDuringHook = false
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { ping: struct.object({}) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('ping') }),
       path: '/ws/test',
     })
 
@@ -917,8 +1016,11 @@ describe('web socket runtime environment edge cases', () => {
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
     }
-    await vi.waitFor(() => expect(lastMockInstance?.send).toHaveBeenCalled())
+    // The snapshotted 20ms interval must fire even though the live config is now infinite.
+    await vi.advanceTimersByTimeAsync(20)
+    expect(lastMockInstance.send).toHaveBeenCalled()
     socket.close(1000, 'done')
+    lastMockInstance.triggerClose({ code: 1000, reason: 'done', wasClean: true })
     await socket.closed
   })
 
@@ -937,7 +1039,7 @@ describe('web socket runtime environment edge cases', () => {
         },
       }),
     )
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       signal: controller.signal,
@@ -959,7 +1061,7 @@ describe('web socket runtime environment edge cases', () => {
         throw snapshotFailure
       },
     }
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), { heartbeat })
 
@@ -970,58 +1072,73 @@ describe('web socket runtime environment edge cases', () => {
   })
 
   test('should surface runtime cause on error event before close', async () => {
-    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoCloseDelay: 50 }))
+    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
 
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
-    const client = createClient(withEndpoint('http://localhost'))
-    const [error, socket] = await run(client, useSocket())
+    const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
+    const nativeSocket = lastMockInstance
+    nativeSocket?.triggerOpen()
+    const [error, socket] = await executePromise
 
     expect(error).toBeNull()
-    if (!socket) {
+    if (!socket || !nativeSocket) {
       throw new Error('Expected socket')
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 10))
-    lastMockInstance?.triggerError()
+    nativeSocket.triggerError()
 
-    const closeInfo = await socket.closed
-    expect(closeInfo).toMatchObject({ kind: 'error' })
+    await expect(socket.closed).resolves.toMatchObject({
+      cause: expect.objectContaining({ message: 'WebSocket connection error' }),
+      kind: 'error',
+    })
   })
 
   test('should wait for the errored physical socket close before constructing its replacement', async () => {
-    vi.stubGlobal('WebSocket', createMockWebSocketClass({ closeEventDelayMs: 40 }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
-    const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
+    vi.useFakeTimers()
+    vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }))
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
+    const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0 },
     })
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
+    lastMockInstance?.triggerOpen()
+    const [, socket] = await executePromise
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
     }
     const firstSocket = lastMockInstance
 
     firstSocket.triggerError()
-    await new Promise((resolve) => setTimeout(resolve, 10))
 
     expect(mockInstances).toHaveLength(1)
     expect(firstSocket.close).toHaveBeenCalledTimes(1)
-    await vi.waitFor(() => {
-      expect(mockInstances).toHaveLength(2)
-      expect(socket.connection.generation).toBe(2)
-    })
+    // Close stays withheld. A premature replacement queued on a timer would appear on this turn,
+    // which is still short of the close grace.
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockInstances).toHaveLength(1)
+
+    firstSocket.triggerClose({ code: 1006, reason: 'transport', wasClean: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mockInstances).toHaveLength(2)
+    // autoOpen is off, so the replacement stays connecting until this turn opens it.
+    mockInstances[1]?.triggerOpen()
+    expect(socket.connection.generation).toBe(2)
 
     socket.close(1000, 'done')
+    lastMockInstance?.triggerClose({ code: 1000, reason: 'done', wasClean: true })
     await socket.closed
   })
 
   test('should fail after a bounded grace when an errored socket never emits close', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0 },
     })
@@ -1053,7 +1170,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should settle an error attempt when native close throws synchronously', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ closeErrors: [new Error('close failed')] }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
@@ -1071,8 +1188,8 @@ describe('web socket runtime environment edge cases', () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       maxOutgoingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -1106,7 +1223,7 @@ describe('web socket runtime environment edge cases', () => {
   ] as const)('should reject unsafe %s queue limit %s before constructing a socket', async (kind, value) => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const definition = {
-      incoming: {},
+      incoming: struct.unknown(),
       maxIncomingQueueSize: kind === 'incoming' ? value : 1,
       maxOutgoingQueueSize: kind === 'outgoing' ? value : 0,
       path: '/ws/test',
@@ -1124,7 +1241,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/test',
     })
 
@@ -1152,7 +1269,7 @@ describe('web socket runtime environment edge cases', () => {
       await gate.promise
       return interceptedSession
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost'), withInterceptors(delayedInterceptor)), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0 },
     })
@@ -1182,7 +1299,7 @@ describe('web socket runtime environment edge cases', () => {
         throw getterFailure
       },
     }
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), { reconnect })
     if (socket) {
@@ -1203,7 +1320,7 @@ describe('web socket runtime environment edge cases', () => {
       delayMs: 0,
       shouldReconnect: () => false,
     }
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       beforeConnect() {
         reconnect.shouldReconnect = () => true
@@ -1250,7 +1367,7 @@ describe('web socket runtime environment edge cases', () => {
       discardedSession = await next(request)
       return replacementSession
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const result = await Promise.race([
       run(createClient(withEndpoint('http://localhost'), withInterceptors(interceptor)), useSocket()),
@@ -1277,7 +1394,7 @@ describe('web socket runtime environment edge cases', () => {
       await createdSession.closed
       throw interceptorFailure
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket] = await run(createClient(withEndpoint('http://localhost'), withInterceptors(interceptor)), useSocket())
 
@@ -1310,7 +1427,7 @@ describe('web socket runtime environment edge cases', () => {
       await new Promise((resolve) => setTimeout(resolve, 0))
       return replacementSession
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket] = await run(createClient(withEndpoint('http://localhost'), withInterceptors(interceptor)), useSocket())
 
@@ -1347,7 +1464,7 @@ describe('web socket runtime environment edge cases', () => {
       }, 10)
       return replacementSession
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const [error, socket] = await run(createClient(withEndpoint('http://localhost'), withInterceptors(interceptor)), useSocket())
     const lateOutcome = await lateCall.promise
@@ -1363,7 +1480,7 @@ describe('web socket runtime environment edge cases', () => {
     'should reject invalid close code %s without changing session state',
     async (code) => {
       vi.stubGlobal('WebSocket', createMockWebSocketClass())
-      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
       const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
       if (!socket || !lastMockInstance) {
         throw new Error('Expected socket')
@@ -1380,7 +1497,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should reject a close reason over 123 UTF-8 bytes without changing session state', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
@@ -1398,7 +1515,7 @@ describe('web socket runtime environment edge cases', () => {
     const reported: unknown[] = []
     vi.stubGlobal('reportError', (error: unknown) => reported.push(error))
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket) {
       throw new Error('Expected socket')
@@ -1427,7 +1544,7 @@ describe('web socket runtime environment edge cases', () => {
     const unhandled: unknown[] = []
     const onUnhandled = (reason: unknown) => unhandled.push(reason)
     process.on('unhandledRejection', onUnhandled)
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket) {
       throw new Error('Expected socket')
@@ -1459,7 +1576,7 @@ describe('web socket runtime environment edge cases', () => {
     const unhandled: unknown[] = []
     const onUnhandled = (reason: unknown) => unhandled.push(reason)
     process.on('unhandledRejection', onUnhandled)
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket) {
       throw new Error('Expected socket')
@@ -1485,7 +1602,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should isolate observer failures when the runtime has no reportError hook', async () => {
     vi.stubGlobal('reportError', undefined)
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket) {
       throw new Error('Expected socket')
@@ -1505,7 +1622,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should release observers and return one no-op unsubscribe after terminal', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket) {
       throw new Error('Expected socket')
@@ -1527,7 +1644,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 2,
-      incoming: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
@@ -1559,7 +1676,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
@@ -1589,7 +1706,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { pong: struct.object({ ok: struct.boolean() }) },
+      incoming: struct.object({ type: struct.literal('pong'), ok: struct.boolean() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -1619,7 +1736,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { pong: struct.object({ ok: struct.boolean() }) },
+      incoming: struct.object({ type: struct.literal('pong'), ok: struct.boolean() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -1650,7 +1767,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 2,
-      incoming: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
@@ -1675,7 +1792,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 2,
-      incoming: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
@@ -1699,7 +1816,7 @@ describe('web socket runtime environment edge cases', () => {
     async (eventKind) => {
       vi.stubGlobal('WebSocket', createMockWebSocketClass())
       const predicate = vi.fn(() => false)
-      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
       const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
         reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
       })
@@ -1726,7 +1843,7 @@ describe('web socket runtime environment edge cases', () => {
     async (policyOutcome) => {
       vi.stubGlobal('WebSocket', createMockWebSocketClass())
       const controller = new AbortController()
-      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+      const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
       const predicate = vi.fn(() => {
         controller.abort(ERR_ABORTED)
         if (policyOutcome === 'throw') {
@@ -1757,7 +1874,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should preserve terminal state when reconnect predicate closes the session and returns true', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     let exposedSocket: SocketAwaitResult<unknown, unknown>[1]
     const predicate = vi.fn(() => {
       exposedSocket?.close(1000, 'owner declined')
@@ -1783,7 +1900,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should preserve owner close when reconnect predicate throws after closing the session', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     let exposedSocket: SocketAwaitResult<unknown, unknown>[1]
     const predicate = vi.fn(() => {
       exposedSocket?.close(1000, 'owner declined')
@@ -1808,7 +1925,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should preserve an abort triggered by an observer during replacement open', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const controller = new AbortController()
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0 },
       signal: controller.signal,
@@ -1832,7 +1949,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should stop reconnect work when a reconnecting observer closes the logical session', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const random = vi.spyOn(Math, 'random').mockReturnValue(1)
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: {
         attempts: 1,
@@ -1864,7 +1981,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const controller = new AbortController()
     const random = vi.spyOn(Math, 'random').mockReturnValue(1)
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: {
         attempts: 1,
@@ -1896,7 +2013,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should not settle twice when owner close interrupts an active reconnect delay', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const reconnecting = createDeferred<void>()
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 1_000 },
     })
@@ -1921,7 +2038,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should settle when finite reconnect inputs overflow during jitter computation', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const random = vi.spyOn(Math, 'random').mockReturnValue(1)
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: {
         attempts: 1,
@@ -1952,7 +2069,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should skip post-open setup when an observer closes the replacement', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0 },
     })
@@ -1976,7 +2093,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
@@ -1998,7 +2115,7 @@ describe('web socket runtime environment edge cases', () => {
     const controller = new AbortController()
     const contexts: Array<{ attempt: number; signal: AbortSignal }> = []
     let rejectHook: ((reason: unknown) => void) | undefined
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
 
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
       beforeConnect(context: { attempt: number; signal: AbortSignal }) {
@@ -2033,7 +2150,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ closeErrors: [closeFailure] }))
     const controller = new AbortController()
     const shouldReconnect = vi.fn(() => true)
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0, shouldReconnect },
       signal: controller.signal,
@@ -2055,7 +2172,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should preserve the last opened connection snapshot when aborting a connecting replacement', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
     const controller = new AbortController()
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0 },
       signal: controller.signal,
@@ -2093,7 +2210,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should use one fallback close, rethrow the first error, and wait for the close event', async () => {
     const firstFailure = new Error('first close failed')
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ closeErrors: [firstFailure] }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
@@ -2112,7 +2229,7 @@ describe('web socket runtime environment edge cases', () => {
     const firstFailure = new Error('first close failed')
     const fallbackFailure = new Error('fallback close failed')
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ closeErrors: [firstFailure, fallbackFailure] }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
@@ -2145,7 +2262,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test.each([1000, 3000, 4999])('should accept close code %s', async (code) => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket) {
       throw new Error('Expected socket')
@@ -2157,7 +2274,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should accept a 123-byte UTF-8 close reason', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket) {
       throw new Error('Expected socket')
@@ -2172,8 +2289,8 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
@@ -2193,8 +2310,8 @@ describe('web socket runtime environment edge cases', () => {
     const controller = new AbortController()
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), { signal: controller.signal })
@@ -2222,8 +2339,8 @@ describe('web socket runtime environment edge cases', () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       maxOutgoingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
@@ -2241,8 +2358,8 @@ describe('web socket runtime environment edge cases', () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       maxOutgoingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -2262,8 +2379,8 @@ describe('web socket runtime environment edge cases', () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       maxOutgoingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -2303,6 +2420,46 @@ describe('web socket runtime environment edge cases', () => {
     await socket.closed
   })
 
+  test('should reject an undefined JSON message before it enters the reconnect queue', async () => {
+    vi.stubGlobal('WebSocket', createMockWebSocketClass())
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      maxOutgoingQueueSize: 2,
+      incoming: struct.unknown(),
+      outgoing: struct.string().optional(),
+      path: '/ws/test',
+    })
+    const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
+      reconnect: { attempts: 1, delayMs: 30 },
+    })
+    if (!socket || !lastMockInstance) {
+      throw new Error('Expected socket')
+    }
+
+    let sendError: unknown
+    socket.onStateChange((state) => {
+      if (state === 'reconnecting' && sendError === undefined) {
+        try {
+          socket.send(undefined)
+        } catch (error) {
+          sendError = error
+        }
+      }
+    })
+
+    lastMockInstance.triggerClose({ code: 1012, reason: 'restart', wasClean: true })
+    await vi.waitFor(() => expect(socket.connection.generation).toBe(2))
+    const replacement = lastMockInstance
+    if (!replacement) {
+      throw new Error('Expected replacement socket')
+    }
+
+    expect(sendError).toEqual(new TypeError('Outgoing WebSocket message has no JSON representation'))
+    expect(replacement.send).not.toHaveBeenCalled()
+    socket.close(1000, 'done')
+    await socket.closed
+  })
+
   test.each(['abort', 'close'] as const)(
     'should not publish replacement open after native flush synchronously triggers %s',
     async (action) => {
@@ -2326,8 +2483,8 @@ describe('web socket runtime environment edge cases', () => {
       const useSocket = defineWebSocket({
         maxIncomingQueueSize: 1,
         maxOutgoingQueueSize: 1,
-        incoming: {},
-        outgoing: { message: struct.object({ text: struct.string() }) },
+        incoming: struct.unknown(),
+        outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
         path: '/ws/test',
       })
       const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -2367,8 +2524,8 @@ describe('web socket runtime environment edge cases', () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       maxOutgoingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -2404,7 +2561,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should not deliver a stale reconnecting state after a listener closes reentrantly', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 30 },
     })
@@ -2429,7 +2586,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const attempts: number[] = []
     const hookFailure = new Error('refresh failed')
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       beforeConnect({ attempt }: { attempt: number }) {
         attempts.push(attempt)
@@ -2456,7 +2613,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should terminate when reconnect policy throws and reject pending receive', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const policyFailure = new Error('policy failed')
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: {
         attempts: 1,
@@ -2484,7 +2641,7 @@ describe('web socket runtime environment edge cases', () => {
     const predicate = vi.fn(() => {
       throw policyFailure
     })
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
     })
@@ -2502,7 +2659,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should fail receive with AbortError when a post-open reconnect policy throws undefined', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: {
         attempts: 1,
@@ -2544,7 +2701,7 @@ describe('web socket runtime environment edge cases', () => {
     createNetworkFault(new Error('reconnect policy offline')),
   ])('should preserve a $code fault thrown by the reconnect policy', async (policyFailure) => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
       reconnect: {
         attempts: 1,
@@ -2570,8 +2727,8 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { mutation: struct.object({ id: struct.number() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('mutation'), id: struct.number() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -2603,8 +2760,8 @@ describe('web socket runtime environment edge cases', () => {
     const attempts: number[] = []
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/test',
     })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -2635,7 +2792,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should cache one disposal promise and wait for native close plus lifecycle teardown', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, closeEventDelayMs: 25 }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
@@ -2681,8 +2838,8 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: {},
-      outgoing: { ping: struct.object({}) },
+      incoming: struct.unknown(),
+      outgoing: struct.object({ type: struct.literal('ping') }),
       path: '/ws/test',
     })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), {
@@ -2711,27 +2868,23 @@ describe('web socket runtime environment edge cases', () => {
     expect(mockInstances).toHaveLength(1)
   })
 
-  test('should abort a blocked invalid-event wait and wait for the message pump before disposal resolves', async () => {
+  test('should abort a blocked blob decode and wait for the message pump before disposal resolves', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const callbackStarted = createDeferred<void>()
-    const onInvalidEvent = vi.fn(() => {
-      callbackStarted.resolve()
-      return new Promise<void>(() => undefined)
-    })
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { known: struct.object({ ok: struct.boolean() }) },
+      incoming: struct.object({ ok: struct.boolean(), type: struct.literal('known') }),
       path: '/ws/test',
     })
-    const [, socket] = await run(createClient(withEndpoint('http://localhost'), withWebSocketOnInvalidEvent(onInvalidEvent)), useSocket())
+    const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
     }
     const nativeSocket = lastMockInstance
     const pendingReceive = socket.receive[Symbol.asyncIterator]().next()
+    const blob = new Blob(['{"ok":true,"type":"known"}'])
+    vi.spyOn(blob, 'arrayBuffer').mockReturnValue(new Promise<ArrayBuffer>(() => undefined))
 
-    nativeSocket.triggerMessage('{"type":"unknown","ok":true}')
-    await callbackStarted.promise
+    nativeSocket.triggerMessage(blob)
 
     const disposed = Promise.resolve(socket[Symbol.asyncDispose]()).then(
       () => true,
@@ -2739,7 +2892,6 @@ describe('web socket runtime environment edge cases', () => {
     )
     await expect(Promise.race([disposed, new Promise<false>((resolve) => setTimeout(() => resolve(false), 100))])).resolves.toBe(true)
 
-    expect(onInvalidEvent).toHaveBeenCalledOnce()
     await expect(pendingReceive).resolves.toEqual({ done: true, value: undefined })
     expect(nativeSocket.listenerCount()).toBe(0)
   })
@@ -2747,17 +2899,12 @@ describe('web socket runtime environment edge cases', () => {
   test('should preserve an observed remote close when disposal starts after a blocked message pump', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
-    const callbackStarted = createDeferred<void>()
-    const onInvalidEvent = vi.fn(() => {
-      callbackStarted.resolve()
-      return new Promise<void>(() => undefined)
-    })
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: { known: struct.object({ ok: struct.boolean() }) },
+      incoming: struct.object({ ok: struct.boolean(), type: struct.literal('known') }),
       path: '/ws/test',
     })
-    const executePromise = run(createClient(withEndpoint('http://localhost'), withWebSocketOnInvalidEvent(onInvalidEvent)), useSocket())
+    const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
     lastMockInstance?.triggerOpen()
@@ -2767,9 +2914,10 @@ describe('web socket runtime environment edge cases', () => {
     }
     const nativeSocket = lastMockInstance
     const pendingReceive = socket.receive[Symbol.asyncIterator]().next()
+    const blob = new Blob(['{"ok":true,"type":"known"}'])
+    vi.spyOn(blob, 'arrayBuffer').mockReturnValue(new Promise<ArrayBuffer>(() => undefined))
 
-    nativeSocket.triggerMessage('{"type":"unknown","ok":true}')
-    await callbackStarted.promise
+    nativeSocket.triggerMessage(blob)
     nativeSocket.triggerClose({ code: 1000, reason: 'remote-finished', wasClean: true })
 
     const disposal = Promise.resolve(socket[Symbol.asyncDispose]()).then(
@@ -2786,7 +2934,6 @@ describe('web socket runtime environment edge cases', () => {
       wasClean: true,
     })
     await expect(pendingReceive).resolves.toEqual({ done: true, value: undefined })
-    expect(onInvalidEvent).toHaveBeenCalledOnce()
     expect(nativeSocket.listenerCount()).toBe(0)
     expect(vi.getTimerCount()).toBe(0)
   })
@@ -2794,7 +2941,7 @@ describe('web socket runtime environment edge cases', () => {
   test('should reject only disposal with TimeoutError when native close never arrives', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
@@ -2840,7 +2987,7 @@ describe('web socket runtime environment edge cases', () => {
   ] as const)('should preserve a thrown %s close value over disposal timeout and still clean up', async (_label, closeFailure) => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, closeErrors: [closeFailure], emitCloseEvent: false }))
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
@@ -2882,7 +3029,7 @@ describe('web socket runtime environment edge cases', () => {
       'WebSocket',
       createMockWebSocketClass({ autoOpen: false, closeErrors: [firstFailure, fallbackFailure], emitCloseEvent: false }),
     )
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket())
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
@@ -2910,7 +3057,7 @@ describe('web socket runtime environment edge cases', () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const controller = new AbortController()
     const abortCause = new Error('owner aborted')
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket(), { signal: controller.signal })
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
@@ -2935,7 +3082,7 @@ describe('web socket runtime environment edge cases', () => {
 
   test('should only await teardown when disposing an already errored session', async () => {
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/test' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
     const [, socket] = await run(createClient(withEndpoint('http://localhost')), useSocket())
     if (!socket || !lastMockInstance) {
       throw new Error('Expected socket')
@@ -2956,5 +3103,222 @@ describe('web socket runtime environment edge cases', () => {
     expect(socket.state).toBe('error')
     expect(nativeSocket.close).toHaveBeenCalledTimes(closeCalls)
     expect(nativeSocket.listenerCount()).toBe(0)
+  })
+})
+
+describe('web socket incoming frame path', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    lastMockInstance = undefined
+    mockInstances = []
+  })
+
+  const useSocket = defineWebSocket({
+    incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+    maxIncomingQueueSize: 8,
+    path: '/ws/test',
+  })
+
+  function frame(text: string): string {
+    return JSON.stringify({ text, type: 'message' })
+  }
+
+  function textOf(message: unknown): string {
+    return (message as { text: string }).text
+  }
+
+  function nextTurn(): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  function settleWithin<T>(promise: Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('operation did not settle')), 100)
+      promise.then(
+        (value) => {
+          clearTimeout(timeout)
+          resolve(value)
+        },
+        (error: unknown) => {
+          clearTimeout(timeout)
+          reject(error)
+        },
+      )
+    })
+  }
+
+  function watchSettled(promise: Promise<unknown>): () => boolean {
+    let settled = false
+    void promise.then(
+      () => {
+        settled = true
+      },
+      () => {
+        settled = true
+      },
+    )
+    return () => settled
+  }
+
+  // A Blob whose bytes arrive when the test says so.
+  function blobOf(bytes: Promise<ArrayBuffer>): Blob {
+    const blob = new Blob()
+    vi.spyOn(blob, 'arrayBuffer').mockReturnValue(bytes)
+    return blob
+  }
+
+  // Junk before and after the frame: a decoder that ignores the view's window reads it and fails to parse.
+  function windowed(text: string, createView: (buffer: ArrayBuffer, offset: number, byteLength: number) => ArrayBufferView) {
+    const bytes = new TextEncoder().encode(text)
+    const padding = 8
+    const buffer = new ArrayBuffer(padding + bytes.length + padding)
+    new Uint8Array(buffer).fill(0x7a)
+    new Uint8Array(buffer, padding, bytes.length).set(bytes)
+    return createView(buffer, padding, bytes.length)
+  }
+
+  async function openSession(options?: { signal?: AbortSignal }) {
+    vi.stubGlobal('WebSocket', createMockWebSocketClass())
+    const [error, socket] = (await createClient(withEndpoint('http://localhost')).execute(
+      useSocket(),
+      options as never,
+    )) as SocketAwaitResult<unknown, unknown>
+    expect(error).toBeNull()
+    const native = lastMockInstance
+    if (!socket || !native) {
+      throw new Error('Expected an open session')
+    }
+    return { native, socket }
+  }
+
+  test.each([
+    ['text', (json: string) => json],
+    ['ArrayBuffer', (json: string) => new TextEncoder().encode(json).buffer],
+    ['Uint8Array', (json: string) => new TextEncoder().encode(json)],
+  ])('should deliver %s frames within one microtask turn', async (_kind, createFrame) => {
+    const { native, socket } = await openSession()
+    const pending = socket.receive[Symbol.asyncIterator]().next()
+    const delivered = watchSettled(pending)
+
+    native.triggerMessage(createFrame(frame('now')))
+    await Promise.resolve()
+
+    // A frame that needs no read is decoded and queued without waiting for another turn.
+    expect(delivered()).toBe(true)
+    await expect(pending).resolves.toEqual({ done: false, value: { text: 'now', type: 'message' } })
+    socket.close(1000, 'done')
+    await socket.closed
+  })
+
+  test('should deliver frames in arrival order while a Blob frame is still being read', async () => {
+    const { native, socket } = await openSession()
+    const blobBytes = createDeferred<ArrayBuffer>()
+    const received: string[] = []
+    const consumed = (async () => {
+      for await (const message of socket.receive) {
+        received.push(textOf(message))
+      }
+    })()
+
+    native.triggerMessage(frame('a'))
+    native.triggerMessage(blobOf(blobBytes.promise))
+    native.triggerMessage(frame('c'))
+    native.triggerMessage(new TextEncoder().encode(frame('d')).buffer)
+    await nextTurn()
+
+    // "c" and "d" need no read, but they arrived after the Blob and must not overtake it.
+    expect(received).toEqual(['a'])
+
+    blobBytes.resolve(encodeMessage({ text: 'b', type: 'message' }))
+    await vi.waitFor(() => expect(received).toEqual(['a', 'b', 'c', 'd']))
+
+    socket.close(1000, 'done')
+    await consumed
+  })
+
+  test.each([
+    ['Uint8Array', (buffer: ArrayBuffer, offset: number, byteLength: number) => new Uint8Array(buffer, offset, byteLength)],
+    ['DataView', (buffer: ArrayBuffer, offset: number, byteLength: number) => new DataView(buffer, offset, byteLength)],
+    // Two bytes per element: the window is measured in bytes, not elements.
+    ['Uint16Array', (buffer: ArrayBuffer, offset: number, byteLength: number) => new Uint16Array(buffer, offset, byteLength / 2)],
+  ])('should decode only the window of a %s frame', async (_kind, createView) => {
+    const { native, socket } = await openSession()
+    const runtimeErrors: unknown[] = []
+    socket.onRuntimeError((error) => {
+      runtimeErrors.push(error)
+    })
+    const pending = socket.receive[Symbol.asyncIterator]().next()
+
+    // The two-byte view needs an even byte length. A trailing space pads it, and JSON ignores it.
+    const json = frame('window')
+    native.triggerMessage(windowed(json.length % 2 === 0 ? json : `${json} `, createView))
+
+    await expect(pending).resolves.toEqual({ done: false, value: { text: 'window', type: 'message' } })
+    expect(runtimeErrors).toEqual([])
+    socket.close(1000, 'done')
+    await socket.closed
+  })
+
+  test('should report each undecodable frame once and keep delivering the frames after it', async () => {
+    const { native, socket } = await openSession()
+    const runtimeErrors: unknown[] = []
+    socket.onRuntimeError((error) => {
+      runtimeErrors.push(error)
+    })
+    const received: string[] = []
+    const consumed = (async () => {
+      for await (const message of socket.receive) {
+        received.push(textOf(message))
+      }
+    })()
+
+    native.triggerMessage(frame('first'))
+    native.triggerMessage('not json')
+    native.triggerMessage(new TextEncoder().encode('{"text":1,"type":"message"}'))
+    native.triggerMessage(blobOf(Promise.resolve(encodeMessage({ type: 'other' }))))
+    native.triggerMessage(frame('last'))
+    await vi.waitFor(() => expect(received).toEqual(['first', 'last']))
+
+    // Text and byte frames fail as soon as they arrive, a Blob frame after its read. Each failure is reported once, in order.
+    expect(runtimeErrors).toHaveLength(3)
+    expect(runtimeErrors[0]).toBeInstanceOf(SyntaxError)
+    expect(runtimeErrors[1]).toBeInstanceOf(StructError)
+    expect(runtimeErrors[2]).toBeInstanceOf(StructError)
+    expect(socket.state).toBe('open')
+
+    socket.close(1000, 'done')
+    await consumed
+  })
+
+  test('should settle promptly when the session is aborted while a Blob frame is being read', async () => {
+    const controller = new AbortController()
+    const { native, socket } = await openSession({ signal: controller.signal })
+    const pendingReceive = socket.receive[Symbol.asyncIterator]()
+      .next()
+      .catch((error: unknown) => error)
+
+    native.triggerMessage(blobOf(new Promise<ArrayBuffer>(() => undefined)))
+    native.triggerMessage(frame('behind the Blob'))
+    const abortCause = new Error('owner aborted')
+    controller.abort(abortCause)
+
+    await expect(settleWithin(socket.closed)).resolves.toMatchObject({ cause: abortCause, kind: 'aborted' })
+    // Disposal waits for the message pump, which can only finish if the read was abandoned.
+    await expect(settleWithin(Promise.resolve(socket[Symbol.asyncDispose]()))).resolves.toBeUndefined()
+    await expect(pendingReceive).resolves.toBe(abortCause)
+    expect(native.listenerCount()).toBe(0)
+  })
+
+  test('should drop the frames queued behind a Blob read when the session is disposed', async () => {
+    const { native, socket } = await openSession()
+    const pendingReceive = socket.receive[Symbol.asyncIterator]().next()
+
+    native.triggerMessage(blobOf(new Promise<ArrayBuffer>(() => undefined)))
+    native.triggerMessage(frame('behind the Blob'))
+    await expect(settleWithin(Promise.resolve(socket[Symbol.asyncDispose]()))).resolves.toBeUndefined()
+
+    // Disposal abandons the read, and the frame that arrived after it is not decoded into the queue.
+    await expect(pendingReceive).resolves.toEqual({ done: true, value: undefined })
+    await expect(socket.closed).resolves.toMatchObject({ kind: 'closed' })
   })
 })

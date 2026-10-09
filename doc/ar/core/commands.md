@@ -5,7 +5,7 @@ description: عرّف نقاط النهاية، ابنِ أوامر معتمة،
 
 # الأوامر
 
-تعريف واحد → منشئ → أمر معتم → `client.execute`. نفس المسار لـ HTTP وSSE وWebSocket.
+تعريف واحد → نقطة نهاية → أمر معتم → `client.execute`. نفس المسار لـ HTTP وSSE وWebSocket.
 
 ## الإعداد الأساسي
 
@@ -20,54 +20,72 @@ if (!error) console.log(data, response.status)
 
 ## اختر تعريفًا
 
-| التعريف                  | العقد                                                 | القيمة عند النجاح                    |
-| ------------------------ | ----------------------------------------------------- | ------------------------------------ |
-| `defineRequest(...)`     | الطريقة، مسار نسبي، مدخل اختياري، مخرج حالة اختياري   | بيانات مفكوكة + `HttpResponse`       |
-| `defineEventStream(...)` | المسار، حدود المخزن/الطابور، خريطة اسم حدث → Struct   | `EventStreamHandle` + لقطة open      |
-| `defineWebSocket(...)`   | المسار، خريطة واردة، خريطة صادرة اختيارية، حد الطابور | `WebSocketSession` + لقطة connection |
+| التعريف                  | العقد                                                          | القيمة عند النجاح                    |
+| ------------------------ | -------------------------------------------------------------- | ------------------------------------ |
+| `defineRequest(...)`     | الطريقة، مسار نسبي، مدخل اختياري، `output` / `error` اختياريان | بيانات مفكوكة + استجابة              |
+| `defineEventStream(...)` | المسار، حدود المخزن/الطابور، خريطة اسم حدث → Struct            | `EventStreamHandle` + لقطة open      |
+| `defineWebSocket(...)`   | المسار، struct وارد واحد، struct صادر اختياري، حد الطابور      | `WebSocketSession` + لقطة connection |
 
-بلا `input` → المنشئ لا يأخذ وسيطًا. مع `input` → مرّر قيمة Struct حتى لو كان كل حقل متداخل اختياريًا. أقسام `path` / `query` / `headers` الاختيارية يمكن حذفها؛ قسم بحقل مطلوب لا يمكن حذفه. وجود غلاف جسم يعني أن الجسم مطلوب.
+بلا `input` → نقطة النهاية لا تأخذ وسيطًا، ويجوز أن يكون `builder` هو `() => request`. مع `input` → مرّر قيمة الـ struct. الحقل الاختياري يجوز حذفه؛ والحقل المطلوب لا يجوز.
 
 أبقِ الأوامر معتمة. لا تحفر في العلامات أو الرموز.
 
-## التعيين التلقائي للطلب
+## أين تذهب القيم
 
-استخدم `struct.request(...)` عندما يملك المدخل المنطقي بالفعل path / query / headers / body:
+الـ struct يقرر كيف تُرمَّز القيمة. والـ `builder` يقرر أين تذهب. `builder` دالة نقية متزامنة للمدخل **المحلَّل**. يعمل وقت التنفيذ. الرمي يصبح `REQ_BUILD_FAILED` على الـ tuple — واستدعاء نقطة النهاية نفسه لا يرمي.
+
+احذف `builder` عندما يكون struct المدخل أصلًا `{ path?, query?, headers?, body? }`. تلك هي المطابقة `(input) => input`. إن لم يكن المدخل المحلَّل قابلًا للإسناد إلى ذلك الشكل، يطلب TypeScript `builder`.
+
+سلّم القيمة المُنوَّعة. ثم ينطبق alias، و`Date` → ISO، و`bigint` → سلسلة في كل موضع يُستخدم فيه ذلك الـ struct: وضع الطلب، وفك الاستجابة، وأحداث SSE، وإطارات WebSocket.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
+const User = struct.object({
+  displayName: struct.string().alias('display_name'),
+  email: struct.string(),
+})
+
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(struct.object({ name: struct.string() })),
-  }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  input: struct.object({ user: User }),
+  builder: (input) => ({ body: input.user }),
+  output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })
 void createUser
 ```
 
-الأسماء المستعارة تعيد كتابة مفاتيح السلك الصادرة فقط. القيم المحلَّلة ومدخلات الأمر تبقي الأسماء المنطقية.
+الجسم هو JSON `{"display_name":"…","email":"…"}`. المفتاح المكتوب يدويًا هو المخرج: `body: { name: input.user.displayName }` يرسل `name`، لأن الكائن الأب مجهول ولا ينطبق الـ alias.
 
-## `build` مخصص
+## عندما تختلف الأشكال
 
-الجأ إلى `build(request, input)` عندما يختلف شكل المستدعي عن شكل السلك. إنه إسقاط مقيّد — وليس مكانًا للتفريع على سياسة المصادقة أو اختراع آثار جانبية.
+استخدم `builder` لعناصر المسار النائبة والحرفيّات والتفرعات. يستقبل القيمة الحقيقية، فتعمل `if` و`??` والقوالب و`switch`.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
 const search = defineRequest({
   method: 'GET',
-  path: '/search',
-  input: struct.object({ q: struct.string(), page: struct.number().optional() }),
-  build(request, input) {
-    request.setQueryParams({ q: input.q, page: input.page })
-  },
+  path: '/orgs/:org_id/users',
+  input: struct.object({
+    orgId: struct.number(),
+    query: struct.object({
+      keyword: struct.string(),
+      pageSize: struct.number().alias('page_size'),
+    }),
+  }),
+  builder: (input) => ({
+    path: { org_id: input.orgId },
+    query: input.query,
+    headers: { 'x-api-version': '2' },
+  }),
   output: struct.object({ items: struct.array(struct.string()) }),
 })
 void search
 ```
+
+`query: input.query` يرسل `page_size`. `headers: { 'x-api-version': '2' }` حرفي. المصادقة والتتبّع ما زالا ينتميان إلى المعترضات: فهي ترى الطلب الأصلي بعد أن يعمل الـ builder.
 
 ## أشكال `output` و`error`
 

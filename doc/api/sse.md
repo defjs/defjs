@@ -10,11 +10,11 @@ Declare an event stream, execute it, iterate events, then close.
 ## defineEventStream() {#defineEventStream}
 
 ```ts
-function defineEventStream(definition: EventStreamDefinition): EventStreamCommandBuilder
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`, `events` map, optional `method` (default `'GET'`), `input`, `build`, buffer/queue limits.
-- **Returns** a builder. Call with input to get an `EventStreamCommand`.
+- **definition** — `path`, `events` map, optional `method` (default `'GET'`), optional `input`, `builder`, and `error`, buffer/queue limits.
+- **Returns** an endpoint. Call with input to get an `EventStreamCommand`.
 
 ```ts twoslash
 import { defineEventStream, struct } from '@defjs/core'
@@ -23,7 +23,7 @@ const ticks = defineEventStream({
   maxBufferSize: 64 * 1024,
   maxQueueSize: 100,
   path: '/ticks',
-  events: { message: struct.json(struct.object({ text: struct.string() })) },
+  events: { message: struct.object({ text: struct.string() }) },
 })
 ```
 
@@ -39,7 +39,7 @@ function executeEventStreamCommand(
 
 Low-level entry for `client.execute`. Prefer the client in application code.
 
-- **Returns** `[null, stream, open]` or `[error, undefined, open?]`.
+- **Returns** `[null, stream, open]` or `[error, undefined, open?]`. When `error` is declared, the fault is `Fault` of that struct; otherwise it is `Fault<undefined>`.
 
 ## Execute options
 
@@ -90,11 +90,12 @@ interface EventStreamOpenInfo {
 
 ```ts
 type EventStreamCloseInfo =
-  | { code: 'eof' | 'aborted'; reason?: string; cause?: unknown }
-  | { code: 'error'; errorCode: EventStreamFaultCode; reason?: string; cause?: unknown }
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamFaultCode`: `'RES_MEDIA_TYPE_INVALID' | 'EXT_OBSERVER_FAILED' | 'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'NET_TIMEOUT' | 'TRANSPORT_ERROR'`.
+`EventStreamFaultCode`: `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
 
 ## Event map
 
@@ -104,7 +105,7 @@ type EventStreamCloseInfo =
 type EventStructs = { [eventName: string]: AnyStruct }
 ```
 
-JSON event payloads need `struct.json(...)`. Plain `struct.object` treats SSE `data` as text and drops JSON frames.
+A `string` event struct keeps the raw `data` text. Every other kind is JSON text: `JSON.parse`, then the struct. A bare `struct.literal` therefore needs JSON text, not an unquoted token. Handshake `error` bodies use the same kind rule as HTTP: `string` is text, `blob` / `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
 
 Reconnect lives on the client (`withSSEReconnect`). SSE `jitter` is a **0–1 multiplicative factor**, same as WebSocket.
 
@@ -112,11 +113,15 @@ See [SSE guide](/core/sse) and [Consume an SSE stream](/recipes/consume-sse).
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`, `events`, optional `method` / `input` / `build`, buffer and queue limits.
+`path`, `events`, optional `method` / `input` / `builder` / `error`, buffer and queue limits. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot return a body.
 
-## EventStreamCommandBuilder {#EventStreamCommandBuilder}
+## EventStreamEndpoint {#EventStreamEndpoint}
 
 Returned by `defineEventStream`. Call with input to get an `EventStreamCommand`.
+
+## EventStreamRequestShape {#EventStreamRequestShape}
+
+Same fields as `HttpRequestShape` for the stream's method and path.
 
 ## EventStreamCommand {#EventStreamCommand}
 

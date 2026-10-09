@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: Provider와 `useClient()`예요.
+description: ClientProvider, useClient, provider props예요.
 ---
 
 # React {#page}
 
-기존 `@defjs/core` 클라이언트를 React 트리에 연결해요. 패키지는 클라이언트를 **만들지 않고**, 캐시를 붙이지 않으며, 전송 리소스도 버리지 않아요.
+기존 `@defjs/core` 클라이언트를 React 트리에 제공해요. 이 패키지는 클라이언트를 만들거나, 캐시하거나, dispose하지 않아요.
 
-[React 가이드](../plugins/react.md)를 보세요.
+[React 가이드](/plugins/react)를 보세요.
 
 ## ClientProvider {#ClientProvider}
 

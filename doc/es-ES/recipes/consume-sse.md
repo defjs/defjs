@@ -19,7 +19,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -45,4 +45,4 @@ if (error) {
 hello from the server
 ```
 
-SSE no reintenta fallos de red o lectura por defecto. Activa los reintentos explícitamente con `withSSEReconnect(...)`. Al configurar reconnect, `attempts` vale `3` por defecto; `attempts: 0` desactiva los reintentos.
+SSE no reintenta fallos de red/lectura salvo que actives `withSSEReconnect(...)`. Con un objeto reconnect, `attempts` vale `3` por defecto; `attempts: 0` desactiva el reintento.

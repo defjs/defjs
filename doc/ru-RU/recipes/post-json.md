@@ -1,11 +1,11 @@
 ---
 title: POST JSON
-description: Отправь JSON-тело через struct.json и декодируй объявленный 201.
+description: Отправь типизированное JSON-тело и декодируй объявленный 201.
 ---
 
 # POST JSON
 
-Оберни тело в `struct.json(...)`. Логические имена полей остаются в TypeScript; wire-алиасы — на Struct.
+Отдай типизированное тело builder’у. Логические имена полей остаются в TypeScript; wire-алиасы на struct становятся JSON-ключами. Тело-объект — это `application/json`.
 
 Подробности — в [Команды](../core/commands.md) и [HTTP](../core/http.md).
 
@@ -28,13 +28,11 @@ const ApiError = struct.object({
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    body: struct.object({
+      name: struct.string(),
+      email: struct.string(),
+    }),
   }),
   output: User,
   error: ApiError,

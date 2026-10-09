@@ -37,7 +37,7 @@ Defjs 唔會幫你 cache results、自動 retry，亦唔會喺你忘記時幫你
 
 | Package                       | 幾時用                                                                                |
 | ----------------------------- | ------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）或 `createClient`（淨係 HTTP）                |
+| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）                                              |
 | `@defjs/react`                | `ClientProvider` / `useClient` — 睇 [React](./plugins/react.md)                       |
 | `@defjs/vue`                  | Plugin + `injectClient` — 睇 [Vue](./plugins/vue.md)                                  |
 | `@defjs/opentelemetry-server` | Outbound spans/metrics — 睇 [OpenTelemetry Server](./plugins/opentelemetry-server.md) |

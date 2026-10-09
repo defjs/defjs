@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { ERR_TIMEOUT } from '../error'
 import {
+  armTransportDeadline,
   awaitWithSignal,
   createAbortTimeoutConflictFault,
   hasAbortTimeoutConflict,
   mergeAbortSignals,
+  releaseAbortSignal,
   validateTransportTimeout,
 } from './abort'
 
@@ -16,6 +18,7 @@ describe('abort helpers', () => {
   test('should merge abort signals and preserve single controller signal', () => {
     const controller = new AbortController()
     expect(mergeAbortSignals(controller.signal, [])).toBe(controller.signal)
+    expect(mergeAbortSignals(controller.signal, [controller.signal, controller.signal])).toBe(controller.signal)
 
     const another = new AbortController()
     const merged = mergeAbortSignals(controller.signal, [another.signal])
@@ -23,6 +26,19 @@ describe('abort helpers', () => {
 
     expect(merged.aborted).toBe(true)
     expect(merged.reason).toBe('stop')
+  })
+
+  test('should release forwarding listeners and deduplicate identical sources', () => {
+    const controller = new AbortController()
+    const another = new AbortController()
+    const add = vi.spyOn(controller.signal, 'addEventListener')
+    const remove = vi.spyOn(controller.signal, 'removeEventListener')
+    const merged = mergeAbortSignals(controller.signal, [another.signal, another.signal])
+
+    expect(add).toHaveBeenCalledOnce()
+    releaseAbortSignal(merged)
+
+    expect(remove).toHaveBeenCalledOnce()
   })
 
   test('should merge timeout into abort signals', () => {
@@ -76,6 +92,39 @@ describe('abort helpers', () => {
 
   test('should accept the largest safe transport timer delay', () => {
     expect(() => validateTransportTimeout(2_147_483_647)).not.toThrow()
+  })
+
+  test('should not listen on a signal when no deadline is armed', () => {
+    const signal = new AbortController().signal
+    const add = vi.spyOn(signal, 'addEventListener')
+
+    armTransportDeadline(undefined).releaseOnAbort(signal)
+
+    expect(add).not.toHaveBeenCalled()
+  })
+
+  test('should remove its release listener when the deadline is released', () => {
+    const signal = new AbortController().signal
+    const add = vi.spyOn(signal, 'addEventListener')
+    const remove = vi.spyOn(signal, 'removeEventListener')
+    const deadline = armTransportDeadline(1_000)
+
+    deadline.releaseOnAbort(signal)
+    deadline.release()
+
+    expect(remove).toHaveBeenCalledExactlyOnceWith('abort', add.mock.calls[0]?.[1])
+  })
+
+  test('should release the deadline when the watched signal aborts', () => {
+    vi.useFakeTimers()
+    const controller = new AbortController()
+    const deadline = armTransportDeadline(1_000)
+
+    deadline.releaseOnAbort(controller.signal)
+    controller.abort()
+    vi.advanceTimersByTime(1_000)
+
+    expect(deadline.signal?.aborted).toBe(false)
   })
 
   test('should detect abort and timeout field conflict', () => {

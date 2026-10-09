@@ -57,14 +57,10 @@ describe('http browser runtime', () => {
     const downloadLoaded: number[] = []
 
     const useCreateAccount = defineRequest({
-      build: (request, input) => {
-        request.setArrayBuffer(input.body)
-      },
-      input: struct.request({ body: struct.arrayBuffer() }),
+      input: struct.object({ body: struct.arrayBuffer() }),
       method: 'POST',
       output: struct.arrayBuffer(),
       path: '/',
-      responseType: 'arraybuffer',
     })
 
     const [error, result, response] = await baseClient.execute(useCreateAccount({ body: new Uint8Array(32 * 1024).buffer }), {
@@ -84,10 +80,7 @@ describe('http browser runtime', () => {
 
   test('should preserve fetch timeout semantics in request runtime', async () => {
     const useDelay = defineRequest({
-      build: (request, input) => {
-        request.setQueryParams({ ms: input.query.ms })
-      },
-      input: struct.request({ query: struct.object({ ms: struct.number() }) }),
+      input: struct.object({ query: struct.object({ ms: struct.number() }) }),
       method: 'GET',
       path: '/delay',
     })

@@ -1,11 +1,11 @@
 ---
 title: POST JSON
-description: أرسل جسم JSON عبر struct.json وافكك 201 معلَنًا.
+description: أرسل جسم JSON مُنوَّعًا وفكّ 201 معلَنًا.
 ---
 
 # POST JSON
 
-غلّف الجسم بـ `struct.json(...)`. أسماء الحقول المنطقية تبقى في TypeScript؛ الأسماء المستعارة على السلك تُوضع على الـ Struct.
+سلّم الجسم المُنوَّع إلى الـ builder. أسماء الحقول المنطقية تبقى في TypeScript؛ وأسماء السلك المستعارة على الـ struct تصبح مفاتيح JSON. جسم الكائن هو `application/json`.
 
 انظر [الأوامر](../core/commands.md) و[HTTP](../core/http.md) للتفاصيل.
 
@@ -28,13 +28,11 @@ const ApiError = struct.object({
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    body: struct.object({
+      name: struct.string(),
+      email: struct.string(),
+    }),
   }),
   output: User,
   error: ApiError,

@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,7 +108,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-The command layer still dispatches by status. Declare `503` in `output` when callers need typed `error.data`. Short-circuiting SSE or WebSocket needs a complete compatible handle/session (closure promises, live state, ownership, and `[Symbol.asyncDispose]`). Partial objects aren’t valid policy. Structural `EventStreamHandle` and `WebSocketSessionLike` implementations now need that standard disposer at compile time; consumers that only receive Defjs handles have no new runtime call requirement.
+The command layer still dispatches by status. Declare one `error` struct for the non-2xx side when callers need typed `error.data`. Short-circuiting SSE or WebSocket needs a complete compatible handle/session (closure promises, live state, ownership, and `[Symbol.asyncDispose]`). Partial objects aren’t valid policy. Structural `EventStreamHandle` and `WebSocketSessionLike` implementations now need that standard disposer at compile time; consumers that only receive Defjs handles have no new runtime call requirement.
 
 ## Retry safe reads
 
@@ -234,7 +235,7 @@ Factories return tagged transport values:
 - `basicAuthHttpInterceptor(provider, options?)` — Basic credentials on HTTP
 - `basicAuthSSEInterceptor(provider, options?)` — Basic credentials on SSE
 
-`HttpRequest` may include `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, and static `operation`. It’s a transport integration value — not the caller’s parsed input. Keep command validation, output validation, and domain error mapping in their layers.
+`HttpRequest` may include `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, and static `operation`. It’s a transport integration value — not the caller’s parsed input. `queryParams` is `new URLSearchParams(queryString)` after serialization. A configured query serializer is not called when the builder produced no query, and a builder `URLSearchParams` is used as-is. Keep command validation, output validation, and domain error mapping in their layers.
 
 SSE/WebSocket observers are lifecycle hooks, not control flow. Unsubscribe WebSocket listeners when the owner ends. Observer failures follow the transport contract; an interceptor itself can throw or reject.
 

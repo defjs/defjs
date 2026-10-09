@@ -10,11 +10,11 @@ Declara un event stream, ejecútalo, itera los eventos y luego cierra.
 ## defineEventStream() {#defineEventStream}
 
 ```ts
-function defineEventStream(definition: EventStreamDefinition): EventStreamCommandBuilder
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`, mapa `events`, `method` opcional (por defecto `'GET'`), `input`, `build`, límites de buffer/cola.
-- **Devuelve** un builder. Llámalo con el input para obtener un `EventStreamCommand`.
+- **definition** — `path`, mapa `events`, `method` opcional (por defecto `'GET'`), `input`, `builder` y `error` opcionales, límites de buffer/cola.
+- **Devuelve** un endpoint. Llámalo con el input para obtener un `EventStreamCommand`.
 
 ```ts twoslash
 import { defineEventStream, struct } from '@defjs/core'
@@ -39,9 +39,9 @@ function executeEventStreamCommand(
 
 Entrada de bajo nivel para `client.execute`. En la app prefiere el cliente.
 
-- **Devuelve** `[null, stream, open]` o `[error, undefined, open?]`.
+- **Devuelve** `[null, stream, open]` o `[error, undefined, open?]`. Cuando se declara `error`, el fault es `Fault` de ese struct; si no, es `Fault<undefined>`.
 
-## Options de execute
+## Opciones de execute
 
 ## EventStreamExecuteOptions {#EventStreamExecuteOptions}
 
@@ -66,9 +66,16 @@ interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposab
 }
 ```
 
-`open` es el snapshot de arranque; tras reconnect puede cambiar — lee también `stream.open`. Usa `await using` para el cleanup propietario. `close()` y `closed` siguen disponibles para control manual.
+`open` es el snapshot de arranque; tras reconnect puede cambiar — lee también `stream.open`. Prefiere `await using stream = handle` para el cleanup del ámbito que posees. El disposer detiene la lectura y el trabajo de reconnect de Defjs y espera a que se libere el reader lock; no promete que termine una promise de `ReadableStream.cancel()` atascada y controlada por el proveedor. `close()` / `closed` manuales siguen disponibles.
 
-El disposer espera a que se detengan los bucles de lectura/reconexión de Defjs y se libere el reader lock. No garantiza que termine una Promise de `ReadableStream.cancel()` atascada en el proveedor. Toda implementación estructural propia de `EventStreamHandle` debe añadir el mismo `[Symbol.asyncDispose]()`; es un cambio breaking en compilación.
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+Las implementaciones estructurales de `EventStreamHandle` ahora deben implementar `[Symbol.asyncDispose]()` y devolver el mismo camino de teardown propietario. Es un cambio breaking en tiempo de compilación para handles propios; el código que solo recibe handles devueltos por Defjs no tiene un requisito nuevo de llamada en runtime.
 
 ### EventStreamOpenInfo {#EventStreamOpenInfo}
 
@@ -83,11 +90,12 @@ interface EventStreamOpenInfo {
 
 ```ts
 type EventStreamCloseInfo =
-  | { code: 'eof' | 'aborted'; reason?: string; cause?: unknown }
-  | { code: 'error'; errorCode: EventStreamFaultCode; reason?: string; cause?: unknown }
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamFaultCode`: `'RES_MEDIA_TYPE_INVALID' | 'EXT_OBSERVER_FAILED' | 'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'NET_TIMEOUT' | 'TRANSPORT_ERROR'`.
+`EventStreamFaultCode`: `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
 
 ## Mapa de eventos
 
@@ -97,15 +105,23 @@ type EventStreamCloseInfo =
 type EventStructs = { [eventName: string]: AnyStruct }
 ```
 
-Ver [guía de SSE](../core/sse.md) y [Consumir un stream SSE](../recipes/consume-sse.md).
+Un struct de evento `string` conserva el texto crudo de `data`. Cualquier otro kind es texto JSON: `JSON.parse` y luego el struct. Un `struct.literal` suelto necesita por tanto texto JSON, no un token sin comillas. Los cuerpos `error` del handshake usan la misma regla de kind que HTTP: `string` es texto, `blob` / `file` son blobs, `arrayBuffer` son bytes y todo lo demás es JSON.
+
+El reconnect vive en el cliente (`withSSEReconnect`). El `jitter` de SSE es un **factor multiplicativo 0–1**, igual que WebSocket.
+
+Mira la [guía de SSE](/core/sse) y [Consumir un stream SSE](/recipes/consume-sse).
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`, `events`, `method` / `input` / `build` opcionales, y techos de buffer y queue.
+`path`, `events`, `method` / `input` / `builder` / `error` opcionales, y límites de buffer y cola. La forma de la solicitud coincide con HTTP, incluido `body`. `GET` y `HEAD` no pueden devolver un body.
 
-## EventStreamCommandBuilder {#EventStreamCommandBuilder}
+## EventStreamEndpoint {#EventStreamEndpoint}
 
 Lo devuelve `defineEventStream`. Llámalo con input y sale un `EventStreamCommand`.
+
+## EventStreamRequestShape {#EventStreamRequestShape}
+
+Los mismos campos que `HttpRequestShape` para el method y el path del stream.
 
 ## EventStreamCommand {#EventStreamCommand}
 
@@ -113,8 +129,8 @@ Command SSE opaco. Pásaselo a `client.execute`.
 
 ## StreamAwaitResult {#StreamAwaitResult}
 
-`[null, stream, open]` or `[error, undefined, open?]`.
+`[null, stream, open]` o `[error, undefined, open?]`.
 
 ## EventStreamData {#EventStreamData}
 
-Payload de evento parseado, inferido de un map `EventStructs`.
+Payload de evento parseado, inferido de un mapa `EventStructs`.

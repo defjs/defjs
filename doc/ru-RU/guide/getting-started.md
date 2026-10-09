@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Шаг 2 — Опиши запрос
 
-Создай `src/get-user.ts`. `struct.request(...)` держит path отдельно от query, headers и body.
+Создай `src/get-user.ts`. Input struct — значение вызывающего. `builder` кладёт это значение на запрос. Здесь весь input — объект path, так что скалярные поля без алиаса заполняют `:id`.
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,22 +63,23 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` возвращает builder. Вызов `getUser(...)` собирает непрозрачную команду, которую ты передашь в `client.execute(...)`.
+`output` — тело 2xx. `error` — любой другой status. По одному struct. Когда эти тела различаются, используй `struct.or(...)` или размеченное объединение.
+
+`defineRequest(...)` возвращает эндпоинт. Вызов `getUser(...)` собирает непрозрачную команду, которую отдашь в `client.execute(...)`. `builder` выше — функция, которая раскладывает input; это не эндпоинт.
 
 ## Шаг 3 — Выполни локально
 
-Подключи клиентский Fetch handle — можно бежать без сети. Defjs всё равно валидирует input, собирает `Request`, диспатчит по статусу и парсит тело.
+Подключи Fetch handle локально для клиента, чтобы прогнать без сети. Defjs всё равно валидирует input, собирает `Request`, диспатчит по status и парсит тело.
 
 ```ts get-user.ts
 import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } from '@defjs/core'
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -175,11 +175,11 @@ Loaded Ada from 200
 User not found
 ```
 
-При успехе: `error` — `null`, `user` — Struct-output для `200`, `response` — `HttpResponse`. При объявленном `404`: `error.code` — `'http'`, `error.status` — `404`, а `error.data` типизирован как `NotFound`. Второй элемент кортежа при ошибке — `undefined`.
+При успехе: `error` — `null`, `user` — output Struct для `200`, `response` — `HttpResponse`. При объявленном `404`: `error.code` — `'HTTP_STATUS'`, `error.status` — `404`, а `error.data` типизирован как `NotFound`. Второй элемент кортежа при провале — `undefined`.
 
 ## Шаг 4 — Укажи на реальный API
 
-Убери `withHTTPHandle(...)` и поставь настоящий base URL, когда сервис реализует `GET /v1/users/:id` с такими телами.
+Убери `withHTTPHandle(...)` и поставь настоящий base URL, когда сервис реализует `GET /v1/users/:id` с этими телами.
 
 ```ts
 import { createClient, withEndpoint, withHTTPHandle } from '@defjs/core'
@@ -205,13 +205,13 @@ void realClient
 
 ## Когда результат другой
 
-- Плохой input → `REQ_INPUT_INVALID`; конфликтующие cancel-опции → `REQ_OPTIONS_INVALID`; падающий `build` → `REQ_BUILD_FAILED`
-- Любой non-2xx → `HTTP_STATUS`, с типизированным `err.data`, если объявлен `error`
+- Плохой input → `REQ_INPUT_INVALID`; конфликтующие опции отмены → `REQ_OPTIONS_INVALID`; упавший `build` → `REQ_BUILD_FAILED`
+- Любой non-2xx → `HTTP_STATUS`, с типизированным `err.data`, если `error` был объявлен
 - Неверный media type → `RES_MEDIA_TYPE_INVALID`, сообщается до чтения тела
-- Объявленное тело не декодируется → `RES_DECODE_FAILED` или `RES_STRUCT_MISMATCH`
-- Падение Fetch / отмена / таймаут → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+- Объявленное тело, которое не декодируется → `RES_DECODE_FAILED` или `RES_STRUCT_MISMATCH`
+- Сбой Fetch / отмена / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` — положительное safe integer в `1..2_147_483_647`. Не передавай `abort` и `timeout` вместе; `signal` можно комбинировать с любым из них. Отмена говорит, что увидел вызывающий — не то, закоммитил ли сервер запись.
+`timeout` — положительное safe integer в `1..2_147_483_647`. Валидные формы отмены: `{ timeout }`, `{ abort }` или `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` вместе невалидно. Отмена говорит, что увидел вызывающий, — не то, закоммитилась ли серверная запись.
 
 ## Дальше по рецептам
 

@@ -5,7 +5,7 @@ description: 连上、发一个类型化信封、收一次，再 close 并 await
 
 # 打开 WebSocket 会话
 
-JSON 信封用非空字符串 `type`。退订、`close`、`await session.closed` 都归你。
+每个方向一个 struct。退订、`close`、`await session.closed` 都归你。非法 frame 进 `onRuntimeError`。
 
 细节见 [WebSocket](../core/web-socket.md)。
 
@@ -17,8 +17,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session] = await client.execute(room())

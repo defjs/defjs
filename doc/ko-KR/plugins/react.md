@@ -35,7 +35,7 @@ import { useEffect, useState } from 'react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -102,7 +102,7 @@ export function HealthCheck() {
 
 ## 쿼리 작업 소유하기
 
-쿼리 라이브러리가 캐싱, 재시도, 낡은 결과 억제, 취소를 소유할 수 있어요. 라이브러리가 주는 signal을 넘기세요.
+쿼리 라이브러리가 캐싱, 재시도, 낡은 결과 억제, 취소를 소유할 수 있어요. 라이브러리가 주는 signal을 넘기세요. 목록 페이지에서는 `client.execute(...)`를 TanStack Query(또는 비슷한 것)로 감싸세요. `@defjs/react`는 DI만 하고 `useRequest`를 제공하지 **않아요**.
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -112,7 +112,7 @@ import { useClient } from '@defjs/react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -146,9 +146,7 @@ import { useEffect } from 'react'
 const notifications = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/notifications',
-  incoming: {
-    message: struct.object({ text: struct.string() }),
-  },
+  incoming: struct.object({ text: struct.string() }),
 })
 
 export function Notifications() {

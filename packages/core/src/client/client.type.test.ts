@@ -2,17 +2,23 @@ import { defineRequest } from '../http'
 import type { HttpRequest } from '../internal/http_request'
 import { struct } from '../struct'
 import type { ClientWebSocketOptions } from './config'
-import type { Client, ClientConfig, ClientOptions, QueryParamsSerializer } from './index'
+import type { Client, ClientConfig, ClientOptions, QuerySerializer } from './index'
 
 // @ts-expect-error withWebSocketQueue was removed; endpoint definitions own queue limits
 import { withWebSocketQueue } from './index'
+
+// @ts-expect-error withQueryParamsSerializer was replaced by withQuerySerializer
+import { withQueryParamsSerializer } from './index'
+
+// @ts-expect-error QueryParamsSerializer was replaced by QuerySerializer
+import type { QueryParamsSerializer } from './index'
 
 import {
   createClient,
   withCredentials,
   withEndpoint,
   withHTTPHandle,
-  withQueryParamsSerializer,
+  withQuerySerializer,
   withSSEHandle,
   withSSEOnInvalidEvent,
   withWebSocketBeforeConnect,
@@ -26,8 +32,17 @@ import {
 type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
 type Expect<T extends true> = T
 
-const serializer: QueryParamsSerializer = (params) => params.toString()
-type SerializerCases = Expect<Equal<typeof serializer, (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string>>
+const serializer: QuerySerializer = (query) => {
+  void query['page']
+  return 'ok'
+}
+type SerializerCases = Expect<Equal<QuerySerializer, (query: { [key: string]: unknown }) => string>>
+type SerializerArity = Expect<Equal<Parameters<QuerySerializer>['length'], 1>>
+type QueryOptionCases = Expect<Equal<ClientOptions['querySerializer'], QuerySerializer | undefined>>
+type QueryConfigCases = Expect<Equal<ClientConfig['querySerializer'], QuerySerializer | undefined>>
+
+// @ts-expect-error queryParamsSerializer was replaced by querySerializer
+type RemovedQueryField = ClientOptions['queryParamsSerializer']
 
 type XSRFTokenProvider = (context: { request: HttpRequest }) => string | null | undefined
 type XSRFTokenProviderContext = Parameters<XSRFTokenProvider>[0]
@@ -77,7 +92,7 @@ const client = createClient(
     attempts: 3,
     delayMs: 1_000,
   }),
-  withQueryParamsSerializer(serializer),
+  withQuerySerializer(serializer),
   withXSRF({
     cookieName: 'CUSTOM-XSRF-TOKEN',
     headerName: 'X-CUSTOM-XSRF-TOKEN',
@@ -114,7 +129,7 @@ const options = {
     handle: customFetch,
   },
   interceptors: [],
-  queryParamsSerializer: serializer,
+  querySerializer: serializer,
   sse: {
     handle: customFetch,
   },
@@ -157,7 +172,13 @@ createClient(withEndpoint(1))
 createClient(
   withEndpoint('https://api.example.com'),
   // @ts-expect-error serializer must return a string
-  withQueryParamsSerializer(() => 1),
+  withQuerySerializer(() => 1),
+)
+
+createClient(
+  withEndpoint('https://api.example.com'),
+  // @ts-expect-error the serializer argument is the encoded query object, not URLSearchParams
+  withQuerySerializer((params: URLSearchParams) => params.toString()),
 )
 
 // @ts-expect-error withHTTPHandle expects a fetch implementation
@@ -179,6 +200,9 @@ createClient(withEndpoint('https://api.example.com'), withWebSocketHeartbeat({ t
 createClient(withEndpoint('https://api.example.com'), withWebSocketBeforeConnect('not-a-function'))
 
 void withWebSocketQueue
+void withQueryParamsSerializer
+void (undefined as unknown as QueryParamsSerializer)
+void (undefined as unknown as RemovedQueryField)
 
 const removedQueue: ClientWebSocketOptions = {
   // @ts-expect-error client-level WebSocket queue configuration was removed
@@ -200,6 +224,9 @@ export type Cases =
   | ClientCases
   | HttpExecuteHelpers
   | OptionsCases
+  | QueryConfigCases
+  | QueryOptionCases
+  | SerializerArity
   | SerializerCases
   | XsrfTokenProviderCases
   | XsrfOptionsCases

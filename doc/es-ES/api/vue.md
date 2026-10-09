@@ -1,13 +1,13 @@
 ---
 title: '@defjs/vue'
-description: Plugin, injection key e injectClient.
+description: Plugin de Vue, injection key e injectClient.
 ---
 
 # Vue {#page}
 
-Conecta un cliente `@defjs/core` existente a Vue. El paquete **no** crea clientes, no cachea resultados ni cierra el transporte al unmount.
+Proporciona un cliente `@defjs/core` existente a una app Vue. Este paquete no crea, no cachea ni dispone el cliente.
 
-Mira la [guía de Vue](../plugins/vue.md).
+Mira la [guía de Vue](/plugins/vue).
 
 ## createClientPlugin() {#createClientPlugin}
 
@@ -45,4 +45,4 @@ Lee el provider `HTTP_CLIENT` más cercano.
 const HTTP_CLIENT: InjectionKey<Client>
 ```
 
-Injection key de Vue. Prefiere `injectClient()` a `inject(HTTP_CLIENT)`. Para un subárbol: `provide(HTTP_CLIENT, childClient)`.
+Injection key de Vue. Prefiere `injectClient()` a `inject(HTTP_CLIENT)`. Sobrescribe un subárbol con `provide(HTTP_CLIENT, childClient)`.

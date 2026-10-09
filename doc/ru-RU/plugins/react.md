@@ -1,19 +1,19 @@
 ---
 title: React
-description: Поставь provider, читай клиент, fetch’ни пользователя и abort при re-run effect.
+description: Поставь provider, прочитай клиент, запроси пользователя и abort, когда effect перезапускается.
 ---
 
 # React
 
-Врежь существующий клиент `@defjs/core` в React-дерево. Получаешь Context и `useClient()`. Пакет **не** создаёт клиент, не добавляет кеш, не ретраит команды и не dispose’ит transport resources. Component, effect или data library, который стартует работу, ею владеет.
+Подключи существующий `@defjs/core` client к React-дереву. Получаешь Context и `useClient()`. Пакет **не** создаёт client, не вешает кеш, не ретраит команды и не dispose’ит ресурсы транспорта. Компонент, effect или data-библиотека, которые стартуют работу, ей владеют.
 
 ## Базовая настройка
 
-Поставь `@defjs/core`, `@defjs/react` и React 18+. ESM; Node.js 22+, когда бежишь в Node:
+Поставь `@defjs/core`, `@defjs/react` и React 18+. ESM; Node.js 22+, если гоняешь в Node:
 
 `bun add @defjs/core @defjs/react react`
 
-Provide клиент, потом fetch пользователя и abort при смене:
+Отдай клиент, потом запроси пользователя и abort при смене:
 
 ```tsx twoslash
 import { createClient, withEndpoint } from '@defjs/core'
@@ -35,7 +35,7 @@ import { useEffect, useState } from 'react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -60,13 +60,13 @@ export function UserName({ id }: { id: number }) {
 }
 ```
 
-`ClientProvider` — обычный Context provider. Другой prop `client` меняет то, что видят descendants — без clone, replace или dispose. Nested providers создают явные границы.
+`ClientProvider` — обычный Context provider. Другой prop `client` меняет то, что видят потомки — без clone, replace или dispose. Вложенные провайдеры создают явные границы.
 
-React в development может setup и cleanup effect больше одного раза. Проверка signal останавливает stale promise от записи в текущий render. Tuple error всё ещё data.
+React в development может поставить и снять effect больше одного раза. Проверка signal не даёт устаревшему promise писать в текущий рендер. Ошибка кортежа всё ещё данные.
 
 ## Читай через `useClient`
 
-`useClient()` возвращает ближайший `Client`. Вызывай во время render (component или custom hook). Throws, когда нет provider:
+`useClient()` возвращает ближайший `Client`. Зови во время рендера (компонент или свой хук). Бросает, если провайдера нет:
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -98,11 +98,11 @@ export function HealthCheck() {
 }
 ```
 
-Hook только отдаёт клиент. Он не стартует работу, не подписывается на транспорт и не превращает error-first кортеж в exception.
+Хук только отдаёт клиент. Работу он не стартует, на транспорт не подписывается и error-first кортеж в исключение не превращает.
 
 ## Владей query-работой
 
-Query library может владеть кешированием, ретраями, подавлением stale-результатов и cancellation. Отдай ей signal, который она предоставляет:
+Query-библиотека может владеть кешем, ретраями, подавлением устаревшего результата и отменой. Отдай ей signal, который она даёт. Для страниц-списков оберни `client.execute(...)` в TanStack Query (или похожее) — `@defjs/react` остаётся только DI и `useRequest` **не** везёт.
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -112,7 +112,7 @@ import { useClient } from '@defjs/react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -132,11 +132,11 @@ export function useUserQueryFn(id: number) {
 }
 ```
 
-Не оборачивай ту же команду во второй effect — два владельца делают cancel и stale-result handling неоднозначными.
+Не оборачивай ту же команду во второй effect — два владельца делают отмену и обработку устаревшего результата неоднозначными.
 
 ## Владей realtime-работой
 
-SSE и WebSocket handles переживают `client.execute(...)`. Зарегистрируй cleanup до await startup, закрой handle, который пришёл после disposal, consume его единственный iterator, await terminal promise:
+Handle SSE и WebSocket живут дольше `client.execute(...)`. Зарегистрируй cleanup до ожидания старта, закрой handle, который приехал после disposal, потреби единственный iterator, дождись терминального promise:
 
 ```tsx twoslash
 import { defineWebSocket, struct } from '@defjs/core'
@@ -146,9 +146,7 @@ import { useEffect } from 'react'
 const notifications = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/notifications',
-  incoming: {
-    message: struct.object({ text: struct.string() }),
-  },
+  incoming: struct.object({ text: struct.string() }),
 })
 
 export function Notifications() {
@@ -198,23 +196,23 @@ export function Notifications() {
 }
 ```
 
-То же правило для `EventStreamHandle`: close в `finally`, await `stream.closed`. WebSocket consumers также должны unsubscribe state/runtime-error listeners и продолжать читать `session.receive` — непрочитанная bounded queue может overflow.
+То же правило для `EventStreamHandle`: close в `finally`, await `stream.closed`. Потребители WebSocket ещё должны отписать listener’ы state и runtime-error и продолжать читать `session.receive` — непрочитанная ограниченная очередь может переполниться.
 
 ## SSR и scope клиента
 
-Entry пакета — граница Client Component. Browser app может шарить module-scoped клиент, когда endpoint, interceptors и captured state browser-safe и request-independent. Для SSR создавай отдельный клиент внутри каждой границы запроса, когда headers, cookies, users, tenants или credentials различаются.
+Точка входа пакета — граница Client Component. Браузерное приложение может делить клиент на уровне модуля, когда эндпоинт, interceptors и захваченное состояние безопасны для браузера и не зависят от запроса. Для SSR создавай отдельный клиент внутри каждой границы запроса, когда различаются заголовки, cookies, пользователи, tenants или credentials.
 
-Provider unmount **не** abort’ит HTTP, не закрывает SSE/WebSocket, не unsubscribe’ит listeners и не вызывает `dispose`. У `@defjs/react` нет такого lifecycle API. Код, который стартует каждую операцию, должен её закончить или отменить.
+Unmount провайдера **не** abort’ит HTTP, не закрывает SSE/WebSocket, не отписывает listener’ы и не зовёт `dispose`. У `@defjs/react` такого lifecycle API нет. Код, который стартовал каждую операцию, должен её закончить или отменить.
 
 ## Справка
 
-Публичные exports из `@defjs/react`:
+Публичные экспорты `@defjs/react`:
 
-- `ClientProvider` — принимает `ClientProviderProps`, provides клиент, который ты передал
-- `useClient` — ближайший клиент, или throws
+- `ClientProvider` — принимает `ClientProviderProps`, отдаёт переданный клиент
+- `useClient` — ближайший клиент, или бросает
 - `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
 
-Создавай клиентов и опции в `@defjs/core`. См. [Клиент](../core/client.md), [Ошибки](../core/errors.md), [SSE](../core/sse.md) и [WebSocket](../core/web-socket.md).
+Клиентов и опции создавай в `@defjs/core`. См. [Клиент](../core/client.md), [Ошибки](../core/errors.md), [SSE](../core/sse.md) и [WebSocket](../core/web-socket.md).
 
 ## Связанные рецепты
 

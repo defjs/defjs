@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### Primitive und Container
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | Unions                                                                              |
 | `struct.enum(values)`                                                       | String-Liste oder `{ Name: value }`-Map                                             |
 
-### Request-/Body-Helfer
+### Body-Codecs und Binary-Werte
 
-| Helfer                                                                         | Rolle                      |
-| ------------------------------------------------------------------------------ | -------------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                           | HTTP/SSE/WS Input-Sections |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | Encoded Bodies             |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | Binary                     |
+| Helfer                                         | Rolle                                                                                                             |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | Object-Struct plus Codec-Tag. Der Tag gilt nur, wenn dieser Wert der Request-Body-Root ist                        |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | Binary-Werte. Als Body-Root werden sie als Bytes gesendet; als `output` / `error` wählen sie diese Representation |
+| `struct.string()`                              | Text. Als Body-Root oder inbound `string`-Struct bleiben die Bytes Text                                           |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **Returns** `[null, value]` oder `[StructError, undefined]`.
+- Optionales `errorMap` schreibt Issue-Messages nur für dieses Parse um.
+- Default liest **logische** Keys (`displayName`). Gib `{ aliases: true }`, um Wire-Keys (`display_name`) zu lesen, so wie HTTP-/JSON-Codecs es tun.
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`: `path`, `code`, `expected`, `received`, `message`.
+`StructIssue`: `path`, `code`, `expected`, `received`, `message`. `code` ist `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` oder `missing_key`.
 
-Siehe [Struct-Guide](../core/struct.md).
+Siehe [Struct-Guide](/core/struct).
 
 ## Struct {#Struct}
 
-Parsebare Form: Input/Output-Typen plus `.optional()`, `.null()`, `.nullish()`, `.alias()`.
+Parsebare Form: Input-/Output-Typen plus `.optional()`, `.null()` / `.nullable()`, `.nullish()`, `.alias()`.
 
 ## StructLike {#StructLike}
 
@@ -97,19 +99,15 @@ Alles mit einem `_struct`-Typ-Payload.
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
 ## ObjectStruct {#ObjectStruct}
 
 Objektförmiges Struct von `struct.object`.
 
-## RequestStruct {#RequestStruct}
-
-Abschnittiges HTTP/SSE/WS-Input von `struct.request`.
-
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`, `code`, `expected`, `received`, `message`. `code` ist `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` oder `missing_key`.
 
 ## FormattedStructError {#FormattedStructError}
 

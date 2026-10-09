@@ -18,7 +18,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` needs `events`, positive safe-integer `maxBufferSize`, positive safe-integer `maxQueueSize`, and a relative `path`. Method defaults to `GET`.
 
-Request input may have `path`, `query`, `headers`, and `body`. Custom `build` gets the same request helpers as HTTP, including body setters. Defjs sends `Accept: text/event-stream` when you didn’t already set `Accept`.
+The request shape matches HTTP: optional `builder` returning `path`, `query`, `headers`, and `body`. `GET` / `HEAD` cannot return a body. A declared `error` struct types the startup fault and decodes a non-2xx handshake body by struct kind (`string` text, `blob` / `file` blob, `arrayBuffer` bytes, otherwise JSON). Defjs sends `Accept: text/event-stream` when you didn’t already set `Accept`.
 
 One logical stream can span several physical Fetch attempts **when** you opt into reconnect. Without `withSSEReconnect`, transient network and stream-read failures end the logical stream. You still get one handle and one async iterator when the open succeeds.
 
@@ -66,7 +66,7 @@ if (error) {
 }
 ```
 
-Response must be successful, media type essence `text/event-stream`, and have a body. Non-2xx startup → `HTTP_STATUS`. Bad content type or missing body → `RES_STRUCT_MISMATCH`. A response snapshot can still sit in the third tuple slot when validation fails after the response arrives.
+Response must be successful, media type essence `text/event-stream`, and have a body. Non-2xx startup → `HTTP_STATUS`. When `error` is declared, that fault carries the decoded handshake body; a bad media type is `RES_MEDIA_TYPE_INVALID` and a body that cannot be read as the declared kind is `RES_DECODE_FAILED`. A response snapshot can still sit in the third tuple slot when validation fails after the response arrives.
 
 `startupOpen` is the initial snapshot. `stream.open` is live and changes on later physical opens. Keep the tuple value when the first response matters.
 
@@ -85,15 +85,7 @@ void result
 
 Wire event name → `events[eventName]`; else `events.default`. No matching Struct → event not delivered. Missing SSE `event` field → logical name `message`.
 
-SSE `data` starts as text. The selected Struct decides conversion:
-
-| Struct                                                                 | Conversion                                                     |
-| ---------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `struct.string()`, `struct.text()`, `struct.any()`, `struct.unknown()` | Stays text                                                     |
-| `struct.number()`                                                      | Trimmed text must be a finite number; empty invalid            |
-| `struct.boolean()`                                                     | Trimmed text exactly `true` or `false`                         |
-| `struct.json(inner)`                                                   | Parse JSON, then decode with `inner`                           |
-| Object, array, union, other ordinary Structs                           | Decode text directly; JSON-looking text is **not** auto-parsed |
+SSE `data` starts as text. A `string` struct keeps that text. Every other kind is JSON: parse the text, then decode with the struct. `struct.object`, `struct.number`, `struct.boolean`, `struct.any`, and `struct.unknown` are JSON, not trimmed text. A bare token such as `ping` does not satisfy `struct.literal('ping')`; the data has to be JSON. A server that sends the JSON string `"abc"` still satisfies `struct.string()`: the delivered value is that raw text, including the quotes, and is not JSON-decoded to `abc`.
 
 Emitted value: `event`, decoded `data`, optional non-empty `id`. With `default`, unknown event names are `string` in the inferred union.
 
@@ -154,7 +146,7 @@ Both must be positive safe integers. Overflow is fatal — no silent discard of 
 | `maxBufferSize` | Incomplete/oversized SSE line/event while parsing  | `CAP_BUFFER_EXCEEDED` |
 | `maxQueueSize`  | Events produced faster than the one consumer reads | `CAP_QUEUE_OVERFLOW`  |
 
-Fatal stream also clears buffered events, cancels the active body, rejects the iterator, and resolves `stream.closed` with `code: 'error'`.
+Fatal stream also clears buffered events, cancels the active body, rejects the iterator, and resolves `stream.closed` with `kind: 'error'`.
 
 ## Close and dispose
 
@@ -175,7 +167,7 @@ const api: StreamApi<string> = handle
 void api
 ```
 
-Terminal codes: `eof`, `aborted`, or `error`. An `error` result also carries an `EventStreamFaultCode`: `RES_MEDIA_TYPE_INVALID`, `EXT_OBSERVER_FAILED`, `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `NET_TIMEOUT`, or `TRANSPORT_ERROR`.
+Terminal codes: `eof`, `aborted`, or `error`. An `error` result also carries an `EventStreamFaultCode`: `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `RES_DECODE_FAILED`, or `RES_MEDIA_TYPE_INVALID`.
 
 `close(reason)` aborts the active attempt, closes the queue, settles as `aborted`. Loop `break` / `return` / throw invokes iterator return and closes with `iterator-return`. The code that executes the command owns closure.
 

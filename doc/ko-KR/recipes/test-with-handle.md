@@ -1,11 +1,11 @@
 ---
 title: 로컬 Fetch 핸들로 테스트하기
-description: withHTTPHandle로 한 클라이언트의 Fetch만 바꾸고 명령은 그대로 둬요.
+description: withHTTPHandle로 그 클라이언트의 Fetch만 바꾸고 명령은 그대로 둬요.
 ---
 
 # 로컬 Fetch 핸들로 테스트하기
 
-`withHTTPHandle(...)`는 그 클라이언트의 Fetch만 바꿔요. URL 구성, 인터셉터, status 디스패치, Struct 디코딩은 그대로 받고 — DNS, TLS, 실제 서버는 없어도 돼요.
+`withHTTPHandle(...)`은 그 클라이언트의 Fetch만 바꿔요. DNS, TLS, 실제 서버 없이도 URL 구성, interceptor, status 디스패치, Struct 디코딩은 그대로예요.
 
 자세한 내용은 [클라이언트](../core/client.md)를 보세요.
 
@@ -15,7 +15,7 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
@@ -40,4 +40,4 @@ console.log(user.name, response.status)
 Ada 200
 ```
 
-프로덕션에서는 같은 `getUser` 명령을 실제 `withEndpoint(...)` 클라이언트에 쓰면 돼요 — 핸들만 바뀌어요.
+프로덕션에서는 같은 `getUser` 명령을 실제 `withEndpoint(...)` 클라이언트에 쓰세요. 바뀌는 것은 handle뿐이에요.

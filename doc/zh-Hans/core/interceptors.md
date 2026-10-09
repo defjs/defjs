@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,17 +108,17 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-Command 层仍按状态分派。调用方要类型化 `error.data` 时，在 `output` 里声明 `503`。短路 SSE 或 WebSocket 需要完整兼容的 handle/session（关闭 promise、活状态、所有权和 `[Symbol.asyncDispose]`）。半截对象不是合法政策。结构化 `EventStreamHandle` 与 `WebSocketSessionLike` 实现现在编译时必须提供标准 disposer；只接收 Defjs handle 的消费者无需新增运行时调用。
+Command 层仍按状态分派。调用方要类型化 `error.data` 时，用一个 `error` struct 描述非 2xx 侧。短路 SSE 或 WebSocket 需要完整兼容的 handle/session（关闭 promise、活状态、所有权和 `[Symbol.asyncDispose]`）。半截对象不是合法政策。结构化 `EventStreamHandle` 与 `WebSocketSessionLike` 实现现在编译时必须提供标准 disposer；只接收 Defjs handle 的消费者无需新增运行时调用。
 
 ## 重试安全读
 
-重试会改行为。政策收窄——这个例子只对可重放的 `GET` / `HEAD` / `OPTIONS`、状态 `0`/`502`/`503`/`504` 重试，把 `Retry-After` 封到 30s，两次重试或 abort 就停：
+重试会改行为。政策收窄——这个例子只对可重放的 `GET` / `HEAD` / `OPTIONS`、状态 `0`、`429`、`502`、`503`、`504` 重试，把 `Retry-After` 封到 30s，两次重试或 abort 就停：
 
 ```typescript twoslash
 import { createHttpInterceptor, type HttpRequest, type HttpResponse } from '@defjs/core'
 
 const retryableMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
-const retryableStatuses = new Set([0, 502, 503, 504])
+const retryableStatuses = new Set([0, 429, 502, 503, 504])
 
 function isReplayable(request: HttpRequest): boolean {
   return typeof ReadableStream === 'undefined' || !(request.body instanceof ReadableStream)
@@ -232,7 +233,7 @@ Factory 返回带标签的传输值：
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP 上的 Basic 凭证
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic 凭证
 
-`HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静态 `operation`。它是传输集成值——不是调用方解析后的输入。Command 校验、output 校验、领域错误映射留在各自层。
+`HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静态 `operation`。它是传输集成值——不是调用方解析后的输入。`queryParams` 是序列化之后的 `new URLSearchParams(queryString)`。builder 没产出 query 时，配好的 query serializer 不会被调用；builder 返回的 `URLSearchParams` 原样使用。Command 校验、output 校验、领域错误映射留在各自层。
 
 SSE/WebSocket observer 是生命周期钩子，不是控制流。所有者结束时退订 WebSocket 监听。Observer 失败跟传输契约走；interceptor 本身可以抛或 reject。
 
@@ -244,5 +245,7 @@ Interceptor 能落实传输政策。它不是输入校验、授权或资源所�
 
 ## 相关配方
 
+- [401 时把 Bearer token 刷新一次](../recipes/refresh-bearer-once.md)
+- [发布 HTTP SDK，别藏起 execute](../recipes/publish-http-sdk.md)
 - [用本地 Fetch handle 做测试](../recipes/test-with-handle.md)
 - [取消一次 HTTP](../recipes/cancel-http.md)

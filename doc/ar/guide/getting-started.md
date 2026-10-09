@@ -1,6 +1,6 @@
 ---
 title: 'البدء: طلب HTTP واحد'
-description: عرّف GET /users/:id، شغّله ضد Fetch محلي، ثم وجّهه إلى API حقيقي.
+description: عرّف GET /users/:id، شغّله ضد معالج Fetch محلي، ثم وجّهه إلى API حقيقي.
 ---
 
 # البدء: طلب HTTP واحد
@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## الخطوة 2 — عرّف الطلب
 
-أنشئ `src/get-user.ts`. `struct.request(...)` يبقي قيم المسار منفصلة عن الاستعلام والرؤوس والجسم.
+أنشئ `src/get-user.ts`. struct المدخل هو قيمة المستدعي. `builder` يضع تلك القيمة على الطلب. هنا المدخل كله هو كائن المسار، فالحقول القياسية بلا alias تملأ `:id`.
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,18 +63,19 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` يُرجع المنشئ. استدعاء `getUser(...)` يبني الأمر المعتم الذي تمرّره إلى `client.execute(...)`.
+`output` هو جسم 2xx. `error` هو كل حالة أخرى. struct واحد لكل منهما. استخدم `struct.or(...)` أو اتحادًا مميّزًا عندما تختلف تلك الأجسام.
+
+`defineRequest(...)` يُرجع نقطة نهاية. استدعاء `getUser(...)` يبني الأمر المعتم الذي ستمرّره إلى `client.execute(...)`. الـ `builder` أعلاه هو الدالة التي تضع المدخل؛ وليس نقطة النهاية.
 
 ## الخطوة 3 — نفّذه محليًا
 
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -175,7 +175,7 @@ Loaded Ada from 200
 User not found
 ```
 
-عند النجاح: `error` هو `null`، و`user` هو مخرج Struct لـ `200`، و`response` هو `HttpResponse`. عند `404` معلَن: `error.code` هو `'http'`، و`error.status` هو `404`، و`error.data` مُنوَّع كـ `NotFound`. العنصر الثاني في الـ tuple هو `undefined` عند الفشل.
+عند النجاح: `error` هو `null`، و`user` هو مخرج Struct لـ `200`، و`response` هو `HttpResponse`. عند `404` معلَن: `error.code` هو `'HTTP_STATUS'`، و`error.status` هو `404`، و`error.data` مُنوَّع كـ `NotFound`. العنصر الثاني في الـ tuple هو `undefined` عند الفشل.
 
 ## الخطوة 4 — وجّه إلى API حقيقي
 
@@ -205,13 +205,14 @@ void realClient
 
 ## عندما تختلف النتيجة
 
-- مدخل سيئ → `REQ_INPUT_INVALID`؛ خيارات إلغاء متعارضة → `REQ_OPTIONS_INVALID`؛ فشل `build` → `REQ_BUILD_FAILED`
+- مدخل سيئ → `REQ_INPUT_INVALID`؛ خيارات إلغاء متعارضة → `REQ_OPTIONS_INVALID`؛ فشل
+  `build` → `REQ_BUILD_FAILED`
 - أي غير-2xx → `HTTP_STATUS`، مع `err.data` مُنوَّع عند إعلان `error`
 - نوع وسائط خاطئ → `RES_MEDIA_TYPE_INVALID`، يُبلَّغ قبل قراءة الجسم
 - جسم معلَن لا يُفكّ → `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH`
 - فشل Fetch / إلغاء / مهلة → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`. لا تمرّر `abort` و`timeout` معًا؛ يمكن لـ `signal` أن يجتمع مع أي منهما. الإلغاء يخبرك بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
+يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`. أشكال الإلغاء الصالحة: `{ timeout }`، `{ abort }`، أو `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` معًا غير صالح. الإلغاء يخبرك بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
 
 ## الوصفات التالية
 

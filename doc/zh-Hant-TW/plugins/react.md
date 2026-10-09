@@ -35,7 +35,7 @@ import { useEffect, useState } from 'react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -102,7 +102,7 @@ Hook 只提供 client。它不會啟動工作、訂閱傳輸，或把 error-firs
 
 ## 自己擁有 query 工作
 
-Query library 可以擁有快取、重試、壓制過期結果、取消。把庫提供的 signal 傳進去：
+Query library 可以擁有快取、重試、壓制過期結果、取消。把庫提供的 signal 傳進去。列表頁請把 `client.execute(...)` 包進 TanStack Query（或類似方案）——`@defjs/react` 只做 DI，**不會**附帶 `useRequest`。
 
 ```tsx twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -112,7 +112,7 @@ import { useClient } from '@defjs/react'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -146,9 +146,7 @@ import { useEffect } from 'react'
 const notifications = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/notifications',
-  incoming: {
-    message: struct.object({ text: struct.string() }),
-  },
+  incoming: struct.object({ text: struct.string() }),
 })
 
 export function Notifications() {

@@ -5,7 +5,7 @@ description: Façade struct, Infer, et StructError.
 
 # Struct {#page}
 
-Construis des formes de frontière wire, parse des valeurs, infère des types TypeScript.
+Construis des formes à la frontière wire, parse des valeurs, infère les types TypeScript.
 
 ## struct {#struct}
 
@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### Primitives et conteneurs
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | Unions                                                                                |
 | `struct.enum(values)`                                                       | Liste de strings ou map `{ Name: value }`                                             |
 
-### Helpers requête / body
+### Codecs de corps et valeurs binaires
 
-| Helper                                                                         | Rôle                          |
-| ------------------------------------------------------------------------------ | ----------------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                           | Sections d’entrée HTTP/SSE/WS |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | Bodies encodés                |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | Binaire                       |
+| Helper                                         | Rôle                                                                                                                          |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | Struct objet plus un tag de codec. Le tag ne s’applique que quand cette valeur est la racine du corps de requête              |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | Valeurs binaires. En racine de corps elles partent en octets ; en `output` / `error` elles sélectionnent cette représentation |
+| `struct.string()`                              | Texte. En racine de corps ou en struct `string` entrant, les octets restent du texte                                          |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **Renvoie** `[null, value]` ou `[StructError, undefined]`.
+- Un `errorMap` optionnel réécrit les messages d’issue pour ce parse seulement.
+- Par défaut, lecture des clés **logiques** (`displayName`). Passe `{ aliases: true }` pour lire les clés wire (`display_name`) comme le font les codecs HTTP/JSON.
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue` : `path`, `code`, `expected`, `received`, `message`.
+`StructIssue` : `path`, `code`, `expected`, `received`, `message`. `code` vaut `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` ou `missing_key`.
 
-Voir [le guide Struct](../core/struct.md).
+Voir le [guide Struct](/core/struct).
 
 ## Struct {#Struct}
 
-Forme parseable : types input/output plus `.optional()`, `.null()`, `.nullish()`, `.alias()`.
+Une forme parseable : types d’entrée/sortie plus `.optional()`, `.null()` / `.nullable()`, `.nullish()`, `.alias()`.
 
 ## StructLike {#StructLike}
 
@@ -97,24 +99,20 @@ Tout ce qui a un payload de type `_struct`.
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`, `.null()` / `.nullable()`, `.nullish()`, `.optional()`.
 
 ## ObjectStruct {#ObjectStruct}
 
-Struct en forme d’objet, de `struct.object`.
-
-## RequestStruct {#RequestStruct}
-
-Input HTTP / SSE / WS découpé par `struct.request`.
+Struct en forme d’objet, issu de `struct.object`.
 
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`, `code`, `expected`, `received`, `message`. `code` vaut `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` ou `missing_key`.
 
 ## FormattedStructError {#FormattedStructError}
 
-Arbre imbriqué `{ _errors, [key]: … }` de `StructError.format()`.
+Arbre `{ _errors, [key]: … }` imbriqué, issu de `StructError.format()`.
 
 ## FlattenedStructError {#FlattenedStructError}
 
-`formErrors` plus `fieldErrors` de `StructError.flatten()`.
+`formErrors` plus `fieldErrors`, issus de `StructError.flatten()`.

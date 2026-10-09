@@ -62,12 +62,10 @@ describe('request http runtime', () => {
 
   test('should encode request aliases and decode response aliases through a real round-trip', async () => {
     const useUser = defineRequest({
-      input: struct.request({
-        body: struct.json(
-          struct.object({
-            name: struct.string().alias('user_name'),
-          }),
-        ),
+      input: struct.object({
+        body: struct.object({
+          name: struct.string().alias('user_name'),
+        }),
       }),
       method: 'POST',
       output: struct.object({
@@ -84,15 +82,10 @@ describe('request http runtime', () => {
 
   test('should round-trip a custom build bound view through the real test server', async () => {
     const useEcho = defineRequest({
-      build: (request, input) => {
-        request.setJson(input.body)
-      },
-      input: struct.request({
-        body: struct.json(
-          struct.object({
-            name: struct.string().alias('user_name'),
-          }),
-        ),
+      input: struct.object({
+        body: struct.object({
+          name: struct.string().alias('user_name'),
+        }),
       }),
       method: 'POST',
       output: struct.object({
@@ -119,10 +112,13 @@ describe('request http runtime', () => {
       ),
     )
     const useOptionalSections = defineRequest({
-      input: struct.request({
-        headers: struct.object({ traceId: struct.string().optional() }),
-        path: struct.object({ locale: struct.string().optional() }),
-        query: struct.object({ page: struct.number().optional() }),
+      builder: (input) => ({
+        headers: input.headers,
+        query: input.query,
+      }),
+      input: struct.object({
+        headers: struct.object({ traceId: struct.string().optional() }).optional(),
+        query: struct.object({ page: struct.number().optional() }).optional(),
       }),
       method: 'GET',
       path: '/search',
@@ -150,6 +146,7 @@ describe('request http runtime', () => {
             body: {
               ok: true,
             },
+            headers: new Headers({ 'content-type': 'application/json' }),
             status: 200,
           })
         }),
@@ -157,27 +154,25 @@ describe('request http runtime', () => {
     )
 
     const useInspectRequest = defineRequest({
-      build: (request, input) => {
-        request.setJson({
+      builder: (input) => ({
+        body: {
           nickname: input.body.nickname,
-        })
-        request.setHeaders({
+        },
+        headers: {
           'x-token': input.headers.token,
-        })
-        request.setPathParams({
+        },
+        path: {
           id: input.path.id,
-        })
-        request.setQueryParams({
+        },
+        query: {
           include: input.query.include,
           tags: input.query.tags,
-        })
-      },
-      input: struct.request({
-        body: struct.json(
-          struct.object({
-            nickname: struct.string(),
-          }),
-        ),
+        },
+      }),
+      input: struct.object({
+        body: struct.object({
+          nickname: struct.string(),
+        }),
         headers: struct.object({
           token: struct.string(),
         }),
@@ -230,7 +225,7 @@ describe('request http runtime', () => {
       ),
     )
     const useUser = defineRequest({
-      input: struct.request({ path: struct.object({ id: struct.string() }) }),
+      input: struct.object({ path: struct.object({ id: struct.string() }) }),
       method: 'GET',
       path: '/users/:id',
     })
@@ -259,6 +254,7 @@ describe('request http runtime', () => {
             body: {
               ok: true,
             },
+            headers: new Headers({ 'content-type': 'application/json' }),
             status: 200,
           })
         }),
@@ -286,12 +282,12 @@ describe('request http runtime', () => {
 
   test('should return definition error when build is provided without input struct', async () => {
     const useRawInput = defineRequest({
-      build: () => {
-        return undefined
+      builder: () => {
+        throw new Error('build failed')
       },
       method: 'GET',
       path: '/raw-input',
-    } as never)
+    })
 
     const [error, result, response] = await client.execute(useRawInput())
 

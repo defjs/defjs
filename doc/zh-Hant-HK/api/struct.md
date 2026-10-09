@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### Primitives 同 containers
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | Unions                                                                       |
 | `struct.enum(values)`                                                       | String list 或者 `{ Name: value }` map                                       |
 
-### Request / body helpers
+### Body codecs 同 binary values
 
-| Helper                                                                         | 做咩                       |
-| ------------------------------------------------------------------------------ | -------------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                           | HTTP/SSE/WS input sections |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | Encoded bodies             |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | Binary                     |
+| Helper                                         | 做咩                                                                                             |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `struct.formData(shape)` / `urlencoded(shape)` | Object struct 再加一個 codec tag。個 tag 只會喺個 value 係 request body root 嘅時候先生效        |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | Binary values。作為 body root 會當 bytes 送出；作為 `output` / `error` 就會揀嗰種 representation |
+| `struct.string()`                              | Text。作為 body root 或者 inbound `string` struct，bytes 會保持係 text                           |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **Returns** `[null, value]` 或者 `[StructError, undefined]`。
+- 可選 `errorMap` 只會改寫呢次 parse 嘅 issue messages。
+- Default 讀 **logical** keys（`displayName`）。傳 `{ aliases: true }` 就讀 wire keys（`display_name`），同 HTTP/JSON codecs 一樣。
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`：`path`、`code`、`expected`、`received`、`message`。
+`StructIssue`：`path`、`code`、`expected`、`received`、`message`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。
 
-睇 [Struct guide](../core/struct.md)。
+睇 [Struct guide](/core/struct)。
 
 ## Struct {#Struct}
 
-可以 parse 嘅 shape：input/output types，再加 `.optional()`、`.null()`、`.nullish()`、`.alias()`。
+可以 parse 嘅 shape：input/output types，再加 `.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias()`。
 
 ## StructLike {#StructLike}
 
@@ -97,23 +99,19 @@ class StructError extends Error {
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`、`.null()` / `.nullable()`、`.nullish()`、`.optional()`。
 
 ## ObjectStruct {#ObjectStruct}
 
-`struct.object` 整出嚟嘅 object shape。
-
-## RequestStruct {#RequestStruct}
-
-`struct.request` 分段嘅 HTTP/SSE/WS input。
+`struct.object` 整出嚟嘅 object-shaped struct。
 
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`、`code`、`expected`、`received`、`message`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。
 
 ## FormattedStructError {#FormattedStructError}
 
-`StructError.format()` 吐出嚟嘅 nested `{ _errors, [key]: … }`。
+`StructError.format()` 吐出嚟嘅 nested `{ _errors, [key]: … }` tree。
 
 ## FlattenedStructError {#FlattenedStructError}
 

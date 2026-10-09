@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: 'Исходящая инструментировка: `withOpenTelemetryServer`.'
+description: withOpenTelemetryServer и опции по транспортам.
 ---
 
 # OpenTelemetry server {#page}
 
-Включай outbound instrumentation при создании клиента. Дописывает interceptors HTTP, SSE и WebSocket. Это **не** inbound server instrumentation и **не** инициализация OpenTelemetry SDK.
+Исходящая инструментировка HTTP / SSE / WebSocket как core interceptors. Этот пакет не инициализирует OpenTelemetry SDK и это не inbound server instrumentation.
 
-См. [гайд OpenTelemetry server](../plugins/opentelemetry-server.md).
+См. [гайд OpenTelemetry server](/plugins/opentelemetry-server).
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 

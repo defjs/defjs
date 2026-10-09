@@ -1,13 +1,13 @@
 ---
 title: '@defjs/vue'
-description: 安裝 plugin、injection key、injectClient。
+description: Vue plugin、injection key，以及 injectClient。
 ---
 
 # Vue {#page}
 
-把既有的 `@defjs/core` client 接進 Vue。這個套件**不會**建立 client、快取結果，也不會在 unmount 時關掉傳輸。
+把既有的 `@defjs/core` client 提供給 Vue app。這個套件不會建立、快取或 dispose client。
 
-見 [Vue 指南](../plugins/vue.md)。
+見 [Vue 指南](/plugins/vue)。
 
 ## createClientPlugin() {#createClientPlugin}
 

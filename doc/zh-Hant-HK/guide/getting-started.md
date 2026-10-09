@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Step 2 — Define 個 request
 
-Create `src/get-user.ts`。`struct.request(...)` 會將 path values 同 query、headers、body 分開。
+Create `src/get-user.ts`。Input struct 係 caller 嘅 value。`builder` 將個 value 擺上 request。呢度成個 input 就係 path object，所以冇 alias 嘅 scalar fields 會填 `:id`。
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,18 +63,19 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` return 嘅係 builder。Call `getUser(...)` 會 build 出你之後傳去 `client.execute(...)` 嘅 opaque command。
+`output` 係 2xx body。`error` 係其餘每個 status。一邊一個 struct。Bodies 唔同就用 `struct.or(...)` 或者 discriminated union。
+
+`defineRequest(...)` return 嘅係 endpoint。Call `getUser(...)` 會 build 出你之後傳去 `client.execute(...)` 嘅 opaque command。上面嗰個 `builder` 係擺放 input 嘅 function；佢唔係 endpoint。
 
 ## Step 3 — 喺本機 execute
 
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -175,7 +175,7 @@ Loaded Ada from 200
 User not found
 ```
 
-Success 時：`error` 係 `null`，`user` 係 `200` Struct output，`response` 係 `HttpResponse`。Declared `404`：`error.code` 係 `'http'`，`error.status` 係 `404`，`error.data` 有 typed `NotFound`。失敗時 tuple 第二項係 `undefined`。
+Success 時：`error` 係 `null`，`user` 係 `200` Struct output，`response` 係 `HttpResponse`。Declared `404`：`error.code` 係 `'HTTP_STATUS'`，`error.status` 係 `404`，`error.data` 有 typed `NotFound`。失敗時 tuple 第二項係 `undefined`。
 
 ## Step 4 — 指去真實 API
 
@@ -205,13 +205,13 @@ void realClient
 
 ## Result 唔同時
 
-- 壞 input → `REQ_INPUT_INVALID`；撞咗嘅 cancel options → `REQ_OPTIONS_INVALID`；`build` 失敗 → `REQ_BUILD_FAILED`
+- 壞 input → `REQ_INPUT_INVALID`；撞咗嘅 cancel options → `REQ_OPTIONS_INVALID`；失敗嘅 `build` → `REQ_BUILD_FAILED`
 - 任何 non-2xx → `HTTP_STATUS`；如果聲明過 `error`，`err.data` 就有 type
 - Media type 唔對 → `RES_MEDIA_TYPE_INVALID`，讀 body 之前就報
 - 聲明過嘅 body 解唔出 → `RES_DECODE_FAILED` 或者 `RES_STRUCT_MISMATCH`
 - Fetch fail / cancel / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。唔好同時傳 `abort` 同 `timeout`；`signal` 可以同其中一個一齊用。Cancellation 淨係話你 caller 見到咩 — 唔證明 server write 有冇 commit。
+`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。合法嘅 cancel 形狀：`{ timeout }`、`{ abort }`，或者 `{ signal, timeout }` / `{ signal, abort }`。`{ abort, timeout }` 一齊係 invalid。Cancellation 淨係話你 caller 見到咩 — 唔證明 server write 有冇 commit。
 
 ## Next recipes
 

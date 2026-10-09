@@ -1,12 +1,12 @@
 import { describe, expect, test, vi } from 'vitest'
-import { createClient, withEndpoint, withHTTPHandle, withInterceptors, withQueryParamsSerializer } from '../client'
+import { createClient, withEndpoint, withHTTPHandle, withInterceptors, withQuerySerializer } from '../client'
 import { createHttpInterceptor } from '../interceptor'
 import { makeResponse } from '../internal/http_response'
 import { struct } from '../struct'
 import { defineRequest } from './index'
 
 describe('request http runtime with client config', () => {
-  test('should support queryParamsSerializer from client config', async () => {
+  test('should support querySerializer from client config', async () => {
     let capturedRequestUrl = ''
 
     const client = createClient(
@@ -20,19 +20,16 @@ describe('request http runtime with client config', () => {
           })
         }),
       ),
-      withQueryParamsSerializer((params) => {
-        return Array.from(params.entries())
+      withQuerySerializer((query) => {
+        return Object.entries(query)
           .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, value]) => `${key.toUpperCase()}=${value}`)
+          .map(([key, value]) => `${key.toUpperCase()}=${String(value)}`)
           .join('&')
       }),
     )
 
     const useSerializedQuery = defineRequest({
-      build: (request, input) => {
-        request.setQueryParams({ a: input.query.a, b: input.query.b })
-      },
-      input: struct.request({ query: struct.object({ a: struct.string(), b: struct.string() }) }),
+      input: struct.object({ query: struct.object({ a: struct.string(), b: struct.string() }) }),
       method: 'GET',
       path: '/query',
     })
@@ -61,19 +58,16 @@ describe('request http runtime with client config', () => {
         }),
       ),
       withHTTPHandle(fetchMock),
-      withQueryParamsSerializer((params) => {
-        return Array.from(params.entries())
+      withQuerySerializer((query) => {
+        return Object.entries(query)
           .sort(([left], [right]) => left.localeCompare(right))
-          .map(([key, value]) => `${key.toUpperCase()}=${value}`)
+          .map(([key, value]) => `${key.toUpperCase()}=${String(value)}`)
           .join('&')
       }),
     )
 
     const useSerializedQuery = defineRequest({
-      build: (request, input) => {
-        request.setQueryParams({ a: input.query.a, b: input.query.b })
-      },
-      input: struct.request({ query: struct.object({ a: struct.string(), b: struct.string() }) }),
+      input: struct.object({ query: struct.object({ a: struct.string(), b: struct.string() }) }),
       method: 'GET',
       path: '/query',
     })
@@ -83,5 +77,26 @@ describe('request http runtime with client config', () => {
     expect(error).toBeNull()
     expect(interceptorCalls).toBe(1)
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  test('should keep the HTTP definition when the caller mutates the configuration object', async () => {
+    const definition: { method: 'GET'; path: string } = { method: 'GET', path: '/first' }
+    const first = defineRequest(definition)
+    definition.path = '/second'
+    const second = defineRequest(definition)
+    const paths: string[] = []
+    const client = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async (request) => {
+          paths.push(request.endpoint)
+          return makeResponse({ status: 204 })
+        }),
+      ),
+    )
+
+    expect((await client.execute(first()))[0]).toBeNull()
+    expect((await client.execute(second()))[0]).toBeNull()
+    expect(paths).toEqual(['/first', '/second'])
   })
 })

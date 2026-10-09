@@ -1,13 +1,13 @@
 ---
 title: 명령
-description: 엔드포인트를 정의하고, opaque 명령을 만들고, 입력을 매핑하고, 전송 결과를 추론해요.
+description: 엔드포인트를 정의하고, opaque 명령을 만들고, 입력을 배치하고, 전송 결과를 추론해요.
 ---
 
 # 명령
 
-정의 하나 → 빌더 → opaque 명령 → `client.execute`. HTTP, SSE, WebSocket이 같은 파이프라인이에요.
+정의 하나 → 엔드포인트 → opaque 명령 → `client.execute`. HTTP, SSE, WebSocket이 같은 파이프라인이에요.
 
-## Basic Setup
+## 기본 사용법
 
 ```typescript twoslash
 import { createClient, defineRequest, withEndpoint } from '@defjs/core'
@@ -20,58 +20,76 @@ if (!error) console.log(data, response.status)
 
 ## 정의 고르기
 
-| 정의                     | 계약                                             | 성공 시 값                             |
-| ------------------------ | ------------------------------------------------ | -------------------------------------- |
-| `defineRequest(...)`     | 메서드, 상대 path, 선택 입력, 선택 status 출력   | 디코딩된 data + `HttpResponse`         |
-| `defineEventStream(...)` | path, buffer/queue 한도, 이벤트 이름 → Struct 맵 | `EventStreamHandle` + open 스냅샷      |
-| `defineWebSocket(...)`   | path, incoming 맵, 선택 outgoing 맵, queue 한도  | `WebSocketSession` + connection 스냅샷 |
+| 정의                     | 계약                                                         | 성공 값                                |
+| ------------------------ | ------------------------------------------------------------ | -------------------------------------- |
+| `defineRequest(...)`     | method, 상대 path, 선택 input, 선택 `output` / `error`       | 디코딩된 data + response               |
+| `defineEventStream(...)` | path, buffer/queue 한도, 이벤트 이름 → Struct map            | `EventStreamHandle` + open 스냅샷      |
+| `defineWebSocket(...)`   | path, incoming struct 하나, 선택 outgoing struct, queue 한도 | `WebSocketSession` + connection 스냅샷 |
 
-`input`이 없으면 빌더는 인자를 받지 않아요. `input`이 있으면 중첩 필드가 전부 optional이어도 Struct 값을 넘겨요. optional `path` / `query` / `headers` 섹션은 생략할 수 있고, 필수 필드가 있는 섹션은 생략할 수 없어요. body 래퍼가 있으면 body는 필수예요.
+`input`이 없으면 엔드포인트는 인자를 받지 않고, `builder`는 `() => request`일 수 있어요. `input`이 있으면 struct 값을 넘기세요. optional 필드는 빼도 되고, 필수 필드는 빼면 안 돼요.
 
-명령은 opaque로 유지해요. 태그나 심볼을 파고들지 마세요.
+명령은 opaque로 두세요. 태그나 심볼을 파고들지 마세요.
 
-## 자동 요청 매핑
+## 값이 가는 곳
 
-논리 입력이 이미 path / query / headers / body를 가지면 `struct.request(...)`를 쓰세요.
+struct가 값을 어떻게 인코딩할지 정하고, `builder`가 어디로 갈지 정해요. `builder`는 **파싱된** 입력의 동기적이고 순수한 함수예요. 실행 시점에 돌아요. throw하면 튜플의 `REQ_BUILD_FAILED`가 되고, 엔드포인트 호출 자체는 throw하지 않아요.
+
+input struct가 이미 `{ path?, query?, headers?, body? }`이면 `builder`를 빼세요. 그건 identity `(input) => input`이에요. 파싱된 입력이 그 모양에 대입되지 않으면 TypeScript가 `builder`를 요구해요.
+
+타입이 있는 값을 그대로 넘기세요. 그러면 alias, `Date` → ISO, `bigint` → 문자열이 그 struct가 쓰이는 곳마다 적용돼요. 요청 배치, 응답 디코딩, SSE 이벤트, WebSocket 프레임이에요.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
+const User = struct.object({
+  displayName: struct.string().alias('display_name'),
+  email: struct.string(),
+})
+
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(struct.object({ name: struct.string() })),
-  }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  input: struct.object({ user: User }),
+  builder: (input) => ({ body: input.user }),
+  output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })
 void createUser
 ```
 
-별칭은 아웃바운드 와이어 키만 바꿔요. 파싱된 값과 명령 입력은 논리 이름을 유지해요.
+body는 JSON `{"display_name":"…","email":"…"}`예요. 손으로 쓴 키는 빠져나가는 구멍이에요. `body: { name: input.user.displayName }`은 `name`을 보내요. 부모 객체가 익명이라 alias가 적용되지 않아요.
 
-## 커스텀 `build`
+## 모양이 다를 때
 
-호출 형태와 와이어 형태가 다를 때 `build(request, input)`을 쓰세요. 제약된 투영이지, 인증 정책으로 분기하거나 부수 효과를 만들 자리는 아니에요.
+path placeholder, 리터럴, 분기는 `builder`를 쓰세요. 실제 값을 받으니 `if`, `??`, 템플릿, `switch`가 동작해요.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
 const search = defineRequest({
   method: 'GET',
-  path: '/search',
-  input: struct.object({ q: struct.string(), page: struct.number().optional() }),
-  build(request, input) {
-    request.setQueryParams({ q: input.q, page: input.page })
-  },
+  path: '/orgs/:org_id/users',
+  input: struct.object({
+    orgId: struct.number(),
+    query: struct.object({
+      keyword: struct.string(),
+      pageSize: struct.number().alias('page_size'),
+    }),
+  }),
+  builder: (input) => ({
+    path: { org_id: input.orgId },
+    query: input.query,
+    headers: { 'x-api-version': '2' },
+  }),
   output: struct.object({ items: struct.array(struct.string()) }),
 })
 void search
 ```
 
-## `output`과 `error`의 모양
+`query: input.query`는 `page_size`를 보내요. `headers: { 'x-api-version': '2' }`는 리터럴이에요. 인증과 트레이싱은 여전히 interceptor에 두세요. builder가 돈 뒤의 네이티브 요청을 봐요.
 
-`output`은 2xx body를 위한 하나의 Struct이고, `error`는 그 밖의 모든 것을 위한 하나의 Struct예요. `ok`가 유일한 분기점이고, 디코딩하는 쪽은 항상 한쪽뿐이에요. 한쪽을 빼면 그 body는 읽히지 않아요. fault가 status를 나르고, `data`는 `undefined`로 남아요.
+## output과 error의 모양
+
+`output`은 2xx body를 위한 Struct 하나이고, `error`는 그 밖 전부를 위한 Struct 하나예요. `ok`가 유일한 분기이고, 디코딩하는 쪽은 항상 한쪽뿐이에요. 한쪽을 빼면 그 body는 읽히지 않아요. fault는 status를 가지고 `data`는 `undefined`로 남아요.
 
 ## 관련 레시피
 

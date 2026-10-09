@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: Provider et `useClient()`.
+description: ClientProvider, useClient, et props du provider.
 ---
 
 # React {#page}
 
-Branche un client `@defjs/core` existant dans un arbre React. Le package ne crée **pas** de client, n’ajoute pas de cache et ne dispose pas les ressources de transport.
+Fournis un client `@defjs/core` existant à un arbre React. Ce paquet ne crée pas, ne met pas en cache et ne dispose pas le client.
 
-Voir le [guide React](../plugins/react.md).
+Voir le [guide React](/plugins/react).
 
 ## ClientProvider {#ClientProvider}
 

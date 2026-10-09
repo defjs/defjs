@@ -7,7 +7,7 @@ description: 装插件、injection key、injectClient。
 
 把已有的 `@defjs/core` Client 接到 Vue。这个包**不会**创建 Client、缓存结果，也不会在卸载时关传输。
 
-见 [Vue 指南](../plugins/vue.md)。
+见 [Vue 指南](/plugins/vue)。
 
 ## createClientPlugin() {#createClientPlugin}
 

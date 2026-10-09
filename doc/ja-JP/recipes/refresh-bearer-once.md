@@ -1,11 +1,81 @@
 ---
-title: Refresh a Bearer token once on 401
+title: 401 で Bearer トークンを一度だけ更新する
+description: Authorization の付与と 1 回の再生を 1 つのインターセプターに入れます。next() は内側へしか進みません。
 ---
 
-# Refresh a Bearer token once on 401
+# 401 で Bearer トークンを一度だけ更新する
 
-::: info
-このページはまだ翻訳されていないため、以下に英語の原文を表示します。
-:::
+`next()` は**この**オニオンの残りです — 外から `axios(config)` のように再ディスパッチするものではありません。付与と single-flight の更新と 1 回の再生を、**1 つ**の HTTP インターセプターに置いて、外側の層が二度走らないようにします。
 
-<!--@include: ../../recipes/refresh-bearer-once.md{9,}-->
+詳細は [Interceptors](../core/interceptors.md) を見てください。
+
+```ts twoslash refresh-bearer.ts
+import { createClient, createHttpInterceptor, defineRequest, struct, withEndpoint, withHTTPHandle, withInterceptors } from '@defjs/core'
+
+const getInvoice = defineRequest({
+  method: 'GET',
+  path: '/v1/invoice',
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal('expired_token') }),
+})
+
+type Credential = { accessToken: string }
+
+function refreshingBearer(read: () => Credential, refresh: (stale: Credential) => Promise<Credential>) {
+  let flight: Promise<Credential> | undefined
+
+  return createHttpInterceptor(async (request, next) => {
+    const authorize = (credential: Credential) => {
+      const headers = new Headers(request.headers)
+      headers.set('authorization', `Bearer ${credential.accessToken}`)
+      return { ...request, headers }
+    }
+
+    const used = read()
+    const response = await next(authorize(used))
+    const body = response.body
+    if (response.status !== 401 || typeof body !== 'object' || body === null || !('code' in body) || body.code !== 'expired_token') {
+      return response
+    }
+
+    const current = read()
+    if (current.accessToken !== used.accessToken) return next(authorize(current))
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined
+    })
+    const refreshed = await flight
+    return next(authorize(refreshed))
+  })
+}
+
+let credential: Credential = { accessToken: 'v1' }
+const handle: typeof fetch = async (input, init) => {
+  const auth = new Request(input, init).headers.get('authorization')
+  if (auth === 'Bearer v1') return Response.json({ code: 'expired_token' }, { status: 401 })
+  return Response.json({ total: 42 }, { status: 200 })
+}
+
+const client = createClient(
+  withEndpoint('https://billing.example.test'),
+  withHTTPHandle(handle),
+  withInterceptors(
+    refreshingBearer(
+      () => credential,
+      async () => {
+        credential = { accessToken: 'v2' }
+        return credential
+      },
+    ),
+  ),
+)
+
+const [error, invoice] = await client.execute(getInvoice())
+console.log(error, invoice?.total)
+```
+
+```txt
+null 42
+```
+
+`next` を再び呼んでも、再入するのはこの層の**内側**のインターセプター（と Fetch ハンドラ）だけです。外側の計時や認証のラッパーは再実行されません — だから 401 の組み立ては、2 回目の `execute` ではなく 1 つのインターセプターに置きます。

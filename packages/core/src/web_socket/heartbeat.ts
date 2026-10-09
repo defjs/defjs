@@ -1,6 +1,7 @@
 import type { WebSocketHandle } from '../client/config'
+import type { AnyStruct } from '../struct'
 import { serializeOutgoingWebSocketMessage } from './codec'
-import type { SocketStructs, WebSocketHeartbeatConfig, WebSocketOutgoingData, WebSocketOutgoingNormalizer } from './web_socket'
+import type { WebSocketHeartbeatConfig, WebSocketOutgoingData } from './web_socket'
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 
@@ -15,14 +16,13 @@ export type HeartbeatSession<TIncoming> = {
   heartbeat: HeartbeatRuntime<TIncoming> | undefined
 }
 
-export function startHeartbeat<TIncoming, TOutgoing extends SocketStructs | undefined>(
+export function startHeartbeat<TIncoming, TOutgoing extends AnyStruct | undefined>(
   socket: WebSocketHandle,
   sessionController: HeartbeatSession<TIncoming>,
   config: WebSocketHeartbeatConfig<TIncoming, WebSocketOutgoingData<TOutgoing>> | undefined,
-  outgoing: TOutgoing,
+  outgoing: TOutgoing | undefined,
   onFatal: (error: unknown) => void,
   openState: number,
-  normalizeOutgoing?: WebSocketOutgoingNormalizer,
 ): void {
   stopHeartbeat(sessionController)
   validateHeartbeatConfig(config)
@@ -62,7 +62,7 @@ export function startHeartbeat<TIncoming, TOutgoing extends SocketStructs | unde
       if (!isActive() || typeof nextMessage === 'undefined') {
         return
       }
-      const serialized = serializeOutgoingWebSocketMessage(outgoing, nextMessage as WebSocketOutgoingData<TOutgoing>, normalizeOutgoing)
+      const serialized = serializeOutgoingWebSocketMessage(outgoing, nextMessage as WebSocketOutgoingData<TOutgoing>)
       if (!isActive()) {
         return
       }

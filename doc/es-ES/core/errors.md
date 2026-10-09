@@ -1,9 +1,9 @@
 ---
-title: Errors
+title: Errores
 description: Ramifica sobre un conjunto cerrado de códigos de fault para 404, timeouts, cuerpos ilegibles y fallos de transporte.
 ---
 
-# Errors
+# Errores
 
 Maneja un 404, un timeout o un cuerpo ilegible leyendo la tupla error-first, no capturando throws. Un `Fault` es un `Error` nativo (`instanceof Error` es true) discriminado por un solo campo: `code`.
 
@@ -18,12 +18,13 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const [err, user, response] = await client.execute(getUser({ path: { id: 7 } }))
+const [err, user, response] = await client.execute(getUser({ id: 7 }))
 if (err?.code === 'HTTP_STATUS' && err.status === 404) {
   console.log(err.data.message)
 } else if (err?.code === 'NET_TIMEOUT') {

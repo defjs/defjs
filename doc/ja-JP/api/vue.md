@@ -1,13 +1,13 @@
 ---
 title: '@defjs/vue'
-description: プラグイン、injection key、injectClient です。
+description: Vue プラグイン、injection key、injectClient です。
 ---
 
 # Vue {#page}
 
-既存の `@defjs/core` クライアントを Vue に繋ぎます。このパッケージはクライアントを**作らず**、結果をキャッシュせず、unmount でトランスポートも閉じません。
+既存の `@defjs/core` クライアントを Vue アプリに渡します。このパッケージはクライアントを作らず、キャッシュせず、破棄しません。
 
-[Vue ガイド](../plugins/vue.md) を見てください。
+[Vue ガイド](/plugins/vue) を見てください。
 
 ## createClientPlugin() {#createClientPlugin}
 

@@ -15,6 +15,8 @@ import { createClient, withEndpoint } from '@defjs/core'
 const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
+`createClient(...)` возвращает перегрузки под каждый вид команды.
+
 ## Собери опции
 
 Опции применяются слева направо. Setters заменяют; `withInterceptors(...items)` дописывает.
@@ -53,13 +55,14 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
@@ -69,18 +72,20 @@ if (!error) console.log(user.name)
 
 ## Справка
 
-| Helper                                                                                                        | Эффект                                               |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | Абсолютный base endpoint для всех транспортов        |
-| `withHTTPHandle(fetch)`                                                                                       | Заменить Fetch для HTTP                              |
-| `withSSEHandle(fetch)`                                                                                        | Заменить Fetch для SSE                               |
-| `withWebSocketHandle(WebSocket)`                                                                              | Заменить конструктор WebSocket                       |
-| `withInterceptors(...items)`                                                                                  | Дописать смешанные interceptors                      |
-| `withQueryParamsSerializer(fn)`                                                                               | Заменить сериализацию query                          |
-| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` для HTTP/SSE при true |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                            |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Крутилки SSE                                         |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Крутилки WebSocket                                   |
+| Helper                                                                                                        | Эффект                                                                |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Абсолютный base endpoint для всех транспортов                         |
+| `withHeaders(HeadersInit)`                                                                                    | Статические default headers для HTTP/SSE; headers команды перекрывают |
+| `withTimeout(ms)`                                                                                             | Только default timeout HTTP `execute` (SSE/WS его игнорируют)         |
+| `withHTTPHandle(fetch)`                                                                                       | Заменить Fetch для HTTP                                               |
+| `withSSEHandle(fetch)`                                                                                        | Заменить Fetch для SSE                                                |
+| `withWebSocketHandle(WebSocket)`                                                                              | Заменить конструктор WebSocket                                        |
+| `withInterceptors(...items)`                                                                                  | Дописать смешанные interceptors                                       |
+| `withQuerySerializer(fn)`                                                                                     | Закодировать уже алиаснутый query-объект в query-строку               |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` для HTTP/SSE при true                  |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                             |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Крутилки SSE                                                          |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Крутилки WebSocket                                                    |
 
 ## Связанные рецепты
 

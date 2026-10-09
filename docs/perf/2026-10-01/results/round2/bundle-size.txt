@@ -1,0 +1,7 @@
+## bun build --minify --target=browser; bytes
+orig	full	min=82570	gzip=25264	brotli=22606
+orig	http	min=80113	gzip=24614	brotli=21989
+orig	struct	min=17647	gzip=5508	brotli=5054
+final	full	min=84630	gzip=26349	brotli=23574
+final	http	min=50873	gzip=15809	brotli=14190
+final	struct	min=17794	gzip=5615	brotli=5142

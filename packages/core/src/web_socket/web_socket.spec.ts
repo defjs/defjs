@@ -1,25 +1,10 @@
-import { afterEach, beforeEach, describe, expect, inject, test } from 'vitest'
+import { beforeEach, describe, expect, inject, test, vi } from 'vitest'
 import { createClient, withEndpoint, withInterceptors, withWebSocketHandle, type Client } from '../client'
 import { ERR_ABORTED } from '../error'
 import { createWebSocketInterceptor, type WebSocketSessionLike } from '../interceptor'
-import { struct } from '../struct'
-import { isRecord } from './codec'
-import { defineWebSocket, type SocketAwaitResult, type WebSocketIncomingNormalizer, type WebSocketOutgoingNormalizer } from './index'
-
-const normalizeProviderFrame: WebSocketIncomingNormalizer = (decoded) => {
-  if (!isRecord(decoded)) return undefined
-  if (typeof decoded['method'] === 'string') return { data: decoded, type: `method.${decoded['method']}` }
-  if (decoded['channel'] === 'heartbeat') return { data: decoded, type: 'channel.heartbeat' }
-  if (typeof decoded['channel'] === 'string' && typeof decoded['type'] === 'string') {
-    return { data: decoded, type: `${decoded['channel']}.${decoded['type']}` }
-  }
-  return undefined
-}
-
-const normalizeProviderCommand: WebSocketOutgoingNormalizer = (_type, encodedPayload) => {
-  if (!isRecord(encodedPayload)) throw new TypeError('Expected encoded provider command object')
-  return encodedPayload
-}
+import { StructError, struct } from '../struct'
+import { createControllableSocketClass, openControllableSocket } from '../../test/regression/controllable_socket'
+import { defineWebSocket, type SocketAwaitResult } from './index'
 
 async function withDeadline<T>(label: string, promise: Promise<T>): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined
@@ -43,10 +28,6 @@ describe('web socket runtime', () => {
     client = createClient(withEndpoint(inject('testServerHost')))
   })
 
-  afterEach(() => {
-    // cleanup only
-  })
-
   async function run(command: unknown, options?: unknown): Promise<SocketAwaitResult<unknown, unknown>> {
     return client.execute(command as never, options as never) as Promise<SocketAwaitResult<unknown, unknown>>
   }
@@ -54,7 +35,7 @@ describe('web socket runtime', () => {
   test('should return transport error with invalid client', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/basic',
     })
 
@@ -81,7 +62,7 @@ describe('web socket runtime', () => {
     let beforeConnectCalls = 0
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/basic',
     })
 
@@ -107,7 +88,7 @@ describe('web socket runtime', () => {
     controller.abort(ERR_ABORTED)
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/basic',
     })
 
@@ -139,7 +120,7 @@ describe('web socket runtime', () => {
         } as unknown as typeof WebSocket,
       ),
     )
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: {}, path: '/ws/basic' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/basic' })
 
     const [error, socket, connection] = await isolated.execute(useSocket(), options as never)
 
@@ -153,31 +134,16 @@ describe('web socket runtime', () => {
   test('should resolve execute and receive typed messages', async () => {
     const useChatSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      build: (request, input) => {
-        request.setQueryParams({
-          roomId: input.query.roomId,
-        })
-      },
-      incoming: {
-        joined: struct.object({
-          roomId: struct.string(),
-          userId: struct.number(),
-        }),
-        message: struct.object({
-          text: struct.string(),
-          userId: struct.number(),
-        }),
-      },
-      input: struct.request({
+      incoming: struct.discriminatedUnion('type', [
+        struct.object({ type: struct.literal('joined'), roomId: struct.string(), userId: struct.number() }),
+        struct.object({ type: struct.literal('message'), text: struct.string(), userId: struct.number() }),
+      ]),
+      input: struct.object({
         query: struct.object({
           roomId: struct.string(),
         }),
       }),
-      outgoing: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/basic',
       protocols: ['json'],
     })
@@ -207,19 +173,11 @@ describe('web socket runtime', () => {
   test('should validate outgoing messages and echo typed responses', async () => {
     const useEchoSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-        ready: struct.object({
-          ok: struct.boolean(),
-        }),
-      },
-      outgoing: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      incoming: struct.discriminatedUnion('type', [
+        struct.object({ type: struct.literal('message'), text: struct.string() }),
+        struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
+      ]),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/echo',
       protocols: ['json'],
     })
@@ -256,11 +214,11 @@ describe('web socket runtime', () => {
   test('should use await using for a real local websocket handshake, message, and close', async () => {
     const useEchoSocket = defineWebSocket({
       maxIncomingQueueSize: 2,
-      incoming: {
-        message: struct.object({ text: struct.string() }),
-        ready: struct.object({ ok: struct.boolean() }),
-      },
-      outgoing: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.discriminatedUnion('type', [
+        struct.object({ type: struct.literal('message'), text: struct.string() }),
+        struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
+      ]),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/echo',
       protocols: ['json'],
     })
@@ -284,92 +242,105 @@ describe('web socket runtime', () => {
   })
 
   test('should support heartbeat with timeout', async () => {
-    const useHeartbeatSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
-      incoming: {
-        pong: struct.object({
-          ok: struct.boolean(),
+    vi.useFakeTimers()
+    const { Socket, latest } = createControllableSocketClass()
+    try {
+      const useHeartbeatSocket = defineWebSocket({
+        maxIncomingQueueSize: 16,
+        incoming: struct.object({ type: struct.literal('pong'), ok: struct.boolean() }),
+        outgoing: struct.object({ type: struct.literal('ping') }),
+        path: '/ws/heartbeat-silent',
+      })
+      const handled = createClient(withEndpoint('https://example.test'), withWebSocketHandle(Socket as unknown as typeof WebSocket))
+      const [error, socket] = await openControllableSocket(
+        handled.execute(useHeartbeatSocket(), {
+          heartbeat: {
+            intervalMs: 10,
+            message: () => ({ type: 'ping' as const }),
+            timeoutMs: 5,
+          },
         }),
-      },
-      outgoing: {
-        ping: struct.object({}),
-      },
-      path: '/ws/heartbeat-silent',
-    })
+        latest,
+      )
 
-    const command = useHeartbeatSocket()
-    const [error, socket] = await run(command, {
-      heartbeat: {
-        intervalMs: 10,
-        message: () => ({ type: 'ping' }),
-        timeoutMs: 5,
-      },
-    })
+      expect(error).toBeNull()
+      if (!socket) {
+        throw new Error('Expected socket')
+      }
 
-    expect(error).toBeNull()
-    if (!socket) {
-      throw new Error('Expected socket')
+      let runtimeError: unknown
+      socket.onRuntimeError((err: unknown) => {
+        runtimeError = err
+      })
+
+      // The ack deadline is armed only after the first ping. Advancing both timers explicitly keeps a
+      // stalled event loop from observing the deadline before this assertion.
+      await vi.advanceTimersByTimeAsync(15)
+      await expect(socket.closed).resolves.toMatchObject({
+        cause: expect.objectContaining({ message: 'WebSocket heartbeat timeout' }),
+        kind: 'error',
+      })
+      expect(runtimeError).toEqual(expect.objectContaining({ message: 'WebSocket heartbeat timeout' }))
+    } finally {
+      vi.useRealTimers()
     }
-
-    let runtimeError: unknown
-    socket.onRuntimeError((err: unknown) => {
-      runtimeError = err
-    })
-
-    await new Promise((resolve) => setTimeout(resolve, 50))
-
-    expect(runtimeError).toBeDefined()
-    await expect(socket.closed).resolves.toBeDefined()
   })
 
   test('should mark heartbeat ack when server responds with pong', async () => {
-    const useHeartbeatSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
-      incoming: {
-        pong: struct.object({
-          ok: struct.boolean(),
+    vi.useFakeTimers()
+    const { Socket, latest } = createControllableSocketClass()
+    try {
+      const useHeartbeatSocket = defineWebSocket({
+        maxIncomingQueueSize: 16,
+        incoming: struct.object({ type: struct.literal('pong'), ok: struct.boolean() }),
+        outgoing: struct.object({ type: struct.literal('ping') }),
+        path: '/ws/heartbeat',
+      })
+      const handled = createClient(withEndpoint('https://example.test'), withWebSocketHandle(Socket as unknown as typeof WebSocket))
+      const [error, socket] = await openControllableSocket(
+        handled.execute(useHeartbeatSocket(), {
+          heartbeat: {
+            intervalMs: 10,
+            isAck: (message: { type: string }) => message.type === 'pong',
+            message: () => ({ type: 'ping' as const }),
+            timeoutMs: 1_000,
+          },
         }),
-      },
-      outgoing: {
-        ping: struct.object({}),
-      },
-      path: '/ws/heartbeat',
-    })
+        latest,
+      )
+      const native = latest()
 
-    const command = useHeartbeatSocket()
-    const [error, socket] = await run(command, {
-      heartbeat: {
-        intervalMs: 10,
-        isAck: (message: { type: string }) => message.type === 'pong',
-        message: () => ({ type: 'ping' }),
-        timeoutMs: 1_000,
-      },
-    })
+      expect(error).toBeNull()
+      if (!socket || !native) {
+        throw new Error('Expected socket')
+      }
 
-    expect(error).toBeNull()
-    if (!socket) {
-      throw new Error('Expected socket')
+      let runtimeError: unknown
+      socket.onRuntimeError((err: unknown) => {
+        runtimeError = err
+      })
+      await vi.advanceTimersByTimeAsync(10)
+      expect(JSON.parse(native.sent[0] ?? '')).toEqual({ type: 'ping' })
+      native.triggerMessage('{"ok":true,"type":"pong"}')
+      await vi.advanceTimersByTimeAsync(0)
+      await vi.advanceTimersByTimeAsync(1_000)
+
+      expect(runtimeError).toBeUndefined()
+      expect(socket.state).toBe('open')
+      const iterator = socket.receive[Symbol.asyncIterator]()
+      socket.close(1000, 'heartbeat-ok')
+      native.triggerClose({ code: 1000, reason: 'heartbeat-ok', wasClean: true })
+      await expect(socket.closed).resolves.toMatchObject({ code: 1000, reason: 'heartbeat-ok' })
+      await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
+    } finally {
+      vi.useRealTimers()
     }
-
-    let runtimeError: unknown
-    socket.onRuntimeError((err: unknown) => {
-      runtimeError = err
-    })
-
-    const iterator = socket.receive[Symbol.asyncIterator]()
-    await expect(socket.closed).resolves.toMatchObject({ code: 1000, reason: 'heartbeat-ok' })
-    await expect(iterator.next()).resolves.toEqual({ done: true, value: undefined })
-    expect(runtimeError).toBeUndefined()
   })
 
   test('should report malformed JSON, drop the frame, and keep the session alive', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/invalid',
     })
 
@@ -397,11 +368,7 @@ describe('web socket runtime', () => {
   test('should emit runtime error when incoming message struct validation fails', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/error-before-close',
     })
 
@@ -424,11 +391,7 @@ describe('web socket runtime', () => {
   test('should skip undeclared incoming message types', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/unknown-message',
     })
 
@@ -451,11 +414,7 @@ describe('web socket runtime', () => {
   test('should expose session state transitions and allow unsubscribing listeners', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        ready: struct.object({
-          ok: struct.boolean(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
       path: '/ws/echo',
     })
 
@@ -490,11 +449,7 @@ describe('web socket runtime', () => {
   test('should support abort after startup and ignore socket.close after cleanup', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        ready: struct.object({
-          ok: struct.boolean(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
       path: '/ws/echo',
     })
 
@@ -516,7 +471,7 @@ describe('web socket runtime', () => {
   test('should abort before startup and surface aborted transport error', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/basic',
     })
 
@@ -535,7 +490,8 @@ describe('web socket runtime', () => {
   test('should return definition error when input validation fails', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
+      builder: () => ({}),
       input: struct.object({
         id: struct.number(),
       }),
@@ -553,10 +509,10 @@ describe('web socket runtime', () => {
   test('should return definition error when build throws', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      build: () => {
+      builder: () => {
         throw new Error('build failed')
       },
-      incoming: {},
+      incoming: struct.unknown(),
       input: struct.object({}),
       path: '/ws/basic',
     })
@@ -572,7 +528,7 @@ describe('web socket runtime', () => {
   test('should return definition error when websocket url creation fails', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/basic',
     })
 
@@ -588,7 +544,7 @@ describe('web socket runtime', () => {
   test('should report a throwing beforeConnect as an extension hook fault', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/basic',
     })
 
@@ -608,23 +564,12 @@ describe('web socket runtime', () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
       maxOutgoingQueueSize: 1,
-      build(request, input) {
-        request.setQueryParams({ key: input.query.key })
-      },
-      input: struct.request({ query: struct.object({ key: struct.string() }) }),
-      incoming: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-        reconnected: struct.object({
-          attempt: struct.number(),
-        }),
-      },
-      outgoing: {
-        message: struct.object({
-          text: struct.string(),
-        }),
-      },
+      input: struct.object({ query: struct.object({ key: struct.string() }) }),
+      incoming: struct.discriminatedUnion('type', [
+        struct.object({ type: struct.literal('message'), text: struct.string() }),
+        struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
+      ]),
+      outgoing: struct.object({ type: struct.literal('message'), text: struct.string() }),
       path: '/ws/reconnect',
     })
 
@@ -673,15 +618,8 @@ describe('web socket runtime', () => {
   test('should abort during reconnect delay with aborted state', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      build(request, input) {
-        request.setQueryParams({ key: input.query.key })
-      },
-      input: struct.request({ query: struct.object({ key: struct.string() }) }),
-      incoming: {
-        reconnected: struct.object({
-          attempt: struct.number(),
-        }),
-      },
+      input: struct.object({ query: struct.object({ key: struct.string() }) }),
+      incoming: struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
       path: '/ws/reconnect',
     })
 
@@ -689,7 +627,9 @@ describe('web socket runtime', () => {
     const command = useSocket({ query: { key: 'abort-during-delay' } })
     const [error, socket] = await run(command, {
       abort: controller.signal,
-      reconnect: { attempts: 2, delayMs: 100 },
+      // The delay is the clock under test: abort is joined to the reconnecting signal, so the
+      // delay only has to outlive that observation instead of a fixed sleep.
+      reconnect: { attempts: 2, delayMs: 60_000 },
     })
 
     expect(error).toBeNull()
@@ -697,7 +637,18 @@ describe('web socket runtime', () => {
       throw new Error('Expected socket')
     }
 
-    await new Promise((resolve) => setTimeout(resolve, 60))
+    await new Promise<void>((resolve) => {
+      if (socket.state === 'reconnecting') {
+        resolve()
+        return
+      }
+      const unsubscribe = socket.onStateChange((state) => {
+        if (state === 'reconnecting') {
+          unsubscribe()
+          resolve()
+        }
+      })
+    })
     controller.abort(ERR_ABORTED)
 
     await expect(socket.closed).resolves.toBeDefined()
@@ -707,15 +658,8 @@ describe('web socket runtime', () => {
   test('should reconnect immediately when delay is zero', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      build(request, input) {
-        request.setQueryParams({ key: input.query.key })
-      },
-      input: struct.request({ query: struct.object({ key: struct.string() }) }),
-      incoming: {
-        reconnected: struct.object({
-          attempt: struct.number(),
-        }),
-      },
+      input: struct.object({ query: struct.object({ key: struct.string() }) }),
+      incoming: struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
       path: '/ws/reconnect',
     })
 
@@ -742,7 +686,7 @@ describe('web socket runtime', () => {
   test('should allow websocket interceptors to short-circuit startup', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {},
+      incoming: struct.unknown(),
       path: '/ws/basic',
     })
 
@@ -763,7 +707,7 @@ describe('web socket runtime', () => {
   })
 
   test('should settle every session created before an interceptor chain fails', async () => {
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: {}, path: '/ws/echo' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: struct.unknown(), path: '/ws/echo' })
     const interceptorFailure = new Error('outer interceptor failed')
     const createdSessions: WebSocketSessionLike[] = []
     const clientWithInterceptor = createClient(
@@ -791,7 +735,7 @@ describe('web socket runtime', () => {
   })
 
   test('should reject a second websocket interceptor next call and settle the first session', async () => {
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: {}, path: '/ws/echo' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: struct.unknown(), path: '/ws/echo' })
     let firstSession: WebSocketSessionLike | undefined
     const clientWithInterceptor = createClient(
       withEndpoint(inject('testServerHost')),
@@ -818,7 +762,7 @@ describe('web socket runtime', () => {
   })
 
   test('should close a created session discarded by a successful interceptor', async () => {
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: {}, path: '/ws/echo' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: struct.unknown(), path: '/ws/echo' })
     let discardedSession: WebSocketSessionLike | undefined
     const shortCircuitSession: WebSocketSessionLike = {
       bufferedAmount: 0,
@@ -857,7 +801,7 @@ describe('web socket runtime', () => {
   })
 
   test('should preserve a wrapper that delegates the created session closed promise', async () => {
-    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: {}, path: '/ws/echo' })
+    const useSocket = defineWebSocket({ maxIncomingQueueSize: 16, incoming: struct.unknown(), path: '/ws/echo' })
     let createdSession: WebSocketSessionLike | undefined
     const clientWithInterceptor = createClient(
       withEndpoint(inject('testServerHost')),
@@ -882,12 +826,7 @@ describe('web socket runtime', () => {
   test('should connect with request changes made by websocket interceptors', async () => {
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        joined: struct.object({
-          roomId: struct.string(),
-          userId: struct.number(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('joined'), roomId: struct.string(), userId: struct.number() }),
       path: '/ws/basic',
     })
 
@@ -921,19 +860,21 @@ describe('web socket runtime', () => {
     await expect(socket.closed).resolves.toMatchObject({ code: 1000 })
   })
 
-  test('normalizes provider envelopes for direct and queued sends', async () => {
+  test('encodes provider commands with aliases and decodes wire frames', async () => {
     const useProviderSocket = defineWebSocket({
-      build(request, input) {
-        request.setQueryParams(input.query)
-      },
-      incoming: {
-        'channel.heartbeat': struct.object({ channel: struct.literal('heartbeat') }),
-        'method.subscribe': struct.object({
+      incoming: struct.or(
+        struct.object({
           method: struct.literal('subscribe'),
           result: struct.object({ channel: struct.string() }),
           success: struct.boolean(),
         }),
-        'method.wire': struct.object({
+        struct.object({ channel: struct.literal('heartbeat') }),
+        struct.object({
+          channel: struct.literal('ticker'),
+          data: struct.array(struct.object({ last: struct.number(), symbol: struct.string() })),
+          type: struct.literal('update'),
+        }),
+        struct.object({
           method: struct.literal('wire'),
           result: struct.object({
             attempt: struct.number(),
@@ -944,24 +885,15 @@ describe('web socket runtime', () => {
           }),
           success: struct.boolean(),
         }),
-        'ticker.update': struct.object({
-          channel: struct.literal('ticker'),
-          data: struct.array(struct.object({ last: struct.number(), symbol: struct.string() })),
-          providerType: struct.literal('update').alias('type'),
-        }),
-      },
-      input: struct.request({ query: struct.object({ key: struct.string(), mode: struct.literal('queue') }) }),
+      ),
+      input: struct.object({ query: struct.object({ key: struct.string(), mode: struct.literal('queue') }) }),
       maxIncomingQueueSize: 3,
       maxOutgoingQueueSize: 1,
-      normalizeIncoming: normalizeProviderFrame,
-      normalizeOutgoing: normalizeProviderCommand,
-      outgoing: {
-        subscribe: struct.object({
-          method: struct.literal('subscribe'),
-          params: struct.object({ channel: struct.string() }),
-          reqId: struct.number().alias('req_id'),
-        }),
-      },
+      outgoing: struct.object({
+        method: struct.literal('subscribe'),
+        params: struct.object({ channel: struct.string() }),
+        reqId: struct.number().alias('req_id'),
+      }),
       path: '/ws/provider-envelopes',
     })
     const key = `provider-queue-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -986,10 +918,7 @@ describe('web socket runtime', () => {
       }
       queuedOnce = true
       try {
-        socket.send({
-          data: { method: 'subscribe', params: { channel: 'book' }, reqId: 2 },
-          type: 'subscribe',
-        })
+        socket.send({ method: 'subscribe', params: { channel: 'book' }, reqId: 2 })
         queued.resolve()
       } catch (cause) {
         queued.reject(cause)
@@ -999,26 +928,22 @@ describe('web socket runtime', () => {
     try {
       await expect(withDeadline('provider subscribe frame', iterator.next())).resolves.toEqual({
         done: false,
-        value: { method: 'subscribe', result: { channel: 'ticker' }, success: true, type: 'method.subscribe' },
+        value: { method: 'subscribe', result: { channel: 'ticker' }, success: true },
       })
       await expect(withDeadline('provider heartbeat frame', iterator.next())).resolves.toEqual({
         done: false,
-        value: { channel: 'heartbeat', type: 'channel.heartbeat' },
+        value: { channel: 'heartbeat' },
       })
       await expect(withDeadline('provider ticker frame', iterator.next())).resolves.toEqual({
         done: false,
         value: {
           channel: 'ticker',
           data: [{ last: 1, symbol: 'BTC/USD' }],
-          providerType: 'update',
-          type: 'ticker.update',
+          type: 'update',
         },
       })
 
-      socket.send({
-        data: { method: 'subscribe', params: { channel: 'ticker' }, reqId: 1 },
-        type: 'subscribe',
-      })
+      socket.send({ method: 'subscribe', params: { channel: 'ticker' }, reqId: 1 })
       await expect(withDeadline('direct provider wire reply', iterator.next())).resolves.toEqual({
         done: false,
         value: {
@@ -1031,13 +956,12 @@ describe('web socket runtime', () => {
             reqId: 1,
           },
           success: true,
-          type: 'method.wire',
         },
       })
       await withDeadline('queued provider send', queued.promise)
       await expect(withDeadline('reconnect provider heartbeat', iterator.next())).resolves.toEqual({
         done: false,
-        value: { channel: 'heartbeat', type: 'channel.heartbeat' },
+        value: { channel: 'heartbeat' },
       })
       await expect(withDeadline('queued provider wire reply', iterator.next())).resolves.toEqual({
         done: false,
@@ -1051,7 +975,6 @@ describe('web socket runtime', () => {
             reqId: 2,
           },
           success: true,
-          type: 'method.wire',
         },
       })
     } finally {
@@ -1061,19 +984,12 @@ describe('web socket runtime', () => {
     }
   })
 
-  test('throws outgoing adapter errors synchronously', async () => {
-    const sentinel = new Error('provider outgoing adapter failed')
+  test('throws outgoing struct failures synchronously', async () => {
     const useProviderSocket = defineWebSocket({
-      build(request, input) {
-        request.setQueryParams(input.query)
-      },
-      incoming: {},
-      input: struct.request({ query: struct.object({ key: struct.string(), mode: struct.literal('throw') }) }),
+      incoming: struct.unknown(),
+      input: struct.object({ query: struct.object({ key: struct.string(), mode: struct.literal('throw') }) }),
       maxIncomingQueueSize: 1,
-      normalizeOutgoing() {
-        throw sentinel
-      },
-      outgoing: { command: struct.object({ method: struct.literal('command') }) },
+      outgoing: struct.object({ method: struct.literal('command') }),
       path: '/ws/provider-envelopes',
     })
     const key = `provider-throw-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -1090,114 +1006,139 @@ describe('web socket runtime', () => {
     try {
       let thrown: unknown
       try {
-        socket.send({ data: { method: 'command' }, type: 'command' })
+        // @ts-expect-error method is not a declared outgoing literal
+        socket.send({ method: 'nope' })
       } catch (cause) {
         thrown = cause
       }
-      expect(thrown).toBe(sentinel)
+      expect(thrown).toBeInstanceOf(StructError)
     } finally {
       socket.close(1000, 'done')
       await withDeadline('provider throw close', socket.closed)
     }
   })
 
-  test('normalizes heartbeat wire and consumes pong as ack', async () => {
-    const useProviderSocket = defineWebSocket({
-      build(request, input) {
-        request.setQueryParams(input.query)
-      },
-      incoming: {
-        'method.pong': struct.object({ method: struct.literal('pong'), reqId: struct.number().alias('req_id') }),
-        'method.wire': struct.object({
-          method: struct.literal('wire'),
-          result: struct.object({
-            attempt: struct.number(),
-            hasType: struct.boolean(),
-            keys: struct.array(struct.string()),
-            method: struct.string(),
-            reqId: struct.number().alias('req_id'),
-          }),
-          success: struct.boolean(),
-        }),
-      },
-      input: struct.request({ query: struct.object({ key: struct.string(), mode: struct.literal('heartbeat') }) }),
-      maxIncomingQueueSize: 64,
-      normalizeIncoming(decoded) {
-        if (!isRecord(decoded) || typeof decoded['method'] !== 'string') return undefined
-        return { data: decoded, type: `method.${decoded['method']}` }
-      },
-      normalizeOutgoing: normalizeProviderCommand,
-      outgoing: { ping: struct.object({ method: struct.literal('ping'), reqId: struct.number().alias('req_id') }) },
-      path: '/ws/provider-envelopes',
-    })
-    const key = `provider-heartbeat-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    let ackChecks = 0
-    const timeoutMs = 200
-    const [error, socket] = await withDeadline(
-      'provider heartbeat execute',
-      client.execute(useProviderSocket({ query: { key, mode: 'heartbeat' } }), {
-        heartbeat: {
-          intervalMs: 20,
-          isAck(message) {
-            ackChecks += 1
-            return message.type === 'method.pong'
-          },
-          message: () => ({ data: { method: 'ping', reqId: 7 }, type: 'ping' }),
-          timeoutMs,
-        },
-      }),
-    )
-
-    expect(error).toBeNull()
-    if (!socket) {
-      throw new Error('Expected provider socket')
-    }
-
-    const runtimeErrors: unknown[] = []
-    const unsubscribe = socket.onRuntimeError((runtimeError) => {
-      runtimeErrors.push(runtimeError)
-    })
-    const iterator = socket.receive[Symbol.asyncIterator]()
-
+  test('encodes heartbeat commands with aliases and consumes the decoded pong as ack', async () => {
+    vi.useFakeTimers()
+    const { Socket, latest } = createControllableSocketClass()
     try {
-      await expect(withDeadline('provider heartbeat wire reply', iterator.next())).resolves.toEqual({
-        done: false,
-        value: {
-          method: 'wire',
-          result: {
-            attempt: 1,
-            hasType: false,
-            keys: ['method', 'req_id'],
-            method: 'ping',
-            reqId: 7,
-          },
-          success: true,
-          type: 'method.wire',
-        },
+      const useProviderSocket = defineWebSocket({
+        incoming: struct.or(
+          struct.object({ channel: struct.literal('heartbeat') }),
+          struct.object({ method: struct.literal('pong'), reqId: struct.number().alias('req_id') }),
+          struct.object({
+            method: struct.literal('wire'),
+            result: struct.object({
+              attempt: struct.number(),
+              hasType: struct.boolean(),
+              keys: struct.array(struct.string()),
+              method: struct.string(),
+              reqId: struct.number().alias('req_id'),
+            }),
+            success: struct.boolean(),
+          }),
+        ),
+        input: struct.object({ query: struct.object({ key: struct.string(), mode: struct.literal('heartbeat') }) }),
+        maxIncomingQueueSize: 64,
+        outgoing: struct.object({ method: struct.literal('ping'), reqId: struct.number().alias('req_id') }),
+        path: '/ws/provider-envelopes',
       })
-      await expect(withDeadline('next provider heartbeat wire reply', iterator.next())).resolves.toEqual({
-        done: false,
-        value: {
-          method: 'wire',
-          result: {
-            attempt: 1,
-            hasType: false,
-            keys: ['method', 'req_id'],
-            method: 'ping',
-            reqId: 7,
+      const acks: Array<{ method: 'pong'; reqId: number }> = []
+      const handled = createClient(withEndpoint('https://example.test'), withWebSocketHandle(Socket as unknown as typeof WebSocket))
+      const [error, socket] = await openControllableSocket(
+        handled.execute(useProviderSocket({ query: { key: 'provider-heartbeat', mode: 'heartbeat' } }), {
+          heartbeat: {
+            intervalMs: 20,
+            isAck(message) {
+              if ('method' in message && message.method === 'pong') {
+                acks.push({ method: 'pong', reqId: message.reqId })
+              }
+              return 'method' in message && message.method === 'pong'
+            },
+            message: () => ({ method: 'ping' as const, reqId: 7 }),
+            timeoutMs: 200,
           },
-          success: true,
-          type: 'method.wire',
-        },
+        }),
+        latest,
+      )
+      const native = latest()
+
+      expect(error).toBeNull()
+      if (!socket || !native) {
+        throw new Error('Expected provider socket')
+      }
+
+      const runtimeErrors: unknown[] = []
+      const unsubscribe = socket.onRuntimeError((runtimeError) => {
+        runtimeErrors.push(runtimeError)
       })
-      await new Promise((resolve) => setTimeout(resolve, timeoutMs + 100))
-      expect(ackChecks).toBeGreaterThan(0)
-      expect(socket.state).toBe('open')
-      expect(runtimeErrors).toEqual([])
+      const iterator = socket.receive[Symbol.asyncIterator]()
+      const wireReply = {
+        method: 'wire' as const,
+        result: {
+          attempt: 1,
+          hasType: false,
+          keys: ['method', 'req_id'],
+          method: 'ping',
+          reqId: 7,
+        },
+        success: true,
+      }
+
+      try {
+        native.triggerMessage(JSON.stringify({ channel: 'heartbeat' }))
+        await expect(iterator.next()).resolves.toEqual({
+          done: false,
+          value: { channel: 'heartbeat' },
+        })
+
+        await vi.advanceTimersByTimeAsync(20)
+        expect(native.sent).toHaveLength(1)
+        echoProviderPing(native, native.sent[0] ?? '')
+        await vi.advanceTimersByTimeAsync(0)
+        expect(acks).toEqual([{ method: 'pong', reqId: 7 }])
+        await expect(iterator.next()).resolves.toEqual({ done: false, value: wireReply })
+
+        // The second ping re-arms the ack deadline. Acknowledge it before advancing past timeoutMs.
+        await vi.advanceTimersByTimeAsync(20)
+        expect(native.sent).toHaveLength(2)
+        echoProviderPing(native, native.sent[1] ?? '')
+        await vi.advanceTimersByTimeAsync(0)
+        expect(acks).toEqual([
+          { method: 'pong', reqId: 7 },
+          { method: 'pong', reqId: 7 },
+        ])
+        await expect(iterator.next()).resolves.toEqual({ done: false, value: wireReply })
+        await vi.advanceTimersByTimeAsync(200)
+
+        expect(socket.state).toBe('open')
+        expect(runtimeErrors).toEqual([])
+      } finally {
+        unsubscribe()
+        socket.close(1000, 'done')
+        native.triggerClose({ code: 1000, reason: 'done', wasClean: true })
+        await socket.closed
+      }
     } finally {
-      unsubscribe()
-      socket.close(1000, 'done')
-      await withDeadline('provider heartbeat close', socket.closed)
+      vi.useRealTimers()
     }
   })
 })
+
+function echoProviderPing(socket: { triggerMessage(data: unknown): void }, payload: string): void {
+  const decoded = JSON.parse(payload) as Record<string, unknown>
+  socket.triggerMessage(
+    JSON.stringify({
+      method: 'wire',
+      result: {
+        attempt: 1,
+        hasType: Object.hasOwn(decoded, 'type'),
+        keys: Object.keys(decoded).sort(),
+        method: decoded['method'],
+        req_id: decoded['req_id'],
+      },
+      success: true,
+    }),
+  )
+  socket.triggerMessage(JSON.stringify({ method: 'pong', req_id: decoded['req_id'] }))
+}

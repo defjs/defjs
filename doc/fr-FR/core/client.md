@@ -15,6 +15,8 @@ import { createClient, withEndpoint } from '@defjs/core'
 const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
+`createClient(...)` renvoie des overloads pour chaque kind de commande.
+
 ## Composer les options
 
 Les options s’appliquent de gauche à droite. Les setters remplacent ; `withInterceptors(...items)` append.
@@ -53,13 +55,14 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
@@ -69,18 +72,20 @@ Sur un serveur, crée le client dans la frontière de la requête quand les opti
 
 ## Référence
 
-| Helper                                                                                                        | Effet                                                   |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | Endpoint de base absolu pour tous les transports        |
-| `withHTTPHandle(fetch)`                                                                                       | Remplace Fetch pour HTTP                                |
-| `withSSEHandle(fetch)`                                                                                        | Remplace Fetch pour SSE                                 |
-| `withWebSocketHandle(WebSocket)`                                                                              | Remplace le constructeur WebSocket                      |
-| `withInterceptors(...items)`                                                                                  | Append des intercepteurs mixtes                         |
-| `withQueryParamsSerializer(fn)`                                                                               | Remplace la sérialisation de query                      |
-| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` pour HTTP/SSE quand true |
-| `withXSRF(options?)`                                                                                          | Cookie XSRF HTTP → en-tête                              |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Réglages SSE                                            |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Réglages WebSocket                                      |
+| Helper                                                                                                        | Effet                                                                             |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Endpoint de base absolu pour tous les transports                                  |
+| `withHeaders(HeadersInit)`                                                                                    | En-têtes par défaut statiques pour HTTP/SSE ; les en-têtes de commande overrident |
+| `withTimeout(ms)`                                                                                             | Timeout `execute` HTTP par défaut seulement (SSE/WS l’ignorent)                   |
+| `withHTTPHandle(fetch)`                                                                                       | Remplace Fetch pour HTTP                                                          |
+| `withSSEHandle(fetch)`                                                                                        | Remplace Fetch pour SSE                                                           |
+| `withWebSocketHandle(WebSocket)`                                                                              | Remplace le constructeur WebSocket                                                |
+| `withInterceptors(...items)`                                                                                  | Append des intercepteurs mixtes                                                   |
+| `withQuerySerializer(fn)`                                                                                     | Encode un objet de query déjà aliasé en query string                              |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` pour HTTP/SSE quand true                           |
+| `withXSRF(options?)`                                                                                          | Cookie XSRF HTTP → en-tête                                                        |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Réglages SSE                                                                      |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Réglages WebSocket                                                                |
 
 ## Recettes liées
 

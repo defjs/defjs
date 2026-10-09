@@ -7,7 +7,7 @@ description: Pourquoi Defjs garde explicites les contrats, commandes, résultats
 
 Defjs fait quelques compromis volontaires. Les API de confort masquent souvent qui possède une requête, un flux ou une session. Defjs garde cette frontière visible pour que tu réutilises le même contrat d’endpoint sans ramasser en silence un cache, un planificateur de retry ou un gestionnaire de ressources.
 
-## Déclarer, c’est affirmer
+## Déclarer, c’est affirmer {#declaration-is-an-assertion}
 
 Ces six règles tranchent toute question sur la façon dont une réponse est lue. Elles sont numérotées pour qu’une discussion ultérieure puisse en citer une au lieu de la redériver.
 
@@ -47,9 +47,9 @@ Le coût : pas de défaut process-wide. Ce coût aide sur un serveur — crée l
 
 Un client dispatche des commandes. Il ne possède pas le travail actif. Qui démarre une requête HTTP, un flux SSE ou une session WebSocket doit l’annuler ou la fermer et attendre la promesse terminale.
 
-## Définitions, builders et commandes
+## Définitions, endpoints et commandes
 
-La définition est le contrat stable : méthode, chemin, Struct d’entrée, mapping de sortie, limites de transport. Le builder est la vue appelable. L’appeler crée une commande opaque pour une seule exécution.
+La définition est le contrat stable : méthode, chemin, struct d’entrée, les structs qui décodent chaque côté de `ok`, limites de transport. `defineRequest` renvoie un endpoint. L’appeler crée une commande opaque pour une seule exécution.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -57,14 +57,13 @@ import { defineRequest, struct } from '@defjs/core'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 ```
 
 Un job d’arrière-plan et un propriétaire UI peuvent exécuter la même forme `getUser` avec des politiques d’annulation/retry différentes. Garder la commande opaque empêche le code app de dépendre des tags ou symboles de transport internes.
@@ -73,15 +72,22 @@ Un job d’arrière-plan et un propriétaire UI peuvent exécuter la même forme
 
 Les trois transports utilisent un tuple erreur en premier. Une seule « response » générique effacerait les faits de cycle de vie.
 
-- HTTP → `[error, data, response]` — sortie décodée + `HttpResponse`
-- SSE → `[error, stream, open]` — un flux logique + instantané de réponse au démarrage
-- WebSocket → `[error, session, connection]` — session logique + instantané de connexion au démarrage
+- HTTP → `[err, data, response]` — sortie décodée + la réponse qui l’a produite
+- SSE → `[err, stream, open]` — un flux logique + instantané de réponse au démarrage
+- WebSocket → `[err, session, connection]` — session logique + instantané de connexion au démarrage
 
-La troisième valeur est un instantané, pas une promesse que de futurs reconnects gardent la même connexion physique. Un échec de démarrage peut quand même inclure une réponse/instantané si le transport en a produit un d’abord. Après le démarrage, le contrôle du cycle de vie appartient au handle ou à la session renvoyés.
+En succès, la troisième valeur est toujours présente. Un échec HTTP est `[error, undefined, undefined]` :
+le fault porte déjà les métadonnées de réponse, et c’est ce fault qui est passé à un handler,
+loggé ou rethrow. Les échecs de démarrage SSE et WebSocket peuvent encore inclure l’instantané open ou connection
+quand il a été capturé.
+
+Pour SSE et WebSocket, la troisième valeur est un instantané, pas une promesse que de futurs reconnects gardent la
+même connexion physique. Après le démarrage, le contrôle du cycle de vie appartient au handle ou à la
+session renvoyés.
 
 ## Décodage à l’exécution
 
-L’inférence TypeScript décrit ce que tu attends ; elle ne peut pas vérifier une réponse serveur à l’exécution. Le parsing Struct est la seconde moitié du contrat. Defjs valide l’entrée de la commande avant la construction de la requête, décode la représentation choisie, puis parse le Struct correspondant.
+L’inférence TypeScript décrit ce que tu attends ; elle ne peut pas vérifier une réponse serveur à l’exécution. Le parsing Struct est la seconde moitié du contrat. Defjs valide l’entrée de la commande avant la construction de la requête, vérifie la représentation, puis parse le struct du côté de `ok` qui s’applique.
 
 Le décodage a lieu **une seule fois, après la chaîne d’intercepteurs**. Une réponse qu’un intercepteur a construite avec `makeResponse(...)` est interprétée exactement comme une réponse venue du réseau : l’origine d’une réponse ne change pas la façon dont elle est lue, donc il n’y a aucun chemin « faire confiance à l’intercepteur » à examiner.
 
@@ -97,9 +103,11 @@ L’ordre est : media type, puis représentation, puis Struct.
 
 Vérifier le media type d’abord, c’est ce qui transforme « j’ai demandé du JSON et reçu du HTML » en un fault précis plutôt qu’en une erreur de parser, et cela saute entièrement la lecture, le parsing et le Struct.
 
-## Les limites de `build`
+## Builder, encodeur et alias
 
-Le mapping automatique `struct.request(...)` est le défaut quand l’entrée a déjà path/query/headers/body. Un `build(request, input)` custom est une projection contrainte quand la forme appelant et la forme wire diffèrent :
+Un struct est le contrat de champ, dans les deux sens. `.alias(name)` est le nom wire. Le struct décide comment une valeur est encodée. Le `builder` décide où cette valeur va.
+
+`builder` est optionnel, synchrone et pur. Il reçoit l’entrée parsée — la vraie valeur, pas une vue de binding — et renvoie la requête : `path`, `query`, `headers` et `body`. Il tourne quand la commande s’exécute. Un throw devient `REQ_BUILD_FAILED` sur le tuple ; appeler l’endpoint ne throw pas. Omets `builder` quand le struct d’entrée est déjà cette forme de requête. Cette omission est `(input) => input`, et TypeScript exige un builder quand l’entrée n’est pas assignable.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -109,22 +117,20 @@ const createBatch = defineRequest({
   path: '/accounts/:account_id/users',
   input: struct.object({
     accountId: struct.number(),
+    draft: struct.boolean().optional(),
     users: struct.array(
       struct.object({
-        displayName: struct.string(),
+        displayName: struct.string().alias('display_name'),
         email: struct.string(),
       }),
     ),
   }),
-  build(request, input) {
-    request.setPathParams({ account_id: input.accountId })
-    request.setJson({
-      users: input.users.map((user) => ({
-        display_name: user.displayName,
-        email: user.email,
-      })),
-    })
-  },
+  builder: (input) => ({
+    path: { account_id: input.accountId },
+    query: { draft: input.draft ? 1 : undefined },
+    headers: { 'x-api-version': '2' },
+    body: { users: input.users },
+  }),
   output: struct.object({ accepted: struct.number() }),
 })
 
@@ -132,9 +138,24 @@ const command = createBatch({
   accountId: 42,
   users: [{ displayName: 'Ada', email: 'ada@example.com' }],
 })
+void command
 ```
 
-`input` est une vue liée au schéma, pas l’objet runtime de l’appelant. La projection peut sélectionner des champs déclarés, renommer des cibles et mapper un élément de tableau source vers un élément de sortie. Elle ne peut pas brancher sur des valeurs, injecter des littéraux ou changer la cardinalité. Normalise les données métier et fais la validation dépendante des valeurs avant de créer la commande.
+Le chemin par défaut est de faire passer la valeur typée. `body: { users: input.users }` garde l’alias de chaque utilisateur, donc le champ wire est `display_name`. Une clé que tu écris toi-même (`account_id`, `x-api-version`) est littérale. Spreader un objet typé garde son struct ; ajouter la clé wire à côté du champ logique est `REQ_BUILD_FAILED`.
+
+L’imbrication de query est une propriété du backend, donc elle vit sur le client : `withQuerySerializer((query) => string)` voit l’objet wire encodé, alias compris. Il n’est pas appelé quand il n’y a pas de query. Un `URLSearchParams` renvoyé par le builder le saute. Sans serializer, les tableaux répètent les clés et un objet imbriqué échoue. Les intercepteurs observent `queryParams` comme `new URLSearchParams(queryString)`.
+
+Le kind du corps se décide d’après la valeur, premier match :
+
+- pas de `body` → rien n’est envoyé
+- un codec `urlencoded` ou `formData` sur la racine du corps → cet encodage de formulaire ; le tag ne s’applique pas quand la valeur est imbriquée dans du JSON
+- `FormData`, `URLSearchParams`, `Blob`, `File`, octets, ou un `ReadableStream` → envoyé tel quel
+- une string → `text/plain;charset=UTF-8`
+- tout le reste → JSON
+
+Les champs `undefined` sont omis. `null` sur un champ nullable est envoyé. Une string n’est pas du JSON sauf si tu la stringifies et poses `content-type`. Sérialiser toi-même (`JSON.stringify`, qs, protobuf) quitte l’encodeur de struct, donc les alias ne s’appliquent pas. Il n’y a pas de `struct.encode` public.
+
+`GET` et `HEAD` ne peuvent pas porter un corps. Les builders WebSocket ne peuvent pas renvoyer d’en-têtes ni de corps. Les sous-protocoles WebSocket statiques restent sur la définition (`protocols`), pas dans le builder. Les frames WebSocket invalides vont à l’écouteur d’erreur runtime de la session. Un struct `error` SSE type le fault de démarrage, et son corps de handshake suit la même règle de kind qu’un corps HTTP : `string` est du texte, les blobs et les fichiers sont des blobs, `arrayBuffer` est des octets, et tout le reste est du JSON.
 
 ## Placement des observateurs et des politiques
 

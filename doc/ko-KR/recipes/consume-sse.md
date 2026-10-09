@@ -1,11 +1,11 @@
 ---
 title: SSE 스트림 소비하기
-description: 타입이 잡힌 이벤트 스트림을 열고, 한 번 순회한 뒤 닫고 closed를 await 해요.
+description: 타입이 있는 이벤트 스트림을 열고, 한 번 순회한 뒤 닫고 closed를 await 해요.
 ---
 
 # SSE 스트림 소비하기
 
-스트림당 async iterator는 하나예요. 조기 종료로 Fetch 시도가 새지 않도록 `finally`에 `close` + `await stream.closed`를 넣어요.
+스트림당 async iterator는 하나예요. 일찍 빠져나가도 Fetch 시도가 새지 않도록 `finally`에 `close`와 `await stream.closed`를 넣어요.
 
 자세한 내용은 [SSE](../core/sse.md)를 보세요.
 
@@ -19,7 +19,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -45,4 +45,4 @@ if (error) {
 hello from the server
 ```
 
-SSE는 기본적으로 네트워크/읽기 실패를 재시도하지 않습니다. `withSSEReconnect(...)`으로 명시적으로 활성화하세요. 재연결을 설정하면 `attempts`의 기본값은 `3`이며, `attempts: 0`은 재시도를 비활성화합니다.
+`withSSEReconnect(...)`를 켜지 않으면 SSE는 네트워크/읽기 실패를 재시도하지 않아요. reconnect 객체를 주면 `attempts` 기본값은 `3`이고, `attempts: 0`은 재시도를 꺼요.

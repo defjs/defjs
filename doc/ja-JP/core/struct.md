@@ -1,11 +1,11 @@
 ---
 title: Struct
-description: リクエストとレスポンスの形をモデルし、未知値をパースし、ワイヤボディをエンコードします。
+description: リクエストとレスポンスの形をモデルし、未知の値をパースし、ワイヤボディをエンコードします。
 ---
 
 # Struct
 
-リクエスト（とそのレスポンス）を Struct としてモデルします。`Infer` で TypeScript 型が、`struct.parse(...)` で実行時チェックが得られます — throw なし、エラーファーストのタプルです。
+リクエスト（とそのレスポンス）を Struct としてモデルします。TypeScript の型は `Infer` から、実行時チェックは `struct.parse(...)` から得られます — throw せず、エラーファーストのタプルです。
 
 ## Basic Setup
 
@@ -23,14 +23,11 @@ type User = Infer<typeof User>
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    name: struct.string(),
+    email: struct.string(),
   }),
+  builder: (input) => ({ body: input }),
   output: User,
 })
 
@@ -39,19 +36,19 @@ if (!parseError) console.log(user.name)
 void createUser
 ```
 
-パース済み出力は宣言フィールドだけを保ちます。必須欠落、間違ったプリミティブ、悪い入れ子、タプル長不一致、許可されない `null` → `StructError`。部分値なし。Struct は不変です。`.optional()` などは新しい Struct を返します。
+パース結果に残るのは宣言したフィールドだけです。必須フィールドの欠落、プリミティブの不一致、壊れた入れ子、タプル長の不一致、許されない `null` → `StructError` で、部分的な値はありません。Struct は不変です。`.optional()` などは新しい Struct を返します。
 
 ## 必須、任意、null
 
 存在と null 許容は別です。
 
-| 宣言                         | Missing / `undefined`                  | `null` | 有効な値     |
-| ---------------------------- | -------------------------------------- | ------ | ------------ |
-| `struct.string()`            | 拒否                                   | 拒否   | 文字列を受理 |
-| `struct.string().optional()` | 受理。欠落オブジェクトフィールドは省略 | 拒否   | 文字列を受理 |
-| `struct.string().null()`     | 拒否                                   | 受理   | 文字列を受理 |
-| `struct.string().nullish()`  | 受理。欠落オブジェクトフィールドは省略 | 受理   | 文字列を受理 |
-| `struct.null()`              | 拒否                                   | 受理   | 他の値は拒否 |
+| 宣言                         | 欠落 / `undefined`                           | `null`     | 妥当な値           |
+| ---------------------------- | -------------------------------------------- | ---------- | ------------------ |
+| `struct.string()`            | 拒否                                         | 拒否       | 文字列を受け付ける |
+| `struct.string().optional()` | 受け付ける。無いオブジェクトフィールドは省略 | 拒否       | 文字列を受け付ける |
+| `struct.string().null()`     | 拒否                                         | 受け付ける | 文字列を受け付ける |
+| `struct.string().nullish()`  | 受け付ける。無いオブジェクトフィールドは省略 | 受け付ける | 文字列を受け付ける |
+| `struct.null()`              | 拒否                                         | 受け付ける | 他の値は拒否       |
 
 ```typescript twoslash
 import { struct } from '@defjs/core'
@@ -72,11 +69,11 @@ if (error) throw error
 console.log(profile.name, profile.nickname, profile.biography, profile.note)
 ```
 
-ルートでは optional は `undefined` になれます。オブジェクト内では、省略された optional/nullish フィールドは欠落のままです。`struct.request(...)` では、全部 optional のセクションは省略できます（`{}` に正規化）。必須フィールドを持つセクションは必須のままです。ボディラッパーがある → 内側が optional でもボディは必須。
+ルートでは optional は `undefined` になれます。オブジェクト内では、省略された optional/nullish フィールドは欠落のままです。リクエスト形の入力は、`path`、`query`、`headers`、`body` という普通のフィールドを使います。呼び出し側が省いてよいものは `.optional()` を付けます。中のフィールドがすべて optional でも、必須の `body` フィールドは必須のままです。
 
-## リクエストボディラッパー
+## リクエストへの配置
 
-`struct.request(...)` は `path`、`query`、`headers`、`body` を分けます。ボディには明示コーデックが要ります。
+path、query、headers、body はビルダーが返すフィールドであり、リクエスト struct ではありません。`input` がすでにその形なら `builder` は省きます。`struct.urlencoded(shape)` と `struct.formData(shape)` は、コーデックタグ付きのオブジェクト struct です。タグが走るのは、その値がボディのルートであるときだけです。キーはエイリアスを使い、配列はフィールド名を繰り返します。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -84,15 +81,13 @@ import { defineRequest, struct } from '@defjs/core'
 const createUser = defineRequest({
   method: 'POST',
   path: '/organizations/:organizationId/users',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ organizationId: struct.string() }),
     query: struct.object({ notify: struct.boolean().optional() }),
     headers: struct.object({ requestId: struct.string().alias('x-request-id') }),
-    body: struct.json(
-      struct.object({
-        displayName: struct.string().alias('display_name'),
-      }),
-    ),
+    body: struct.object({
+      displayName: struct.string().alias('display_name'),
+    }),
   }),
 })
 
@@ -105,21 +100,20 @@ const command = createUser({
 void command
 ```
 
-| ラッパー                   | パース済み値         | ワイヤ境界                                                           |
-| -------------------------- | -------------------- | -------------------------------------------------------------------- |
-| `struct.json(inner)`       | `inner` からの値     | JSON テキスト、`application/json`                                    |
-| `struct.text()`            | `string`             | テキスト、`text/plain;charset=UTF-8`                                 |
-| `struct.urlencoded(shape)` | shape のオブジェクト | `URLSearchParams`、`application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)`   | shape のオブジェクト | `FormData`。プラットフォームが multipart boundary を設定             |
-| `struct.blob()`            | `Blob`               | Blob の type、または `application/octet-stream`                      |
-| `struct.file()`            | `File`               | ネイティブ `File`（name + type）                                     |
-| `struct.arrayBuffer()`     | `ArrayBuffer`        | バッファ、`application/octet-stream`                                 |
+| ボディのルート                                  | 送られるもの      | デフォルトの content type                         |
+| ----------------------------------------------- | ----------------- | ------------------------------------------------- |
+| 型付きの object、array、number、boolean、`null` | JSON テキスト     | `application/json`                                |
+| `string` struct、または生の文字列               | テキスト          | `text/plain;charset=UTF-8`                        |
+| ルートの `struct.urlencoded(shape)`             | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| ルートの `struct.formData(shape)`               | `FormData`        | プラットフォームの multipart boundary             |
+| `Blob` / `File`                                 | その blob         | blob の type、または `application/octet-stream`   |
+| `ArrayBuffer` / view / stream                   | バイト列          | `application/octet-stream`                        |
 
-`struct.file()` はフォームフィールド用の値 Struct であり、単独の `request.body` ではありません。バイナリボディは `struct.blob()` と `struct.arrayBuffer()` です。むき出しのオブジェクト/配列/プリミティブ Struct は `request.body` として無効です。SSE は `body` を拒否します。WebSocket のリクエスト入力は `body` と `headers` を拒否します。
+`struct.file()` は、フォームフィールド用と生のファイルボディ用の値 struct です。WebSocket のビルダーは `headers` も `body` も返せません。HTTP と SSE は返せます。`GET` と `HEAD` は返せません。
 
 ## エイリアス
 
-`.alias(...)` は論理名とワイヤ名を分けます。`struct.parse(...)` は論理キーを使います。JSON とフラットなリクエストコーデックはエイリアスをエンコードし、JSON レスポンスデコードはワイヤキーを論理フィールドに戻します。
+`.alias(...)` は論理名とワイヤ名を分けます。`struct.parse(...)` は論理キーを使います。JSON とフラットなリクエストコーデックはエイリアスをエンコードし、JSON レスポンスのデコードはワイヤキーを論理フィールドへ戻します。
 
 ```typescript twoslash
 import { struct } from '@defjs/core'
@@ -136,18 +130,29 @@ const [wireError] = struct.parse(User, { display_name: 'Ada' })
 console.log(wireError?.issues[0]?.path)
 ```
 
-| 境界                                             | フィールド                  |
-| ------------------------------------------------ | --------------------------- |
-| `struct.parse(User, ...)`                        | 論理 `displayName`          |
-| JSON リクエストエンコード                        | ワイヤ `display_name`       |
-| JSON レスポンスデコード                          | ワイヤ → 論理 `displayName` |
-| query、header、URL-encoded、multipart エンコード | キーとしてワイヤエイリアス  |
+| 境界                                     | フィールド                    |
+| ---------------------------------------- | ----------------------------- |
+| `struct.parse(User, ...)` とコマンド入力 | 論理名 `displayName`          |
+| ビルダーに渡した型付きオブジェクト       | ワイヤ名 `display_name`       |
+| JSON / SSE / WebSocket のデコード        | ワイヤ → 論理名 `displayName` |
+| ビルダー内で書いた匿名オブジェクト       | 自分で書いたキー              |
 
-エイリアスは入れ子フィールド、配列、オブジェクト、ユニオン、ディスクリミネータで動きます。アプリコードでは論理名を保ち、外部命名は Struct に載せてください。
+エイリアスは入れ子フィールド、配列、オブジェクト、ユニオン、判別子で効きます。アプリコードでは論理名を保ち、外部名は struct に一度だけ置いてください。型付きオブジェクトをスプレッドすると、そのエンコードが保たれます。同じオブジェクトに論理フィールドとそのワイヤキーの両方を置くと `REQ_BUILD_FAILED` です。値を自分で `JSON.stringify` するとこの経路から外れます。シリアライザが見るのは論理名です。
 
-## パース失敗
+ガイドはルートだけでなく、各ノードで決まります。匿名の親の下に新しく書いたオブジェクトは、書いたキーのままです。型付きの親の下では、同じオブジェクトがそのフィールドの struct を使います。
 
-`struct.parse(...)` は `[null, value]` または `[StructError, undefined]` を返します。`StructError` は `Error` を拡張し、`issues` に加え `format()`、`flatten()`、`prettify()` を公開します。
+```ts
+body: { row: { id: '42' } }              // 根匿名：发出 id
+body: { ...input, row: { id: '42' } }    // 根带类型，row 字段声明了 alias：发出 wire_id
+```
+
+union のガイドが複数の分岐に一致したら、分岐ごとにエンコードして比較します。ワイヤ結果が同じならそれを採用し、違えば `REQ_BUILD_FAILED` です。
+
+非 object 部分を含む混合 intersection は、解析時に一致した各部分のタグの連言をタグとして付け、解析せず新しく書いた値は匿名オブジェクトとして扱います。
+
+## パースの失敗
+
+`struct.parse(...)` は `[null, value]` か `[StructError, undefined]` を返します。`StructError` は `Error` を拡張し、`issues` に加えて `format()`、`flatten()`、`prettify()` を持ちます。
 
 ```typescript twoslash
 import { struct, StructError } from '@defjs/core'
@@ -164,13 +169,13 @@ if (error) {
 void value
 ```
 
-`StructIssue` は `code`、`expected`、`message`、`path`、`received` を持ちます。issue は信頼できない入力を持ち得ます — ログや返却の前に redact してください。`struct.parse(..., { errorMap })` rewrites issue messages for that call only.決定的にし、リクエスト固有状態を入れないでください。
+`StructIssue` は `code`、`expected`、`message`、`path`、`received` を持ちます。`code` は `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union`、`missing_key` のいずれかです。issue には信頼できない入力が入り得ます — ログや返却の前に redact してください。`struct.parse(..., { errorMap })` は、その呼び出しだけの issue メッセージを書き換えます。
 
-Struct の検証は構造だけです。公開の range、format、refinement、認可、状態遷移ルールはありません。そうした検査はコマンドを組み立てる前に行ってください。
+Struct の検証は構造だけです。公開された範囲、形式、refinement、認証、状態遷移の規則はありません。そうした検査はコマンドを作る前に行ってください。
 
 ## Reference
 
-`@defjs/core` 上の公開コンストラクタです（内部は facade API ではありません）。
+`@defjs/core` の公開コンストラクタです（内部はファサード API ではありません）。
 
 ```typescript twoslash
 import { struct } from '@defjs/core'
@@ -190,62 +195,46 @@ const Status = struct.enum(['draft', 'published'])
 const FileValue = struct.file()
 const Form = struct.formData({ file: struct.file() })
 const Combined = struct.intersection(struct.object({ id: struct.number() }), struct.object({ name: struct.string() }))
-const JsonBody = struct.json(struct.object({ ok: struct.boolean() }))
 const Literal = struct.literal('ready')
 const NullValue = struct.null()
 const NumberValue = struct.number()
 const ObjectValue = struct.object({ id: struct.number() })
 const Union = struct.or(struct.string(), struct.number())
 const RecordValue = struct.record(struct.number())
-const Request = struct.request({ path: struct.object({ id: struct.number() }) })
 const StringValue = struct.string()
-const TextBody = struct.text()
 const Tuple = struct.tuple([struct.string(), struct.number()])
 const Unknown = struct.unknown()
 const FormUrlEncoded = struct.urlencoded({ name: struct.string() })
 
 void [Any, ArrayOfStrings, Bytes, BigIntValue, BlobValue, BooleanValue, DateValue, Discriminated, Status, FileValue, Form, Combined]
-void [
-  JsonBody,
-  Literal,
-  NullValue,
-  NumberValue,
-  ObjectValue,
-  Union,
-  RecordValue,
-  Request,
-  StringValue,
-  TextBody,
-  Tuple,
-  Unknown,
-  FormUrlEncoded,
-]
+void [Literal, NullValue, NumberValue, ObjectValue, Union, RecordValue, StringValue, Tuple, Unknown, FormUrlEncoded]
 ```
 
-| コンストラクタ                   | 入力                                            | 推論される出力           |
-| -------------------------------- | ----------------------------------------------- | ------------------------ |
-| `struct.number()`                | `NaN` 以外の数値                                | ±Infinity`を含む`number` |
-| `struct.date()`                  | `Date`、数値、または日付文字列                  | 有効な `Date`            |
-| `struct.bigint()`                | `bigint`、または `BigInt(...)` が受理する文字列 | `bigint`                 |
-| `struct.enum(...)`               | 宣言された文字列または数値メンバー              | そのリテラルユニオン     |
-| `struct.discriminatedUnion(...)` | 必須リテラルディスクリミネータ付きオブジェクト  | 選ばれたオブジェクト分岐 |
-| `struct.or(...)`                 | 最初に一致する分岐。エンコードは曖昧さを検査    | 分岐出力のユニオン       |
-| `struct.intersection(...)`       | 全メンバーが受理する値                          | 出力の交差               |
-| `struct.record(value)`           | 値が `value` に一致するプレーンオブジェクト     | パース済み値の Record    |
-| `struct.tuple(items)`            | 宣言長ちょうどである配列                        | 固定長タプル             |
+| コンストラクタ                   | 入力                                              | 推論される出力              |
+| -------------------------------- | ------------------------------------------------- | --------------------------- |
+| `struct.number()`                | `NaN` 以外の数値                                  | ±`Infinity` を含む `number` |
+| `struct.date()`                  | `Date`、数値、または日付文字列                    | 妥当な `Date`               |
+| `struct.bigint()`                | `bigint`、または `BigInt(...)` が受け付ける文字列 | `bigint`                    |
+| `struct.enum(...)`               | 宣言した文字列または数値のメンバー                | そのリテラルユニオン        |
+| `struct.discriminatedUnion(...)` | 必須のリテラル判別子を持つオブジェクト            | 選ばれたオブジェクトの枝    |
+| `struct.or(...)`                 | 最初に一致した枝。エンコードは曖昧さを検査する    | 枝の出力のユニオン          |
+| `struct.intersection(...)`       | すべてのメンバーが受け付ける値                    | 出力の交差                  |
+| `struct.record(value)`           | 値が `value` に合うプレーンオブジェクト           | パース済み値のレコード      |
+| `struct.tuple(items)`            | 宣言した長さちょうどの配列                        | 固定長タプル                |
 
-すべての Struct は `.alias(name)`、`.optional()`、`.null()`、`.nullish()` をサポートします。`struct.discriminatedUnion` は必須リテラルディスクリミネータ付きオブジェクトオプションが要り、重複を拒否します。
+すべての Struct は `.alias(name)`、`.optional()`、`.null()`、`.nullish()` をサポートします。`struct.discriminatedUnion` は、必須のリテラル判別子を持つオブジェクトの選択肢が必要で、重複は拒否します。
 
-`struct`、`Infer`、`Struct`、`StructError`、関連する公開型は `@defjs/core` から import してください。パーサは `struct.parse(...)` を使います。`createObjectStruct`、定義 symbol、コーデック内部、`packages/core/src` は import しないでください。
+`struct`、`Infer`、`Struct`、`StructError`、関連する公開型は `@defjs/core` から import してください。パーサーは `struct.parse(...)` です。`createObjectStruct`、定義の symbol、コーデック内部、`packages/core/src` は import しないでください。
 
-facade の非約束事項:
+ファサードが約束しないこと:
 
-- オブジェクト/record 出力は null プロトタイプを使います — `Object.prototype` メソッドを前提にしないでください。
+- オブジェクト/レコードの出力は null プロトタイプです — `Object.prototype` のメソッドを前提にしないでください。
 - 未知のオブジェクトキーは落とされます。
-- `struct.number()` は `NaN` を拒否し、無限大は受理します。
-- `struct.or(...)` は分岐を順に試し、分岐が食い違う曖昧なエンコードは拒否します。
-- `struct.intersection(...)` はメンバーを宣言順にパースします。
-- Struct は境界を検証します。キャッシュも認可も、トランスポートリソースの所有もしません。
+- `struct.number()` は `NaN` を拒否し、無限大は受け付けます。
+- `struct.or(...)` は枝を順に試します。枝のエンコードが食い違うときは曖昧なエンコードを拒否します。
+- `struct.intersection(...)` は宣言順にメンバーをパースします。
+- intersection はメンバー出力を深くマージします（`Object.is` で等しい値と同時刻の Date はそのまま、plain object と長さが同じ配列は再帰的にマージ、それ以外の衝突はその path の `invalid_intersection`）。`unknown` / `any` は出力に寄与しません。一つの論理キーは複数の wire key に対応できます。同じ wire key に等しくない値が書かれたときだけ衝突です。
+- Struct は境界を検証します。キャッシュも認可も、トランスポート資源の所有もしません。
 
 ## 関連レシピ
 

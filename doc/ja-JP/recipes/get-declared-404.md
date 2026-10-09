@@ -17,7 +17,7 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
@@ -39,4 +39,4 @@ if (error?.code === 'HTTP_STATUS' && error.status === 404) {
 Loaded Ada from 200
 ```
 
-2xx 以外の status はすべて `HTTP_STATUS` です。`error` を宣言すればそのボディに型が付き、省けば `err.data` は `undefined` になってボディも読まれません。ひとつの `error` Struct が 2xx 以外のすべての status を受け持つので、形が異なるときは `struct.or(...)` か判別可能な union を使ってください。
+2xx 以外の status はすべて `HTTP_STATUS` です。`error` を宣言すればそのボディに型が付き、`error` を省けば `err.data` は `undefined` のまま、ボディは読まれません。ひとつの `error` Struct が 2xx 以外のすべての status を受け持つので、形が異なるときは `struct.or(...)` か判別可能な union を使ってください。

@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: 'Instrumentation sortante : `withOpenTelemetryServer`.'
+description: withOpenTelemetryServer et options par transport.
 ---
 
 # OpenTelemetry server {#page}
 
-Allume l’instrumentation sortante à la création du client. Ajoute des interceptors HTTP, SSE et WebSocket. Ce n’est **pas** de l’instrumentation serveur entrante, et ça n’initialise **pas** un SDK OpenTelemetry.
+Instrumentation sortante HTTP / SSE / WebSocket, sous forme d’intercepteurs core. Ce paquet n’initialise pas un SDK OpenTelemetry, et ce n’est pas de l’instrumentation serveur entrante.
 
-Voir le [guide OpenTelemetry server](../plugins/opentelemetry-server.md).
+Voir le [guide OpenTelemetry server](/plugins/opentelemetry-server).
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 
@@ -15,7 +15,7 @@ Voir le [guide OpenTelemetry server](../plugins/opentelemetry-server.md).
 function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
 ```
 
-Ajoute un interceptor par transport activé. Applique-le au `createClient`.
+Ajoute un intercepteur par transport activé. Applique-le au moment de `createClient`.
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -24,9 +24,9 @@ import { withOpenTelemetryServer } from '@defjs/opentelemetry-server'
 const client = createClient(withEndpoint('https://api.example.com'), withOpenTelemetryServer({ tracer }))
 ```
 
-`tracer` est obligatoire. `meter` est optionnel — sans lui, pas de metrics du paquet. Pas de `propagator` → W3C Trace Context + Baggage.
+`tracer` est obligatoire. `meter` est optionnel — omets-le pour sauter les métriques du paquet. Pas de `propagator` → W3C Trace Context + Baggage.
 
-HTTP, SSE et WebSocket sont on par défaut. `{ enabled: false }` saute un transport.
+HTTP, SSE et WebSocket sont on par défaut. Passe `{ enabled: false }` sur un transport pour le sauter.
 
 ## OpenTelemetryServerOptions {#OpenTelemetryServerOptions}
 
@@ -65,8 +65,23 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 }
 ```
 
-`startSpanHook` s’exécute synchroniquement avant la création du span de son transport HTTP, SSE ou WebSocket. Les attributs applicatifs sont appliqués en dernier et peuvent donc remplacer `url.full`. S’il throw, Defjs enregistre `defjs.otel.hook.error` et continue la requête avec les attributs intégrés ; `requestHook` et `responseHook` restent postérieurs à la création du span.
+`startSpanHook` s’exécute synchroniquement avant la création du span, pour son propre transport HTTP, SSE ou WebSocket. Ses attributs sont appliqués après les attributs intégrés, donc l’application peut overrider `url.full` ou une autre valeur initiale. S’il throw, Defjs crée le span avec les attributs intégrés, enregistre `defjs.otel.hook.error` et continue la requête ; `requestHook` et `responseHook` gardent leur sémantique existante, postérieure à la création.
 
-Par défaut, `url.full` résout seulement `request.endpoint` contre l’éventuel `request.baseEndpoint` et n’ajoute pas un `request.queryString` indépendant. Cette frontière n’est pas une redaction et aucune politique redactor n’est intégrée. Construis explicitement une URL complète ou masquée dans `startSpanHook`.
+Par défaut, `url.full` ne résout que `request.endpoint` contre l’éventuel `request.baseEndpoint` ; un `request.queryString` indépendant n’est pas ajouté. Cette frontière n’est pas une redaction, et le paquet n’a ni redactor intégré ni politique de clés sensibles. Construis, et masque si besoin, une URL possédée par l’application, explicitement :
 
-`queryPropagation` vaut `false` par défaut. Active-le seulement si le trace context dans l’URL WebSocket te va.
+```ts
+import { createResolvedRequestUrl, type HttpRequest } from '@defjs/core'
+import type { Attributes } from '@opentelemetry/api'
+
+const http = {
+  startSpanHook(request: HttpRequest): Attributes {
+    if (!request.baseEndpoint) return {}
+    const url = createResolvedRequestUrl(request.baseEndpoint, request.endpoint)
+    if (request.queryString) url.search = request.queryString
+    url.searchParams.delete('access_token')
+    return { 'url.full': url.href }
+  },
+}
+```
+
+`queryPropagation` vaut `false` par défaut. Ne l’active qu’après avoir accepté le trace context dans l’URL WebSocket.

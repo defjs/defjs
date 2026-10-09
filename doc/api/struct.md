@@ -33,13 +33,13 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | Unions                                                                         |
 | `struct.enum(values)`                                                       | String list or `{ Name: value }` map                                           |
 
-### Request / body helpers
+### Body codecs and binary values
 
-| Helper                                                                                      | Role                       |
-| ------------------------------------------------------------------------------------------- | -------------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                                        | HTTP/SSE/WS input sections |
-| `struct.json(inner, { contentType? })` / `text()` / `formData(shape)` / `urlencoded(shape)` | Encoded bodies             |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                                | Binary                     |
+| Helper                                         | Role                                                                                                        |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | Object struct plus a codec tag. The tag applies only when that value is the request body root               |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | Binary values. As a body root they are sent as bytes; as `output` / `error` they select that representation |
+| `struct.string()`                              | Text. As a body root or an inbound `string` struct, the bytes stay text                                     |
 
 ### struct.parse() {#struct.parse}
 
@@ -85,7 +85,7 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`: `path`, `code`, `expected`, `received`, `message`.
+`StructIssue`: `path`, `code`, `expected`, `received`, `message`. `code` is `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, or `missing_key`.
 
 See [Struct guide](/core/struct).
 
@@ -105,13 +105,9 @@ Anything with a `_struct` type payload.
 
 Object-shaped struct from `struct.object`.
 
-## RequestStruct {#RequestStruct}
-
-Sectioned HTTP/SSE/WS input from `struct.request`.
-
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`, `code`, `expected`, `received`, `message`. `code` is `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, or `missing_key`.
 
 ## FormattedStructError {#FormattedStructError}
 

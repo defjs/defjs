@@ -19,7 +19,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -45,4 +45,4 @@ if (error) {
 hello from the server
 ```
 
-SSE 預設唔會 retry 網絡或讀取失敗；要用 `withSSEReconnect(...)` 明確啟用。提供 reconnect 設定後，`attempts` 預設係 `3`；`attempts: 0` 關閉重試。
+除非你開 `withSSEReconnect(...)`，否則 SSE 唔會 retry network/read failures。有 reconnect object 嘅時候，`attempts` 預設係 `3`；`attempts: 0` 關閉 retry。

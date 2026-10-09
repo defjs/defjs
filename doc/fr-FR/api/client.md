@@ -26,6 +26,8 @@ const client = createClient(withEndpoint('https://api.example.com'))
 
 ## Helpers d’option
 
+Tous les helpers renvoient `ClientOption`.
+
 ### withEndpoint() {#withEndpoint}
 
 ```ts
@@ -42,13 +44,13 @@ function withInterceptors(...interceptors: Interceptor[]): ClientOption
 
 Append les intercepteurs dans l’ordre d’enregistrement. Les kinds mixtes sont filtrés par transport à l’execute.
 
-### withQueryParamsSerializer() {#withQueryParamsSerializer}
+### withQuerySerializer() {#withQuerySerializer}
 
 ```ts
-function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-Remplace l’encodage de query. `serializer(params, rawParams?)` doit renvoyer la query string sans `?` initial.
+Remplace l’encodage de query pour HTTP, SSE et WebSocket. `serializer(query)` reçoit l’**objet wire déjà encodé** (alias appliqués, `Date` en ISO, `bigint` en string) et doit renvoyer la query string sans `?` initial. Il n’est pas appelé quand la requête n’a pas de query. Un builder qui renvoie `URLSearchParams` le saute.
 
 ### withHTTPHandle() {#withHTTPHandle}
 
@@ -82,7 +84,7 @@ function withXSRF(options?: {
 }): ClientOption
 ```
 
-Copie un cookie XSRF vers un en-tête de requête. Défauts : cookie `XSRF-TOKEN`, en-tête `X-XSRF-TOKEN`.
+Copie un cookie XSRF sur un en-tête de requête. Défauts : cookie `XSRF-TOKEN`, en-tête `X-XSRF-TOKEN`.
 
 ### Réglages SSE
 
@@ -132,31 +134,31 @@ type Client = {
 type ClientOption = (config: ClientConfig) => void
 ```
 
-### QueryParamsSerializer {#QueryParamsSerializer}
+### QuerySerializer {#QuerySerializer}
 
 ```ts
-type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
+type QuerySerializer = (query: { [key: string]: unknown }) => string
 ```
 
 ### ClientSSEOptions {#ClientSSEOptions}
 
 ### ClientWebSocketOptions {#ClientWebSocketOptions}
 
-SSE : `handle`, `onInvalidEvent`, `reconnect` (`attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, `shouldReconnect`).
+SSE : `handle`, `onInvalidEvent`, `reconnect` (`attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, `shouldReconnect`). Le `jitter` SSE est un facteur multiplicatif 0–1, comme WebSocket. Quand `reconnect` SSE est posé, `attempts` vaut **3** par défaut ; `attempts: 0` désactive. Omettre `withSSEReconnect` désactive aussi le retry.
 
-WebSocket : `handle`, `beforeConnect`, `heartbeat` (`intervalMs`, `message`, `isAck`, `timeoutMs`), `protocols`, `reconnect` (même forme que SSE plus close `code` / `reason` / `wasClean`).
+WebSocket : `handle`, `beforeConnect`, `heartbeat` (`intervalMs`, `message`, `isAck`, `timeoutMs`), `protocols`, `reconnect` (même forme que SSE, plus `code` / `reason` / `wasClean` de close). Quand `reconnect` WebSocket est posé, `attempts` vaut **3** par défaut ; `0` désactive. Omettre `attempts` n’est pas illimité. Le `jitter` WebSocket est un facteur multiplicatif 0–1.
 
-`ClientConfig` est l’instantané résolu (`endpoint`, `http`, `sse`, `webSocket`, `interceptors`, …). `ClientOptions` est le pendant côté input.
+`ClientConfig` est l’instantané résolu (`endpoint`, `http`, `sse`, `webSocket`, `interceptors`, …). `ClientOptions` est la contrepartie en forme d’entrée.
 
-Voir [le guide Client](../core/client.md).
+Voir le [guide Client](/core/client).
 
 ## ClientOptions {#ClientOptions}
 
-Config côté input : `endpoint`, `http`, `sse`, `webSocket`, `interceptors`, …
+Config en forme d’entrée : `endpoint`, `http`, `sse`, `webSocket`, `interceptors`, …
 
 ## ClientConfig {#ClientConfig}
 
-Snapshot une fois les option helpers appliqués.
+Instantané résolu après application des helpers d’options.
 
 ## ClientSSEConfig {#ClientSSEConfig}
 

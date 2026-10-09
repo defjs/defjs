@@ -1,11 +1,10 @@
-import type { QueryParamsSerializer } from '../client/config'
-import { DEFAULT_QUERY_PARAMS_SERIALIZER } from '../client/config'
+import type { QuerySerializer } from '../client/config'
 import { applyRequestContentType } from '../http/transport/body'
-import type { AnyStruct } from '../struct'
 import type { HttpRequest } from './http_request'
-import type { RequestBuildHandler } from './request_builder'
-import { buildRequest } from './request_builder'
-import { appendRecordToHeaders, createSearchParams, fillUrl } from './url'
+import type { OutboundBuilder } from './outbound_request'
+import { materializeOutboundRequest, runOutboundBuilder } from './outbound_request'
+import type { RequestBuildValue } from './request_values'
+import { appendRecordToHeaders, fillUrl, resolveTransportQuery } from './url'
 
 type BaseTransport = 'http' | 'sse'
 
@@ -17,47 +16,48 @@ type BaseTransportRequest = HttpRequest & {
   queryString: string
 }
 
-export type BaseTransportRequestOptions<TInput extends AnyStruct | undefined, TTransport extends BaseTransport> = {
+export type BaseTransportRequestOptions<TTransport extends BaseTransport> = {
   abort: AbortSignal
   baseEndpoint: string
   defaultHeaders?: Headers
-  input?: TInput
   operation?: string
-  queryParamsSerializer: QueryParamsSerializer
+  querySerializer?: QuerySerializer
   timeout?: number
   transport: TTransport
   withCredentials?: boolean
 }
 
-export function createBaseTransportRequest<TInput extends AnyStruct | undefined, TTransport extends BaseTransport>(
+export function createBaseTransportRequest<TTransport extends BaseTransport>(
   method: string,
   path: string,
   input: unknown,
-  build: RequestBuildHandler<TInput, TTransport> | undefined,
-  options: BaseTransportRequestOptions<TInput, TTransport>,
+  builder: OutboundBuilder | undefined,
+  options: BaseTransportRequestOptions<TTransport>,
 ): BaseTransportRequest {
-  const built = buildRequest(input, build, {
-    input: options.input,
-    transport: options.transport,
-  })
-  const allowComplexQuery = options.queryParamsSerializer !== DEFAULT_QUERY_PARAMS_SERIALIZER
-  const queryParams = createSearchParams(built.query, { allowComplex: allowComplexQuery })
+  const built = materializeOutboundRequest(runOutboundBuilder(input, builder), options.transport)
+  // A body is a build error here: Bun's Request accepts a GET/HEAD body and only fetch() throws.
+  if (built.body !== undefined && (method.toUpperCase() === 'GET' || method.toUpperCase() === 'HEAD')) {
+    throw new TypeError('GET/HEAD requests cannot have a body')
+  }
+  const { queryParams, queryString } = resolveTransportQuery(built.query, options.querySerializer)
   const headers = options.defaultHeaders ? new Headers(options.defaultHeaders) : new Headers()
 
-  appendRecordToHeaders(headers, built.headers)
+  appendRecordToHeaders(headers, built.headers as HeadersInit | { [key: string]: RequestBuildValue } | undefined)
+  if (built.defaultContentType && !headers.has('content-type')) {
+    headers.set('content-type', built.defaultContentType)
+  }
 
   const request: BaseTransportRequest = {
     abort: options.abort,
     baseEndpoint: options.baseEndpoint,
-    body: built.body,
-    bodyContentType: built.bodyContentType,
+    body: built.body as HttpRequest['body'],
     bodyContentTypeSource: built.body,
     endpoint: fillUrl(path, built.params),
     headers,
     method,
     operation: options.operation,
     queryParams,
-    queryString: options.queryParamsSerializer(queryParams, built.query),
+    queryString,
     timeout: options.timeout,
     withCredentials: options.withCredentials ?? false,
   }

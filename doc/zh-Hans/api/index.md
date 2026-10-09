@@ -30,5 +30,5 @@ description: 手写的工作区包查阅页——你 import 的函数、options 
 
 ## 相关
 
-- [快速开始](../guide/getting-started.md)
-- [声明了 404 的 GET](../recipes/get-declared-404.md)
+- [快速开始](/guide/getting-started)
+- [声明了 404 的 GET](/recipes/get-declared-404)

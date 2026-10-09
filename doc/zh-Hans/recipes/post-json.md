@@ -1,11 +1,11 @@
 ---
 title: POST JSON
-description: 用 struct.json 发 JSON body，解码声明过的 201。
+description: 把带类型的 JSON body 交给 builder，并解码声明过的 201。
 ---
 
 # POST JSON
 
-Body 包进 `struct.json(...)`。逻辑字段名留在 TypeScript；线上别名写在 Struct 上。
+把带类型的 body 交给 builder。逻辑字段名留在 TypeScript；struct 上的线上 alias 会变成 JSON key。对象 body 是 `application/json`。
 
 细节见 [Commands](../core/commands.md) 和 [HTTP](../core/http.md)。
 
@@ -28,13 +28,11 @@ const ApiError = struct.object({
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    body: struct.object({
+      name: struct.string(),
+      email: struct.string(),
+    }),
   }),
   output: User,
   error: ApiError,

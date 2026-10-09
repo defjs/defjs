@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -108,7 +108,7 @@ provide(HTTP_CLIENT, childClient)
 
 ## امتلك عمل HTTP خارج مراقب
 
-للعمل الذي يبدأه composable أو مكوّن خارج مراقب، استخدم `AbortController` + `onScopeDispose`. أجهض البدء والعمل النشط؛ افحص الإشارة قبل تعيين الحالة التفاعلية. إضافة أو نطاق حقن لا يستنتج من يملك أمرًا.
+للعمل الذي يبدأه composable أو مكوّن خارج مراقب، استخدم `AbortController` + `onScopeDispose`. أجهض البدء والعمل النشط؛ افحص الإشارة قبل تعيين الحالة التفاعلية. إضافة أو نطاق حقن لا يستنتج من يملك أمرًا. لصفحات القوائم، لفّ `execute` بـ Vue Query (أو ما يشبهها) — `@defjs/vue` يبقى حقن اعتماد فقط و**لا** يُشحن مع `useRequest`.
 
 عندما يملك نطاق عميلًا، أبقِه مستقلًا عن الطلب لإعادة الاستخدام على مستوى المتصفح. إذا التقط رؤوسًا أو ملفات تعريف ارتباط أو مستخدمين أو مستأجرين أو بيانات اعتماد، أنشئه في حدود طلب التطبيق/SSR ذات الصلة ووفّر ذلك المثيل هناك.
 

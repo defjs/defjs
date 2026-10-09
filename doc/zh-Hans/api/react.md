@@ -7,7 +7,7 @@ description: 装 provider、读 Client。
 
 把已有的 `@defjs/core` Client 接到 React 树。这个包**不会**创建 Client、加缓存，也不会释放传输资源。
 
-见 [React 指南](../plugins/react.md)。
+见 [React 指南](/plugins/react)。
 
 ## ClientProvider {#ClientProvider}
 

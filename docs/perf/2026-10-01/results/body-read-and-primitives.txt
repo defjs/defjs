@@ -1,0 +1,37 @@
+## Loopback HTTP (node:http server), 3000 sequential fetches each; body read strategy comparison
+== node
+small text()         110.3 µs
+small reader loop    102.8 µs
+big text()           494.4 µs
+big reader loop      541.5 µs
+== bun
+small text()         81.0 µs
+small reader loop    87.8 µs
+big text()           302.3 µs
+big reader loop      406.1 µs
+
+## In-memory Response bodies (mock fetch), ns per operation
+== node
+res.json()                     2773 ns
+res.arrayBuffer()+parse        2787 ns
+res.text()+parse               2647 ns
+getReader loop+concat+parse    2471 ns
+new Request(url,init)          2831 ns
+new URL x2 (base+rel)          860 ns
+AbortSignal.any(3)             3587 ns
+new AbortController            75 ns
+awaitWithSignal-like           545 ns
+plain await                    99 ns
+new Headers()+2 set            246 ns
+== bun
+res.json()                     518 ns
+res.arrayBuffer()+parse        774 ns
+res.text()+parse               510 ns
+getReader loop+concat+parse    12752 ns
+new Request(url,init)          753 ns
+new URL x2 (base+rel)          428 ns
+AbortSignal.any(3)             849 ns
+new AbortController            275 ns
+awaitWithSignal-like           805 ns
+plain await                    82 ns
+new Headers()+2 set            174 ns

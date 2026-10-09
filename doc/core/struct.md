@@ -23,14 +23,11 @@ type User = Infer<typeof User>
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    name: struct.string(),
+    email: struct.string(),
   }),
+  builder: (input) => ({ body: input }),
   output: User,
 })
 
@@ -72,11 +69,11 @@ if (error) throw error
 console.log(profile.name, profile.nickname, profile.biography, profile.note)
 ```
 
-At the root, optional can be `undefined`. Inside an object, omitted optional/nullish fields stay absent. In `struct.request(...)`, an all-optional section can be omitted (normalized to `{}`); a section with a required field stays required. A body wrapper present → body required, even if inner fields are optional.
+At the root, optional can be `undefined`. Inside an object, omitted optional/nullish fields stay absent. A request-shaped input uses ordinary fields named `path`, `query`, `headers`, and `body`. Mark one `.optional()` when the caller may omit it. A required `body` field stays required even when every field inside it is optional.
 
-## Request body wrappers
+## Request placement
 
-`struct.request(...)` splits `path`, `query`, `headers`, and `body`. Bodies need an explicit codec:
+Path, query, headers, and body are fields the builder returns, not a request struct. Omit `builder` when `input` already has that shape. `struct.urlencoded(shape)` and `struct.formData(shape)` are object structs with a codec tag. The tag runs only when that value is the body root: keys use aliases, and arrays repeat the field name.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -84,15 +81,13 @@ import { defineRequest, struct } from '@defjs/core'
 const createUser = defineRequest({
   method: 'POST',
   path: '/organizations/:organizationId/users',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ organizationId: struct.string() }),
     query: struct.object({ notify: struct.boolean().optional() }),
     headers: struct.object({ requestId: struct.string().alias('x-request-id') }),
-    body: struct.json(
-      struct.object({
-        displayName: struct.string().alias('display_name'),
-      }),
-    ),
+    body: struct.object({
+      displayName: struct.string().alias('display_name'),
+    }),
   }),
 })
 
@@ -105,17 +100,16 @@ const command = createUser({
 void command
 ```
 
-| Wrapper                    | Parsed value       | Wire boundary                                                        |
-| -------------------------- | ------------------ | -------------------------------------------------------------------- |
-| `struct.json(inner)`       | Value from `inner` | JSON text, `application/json`                                        |
-| `struct.text()`            | `string`           | Text, `text/plain;charset=UTF-8`                                     |
-| `struct.urlencoded(shape)` | Shape’s object     | `URLSearchParams`, `application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)`   | Shape’s object     | `FormData`; platform sets multipart boundary                         |
-| `struct.blob()`            | `Blob`             | Blob type or `application/octet-stream`                              |
-| `struct.file()`            | `File`             | Native `File` (name + type)                                          |
-| `struct.arrayBuffer()`     | `ArrayBuffer`      | Buffer, `application/octet-stream`                                   |
+| Body root                                    | Sent as           | Default content type                              |
+| -------------------------------------------- | ----------------- | ------------------------------------------------- |
+| typed object, array, number, boolean, `null` | JSON text         | `application/json`                                |
+| `string` struct or a raw string              | text              | `text/plain;charset=UTF-8`                        |
+| `struct.urlencoded(shape)` at the root       | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `struct.formData(shape)` at the root         | `FormData`        | platform multipart boundary                       |
+| `Blob` / `File`                              | the blob          | blob type or `application/octet-stream`           |
+| `ArrayBuffer` / view / stream                | bytes             | `application/octet-stream`                        |
 
-`struct.file()` is a value Struct for form fields — not a standalone `request.body`. Binary bodies are `struct.blob()` and `struct.arrayBuffer()`. Bare object/array/primitive Structs are not valid as `request.body`. SSE rejects `body`. WebSocket request input rejects `body` and `headers`.
+`struct.file()` is a value struct for a form field and for a raw file body. WebSocket builders cannot return `headers` or `body`. HTTP and SSE can. `GET` and `HEAD` cannot.
 
 ## Aliases
 
@@ -136,14 +130,25 @@ const [wireError] = struct.parse(User, { display_name: 'Ada' })
 console.log(wireError?.issues[0]?.path)
 ```
 
-| Boundary                                       | Field                        |
-| ---------------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)`                      | Logical `displayName`        |
-| JSON request encoding                          | Wire `display_name`          |
-| JSON response decoding                         | Wire → logical `displayName` |
-| Query, header, URL-encoded, multipart encoding | Wire alias as key            |
+| Boundary                                    | Field                        |
+| ------------------------------------------- | ---------------------------- |
+| `struct.parse(User, ...)` and command input | Logical `displayName`        |
+| Typed object handed to the builder          | Wire `display_name`          |
+| JSON / SSE / WebSocket decoding             | Wire → logical `displayName` |
+| Anonymous object written in the builder     | The key you wrote            |
 
-Aliases work on nested fields, arrays, objects, unions, and discriminators. Keep logical names in app code; put external naming in the Struct.
+Aliases work on nested fields, arrays, objects, unions, and discriminators. Keep logical names in app code; put the external name on the struct once. Spreading a typed object keeps that encoding. Setting both the logical field and its wire key in the same object is `REQ_BUILD_FAILED`. `JSON.stringify` of a value yourself leaves this path: the serializer sees logical names.
+
+The guide is chosen at every node, not only at the root. A new object under an anonymous parent keeps the keys you wrote. The same object under a typed parent uses that field's struct.
+
+```ts
+body: { row: { id: '42' } }              // 根匿名：发出 id
+body: { ...input, row: { id: '42' } }    // 根带类型，row 字段声明了 alias：发出 wire_id
+```
+
+When a union guide matches more than one branch, each branch is encoded and compared. Identical wire output is kept; a difference is `REQ_BUILD_FAILED`.
+
+A mixed intersection that contains a non-object part is tagged, when parsed, with the conjunction of the tags from the parts that matched; a newly written mixed-intersection value that was not parsed is an anonymous object.
 
 ## Parse failures
 
@@ -164,7 +169,7 @@ if (error) {
 void value
 ```
 
-A `StructIssue` has `code`, `expected`, `message`, `path`, and `received`. Issues can hold untrusted input — redact before logging or returning. `struct.parse(..., { errorMap })` rewrites issue messages for that call only.
+A `StructIssue` has `code`, `expected`, `message`, `path`, and `received`. `code` is `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, or `missing_key`. Issues can hold untrusted input — redact before logging or returning. `struct.parse(..., { errorMap })` rewrites issue messages for that call only.
 
 Struct validation is structural only. No public range, format, refinement, auth, or state-transition rules. Do those checks before you build a command.
 
@@ -190,36 +195,19 @@ const Status = struct.enum(['draft', 'published'])
 const FileValue = struct.file()
 const Form = struct.formData({ file: struct.file() })
 const Combined = struct.intersection(struct.object({ id: struct.number() }), struct.object({ name: struct.string() }))
-const JsonBody = struct.json(struct.object({ ok: struct.boolean() }))
 const Literal = struct.literal('ready')
 const NullValue = struct.null()
 const NumberValue = struct.number()
 const ObjectValue = struct.object({ id: struct.number() })
 const Union = struct.or(struct.string(), struct.number())
 const RecordValue = struct.record(struct.number())
-const Request = struct.request({ path: struct.object({ id: struct.number() }) })
 const StringValue = struct.string()
-const TextBody = struct.text()
 const Tuple = struct.tuple([struct.string(), struct.number()])
 const Unknown = struct.unknown()
 const FormUrlEncoded = struct.urlencoded({ name: struct.string() })
 
 void [Any, ArrayOfStrings, Bytes, BigIntValue, BlobValue, BooleanValue, DateValue, Discriminated, Status, FileValue, Form, Combined]
-void [
-  JsonBody,
-  Literal,
-  NullValue,
-  NumberValue,
-  ObjectValue,
-  Union,
-  RecordValue,
-  Request,
-  StringValue,
-  TextBody,
-  Tuple,
-  Unknown,
-  FormUrlEncoded,
-]
+void [Literal, NullValue, NumberValue, ObjectValue, Union, RecordValue, StringValue, Tuple, Unknown, FormUrlEncoded]
 ```
 
 | Constructor                      | Input                                            | Inferred output                 |
@@ -245,6 +233,7 @@ Facade non-promises:
 - `struct.number()` rejects `NaN`, accepts infinities.
 - `struct.or(...)` tries branches in order; rejects ambiguous encodings when branches disagree.
 - `struct.intersection(...)` parses members in declaration order.
+- An intersection deep-merges member outputs (`Object.is`-equal values and equal-time dates stay, plain objects and equal-length arrays merge recursively, any other clash is `invalid_intersection` at that path), `unknown`/`any` contribute nothing, and one logical key may map to several wire keys. Only unequal values written to the same wire key conflict.
 - A Struct validates a boundary; it doesn’t cache, authorize, or own a transport resource.
 
 ## Related recipes

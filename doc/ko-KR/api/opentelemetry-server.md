@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: 나가는 계측 option, `withOpenTelemetryServer`예요.
+description: withOpenTelemetryServer와 전송별 options예요.
 ---
 
 # OpenTelemetry server {#page}
 
-클라이언트를 만들 때 나가는 계측을 켜요. HTTP, SSE, WebSocket interceptor를 붙여요. **들어오는** 서버 계측이 아니고, OpenTelemetry SDK도 초기화하지 않아요.
+나가는 HTTP / SSE / WebSocket 계측을 core interceptor로 붙여요. 이 패키지는 OpenTelemetry SDK를 초기화하지 않고, 들어오는 서버 계측도 아니에요.
 
-[OpenTelemetry server 가이드](../plugins/opentelemetry-server.md)를 보세요.
+[OpenTelemetry server 가이드](/plugins/opentelemetry-server)를 보세요.
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 
@@ -15,7 +15,7 @@ description: 나가는 계측 option, `withOpenTelemetryServer`예요.
 function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
 ```
 
-켠 전송마다 interceptor 하나를 추가해요. `createClient` 때 겹치세요.
+켠 전송마다 interceptor 하나를 추가해요. `createClient` 때 적용하세요.
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -65,7 +65,7 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 }
 ```
 
-`startSpanHook`은 해당 HTTP, SSE, WebSocket 전송의 span을 만들기 전에 동기적으로 실행돼요. 반환한 속성은 내장 속성 뒤에 적용되므로 애플리케이션이 `url.full` 같은 초기 값을 덮어쓸 수 있어요. Hook이 throw해도 Defjs는 내장 속성으로 span을 만들고 `defjs.otel.hook.error`를 기록한 뒤 요청을 계속해요. `requestHook`과 `responseHook`은 기존처럼 span 생성 후 실행돼요.
+`startSpanHook`은 해당 HTTP, SSE, WebSocket 전송의 span을 만들기 전에 동기적으로 실행돼요. 반환한 속성은 내장 속성 뒤에 적용되므로 애플리케이션이 `url.full`이나 다른 초기 값을 덮어쓸 수 있어요. Hook이 throw해도 Defjs는 내장 속성으로 span을 만들고 `defjs.otel.hook.error`를 기록한 뒤 요청을 계속해요. `requestHook`과 `responseHook`은 기존처럼 span 생성 후 실행돼요.
 
 기본 `url.full`은 `request.endpoint`를 선택적인 `request.baseEndpoint`에 대해 resolve할 뿐, 별도 `request.queryString`을 붙이지 않아요. 이 경계는 redaction이 아니고, 패키지에는 내장 redactor나 민감 key 정책이 없어요. 애플리케이션이 소유한 URL을 명시적으로 구성하고 필요하면 민감 값을 지우세요.
 

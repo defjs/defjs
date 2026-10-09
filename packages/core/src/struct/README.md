@@ -27,14 +27,13 @@ type User = Infer<typeof User>
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
-  output: User } as const,
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: User,
 })
 
 const client = createClient(withEndpoint('https://api.example.com'))
-const [error, user] = await client.execute(getUser({ path: { id: 1 } }))
+const [error, user] = await client.execute(getUser({ id: 1 }))
 if (error) throw error
 
 console.log(user.id, user.displayName)
@@ -42,25 +41,25 @@ console.log(user.id, user.displayName)
 
 `Infer<typeof User>` 是解析后的输出类型。`alias('display_name')` 只改变外部协议中的字段名，不把 TypeScript 属性 `displayName` 改成 `display_name`。
 
-Struct 实例本身没有 `.parse()`、`validate`、`parseAsync` 或 `encode` 方法。需要独立解析时使用 facade 上的 `struct.parse(User, input)`；HTTP、SSE、WebSocket endpoint runtime 和 request builder 也会在各自边界使用同一份 Struct metadata。
+Struct 实例本身没有 `.parse()`、`validate`、`parseAsync` 或 `encode` 方法。需要独立解析时使用 facade 上的 `struct.parse(User, input)`；HTTP、SSE、WebSocket endpoint 会在各自边界使用同一份 Struct metadata。出站编码由 builder 交出的带类型值驱动，没有公开的 `struct.encode`。
 
 ## 公共构造器
 
 `struct` facade 当前提供以下构造器。这里按用途分组，不对应内部实现的全部 definition kind。
 
-| 用途                     | 构造器                                                          | 说明                                                                      |
-| ------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 基础值                   | `string`、`number`、`boolean`、`null`                           | 字符串、数字、布尔值和显式 `null`                                         |
-| 不透明值                 | `any`、`unknown`                                                | 接受不受 Struct 约束的值；`any` 的输出类型也不提供静态保证                |
-| 固定值                   | `literal`、`enum`                                               | 单个字面量或非空枚举；枚举支持字符串数组和含字符串/数字值的对象           |
-| 平台/转换值              | `date`、`bigint`                                                | 输入可来自 wire 表示，输出分别是 `Date` 和 `bigint`                       |
-| 二进制值                 | `blob`、`file`、`arrayBuffer`                                   | 浏览器平台值                                                              |
-| 复合值                   | `object`、`array`、`tuple`、`record`                            | 对象、列表、固定长度序列和任意 key 的记录                                 |
-| 组合值                   | `or`、`intersection`、`discriminatedUnion`                      | 普通 union、交集和按 discriminator 路由的 union                           |
-| 请求包装                 | `request`                                                       | 将 path、query、headers、body 组织成 request sections                     |
-| body codec / binary body | `json`、`urlencoded`、`formData`、`text`、`blob`、`arrayBuffer` | 为 request body 选择 JSON、表单、文本或二进制编码；后两者是直接二进制路径 |
+| 用途        | 构造器                                     | 说明                                                                   |
+| ----------- | ------------------------------------------ | ---------------------------------------------------------------------- |
+| 基础值      | `string`、`number`、`boolean`、`null`      | 字符串、数字、布尔值和显式 `null`                                      |
+| 不透明值    | `any`、`unknown`                           | 接受不受 Struct 约束的值；`any` 的输出类型也不提供静态保证             |
+| 固定值      | `literal`、`enum`                          | 单个字面量或非空枚举；枚举支持字符串数组和含字符串/数字值的对象        |
+| 平台/转换值 | `date`、`bigint`                           | 输入可来自 wire 表示，输出分别是 `Date` 和 `bigint`                    |
+| 二进制值    | `blob`、`file`、`arrayBuffer`              | 浏览器平台值                                                           |
+| 复合值      | `object`、`array`、`tuple`、`record`       | 对象、列表、固定长度序列和任意 key 的记录                              |
+| 组合值      | `or`、`intersection`、`discriminatedUnion` | 普通 union、交集和按 discriminator 路由的 union                        |
+| 表单 codec  | `urlencoded`、`formData`                   | 仍是 object struct，只多一个 codec tag；tag 只在该值作为 body 根时生效 |
+| 二进制值    | `blob`、`file`、`arrayBuffer`              | 值 Struct。作为 body 根时按字节发送；作为入站声明时选择对应表示        |
 
-`struct.blob()` 和 `struct.arrayBuffer()` 既是值 Struct，也可以直接作为二进制 request body。普通 `struct.object(...)` 不能直接放入 `struct.request({ body: ... })`；JSON body 应使用 `struct.json(objectStruct)`，表单 body 使用 `struct.urlencoded(shape)` 或 `struct.formData(shape)`。
+普通 object、数组、number、boolean、`null` 作为 body 根时按 JSON 发送。`string` 作为 body 根或入站 `string` struct 时保持原文。`struct.urlencoded(shape)` 与 `struct.formData(shape)` 不是包装 kind。
 
 常见组合示例：
 
@@ -109,6 +108,8 @@ const [error, summary] = struct.parse(DailySummary, {
 `date`、`bigint` 以及 JSON codec 仍会做边界转换：例如 `date` 接受 `Date`、字符串或数字并输出 `Date`，`bigint` 接受 `bigint` 或字符串并输出 `bigint`。无效日期或不符合 `bigint` 输入规则的值产生结构错误。
 
 `struct.object(shape)` 只遍历声明的 shape，未知 key 会被丢弃。`array`、`record`、`tuple`、object 和 intersection 都在第一个确定错误处停止；tuple 输入长度必须与声明长度完全一致。解析后的 object 和 record 使用 null prototype；依赖 `Object.prototype` 方法时，应使用 `Object.keys`/`Object.entries`，或显式复制为普通对象。
+
+`intersection` 深合并每个成员的输出：`Object.is` 相等的值以及时间相同的 `Date` 保留该值，普通对象按自有 key 递归合并，等长数组按元素合并，其余冲突记为 `invalid_intersection`，path 指向冲突的 key 或下标。`unknown` 和 `any` 仍会执行，但不向合并结果贡献任何字段；成员全部是 `unknown` / `any` 时，结果就是输入本身。
 
 Node 的 strict deep equality 会比较 prototype，因此 Struct 解析结果不会与字段相同的 object literal 深度相等。测试应显式断言这个边界，或只在断言处做 shallow copy：
 
@@ -179,7 +180,7 @@ Struct 会区分“没有传字段”和“显式传入合法的 `0`、`false`�
 
 ## Alias 与 wire key
 
-`.alias(name)` 只改变 wire key，不改变逻辑字段名、`Infer`、request section 或 body codec。JSON、query、path、headers、URL-encoded 和 FormData 的自动编解码都会读取同一 alias。
+`.alias(name)` 只改变 wire key，不改变逻辑字段名或 `Infer`。带类型对象在出站编码、JSON 响应、SSE 事件和 WebSocket 帧上使用同一个 alias。匿名对象的 key 按字面量发送，alias 不参与。
 
 ```typescript
 import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } from '@defjs/core'
@@ -199,7 +200,8 @@ let requestWireBody: unknown
 const echoUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({ body: struct.json(UserBody) }),
+  input: struct.object({ user: UserBody }),
+  builder: (input) => ({ body: input.user }),
   output: UserBody,
 })
 const client = createClient(
@@ -210,7 +212,7 @@ const client = createClient(
   }),
 )
 
-const [requestError, responseUser] = await client.execute(echoUser({ body: { id: 1, displayName: 'Ada' } }))
+const [requestError, responseUser] = await client.execute(echoUser({ user: { id: 1, displayName: 'Ada' } }))
 if (requestError) throw requestError
 ```
 
@@ -223,19 +225,15 @@ if (requestError) throw requestError
 | 解析后的值        | `{ displayName: 'Ada' }`  | 不会变成 `{ display_name: 'Ada' }`                  |
 | 编码后的值        | `{ display_name: 'Ada' }` | 发到协议边界的 key                                  |
 
-同一 object shape 内的 wire key 必须唯一；两个字段不能通过 alias 解析成同一个外部 key。不同 request section 可以各自使用同名 wire key，因为它们属于不同的协议位置。
+同一 object shape 内的 wire key 必须唯一；两个字段不能通过 alias 解析成同一个外部 key。path、query、headers、body 是不同对象，所以彼此可以重用同一个 wire key。
 
-显式 `build(ctx, input)` 时需要区分 bound view 和最终 wire key。`input` 是从 endpoint input Struct 生成的 schema-bound view，不是实际业务值，也不是可以拿去复用的 field Struct。例如：
+builder 拿到的是解析后的真实值，对象节点带有产生它的 struct。把带类型的值交出去，alias 会生效；在匿名对象里手写 key，则 key 就是线上名：
 
 ```typescript
-build(ctx, input) {
-  ctx.setJson({
-    name: input.body.displayName,
-  })
-}
+builder: (input) => ({ body: { name: input.user.displayName } })
 ```
 
-这里对象字面量中的 `name` 已经是最终 wire key，不会再自动套用 `display_name`。如果把整个 keyed object 交给 JSON encoder，encoder 才会按对象 Struct metadata 递归应用 aliases。自动构建 `struct.request(...)` 时，runtime 会按 section 和 field metadata 使用 alias。
+这里的 `name` 不会再套用 `display_name`。`body: input.user` 才会按 `UserBody` 的 alias 编码。展开 `{ ...input.user, role: 'admin' }` 仍保留类型；同时写入逻辑名和它的 wire key 会在执行时成为 `REQ_BUILD_FAILED`。
 
 ## Union 与 discriminated union
 
@@ -249,6 +247,8 @@ type Identifier = Infer<typeof Identifier> // string | number
 ```
 
 顺序是合同的一部分。重叠分支会让前面的分支吸收后面的分支；`struct.any()` 或 `struct.unknown()` 这类宽泛分支也可能让后续分支永远没有机会。每个 option 内部都 fail-fast；第一个成功 option 立即返回。所有 option 都失败时只产生一个外层 `invalid_union` issue，不聚合候选分支的错误。
+
+解析失败的 issue code 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union`、`missing_key`。`format()`、`flatten()` 和 `prettify()` 按 path 与 message 呈现这些 code。
 
 ### 判别联合
 
@@ -283,14 +283,12 @@ function summarize(event: Event): string {
 - 已选分支的字段错误会保留该字段路径。
 - JSON codec 支持 discriminator 字段的 alias；按 option 声明顺序读取第一个实际存在的 wire discriminator，选中分支后不再访问其他 option 的 alias。
 
-## Request sections
+## 请求放置
 
-`struct.request(...)` 表达直接映射到 request 的四个 section：`path`、`query`、`headers` 和 `body`。
-
-只需声明实际使用的 section；一旦声明，该 section 本身就是必填的。section 内只有标记为 optional 或 nullish 的字段可以省略。例如声明 `query: struct.object({ page: struct.number().optional() })` 后，`query: {}` 合法，但完全省略 `query` 会失败。
+path、query、headers、body 由 endpoint 的 `builder` 返回，不是一种 struct kind。input 本身已经是这个形状时可以省略 `builder`，等价于 `(input) => input`。字段是否必填只看它自己的 `.optional()` / `.nullish()`，没有“整段 section 可省略”的特判。
 
 ```typescript
-const UpdateInput = struct.request({
+const UpdateInput = struct.object({
   path: struct.object({
     userId: struct.number().alias('id'),
   }),
@@ -300,11 +298,9 @@ const UpdateInput = struct.request({
   headers: struct.object({
     traceId: struct.string().alias('x-trace-id'),
   }),
-  body: struct.json(
-    struct.object({
-      name: struct.string().alias('display_name'),
-    }),
-  ),
+  body: struct.object({
+    name: struct.string().alias('display_name'),
+  }),
 })
 
 const updateUser = defineRequest({
@@ -321,18 +317,11 @@ updateUser({
 })
 ```
 
-当 HTTP、SSE 或 WebSocket endpoint runtime 未提供显式 `build` 时，内部 request builder 才会读取 `struct.request` metadata 并默认 materialize：
+`path` 和 `headers` 编码后必须是扁平标量。未配置 query 序列化器时，`query` 也必须是扁平标量：数组展开为重复 key，嵌套对象报 `REQ_BUILD_FAILED`。配置 `withQuerySerializer` 后 `query` 可以嵌套，序列化器收到的是 alias 已生效的线上对象（`Date` 为 ISO，`bigint` 为字符串）。`urlencoded` 和 `formData` 的 codec tag 只在该对象作为 body 根时把字段编成表单；嵌进别的对象里就按普通 JSON 字段编码。HTTP 和 SSE 可以有 body；`GET` / `HEAD` 在类型上禁止 body。WebSocket 的 builder 不能返回 headers 或 body。
 
-1. `path` -> path params；
-2. `query` -> query params；
-3. `headers` -> HTTP headers；
-4. `body` -> body wrapper 指定的 codec。
+Path placeholder 应传入原始 scalar；Core 对每个值恰好执行一次 `encodeURIComponent`。调用方不要预编码，否则 `%` 会再次编码为 `%25`。
 
-`struct.request` 只声明 sections 和 body codec；它本身不执行 materialize，也不能独立构建请求。`path`、`query` 和 `headers` 必须是 flat object Struct。`urlencoded` 和 `formData` 的便捷构造器也接收 flat shape；JSON body 可以嵌套对象。HTTP 和 SSE request input 支持 body；WebSocket request input 只支持 path 和 query，不支持 headers 和 body，这些是 transport runtime 的限制。
-
-Path placeholder 应传入原始 scalar 值；Core 在替换时会对每个值恰好执行一次 `encodeURIComponent`。调用方不要预编码，否则 `%` 会再次编码为 `%25`。
-
-如果写了显式 `build`，默认 materialize 不再替你完成 request plan；`build` 必须明确写出需要的 section 和 body 编码。`struct.request` 负责表达结构和 codec，不负责决定应用层业务校验，也不改变 transport 的生命周期合同。
+builder 不负责应用层校验，也不改变 transport 的生命周期。校验失败仍是 `REQ_INPUT_INVALID`；builder 抛错或线上名冲突是 `REQ_BUILD_FAILED`，且不会从 endpoint 调用处抛出。
 
 ## StructError 与解析失败
 
@@ -345,7 +334,7 @@ Path placeholder 应传入原始 scalar 值；Core 在替换时会对每个值�
 失败: [StructError, undefined]
 ```
 
-对象、数组、record、request、tuple 等在第一个错误处停止；不会把部分成功 output 暴露给调用方。为了兼容错误展示 API，`StructError.issues` 仍是数组，但正常解析失败只包含当前第一个 issue。内部 `parseStructValue` 是 throwing adapter；应用应使用根入口的 `struct.parse`，不要依赖 `./introspection` 等内部路径。
+对象、数组、record、tuple 等在第一个错误处停止；不会把部分成功 output 暴露给调用方。为了兼容错误展示 API，`StructError.issues` 仍是数组，但正常解析失败只包含当前第一个 issue。内部 `parseStructValue` 是 throwing adapter；应用应使用根入口的 `struct.parse`，不要依赖 `./introspection` 等内部路径。
 
 在 endpoint runtime 中，Struct 错误会由对应 transport 再包装。例如 HTTP 输入结构失败成为 `REQ_INPUT_INVALID`，响应体不合声明成为 `RES_STRUCT_MISMATCH`。分流条件见下面的 HTTP 矩阵；这一步属于 endpoint 层，不属于 Struct 本身。
 
@@ -368,7 +357,7 @@ if (error?.code === 'RES_STRUCT_MISMATCH') {
 
 `[err, data, response]`、HTTP status、`HTTP_STATUS`、`DecodedResponse` 以及 fault 的 `data` 都是 endpoint/transport 层的合同。Struct 本身没有 status、response 或 HTTP tuple。
 
-`ok` 是唯一的分流点：2xx 用 `output` 解码，其余用 `error` 解码，永不两者都试。省略某一侧意味着那个 body 根本不读。声明了任一侧且省略 `responseType` 时，effective mode 是 `json`；显式 `text`、`blob`、`arraybuffer` 使用各自的 representation，不把 JSON-looking bytes 当作 JSON syntax。两侧都不声明时不能声明 `responseType`，底层会取消响应 body。
+`ok` 是唯一的分流点：2xx 用 `output` 解码，其余用 `error` 解码，永不两者都试。省略某一侧意味着那个 body 根本不读。表示法由 struct kind 决定：`string` 是原文，`blob` / `file` 是 Blob，`arrayBuffer` 是字节，其余是 JSON。两侧都不声明时，底层会取消响应 body。没有 `responseType` 选项。
 
 解码只发生一次，且在拦截器链之后——拦截器用 `makeResponse(...)` 短路返回的响应，和线上真实响应走同一条解码路径。
 

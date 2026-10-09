@@ -1,22 +1,19 @@
-import type { Command } from './command'
-import { isEventStreamCommand, isHttpCommand, isWebSocketCommand } from './command'
+import type { Command, CommandExecutor } from './command'
+import { COMMAND_EXECUTE, isEventStreamCommand, isHttpCommand, isWebSocketCommand } from './command'
 import type { ClientConfig } from './config'
 import { createClientConfig } from './config'
 import type { ClientOption } from './option'
 import type { HttpCommand, HttpExecuteOptions } from '../http/http'
-import { executeHttpCommand } from '../http/http'
+import type { executeHttpCommand } from '../http/http'
 import type { EventStructs, EventStreamCommand, EventStreamData, EventStreamExecuteOptions, StreamAwaitResult } from '../sse/sse'
-import { executeEventStreamCommand } from '../sse/sse'
 import type { AnyStruct } from '../struct'
 import type {
   SocketAwaitResult,
-  SocketStructs,
   WebSocketCommand,
   WebSocketExecuteOptions,
   WebSocketIncomingData,
   WebSocketOutgoingData,
 } from '../web_socket/web_socket'
-import { executeWebSocketCommand } from '../web_socket/web_socket'
 
 export const CLIENT = Symbol('Client')
 
@@ -27,13 +24,13 @@ export type Client = {
   readonly [CLIENT]: ClientConfig
 
   /** Open an SSE command and return stream open/await results. */
-  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs>(
-    command: EventStreamCommand<TInput, TEvents>,
+  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
     options?: EventStreamExecuteOptions,
-  ): Promise<StreamAwaitResult<EventStreamData<TEvents>>>
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
 
   /** Open a WebSocket command and return session await results. */
-  execute<TInput extends AnyStruct | undefined, TIncoming extends SocketStructs, TOutgoing extends SocketStructs | undefined>(
+  execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
     command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
     options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
   ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
@@ -65,11 +62,11 @@ export function createClient(...options: ClientOption[]): Client {
     option(conf)
   }
 
-  function execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs>(
-    command: EventStreamCommand<TInput, TEvents>,
+  function execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
     options?: EventStreamExecuteOptions,
-  ): Promise<StreamAwaitResult<EventStreamData<TEvents>>>
-  function execute<TInput extends AnyStruct | undefined, TIncoming extends SocketStructs, TOutgoing extends SocketStructs | undefined>(
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+  function execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
     command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
     options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
   ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
@@ -78,21 +75,11 @@ export function createClient(...options: ClientOption[]): Client {
     options?: HttpExecuteOptions,
   ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
   function execute(command: Command, options?: unknown): Promise<unknown> {
-    if (isHttpCommand(command)) {
-      return executeHttpCommand(conf, command, options as HttpExecuteOptions | undefined)
-    }
-
-    if (isEventStreamCommand(command)) {
-      return executeEventStreamCommand(conf, command, options as EventStreamExecuteOptions | undefined)
-    }
-
-    if (isWebSocketCommand(command)) {
-      return executeWebSocketCommand(
+    if (isHttpCommand(command) || isEventStreamCommand(command) || isWebSocketCommand(command)) {
+      return (command[COMMAND_EXECUTE] as (config: ClientConfig, command: Command, options: unknown) => ReturnType<CommandExecutor>)(
         conf,
         command,
-        options as
-          | WebSocketExecuteOptions<WebSocketIncomingData<SocketStructs>, WebSocketOutgoingData<SocketStructs | undefined>>
-          | undefined,
+        options,
       )
     }
 

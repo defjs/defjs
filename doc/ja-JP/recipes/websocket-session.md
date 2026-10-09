@@ -5,7 +5,7 @@ description: 接続し、型付きエンベロープを 1 つ送り、1 つ受�
 
 # WebSocket セッションを開く
 
-JSON エンベロープは空でない文字列の `type` を使います。購読解除、`close`、`await session.closed` は呼び出し側の責任です。
+方向ごとに struct は 1 つです。購読解除、`close`、`await session.closed` は呼び出し側の責任です。不正なフレームは `onRuntimeError` へ行きます。
 
 詳細は [WebSocket](../core/web-socket.md) を見てください。
 
@@ -17,8 +17,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session] = await client.execute(room())

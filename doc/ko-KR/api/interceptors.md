@@ -100,4 +100,4 @@ function basicAuthSSEInterceptor(fn: () => { username: string; password: string 
 
 `fn`은 요청마다 호출돼요. `BasicAuthInterceptorOptions`의 선택 `encode`가 기본 `Basic …` 헤더 값을 교체해요.
 
-자세한 내용은 [인터셉터 가이드](../core/interceptors.md)를 보세요.
+[인터셉터 가이드](/core/interceptors)를 보세요.

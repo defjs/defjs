@@ -19,7 +19,11 @@ describe('http utils', () => {
 
     expect(serializeHttpBody(formData)).toBe(formData)
     expect(serializeHttpBody(blob)).toBe(blob)
+    const bytes = new Uint8Array([1, 2, 3])
+    const view = new DataView(bytes.buffer)
     expect(serializeHttpBody(arrayBuffer)).toBe(arrayBuffer)
+    expect(serializeHttpBody(bytes)).toBe(bytes)
+    expect(serializeHttpBody(view)).toBe(view)
     expect(serializeHttpBody(searchParams)).toBe(searchParams)
     expect(serializeHttpBody(stream)).toBe(stream)
     expect(serializeHttpBody('hello')).toBe('hello')
@@ -50,7 +54,11 @@ describe('http utils', () => {
     })
 
     expect(resolveHttpBodyContentType(formData)).toBeNull()
+    const bytes = new Uint8Array([1, 2, 3])
+    const view = new DataView(bytes.buffer)
     expect(resolveHttpBodyContentType(arrayBuffer)).toBe('application/octet-stream')
+    expect(resolveHttpBodyContentType(bytes)).toBe('application/octet-stream')
+    expect(resolveHttpBodyContentType(view)).toBe('application/octet-stream')
     expect(resolveHttpBodyContentType(blob)).toBe(blob.type)
     expect(resolveHttpBodyContentType(new Blob(['hello']))).toBe('application/octet-stream')
     if (typeof File !== 'undefined') {
@@ -71,6 +79,14 @@ describe('http utils', () => {
   test('should return null content type for unsupported bodies', () => {
     expect(resolveHttpBodyContentType(undefined)).toBeNull()
     expect(resolveHttpBodyContentType((() => 'noop') as never)).toBeNull()
+  })
+
+  test('should keep a header when builder source metadata matches the body', () => {
+    const body = '{"ok":true}'
+    const headers = new Headers({ 'Content-Type': 'application/merge-patch+json' })
+    applyRequestContentType(makeRequest({ body, bodyContentTypeSource: body }), headers)
+
+    expect(headers.get('content-type')).toBe('application/merge-patch+json')
   })
 
   test('should apply final request content type from body after headers', () => {

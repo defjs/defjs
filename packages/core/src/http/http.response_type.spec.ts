@@ -5,116 +5,209 @@ import { makeResponse } from '../internal/http_response'
 import { struct } from '../struct'
 import { defineRequest } from './index'
 
-describe('request http response type declarations', () => {
-  test('should support explicit responseType declarations', async () => {
-    const client = createClient(
-      withEndpoint('https://example.com'),
-      withInterceptors(
-        createHttpInterceptor(async ({ endpoint }) => {
-          switch (endpoint) {
-            case '/json-text':
-              return makeResponse({
-                body: { id: 1 },
-                headers: new Headers([['content-type', 'application/json']]),
-                status: 200,
-              })
-            case '/plain-text':
-              return makeResponse({
-                body: 'zen-kit',
-                headers: new Headers([['content-type', 'text/plain']]),
-                status: 200,
-              })
-            default:
-              return makeResponse({
-                body: null,
-                status: 404,
-              })
-          }
-        }),
-      ),
-    )
+const JSON_HEADERS = { 'content-type': 'application/json' }
+const TEXT_HEADERS = { 'content-type': 'text/plain' }
+const BYTES_HEADERS = { 'content-type': 'application/octet-stream' }
 
-    const useJsonResponse = defineRequest({
-      method: 'GET',
-      output: struct.object({
-        id: struct.number(),
-      }),
-      responseType: 'json',
-      path: '/json-text',
-    })
+function clientReturning(body: BodyInit | null, status: number, headers: Record<string, string>) {
+  return createClient(
+    withEndpoint('https://example.com'),
+    withHTTPHandle(async () => new Response(body, { headers, status })),
+  )
+}
 
-    const useTextResponse = defineRequest({
-      method: 'GET',
-      output: struct.string(),
-      responseType: 'text',
-      path: '/plain-text',
-    })
+describe('inbound representation by struct kind', () => {
+  test('should read a string output as raw text', async () => {
+    const client = clientReturning('zen-kit', 200, TEXT_HEADERS)
+    const useRequest = defineRequest({ method: 'GET', output: struct.string(), path: '/raw' })
 
-    const [[jsonError, jsonResult], [textError, textResult]] = await Promise.all([
-      client.execute(useJsonResponse()),
-      client.execute(useTextResponse()),
-    ])
+    const [error, result] = await client.execute(useRequest())
 
-    expect(jsonError).toBeNull()
-    expect(jsonResult).toEqual({ id: 1 })
-    expect(textError).toBeNull()
-    expect(textResult).toBe('zen-kit')
+    expect(error).toBeNull()
+    expect(result).toBe('zen-kit')
   })
 
-  test.each(['arraybuffer', 'blob'] as const)('should decode a declared JSON 404 when success responseType is %s', async (responseType) => {
+  test('should keep a JSON string body raw when the output struct is a string', async () => {
+    const client = clientReturning('"abc"', 200, JSON_HEADERS)
+    const useRequest = defineRequest({ method: 'GET', output: struct.string(), path: '/raw' })
+
+    const [error, result] = await client.execute(useRequest())
+
+    expect(error).toBeNull()
+    expect(result).toBe('"abc"')
+  })
+
+  test('should read a blob output as a Blob', async () => {
+    const client = clientReturning(new Uint8Array([1, 2, 3]), 200, BYTES_HEADERS)
+    const useRequest = defineRequest({ method: 'GET', output: struct.blob(), path: '/file' })
+
+    const [error, result] = await client.execute(useRequest())
+
+    expect(error).toBeNull()
+    expect(result).toBeInstanceOf(Blob)
+    await expect((result as Blob).arrayBuffer()).resolves.toEqual(new Uint8Array([1, 2, 3]).buffer)
+  })
+
+  test('should read an arrayBuffer output as bytes', async () => {
+    const client = clientReturning(new Uint8Array([1, 2, 3]), 200, BYTES_HEADERS)
+    const useRequest = defineRequest({ method: 'GET', output: struct.arrayBuffer(), path: '/bytes' })
+
+    const [error, result] = await client.execute(useRequest())
+
+    expect(error).toBeNull()
+    expect(result).toBeInstanceOf(ArrayBuffer)
+    expect(new Uint8Array(result as ArrayBuffer)).toEqual(new Uint8Array([1, 2, 3]))
+  })
+
+  test('should read object, number, and boolean outputs as JSON', async () => {
+    const client = createClient(
+      withEndpoint('https://example.com'),
+      withHTTPHandle(async (input) => {
+        const href = input instanceof Request ? input.url : String(input)
+        const pathname = new URL(href).pathname
+        const body = pathname === '/num' ? '7' : pathname === '/flag' ? 'true' : JSON.stringify({ id: 1 })
+        return new Response(body, { headers: JSON_HEADERS, status: 200 })
+      }),
+    )
+    const useObject = defineRequest({
+      method: 'GET',
+      output: struct.object({ id: struct.number() }),
+      path: '/json',
+    })
+    const useNumber = defineRequest({ method: 'GET', output: struct.number(), path: '/num' })
+    const useBoolean = defineRequest({ method: 'GET', output: struct.boolean(), path: '/flag' })
+
+    const [objectError, objectResult] = await client.execute(useObject())
+    const [numberError, numberResult] = await client.execute(useNumber())
+    const [booleanError, booleanResult] = await client.execute(useBoolean())
+
+    expect(objectError).toBeNull()
+    expect(objectResult).toEqual({ id: 1 })
+    expect(numberError).toBeNull()
+    expect(numberResult).toBe(7)
+    expect(booleanError).toBeNull()
+    expect(booleanResult).toBe(true)
+  })
+
+  test('should read a string error as raw text', async () => {
+    const client = clientReturning('missing', 404, TEXT_HEADERS)
+    const useRequest = defineRequest({
+      error: struct.string(),
+      method: 'GET',
+      output: struct.blob(),
+      path: '/missing',
+    })
+
+    const [error] = await client.execute(useRequest())
+
+    expect(error?.code).toBe('HTTP_STATUS')
+    if (error?.code !== 'HTTP_STATUS') {
+      throw new Error('Expected an http status fault')
+    }
+    expect(error.data).toBe('missing')
+  })
+
+  test('should read a blob error as a Blob', async () => {
+    const client = clientReturning(new Uint8Array([1, 2, 3]), 404, BYTES_HEADERS)
+    const useRequest = defineRequest({
+      error: struct.blob(),
+      method: 'GET',
+      output: struct.object({ ok: struct.boolean() }),
+      path: '/missing',
+    })
+
+    const [error] = await client.execute(useRequest())
+
+    expect(error?.code).toBe('HTTP_STATUS')
+    if (error?.code !== 'HTTP_STATUS') {
+      throw new Error('Expected an http status fault')
+    }
+    expect(error.data).toBeInstanceOf(Blob)
+    await expect((error.data as Blob).arrayBuffer()).resolves.toEqual(new Uint8Array([1, 2, 3]).buffer)
+  })
+
+  test('should read an arrayBuffer error as bytes', async () => {
+    const client = clientReturning(new Uint8Array([4, 5]), 404, BYTES_HEADERS)
+    const useRequest = defineRequest({
+      error: struct.arrayBuffer(),
+      method: 'GET',
+      output: struct.string(),
+      path: '/missing',
+    })
+
+    const [error] = await client.execute(useRequest())
+
+    expect(error?.code).toBe('HTTP_STATUS')
+    if (error?.code !== 'HTTP_STATUS') {
+      throw new Error('Expected an http status fault')
+    }
+    expect(error.data).toBeInstanceOf(ArrayBuffer)
+    expect(new Uint8Array(error.data as ArrayBuffer)).toEqual(new Uint8Array([4, 5]))
+  })
+
+  test('should read an object error as JSON while a blob output stays binary', async () => {
     const client = createClient(
       withEndpoint('https://example.com'),
       withHTTPHandle(async (input) => {
         const href = input instanceof Request ? input.url : String(input)
         if (new URL(href).pathname === '/missing') {
           return new Response(JSON.stringify({ message: 'gone' }), {
-            headers: { 'content-type': 'application/json' },
+            headers: JSON_HEADERS,
             status: 404,
           })
         }
         return new Response(new Uint8Array([1, 2, 3]), {
-          headers: { 'content-type': 'application/octet-stream' },
+          headers: BYTES_HEADERS,
           status: 200,
         })
       }),
     )
     const useMissing = defineRequest({
-      method: 'GET',
-      output: responseType === 'blob' ? struct.blob() : struct.arrayBuffer(),
       error: struct.object({ message: struct.string() }),
+      method: 'GET',
+      output: struct.blob(),
       path: '/missing',
-      responseType,
     })
     const useOk = defineRequest({
-      method: 'GET',
-      output: responseType === 'blob' ? struct.blob() : struct.arrayBuffer(),
       error: struct.object({ message: struct.string() }),
+      method: 'GET',
+      output: struct.blob(),
       path: '/ok',
-      responseType,
     })
 
-    const [error, result] = await client.execute(useMissing())
+    const [error] = await client.execute(useMissing())
     const [okError, okResult] = await client.execute(useOk())
 
-    expect(result).toBeUndefined()
     expect(error?.code).toBe('HTTP_STATUS')
     if (error?.code !== 'HTTP_STATUS') {
       throw new Error('Expected an http status fault')
     }
-    expect(typeof error.data.message).toBe('string')
-    expect(error.data.message).toBe('gone')
+    expect(error.data).toEqual({ message: 'gone' })
     expect(okError).toBeNull()
-    if (responseType === 'blob') {
-      expect(okResult).toBeInstanceOf(Blob)
-    } else {
-      expect(okResult).toBeInstanceOf(ArrayBuffer)
-    }
+    expect(okResult).toBeInstanceOf(Blob)
   })
 
-  test('should decode JSON error bodies from text, bytes, and blobs', async () => {
+  test('should keep a file error body off the JSON path', async () => {
+    const client = clientReturning(new Uint8Array([1, 2, 3]), 404, BYTES_HEADERS)
+    const useRequest = defineRequest({
+      error: struct.file(),
+      method: 'GET',
+      output: struct.arrayBuffer(),
+      path: '/missing',
+    })
+
+    const [error] = await client.execute(useRequest())
+
+    expect(error?.code).toBe('RES_STRUCT_MISMATCH')
+  })
+
+  test('should decode JSON error bodies from an already-parsed value, bytes, and blobs', async () => {
+    const bufferBytes = new TextEncoder().encode(JSON.stringify({ message: 'buffer-body' }))
+    // A string on a JSON representation is a JSON string root, so the object case must already be parsed.
     const payloads = [
-      JSON.stringify({ message: 'string-body' }),
+      { message: 'string-body' },
       new TextEncoder().encode(JSON.stringify({ message: 'view-body' })),
+      bufferBytes.buffer.slice(bufferBytes.byteOffset, bufferBytes.byteOffset + bufferBytes.byteLength),
       new Blob([JSON.stringify({ message: 'blob-body' })], { type: 'application/json' }),
     ]
     let index = 0
@@ -129,17 +222,17 @@ describe('request http response type declarations', () => {
           }
           return makeResponse({
             body,
+            headers: new Headers(JSON_HEADERS),
             status: 404,
           })
         }),
       ),
     )
     const useRequest = defineRequest({
+      error: struct.object({ message: struct.string() }),
       method: 'GET',
       output: struct.arrayBuffer(),
-      error: struct.object({ message: struct.string() }),
       path: '/missing',
-      responseType: 'arraybuffer',
     })
 
     const messages = []
@@ -152,88 +245,90 @@ describe('request http response type declarations', () => {
       messages.push(error.data.message)
     }
 
-    expect(messages).toEqual(['string-body', 'view-body', 'blob-body'])
+    expect(messages).toEqual(['string-body', 'view-body', 'buffer-body', 'blob-body'])
   })
 
-  test('should decode a declared text 404 when success responseType is arraybuffer', async () => {
+  test('should keep an interceptor JSON string as a string root', async () => {
     const client = createClient(
       withEndpoint('https://example.com'),
-      withHTTPHandle(async () => new Response('missing', { status: 404 })),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body: '123',
+            headers: new Headers(JSON_HEADERS),
+            status: 200,
+          }),
+        ),
+      ),
     )
     const useRequest = defineRequest({
       method: 'GET',
-      output: struct.arrayBuffer(),
-      error: struct.string(),
-      path: '/missing',
-      responseType: 'arraybuffer',
+      output: struct.unknown(),
+      path: '/root-string',
     })
 
-    const [error] = await client.execute(useRequest())
-    expect(error?.code).toBe('HTTP_STATUS')
-    if (error?.code !== 'HTTP_STATUS') {
-      throw new Error('Expected an http status fault')
-    }
-    expect(error.data).toBe('missing')
+    const [error, data] = await client.execute(useRequest())
+
+    expect(error).toBeNull()
+    expect(data).toBe('123')
   })
 
-  test('should keep declared blob and file error bodies off the JSON path', async () => {
+  test('should reject a JSON string that only looks like an object', async () => {
     const client = createClient(
       withEndpoint('https://example.com'),
-      withHTTPHandle(async () => new Response(new Uint8Array([1, 2, 3]), { status: 404 })),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body: '{"role":"admin"}',
+            headers: new Headers(JSON_HEADERS),
+            status: 200,
+          }),
+        ),
+      ),
     )
-    const useBlob = defineRequest({
+    const useRequest = defineRequest({
       method: 'GET',
-      output: struct.arrayBuffer(),
-      error: struct.blob(),
-      path: '/missing-blob',
-      responseType: 'arraybuffer',
-    })
-    const useFile = defineRequest({
-      method: 'GET',
-      output: struct.arrayBuffer(),
-      error: struct.file(),
-      path: '/missing-file',
-      responseType: 'arraybuffer',
+      output: struct.object({ role: struct.string() }),
+      path: '/object-text',
     })
 
-    const [blobError] = await client.execute(useBlob())
-    const [fileError] = await client.execute(useFile())
+    const [error, data] = await client.execute(useRequest())
 
-    expect(blobError?.code).toBe('RES_STRUCT_MISMATCH')
-    expect(fileError?.code).toBe('RES_STRUCT_MISMATCH')
+    expect(error?.code).toBe('RES_STRUCT_MISMATCH')
+    expect(data).toBeUndefined()
   })
 
-  test('should keep a declared arraybuffer error body off the JSON decode path', async () => {
+  test('should keep a declared arrayBuffer error body off the JSON decode path', async () => {
     const client = createClient(
       withEndpoint('https://example.com'),
       withInterceptors(createHttpInterceptor(async () => makeResponse({ body: { message: 'gone' }, status: 404 }))),
     )
     const useRequest = defineRequest({
+      error: struct.arrayBuffer(),
       method: 'GET',
       output: struct.object({ ok: struct.boolean() }),
-      error: struct.arrayBuffer(),
       path: '/missing-bytes',
-      responseType: 'json',
     })
 
     const [error] = await client.execute(useRequest())
+
     expect(error?.code).toBe('RES_STRUCT_MISMATCH')
   })
 
-  test('should parse a declared text error from a non-binary interceptor body', async () => {
+  test('should reject a non-text interceptor body for a string error', async () => {
     const client = createClient(
       withEndpoint('https://example.com'),
       withInterceptors(createHttpInterceptor(async () => makeResponse({ body: 404, status: 404 }))),
     )
     const useRequest = defineRequest({
+      error: struct.string(),
       method: 'GET',
       output: struct.arrayBuffer(),
-      error: struct.string(),
       path: '/missing',
-      responseType: 'arraybuffer',
     })
 
     const [error] = await client.execute(useRequest())
+
     expect(error?.code).toBe('RES_STRUCT_MISMATCH')
   })
 })

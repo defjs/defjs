@@ -89,12 +89,29 @@ describe('json content-type precheck', () => {
     expect(data).toBeUndefined()
   })
 
-  test('should skip the precheck when responseType is not json', async () => {
-    const useText = defineRequest({ method: 'GET', output: struct.string(), path: '/raw', responseType: 'text' })
+  test('should skip the precheck when the output struct is a string', async () => {
+    const useText = defineRequest({ method: 'GET', output: struct.string(), path: '/raw' })
     const { client } = clientReturning('plain body', { headers: { 'content-type': 'text/html' }, status: 200 })
     const [fault, data] = await client.execute(useText())
 
     expect(fault).toBeNull()
     expect(data).toBe('plain body')
+  })
+
+  test('should still precheck a JSON error when the output struct is a string', async () => {
+    const useRequest = defineRequest({
+      error: ApiError,
+      method: 'GET',
+      output: struct.string(),
+      path: '/raw',
+    })
+    const { cancelled, client } = clientReturning('<html>gateway timeout</html>', {
+      headers: { 'content-type': 'text/html' },
+      status: 504,
+    })
+    const [fault] = await client.execute(useRequest())
+
+    expect(fault?.code).toBe('RES_MEDIA_TYPE_INVALID')
+    expect(cancelled()).toBe(true)
   })
 })

@@ -5,7 +5,7 @@ description: Keep GraphQL as HTTP 200 + application unwrap; Core does not ship a
 
 # Unwrap a GraphQL HTTP envelope
 
-Defjs does not implement GraphQL `errorPolicy`. Model the wire as HTTP POST with a JSON envelope, declare `200`, then unwrap `errors[]` / missing `data` in your own helper.
+Defjs does not implement GraphQL `errorPolicy`. Model the wire as an HTTP POST whose builder places the query document and variables, then unwrap `errors[]` / missing `data` in your own helper.
 
 See [Design Decisions](../guide/design-decisions.md).
 
@@ -17,13 +17,8 @@ const VIEWER_QUERY = 'query Viewer { viewer { id login } }' as const
 const runViewer = defineRequest({
   method: 'POST',
   path: '/graphql',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        operationName: struct.literal('Viewer'),
-        query: struct.literal(VIEWER_QUERY),
-      }),
-    ),
+  builder: () => ({
+    body: { query: VIEWER_QUERY, operationName: 'Viewer' },
   }),
   output: struct.object({
     data: struct
@@ -36,7 +31,7 @@ const runViewer = defineRequest({
 })
 
 async function loadViewer(client: Client) {
-  const [error, result] = await client.execute(runViewer({ body: { operationName: 'Viewer', query: VIEWER_QUERY } }))
+  const [error, result] = await client.execute(runViewer())
   if (error) throw error
   if (result.errors?.length) {
     throw new Error(result.errors.map((item) => item.message).join('; '))

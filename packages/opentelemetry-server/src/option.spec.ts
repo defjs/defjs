@@ -19,7 +19,6 @@ function makeConfig(): ClientConfig {
     endpoint: 'https://api.example.com',
     http: { handle: sharedFetch },
     interceptors: [],
-    queryParamsSerializer: (params) => params.toString(),
     sse: { handle: sharedFetch },
     webSocket: { handle: globalThis.WebSocket },
   }

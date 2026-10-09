@@ -1,45 +1,49 @@
-import { COMMAND_TYPE, HTTP_COMMAND } from '../client/command'
+import { COMMAND_EXECUTE, COMMAND_TYPE, HTTP_COMMAND, type CommandExecutor } from '../client/command'
 import type { BaseCommand } from '../client/command'
 import type { HttpClientConfig } from '../client/config'
-import type { AnyFault, Fault, FaultOf } from '../error'
+import type { AnyFault, Fault, FaultOf, PreflightFault } from '../error'
 import {
   createDecodeFault,
   createHttpStatusFault,
   createNetworkFault,
   createPreflightFault,
   createUndecodedHttpStatusFault,
-  ERR_TIMEOUT,
 } from '../error'
 import { makeChain, resolveHttpInterceptors } from '../interceptor/interceptor'
 import type { UseCancellationConfig } from '../internal/abort'
 import {
+  armTransportDeadline,
   awaitWithSignal,
   createAbortTimeoutConflictFault,
   hasAbortTimeoutConflict,
   mergeAbortSignals,
+  releaseAbortSignal,
   resolveAbortedFault,
   resolveAbortFault,
   resolveAbortCause,
+  resolveTransportCancellation,
   snapshotCancellationConfig,
   validateTransportTimeout,
 } from '../internal/abort'
-import type { EndpointCommandBuilder } from '../internal/endpoint_command'
+import { readBytesText } from '../internal/bytes'
+import type { EndpointCallable } from '../internal/endpoint_command'
+import { resolveInboundRepresentation } from '../internal/inbound_representation'
 import { isTransportOrigin, markTransportOrigin } from '../internal/transport_origin'
 import type { EndpointInput, ParsedInput } from '../internal/endpoint_input'
 import { parseEndpointInput } from '../internal/endpoint_input'
-import type { HttpProgressFn, HttpResponseType } from '../internal/http_request'
+import type { HttpProgressFn } from '../internal/http_request'
 import type { DecodedResponse, HttpMeta, HttpResponse } from '../internal/http_response'
-import type { RequestBuildHandler } from '../internal/request_builder'
+import type { BuilderField, HttpRequestShape } from '../internal/builder_types'
+import type { OutboundBuilder } from '../internal/outbound_request'
 import type { AnyStruct, Infer } from '../struct'
 import { decodeJson } from '../struct/codec/json'
+import { StructError } from '../struct/errors'
 import { parseStructValue } from '../struct/introspection'
-import { DEFINITION } from '../struct/symbols'
-import type { RuntimeStruct } from '../struct/types'
-import { createHttpRequest, resolveDefaultResponseType } from './request'
+import { createHttpRequest } from './request'
 import type { BodyFailure } from './transport/body_failure'
 import { isBodyFailure } from './transport/body_failure'
 import { fetchHandler } from './transport/fetch'
-import { parseJsonText } from './transport/utils'
+import { getContentType, isJsonMediaType } from './transport/utils'
 
 /**
  * Per-request options for HTTP execution: progress callbacks and cancellation.
@@ -51,7 +55,7 @@ export type UseRequestConfig = {
 } & UseCancellationConfig
 
 /**
- * Executable HTTP command produced by a `defineRequest` builder.
+ * Executable HTTP command produced by a `defineRequest` endpoint.
  * Carries the request definition and optional typed input for `client.execute`.
  */
 export interface HttpCommand<
@@ -71,13 +75,15 @@ export interface HttpCommand<
 export type HttpExecuteOptions = UseRequestConfig & { signal?: AbortSignal }
 
 /**
- * Builder returned by `defineRequest`; call with input to create an `HttpCommand`.
+ * Endpoint returned by `defineRequest`; call with input to create an `HttpCommand`.
  */
-export type RequestCommandBuilder<
+export type RequestEndpoint<
   TInput extends AnyStruct | undefined,
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined = undefined,
-> = EndpointCommandBuilder<TInput, HttpCommand<TInput, TOutput, TError>>
+> = EndpointCallable<TInput, HttpCommand<TInput, TOutput, TError>>
+
+export type { BuilderInput, HttpRequestShape } from '../internal/builder_types'
 
 type DeclaredBody<TStruct> = [TStruct] extends [undefined] ? undefined : Infer<TStruct>
 
@@ -89,13 +95,10 @@ export type RequestSuccessData<TOutput extends AnyStruct | undefined> = Declared
 /** Inferred error body for the declared `error` struct, or `undefined` when none is declared. */
 export type RequestErrorData<TError extends AnyStruct | undefined> = DeclaredBody<TError>
 
-type HasDeclaration<TOutput, TError> = [TOutput] extends [undefined] ? ([TError] extends [undefined] ? false : true) : true
-
 type ResponseDeclaration<TOutput extends AnyStruct | undefined, TError extends AnyStruct | undefined> = ([TOutput] extends [undefined]
   ? { output?: never }
   : { output: TOutput }) &
-  ([TError] extends [undefined] ? { error?: never } : { error: TError }) &
-  (HasDeclaration<TOutput, TError> extends true ? { responseType?: HttpResponseType } : { responseType?: never })
+  ([TError] extends [undefined] ? { error?: never } : { error: TError })
 
 /**
  * Contract for an HTTP endpoint: method, path, optional input struct, and the structs that
@@ -103,28 +106,19 @@ type ResponseDeclaration<TOutput extends AnyStruct | undefined, TError extends A
  *
  * `output` declares the body for a 2xx response, `error` the body for anything else. Only one
  * of the two ever runs, and omitting one means that body is never read. Pass to `defineRequest`
- * to get a typed command builder.
+ * to get a typed endpoint.
  */
 export type RequestDefinition<
   TInput extends AnyStruct | undefined = undefined,
   TOutput extends AnyStruct | undefined = undefined,
   TError extends AnyStruct | undefined = undefined,
-> = ResponseDeclaration<TOutput, TError> & { operation?: string } & (
-    | {
-        method: string
-        path: string
-        build?: never
-        input?: TInput
-      }
-    | (TInput extends AnyStruct
-        ? {
-            method: string
-            path: string
-            build: RequestBuildHandler<TInput>
-            input: TInput
-          }
-        : never)
-  )
+> = ResponseDeclaration<TOutput, TError> & {
+  builder?: OutboundBuilder
+  input?: TInput
+  method: string
+  operation?: string
+  path: string
+}
 
 /**
  * Await-result tuple for an HTTP call.
@@ -141,51 +135,55 @@ type HttpExecuteAwaitResult<TOutput extends AnyStruct | undefined, TError extend
   | [error: Fault<TError>, result: undefined, response: undefined]
 
 /**
- * Declare a typed HTTP request command builder.
+ * Declare a typed HTTP request endpoint.
  *
- * Pass method, path, optional input struct, and status-keyed output structs.
- * Call the returned builder with input to get an `HttpCommand` for `client.execute`.
+ * Pass method, path, an optional input struct, and the single `output` and `error` structs.
+ * Call the returned endpoint with input to get an `HttpCommand` for `client.execute`.
  *
- * @param definition - Request contract (method, path, input, output).
- * @returns A builder that creates `HttpCommand` values from input.
+ * @param definition - Request contract (method, path, input, builder, output).
+ * @returns An endpoint that creates `HttpCommand` values from input.
  *
  * @example
  * ```ts
  * const getUser = defineRequest({
  *   method: 'GET',
  *   path: '/users/:id',
- *   input: struct.request({ path: struct.object({ id: struct.number() }) }),
+ *   input: struct.object({ id: struct.number() }),
+ *   builder: (input) => ({ path: { id: input.id } }),
  *   output: struct.object({ id: struct.number(), name: struct.string() }),
  *   error: struct.object({ message: struct.string() }),
  * })
  * ```
  */
 export function defineRequest<
-  TInput extends AnyStruct,
-  TOutput extends AnyStruct | undefined = undefined,
-  TError extends AnyStruct | undefined = undefined,
->(definition: RequestDefinition<TInput, TOutput, TError>): RequestCommandBuilder<TInput, TOutput, TError>
-export function defineRequest<
+  const M extends string,
+  const P extends string,
   TInput extends AnyStruct | undefined = undefined,
   TOutput extends AnyStruct | undefined = undefined,
   TError extends AnyStruct | undefined = undefined,
->(definition: RequestDefinition<TInput, TOutput, TError>): RequestCommandBuilder<TInput, TOutput, TError>
-export function defineRequest<
-  TInput extends AnyStruct | undefined = undefined,
-  TOutput extends AnyStruct | undefined = undefined,
-  TError extends AnyStruct | undefined = undefined,
->(definition: RequestDefinition<TInput, TOutput, TError>): RequestCommandBuilder<TInput, TOutput, TError> {
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError> {
+  // Snapshot the top-level definition so a later mutation of the caller's object cannot retarget this endpoint.
+  const endpoint = { ...definition } as RequestDefinition<TInput, TOutput, TError>
+
   function create(input?: EndpointInput<TInput>): HttpCommand<TInput, TOutput, TError> {
     const command: HttpCommand<TInput, TOutput, TError> = {
+      [COMMAND_EXECUTE]: executeHttpCommand as CommandExecutor,
       [COMMAND_TYPE]: HTTP_COMMAND,
-      definition,
+      definition: endpoint,
       input,
     }
 
     return command
   }
 
-  return ((input?: EndpointInput<TInput>) => create(input)) as RequestCommandBuilder<TInput, TOutput, TError>
+  return ((input?: EndpointInput<TInput>) => create(input)) as RequestEndpoint<TInput, TOutput, TError>
 }
 
 /**
@@ -193,7 +191,7 @@ export function defineRequest<
  * Prefer `client.execute(command)` in application code; this is the underlying implementation.
  *
  * @param clientConfig - Resolved HTTP client configuration (endpoint, interceptors, handler).
- * @param command - Command from a `defineRequest` builder.
+ * @param command - Command from a `defineRequest` endpoint.
  * @param options - Per-request progress and cancellation options.
  * @returns An await-result tuple of success body or typed request error.
  */
@@ -245,40 +243,48 @@ export async function executeHttpCommand<
     return fail(resolveAbortedFault(preAbortedSignal))
   }
 
+  // The deadline covers parse, the builder, the transport, and declared-body conversion.
+  // release() only clears the timer, so a response that already arrived is not aborted by it.
+  const deadline = armTransportDeadline(cancellation.timeout)
+  // The deadline signal is ours and per request, so alone it is the request signal. A caller signal
+  // still goes through a composite: listeners must never be left on a signal the caller keeps.
+  const requestSignal =
+    cancellation.abort === undefined && cancellation.signal === undefined && deadline.signal
+      ? deadline.signal
+      : mergeAbortSignals(controller.signal, [cancellation.abort, cancellation.signal, deadline.signal])
+  deadline.releaseOnAbort(requestSignal)
+  const stopBeforeTransport = (fault: PreflightFault): HttpExecuteAwaitResult<TOutput, TError> => {
+    deadline.release()
+    releaseAbortSignal(requestSignal)
+    return fail(fault)
+  }
+
+  // Read a status class only when that side declared a struct, using that side's kind.
+  // The other side is cancelled unread. A transport fault while reading a declared side still surfaces.
+  const responseType = definition.output ? resolveInboundRepresentation(definition.output) : undefined
+  const errorResponseType = definition.error ? resolveInboundRepresentation(definition.error) : undefined
   let parsedInput: ParsedInput<TInput>
   try {
     parsedInput = (await parseEndpointInput(definition.input, input)) as ParsedInput<TInput>
   } catch (error) {
-    return fail(createPreflightFault('REQ_INPUT_INVALID', error))
+    return stopBeforeTransport(resolveTransportCancellation(deadline, requestSignal, createPreflightFault('REQ_INPUT_INVALID', error)))
   }
 
-  let requestSignal: AbortSignal
-  let request
-  let releaseRequestTimeout: () => void = () => undefined
-  const hasDeclaration = definition.output !== undefined || definition.error !== undefined
-  const responseType = resolveDefaultResponseType(hasDeclaration, definition.responseType)
-  try {
-    let timeoutSignal: AbortSignal | undefined
-    if (typeof cancellation.timeout === 'number') {
-      const timeoutController = new AbortController()
-      const timeoutTimer = setTimeout(() => {
-        timeoutController.abort(ERR_TIMEOUT)
-      }, cancellation.timeout)
-      timeoutSignal = timeoutController.signal
-      releaseRequestTimeout = () => {
-        clearTimeout(timeoutTimer)
-      }
-    }
+  const parsedCancellation = resolveTransportCancellation(deadline, requestSignal)
+  if (parsedCancellation) {
+    return stopBeforeTransport(parsedCancellation)
+  }
 
-    requestSignal = mergeAbortSignals(controller.signal, [cancellation.abort, cancellation.signal, timeoutSignal])
-    request = createHttpRequest(definition.method, definition.path, parsedInput, definition.build, {
+  let request
+  try {
+    request = createHttpRequest(definition.method, definition.path, parsedInput, definition.builder, {
       abort: requestSignal,
       baseEndpoint: clientConfig.endpoint,
       defaultHeaders: clientConfig.headers,
       downloadProgress: config.onDownloadProgress,
-      input: definition.input,
+      errorResponseType,
       operation: definition.operation,
-      queryParamsSerializer: clientConfig.queryParamsSerializer,
+      querySerializer: clientConfig.querySerializer,
       responseType,
       timeout: cancellation.timeout,
       uploadProgress: config.onUploadProgress,
@@ -286,14 +292,20 @@ export async function executeHttpCommand<
       xsrf: clientConfig.xsrf,
     })
   } catch (error) {
-    releaseRequestTimeout()
-    return fail(createPreflightFault('REQ_BUILD_FAILED', error))
+    return stopBeforeTransport(resolveTransportCancellation(deadline, requestSignal, createPreflightFault('REQ_BUILD_FAILED', error)))
   }
+
+  const builtCancellation = resolveTransportCancellation(deadline, requestSignal)
+  if (builtCancellation) {
+    return stopBeforeTransport(builtCancellation)
+  }
+
+  const releaseRequestTimeout = deadline.release
 
   const transportController = new AbortController()
   let chainSettled = false
   let inflightTransport: Promise<HttpResponse<unknown>> | undefined
-  let response: HttpResponse<unknown>
+  let response: HttpResponse<unknown> | undefined
   const handler = (nextRequest: typeof request): Promise<HttpResponse<unknown>> => {
     if (chainSettled) {
       const rejected = Promise.reject<HttpResponse<unknown>>(
@@ -303,19 +315,37 @@ export async function executeHttpCommand<
       return rejected
     }
 
-    const transportAbort = mergeAbortSignals(transportController.signal, [requestSignal, nextRequest.abort])
+    // transportController already follows requestSignal through abortTransport. Only an interceptor that
+    // swapped the signal needs a composite, which is expensive to build and to listen on.
+    const transportAbort =
+      nextRequest.abort === undefined || nextRequest.abort === requestSignal
+        ? transportController.signal
+        : mergeAbortSignals(transportController.signal, [nextRequest.abort])
+    // Interceptors run after the post-builder check. A deadline that expired there must not start the fetch.
+    const due = resolveTransportCancellation(deadline, transportAbort)
+    if (due) {
+      // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
+      const rejected = Promise.reject<HttpResponse<unknown>>(markTransportOrigin(resolveAbortCause(transportAbort) as Error))
+      releaseAbortSignal(transportAbort)
+      void rejected.catch(() => undefined)
+      return rejected
+    }
     const pending = fetchHandler(
       {
         ...nextRequest,
         abort: transportAbort,
       },
       clientConfig.http.handle,
-    ).catch((error: unknown) => {
-      // Cancellation outranks whatever the transport was doing when it noticed. Tagging here is
-      // the only way to tell a dead server from an interceptor that threw the same value: both
-      // reach the chain's catch as one bare cause.
-      throw markTransportOrigin(resolveAbortCause(transportAbort) ?? error)
-    })
+    )
+      .catch((error: unknown) => {
+        // Cancellation outranks whatever the transport was doing when it noticed. Tagging here is
+        // the only way to tell a dead server from an interceptor that threw the same value: both
+        // reach the chain's catch as one bare cause.
+        throw markTransportOrigin(resolveAbortCause(transportAbort) ?? error)
+      })
+      .finally(() => {
+        releaseAbortSignal(transportAbort)
+      })
     inflightTransport = pending
     return pending
   }
@@ -348,20 +378,9 @@ export async function executeHttpCommand<
         }
         return fail(aborted)
       }
-      // The transport tags what it knows; a representation failure only matters when the
-      // relevant side declared a struct, so it is resolved against the declaration below.
+      // The transport only reads a side that declared a struct, so a tagged body failure —
+      // including a representation failure — always belongs to that side and surfaces as its fault.
       if (isBodyFailure(error)) {
-        if (!isRepresentationFailure(error)) {
-          return fail(fromBodyFailure(error))
-        }
-        const struct = error.meta.ok ? definition.output : definition.error
-        // Philosophy 5: an unreadable body on the side you opted out of is none of your business.
-        if (!struct) {
-          if (error.meta.ok) {
-            return [null, undefined as RequestSuccessData<TOutput>, error.meta as DeclaredResponse<TOutput>]
-          }
-          return fail(createUndecodedHttpStatusFault(error.meta))
-        }
         return fail(fromBodyFailure(error))
       }
       // Recognized cancellation shapes stay cancellation wherever they came from; anything else
@@ -378,18 +397,30 @@ export async function executeHttpCommand<
     if (!transportController.signal.aborted) {
       transportController.abort(new Error('HTTP interceptor chain settled'))
     }
-    releaseRequestTimeout()
+    // Keep the deadline armed while a declared body is still being converted.
+    if (!response) {
+      releaseRequestTimeout()
+      releaseAbortSignal(requestSignal)
+    }
   }
 
-  const meta = toHttpMeta(response)
+  const settledResponse = response as HttpResponse<unknown>
+  const meta = toHttpMeta(settledResponse)
 
   // Philosophy 2: `ok` is the only fork, and only one side ever decodes.
-  const struct = response.ok ? definition.output : definition.error
+  const struct = settledResponse.ok ? definition.output : definition.error
 
   // Philosophy 5: with nothing declared for this side, that body is never read — not even to
   // fail on. An unreadable representation on the side you opted out of is none of your business.
+  // Interceptor work can still cross the deadline. Check before release, which makes the gate a no-op.
   if (!struct) {
-    if (response.ok) {
+    const cancelled = resolveTransportCancellation(deadline, requestSignal)
+    releaseRequestTimeout()
+    releaseAbortSignal(requestSignal)
+    if (cancelled) {
+      return fail(cancelled)
+    }
+    if (settledResponse.ok) {
       return [null, undefined as RequestSuccessData<TOutput>, meta as DeclaredResponse<TOutput>]
     }
     return fail(createUndecodedHttpStatusFault(meta))
@@ -397,14 +428,34 @@ export async function executeHttpCommand<
 
   let decoded: unknown
   try {
-    decoded = await parseStructResponse(struct, response.body, resolveParseResponseType(struct, responseType, response.ok))
+    decoded = await decodeDeclaredBody(struct, settledResponse, requestSignal)
+    // Synchronous conversion can finish before the deadline timer runs.
+    // A declared error uses the same wall-clock gate as a success.
+    const cancelled = resolveTransportCancellation(deadline, requestSignal)
+    if (cancelled) {
+      return fail(cancelled)
+    }
   } catch (error) {
-    // Philosophy 3 + 4: the declaration did not hold, and a failed decode has no body.
-    return fail(createDecodeFault('RES_STRUCT_MISMATCH', error, meta))
+    // Caller abort wins over an overdue deadline, which wins over a conversion fault.
+    const cancelled = resolveTransportCancellation(deadline, requestSignal)
+    if (cancelled) {
+      return fail(cancelled)
+    }
+    // Philosophy 3 + 4: representation failures are not struct mismatches, and a failed decode has no body.
+    if (error instanceof JsonMediaTypeError) {
+      return fail(createDecodeFault('RES_MEDIA_TYPE_INVALID', error, meta))
+    }
+    if (error instanceof StructError) {
+      return fail(createDecodeFault('RES_STRUCT_MISMATCH', error, meta))
+    }
+    return fail(createDecodeFault('RES_DECODE_FAILED', error, meta))
+  } finally {
+    releaseRequestTimeout()
+    releaseAbortSignal(requestSignal)
   }
 
   const decodedResponse: DecodedResponse<unknown> = { ...meta, body: decoded }
-  if (response.ok) {
+  if (settledResponse.ok) {
     return [null, decoded as RequestSuccessData<TOutput>, decodedResponse as DeclaredResponse<TOutput>]
   }
 
@@ -421,9 +472,38 @@ function toHttpMeta(response: HttpResponse<unknown>): HttpMeta {
   }
 }
 
-/** Whether a tagged body failure is about interpreting a body rather than obtaining one. */
-function isRepresentationFailure(failure: BodyFailure): boolean {
-  return failure.code === 'RES_DECODE_FAILED' || failure.code === 'RES_MEDIA_TYPE_INVALID'
+class JsonMediaTypeError extends TypeError {
+  constructor(contentType: string) {
+    super(`Expected a JSON media type, received ${contentType || '<none>'}`)
+    this.name = 'TypeError'
+  }
+}
+
+function isAbsentDeclaredBody(response: HttpResponse<unknown>): boolean {
+  return response.body === undefined
+}
+
+async function decodeDeclaredBody(struct: AnyStruct, response: HttpResponse<unknown>, signal: AbortSignal): Promise<unknown> {
+  const representation = resolveInboundRepresentation(struct)
+  const absent = isAbsentDeclaredBody(response)
+  const contentType = getContentType(response.headers)
+  // The media type is checked before any read. An absent body has nothing to classify.
+  if (!absent && representation === 'json' && !isJsonMediaType(contentType)) {
+    throw new JsonMediaTypeError(contentType)
+  }
+  if (absent) {
+    if (representation === 'text') {
+      return parseStructValue(struct, '')
+    }
+    throw new TypeError('Response body is absent')
+  }
+  // Only a Blob read is asynchronous and not itself cancellable, so only it races the request signal.
+  // Every other body converts synchronously, and the caller checks cancellation right after.
+  if (typeof Blob !== 'undefined' && response.body instanceof Blob) {
+    return await awaitWithSignal(() => parseStructResponse(struct, response.body), signal)
+  }
+  signal.throwIfAborted()
+  return await parseStructResponse(struct, response.body)
 }
 
 /** Map a transport-tagged body failure onto the fault it was classified as. */
@@ -437,52 +517,25 @@ function fromBodyFailure(failure: BodyFailure): AnyFault {
   return createPreflightFault(code, cause, meta)
 }
 
-function resolveParseResponseType(
-  struct: AnyStruct,
-  responseType: HttpResponseType | undefined,
-  ok: boolean,
-): HttpResponseType | undefined {
-  if (ok) {
-    return responseType
-  }
-
-  const kind = (struct as RuntimeStruct)[DEFINITION].kind
-  if (kind === 'arrayBuffer') {
-    return 'arraybuffer'
-  }
-  if (kind === 'blob' || kind === 'file') {
-    return 'blob'
-  }
-  if (kind === 'string') {
-    return 'text'
-  }
-  return 'json'
-}
-
-async function bytesToText(body: unknown): Promise<string | undefined> {
-  if (typeof body === 'string') {
-    return body
-  }
-  if (body instanceof ArrayBuffer) {
-    return new TextDecoder().decode(body)
-  }
-  if (ArrayBuffer.isView(body)) {
-    return new TextDecoder().decode(body)
-  }
-  if (typeof Blob !== 'undefined' && body instanceof Blob) {
-    return await body.text()
-  }
-  return undefined
-}
-
-async function parseStructResponse(struct: AnyStruct, body: unknown, responseType: HttpResponseType | undefined): Promise<unknown> {
+async function parseStructResponse(struct: AnyStruct, body: unknown): Promise<unknown> {
+  // Interceptor bodies may already be text, bytes, or a parsed value. The struct kind decides.
+  // A JSON string is a string root: the transport already parsed bytes, so do not parse again.
+  const responseType = resolveInboundRepresentation(struct)
   if (responseType === 'json') {
-    const text = await bytesToText(body)
-    return decodeJson(struct, text === undefined ? body : parseJsonText(text))
+    if (typeof body === 'string') {
+      return decodeJson(struct, body)
+    }
+    const text = await readBodyText(body)
+    return decodeJson(struct, text === undefined ? body : JSON.parse(text))
   }
   if (responseType === 'text') {
-    const text = await bytesToText(body)
+    const text = await readBodyText(body)
     return parseStructValue(struct, text ?? body)
   }
   return parseStructValue(struct, body)
+}
+
+function readBodyText(value: unknown): string | Promise<string> | undefined {
+  const text = readBytesText(value)
+  return text ?? (typeof Blob !== 'undefined' && value instanceof Blob ? value.text() : undefined)
 }

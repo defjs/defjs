@@ -100,4 +100,4 @@ function basicAuthSSEInterceptor(fn: () => { username: string; password: string 
 
 `fn` 每个请求调一次。`BasicAuthInterceptorOptions` 上可选的 `encode` 用来换掉默认的 `Basic …` header 值。
 
-见 [Interceptors 指南](../core/interceptors.md)。
+见 [Interceptors 指南](/core/interceptors)。

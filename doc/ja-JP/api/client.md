@@ -16,7 +16,7 @@ function createClient(...options: ClientOption[]): Client
 options は順に適用されます。インターセプターが auth やテナントを掴むなら、クライアントはリクエスト境界の中で作ってください。
 
 - **options** — `withEndpoint` のような option ヘルパーです。
-- **戻り値** — `execute` がトランスポートごとにオーバーロードされたクライアントです。
+- **戻り値** `execute` がトランスポートごとにオーバーロードされたクライアントです。
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -25,6 +25,8 @@ const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
 ## option ヘルパー
+
+どのヘルパーも `ClientOption` を返します。
 
 ### withEndpoint() {#withEndpoint}
 
@@ -40,15 +42,15 @@ function withEndpoint(endpoint: string): ClientOption
 function withInterceptors(...interceptors: Interceptor[]): ClientOption
 ```
 
-登録順でインターセプターを追記します。混在の kind は execute 時にトランスポートでフィルタされます。
+登録順でインターセプターを追記します。混在の kind は execute 時にトランスポートごとにフィルタされます。
 
-### withQueryParamsSerializer() {#withQueryParamsSerializer}
+### withQuerySerializer() {#withQuerySerializer}
 
 ```ts
-function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-query のエンコードを差し替えます。`serializer(params, rawParams?)` は先頭の `?` なしの query 文字列を返す必要があります。
+HTTP、SSE、WebSocket の query エンコードを差し替えます。`serializer(query)` は**エンコード済みのワイヤオブジェクト**（エイリアス適用済み、`Date` は ISO、`bigint` は文字列）を受け取り、先頭の `?` なしの query 文字列を返す必要があります。リクエストに query が無いときは呼ばれません。`URLSearchParams` を返すビルダーはこれを飛ばします。
 
 ### withHTTPHandle() {#withHTTPHandle}
 
@@ -132,31 +134,31 @@ type Client = {
 type ClientOption = (config: ClientConfig) => void
 ```
 
-### QueryParamsSerializer {#QueryParamsSerializer}
+### QuerySerializer {#QuerySerializer}
 
 ```ts
-type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
+type QuerySerializer = (query: { [key: string]: unknown }) => string
 ```
 
 ### ClientSSEOptions {#ClientSSEOptions}
 
 ### ClientWebSocketOptions {#ClientWebSocketOptions}
 
-SSE は `handle`、`onInvalidEvent`、`reconnect`（`attempts`、`delayMs`、`factor`、`jitter`、`maxDelayMs`、`shouldReconnect`）です。
+SSE は `handle`、`onInvalidEvent`、`reconnect`（`attempts`、`delayMs`、`factor`、`jitter`、`maxDelayMs`、`shouldReconnect`）です。SSE の `jitter` は WebSocket と同じ、0–1 の乗法因子です。SSE の `reconnect` を置いたとき、`attempts` のデフォルトは **3** です。`attempts: 0` は無効にします。`withSSEReconnect` を省いてもリトライは無効です。
 
-WebSocket は `handle`、`beforeConnect`、`heartbeat`（`intervalMs`、`message`、`isAck`、`timeoutMs`）、`protocols`、`reconnect`（SSE と同じ形に、close の `code` / `reason` / `wasClean`）です。
+WebSocket は `handle`、`beforeConnect`、`heartbeat`（`intervalMs`、`message`、`isAck`、`timeoutMs`）、`protocols`、`reconnect`（SSE と同じ形に、close の `code` / `reason` / `wasClean`）です。WebSocket の `reconnect` を置いたとき、`attempts` のデフォルトは **3** です。`0` は無効にします。`attempts` を省いても無制限にはなりません。WebSocket の `jitter` は 0–1 の乗法因子です。
 
 `ClientConfig` は解決済みスナップショット（`endpoint`、`http`、`sse`、`webSocket`、`interceptors`、…）です。`ClientOptions` は入力側の形です。
 
-[Client ガイド](../core/client.md) を見てください。
+[Client ガイド](/core/client) を見てください。
 
 ## ClientOptions {#ClientOptions}
 
-入力側の config です。`endpoint`、`http`、`sse`、`webSocket`、`interceptors`…
+入力側の config です。`endpoint`、`http`、`sse`、`webSocket`、`interceptors`、…
 
 ## ClientConfig {#ClientConfig}
 
-option helpers を当てたあとのスナップショットです。
+option ヘルパーを当てたあとの、解決済みスナップショットです。
 
 ## ClientSSEConfig {#ClientSSEConfig}
 
@@ -164,7 +166,7 @@ option helpers を当てたあとのスナップショットです。
 
 ## WebSocketHandle {#WebSocketHandle}
 
-トランスポートが触る、最小限の WebSocket インスタンス面です。
+トランスポートが使う、最小限の WebSocket インスタンス面です。
 
 ## WebSocketHandleConstructor {#WebSocketHandleConstructor}
 

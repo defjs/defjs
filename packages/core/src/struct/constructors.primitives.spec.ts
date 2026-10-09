@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'vitest'
+import { encodeJson } from './codec/json'
 import { encodeValue } from './encode'
 import { StructError, struct } from './index'
 import { parseStructTuple as parse } from './introspection'
@@ -158,6 +159,139 @@ describe('constructors.ts intersection', () => {
 
     const [badErr] = parse(person, { active: true, age: 30, name: false })
     expect(badErr).toBeInstanceOf(StructError)
+  })
+
+  test('intersection emits every wire key when one logical key has several aliases', () => {
+    const schema = struct.intersection(struct.object({ a: struct.string().alias('x') }), struct.object({ a: struct.string().alias('y') }))
+    expect(parse(schema, { a: 'v' })).toEqual([null, { a: 'v' }])
+    expect(encodeJson(schema, { a: 'v' })).toEqual({ x: 'v', y: 'v' })
+    expect(parse(schema, { x: 'v', y: 'v' }, { aliases: true })).toEqual([null, { a: 'v' }])
+    expect(parse(schema, { x: 'L', y: 'R' }, { aliases: true })[0]?.issues[0]).toMatchObject({
+      code: 'invalid_intersection',
+      path: ['a'],
+      received: 'R',
+    })
+    expect(parse(schema, { x: 'v' }, { aliases: true })[0]?.issues[0]?.code).toBe('missing_key')
+
+    const nested = struct.intersection(
+      struct.object({ profile: struct.object({ name: struct.string().alias('full_name') }) }),
+      struct.object({ profile: struct.object({ name: struct.string().alias('display_name') }) }),
+    )
+    expect(parse(nested, { profile: { name: 'Ada' } })).toEqual([null, { profile: { name: 'Ada' } }])
+    expect(encodeJson(nested, { profile: { name: 'Ada' } })).toEqual({ profile: { display_name: 'Ada', full_name: 'Ada' } })
+  })
+
+  test('intersection encodes each matching union branch under its own wire key', () => {
+    const schema = struct.intersection(
+      struct.object({ a: struct.string().alias('x') }),
+      struct.or(struct.object({ a: struct.string().alias('y') }), struct.number()),
+    )
+    expect(parse(schema, { a: 'v' })).toEqual([null, { a: 'v' }])
+    expect(encodeJson(schema, { a: 'v' })).toEqual({ x: 'v', y: 'v' })
+
+    const discriminated = struct.intersection(
+      struct.object({ a: struct.string().alias('x') }),
+      struct.discriminatedUnion('kind', [
+        struct.object({ a: struct.string().alias('y'), kind: struct.literal('left') }),
+        struct.object({ a: struct.string().alias('x'), kind: struct.literal('right') }),
+      ]),
+    )
+    expect(parse(discriminated, { a: 'v', kind: 'left' })).toEqual([null, { a: 'v', kind: 'left' }])
+    expect(encodeJson(discriminated, { a: 'v', kind: 'left' })).toEqual({ kind: 'left', x: 'v', y: 'v' })
+    expect(parse(discriminated, { a: 'v', kind: 'right' })).toEqual([null, { a: 'v', kind: 'right' }])
+    expect(encodeJson(discriminated, { a: 'v', kind: 'right' })).toEqual({ kind: 'right', x: 'v' })
+    expect(encodeJson(discriminated, { a: 'v' })).toEqual({ a: 'v', x: 'v' })
+  })
+
+  test('an absent optional key is not a conflict when its aliases differ', () => {
+    const schema = struct.intersection(
+      struct.object({ a: struct.string().alias('x').optional() }),
+      struct.object({ a: struct.string().alias('y').optional() }),
+    )
+    expect(parse(schema, {})).toEqual([null, {}])
+    expect(encodeJson(schema, {})).toEqual({})
+    expect(parse(schema, { x: 'v', y: 'v' }, { aliases: true })).toEqual([null, { a: 'v' }])
+    expect(encodeJson(schema, { a: 'v' })).toEqual({ x: 'v', y: 'v' })
+  })
+
+  test('two aliases on one logical key are a successful union branch', () => {
+    const aliased = struct.intersection(struct.object({ a: struct.string().alias('x') }), struct.object({ a: struct.string().alias('y') }))
+    expect(parse(struct.or(aliased, struct.number()), { a: 'v' })).toEqual([null, { a: 'v' }])
+  })
+
+  test('nullable aliased intersections still parse and encode null', () => {
+    const schema = struct.intersection(
+      struct.object({ a: struct.string().alias('x') }).nullable(),
+      struct.object({ b: struct.string().alias('y') }).nullable(),
+    )
+    expect(parse(schema, null)).toEqual([null, null])
+    expect(encodeJson(schema, null)).toBeNull()
+  })
+
+  test('a non-object intersection member does not invent a wire key for an object key', () => {
+    const schema = struct.intersection(struct.string(), struct.object({ a: struct.string().alias('x') }))
+    expect(encodeJson(schema, { a: 'v' })).toEqual({ a: 'v', x: 'v' })
+  })
+
+  test('intersection merges the same logical key when every reachable object uses the same wire key', () => {
+    const schema = struct.intersection(
+      struct.object({ a: struct.string().alias('wire'), name: struct.string() }),
+      struct.or(struct.object({ a: struct.string().alias('wire') }), struct.number()),
+    )
+
+    expect(parse(schema, { a: 'same', name: 'Ada' })).toEqual([null, { a: 'same', name: 'Ada' }])
+    expect(encodeJson(schema, { a: 'same', name: 'Ada' })).toEqual({ name: 'Ada', wire: 'same' })
+    expect(parse(schema, { a: 'only' })).toEqual([
+      expect.objectContaining({ issues: [expect.objectContaining({ path: ['name'] })] }),
+      undefined,
+    ])
+
+    const shape: { self?: ReturnType<typeof struct.object> } = {}
+    const node = struct.object({
+      name: struct.string().alias('name_wire'),
+      get self() {
+        return shape.self as ReturnType<typeof struct.object>
+      },
+    })
+    shape.self = node
+    expect(() => struct.intersection(node, struct.object({ name: struct.string().alias('name_wire') }))).not.toThrow()
+
+    expect(() =>
+      struct.intersection(
+        struct.tuple([struct.object({ a: struct.string().alias('x') }), struct.object({ a: struct.string().alias('y') })]),
+        struct.tuple([struct.object({ a: struct.string().alias('x') }), struct.object({ b: struct.string() })]),
+      ),
+    ).not.toThrow()
+  })
+
+  test('intersection emits both wire keys for array, record, and tuple aliases of one logical key', () => {
+    const both = { display_name: 'Ada', full_name: 'Ada' }
+    const rows = struct.intersection(
+      struct.object({ rows: struct.array(struct.object({ name: struct.string().alias('full_name') })) }),
+      struct.object({ rows: struct.array(struct.object({ name: struct.string().alias('display_name') })) }),
+    )
+    expect(parse(rows, { rows: [{ name: 'Ada' }] })).toEqual([null, { rows: [{ name: 'Ada' }] }])
+    expect(encodeJson(rows, { rows: [{ name: 'Ada' }] })).toEqual({ rows: [both] })
+
+    const record = struct.intersection(
+      struct.record(struct.object({ name: struct.string().alias('full_name') })),
+      struct.record(struct.object({ name: struct.string().alias('display_name') })),
+    )
+    expect(parse(record, { ada: { name: 'Ada' } })).toEqual([null, { ada: { name: 'Ada' } }])
+    expect(encodeJson(record, { ada: { name: 'Ada' } })).toEqual({ ada: both })
+
+    const tuple = struct.intersection(
+      struct.tuple([struct.object({ name: struct.string().alias('full_name') })]),
+      struct.tuple([struct.object({ name: struct.string().alias('display_name') })]),
+    )
+    expect(parse(tuple, [{ name: 'Ada' }])).toEqual([null, [{ name: 'Ada' }]])
+    expect(encodeJson(tuple, [{ name: 'Ada' }])).toEqual([both])
+
+    const agreed = struct.intersection(
+      struct.array(struct.object({ name: struct.string().alias('full_name') })),
+      struct.tuple([struct.object({ name: struct.string().alias('full_name') })]),
+    )
+    expect(encodeJson(agreed, [{ name: 'Ada' }, { name: 'Bea' }])).toEqual([{ full_name: 'Ada' }, { full_name: 'Bea', name: 'Bea' }])
   })
 
   test('intersection rejects when either side fails', () => {

@@ -1,11 +1,11 @@
 ---
 title: POST JSON
-description: JSON-Body mit struct.json senden und deklariertes 201 dekodieren.
+description: Typisierten JSON-Body senden und ein deklariertes 201 dekodieren.
 ---
 
 # POST JSON
 
-Wickle den Body in `struct.json(...)`. Logische Feldnamen bleiben in TypeScript; Wire-Aliasse gehören auf den Struct.
+Reich den typisierten Body an den Builder. Logische Feldnamen bleiben in TypeScript; Wire-Aliasse auf dem Struct werden JSON-Keys. Ein Object-Body ist `application/json`.
 
 Details siehe [Commands](../core/commands.md) und [HTTP](../core/http.md).
 
@@ -28,13 +28,11 @@ const ApiError = struct.object({
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    body: struct.object({
+      name: struct.string(),
+      email: struct.string(),
+    }),
   }),
   output: User,
   error: ApiError,

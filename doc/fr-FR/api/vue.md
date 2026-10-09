@@ -1,13 +1,13 @@
 ---
 title: '@defjs/vue'
-description: Plugin, clé d’injection et injectClient.
+description: Plugin Vue, clé d’injection et injectClient.
 ---
 
 # Vue {#page}
 
-Branche un client `@defjs/core` existant dans Vue. Le package ne crée **pas** de clients, ne met pas les résultats en cache et ne ferme pas le transport au unmount.
+Fournis un client `@defjs/core` existant à une app Vue. Ce paquet ne crée pas, ne met pas en cache et ne dispose pas le client.
 
-Voir le [guide Vue](../plugins/vue.md).
+Voir le [guide Vue](/plugins/vue).
 
 ## createClientPlugin() {#createClientPlugin}
 

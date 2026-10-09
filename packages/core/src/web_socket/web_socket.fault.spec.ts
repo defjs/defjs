@@ -14,7 +14,7 @@ import { defineWebSocket } from './index'
  */
 
 const useRoom = defineWebSocket({
-  incoming: { message: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
   maxIncomingQueueSize: 8,
   path: '/ws',
 })
@@ -24,6 +24,49 @@ function unreachableClient(...options: Parameters<typeof createClient>): ReturnT
 }
 
 describe('web socket startup faults', () => {
+  test.each(['abort', 'timeout'] as const)(
+    'should classify a pre-cancelled interceptor signal as %s without constructing a socket',
+    async (mode) => {
+      let constructed = 0
+      class Socket extends EventTarget {
+        static readonly OPEN = 1
+        readyState = 0
+        bufferedAmount = 0
+        protocol = ''
+        extensions = ''
+        binaryType = 'blob'
+        readonly url: string
+        constructor(url: string | URL) {
+          super()
+          this.url = String(url)
+          constructed += 1
+        }
+        send(_data: string) {}
+        close() {
+          this.readyState = 3
+        }
+      }
+      const client = createClient(
+        withEndpoint('https://example.test'),
+        withWebSocketHandle(Socket),
+        withInterceptors(
+          createWebSocketInterceptor((request, next) =>
+            next({
+              ...request,
+              abort: AbortSignal.abort(mode === 'timeout' ? new DOMException('deadline', 'TimeoutError') : 'stop'),
+            }),
+          ),
+        ),
+      )
+
+      const [fault, session] = await client.execute(useRoom())
+
+      expect(constructed).toBe(0)
+      expect(session).toBeUndefined()
+      expect(fault?.code).toBe(mode === 'timeout' ? 'NET_TIMEOUT' : 'NET_ABORTED')
+    },
+  )
+
   test('should report an interceptor throw as EXT_INTERCEPTOR_FAILED and keep the cause', async () => {
     const cause = new Error('interceptor exploded')
     const client = createClient(
@@ -78,8 +121,8 @@ describe('web socket startup faults', () => {
 
   test('should report invalid input as REQ_INPUT_INVALID', async () => {
     const useTyped = defineWebSocket({
-      incoming: { message: struct.object({ text: struct.string() }) },
-      input: struct.request({ path: struct.object({ room: struct.number() }) }),
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+      input: struct.object({ path: struct.object({ room: struct.number() }) }),
       maxIncomingQueueSize: 8,
       path: '/ws/:room',
     })
@@ -91,7 +134,7 @@ describe('web socket startup faults', () => {
 
   test('should report an invalid declared queue limit as REQ_OPTIONS_INVALID', async () => {
     const useBadLimit = defineWebSocket({
-      incoming: { message: struct.object({ text: struct.string() }) },
+      incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       maxIncomingQueueSize: 0,
       path: '/ws',
     })

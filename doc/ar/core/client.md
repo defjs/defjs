@@ -15,6 +15,8 @@ import { createClient, withEndpoint } from '@defjs/core'
 const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
+`createClient(...)` يُرجع تحميلات زائدة لكل نوع أمر.
+
 ## ركّب الخيارات
 
 الخيارات تُطبَّق من اليسار إلى اليمين. المُعيِّنات تستبدل؛ `withInterceptors(...items)` يُلحق.
@@ -53,13 +55,14 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
@@ -72,11 +75,13 @@ if (!error) console.log(user.name)
 | المساعد                                                                                                       | الأثر                                                      |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | نقطة نهاية أساس مطلقة لكل وسائل النقل                      |
+| `withHeaders(HeadersInit)`                                                                                    | رؤوس افتراضية ثابتة لـ HTTP/SSE؛ رؤوس الأمر تتجاوزها       |
+| `withTimeout(ms)`                                                                                             | مهلة `execute` الافتراضية لـ HTTP فقط (SSE/WS يتجاهلانها)  |
 | `withHTTPHandle(fetch)`                                                                                       | استبدل Fetch لـ HTTP                                       |
 | `withSSEHandle(fetch)`                                                                                        | استبدل Fetch لـ SSE                                        |
 | `withWebSocketHandle(WebSocket)`                                                                              | استبدل مُنشئ WebSocket                                     |
 | `withInterceptors(...items)`                                                                                  | ألحق معترضات مختلطة                                        |
-| `withQueryParamsSerializer(fn)`                                                                               | استبدل تسلسل الاستعلام                                     |
+| `withQuerySerializer(fn)`                                                                                     | رمّز كائن استعلام مُسمّى أصلًا إلى سلسلة استعلام           |
 | `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` لـ HTTP/SSE عندما يكون true |
 | `withXSRF(options?)`                                                                                          | ملف تعريف ارتباط XSRF لـ HTTP → رأس                        |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | مفاتيح SSE                                                 |

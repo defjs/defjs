@@ -1,22 +1,21 @@
-import type { QueryParamsSerializer } from '../client/config'
+import type { QuerySerializer } from '../client/config'
 import type { HttpProgressFn, HttpRequest, HttpResponseType } from '../internal/http_request'
-import type { RequestBuildHandler } from '../internal/request_builder'
+import type { OutboundBuilder } from '../internal/outbound_request'
 import { createBaseTransportRequest } from '../internal/transport_request'
-import type { AnyStruct } from '../struct'
 
-export function createHttpRequest<TInput extends AnyStruct | undefined>(
+export function createHttpRequest(
   method: string,
   path: string,
   input: unknown,
-  build: RequestBuildHandler<TInput> | undefined,
+  builder: OutboundBuilder | undefined,
   options: {
     abort: AbortSignal
     baseEndpoint: string
     defaultHeaders?: Headers
     downloadProgress?: HttpProgressFn
-    input?: TInput
     operation?: string
-    queryParamsSerializer: QueryParamsSerializer
+    errorResponseType?: HttpResponseType
+    querySerializer?: QuerySerializer
     responseType?: HttpResponseType
     timeout?: number
     uploadProgress?: HttpProgressFn
@@ -28,13 +27,12 @@ export function createHttpRequest<TInput extends AnyStruct | undefined>(
     }
   },
 ): HttpRequest {
-  const request = createBaseTransportRequest(method, path, input, build, {
+  const request = createBaseTransportRequest(method, path, input, builder, {
     abort: options.abort,
     baseEndpoint: options.baseEndpoint,
     defaultHeaders: options.defaultHeaders,
-    input: options.input,
     operation: options.operation,
-    queryParamsSerializer: options.queryParamsSerializer,
+    querySerializer: options.querySerializer,
     timeout: options.timeout,
     transport: 'http',
     withCredentials: options.withCredentials,
@@ -43,26 +41,9 @@ export function createHttpRequest<TInput extends AnyStruct | undefined>(
   return {
     ...request,
     downloadProgress: options.downloadProgress,
+    errorResponseType: options.errorResponseType,
     responseType: options.responseType,
     uploadProgress: options.uploadProgress,
     xsrf: options.xsrf,
   }
-}
-
-/**
- * Pick the representation the transport should read the body as.
- *
- * Declaring either `output` or `error` means something will be decoded, and JSON is the
- * default representation. Declaring neither leaves the body unread.
- *
- * @param hasDeclaration - Whether the endpoint declared `output` or `error`.
- * @param responseType - Explicit representation from the definition, when given.
- * @returns The representation to read, or `undefined` to skip the body entirely.
- */
-export function resolveDefaultResponseType(hasDeclaration: boolean, responseType?: HttpResponseType): HttpResponseType | undefined {
-  if (responseType) {
-    return responseType
-  }
-
-  return hasDeclaration ? 'json' : undefined
 }

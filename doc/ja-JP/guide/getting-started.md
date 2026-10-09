@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Step 2 — リクエストを定義する
 
-`src/get-user.ts` を作ります。`struct.request(...)` は path の値を query・headers・body から分けておきます。
+`src/get-user.ts` を作ります。input の struct は呼び出し側の値です。`builder` はその値をリクエストのどこに置くかを決めます。ここでは入力全体が path オブジェクトなので、エイリアスのないスカラーフィールドが `:id` を埋めます。
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,18 +63,19 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` はビルダーを返します。`getUser(...)` を呼ぶと、`client.execute(...)` に渡す不透明なコマンドができます。
+`output` は 2xx のボディです。`error` はそれ以外のすべての status です。それぞれ struct は 1 つです。ボディの形が違うときは `struct.or(...)` か判別可能な union を使います。
+
+`defineRequest(...)` はエンドポイントを返します。`getUser(...)` を呼ぶと、`client.execute(...)` に渡す不透明なコマンドができます。上の `builder` は入力を配置する関数であり、エンドポイントそのものではありません。
 
 ## Step 3 — ローカルで実行する
 
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -175,7 +175,7 @@ Loaded Ada from 200
 User not found
 ```
 
-成功時は `error` が `null`、`user` が `200` の Struct 出力、`response` が `HttpResponse` です。宣言済み `404` では `error.code` が `'http'`、`error.status` が `404`、`error.data` は型付きの `NotFound` です。失敗時、タプルの 2 番目は `undefined` です。
+成功時は `error` が `null`、`user` が `200` の Struct 出力、`response` が `HttpResponse` です。宣言済み `404` では `error.code` が `'HTTP_STATUS'`、`error.status` が `404`、`error.data` は型付きの `NotFound` です。失敗時、タプルの 2 番目は `undefined` です。
 
 ## Step 4 — 実 API に向ける
 
@@ -205,13 +205,13 @@ void realClient
 
 ## 結果が違うとき
 
-- 悪い入力 → `REQ_INPUT_INVALID` / 衝突するキャンセル options → `REQ_OPTIONS_INVALID` / `build` の失敗 → `REQ_BUILD_FAILED`
+- 悪い入力 → `REQ_INPUT_INVALID`。衝突するキャンセル options → `REQ_OPTIONS_INVALID`。失敗する `build` → `REQ_BUILD_FAILED`
 - あらゆる non-2xx → `HTTP_STATUS`。`error` を宣言していれば `err.data` に型が付きます
 - メディアタイプ違い → `RES_MEDIA_TYPE_INVALID`。ボディを読む前に報告されます
 - 宣言済みボディがデコードできない → `RES_DECODE_FAILED` または `RES_STRUCT_MISMATCH`
 - Fetch 失敗 / キャンセル / タイムアウト → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。`abort` と `timeout` を同時に渡さないでください。`signal` はどちらとも組み合わせられます。キャンセルは呼び出し側が何を観測したかを伝えます — サーバー側の書き込みがコミットしたかどうかではありません。
+`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。有効なキャンセルの形は `{ timeout }`、`{ abort }`、または `{ signal, timeout }` / `{ signal, abort }` です。`{ abort, timeout }` を同時に渡すのは無効です。キャンセルは呼び出し側が見たことを伝えます — サーバー側の書き込みがコミットしたかどうかではありません。
 
 ## 次のレシピ
 

@@ -30,5 +30,5 @@ C’est la référence des paquets du workspace. Les signatures sont le contrat 
 
 ## Voir aussi
 
-- [Bien démarrer](../guide/getting-started.md)
-- [GET avec un 404 déclaré](../recipes/get-declared-404.md)
+- [Bien démarrer](/guide/getting-started)
+- [GET avec un 404 déclaré](/recipes/get-declared-404)

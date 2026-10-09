@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: 裝 provider、讀 client。
+description: ClientProvider、useClient，以及 provider props。
 ---
 
 # React {#page}
 
-把既有的 `@defjs/core` client 接進 React 樹。這個套件**不會**建立 client、加快取，也不會釋放傳輸資源。
+把既有的 `@defjs/core` client 提供給 React 樹。這個套件不會建立、快取或 dispose client。
 
-見 [React 指南](../plugins/react.md)。
+見 [React 指南](/plugins/react)。
 
 ## ClientProvider {#ClientProvider}
 

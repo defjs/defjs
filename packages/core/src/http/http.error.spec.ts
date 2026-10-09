@@ -47,6 +47,7 @@ describe('request http runtime errors', () => {
 
   test('should return request validation failures as definition errors', async () => {
     const useValidatedRequest = defineRequest({
+      builder: () => ({}),
       input: struct.object({
         id: struct.number(),
       }),
@@ -89,10 +90,11 @@ describe('request http runtime errors', () => {
       ),
     )
     const useRequest = defineRequest({
-      build() {
+      builder(input) {
         buildCalls += 1
+        return input
       },
-      input: struct.request({
+      input: struct.object({
         query: struct.object({ page: struct.number() }),
       }),
       method: 'GET',
@@ -202,7 +204,7 @@ describe('request http runtime errors', () => {
 
   test('should return definition error when build throws', async () => {
     const useBadBuild = defineRequest({
-      build: () => {
+      builder: () => {
         throw new Error('build failed')
       },
       input: struct.object({}),
@@ -269,11 +271,12 @@ describe('request http runtime errors', () => {
     const useRequest = defineRequest({ method: 'GET', path: '/hanging-interceptor' })
     const pending = guardedClient.execute(useRequest(), mode === 'abort' ? { signal: controller.signal } : { timeout: 1 })
 
-    await started
+    // A 1ms deadline can fire before the interceptor runs. Waiting on `started` then hangs the test.
     if (mode === 'abort') {
+      await started
       controller.abort('caller stopped')
     }
-    const result = await Promise.race([pending, new Promise<false>((resolve) => setTimeout(() => resolve(false), 100))])
+    const result = await Promise.race([pending, new Promise<false>((resolve) => setTimeout(() => resolve(false), 1000))])
 
     expect(result).not.toBe(false)
     if (result === false) {
@@ -398,6 +401,7 @@ describe('request http runtime errors', () => {
   test('should reject with.abort and with.timeout before parsing HTTP input', async () => {
     const controller = new AbortController()
     const useRequest = defineRequest({
+      builder: () => ({}),
       input: struct.object({
         id: struct.string(),
       }),
@@ -426,7 +430,7 @@ describe('request http runtime errors', () => {
       path: '/null',
     })
 
-    const [error, result, response] = await client.execute(useRequest(undefined), { abort: controller.signal, timeout: 1 } as never)
+    const [error, result, response] = await client.execute(useRequest(), { abort: controller.signal, timeout: 1 } as never)
 
     expect(result).toBeUndefined()
     expect(response).toBeUndefined()
@@ -505,7 +509,7 @@ describe('request http runtime errors', () => {
       path: '/null',
     })
 
-    const [error, result, response] = await client.execute(useRequest(undefined), { abort: signal })
+    const [error, result, response] = await client.execute(useRequest(), { abort: signal })
 
     expect(result).toBeUndefined()
     expect(response).toBeUndefined()
@@ -540,7 +544,6 @@ describe('request http runtime errors', () => {
       method: 'GET',
       output: struct.string(),
       path: '/download',
-      responseType: 'text',
     })
 
     const [error, result, response] = await guardedClient.execute(useRequest(), {
@@ -619,6 +622,7 @@ describe('request http runtime errors', () => {
 
   test('should expose error on ref after failed request', async () => {
     const useBadRequest = defineRequest({
+      builder: () => ({}),
       input: struct.object({
         id: struct.number(),
       }),
@@ -634,12 +638,7 @@ describe('request http runtime errors', () => {
 
   test('should cancel a pending request', async () => {
     const useDelay = defineRequest({
-      build: (request, input) => {
-        request.setQueryParams({
-          ms: input.query.ms,
-        })
-      },
-      input: struct.request({
+      input: struct.object({
         query: struct.object({
           ms: struct.number(),
         }),
@@ -854,12 +853,7 @@ describe('request http runtime errors', () => {
 
   test('should support timeout in second-stage config', async () => {
     const useDelay = defineRequest({
-      build: (request, input) => {
-        request.setQueryParams({
-          ms: input.query.ms,
-        })
-      },
-      input: struct.request({
+      input: struct.object({
         query: struct.object({
           ms: struct.number(),
         }),
@@ -904,11 +898,298 @@ describe('request http runtime errors', () => {
     }
   })
 
+  test('should report timeout when synchronous response conversion outlasts the deadline', async () => {
+    let clock = 1_000
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const body: { id?: number } = {}
+    Object.defineProperty(body, 'id', {
+      enumerable: true,
+      get() {
+        clock += 40
+        return 1
+      },
+    })
+    const slowClient = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            status: 200,
+          }),
+        ),
+      ),
+    )
+    const useRequest = defineRequest({
+      method: 'GET',
+      output: struct.object({ id: struct.number() }),
+      path: '/slow-decode',
+    })
+
+    try {
+      const [error, result] = await slowClient.execute(useRequest(), { timeout: 30 })
+
+      expect(result).toBeUndefined()
+      expect(error?.code).toBe('NET_TIMEOUT')
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test('should prefer caller cancellation when synchronous response conversion also crosses the deadline', async () => {
+    let clock = 1_000
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const controller = new AbortController()
+    const body: { id?: number } = {}
+    Object.defineProperty(body, 'id', {
+      enumerable: true,
+      get() {
+        controller.abort('caller stopped')
+        clock += 40
+        return 1
+      },
+    })
+    const slowClient = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            status: 200,
+          }),
+        ),
+      ),
+    )
+    const useRequest = defineRequest({
+      method: 'GET',
+      output: struct.object({ id: struct.number() }),
+      path: '/slow-decode',
+    })
+
+    try {
+      const [error, result] = await slowClient.execute(useRequest(), { signal: controller.signal, timeout: 30 })
+
+      expect(result).toBeUndefined()
+      expect(error?.code).toBe('NET_ABORTED')
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test('should report timeout when a declared error conversion outlasts the deadline', async () => {
+    let clock = 1_000
+    let converted = false
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const body: { id?: number } = {}
+    Object.defineProperty(body, 'id', {
+      enumerable: true,
+      get() {
+        converted = true
+        clock += 40
+        return 1
+      },
+    })
+    const slowClient = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            status: 403,
+          }),
+        ),
+      ),
+    )
+    const shape = struct.object({ id: struct.number() })
+    const useRequest = defineRequest({
+      error: shape,
+      method: 'GET',
+      output: shape,
+      path: '/slow-error',
+    })
+
+    try {
+      const [error, result] = await slowClient.execute(useRequest(), { timeout: 30 })
+
+      expect(converted).toBe(true)
+      expect(result).toBeUndefined()
+      expect(error?.code).toBe('NET_TIMEOUT')
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test('should report timeout when declared conversion fails after the deadline', async () => {
+    let clock = 1_000
+    let converted = false
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const body: { id?: number } = {}
+    Object.defineProperty(body, 'id', {
+      enumerable: true,
+      get() {
+        converted = true
+        clock += 40
+        return 'wrong' as unknown as number
+      },
+    })
+    const slowClient = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            status: 200,
+          }),
+        ),
+      ),
+    )
+    const useRequest = defineRequest({
+      method: 'GET',
+      output: struct.object({ id: struct.number() }),
+      path: '/slow-mismatch',
+    })
+
+    try {
+      const [error, result] = await slowClient.execute(useRequest(), { timeout: 30 })
+
+      expect(converted).toBe(true)
+      expect(result).toBeUndefined()
+      expect(error?.code).toBe('NET_TIMEOUT')
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test('should report timeout when synchronous decoding throws after the deadline', async () => {
+    let clock = 1_000
+    let converted = false
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const body: { id?: number } = {}
+    Object.defineProperty(body, 'id', {
+      enumerable: true,
+      get() {
+        converted = true
+        clock += 40
+        throw new TypeError('broken body')
+      },
+    })
+    const slowClient = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            status: 200,
+          }),
+        ),
+      ),
+    )
+    const useRequest = defineRequest({
+      method: 'GET',
+      output: struct.object({ id: struct.number() }),
+      path: '/slow-decode-throw',
+    })
+
+    try {
+      const [error, result] = await slowClient.execute(useRequest(), { timeout: 30 })
+
+      expect(converted).toBe(true)
+      expect(result).toBeUndefined()
+      expect(error?.code).toBe('NET_TIMEOUT')
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test('should prefer caller cancellation when declared conversion fails after the deadline', async () => {
+    let clock = 1_000
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const controller = new AbortController()
+    const body: { id?: number } = {}
+    Object.defineProperty(body, 'id', {
+      enumerable: true,
+      get() {
+        controller.abort('caller stopped')
+        clock += 40
+        return 'wrong' as unknown as number
+      },
+    })
+    const slowClient = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({
+            body,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            status: 200,
+          }),
+        ),
+      ),
+    )
+    const useRequest = defineRequest({
+      method: 'GET',
+      output: struct.object({ id: struct.number() }),
+      path: '/slow-mismatch-abort',
+    })
+
+    try {
+      const [error, result] = await slowClient.execute(useRequest(), { signal: controller.signal, timeout: 30 })
+
+      expect(result).toBeUndefined()
+      expect(error?.code).toBe('NET_ABORTED')
+    } finally {
+      now.mockRestore()
+    }
+  })
+
+  test('should report timeout when an undeclared response outlasts the deadline', async () => {
+    let clock = 1_000
+    let converted = false
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock)
+    const body: { id?: number } = {}
+    Object.defineProperty(body, 'id', {
+      enumerable: true,
+      get() {
+        converted = true
+        return 1
+      },
+    })
+    const slowClient = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () => {
+          clock += 40
+          return makeResponse({
+            body,
+            headers: new Headers({ 'content-type': 'application/json' }),
+            status: 200,
+          })
+        }),
+      ),
+    )
+    const useRequest = defineRequest({ method: 'GET', path: '/slow-undeclared' })
+
+    try {
+      const [error, result] = await slowClient.execute(useRequest(), { timeout: 30 })
+
+      expect(converted).toBe(false)
+      expect(result).toBeUndefined()
+      expect(error?.code).toBe('NET_TIMEOUT')
+    } finally {
+      now.mockRestore()
+    }
+  })
+
   test('should release the timeout timer when request construction fails', async () => {
     vi.useFakeTimers()
     const buildError = new Error('build failed')
     const useRequest = defineRequest({
-      build() {
+      builder() {
         throw buildError
       },
       input: struct.object({ id: struct.string() }),
@@ -1007,6 +1288,31 @@ describe('request http runtime errors', () => {
 
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
     expect(logs).toEqual(['after'])
+  })
+
+  test.each(['abort', 'timeout'] as const)('should classify a pre-cancelled interceptor signal as %s without fetching', async (mode) => {
+    let fetches = 0
+    const guardedClient = createClient(
+      withEndpoint('https://example.com'),
+      withHTTPHandle(async () => {
+        fetches += 1
+        return new Response(null, { status: 204 })
+      }),
+      withInterceptors(
+        createHttpInterceptor((_request, next) =>
+          next({
+            ..._request,
+            abort: AbortSignal.abort(mode === 'timeout' ? new DOMException('deadline', 'TimeoutError') : 'stop'),
+          }),
+        ),
+      ),
+    )
+    const useRequest = defineRequest({ method: 'GET', path: '/preabort' })
+
+    const [error] = await guardedClient.execute(useRequest())
+
+    expect(fetches).toBe(0)
+    expect(error?.code).toBe(mode === 'timeout' ? 'NET_TIMEOUT' : 'NET_ABORTED')
   })
 
   test('should classify a non-Error interceptor throw as INTERCEPTOR_FAILED', async () => {

@@ -55,30 +55,33 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
 ## 伺服器 vs 瀏覽器的範圍
 
-在伺服器上，若 options 或 interceptor closures 會捕捉 auth、cookies、users、tenants，請在請求邊界內建立 client。Client 身分本身不是安全邊界.
+在伺服器上，若 options 或 interceptor closures 會捕捉 auth、cookies、users、tenants，請在請求邊界內建立 client。Client 身分本身不是安全邊界。
 
 ## Reference
 
 | Helper                                                                                                        | 效果                                                       |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | 所有傳輸共用的絕對 base endpoint                           |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP／SSE 的靜態預設 headers；command headers 會覆寫       |
+| `withTimeout(ms)`                                                                                             | 只當 HTTP `execute` 的預設 timeout（SSE／WS 會忽略）       |
 | `withHTTPHandle(fetch)`                                                                                       | 替換 HTTP 的 Fetch                                         |
 | `withSSEHandle(fetch)`                                                                                        | 替換 SSE 的 Fetch                                          |
 | `withWebSocketHandle(WebSocket)`                                                                              | 替換 WebSocket constructor                                 |
 | `withInterceptors(...items)`                                                                                  | 追加混合 interceptors                                      |
-| `withQueryParamsSerializer(fn)`                                                                               | 替換 query 序列化                                          |
+| `withQuerySerializer(fn)`                                                                                     | 把已經套過 alias 的 query 物件編成 query string            |
 | `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP／SSE 的 Fetch 用 `credentials: 'include'` |
 | `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                  |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 旋鈕                                                   |

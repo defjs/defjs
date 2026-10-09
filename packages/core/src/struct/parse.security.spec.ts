@@ -137,7 +137,7 @@ describe('parse.ts prototype pollution defense', () => {
         return { page: 1 }
       },
     }
-    expect(parse(struct.request({ query: struct.object({ page: struct.number() }) }), requestInput)).toEqual([null, { query: { page: 1 } }])
+    expect(parse(struct.object({ query: struct.object({ page: struct.number() }) }), requestInput)).toEqual([null, { query: { page: 1 } }])
 
     let typeReads = 0
     const Event = struct.discriminatedUnion('type', [struct.object({ payload: struct.string(), type: struct.literal('message') })])

@@ -3,7 +3,7 @@ title: Клиент
 description: createClient, хелперы опций и тип Client.
 ---
 
-# Клиент
+# Клиент {#page}
 
 Собери клиент, наложи опции слева направо, потом `execute` команды HTTP / SSE / WebSocket.
 
@@ -26,6 +26,8 @@ const client = createClient(withEndpoint('https://api.example.com'))
 
 ## Хелперы option
 
+Все хелперы возвращают `ClientOption`.
+
 ### withEndpoint() {#withEndpoint}
 
 ```ts
@@ -42,13 +44,13 @@ function withInterceptors(...interceptors: Interceptor[]): ClientOption
 
 Дописывает interceptors в порядке регистрации. Смешанные kind фильтруются по транспорту в момент execute.
 
-### withQueryParamsSerializer() {#withQueryParamsSerializer}
+### withQuerySerializer() {#withQuerySerializer}
 
 ```ts
-function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-Заменяет кодирование query. `serializer(params, rawParams?)` возвращает query-строку без ведущего `?`.
+Заменяет кодирование query для HTTP, SSE и WebSocket. `serializer(query)` получает **уже закодированный wire-объект** (алиасы применены, `Date` как ISO, `bigint` как string) и должен вернуть query-строку без ведущего `?`. Его не зовут, когда у запроса нет query. Builder, который возвращает `URLSearchParams`, его пропускает.
 
 ### withHTTPHandle() {#withHTTPHandle}
 
@@ -132,23 +134,23 @@ type Client = {
 type ClientOption = (config: ClientConfig) => void
 ```
 
-### QueryParamsSerializer {#QueryParamsSerializer}
+### QuerySerializer {#QuerySerializer}
 
 ```ts
-type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
+type QuerySerializer = (query: { [key: string]: unknown }) => string
 ```
 
 ### ClientSSEOptions {#ClientSSEOptions}
 
 ### ClientWebSocketOptions {#ClientWebSocketOptions}
 
-SSE: `handle`, `onInvalidEvent`, `reconnect` (`attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, `shouldReconnect`).
+SSE: `handle`, `onInvalidEvent`, `reconnect` (`attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, `shouldReconnect`). SSE `jitter` — мультипликативный коэффициент 0–1, как у WebSocket. Когда SSE `reconnect` задан, `attempts` по умолчанию **3**; `attempts: 0` отключает. Без `withSSEReconnect` ретрая тоже нет.
 
-WebSocket: `handle`, `beforeConnect`, `heartbeat` (`intervalMs`, `message`, `isAck`, `timeoutMs`), `protocols`, `reconnect` (та же форма, что у SSE, плюс close `code` / `reason` / `wasClean`).
+WebSocket: `handle`, `beforeConnect`, `heartbeat` (`intervalMs`, `message`, `isAck`, `timeoutMs`), `protocols`, `reconnect` (та же форма, что у SSE, плюс close `code` / `reason` / `wasClean`). Когда WebSocket `reconnect` задан, `attempts` по умолчанию **3**; `0` отключает. Опустить `attempts` — это не «без лимита». WebSocket `jitter` — мультипликативный коэффициент 0–1.
 
 `ClientConfig` — готовый снимок (`endpoint`, `http`, `sse`, `webSocket`, `interceptors`, …). `ClientOptions` — та же форма, но как вход.
 
-Подробности — в [гайде Client](../core/client.md).
+См. [гайд Client](/core/client).
 
 ## ClientOptions {#ClientOptions}
 

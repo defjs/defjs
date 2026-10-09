@@ -30,5 +30,5 @@ description: مرجع مكتوب يدويًا لحزم مساحة العمل —
 
 ## ذات صلة
 
-- [البدء](../guide/getting-started.md)
-- [GET مع 404 معلَن](../recipes/get-declared-404.md)
+- [البدء](/guide/getting-started)
+- [GET مع 404 معلَن](/recipes/get-declared-404)

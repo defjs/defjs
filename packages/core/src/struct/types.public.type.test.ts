@@ -6,7 +6,6 @@ import {
   type Infer,
   type ObjectStruct,
   type ParseResult,
-  type RequestStruct,
   type StructInput,
   type StructIssue,
   type StructLike,
@@ -19,7 +18,7 @@ import type { ObjectShape } from './index'
 // @ts-expect-error RequestShape is internal.
 import type { RequestShape } from './index'
 
-// @ts-expect-error RequestBodyCodec is internal.
+// @ts-expect-error RequestBodyCodec was removed with the requestBody kind.
 import type { RequestBodyCodec } from './index'
 
 // @ts-expect-error ContentCodecKind is internal.
@@ -32,16 +31,17 @@ describe('struct public API', () => {
   it('exports struct, Infer, and error types', () => {
     const Id = struct.string()
     const User = struct.object({ id: Id })
-    const Request = struct.request({ path: User })
+    const Request = struct.object({ path: User })
 
     expectTypeOf<Infer<typeof User>>().toEqualTypeOf<{ id: string }>()
     expectTypeOf<StructInput<typeof User>>().toEqualTypeOf<{ id: string }>()
     expectTypeOf(User).toExtend<ObjectStruct<{ id: typeof Id }>>()
-    expectTypeOf(Request).toExtend<RequestStruct<{ path: typeof User }>>()
+    expectTypeOf(Request).toExtend<ObjectStruct<{ path: typeof User }>>()
     expectTypeOf(User).toExtend<StructLike<{ id: string }, { id: string }, false>>()
     expectTypeOf(User).toExtend<StructMethods<{ id: string }, { id: string }, false>>()
     expectTypeOf(struct.parse(User, { id: 'u_1' })).toEqualTypeOf<ParseResult<{ id: string }>>()
     expectTypeOf(StructError).toBeConstructibleWith([] as StructIssue[])
+    expectTypeOf<'invalid_intersection'>().toExtend<StructIssue['code']>()
     expectTypeOf<ErrorMap>().toBeFunction()
   })
 

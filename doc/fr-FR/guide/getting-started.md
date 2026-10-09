@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Étape 2 — Définir la requête
 
-Crée `src/get-user.ts`. `struct.request(...)` garde les valeurs de chemin séparées de la query, des en-têtes et du body.
+Crée `src/get-user.ts`. Le struct d’entrée est la valeur de l’appelant. `builder` place cette valeur sur la requête. Ici toute l’entrée est l’objet de path, donc les champs scalaires sans alias remplissent `:id`.
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,22 +63,23 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` renvoie le builder. Appeler `getUser(...)` construit la commande opaque que tu passeras à `client.execute(...)`.
+`output` est le corps 2xx. `error` est tout autre statut. Un struct chacun. Utilise `struct.or(...)` ou une union discriminée quand ces corps diffèrent.
+
+`defineRequest(...)` renvoie un endpoint. Appeler `getUser(...)` construit la commande opaque que tu passeras à `client.execute(...)`. Le `builder` ci-dessus est la fonction qui place l’entrée ; ce n’est pas l’endpoint.
 
 ## Étape 3 — L’exécuter en local
 
-Branche un handle Fetch local au client pour tourner sans réseau. Defjs valide quand même l’entrée, construit la `Request`, dispatche selon le statut et parse le body.
+Branche un handle Fetch local au client pour tourner sans réseau. Defjs valide quand même l’entrée, construit la `Request`, dispatche par statut et parse le corps.
 
 ```ts get-user.ts
 import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } from '@defjs/core'
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -130,7 +130,7 @@ if (error) {
 }
 ```
 
-Lance :
+Lance-le :
 
 ::: tabs
 == bun
@@ -169,17 +169,17 @@ deno run src/get-user.ts
 Loaded Ada from 200
 ```
 
-Essaie un utilisateur manquant — change l’id du path en `8` et relance :
+Essaie un utilisateur manquant — change l’id de path en `8` et relance :
 
 ```txt
 User not found
 ```
 
-En succès : `error` est `null`, `user` est la sortie Struct du `200`, `response` est un `HttpResponse`. Sur un `404` déclaré : `error.code` vaut `'http'`, `error.status` vaut `404`, et `error.data` est typé `NotFound`. Le deuxième élément du tuple vaut `undefined` en échec.
+En succès : `error` est `null`, `user` est la sortie Struct du `200`, `response` est un `HttpResponse`. Sur un `404` déclaré : `error.code` est `'HTTP_STATUS'`, `error.status` est `404`, et `error.data` est typé `NotFound`. Le deuxième élément du tuple est `undefined` en échec.
 
 ## Étape 4 — Pointer vers une vraie API
 
-Retire `withHTTPHandle(...)` et mets la vraie base URL quand le service implémente `GET /v1/users/:id` avec ces corps.
+Enlève `withHTTPHandle(...)` et pose la vraie URL de base quand le service implémente `GET /v1/users/:id` avec ces corps.
 
 ```ts
 import { createClient, withEndpoint, withHTTPHandle } from '@defjs/core'
@@ -205,13 +205,14 @@ Même commande. Client différent.
 
 ## Quand le résultat change
 
-- Mauvaise entrée → `REQ_INPUT_INVALID` ; options d’annulation conflictuelles → `REQ_OPTIONS_INVALID` ; un `build` qui échoue → `REQ_BUILD_FAILED`
-- N’importe quel non-2xx → `HTTP_STATUS`, avec `err.data` typé si `error` était déclaré
+- Mauvaise entrée → `REQ_INPUT_INVALID` ; options d’annulation en conflit → `REQ_OPTIONS_INVALID` ; un
+  `build` qui échoue → `REQ_BUILD_FAILED`
+- Tout non-2xx → `HTTP_STATUS`, avec `err.data` typé quand `error` a été déclaré
 - Mauvais media type → `RES_MEDIA_TYPE_INVALID`, signalé avant la lecture du corps
-- Corps déclaré qui ne décode pas → `RES_DECODE_FAILED` ou `RES_STRUCT_MISMATCH`
+- Un corps déclaré qui ne décode pas → `RES_DECODE_FAILED` ou `RES_STRUCT_MISMATCH`
 - Échec Fetch / annulation / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` doit être un entier sûr positif dans `1..2_147_483_647`. Ne passe pas `abort` et `timeout` ensemble ; `signal` peut se combiner avec l’un ou l’autre. L’annulation te dit ce que l’appelant a vu — pas si une écriture serveur a été commitée.
+`timeout` doit être un entier sûr positif dans `1..2_147_483_647`. Formes d’annulation valides : `{ timeout }`, `{ abort }`, ou `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` ensemble est invalide. L’annulation te dit ce que l’appelant a vu — pas si une écriture serveur a été commitée.
 
 ## Recettes suivantes
 

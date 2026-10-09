@@ -1,13 +1,13 @@
 ---
 title: '@defjs/opentelemetry-server'
-description: 'Instrumentación de salida: `withOpenTelemetryServer`.'
+description: withOpenTelemetryServer y opciones por transporte.
 ---
 
 # OpenTelemetry server {#page}
 
-Enciende la instrumentación de salida al crear el cliente. Añade interceptors HTTP, SSE y WebSocket. **No** es instrumentación de servidor de entrada, y **no** inicializa un SDK de OpenTelemetry.
+Instrumentación de salida HTTP / SSE / WebSocket como interceptores del core. Este paquete no inicializa un SDK de OpenTelemetry, y no es instrumentación de servidor de entrada.
 
-Mira la [guía de OpenTelemetry server](../plugins/opentelemetry-server.md).
+Mira la [guía de OpenTelemetry server](/plugins/opentelemetry-server).
 
 ## withOpenTelemetryServer() {#withOpenTelemetryServer}
 
@@ -65,8 +65,23 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 }
 ```
 
-`startSpanHook` se ejecuta de forma síncrona antes de crear el span de su transporte HTTP, SSE o WebSocket. Los atributos de la aplicación se aplican al final, así que pueden sobrescribir `url.full`. Si lanza, Defjs registra `defjs.otel.hook.error` y continúa la solicitud con los atributos incorporados; `requestHook` y `responseHook` siguen ejecutándose tras crear el span.
+`startSpanHook` se ejecuta de forma síncrona antes de crear el span de su propio transporte HTTP, SSE o WebSocket. Sus atributos se aplican después de los atributos incorporados, así que la aplicación puede sobrescribir `url.full` u otro valor inicial. Si lanza, Defjs crea el span con los atributos incorporados, registra `defjs.otel.hook.error` y continúa la solicitud; `requestHook` y `responseHook` conservan su semántica existente posterior a la creación.
 
-Por defecto, `url.full` solo resuelve `request.endpoint` contra el `request.baseEndpoint` opcional y no añade un `request.queryString` independiente. Ese límite no es redaction y no hay una política redactor incorporada. Construye explícitamente una URL completa o redactada en `startSpanHook`.
+Por defecto, `url.full` solo resuelve `request.endpoint` contra el `request.baseEndpoint` opcional; un `request.queryString` independiente no se añade. Ese límite no es redaction, y el paquete no tiene un redactor incorporado ni una política de claves sensibles. Construye y, si hace falta, redacta de forma explícita una URL que posea la aplicación:
 
-`queryPropagation` vale `false` por defecto. Actívalo solo si te vale meter trace context en la URL de WebSocket.
+```ts
+import { createResolvedRequestUrl, type HttpRequest } from '@defjs/core'
+import type { Attributes } from '@opentelemetry/api'
+
+const http = {
+  startSpanHook(request: HttpRequest): Attributes {
+    if (!request.baseEndpoint) return {}
+    const url = createResolvedRequestUrl(request.baseEndpoint, request.endpoint)
+    if (request.queryString) url.search = request.queryString
+    url.searchParams.delete('access_token')
+    return { 'url.full': url.href }
+  },
+}
+```
+
+`queryPropagation` vale `false` por defecto. Actívalo solo después de aceptar el trace context en la URL de WebSocket.

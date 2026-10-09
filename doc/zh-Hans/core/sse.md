@@ -18,7 +18,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -37,9 +37,9 @@ if (error) {
 
 `defineEventStream(...)` 要 `events`、正 safe integer 的 `maxBufferSize`、正 safe integer 的 `maxQueueSize`，以及相对 `path`。Method 默认 `GET`。
 
-请求输入可以有 `path`、`query`、`headers` 和 `body`。自定义 `build` 拿到和 HTTP 一样的 request helper，包括 body setter。你没设 `Accept` 时，Defjs 会发 `Accept: text/event-stream`。
+请求形状和 HTTP 一样：可选 `builder`，返回 `path`、`query`、`headers`、`body`。`GET` / `HEAD` 不能返回 body。声明了 `error` struct 时，启动 fault 带类型，非 2xx 握手 body 按 struct kind 解码（`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON）。你没设 `Accept` 时，Defjs 会发 `Accept: text/event-stream`。
 
-SSE 默认不重试网络或读取失败；必须用 `withSSEReconnect(...)` 显式启用。提供 reconnect 配置后，`attempts` 默认是 `3`；`attempts: 0` 禁用重试。
+**当你**选择重连时，一条逻辑流可以跨多次物理 Fetch。没有 `withSSEReconnect`，瞬时网络和流读取失败会结束逻辑流。打开成功时你仍拿到一个 handle、一个 async iterator。
 
 ## 打开并查看
 
@@ -66,7 +66,7 @@ if (error) {
 }
 ```
 
-响应必须成功，媒体类型本质是 `text/event-stream`，且有 body。启动非 2xx → `HTTP_STATUS`。坏 content type 或缺 body → `RES_STRUCT_MISMATCH`。响应到达后校验失败时，第三项仍可能有响应快照。
+响应必须成功，媒体类型本质是 `text/event-stream`，且有 body。启动非 2xx → `HTTP_STATUS`。声明了 `error` 时，这个 fault 带着解码后的握手 body；媒体类型不对是 `RES_MEDIA_TYPE_INVALID`，body 没法按声明的 kind 读出来是 `RES_DECODE_FAILED`。响应到达后校验失败时，第三项仍可能有响应快照。
 
 `startupOpen` 是初始快照。`stream.open` 是活的，后续物理打开会变。第一次响应重要时，留着 tuple 里的值。
 
@@ -85,15 +85,7 @@ void result
 
 线上事件名 → `events[eventName]`；否则 `events.default`。没有匹配 Struct → 事件不投递。缺 SSE `event` 字段 → 逻辑名是 `message`。
 
-SSE `data` 先是文本。选中的 Struct 决定怎么转：
-
-| Struct                                                                 | 转换                                                 |
-| ---------------------------------------------------------------------- | ---------------------------------------------------- |
-| `struct.string()`、`struct.text()`、`struct.any()`、`struct.unknown()` | 保持文本                                             |
-| `struct.number()`                                                      | trim 后必须是有限数字；空无效                        |
-| `struct.boolean()`                                                     | trim 后恰好是 `true` 或 `false`                      |
-| `struct.json(inner)`                                                   | 先 parse JSON，再用 `inner` 解码                     |
-| Object、array、union、其他普通 Struct                                  | 直接解码文本；看起来像 JSON 的文本**不会**自动 parse |
+SSE `data` 一开始是文本。`string` struct 保留这段文本。其余 kind 都是 JSON：先 parse 文本，再用 struct 解码。`struct.object`、`struct.number`、`struct.boolean`、`struct.any`、`struct.unknown` 都是 JSON，不是 trim 过的文本。`ping` 这种裸 token 满足不了 `struct.literal('ping')`；data 必须是 JSON。服务端发 JSON 字符串 `"abc"` 时仍然满足 `struct.string()`：交付的值就是这段原始文本，引号也在，不会 JSON 解码成 `abc`。
 
 发出的值：`event`、解码后的 `data`、可选非空 `id`。有 `default` 时，未知事件名在推断 union 里是 `string`。
 
@@ -121,7 +113,7 @@ Observer 跑在 transform 边界。除非当前尝试的 signal 已 abort，它�
 
 ## 重连
 
-SSE 默认不重试网络或读取失败；必须用 `withSSEReconnect(...)` 显式启用。提供 reconnect 配置后，`attempts` 默认是 `3`；`attempts: 0` 禁用重试。 正常 EOF 不重试。网络和流读取失败可以重试。状态/content-type 校验、parser 上限、消息 transform 失败、队列溢出、正常 EOF 对逻辑流是终端。
+**行为变化：** SSE 重连是 opt-in。没有 `withSSEReconnect(...)` 时，网络和流读取失败**不会**重试（等同 `attempts: 0`）。传 `withSSEReconnect({ attempts: 3 })`（或另一份审过的预算）才会重试这些失败。正常 EOF 不重试。状态/content-type 校验、parser 上限、消息 transform 失败、队列溢出、正常 EOF 对逻辑流仍是终端。
 
 ```ts
 import { createClient, withEndpoint, withSSEReconnect } from '@defjs/core'
@@ -129,21 +121,21 @@ import { createClient, withEndpoint, withSSEReconnect } from '@defjs/core'
 const client = createClient(
   withEndpoint('https://api.example.com'),
   withSSEReconnect({
-    attempts: 5,
+    attempts: 3,
     delayMs: 1_000,
     factor: 2,
     maxDelayMs: 30_000,
     jitter: 0.5,
     shouldReconnect({ attempt, open }) {
-      return attempt <= 5 && (open?.response.status ?? 0) !== 401
+      return attempt <= 3 && (open?.response.status ?? 0) !== 401
     },
   }),
 )
 ```
 
-SSE 默认不重试网络或读取失败；必须用 `withSSEReconnect(...)` 显式启用。提供 reconnect 配置后，`attempts` 默认是 `3`；`attempts: 0` 禁用重试。 `delayMs` 是初始间隔；`factor` 放大；`maxDelayMs` 封顶基数。SSE 的 `jitter` 是与 WebSocket 相同的 **0–1 乘性因子**。流上的 `retry:` 字段会更新当前间隔。政策回调返回 false / 抛错 / reject 会结束逻辑流。
+`attempts` 计的是初次尝试之后的重试次数；设了 reconnect 对象时默认 `3`。`attempts: 0` 禁用重试。不写 `withSSEReconnect` 同样禁用重试。`delayMs` 是初始间隔；`factor` 放大；`maxDelayMs` 封顶基数。SSE 的 `jitter` 是与 WebSocket 相同的 **0–1 乘性因子**。流上的 `retry:` 字段会更新当前间隔。政策回调返回 false / 抛错 / reject 会结束逻辑流。
 
-最近解析到的事件 ID 会在后续尝试变成 `Last-Event-ID`。重连前先搞清服务端重放语义。
+最近解析到的事件 ID 会在后续尝试变成 `Last-Event-ID`。后续尝试会重发同一条 Fetch 请求，包括 method 和 body。重连前先搞清服务端重放语义。
 
 ## Buffer 与队列上限
 
@@ -154,7 +146,7 @@ SSE 默认不重试网络或读取失败；必须用 `withSSEReconnect(...)` 显
 | `maxBufferSize` | 解析时不完整/过大的 SSE 行/事件 | `CAP_BUFFER_EXCEEDED` |
 | `maxQueueSize`  | 生产快于唯一消费者读取的事件    | `CAP_QUEUE_OVERFLOW`  |
 
-致命流还会清空缓冲事件、取消活动 body、reject iterator，并以 `code: 'error'` resolve `stream.closed`。
+致命流还会清空缓冲事件、取消活动 body、reject iterator，并以 `kind: 'error'` resolve `stream.closed`。
 
 ## Close 与 dispose
 
@@ -175,7 +167,7 @@ const api: StreamApi<string> = handle
 void api
 ```
 
-终端 code：`eof`、`aborted` 或 `error`。`error` 结果还会带 `EventStreamFaultCode`：`RES_MEDIA_TYPE_INVALID`、`EXT_OBSERVER_FAILED`、`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`NET_TIMEOUT` 或 `TRANSPORT_ERROR`。
+终端 code：`eof`、`aborted` 或 `error`。`error` 结果还会带 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或 `RES_MEDIA_TYPE_INVALID`。
 
 `close(reason)` 中止当前尝试、关闭队列，以 `aborted` settle。循环 `break` / `return` / throw 会触发 iterator return，并以 `iterator-return` 关闭。执行 command 的代码拥有关闭权。
 

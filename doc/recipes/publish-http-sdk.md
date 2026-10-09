@@ -1,11 +1,11 @@
 ---
 title: Publish an HTTP SDK without hiding execute
-description: Export builders and createClient; keep status narrowing at the call site.
+description: Export endpoints and createClient; keep status narrowing at the call site.
 ---
 
 # Publish an HTTP SDK without hiding execute
 
-A method SDK that swallows `client.execute` usually collapses declared `404` into an untyped throw or a shared “API error”. Keep the contract as builders plus an explicit client; callers still own status branching.
+A method SDK that swallows `client.execute` usually collapses declared `404` into an untyped throw or a shared “API error”. Keep the contract as endpoints plus an explicit client; callers still own status branching.
 
 See [Commands](../core/commands.md), [Client](../core/client.md), and [Design Decisions](../guide/design-decisions.md).
 
@@ -16,7 +16,7 @@ import { createClient, defineRequest, struct, withEndpoint, type Client, type Cl
 export const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
@@ -52,4 +52,4 @@ console.log(name, error, user?.name)
 Ada null Ada
 ```
 
-Export builders and a client factory. Helpers may call `execute` for one reviewed path, but do not replace the tuple for every status you care about.
+Export endpoints and a client factory. Helpers may call `execute` for one reviewed path, but do not replace the tuple for every status you care about.

@@ -27,6 +27,8 @@ type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
 type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
 ```
 
+`EventStreamHandle` erweitert `AsyncDisposable`. Eine strukturelle Short-Circuit-Implementierung muss `[Symbol.asyncDispose](): PromiseLike<void>` liefern und ihn an denselben Close-Lifecycle hängen.
+
 ## createWebSocketInterceptor() {#createWebSocketInterceptor}
 
 ```ts
@@ -36,7 +38,24 @@ type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
 type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
 ```
 
-`WebSocketSessionLike` ist die interceptor-seitige Session: `send`, `close`, `receive`, `state`, `closed`, `connection`, `bufferedAmount`, `onStateChange`, `onRuntimeError` und `[Symbol.asyncDispose](): PromiseLike<void>`. Sie erweitert `AsyncDisposable`; jeder Wrapper muss denselben Disposer weiterleiten. Eigene strukturelle Implementierungen brechen bei der Compilation, bis sie ihn ergänzen; reine Empfänger einer Defjs-Session brauchen keinen neuen Runtime-Aufruf.
+`WebSocketSessionLike` ist die interceptor-seitige Session:
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+Ein Wrapper oder eine Short-Circuit-Session muss denselben `[Symbol.asyncDispose]()`-Teardown wie ihren `close`- / `closed`-Lifecycle weiterleiten; ein fremdes resolved Promise reicht nicht. Dieses Member zu verlangen ist eine Compile-Time-Breaking-Änderung für strukturelle Implementierungen. Code, der nur von Defjs zurückgegebene Sessions akzeptiert, hat keine zusätzliche Runtime-Aufrufpflicht.
 
 ## Getaggte Typen
 
@@ -81,4 +100,4 @@ function basicAuthSSEInterceptor(fn: () => { username: string; password: string 
 
 `fn` wird pro Request aufgerufen. Optionales `encode` auf `BasicAuthInterceptorOptions` ersetzt den Default-`Basic …`-Header-Wert.
 
-Siehe [Interceptors-Guide](../core/interceptors.md).
+Siehe [Interceptors-Guide](/core/interceptors).

@@ -1,9 +1,9 @@
 ---
 title: العميل
-description: createClient، مساعدات الخيارات، ونوع Client.
+description: createClient، ومساعدات الخيارات، ونوع Client.
 ---
 
-# العميل
+# العميل {#page}
 
 أنشئ عميلًا، ركّب الخيارات من اليسار إلى اليمين، ثم `execute` أوامر HTTP / SSE / WebSocket.
 
@@ -26,6 +26,8 @@ const client = createClient(withEndpoint('https://api.example.com'))
 
 ## مساعدات الخيارات
 
+كل المساعدات تُرجع `ClientOption`.
+
 ### withEndpoint() {#withEndpoint}
 
 ```ts
@@ -42,13 +44,13 @@ function withInterceptors(...interceptors: Interceptor[]): ClientOption
 
 يُلحق المعترضات بترتيب التسجيل. الأنواع المختلطة تُصفّى حسب وسيلة النقل عند التنفيذ.
 
-### withQueryParamsSerializer() {#withQueryParamsSerializer}
+### withQuerySerializer() {#withQuerySerializer}
 
 ```ts
-function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-يستبدل ترميز الاستعلام. `serializer(params, rawParams?)` يجب أن يُرجع سلسلة الاستعلام دون `?` بادئة.
+يستبدل ترميز الاستعلام لـ HTTP وSSE وWebSocket. `serializer(query)` يستقبل **كائن السلك المرمَّز** (الأسماء المستعارة مُطبَّقة، و`Date` بصيغة ISO، و`bigint` كسلسلة) ويجب أن يُرجع سلسلة الاستعلام دون `?` بادئة. لا يُستدعى عندما لا يملك الطلب استعلامًا. الـ `builder` الذي يُرجع `URLSearchParams` يتخطاه.
 
 ### withHTTPHandle() {#withHTTPHandle}
 
@@ -132,31 +134,31 @@ type Client = {
 type ClientOption = (config: ClientConfig) => void
 ```
 
-### QueryParamsSerializer {#QueryParamsSerializer}
+### QuerySerializer {#QuerySerializer}
 
 ```ts
-type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
+type QuerySerializer = (query: { [key: string]: unknown }) => string
 ```
 
 ### ClientSSEOptions {#ClientSSEOptions}
 
 ### ClientWebSocketOptions {#ClientWebSocketOptions}
 
-SSE: `handle`، `onInvalidEvent`، `reconnect` (`attempts`، `delayMs`، `factor`، `jitter`، `maxDelayMs`، `shouldReconnect`).
+SSE: `handle`، `onInvalidEvent`، `reconnect` (`attempts`، `delayMs`، `factor`، `jitter`، `maxDelayMs`، `shouldReconnect`). `jitter` في SSE عامل ضربي بين 0 و1، مثل WebSocket. عند ضبط `reconnect` لـ SSE، الافتراضي لـ `attempts` هو **3**؛ و`attempts: 0` يعطّل. حذف `withSSEReconnect` يعطّل إعادة المحاولة أيضًا.
 
-WebSocket: `handle`، `beforeConnect`، `heartbeat` (`intervalMs`، `message`، `isAck`، `timeoutMs`)، `protocols`، `reconnect` (نفس شكل SSE إضافةً إلى `code` / `reason` / `wasClean` للإغلاق).
+WebSocket: `handle`، `beforeConnect`، `heartbeat` (`intervalMs`، `message`، `isAck`، `timeoutMs`)، `protocols`، `reconnect` (نفس شكل SSE إضافةً إلى `code` / `reason` / `wasClean` للإغلاق). عند ضبط `reconnect` لـ WebSocket، الافتراضي لـ `attempts` هو **3**؛ و`0` يعطّل. حذف `attempts` ليس بلا حد. `jitter` في WebSocket عامل ضربي بين 0 و1.
 
 `ClientConfig` هي لقطة الحل (`endpoint`، `http`، `sse`، `webSocket`، `interceptors`، …). `ClientOptions` هي المقابل على شكل المدخل.
 
-انظر [دليل العميل](../core/client.md).
+انظر [دليل العميل](/core/client).
 
 ## ClientOptions {#ClientOptions}
 
-تهيئة بشكل الإدخال: `endpoint`، `http`، `sse`، `webSocket`، `interceptors`…
+تهيئة بشكل الإدخال: `endpoint`، `http`، `sse`، `webSocket`، `interceptors`، …
 
 ## ClientConfig {#ClientConfig}
 
-لقطة بعد تطبيق مساعدات الخيارات.
+لقطة محلولة بعد تطبيق مساعدات الخيارات.
 
 ## ClientSSEConfig {#ClientSSEConfig}
 

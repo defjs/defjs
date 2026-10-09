@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,17 +108,17 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-명령 레이어는 여전히 status로 디스패치해요. 호출자가 타입이 잡힌 `error.data`가 필요하면 `output`에 `503`을 선언해요. SSE나 WebSocket을 short-circuit하려면 완전한 호환 핸들/세션이 필요해요 (종료 프로미스, live 상태, 소유권, `[Symbol.asyncDispose]`). 부분 객체는 유효한 정책이 아니에요. 구조적인 `EventStreamHandle`과 `WebSocketSessionLike` 구현은 이제 컴파일 시 표준 disposer도 필요하고, Defjs 핸들을 받기만 하는 소비자에는 새 런타임 호출 요구가 없어요.
+명령 레이어는 여전히 status로 디스패치해요. 호출자가 타입이 잡힌 `error.data`가 필요하면 비 2xx 쪽을 `error` struct 하나로 선언해요. SSE나 WebSocket을 short-circuit하려면 완전한 호환 핸들/세션이 필요해요 (종료 프로미스, live 상태, 소유권, `[Symbol.asyncDispose]`). 부분 객체는 유효한 정책이 아니에요. 구조적인 `EventStreamHandle`과 `WebSocketSessionLike` 구현은 이제 컴파일 시 표준 disposer도 필요하고, Defjs 핸들을 받기만 하는 소비자에는 새 런타임 호출 요구가 없어요.
 
 ## 안전한 읽기 재시도
 
-재시도는 동작을 바꿔요. 정책을 좁게 유지하세요 — 이 예는 재생 가능한 `GET` / `HEAD` / `OPTIONS`를 status `0`, `502`, `503`, `504`에 대해 재시도하고, `Retry-After`를 30초로 제한하며, 두 번 재시도하거나 abort에서 멈춰요.
+재시도는 동작을 바꿔요. 정책을 좁게 유지하세요 — 이 예는 재생 가능한 `GET` / `HEAD` / `OPTIONS`를 status `0`, `429`, `502`, `503`, `504`에 대해 재시도하고, `Retry-After`를 30초로 제한하며, 두 번 재시도하거나 abort에서 멈춰요.
 
 ```typescript twoslash
 import { createHttpInterceptor, type HttpRequest, type HttpResponse } from '@defjs/core'
 
 const retryableMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
-const retryableStatuses = new Set([0, 502, 503, 504])
+const retryableStatuses = new Set([0, 429, 502, 503, 504])
 
 function isReplayable(request: HttpRequest): boolean {
   return typeof ReadableStream === 'undefined' || !(request.body instanceof ReadableStream)
@@ -233,7 +234,7 @@ const preserveSession = createWebSocketInterceptor(async (request, next) => {
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP용 Basic 자격 증명
 - `basicAuthSSEInterceptor(provider, options?)` — SSE용 Basic 자격 증명
 
-`HttpRequest`에는 `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, 정적 `operation`이 있을 수 있어요. 전송 통합 값이지 호출자의 파싱된 입력이 아니에요. 명령 검증, 출력 검증, 도메인 오류 매핑은 각자 레이어에 두세요.
+`HttpRequest`에는 `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, 정적 `operation`이 있을 수 있어요. 전송 통합 값이지 호출자의 파싱된 입력이 아니에요. `queryParams`는 직렬화 뒤의 `new URLSearchParams(queryString)`이에요. 설정된 query serializer는 builder가 query를 만들지 않으면 호출되지 않고, builder의 `URLSearchParams`는 그대로 쓰여요. 명령 검증, 출력 검증, 도메인 오류 매핑은 각자 레이어에 두세요.
 
 SSE/WebSocket 옵저버는 수명 훅이지 제어 흐름이 아니에요. 소유자가 끝날 때 WebSocket 리스너를 구독 해제하세요. 옵저버 실패는 전송 계약을 따르고, 인터셉터 자체는 throw하거나 reject할 수 있어요.
 
@@ -245,5 +246,7 @@ Basic 자격 증명은 base64이지 암호가 아니에요. TLS를 쓰고, 서�
 
 ## 관련 레시피
 
+- [401에서 Bearer 토큰을 한 번 갱신하기](../recipes/refresh-bearer-once.md)
+- [execute를 숨기지 않고 HTTP SDK 공개하기](../recipes/publish-http-sdk.md)
 - [로컬 Fetch 핸들로 테스트하기](../recipes/test-with-handle.md)
 - [HTTP 호출 취소하기](../recipes/cancel-http.md)

@@ -1,11 +1,11 @@
 ---
 title: 선언된 404가 있는 GET
-description: GET 하나를 실행하고 타입이 잡힌 200과 선언된 404로 분기해요.
+description: GET 하나를 실행하고 타입이 있는 200과 선언된 404로 분기해요.
 ---
 
 # 선언된 404가 있는 GET
 
-성공과 404 body를 모두 선언해요. `error.code`와 `error.status`로 분기하면 선언된 miss에 타입이 잡힌 `error.data`를 받아요.
+성공 body와 404 body를 둘 다 선언해요. `error.code`와 `error.status`로 분기하면, 선언된 miss의 타입이 있는 `error.data`를 받아요.
 
 자세한 내용은 [HTTP](../core/http.md)와 [오류](../core/errors.md)를 보세요.
 
@@ -17,7 +17,7 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
@@ -39,4 +39,4 @@ if (error?.code === 'HTTP_STATUS' && error.status === 404) {
 Loaded Ada from 200
 ```
 
-2xx가 아닌 모든 status는 `HTTP_STATUS`예요. `error`를 선언하면 그 body에 타입이 붙고, 빼면 `err.data`가 `undefined`가 되고 body도 읽히지 않아요. 하나의 `error` Struct가 2xx 아닌 모든 status를 담당하니, 모양이 다를 때는 `struct.or(...)`나 판별 가능한 union을 쓰세요.
+2xx가 아닌 status는 모두 `HTTP_STATUS`예요. `error`를 선언하면 그 body에 타입이 생기고, `error`를 빼면 `err.data`는 `undefined`이고 body는 읽히지 않아요. `error` Struct 하나가 모든 non-2xx status를 덮으니, 모양이 달라지면 `struct.or(...)`나 discriminated union을 쓰세요.

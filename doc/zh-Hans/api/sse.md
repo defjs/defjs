@@ -10,11 +10,11 @@ description: defineEventStream、execute options，以及 stream handle。
 ## defineEventStream() {#defineEventStream}
 
 ```ts
-function defineEventStream(definition: EventStreamDefinition): EventStreamCommandBuilder
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`、`events` map，可选 `method`（默认 `'GET'`）、`input`、`build`、buffer/queue 上限。
-- **返回** 一个 builder。塞 input 调用，得到 `EventStreamCommand`。
+- **definition** — `path`、`events` map，可选 `method`（默认 `'GET'`），可选 `input`、`builder`、`error`，以及 buffer/queue 上限。
+- **返回** 一个 endpoint。塞 input 调用，得到 `EventStreamCommand`。
 
 ```ts twoslash
 import { defineEventStream, struct } from '@defjs/core'
@@ -39,7 +39,7 @@ function executeEventStreamCommand(
 
 `client.execute` 的底层入口。业务代码走 client。
 
-- **返回** `[null, stream, open]` 或 `[error, undefined, open?]`。
+- **返回** `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。
 
 ## 执行 options
 
@@ -90,11 +90,12 @@ interface EventStreamOpenInfo {
 
 ```ts
 type EventStreamCloseInfo =
-  | { code: 'eof' | 'aborted'; reason?: string; cause?: unknown }
-  | { code: 'error'; errorCode: EventStreamFaultCode; reason?: string; cause?: unknown }
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamFaultCode`：`'RES_MEDIA_TYPE_INVALID' | 'EXT_OBSERVER_FAILED' | 'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'NET_TIMEOUT' | 'TRANSPORT_ERROR'`。
+`EventStreamFaultCode`：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
 
 ## 事件 map
 
@@ -104,15 +105,23 @@ type EventStreamCloseInfo =
 type EventStructs = { [eventName: string]: AnyStruct }
 ```
 
-见 [SSE 指南](../core/sse.md) 和[消费 SSE 流](../recipes/consume-sse.md)。
+`string` 事件 struct 保留原始 `data` 文本。其余 kind 都是 JSON 文本：`JSON.parse`，再交给 struct。所以裸的 `struct.literal` 需要 JSON 文本，不是没加引号的 token。握手 `error` body 用和 HTTP 一样的 kind 规则：`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON。
+
+重连在 client 上（`withSSEReconnect`）。SSE `jitter` 是 **0–1 的乘性因子**，和 WebSocket 一样。
+
+见 [SSE 指南](/core/sse) 和[消费 SSE 流](/recipes/consume-sse)。
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`、`events`，可选 `method` / `input` / `build`，还有 buffer 和 queue 上限。
+`path`、`events`，可选 `method` / `input` / `builder` / `error`，还有 buffer 和 queue 上限。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能返回 body。
 
-## EventStreamCommandBuilder {#EventStreamCommandBuilder}
+## EventStreamEndpoint {#EventStreamEndpoint}
 
 `defineEventStream` 的返回值。拿 input 调一下就得到 `EventStreamCommand`。
+
+## EventStreamRequestShape {#EventStreamRequestShape}
+
+和这条流的 method、path 对应的 `HttpRequestShape` 字段相同。
 
 ## EventStreamCommand {#EventStreamCommand}
 
@@ -120,7 +129,7 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 ## StreamAwaitResult {#StreamAwaitResult}
 
-`[null, stream, open]` or `[error, undefined, open?]`.
+`[null, stream, open]` 或 `[error, undefined, open?]`。
 
 ## EventStreamData {#EventStreamData}
 

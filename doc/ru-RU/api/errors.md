@@ -156,4 +156,4 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 Общие значения `cause` / message для abort и timeout. Бросить один из них из interceptor’а — это и есть способ, которым interceptor выражает отмену.
 
-См. [руководство по Errors](/ru-RU/core/errors).
+См. [гайд Errors](/core/errors).

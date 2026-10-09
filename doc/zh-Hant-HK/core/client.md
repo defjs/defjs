@@ -15,6 +15,8 @@ import { createClient, withEndpoint } from '@defjs/core'
 const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
+`createClient(...)` 會為每種 command kind return overloads。
+
 ## Compose options
 
 Options 由左到右套用。Setters 會 replace；`withInterceptors(...items)` 會 append。
@@ -53,34 +55,37 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
 ## Server vs browser 嘅 scope
 
-喺 server 上面，當 options 或者 interceptor closures capture auth、cookies、users 或者 tenants 時，喺 request boundary 入面 create client。Client identity 本身唔係 security boundary.
+喺 server 上面，當 options 或者 interceptor closures capture auth、cookies、users 或者 tenants 時，喺 request boundary 入面 create client。Client identity 本身唔係 security boundary。
 
 ## Reference
 
-| Helper                                                                                                        | Effect                                                 |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `withEndpoint(url)`                                                                                           | 所有 transports 嘅 absolute base endpoint              |
-| `withHTTPHandle(fetch)`                                                                                       | 換走 HTTP 嘅 Fetch                                     |
-| `withSSEHandle(fetch)`                                                                                        | 換走 SSE 嘅 Fetch                                      |
-| `withWebSocketHandle(WebSocket)`                                                                              | 換走 WebSocket constructor                             |
-| `withInterceptors(...items)`                                                                                  | Append mixed interceptors                              |
-| `withQueryParamsSerializer(fn)`                                                                               | 換走 query serialization                               |
-| `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP/SSE 用 Fetch `credentials: 'include'` |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                              |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE knobs                                              |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket knobs                                        |
+| Helper                                                                                                        | Effect                                                          |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | 所有 transports 嘅 absolute base endpoint                       |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE 嘅 static default headers；command headers 會 override |
+| `withTimeout(ms)`                                                                                             | 只係 default HTTP `execute` timeout（SSE/WS 會 ignore）         |
+| `withHTTPHandle(fetch)`                                                                                       | 換走 HTTP 嘅 Fetch                                              |
+| `withSSEHandle(fetch)`                                                                                        | 換走 SSE 嘅 Fetch                                               |
+| `withWebSocketHandle(WebSocket)`                                                                              | 換走 WebSocket constructor                                      |
+| `withInterceptors(...items)`                                                                                  | Append mixed interceptors                                       |
+| `withQuerySerializer(fn)`                                                                                     | 將已經套咗 alias 嘅 query object encode 成 query string         |
+| `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP/SSE 用 Fetch `credentials: 'include'`          |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                       |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE knobs                                                       |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket knobs                                                 |
 
 ## Related recipes
 

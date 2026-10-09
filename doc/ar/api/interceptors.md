@@ -5,7 +5,7 @@ description: منشئات معترضات HTTP وSSE وWebSocket.
 
 # المعترضات
 
-غلّف `next` لوسيلة نقل واحدة. سجّل بـ `withInterceptors`. القوائم المختلطة تُصفّى حسب `kind` عند التنفيذ.
+غلّف `next` لوسيلة نقل واحدة. سجّل بـ `withInterceptors`. القوائم المختلطة تُصفّى حسب النوع عند التنفيذ.
 
 ## createHttpInterceptor() {#createHttpInterceptor}
 
@@ -27,6 +27,8 @@ type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
 type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
 ```
 
+`EventStreamHandle` يمتد `AsyncDisposable`. أي تنفيذ هيكلي للاختصار يجب أن يوفّر `[Symbol.asyncDispose](): PromiseLike<void>` ويربطه بدورة حياة الإغلاق نفسها.
+
 ## createWebSocketInterceptor() {#createWebSocketInterceptor}
 
 ```ts
@@ -36,7 +38,24 @@ type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
 type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
 ```
 
-`WebSocketSessionLike` هي الجلسة المواجهة للمعترض: `send`، `close`، `receive`، `state`، `closed`، `connection`، `bufferedAmount`، `onStateChange`، `onRuntimeError` و`[Symbol.asyncDispose](): PromiseLike<void>`. وهي تمتد `AsyncDisposable`؛ يجب أن يمرّر أي wrapper نفس disposer. التطبيقات الهيكلية المخصصة ستنكسر وقت الترجمة حتى تضيفه، أما من يستقبل جلسة Defjs فقط فلا يحتاج استدعاء runtime جديدًا.
+`WebSocketSessionLike` هي الجلسة المواجهة للمعترض:
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+يجب أن يمرّر الغلاف أو جلسة الاختصار نفس teardown الخاص بـ `[Symbol.asyncDispose]()` كما في دورة حياة `close` / `closed`؛ وإرجاع وعد محلول غير مرتبط لا يكفي. اشتراط هذا العضو تغيير كاسر وقت الترجمة للتطبيقات الهيكلية. الكود الذي يقبل فقط جلسات تعيدها Defjs بلا متطلب استدعاء وقت تشغيل إضافي.
 
 ## أنواع بوسم
 
@@ -81,4 +100,4 @@ function basicAuthSSEInterceptor(fn: () => { username: string; password: string 
 
 `fn` تُستدعى لكل طلب. `encode` الاختياري على `BasicAuthInterceptorOptions` يستبدل قيمة رأس `Basic …` الافتراضية.
 
-انظر [دليل المعترضات](../core/interceptors.md).
+انظر [دليل المعترضات](/core/interceptors).

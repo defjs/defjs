@@ -1,11 +1,81 @@
 ---
-title: Refresh a Bearer token once on 401
+title: Einen Bearer-Token bei 401 einmal refreshen
+description: Authorization anhängen und einmal innerhalb eines Interceptors replayen; next() geht nur nach innen.
 ---
 
-# Refresh a Bearer token once on 401
+# Einen Bearer-Token bei 401 einmal refreshen
 
-::: info
-Diese Seite wurde noch nicht übersetzt. Unten steht der englische Originaltext.
-:::
+`next()` ist der Rest **dieser** Onion — nicht `axios(config)`-Redispatch von außen. Packe Attach + Single-Flight-Refresh + einen Replay in **einen** HTTP-Interceptor, damit äußere Layer nicht zweimal laufen.
 
-<!--@include: ../../recipes/refresh-bearer-once.md{9,}-->
+Siehe [Interceptors](../core/interceptors.md).
+
+```ts twoslash refresh-bearer.ts
+import { createClient, createHttpInterceptor, defineRequest, struct, withEndpoint, withHTTPHandle, withInterceptors } from '@defjs/core'
+
+const getInvoice = defineRequest({
+  method: 'GET',
+  path: '/v1/invoice',
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal('expired_token') }),
+})
+
+type Credential = { accessToken: string }
+
+function refreshingBearer(read: () => Credential, refresh: (stale: Credential) => Promise<Credential>) {
+  let flight: Promise<Credential> | undefined
+
+  return createHttpInterceptor(async (request, next) => {
+    const authorize = (credential: Credential) => {
+      const headers = new Headers(request.headers)
+      headers.set('authorization', `Bearer ${credential.accessToken}`)
+      return { ...request, headers }
+    }
+
+    const used = read()
+    const response = await next(authorize(used))
+    const body = response.body
+    if (response.status !== 401 || typeof body !== 'object' || body === null || !('code' in body) || body.code !== 'expired_token') {
+      return response
+    }
+
+    const current = read()
+    if (current.accessToken !== used.accessToken) return next(authorize(current))
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined
+    })
+    const refreshed = await flight
+    return next(authorize(refreshed))
+  })
+}
+
+let credential: Credential = { accessToken: 'v1' }
+const handle: typeof fetch = async (input, init) => {
+  const auth = new Request(input, init).headers.get('authorization')
+  if (auth === 'Bearer v1') return Response.json({ code: 'expired_token' }, { status: 401 })
+  return Response.json({ total: 42 }, { status: 200 })
+}
+
+const client = createClient(
+  withEndpoint('https://billing.example.test'),
+  withHTTPHandle(handle),
+  withInterceptors(
+    refreshingBearer(
+      () => credential,
+      async () => {
+        credential = { accessToken: 'v2' }
+        return credential
+      },
+    ),
+  ),
+)
+
+const [error, invoice] = await client.execute(getInvoice())
+console.log(error, invoice?.total)
+```
+
+```txt
+null 42
+```
+
+`next` nochmal aufzurufen betritt nur Interceptors **innerhalb** dieses Layers (und den Fetch-Handler) erneut. Es lässt äußere Timing-/Auth-Wrapper nicht nochmal laufen — deshalb gehört das 401-Layout in einen Interceptor, nicht in ein zweites `execute`.

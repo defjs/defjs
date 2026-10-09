@@ -5,19 +5,14 @@ import { DEFINITION } from './symbols'
 import type {
   ArrayStruct,
   DiscriminatedUnionStruct,
-  IntersectionInput,
-  IntersectionOutput,
+  IntersectionStruct,
   LiteralValue,
   NumberStruct,
+  ObjectDefinition,
   ObjectStruct,
   ObjectShape,
   PresentValue,
   RecordStruct,
-  RequestBodyCodec,
-  RequestBodyDescriptor,
-  RequestBodyStruct,
-  RequestStruct,
-  RequestShape,
   RuntimeStruct,
   Struct,
   StructDefinition,
@@ -27,7 +22,7 @@ import type {
   UnionStruct,
   UnknownStruct,
 } from './types'
-import { describeValue, expectedType, failure, isPlainObject, success } from './utils'
+import { describeValue, expectedType, isPlainObject, success } from './utils'
 
 export function createStringStruct(): StringStruct {
   return castStruct<StringStruct>(
@@ -158,100 +153,18 @@ export function createObjectStruct<T extends ObjectShape>(shape: T): ObjectStruc
   )
 }
 
-export function createRequestStruct<const T extends RequestShape>(shape: T): RequestStruct<T> {
-  if (!isPlainObject(shape)) {
-    throw new TypeError('request struct requires a plain object')
-  }
-
-  const path = shape.path
-  const query = shape.query
-  const headers = shape.headers
-  const body = shape.body
-
-  if (path) {
-    assertObjectStruct(path, 'request.path')
-  }
-  if (query) {
-    assertObjectStruct(query, 'request.query')
-  }
-  if (headers) {
-    assertObjectStruct(headers, 'request.headers')
-  }
-  const bodyDescriptor = createRequestBodyDescriptor(body)
-
-  return castStruct<RequestStruct<T>>(
-    makeStruct({
-      body,
-      bodyDescriptor,
-      flags: DEFAULT_FLAGS,
-      headers,
-      kind: 'request',
-      path,
-      query,
-    }),
-  )
+export function createUrlencodedBodyStruct<T extends ObjectShape>(shape: T): ObjectStruct<T> {
+  return createCodecObjectStruct(shape, 'urlencoded')
 }
 
-function createRequestBodyDescriptor(body: StructLike<unknown, unknown, boolean> | undefined): RequestBodyDescriptor | undefined {
-  if (!body) {
-    return undefined
-  }
-
-  assertStruct(body, 'request.body')
-
-  const definition = (body as unknown as RuntimeStruct)[DEFINITION]
-  if (definition.kind === 'requestBody') {
-    return {
-      codec: definition.codec,
-      contentType: definition.contentType,
-      struct: definition.struct as unknown as RuntimeStruct,
-    }
-  }
-  if (definition.kind === 'blob') {
-    return { codec: 'blob', struct: body as unknown as RuntimeStruct }
-  }
-  if (definition.kind === 'arrayBuffer') {
-    return { codec: 'arrayBuffer', struct: body as unknown as RuntimeStruct }
-  }
-
-  throw new TypeError('body must use a body wrapper struct')
+export function createFormDataBodyStruct<T extends ObjectShape>(shape: T): ObjectStruct<T> {
+  return createCodecObjectStruct(shape, 'formData')
 }
 
-export function createRequestBodyStruct<const C extends RequestBodyCodec, S extends StructLike<unknown, unknown, boolean>>(
-  codec: C,
-  struct: S,
-  contentType?: string | null,
-): RequestBodyStruct<C, S> {
-  assertStruct(struct, `${codec} body`)
-
-  return castStruct<RequestBodyStruct<C, S>>(
-    makeStruct({
-      codec,
-      ...(contentType !== undefined ? { contentType } : {}),
-      flags: DEFAULT_FLAGS,
-      kind: 'requestBody',
-      struct,
-    }),
-  )
-}
-
-export function createJsonBodyStruct<S extends StructLike<unknown, unknown, boolean>>(
-  struct: S,
-  options?: { contentType?: string | null },
-): RequestBodyStruct<'json', S> {
-  return createRequestBodyStruct('json', struct, options?.contentType)
-}
-
-export function createUrlencodedBodyStruct<T extends ObjectShape>(shape: T): RequestBodyStruct<'urlencoded', ObjectStruct<T>> {
-  return createRequestBodyStruct('urlencoded', createObjectStruct(shape))
-}
-
-export function createFormDataBodyStruct<T extends ObjectShape>(shape: T): RequestBodyStruct<'formData', ObjectStruct<T>> {
-  return createRequestBodyStruct('formData', createObjectStruct(shape))
-}
-
-export function createTextBodyStruct(): RequestBodyStruct<'text', StringStruct> {
-  return createRequestBodyStruct('text', createStringStruct())
+function createCodecObjectStruct<T extends ObjectShape>(shape: T, codec: 'formData' | 'urlencoded'): ObjectStruct<T> {
+  const created = createObjectStruct(shape)
+  ;((created as unknown as RuntimeStruct)[DEFINITION] as ObjectDefinition).codec = codec
+  return created
 }
 
 export function createRecordStruct<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S> {
@@ -455,14 +368,14 @@ export function createBlobStruct(): Struct<Blob, Blob> {
 
 export function createBigIntStruct(): Struct<bigint | string, bigint> {
   return createPrimitiveStruct({
-    decode: (input, path) => {
+    decode: (input, path, fail) => {
       if (typeof input === 'bigint') {
         return success(input)
       }
       try {
         return success(BigInt(input as string))
       } catch {
-        return failure(issue(path, 'invalid_type', 'bigint', input))
+        return fail(issue(path, 'invalid_type', 'bigint', input))
       }
     },
     encode: (value) => value.toString(),
@@ -475,10 +388,10 @@ export function createBigIntStruct(): Struct<bigint | string, bigint> {
 
 export function createDateStruct(): Struct<Date | number | string, Date> {
   return createPrimitiveStruct({
-    decode: (input, path) => {
+    decode: (input, path, fail) => {
       const date = input instanceof Date ? input : new Date(input as never)
       if (Number.isNaN(date.getTime())) {
-        return failure(issue(path, 'invalid_type', 'Date', input))
+        return fail(issue(path, 'invalid_type', 'Date', input))
       }
       return success(date)
     },
@@ -492,7 +405,7 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
 
 export function createIntersectionStruct<
   const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]],
->(...structs: T): Struct<IntersectionInput<T>, IntersectionOutput<T>> {
+>(...structs: T): IntersectionStruct<T> {
   if (structs.length === 0) {
     throw new TypeError('intersection requires at least one struct')
   }
@@ -502,13 +415,13 @@ export function createIntersectionStruct<
   }
 
   if (structs.length === 1) {
-    return castStruct<Struct<IntersectionInput<T>, IntersectionOutput<T>>>(structs[0] as unknown as RuntimeStruct)
+    return castStruct<IntersectionStruct<T>>(structs[0] as unknown as RuntimeStruct)
   }
 
   const objectSides = structs.every(isObjectIntersectionSide)
   const options = objectSides ? flattenObjectIntersectionSides(structs) : structs
 
-  return castStruct<Struct<IntersectionInput<T>, IntersectionOutput<T>>>(
+  return castStruct<IntersectionStruct<T>>(
     makeStruct({
       expected: structs.map((item) => expectedType((item as unknown as RuntimeStruct)[DEFINITION])).join(' & '),
       flags: DEFAULT_FLAGS,
@@ -555,11 +468,4 @@ export function createArrayBufferStruct(): Struct<ArrayBuffer, ArrayBuffer> {
     kind: 'arrayBuffer',
     runtimeIs: (value): value is ArrayBuffer => typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer,
   })
-}
-
-function assertObjectStruct(value: unknown, label: string): asserts value is ObjectStruct<ObjectShape> {
-  assertStruct(value, label)
-  if ((value as unknown as RuntimeStruct)[DEFINITION].kind !== 'object') {
-    throw new TypeError(`${label} must be an object struct`)
-  }
 }

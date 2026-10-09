@@ -1,11 +1,11 @@
 ---
 title: POST JSON
-description: struct.json으로 JSON body를 보내고 선언된 201을 디코딩해요.
+description: 타입이 있는 JSON body를 보내고 선언된 201을 디코딩해요.
 ---
 
 # POST JSON
 
-body를 `struct.json(...)`으로 감싸요. 논리 필드 이름은 TypeScript에 두고, 와이어 별칭은 Struct에 둬요.
+타입이 있는 body를 builder에 넘겨요. 논리 필드 이름은 TypeScript에 두고, struct의 와이어 alias가 JSON 키가 돼요. 객체 body는 `application/json`이에요.
 
 자세한 내용은 [명령](../core/commands.md)과 [HTTP](../core/http.md)를 보세요.
 
@@ -28,13 +28,11 @@ const ApiError = struct.object({
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    body: struct.object({
+      name: struct.string(),
+      email: struct.string(),
+    }),
   }),
   output: User,
   error: ApiError,

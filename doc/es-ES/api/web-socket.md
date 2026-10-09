@@ -10,11 +10,11 @@ Declara un socket, ejecútalo, envía/recibe mensajes tipados y luego cierra.
 ## defineWebSocket() {#defineWebSocket}
 
 ```ts
-function defineWebSocket(definition: WebSocketDefinition): WebSocketCommandBuilder
+function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`, structs `incoming`, `outgoing` opcional, `input`, `build`, límites de cola.
-- **Devuelve** un builder. Llámalo con el input para obtener un `WebSocketCommand`.
+- **definition** — `path`, un struct `incoming`, struct `outgoing` opcional, `input` opcional, `builder` opcional, `protocols` estáticos, límites de cola.
+- **Devuelve** un endpoint. Llámalo con el input para obtener un `WebSocketCommand`.
 
 ```ts twoslash
 import { defineWebSocket, struct } from '@defjs/core'
@@ -22,8 +22,9 @@ import { defineWebSocket, struct } from '@defjs/core'
 const chat = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { message: struct.object({ text: struct.string() }) },
+  protocols: ['chat.v1'],
+  incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+  outgoing: struct.object({ text: struct.string(), type: struct.literal('message') }),
 })
 ```
 
@@ -60,7 +61,16 @@ interface WebSocketSession<TIncoming, TOutgoing> extends AsyncDisposable {
 }
 ```
 
-Tú gestionas el cleanup; usa `await using`. `close()` y `closed` siguen disponibles. `closed` es el estado terminal lógico. El disposer espera como máximo un segundo al teardown de Defjs; si no observa el evento close puede rechazar con una `DOMException` llamada `TimeoutError`. Esto no demuestra un cierre TCP físico.
+Prefiere `await using ownedSession = session` para el cleanup del ámbito que posees. `session.close()` manual y `await session.closed` siguen disponibles.
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+`closed` reporta el estado terminal lógico. El disposer async pide el close nativo y espera el teardown que posee Defjs, pero acota un evento close ausente a un segundo y puede rechazar con una `DOMException` llamada `TimeoutError`. No puede demostrar que la conexión TCP física se cerró.
 
 ### WebSocketState {#WebSocketState}
 
@@ -72,9 +82,16 @@ Tú gestionas el cleanup; usa `await using`. `close()` y `closed` siguen disponi
 
 ### WebSocketCloseInfo {#WebSocketCloseInfo}
 
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
 Snapshot de cierre cuando termina el socket (code, reason, flag clean, cause opcional). Un close manual puede llevar `ManualSocketCloseReason`.
 
-## Options de execute
+## Opciones de execute
 
 ## WebSocketExecuteOptions {#WebSocketExecuteOptions}
 
@@ -92,25 +109,31 @@ type WebSocketExecuteOptions = {
 
 `WebSocketHeartbeatConfig`: `intervalMs`, `message` opcional, `isAck`, `timeoutMs`.
 
-## Mapas de mensajes
+Cuando `reconnect` está definido, `attempts` vale 3 por defecto; `0` lo desactiva. Omitir `attempts` no significa ilimitado.
 
-## SocketStructs {#SocketStructs}
+## Mensajes
+
+`incoming` es un struct. Los frames de texto, `ArrayBuffer`, typed array y `Blob` se leen como UTF-8, se parsean como JSON y luego se comprueban contra ese struct. Un frame que falla el parse JSON o el struct se reporta a `session.onRuntimeError` y no se encola. No hay opción de cliente para frames inválidos.
+
+`outgoing` es un struct. `session.send` acepta el `StructInput` de ese struct, codifica los alias y luego hace `JSON.stringify`. Varios kinds de mensaje son un `struct.discriminatedUnion`.
 
 ```ts
-type SocketStructs = { [typeName: string]: AnyStruct }
+session.send({ type: 'message', text: 'Hello' })
 ```
 
-Los payloads incoming/outgoing van etiquetados con `type` (y campos aplanados o un wrapper `data` según la forma del struct).
-
-Ver [guía de WebSocket](../core/web-socket.md) y [Abrir una sesión WebSocket](../recipes/websocket-session.md).
+Mira la [guía de WebSocket](/core/web-socket) y [Abrir una sesión WebSocket](/recipes/websocket-session).
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`, `incoming`, `outgoing` / `input` / `build` opcionales, y techos de queue.
+`path`, `incoming`, `outgoing` / `input` / `builder` / `protocols` opcionales, y límites de cola. El builder solo puede devolver `path` y `query`.
 
-## WebSocketCommandBuilder {#WebSocketCommandBuilder}
+## WebSocketEndpoint {#WebSocketEndpoint}
 
 Lo devuelve `defineWebSocket`. Llámalo con input y sale un `WebSocketCommand`.
+
+## WebSocketRequestShape {#WebSocketRequestShape}
+
+Solo `path` y `query`. `headers` y `body` son `never`.
 
 ## WebSocketCommand {#WebSocketCommand}
 
@@ -122,24 +145,24 @@ Heartbeat, reconnect, `beforeConnect`, protocols, más cancelación. `WebSocketE
 
 ## SocketAwaitResult {#SocketAwaitResult}
 
-`[null, session, connection]` or `[error, undefined, connection?]`.
+`[null, session, connection]` o `[error, undefined, connection?]`.
 
 ## ManualSocketCloseReason {#ManualSocketCloseReason}
 
-Razón que se guarda cuando cierras con `session.close()`.
+Razón que se guarda cuando la sesión se cierra con `session.close()`.
 
 ## WebSocketHeartbeatConfig {#WebSocketHeartbeatConfig}
 
-`intervalMs`, optional `message`, `isAck`, `timeoutMs`.
+`intervalMs`, `message` opcional, `isAck`, `timeoutMs`.
 
 ## WebSocketIncomingData {#WebSocketIncomingData}
 
-Forma del mensaje entrante, inferida de un map `SocketStructs` incoming.
+Frame entrante decodificado: `Infer` del struct `incoming`.
 
 ## WebSocketOutgoingData {#WebSocketOutgoingData}
 
-Forma del mensaje saliente, inferida de un map `SocketStructs` outgoing.
+Valor que acepta `session.send`: `StructInput` del struct `outgoing`, o `never` si no se declaró ninguno.
 
 ## SocketLifecycleOutcome {#SocketLifecycleOutcome}
 
-Snapshot terminal cuando el socket ya acabó.
+Snapshot terminal del ciclo de vida cuando el socket ya acabó.

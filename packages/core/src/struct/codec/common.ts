@@ -2,6 +2,7 @@ import { encodeValue } from '../encode'
 import { mapAliasedObjectFields } from '../fields'
 
 import { isObjectStruct, parseStructValue } from '../introspection'
+import { DEFINITION } from '../symbols'
 import type { AnyStructLike, RuntimeStruct } from '../types'
 
 export { mapAliasedObjectFields } from '../fields'
@@ -9,6 +10,15 @@ export { mapAliasedObjectFields } from '../fields'
 export const ALIAS_ENCODE_OPTIONS = { encodeObject: mapAliasedObjectFields }
 
 export function encodeObjectByAlias(struct: AnyStructLike, value: unknown, label = 'json'): unknown {
+  const definition = (struct as RuntimeStruct)[DEFINITION]
+  // `.nullable()` and `.optional()` keep kind `object`, so nullish has to win before the object assertion.
+  if (value === null && definition.flags.nullable) {
+    return null
+  }
+  if (typeof value === 'undefined' && definition.flags.optional) {
+    return undefined
+  }
+
   if (!isObjectStruct(struct)) {
     return encodeAliasedField(struct, value, label)
   }

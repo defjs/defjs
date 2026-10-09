@@ -156,4 +156,4 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 abort と timeout で共有される `cause` / message の値です。インターセプターからどちらかを throw するのが、インターセプターがキャンセルを表す方法です。
 
-[Errors ガイド](/ja-JP/core/errors) を参照してください。
+[Errors ガイド](/core/errors) を参照してください。

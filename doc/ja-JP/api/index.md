@@ -30,5 +30,5 @@ description: ワークスペースパッケージの手書き参照 — import �
 
 ## 関連
 
-- [はじめよう](../guide/getting-started.md)
-- [宣言済み 404 付きの GET](../recipes/get-declared-404.md)
+- [はじめよう](/guide/getting-started)
+- [宣言済み 404 付きの GET](/recipes/get-declared-404)

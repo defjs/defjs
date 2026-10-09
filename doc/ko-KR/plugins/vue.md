@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -108,7 +108,7 @@ provide(HTTP_CLIENT, childClient)
 
 ## watcher 밖에서 HTTP 작업 소유하기
 
-watcher 밖에서 composable이나 컴포넌트가 시작한 작업은 `AbortController` + `onScopeDispose`를 쓰세요. 시작과 활성 작업을 abort하고, 반응형 상태를 할당하기 전에 signal을 확인하세요. 플러그인이나 injection 범위는 명령 소유자를 추론하지 않아요.
+watcher 밖에서 composable이나 컴포넌트가 시작한 작업은 `AbortController` + `onScopeDispose`를 쓰세요. 시작과 활성 작업을 abort하고, 반응형 상태를 할당하기 전에 signal을 확인하세요. 플러그인이나 injection 범위는 명령 소유자를 추론하지 않아요. 목록 페이지에서는 `execute`를 Vue Query(또는 비슷한 것)로 감싸세요. `@defjs/vue`는 DI만 하고 `useRequest`를 제공하지 **않아요**.
 
 범위가 클라이언트를 소유하면 브라우저 전역 재사용을 위해 요청에 독립적으로 두세요. 헤더, 쿠키, 사용자, 테넌트, 자격 증명을 담으면 관련 앱/SSR 요청 경계에서 만들고 그 인스턴스를 거기서 제공하세요.
 

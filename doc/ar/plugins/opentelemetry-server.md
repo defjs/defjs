@@ -108,13 +108,13 @@ const orderEvents = defineEventStream({
   maxQueueSize: 100,
   operation: 'orders.watch',
   path: '/orders/events',
-  events: { update: struct.json(struct.object({ id: struct.number() })) },
+  events: { update: struct.object({ id: struct.number() }) },
 })
 const orderSocket = defineWebSocket({
   maxIncomingQueueSize: 100,
   operation: 'orders.connect',
   path: '/orders/socket',
-  incoming: { update: struct.object({ id: struct.number() }) },
+  incoming: struct.object({ id: struct.number() }),
 })
 
 void readOrders

@@ -30,5 +30,5 @@ Hier schlägst du Workspace-Pakete nach. Signatures sind der Vertrag; Guides und
 
 ## Verwandtes
 
-- [Erste Schritte](../guide/getting-started.md)
-- [GET mit deklariertem 404](../recipes/get-declared-404.md)
+- [Erste Schritte](/guide/getting-started)
+- [GET mit deklariertem 404](/recipes/get-declared-404)

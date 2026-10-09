@@ -3,19 +3,34 @@ import type { HTTP_COMMAND } from '../client/command'
 import { COMMAND_TYPE } from '../client/command'
 import { createClient } from '../client'
 import type { DecodedResponse, HttpMeta } from '../internal/http_response'
-import type { HttpAwaitResult, HttpExecuteOptions } from './http'
+// @ts-expect-error RequestCommandBuilder was renamed to RequestEndpoint
+import type { RequestCommandBuilder } from './http'
+
+import type { HttpAwaitResult, HttpExecuteOptions, RequestEndpoint } from './http'
 import { defineRequest } from './http'
-import { struct } from '../struct'
+import { struct, type AnyStruct } from '../struct'
 
 const User = struct.object({ id: struct.number(), name: struct.string() })
 const ApiError = struct.object({ code: struct.string(), message: struct.string() })
 
 const useGetUser = defineRequest({
+  builder: (input) => ({ path: input }),
   method: 'GET',
   path: '/users/:id',
   input: struct.object({ id: struct.number() }),
   output: User,
 })
+
+function takesRequestEndpoint<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(endpoint: RequestEndpoint<TInput, TOutput, TError>): RequestEndpoint<TInput, TOutput, TError> {
+  return endpoint
+}
+
+expectTypeOf(takesRequestEndpoint(useGetUser)).toEqualTypeOf<typeof useGetUser>()
+void (undefined as unknown as RequestCommandBuilder)
 
 const command = useGetUser({ id: 1 })
 expectTypeOf(command[COMMAND_TYPE]).toEqualTypeOf<typeof HTTP_COMMAND>()
@@ -137,23 +152,24 @@ async function assertNeitherDeclared(): Promise<void> {
 void assertNeitherDeclared
 
 // ---------------------------------------------------------------------------
-// `responseType` only means something when something gets decoded.
+// Representation follows the struct kind. `responseType` is not a definition option.
 // ---------------------------------------------------------------------------
-// @ts-expect-error responseType requires an output or error declaration.
+// @ts-expect-error responseType was removed; the struct kind selects the representation.
 defineRequest({ method: 'GET', path: '/discarded', responseType: 'json' })
 
-defineRequest({ method: 'GET', output: struct.string(), path: '/json', responseType: 'json' })
+// @ts-expect-error responseType was removed even when an output struct is declared.
 defineRequest({ method: 'GET', output: struct.string(), path: '/text', responseType: 'text' })
-defineRequest({ method: 'GET', output: struct.blob(), path: '/blob', responseType: 'blob' })
-defineRequest({ method: 'GET', output: struct.arrayBuffer(), path: '/bytes', responseType: 'arraybuffer' })
+
+// @ts-expect-error responseType was removed even when an error struct is declared.
 defineRequest({ error: ApiError, method: 'GET', path: '/error-response-type', responseType: 'json' })
 
-const useEmptyObject = defineRequest({ method: 'POST', path: '/empty', input: struct.object({}) })
+const useEmptyObject = defineRequest({ builder: () => ({}), method: 'POST', path: '/empty', input: struct.object({}) })
 // @ts-expect-error a required root Struct still requires an input argument even when {} is a valid value.
 useEmptyObject()
 useEmptyObject({})
 
 const useOptionalFields = defineRequest({
+  builder: (input) => ({ query: { q: input.query } }),
   method: 'GET',
   path: '/search',
   input: struct.object({ query: struct.string().optional() }),
@@ -162,19 +178,30 @@ const useOptionalFields = defineRequest({
 useOptionalFields()
 useOptionalFields({})
 
-const useOptionalRoot = defineRequest({ method: 'POST', path: '/optional', input: struct.object({}).optional() })
+const useOptionalRoot = defineRequest({
+  builder: () => ({}),
+  method: 'POST',
+  path: '/optional',
+  input: struct.object({}).optional(),
+})
 useOptionalRoot()
 
-const useUnionInput = defineRequest({ method: 'POST', path: '/union', input: struct.or(struct.string(), struct.number()) })
+const useUnionInput = defineRequest({
+  builder: (input) => ({ body: input }),
+  method: 'POST',
+  path: '/union',
+  input: struct.or(struct.string(), struct.number()),
+})
 // @ts-expect-error a required union input cannot be omitted.
 useUnionInput()
 useUnionInput('value')
 
 const useOptionalRequestSections = defineRequest({
-  input: struct.request({
-    headers: struct.object({ traceId: struct.string().optional() }),
-    path: struct.object({ locale: struct.string().optional() }),
-    query: struct.object({ page: struct.number().optional() }),
+  builder: (input) => ({ headers: input.headers, query: input.query }),
+  input: struct.object({
+    headers: struct.object({ traceId: struct.string().optional() }).optional(),
+    path: struct.object({ locale: struct.string().optional() }).optional(),
+    query: struct.object({ page: struct.number().optional() }).optional(),
   }),
   method: 'GET',
   path: '/optional-sections',
@@ -185,7 +212,7 @@ useOptionalRequestSections({ query: { page: 1 } })
 useOptionalRequestSections()
 
 const useMixedRequestSection = defineRequest({
-  input: struct.request({ query: struct.object({ page: struct.number().optional(), q: struct.string() }) }),
+  input: struct.object({ query: struct.object({ page: struct.number().optional(), q: struct.string() }) }),
   method: 'GET',
   path: '/mixed-section',
 })
@@ -194,7 +221,7 @@ useMixedRequestSection({ query: { q: 'defjs' } })
 useMixedRequestSection({})
 
 const useOptionalBodyFields = defineRequest({
-  input: struct.request({ body: struct.json(struct.object({ note: struct.string().optional() })) }),
+  input: struct.object({ body: struct.object({ note: struct.string().optional() }) }),
   method: 'POST',
   path: '/body',
 })

@@ -30,5 +30,5 @@ description: 워크스페이스 패키지 조회예요. import하는 함수, 옵
 
 ## 관련
 
-- [시작하기](../guide/getting-started.md)
-- [선언된 404가 있는 GET](../recipes/get-declared-404.md)
+- [시작하기](/guide/getting-started)
+- [선언된 404가 있는 GET](/recipes/get-declared-404)

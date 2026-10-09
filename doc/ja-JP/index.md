@@ -37,7 +37,7 @@ Defjs は結果をキャッシュしたり、代わりにリトライしたり�
 
 | パッケージ                    | いつ                                                                                                 |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）または `createClient`（HTTP 専用）                           |
+| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）                                                             |
 | `@defjs/react`                | `ClientProvider` / `useClient` — [React](./plugins/react.md) を参照                                  |
 | `@defjs/vue`                  | プラグイン + `injectClient` — [Vue](./plugins/vue.md) を参照                                         |
 | `@defjs/opentelemetry-server` | アウトバウンドのスパン/メトリクス — [OpenTelemetry Server](./plugins/opentelemetry-server.md) を参照 |

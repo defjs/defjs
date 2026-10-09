@@ -22,7 +22,7 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
@@ -43,7 +43,7 @@ if (error) {
 ## Core Boundaries
 
 - Commands are typed values created by `defineRequest`, `defineEventStream`, and `defineWebSocket`.
-- Structs validate request input and response data at runtime. `struct.request({ path, query, headers, body })` maps each request part explicitly.
+- Structs validate request input and response data at runtime. A `builder` places parsed input onto `path`, `query`, `headers`, and `body`. Omit it when the input struct already has that shape. `.alias(name)` is the wire name for a typed value.
 - Expected failures are returned as native `Fault` instances in an error-first tuple; custom interceptors and application callbacks can still throw. A `Fault` is discriminated by one closed set of `code` values whose prefix is the class — `HTTP_STATUS`, `REQ_*`, `NET_*`, `RES_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `String(error)` is directly loggable, while `code` and the variant metadata remain enumerable for structured logs.
 - Faults carry their underlying value on the native `Error` cause chain. Narrow `error.cause instanceof StructError` before calling Struct-only helpers such as `format()`, `flatten()`, or `prettify()`.
 - Server clients that capture cookies, authorization, tenant data, or user data must be created inside the owning request scope.
@@ -55,44 +55,9 @@ if (error) {
 
 For client-local tests, inject a Fetch-compatible function with `withHTTPHandle(...)`. This keeps request interception scoped to one client and still exercises command building, interceptors, status dispatch, and response validation.
 
-### WebSocket provider envelopes
+### WebSocket messages
 
-`defineWebSocket` accepts synchronous, definition-local `normalizeIncoming` and `normalizeOutgoing` boundaries for providers that do not use Defjs's default top-level `type` envelope. Incoming normalization runs after wire JSON decoding and returns a declared dispatch tag plus the payload to validate. Outgoing normalization receives the logical tag and the Struct-encoded payload, then returns the exact pre-transport wire value.
-
-```typescript
-const kraken = defineWebSocket({
-  incoming: {
-    'method.subscribe': struct.object({ method: struct.literal('subscribe'), success: struct.boolean() }),
-  },
-  maxIncomingQueueSize: 16,
-  normalizeIncoming(decoded) {
-    if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) return undefined
-    if (Reflect.get(decoded, 'method') !== 'subscribe') return undefined
-    return { data: decoded, type: 'method.subscribe' }
-  },
-  normalizeOutgoing(_type, encodedPayload) {
-    if (typeof encodedPayload !== 'object' || encodedPayload === null || Array.isArray(encodedPayload)) {
-      throw new TypeError('Expected encoded command')
-    }
-    return encodedPayload as { readonly [key: string]: unknown }
-  },
-  outgoing: {
-    subscribe: struct.object({
-      method: struct.literal('subscribe'),
-      params: struct.object({ channel: struct.string() }),
-      reqId: struct.number().alias('req_id'),
-    }),
-  },
-  path: '/v2',
-})
-
-// session.send({ type: 'subscribe', method: 'subscribe', params: { channel: 'ticker' }, reqId: 1 })
-// wire: {"method":"subscribe","params":{"channel":"ticker"},"req_id":1}
-```
-
-Both adapters are synchronous. An outgoing adapter exception escapes `session.send()` synchronously; heartbeat serialization uses the existing fatal runtime path. Reconnect queues retain the already-normalized serialized string. If a provider payload itself has a wire `type`, declare it under a non-dispatch property such as `providerType: struct.literal('update').alias('type')`.
-
-The adapters do not replace Struct validation, WebSocket subprotocols, reconnect policy, or session lifecycle. Without them, incoming results and outgoing bytes keep the legacy Defjs envelope behavior.
+`incoming` and `outgoing` are each one struct. `session.send` encodes that struct (aliases included) and sends JSON. A frame that is not valid JSON, or does not match `incoming`, is reported to `session.onRuntimeError` and is not delivered. Use `struct.discriminatedUnion` when one socket carries several message kinds. Static subprotocols belong on `protocols`.
 
 ## Runtime Notes
 

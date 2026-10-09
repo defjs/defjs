@@ -197,7 +197,7 @@ describe('codec/json.ts', () => {
 
   test('does not select a request union branch with a missing declared section', () => {
     const Payload = struct.or(
-      struct.request({ query: struct.object({ page: struct.number().alias('p') }) }),
+      struct.object({ query: struct.object({ page: struct.number().alias('p') }) }),
       struct.object({ kind: struct.literal('fallback').alias('event_type') }),
     )
 
@@ -439,5 +439,51 @@ describe('codec/json.ts', () => {
       name: 'Miao',
       when: new Date('2026-05-12T10:00:00Z'),
     })
+  })
+})
+
+const Profile = struct.object({ name: struct.string().alias('display_name') })
+
+describe('encodeJson nullish objects', () => {
+  test('encodes null for a nullable object field and omits an optional one', () => {
+    const request = struct.object({
+      extra: Profile.optional(),
+      profile: Profile.nullable(),
+    })
+
+    expect(encodeJson(request, { profile: null })).toEqual({ profile: null })
+    expect(encodeJson(request, { extra: undefined, profile: { name: 'N' } })).toEqual({
+      profile: { display_name: 'N' },
+    })
+  })
+
+  test('encodes a nullable object root as null and an optional root as undefined', () => {
+    expect(encodeJson(Profile.nullable(), null)).toBeNull()
+    expect(encodeJson(Profile.optional(), undefined)).toBeUndefined()
+    expect(encodeJson(Profile.nullish(), null)).toBeNull()
+    expect(encodeJson(Profile.nullish(), undefined)).toBeUndefined()
+    expect(encodeJson(Profile.nullable(), { name: 'N' })).toEqual({ display_name: 'N' })
+  })
+
+  test('encodes nullable objects nested in arrays and records', () => {
+    const nested = struct.object({
+      bag: struct.record(Profile.nullable()),
+      rows: struct.array(Profile.nullable()),
+    })
+
+    expect(
+      encodeJson(nested, {
+        bag: { a: null, b: { name: 'M' } },
+        rows: [null, { name: 'N' }],
+      }),
+    ).toEqual({
+      bag: { a: null, b: { display_name: 'M' } },
+      rows: [null, { display_name: 'N' }],
+    })
+  })
+
+  test('still rejects null and undefined for an object that does not allow them', () => {
+    expect(() => encodeJson(Profile, null)).toThrow('json encode expects object value')
+    expect(() => encodeJson(Profile, undefined)).toThrow('json encode expects object value')
   })
 })

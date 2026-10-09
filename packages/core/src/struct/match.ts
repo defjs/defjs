@@ -1,6 +1,5 @@
 import { resolveObjectShape } from './shape'
 import { DEFINITION } from './symbols'
-import { REQUEST_SECTION_KEYS } from './types'
 import type { RuntimeStruct, StructDefinition, StructLike } from './types'
 import { hasOwnKey, isPlainObject, matchesEnum } from './utils'
 
@@ -24,12 +23,7 @@ export function matchesDefinition(definition: StructDefinition, value: unknown, 
     if (definition.kind === 'null' || definition.flags.nullable) {
       return true
     }
-    if (
-      (definition.kind !== 'literal' || definition.value !== null) &&
-      definition.kind !== 'intersection' &&
-      definition.kind !== 'or' &&
-      definition.kind !== 'requestBody'
-    ) {
+    if ((definition.kind !== 'literal' || definition.value !== null) && definition.kind !== 'intersection' && definition.kind !== 'or') {
       return false
     }
   }
@@ -65,19 +59,6 @@ export function matchesDefinition(definition: StructDefinition, value: unknown, 
       )
     case 'object':
       return isPlainObject(value) && matchesObjectValue(struct, value)
-    case 'request':
-      if (!isPlainObject(value)) {
-        return false
-      }
-      for (const key of REQUEST_SECTION_KEYS) {
-        const section = definition[key] as RuntimeStruct | undefined
-        if (section && (!hasOwnKey(value, key) || !matchesRuntimeValue(section, value[key]))) {
-          return false
-        }
-      }
-      return true
-    case 'requestBody':
-      return matchesRuntimeValue(definition.struct as unknown as RuntimeStruct, value)
     case 'record':
       return (
         isPlainObject(value) &&

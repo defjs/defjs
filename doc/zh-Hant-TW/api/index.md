@@ -30,5 +30,5 @@ description: 手寫的工作區套件查表 — 你會 import 的函式、option
 
 ## 相關
 
-- [開始使用](../guide/getting-started.md)
-- [已宣告 404 的 GET](../recipes/get-declared-404.md)
+- [開始使用](/guide/getting-started)
+- [已宣告 404 的 GET](/recipes/get-declared-404)

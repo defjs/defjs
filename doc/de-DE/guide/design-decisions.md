@@ -7,47 +7,67 @@ description: Warum Defjs Verträge, Commands, Transport-Ergebnisse, Decoding und
 
 Defjs trifft ein paar bewusste Trade-offs. Convenience-APIs verstecken oft, wer einen Request, Stream oder eine Session besitzt. Defjs hält diese Grenze sichtbar, damit du denselben Endpoint-Vertrag wiederverwenden kannst, ohne stillschweigend Cache, Retry-Scheduler oder Resource-Manager mitzunehmen.
 
-## Deklaration ist eine Zusicherung
+## Deklaration ist eine Zusicherung {#declaration-is-an-assertion}
 
-Diese sechs Regeln entscheiden jede Frage danach, wie eine Response gelesen wird. Sie sind numeriert, damit eine spätere Diskussion eine davon zitieren kann, statt sie neu herzuleiten.
+Diese sechs Regeln entscheiden jede Frage danach, wie eine Response gelesen wird. Sie sind numeriert, damit eine
+spätere Diskussion eine davon zitieren kann, statt sie neu herzuleiten.
 
 ### 1. Was du deklarierst, sicherst du zu
 
-`output` heißt: "wenn `ok` true ist, **ist** der Body diese Form". `error` heißt: "wenn `ok` false ist, **ist** der Body diese Form". Eine Deklaration ist kein Hinweis und keine Best-Effort-Hoffnung, sondern eine Behauptung darüber, was ankommen wird.
+`output` heißt: "wenn `ok` true ist, **ist** der Body diese Form". `error` heißt: "wenn `ok` false ist,
+**ist** der Body diese Form". Eine Deklaration ist kein Hinweis und keine Best-Effort-Hoffnung, sondern eine Behauptung darüber,
+was ankommen wird.
 
 ### 2. `ok` ist die einzige Verzweigung, und es dekodiert immer nur eine Seite
 
-Eine 2xx-Response wird mit `output` gelesen. Alles andere mit `error`. Nie beides, nie das andere als Fallback.
+Eine 2xx-Response wird mit `output` gelesen. Alles andere mit `error`. Nie beides, nie das andere
+als Fallback.
 
 ### 3. Realität, die von der Zusicherung abweicht, ist ein Failure — und wird laut gemeldet
 
-Kein Raten von Formaten, kein Abstieg auf etwas Schwächeres, kein Schweigen. Ob sich das Backend geändert hat, ein Gateway eingegriffen hat oder jemand die Response manipuliert hat, **ändert die Schlussfolgerung nicht** — die Library kann das nicht unterscheiden und sollte nicht so tun.
+Kein Raten von Formaten, kein Abstieg auf etwas Schwächeres, kein Schweigen. Ob sich das Backend
+geändert hat, ein Gateway eingegriffen hat oder jemand die Response manipuliert hat, **ändert die
+Schlussfolgerung nicht** — die Library kann das nicht unterscheiden und sollte nicht so tun.
 
-Das ist die Regel, die man am häufigsten aufgeweicht haben will, deshalb sei der Fall klar benannt. Angenommen, ein Angreifer kann eine `200` umschreiben, die deine Seite gerade mit `output` lesen wollte, und du bekommst stattdessen eine `3xx`, `4xx` oder `5xx`. Zu scheitern ist keine Unannehmlichkeit, sondern das einzige sichere Ergebnis. Dir den rohen Body "für alle Fälle" zu geben, würde jedem, der eine Response injizieren kann, einen Weg um genau die Validierung geben, die du angefordert hast.
+Das ist die Regel, die man am häufigsten aufgeweicht haben will, deshalb sei der Fall klar benannt.
+Angenommen, ein Angreifer kann eine `200` umschreiben, die deine Seite gerade mit `output` lesen wollte, und stattdessen
+bekommst du eine `3xx`, `4xx` oder `5xx`. Zu scheitern ist keine Unannehmlichkeit, sondern das einzige sichere
+Ergebnis. Dir den rohen Body "für alle Fälle" zu geben, würde jedem, der eine Response injizieren kann, einen
+Weg um genau die Validierung geben, die du angefordert hast.
 
 ### 4. Ein fehlgeschlagenes Dekodieren hat keinen Body
 
-Ein Body **ist** ein dekodierter Wert. Wenn das Dekodieren fehlschlug, gibt es keinen Wert — es gibt keinen halb dekodierten Body zum Inspizieren. Das auslösende Detail liegt auf `cause`; die Response behält ihre Metadaten und nichts weiter.
+Ein Body **ist** ein dekodierter Wert. Wenn das Dekodieren fehlschlug, gibt es keinen Wert — es gibt keinen halb dekodierten
+Body zum Inspizieren. Das auslösende Detail liegt auf `cause`; die Response behält ihre Metadaten und
+nichts weiter.
 
-Diese Regel erzwingt das Typsystem, nicht die Konvention: Das `response` eines Decode-Faults ist `HttpMeta` und hat überhaupt kein `body`-Feld — der Griff danach ist ein Compile-Error.
+Das erzwingt das Typsystem, nicht die Konvention: Das `response` eines Decode-Faults ist
+`HttpMeta` und hat überhaupt kein `body`-Feld, der Griff danach ist also ein Compile-Error.
 
 ### 5. Wenn du die Zusicherung nicht willst, deklariere nicht
 
-`output` auszulassen heißt "der 2xx-Body interessiert mich nicht" — er wird nie gelesen. `error` auszulassen sagt dasselbe für alles andere. Das ist ein explizites Opt-out, kein Versehen, und es gilt vollständig: ein unlesbarer Body auf der Seite, die du abgewählt hast, ist nicht deine Sache — nicht einmal die Tatsache, dass er nicht lesbar war.
+`output` auszulassen heißt "der 2xx-Body interessiert mich nicht" — er wird nie gelesen. `error` auszulassen
+sagt dasselbe für alles andere. Das ist ein explizites Opt-out, kein Versehen, und es gilt vollständig:
+ein unlesbarer Body auf der Seite, die du abgewählt hast, ist nicht deine Sache, nicht einmal die
+Tatsache, dass er nicht lesbar war.
 
 ### 6. 3xx ist kein Error-Code-Bereich
 
-Wenn du weißt, dass ein Endpoint mit einem Redirect-Status antwortet, gib `output` kein Schema dafür, oder deklariere eines, das einen leeren Wert akzeptiert. Andernfalls ist ein gemeldeter Failure das erwartete Ergebnis und keine Lücke.
+Wenn du weißt, dass ein Endpoint mit einem Redirect-Status antwortet, gib `output` kein Schema dafür, oder
+deklariere eines, das einen leeren Wert akzeptiert. Andernfalls ist ein gemeldeter Failure das erwartete Ergebnis,
+keine Lücke.
 
 ## Explizite Clients
+
+`createClient(...)` macht Endpoint-Config zu einem expliziten Wert. Verschiedene Environments oder Request-Scopes bekommen verschiedene Endpoints, Credentials, Interceptors, Serializer und Transport-Handles.
 
 Der Preis: kein process-weites Default. Dieser Preis hilft auf einem Server — erzeuge den Client innerhalb der Request-Grenze, wenn Options oder Closures Auth, Cookies, User, Tenants oder Request-Metadata erfassen. Ein expliziter Client isoliert trotzdem keinen State, den ein Interceptor erfasst. Client-Identität ist für sich keine Security-Grenze.
 
 Ein Client dispatcht Commands. Er besitzt keine aktive Arbeit. Wer einen HTTP-Request, SSE-Stream oder eine WebSocket-Session startet, muss canceln oder schließen und auf das Terminal-Promise warten.
 
-## Definitionen, Builder und Commands
+## Definitionen, Endpoints und Commands
 
-Die Definition ist der stabile Vertrag: Method, Path, Input-Struct, Output-Mapping, Transport-Limits. Der Builder ist die aufrufbare Sicht. Der Aufruf erzeugt einen opaken Command für eine einzelne Ausführung.
+Die Definition ist der stabile Vertrag: Method, Path, Input-Struct, die Structs, die jede Seite von `ok` dekodieren, Transport-Limits. `defineRequest` gibt einen Endpoint zurück. Der Aufruf erzeugt einen opaken Command für eine einzelne Ausführung.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -55,14 +75,13 @@ import { defineRequest, struct } from '@defjs/core'
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 ```
 
 Ein Background-Job und ein UI-Owner können dieselbe `getUser`-Form mit unterschiedlichen Cancel-/Retry-Policies ausführen. Opake Commands verhindern, dass App-Code von internen Transport-Tags oder Symbolen abhängt.
@@ -71,33 +90,45 @@ Ein Background-Job und ein UI-Owner können dieselbe `getUser`-Form mit untersch
 
 Alle drei Transports nutzen ein Error-first-Tupel. Ein einziges generisches „Response“ würde Lifecycle-Fakten auslöschen.
 
-- HTTP → `[error, data, response]` — dekodierter Output + `HttpResponse`
-- SSE → `[error, stream, open]` — ein logischer Stream + Startup-Response-Snapshot
-- WebSocket → `[error, session, connection]` — logische Session + Startup-Connection-Snapshot
+- HTTP → `[err, data, response]` — dekodierter Output + die Response, die ihn erzeugt hat
+- SSE → `[err, stream, open]` — ein logischer Stream + Startup-Response-Snapshot
+- WebSocket → `[err, session, connection]` — logische Session + Startup-Connection-Snapshot
 
-Der dritte Wert ist ein Snapshot, kein Promise, dass spätere Reconnects dieselbe physische Connection behalten. Startup-Fehler kann trotzdem Response/Snapshot enthalten, wenn der Transport zuerst eines erzeugt hat. Nach dem Startup gehört Lifecycle-Kontrolle zum zurückgegebenen Handle oder zur Session.
+Im Erfolg ist der dritte Wert immer da. Ein HTTP-Failure ist `[error, undefined, undefined]`:
+der Fault trägt die Response-Metadaten schon, und genau dieser Fault wird an einen Handler gegeben,
+geloggt oder rethrowt. SSE- und WebSocket-Startup-Failures können den Open- oder Connection-
+Snapshot trotzdem enthalten, wenn einer erfasst wurde.
+
+Bei SSE und WebSocket ist der dritte Wert ein Snapshot, kein Promise, dass spätere Reconnects dieselbe
+physische Connection behalten. Nach dem Startup gehört Lifecycle-Kontrolle zum zurückgegebenen Handle oder zur
+Session.
 
 ## Runtime-Decoding
 
-TypeScript-Inferenz beschreibt, was du erwartest; sie kann eine Server-Response zur Laufzeit nicht prüfen. Struct-Parsing ist die zweite Hälfte des Vertrags. Defjs validiert Command-Input vor dem Request-Bau, dekodiert die gewählte Representation und parst dann den passenden Struct.
+TypeScript-Inferenz beschreibt, was du erwartest; sie kann eine Server-Response zur Laufzeit nicht prüfen. Struct-Parsing ist die zweite Hälfte des Vertrags. Defjs validiert Command-Input vor dem Request-Bau, prüft die Representation und parst dann den Struct der Seite von `ok`, die gilt.
 
-Dekodiert wird **einmal, nach der Interceptor-Chain**. Eine Response, die ein Interceptor mit `makeResponse(...)` gebaut hat, wird genau wie eine von der Leitung interpretiert: woher eine Response kam, ändert nicht, wie sie gelesen wird — es gibt also keinen "dem Interceptor vertrauen"-Pfad, über den man nachdenken müsste.
+Dekodiert wird **einmal, nach der Interceptor-Chain**. Eine Response, die ein Interceptor mit
+`makeResponse(...)` gebaut hat, wird genau wie eine von der Leitung interpretiert: woher eine Response kam,
+ändert nicht, wie sie gelesen wird — es gibt also keinen "dem Interceptor vertrauen"-Pfad, über den man nachdenken müsste.
 
 Die Reihenfolge ist: Media-Type, dann Representation, dann Struct.
 
-| Was nicht gehalten hat                                                   | Fault                                                                |
-| ------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| Der Media-Type ist nicht der, den die deklarierte Representation braucht | `RES_MEDIA_TYPE_INVALID` — gemeldet, **bevor** der Body gelesen wird |
-| Die Bytes sind nicht diese Representation                                | `RES_DECODE_FAILED`                                                  |
-| Der Wert ist nicht dieser Struct                                         | `RES_STRUCT_MISMATCH`                                                |
-| Non-2xx, und `error` hat dekodiert                                       | `HTTP_STATUS` mit typisiertem `data`                                 |
-| Non-2xx, und `error` war nicht deklariert                                | `HTTP_STATUS` mit `data: undefined`                                  |
+| Was nicht gehalten hat                                                   | Fault                                                              |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
+| Der Media-Type ist nicht der, den die deklarierte Representation braucht | `RES_MEDIA_TYPE_INVALID` — gemeldet, _bevor_ der Body gelesen wird |
+| Die Bytes sind nicht diese Representation                                | `RES_DECODE_FAILED`                                                |
+| Der Wert ist nicht dieser Struct                                         | `RES_STRUCT_MISMATCH`                                              |
+| Non-2xx, und `error` hat dekodiert                                       | `HTTP_STATUS` mit typisiertem `data`                               |
+| Non-2xx, und `error` war nicht deklariert                                | `HTTP_STATUS` mit `data: undefined`                                |
 
-Den Media-Type zuerst zu prüfen macht aus "ich wollte JSON und bekam HTML" einen präzisen Fault statt eines Parser-Errors — und es überspringt Lesen, Parsen und Struct komplett.
+Den Media-Type zuerst zu prüfen macht aus "ich wollte JSON und bekam HTML" einen präzisen
+Fault statt eines Parser-Errors, und es überspringt Lesen, Parsen und Struct komplett.
 
-## Die Grenzen von `build`
+## Builder, Encoder und Alias
 
-Automatisches `struct.request(...)`-Mapping ist Default, wenn Input schon Path/Query/Headers/Body hat. Custom `build(request, input)` ist eine eingeschränkte Projektion, wenn Caller-Shape und Wire-Shape auseinanderlaufen:
+Ein Struct ist der Field-Vertrag, in beide Richtungen. `.alias(name)` ist der Wire-Name. Der Struct entscheidet, wie ein Wert encodet wird. Der `builder` entscheidet, wohin dieser Wert geht.
+
+`builder` ist optional, synchron und pure. Er bekommt den geparsten Input — den echten Wert, keine Binding-Sicht — und gibt den Request zurück: `path`, `query`, `headers` und `body`. Er läuft, wenn der Command ausgeführt wird. Ein Throw wird `REQ_BUILD_FAILED` auf dem Tupel; der Endpoint-Aufruf throwt nicht. Lass `builder` weg, wenn der Input-Struct schon diese Request-Shape ist. Dieses Weglassen ist `(input) => input`, und TypeScript verlangt einen Builder, wenn der Input nicht zuweisbar ist.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -107,22 +138,20 @@ const createBatch = defineRequest({
   path: '/accounts/:account_id/users',
   input: struct.object({
     accountId: struct.number(),
+    draft: struct.boolean().optional(),
     users: struct.array(
       struct.object({
-        displayName: struct.string(),
+        displayName: struct.string().alias('display_name'),
         email: struct.string(),
       }),
     ),
   }),
-  build(request, input) {
-    request.setPathParams({ account_id: input.accountId })
-    request.setJson({
-      users: input.users.map((user) => ({
-        display_name: user.displayName,
-        email: user.email,
-      })),
-    })
-  },
+  builder: (input) => ({
+    path: { account_id: input.accountId },
+    query: { draft: input.draft ? 1 : undefined },
+    headers: { 'x-api-version': '2' },
+    body: { users: input.users },
+  }),
   output: struct.object({ accepted: struct.number() }),
 })
 
@@ -130,9 +159,24 @@ const command = createBatch({
   accountId: 42,
   users: [{ displayName: 'Ada', email: 'ada@example.com' }],
 })
+void command
 ```
 
-`input` ist eine schema-gebundene Sicht, nicht das Runtime-Objekt des Callers. Die Projektion kann deklarierte Felder wählen, Targets umbenennen und ein Source-Array-Item auf ein Output-Item mappen. Sie kann nicht auf Werte branchen, Literale injizieren oder Kardinalität ändern. Normalisiere Business-Daten und mach wertabhängige Validierung, bevor du den Command erzeugst.
+Der Default-Pfad ist, den typisierten Wert durchzureichen. `body: { users: input.users }` behält den Alias jedes Users, der Wire-Field ist also `display_name`. Ein Key, den du selbst schreibst (`account_id`, `x-api-version`), ist literal. Ein typisiertes Object zu spreaden behält seinen Struct; den Wire-Key neben das logische Field zu setzen ist `REQ_BUILD_FAILED`.
+
+Query-Nesting ist eine Eigenschaft des Backends, also lebt es auf dem Client: `withQuerySerializer((query) => string)` sieht das encodierte Wire-Object, Aliasse inklusive. Ohne Query wird er nicht aufgerufen. `URLSearchParams` aus dem Builder überspringt ihn. Ohne Serializer wiederholen Arrays Keys, und ein genestetes Object failt. Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`.
+
+Der Body-Kind wird am Wert entschieden, erster Match:
+
+- kein `body` → nichts wird gesendet
+- ein `urlencoded`- oder `formData`-Codec am Body-Root → dieses Form-Encoding; der Tag gilt nicht, wenn der Wert in JSON genestet ist
+- `FormData`, `URLSearchParams`, `Blob`, `File`, Bytes oder ein `ReadableStream` → as-is gesendet
+- ein String → `text/plain;charset=UTF-8`
+- alles andere → JSON
+
+`undefined`-Fields werden weggelassen. `null` auf einem nullable Field wird gesendet. Ein String ist kein JSON, außer du stringifizierst ihn und setzt `content-type`. Selbst serialisieren (`JSON.stringify`, qs, Protobuf) verlässt den Struct-Encoder, Aliasse gelten dann nicht. Es gibt kein öffentliches `struct.encode`.
+
+`GET` und `HEAD` können keinen Body tragen. WebSocket-Builder können weder Headers noch einen Body zurückgeben. Statische WebSocket-Subprotocols bleiben auf der Definition (`protocols`), nicht im Builder. Invalid WebSocket-Frames gehen an den Session-Runtime-Error-Listener. Ein SSE-`error`-Struct typisiert den Startup-Fault, und sein Handshake-Body folgt derselben Kind-Regel wie ein HTTP-Body: `string` ist Text, Blobs und Files sind Blobs, `arrayBuffer` sind Bytes, und alles andere ist JSON.
 
 ## Observer und Policy-Platzierung
 

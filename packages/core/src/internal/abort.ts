@@ -105,42 +105,179 @@ export async function awaitWithSignal<T>(run: () => T | PromiseLike<T>, signal: 
   }
 }
 
+export interface TransportDeadline {
+  /** `NET_TIMEOUT` once synchronous work has already used up `timeout`. */
+  expiredFault: () => PreflightFault | undefined
+  release: () => void
+  /**
+   * Release early when `signal` aborts. The listener exists only while a timer is armed and is
+   * removed by `release`: a listener left on a composite signal pins it to every source it follows,
+   * so a caller's long-lived signal would otherwise hold every request that ever used it.
+   */
+  releaseOnAbort: (signal: AbortSignal) => void
+  signal: AbortSignal | undefined
+}
+
+/**
+ * Arm `timeout` before synchronous parse and builder work.
+ *
+ * A timer task cannot run until that work yields. `expiredFault` also watches
+ * the wall clock so a microtask transport cannot succeed after the deadline.
+ * `release` clears the timer and makes a later wall-clock check a no-op, so a
+ * settled startup can no longer abort the request signal.
+ */
+export function armTransportDeadline(timeout: number | undefined): TransportDeadline {
+  if (typeof timeout !== 'number') {
+    return {
+      expiredFault: () => undefined,
+      release: () => undefined,
+      releaseOnAbort: () => undefined,
+      signal: undefined,
+    }
+  }
+
+  const startedAt = Date.now()
+  const controller = new AbortController()
+  let released = false
+  let watched: AbortSignal | undefined
+  const timer = setTimeout(() => {
+    controller.abort(ERR_TIMEOUT)
+  }, timeout)
+  const release = () => {
+    if (released) {
+      return
+    }
+    released = true
+    clearTimeout(timer)
+    watched?.removeEventListener('abort', release)
+  }
+
+  return {
+    release,
+    releaseOnAbort(signal) {
+      watched = signal
+      signal.addEventListener('abort', release, { once: true })
+    },
+    signal: controller.signal,
+    expiredFault() {
+      if (released || Date.now() - startedAt < timeout) {
+        return undefined
+      }
+      controller.abort(ERR_TIMEOUT)
+      return resolveAbortedFault(controller.signal)
+    },
+  }
+}
+
+/**
+ * Caller abort wins over a wall-clock deadline. A timer that already fired aborts
+ * with `ERR_TIMEOUT`, so that signal still reports `NET_TIMEOUT`. Cancellation wins
+ * over a parse or builder failure. Without `fallback`, a live signal returns undefined.
+ */
+export function resolveTransportCancellation(deadline: TransportDeadline, signal: AbortSignal): PreflightFault | undefined
+export function resolveTransportCancellation(deadline: TransportDeadline, signal: AbortSignal, fallback: PreflightFault): PreflightFault
+export function resolveTransportCancellation(
+  deadline: TransportDeadline,
+  signal: AbortSignal,
+  fallback?: PreflightFault,
+): PreflightFault | undefined {
+  return resolveAbortFault(signal) ?? deadline.expiredFault() ?? fallback
+}
+
+type ForwardingSignalState = {
+  active: boolean
+  release: () => void
+  sources: readonly AbortSignal[]
+}
+
+const forwardingSignals = new WeakMap<AbortSignal, ForwardingSignalState>()
+
+/** Release listeners owned by a signal returned from `mergeAbortSignals`. */
+export function releaseAbortSignal(signal: AbortSignal): void {
+  forwardingSignals.get(signal)?.release()
+}
+
 export function mergeAbortSignals(controller: AbortSignal, signals: (AbortSignal | undefined)[], timeout?: number): AbortSignal {
   validateTransportTimeout(timeout)
   const hasTimeout = typeof timeout === 'number'
-  const merged: AbortSignal[] = [controller]
 
+  if (!hasTimeout && signals.length > 0 && signals.every((signal) => signal === undefined || signal === controller)) {
+    return controller
+  }
+
+  const merged: AbortSignal[] = []
+  const seen = new Set<AbortSignal>()
+  const append = (signal: AbortSignal) => {
+    const state = forwardingSignals.get(signal)
+    if (state?.active) {
+      for (const source of state.sources) {
+        append(source)
+      }
+      return
+    }
+    if (!seen.has(signal)) {
+      seen.add(signal)
+      merged.push(signal)
+    }
+  }
+  append(controller)
   for (const signal of signals) {
     if (signal) {
-      merged.push(signal)
+      append(signal)
     }
   }
 
   if (!hasTimeout && merged.length === 1) {
-    return controller
+    return merged[0] as AbortSignal
   }
 
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined
+  const combinedController = new AbortController()
+  const listeners: Array<[AbortSignal, () => void]> = []
+  let abortWithReason: (reason: unknown) => void
+  const state: ForwardingSignalState = {
+    active: true,
+    release() {
+      if (!state.active) {
+        return
+      }
+      state.active = false
+      for (const [source, listener] of listeners) {
+        source.removeEventListener('abort', listener)
+      }
+      if (timeoutTimer !== undefined) {
+        clearTimeout(timeoutTimer)
+      }
+    },
+    sources: merged,
+  }
+  forwardingSignals.set(combinedController.signal, state)
+
+  abortWithReason = (reason) => {
+    if (combinedController.signal.aborted) {
+      return
+    }
+    combinedController.abort(reason)
+    state.release()
+  }
+
   if (hasTimeout) {
-    const timeoutController = new AbortController()
     timeoutTimer = setTimeout(() => {
-      timeoutController.abort(ERR_TIMEOUT)
+      abortWithReason(ERR_TIMEOUT)
     }, timeout)
-    merged.push(timeoutController.signal)
   }
 
-  const combined = AbortSignal.any(merged)
-  if (timeoutTimer !== undefined) {
-    const timer = timeoutTimer
-    const clear = () => {
-      clearTimeout(timer)
-    }
-    if (combined.aborted) {
-      clear()
-    } else {
-      combined.addEventListener('abort', clear, { once: true })
-    }
+  const alreadyAborted = merged.find((signal) => signal.aborted)
+  if (alreadyAborted) {
+    abortWithReason(alreadyAborted.reason)
+    return combinedController.signal
   }
 
-  return combined
+  for (const source of merged) {
+    const listener = () => abortWithReason(source.reason)
+    listeners.push([source, listener])
+    source.addEventListener('abort', listener, { once: true })
+  }
+
+  return combinedController.signal
 }

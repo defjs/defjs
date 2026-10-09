@@ -1,6 +1,6 @@
 ---
 title: WebSocket
-description: defineWebSocket، الجلسة، وخيارات التنفيذ.
+description: defineWebSocket، والجلسة، وخيارات التنفيذ.
 ---
 
 # WebSocket
@@ -10,11 +10,11 @@ description: defineWebSocket، الجلسة، وخيارات التنفيذ.
 ## defineWebSocket() {#defineWebSocket}
 
 ```ts
-function defineWebSocket(definition: WebSocketDefinition): WebSocketCommandBuilder
+function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`، structs `incoming`، `outgoing` اختياري، `input`، `build`، حدود الطابور.
-- **يُرجع** منشئًا. استدعِه بالمدخل لتحصل على `WebSocketCommand`.
+- **definition** — `path`، وstruct `incoming` واحد، وstruct `outgoing` اختياري، و`input` و`builder` اختياريان، و`protocols` ثابتة، وحدود الطابور.
+- **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `WebSocketCommand`.
 
 ```ts twoslash
 import { defineWebSocket, struct } from '@defjs/core'
@@ -22,8 +22,9 @@ import { defineWebSocket, struct } from '@defjs/core'
 const chat = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { message: struct.object({ text: struct.string() }) },
+  protocols: ['chat.v1'],
+  incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+  outgoing: struct.object({ text: struct.string(), type: struct.literal('message') }),
 })
 ```
 
@@ -60,7 +61,16 @@ interface WebSocketSession<TIncoming, TOutgoing> extends AsyncDisposable {
 }
 ```
 
-أنت تملك التنظيف؛ استخدم `await using`. يبقى `close()` و`closed` متاحين. `closed` هو نهاية lifecycle المنطقية. ينتظر disposer تنظيف Defjs بحد ثانية واحدة؛ إذا لم يُرصد حدث close فقد يرفض بـ `DOMException` اسمه `TimeoutError`. هذا لا يثبت أن TCP المادي أُغلق.
+فضّل `await using ownedSession = session` لتنظيف النطاق المملوك. يبقى `session.close()` اليدوي و`await session.closed` متاحين.
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+`closed` يبلّغ عن الحالة النهائية المنطقية. المتخلّص غير المتزامن يطلب إغلاقًا أصليًا وينتظر teardown المملوك لـ Defjs، لكنه يحدّ حدث الإغلاق المفقود بثانية واحدة وقد يرفض بـ `DOMException` اسمه `TimeoutError`. ولا يستطيع إثبات أن اتصال TCP المادي أُغلق.
 
 ### WebSocketState {#WebSocketState}
 
@@ -72,7 +82,14 @@ interface WebSocketSession<TIncoming, TOutgoing> extends AsyncDisposable {
 
 ### WebSocketCloseInfo {#WebSocketCloseInfo}
 
-لقطة الإغلاق بعد انتهاء المقبس (`code`، `reason`، علامة الإغلاق النظيف، `cause` اختياري). الإغلاق اليدوي يمكن أن يحمل `ManualSocketCloseReason`.
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
+لقطة الإغلاق بعد انتهاء المقبس (الرمز، السبب، علامة الإغلاق النظيف، سبب اختياري). الإغلاق اليدوي يمكن أن يحمل `ManualSocketCloseReason`.
 
 ## خيارات التنفيذ
 
@@ -92,25 +109,31 @@ type WebSocketExecuteOptions = {
 
 `WebSocketHeartbeatConfig`: `intervalMs`، و`message` و`isAck` و`timeoutMs` اختيارية.
 
-## خرائط الرسائل
+عند ضبط `reconnect`، الافتراضي لـ `attempts` هو 3؛ و`0` يعطّل. حذف `attempts` ليس بلا حد.
 
-## SocketStructs {#SocketStructs}
+## الرسائل
+
+`incoming` هو struct واحد. إطارات النص و`ArrayBuffer` والمصفوفة المُنوَّعة و`Blob` تُقرأ كـ UTF-8، ثم `JSON.parse`، ثم تُفحص مقابل ذلك الـ struct. الإطار الذي يفشل تحليل JSON أو الـ struct يُبلَّغ إلى `session.onRuntimeError` ولا يُصفّ. لا يوجد خيار عميل للإطار غير الصالح.
+
+`outgoing` هو struct واحد. `session.send` يقبل `StructInput` لذلك الـ struct، ويرمّز الأسماء المستعارة، ثم `JSON.stringify`. عدة أنواع من الرسائل هي `struct.discriminatedUnion`.
 
 ```ts
-type SocketStructs = { [typeName: string]: AnyStruct }
+session.send({ type: 'message', text: 'Hello' })
 ```
 
-الحمولات الواردة/الصادرة موسومة بـ `type` (وحقول مسطّحة أو غلاف `data` حسب شكل الـ struct).
-
-انظر [دليل WebSocket](../core/web-socket.md) و[فتح جلسة WebSocket](../recipes/websocket-session.md).
+انظر [دليل WebSocket](/core/web-socket) و[فتح جلسة WebSocket](/recipes/websocket-session).
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path` و`incoming` و`outgoing` / `input` / `build` اختيارية، مع حدود الطابور.
+`path` و`incoming`، و`outgoing` / `input` / `builder` / `protocols` اختيارية، وحدود الطابور. الـ builder قد يُرجع `path` و`query` فقط.
 
-## WebSocketCommandBuilder {#WebSocketCommandBuilder}
+## WebSocketEndpoint {#WebSocketEndpoint}
 
 يعيده `defineWebSocket`. استدعه بالمدخل لتحصل على `WebSocketCommand`.
+
+## WebSocketRequestShape {#WebSocketRequestShape}
+
+`path` و`query` فقط. `headers` و`body` هما `never`.
 
 ## WebSocketCommand {#WebSocketCommand}
 
@@ -122,23 +145,23 @@ type SocketStructs = { [typeName: string]: AnyStruct }
 
 ## SocketAwaitResult {#SocketAwaitResult}
 
-`[null, session, connection]` or `[error, undefined, connection?]`.
+`[null, session, connection]` أو `[error, undefined, connection?]`.
 
 ## ManualSocketCloseReason {#ManualSocketCloseReason}
 
-السبب المسجَّل عند الإغلاق بـ `session.close()`.
+السبب المسجَّل عند إغلاق الجلسة عبر `session.close()`.
 
 ## WebSocketHeartbeatConfig {#WebSocketHeartbeatConfig}
 
-`intervalMs`, optional `message`, `isAck`, `timeoutMs`.
+`intervalMs`، و`message` و`isAck` و`timeoutMs` اختيارية.
 
 ## WebSocketIncomingData {#WebSocketIncomingData}
 
-شكل الرسالة الواردة المستنتج من خريطة `SocketStructs` الواردة.
+الإطار الوارد المفكوك: `Infer` لـ struct `incoming`.
 
 ## WebSocketOutgoingData {#WebSocketOutgoingData}
 
-شكل الرسالة الصادرة المستنتج من خريطة `SocketStructs` الصادرة.
+القيمة التي يقبلها `session.send`: `StructInput` لـ struct `outgoing`، أو `never` عندما لا يُعلن أيّ منه.
 
 ## SocketLifecycleOutcome {#SocketLifecycleOutcome}
 

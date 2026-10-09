@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -108,7 +108,7 @@ Nächster Provider gewinnt. Descendants bekommen `childClient`; Siblings außerh
 
 ## HTTP-Arbeit außerhalb eines Watchers besitzen
 
-Für Arbeit, die ein Composable oder eine Komponente außerhalb eines Watchers startet, nutze `AbortController` + `onScopeDispose`. Abort Startup und aktive Arbeit; check das Signal, bevor du reaktiven State assignst. Ein Plugin oder Injection-Scope inferiert nicht, wer einen Command besitzt.
+Für Arbeit, die ein Composable oder eine Komponente außerhalb eines Watchers startet, nutze `AbortController` + `onScopeDispose`. Abort Startup und aktive Arbeit; check das Signal, bevor du reaktiven State assignst. Ein Plugin oder Injection-Scope inferiert nicht, wer einen Command besitzt. Für List-Pages wrappe `execute` mit Vue Query (oder ähnlich) — `@defjs/vue` bleibt nur DI und liefert **kein** `useRequest`.
 
 Wenn ein Scope einen Client besitzt, halte ihn request-independent für browser-weite Reuse. Wenn er Headers, Cookies, User, Tenants oder Credentials erfasst, erzeuge ihn in der relevanten App-/SSR-Request-Grenze und provide diese Instanz dort.
 

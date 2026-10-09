@@ -32,7 +32,17 @@ describe('Response', () => {
     expect(res.status).toBe(0)
     expect(res.statusText).toBe('')
     expect(res.ok).toBe(false)
+    expect(res.body).toBeUndefined()
     expect(res).not.toHaveProperty('error')
+  })
+
+  test('should keep an omitted body absent and an explicit null', () => {
+    const absent = makeResponse({ status: 204 })
+    const parsedNull = makeResponse({ status: 200, body: null })
+    expect(absent.body).toBeUndefined()
+    expect(parsedNull.body).toBeNull()
+    expect(makeResponse({ ...parsedNull }).body).toBeNull()
+    expect({ ...absent }.body).toBeUndefined()
   })
 
   test('should omit resolved urls from http failure messages', () => {

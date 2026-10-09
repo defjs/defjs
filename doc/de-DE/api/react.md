@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: Provider und `useClient()`.
+description: ClientProvider, useClient und Provider-Props.
 ---
 
 # React {#page}
 
-Verdrahte einen bestehenden `@defjs/core`-Client in einen React-Tree. Das Paket erzeugt **keinen** Client, fügt keinen Cache hinzu und disposet keine Transport-Resources.
+Stelle einen bestehenden `@defjs/core`-Client einem React-Tree bereit. Dieses Paket erzeugt, cached oder disposed den Client nicht.
 
-Sieh den [React-Guide](../plugins/react.md).
+Siehe den [React-Guide](/plugins/react).
 
 ## ClientProvider {#ClientProvider}
 
@@ -37,8 +37,8 @@ function useClient(): Client
 
 Liest den nächsten `ClientProvider`.
 
-- **Gibt zurück** den bereitgestellten Client.
-- **Wirft** außerhalb eines `ClientProvider`.
+- **Returns** den bereitgestellten Client.
+- **Throws** außerhalb eines `ClientProvider`.
 
 ## ClientProviderProps {#ClientProviderProps}
 

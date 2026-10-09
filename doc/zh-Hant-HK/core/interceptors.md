@@ -99,6 +99,7 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
     return makeResponse({
       status: 503,
       statusText: 'Service Unavailable',
+      headers: new Headers({ 'content-type': 'application/json' }),
       body: { message: 'Temporarily unavailable' },
     })
   }
@@ -107,17 +108,17 @@ const maintenanceGate = createHttpInterceptor(async (_request, next) => {
 })
 ```
 
-Command layer 仍然會按 status dispatch。Callers 需要 typed `error.data` 時，喺 `output` declare `503`。Short-circuit SSE 或者 WebSocket 需要完整 compatible handle/session（closure promises、live state、ownership 同 `[Symbol.asyncDispose]`）。Partial objects 唔係 valid policy。Structural `EventStreamHandle` 同 `WebSocketSessionLike` implementation 而家 compile 時必須有 standard disposer；淨係接收 Defjs handle 嘅 consumer 唔使加新 runtime call。
+Command layer 仍然會按 status dispatch。Callers 需要 typed `error.data` 時，用單一 `error` struct 描述非 2xx side。Short-circuit SSE 或者 WebSocket 需要完整 compatible handle/session（closure promises、live state、ownership 同 `[Symbol.asyncDispose]`）。Partial objects 唔係 valid policy。Structural `EventStreamHandle` 同 `WebSocketSessionLike` implementation 而家 compile 時必須有 standard disposer；淨係接收 Defjs handle 嘅 consumer 唔使加新 runtime call。
 
 ## Retry safe reads
 
-Retries 會改行為。Keep policy 窄 — 呢個例子為 statuses `0`、`502`、`503`、`504` retry replayable `GET` / `HEAD` / `OPTIONS`，將 `Retry-After` cap 喺 30s，兩次 retries 或者 abort 就停：
+Retries 會改行為。Keep policy 窄 — 呢個例子為 statuses `0`、`429`、`502`、`503`、`504` retry replayable `GET` / `HEAD` / `OPTIONS`，將 `Retry-After` cap 喺 30s，兩次 retries 或者 abort 就停：
 
 ```typescript twoslash
 import { createHttpInterceptor, type HttpRequest, type HttpResponse } from '@defjs/core'
 
 const retryableMethods = new Set(['GET', 'HEAD', 'OPTIONS'])
-const retryableStatuses = new Set([0, 502, 503, 504])
+const retryableStatuses = new Set([0, 429, 502, 503, 504])
 
 function isReplayable(request: HttpRequest): boolean {
   return typeof ReadableStream === 'undefined' || !(request.body instanceof ReadableStream)
@@ -232,7 +233,7 @@ Factories return tagged transport values：
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP 上嘅 Basic credentials
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上嘅 Basic credentials
 
-`HttpRequest` 可以包括 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`，同 static `operation`。佢係 transport integration value — 唔係 caller 嘅 parsed input。Command validation、output validation 同 domain error mapping 留喺各自嘅 layers。
+`HttpRequest` 可以包括 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`，同 static `operation`。佢係 transport integration value — 唔係 caller 嘅 parsed input。Serialization 之後，`queryParams` 係 `new URLSearchParams(queryString)`。Builder 冇產生 query 嘅時候，configured query serializer 唔會被 call；builder 嘅 `URLSearchParams` 會原樣用。Command validation、output validation 同 domain error mapping 留喺各自嘅 layers。
 
 SSE/WebSocket observers 係 lifecycle hooks，唔係 control flow。Owner 完結時 unsubscribe WebSocket listeners。Observer failures 跟 transport contract；interceptor 本身可以 throw 或者 reject。
 
@@ -244,5 +245,7 @@ Interceptor 可以 enforce transport policy。佢唔係 input validation、autho
 
 ## Related recipes
 
+- [401 時 refresh Bearer token 一次](../recipes/refresh-bearer-once.md)
+- [Publish 一個唔隱藏 execute 嘅 HTTP SDK](../recipes/publish-http-sdk.md)
 - [Test with a local Fetch handle](../recipes/test-with-handle.md)
 - [Cancel an HTTP call](../recipes/cancel-http.md)

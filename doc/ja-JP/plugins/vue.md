@@ -48,7 +48,7 @@ const name = ref('Loading...')
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
   output: struct.object({ name: struct.string() }),
@@ -108,7 +108,7 @@ provide(HTTP_CLIENT, childClient)
 
 ## watcher の外で HTTP 作業を所有する
 
-composable やコンポーネントが watcher の外で始めた作業には、`AbortController` + `onScopeDispose` を使います。起動と進行中の作業を abort し、リアクティブ状態を代入する前に signal を確認してください。プラグインや注入スコープは、誰がコマンドを所有するかを推論しません。
+composable やコンポーネントが watcher の外で始めた作業には、`AbortController` + `onScopeDispose` を使います。起動と進行中の作業を abort し、リアクティブ状態を代入する前に signal を確認してください。プラグインや注入スコープは、誰がコマンドを所有するかを推論しません。一覧ページでは `execute` を Vue Query（または類似のもの）で包んでください — `@defjs/vue` は DI だけのままで、`useRequest` は**出しません**。
 
 スコープがクライアントを所有するとき、ブラウザー全体で再利用するならリクエスト非依存に保ってください。ヘッダー・cookie・ユーザー・テナント・資格情報を掴むなら、関連するアプリ/SSR のリクエスト境界で作り、そこで provide してください。
 

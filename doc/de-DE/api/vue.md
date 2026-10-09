@@ -1,13 +1,13 @@
 ---
 title: '@defjs/vue'
-description: Plugin, Injection-Key und injectClient.
+description: Vue-Plugin, Injection-Key und injectClient.
 ---
 
 # Vue {#page}
 
-Verdrahte einen bestehenden `@defjs/core`-Client in Vue. Das Paket erzeugt **keine** Clients, cached keine Results und schließt Transport-Resources bei Unmount nicht.
+Stelle einen bestehenden `@defjs/core`-Client einer Vue-App bereit. Dieses Paket erzeugt, cached oder disposed den Client nicht.
 
-Sieh den [Vue-Guide](../plugins/vue.md).
+Siehe den [Vue-Guide](/plugins/vue).
 
 ## createClientPlugin() {#createClientPlugin}
 
@@ -16,7 +16,7 @@ function createClientPlugin(client: Client): Plugin
 ```
 
 - **client** — Instanz von `createClient`.
-- **Gibt zurück** Vue-Plugin für `app.use(...)`.
+- **Returns** ein Vue-Plugin für `app.use(...)`.
 
 ```ts
 import { createClient, withEndpoint } from '@defjs/core'
@@ -36,8 +36,8 @@ function injectClient(): Client
 
 Liest den nächsten `HTTP_CLIENT`-Provider.
 
-- **Gibt zurück** den injizierten Client.
-- **Wirft** wenn das Plugin fehlt.
+- **Returns** den injizierten Client.
+- **Throws** wenn das Plugin nicht installiert wurde.
 
 ## HTTP_CLIENT {#HTTP_CLIENT}
 
@@ -45,4 +45,4 @@ Liest den nächsten `HTTP_CLIENT`-Provider.
 const HTTP_CLIENT: InjectionKey<Client>
 ```
 
-Vue-Injection-Key. Nimm `injectClient()` statt `inject(HTTP_CLIENT)`. Subtree überschreiben: `provide(HTTP_CLIENT, childClient)`.
+Vue-Injection-Key. Nimm lieber `injectClient()` statt `inject(HTTP_CLIENT)`. Überschreibe einen Subtree mit `provide(HTTP_CLIENT, childClient)`.

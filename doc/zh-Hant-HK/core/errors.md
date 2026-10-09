@@ -18,12 +18,13 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const [err, user, response] = await client.execute(getUser({ path: { id: 7 } }))
+const [err, user, response] = await client.execute(getUser({ id: 7 }))
 if (err?.code === 'HTTP_STATUS' && err.status === 404) {
   console.log(err.data.message)
 } else if (err?.code === 'NET_TIMEOUT') {
@@ -78,7 +79,7 @@ console.log(triage(example))
 | 類別   | Code                                                                   | 邊個要改                       |
 | ------ | ---------------------------------------------------------------------- | ------------------------------ |
 | `HTTP` | `HTTP_STATUS`                                                          | 對端回咗非 2xx；當業務邏輯處理 |
-| `REQ`  | `REQ_INPUT_INVALID`、`REQ_OPTIONS_INVALID`、`REQ_BUILD_FAILED`         | Caller，或者 endpoint 聲明     |
+| `REQ`  | `REQ_INPUT_INVALID`、`REQ_OPTIONS_INVALID`、`REQ_BUILD_FAILED`         | 呢次 call，或者 endpoint 聲明  |
 | `NET`  | `NET_ABORTED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`NET_BODY_INCOMPLETE` | 冇人，或者 retry               |
 | `RES`  | `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH`   | 聲明同對端要對得上             |
 | `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | 你掛上 pipeline 嘅 code        |

@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: Provider и `useClient()`.
+description: ClientProvider, useClient и props провайдера.
 ---
 
 # React {#page}
 
-Подключи существующий `@defjs/core` client к React-дереву. Пакет **не** создаёт client, не вешает кэш и не dispose’ит транспорт.
+Отдай существующий `@defjs/core` client React-дереву. Этот пакет не создаёт, не кэширует и не dispose’ит client.
 
-См. [гайд React](../plugins/react.md).
+См. [гайд React](/plugins/react).
 
 ## ClientProvider {#ClientProvider}
 

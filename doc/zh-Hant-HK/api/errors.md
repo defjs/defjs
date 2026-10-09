@@ -156,4 +156,4 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 Abort 同 timeout 共享嘅 `cause` / message 值。喺 interceptor 裡面拋一個出嚟，就係 interceptor 表達取消嘅方式。
 
-睇 [Errors 指南](/zh-Hant-HK/core/errors)。
+睇 [Errors guide](/core/errors)。

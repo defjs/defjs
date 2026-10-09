@@ -1,13 +1,13 @@
 ---
 title: '@defjs/react'
-description: Provider y `useClient()`.
+description: ClientProvider, useClient y props del provider.
 ---
 
 # React {#page}
 
-Conecta un cliente `@defjs/core` existente a un árbol React. El paquete **no** crea un cliente, no añade caché ni dispone recursos de transporte.
+Proporciona un cliente `@defjs/core` existente a un árbol React. Este paquete no crea, no cachea ni dispone el cliente.
 
-Mira la [guía de React](../plugins/react.md).
+Mira la [guía de React](/plugins/react).
 
 ## ClientProvider {#ClientProvider}
 
@@ -38,7 +38,7 @@ function useClient(): Client
 Lee el `ClientProvider` más cercano.
 
 - **Devuelve** el cliente proporcionado.
-- **Lanza** fuera de un `ClientProvider`.
+- **Lanza** si se llama fuera de un `ClientProvider`.
 
 ## ClientProviderProps {#ClientProviderProps}
 

@@ -10,7 +10,7 @@ import {
   withHeaders,
   withHTTPHandle,
   withInterceptors,
-  withQueryParamsSerializer,
+  withQuerySerializer,
   withSSEHandle,
   withSSEOnInvalidEvent,
   withSSEReconnect,
@@ -18,7 +18,6 @@ import {
   withWebSocketBeforeConnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
-  withWebSocketOnInvalidEvent,
   withWebSocketProtocols,
   withWebSocketReconnect,
   withXSRF,
@@ -49,7 +48,7 @@ describe('Client', () => {
     const usePing = defineRequest({
       method: 'GET',
       path: '/ping',
-      input: struct.request({
+      input: struct.object({
         headers: struct.object({ override: struct.string().alias('X-Override') }),
       }),
       output: struct.object({ ok: struct.boolean() }),
@@ -105,14 +104,14 @@ describe('Client', () => {
       const request = new Request(input, init)
       expect(request.headers.get('x-custom-xsrf-token')).toBe('xsrf-token')
       expect(request.credentials).toBe('include')
-      expect(new URL(request.url).search).toBe('?serialized=q=zen')
+      expect(new URL(request.url).search).toBe('?serialized=zen')
       return new Response(JSON.stringify({ ok: true }), {
         headers: { 'content-type': 'application/json' },
         status: 200,
       })
     }) as unknown as typeof fetch
     const interceptor = createHttpInterceptor(async (request, next) => next(request))
-    const serializer = (params: URLSearchParams) => `serialized=${params.toString()}`
+    const serializer = (query: { [key: string]: unknown }) => `serialized=${String(query['q'])}`
     const tokenProvider = vi.fn(() => 'xsrf-token')
 
     const client = createClient(
@@ -121,7 +120,7 @@ describe('Client', () => {
       withHTTPHandle(customFetch),
       withSSEHandle(customFetch),
       withInterceptors(interceptor),
-      withQueryParamsSerializer(serializer),
+      withQuerySerializer(serializer),
       withXSRF({
         cookieName: 'CUSTOM-XSRF-TOKEN',
         headerName: 'X-CUSTOM-XSRF-TOKEN',
@@ -132,7 +131,7 @@ describe('Client', () => {
     const request = defineRequest({
       method: 'POST',
       path: '/items',
-      input: struct.request({ query: struct.object({ q: struct.string() }) }),
+      input: struct.object({ query: struct.object({ q: struct.string() }) }),
       output: struct.object({ ok: struct.boolean() }),
     })
     const [error, data] = await client.execute(request({ query: { q: 'zen' } }))
@@ -156,7 +155,6 @@ describe('Client', () => {
       withEndpoint('https://example.com'),
       withSSEOnInvalidEvent(onInvalidEvent),
       withSSEReconnect({ attempts: 5, delayMs: 500 }),
-      withWebSocketOnInvalidEvent(onInvalidEvent),
       withWebSocketHandle(MockWebSocket as unknown as typeof WebSocket),
       withWebSocketBeforeConnect(beforeConnect),
       withWebSocketProtocols(['json']),

@@ -44,13 +44,13 @@ function withInterceptors(...interceptors: Interceptor[]): ClientOption
 
 Appends interceptors in registration order. Mixed kinds are filtered per transport at execute time.
 
-### withQueryParamsSerializer() {#withQueryParamsSerializer}
+### withQuerySerializer() {#withQuerySerializer}
 
 ```ts
-function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-Replaces query encoding. `serializer(params, rawParams?)` must return the query string without a leading `?`.
+Replaces query encoding for HTTP, SSE, and WebSocket. `serializer(query)` receives the **encoded wire object** (aliases applied, `Date` as ISO, `bigint` as string) and must return the query string without a leading `?`. It is not called when the request has no query. A builder that returns `URLSearchParams` skips it.
 
 ### withHTTPHandle() {#withHTTPHandle}
 
@@ -134,10 +134,10 @@ type Client = {
 type ClientOption = (config: ClientConfig) => void
 ```
 
-### QueryParamsSerializer {#QueryParamsSerializer}
+### QuerySerializer {#QuerySerializer}
 
 ```ts
-type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
+type QuerySerializer = (query: { [key: string]: unknown }) => string
 ```
 
 ### ClientSSEOptions {#ClientSSEOptions}

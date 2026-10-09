@@ -32,6 +32,7 @@ describe('Client.execute', () => {
         createHttpInterceptor(async () =>
           makeResponse({
             body: { ok: true },
+            headers: new Headers({ 'content-type': 'application/json' }),
             status: 200,
           }),
         ),
@@ -78,12 +79,7 @@ describe('Client.execute', () => {
   test('client.execute dispatches web-socket command', async () => {
     const useChatSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
-      incoming: {
-        joined: struct.object({
-          roomId: struct.string(),
-          userId: struct.number(),
-        }),
-      },
+      incoming: struct.object({ type: struct.literal('joined'), roomId: struct.string(), userId: struct.number() }),
       path: '/ws/basic',
     })
 

@@ -1,6 +1,6 @@
 ---
 title: Defjs
-description: 명시적인 클라이언트와 error-first 결과로 타입을 갖춘 HTTP, SSE, WebSocket 명령을 다룹니다.
+description: 명시적인 클라이언트와 error-first 결과로 다루는, 타입이 있는 HTTP, SSE, WebSocket 명령이에요.
 ---
 
 # Defjs
@@ -21,7 +21,7 @@ const [error, result, response] = await client.execute(getHealth())
 if (!error) console.log(result.ok, response.status)
 ```
 
-Defjs는 결과를 캐시하지 않고, 대신 재시도하지 않으며, 잊은 스트림을 닫아주지도 않아요. 취소와 정리는 호출하는 쪽이 소유해요.
+Defjs는 결과를 캐시하지 않고, 대신 재시도해 주지 않으며, 잊은 스트림을 닫아 주지도 않아요. 취소와 정리는 호출하는 쪽이 소유해요.
 
 ## 전송 방식 고르기
 
@@ -54,7 +54,7 @@ Defjs는 결과를 캐시하지 않고, 대신 재시도하지 않으며, 잊은
 
 ## 소유권을 한 호흡으로
 
-HTTP는 더 이상 필요 없을 때 abort 해요. SSE는 닫고 `await stream.closed` 해요. WebSocket은 닫고 `await session.closed` 해요. 서버에서는 옵션이 쿠키, 인증, 테넌트 데이터를 담을 때 요청 경계 안에서 클라이언트를 만들어요. 로그하기 전에 URL, 헤더, body를 마스킹해요.
+HTTP는 낡았을 때 abort 해요. SSE는 닫고 `await stream.closed` 해요. WebSocket은 닫고 `await session.closed` 해요. 서버에서는 옵션이 쿠키, 인증, 테넌트 데이터를 담을 때 요청 경계 안에서 클라이언트를 만들어요. 로그하기 전에 URL, 헤더, body를 마스킹해요.
 
 ## 관련 레시피
 

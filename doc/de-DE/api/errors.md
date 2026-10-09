@@ -156,4 +156,4 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 Gemeinsame `cause`-/Message-Werte für Abort und Timeout. Einen davon aus einem Interceptor zu throwen ist die Art, wie ein Interceptor Cancellation ausdrückt.
 
-Siehe [Errors-Guide](/de-DE/core/errors).
+Siehe [Errors-Guide](/core/errors).

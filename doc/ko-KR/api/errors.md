@@ -3,7 +3,7 @@ title: 오류
 description: Fault의 변형들과 팩토리 helper.
 ---
 
-# Errors
+# 오류
 
 Execute는 판별 가능한 `Fault`를 튜플 첫 자리에 돌려줘요. 선언된 실패에 예외를 던지지는 않아요.
 
@@ -156,4 +156,4 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 abort와 timeout이 공유하는 `cause` / message 값이에요. 인터셉터에서 둘 중 하나를 throw하는 게 인터셉터가 취소를 표현하는 방법이에요.
 
-[Errors 가이드](/ko-KR/core/errors)를 보세요.
+[오류 가이드](/core/errors)를 보세요.

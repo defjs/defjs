@@ -119,23 +119,8 @@ describe('parse.ts object and composite values', () => {
     expect(parse(struct.intersection(struct.null(), struct.null()), null)).toEqual([null, null])
     expect(parse(struct.intersection(struct.unknown(), struct.string()), 'x')).toEqual([null, 'x'])
 
-    const Body = struct.request({ body: struct.json(struct.null()) })
+    const Body = struct.object({ body: struct.null() })
     expect(parse(Body, { body: null })).toEqual([null, { body: null }])
-  })
-
-  test('does not inherit optionality from a request-body inner struct', () => {
-    const Body = struct.json(struct.string().optional())
-    const [bodyError, bodyValue] = parse(Body, undefined)
-    expect(bodyError).toBeInstanceOf(StructError)
-    expect(bodyValue).toBeUndefined()
-    expect(parse(Body, 'hello')).toEqual([null, 'hello'])
-    expect(parse(Body.optional(), undefined)).toEqual([null, undefined])
-
-    const Request = struct.request({ body: Body })
-    const [requestError, requestValue] = parse(Request, { body: undefined })
-    expect(requestError).toBeInstanceOf(StructError)
-    expect(requestError?.issues[0]?.path).toEqual(['body'])
-    expect(requestValue).toBeUndefined()
   })
 
   test('does not inspect later union options or the right intersection after an earlier result', () => {
@@ -346,9 +331,9 @@ describe('parse.ts object and composite values', () => {
     })
   })
 
-  test('keeps request section output order path query headers body', () => {
-    const Input = struct.request({
-      body: struct.json(struct.object({ name: struct.string() })),
+  test('keeps object field output in declaration order', () => {
+    const Input = struct.object({
+      body: struct.object({ name: struct.string() }),
       headers: struct.object({ trace: struct.string() }),
       path: struct.object({ id: struct.string() }),
       query: struct.object({ page: struct.number().optional() }),
@@ -364,28 +349,25 @@ describe('parse.ts object and composite values', () => {
     if (error) {
       throw error
     }
-    expect(Object.keys(value)).toEqual(['path', 'query', 'headers', 'body'])
+    expect(Object.keys(value)).toEqual(['body', 'headers', 'path', 'query'])
 
     const [omittedError, omittedValue] = parse(Input, {
       body: { name: 'Miao' },
       headers: { trace: 'trace-1' },
       path: { id: 'u_1' },
     })
+    expect(omittedError).toBeInstanceOf(StructError)
+    expect(omittedError?.issues[0]?.path).toEqual(['query'])
+    expect(omittedValue).toBeUndefined()
 
-    if (omittedError) {
-      throw omittedError
-    }
-    expect(omittedValue.query).toEqual({})
-    expect(Object.keys(omittedValue)).toEqual(['path', 'query', 'headers', 'body'])
-
-    const RequiredQuery = struct.request({ query: struct.object({ page: struct.number() }) })
+    const RequiredQuery = struct.object({ query: struct.object({ page: struct.number() }) })
     const [missingError, missingValue] = parse(RequiredQuery, {})
     expect(missingError).toBeInstanceOf(StructError)
     expect(missingError?.issues[0]?.code).toBe('missing_key')
     expect(missingError?.issues[0]?.path).toEqual(['query'])
     expect(missingValue).toBeUndefined()
 
-    const OptionalBodyFields = struct.request({ body: struct.json(struct.object({ note: struct.string().optional() })) })
+    const OptionalBodyFields = struct.object({ body: struct.object({ note: struct.string().optional() }) })
     const [missingBodyError, missingBodyValue] = parse(OptionalBodyFields, {})
     expect(missingBodyError).toBeInstanceOf(StructError)
     expect(missingBodyError?.issues[0]?.path).toEqual(['body'])

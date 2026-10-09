@@ -16,8 +16,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session, startupConnection] = await client.execute(room())
@@ -28,6 +28,7 @@ if (error) {
   const unsubscribe = ownedSession.onRuntimeError((cause) => console.error('runtime', cause))
   try {
     ownedSession.send({ type: 'send', text: 'Hello' })
+    // wire: {"type":"send","text":"Hello"}
     for await (const message of ownedSession.receive) {
       console.log(message.type, message.text)
       break
@@ -38,25 +39,17 @@ if (error) {
 }
 ```
 
-## JSON envelope
+## 每個方向一個 struct
 
-`defineWebSocket(...)` 描述 JSON-message endpoint。Required `incoming` map 按 message type 揀 Struct；optional `outgoing` 對 `session.send(...)` 做同一樣。每條 wire message 係帶非空 string `type` 嘅 object。
-
-Object payload fields 坐喺 `type` 旁邊。Scalar 同 array payloads 用 envelope 嘅 `data` field：
+`incoming` 係每條 text frame 嘅一個 struct。`outgoing` 係 `session.send(...)` 嘅一個 struct。幾種 kinds 用 `struct.discriminatedUnion` model。嗰啲 fields 上面嘅 alias 就係兩個方向嘅 wire name。冇獨立 type envelope，亦冇 normalizer。
 
 ```json
-{ "type": "message", "userId": 7, "text": "Hello" }
+{ "type": "message", "text": "Hello" }
 ```
 
-```json
-{ "type": "count", "data": 3 }
-```
+Incoming text、`ArrayBuffer`、typed-array 同 `Blob` frames 會當 UTF-8 讀、JSON-parsed，再對住 `incoming` 檢查。Malformed JSON 同 struct failures 去 `session.onRuntimeError`，而且唔會入 queue。Session 保持開住。唔係 text、bytes 或者 `Blob` 嘅 frames 會被 ignore。冇 `withWebSocketOnInvalidEvent`。
 
-Message map 控制 payload，唔係 envelope discriminator。`incoming.default` 接受否則 undeclared 嘅 type names；冇佢嘅話，unknown types 會被 drop。Incoming text、`ArrayBuffer`、typed-array 同 `Blob` frames 會 decode 做 UTF-8 JSON。Malformed JSON 同 Struct failures 去 runtime-error observers — 唔去 `receive`。
-
-如果 object payload 有個 field 叫 `data`，encode 之後佢仍然坐喺 `type` 旁邊（唔係 nested envelope）。例子：`write` 配 `{ data: string, source: string }` wire 做 `{ type: 'write', data: string, source: string }`。Caller-side value 仍然係 `{ type: 'write', data: { data, source } }`，因為 serialization 之前 `data` 帶住 object payload。Aliases 套用喺 payload fields。`type` discriminator 屬於 envelope，唔屬於 Struct。
-
-`session.send(...)` 會 synchronous validate 同 serialize。Open 時即刻 send；`reconnecting` 期間如果有 outgoing queue 就 queue；唔 writable 就 throw `InvalidStateError`。冇 outgoing map、undeclared type、payload validation failure、disabled/full outgoing queue，或者 native send failure 都會 throw。
+`session.send(...)` 會 synchronous validate 同 serialize：struct encode，然後 `JSON.stringify`。Open 時即刻 send；`reconnecting` 期間如果有 outgoing queue 就 queue；唔 writable 就 throw `InvalidStateError`。冇 outgoing struct、payload 過唔到 struct、outgoing queue disabled 或者 full，或者 native send 失敗，都會 throw。Definition 上面嘅 static `protocols` list 係 endpoint contract（例如 `graphql-transport-ws`）。Execute options 同 `withWebSocketProtocols` 仍然可以 override；token-in-subprotocol 屬於 `beforeConnect` 或者 interceptor，唔係 builder。Builder 只可以 return `path` 同 `query`。
 
 `receive` 係 one-consumer。第二個 iterator 會被 reject。
 
@@ -110,7 +103,7 @@ const client = createClient(
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { ready: struct.object({ ok: struct.boolean() }) },
+  incoming: struct.object({ type: struct.literal('ready'), ok: struct.boolean() }),
 })
 const [error, session] = await client.execute(room())
 if (!error) {
@@ -127,7 +120,7 @@ WebSocket backoff jitter 係 **multiplicative**（`jitter: 0.2` → delay 喺 `0
 
 ## Heartbeat
 
-喺 execute 或者 client scope opt-in。Interval 會經 outgoing Struct map send `message()`。Optional `isAck(message)` 認 ack — 嗰條 message 會清 timeout，而且 **唔會** deliver 去 `receive`。
+喺 execute 或者 client scope opt-in。Interval 會經 outgoing struct send `message()`。Optional `isAck(message)` 認 ack — 嗰條 message 會清 timeout，而且 **唔會** deliver 去 `receive`。
 
 ```ts
 import { createClient, defineWebSocket, struct, withEndpoint } from '@defjs/core'
@@ -136,8 +129,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { pong: struct.object({ ok: struct.boolean() }) },
-  outgoing: { ping: struct.object({}) },
+  incoming: struct.discriminatedUnion('type', [struct.object({ type: struct.literal('pong'), ok: struct.boolean() })]),
+  outgoing: struct.object({ type: struct.literal('ping') }),
 })
 
 const [error, session] = await client.execute(room(), {
@@ -154,7 +147,7 @@ if (!error) {
 }
 ```
 
-`intervalMs` 同 `timeoutMs` 一定要係 ≤ `2_147_483_647` 嘅 positive finite timers。Heartbeat message 一定要符合 outgoing map。Serialization、native send、ack classification 同 timeout failures 對 logical session 係 fatal — 唔會變做 ordinary reconnects。
+`intervalMs` 同 `timeoutMs` 一定要係 ≤ `2_147_483_647` 嘅 positive finite timers。Heartbeat message 一定要符合 outgoing struct。Serialization、native send、ack classification 同 timeout failures 對 logical session 係 fatal — 唔會變做 ordinary reconnects。
 
 ## Queues
 
@@ -171,7 +164,7 @@ Incoming overflow 會清 pending sequence、fail `receive`、停 session，再�
 
 Definition `protocols`、client `withWebSocketProtocols(...)`，同 execute `protocols` 設定 constructor subprotocol list。Precedence：execution → client → definition。第一個 defined list 會 copy 畀 logical session，reconnect 時 reuse。
 
-Browser WebSocket constructors 唔接受 arbitrary handshake headers。Defjs 會將 `http:` → `ws:` 同 `https:` → `wss:`，path placeholders encode 一次，用 configured query serializer。WebSocket query building 亦會將 complex query values serialize 做 JSON（同 default HTTP scalar-only query 唔同）。
+Browser WebSocket constructors 唔接受 arbitrary handshake headers，builder 亦唔可以 return `headers` 或者 `body`。Defjs 會將 `http:` → `ws:` 同 `https:` → `wss:`，path placeholders encode 一次，query rules 同 HTTP 一樣：預設係 scalars 同重複 keys，nested objects 用 `withQuerySerializer`，冇 query 就唔會 call serializer。
 
 `withCredentials(true)` 係 HTTP/SSE 嘅 Fetch credentials — 唔係 WebSocket auth。用 reviewed cookie/session policy、subprotocol，或者 short-lived connection ticket。唔好將一般 credentials 或者 long-lived secrets 放 query string。
 
@@ -192,15 +185,13 @@ void observeSession
 
 `session.closed` 係 logical terminal snapshot：`'closed'`、`'aborted'` 或者 `'error'`，可選帶 native `code` / `reason` / `wasClean`，aborted/error 時仲有 `cause`。Observed native close fields 贏過 owner 要求嘅 fallback。
 
-Standard async disposer 會 request best-effort native close，再等 Defjs-owned lifecycle、message pump、timers、listeners、queues 同 socket references teardown。假如 1 秒內都 observe 唔到 close event，logical cleanup 會 forced complete，`closed` 會用 manual `kind: 'closed'` settle，但 disposer 會用名為 `TimeoutError` 嘅 `DOMException` reject。假如 native close call 自己 throw，cleanup 完成後 disposer 會用嗰個 error reject。重複 call disposer 會 share 同一個 teardown。以上結果全部都證明唔到 physical TCP connection 已經 close。
-
-自己 structural implement session 嘅 code，而家必須 provide 同一份 `[Symbol.asyncDispose](): PromiseLike<void>` contract。對 implementer 嚟講係 compile-time breaking change；淨係接收 Defjs session 嘅 consumer 唔使加新 runtime call。
+Standard async disposer 會 request best-effort native close，再等 Defjs-owned lifecycle、message-pump、timer、listener、queue 同 socket-reference teardown。假如 1 秒內都 observe 唔到 close event，teardown 會被 force，disposer 可能用名為 `TimeoutError` 嘅 `DOMException` reject；呢樣證明唔到 physical TCP connection 已經 close。重複 call disposer 會 share 同一個 teardown。自己 structural implement session 嘅 code，而家必須 provide 同一份 `[Symbol.asyncDispose](): PromiseLike<void>` contract。
 
 ## GraphQL boundary
 
-Defjs 提供 typed JSON envelope 同 logical session lifecycle。佢 **唔會** implement WebSocket application protocol。GraphQL-over-WebSocket features — connection init、operation IDs、`next`/`error`/`complete`、disposal、subscription replay — 都喺 core contract 之外。
+Defjs 提供一個 incoming struct、一個 outgoing struct，同 logical session lifecycle。佢 **唔會** implement WebSocket application protocol。GraphQL-over-WebSocket features — connection init、operation IDs、`next`/`error`/`complete`、disposal、subscription replay — 都喺 core contract 之外。
 
-Server 要求嗰個 protocol 時，用好似 `graphql-ws` 噉嘅 protocol client，或者用 `defineWebSocket(...)` model 自己嘅 envelope。淨係一個 message map 唔會 negotiate GraphQL semantics。
+Server 要求嗰個 protocol 時，用好似 `graphql-ws` 噉嘅 protocol client，或者用 `defineWebSocket(...)` model 嗰啲 frames。Static subprotocol 例如 `graphql-transport-ws` 放喺 `protocols`。淨係一個 struct 唔會 negotiate GraphQL semantics。
 
 ## Related recipes
 

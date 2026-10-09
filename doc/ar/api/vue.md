@@ -5,9 +5,9 @@ description: إضافة Vue ومفتاح الحقن وinjectClient.
 
 # Vue {#page}
 
-اربط عميل `@defjs/core` موجودًا في Vue. الحزمة **لا** تنشئ عملاء، ولا تخزّن نتائج، ولا تغلق النقل عند إلغاء التركيب.
+وفّر عميل `@defjs/core` موجودًا لتطبيق Vue. هذه الحزمة لا تنشئ العميل ولا تخزّنه ولا تتخلّص منه.
 
-انظر [دليل Vue](../plugins/vue.md).
+انظر [دليل Vue](/plugins/vue).
 
 ## createClientPlugin() {#createClientPlugin}
 

@@ -1,38 +1,122 @@
 name: Release
 
+# Manual, pick-what-you-want trigger. GitHub Actions has no native multi-select input, so each
+# target is its own checkbox in the "Run workflow" form; tick any combination. Package versions
+# are whatever is already committed in each packages/*/package.json — nothing here bumps them.
 on:
-  push:
-    tags:
-      - 'release-core-v*'
-      - 'release-opentelemetry-server-v*'
-      - 'release-react-v*'
-      - 'release-vue-v*'
+  workflow_dispatch:
+    inputs:
+      core:
+        description: Publish @defjs/core to npm
+        type: boolean
+        default: false
+      opentelemetry-server:
+        description: Publish @defjs/opentelemetry-server to npm
+        type: boolean
+        default: false
+      react:
+        description: Publish @defjs/react to npm
+        type: boolean
+        default: false
+      vue:
+        description: Publish @defjs/vue to npm
+        type: boolean
+        default: false
+      docs:
+        description: Deploy the docs site to GitHub Pages
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
-  publish:
+  core:
+    if: ${{ inputs.core }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.4.0
       - run: bun ci
-      - name: Resolve release target
-        id: target
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: bun scripts/release-target.ts "$RELEASE_TAG"
-      - name: Build selected package
-        working-directory: ${{ steps.target.outputs.package_dir }}
-        run: bun --bun run build
-      - name: Publish selected package
-        working-directory: ${{ steps.target.outputs.package_dir }}/dist
+      - run: bun --bun run build
+        working-directory: packages/core
+      - working-directory: packages/core/dist
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
         run: |
           printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
           npm publish --access public
+
+  opentelemetry-server:
+    if: ${{ inputs.opentelemetry-server }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - run: bun --bun run build
+        working-directory: packages/opentelemetry-server
+      - working-directory: packages/opentelemetry-server/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
+        run: |
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
+          npm publish --access public
+
+  react:
+    if: ${{ inputs.react }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - run: bun --bun run build
+        working-directory: packages/react
+      - working-directory: packages/react/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
+        run: |
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
+          npm publish --access public
+
+  vue:
+    if: ${{ inputs.vue }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - run: bun --bun run build
+        working-directory: packages/vue
+      - working-directory: packages/vue/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
+        run: |
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
+          npm publish --access public
+
+  docs:
+    if: ${{ inputs.docs }}
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - run: bun run build
+        working-directory: doc
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: doc/.vitepress/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4

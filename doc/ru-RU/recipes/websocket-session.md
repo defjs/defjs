@@ -5,7 +5,7 @@ description: Подключись, отправь один типизирова�
 
 # Открыть WebSocket-сессию
 
-JSON-envelope’ы используют непустой строковый `type`. Unsubscribe, `close` и `await session.closed` — на тебе.
+Каждое направление — один struct. Unsubscribe, `close` и `await session.closed` — на тебе. Невалидные кадры идут в `onRuntimeError`.
 
 Подробности — в [WebSocket](../core/web-socket.md).
 
@@ -17,8 +17,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session] = await client.execute(room())

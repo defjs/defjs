@@ -30,5 +30,5 @@ description: Ручной lookup пакетов воркспейса — фун�
 
 ## Связанное
 
-- [Начало работы](../guide/getting-started.md)
-- [GET с объявленным 404](../recipes/get-declared-404.md)
+- [Начало работы](/guide/getting-started)
+- [GET с объявленным 404](/recipes/get-declared-404)

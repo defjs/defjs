@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Schritt 2 — Request definieren
 
-Lege `src/get-user.ts` an. `struct.request(...)` hält Path-Werte getrennt von Query, Headers und Body.
+Lege `src/get-user.ts` an. Der Input-Struct ist der Wert des Callers. `builder` platziert diesen Wert auf dem Request. Hier ist der ganze Input das Path-Object, also füllen alias-freie Scalar-Fields `:id`.
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,18 +63,19 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` gibt den Builder zurück. Der Aufruf `getUser(...)` baut den opaken Command, den du an `client.execute(...)` übergibst.
+`output` ist der 2xx-Body. `error` ist jeder andere Status. Je ein Struct. Nutze `struct.or(...)` oder eine Discriminated Union, wenn diese Bodies auseinanderlaufen.
+
+`defineRequest(...)` gibt einen Endpoint zurück. Der Aufruf `getUser(...)` baut den opaken Command, den du an `client.execute(...)` übergibst. Der `builder` oben ist die Function, die Input platziert; er ist nicht der Endpoint.
 
 ## Schritt 3 — Lokal ausführen
 
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -175,7 +175,7 @@ Probier einen fehlenden User — ändere die Path-id auf `8` und lauf nochmal:
 User not found
 ```
 
-Bei Erfolg: `error` ist `null`, `user` ist der `200`-Struct-Output, `response` ist ein `HttpResponse`. Bei deklariertem `404`: `error.code` ist `'http'`, `error.status` ist `404`, und `error.data` ist typisiert als `NotFound`. Der zweite Tupel-Eintrag ist bei Fehler `undefined`.
+Bei Erfolg: `error` ist `null`, `user` ist der `200`-Struct-Output, `response` ist ein `HttpResponse`. Bei deklariertem `404`: `error.code` ist `'HTTP_STATUS'`, `error.status` ist `404`, und `error.data` ist typisiert als `NotFound`. Der zweite Tupel-Eintrag ist bei Fehler `undefined`.
 
 ## Schritt 4 — Auf eine echte API zeigen
 
@@ -205,13 +205,14 @@ Gleicher Command. Anderer Client.
 
 ## Wenn das Ergebnis abweicht
 
-- Schlechter Input → `REQ_INPUT_INVALID`; konfliktierende Cancel-Options → `REQ_OPTIONS_INVALID`; ein fehlschlagendes `build` → `REQ_BUILD_FAILED`
+- Schlechter Input → `REQ_INPUT_INVALID`; konfliktierende Cancel-Options → `REQ_OPTIONS_INVALID`; ein fehlschlagendes
+  `build` → `REQ_BUILD_FAILED`
 - Jedes Non-2xx → `HTTP_STATUS`, mit typisiertem `err.data`, wenn `error` deklariert war
 - Falscher Media-Type → `RES_MEDIA_TYPE_INVALID`, gemeldet bevor der Body gelesen wird
 - Ein deklarierter Body, der nicht dekodiert → `RES_DECODE_FAILED` oder `RES_STRUCT_MISMATCH`
 - Fetch-Fail / Cancel / Timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein. Gib nicht `abort` und `timeout` zusammen; `signal` kann mit jedem der beiden kombiniert werden. Cancellation sagt dir, was der Caller gesehen hat — nicht, ob ein Server-Write committed hat.
+`timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein. Gültige Cancel-Shapes: `{ timeout }`, `{ abort }` oder `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` zusammen ist ungültig. Cancellation sagt dir, was der Caller gesehen hat — nicht, ob ein Server-Write committed hat.
 
 ## Nächste Rezepte
 

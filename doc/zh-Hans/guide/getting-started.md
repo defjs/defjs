@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Step 2 — 定义请求
 
-建 `src/get-user.ts`。`struct.request(...)` 把 path 和 query、headers、body 分开。
+建 `src/get-user.ts`。Input struct 是调用方的值。`builder` 把这个值放到请求上。这里整个 input 就是 path 对象，所以没有 alias 的标量字段会填上 `:id`。
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,18 +63,19 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-`defineRequest(...)` 返回 builder。调用 `getUser(...)` 会打出 opaque command，再交给 `client.execute(...)`。
+`output` 是 2xx body。`error` 是其余每个状态。各一个 struct。这些 body 形状不同时，用 `struct.or(...)` 或判别联合。
+
+`defineRequest(...)` 返回 endpoint。调用 `getUser(...)` 打出 opaque command，再交给 `client.execute(...)`。上面的 `builder` 是摆放 input 的函数，它不是 endpoint。
 
 ## Step 3 — 本地执行
 
@@ -95,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -115,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -175,7 +175,7 @@ Loaded Ada from 200
 User not found
 ```
 
-成功时：`error` 是 `null`，`user` 是 `200` Struct 输出，`response` 是 `HttpResponse`。声明过的 `404`：`error.code` 是 `'http'`，`error.status` 是 `404`，`error.data` 类型是 `NotFound`。失败时第二项是 `undefined`。
+成功时：`error` 是 `null`，`user` 是 `200` Struct 输出，`response` 是 `HttpResponse`。声明过的 `404`：`error.code` 是 `'HTTP_STATUS'`，`error.status` 是 `404`，`error.data` 类型是 `NotFound`。失败时第二项是 `undefined`。
 
 ## Step 4 — 指向真实 API
 
@@ -211,7 +211,7 @@ void realClient
 - 声明过的 body 解不出来 → `RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`
 - Fetch 失败 / 取消 / 超时 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` 必须是 `1..2_147_483_647` 的正 safe integer。别同时传 `abort` 和 `timeout`；`signal` 可以跟其中任一个搭配。取消只说明调用方看到了什么——不代表服务端写入已经回滚。
+`timeout` 必须是 `1..2_147_483_647` 的正 safe integer。合法取消形状：`{ timeout }`、`{ abort }`，或 `{ signal, timeout }` / `{ signal, abort }`。`{ abort, timeout }` 一起传是非法的。取消只说明调用方看到了什么——不代表服务端写入已经提交。
 
 ## 接下来的配方
 

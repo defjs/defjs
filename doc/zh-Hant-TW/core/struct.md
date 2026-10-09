@@ -23,14 +23,11 @@ type User = Infer<typeof User>
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(
-      struct.object({
-        name: struct.string(),
-        email: struct.string(),
-      }),
-    ),
+  input: struct.object({
+    name: struct.string(),
+    email: struct.string(),
   }),
+  builder: (input) => ({ body: input }),
   output: User,
 })
 
@@ -72,11 +69,11 @@ if (error) throw error
 console.log(profile.name, profile.nickname, profile.biography, profile.note)
 ```
 
-在根層，optional 可以是 `undefined`。在物件裡，省略的 optional／nullish 欄位維持不存在。在 `struct.request(...)` 中，全 optional 的區段可以省略（正規化成 `{}`）；有必填欄位的區段仍必填。有 body wrapper → body 必填，就算內層欄位是 optional。
+在根層，optional 可以是 `undefined`。在物件裡，省略的 optional／nullish 欄位維持不存在。Request 形狀的 input 用名為 `path`、`query`、`headers`、`body` 的一般欄位。呼叫端可以省略時，把該欄位標成 `.optional()`。`body` 欄位若是必填，就算裡面每個欄位都是 optional，它仍是必填。
 
-## Request body wrappers
+## 放置 request
 
-`struct.request(...)` 拆開 `path`、`query`、`headers`、`body`。Bodies 需要明確的 codec：
+Path、query、headers、body 是 builder 回傳的欄位，不是一個 request struct。當 `input` 已經是那個形狀時，省略 `builder`。`struct.urlencoded(shape)` 與 `struct.formData(shape)` 是帶 codec tag 的物件 struct。Tag 只有在該值是 body 根時才跑：keys 用 aliases，陣列會重複欄位名稱。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -84,15 +81,13 @@ import { defineRequest, struct } from '@defjs/core'
 const createUser = defineRequest({
   method: 'POST',
   path: '/organizations/:organizationId/users',
-  input: struct.request({
+  input: struct.object({
     path: struct.object({ organizationId: struct.string() }),
     query: struct.object({ notify: struct.boolean().optional() }),
     headers: struct.object({ requestId: struct.string().alias('x-request-id') }),
-    body: struct.json(
-      struct.object({
-        displayName: struct.string().alias('display_name'),
-      }),
-    ),
+    body: struct.object({
+      displayName: struct.string().alias('display_name'),
+    }),
   }),
 })
 
@@ -105,17 +100,16 @@ const command = createUser({
 void command
 ```
 
-| Wrapper                    | 剖析後的值        | Wire 邊界                                                            |
-| -------------------------- | ----------------- | -------------------------------------------------------------------- |
-| `struct.json(inner)`       | 來自 `inner` 的值 | JSON 文字、`application/json`                                        |
-| `struct.text()`            | `string`          | 文字、`text/plain;charset=UTF-8`                                     |
-| `struct.urlencoded(shape)` | Shape 的物件      | `URLSearchParams`、`application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)`   | Shape 的物件      | `FormData`；平台設 multipart boundary                                |
-| `struct.blob()`            | `Blob`            | Blob type 或 `application/octet-stream`                              |
-| `struct.file()`            | `File`            | 原生 `File`（name + type）                                           |
-| `struct.arrayBuffer()`     | `ArrayBuffer`     | Buffer、`application/octet-stream`                                   |
+| Body 根                                         | 送出形式          | 預設 content type                                 |
+| ----------------------------------------------- | ----------------- | ------------------------------------------------- |
+| 型別化的 object、array、number、boolean、`null` | JSON 文字         | `application/json`                                |
+| `string` struct 或原始字串                      | 文字              | `text/plain;charset=UTF-8`                        |
+| 根上的 `struct.urlencoded(shape)`               | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| 根上的 `struct.formData(shape)`                 | `FormData`        | 平台 multipart boundary                           |
+| `Blob`／`File`                                  | 該 blob           | blob type 或 `application/octet-stream`           |
+| `ArrayBuffer`／view／stream                     | bytes             | `application/octet-stream`                        |
 
-`struct.file()` 是給 form fields 的值 Struct — 不是獨立的 `request.body`。Binary bodies 用 `struct.blob()` 與 `struct.arrayBuffer()`。裸的 object／array／primitive Structs 不能當 `request.body`。SSE 拒絕 `body`。WebSocket request input 拒絕 `body` 與 `headers`。
+`struct.file()` 是給 form 欄位與裸 file body 用的值 struct。WebSocket builder 不能回傳 `headers` 或 `body`。HTTP 與 SSE 可以。`GET` 與 `HEAD` 不行。
 
 ## Aliases
 
@@ -138,12 +132,23 @@ console.log(wireError?.issues[0]?.path)
 
 | 邊界                                       | 欄位                      |
 | ------------------------------------------ | ------------------------- |
-| `struct.parse(User, ...)`                  | 邏輯 `displayName`        |
-| JSON request 編碼                          | Wire `display_name`       |
-| JSON 回應解碼                              | Wire → 邏輯 `displayName` |
-| Query、header、URL-encoded、multipart 編碼 | Wire alias 當 key         |
+| `struct.parse(User, ...)` 與 command input | 邏輯 `displayName`        |
+| 交給 builder 的型別化物件                  | Wire `display_name`       |
+| JSON／SSE／WebSocket 解碼                  | Wire → 邏輯 `displayName` |
+| Builder 裡寫的匿名物件                     | 你寫下的那個 key          |
 
-Aliases 可作用在巢狀欄位、arrays、objects、unions、discriminators。應用程式碼用邏輯名稱；外部命名放在 Struct。
+Aliases 可作用在巢狀欄位、arrays、objects、unions、discriminators。應用程式碼用邏輯名稱；外部名稱在 struct 上宣告一次。展開型別化物件會保留那套編碼。在同一個物件裡同時設定邏輯欄位和它的 wire key 是 `REQ_BUILD_FAILED`。自己對值做 `JSON.stringify` 就離開這條路徑：serializer 看到的是邏輯名稱。
+
+引導在每個節點決定，不只在根上。匿名父物件底下新寫的物件保留你寫下的 key。帶型別的父物件底下，同一個物件改用該欄位的 struct。
+
+```ts
+body: { row: { id: '42' } }              // 根匿名：发出 id
+body: { ...input, row: { id: '42' } }    // 根带类型，row 字段声明了 alias：发出 wire_id
+```
+
+union 引導同時命中多個分支時，每個分支都編碼再比較。線上結果一致就採用；有差異就是 `REQ_BUILD_FAILED`。
+
+混合 intersection（包含非 object 部分）解析時，標籤是各匹配部分既有標籤的合取；未經解析、新寫的混合 intersection 值按匿名物件處理。
 
 ## 剖析失敗
 
@@ -164,7 +169,7 @@ if (error) {
 void value
 ```
 
-`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。Issues 可能持有不可信 input — 記錄或回傳前先遮罩。`struct.parse(..., { errorMap })` 只覆蓋那一次 parse 的文案。
+`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。Issues 可能持有不可信 input — 記錄或回傳前先遮罩。`struct.parse(..., { errorMap })` 只覆蓋那一次 parse 的文案。
 
 Struct 驗證只做結構。沒有公開的 range、format、refinement、auth 或狀態轉移規則。那些檢查在建 command 之前做。
 
@@ -190,36 +195,19 @@ const Status = struct.enum(['draft', 'published'])
 const FileValue = struct.file()
 const Form = struct.formData({ file: struct.file() })
 const Combined = struct.intersection(struct.object({ id: struct.number() }), struct.object({ name: struct.string() }))
-const JsonBody = struct.json(struct.object({ ok: struct.boolean() }))
 const Literal = struct.literal('ready')
 const NullValue = struct.null()
 const NumberValue = struct.number()
 const ObjectValue = struct.object({ id: struct.number() })
 const Union = struct.or(struct.string(), struct.number())
 const RecordValue = struct.record(struct.number())
-const Request = struct.request({ path: struct.object({ id: struct.number() }) })
 const StringValue = struct.string()
-const TextBody = struct.text()
 const Tuple = struct.tuple([struct.string(), struct.number()])
 const Unknown = struct.unknown()
 const FormUrlEncoded = struct.urlencoded({ name: struct.string() })
 
 void [Any, ArrayOfStrings, Bytes, BigIntValue, BlobValue, BooleanValue, DateValue, Discriminated, Status, FileValue, Form, Combined]
-void [
-  JsonBody,
-  Literal,
-  NullValue,
-  NumberValue,
-  ObjectValue,
-  Union,
-  RecordValue,
-  Request,
-  StringValue,
-  TextBody,
-  Tuple,
-  Unknown,
-  FormUrlEncoded,
-]
+void [Literal, NullValue, NumberValue, ObjectValue, Union, RecordValue, StringValue, Tuple, Unknown, FormUrlEncoded]
 ```
 
 | Constructor                      | Input                                   | 推導輸出                 |
@@ -245,6 +233,7 @@ Facade 的非 promise 注意事項：
 - `struct.number()` 拒絕 `NaN`，接受 infinities。
 - `struct.or(...)` 依序試分支；分支不同意時拒絕歧義編碼。
 - `struct.intersection(...)` 依宣告順序剖析 members。
+- intersection 會深合併 members 的輸出（`Object.is` 相等的值與時間相同的 Date 保留，plain objects 與等長 arrays 遞迴合併，其餘衝突是該 path 上的 `invalid_intersection`），`unknown` / `any` 不貢獻輸出，同一個邏輯 key 可以對應多個 wire key；只有同一個 wire key 上寫入了不相等的值才是衝突。
 - Struct 驗證邊界；它不會快取、授權，或擁有傳輸資源。
 
 ## 相關 recipes

@@ -19,7 +19,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -45,4 +45,4 @@ if (error) {
 hello from the server
 ```
 
-SSE ne réessaie pas les échecs réseau ou de lecture par défaut. Active les retries explicitement avec `withSSEReconnect(...)`. Lorsque reconnect est configuré, `attempts` vaut `3` par défaut ; `attempts: 0` désactive les retries.
+SSE ne relance pas les échecs réseau ou de lecture sauf si tu actives `withSSEReconnect(...)`. Avec un objet reconnect, `attempts` vaut `3` par défaut ; `attempts: 0` désactive le retry.

@@ -46,7 +46,7 @@ deno add npm:@defjs/core
 
 ## Step 2 — Define the request
 
-Create `src/get-user.ts`. `struct.request(...)` keeps path values separate from query, headers, and body.
+Create `src/get-user.ts`. The input struct is the caller's value. `builder` places that value on the request. Here the whole input is the path object, so alias-free scalar fields fill `:id`.
 
 ```ts get-user.ts
 import { defineRequest, struct } from '@defjs/core'
@@ -63,20 +63,19 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
 
-const command = getUser({ path: { id: 7 } })
+const command = getUser({ id: 7 })
 void command
 ```
 
-Prefer the `output` array for Getting Started and most recipes. Use a status→body map when you extract declarations into variables. A multi-status group like `status: [400, 409]` must stay in the array form.
+`output` is the 2xx body. `error` is every other status. One struct each. Use `struct.or(...)` or a discriminated union when those bodies differ.
 
-`defineRequest(...)` returns the builder. Calling `getUser(...)` builds the opaque command you’ll pass to `client.execute(...)`.
+`defineRequest(...)` returns an endpoint. Calling `getUser(...)` builds the opaque command you’ll pass to `client.execute(...)`. The `builder` above is the function that places input; it is not the endpoint.
 
 ## Step 3 — Execute it locally
 
@@ -97,9 +96,8 @@ const NotFound = struct.object({
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: User,
   error: NotFound,
 })
@@ -117,7 +115,7 @@ const handle: typeof fetch = async (input, init) => {
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 
-const [error, user, response] = await client.execute(getUser({ path: { id: 7 } }), {
+const [error, user, response] = await client.execute(getUser({ id: 7 }), {
   timeout: 5_000,
 })
 
@@ -177,7 +175,7 @@ Try a missing user — change the path id to `8` and run again:
 User not found
 ```
 
-On success: `error` is `null`, `user` is the `200` Struct output, `response` is an `HttpResponse`. On a declared `404`: `error.code` is `'http'`, `error.status` is `404`, and `error.data` is typed `NotFound`. The second tuple item is `undefined` on failure.
+On success: `error` is `null`, `user` is the `200` Struct output, `response` is an `HttpResponse`. On a declared `404`: `error.code` is `'HTTP_STATUS'`, `error.status` is `404`, and `error.data` is typed `NotFound`. The second tuple item is `undefined` on failure.
 
 ## Step 4 — Point at a real API
 

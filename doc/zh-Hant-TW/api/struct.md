@@ -17,7 +17,7 @@ const User = struct.object({
   displayName: struct.string().alias('display_name'),
 })
 
-const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
 ### 純量與容器
@@ -33,21 +33,23 @@ const [error, user] = struct.parse(User, { id: 1, display_name: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | 聯集                                                                    |
 | `struct.enum(values)`                                                       | 字串清單或 `{ Name: value }` map                                        |
 
-### Request／body helpers
+### Body codecs 與二進位值
 
-| Helper                                                                         | 用途                        |
-| ------------------------------------------------------------------------------ | --------------------------- |
-| `struct.request({ path?, query?, headers?, body? })`                           | HTTP／SSE／WS 的 input 區段 |
-| `struct.json(inner)` / `text(inner)` / `formData(inner)` / `urlencoded(inner)` | 編碼後的 bodies             |
-| `struct.arrayBuffer()` / `blob()` / `file()`                                   | 二進位                      |
+| Helper                                         | 用途                                                                              |
+| ---------------------------------------------- | --------------------------------------------------------------------------------- |
+| `struct.formData(shape)` / `urlencoded(shape)` | 物件 struct 加上 codec tag。只有該值是 request body 根時，tag 才生效              |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | 二進位值。當 body 根時以 bytes 送出；當 `output`／`error` 時選那個 representation |
+| `struct.string()`                              | 文字。當 body 根，或當入站的 `string` struct 時，bytes 維持文字                   |
 
 ### struct.parse() {#struct.parse}
 
 ```ts
-function parse<S>(struct: S, value: unknown): ParseResult<Infer<S>>
+function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; errorMap?: ErrorMap }): ParseResult<Infer<S>>
 ```
 
 - **回傳** `[null, value]` 或 `[StructError, undefined]`。
+- 選填的 `errorMap` 只改這一次 parse 的 issue 文案。
+- 預設讀**邏輯** keys（`displayName`）。傳 `{ aliases: true }` 會讀 wire keys（`display_name`），跟 HTTP／JSON codecs 一樣。
 
 ## ErrorMap {#ErrorMap}
 
@@ -83,13 +85,13 @@ class StructError extends Error {
 }
 ```
 
-`StructIssue`：`path`、`code`、`expected`、`received`、`message`。
+`StructIssue`：`path`、`code`、`expected`、`received`、`message`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。
 
-見 [Struct 指南](../core/struct.md)。
+見 [Struct 指南](/core/struct)。
 
 ## Struct {#Struct}
 
-能 parse 的形狀：input/output 型別，加上 `.optional()`、`.null()`、`.nullish()`、`.alias()`。
+能 parse 的形狀：input／output 型別，加上 `.optional()`、`.null()`／`.nullable()`、`.nullish()`、`.alias()`。
 
 ## StructLike {#StructLike}
 
@@ -97,19 +99,15 @@ class StructError extends Error {
 
 ## StructMethods {#StructMethods}
 
-`.alias()`, `.null()`, `.nullish()`, `.optional()`.
+`.alias()`、`.null()`／`.nullable()`、`.nullish()`、`.optional()`。
 
 ## ObjectStruct {#ObjectStruct}
 
 `struct.object` 做出來的物件形狀。
 
-## RequestStruct {#RequestStruct}
-
-`struct.request` 分段的 HTTP／SSE／WS input。
-
 ## StructIssue {#StructIssue}
 
-`path`, `code`, `expected`, `received`, `message`.
+`path`、`code`、`expected`、`received`、`message`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。
 
 ## FormattedStructError {#FormattedStructError}
 

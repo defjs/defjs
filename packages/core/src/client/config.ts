@@ -2,15 +2,16 @@ import type { Interceptor } from '../interceptor/interceptor'
 import type { HttpRequest } from '../internal/http_request'
 
 /**
- * Serializes query parameters for the request URL.
+ * Serializes an encoded query object into a query string.
  *
- * @param params - Normalized `URLSearchParams` built from the request.
- * @param rawParams - Optional original param object before normalization.
- * @returns The query string (without a leading `?`).
+ * `query` is the wire object: aliases already applied, `Date` values already ISO
+ * strings, `bigint` values already strings. Nested objects and arrays are preserved.
+ * The returned string is used verbatim and is not passed through `URLSearchParams`.
+ *
+ * @param query - Encoded query object.
+ * @returns The query string without a leading `?`.
  */
-export type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
-
-export const DEFAULT_QUERY_PARAMS_SERIALIZER: QueryParamsSerializer = (params) => params.toString()
+export type QuerySerializer = (query: { [key: string]: unknown }) => string
 
 /**
  * Fetch-compatible function used as an HTTP or SSE handle.
@@ -80,8 +81,6 @@ export interface ClientWebSocketOptions {
     /** Return `false` to skip reconnecting for this close. */
     shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
   }
-  /** Called when an incoming message has no matching struct (unknown `type`). Struct/JSON failures still use `onRuntimeError`. */
-  onInvalidEvent?: (context: { reason: 'missing-struct'; message: { type: string; data: unknown } }) => unknown
 }
 
 /** Optional SSE settings applied when creating a client. */
@@ -133,8 +132,8 @@ export interface HttpClientOptions {
   http?: { handle?: FetchHandle }
   /** Interceptors applied in registration order. */
   interceptors?: Interceptor[]
-  /** Custom query-string serializer. */
-  queryParamsSerializer?: QueryParamsSerializer
+  /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
+  querySerializer?: QuerySerializer
   /** Default HTTP execute timeout in milliseconds (SSE/WebSocket ignore this). */
   timeout?: number
   /** XSRF cookie/header mapping and optional token provider. */
@@ -168,8 +167,8 @@ export interface HttpClientConfig {
   http: { handle: FetchHandle }
   /** Interceptors applied in registration order. */
   interceptors: Interceptor[]
-  /** Query-string serializer used for requests. */
-  queryParamsSerializer: QueryParamsSerializer
+  /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
+  querySerializer?: QuerySerializer
   /** Default HTTP execute timeout in milliseconds (SSE/WebSocket ignore this). */
   timeout?: number
   /** Resolved XSRF settings when enabled. */
@@ -193,7 +192,18 @@ export interface ClientConfig extends HttpClientConfig {
   webSocket: ClientWebSocketOptions
 }
 
-const DEFAULT_FETCH: FetchHandle = globalThis.fetch.bind(globalThis)
+const PLATFORM_FETCH = globalThis.fetch
+
+/**
+ * The library default handle. The HTTP transport recognizes it by identity: only it is the platform fetch called with the
+ * request signal, so only it may be called as `(url, init)` and have its body read in one piece.
+ */
+export const DEFAULT_FETCH: FetchHandle = PLATFORM_FETCH.bind(globalThis)
+
+/** `DEFAULT_FETCH` while the global fetch is untouched; a replaced global is an ordinary custom handle. */
+export function resolveGlobalFetch(): FetchHandle {
+  return globalThis.fetch === PLATFORM_FETCH ? DEFAULT_FETCH : globalThis.fetch.bind(globalThis)
+}
 
 export const DEFAULT_HTTP_OPTIONS: { handle: FetchHandle } = {
   handle: DEFAULT_FETCH,
@@ -210,7 +220,6 @@ export function createHttpClientConfig(): HttpClientConfig {
     endpoint: '',
     http: { ...DEFAULT_HTTP_OPTIONS },
     interceptors: [],
-    queryParamsSerializer: DEFAULT_QUERY_PARAMS_SERIALIZER,
     xsrf: undefined,
   }
 }
@@ -223,7 +232,6 @@ export function createClientConfig(): ClientConfig {
       handle: globalThis.WebSocket,
       beforeConnect: undefined,
       heartbeat: undefined,
-      onInvalidEvent: undefined,
       protocols: undefined,
       reconnect: undefined,
     },

@@ -26,6 +26,8 @@ const client = createClient(withEndpoint('https://api.example.com'))
 
 ## Option-Helfer
 
+Alle Helper geben `ClientOption` zurück.
+
 ### withEndpoint() {#withEndpoint}
 
 ```ts
@@ -42,13 +44,13 @@ function withInterceptors(...interceptors: Interceptor[]): ClientOption
 
 Hängt Interceptors in Registration-Order an. Gemischte Kinds werden zur Execute-Zeit nach Transport gefiltert.
 
-### withQueryParamsSerializer() {#withQueryParamsSerializer}
+### withQuerySerializer() {#withQuerySerializer}
 
 ```ts
-function withQueryParamsSerializer(serializer: QueryParamsSerializer): ClientOption
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-Ersetzt Query-Encoding. `serializer(params, rawParams?)` muss den Query-String ohne führendes `?` zurückgeben.
+Ersetzt Query-Encoding für HTTP, SSE und WebSocket. `serializer(query)` bekommt das **encodierte Wire-Objekt** (Aliasse angewandt, `Date` als ISO, `bigint` als String) und muss den Query-String ohne führendes `?` zurückgeben. Ohne Query wird er nicht aufgerufen. Ein Builder, der `URLSearchParams` zurückgibt, überspringt ihn.
 
 ### withHTTPHandle() {#withHTTPHandle}
 
@@ -132,23 +134,23 @@ type Client = {
 type ClientOption = (config: ClientConfig) => void
 ```
 
-### QueryParamsSerializer {#QueryParamsSerializer}
+### QuerySerializer {#QuerySerializer}
 
 ```ts
-type QueryParamsSerializer = (params: URLSearchParams, rawParams?: { [key: string]: unknown }) => string
+type QuerySerializer = (query: { [key: string]: unknown }) => string
 ```
 
 ### ClientSSEOptions {#ClientSSEOptions}
 
 ### ClientWebSocketOptions {#ClientWebSocketOptions}
 
-SSE: `handle`, `onInvalidEvent`, `reconnect` (`attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, `shouldReconnect`).
+SSE: `handle`, `onInvalidEvent`, `reconnect` (`attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, `shouldReconnect`). SSE-`jitter` ist ein multiplikativer Faktor von 0–1, genau wie bei WebSocket. Ist SSE-`reconnect` gesetzt, ist der Default für `attempts` **3**; `attempts: 0` schaltet aus. `withSSEReconnect` weglassen schaltet Retry ebenfalls aus.
 
-WebSocket: `handle`, `beforeConnect`, `heartbeat` (`intervalMs`, `message`, `isAck`, `timeoutMs`), `protocols`, `reconnect` (gleiche Shape wie SSE plus Close `code` / `reason` / `wasClean`).
+WebSocket: `handle`, `beforeConnect`, `heartbeat` (`intervalMs`, `message`, `isAck`, `timeoutMs`), `protocols`, `reconnect` (gleiche Shape wie SSE plus Close `code` / `reason` / `wasClean`). Ist WebSocket-`reconnect` gesetzt, ist der Default für `attempts` **3**; `0` schaltet aus. `attempts` weglassen heißt nicht unbegrenzt. WebSocket-`jitter` ist ein multiplikativer Faktor von 0–1.
 
 `ClientConfig` ist der resolved Snapshot (`endpoint`, `http`, `sse`, `webSocket`, `interceptors`, …). `ClientOptions` ist das input-förmige Gegenstück.
 
-Siehe [Client-Guide](../core/client.md).
+Siehe [Client-Guide](/core/client).
 
 ## ClientOptions {#ClientOptions}
 
@@ -156,7 +158,7 @@ Input-förmiges Config: `endpoint`, `http`, `sse`, `webSocket`, `interceptors`, 
 
 ## ClientConfig {#ClientConfig}
 
-Snapshot, nachdem die Option-Helpers gelaufen sind.
+Aufgelöster Snapshot, nachdem die Option-Helper angewandt wurden.
 
 ## ClientSSEConfig {#ClientSSEConfig}
 
@@ -164,7 +166,7 @@ Aufgelöstes SSE-Config auf `ClientConfig.sse`.
 
 ## WebSocketHandle {#WebSocketHandle}
 
-Minimale WebSocket-Instanzfläche, die der Transport anfasst.
+Minimale WebSocket-Instanzfläche, die der Transport nutzt.
 
 ## WebSocketHandleConstructor {#WebSocketHandleConstructor}
 

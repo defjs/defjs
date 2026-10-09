@@ -15,6 +15,8 @@ import { createClient, withEndpoint } from '@defjs/core'
 const client = createClient(withEndpoint('https://api.example.com'))
 ```
 
+`createClient(...)` はコマンド種別ごとのオーバーロードを返します。
+
 ## options を合成する
 
 options は左から右へ適用されます。setter は置換、`withInterceptors(...items)` は追記です。
@@ -53,34 +55,37 @@ import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } fro
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 
 const handle: typeof fetch = async () => Response.json({ id: 7, name: 'Ada' })
 const client = createClient(withEndpoint('https://fixture.invalid'), withHTTPHandle(handle))
-const [error, user] = await client.execute(getUser({ path: { id: 7 } }))
+const [error, user] = await client.execute(getUser({ id: 7 }))
 if (!error) console.log(user.name)
 ```
 
 ## サーバーとブラウザーでのスコープ
 
-サーバーでは、options やインターセプターのクロージャが認証・cookie・ユーザー・テナントを掴むなら、クライアントをリクエスト境界の中で作ります。クライアントの同一性そのものがセキュリティ境界ではありません.
+サーバーでは、options やインターセプターのクロージャが認証・cookie・ユーザー・テナントを掴むなら、クライアントをリクエスト境界の中で作ります。クライアントの同一性そのものがセキュリティ境界ではありません。
 
 ## Reference
 
-| ヘルパー                                                                                                      | 効果                                                   |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| `withEndpoint(url)`                                                                                           | 全トランスポートの絶対ベースエンドポイント             |
-| `withHTTPHandle(fetch)`                                                                                       | HTTP の Fetch を差し替え                               |
-| `withSSEHandle(fetch)`                                                                                        | SSE の Fetch を差し替え                                |
-| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket コンストラクタを差し替え                     |
-| `withInterceptors(...items)`                                                                                  | 混在インターセプターを追記                             |
-| `withQueryParamsSerializer(fn)`                                                                               | query シリアライズを差し替え                           |
-| `withCredentials(boolean)`                                                                                    | true のとき HTTP/SSE で Fetch `credentials: 'include'` |
-| `withXSRF(options?)`                                                                                          | HTTP の XSRF cookie → ヘッダー                         |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE のつまみ                                           |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket のつまみ                                     |
+| ヘルパー                                                                                                      | 効果                                                                   |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | 全トランスポートの絶対ベースエンドポイント                             |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE の静的なデフォルトヘッダー。コマンドのヘッダーが上書きする    |
+| `withTimeout(ms)`                                                                                             | HTTP の `execute` のデフォルト timeout だけ（SSE/WS は無視する）       |
+| `withHTTPHandle(fetch)`                                                                                       | HTTP の Fetch を差し替え                                               |
+| `withSSEHandle(fetch)`                                                                                        | SSE の Fetch を差し替え                                                |
+| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket コンストラクタを差し替え                                     |
+| `withInterceptors(...items)`                                                                                  | 混在インターセプターを追記                                             |
+| `withQuerySerializer(fn)`                                                                                     | エイリアス適用済みの query オブジェクトを query 文字列にエンコードする |
+| `withCredentials(boolean)`                                                                                    | true のとき HTTP/SSE で Fetch `credentials: 'include'`                 |
+| `withXSRF(options?)`                                                                                          | HTTP の XSRF cookie → ヘッダー                                         |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE のつまみ                                                           |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket のつまみ                                                     |
 
 ## 関連レシピ
 

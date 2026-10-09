@@ -1,13 +1,13 @@
 ---
-title: Errors
-description: Ветвись по замкнутому набору fault-кодов для 404, таймаутов, нечитаемых тел и transport failure.
+title: Ошибки
+description: Ветвись по одному замкнутому набору кодов fault для 404, timeout, нечитаемых тел и сбоев транспорта.
 ---
 
-# Errors
+# Ошибки
 
-Обрабатывай 404, таймаут или нечитаемое тело, читая error-first кортеж, а не отлавливая throw. `Fault` — это нативный `Error` (`instanceof Error` истинно), размеченный одним полем: `code`.
+404, timeout или нечитаемое тело обрабатывай, читая error-first кортеж, а не ловя throw. `Fault` — нативный `Error` (`instanceof Error` истинен), размеченный одним полем: `code`.
 
-Никакого `kind` нет. Класс провала — это отрезок до первого `_` в его коде, так что `NET_TIMEOUT` — провал класса `NET`, а `RES_STRUCT_MISMATCH` — класса `RES`. Читай префикс для грубой сортировки и код целиком для точного случая.
+`kind` нет. Класс провала — отрезок до первого `_` в коде, так что `NET_TIMEOUT` — провал `NET`, а `RES_STRUCT_MISMATCH` — провал `RES`. Префикс читай для грубой сортировки, весь код — для точного случая.
 
 ## Базовая настройка
 
@@ -18,12 +18,13 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.request({ path: struct.object({ id: struct.number() }) }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const [err, user, response] = await client.execute(getUser({ path: { id: 7 } }))
+const [err, user, response] = await client.execute(getUser({ id: 7 }))
 if (err?.code === 'HTTP_STATUS' && err.status === 404) {
   console.log(err.data.message)
 } else if (err?.code === 'NET_TIMEOUT') {
@@ -35,7 +36,7 @@ if (err?.code === 'HTTP_STATUS' && err.status === 404) {
 }
 ```
 
-Поскольку набор замкнут, `switch` по `code` исчерпывающий:
+Раз набор замкнут, `switch` по `code` исчерпывающий:
 
 ```typescript twoslash
 import { createNetworkFault, ERR_ABORTED, type Fault } from '@defjs/core'
@@ -75,27 +76,27 @@ console.log(triage(example))
 
 ## Стабильные коды
 
-| Класс  | Коды                                                                   | Кому придётся меняться                             |
+| Класс  | Коды                                                                   | Кому меняться                                      |
 | ------ | ---------------------------------------------------------------------- | -------------------------------------------------- |
 | `HTTP` | `HTTP_STATUS`                                                          | Пир ответил non-2xx; обрабатывай как бизнес-логику |
-| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | Вызов или объявление endpoint                      |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | Вызов или объявление эндпоинта                     |
 | `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Никому, или ретрай                                 |
-| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | Объявление и пир нужно согласовать                 |
-| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Код, который ты подключил к конвейеру              |
-| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | Объявленный предел или темп потребителя            |
-| `ENV`  | `ENV_UNSUPPORTED`                                                      | Хостовая runtime                                   |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | Объявление и пир надо свести                       |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Код, который ты повесил на pipeline                |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | Объявленный лимит или темп consumer                |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | Рантайм хоста                                      |
 
-Набор замкнут намеренно: именно это держит `switch` исчерпывающим. Расширения сообщают свою деталь через `cause`, а не через новый код.
+Набор замкнут нарочно: именно это держит `switch` исчерпывающим. Расширения сообщают свою деталь через `cause`, а не через новый код.
 
 ### Поля по форме
 
-| Код           | `status`    | `response`                                                           | `data`                                      |
-| ------------- | ----------- | -------------------------------------------------------------------- | ------------------------------------------- |
-| `HTTP_STATUS` | Всегда      | Всегда; `body` есть только если `error` был объявлен и декодировался | Декодированное `error`-тело или `undefined` |
-| `RES_*`       | Всегда      | Всегда, только метаданные — **без `body`**                           | Отсутствует                                 |
-| Всё остальное | Отсутствует | Только там, где у транспорта уже были метаданные                     | Отсутствует                                 |
+| Код           | `status` | `response`                                                      | `data`                                      |
+| ------------- | -------- | --------------------------------------------------------------- | ------------------------------------------- |
+| `HTTP_STATUS` | Всегда   | Всегда; `body` есть, только если `error` объявлен и декодирован | Декодированное тело `error` или `undefined` |
+| `RES_*`       | Всегда   | Всегда, только метаданные — **нет `body`**                      | Нет                                         |
+| Всё остальное | Нет      | Только там, где у транспорта уже были метаданные                | Нет                                         |
 
-`cause` несёт нижележащее значение: `StructError` при расхождении struct, провал парсера при нечитаемой representation, всё, что бросило расширение.
+`cause` несёт нижележащее значение: `StructError` при расхождении struct, провал парсера при нечитаемой representation, что бы ни бросило расширение.
 
 ## Формы кортежа по транспортам
 
@@ -123,36 +124,36 @@ const results: [HttpResult, SseResult, SocketResult] | undefined = undefined
 void results
 ```
 
-При HTTP-провале третий слот — `undefined`: fault уже несёт те метаданные response, которые были. Это важно потому, что именно fault ты передаёшь в handler, логируешь или перебрасываешь, — значит, метаданные должны путешествовать _вместе_ с ним, а не рядом.
+При HTTP-провале третий слот — `undefined`: fault уже несёт те метаданные ответа, что были. Это важно, потому что fault — то, что ты отдаёшь handler’у, логируешь или пробрасываешь, так что метаданные должны ехать _вместе_ с ним, а не рядом.
 
-У SSE и WebSocket третий слот — снимок старта, и он может присутствовать даже когда старт провалился. После того как handle или session вернулись, дальнейшие провалы живут в их жизненном цикле — они никогда не перезаписывают уже устоявшийся кортеж старта.
+У SSE и WebSocket третий слот — снимок старта, который может быть даже когда старт упал. После возврата handle или session поздние провалы живут на его lifecycle — осевший кортеж старта они не переписывают.
 
 ## Как читается тело
 
-`ok` — единственная развилка, и декодирует всегда одна сторона. `output` читает тело 2xx; `error` читает всё остальное. Пропустить один значит, что это тело не прочитают.
+`ok` — единственная развилка, и декодирует всегда одна сторона. `output` читает тело 2xx; `error` читает всё остальное. Пропустить сторону значит, что это тело не читают.
 
-| Ситуация                                               | Итог                                                    |
-| ------------------------------------------------------ | ------------------------------------------------------- |
-| 2xx, `output` объявлен, тело декодировалось            | Успех; `data` и `response.body` типизированы            |
-| 2xx, `output` пропущен                                 | Успех; `data` — `undefined`, у response нет `body`      |
-| Non-2xx, `error` объявлен, тело декодировалось         | `HTTP_STATUS` с типизированным `data`                   |
-| Non-2xx, `error` пропущен                              | `HTTP_STATUS` с `data: undefined`                       |
-| Media type не тот, который нужен representation        | `RES_MEDIA_TYPE_INVALID`, сообщается **до** чтения тела |
-| Байты не являются этой representation                  | `RES_DECODE_FAILED`                                     |
-| Значение не соответствует этому struct                 | `RES_STRUCT_MISMATCH`                                   |
-| Нечитаемое тело на стороне, которую ты **не** объявлял | Игнорируется целиком — см. ниже                         |
+| Ситуация                                              | Исход                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| 2xx, `output` объявлен, тело декодируется             | Успех; `data` и `response.body` типизированы            |
+| 2xx, `output` опущен                                  | Успех; `data` — `undefined`, у response нет `body`      |
+| Non-2xx, `error` объявлен, тело декодируется          | `HTTP_STATUS` с типизированным `data`                   |
+| Non-2xx, `error` опущен                               | `HTTP_STATUS` с `data: undefined`                       |
+| Media type не тот, что нужен representation           | `RES_MEDIA_TYPE_INVALID`, сообщается **до** чтения тела |
+| Байты — не эта representation                         | `RES_DECODE_FAILED`                                     |
+| Значение — не этот struct                             | `RES_STRUCT_MISMATCH`                                   |
+| Нечитаемое тело на стороне, которую ты **не** объявил | Игнорируется целиком — см. ниже                         |
 
-Последняя строка — та, которую стоит запомнить. Если ты объявил `output`, но не `error`, то 500 с битым JSON в теле сообщается как `HTTP_STATUS` со `status: 500`. Ты сказал, что тела ошибок тебя не интересуют, — и это включает то, что тебя не интересует и сам факт нечитаемости.
+Последнюю строку стоит помнить. Если ты объявил `output`, но не `error`, 500 с битым JSON-телом сообщается как `HTTP_STATUS` со `status: 500`. Ты сказал, что тела ошибок тебе не важны, и это включает неважность того, что одно не прочиталось.
 
-Декодирование происходит один раз, после цепочки interceptor’ов. Response, собранный interceptor’ом через `makeResponse(...)`, проходит ту же проверку media type и тот же struct, что и пришедший по сети.
+Декодирование происходит один раз, после цепочки interceptor. Ответ, который interceptor собрал через `makeResponse(...)`, проходит ту же проверку media type и тот же struct, что и пришедший с провода.
 
-`HttpResponse.ok` значит только `200 <= status < 300`. Transport failure — это fault, а никогда не response: никакого response со status 0 вместо него нет.
+`HttpResponse.ok` значит только `200 <= status < 300`. Провал транспорта — это fault, никогда не response: status-0 ответа, стоящего вместо него, нет.
 
 ## Сужение объединения тел ошибок
 
-Один struct `error` покрывает все non-2xx статусы, поэтому при разных формах ты объявляешь объединение. Что ты сможешь делать с `fault.data` дальше, полностью зависит от того, как ты объявил это объединение: library возвращает ровно тот тип, который ты запросил.
+Один struct `error` покрывает каждый non-2xx статус, так что при разных формах объявляй union. Что потом можно делать с `fault.data`, целиком зависит от того, как ты объявил этот union — библиотека отдаёт ровно тот тип, который ты попросил.
 
-`struct.or(...)` даёт обычное объединение, которое TypeScript сам сузить не может. Проверяй нужное поле:
+`struct.or(...)` даёт обычный union, который TypeScript сам не сужает. Проверь нужное поле:
 
 ```typescript twoslash
 import { struct, type Fault } from '@defjs/core'
@@ -166,7 +167,7 @@ if (fault.code === 'HTTP_STATUS' && 'retryAfter' in fault.data) {
 }
 ```
 
-`struct.discriminatedUnion(...)` сужает по полю, которое тело действительно несёт, — удобная форма, когда API уже размечает свои ошибки:
+`struct.discriminatedUnion(...)` сужает по полю, которое тело реально несёт — удобная форма, когда API уже тегирует ошибки:
 
 ```typescript twoslash
 import { struct, type Fault } from '@defjs/core'
@@ -190,7 +191,7 @@ if (fault.code === 'HTTP_STATUS') {
 }
 ```
 
-Когда API кладёт статус **внутрь** тела, размечай по нему, а не по `fault.status`:
+Когда API кладёт status **внутрь** тела, дискриминируй по нему, а не по `fault.status`:
 
 ```typescript twoslash
 import { struct, type Fault } from '@defjs/core'
@@ -207,27 +208,27 @@ if (fault.code === 'HTTP_STATUS' && fault.data.status === 429) {
 }
 ```
 
-Последнюю форму стоит предпочитать там, где API её поддерживает. `fault.status` — число HTTP-слоя, которое может перезаписать proxy, gateway или CDN; а `data.status` был декодирован из тела, которое утвердил твой struct `error`, так что добраться до него — доказательство, что его выдал backend.
+Последнюю форму стоит предпочитать, где API это поддерживает. `fault.status` — число HTTP-слоя, которое прокси, gateway или CDN может переписать; `data.status` декодирован из тела, которое утвердил твой struct `error`, так что дотянуться до него — доказательство, что его произвёл бэкенд.
 
-Неразмеченное объединение, которое не сужается, — свойство объявления, а не library: она отдаёт тебе тот тип, который ты объявил. Хочешь сужения — добавь в struct размечающее поле.
+Union без дискриминатора, который не сужается, — свойство объявления, не библиотеки: она отдаёт тип, который ты объявил. Добавь дискриминатор в struct, если он нужен.
 
 ## Старт и после открытия
 
-SSE проверяет статус, `text/event-stream` и наличие тела до того, как resolve’ит handle. Non-2xx → `HTTP_STATUS`. Неверный media type → `RES_MEDIA_TYPE_INVALID`. Тела нет → `RES_DECODE_FAILED`. Снимок открытия всё равно может попасть в третий слот кортежа.
+SSE валидирует status, `text/event-stream` и наличие тела до резолва handle. Non-2xx → `HTTP_STATUS`. Неверный media type → `RES_MEDIA_TYPE_INVALID`. Нет тела → `RES_DECODE_FAILED`. Снимок открытия всё ещё может лечь в третий слот кортежа.
 
-Старт WebSocket покрывает handshake плюс первое физическое open. Провал конструктора, закрытие до открытия, таймаут или отмена — всё это даёт кортеж старта. Снимок соединения может существовать, даже если socket так и не дошёл до `open`.
+Старт WebSocket покрывает handshake плюс первое физическое open. Провал конструктора, close до open, timeout или cancel — всё это стартовый кортеж. Снимок connection может существовать, даже если сокет так и не дошёл до `open`.
 
-| Транспорт | После старта                                                                                                                                                     |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | Итератор реджектит на фатальной ошибке; `stream.closed` резолвится с `kind: 'error'` и `code` fault’а                                                            |
-| WebSocket | `onRuntimeError` для провалов сообщения/очереди/heartbeat; `receive` падает на терминальных ошибках; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'` |
-| HTTP      | Promise от execute settle’ится один раз. Код interceptor’ов и колбэков всё ещё может throw’ить вне нормализации кортежа                                          |
+| Транспорт | После старта                                                                                                                                                 |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SSE       | Iterator reject’ит на фатальной ошибке; `stream.closed` резолвится с `kind: 'error'` и `code` fault                                                          |
+| WebSocket | `onRuntimeError` для провалов message/queue/heartbeat; `receive` падает на терминальных ошибках; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'` |
+| HTTP      | Promise execute оседает один раз. Код interceptor и колбэка всё ещё может бросить вне нормализации кортежа                                                   |
 
-`NET_ABORTED` / `NET_TIMEOUT` описывают то, что вызывающий увидел на старте. Возвращённый stream или session ты всё равно закрываешь и await’ишь его терминальный promise.
+`NET_ABORTED` / `NET_TIMEOUT` описывают, что увидел вызывающий на старте. Возвращённый стрим или сессию ты всё равно закрываешь и ждёшь терминальный promise.
 
 ## Логирование нативного Error и cause
 
-Fault’ы — это экземпляры нативного `Error`, поэтому диагностический адаптер не нужен. `String(fault)` даёт стабильную нативную форму `DefjsFault: <message>`. `code` и поля вариантов — `status`, `response`, `data` — остаются перечислимыми для структурированного логирования; `name` и нативная цепочка `cause` — нет.
+Faults — экземпляры нативного `Error`, так что диагностический адаптер не нужен. `String(fault)` даёт стабильную нативную форму `DefjsFault: <message>`. `code` и поля варианта — `status`, `response`, `data` — остаются перечислимыми для структурного лога; `name` и нативная цепочка `cause` не перечислимы.
 
 ```typescript twoslash
 import { StructError, type Fault } from '@defjs/core'
@@ -240,20 +241,20 @@ export function logFault(fault: Fault): void {
 }
 ```
 
-Сузь `fault.cause instanceof StructError` до вызова `format()`, `flatten()` или `prettify()`. Эти helper’ы живут на cause у Struct и не копируются на fault. Не заставляй поток управления парсить `message` или `String(fault)` — контракт это `code` и проверенный `status`.
+Сузь `fault.cause instanceof StructError`, прежде чем звать `format()`, `flatten()` или `prettify()`. Эти helper’ы живут на cause Struct; на fault они не копируются. Не строй control flow на разборе `message` или `String(fault)` — контракт это `code` и проверенный `status`.
 
 ## Справка
 
-| Ветка                       | Проверка в потоке управления       | Полезные стабильные поля                    | Обычно отсутствует / чувствительно   |
-| --------------------------- | ---------------------------------- | ------------------------------------------- | ------------------------------------ |
-| Политика HTTP-статуса       | `fault.code === 'HTTP_STATUS'`     | `fault.status`, проверенный `fault.data`    | Тело, headers, URL, `cause`          |
-| Отмена вызывающим           | `fault.code === 'NET_ABORTED'`     | `code`                                      | Причина отмены и стек                |
-| Таймаут                     | `fault.code === 'NET_TIMEOUT'`     | `code`                                      | URL запроса и нижележащая cause      |
-| Контракт сломался           | `fault.code.startsWith('RES_')`    | `code`, проверенный `fault.response.status` | Struct issue, тело, входные значения |
-| Твой собственный код бросил | `fault.code.startsWith('EXT_')`    | `code`, `cause`                             | Всё, что приложило расширение        |
-| Runtime потока/сессии       | `stream.closed` / `session.closed` | Терминальные `kind` и `code`                | Payload событий, фреймы, cause       |
+| Ветка                 | Проверка control flow              | Полезные стабильные поля                    | Обычно нет / чувствительно          |
+| --------------------- | ---------------------------------- | ------------------------------------------- | ----------------------------------- |
+| Политика HTTP status  | `fault.code === 'HTTP_STATUS'`     | `fault.status`, проверенный `fault.data`    | Тело, заголовки, URL, `cause`       |
+| Отмена вызывающим     | `fault.code === 'NET_ABORTED'`     | `code`                                      | Причина abort и стек                |
+| Timeout               | `fault.code === 'NET_TIMEOUT'`     | `code`                                      | URL запроса и нижележащий cause     |
+| Контракт сломался     | `fault.code.startsWith('RES_')`    | `code`, проверенный `fault.response.status` | Issues struct, тело, значения input |
+| Бросил твой код       | `fault.code.startsWith('EXT_')`    | `code`, `cause`                             | Что приложило расширение            |
+| Runtime стрима/сессии | `stream.closed` / `session.closed` | Терминальные `kind` и `code`                | Payload событий, кадры, cause       |
 
-Считай `cause`, `data`, headers и тела response, URL, Struct issue, входные значения и стеки чувствительными. Консервативная сводка:
+Считай чувствительными `cause`, `data`, заголовки и тела ответа, URL, issues Struct, значения input и стеки. Консервативная сводка:
 
 ```typescript twoslash
 import type { Fault } from '@defjs/core'
@@ -266,7 +267,7 @@ export function summarize(fault: Fault): { code: Fault['code']; status?: number 
 }
 ```
 
-`createNetworkFault`, `createPreflightFault`, `createDecodeFault`, `createHttpStatusFault` и `createUndecodedHttpStatusFault` собирают эти нативные Error-значения. Обычные провалы запроса по-прежнему возвращаются в кортеже; их не бросают лишь потому, что они наследуют поведение нативного Error. `ERR_ABORTED` и `ERR_TIMEOUT` — общие cause, которые распознаёт нормализатор транспорта.
+`createNetworkFault`, `createPreflightFault`, `createDecodeFault`, `createHttpStatusFault` и `createUndecodedHttpStatusFault` собирают эти нативные значения Error. Обычные провалы запроса всё равно возвращают их в кортеже; их не бросают лишь потому, что они наследуют поведение нативного Error. `ERR_ABORTED` и `ERR_TIMEOUT` — общие cause, которые узнаёт нормализатор транспорта.
 
 ## Связанные рецепты
 

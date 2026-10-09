@@ -27,6 +27,8 @@ type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
 type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
 ```
 
+`EventStreamHandle` は `AsyncDisposable` を拡張します。構造的なショートサーキット実装は `[Symbol.asyncDispose](): PromiseLike<void>` を提供し、同じ close ライフサイクルへ繋ぐ必要があります。
+
 ## createWebSocketInterceptor() {#createWebSocketInterceptor}
 
 ```ts
@@ -36,7 +38,24 @@ type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
 type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
 ```
 
-`WebSocketSessionLike` はインターセプターから見たセッションです。`send`、`close`、`receive`、`state`、`closed`、`connection`、`bufferedAmount`、`onStateChange`、`onRuntimeError`、`[Symbol.asyncDispose](): PromiseLike<void>` を持ち、`AsyncDisposable` を拡張します。wrapper は同じ disposer を転送してください。独自の構造的実装は追加するまでコンパイル時 breaking になります。Defjs session を受け取るだけなら新しい runtime 呼び出しは不要です。
+`WebSocketSessionLike` はインターセプターから見たセッションです。
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+wrapper やショートサーキットのセッションは、`close` / `closed` のライフサイクルと同じ `[Symbol.asyncDispose]()` の teardown を転送する必要があります。無関係な解決済み promise を返すのでは足りません。このメンバーを要求することは、構造的実装にとってはコンパイル時の破壊的変更です。Defjs が返すセッションだけを受け取るコードには、追加の実行時呼び出しは要りません。
 
 ## タグ付きの型
 
@@ -79,6 +98,6 @@ function basicAuthHttpInterceptor(fn: () => { username: string; password: string
 function basicAuthSSEInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): SSEInterceptor
 ```
 
-`fn` はリクエストごとに呼ばれます。`BasicAuthInterceptorOptions` の任意の `encode` で、デフォルトの `Basic …` ヘッダー値を差し替えます。
+`fn` はリクエストごとに呼ばれます。`BasicAuthInterceptorOptions` の任意の `encode` が、デフォルトの `Basic …` ヘッダー値を差し替えます。
 
-[Interceptors ガイド](../core/interceptors.md) を見てください。
+[Interceptors ガイド](/core/interceptors) を見てください。

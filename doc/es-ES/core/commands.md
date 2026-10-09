@@ -5,7 +5,7 @@ description: Define endpoints, construye comandos opacos, mapea entradas e infie
 
 # Comandos
 
-Una definición → builder → comando opaco → `client.execute`. El mismo pipeline para HTTP, SSE y WebSocket.
+Una definición → endpoint → comando opaco → `client.execute`. El mismo pipeline para HTTP, SSE y WebSocket.
 
 ## Basic Setup
 
@@ -20,58 +20,78 @@ if (!error) console.log(data, response.status)
 
 ## Elige una definición
 
-| Definición               | Contrato                                                          | Valor en éxito                           |
-| ------------------------ | ----------------------------------------------------------------- | ---------------------------------------- |
-| `defineRequest(...)`     | Método, path relativo, input opcional, output por estado opcional | Datos decodificados + `HttpResponse`     |
-| `defineEventStream(...)` | Path, límites de buffer/cola, mapa nombre de evento → Struct      | `EventStreamHandle` + snapshot open      |
-| `defineWebSocket(...)`   | Path, mapa incoming, mapa outgoing opcional, límite de cola       | `WebSocketSession` + snapshot connection |
+| Definición               | Contrato                                                             | Valor en éxito                            |
+| ------------------------ | -------------------------------------------------------------------- | ----------------------------------------- |
+| `defineRequest(...)`     | Método, path relativo, input opcional, `output` / `error` opcionales | Datos decodificados + respuesta           |
+| `defineEventStream(...)` | Path, límites de buffer/cola, mapa nombre de evento → Struct         | `EventStreamHandle` + snapshot de open    |
+| `defineWebSocket(...)`   | Path, un struct incoming, struct outgoing opcional, límite de cola   | `WebSocketSession` + snapshot de conexión |
 
-Sin `input` → el builder no toma argumento. Con `input` → pasa el valor Struct aunque todos los campos anidados sean opcionales. Las secciones opcionales `path` / `query` / `headers` pueden omitirse; una sección con un campo requerido no. Un wrapper de cuerpo presente significa que el cuerpo es requerido.
+Sin `input` → el endpoint no toma argumento, y `builder` puede ser `() => request`. Con `input` → pasa el valor del struct. Un campo opcional puede omitirse; uno requerido no.
 
 Mantén los comandos opacos. No husmees tags ni símbolos.
 
-## Mapeo automático de solicitud
+## Dónde van los valores
 
-Usa `struct.request(...)` cuando la entrada lógica ya tiene path / query / headers / body:
+El struct decide cómo se codifica un valor. El `builder` decide dónde va. `builder` es una función pura y síncrona del input **ya parseado**. Corre en el momento de execute. Un throw se convierte en `REQ_BUILD_FAILED` en la tupla: la llamada al endpoint en sí no lanza.
+
+Omite `builder` cuando el struct de input ya es `{ path?, query?, headers?, body? }`. Esa es la identidad `(input) => input`. Si el input parseado no es asignable a esa forma, TypeScript exige un `builder`.
+
+Pasa el valor tipado. El alias, `Date` → ISO y `bigint` → string se aplican entonces en todos los sitios donde se usa ese struct: colocación de la solicitud, decodificación de la respuesta, eventos SSE y frames WebSocket.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
+const User = struct.object({
+  displayName: struct.string().alias('display_name'),
+  email: struct.string(),
+})
+
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(struct.object({ name: struct.string() })),
-  }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  input: struct.object({ user: User }),
+  builder: (input) => ({ body: input.user }),
+  output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })
 void createUser
 ```
 
-Los alias reescriben solo las claves de cable salientes. Los valores parseados y las entradas del comando conservan los nombres lógicos.
+El body es JSON `{"display_name":"…","email":"…"}`. Una clave escrita a mano es la vía de escape: `body: { name: input.user.displayName }` envía `name`, porque el objeto padre es anónimo y el alias no aplica.
 
-## `build` personalizado
+## Cuando las formas difieren
 
-Llega a `build(request, input)` cuando la forma del llamador y la del cable difieren. Es una proyección acotada — no un sitio para ramificar por política de auth o inventar side effects.
+Usa `builder` para placeholders de path, literales y ramas. Recibe el valor real, así que `if`, `??`, templates y `switch` funcionan.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
 const search = defineRequest({
   method: 'GET',
-  path: '/search',
-  input: struct.object({ q: struct.string(), page: struct.number().optional() }),
-  build(request, input) {
-    request.setQueryParams({ q: input.q, page: input.page })
-  },
+  path: '/orgs/:org_id/users',
+  input: struct.object({
+    orgId: struct.number(),
+    query: struct.object({
+      keyword: struct.string(),
+      pageSize: struct.number().alias('page_size'),
+    }),
+  }),
+  builder: (input) => ({
+    path: { org_id: input.orgId },
+    query: input.query,
+    headers: { 'x-api-version': '2' },
+  }),
   output: struct.object({ items: struct.array(struct.string()) }),
 })
 void search
 ```
 
-## Formas de `output` y `error`
+`query: input.query` envía `page_size`. `headers: { 'x-api-version': '2' }` es un literal. Auth y tracing siguen perteneciendo a los interceptores: ven la solicitud nativa después de que corre el builder.
 
-`output` es un Struct para el cuerpo 2xx; `error` es un Struct para todo lo demás. `ok` es la única bifurcación, y solo un lado decodifica. Omitir un lado significa que ese cuerpo nunca se lee: el fault lleva el estado y `data` se queda en `undefined`.
+## Formas de output y error
+
+`output` es un Struct para el cuerpo 2xx; `error` es un Struct para todo lo demás. `ok` es la única
+bifurcación, y solo un lado decodifica. Omitir un lado significa que ese cuerpo nunca se lee: el fault
+lleva el estado y `data` se queda en `undefined`.
 
 ## Recetas relacionadas
 

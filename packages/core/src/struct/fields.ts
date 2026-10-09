@@ -1,6 +1,6 @@
 import { resolveObjectShape } from './shape'
 import { DEFINITION } from './symbols'
-import { hasOwnKey } from './utils'
+import { hasOwnKey, nullObject } from './utils'
 import type { ObjectDefinition, RuntimeStruct } from './types'
 
 export interface ResolvedStructField {
@@ -50,7 +50,7 @@ export function mapAliasedObjectFields(
   struct: RuntimeStruct,
   value: { [key: string]: unknown },
   encodeChild: (struct: RuntimeStruct, value: unknown) => unknown,
-  output: { [key: string]: unknown } = Object.create(null),
+  output: { [key: string]: unknown } = nullObject(),
 ): { [key: string]: unknown } {
   const definition = struct[DEFINITION]
   if (definition.kind !== 'object') {

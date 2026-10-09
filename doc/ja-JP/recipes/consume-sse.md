@@ -19,7 +19,7 @@ const notifications = defineEventStream({
   maxQueueSize: 100,
   path: '/notifications',
   events: {
-    message: struct.json(struct.object({ text: struct.string() })),
+    message: struct.object({ text: struct.string() }),
   },
 })
 
@@ -45,4 +45,4 @@ if (error) {
 hello from the server
 ```
 
-SSE はネットワークや読み取りの失敗をデフォルトではリトライしません。`withSSEReconnect(...)` で明示的に有効にしてください。再接続を設定すると `attempts` のデフォルトは `3` になり、`attempts: 0` はリトライを無効にします。
+SSE は `withSSEReconnect(...)` を有効にしない限り、ネットワーク/読み取りの失敗をリトライしません。再接続オブジェクトを置くと `attempts` のデフォルトは `3` で、`attempts: 0` はリトライを無効にします。

@@ -18,17 +18,17 @@ Aquí consultas los paquetes del workspace. Las firmas son el contrato; las guí
 
 ## @defjs/core
 
-| Página                            | Qué consultas                                                    |
-| --------------------------------- | ---------------------------------------------------------------- |
-| [Client](./client.md)             | `createClient`, `with*` options, `Client`                        |
-| [HTTP](./http.md)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
-| [Struct](./struct.md)             | `struct.*`, `Infer`, `StructError`                               |
-| [Errors](./errors.md)             | variantes y factorías de `Fault`                                 |
-| [Interceptors](./interceptors.md) | helpers de interceptor HTTP / SSE / WebSocket                    |
-| [SSE](./sse.md)                   | `defineEventStream`, stream handle                               |
-| [WebSocket](./web-socket.md)      | `defineWebSocket`, session                                       |
+| Página                            | Qué consultas                                                        |
+| --------------------------------- | -------------------------------------------------------------------- |
+| [Client](./client.md)             | `createClient`, opciones `with*`, `Client`                           |
+| [HTTP](./http.md)                 | `defineRequest`, opciones de execute, `HttpRequest` / `HttpResponse` |
+| [Struct](./struct.md)             | `struct.*`, `Infer`, `StructError`                                   |
+| [Errors](./errors.md)             | variantes y factorías de `Fault`                                     |
+| [Interceptors](./interceptors.md) | helpers de interceptor HTTP / SSE / WebSocket                        |
+| [SSE](./sse.md)                   | `defineEventStream`, handle del stream                               |
+| [WebSocket](./web-socket.md)      | `defineWebSocket`, sesión                                            |
 
 ## Relacionado
 
-- [Primeros pasos](../guide/getting-started.md)
-- [GET con un 404 declarado](../recipes/get-declared-404.md)
+- [Primeros pasos](/guide/getting-started)
+- [GET con un 404 declarado](/recipes/get-declared-404)

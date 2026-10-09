@@ -5,7 +5,7 @@ description: Connect, send one typed envelope, receive once, then close and awai
 
 # Open a WebSocket session
 
-JSON envelopes use a non-empty string `type`. You own unsubscribe, `close`, and `await session.closed`.
+Each direction is one struct. You own unsubscribe, `close`, and `await session.closed`. Invalid frames go to `onRuntimeError`.
 
 See [WebSocket](../core/web-socket.md) for details.
 
@@ -17,8 +17,8 @@ const client = createClient(withEndpoint('https://chat.example.com'))
 const room = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { send: struct.object({ text: struct.string() }) },
+  incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
+  outgoing: struct.object({ type: struct.literal('send'), text: struct.string() }),
 })
 
 const [error, session] = await client.execute(room())

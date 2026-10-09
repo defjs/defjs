@@ -5,7 +5,7 @@ description: 定義 endpoints、建立不透明 commands、對應 inputs，並�
 
 # Commands
 
-一份定義 → builder → 不透明 command → `client.execute`。HTTP、SSE、WebSocket 走同一條管線。
+一份定義 → endpoint → 不透明 command → `client.execute`。HTTP、SSE、WebSocket 走同一條管線。
 
 ## Basic Setup
 
@@ -20,54 +20,72 @@ if (!error) console.log(data, response.status)
 
 ## 選定義
 
-| 定義                     | 契約                                              | 成功時的值                           |
-| ------------------------ | ------------------------------------------------- | ------------------------------------ |
-| `defineRequest(...)`     | Method、相對 path、選填 input、選填 status output | 解碼後的資料 + `HttpResponse`        |
-| `defineEventStream(...)` | Path、buffer／queue 限制、event-name → Struct map | `EventStreamHandle` + open 快照      |
-| `defineWebSocket(...)`   | Path、incoming map、選填 outgoing map、queue 限制 | `WebSocketSession` + connection 快照 |
+| 定義                     | 契約                                                         | 成功時的值                           |
+| ------------------------ | ------------------------------------------------------------ | ------------------------------------ |
+| `defineRequest(...)`     | Method、相對 path、選填 input、選填 `output`／`error`        | 解碼後的資料 + response              |
+| `defineEventStream(...)` | Path、buffer／queue 限制、event-name → Struct map            | `EventStreamHandle` + open 快照      |
+| `defineWebSocket(...)`   | Path、一個 incoming struct、選填 outgoing struct、queue 限制 | `WebSocketSession` + connection 快照 |
 
-沒有 `input` → builder 不吃參數。有 `input` → 就算巢狀欄位全是 optional，也要傳 Struct 值。選填的 `path`／`query`／`headers` 區段可以省略；區段裡有必填欄位就不行。有 body wrapper 就表示 body 必填。
+沒有 `input` → endpoint 不吃參數，而且 `builder` 可以是 `() => request`。有 `input` → 傳 struct 值。選填欄位可以省略；必填欄位不行。
 
 讓 commands 保持不透明。別去挖 tags 或 symbols。
 
-## 自動 request 對應
+## 值放到哪
 
-當邏輯 input 已有 path／query／headers／body 時，用 `struct.request(...)`：
+Struct 決定值怎麼編碼。`builder` 決定值放到哪。`builder` 是**已剖析** input 的同步純函式。它在執行時跑。丟出錯誤會變成 tuple 上的 `REQ_BUILD_FAILED` — 呼叫 endpoint 本身不會 throw。
+
+當 input struct 已經是 `{ path?, query?, headers?, body? }` 時，省略 `builder`。那就是恆等的 `(input) => input`。剖析後的 input 不能指派成那個形狀時，TypeScript 會要求 `builder`。
+
+把型別化的值交出去。Alias、`Date` → ISO、`bigint` → 字串，會套用在這個 struct 出現的每個地方：request 放置、回應解碼、SSE events、WebSocket frames。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
+const User = struct.object({
+  displayName: struct.string().alias('display_name'),
+  email: struct.string(),
+})
+
 const createUser = defineRequest({
   method: 'POST',
   path: '/users',
-  input: struct.request({
-    body: struct.json(struct.object({ name: struct.string() })),
-  }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  input: struct.object({ user: User }),
+  builder: (input) => ({ body: input.user }),
+  output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })
 void createUser
 ```
 
-Aliases 只改 outbound wire keys。剖析後的值與 command inputs 仍用邏輯名稱。
+Body 是 JSON `{"display_name":"…","email":"…"}`。自己寫的 key 是逃生口：`body: { name: input.user.displayName }` 送出的是 `name`，因為父物件是匿名的，alias 不套用。
 
-## 自訂 `build`
+## 形狀不一樣時
 
-當呼叫端形狀與 wire 形狀不同時，才用 `build(request, input)`。它是受約束的投影 — 不是放 auth 政策分支或搞 side effects 的地方。
+Path placeholders、字面值、分支用 `builder`。它收到的是真實的值，所以 `if`、`??`、template、`switch` 都能用。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
 
 const search = defineRequest({
   method: 'GET',
-  path: '/search',
-  input: struct.object({ q: struct.string(), page: struct.number().optional() }),
-  build(request, input) {
-    request.setQueryParams({ q: input.q, page: input.page })
-  },
+  path: '/orgs/:org_id/users',
+  input: struct.object({
+    orgId: struct.number(),
+    query: struct.object({
+      keyword: struct.string(),
+      pageSize: struct.number().alias('page_size'),
+    }),
+  }),
+  builder: (input) => ({
+    path: { org_id: input.orgId },
+    query: input.query,
+    headers: { 'x-api-version': '2' },
+  }),
   output: struct.object({ items: struct.array(struct.string()) }),
 })
 void search
 ```
+
+`query: input.query` 送出 `page_size`。`headers: { 'x-api-version': '2' }` 是字面。Auth 與 tracing 仍屬於 interceptors：它們在 builder 跑完之後看到原生 request。
 
 ## `output` 與 `error` 的形狀
 

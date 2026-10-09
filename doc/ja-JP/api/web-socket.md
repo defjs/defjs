@@ -10,11 +10,11 @@ description: defineWebSocket、session、execute options です。
 ## defineWebSocket() {#defineWebSocket}
 
 ```ts
-function defineWebSocket(definition: WebSocketDefinition): WebSocketCommandBuilder
+function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`、`incoming` structs、任意の `outgoing`、`input`、`build`、キュー上限です。
-- **戻り値** — ビルダーです。入力を渡すと `WebSocketCommand` になります。
+- **definition** — `path`、`incoming` struct 1 つ、任意の `outgoing` struct、任意の `input`、`builder`、静的な `protocols`、キュー上限です。
+- **戻り値** エンドポイントです。入力を渡して呼ぶと `WebSocketCommand` になります。
 
 ```ts twoslash
 import { defineWebSocket, struct } from '@defjs/core'
@@ -22,8 +22,9 @@ import { defineWebSocket, struct } from '@defjs/core'
 const chat = defineWebSocket({
   maxIncomingQueueSize: 100,
   path: '/chat',
-  incoming: { message: struct.object({ text: struct.string() }) },
-  outgoing: { message: struct.object({ text: struct.string() }) },
+  protocols: ['chat.v1'],
+  incoming: struct.object({ text: struct.string(), type: struct.literal('message') }),
+  outgoing: struct.object({ text: struct.string(), type: struct.literal('message') }),
 })
 ```
 
@@ -39,7 +40,7 @@ function executeWebSocketCommand(
 
 `client.execute` の低レベル入口です。アプリコードではクライアントを使ってください。
 
-- **戻り値** — `[null, session, connection]`、または `[error, undefined, connection?]` です。
+- **戻り値** `[null, session, connection]`、または `[error, undefined, connection?]` です。
 
 WebSocket の execute は `beforeConnect`、`heartbeat`、`protocols`、`reconnect` を上書きできます。
 
@@ -60,7 +61,16 @@ interface WebSocketSession<TIncoming, TOutgoing> extends AsyncDisposable {
 }
 ```
 
-cleanup は呼び出し側の所有です。`await using` を使えます。`close()` と `closed` も残っています。`closed` は論理ライフサイクルの終端です。disposer は Defjs teardown を最大 1 秒待ち、close event がなければ `TimeoutError` という名前の `DOMException` を reject できます。これは物理 TCP close の証明ではありません。
+所有するスコープのクリーンアップには `await using ownedSession = session` を選んでください。手動の `session.close()` と `await session.closed` も残っています。
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+`closed` は論理的な終端状態を報告します。非同期 disposer はネイティブ close を要求し、Defjs が所有する teardown を待ちますが、close イベントが無い場合は 1 秒で打ち切り、`TimeoutError` という名前の `DOMException` で reject することがあります。物理 TCP 接続が閉じたことは証明できません。
 
 ### WebSocketState {#WebSocketState}
 
@@ -71,6 +81,13 @@ cleanup は呼び出し側の所有です。`await using` を使えます。`clo
 `url`、`protocol`、`extensions`、`generation`（再接続で増えます）。
 
 ### WebSocketCloseInfo {#WebSocketCloseInfo}
+
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
 
 ソケット終了後の close スナップショットです（code、reason、clean フラグ、任意の cause）。手動 close は `ManualSocketCloseReason` を持てます。
 
@@ -92,54 +109,60 @@ type WebSocketExecuteOptions = {
 
 `WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。
 
-## メッセージ map
+`reconnect` を置いたとき、`attempts` のデフォルトは 3 です。`0` は無効にします。`attempts` を省いても無制限にはなりません。
 
-## SocketStructs {#SocketStructs}
+## メッセージ
+
+`incoming` は struct 1 つです。テキスト、`ArrayBuffer`、typed-array、`Blob` のフレームは UTF-8 として読まれ、JSON パースされ、その struct に対して検査されます。JSON パースか struct に失敗したフレームは `session.onRuntimeError` に報告され、キューには入りません。クライアント側の不正フレーム option はありません。
+
+`outgoing` は struct 1 つです。`session.send` はその struct の `StructInput` を受け、エイリアスをエンコードしてから `JSON.stringify` します。メッセージの種類が複数なら `struct.discriminatedUnion` です。
 
 ```ts
-type SocketStructs = { [typeName: string]: AnyStruct }
+session.send({ type: 'message', text: 'Hello' })
 ```
 
-incoming/outgoing のペイロードは `type` でタグ付けされます（struct の形に応じて、フラットなフィールドか `data` ラッパー）。
-
-[WebSocket ガイド](../core/web-socket.md) と [WebSocket セッションを開く](../recipes/websocket-session.md) を見てください。
+[WebSocket ガイド](/core/web-socket) と [WebSocket セッションを開く](/recipes/websocket-session) を見てください。
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`、`incoming`、任意の `outgoing` / `input` / `build`、キュー上限です。
+`path`、`incoming`、任意の `outgoing` / `input` / `builder` / `protocols`、キュー上限です。ビルダーが返せるのは `path` と `query` だけです。
 
-## WebSocketCommandBuilder {#WebSocketCommandBuilder}
+## WebSocketEndpoint {#WebSocketEndpoint}
 
-`defineWebSocket` の戻り値です。input を渡して呼ぶと `WebSocketCommand` になります。
+`defineWebSocket` の戻り値です。入力を渡して呼ぶと `WebSocketCommand` になります。
+
+## WebSocketRequestShape {#WebSocketRequestShape}
+
+`path` と `query` だけです。`headers` と `body` は `never` です。
 
 ## WebSocketCommand {#WebSocketCommand}
 
-不透明な WebSocket command です。`client.execute` に渡します。
+不透明な WebSocket コマンドです。`client.execute` に渡します。
 
 ## UseWebSocketConfig {#UseWebSocketConfig}
 
-heartbeat、reconnect、`beforeConnect`、protocols、それにキャンセルです。`WebSocketExecuteOptions` は `signal` を足します。
+ハートビート、再接続、`beforeConnect`、protocols、それにキャンセルです。`WebSocketExecuteOptions` は `signal` を足します。
 
 ## SocketAwaitResult {#SocketAwaitResult}
 
-`[null, session, connection]` or `[error, undefined, connection?]`.
+`[null, session, connection]` または `[error, undefined, connection?]` です。
 
 ## ManualSocketCloseReason {#ManualSocketCloseReason}
 
-`session.close()` で閉じたときに残す理由です。
+`session.close()` で閉じたときに記録される理由です。
 
 ## WebSocketHeartbeatConfig {#WebSocketHeartbeatConfig}
 
-`intervalMs`, optional `message`, `isAck`, `timeoutMs`.
+`intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。
 
 ## WebSocketIncomingData {#WebSocketIncomingData}
 
-incoming の `SocketStructs` map から推論した受信メッセージの形です。
+デコードされた受信フレームです。`incoming` struct の `Infer` です。
 
 ## WebSocketOutgoingData {#WebSocketOutgoingData}
 
-outgoing の `SocketStructs` map から推論した送信メッセージの形です。
+`session.send` が受け付ける値です。`outgoing` struct の `StructInput` で、宣言が無ければ `never` です。
 
 ## SocketLifecycleOutcome {#SocketLifecycleOutcome}
 
-ソケットが終わったあとの終端ライフサイクルのスナップショットです。
+ソケットが終わったあとの、終端ライフサイクルのスナップショットです。

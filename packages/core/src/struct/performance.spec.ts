@@ -109,13 +109,14 @@ describe('performance optimization contracts', () => {
     expect(struct.parse(source, undefined)[0]).not.toBeNull()
   })
 
-  test('JSON intersection preserves alias overwrites, optional omission and nullable sides', () => {
+  test('JSON intersection merges equal shared wire keys and rejects conflicts', () => {
     const schema = struct.intersection(
       struct.object({ first: struct.string().alias('wire') }),
       struct.object({ second: struct.string().optional().alias('wire') }),
     )
     expect(encodeJson(schema, { first: 'first' })).toEqual({ wire: 'first' })
-    expect(encodeJson(schema, { first: 'first', second: 'last' })).toEqual({ wire: 'last' })
+    expect(encodeJson(schema, { first: 'same', second: 'same' })).toEqual({ wire: 'same' })
+    expect(() => encodeJson(schema, { first: 'first', second: 'last' })).toThrow(new TypeError('invalid intersection encode at wire'))
     expect(struct.parse(schema, { first: 1 })[0]?.issues[0]?.path).toEqual(['first'])
     const nullable = struct.intersection(struct.object({ x: struct.string() }).nullable(), struct.object({ y: struct.string() }).nullable())
     expect(struct.parse(nullable, null)).toEqual([null, null])
@@ -135,10 +136,10 @@ describe('performance optimization contracts', () => {
       [struct.object({ value: struct.number() }), []],
       [struct.record(struct.number()), []],
       [struct.record(struct.number()), { value: 'bad' }],
-      [struct.request({ query: struct.object({ id: struct.number() }) }), 'bad'],
-      [struct.request({ query: struct.object({ id: struct.number() }) }), {}],
-      [struct.request({ body: struct.json(struct.number()) }), {}],
-      [struct.request({ body: struct.json(struct.number()) }), { body: 'bad' }],
+      [struct.object({ query: struct.object({ id: struct.number() }) }), 'bad'],
+      [struct.object({ query: struct.object({ id: struct.number() }) }), {}],
+      [struct.object({ body: struct.number() }), {}],
+      [struct.object({ body: struct.number() }), { body: 'bad' }],
       [struct.tuple([struct.number()]), []],
       [struct.tuple([struct.number()]), ['bad']],
       [struct.or(struct.number(), struct.boolean()), 'bad'],
@@ -179,7 +180,7 @@ describe('performance optimization contracts', () => {
 
   test('mixed intersections retain generic merging and custom object encoders', () => {
     const mixed = struct.intersection(struct.any(), struct.object({ value: struct.string() }))
-    expect(struct.parse(mixed, { extra: 1, value: 'x' })).toEqual([null, { extra: 1, value: 'x' }])
+    expect(struct.parse(mixed, { extra: 1, value: 'x' })).toEqual([null, { value: 'x' }])
     const objects = struct.intersection(struct.object({ value: struct.string() }), struct.object({ value: struct.string() }))
     let calls = 0
     const output = encodeValue(
@@ -188,11 +189,11 @@ describe('performance optimization contracts', () => {
       {
         encodeObject() {
           calls += 1
-          return { [`branch${calls}`]: calls, shared: calls }
+          return { [`branch${calls}`]: calls, shared: 1 }
         },
       },
     )
-    expect(output).toEqual({ branch1: 1, branch2: 2, shared: 2 })
+    expect(output).toEqual({ branch1: 1, branch2: 2, shared: 1 })
     expect(Object.getPrototypeOf(output)).toBeNull()
     expect(calls).toBe(2)
   })
