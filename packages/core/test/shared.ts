@@ -1,5 +1,6 @@
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import '../../../test/loopback-proxy-bypass.ts'
 
 export const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)))
 export const globalSetupPath = resolve(packageRoot, 'test/setup.ts')

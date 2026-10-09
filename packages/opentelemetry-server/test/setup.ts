@@ -1,7 +1,8 @@
-import { createNodeWebSocket } from '@hono/node-ws'
+import { upgradeWebSocket } from '@hono/node-server'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import type { TestProject } from 'vitest/node'
+import { WebSocketServer } from 'ws'
 import { startHonoTestServer, type HonoTestServer } from '../../../test/hono-test-server'
 
 declare module 'vitest' {
@@ -39,8 +40,6 @@ export async function setup({ provide }: TestProject) {
   app.get('/sse/500', (c) => c.body(null, 500))
 
   // WebSocket: echo back traceparent query param, then close
-  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app, baseUrl: 'http://127.0.0.1' })
-
   app.get(
     '/ws',
     upgradeWebSocket((c) => {
@@ -58,7 +57,8 @@ export async function setup({ provide }: TestProject) {
     }),
   )
 
-  testServer = await startHonoTestServer(app, { injectWebSocket })
+  const wss = new WebSocketServer({ noServer: true })
+  testServer = await startHonoTestServer(app, { websocket: { server: wss } })
   provide('testServerHost', testServer.host)
 }
 

@@ -42,12 +42,12 @@ void createUser
 
 الوجود والقابلية لـ null منفصلان:
 
-| الإعلان                      | مفقود / `undefined`          | `null` | قيمة صالحة        |
-| ---------------------------- | ---------------------------- | ------ | ----------------- |
-| `struct.string()`            | ارفض                         | ارفض   | اقبل سلسلة        |
-| `struct.string().optional()` | اقبل؛ احذف حقل الكائن الغائب | ارفض   | اقبل سلسلة        |
-| `struct.string().null()`     | ارفض                         | اقبل   | اقبل سلسلة        |
-| `struct.string().nullish()`  | اقبل؛ احذف حقل الكائن الغائب | اقبل   | اقبل سلسلة        |
+| الإعلان                        | مفقود / `undefined`          | `null` | قيمة صالحة       |
+| ---------------------------- | ---------------------------- | ------ | ---------------- |
+| `struct.string()`            | ارفض                         | ارفض   | اقبل سلسلة       |
+| `struct.string().optional()` | اقبل؛ احذف حقل الكائن الغائب | ارفض   | اقبل سلسلة       |
+| `struct.string().null()`     | ارفض                         | اقبل   | اقبل سلسلة       |
+| `struct.string().nullish()`  | اقبل؛ احذف حقل الكائن الغائب | اقبل   | اقبل سلسلة       |
 | `struct.null()`              | ارفض                         | اقبل   | ارفض القيم الأخرى |
 
 ```typescript twoslash
@@ -100,14 +100,14 @@ const command = createUser({
 void command
 ```
 
-| جذر الجسم                                      | يُرسَل كـ         | نوع المحتوى الافتراضي                             |
-| ---------------------------------------------- | ----------------- | ------------------------------------------------- |
+| جذر الجسم                                   | يُرسَل كـ           | نوع المحتوى الافتراضي                              |
+| ------------------------------------------- | ----------------- | ------------------------------------------------- |
 | كائن مُنوَّع، مصفوفة، عدد، قيمة منطقية، `null` | نص JSON           | `application/json`                                |
-| struct `string` أو سلسلة خام                   | نص                | `text/plain;charset=UTF-8`                        |
-| `struct.urlencoded(shape)` عند الجذر           | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)` عند الجذر             | `FormData`        | حد multipart للمنصة                               |
-| `Blob` / `File`                                | الـ blob          | نوع الـ blob أو `application/octet-stream`        |
-| `ArrayBuffer` / عرض / تدفق                     | بايتات            | `application/octet-stream`                        |
+| struct `string` أو سلسلة خام                | نص                | `text/plain;charset=UTF-8`                        |
+| `struct.urlencoded(shape)` عند الجذر        | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `struct.formData(shape)` عند الجذر          | `FormData`        | حد multipart للمنصة                               |
+| `Blob` / `File`                             | الـ blob          | نوع الـ blob أو `application/octet-stream`        |
+| `ArrayBuffer` / عرض / تدفق                  | بايتات            | `application/octet-stream`                        |
 
 `struct.file()` هو struct قيمة لحقل نموذج ولجسم ملف خام. بنّاؤو WebSocket لا يمكنهم إرجاع `headers` أو `body`. HTTP وSSE يستطيعان. `GET` و`HEAD` لا يستطيعان.
 
@@ -130,12 +130,12 @@ const [wireError] = struct.parse(User, { display_name: 'Ada' })
 console.log(wireError?.issues[0]?.path)
 ```
 
-| الحد                                  | الحقل                     |
-| ------------------------------------- | ------------------------- |
+| الحد                                 | الحقل                     |
+| ------------------------------------ | ------------------------- |
 | `struct.parse(User, ...)` ومدخل الأمر | منطقي `displayName`       |
-| كائن مُنوَّع يُسلَّم إلى الـ builder  | سلك `display_name`        |
-| فك JSON / SSE / WebSocket             | سلك → منطقي `displayName` |
-| كائن مجهول مكتوب في الـ builder       | المفتاح الذي كتبته        |
+| كائن مُنوَّع يُسلَّم إلى الـ builder       | سلك `display_name`        |
+| فك JSON / SSE / WebSocket            | سلك → منطقي `displayName` |
+| كائن مجهول مكتوب في الـ builder      | المفتاح الذي كتبته        |
 
 الأسماء المستعارة تعمل على الحقول المتداخلة والمصفوفات والكائنات والاتحادات والمميّزات. أبقِ الأسماء المنطقية في كود التطبيق؛ ضع الاسم الخارجي على الـ struct مرة واحدة. نشر كائن مُنوَّع يُبقي ذلك الترميز. تعيين الحقل المنطقي ومفتاح سلكه معًا في الكائن نفسه هو `REQ_BUILD_FAILED`. `JSON.stringify` لقيمة بنفسك يغادر هذا المسار: المُسلسِل يرى الأسماء المنطقية.
 
@@ -210,17 +210,17 @@ void [Any, ArrayOfStrings, Bytes, BigIntValue, BlobValue, BooleanValue, DateValu
 void [Literal, NullValue, NumberValue, ObjectValue, Union, RecordValue, StringValue, Tuple, Unknown, FormUrlEncoded]
 ```
 
-| المُنشئ                          | المدخل                                 | المخرج المستنتج                  |
+| المُنشئ                           | المدخل                                 | المخرج المستنتج                  |
 | -------------------------------- | -------------------------------------- | -------------------------------- |
 | `struct.number()`                | عدد غير `NaN`                          | `number`، بما في ذلك ±`Infinity` |
 | `struct.date()`                  | `Date` أو عدد أو سلسلة تاريخ           | `Date` صالح                      |
 | `struct.bigint()`                | `bigint` أو سلسلة يقبلها `BigInt(...)` | `bigint`                         |
-| `struct.enum(...)`               | عضو سلسلة أو عدد معلَن                 | اتحاد ذلك الحرفي                 |
-| `struct.discriminatedUnion(...)` | كائن بمميّز حرفي مطلوب                 | فرع الكائن المختار               |
+| `struct.enum(...)`               | عضو سلسلة أو عدد معلَن                  | اتحاد ذلك الحرفي                 |
+| `struct.discriminatedUnion(...)` | كائن بمميّز حرفي مطلوب                  | فرع الكائن المختار               |
 | `struct.or(...)`                 | أول فرع مطابق؛ والترميز يفحص الغموض    | اتحاد مخرجات الفروع              |
 | `struct.intersection(...)`       | قيم يقبلها كل عضو                      | تقاطع المخرجات                   |
-| `struct.record(value)`           | كائن عادي تطابق قيمه `value`           | Record من القيم المحلَّلة        |
-| `struct.tuple(items)`            | مصفوفة بالطول المعلَن بالضبط           | tuple بطول ثابت                  |
+| `struct.record(value)`           | كائن عادي تطابق قيمه `value`           | Record من القيم المحلَّلة          |
+| `struct.tuple(items)`            | مصفوفة بالطول المعلَن بالضبط            | tuple بطول ثابت                  |
 
 كل Struct يدعم `.alias(name)` و`.optional()` و`.null()` و`.nullish()`. `struct.discriminatedUnion` يحتاج خيارات كائن بمميّز حرفي مطلوب ويرفض التكرارات.
 

@@ -31,15 +31,15 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 | `struct.array(item)` / `tuple(...)` / `record(value)`                       | مجموعات                                                                    |
 | `struct.object(shape)`                                                      | كائن؛ الحقول تقبل `.optional()` و`.null()` / `.nullable()` و`.alias(name)` |
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | اتحادات                                                                    |
-| `struct.enum(values)`                                                       | قائمة سلاسل أو خريطة `{ Name: value }`                                     |
+| `struct.enum(values)`                                                       | قائمة سلاسل أو خريطة `{ Name: value }`                                      |
 
 ### ترميزات الجسم والقيم الثنائية
 
 | المساعد                                        | الدور                                                                         |
 | ---------------------------------------------- | ----------------------------------------------------------------------------- |
 | `struct.formData(shape)` / `urlencoded(shape)` | struct كائن مع وسم ترميز. الوسم ينطبق فقط عندما تكون تلك القيمة جذر جسم الطلب |
-| `struct.arrayBuffer()` / `blob()` / `file()`   | قيم ثنائية. كجذر جسم تُرسَل بايتات؛ وكـ `output` / `error` تختار ذلك التمثيل  |
-| `struct.string()`                              | نص. كجذر جسم أو struct `string` وارد، تبقى البايتات نصًا                      |
+| `struct.arrayBuffer()` / `blob()` / `file()`   | قيم ثنائية. كجذر جسم تُرسَل بايتات؛ وكـ `output` / `error` تختار ذلك التمثيل    |
+| `struct.string()`                              | نص. كجذر جسم أو struct `string` وارد، تبقى البايتات نصًا                       |
 
 ### struct.parse() {#struct.parse}
 

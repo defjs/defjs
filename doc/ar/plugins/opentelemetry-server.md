@@ -185,14 +185,14 @@ void outcome
 
 عندما يُمرَّر `meter`:
 
-| المقياس                                      | المعنى                                   |
-| -------------------------------------------- | ---------------------------------------- |
+| المقياس                                      | المعنى                                  |
+| -------------------------------------------- | --------------------------------------- |
 | `http.client.request.duration`               | مدة طلب HTTP (ثوانٍ)                     |
-| `defjs.client.sse.connect.duration`          | الوقت حتى إرجاع معالج SSE                |
-| `defjs.client.sse.connection.duration`       | إرجاع المعالج → الإغلاق النهائي          |
+| `defjs.client.sse.connect.duration`          | الوقت حتى إرجاع معالج SSE               |
+| `defjs.client.sse.connection.duration`       | إرجاع المعالج → الإغلاق النهائي           |
 | `defjs.client.sse.active_streams`            | معالجات SSE منطقية بـ `closed` معلّق     |
-| `defjs.client.websocket.connect.duration`    | الوقت حتى إرجاع جلسة WebSocket           |
-| `defjs.client.websocket.connection.duration` | إرجاع الجلسة → الإغلاق النهائي           |
+| `defjs.client.websocket.connect.duration`    | الوقت حتى إرجاع جلسة WebSocket          |
+| `defjs.client.websocket.connection.duration` | إرجاع الجلسة → الإغلاق النهائي            |
 | `defjs.client.websocket.active_connections`  | جلسات WebSocket منطقية بـ `closed` معلّق |
 
 أدوات SSE/WebSocket النشطة تعدّ الموارد المنطقية (بما في ذلك فجوات إعادة الاتصال)، لا المقابس المادية أو محاولات HTTP الفردية.

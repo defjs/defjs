@@ -1,8 +1,6 @@
-import type { NodeWebSocket } from '@hono/node-ws'
+import { upgradeWebSocket } from '@hono/node-server'
 import type { Context, Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-
-type UpgradeWebSocket = NodeWebSocket['upgradeWebSocket']
 
 type EchoField = {
   filename?: string
@@ -24,7 +22,7 @@ export function registerE2eProbe(app: Hono): void {
   })
 }
 
-export function registerE2eRoutes(app: Hono, upgradeWebSocket: UpgradeWebSocket): void {
+export function registerE2eRoutes(app: Hono): void {
   app.get('/e2e/miss-log', (c) => c.json({ hits: missHits }))
 
   app.all('/e2e/echo', echoReceived)

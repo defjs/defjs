@@ -1,5 +1,5 @@
 import type { Socket } from 'node:net'
-import type { ServerType } from '@hono/node-server'
+import type { WebSocketServerLike } from '@hono/node-server'
 import { createAdaptorServer } from '@hono/node-server'
 import type { Hono } from 'hono'
 
@@ -9,7 +9,7 @@ export interface HonoTestServer {
 }
 
 export interface HonoTestServerOptions {
-  injectWebSocket?: (server: ServerType) => void
+  websocket?: { server: WebSocketServerLike }
 }
 
 export async function startHonoTestServer(app: Hono, options: HonoTestServerOptions = {}): Promise<HonoTestServer> {
@@ -17,6 +17,7 @@ export async function startHonoTestServer(app: Hono, options: HonoTestServerOpti
   const server = createAdaptorServer({
     fetch: app.fetch,
     hostname: '127.0.0.1',
+    websocket: options.websocket,
   })
 
   server.on('connection', (socket) => {
@@ -25,8 +26,6 @@ export async function startHonoTestServer(app: Hono, options: HonoTestServerOpti
       sockets.delete(socket)
     })
   })
-
-  options.injectWebSocket?.(server)
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)

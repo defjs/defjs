@@ -1,11 +1,11 @@
 import type { Socket } from 'node:net'
 import { fileURLToPath } from 'node:url'
-import { createAdaptorServer } from '@hono/node-server'
-import { createNodeWebSocket } from '@hono/node-ws'
+import { createAdaptorServer, upgradeWebSocket } from '@hono/node-server'
 import { Hono } from 'hono'
 import { chromium, firefox } from 'playwright'
 import { build } from 'vite'
 import { afterAll, beforeAll, expect, test } from 'vitest'
+import { WebSocketServer } from 'ws'
 import { browserLaunchEnv } from '../../../../test/firefox-app-data'
 import type { createClient, defineWebSocket, struct, withEndpoint, withWebSocketHandle } from '../../src'
 
@@ -34,7 +34,6 @@ beforeAll(async () => {
   moduleUrl = `data:text/javascript;base64,${Buffer.from(chunk.code).toString('base64')}`
 
   const app = new Hono()
-  const { upgradeWebSocket, injectWebSocket, wss } = createNodeWebSocket({ app, baseUrl: 'http://127.0.0.1' })
   // Clone the two original 10ms fixtures without changing the shared 200ms fixtures.
   app.get(
     '/error-before-close',
@@ -68,13 +67,13 @@ beforeAll(async () => {
       },
     })),
   )
-  const server = createAdaptorServer({ fetch: app.fetch, hostname: '127.0.0.1' })
+  const wss = new WebSocketServer({ noServer: true })
+  const server = createAdaptorServer({ fetch: app.fetch, hostname: '127.0.0.1', websocket: { server: wss } })
   const connections = new Set<Socket>()
   server.on('connection', (socket) => {
     connections.add(socket)
     socket.on('close', () => connections.delete(socket))
   })
-  injectWebSocket(server)
   stopServer = async () => {
     for (const client of wss.clients) client.terminate()
     await new Promise<void>((resolve, reject) => wss.close((error?: Error) => (error ? reject(error) : resolve())))

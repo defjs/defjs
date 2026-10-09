@@ -1,13 +1,12 @@
 import { connect, type Socket } from 'node:net'
 import type { ServerType } from '@hono/node-server'
-import { createAdaptorServer } from '@hono/node-server'
-import type { NodeWebSocket } from '@hono/node-ws'
-import { createNodeWebSocket } from '@hono/node-ws'
+import { createAdaptorServer, upgradeWebSocket } from '@hono/node-server'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { streamSSE } from 'hono/streaming'
 import type { TestProject } from 'vitest/node'
+import { WebSocketServer } from 'ws'
 import { registerBodyRoutes } from './body-routes'
 import { registerE2eProbe, registerE2eRoutes } from './e2e-routes'
 import { registerXsrfRoutes } from './xsrf-middleware'
@@ -19,7 +18,7 @@ declare module 'vitest' {
 }
 
 let testServer: ServerType | undefined
-let nodeWebSocket: NodeWebSocket | undefined
+let webSocketServer: WebSocketServer | undefined
 let testServerAddr: string
 let testServerPort: number | undefined
 const testServerSockets = new Set<Socket>()
@@ -294,12 +293,7 @@ export async function setup({ provide }: TestProject) {
     })
   })
 
-  const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({
-    app,
-    baseUrl: 'http://127.0.0.1',
-  })
-  nodeWebSocket = { injectWebSocket, upgradeWebSocket, wss }
-  registerE2eRoutes(app, upgradeWebSocket)
+  registerE2eRoutes(app)
 
   app.get(
     '/ws/basic',
@@ -528,9 +522,12 @@ export async function setup({ provide }: TestProject) {
     })),
   )
 
+  const wss = new WebSocketServer({ noServer: true })
+  webSocketServer = wss
   const server = createAdaptorServer({
     fetch: app.fetch,
     hostname: '127.0.0.1',
+    websocket: { server: wss },
   })
   testServer = server
 
@@ -540,8 +537,6 @@ export async function setup({ provide }: TestProject) {
       testServerSockets.delete(socket)
     })
   })
-
-  injectWebSocket(server)
 
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
@@ -565,15 +560,15 @@ export async function teardown() {
   const port = testServerPort
 
   try {
-    const currentWebSocket = nodeWebSocket
-    if (currentWebSocket) {
-      currentWebSocket.wss.clients.forEach((client: { terminate(): void }) => {
+    const currentWebSocketServer = webSocketServer
+    if (currentWebSocketServer) {
+      currentWebSocketServer.clients.forEach((client: { terminate(): void }) => {
         client.terminate()
       })
       try {
         await teardownDeadline(
           new Promise<void>((resolve, reject) => {
-            currentWebSocket.wss.close((error: Error | undefined) => {
+            currentWebSocketServer.close((error: Error | undefined) => {
               if (error) {
                 reject(error)
                 return
@@ -584,7 +579,7 @@ export async function teardown() {
           'WebSocket server close timed out',
         )
       } catch (cause) {
-        currentWebSocket.wss.clients.forEach((client: { terminate(): void }) => {
+        currentWebSocketServer.clients.forEach((client: { terminate(): void }) => {
           client.terminate()
         })
         failures.push(labeledTeardownFailure('WebSocket server close failed', cause))
@@ -630,7 +625,7 @@ export async function teardown() {
   } finally {
     providerEnvelopeAttempts.clear()
     testServerSockets.clear()
-    nodeWebSocket = undefined
+    webSocketServer = undefined
     testServer = undefined
     testServerPort = undefined
   }

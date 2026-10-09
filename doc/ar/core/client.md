@@ -72,16 +72,16 @@ if (!error) console.log(user.name)
 
 ## المرجع
 
-| المساعد                                                                                                       | الأثر                                                      |
+| المساعد                                                                                                       | الأثر                                                       |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | نقطة نهاية أساس مطلقة لكل وسائل النقل                      |
-| `withHeaders(HeadersInit)`                                                                                    | رؤوس افتراضية ثابتة لـ HTTP/SSE؛ رؤوس الأمر تتجاوزها       |
-| `withTimeout(ms)`                                                                                             | مهلة `execute` الافتراضية لـ HTTP فقط (SSE/WS يتجاهلانها)  |
+| `withHeaders(HeadersInit)`                                                                                    | رؤوس افتراضية ثابتة لـ HTTP/SSE؛ رؤوس الأمر تتجاوزها        |
+| `withTimeout(ms)`                                                                                             | مهلة `execute` الافتراضية لـ HTTP فقط (SSE/WS يتجاهلانها)    |
 | `withHTTPHandle(fetch)`                                                                                       | استبدل Fetch لـ HTTP                                       |
 | `withSSEHandle(fetch)`                                                                                        | استبدل Fetch لـ SSE                                        |
-| `withWebSocketHandle(WebSocket)`                                                                              | استبدل مُنشئ WebSocket                                     |
+| `withWebSocketHandle(WebSocket)`                                                                              | استبدل مُنشئ WebSocket                                      |
 | `withInterceptors(...items)`                                                                                  | ألحق معترضات مختلطة                                        |
-| `withQuerySerializer(fn)`                                                                                     | رمّز كائن استعلام مُسمّى أصلًا إلى سلسلة استعلام           |
+| `withQuerySerializer(fn)`                                                                                     | رمّز كائن استعلام مُسمّى أصلًا إلى سلسلة استعلام                  |
 | `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` لـ HTTP/SSE عندما يكون true |
 | `withXSRF(options?)`                                                                                          | ملف تعريف ارتباط XSRF لـ HTTP → رأس                        |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | مفاتيح SSE                                                 |

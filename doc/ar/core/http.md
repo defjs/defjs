@@ -93,12 +93,12 @@ else console.log(user.id)
 
 فضّل تسليم القيمة المُنوَّعة على تهجئة مفاتيح السلك. يُعلَن alias مرة واحدة على الحقل وينطبق في الاتجاهين: `output` / `error` / الأحداث / الإطارات الواردة تفك `display_name` إلى `displayName`، و`body: input.order` يعيد كتابة الشجرة كلها. يمكن لـ struct `User` نفسه أن يكون جسم إنشاء ومخرج جلب. المفتاح الذي تكتبه بنفسك هو الاستثناء: الكائن الأب مجهول، فلا يعمل الـ alias.
 
-| تعبير الـ builder                               | على السلك                                                 |
-| ----------------------------------------------- | --------------------------------------------------------- |
-| `body: input.profile`                           | كائن مُنوَّع: ترميز alias و`Date` / `bigint`              |
+| تعبير الـ builder                               | على السلك                                             |
+| ----------------------------------------------- | ----------------------------------------------------- |
+| `body: input.profile`                           | كائن مُنوَّع: ترميز alias و`Date` / `bigint`             |
 | `body: { profile: input.profile }`              | المفاتيح الخارجية حرفية، والكائن الداخلي ما زال مُنوَّعًا |
-| `body: { ...input.profile, role: 'admin' }`     | النشر يُبقي الـ struct؛ والمفتاح الإضافي حرفي             |
-| `body: { name: input.profile.displayName }`     | أب مجهول: لا ينطبق الـ alias                              |
+| `body: { ...input.profile, role: 'admin' }`     | النشر يُبقي الـ struct؛ والمفتاح الإضافي حرفي           |
+| `body: { name: input.profile.displayName }`     | أب مجهول: لا ينطبق الـ alias                           |
 | `query: input.query` / `headers: input.headers` | كائنات مسطّحة مُنوَّعة: يصبح alias مفتاح السلك            |
 
 نشر كائن مُنوَّع مع تعيين مفتاح سلكه أيضًا (`display_name` بجانب `displayName`) هو `REQ_BUILD_FAILED`. كائن متداخل في `path` أو `headers` يفشل بالطريقة نفسها.
@@ -135,16 +135,16 @@ const client = createClient(
 
 أول تطابق يفوز:
 
-| قيمة `body`                                           | تُرسَل كـ                                                                   | نوع المحتوى الافتراضي                                 |
-| ----------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
-| محذوف / `undefined`                                   | بلا جسم                                                                     | —                                                     |
+| قيمة `body`                                        | تُرسَل كـ                                                                     | نوع المحتوى الافتراضي                                  |
+| -------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| محذوف / `undefined`                                | بلا جسم                                                                      | —                                                     |
 | كائن مُنوَّع جذره يحمل وسم `urlencoded` أو `formData` | `URLSearchParams` / `FormData`؛ المفاتيح أسماء سلك؛ المصفوفات تكرر المفاتيح | نوع النموذج / حد المنصة                               |
-| `FormData`، `URLSearchParams`                         | كما هي                                                                      | نفسه؛ Defjs تمسح `Content-Type` القديم على `FormData` |
-| `Blob` / `File`                                       | كما هي                                                                      | `blob.type`، أو `application/octet-stream`            |
-| `ArrayBuffer`، `TypedArray`، `DataView`               | كما هي                                                                      | `application/octet-stream`                            |
-| `ReadableStream`                                      | متدفّق (`duplex: 'half'` عندما يسمح وقت التشغيل)                            | `application/octet-stream`                            |
-| `string`                                              | كما هي                                                                      | `text/plain;charset=UTF-8`                            |
-| كائن، مصفوفة، عدد، قيمة منطقية، `null`                | مرمَّز، ثم `JSON.stringify`                                                 | `application/json`                                    |
+| `FormData`، `URLSearchParams`                      | كما هي                                                                      | نفسه؛ Defjs تمسح `Content-Type` القديم على `FormData` |
+| `Blob` / `File`                                    | كما هي                                                                      | `blob.type`، أو `application/octet-stream`            |
+| `ArrayBuffer`، `TypedArray`، `DataView`            | كما هي                                                                      | `application/octet-stream`                            |
+| `ReadableStream`                                   | متدفّق (`duplex: 'half'` عندما يسمح وقت التشغيل)                             | `application/octet-stream`                            |
+| `string`                                           | كما هي                                                                      | `text/plain;charset=UTF-8`                            |
+| كائن، مصفوفة، عدد، قيمة منطقية، `null`             | مرمَّز، ثم `JSON.stringify`                                                   | `application/json`                                    |
 
 اضبط `content-type` على `headers` لتجاوز الافتراضي. وسم الترميز ينطبق فقط عند جذر الجسم: `body: { meta: input.form }` هو JSON، وحقول النموذج حقول JSON عادية. السلسلة نص خام؛ وسلسلة JSON مثل `"abc"` تحتاج `JSON.stringify` مع `application/json`. حقول `undefined` تُحذف؛ وحقل `nullable` مُرسَل كـ `null` هو JSON `null`.
 

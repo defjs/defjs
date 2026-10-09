@@ -118,7 +118,8 @@ import type {
 } from '@defjs/core'
 
 type HttpResult =
-  [err: null, data: unknown, response: DecodedResponse<unknown> | HttpMeta] | [err: Fault, data: undefined, response: undefined]
+  | [err: null, data: unknown, response: DecodedResponse<unknown> | HttpMeta]
+  | [err: Fault, data: undefined, response: undefined]
 type SseResult =
   | [err: null, stream: EventStreamHandle<unknown>, open: EventStreamOpenInfo]
   | [err: Fault, stream: undefined, open: EventStreamOpenInfo | undefined]
