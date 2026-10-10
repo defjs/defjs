@@ -2,9 +2,9 @@ import type { Socket } from 'node:net'
 import { fileURLToPath } from 'node:url'
 import { createAdaptorServer, upgradeWebSocket } from '@hono/node-server'
 import { Hono } from 'hono'
-import { chromium, firefox } from 'playwright'
+import { type Browser, chromium, firefox } from 'playwright'
 import { build } from 'vite'
-import { afterAll, beforeAll, expect, test } from 'vitest'
+import { afterAll, beforeAll, expect, test, vi } from 'vitest'
 import { WebSocketServer } from 'ws'
 import { browserLaunchEnv } from '../../../../test/firefox-app-data'
 import type { createClient, defineWebSocket, struct, withEndpoint, withWebSocketHandle } from '../../src'
@@ -117,7 +117,11 @@ async function openBrowser(name: 'chromium' | 'firefox') {
     )
     return { browser, page }
   } catch (error) {
-    await boundedStage(name, 'setup-cleanup', () => browser.close(), 5_000)
+    try {
+      await boundedStage(name, 'setup-cleanup', () => browser.close(), 5_000)
+    } catch (cleanupError) {
+      throw new AggregateError([error, cleanupError], `${name}: browser setup and cleanup failed`, { cause: error })
+    }
     throw error
   }
 }
@@ -137,6 +141,32 @@ async function boundedStage<T>(name: string, stage: string, run: () => Promise<T
     console.log('ROUND6_BROWSER_STAGE', name, stage, 'settled')
   }
 }
+
+test('preserves the browser setup timeout when cleanup also times out', async () => {
+  const browser = {
+    version: () => 'test',
+    newPage: () => new Promise<never>(() => {}),
+    close: () => new Promise<never>(() => {}),
+  }
+  const launch = vi.spyOn(firefox, 'launch').mockResolvedValue(browser as unknown as Browser)
+  vi.useFakeTimers()
+  try {
+    const failure = openBrowser('firefox').catch((error: unknown) => error)
+    await vi.advanceTimersByTimeAsync(10_000)
+    const error = await failure
+    expect(error).toBeInstanceOf(AggregateError)
+    expect(error).toMatchObject({
+      cause: expect.objectContaining({ message: expect.stringContaining('firefox/new-page') }),
+      errors: [
+        expect.objectContaining({ message: expect.stringContaining('firefox/new-page') }),
+        expect.objectContaining({ message: expect.stringContaining('firefox/setup-cleanup') }),
+      ],
+    })
+  } finally {
+    vi.useRealTimers()
+    launch.mockRestore()
+  }
+})
 
 test.each(['chromium', 'firefox'] as const)(
   '%s: original 10ms closes agree with native-only controls',
