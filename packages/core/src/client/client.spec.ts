@@ -46,6 +46,7 @@ describe('Client', () => {
     )
 
     const usePing = defineRequest({
+      builder: (input) => input,
       method: 'GET',
       path: '/ping',
       input: struct.object({
@@ -129,6 +130,7 @@ describe('Client', () => {
     )
 
     const request = defineRequest({
+      builder: (input) => input,
       method: 'POST',
       path: '/items',
       input: struct.object({ query: struct.object({ q: struct.string() }) }),

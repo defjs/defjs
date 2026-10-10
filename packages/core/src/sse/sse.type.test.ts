@@ -52,6 +52,7 @@ const useEvents = defineEventStream({
 })
 
 const chatStream = defineEventStream({
+  builder: (input) => input,
   maxBufferSize: 1024,
   maxQueueSize: 16,
   method: 'POST',

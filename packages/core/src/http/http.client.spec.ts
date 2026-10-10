@@ -29,6 +29,7 @@ describe('request http runtime with client config', () => {
     )
 
     const useSerializedQuery = defineRequest({
+      builder: (input) => input,
       input: struct.object({ query: struct.object({ a: struct.string(), b: struct.string() }) }),
       method: 'GET',
       path: '/query',
@@ -67,6 +68,7 @@ describe('request http runtime with client config', () => {
     )
 
     const useSerializedQuery = defineRequest({
+      builder: (input) => input,
       input: struct.object({ query: struct.object({ a: struct.string(), b: struct.string() }) }),
       method: 'GET',
       path: '/query',

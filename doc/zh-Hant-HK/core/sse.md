@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` 要 `events`、positive safe-integer `maxBufferSize`、positive safe-integer `maxQueueSize`，同 relative `path`。Method 預設 `GET`。
 
-Request shape 同 HTTP 一樣：可選 `builder` return `path`、`query`、`headers` 同 `body`。`GET` / `HEAD` 唔可以 return body。聲明過嘅 `error` struct 會 type 住 startup fault，並按 struct kind decode 非 2xx handshake body（`string` 係 text，`blob` / `file` 係 blob，`arrayBuffer` 係 bytes，否則 JSON）。你未 set `Accept` 時，Defjs 會送 `Accept: text/event-stream`。
+Request shape 同 HTTP 一樣：`builder` return `path`、`query`、`headers` 同 `body`。`GET` / `HEAD` 唔可以 return body。聲明過嘅 `error` struct 會 type 住 startup fault，並按 struct kind decode 非 2xx handshake body（`string` 係 text，`blob` / `file` 係 blob，`arrayBuffer` 係 bytes，否則 JSON）。你未 set `Accept` 時，Defjs 會送 `Accept: text/event-stream`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 一條 logical stream **只有**你 opt in reconnect 先可以跨幾次 physical Fetch attempts。冇 `withSSEReconnect`，短暫嘅 network 同 stream-read failures 就會完結條 logical stream。Open 成功之後你仍然只有一個 handle 同一個 async iterator。
 

@@ -34,9 +34,12 @@ type FormTarget = {
   append(key: string, value: string): void
 }
 
-export function runOutboundBuilder(input: unknown, builder: OutboundBuilder | undefined): unknown {
-  if (!builder) {
-    return input === undefined ? {} : input
+export function runOutboundBuilder(input: unknown, builder: OutboundBuilder | undefined, inputDeclared = input !== undefined): unknown {
+  if (builder === undefined) {
+    if (inputDeclared) {
+      throw new TypeError('An endpoint with input requires an explicit builder')
+    }
+    return {}
   }
 
   const result = builder(input as never)

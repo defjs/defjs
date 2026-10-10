@@ -121,6 +121,7 @@ describe('web socket startup faults', () => {
 
   test('should report invalid input as REQ_INPUT_INVALID', async () => {
     const useTyped = defineWebSocket({
+      builder: (input) => input,
       incoming: struct.object({ type: struct.literal('message'), text: struct.string() }),
       input: struct.object({ path: struct.object({ room: struct.number() }) }),
       maxIncomingQueueSize: 8,

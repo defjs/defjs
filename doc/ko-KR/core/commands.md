@@ -34,7 +34,7 @@ if (!error) console.log(data, response.status)
 
 struct가 값을 어떻게 인코딩할지 정하고, `builder`가 어디로 갈지 정해요. `builder`는 **파싱된** 입력의 동기적이고 순수한 함수예요. 실행 시점에 돌아요. throw하면 튜플의 `REQ_BUILD_FAILED`가 되고, 엔드포인트 호출 자체는 throw하지 않아요.
 
-input struct가 이미 `{ path?, query?, headers?, body? }`이면 `builder`를 빼세요. 그건 identity `(input) => input`이에요. 파싱된 입력이 그 모양에 대입되지 않으면 TypeScript가 `builder`를 요구해요.
+`input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 타입이 있는 값을 그대로 넘기세요. 그러면 alias, `Date` → ISO, `bigint` → 문자열이 그 struct가 쓰이는 곳마다 적용돼요. 요청 배치, 응답 디코딩, SSE 이벤트, WebSocket 프레임이에요.
 

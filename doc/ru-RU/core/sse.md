@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` нуждается в `events`, положительном safe-integer `maxBufferSize`, положительном safe-integer `maxQueueSize` и относительном `path`. Method по умолчанию `GET`.
 
-Форма запроса совпадает с HTTP: необязательный `builder`, возвращающий `path`, `query`, `headers` и `body`. `GET` / `HEAD` не могут вернуть тело. Объявленный struct `error` типизирует fault старта и декодирует non-2xx тело handshake по kind struct (`string` — текст, `blob` / `file` — blob, `arrayBuffer` — байты, иначе JSON). Defjs шлёт `Accept: text/event-stream`, если ты ещё не поставил `Accept`.
+Форма запроса совпадает с HTTP: `builder`, возвращающий `path`, `query`, `headers` и `body`. `GET` / `HEAD` не могут вернуть тело. Объявленный struct `error` типизирует fault старта и декодирует non-2xx тело handshake по kind struct (`string` — текст, `blob` / `file` — blob, `arrayBuffer` — байты, иначе JSON). Defjs шлёт `Accept: text/event-stream`, если ты ещё не поставил `Accept`. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 
 Один логический стрим может охватить несколько физических Fetch-попыток **когда** ты opt-in’ишься в reconnect. Без `withSSEReconnect` преходящие сбои сети и чтения стрима заканчивают логический стрим. При успешном open ты всё равно получаешь один handle и один async iterator.
 

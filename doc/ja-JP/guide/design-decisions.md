@@ -102,7 +102,7 @@ TypeScript の推論は期待するものを記述しますが、サーバーレ
 
 struct は両方向のフィールド契約です。`.alias(name)` がワイヤ名です。struct が値のエンコード方法を決め、`builder` がその値の行き先を決めます。
 
-`builder` は任意で、同期的で、純粋です。受け取るのはパース済みの入力 — 束縛ビューではなく実値 — で、返すのはリクエストの `path`、`query`、`headers`、`body` です。コマンドの実行時に走ります。throw するとタプル上の `REQ_BUILD_FAILED` になります。エンドポイントを呼ぶこと自体は throw しません。入力 struct がすでにそのリクエスト形なら `builder` は省きます。その省略は `(input) => input` であり、入力がその形に代入できないときは TypeScript が `builder` を要求します。
+`builder` は同期的な純粋関数です。受け取るのはパース済みの入力 — 束縛ビューではなく実値 — で、返すのはリクエストの `path`、`query`、`headers`、`body` です。コマンドの実行時に走ります。throw するとタプル上の `REQ_BUILD_FAILED` になります。エンドポイントを呼ぶこと自体は throw しません。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

@@ -107,7 +107,7 @@ Vérifier le media type d’abord, c’est ce qui transforme « j’ai demandé 
 
 Un struct est le contrat de champ, dans les deux sens. `.alias(name)` est le nom wire. Le struct décide comment une valeur est encodée. Le `builder` décide où cette valeur va.
 
-`builder` est optionnel, synchrone et pur. Il reçoit l’entrée parsée — la vraie valeur, pas une vue de binding — et renvoie la requête : `path`, `query`, `headers` et `body`. Il tourne quand la commande s’exécute. Un throw devient `REQ_BUILD_FAILED` sur le tuple ; appeler l’endpoint ne throw pas. Omets `builder` quand le struct d’entrée est déjà cette forme de requête. Cette omission est `(input) => input`, et TypeScript exige un builder quand l’entrée n’est pas assignable.
+`builder` est synchrone et pur. Il reçoit l’entrée parsée — la vraie valeur, pas une vue de binding — et renvoie la requête : `path`, `query`, `headers` et `body`. Il tourne quand la commande s’exécute. Un throw devient `REQ_BUILD_FAILED` sur le tuple ; appeler l’endpoint ne throw pas. Un `input` déclaré exige toujours un `builder` explicite, même si l’entrée a déjà la forme de la requête. Seules les définitions sans `input` peuvent omettre `builder`.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

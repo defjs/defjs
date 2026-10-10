@@ -57,6 +57,7 @@ describe('http browser runtime', () => {
     const downloadLoaded: number[] = []
 
     const useCreateAccount = defineRequest({
+      builder: (input) => input,
       input: struct.object({ body: struct.arrayBuffer() }),
       method: 'POST',
       output: struct.arrayBuffer(),
@@ -80,6 +81,7 @@ describe('http browser runtime', () => {
 
   test('should preserve fetch timeout semantics in request runtime', async () => {
     const useDelay = defineRequest({
+      builder: (input) => input,
       input: struct.object({ query: struct.object({ ms: struct.number() }) }),
       method: 'GET',
       path: '/delay',

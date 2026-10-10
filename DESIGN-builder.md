@@ -29,7 +29,7 @@
 ### 1.4 `struct.request` 放错了层
 
 - 它描述的是端点的线上形状，不是数据类型，却占用 `request`、`requestBody` 两种 Struct kind，在 `parse`、`encode`、`match`、`guards`、`utils`、`constructors`、`types` 中形成约 50 处特判；WebSocket 还要在运行时断言"不许有 headers/body"。
-- 它的核心价值——零代码映射——可以由"默认 builder 是恒等函数"无特例地提供。
+- 输入结构只描述调用参数；请求放置由显式 `builder` 完成，不需要额外的 Struct kind。
 
 ---
 
@@ -47,15 +47,15 @@
 
 ### 3.1 定义字段
 
-| 字段        | 说明                                                                                                        |
-| ----------- | ----------------------------------------------------------------------------------------------------------- |
-| `input`     | 可选。struct，校验并解析调用方参数（保留 `REQ_INPUT_INVALID`）。                                            |
-| `builder`   | 可选。`(input: BuilderInput<TInput>) => …`，同步、纯函数，execute 时惰性执行，抛错成为 `REQ_BUILD_FAILED`。 |
-| `protocols` | 仅 WebSocket，可选。静态子协议列表，属于端点契约（如 `graphql-transport-ws`），不进入 builder。             |
+| 字段        | 说明                                                                                                                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `input`     | 可选。struct，校验并解析调用方参数（保留 `REQ_INPUT_INVALID`）。                                                                     |
+| `builder`   | 声明 `input` 时必填，否则可选。`(input: BuilderInput<TInput>) => …`，同步、纯函数，execute 时惰性执行，抛错成为 `REQ_BUILD_FAILED`。 |
+| `protocols` | 仅 WebSocket，可选。静态子协议列表，属于端点契约（如 `graphql-transport-ws`），不进入 builder。                                      |
 
 - builder 只有一个参数：**真实的解析值**。没有 ctx，没有 setter。
 - 返回值就是请求本身，不引入 "parts" 之类的新概念。返回类型只用于对象字面量的上下文推导，用户无需书写其名字。
-- 省略 `builder` 等价于 `(input) => input`，前提是 `BuilderInput<TInput>` 可赋值给该传输的请求形状（类型层检查）。无 `input` 时 builder 可以是 `() => ({ headers: … })`。
+- 只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`，或使用 `() => ({ headers: … })` 构造静态请求。
 
 ### 3.2 builder 返回形状
 
@@ -188,14 +188,15 @@ const upload = defineRequest({
   builder: (input) => ({ path: { id: input.id }, body: input.form }),
 })
 
-// 省略 builder：恒等映射
+// input 只声明调用参数，builder 明确决定发送位置
 const updateUser = defineRequest({
   method: 'PATCH',
   path: '/users/:id',
   input: struct.object({
-    path: struct.object({ id: struct.number() }),
-    body: struct.object({ displayName: struct.string().alias('display_name') }),
+    id: struct.number(),
+    user: struct.object({ displayName: struct.string().alias('display_name') }),
   }),
+  builder: (input) => ({ path: { id: input.id }, body: input.user }),
 })
 
 const feed = defineEventStream({
@@ -322,7 +323,7 @@ alias 的意义是：**线上名在类型上声明一次，所有引用该类型
 | 响应解码                       | 每个 `output` / `error` / event / incoming，`display_name` → `displayName`                             |
 | 嵌套 body                      | `body: input.order`，订单行数组、地址对象整棵树自动改写                                                |
 | query / headers 交给带类型对象 | `query: input.query`（`pageSize` → `page_size`），`headers: input.headers`（`traceId` → `x-trace-id`） |
-| 恒等默认                       | 不写 builder，input 按 `{ path, query, headers, body }` 建模                                           |
+| 显式请求放置                   | `builder: (input) => ({ path: { id: input.id }, body: input.user })`                                   |
 | WS outgoing                    | `session.send(msg)` 经 struct 编码                                                                     |
 | 同一 struct 复用               | `User` 同时是 `createUser` 的 body 与 `getUser` 的 output，线上名只写一处                              |
 
@@ -419,9 +420,7 @@ type WebSocketRequestShape<P> = {
 ```ts
 type BuilderField<TInput, TShape> = [TInput] extends [undefined]
   ? { builder?: () => TShape }
-  : BuilderInput<TInput> extends TShape
-    ? { builder?: (input: BuilderInput<TInput>) => TShape }
-    : { builder: (input: BuilderInput<TInput>) => TShape }
+  : { builder: (input: BuilderInput<TInput>) => TShape }
 ```
 
 ### 5.5 endpoint 调用签名
@@ -449,7 +448,7 @@ builder: (input) => ({ path: input }) // ✘ input 含嵌套对象
 builder: (input) => ({ path: input }) // ✘ input 含 optional 字段
 builder: (input) => ({ path: { user_id: input.userId }, query: input }) // ✔ Date、string[] 可进 query
 
-defineRequest({ method: 'PATCH', path: '/users/:id', input: RequestShaped }) // ✔ 恒等默认
+defineRequest({ method: 'PATCH', path: '/users/:id', input: RequestShaped }) // ✘ 声明 input 就须写 builder
 defineRequest({ method: 'POST', path: '/x', input: struct.object({ name: struct.string() }) }) // ✘ 须写 builder
 defineRequest({ method: 'GET', path: '/x', builder: () => ({ body: { a: 1 } }) }) // ✘ GET 带 body
 defineWebSocket({ path: '/ws/:room', input, builder: (i) => ({ path: { room: i.room }, headers: {} }) }) // ✘ WS 无 headers
@@ -503,7 +502,7 @@ HTTP 的 `output` / `error`、SSE event data、WebSocket 帧统一按 struct kin
 | 项                                                                                                                                                                                             | 理由                                         |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | `internal/request_builder.ts` 的绑定视图、plan、materialize 全套及其 spec / type test                                                                                                          | 由 builder + 编码器取代                      |
-| `struct.request` 与 `request` kind                                                                                                                                                             | 由恒等默认 builder 取代                      |
+| `struct.request` 与 `request` kind                                                                                                                                                             | 由普通 input struct 和显式 builder 取代      |
 | `requestBody` kind、`struct.json`、`struct.text`                                                                                                                                               | 请求侧由 body 规则覆盖，入站由 kind 规则覆盖 |
 | `responseType` 及其条件类型                                                                                                                                                                    | 由 kind 推导                                 |
 | WS 的 `SocketStructs` 映射、`'default'` 键、type 信封约定、`normalizeIncoming` / `normalizeOutgoing`、`MissingWebSocketStructError`、`cloneStrictJsonValue`、`KnownOutgoingSocketUnion` 等类型 | 由 `incoming` / `outgoing` 单 struct 取代    |
@@ -585,7 +584,7 @@ query 嵌套格式变体众多，重做即重复造轮子；由 3.3 的序列化
 - 原生 `URLSearchParams` / `Headers` / `BodyInit` 原样透传，不经编码器与序列化器。
 - 3.4 body 分流表逐行覆盖（含 `Uint8Array` 等 `BufferSource`、默认 content-type 与 `headers` 覆盖）；codec tag 仅在 body 根生效；`undefined` 字段省略、`null` 发送。
 - query：未配置序列化器时数组展开为重复 key、嵌套报错；配置后序列化器收到的是 alias 已生效的线上对象。
-- 省略 builder 的恒等映射；不可赋值时类型报错。
+- 声明 input 却省略 builder 时类型报错；绕过类型检查则返回 `REQ_BUILD_FAILED`。无 input 的静态定义仍可省略 builder。
 - 第 5.6 节用例与 5.7 节两个坑全部落为 type test。
 - 响应解码与 `struct.parse` 不挂 `[STRUCT]`。
 - 入站 kind 表示法四类；WS `incoming` 断言失败走错误监听器；`outgoing` 经 alias 编码。

@@ -638,6 +638,7 @@ describe('request http runtime errors', () => {
 
   test('should cancel a pending request', async () => {
     const useDelay = defineRequest({
+      builder: (input) => input,
       input: struct.object({
         query: struct.object({
           ms: struct.number(),
@@ -853,6 +854,7 @@ describe('request http runtime errors', () => {
 
   test('should support timeout in second-stage config', async () => {
     const useDelay = defineRequest({
+      builder: (input) => input,
       input: struct.object({
         query: struct.object({
           ms: struct.number(),

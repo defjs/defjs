@@ -13,7 +13,7 @@ description: defineWebSocket، والجلسة، وخيارات التنفيذ.
 function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`، وstruct `incoming` واحد، وstruct `outgoing` اختياري، و`input` و`builder` اختياريان، و`protocols` ثابتة، وحدود الطابور.
+- **definition** — `path`، وstruct `incoming` واحد، وstructs `outgoing` و`input` اختيارية، و`protocols` ثابتة اختيارية، وحدود الطابور. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 - **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `WebSocketCommand`.
 
 ```ts twoslash
@@ -125,7 +125,7 @@ session.send({ type: 'message', text: 'Hello' })
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path` و`incoming`، و`outgoing` / `input` / `builder` / `protocols` اختيارية، وحدود الطابور. الـ builder قد يُرجع `path` و`query` فقط.
+`path` و`incoming`، و`outgoing` / `input` / `protocols` اختيارية، وحدود الطابور. الـ builder قد يُرجع `path` و`query` فقط. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 
 ## WebSocketEndpoint {#WebSocketEndpoint}
 

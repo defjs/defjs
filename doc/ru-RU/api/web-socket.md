@@ -13,7 +13,7 @@ description: defineWebSocket, session и опции execute.
 function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`, один struct `incoming`, необязательный struct `outgoing`, необязательные `input`, `builder`, статические `protocols`, лимиты очереди.
+- **definition** — `path`, один struct `incoming`, необязательные structs `outgoing` и `input`, необязательные статические `protocols`, лимиты очереди. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 - **Возвращает** эндпоинт. Вызови с input — получишь `WebSocketCommand`.
 
 ```ts twoslash
@@ -125,7 +125,7 @@ session.send({ type: 'message', text: 'Hello' })
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`, `incoming`, необязательные `outgoing` / `input` / `builder` / `protocols`, лимиты очереди. Builder может вернуть только `path` и `query`.
+`path`, `incoming`, необязательные `outgoing` / `input` / `protocols`, лимиты очереди. Builder может вернуть только `path` и `query`. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 
 ## WebSocketEndpoint {#WebSocketEndpoint}
 

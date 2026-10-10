@@ -62,6 +62,7 @@ describe('request http runtime', () => {
 
   test('should encode request aliases and decode response aliases through a real round-trip', async () => {
     const useUser = defineRequest({
+      builder: (input) => input,
       input: struct.object({
         body: struct.object({
           name: struct.string().alias('user_name'),
@@ -82,6 +83,7 @@ describe('request http runtime', () => {
 
   test('should round-trip a custom build bound view through the real test server', async () => {
     const useEcho = defineRequest({
+      builder: (input) => input,
       input: struct.object({
         body: struct.object({
           name: struct.string().alias('user_name'),
@@ -225,6 +227,7 @@ describe('request http runtime', () => {
       ),
     )
     const useUser = defineRequest({
+      builder: (input) => input,
       input: struct.object({ path: struct.object({ id: struct.string() }) }),
       method: 'GET',
       path: '/users/:id',

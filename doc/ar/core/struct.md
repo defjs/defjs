@@ -73,7 +73,7 @@ console.log(profile.name, profile.nickname, profile.biography, profile.note)
 
 ## وضع الطلب
 
-المسار والاستعلام والرؤوس والجسم حقول يُرجعها الـ builder، وليست struct طلب. احذف `builder` عندما يملك `input` ذلك الشكل أصلًا. `struct.urlencoded(shape)` و`struct.formData(shape)` هما struct كائن مع وسم ترميز. الوسم يعمل فقط عندما تكون تلك القيمة جذر الجسم: المفاتيح تستخدم الأسماء المستعارة، والمصفوفات تكرر اسم الحقل.
+المسار والاستعلام والرؤوس والجسم حقول يُرجعها الـ builder، وليست struct طلب. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`. `struct.urlencoded(shape)` و`struct.formData(shape)` هما struct كائن مع وسم ترميز. الوسم يعمل فقط عندما تكون تلك القيمة جذر الجسم: المفاتيح تستخدم الأسماء المستعارة، والمصفوفات تكرر اسم الحقل.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

@@ -59,7 +59,7 @@ path placeholder는 raw 스칼라라서 정확히 한 번만 인코딩돼요. �
 
 ## 입력 배치하기
 
-struct가 값을 인코딩하고, builder가 배치해요. `input`이 이미 `{ path?, query?, headers?, body? }`이면 `builder`를 빼세요.
+struct가 값을 인코딩하고, builder가 배치해요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 ```typescript twoslash
 import { createClient, defineRequest, struct, withEndpoint } from '@defjs/core'
@@ -74,6 +74,11 @@ const updateUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    headers: input.headers,
+    body: input.body,
   }),
   output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })

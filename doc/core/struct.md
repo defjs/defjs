@@ -73,7 +73,7 @@ At the root, optional can be `undefined`. Inside an object, omitted optional/nul
 
 ## Request placement
 
-Path, query, headers, and body are fields the builder returns, not a request struct. Omit `builder` when `input` already has that shape. `struct.urlencoded(shape)` and `struct.formData(shape)` are object structs with a codec tag. The tag runs only when that value is the body root: keys use aliases, and arrays repeat the field name.
+Path, query, headers, and body are fields the builder returns, not a request struct. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`. `struct.urlencoded(shape)` and `struct.formData(shape)` are object structs with a codec tag. The tag runs only when that value is the body root: keys use aliases, and arrays repeat the field name.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

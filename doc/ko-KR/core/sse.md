@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)`에는 `events`, 양의 안전 정수 `maxBufferSize`, 양의 안전 정수 `maxQueueSize`, 상대 `path`가 필요해요. method 기본값은 `GET`이에요.
 
-요청 모양은 HTTP와 같아요. 선택 `builder`가 `path`, `query`, `headers`, `body`를 돌려줘요. `GET` / `HEAD`는 body를 돌려줄 수 없어요. 선언된 `error` struct는 시작 fault의 타입을 정하고, non-2xx 핸드셰이크 body를 struct kind로 디코딩해요 (`string`은 텍스트, `blob` / `file`은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON). `Accept`를 이미 두지 않았으면 Defjs가 `Accept: text/event-stream`을 보내요.
+요청 모양은 HTTP와 같아요. `builder`가 `path`, `query`, `headers`, `body`를 돌려줘요. `GET` / `HEAD`는 body를 돌려줄 수 없어요. 선언된 `error` struct는 시작 fault의 타입을 정하고, non-2xx 핸드셰이크 body를 struct kind로 디코딩해요 (`string`은 텍스트, `blob` / `file`은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON). `Accept`를 이미 두지 않았으면 Defjs가 `Accept: text/event-stream`을 보내요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 재연결을 고르면 논리 스트림 하나가 여러 물리 Fetch 시도를 가로지를 수 있어요. `withSSEReconnect`가 없으면 일시적인 네트워크 실패와 스트림 읽기 실패는 논리 스트림을 끝내요. 열기에 성공하면 핸들 하나와 async iterator 하나를 받아요.
 

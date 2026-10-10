@@ -13,7 +13,7 @@ description: defineRequest、execute options，以及 HTTP request／response �
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`、`path`，可選 `input` struct，可選 `builder`，可選 `output` 與 `error` struct，可選 `operation`。
+- **definition** — `method`、`path`，選填 `input` struct、`output` 與 `error` struct，以及 `operation`。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 - **回傳** endpoint。帶 input 呼叫就得到 `HttpCommand`。
 
 ```ts
@@ -79,7 +79,7 @@ type HttpExecuteOptions = {
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`、`path`，可選 `input`、`builder`、`output`、`error`、`operation`。沒有 `responseType`：struct kind 決定已宣告的 body 怎麼讀。
+`method`、`path`，可選 `input`、`output`、`error`、`operation`。沒有 `responseType`：struct kind 決定已宣告的 body 怎麼讀。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

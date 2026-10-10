@@ -133,6 +133,7 @@ describe('web socket runtime', () => {
 
   test('should resolve execute and receive typed messages', async () => {
     const useChatSocket = defineWebSocket({
+      builder: (input) => input,
       maxIncomingQueueSize: 16,
       incoming: struct.discriminatedUnion('type', [
         struct.object({ type: struct.literal('joined'), roomId: struct.string(), userId: struct.number() }),
@@ -562,6 +563,7 @@ describe('web socket runtime', () => {
 
   test('should support reconnect, queued sends, and abort during reconnect delay', async () => {
     const useSocket = defineWebSocket({
+      builder: (input) => input,
       maxIncomingQueueSize: 16,
       maxOutgoingQueueSize: 1,
       input: struct.object({ query: struct.object({ key: struct.string() }) }),
@@ -617,6 +619,7 @@ describe('web socket runtime', () => {
 
   test('should abort during reconnect delay with aborted state', async () => {
     const useSocket = defineWebSocket({
+      builder: (input) => input,
       maxIncomingQueueSize: 16,
       input: struct.object({ query: struct.object({ key: struct.string() }) }),
       incoming: struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
@@ -657,6 +660,7 @@ describe('web socket runtime', () => {
 
   test('should reconnect immediately when delay is zero', async () => {
     const useSocket = defineWebSocket({
+      builder: (input) => input,
       maxIncomingQueueSize: 16,
       input: struct.object({ query: struct.object({ key: struct.string() }) }),
       incoming: struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
@@ -862,6 +866,7 @@ describe('web socket runtime', () => {
 
   test('encodes provider commands with aliases and decodes wire frames', async () => {
     const useProviderSocket = defineWebSocket({
+      builder: (input) => input,
       incoming: struct.or(
         struct.object({
           method: struct.literal('subscribe'),
@@ -986,6 +991,7 @@ describe('web socket runtime', () => {
 
   test('throws outgoing struct failures synchronously', async () => {
     const useProviderSocket = defineWebSocket({
+      builder: (input) => input,
       incoming: struct.unknown(),
       input: struct.object({ query: struct.object({ key: struct.string(), mode: struct.literal('throw') }) }),
       maxIncomingQueueSize: 1,
@@ -1023,6 +1029,7 @@ describe('web socket runtime', () => {
     const { Socket, latest } = createControllableSocketClass()
     try {
       const useProviderSocket = defineWebSocket({
+        builder: (input) => input,
         incoming: struct.or(
           struct.object({ channel: struct.literal('heartbeat') }),
           struct.object({ method: struct.literal('pong'), reqId: struct.number().alias('req_id') }),

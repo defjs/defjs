@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` braucht `events`, positive Safe-Integer `maxBufferSize`, positive Safe-Integer `maxQueueSize` und einen relativen `path`. Method defaultet auf `GET`.
 
-Die Request-Shape entspricht HTTP: optionaler `builder`, der `path`, `query`, `headers` und `body` zurückgibt. `GET` / `HEAD` können keinen Body zurückgeben. Ein deklarierter `error`-Struct typisiert den Startup-Fault und dekodiert einen Non-2xx-Handshake-Body nach Struct-Kind (`string` Text, `blob` / `file` Blob, `arrayBuffer` Bytes, sonst JSON). Defjs sendet `Accept: text/event-stream`, wenn du `Accept` nicht schon gesetzt hast.
+Die Request-Shape entspricht HTTP: `builder`, der `path`, `query`, `headers` und `body` zurückgibt. `GET` / `HEAD` können keinen Body zurückgeben. Ein deklarierter `error`-Struct typisiert den Startup-Fault und dekodiert einen Non-2xx-Handshake-Body nach Struct-Kind (`string` Text, `blob` / `file` Blob, `arrayBuffer` Bytes, sonst JSON). Defjs sendet `Accept: text/event-stream`, wenn du `Accept` nicht schon gesetzt hast. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 Ein logischer Stream kann mehrere physische Fetch-Attempts umspannen, **wenn** du Reconnect opt-in machst. Ohne `withSSEReconnect` beenden transiente Network- und Stream-Read-Failures den logischen Stream. Du bekommst trotzdem ein Handle und einen Async-Iterator, wenn das Open gelingt.
 

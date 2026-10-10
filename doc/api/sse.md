@@ -13,7 +13,7 @@ Declare an event stream, execute it, iterate events, then close.
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`, `events` map, optional `method` (default `'GET'`), optional `input`, `builder`, and `error`, buffer/queue limits.
+- **definition** — `path`, `events` map, optional `method` (default `'GET'`), optional `input` and `error`, buffer/queue limits. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
 - **Returns** an endpoint. Call with input to get an `EventStreamCommand`.
 
 ```ts twoslash
@@ -113,7 +113,7 @@ See [SSE guide](/core/sse) and [Consume an SSE stream](/recipes/consume-sse).
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`, `events`, optional `method` / `input` / `builder` / `error`, buffer and queue limits. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot return a body.
+`path`, `events`, optional `method` / `input` / `error`, buffer and queue limits. The request shape matches HTTP, including `body`. `GET` and `HEAD` cannot return a body. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

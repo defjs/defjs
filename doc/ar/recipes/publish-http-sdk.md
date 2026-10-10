@@ -19,6 +19,7 @@ export const getUser = defineRequest({
   input: struct.object({
     path: struct.object({ id: struct.number() }),
   }),
+  builder: (input) => ({ path: input.path }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })

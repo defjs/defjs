@@ -74,6 +74,7 @@ const RequestShaped = struct.object({
 })
 defineRequest({
   input: RequestShaped,
+  builder: (input) => ({ path: input.path, body: input.body }),
   method: 'PATCH',
   path: '/users/:id',
 })

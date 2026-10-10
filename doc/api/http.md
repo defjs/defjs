@@ -13,7 +13,7 @@ Declare a typed request, build a command from input, execute it.
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`, `path`, optional `input` struct, optional `builder`, optional `output` and `error` structs, optional `operation`.
+- **definition** — `method`, `path`, optional `input` struct, optional `output` and `error` structs, optional `operation`. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
 - **Returns** an endpoint. Call it with input to get an `HttpCommand`.
 
 ```ts
@@ -86,7 +86,7 @@ Cancellation is `abort` **or** `timeout`, not both. `signal` combines with eithe
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`, `path`, optional `input`, `builder`, `output`, `error`, and `operation`. There is no `responseType`: the struct kind selects how a declared body is read.
+`method`, `path`, optional `input`, `output`, `error`, and `operation`. There is no `responseType`: the struct kind selects how a declared body is read. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

@@ -34,7 +34,7 @@ Keep commands opaque。唔好挖 tags 或者 symbols。
 
 Struct 決定一個 value 點 encode。`builder` 決定佢去邊。`builder` 係 **parsed** input 嘅 synchronous pure function。佢喺 execute 時先 run。Throw 會變成 tuple 上面嘅 `REQ_BUILD_FAILED`——call endpoint 本身唔會 throw。
 
-當 input struct 已經係 `{ path?, query?, headers?, body? }`，就 omit `builder`。呢個就係 identity `(input) => input`。如果 parsed input 唔 assignable 去嗰個 shape，TypeScript 會要求有 `builder`。
+只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 將 typed value 交過去。Alias、`Date` → ISO、`bigint` → string 之後會喺用到嗰個 struct 嘅每個地方生效：request placement、response decoding、SSE events 同 WebSocket frames。
 

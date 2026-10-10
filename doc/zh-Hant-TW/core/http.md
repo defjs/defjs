@@ -59,7 +59,7 @@ Definition path 不能含 `?` 或 `#`，也不能是絕對或 protocol-relative�
 
 ## 放置 input
 
-Struct 負責編碼值。Builder 負責放置它。當 `input` 已經是 `{ path?, query?, headers?, body? }` 時，省略 `builder`。
+Struct 負責編碼值。Builder 負責放置它。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 
 ```typescript twoslash
 import { createClient, defineRequest, struct, withEndpoint } from '@defjs/core'
@@ -74,6 +74,11 @@ const updateUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    headers: input.headers,
+    body: input.body,
   }),
   output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })

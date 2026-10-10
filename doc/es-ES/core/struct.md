@@ -73,7 +73,7 @@ En la raíz, optional puede ser `undefined`. Dentro de un objeto, los campos opt
 
 ## Colocación de la solicitud
 
-Path, query, headers y body son campos que devuelve el builder, no un struct de request. Omite `builder` cuando `input` ya tiene esa forma. `struct.urlencoded(shape)` y `struct.formData(shape)` son structs de objeto con un tag de códec. El tag solo corre cuando ese valor es la raíz del body: las claves usan alias y los arrays repiten el nombre del campo.
+Path, query, headers y body son campos que devuelve el builder, no un struct de request. Declarar `input` siempre exige un `builder` explícito, aunque la entrada ya tenga la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`. `struct.urlencoded(shape)` y `struct.formData(shape)` son structs de objeto con un tag de códec. El tag solo corre cuando ese valor es la raíz del body: las claves usan alias y los arrays repiten el nombre del campo.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

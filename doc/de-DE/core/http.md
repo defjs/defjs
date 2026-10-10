@@ -59,7 +59,7 @@ Definition-Path darf kein `?` oder `#` enthalten und darf nicht absolut oder pro
 
 ## Input platzieren
 
-Der Struct encodet den Wert. Der Builder platziert ihn. Lass `builder` weg, wenn `input` schon `{ path?, query?, headers?, body? }` ist.
+Der Struct encodet den Wert. Der Builder platziert ihn. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ```typescript twoslash
 import { createClient, defineRequest, struct, withEndpoint } from '@defjs/core'
@@ -74,6 +74,11 @@ const updateUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    headers: input.headers,
+    body: input.body,
   }),
   output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })

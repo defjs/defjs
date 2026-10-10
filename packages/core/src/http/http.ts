@@ -104,6 +104,7 @@ type ResponseDeclaration<TOutput extends AnyStruct | undefined, TError extends A
  * Contract for an HTTP endpoint: method, path, optional input struct, and the structs that
  * decode its bodies.
  *
+ * Declaring `input` requires an explicit `builder` to place the parsed value on the request.
  * `output` declares the body for a 2xx response, `error` the body for anything else. Only one
  * of the two ever runs, and omitting one means that body is never read. Pass to `defineRequest`
  * to get a typed endpoint.
@@ -282,6 +283,7 @@ export async function executeHttpCommand<
       baseEndpoint: clientConfig.endpoint,
       defaultHeaders: clientConfig.headers,
       downloadProgress: config.onDownloadProgress,
+      inputDeclared: definition.input !== undefined,
       errorResponseType,
       operation: definition.operation,
       querySerializer: clientConfig.querySerializer,

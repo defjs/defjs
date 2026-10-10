@@ -59,7 +59,7 @@ El path de la definición no puede contener `?` ni `#`, ni ser absoluto o protoc
 
 ## Colocar el input
 
-El struct codifica el valor. El builder lo coloca. Omite `builder` cuando `input` ya es `{ path?, query?, headers?, body? }`.
+El struct codifica el valor. El builder lo coloca. Declarar `input` siempre exige un `builder` explícito, aunque la entrada ya tenga la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ```typescript twoslash
 import { createClient, defineRequest, struct, withEndpoint } from '@defjs/core'
@@ -74,6 +74,11 @@ const updateUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    headers: input.headers,
+    body: input.body,
   }),
   output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })

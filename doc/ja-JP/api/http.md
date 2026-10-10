@@ -13,7 +13,7 @@ description: defineRequest、execute options、HTTP の request/response 型で�
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`、`path`、任意の `input` struct、任意の `builder`、任意の `output` と `error` struct、任意の `operation`。
+- **definition** — `method`、`path`、任意の `input` struct、`output` と `error` struct、および `operation`。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 - **戻り値** エンドポイントです。入力を渡して呼ぶと `HttpCommand` になります。
 
 ```ts
@@ -79,7 +79,7 @@ type HttpExecuteOptions = {
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`、`path`、任意の `input`、`builder`、`output`、`error`、`operation` です。`responseType` はありません。宣言したボディの読み方は struct の kind が選びます。
+`method`、`path`、任意の `input`、`output`、`error`、`operation` です。`responseType` はありません。宣言したボディの読み方は struct の kind が選びます。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

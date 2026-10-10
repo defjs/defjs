@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` يحتاج `events`، و`maxBufferSize` عددًا صحيحًا آمنًا موجبًا، و`maxQueueSize` عددًا صحيحًا آمنًا موجبًا، و`path` نسبيًا. الطريقة الافتراضية `GET`.
 
-شكل الطلب يطابق HTTP: `builder` اختياري يُرجع `path` و`query` و`headers` و`body`. `GET` / `HEAD` لا يمكنهما إرجاع جسم. struct `error` معلَن يُنوّع خطأ البدء ويفك جسم مصافحة غير-2xx حسب نوع الـ struct (نص `string`، وblob لـ `blob` / `file`، وبايتات لـ `arrayBuffer`، وإلا JSON). Defjs ترسل `Accept: text/event-stream` عندما لم تضبط `Accept` أصلًا.
+شكل الطلب يطابق HTTP: `builder` يُرجع `path` و`query` و`headers` و`body`. `GET` / `HEAD` لا يمكنهما إرجاع جسم. struct `error` معلَن يُنوّع خطأ البدء ويفك جسم مصافحة غير-2xx حسب نوع الـ struct (نص `string`، وblob لـ `blob` / `file`، وبايتات لـ `arrayBuffer`، وإلا JSON). Defjs ترسل `Accept: text/event-stream` عندما لم تضبط `Accept` أصلًا. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 
 تدفق منطقي واحد يمكن أن يمتد على عدة محاولات Fetch مادية **عندما** تختار إعادة الاتصال. بلا `withSSEReconnect`، فشل الشبكة العابر وفشل قراءة التدفق ينهيان التدفق المنطقي. ما زلت تحصل على مقبض واحد ومكرّر غير متزامن واحد عندما ينجح الفتح.
 

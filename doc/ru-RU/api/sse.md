@@ -13,7 +13,7 @@ description: defineEventStream, опции execute и stream handle.
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`, карта `events`, необязательный `method` (по умолчанию `'GET'`), необязательные `input`, `builder` и `error`, лимиты buffer/queue.
+- **definition** — `path`, карта `events`, необязательный `method` (по умолчанию `'GET'`), необязательные `input` и `error`, лимиты buffer/queue. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 - **Возвращает** эндпоинт. Вызови с input — получишь `EventStreamCommand`.
 
 ```ts twoslash
@@ -113,7 +113,7 @@ Reconnect живёт на клиенте (`withSSEReconnect`). SSE `jitter` — 
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`, `events`, необязательные `method` / `input` / `builder` / `error`, лимиты buffer и queue. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут вернуть тело.
+`path`, `events`, необязательные `method` / `input` / `error`, лимиты buffer и queue. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут вернуть тело. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

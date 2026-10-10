@@ -102,7 +102,7 @@ TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check ser
 
 Struct 係 field contract，兩個方向都係。`.alias(name)` 係 wire name。Struct 決定一個 value 點 encode。`builder` 決定個 value 去邊。
 
-`builder` 可選、synchronous，而且 pure。佢收到 parsed input——真實 value，唔係 binding view——再 return request：`path`、`query`、`headers` 同 `body`。Command execute 嗰陣先 run。Throw 會變成 tuple 上面嘅 `REQ_BUILD_FAILED`；call endpoint 本身唔會 throw。當 input struct 已經係嗰個 request shape，就 omit `builder`。省略就係 `(input) => input`；input 唔 assignable 嘅時候 TypeScript 會要求有 builder。
+`builder` 係 synchronous，而且 pure。佢收到 parsed input——真實 value，唔係 binding view——再 return request：`path`、`query`、`headers` 同 `body`。Command execute 嗰陣先 run。Throw 會變成 tuple 上面嘅 `REQ_BUILD_FAILED`；call endpoint 本身唔會 throw。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

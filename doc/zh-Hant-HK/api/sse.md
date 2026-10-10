@@ -13,7 +13,7 @@ Declare 一條 event stream，execute 佢，iterate events，之後 close。
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`、`events` map，可選 `method`（default `'GET'`），可選 `input`、`builder` 同 `error`，仲有 buffer/queue limits。
+- **definition** — `path`、`events` map，可選 `method`（default `'GET'`）、`input` 同 `error`，仲有 buffer/queue limits。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 - **Returns** 一個 endpoint。用 input call 佢，就會得到 `EventStreamCommand`。
 
 ```ts twoslash
@@ -113,7 +113,7 @@ Reconnect 住喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0–1 multi
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`、`events`，可選 `method` / `input` / `builder` / `error`，仲有 buffer 同 queue 上限。Request shape 同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以 return body。
+`path`、`events`，可選 `method` / `input` / `error`，仲有 buffer 同 queue 上限。Request shape 同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以 return body。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

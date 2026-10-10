@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` 要 `events`、正 safe integer 的 `maxBufferSize`、正 safe integer 的 `maxQueueSize`，以及相对 `path`。Method 默认 `GET`。
 
-请求形状和 HTTP 一样：可选 `builder`，返回 `path`、`query`、`headers`、`body`。`GET` / `HEAD` 不能返回 body。声明了 `error` struct 时，启动 fault 带类型，非 2xx 握手 body 按 struct kind 解码（`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON）。你没设 `Accept` 时，Defjs 会发 `Accept: text/event-stream`。
+请求形状和 HTTP 一样：`builder`，返回 `path`、`query`、`headers`、`body`。`GET` / `HEAD` 不能返回 body。声明了 `error` struct 时，启动 fault 带类型，非 2xx 握手 body 按 struct kind 解码（`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON）。你没设 `Accept` 时，Defjs 会发 `Accept: text/event-stream`。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
 
 **当你**选择重连时，一条逻辑流可以跨多次物理 Fetch。没有 `withSSEReconnect`，瞬时网络和流读取失败会结束逻辑流。打开成功时你仍拿到一个 handle、一个 async iterator。
 

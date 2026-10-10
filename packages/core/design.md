@@ -91,9 +91,9 @@ struct.formData({ photo: struct.file() })
 
 ## 请求放置
 
-`builder` 是可选、同步、纯函数。它收到的是解析后的真实值，返回 `{ path?, query?, headers?, body? }`。它在 command 执行时运行。抛错变成元组上的 `REQ_BUILD_FAILED`，调用 endpoint 本身不抛。
+`builder` 是同步纯函数。它收到的是解析后的真实值，返回 `{ path?, query?, headers?, body? }`。它在 command 执行时运行。抛错变成元组上的 `REQ_BUILD_FAILED`，调用 endpoint 本身不抛。
 
-省略 `builder` 等于 `(input) => input`，前提是 input 已经是这个请求形状。TypeScript 会在 input 对不上时要求写出 `builder`。
+`defineRequest`、`defineEventStream`、`defineWebSocket` 只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
 
 ```ts
 import { defineRequest, struct } from '@defjs/core'
@@ -106,9 +106,10 @@ const updateUser = defineRequest({
   method: 'PATCH',
   path: '/users/:id',
   input: struct.object({
-    path: struct.object({ id: struct.number() }),
-    body: UserBody,
+    id: struct.number(),
+    user: UserBody,
   }),
+  builder: (input) => ({ path: { id: input.id }, body: input.user }),
   output: UserBody,
 })
 
@@ -121,7 +122,7 @@ const getUser = defineRequest({
 })
 ```
 
-调用分别是 `updateUser({ path: { id: 7 }, body: { displayName: 'Ada' } })` 和 `getUser({ id: 7 })`。优先把带类型的值交出去：`body: input.user` 会套用整棵树上的 alias。自己写的对象键是字面 wire key，alias 不生效。展开（spread）保留 struct；逻辑键和 wire 键同时出现是 `REQ_BUILD_FAILED`。
+调用分别是 `updateUser({ id: 7, user: { displayName: 'Ada' } })` 和 `getUser({ id: 7 })`。优先把带类型的值交出去：`body: input.user` 会套用整棵树上的 alias。自己写的对象键是字面 wire key，alias 不生效。展开（spread）保留 struct；逻辑键和 wire 键同时出现是 `REQ_BUILD_FAILED`。
 
 `path` 和 `headers` 必须是扁平标量。`null` 出现在 path、query、headers 里是 `REQ_BUILD_FAILED`。`undefined` 字段省略；`nullable` 的 `null` 会发出去。path 占位符是原始标量，每段只编码一次；空值和 `.` / `..` 拒绝。
 

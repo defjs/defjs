@@ -34,7 +34,7 @@ if (!error) console.log(data, response.status)
 
 struct が値のエンコード方法を決めます。`builder` が行き先を決めます。`builder` は**パース済み**入力の、同期的で純粋な関数です。execute のときに走ります。throw するとタプル上の `REQ_BUILD_FAILED` になります — エンドポイント呼び出し自体は throw しません。
 
-入力 struct がすでに `{ path?, query?, headers?, body? }` なら `builder` は省きます。それは恒等の `(input) => input` です。パース済み入力がその形に代入できないとき、TypeScript は `builder` を要求します。
+`input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 
 型付きの値をそのまま渡してください。エイリアス、`Date` → ISO、`bigint` → 文字列は、その struct が使われるあらゆる場所で適用されます。リクエストへの配置、レスポンスのデコード、SSE イベント、WebSocket フレームです。
 

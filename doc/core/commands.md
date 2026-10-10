@@ -34,7 +34,7 @@ Keep commands opaque. Don’t dig into tags or symbols.
 
 The struct decides how a value is encoded. The `builder` decides where it goes. `builder` is a synchronous pure function of the **parsed** input. It runs at execute time. A throw becomes `REQ_BUILD_FAILED` on the tuple — the endpoint call itself does not throw.
 
-Omit `builder` when the input struct is already `{ path?, query?, headers?, body? }`. That is the identity `(input) => input`. If the parsed input is not assignable to that shape, TypeScript requires a `builder`.
+A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
 
 Hand the typed value through. Alias, `Date` → ISO, and `bigint` → string then apply everywhere that struct is used: request placement, response decoding, SSE events, and WebSocket frames.
 

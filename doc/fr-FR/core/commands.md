@@ -34,7 +34,7 @@ Garde les commandes opaques. Ne fouille pas les tags ni les symboles.
 
 Le struct décide comment une valeur est encodée. Le `builder` décide où elle va. `builder` est une fonction synchrone pure de l’entrée **parsée**. Il tourne à l’execute. Un throw devient `REQ_BUILD_FAILED` sur le tuple — l’appel de l’endpoint lui-même ne throw pas.
 
-Omets `builder` quand le struct d’entrée est déjà `{ path?, query?, headers?, body? }`. C’est l’identité `(input) => input`. Si l’entrée parsée n’est pas assignable à cette forme, TypeScript exige un `builder`.
+Un `input` déclaré exige toujours un `builder` explicite, même si l’entrée a déjà la forme de la requête. Seules les définitions sans `input` peuvent omettre `builder`.
 
 Fais passer la valeur typée. Alias, `Date` → ISO et `bigint` → string s’appliquent ensuite partout où ce struct est utilisé : placement de la requête, décodage de la réponse, événements SSE et frames WebSocket.
 

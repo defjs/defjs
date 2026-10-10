@@ -13,7 +13,7 @@ description: defineWebSocket, session, 실행 options예요.
 function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`, `incoming` struct 하나, 선택 `outgoing` struct, 선택 `input`, `builder`, 정적 `protocols`, queue 한도예요.
+- **definition** — `path`, `incoming` struct 하나, 선택 `outgoing`과 `input` struct, 정적 `protocols`, queue 한도예요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 - **반환** 엔드포인트예요. 입력을 넣어 호출하면 `WebSocketCommand`가 나와요.
 
 ```ts twoslash
@@ -125,7 +125,7 @@ session.send({ type: 'message', text: 'Hello' })
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`, `incoming`, 선택 `outgoing` / `input` / `builder` / `protocols`, queue 한도예요. builder는 `path`와 `query`만 돌려줄 수 있어요.
+`path`, `incoming`, 선택 `outgoing` / `input` / `protocols`, queue 한도예요. builder는 `path`와 `query`만 돌려줄 수 있어요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 ## WebSocketEndpoint {#WebSocketEndpoint}
 

@@ -13,7 +13,7 @@ description: defineRequest، وخيارات التنفيذ، وأنواع طلب
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method` و`path`، وstruct `input` اختياري، و`builder` اختياري، وstructs `output` و`error` اختيارية، و`operation` اختياري.
+- **definition** — `method` و`path`، وstruct `input` اختياري، وstructs `output` و`error` اختيارية، و`operation` اختياري. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 - **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `HttpCommand`.
 
 ```ts
@@ -80,7 +80,7 @@ type HttpExecuteOptions = {
 
 ### RequestDefinition {#RequestDefinition}
 
-`method` و`path`، و`input` و`builder` و`output` و`error` و`operation` اختيارية. لا يوجد `responseType`: نوع الـ struct يختار كيف يُقرأ الجسم المعلَن.
+`method` و`path`، و`input` و`output` و`error` و`operation` اختيارية. لا يوجد `responseType`: نوع الـ struct يختار كيف يُقرأ الجسم المعلَن. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

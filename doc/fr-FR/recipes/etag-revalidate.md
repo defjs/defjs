@@ -29,6 +29,7 @@ const readProduct = defineRequest({
       etag: struct.string().optional().alias('If-None-Match'),
     }),
   }),
+  builder: (input) => ({ path: input.path, headers: input.headers }),
   output: Product,
 })
 

@@ -45,22 +45,21 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/v1/users/:id',
-  input: struct.object({
-    path: struct.object({
-      id: struct.number(),
-    }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const [error, user] = await client.execute(getUser({ path: { id: 1 } }))
+const [error, user] = await client.execute(getUser({ id: 1 }))
 if (error) {
   console.error(error.code)
 } else {
   console.log(user.name)
 }
 ```
+
+`input` defines the caller's parameters; `builder` explicitly places them on the request. Declaring `input` requires `builder` for HTTP, SSE, and WebSocket endpoints. Only definitions without `input` may omit it.
 
 ## Documentation
 

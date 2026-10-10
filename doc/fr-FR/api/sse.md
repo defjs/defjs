@@ -13,7 +13,7 @@ Déclare un flux d’événements, exécute-le, itère les événements, puis fe
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`, map `events`, `method` optionnel (défaut `'GET'`), `input` optionnel, `builder` et `error` optionnels, limites de buffer/queue.
+- **definition** — `path`, map `events`, `method` optionnel (défaut `'GET'`), `input` et `error` optionnels, limites de buffer/queue. Un `input` déclaré exige toujours un `builder` explicite, même si l’entrée a déjà la forme de la requête. Seules les définitions sans `input` peuvent omettre `builder`.
 - **Renvoie** un endpoint. Appelle avec l’entrée pour obtenir un `EventStreamCommand`.
 
 ```ts twoslash
@@ -113,7 +113,7 @@ Voir le [guide SSE](/core/sse) et [Consommer un flux SSE](/recipes/consume-sse).
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`, `events`, `method` / `input` / `builder` / `error` optionnels, limites de buffer et de queue. La forme de requête suit HTTP, y compris `body`. `GET` et `HEAD` ne peuvent pas renvoyer un corps.
+`path`, `events`, `method` / `input` / `error` optionnels, limites de buffer et de queue. La forme de requête suit HTTP, y compris `body`. `GET` et `HEAD` ne peuvent pas renvoyer un corps. Un `input` déclaré exige toujours un `builder` explicite, même si l’entrée a déjà la forme de la requête. Seules les définitions sans `input` peuvent omettre `builder`.
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

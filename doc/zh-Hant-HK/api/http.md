@@ -13,7 +13,7 @@ Declare 一個 typed request，用 input build command，之後 execute。
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`、`path`，可選 `input` struct，可選 `builder`，可選 `output` 同 `error` structs，可選 `operation`。
+- **definition** — `method`、`path`，可選 `input` struct、`output` 同 `error` structs，以及 `operation`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 - **Returns** 一個 endpoint。用 input call 佢，就會得到 `HttpCommand`。
 
 ```ts
@@ -80,7 +80,7 @@ Cancellation 係 `abort` **或者** `timeout`，唔可以兩個一齊。`signal`
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`、`path`，可選 `input`、`builder`、`output`、`error` 同 `operation`。冇 `responseType`：struct kind 決定一個已聲明 body 點讀。
+`method`、`path`，可選 `input`、`output`、`error` 同 `operation`。冇 `responseType`：struct kind 決定一個已聲明 body 點讀。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

@@ -29,9 +29,8 @@ import { defineRequest, struct } from '@defjs/core'
 export const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.object({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
 })
 ```
@@ -69,7 +68,7 @@ export function UserProfile({ id }: { id: number }) {
   useEffect(() => {
     const abort = new AbortController()
 
-    void client.execute(getUser({ path: { id } }), { signal: abort.signal }).then(([error, user]) => {
+    void client.execute(getUser({ id }), { signal: abort.signal }).then(([error, user]) => {
       if (!abort.signal.aborted) setName(error ? error.message : user.name)
     })
 

@@ -34,6 +34,7 @@ const createUser = defineRequest({
       email: struct.string(),
     }),
   }),
+  builder: (input) => ({ body: input.body }),
   output: User,
   error: ApiError,
 })

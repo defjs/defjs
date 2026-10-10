@@ -20,6 +20,7 @@ export type BaseTransportRequestOptions<TTransport extends BaseTransport> = {
   abort: AbortSignal
   baseEndpoint: string
   defaultHeaders?: Headers
+  inputDeclared?: boolean
   operation?: string
   querySerializer?: QuerySerializer
   timeout?: number
@@ -34,7 +35,7 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
   builder: OutboundBuilder | undefined,
   options: BaseTransportRequestOptions<TTransport>,
 ): BaseTransportRequest {
-  const built = materializeOutboundRequest(runOutboundBuilder(input, builder), options.transport)
+  const built = materializeOutboundRequest(runOutboundBuilder(input, builder, options.inputDeclared), options.transport)
   // A body is a build error here: Bun's Request accepts a GET/HEAD body and only fetch() throws.
   if (built.body !== undefined && (method.toUpperCase() === 'GET' || method.toUpperCase() === 'HEAD')) {
     throw new TypeError('GET/HEAD requests cannot have a body')

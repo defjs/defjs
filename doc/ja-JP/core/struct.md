@@ -73,7 +73,7 @@ console.log(profile.name, profile.nickname, profile.biography, profile.note)
 
 ## リクエストへの配置
 
-path、query、headers、body はビルダーが返すフィールドであり、リクエスト struct ではありません。`input` がすでにその形なら `builder` は省きます。`struct.urlencoded(shape)` と `struct.formData(shape)` は、コーデックタグ付きのオブジェクト struct です。タグが走るのは、その値がボディのルートであるときだけです。キーはエイリアスを使い、配列はフィールド名を繰り返します。
+path、query、headers、body はビルダーが返すフィールドであり、リクエスト struct ではありません。`input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。`struct.urlencoded(shape)` と `struct.formData(shape)` は、コーデックタグ付きのオブジェクト struct です。タグが走るのは、その値がボディのルートであるときだけです。キーはエイリアスを使い、配列はフィールド名を繰り返します。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

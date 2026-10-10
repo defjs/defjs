@@ -111,6 +111,7 @@ describe('web socket browser runtime', () => {
 
   test('should reconnect in real browsers', async () => {
     const command = defineWebSocket({
+      builder: (input) => input,
       maxIncomingQueueSize: 16,
       incoming: struct.object({ type: struct.literal('reconnected'), attempt: struct.number() }),
       input: struct.object({

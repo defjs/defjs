@@ -73,7 +73,7 @@ console.log(profile.name, profile.nickname, profile.biography, profile.note)
 
 ## Placement de la requête
 
-Path, query, headers et body sont des champs que le builder renvoie, pas un struct de requête. Omets `builder` quand `input` a déjà cette forme. `struct.urlencoded(shape)` et `struct.formData(shape)` sont des structs objet avec un tag de codec. Le tag ne tourne que quand cette valeur est la racine du corps : les clés utilisent les alias, et les tableaux répètent le nom du champ.
+Path, query, headers et body sont des champs que le builder renvoie, pas un struct de requête. Un `input` déclaré exige toujours un `builder` explicite, même si l’entrée a déjà la forme de la requête. Seules les définitions sans `input` peuvent omettre `builder`. `struct.urlencoded(shape)` et `struct.formData(shape)` sont des structs objet avec un tag de codec. Le tag ne tourne que quand cette valeur est la racine du corps : les clés utilisent les alias, et les tableaux répètent le nom du champ.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

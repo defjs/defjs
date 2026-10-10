@@ -22,14 +22,13 @@ const client = createClient(withEndpoint('https://api.example.com'))
 const getUser = defineRequest({
   method: 'GET',
   path: '/users/:id',
-  input: struct.object({
-    path: struct.object({ id: struct.number() }),
-  }),
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
   output: struct.object({ id: struct.number(), name: struct.string() }),
   error: struct.object({ message: struct.string() }),
 })
 
-const [error, user] = await client.execute(getUser({ path: { id: 1 } }))
+const [error, user] = await client.execute(getUser({ id: 1 }))
 
 if (error) {
   console.error(String(error), error.code)
@@ -43,7 +42,7 @@ if (error) {
 ## Core Boundaries
 
 - Commands are typed values created by `defineRequest`, `defineEventStream`, and `defineWebSocket`.
-- Structs validate request input and response data at runtime. A `builder` places parsed input onto `path`, `query`, `headers`, and `body`. Omit it when the input struct already has that shape. `.alias(name)` is the wire name for a typed value.
+- Structs validate request input and response data at runtime. A `builder` places parsed input onto `path`, `query`, `headers`, and `body`. Every definition with `input` requires an explicit `builder`; only definitions without `input` may omit it. `.alias(name)` is the wire name for a typed value.
 - Expected failures are returned as native `Fault` instances in an error-first tuple; custom interceptors and application callbacks can still throw. A `Fault` is discriminated by one closed set of `code` values whose prefix is the class — `HTTP_STATUS`, `REQ_*`, `NET_*`, `RES_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `String(error)` is directly loggable, while `code` and the variant metadata remain enumerable for structured logs.
 - Faults carry their underlying value on the native `Error` cause chain. Narrow `error.cause instanceof StructError` before calling Struct-only helpers such as `format()`, `flatten()`, or `prettify()`.
 - Server clients that capture cookies, authorization, tenant data, or user data must be created inside the owning request scope.

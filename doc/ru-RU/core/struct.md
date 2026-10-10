@@ -73,7 +73,7 @@ console.log(profile.name, profile.nickname, profile.biography, profile.note)
 
 ## Раскладка запроса
 
-Path, query, headers и body — поля, которые возвращает builder, а не request struct. Опусти `builder`, когда у `input` уже эта форма. `struct.urlencoded(shape)` и `struct.formData(shape)` — object structs с тегом кодека. Тег бежит, только когда это значение — корень тела: ключи используют алиасы, а массивы повторяют имя поля.
+Path, query, headers и body — поля, которые возвращает builder, а не request struct. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`. `struct.urlencoded(shape)` и `struct.formData(shape)` — object structs с тегом кодека. Тег бежит, только когда это значение — корень тела: ключи используют алиасы, а массивы повторяют имя поля.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

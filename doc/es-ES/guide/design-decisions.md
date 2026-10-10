@@ -128,7 +128,7 @@ preciso en lugar de un error del parser, y se salta la lectura, el parseo y el s
 
 Un struct es el contrato del campo, en ambas direcciones. `.alias(name)` es el nombre de cable. El struct decide cómo se codifica un valor. El `builder` decide dónde va ese valor.
 
-`builder` es opcional, síncrono y puro. Recibe el input parseado — el valor real, no una vista de binding — y devuelve la solicitud: `path`, `query`, `headers` y `body`. Corre cuando se ejecuta el comando. Un throw se convierte en `REQ_BUILD_FAILED` en la tupla; llamar al endpoint no lanza. Omite `builder` cuando el struct de input ya es esa forma de solicitud. Esa omisión es `(input) => input`, y TypeScript exige un builder cuando el input no es asignable.
+`builder` es síncrono y puro. Recibe el input parseado — el valor real, no una vista de binding — y devuelve la solicitud: `path`, `query`, `headers` y `body`. Corre cuando se ejecuta el comando. Un throw se convierte en `REQ_BUILD_FAILED` en la tupla; llamar al endpoint no lanza. Declarar `input` siempre exige un `builder` explícito, aunque la entrada ya tenga la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

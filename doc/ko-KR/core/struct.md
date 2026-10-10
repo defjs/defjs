@@ -73,7 +73,7 @@ console.log(profile.name, profile.nickname, profile.biography, profile.note)
 
 ## 요청 배치
 
-path, query, headers, body는 builder가 돌려주는 필드이지, 요청 struct가 아니에요. `input`이 이미 그 모양이면 `builder`를 빼세요. `struct.urlencoded(shape)`와 `struct.formData(shape)`는 코덱 태그가 있는 객체 struct예요. 태그는 그 값이 body 루트일 때만 돌아요. 키는 alias를 쓰고, 배열은 필드 이름을 반복해요.
+path, query, headers, body는 builder가 돌려주는 필드이지, 요청 struct가 아니에요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. `struct.urlencoded(shape)`와 `struct.formData(shape)`는 코덱 태그가 있는 객체 struct예요. 태그는 그 값이 body 루트일 때만 돌아요. 키는 alias를 쓰고, 배열은 필드 이름을 반복해요.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

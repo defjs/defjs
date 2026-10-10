@@ -13,7 +13,7 @@ description: defineEventStream, 실행 options, stream handle이에요.
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`, `events` map, 선택 `method`(기본 `'GET'`), 선택 `input`, `builder`, `error`, buffer/queue 한도예요.
+- **definition** — `path`, `events` map, 선택 `method`(기본 `'GET'`), `input`과 `error`, buffer/queue 한도예요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 - **반환** 엔드포인트예요. 입력을 넣어 호출하면 `EventStreamCommand`가 나와요.
 
 ```ts twoslash
@@ -113,7 +113,7 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`, `events`, 선택 `method` / `input` / `builder` / `error`, buffer와 queue 한도예요. 요청 모양은 `body`를 포함해 HTTP와 같아요. `GET`과 `HEAD`는 body를 돌려줄 수 없어요.
+`path`, `events`, 선택 `method` / `input` / `error`, buffer와 queue 한도예요. 요청 모양은 `body`를 포함해 HTTP와 같아요. `GET`과 `HEAD`는 body를 돌려줄 수 없어요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

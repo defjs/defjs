@@ -13,7 +13,7 @@ Deklariere einen Socket, führe ihn aus, sende/empfange typisierte Messages, dan
 function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`, ein `incoming`-Struct, optionaler `outgoing`-Struct, optionales `input`, `builder`, statische `protocols`, Queue-Limits.
+- **definition** — `path`, ein `incoming`-Struct, optionale `outgoing`- und `input`-Structs, optionale statische `protocols`, Queue-Limits. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 - **Returns** einen Endpoint. Ruf ihn mit Input auf und du bekommst einen `WebSocketCommand`.
 
 ```ts twoslash
@@ -125,7 +125,7 @@ Siehe [WebSocket-Guide](/core/web-socket) und [WebSocket-Session öffnen](/recip
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`, `incoming`, optional `outgoing` / `input` / `builder` / `protocols`, Queue-Limits. Der Builder darf nur `path` und `query` zurückgeben.
+`path`, `incoming`, optional `outgoing` / `input` / `protocols`, Queue-Limits. Der Builder darf nur `path` und `query` zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ## WebSocketEndpoint {#WebSocketEndpoint}
 

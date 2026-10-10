@@ -285,7 +285,7 @@ function summarize(event: Event): string {
 
 ## 请求放置
 
-path、query、headers、body 由 endpoint 的 `builder` 返回，不是一种 struct kind。input 本身已经是这个形状时可以省略 `builder`，等价于 `(input) => input`。字段是否必填只看它自己的 `.optional()` / `.nullish()`，没有“整段 section 可省略”的特判。
+path、query、headers、body 由 endpoint 的 `builder` 返回，不是一种 struct kind。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。字段是否必填只看它自己的 `.optional()` / `.nullish()`，没有“整段 section 可省略”的特判。
 
 ```typescript
 const UpdateInput = struct.object({
@@ -307,6 +307,12 @@ const updateUser = defineRequest({
   method: 'PATCH',
   path: '/users/:id',
   input: UpdateInput,
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
+  }),
 })
 
 updateUser({

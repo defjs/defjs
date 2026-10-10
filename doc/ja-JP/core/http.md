@@ -59,7 +59,7 @@ path のプレースホルダは生のスカラーで、ちょうど一度だけ
 
 ## 入力を配置する
 
-struct が値をエンコードします。ビルダーがそれを配置します。`input` がすでに `{ path?, query?, headers?, body? }` なら `builder` は省きます。
+struct が値をエンコードします。ビルダーがそれを配置します。`input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 
 ```typescript twoslash
 import { createClient, defineRequest, struct, withEndpoint } from '@defjs/core'
@@ -74,6 +74,11 @@ const updateUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    headers: input.headers,
+    body: input.body,
   }),
   output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })

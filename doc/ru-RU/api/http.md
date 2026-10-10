@@ -13,7 +13,7 @@ description: defineRequest, опции execute и типы HTTP request/response
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`, `path`, необязательный `input` struct, необязательный `builder`, необязательные `output` и `error` structs, необязательный `operation`.
+- **definition** — `method`, `path`, необязательный `input` struct, необязательные `output` и `error` structs, необязательный `operation`. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 - **Возвращает** эндпоинт. Вызови его с input — получишь `HttpCommand`.
 
 ```ts
@@ -79,7 +79,7 @@ type HttpExecuteOptions = {
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`, `path`, необязательные `input`, `builder`, `output`, `error` и `operation`. `responseType` нет: kind struct выбирает, как читать объявленное тело.
+`method`, `path`, необязательные `input`, `output`, `error` и `operation`. `responseType` нет: kind struct выбирает, как читать объявленное тело. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

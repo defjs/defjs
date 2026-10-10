@@ -13,7 +13,7 @@ Declara una solicitud tipada, construye un comando a partir del input y ejecúta
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`, `path`, struct `input` opcional, `builder` opcional, structs `output` y `error` opcionales, `operation` opcional.
+- **definition** — `method`, `path`, struct `input` opcional, structs `output` y `error` opcionales, `operation` opcional. Declarar `input` siempre exige un `builder` explícito, aunque la entrada ya tenga la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
 - **Devuelve** un endpoint. Llámalo con el input para obtener un `HttpCommand`.
 
 ```ts
@@ -86,7 +86,7 @@ La cancelación es `abort` **o** `timeout`, no ambos. `signal` se combina con cu
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`, `path`, `input` opcional, `builder`, `output`, `error` y `operation`. No hay `responseType`: el kind del struct elige cómo se lee un cuerpo declarado.
+`method`, `path`, `input` opcional, `output`, `error` y `operation`. No hay `responseType`: el kind del struct elige cómo se lee un cuerpo declarado. Declarar `input` siempre exige un `builder` explícito, aunque la entrada ya tenga la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

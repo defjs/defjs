@@ -212,6 +212,7 @@ useOptionalRequestSections({ query: { page: 1 } })
 useOptionalRequestSections()
 
 const useMixedRequestSection = defineRequest({
+  builder: (input) => input,
   input: struct.object({ query: struct.object({ page: struct.number().optional(), q: struct.string() }) }),
   method: 'GET',
   path: '/mixed-section',
@@ -221,6 +222,7 @@ useMixedRequestSection({ query: { q: 'defjs' } })
 useMixedRequestSection({})
 
 const useOptionalBodyFields = defineRequest({
+  builder: (input) => input,
   input: struct.object({ body: struct.object({ note: struct.string().optional() }) }),
   method: 'POST',
   path: '/body',

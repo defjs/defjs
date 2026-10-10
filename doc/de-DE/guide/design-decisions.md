@@ -128,7 +128,7 @@ Fault statt eines Parser-Errors, und es überspringt Lesen, Parsen und Struct ko
 
 Ein Struct ist der Field-Vertrag, in beide Richtungen. `.alias(name)` ist der Wire-Name. Der Struct entscheidet, wie ein Wert encodet wird. Der `builder` entscheidet, wohin dieser Wert geht.
 
-`builder` ist optional, synchron und pure. Er bekommt den geparsten Input — den echten Wert, keine Binding-Sicht — und gibt den Request zurück: `path`, `query`, `headers` und `body`. Er läuft, wenn der Command ausgeführt wird. Ein Throw wird `REQ_BUILD_FAILED` auf dem Tupel; der Endpoint-Aufruf throwt nicht. Lass `builder` weg, wenn der Input-Struct schon diese Request-Shape ist. Dieses Weglassen ist `(input) => input`, und TypeScript verlangt einen Builder, wenn der Input nicht zuweisbar ist.
+`builder` ist synchron und pure. Er bekommt den geparsten Input — den echten Wert, keine Binding-Sicht — und gibt den Request zurück: `path`, `query`, `headers` und `body`. Er läuft, wenn der Command ausgeführt wird. Ein Throw wird `REQ_BUILD_FAILED` auf dem Tupel; der Endpoint-Aufruf throwt nicht. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

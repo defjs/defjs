@@ -57,7 +57,7 @@ interface WebSocketDefinitionBase<TIncoming extends AnyStruct = AnyStruct, TOutg
   protocols?: readonly string[]
 }
 
-/** Contract describing a WebSocket endpoint: path, message structs, and queue limits. */
+/** Contract describing a WebSocket endpoint. Declared input requires an explicit builder. */
 export type WebSocketDefinition<
   TInput extends AnyStruct | undefined = undefined,
   TIncoming extends AnyStruct = AnyStruct,
@@ -332,7 +332,7 @@ async function runWebSocketCommand<
 
   let built: MaterializedRequest
   try {
-    built = materializeOutboundRequest(runOutboundBuilder(parsedInput, endpoint.builder), 'webSocket')
+    built = materializeOutboundRequest(runOutboundBuilder(parsedInput, endpoint.builder, endpoint.input !== undefined), 'webSocket')
   } catch (error) {
     return stopBeforeTransport(resolveTransportCancellation(deadline, signal, createPreflightFault('REQ_BUILD_FAILED', error)))
   }

@@ -102,7 +102,7 @@ TypeScript 推断只描述你期望什么，拦不住服务端真返回什么。
 
 Struct 是字段契约，两个方向都是。`.alias(name)` 是线上名字。Struct 决定值怎么编码。`builder` 决定这个值放哪。
 
-`builder` 可选、同步、纯。它收到的是 parse 过的 input——真值，不是绑定视图——并返回请求：`path`、`query`、`headers`、`body`。command 执行时才跑。抛错会变成 tuple 上的 `REQ_BUILD_FAILED`；调用 endpoint 本身不抛。input struct 已经是那个请求形状时，省略 `builder`。省略就是 `(input) => input`；input 不能赋给那个形状时，TypeScript 会要求一个 builder。
+`builder` 是同步纯函数。它收到的是 parse 过的 input——真值，不是绑定视图——并返回请求：`path`、`query`、`headers`、`body`。command 执行时才跑。抛错会变成 tuple 上的 `REQ_BUILD_FAILED`；调用 endpoint 本身不抛。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

@@ -3,7 +3,7 @@ import { createClient, withEndpoint, withInterceptors, withQuerySerializer, with
 import { createHttpInterceptor } from '../interceptor'
 import { makeResponse } from './http_response'
 import { parseEndpointInput } from './endpoint_input'
-import { materializeOutboundRequest, type OutboundBuilder } from './outbound_request'
+import { materializeOutboundRequest } from './outbound_request'
 import { createHttpRequest } from '../http/request'
 import { defineRequest } from '../http/http'
 import { defineEventStream } from '../sse/sse'
@@ -81,10 +81,10 @@ function buildHttp(
   method: string,
   path: string,
   input: unknown,
-  builder: ((value: LooseInput) => unknown) | undefined,
+  builder: (value: LooseInput) => unknown,
   serializer?: (query: { [key: string]: unknown }) => string,
 ) {
-  return createHttpRequest(method, path, input, builder as OutboundBuilder | undefined, {
+  return createHttpRequest(method, path, input, builder, {
     abort: new AbortController().signal,
     baseEndpoint: 'https://api.example.com',
     querySerializer: serializer,
@@ -838,7 +838,7 @@ describe('outbound request builder', () => {
     expect(error.cause.message).toBe('boom')
   })
 
-  test('uses the parsed input as the request when builder is omitted', async () => {
+  test('uses an explicit identity builder for request-shaped input', async () => {
     let captured: { body?: unknown; endpoint?: string; headers?: Headers } | undefined
     const client = createClient(
       withEndpoint('https://example.com'),
@@ -854,6 +854,7 @@ describe('outbound request builder', () => {
       ),
     )
     const updateUser = defineRequest({
+      builder: (input) => input,
       input: struct.object({
         body: struct.object({ displayName: struct.string().alias('display_name') }),
         path: struct.object({ id: struct.number() }),

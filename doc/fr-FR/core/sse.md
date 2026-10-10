@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` a besoin de `events`, d’un `maxBufferSize` entier sûr positif, d’un `maxQueueSize` entier sûr positif, et d’un `path` relatif. La méthode vaut `GET` par défaut.
 
-La forme de requête suit HTTP : `builder` optionnel qui renvoie `path`, `query`, `headers` et `body`. `GET` / `HEAD` ne peuvent pas renvoyer un corps. Un struct `error` déclaré type le fault de démarrage et décode un corps de handshake non-2xx selon le kind du struct (`string` texte, `blob` / `file` blob, `arrayBuffer` octets, sinon JSON). Defjs envoie `Accept: text/event-stream` quand tu n’as pas déjà posé `Accept`.
+La forme de requête suit HTTP : `builder` qui renvoie `path`, `query`, `headers` et `body`. `GET` / `HEAD` ne peuvent pas renvoyer un corps. Un struct `error` déclaré type le fault de démarrage et décode un corps de handshake non-2xx selon le kind du struct (`string` texte, `blob` / `file` blob, `arrayBuffer` octets, sinon JSON). Defjs envoie `Accept: text/event-stream` quand tu n’as pas déjà posé `Accept`. Un `input` déclaré exige toujours un `builder` explicite, même si l’entrée a déjà la forme de la requête. Seules les définitions sans `input` peuvent omettre `builder`.
 
 Un flux logique peut couvrir plusieurs tentatives Fetch physiques **quand** tu optes pour le reconnect. Sans `withSSEReconnect`, les échecs réseau transitoires et de lecture de flux terminent le flux logique. Tu as toujours un handle et un itérateur async quand l’ouverture réussit.
 

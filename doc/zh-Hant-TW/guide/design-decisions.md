@@ -102,7 +102,7 @@ TypeScript 推導描述的是你期待的形狀；它無法在執行階段檢查
 
 Struct 是雙向的欄位契約。`.alias(name)` 是 wire 名稱。Struct 決定值怎麼編碼。`builder` 決定值放到哪。
 
-`builder` 是選填的、同步的、純粹的。它收到的是剖析後的 input——真實的值，不是綁定視圖——並回傳 request：`path`、`query`、`headers`、`body`。它在 command 執行時跑。丟出錯誤會變成 tuple 上的 `REQ_BUILD_FAILED`；呼叫 endpoint 本身不會 throw。當 input struct 已經是那個 request 形狀時，省略 `builder`。省略就等於 `(input) => input`；input 不能指派成那個形狀時，TypeScript 會要求 builder。
+`builder` 是同步純函式。它收到的是剖析後的 input——真實的值，不是綁定視圖——並回傳 request：`path`、`query`、`headers`、`body`。它在 command 執行時跑。丟出錯誤會變成 tuple 上的 `REQ_BUILD_FAILED`；呼叫 endpoint 本身不會 throw。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

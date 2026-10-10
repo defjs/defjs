@@ -595,8 +595,9 @@ describe('request builder through the real server', () => {
     expect(url.bodyText).toBe('source_url=https%3A%2F%2Fexample.com%2Fa')
   })
 
-  test('uses the identity builder when input already has the request shape', async () => {
+  test('uses an explicit identity builder when input already has the request shape', async () => {
     const updateUser = defineRequest({
+      builder: (input) => input,
       input: struct.object({
         body: struct.object({
           displayName: struct.string().alias('display_name'),

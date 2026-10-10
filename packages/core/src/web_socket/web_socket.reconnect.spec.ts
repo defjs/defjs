@@ -20,6 +20,7 @@ describe('web socket runtime reconnect', () => {
 
   test('should reconnect and flush queued messages', async () => {
     const useReconnectSocket = defineWebSocket({
+      builder: (input) => input,
       maxIncomingQueueSize: 16,
       maxOutgoingQueueSize: 2,
       incoming: struct.discriminatedUnion('type', [

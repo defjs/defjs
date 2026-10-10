@@ -87,6 +87,7 @@ describe('web socket runtime lifecycle', () => {
     )
 
     const useBeforeConnectSocket = defineWebSocket({
+      builder: (input) => input,
       maxIncomingQueueSize: 16,
       input: struct.object({ query: struct.object({ token: struct.string() }) }),
       incoming: struct.object({ type: struct.literal('connected'), token: struct.string() }),

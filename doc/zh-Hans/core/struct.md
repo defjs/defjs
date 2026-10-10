@@ -73,7 +73,7 @@ console.log(profile.name, profile.nickname, profile.biography, profile.note)
 
 ## 请求怎么摆
 
-Path、query、headers、body 是 builder 返回的字段，不是一种 request struct。`input` 已经是这个形状时，省略 `builder`。`struct.urlencoded(shape)` 和 `struct.formData(shape)` 是带 codec tag 的对象 struct。这个 tag 只在该值是 body 根时跑：key 用 alias，数组重复字段名。
+Path、query、headers、body 是 builder 返回的字段，不是一种 request struct。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。`struct.urlencoded(shape)` 和 `struct.formData(shape)` 是带 codec tag 的对象 struct。这个 tag 只在该值是 body 根时跑：key 用 alias，数组重复字段名。
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

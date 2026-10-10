@@ -59,7 +59,7 @@ Path определения не может содержать `?` или `#` и
 
 ## Разложи input
 
-Struct кодирует значение. Builder его раскладывает. Опусти `builder`, когда `input` уже `{ path?, query?, headers?, body? }`.
+Struct кодирует значение. Builder его раскладывает. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
 
 ```typescript twoslash
 import { createClient, defineRequest, struct, withEndpoint } from '@defjs/core'
@@ -74,6 +74,11 @@ const updateUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    headers: input.headers,
+    body: input.body,
   }),
   output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })

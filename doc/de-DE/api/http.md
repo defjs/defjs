@@ -13,7 +13,7 @@ Deklariere einen typisierten Request, baue aus dem Input einen Command, führe i
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`, `path`, optionaler `input`-Struct, optionaler `builder`, optionale `output`- und `error`-Structs, optionales `operation`.
+- **definition** — `method`, `path`, optionaler `input`-Struct, optionale `output`- und `error`-Structs, optionales `operation`. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 - **Returns** einen Endpoint. Ruf ihn mit Input auf und du bekommst einen `HttpCommand`.
 
 ```ts
@@ -86,7 +86,7 @@ Cancellation ist `abort` **oder** `timeout`, nicht beides. `signal` kombiniert m
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`, `path`, optional `input`, `builder`, `output`, `error` und `operation`. Es gibt kein `responseType`: der Struct-Kind wählt, wie ein deklarierter Body gelesen wird.
+`method`, `path`, optional `input`, `output`, `error` und `operation`. Es gibt kein `responseType`: der Struct-Kind wählt, wie ein deklarierter Body gelesen wird. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

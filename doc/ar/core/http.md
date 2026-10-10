@@ -59,7 +59,7 @@ void client.execute(command)
 
 ## ضع المدخل
 
-الـ struct يرمّز القيمة. والـ builder يضعها. احذف `builder` عندما يكون `input` أصلًا `{ path?, query?, headers?, body? }`.
+الـ struct يرمّز القيمة. والـ builder يضعها. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 
 ```typescript twoslash
 import { createClient, defineRequest, struct, withEndpoint } from '@defjs/core'
@@ -74,6 +74,11 @@ const updateUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    headers: input.headers,
+    body: input.body,
   }),
   output: struct.object({ id: struct.number(), displayName: struct.string().alias('display_name') }),
 })

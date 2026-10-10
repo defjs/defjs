@@ -75,7 +75,7 @@ describe('http request helpers', () => {
 
   test('should reject request-shaped missing path params', () => {
     expect(() =>
-      createHttpRequest('GET', '/user/:id', { path: {} }, undefined, {
+      createHttpRequest('GET', '/user/:id', { path: {} }, (input) => input, {
         abort: new AbortController().signal,
         baseEndpoint: 'https://api.example.com',
       }),
@@ -83,7 +83,7 @@ describe('http request helpers', () => {
   })
 
   test('should pass encoded query values to a custom querySerializer', () => {
-    const request = createHttpRequest('GET', '/search', { query: { filter: ['active'], include: true } }, undefined, {
+    const request = createHttpRequest('GET', '/search', { query: { filter: ['active'], include: true } }, (input) => input, {
       abort: new AbortController().signal,
       baseEndpoint: 'https://api.example.com',
       querySerializer: (query) => {
@@ -119,7 +119,7 @@ describe('http request helpers', () => {
         orgId: 'org_1',
       },
     })
-    const request = createHttpRequest('POST', '/orgs/:org_id/users', parsed, undefined, options)
+    const request = createHttpRequest('POST', '/orgs/:org_id/users', parsed, (input) => input, options)
 
     expect(request.endpoint).toBe('/orgs/org_1/users')
     expect(request.queryString).toBe('')
@@ -152,7 +152,7 @@ describe('http request helpers', () => {
         queryName: 'Jack',
       },
     })
-    const request = createHttpRequest('POST', '/users/:uid', parsed, undefined, options)
+    const request = createHttpRequest('POST', '/users/:uid', parsed, (input) => input, options)
 
     expect(request.endpoint).toBe('/users/7')
     expect(request.queryString).toBe('name=Jack')

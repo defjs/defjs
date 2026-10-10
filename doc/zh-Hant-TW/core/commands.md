@@ -34,7 +34,7 @@ if (!error) console.log(data, response.status)
 
 Struct 決定值怎麼編碼。`builder` 決定值放到哪。`builder` 是**已剖析** input 的同步純函式。它在執行時跑。丟出錯誤會變成 tuple 上的 `REQ_BUILD_FAILED` — 呼叫 endpoint 本身不會 throw。
 
-當 input struct 已經是 `{ path?, query?, headers?, body? }` 時，省略 `builder`。那就是恆等的 `(input) => input`。剖析後的 input 不能指派成那個形狀時，TypeScript 會要求 `builder`。
+只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 
 把型別化的值交出去。Alias、`Date` → ISO、`bigint` → 字串，會套用在這個 struct 出現的每個地方：request 放置、回應解碼、SSE events、WebSocket frames。
 

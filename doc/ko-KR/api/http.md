@@ -13,7 +13,7 @@ description: defineRequest, 실행 options, HTTP request/response 타입이에�
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`, `path`, 선택 `input` struct, 선택 `builder`, 선택 `output`과 `error` struct, 선택 `operation`이에요.
+- **definition** — `method`, `path`, 선택 `input` struct, `output`과 `error` struct, `operation`이에요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 - **반환** 엔드포인트예요. 입력을 넣어 호출하면 `HttpCommand`가 나와요.
 
 ```ts
@@ -79,7 +79,7 @@ type HttpExecuteOptions = {
 
 ### RequestDefinition {#RequestDefinition}
 
-`method`, `path`, 선택 `input`, `builder`, `output`, `error`, `operation`이에요. `responseType`은 없어요. struct kind가 선언된 body를 어떻게 읽을지 골라요.
+`method`, `path`, 선택 `input`, `output`, `error`, `operation`이에요. `responseType`은 없어요. struct kind가 선언된 body를 어떻게 읽을지 골라요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 ### ResponseDeclaration {#ResponseDeclaration}
 

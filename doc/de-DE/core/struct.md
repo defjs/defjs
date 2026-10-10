@@ -73,7 +73,7 @@ Am Root kann optional `undefined` sein. Innerhalb eines Objects bleiben weggelas
 
 ## Request-Platzierung
 
-Path, Query, Headers und Body sind Fields, die der Builder zurückgibt, kein Request-Struct. Lass `builder` weg, wenn `input` diese Shape schon hat. `struct.urlencoded(shape)` und `struct.formData(shape)` sind Object-Structs mit einem Codec-Tag. Der Tag läuft nur, wenn dieser Wert der Body-Root ist: Keys nutzen Aliasse, und Arrays wiederholen den Field-Namen.
+Path, Query, Headers und Body sind Fields, die der Builder zurückgibt, kein Request-Struct. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen. `struct.urlencoded(shape)` und `struct.formData(shape)` sind Object-Structs mit einem Codec-Tag. Der Tag läuft nur, wenn dieser Wert der Body-Root ist: Keys nutzen Aliasse, und Arrays wiederholen den Field-Namen.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'
@@ -88,6 +88,12 @@ const createUser = defineRequest({
     body: struct.object({
       displayName: struct.string().alias('display_name'),
     }),
+  }),
+  builder: (input) => ({
+    path: input.path,
+    query: input.query,
+    headers: input.headers,
+    body: input.body,
   }),
 })
 

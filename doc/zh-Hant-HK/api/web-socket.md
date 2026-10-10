@@ -13,7 +13,7 @@ Declare 一個 socket，execute 佢，send/receive typed messages，之後 close
 function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`、一個 `incoming` struct，可選 `outgoing` struct，可選 `input`、`builder`、static `protocols`、queue limits。
+- **definition** — `path`、一個 `incoming` struct，可選 `outgoing` 同 `input` structs、static `protocols`，仲有 queue limits。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 - **Returns** 一個 endpoint。用 input call 佢，就會得到 `WebSocketCommand`。
 
 ```ts twoslash
@@ -125,7 +125,7 @@ session.send({ type: 'message', text: 'Hello' })
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`、`incoming`，可選 `outgoing` / `input` / `builder` / `protocols`，仲有 queue 上限。Builder 只可以 return `path` 同 `query`。
+`path`、`incoming`，可選 `outgoing` / `input` / `protocols`，仲有 queue 上限。Builder 只可以 return `path` 同 `query`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ## WebSocketEndpoint {#WebSocketEndpoint}
 

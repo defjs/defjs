@@ -13,7 +13,7 @@ description: defineEventStream、execute options，以及 stream handle。
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`、`events` map，可选 `method`（默认 `'GET'`），可选 `input`、`builder`、`error`，以及 buffer/queue 上限。
+- **definition** — `path`、`events` map，可选 `method`（默认 `'GET'`），可选 `input` 和 `error`，以及 buffer/queue 上限。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
 - **返回** 一个 endpoint。塞 input 调用，得到 `EventStreamCommand`。
 
 ```ts twoslash
@@ -113,7 +113,7 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`、`events`，可选 `method` / `input` / `builder` / `error`，还有 buffer 和 queue 上限。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能返回 body。
+`path`、`events`，可选 `method` / `input` / `error`，还有 buffer 和 queue 上限。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能返回 body。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

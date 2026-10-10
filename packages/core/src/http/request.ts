@@ -13,6 +13,7 @@ export function createHttpRequest(
     baseEndpoint: string
     defaultHeaders?: Headers
     downloadProgress?: HttpProgressFn
+    inputDeclared?: boolean
     operation?: string
     errorResponseType?: HttpResponseType
     querySerializer?: QuerySerializer
@@ -31,6 +32,7 @@ export function createHttpRequest(
     abort: options.abort,
     baseEndpoint: options.baseEndpoint,
     defaultHeaders: options.defaultHeaders,
+    inputDeclared: options.inputDeclared,
     operation: options.operation,
     querySerializer: options.querySerializer,
     timeout: options.timeout,

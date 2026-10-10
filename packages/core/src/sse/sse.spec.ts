@@ -175,6 +175,7 @@ describe('request event stream runtime', () => {
     })
     const client = createClient(withEndpoint('https://api.example.com'), withSSEHandle(fetchMock))
     const chat = defineEventStream({
+      builder: (input) => input,
       maxBufferSize: 1024,
       maxQueueSize: 16,
       method: 'POST',

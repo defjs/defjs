@@ -102,7 +102,7 @@ TypeScript 추론은 기대를 설명할 뿐, 런타임에 서버 응답을 검�
 
 struct는 양방향의 필드 계약이에요. `.alias(name)`이 와이어 이름이에요. struct가 값을 어떻게 인코딩할지 정하고, `builder`가 그 값이 어디로 갈지 정해요.
 
-`builder`는 선택이고, 동기적이고, 순수해요. 바인딩 뷰가 아니라 파싱된 입력, 즉 실제 값을 받고, `path`, `query`, `headers`, `body`라는 요청을 돌려줘요. 명령이 실행될 때 돌아요. throw하면 튜플의 `REQ_BUILD_FAILED`가 되고, 엔드포인트를 호출하는 것은 throw하지 않아요. input struct가 이미 그 요청 모양이면 `builder`를 빼세요. 그 생략은 `(input) => input`이고, 입력이 대입되지 않으면 TypeScript가 builder를 요구해요.
+`builder`는 동기적인 순수 함수예요. 바인딩 뷰가 아니라 파싱된 입력, 즉 실제 값을 받고, `path`, `query`, `headers`, `body`라는 요청을 돌려줘요. 명령이 실행될 때 돌아요. throw하면 튜플의 `REQ_BUILD_FAILED`가 되고, 엔드포인트를 호출하는 것은 throw하지 않아요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

@@ -128,7 +128,7 @@ fault instead of a parser error, and it skips the read, the parse, and the struc
 
 A struct is the field contract, in both directions. `.alias(name)` is the wire name. The struct decides how a value is encoded. The `builder` decides where that value goes.
 
-`builder` is optional, synchronous, and pure. It receives the parsed input — the real value, not a binding view — and returns the request: `path`, `query`, `headers`, and `body`. It runs when the command executes. A throw becomes `REQ_BUILD_FAILED` on the tuple; calling the endpoint does not throw. Omit `builder` when the input struct is already that request shape. That omission is `(input) => input`, and TypeScript requires a builder when the input is not assignable.
+`builder` is synchronous and pure. It receives the parsed input — the real value, not a binding view — and returns the request: `path`, `query`, `headers`, and `body`. It runs when the command executes. A throw becomes `REQ_BUILD_FAILED` on the tuple; calling the endpoint does not throw. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
 
 ```typescript twoslash
 import { defineRequest, struct } from '@defjs/core'

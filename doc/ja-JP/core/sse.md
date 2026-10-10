@@ -37,7 +37,7 @@ if (error) {
 
 `defineEventStream(...)` には `events`、正の安全な整数の `maxBufferSize`、正の安全な整数の `maxQueueSize`、相対 `path` が要ります。method のデフォルトは `GET` です。
 
-リクエストの形は HTTP と同じです。任意の `builder` が `path`、`query`、`headers`、`body` を返します。`GET` / `HEAD` はボディを返せません。宣言した `error` struct は起動時の fault に型を付け、non-2xx のハンドシェイクボディを struct の kind でデコードします（`string` はテキスト、`blob` / `file` は blob、`arrayBuffer` はバイト列、それ以外は JSON）。`Accept` をすでに立てていなければ、Defjs は `Accept: text/event-stream` を送ります。
+リクエストの形は HTTP と同じです。`builder` が `path`、`query`、`headers`、`body` を返します。`GET` / `HEAD` はボディを返せません。宣言した `error` struct は起動時の fault に型を付け、non-2xx のハンドシェイクボディを struct の kind でデコードします（`string` はテキスト、`blob` / `file` は blob、`arrayBuffer` はバイト列、それ以外は JSON）。`Accept` をすでに立てていなければ、Defjs は `Accept: text/event-stream` を送ります。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 
 論理ストリーム 1 つが、複数の物理 Fetch 試行にまたがれるのは、再接続を選んだ**とき**だけです。`withSSEReconnect` が無ければ、一時的なネットワーク失敗とストリーム読み取り失敗で論理ストリームは終わります。open が成功すれば、ハンドルは 1 つ、非同期イテレータも 1 つのままです。
 

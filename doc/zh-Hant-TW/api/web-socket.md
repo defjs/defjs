@@ -13,7 +13,7 @@ description: defineWebSocket、session，以及 execute options。
 function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`、一個 `incoming` struct、選填 `outgoing` struct、選填 `input`、`builder`、靜態 `protocols`、queue 限制。
+- **definition** — `path`、一個 `incoming` struct、選填 `outgoing` 與 `input` struct、靜態 `protocols`，以及 queue 限制。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 - **回傳** endpoint。帶 input 呼叫就得到 `WebSocketCommand`。
 
 ```ts twoslash
@@ -125,7 +125,7 @@ session.send({ type: 'message', text: 'Hello' })
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`、`incoming`，可選 `outgoing`／`input`／`builder`／`protocols`，還有 queue 上限。Builder 只能回傳 `path` 與 `query`。
+`path`、`incoming`，可選 `outgoing`／`input`／`protocols`，還有 queue 上限。Builder 只能回傳 `path` 與 `query`。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 
 ## WebSocketEndpoint {#WebSocketEndpoint}
 

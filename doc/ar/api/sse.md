@@ -13,7 +13,7 @@ description: defineEventStream، وخيارات التنفيذ، ومقبض ال
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`، خريطة `events`، و`method` اختياري (الافتراضي `'GET'`)، و`input` و`builder` و`error` اختيارية، وحدود المخزن/الطابور.
+- **definition** — `path`، خريطة `events`، و`method` اختياري (الافتراضي `'GET'`)، و`input` و`error` اختياريان، وحدود المخزن/الطابور. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 - **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `EventStreamCommand`.
 
 ```ts twoslash
@@ -113,7 +113,7 @@ struct حدث من نوع `string` يُبقي نص `data` الخام. كل نو�
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path` و`events`، و`method` / `input` / `builder` / `error` اختيارية، وحدود المخزن والطابور. شكل الطلب يطابق HTTP، بما في ذلك `body`. `GET` و`HEAD` لا يمكنهما إرجاع جسم.
+`path` و`events`، و`method` / `input` / `error` اختيارية، وحدود المخزن والطابور. شكل الطلب يطابق HTTP، بما في ذلك `body`. `GET` و`HEAD` لا يمكنهما إرجاع جسم. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

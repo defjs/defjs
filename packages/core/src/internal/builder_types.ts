@@ -97,6 +97,4 @@ export type BuilderInput<S> =
 
 export type BuilderField<TInput, TShape> = [TInput] extends [undefined]
   ? { builder?: () => TShape }
-  : BuilderInput<TInput> extends TShape
-    ? { builder?: (input: BuilderInput<TInput>) => TShape }
-    : { builder: (input: BuilderInput<TInput>) => TShape }
+  : { builder: (input: BuilderInput<TInput>) => TShape }

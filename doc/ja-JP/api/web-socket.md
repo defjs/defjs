@@ -13,7 +13,7 @@ description: defineWebSocket、session、execute options です。
 function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
 ```
 
-- **definition** — `path`、`incoming` struct 1 つ、任意の `outgoing` struct、任意の `input`、`builder`、静的な `protocols`、キュー上限です。
+- **definition** — `path`、`incoming` struct 1 つ、任意の `outgoing` と `input` struct、静的な `protocols`、キュー上限です。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 - **戻り値** エンドポイントです。入力を渡して呼ぶと `WebSocketCommand` になります。
 
 ```ts twoslash
@@ -125,7 +125,7 @@ session.send({ type: 'message', text: 'Hello' })
 
 ## WebSocketDefinition {#WebSocketDefinition}
 
-`path`、`incoming`、任意の `outgoing` / `input` / `builder` / `protocols`、キュー上限です。ビルダーが返せるのは `path` と `query` だけです。
+`path`、`incoming`、任意の `outgoing` / `input` / `protocols`、キュー上限です。ビルダーが返せるのは `path` と `query` だけです。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 
 ## WebSocketEndpoint {#WebSocketEndpoint}
 

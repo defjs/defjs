@@ -13,7 +13,7 @@ description: defineEventStream、execute options、stream handle です。
 function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
 ```
 
-- **definition** — `path`、`events` マップ、任意の `method`（デフォルト `'GET'`）、任意の `input`、`builder`、`error`、バッファ/キュー上限です。
+- **definition** — `path`、`events` マップ、任意の `method`（デフォルト `'GET'`）、`input` と `error`、バッファ/キュー上限です。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 - **戻り値** エンドポイントです。入力を渡して呼ぶと `EventStreamCommand` になります。
 
 ```ts twoslash
@@ -113,7 +113,7 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 ## EventStreamDefinition {#EventStreamDefinition}
 
-`path`、`events`、任意の `method` / `input` / `builder` / `error`、バッファとキューの上限です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを返せません。
+`path`、`events`、任意の `method` / `input` / `error`、バッファとキューの上限です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを返せません。 `input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
 
 ## EventStreamEndpoint {#EventStreamEndpoint}
 

@@ -87,7 +87,7 @@ interface EventStreamDefinitionBase<TEvents extends EventStructs = EventStructs>
 /** Makes `error` required only when an error struct is declared, so omission stays `Fault<undefined>`. */
 type EventStreamErrorField<TError extends AnyStruct | undefined> = [TError] extends [undefined] ? { error?: never } : { error: TError }
 
-/** Contract describing an SSE endpoint: path, events, and buffer/queue limits. */
+/** Contract describing an SSE endpoint. Declared input requires an explicit builder. */
 export type EventStreamDefinition<
   TInput extends AnyStruct | undefined = undefined,
   TEvents extends EventStructs = EventStructs,
@@ -285,6 +285,7 @@ async function runEventStreamCommand<
       abort: requestSignal,
       baseEndpoint: clientConfig.endpoint,
       defaultHeaders: clientConfig.headers,
+      inputDeclared: endpoint.input !== undefined,
       operation: endpoint.operation,
       querySerializer: clientConfig.querySerializer,
       timeout: cancellation.timeout,
