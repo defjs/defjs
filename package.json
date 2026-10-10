@@ -34,7 +34,7 @@
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
     "test": "bun run --sequential --workspaces --if-present test",
-    "typecheck": "tsc --project tsconfig.json --noEmit",
+    "typecheck": "bun check --project tsconfig.json",
     "verify": "bun run lint && bun run fmt:check && bun run test && bun run build"
   },
   "devDependencies": {
@@ -48,10 +48,11 @@
     "typescript": "catalog:"
   },
   "overrides": {
+    "bun-types": "1.4.3",
     "vite": "^8.3.4"
   },
   "engines": {
-    "bun": ">=1.4.2"
+    "bun": ">=1.4.3"
   },
-  "packageManager": "bun@1.4.2"
+  "packageManager": "bun@1.4.3"
 }

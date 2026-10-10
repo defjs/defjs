@@ -24,7 +24,7 @@ Defjs is a TypeScript library for defining typed HTTP, SSE, and WebSocket APIs o
 - Streaming support.
 - Interceptor support.
 - Works in browser and server applications that provide the required platform transports.
-- Bun `1.4.0` is the repository's only development, test, build, packaging, and publishing runtime.
+- Bun `1.4.3` is the repository's only development, test, build, packaging, and publishing runtime.
 - ESM. `@defjs/core` declares no runtime dependencies.
 
 ## Quick Start
@@ -92,6 +92,10 @@ Repository commands are classified by scope. A command being exposed at the root
 
 Formatting, linting, and TypeScript checking are repository-wide gates. Workspace manifests must not duplicate them, and CI must not invoke them through `bun run --workspaces`, `--filter`, or per-package filters.
 
+`bun run typecheck` uses Bun's built-in checker. TypeScript remains installed for editor and build tooling; documentation keeps its own TypeScript version for Twoslash compatibility.
+
+<!-- shortcut: @types/bun has not published 1.4.3; remove the bun-types override when upgrading the wrapper to a version that depends on bun-types 1.4.3 or later. -->
+
 Tests and builds are intentionally different. Their environments, configurations, and outputs belong to specific workspaces, so the root commands aggregate the relevant workspace lifecycle scripts.
 
 Documentation builds typecheck code fences marked `twoslash`, including the SSE/WebSocket API quick starts and executable recipes, and fail on unexpected TypeScript errors. API signature sketches and incomplete fragments are not standalone programs. The documentation workspace tests execute the ETag and Bearer recipes and assert their actual status transitions. After rendering, its build checks local page links and anchors, including generated navigation and locale links. Missing translations display an explicit notice and include the English source so fixes stay synchronized.
@@ -141,7 +145,7 @@ See the package READMEs and the metadata for the published releases you install 
 
 ## Adoption note
 
-Repository development baseline: Bun `1.4.0`.
+Repository development baseline: Bun `1.4.3`.
 
 These values describe this repository's contributor baseline, not a blanket requirement for every consumer application that installs a published package.
 
