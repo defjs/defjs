@@ -20,6 +20,9 @@
     "build": "tsdown --config-loader native --config tsdown.config.ts",
     "test": "vitest run --coverage"
   },
+  "dependencies": {
+    "@opentelemetry/api-logs": "^0.223.0"
+  },
   "devDependencies": {
     "@defjs/core": "workspace:^",
     "@hono/node-server": "catalog:",

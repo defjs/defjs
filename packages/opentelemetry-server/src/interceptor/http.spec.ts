@@ -1,10 +1,111 @@
 import type { HttpRequest } from '@defjs/core'
-import { SpanStatusCode } from '@opentelemetry/api'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
-import { activeSpans, createMockMetrics, createMockPropagator, createMockTracer, makeHttpRequest, makeHttpResponse } from '../test-utils'
+import { createNetworkFault, ERR_ABORTED, ERR_TIMEOUT } from '@defjs/core'
+import { context, diag, ROOT_CONTEXT, SpanStatusCode, trace } from '@opentelemetry/api'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  activeSpans,
+  createMockLogger,
+  createMockMetrics,
+  createMockPropagator,
+  createMockTracer,
+  makeHttpRequest,
+  makeHttpResponse,
+} from '../test-utils'
 import { createOpenTelemetryHttpInterceptor } from './http'
 
 let mockPropagator: ReturnType<typeof createMockPropagator>
+
+describe('HTTP client diagnostic logs', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  test.each([false, true])('records the saved context and original cause with tracer=%s', async (tracing) => {
+    const { logger, records } = createMockLogger()
+    const { tracer, spans } = createMockTracer()
+    const parent = trace.setSpanContext(ROOT_CONTEXT, {
+      traceId: '11111111111111111111111111111111',
+      spanId: '2222222222222222',
+      traceFlags: 0,
+    })
+    const active = vi.spyOn(context, 'active').mockReturnValue(parent)
+    const interceptor = createOpenTelemetryHttpInterceptor({
+      logger,
+      tracer: tracing ? tracer : undefined,
+      propagator: createMockPropagator(),
+    })
+    const cause = new TypeError('private network detail')
+    await expect(
+      interceptor.fn(makeHttpRequest(), async () => {
+        active.mockReturnValue(ROOT_CONTEXT)
+        throw cause
+      }),
+    ).rejects.toBe(cause)
+    expect(records).toHaveLength(1)
+    const record = records[0]
+    if (!record?.context) throw new Error('Expected a log record with explicit context')
+    expect(record).toMatchObject({
+      eventName: 'http.client.request.exception',
+      severityNumber: 13,
+      severityText: 'WARN',
+      attributes: { 'defjs.phase': 'request', 'exception.type': 'TypeError' },
+    })
+    if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0])
+    else expect(record.context).toBe(parent)
+  })
+
+  test.each([ERR_ABORTED, new DOMException('cancelled', 'AbortError'), createNetworkFault(ERR_ABORTED)])(
+    'does not log cancellation: %s',
+    async (cause) => {
+      const { logger, records } = createMockLogger()
+      const interceptor = createOpenTelemetryHttpInterceptor({ logger, propagator: createMockPropagator() })
+      await expect(
+        interceptor.fn(makeHttpRequest(), async () => {
+          throw cause
+        }),
+      ).rejects.toBe(cause)
+      expect(records).toEqual([])
+    },
+  )
+
+  test('still logs a timeout when the request signal is aborted', async () => {
+    const { logger, records } = createMockLogger()
+    const interceptor = createOpenTelemetryHttpInterceptor({ logger, propagator: createMockPropagator() })
+    await expect(
+      interceptor.fn({ ...makeHttpRequest(), abort: AbortSignal.abort(ERR_TIMEOUT) }, async () => {
+        throw ERR_TIMEOUT
+      }),
+    ).rejects.toBe(ERR_TIMEOUT)
+    expect(records).toHaveLength(1)
+    expect(records[0]?.severityNumber).toBe(13)
+  })
+
+  test.each([200, 404, 500, 0])('does not manufacture an exception log for status %s', async (status) => {
+    const { logger, records } = createMockLogger()
+    const interceptor = createOpenTelemetryHttpInterceptor({ logger, propagator: createMockPropagator() })
+    const response = { ...makeHttpResponse(), status }
+    await expect(interceptor.fn(makeHttpRequest(), async () => response)).resolves.toBe(response)
+    expect(records).toEqual([])
+  })
+
+  test('logger failure preserves the original rejection and other telemetry', async () => {
+    const { logger } = createMockLogger()
+    logger.emit.mockImplementation(() => {
+      throw new Error('logger failed')
+    })
+    vi.spyOn(diag, 'error').mockImplementation(() => undefined)
+    const { tracer, spans } = createMockTracer()
+    const metrics = createMockMetrics()
+    const cause = new Error('network failed')
+    const interceptor = createOpenTelemetryHttpInterceptor({ logger, tracer, metrics, propagator: createMockPropagator() })
+    await expect(
+      interceptor.fn(makeHttpRequest(), async () => {
+        throw cause
+      }),
+    ).rejects.toBe(cause)
+    expect(logger.emit).toHaveBeenCalledTimes(1)
+    expect(spans[0]?.ended).toBe(true)
+    expect(metrics.requestDuration.record).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe('createOpenTelemetryHttpInterceptor', () => {
   beforeEach(() => {
@@ -24,6 +125,41 @@ describe('createOpenTelemetryHttpInterceptor', () => {
     expect(mockPropagator.inject).toHaveBeenCalled()
     const calls = vi.mocked(next).mock.calls
     expect(calls[0]?.[0].headers?.get('traceparent')).toBe('mock-trace-id')
+  })
+
+  test.each([200, 404, 500, 0])('records HTTP status %s without a tracer and preserves the response', async (status) => {
+    const metrics = createMockMetrics()
+    const response = { ...makeHttpResponse(), status }
+    const interceptor = createOpenTelemetryHttpInterceptor({ propagator: mockPropagator, metrics })
+
+    await expect(interceptor.fn(makeHttpRequest(), async () => response)).resolves.toBe(response)
+
+    expect(metrics.requestDuration.record).toHaveBeenCalledTimes(1)
+    expect(metrics.requestDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'http.request.method': 'GET',
+      'server.address': 'api.example.com',
+      ...(status === 0 ? {} : { 'http.response.status_code': status }),
+      ...(status >= 400 ? { 'error.type': String(status) } : {}),
+    })
+  })
+
+  test('records a transport rejection without a tracer and rethrows the original cause', async () => {
+    const metrics = createMockMetrics()
+    const error = new TypeError('connection failed')
+    const interceptor = createOpenTelemetryHttpInterceptor({ propagator: mockPropagator, metrics })
+
+    await expect(
+      interceptor.fn(makeHttpRequest(), async () => {
+        throw error
+      }),
+    ).rejects.toBe(error)
+
+    expect(metrics.requestDuration.record).toHaveBeenCalledTimes(1)
+    expect(metrics.requestDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'http.request.method': 'GET',
+      'server.address': 'api.example.com',
+      'error.type': 'TypeError',
+    })
   })
 
   test('should create span with correct name', async () => {

@@ -39,7 +39,7 @@ export default defineConfig({
     },
   },
   deps: {
-    neverBundle: ['@defjs/core', '@opentelemetry/api', '@opentelemetry/core'],
+    neverBundle: ['@defjs/core', '@opentelemetry/api', '@opentelemetry/api-logs', '@opentelemetry/core'],
   },
   copy: ['../../LICENSE', './README.md'],
   hooks: {

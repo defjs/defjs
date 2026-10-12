@@ -2,7 +2,9 @@ import type { HttpRequest, WebSocketSessionLike } from '@defjs/core'
 import { createWebSocketInterceptor, ERR_ABORTED } from '@defjs/core'
 import type { Attributes, Span, TextMapPropagator, Tracer } from '@opentelemetry/api'
 import { context, trace } from '@opentelemetry/api'
+import type { Logger } from '@opentelemetry/api-logs'
 import { headersGetter, queryStringSetter } from '../propagation/carrier'
+import { emitClientException } from '../telemetry/logs'
 import type { WebSocketClientMetrics } from '../telemetry/metrics'
 import {
   createConnectionMetricAttributes,
@@ -14,7 +16,8 @@ import { addSpanEvent, createWebSocketSpan, endSpan, resolveStartSpanHook, runSp
 import { resolveUrl } from '../telemetry/url'
 
 export interface WebSocketInterceptorOptions {
-  tracer: Tracer
+  tracer?: Tracer
+  logger?: Logger
   propagator: TextMapPropagator
   metrics?: WebSocketClientMetrics
   requireParentSpan?: boolean
@@ -28,29 +31,36 @@ export function createOpenTelemetryWebSocketInterceptor(
   options: WebSocketInterceptorOptions,
 ): ReturnType<typeof createWebSocketInterceptor> {
   return createWebSocketInterceptor(async (req, next) => {
-    const { tracer, propagator, metrics, requireParentSpan, queryPropagation = false, startSpanHook, requestHook, responseHook } = options
+    const {
+      tracer,
+      logger,
+      propagator,
+      metrics,
+      requireParentSpan,
+      queryPropagation = false,
+      startSpanHook,
+      requestHook,
+      responseHook,
+    } = options
 
-    if (requireParentSpan && !trace.getActiveSpan()) {
+    if (tracer && requireParentSpan && !trace.getActiveSpan()) {
       return next(req)
     }
 
     const url = resolveUrl(req.endpoint, req.baseEndpoint)
 
     const parentCtx = propagator.extract(context.active(), req.headers ?? new Headers(), headersGetter)
-    const startSpanHookResult = resolveStartSpanHook(startSpanHook, req)
-    const span = createWebSocketSpan(
-      tracer,
-      url,
-      parentCtx,
-      req.operation,
-      startSpanHookResult.ok ? startSpanHookResult.attributes : undefined,
-    )
-    if (!startSpanHookResult.ok) {
-      runSpanHook(span, 'startSpanHook', () => {
-        throw startSpanHookResult.error
-      })
+    let span: Span | undefined
+    if (tracer) {
+      const startSpanHookResult = resolveStartSpanHook(startSpanHook, req)
+      span = createWebSocketSpan(tracer, url, parentCtx, req.operation, startSpanHookResult.ok ? startSpanHookResult.attributes : undefined)
+      if (!startSpanHookResult.ok) {
+        runSpanHook(span, 'startSpanHook', () => {
+          throw startSpanHookResult.error
+        })
+      }
     }
-    const spanCtx = trace.setSpan(parentCtx, span)
+    const spanCtx = span ? trace.setSpan(parentCtx, span) : parentCtx
 
     let queryParams = req.queryParams
     let queryString = req.queryString
@@ -63,7 +73,7 @@ export function createOpenTelemetryWebSocketInterceptor(
       queryString = appendInjectedQueryString(queryString, originalParams, carrier.params)
     }
 
-    runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
+    if (span) runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
 
     const connectStartMs = performance.now()
 
@@ -72,8 +82,10 @@ export function createOpenTelemetryWebSocketInterceptor(
       const connectedAtMs = performance.now()
       const activeAttributes = createServerMetricAttributes(req)
 
-      runSpanHook(span, 'responseHook', () => responseHook?.(span, session, req))
-      addSpanEvent(span, 'websocket.connected')
+      if (span) {
+        runSpanHook(span, 'responseHook', () => responseHook?.(span, session, req))
+        addSpanEvent(span, 'websocket.connected')
+      }
 
       metrics?.connectDuration.record(durationSeconds(connectStartMs, connectedAtMs), createConnectionMetricAttributes(req, 'success'))
       metrics?.activeConnections.add(1, activeAttributes)
@@ -86,43 +98,55 @@ export function createOpenTelemetryWebSocketInterceptor(
         (closeInfo: unknown) => {
           closeActiveConnection()
           const runtimeCloseInfo =
-            typeof closeInfo === 'object' && closeInfo !== null ? (closeInfo as { cause?: unknown; kind?: unknown }) : {}
+            typeof closeInfo === 'object' && closeInfo !== null ? (closeInfo as { cause?: unknown; kind?: unknown; code?: unknown }) : {}
           const closeKind = runtimeCloseInfo.kind
           const closeCause = runtimeCloseInfo.cause
           const failed = typeof closeKind === 'string' ? closeKind !== 'closed' : typeof closeCause !== 'undefined'
           if (failed) {
             const error = typeof closeKind === 'string' ? (closeKind === 'error' ? closeCause : (closeCause ?? ERR_ABORTED)) : closeCause
-            addSpanEvent(span, 'websocket.error', createErrorMetricAttributes(error))
+            if (closeKind !== 'aborted') {
+              emitClientException(logger, {
+                request: req,
+                context: spanCtx,
+                error,
+                transport: 'websocket',
+                phase: 'connection',
+                closeInfo: runtimeCloseInfo,
+              })
+            }
+            if (span) addSpanEvent(span, 'websocket.error', createErrorMetricAttributes(error))
             metrics?.connectionDuration.record(
               durationSeconds(connectedAtMs),
               createConnectionMetricAttributes(req, 'error', createErrorMetricAttributes(error)),
             )
-            setSpanError(span, error)
+            if (span) setSpanError(span, error)
             return
           }
 
-          addSpanEvent(span, 'websocket.closed')
+          if (span) addSpanEvent(span, 'websocket.closed')
           metrics?.connectionDuration.record(durationSeconds(connectedAtMs), createConnectionMetricAttributes(req, 'success'))
-          endSpan(span)
+          if (span) endSpan(span)
         },
         (error: unknown) => {
           closeActiveConnection()
-          addSpanEvent(span, 'websocket.error', createErrorMetricAttributes(error))
+          emitClientException(logger, { request: req, context: spanCtx, error, transport: 'websocket', phase: 'connection' })
+          if (span) addSpanEvent(span, 'websocket.error', createErrorMetricAttributes(error))
           metrics?.connectionDuration.record(
             durationSeconds(connectedAtMs),
             createConnectionMetricAttributes(req, 'error', createErrorMetricAttributes(error)),
           )
-          setSpanError(span, error)
+          if (span) setSpanError(span, error)
         },
       )
 
       return session
     } catch (error) {
+      emitClientException(logger, { request: req, context: spanCtx, error, transport: 'websocket', phase: 'connect' })
       metrics?.connectDuration.record(
         durationSeconds(connectStartMs),
         createConnectionMetricAttributes(req, 'error', createErrorMetricAttributes(error)),
       )
-      setSpanError(span, error)
+      if (span) setSpanError(span, error)
       throw error
     }
   })

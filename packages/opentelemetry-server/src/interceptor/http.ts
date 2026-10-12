@@ -2,14 +2,17 @@ import type { HttpRequest, HttpResponse } from '@defjs/core'
 import { createHttpInterceptor } from '@defjs/core'
 import type { Attributes, Span, TextMapPropagator, Tracer } from '@opentelemetry/api'
 import { context, trace } from '@opentelemetry/api'
+import type { Logger } from '@opentelemetry/api-logs'
 import { headersGetter, headersSetter } from '../propagation/carrier'
+import { emitClientException } from '../telemetry/logs'
 import type { HttpClientMetrics } from '../telemetry/metrics'
 import { createHttpMetricAttributes, durationSeconds } from '../telemetry/metrics'
 import { createHttpSpan, resolveStartSpanHook, runSpanHook, setSpanError, setSpanHttpResponse } from '../telemetry/trace'
 import { resolveHttpUrl } from '../telemetry/url'
 
 export interface HttpInterceptorOptions {
-  tracer: Tracer
+  tracer?: Tracer
+  logger?: Logger
   propagator: TextMapPropagator
   metrics?: HttpClientMetrics
   requireParentSpan?: boolean
@@ -20,30 +23,33 @@ export interface HttpInterceptorOptions {
 
 export function createOpenTelemetryHttpInterceptor(options: HttpInterceptorOptions): ReturnType<typeof createHttpInterceptor> {
   return createHttpInterceptor(async (req, next) => {
-    const { tracer, propagator, metrics, requireParentSpan, startSpanHook, requestHook, responseHook } = options
+    const { tracer, logger, propagator, metrics, requireParentSpan, startSpanHook, requestHook, responseHook } = options
 
-    if (requireParentSpan && !trace.getActiveSpan()) {
+    if (tracer && requireParentSpan && !trace.getActiveSpan()) {
       return next(req)
     }
 
     const parentCtx = propagator.extract(context.active(), req.headers ?? new Headers(), headersGetter)
     const { url, serverAddress, serverPort } = resolveHttpUrl(req.endpoint, req.baseEndpoint)
-    const startSpanHookResult = resolveStartSpanHook(startSpanHook, req)
-    const span = createHttpSpan(tracer, req.method, url, parentCtx, req.operation, {
-      ...(serverAddress ? { 'server.address': serverAddress } : {}),
-      ...(serverPort ? { 'server.port': serverPort } : {}),
-      ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
-    })
-
-    if (!startSpanHookResult.ok) {
-      runSpanHook(span, 'startSpanHook', () => {
-        throw startSpanHookResult.error
+    let span: Span | undefined
+    if (tracer) {
+      const startSpanHookResult = resolveStartSpanHook(startSpanHook, req)
+      span = createHttpSpan(tracer, req.method, url, parentCtx, req.operation, {
+        ...(serverAddress ? { 'server.address': serverAddress } : {}),
+        ...(serverPort ? { 'server.port': serverPort } : {}),
+        ...(startSpanHookResult.ok ? startSpanHookResult.attributes : {}),
       })
+
+      if (!startSpanHookResult.ok) {
+        runSpanHook(span, 'startSpanHook', () => {
+          throw startSpanHookResult.error
+        })
+      }
     }
 
-    runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
+    if (span) runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
 
-    const spanCtx = trace.setSpan(parentCtx, span)
+    const spanCtx = span ? trace.setSpan(parentCtx, span) : parentCtx
     const headers = req.headers instanceof Headers ? req.headers : new Headers(req.headers)
     propagator.inject(spanCtx, headers, headersSetter)
 
@@ -53,8 +59,10 @@ export function createOpenTelemetryHttpInterceptor(options: HttpInterceptorOptio
       const response = await next({ ...req, headers })
       const durationS = durationSeconds(startTime)
 
-      runSpanHook(span, 'responseHook', () => responseHook?.(span, response, req))
-      setSpanHttpResponse(span, response.status)
+      if (span) {
+        runSpanHook(span, 'responseHook', () => responseHook?.(span, response, req))
+        setSpanHttpResponse(span, response.status)
+      }
 
       metrics?.requestDuration.record(durationS, createHttpMetricAttributes(req, response))
 
@@ -62,7 +70,9 @@ export function createOpenTelemetryHttpInterceptor(options: HttpInterceptorOptio
     } catch (error) {
       const durationS = durationSeconds(startTime)
 
-      setSpanError(span, error)
+      emitClientException(logger, { request: req, context: spanCtx, error, transport: 'http', phase: 'request' })
+
+      if (span) setSpanError(span, error)
       metrics?.requestDuration.record(durationS, createHttpMetricAttributes(req, undefined, error))
 
       throw error

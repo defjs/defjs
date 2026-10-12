@@ -2,7 +2,9 @@ import type { EventStreamCloseInfo, EventStreamHandle, HttpRequest } from '@defj
 import { createSSEInterceptor } from '@defjs/core'
 import type { Attributes, Span, TextMapPropagator, Tracer } from '@opentelemetry/api'
 import { context, trace } from '@opentelemetry/api'
+import type { Logger } from '@opentelemetry/api-logs'
 import { headersGetter, headersSetter } from '../propagation/carrier'
+import { emitClientException } from '../telemetry/logs'
 import type { SSEClientMetrics } from '../telemetry/metrics'
 import {
   createConnectionMetricAttributes,
@@ -14,7 +16,8 @@ import { addSpanEvent, createSSESpan, endSpan, resolveStartSpanHook, runSpanHook
 import { resolveUrl } from '../telemetry/url'
 
 export interface SSEInterceptorOptions {
-  tracer: Tracer
+  tracer?: Tracer
+  logger?: Logger
   propagator: TextMapPropagator
   metrics?: SSEClientMetrics
   requireParentSpan?: boolean
@@ -25,26 +28,29 @@ export interface SSEInterceptorOptions {
 
 export function createOpenTelemetrySSEInterceptor(options: SSEInterceptorOptions): ReturnType<typeof createSSEInterceptor> {
   return createSSEInterceptor(async (req, next) => {
-    const { tracer, propagator, metrics, requireParentSpan, startSpanHook, requestHook, responseHook } = options
+    const { tracer, logger, propagator, metrics, requireParentSpan, startSpanHook, requestHook, responseHook } = options
 
-    if (requireParentSpan && !trace.getActiveSpan()) {
+    if (tracer && requireParentSpan && !trace.getActiveSpan()) {
       return next(req)
     }
 
     const parentCtx = propagator.extract(context.active(), req.headers ?? new Headers(), headersGetter)
     const url = resolveUrl(req.endpoint, req.baseEndpoint)
-    const startSpanHookResult = resolveStartSpanHook(startSpanHook, req)
-    const span = createSSESpan(tracer, url, parentCtx, req.operation, startSpanHookResult.ok ? startSpanHookResult.attributes : undefined)
-    if (!startSpanHookResult.ok) {
-      runSpanHook(span, 'startSpanHook', () => {
-        throw startSpanHookResult.error
-      })
+    let span: Span | undefined
+    if (tracer) {
+      const startSpanHookResult = resolveStartSpanHook(startSpanHook, req)
+      span = createSSESpan(tracer, url, parentCtx, req.operation, startSpanHookResult.ok ? startSpanHookResult.attributes : undefined)
+      if (!startSpanHookResult.ok) {
+        runSpanHook(span, 'startSpanHook', () => {
+          throw startSpanHookResult.error
+        })
+      }
     }
-    const spanCtx = trace.setSpan(parentCtx, span)
+    const spanCtx = span ? trace.setSpan(parentCtx, span) : parentCtx
     const headers = req.headers instanceof Headers ? req.headers : new Headers(req.headers)
     propagator.inject(spanCtx, headers, headersSetter)
 
-    runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
+    if (span) runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
 
     const connectStartMs = performance.now()
 
@@ -53,8 +59,10 @@ export function createOpenTelemetrySSEInterceptor(options: SSEInterceptorOptions
       const connectedAtMs = performance.now()
       const activeAttributes = createServerMetricAttributes(req)
 
-      runSpanHook(span, 'responseHook', () => responseHook?.(span, stream, req))
-      addSpanEvent(span, 'sse.connected')
+      if (span) {
+        runSpanHook(span, 'responseHook', () => responseHook?.(span, stream, req))
+        addSpanEvent(span, 'sse.connected')
+      }
 
       metrics?.connectDuration.record(durationSeconds(connectStartMs, connectedAtMs), createConnectionMetricAttributes(req, 'success'))
       metrics?.activeStreams.add(1, activeAttributes)
@@ -72,7 +80,15 @@ export function createOpenTelemetrySSEInterceptor(options: SSEInterceptorOptions
           }
 
           if (closeInfo.kind === 'error') {
-            addSpanEvent(span, 'sse.error', closeAttributes)
+            emitClientException(logger, {
+              request: req,
+              context: spanCtx,
+              error: closeInfo.cause,
+              transport: 'sse',
+              phase: 'connection',
+              closeInfo,
+            })
+            if (span) addSpanEvent(span, 'sse.error', closeAttributes)
             metrics?.connectionDuration.record(
               durationSeconds(connectedAtMs),
               createConnectionMetricAttributes(req, 'error', {
@@ -80,35 +96,37 @@ export function createOpenTelemetrySSEInterceptor(options: SSEInterceptorOptions
                 ...createErrorMetricAttributes(closeInfo.cause),
               }),
             )
-            setSpanError(span, closeInfo.cause)
+            if (span) setSpanError(span, closeInfo.cause)
             return
           }
 
-          addSpanEvent(span, closeInfo.kind === 'aborted' ? 'sse.aborted' : 'sse.closed', closeAttributes)
+          if (span) addSpanEvent(span, closeInfo.kind === 'aborted' ? 'sse.aborted' : 'sse.closed', closeAttributes)
           metrics?.connectionDuration.record(
             durationSeconds(connectedAtMs),
             createConnectionMetricAttributes(req, 'success', closeAttributes),
           )
-          endSpan(span)
+          if (span) endSpan(span)
         },
         (error: unknown) => {
           closeActiveStream()
-          addSpanEvent(span, 'sse.error', createErrorMetricAttributes(error))
+          emitClientException(logger, { request: req, context: spanCtx, error, transport: 'sse', phase: 'connection' })
+          if (span) addSpanEvent(span, 'sse.error', createErrorMetricAttributes(error))
           metrics?.connectionDuration.record(
             durationSeconds(connectedAtMs),
             createConnectionMetricAttributes(req, 'error', createErrorMetricAttributes(error)),
           )
-          setSpanError(span, error)
+          if (span) setSpanError(span, error)
         },
       )
 
       return stream
     } catch (error) {
+      emitClientException(logger, { request: req, context: spanCtx, error, transport: 'sse', phase: 'connect' })
       metrics?.connectDuration.record(
         durationSeconds(connectStartMs),
         createConnectionMetricAttributes(req, 'error', createErrorMetricAttributes(error)),
       )
-      setSpanError(span, error)
+      if (span) setSpanError(span, error)
       throw error
     }
   })

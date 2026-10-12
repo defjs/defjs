@@ -1,5 +1,6 @@
 import type { ClientOption, EventStreamHandle, HttpRequest, HttpResponse, WebSocketSessionLike } from '@defjs/core'
 import type { Attributes, Meter, Span, TextMapPropagator, Tracer } from '@opentelemetry/api'
+import type { Logger } from '@opentelemetry/api-logs'
 import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from '@opentelemetry/core'
 import { createOpenTelemetryHttpInterceptor } from './interceptor/http'
 import { createOpenTelemetrySSEInterceptor } from './interceptor/sse'
@@ -31,17 +32,19 @@ export interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServer
 /**
  * Options for {@link withOpenTelemetryServer}.
  *
- * Pass an application-owned OpenTelemetry `Tracer` (and optional `Meter`).
+ * Pass application-owned OpenTelemetry `Tracer`, `Meter`, and/or `Logger` handles.
  * This package does not initialize the OpenTelemetry SDK.
  */
 export interface OpenTelemetryServerOptions {
-  /** OpenTelemetry tracer used for outbound client spans. */
-  tracer: Tracer
+  /** Optional tracer; omitting it disables outbound spans and span hooks. */
+  tracer?: Tracer
   /** Optional meter; when set, per-transport client metrics are recorded. */
   meter?: Meter
+  /** Optional logger; emits WARN diagnostics for failed outbound requests and connections. */
+  logger?: Logger
   /** Context propagator. Defaults to W3C Trace Context + Baggage. */
   propagator?: TextMapPropagator
-  /** When `true`, only create an outgoing span if an active parent span exists. */
+  /** With a tracer, bypass instrumentation when no active parent span exists. Ignored without a tracer. */
   requireParentSpan?: boolean
   /** HTTP transport instrumentation options. */
   http?: OpenTelemetryServerHttpOptions
@@ -58,10 +61,10 @@ interface TransportSwitch {
 /**
  * Client option that installs outbound OpenTelemetry interceptors for HTTP, SSE, and WebSocket.
  *
- * Does not initialize the OpenTelemetry SDK — supply a `tracer` (and optional `meter`) from your app.
+ * Does not initialize the OpenTelemetry SDK or acquire global handles. Supply a `tracer`, `meter`, and/or `logger` from your app.
  * Each transport can be toggled or customized via `http`, `sse`, and `webSocket`.
  *
- * @param options - Tracer, optional meter/propagator, and per-transport settings.
+ * @param options - Optional tracer/meter/logger/propagator and per-transport settings.
  * @returns A `ClientOption` for `createClient(...)`.
  *
  * @example
@@ -76,6 +79,7 @@ export function withOpenTelemetryServer(options: OpenTelemetryServerOptions): Cl
   const {
     tracer,
     meter,
+    logger,
     propagator = new CompositePropagator({
       propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()],
     }),
@@ -87,6 +91,7 @@ export function withOpenTelemetryServer(options: OpenTelemetryServerOptions): Cl
       config.interceptors.push(
         createOpenTelemetryHttpInterceptor({
           tracer,
+          logger,
           propagator,
           metrics: meter ? createHttpClientMetrics(meter) : undefined,
           requireParentSpan,
@@ -101,6 +106,7 @@ export function withOpenTelemetryServer(options: OpenTelemetryServerOptions): Cl
       config.interceptors.push(
         createOpenTelemetrySSEInterceptor({
           tracer,
+          logger,
           propagator,
           metrics: meter ? createSSEClientMetrics(meter) : undefined,
           requireParentSpan,
@@ -115,6 +121,7 @@ export function withOpenTelemetryServer(options: OpenTelemetryServerOptions): Cl
       config.interceptors.push(
         createOpenTelemetryWebSocketInterceptor({
           tracer,
+          logger,
           propagator,
           metrics: meter ? createWebSocketClientMetrics(meter) : undefined,
           requireParentSpan,

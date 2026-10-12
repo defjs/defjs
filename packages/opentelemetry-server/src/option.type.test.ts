@@ -1,6 +1,7 @@
 import type { ClientConfig, EventStreamHandle, HttpRequest, HttpResponse, WebSocketSessionLike } from '@defjs/core'
 import { createClient, withEndpoint } from '@defjs/core'
 import type { Attributes, Meter, Span, TextMapPropagator, Tracer } from '@opentelemetry/api'
+import type { Logger } from '@opentelemetry/api-logs'
 import type {
   OpenTelemetryServerHttpOptions,
   OpenTelemetryServerSSEOptions,
@@ -164,8 +165,22 @@ type SSEResponseHookResult = Expect<Equal<ReturnType<SSEResponseHook>, Promise<v
 type WebSocketRequestHookResult = Expect<Equal<ReturnType<WebSocketRequestHook>, Promise<void> | void>>
 type WebSocketResponseHookResult = Expect<Equal<ReturnType<WebSocketResponseHook>, Promise<void> | void>>
 
-// @ts-expect-error tracer is required
+// Tracing and metrics are independently optional.
 withOpenTelemetryServer({})
+withOpenTelemetryServer({ meter: makeMeter() })
+withOpenTelemetryServer({ propagator: makePropagator(), requireParentSpan: true })
+
+const logger: Logger = { emit: noop, enabled: () => true }
+withOpenTelemetryServer({ logger })
+withOpenTelemetryServer({ logger, meter: makeMeter() })
+withOpenTelemetryServer({ logger, tracer: makeTracer() })
+withOpenTelemetryServer({ logger, tracer: makeTracer(), meter: makeMeter() })
+
+// @ts-expect-error third-party business loggers are not OTel log emitters
+withOpenTelemetryServer({ logger: { info: noop } })
+
+// @ts-expect-error the options object is still required
+withOpenTelemetryServer()
 
 // @ts-expect-error invalid key — excess property checking on object literal
 withOpenTelemetryServer({ tracer: makeTracer(), unknownKey: true })

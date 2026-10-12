@@ -1,8 +1,11 @@
 import type { HttpRequest } from '@defjs/core'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { createNetworkFault, ERR_ABORTED, ERR_TIMEOUT } from '@defjs/core'
+import { context, diag, ROOT_CONTEXT, trace } from '@opentelemetry/api'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   activeSpans,
   createMockMetrics,
+  createMockLogger,
   createMockPropagator,
   createMockTracer,
   makeDeferredSSEStream,
@@ -13,6 +16,109 @@ import {
 import { createOpenTelemetrySSEInterceptor } from './sse'
 
 let mockPropagator: ReturnType<typeof createMockPropagator>
+
+describe('SSE client diagnostic logs', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  test.each([
+    { cause: new Error('offline'), count: 1 },
+    { cause: ERR_TIMEOUT, count: 1 },
+    { cause: ERR_ABORTED, count: 0 },
+    { cause: createNetworkFault(ERR_ABORTED), count: 0 },
+  ])('classifies startup failure $cause with $count diagnostics', async ({ cause, count }) => {
+    const { logger, records } = createMockLogger()
+    const interceptor = createOpenTelemetrySSEInterceptor({ logger, propagator: createMockPropagator() })
+    await expect(
+      interceptor.fn(makeSSERequest(), async () => {
+        throw cause
+      }),
+    ).rejects.toBe(cause)
+    expect(records).toHaveLength(count)
+    if (count)
+      expect(records[0]).toMatchObject({
+        eventName: 'defjs.client.sse.exception',
+        severityNumber: 13,
+        attributes: { 'defjs.phase': 'connect' },
+      })
+  })
+
+  test.each([
+    { tracing: false, rejected: false },
+    { tracing: true, rejected: false },
+    { tracing: false, rejected: true },
+    { tracing: true, rejected: true },
+  ])('retains the opening context after close, tracer=$tracing rejected=$rejected', async ({ tracing, rejected }) => {
+    const { logger, records } = createMockLogger()
+    const { tracer, spans } = createMockTracer()
+    const metrics = createMockMetrics()
+    const parent = trace.setSpanContext(ROOT_CONTEXT, {
+      traceId: '11111111111111111111111111111111',
+      spanId: '2222222222222222',
+      traceFlags: 0,
+    })
+    const active = vi.spyOn(context, 'active').mockReturnValue(parent)
+    const stream = makeDeferredSSEStream()
+    const interceptor = createOpenTelemetrySSEInterceptor({
+      logger,
+      tracer: tracing ? tracer : undefined,
+      metrics,
+      propagator: createMockPropagator(),
+    })
+    await expect(interceptor.fn(makeSSERequest(), async () => stream.stream)).resolves.toBe(stream.stream)
+    expect(records).toEqual([])
+    active.mockReturnValue(ROOT_CONTEXT)
+    const cause = new TypeError('private failure')
+    if (rejected) stream.reject(cause)
+    else stream.close('error', cause, 'CAP_BUFFER_EXCEEDED')
+    await waitForSettledPromises()
+    stream.close('error', cause)
+    await waitForSettledPromises()
+    expect(records).toHaveLength(1)
+    const record = records[0]
+    if (!record?.context) throw new Error('Expected a log record with explicit context')
+    expect(record).toMatchObject({ severityNumber: 13, attributes: { 'defjs.phase': 'connection', 'exception.type': 'TypeError' } })
+    expect(record.attributes?.['defjs.sse.fault.code']).toBe(rejected ? undefined : 'CAP_BUFFER_EXCEEDED')
+    if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0])
+    else expect(record.context).toBe(parent)
+    expect(metrics.activeStreams.add.mock.calls.map(([value]) => value)).toEqual([1, -1])
+    expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1)
+  })
+
+  test.each(['eof', 'aborted'] as const)('does not log %s even if it carries an error cause', async (kind) => {
+    const { logger, records } = createMockLogger()
+    const stream = makeDeferredSSEStream()
+    const interceptor = createOpenTelemetrySSEInterceptor({ logger, propagator: createMockPropagator() })
+    await interceptor.fn(makeSSERequest(), async () => stream.stream)
+    stream.close(kind, new Error('user decided to stop'))
+    await waitForSettledPromises()
+    expect(records).toEqual([])
+  })
+
+  test.each([false, true])('logger failure preserves closed outcome, rejected=%s', async (rejected) => {
+    const { logger } = createMockLogger()
+    logger.emit.mockImplementation(() => {
+      throw new Error('logger failed')
+    })
+    vi.spyOn(diag, 'error').mockImplementation(() => undefined)
+    const { tracer, spans } = createMockTracer()
+    const metrics = createMockMetrics()
+    const stream = makeDeferredSSEStream()
+    const interceptor = createOpenTelemetrySSEInterceptor({ logger, tracer, metrics, propagator: createMockPropagator() })
+    await expect(interceptor.fn(makeSSERequest(), async () => stream.stream)).resolves.toBe(stream.stream)
+    const cause = new Error('original')
+    if (rejected) {
+      stream.reject(cause)
+      await expect(stream.stream.closed).rejects.toBe(cause)
+    } else {
+      stream.close('error', cause)
+      await expect(stream.stream.closed).resolves.toMatchObject({ kind: 'error', cause })
+    }
+    await waitForSettledPromises()
+    expect(logger.emit).toHaveBeenCalledTimes(1)
+    expect(spans[0]?.ended).toBe(true)
+    expect(metrics.activeStreams.add.mock.calls.map(([value]) => value)).toEqual([1, -1])
+  })
+})
 
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -34,6 +140,62 @@ describe('createOpenTelemetrySSEInterceptor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPropagator = createMockPropagator()
+  })
+
+  test.each([
+    { close: 'eof', result: 'success', extras: { 'sse.close.kind': 'eof' } },
+    { close: 'aborted', result: 'success', extras: { 'sse.close.kind': 'aborted' } },
+    {
+      close: 'error',
+      result: 'error',
+      extras: { 'sse.close.kind': 'error', 'defjs.sse.fault.code': 'CAP_QUEUE_OVERFLOW', 'error.type': 'TypeError' },
+    },
+    { close: 'rejected', result: 'error', extras: { 'error.type': 'TypeError' } },
+  ] as const)('records SSE $close lifecycle without a tracer', async ({ close, result, extras }) => {
+    const metrics = createMockMetrics()
+    const stream = makeDeferredSSEStream()
+    const interceptor = createOpenTelemetrySSEInterceptor({ propagator: mockPropagator, metrics, requireParentSpan: true })
+    await expect(interceptor.fn(makeSSERequest(), async () => stream.stream)).resolves.toBe(stream.stream)
+    expect(metrics.connectDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'server.address': 'api.example.com',
+      'defjs.result': 'success',
+    })
+    expect(metrics.activeStreams.add.mock.calls).toEqual([[1, { 'server.address': 'api.example.com' }]])
+    expect(metrics.connectionDuration.record).not.toHaveBeenCalled()
+
+    if (close === 'rejected') stream.reject(new TypeError('stream lost'))
+    else stream.close(close, close === 'error' ? new TypeError('stream lost') : undefined, 'CAP_QUEUE_OVERFLOW')
+    await waitForSettledPromises()
+
+    expect(metrics.activeStreams.add.mock.calls).toEqual([
+      [1, { 'server.address': 'api.example.com' }],
+      [-1, { 'server.address': 'api.example.com' }],
+    ])
+    expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1)
+    expect(metrics.connectionDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'server.address': 'api.example.com',
+      'defjs.result': result,
+      ...extras,
+    })
+  })
+
+  test('records SSE startup failure without a tracer without incrementing active streams', async () => {
+    const metrics = createMockMetrics()
+    const error = new TypeError('connect failed')
+    const interceptor = createOpenTelemetrySSEInterceptor({ propagator: mockPropagator, metrics })
+    await expect(
+      interceptor.fn(makeSSERequest(), async () => {
+        throw error
+      }),
+    ).rejects.toBe(error)
+    expect(metrics.connectDuration.record).toHaveBeenCalledTimes(1)
+    expect(metrics.connectDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'server.address': 'api.example.com',
+      'defjs.result': 'error',
+      'error.type': 'TypeError',
+    })
+    expect(metrics.activeStreams.add).not.toHaveBeenCalled()
+    expect(metrics.connectionDuration.record).not.toHaveBeenCalled()
   })
 
   test('should inject traceparent header via propagator', async () => {

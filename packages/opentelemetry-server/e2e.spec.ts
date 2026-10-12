@@ -1,10 +1,22 @@
-import { createClient, defineEventStream, defineRequest, defineWebSocket, struct, withEndpoint, withHTTPHandle } from '@defjs/core'
-import { SpanStatusCode } from '@opentelemetry/api'
+import { createServer } from 'node:net'
+import type { AddressInfo } from 'node:net'
+import {
+  createClient,
+  defineEventStream,
+  defineRequest,
+  defineWebSocket,
+  struct,
+  withEndpoint,
+  withHTTPHandle,
+  withSSEHandle,
+} from '@defjs/core'
+import { diag, SpanStatusCode } from '@opentelemetry/api'
 import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from '@opentelemetry/core'
-import { describe, expect, inject, test } from 'vitest'
+import { afterEach, describe, expect, inject, test, vi } from 'vitest'
+import { WebSocketServer } from 'ws'
 import { withOpenTelemetryServer } from './src/option'
 import type { MockSpan } from './src/test-utils'
-import { createMockTracer } from './src/test-utils'
+import { createMockLogger, createMockTracer } from './src/test-utils'
 
 interface EchoHeadersResponse {
   headers: { [key: string]: string }
@@ -40,7 +52,246 @@ function onlySpan(spans: readonly MockSpan[]): MockSpan {
   return span
 }
 
+async function closedPort(): Promise<number> {
+  const server = createServer()
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  const { port } = server.address() as AddressInfo
+  await new Promise((resolve) => server.close(resolve))
+  return port
+}
+
 const TRACE_PARENT_REGEX = /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/
+
+describe('client.execute diagnostic boundary', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  test.each([false, true])('preserves the network fault when logger throws=%s', async (throws) => {
+    const { logger, records } = createMockLogger()
+    if (throws)
+      logger.emit.mockImplementation(() => {
+        throw new Error('logger failed')
+      })
+    vi.spyOn(diag, 'error').mockImplementation(() => undefined)
+    const cause = new TypeError('local transport unavailable')
+    const client = createClient(
+      withEndpoint('https://example.invalid'),
+      withHTTPHandle(async () => {
+        throw cause
+      }),
+      withOpenTelemetryServer({ logger }),
+    )
+    const request = defineRequest({ method: 'GET', path: '/inventory' })
+    const [fault, data, response] = await client.execute(request())
+    expect(fault).toMatchObject({ code: 'NET_UNREACHABLE', cause })
+    expect(fault?.cause).toBe(cause)
+    expect(data).toBeUndefined()
+    expect(response).toBeUndefined()
+    expect(logger.emit).toHaveBeenCalledTimes(1)
+    if (!throws) expect(records[0]).toMatchObject({ severityNumber: 13, eventName: 'http.client.request.exception' })
+  })
+
+  test('does not log input validation faults that never reach an interceptor', async () => {
+    const { logger, records } = createMockLogger()
+    const handle = vi.fn(async () => new Response())
+    const client = createClient(withEndpoint('https://example.invalid'), withHTTPHandle(handle), withOpenTelemetryServer({ logger }))
+    const request = defineRequest({
+      method: 'POST',
+      path: '/inventory',
+      input: struct.object({ count: struct.number() }),
+      builder: (input) => ({ body: input }),
+    })
+    const [fault] = await client.execute(request({ count: 'invalid' } as never))
+    expect(fault?.code).toBe('REQ_INPUT_INVALID')
+    expect(handle).not.toHaveBeenCalled()
+    expect(records).toEqual([])
+  })
+
+  test.each([
+    { status: 500, body: '{}', code: 'HTTP_STATUS', logCount: 0 },
+    { status: 200, body: '{invalid', code: 'RES_DECODE_FAILED', logCount: 1 },
+    { status: 200, body: '{"count":"invalid"}', code: 'RES_STRUCT_MISMATCH', logCount: 0 },
+  ])('only logs $code when the failure occurs inside the HTTP interceptor', async ({ status, body, code, logCount }) => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(
+      withEndpoint('https://example.invalid'),
+      withHTTPHandle(async () => new Response(body, { status, headers: { 'content-type': 'application/json' } })),
+      withOpenTelemetryServer({ logger }),
+    )
+    const request = defineRequest({ method: 'GET', path: '/inventory', output: struct.object({ count: struct.number() }) })
+    const [fault] = await client.execute(request())
+    expect(fault?.code).toBe(code)
+    expect(records).toHaveLength(logCount)
+    if (logCount > 0) {
+      expect(records[0]).toMatchObject({ severityNumber: 13, attributes: { 'exception.type': 'BodyFailure' } })
+    }
+  })
+
+  test.each([
+    { status: 500, body: '{"message":"down"}', contentType: 'application/json', code: 'HTTP_STATUS', logCount: 0 },
+    { status: 500, body: '{"message":1}', contentType: 'application/json', code: 'RES_STRUCT_MISMATCH', logCount: 0 },
+    { status: 500, body: '{invalid', contentType: 'application/json', code: 'RES_DECODE_FAILED', logCount: 1 },
+    { status: 502, body: '<html></html>', contentType: 'text/html', code: 'RES_MEDIA_TYPE_INVALID', logCount: 1 },
+    { status: 200, body: '<html></html>', contentType: 'text/html', code: 'RES_MEDIA_TYPE_INVALID', logCount: 1 },
+    { status: 204, body: null, contentType: 'application/json', code: 'RES_DECODE_FAILED', logCount: 0 },
+  ])('declared bodies: $status $contentType yields $code with $logCount log(s)', async ({ status, body, contentType, code, logCount }) => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(
+      withEndpoint('https://example.invalid'),
+      withHTTPHandle(async () => new Response(body, { status, headers: { 'content-type': contentType } })),
+      withOpenTelemetryServer({ logger }),
+    )
+    const request = defineRequest({
+      method: 'GET',
+      path: '/inventory',
+      output: struct.object({ count: struct.number() }),
+      error: struct.object({ message: struct.string() }),
+    })
+    const [fault] = await client.execute(request())
+    expect(fault?.code).toBe(code)
+    expect(records).toHaveLength(logCount)
+    if (logCount > 0) {
+      expect(records[0]).toMatchObject({
+        eventName: 'http.client.request.exception',
+        severityNumber: 13,
+        attributes: { 'defjs.phase': 'request', 'exception.type': 'BodyFailure' },
+      })
+    }
+  })
+
+  test('SSE non-2xx handshake logs one connect failure before core converts it to HTTP_STATUS', async () => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(withEndpoint(inject('testServerHost')), withOpenTelemetryServer({ logger }))
+    const [fault] = await client.execute(
+      defineEventStream({ events: { message: struct.string() }, maxBufferSize: 1024, maxQueueSize: 4, path: '/sse/500' })(),
+    )
+    expect(fault?.code).toBe('HTTP_STATUS')
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({
+      eventName: 'defjs.client.sse.exception',
+      severityNumber: 13,
+      attributes: { 'defjs.phase': 'connect', 'exception.type': 'EventStreamFatalError' },
+    })
+  })
+
+  test('SSE network failure logs one connect failure', async () => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(
+      withEndpoint('https://example.invalid'),
+      withSSEHandle(async () => {
+        throw new TypeError('local transport unavailable')
+      }),
+      withOpenTelemetryServer({ logger }),
+    )
+    const [fault] = await client.execute(
+      defineEventStream({ events: { message: struct.string() }, maxBufferSize: 1024, maxQueueSize: 4, path: '/stream' })(),
+    )
+    expect(fault?.code).toBe('NET_UNREACHABLE')
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({
+      eventName: 'defjs.client.sse.exception',
+      attributes: { 'defjs.phase': 'connect', 'exception.type': 'TypeError' },
+    })
+  })
+
+  test('SSE caller abort during the handshake does not log', async () => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(
+      withEndpoint('https://example.invalid'),
+      withSSEHandle(() => new Promise<Response>(() => undefined)),
+      withOpenTelemetryServer({ logger }),
+    )
+    const abort = new AbortController()
+    setTimeout(() => abort.abort(), 10)
+    const [fault] = await client.execute(
+      defineEventStream({ events: { message: struct.string() }, maxBufferSize: 1024, maxQueueSize: 4, path: '/stream' })(),
+      { abort: abort.signal },
+    )
+    expect(fault?.code).toBe('NET_ABORTED')
+    expect(records).toEqual([])
+  })
+
+  test('SSE end of stream does not log', async () => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(withEndpoint(inject('testServerHost')), withOpenTelemetryServer({ logger }))
+    const [fault, stream] = await client.execute(
+      defineEventStream({ events: { traceparent: struct.string() }, maxBufferSize: 64 * 1024, maxQueueSize: 16, path: '/sse' })(),
+    )
+    expect(fault).toBeNull()
+    for await (const event of stream ?? []) void event
+    await expect(stream?.closed).resolves.toMatchObject({ kind: 'eof' })
+    expect(records).toEqual([])
+  })
+
+  test.each([
+    { name: 'refused handshake', path: '/ws/missing', wrongPort: false },
+    { name: 'unreachable host', path: '/ws', wrongPort: true },
+  ])('WebSocket $name logs one connect failure', async ({ path, wrongPort }) => {
+    const { logger, records } = createMockLogger()
+    const host = wrongPort ? `ws://127.0.0.1:${await closedPort()}` : inject('testServerHost').replace(/^http:/, 'ws:')
+    const client = createClient(withEndpoint(host), withOpenTelemetryServer({ logger }))
+    const [fault] = await client.execute(defineWebSocket({ maxIncomingQueueSize: 4, incoming: struct.unknown(), path })())
+    expect(fault?.code).toBe('NET_UNREACHABLE')
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({
+      eventName: 'defjs.client.websocket.exception',
+      severityNumber: 13,
+      attributes: { 'defjs.phase': 'connect', 'exception.type': 'DefjsFault' },
+    })
+  })
+
+  test('WebSocket caller abort after open does not log', async () => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(withEndpoint(inject('testServerHost').replace(/^http:/, 'ws:')), withOpenTelemetryServer({ logger }))
+    const abort = new AbortController()
+    const [fault, socket] = await client.execute(defineWebSocket({ maxIncomingQueueSize: 4, incoming: struct.unknown(), path: '/ws' })(), {
+      abort: abort.signal,
+    })
+    expect(fault).toBeNull()
+    abort.abort()
+    await expect(socket?.closed).resolves.toMatchObject({ kind: 'aborted' })
+    expect(records).toEqual([])
+  })
+
+  test.each([
+    { path: '/ws', code: 1000 },
+    { path: '/ws/1011', code: 1011 },
+  ])('WebSocket server close $code does not log', async ({ path, code }) => {
+    const { logger, records } = createMockLogger()
+    const client = createClient(withEndpoint(inject('testServerHost').replace(/^http:/, 'ws:')), withOpenTelemetryServer({ logger }))
+    const [fault, socket] = await client.execute(defineWebSocket({ maxIncomingQueueSize: 4, incoming: struct.unknown(), path })())
+    expect(fault).toBeNull()
+    await expect(socket?.closed).resolves.toMatchObject({ kind: 'closed', code })
+    expect(records).toEqual([])
+  })
+
+  // An abrupt drop (1006) has no close frame. Whether the platform WebSocket fires `error` before `close` depends on the
+  // runtime (Node/undici does, Bun does not), and the session ends in `error` and logs once only when it does.
+  test('WebSocket abrupt drop 1006 logs once only when the runtime reports an error first', async () => {
+    const wss = new WebSocketServer({ host: '127.0.0.1', port: 0 })
+    wss.on('connection', (socket) => setTimeout(() => socket.terminate(), 20))
+    await new Promise((resolve) => wss.once('listening', resolve))
+    try {
+      const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}`
+      const reportsErrorFirst = await new Promise<boolean>((resolve) => {
+        const events: string[] = []
+        const probe = new WebSocket(url)
+        probe.addEventListener('error', () => events.push('error'))
+        probe.addEventListener('close', () => resolve(events.includes('error')))
+      })
+
+      const { logger, records } = createMockLogger()
+      const client = createClient(withEndpoint(url), withOpenTelemetryServer({ logger }))
+      const [fault, socket] = await client.execute(defineWebSocket({ maxIncomingQueueSize: 4, incoming: struct.unknown(), path: '/' })())
+      expect(fault).toBeNull()
+      await expect(socket?.closed).resolves.toMatchObject({ kind: reportsErrorFirst ? 'error' : 'closed', code: 1006, wasClean: false })
+      expect(records.map((record) => record.attributes)).toEqual(
+        reportsErrorFirst ? [expect.objectContaining({ 'defjs.phase': 'connection', 'websocket.close.code': 1006 })] : [],
+      )
+    } finally {
+      wss.close()
+    }
+  })
+})
 
 describe('e2e: opentelemetry-server with real test server', () => {
   test('HTTP request carries traceparent header', async () => {

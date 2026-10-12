@@ -1,9 +1,11 @@
-import { ERR_ABORTED, type HttpRequest } from '@defjs/core'
+import { createNetworkFault, ERR_ABORTED, ERR_TIMEOUT, type HttpRequest } from '@defjs/core'
 import type { Context, TextMapGetter, TextMapPropagator, TextMapSetter } from '@opentelemetry/api'
-import { beforeEach, describe, expect, test, vi } from 'vitest'
+import { context, diag, ROOT_CONTEXT, trace } from '@opentelemetry/api'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   activeSpans,
   createMockMetrics,
+  createMockLogger,
   createMockTracer,
   makeDeferredWsSession,
   makeWsRequest,
@@ -36,10 +38,188 @@ function isQueryCarrier(value: unknown): value is QueryCarrier {
 
 let mockPropagator: ReturnType<typeof createMockWsPropagator>
 
+describe('WebSocket client diagnostic logs', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  test.each([
+    { cause: new Error('offline'), count: 1 },
+    { cause: ERR_TIMEOUT, count: 1 },
+    { cause: ERR_ABORTED, count: 0 },
+    { cause: createNetworkFault(ERR_ABORTED), count: 0 },
+  ])('classifies startup failure $cause with $count diagnostics', async ({ cause, count }) => {
+    const { logger, records } = createMockLogger()
+    const interceptor = createOpenTelemetryWebSocketInterceptor({ logger, propagator: createMockWsPropagator() })
+    await expect(
+      interceptor.fn(makeWsRequest(), async () => {
+        throw cause
+      }),
+    ).rejects.toBe(cause)
+    expect(records).toHaveLength(count)
+    if (count)
+      expect(records[0]).toMatchObject({
+        eventName: 'defjs.client.websocket.exception',
+        severityNumber: 13,
+        attributes: { 'defjs.phase': 'connect' },
+      })
+  })
+
+  test.each([
+    { tracing: false, rejected: false },
+    { tracing: true, rejected: false },
+    { tracing: false, rejected: true },
+    { tracing: true, rejected: true },
+  ])('retains the opening context after close, tracer=$tracing rejected=$rejected', async ({ tracing, rejected }) => {
+    const { logger, records } = createMockLogger()
+    const { tracer, spans } = createMockTracer()
+    const metrics = createMockMetrics()
+    const parent = trace.setSpanContext(ROOT_CONTEXT, {
+      traceId: '11111111111111111111111111111111',
+      spanId: '2222222222222222',
+      traceFlags: 0,
+    })
+    const active = vi.spyOn(context, 'active').mockReturnValue(parent)
+    const session = makeDeferredWsSession()
+    const interceptor = createOpenTelemetryWebSocketInterceptor({
+      logger,
+      tracer: tracing ? tracer : undefined,
+      metrics,
+      propagator: createMockWsPropagator(),
+    })
+    await expect(interceptor.fn(makeWsRequest(), async () => session.session)).resolves.toBe(session.session)
+    expect(records).toEqual([])
+    active.mockReturnValue(ROOT_CONTEXT)
+    const cause = new TypeError('private failure')
+    if (rejected) session.reject(cause)
+    else session.close({ kind: 'error', cause, code: 1006, reason: 'private close reason' })
+    await waitForSettledPromises()
+    session.close({ kind: 'error', cause })
+    await waitForSettledPromises()
+    expect(records).toHaveLength(1)
+    const record = records[0]
+    if (!record?.context) throw new Error('Expected a log record with explicit context')
+    expect(record).toMatchObject({ severityNumber: 13, attributes: { 'defjs.phase': 'connection', 'exception.type': 'TypeError' } })
+    expect(record.attributes?.['websocket.close.code']).toBe(rejected ? undefined : 1006)
+    expect(JSON.stringify(records)).not.toContain('private')
+    if (tracing) expect(trace.getSpan(record.context)).toBe(spans[0])
+    else expect(record.context).toBe(parent)
+    expect(metrics.activeConnections.add.mock.calls.map(([value]) => value)).toEqual([1, -1])
+    expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1)
+  })
+
+  test.each(['closed', 'aborted'] as const)('does not log %s even with an error cause', async (kind) => {
+    const { logger, records } = createMockLogger()
+    const session = makeDeferredWsSession()
+    const interceptor = createOpenTelemetryWebSocketInterceptor({ logger, propagator: createMockWsPropagator() })
+    await interceptor.fn(makeWsRequest(), async () => session.session)
+    session.close({ kind, cause: new Error('user decided to stop') })
+    await waitForSettledPromises()
+    expect(records).toEqual([])
+  })
+
+  test('retains legacy close-cause diagnostics without manufacturing normal-close logs', async () => {
+    const { logger, records } = createMockLogger()
+    const interceptor = createOpenTelemetryWebSocketInterceptor({ logger, propagator: createMockWsPropagator() })
+    for (const info of [undefined, {}, { cause: new Error('offline'), code: 1006 }]) {
+      const session = makeDeferredWsSession()
+      await interceptor.fn(makeWsRequest(), async () => session.session)
+      session.close(info as never)
+      await waitForSettledPromises()
+    }
+    expect(records).toHaveLength(1)
+    expect(records[0]?.attributes?.['websocket.close.code']).toBe(1006)
+  })
+
+  test.each(['emit', 'close-code', 'rejected'] as const)('preserves termination when logging fails in %s', async (failure) => {
+    const { logger } = createMockLogger()
+    if (failure !== 'close-code')
+      logger.emit.mockImplementation(() => {
+        throw new Error('logger failed')
+      })
+    const report = vi.spyOn(diag, 'error').mockImplementation(() => undefined)
+    const { tracer, spans } = createMockTracer()
+    const metrics = createMockMetrics()
+    const session = makeDeferredWsSession()
+    const interceptor = createOpenTelemetryWebSocketInterceptor({ logger, tracer, metrics, propagator: createMockWsPropagator() })
+    await expect(interceptor.fn(makeWsRequest(), async () => session.session)).resolves.toBe(session.session)
+    const cause = new Error('original')
+    if (failure === 'rejected') {
+      session.reject(cause)
+      await expect(session.session.closed).rejects.toBe(cause)
+    } else {
+      session.close({
+        kind: 'error',
+        cause,
+        get code(): number | undefined {
+          if (failure === 'close-code') throw new Error('private close getter')
+          return undefined
+        },
+      })
+      await expect(session.session.closed).resolves.toMatchObject({ kind: 'error', cause })
+    }
+    await waitForSettledPromises()
+    expect(report).toHaveBeenCalledTimes(1)
+    expect(spans[0]?.ended).toBe(true)
+    expect(metrics.activeConnections.add.mock.calls.map(([value]) => value)).toEqual([1, -1])
+  })
+})
+
 describe('createOpenTelemetryWebSocketInterceptor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPropagator = createMockWsPropagator()
+  })
+
+  test.each([
+    { close: 'closed', result: 'success', extras: {} },
+    { close: 'aborted', result: 'error', extras: { 'error.type': 'Error' } },
+    { close: 'error', result: 'error', extras: { 'error.type': 'TypeError' } },
+    { close: 'rejected', result: 'error', extras: { 'error.type': 'TypeError' } },
+  ] as const)('records WebSocket $close lifecycle without a tracer', async ({ close, result, extras }) => {
+    const metrics = createMockMetrics()
+    const ws = makeDeferredWsSession()
+    const interceptor = createOpenTelemetryWebSocketInterceptor({ propagator: mockPropagator, metrics, requireParentSpan: true })
+    await expect(interceptor.fn(makeWsRequest(), async () => ws.session)).resolves.toBe(ws.session)
+    expect(metrics.connectDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'server.address': 'api.example.com',
+      'defjs.result': 'success',
+    })
+    expect(metrics.activeConnections.add.mock.calls).toEqual([[1, { 'server.address': 'api.example.com' }]])
+    expect(metrics.connectionDuration.record).not.toHaveBeenCalled()
+
+    if (close === 'rejected') ws.reject(new TypeError('connection lost'))
+    else if (close === 'error') ws.close({ kind: 'error', cause: new TypeError('connection lost') })
+    else ws.close({ kind: close })
+    await waitForSettledPromises()
+
+    expect(metrics.activeConnections.add.mock.calls).toEqual([
+      [1, { 'server.address': 'api.example.com' }],
+      [-1, { 'server.address': 'api.example.com' }],
+    ])
+    expect(metrics.connectionDuration.record).toHaveBeenCalledTimes(1)
+    expect(metrics.connectionDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'server.address': 'api.example.com',
+      'defjs.result': result,
+      ...extras,
+    })
+  })
+
+  test('records WebSocket startup failure without a tracer without incrementing active connections', async () => {
+    const metrics = createMockMetrics()
+    const error = new TypeError('connect failed')
+    const interceptor = createOpenTelemetryWebSocketInterceptor({ propagator: mockPropagator, metrics })
+    await expect(
+      interceptor.fn(makeWsRequest(), async () => {
+        throw error
+      }),
+    ).rejects.toBe(error)
+    expect(metrics.connectDuration.record).toHaveBeenCalledTimes(1)
+    expect(metrics.connectDuration.record).toHaveBeenCalledWith(expect.any(Number), {
+      'server.address': 'api.example.com',
+      'defjs.result': 'error',
+      'error.type': 'TypeError',
+    })
+    expect(metrics.activeConnections.add).not.toHaveBeenCalled()
+    expect(metrics.connectionDuration.record).not.toHaveBeenCalled()
   })
 
   test('should extract trace context from headers via propagator', async () => {

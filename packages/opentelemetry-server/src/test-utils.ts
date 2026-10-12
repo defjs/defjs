@@ -24,11 +24,23 @@ import type {
   Tracer,
 } from '@opentelemetry/api'
 import { vi } from 'vitest'
+import type { Logger, LogRecord } from '@opentelemetry/api-logs'
 
 type MockFn = ReturnType<typeof vi.fn>
 type SSECloseCode = 'eof' | 'error' | 'aborted'
 function noop(): void {
   return undefined
+}
+
+export function createMockLogger() {
+  const records: LogRecord[] = []
+  const logger = {
+    emit: vi.fn((record: LogRecord) => {
+      records.push(record)
+    }),
+    enabled: vi.fn(() => true),
+  } satisfies Logger
+  return { logger, records }
 }
 
 function emptyAsyncIterable(): AsyncIterable<unknown> {
@@ -242,11 +254,6 @@ function makeSSECloseInfo(kind: SSECloseCode, cause?: unknown, code: EventStream
   return kind === 'error' ? { cause, code, kind, reason: '' } : { cause, kind, reason: '' }
 }
 
-export function makeSSEStreamError(error: unknown): EventStreamHandle<unknown> {
-  const closed = Promise.reject<EventStreamCloseInfo>(error)
-  return makeSSEHandleBase(closed)
-}
-
 export function makeWsRequest(queryParams?: URLSearchParams, headers?: Headers): HttpRequest {
   return {
     method: 'GET',
@@ -273,10 +280,6 @@ export function makeDeferredWsSession() {
       closed.reject(error)
     },
   }
-}
-
-export function makeWsSessionError(error: unknown): WebSocketSessionLike {
-  return createWsSession(Promise.reject(error))
 }
 
 export function waitForSettledPromises(): Promise<void> {

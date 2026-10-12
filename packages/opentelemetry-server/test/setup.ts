@@ -57,6 +57,16 @@ export async function setup({ provide }: TestProject) {
     }),
   )
 
+  // WebSocket: server-initiated close with an internal-error code
+  app.get(
+    '/ws/1011',
+    upgradeWebSocket(() => ({
+      onOpen(_event, ws) {
+        setTimeout(() => ws.close(1011, 'server error'), 50)
+      },
+    })),
+  )
+
   const wss = new WebSocketServer({ noServer: true })
   testServer = await startHonoTestServer(app, { websocket: { server: wss } })
   provide('testServerHost', testServer.host)
