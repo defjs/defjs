@@ -1,0 +1,16 @@
+---
+title: 'WebSocketInterceptorFn'
+description: 'WebSocket interceptor 的函数形式。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptorFn" />
+
+```ts
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+可以检查或替换 `req`，然后调用 [`next`](/zh-Hans/api/core/websockethandler-type) 继续这条链，或返回自己的 [`WebSocketSessionLike`](/zh-Hans/api/core/websocketsessionlike-type) 来短路。用 `createWebSocketInterceptor(fn)` 包一层，才能通过 `withInterceptors` 注册。
+
+这条链每次 `execute` 只运行一次。重连发生在它返回的 session 内部，不会再次运行它。
+
+[Interceptors](/zh-Hans/api/interceptors)

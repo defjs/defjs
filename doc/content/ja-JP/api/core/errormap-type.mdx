@@ -1,0 +1,14 @@
+---
+title: 'ErrorMap'
+description: 'struct の issue のメッセージを書き換えるコールバックです。'
+---
+
+<ApiReference identity="@defjs/core:ErrorMap" />
+
+```ts
+type ErrorMap = (issue: StructIssue) => string | undefined
+```
+
+`struct.parse` の `errorMap` オプションとして渡します。issue（`code`、`expected`、`message`、`path`、`received`）が記録される前に、issue ごとに呼ばれます。文字列を返すとデフォルトのメッセージが置き換わり、`undefined` を返すとそのまま残ります。
+
+[Struct](/ja-JP/api/struct)

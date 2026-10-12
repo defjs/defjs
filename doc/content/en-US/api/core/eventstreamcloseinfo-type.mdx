@@ -1,0 +1,17 @@
+---
+title: 'EventStreamCloseInfo'
+description: 'How an SSE stream ended: clean EOF, abort, or an error with a fault code.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCloseInfo" />
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its signal aborted; `reason` and `cause` carry the value passed to `close`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`.
+
+[SSE](/api/sse)

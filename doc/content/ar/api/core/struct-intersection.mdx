@@ -1,0 +1,21 @@
+---
+title: 'struct.intersection'
+description: 'struct يتطلب مطابقة كل الـ structs ويدمج نتائجها.'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+```
+
+`struct.intersection` متغيّر عدد المعاملات: مرّر كل struct كمعامل مستقل.
+
+- يحلّل المدخل بكل struct ويدمج النتائج.
+- عندما يكون كل struct هو struct كائن، تكون المخرجات كائنًا واحدًا بحقولها جميعًا. وتُزال المفاتيح التي لا يعلنها أي منها.
+- عندما ينتج اثنان من الـ structs قيمتين غير متوافقتين للمفتاح نفسه، يفشل بـ `invalid_intersection`.
+- يُرجَع struct واحد منفرد كما هو. واستدعاؤه بلا structs يرمي `TypeError`، وكذلك معامل ليس struct.
+
+`IntersectionStruct<T>` غير مُصدَّر. وهو `Struct` مدخله ومخرجه هما تقاطع أنواع الأعضاء.
+
+[Struct](/ar/api/struct)

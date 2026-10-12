@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'リクエストビルダーが受け取る、パース済みのエンドポイント入力型です。'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+`builder` が見る、パース済みのエンドポイント入力です。オブジェクトノードはそれを生んだ struct（内部の `Typed` ブランド）を運ぶので、エイリアス、`Date`、`bigint` のエンコードは値についてリクエストまで引き継がれます。record のエントリーと tuple の要素にも同じようにブランドが付きます。実行時には、パース済みの値がオブジェクトのときに限り、record のコンテナにもタグが付きます。array と tuple のコンテナには付かず、`null` と `undefined` にも決して付きません。nullish 修飾子は包んでいた struct を復元し、union のオプションは分配され、intersection のオプションは結合されます。それ以外の struct は `Infer<S>` にフォールバックします。
+
+`CarriedStruct`、`NullishBuilderInput`、`IntersectBuilderInputs`、`Typed` は内部ヘルパー型です。
+
+[HTTP](/ja-JP/api/http)

@@ -1,0 +1,22 @@
+---
+title: 'SSE 이벤트 소비'
+description: 타입이 있는 이벤트 스트림을 열고, 한 번 순회한 뒤 닫고 closed를 await 해요.
+---
+
+# SSE 스트림 소비하기
+
+스트림당 async iterator는 하나예요. 일찍 빠져나가도 Fetch 시도가 새지 않도록 `finally`에 `close`와 `await stream.closed`를 넣어요.
+
+자세한 내용은 [SSE](/ko-KR/docs/sse)를 보세요.
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com`은 placeholder예요. 첫 이벤트가 `message`이고 데이터가 `{ "text": "hello from the server" }`인 서버에서는 이 스니펫이 다음을 출력해요.
+
+```txt
+hello from the server
+```
+
+`withSSEReconnect(...)`를 켜지 않으면 SSE는 네트워크/읽기 실패를 재시도하지 않아요. reconnect 객체를 주면 `attempts` 기본값은 `3`이고, `attempts: 0`은 재시도를 꺼요. `shouldReconnect`가 없으면 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE` 요청만 재연결하고, `ReadableStream` 요청 body는 재연결하지 않아요.

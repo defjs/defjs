@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: '`makeResponse` 接受的欄位。'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+`status` 預設為 `0`，`statusText` 預設為 `''`。`url` 與 `headers` 預設取自 `request`：它解析後的 URL（base endpoint、path 與 query）與 headers 的副本。沒有 `baseEndpoint` 的 request，則使用其原樣書寫的 `endpoint`。沒有 `request` 時，`url` 是 `''`，`headers` 為空。省略的 `body` 維持 `undefined`；只有明確傳 `null` 才是 JSON `null`。
+
+[HTTP](/zh-Hant-TW/api/http)

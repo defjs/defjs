@@ -1,0 +1,14 @@
+---
+title: 'RequestErrorData'
+description: 'نوع جسم الخطأ المفكوك لـ struct الخطأ المعلَن في نقطة النهاية.'
+---
+
+<ApiReference identity="@defjs/core:RequestErrorData" />
+
+```ts
+type RequestErrorData<TError extends AnyStruct | undefined> = [TError] extends [undefined] ? undefined : Infer<TError>
+```
+
+نوع الجسم المفكوك لـ struct الـ `error` المعلَن، أو `undefined` إن لم يُعلَن واحد.
+
+[HTTP](/ar/api/http)

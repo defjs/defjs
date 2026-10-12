@@ -1,0 +1,14 @@
+---
+title: 'AnyFault'
+description: 'デコード済みエラーボディの型を問わない、あらゆる fault バリアントのユニオン型です。'
+---
+
+<ApiReference identity="@defjs/core:AnyFault" />
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+デコード済みエラーボディの型を問わない、あらゆる fault です。どのエンドポイントが出したかを気にせず fault を分類するハンドラーに使ってください。ボディの型が重要な場所では `Fault<typeof yourErrorStruct>` を選びます。
+
+[Errors](/ja-JP/api/errors)

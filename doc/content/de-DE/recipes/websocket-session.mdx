@@ -1,0 +1,22 @@
+---
+title: 'WebSocket-Sitzungen verwalten'
+description: Verbinden, einen typisierten Envelope senden, einmal empfangen, dann schließen und auf closed warten.
+---
+
+# WebSocket-Session öffnen
+
+Jede Richtung ist ein Struct. Du besitzt das Abmelden, `close` und `await session.closed`. Ungültige Frames gehen an `onRuntimeError`.
+
+Details siehe [WebSocket](/de-DE/docs/web-socket).
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` ist ein Platzhalter. Bei einem Server, der `{ "type": "send", "text": "Hello" }` mit `{ "type": "message", "text": "Hello" }` beantwortet, gibt das Snippet aus:
+
+```txt
+message Hello
+```
+
+Reconnect ist opt-in (`withWebSocketReconnect`). Heartbeat ebenfalls. Browser-WebSockets können keine beliebigen Handshake-Headers nehmen — nutze Cookies, Subprotocols oder ein short-lived Ticket.

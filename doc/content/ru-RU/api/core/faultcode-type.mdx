@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'Закрытый набор всех кодов сбоев, о которых сообщает Defjs.'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+Один закрытый набор. Сегмент до первого `_` — это класс; отдельного поля `kind` нет.
+
+| Класс  | Значение                                                            |
+| ------ | ------------------------------------------------------------------- |
+| `HTTP` | Пир ответил статусом не из диапазона 2xx.                           |
+| `REQ`  | Request не ушёл: input, опции execute или сборка.                   |
+| `NET`  | Нет пригодного ответа: отмена, таймаут, соединение, усечённое тело. |
+| `RES`  | Ответ пришёл, но не может быть прочитан так, как объявлено.         |
+| `EXT`  | Код, который ты подключил к конвейеру, бросил исключение.           |
+| `CAP`  | Превышен объявленный лимит буфера или очереди.                      |
+| `ENV`  | В runtime хоста нет необходимой возможности.                        |
+
+Набор остаётся закрытым, чтобы `switch (fault.code)` был исчерпывающим: расширения сообщают свои подробности через `cause`, а не через новый код.
+
+[Ошибки](/ru-RU/api/errors)

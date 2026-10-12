@@ -1,0 +1,32 @@
+---
+title: 'defineEventStream'
+description: 'Declara un endpoint tipado de Server-Sent Events.'
+---
+
+<ApiReference identity="@defjs/core:defineEventStream" />
+
+```ts
+function defineEventStream<
+  const P extends string,
+  const M extends string = 'GET',
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<EventStreamDefinitionBase<TEvents>, 'method' | 'path'> &
+    EventStreamErrorField<TError> & {
+      input?: TInput
+      method?: M
+      path: P
+    } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>,
+): EventStreamEndpoint<TInput, TEvents, TError>
+```
+
+- **definition** — `path`, un mapa `events` y los límites obligatorios `maxBufferSize` y `maxQueueSize` (enteros seguros positivos). Opcionales: `method` (por defecto `'GET'`), `operation`, `input` y `error`. Un `input` declarado siempre requiere un `builder` explícito, aunque ya coincida con la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
+- **Devuelve** un endpoint. Llámalo con una entrada para obtener un `EventStreamCommand`.
+
+`EventStreamDefinitionBase`, `EventStreamErrorField` y `BuilderField` son tipos auxiliares internos: `error` es obligatorio solo cuando `TError` es un struct, y `builder` es `(input: BuilderInput<TInput>) => EventStreamRequestShape` cuando se declara `input`.
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+[SSE](/es-ES/api/sse)

@@ -1,0 +1,136 @@
+---
+title: 'クイックスタート'
+description: GET /users/:id を定義し、ローカル Fetch ハンドルで動かし、そのあと実 API に向けます。
+---
+
+# はじめに: 1 つの HTTP リクエスト
+
+`GET /users/:id` を定義し、明示的なクライアント経由で実行して、`200` と宣言済みの `404` の両方をデコードします。ローカルハンドラで最初の実行はオフラインのままにしておけます。実サービスに差し替えてもコマンドは同じです。
+
+## Step 1 — インストール
+
+`@defjs/core` は ESM で、Node.js、Bun、Deno で動きます。Node.js 22.18+（または 24+）は type stripping により `.ts` をそのまま実行します。それより古い 22.x では `--experimental-strip-types` が要ります。package.json に `"type": "module"` を書いてください。ブラウザーでもバンドラーと Fetch は要ります。
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno add npm:@defjs/core
+```
+
+</Tab>
+</Tabs>
+## Step 2 — リクエストを定義する
+
+`src/get-user.ts` を作ります。input の struct は呼び出し側の値です。`builder` はその値をリクエストのどこに置くかを決めます。ここでは入力全体が path オブジェクトなので、エイリアスのないスカラーフィールドが `:id` を埋めます。
+
+<include cwd meta="get-user.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` は 2xx のボディです。`error` はそれ以外のすべての status です。それぞれ struct は 1 つです。ボディの形が違うときは `struct.or(...)` か判別可能な union を使います。
+
+`defineRequest(...)` はエンドポイントを返します。`getUser(...)` を呼ぶと、`client.execute(...)` に渡す不透明なコマンドができます。上の `builder` は入力を配置する関数であり、エンドポイントそのものではありません。
+
+## Step 3 — ローカルで実行する
+
+クライアントローカルの Fetch ハンドルを繋ぎ、ネットワークなしで動かします。Defjs はそれでも入力検証、`Request` の組み立て、status による振り分け、ボディのパースを行います。
+
+<include cwd meta="get-user.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+実行します。
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun src/get-user.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno run src/get-user.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+いないユーザーも試してみましょう — path の id を `8` にしてもう一度実行します。
+
+```txt
+User not found
+```
+
+成功時は `error` が `null`、`user` が `200` の Struct 出力、`response` が `HttpResponse` です。宣言済み `404` では `error.code` が `'HTTP_STATUS'`、`error.status` が `404`、`error.data` は型付きの `NotFound` です。失敗時、タプルの 2 番目は `undefined` です。
+
+## Step 4 — 実 API に向ける
+
+サービスが `GET /v1/users/:id` とそのボディを実装しているなら、`withHTTPHandle(...)` を外して本当のベース URL を設定します。
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+同じコマンド。違うクライアント。
+
+## 結果が違うとき
+
+- 悪い入力 → `REQ_INPUT_INVALID`。衝突するキャンセル options → `REQ_OPTIONS_INVALID`。失敗する `builder` → `REQ_BUILD_FAILED`
+- non-2xx の status → `HTTP_STATUS`。`error` を宣言していてそのボディがデコードできれば、`error.data` に型が付きます
+- 宣言された JSON ボディのメディアタイプ違い → `RES_MEDIA_TYPE_INVALID`。ボディを読む前に報告されます
+- 宣言済みボディ（2xx なら `output`、それ以外は `error`）がデコードできない → `RES_DECODE_FAILED` または `RES_STRUCT_MISMATCH`。status は問いません
+- Fetch 失敗 / キャンセル / タイムアウト → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。有効なキャンセルの形は `{ timeout }`、`{ abort }`、または `{ signal, timeout }` / `{ signal, abort }` です。`{ abort, timeout }` を同時に渡すのは無効です。キャンセルは呼び出し側が見たことを伝えます — サーバー側の書き込みがコミットしたかどうかではありません。
+
+## 次のレシピ
+
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [POST JSON](/ja-JP/recipes/post-json)
+- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
+- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
+- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)
+- [ローカル Fetch ハンドルでテストする](/ja-JP/recipes/test-with-handle)

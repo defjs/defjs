@@ -1,0 +1,22 @@
+---
+title: 'OpenTelemetryServerWebSocketOptions'
+description: 'Опции транспорта WebSocket — общие опции плюс queryPropagation.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions" />
+
+```ts
+interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTransportOptions<WebSocketSessionLike> {
+  queryPropagation?: boolean
+}
+```
+
+Задаётся в `webSocket` у `OpenTelemetryServerOptions`. `enabled`, `startSpanHook`, `requestHook` и `responseHook` приходят из `OpenTelemetryServerTransportOptions`; `responseHook(span, session, req)` получает открытый `WebSocketSessionLike` и исходный `HttpRequest`.
+
+`queryPropagation` по умолчанию `false`: query-строка WebSocket остаётся без изменений, а trace context и baggage в URL не пишутся. Браузерные клиенты WebSocket обычно не могут задавать заголовки, поэтому при включении переданный контекст дописывается в query-строку. Query-строки могут попасть в записи прокси, access-логи и APM-инструменты, а значения baggage могут быть чувствительными. Включай, только если готов принять такое раскрытие.
+
+WebSocket трассируется на уровне соединения. Span остаётся открытым, пока не settle’ится `session.closed`. Он записывает `websocket.connected`, затем `websocket.closed` при нормальном закрытии или `websocket.error`. Close-фрейм от сервера считается нормальным закрытием с любым кодом, включая 1011. Резкий обрыв без close-фрейма (1006) считается нормальным только там, где runtime не сообщает об `error` сокета перед `close` (Bun); там, где сообщает (Node.js), сессия завершается ошибкой и логируется один раз. Abort открытой сессии вызывающим — тоже `websocket.error`: span завершается как `ERROR`, а лог не отправляется. `error.type` следует причине abort: `AbortError` для `abort()` по умолчанию, `Error.name` для причины-`Error`, `string` для строковой причины. Abort, пока WebSocket ещё подключается, завершает span как `ERROR` с `error.type` `DefjsFault`. Spans для отдельных сообщений не создаются.
+
+Передай `{ enabled: false }`, чтобы пропустить WebSocket-инструментацию. Hooks для span вызываются только при переданном `tracer`.
+
+[@defjs/opentelemetry-server](/ru-RU/api/opentelemetry-server)

@@ -1,0 +1,24 @@
+---
+title: 'StructIssue'
+description: 'struct 解析時產生的一個驗證失敗。'
+---
+
+<ApiReference identity="@defjs/core:StructIssue" />
+
+```ts
+interface StructIssue {
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  expected: string
+  message: string
+  path: Array<number | string>
+  received: unknown
+}
+```
+
+- `code` 是機器可讀的類別。parser 會產生 `invalid_type`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 與 `missing_key`；`custom` 雖是型別的一部分，但內建 structs 不會產生它。
+- `expected` 描述預期的型別或值。
+- `message` 是最終文案，經過選用的 [`ErrorMap`](/zh-Hant-TW/api/core/errormap-type) 改寫之後。
+- `path` 從 parse 根走到失敗位置：欄位名稱與陣列索引。根層級失敗時為空。
+- `received` 是在 `path` 上失敗的值。
+
+[Struct](/zh-Hant-TW/api/struct)

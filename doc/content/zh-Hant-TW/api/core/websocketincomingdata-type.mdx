@@ -1,0 +1,14 @@
+---
+title: 'WebSocketIncomingData'
+description: '收到的 WebSocket message 解碼後的型別。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketIncomingData" />
+
+```ts
+type WebSocketIncomingData<TIncoming extends AnyStruct> = Infer<TIncoming>
+```
+
+`session.receive` 產出的每則 message 的型別：endpoint 的 `incoming` struct 經 [`Infer`](/zh-Hant-TW/api/core/infer-type) 得到的輸出。有 alias 的欄位使用其邏輯名稱。
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

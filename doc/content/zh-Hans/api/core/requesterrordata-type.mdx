@@ -1,0 +1,14 @@
+---
+title: 'RequestErrorData'
+description: 'endpoint 所声明的 error struct 解码后的错误 body 类型。'
+---
+
+<ApiReference identity="@defjs/core:RequestErrorData" />
+
+```ts
+type RequestErrorData<TError extends AnyStruct | undefined> = [TError] extends [undefined] ? undefined : Infer<TError>
+```
+
+所声明 `error` struct 解码后的 body 类型；没有声明时为 `undefined`。
+
+[HTTP](/zh-Hans/api/http)

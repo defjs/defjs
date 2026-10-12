@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: 'الحقول التي يقبلها makeResponse.'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+القيمة الافتراضية لـ `status` هي `0` ولـ `statusText` هي `''`. أما `url` و`headers` فتؤخذ قيمهما الافتراضية من `request`: عنوانه المحلَّل (نقطة النهاية الأساسية والمسار والاستعلام) ونسخة من ترويساته. والطلب الذي لا يملك `baseEndpoint` يعطي `endpoint` كما كُتب. وبلا طلب يكون `url` هو `''` وتكون `headers` فارغة. الـ `body` المحذوف يبقى `undefined`؛ ولا يصبح JSON `null` إلا عند تمرير `null` صراحةً.
+
+[HTTP](/ar/api/http)

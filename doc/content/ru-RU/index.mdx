@@ -1,0 +1,56 @@
+---
+title: Defjs
+description: Типизированные команды HTTP, SSE и WebSocket — явный клиент и error-first результаты.
+---
+
+# Defjs
+
+Опиши эндпоинт, собери непрозрачную команду и выполни её. Одна и та же форма для HTTP, SSE и WebSocket.
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Defjs не кеширует результаты, не ретраит за тебя и не закрывает стримы, если ты забыл. Отмена и cleanup — на тебе.
+
+## Выбери транспорт
+
+| Тебе нужно                           | Начни с                             | Успешный результат                           |
+| ------------------------------------ | ----------------------------------- | -------------------------------------------- |
+| Запрос + ответ по статусу            | [HTTP](/ru-RU/docs/http)            | Декодированные данные + `HttpResponse`       |
+| Долгоживущая лента событий с сервера | [SSE](/ru-RU/docs/sse)              | Один стрим + снимок `open` при старте        |
+| Двунаправленная сессия               | [WebSocket](/ru-RU/docs/web-socket) | Одна сессия + снимок `connection` при старте |
+
+Впервые здесь? Пройди [Начало работы](/ru-RU/docs/start), потом возьми [рецепт](/ru-RU/recipes/get-declared-404). Хочешь понять «зачем так»? Читай [Проектные решения](/ru-RU/docs/design-decisions) уже после того, как что-то прогнал.
+
+## Выбери пакет
+
+| Пакет                         | Когда                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | `createClient` (HTTP + SSE + WebSocket)                                                                     |
+| `@defjs/react`                | `ClientProvider` / `useClient` — см. [React](/ru-RU/docs/integrations/react)                                |
+| `@defjs/vue`                  | Плагин + `injectClient` — см. [Vue](/ru-RU/docs/integrations/vue)                                           |
+| `@defjs/opentelemetry-server` | Исходящие spans, metrics и logs — см. [OpenTelemetry Server](/ru-RU/docs/integrations/opentelemetry-server) |
+
+## Формы результатов
+
+Все три транспорта возвращают error-first кортеж из трёх элементов. Позиции совпадают, смыслы — нет:
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+При ошибке второй элемент — `undefined`. Для HTTP третий элемент тоже `undefined`, потому что метаданные ответа несёт fault. Для SSE и WebSocket третий элемент — снимок старта, если он был получен до сбоя. См. [Ошибки](/ru-RU/docs/errors).
+
+## Владение на одном дыхании
+
+Abort HTTP, когда запрос уже не нужен. Закрой SSE и `await stream.closed`. Закрой WebSocket и `await session.closed`. На сервере создавай клиент внутри границы запроса, если опции захватывают cookies, auth или tenant. Перед логом маскируй URL, заголовки и тела.
+
+## Связанные рецепты
+
+- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)
+- [POST JSON](/ru-RU/recipes/post-json)
+- [Отменить HTTP-вызов](/ru-RU/recipes/cancel-http)
+- [Читать SSE-стрим](/ru-RU/recipes/consume-sse)
+- [Открыть WebSocket-сессию](/ru-RU/recipes/websocket-session)
+- [Тест с локальным Fetch handle](/ru-RU/recipes/test-with-handle)

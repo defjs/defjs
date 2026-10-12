@@ -1,0 +1,14 @@
+---
+title: 'HttpInterceptorNext'
+description: 'دالة المتابعة التي تشغّل بقية سلسلة معترضات HTTP.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptorNext" />
+
+```ts
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`next(req)` يتجه **للداخل** فقط: المعترضات المسجَّلة بعد هذا المعترض، ثم معالج fetch. وهو ليس إعادة إرسال لـ `client.execute` من الخارج. استدعِ `next` مرة أخرى لإعادة تشغيل آمنة، مثل تجديد واحد بعد 401، من المعترض نفسه؛ والطبقات الخارجية لا تعمل مرة ثانية. وبعد أن تستقر السلسلة، يُرفض استدعاء `next` بالرسالة `HTTP interceptor next() cannot be called after the chain has settled`.
+
+[المعترضات](/ar/api/interceptors)

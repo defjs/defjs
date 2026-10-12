@@ -1,0 +1,17 @@
+---
+title: 'createUndecodedHttpStatusFault'
+description: 'Factory für einen HTTP_STATUS-Fault, dessen Body nie dekodiert wurde.'
+---
+
+<ApiReference identity="@defjs/core:createUndecodedHttpStatusFault" />
+
+```ts
+function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+```
+
+- **response** — Metadaten einer Non-2xx-Response. Es wurde kein Body gelesen, weil der Endpoint kein `error`-Struct deklariert hat.
+- **Returns** einen nativen `Error` namens `DefjsFault` mit `code: 'HTTP_STATUS'`, `data: undefined`, `status` aus der Response kopiert und `response` unverändert.
+
+Nutze [`createHttpStatusFault`](/de-DE/api/core/createhttpstatusfault), wenn der Body dekodiert wurde.
+
+[Fehler](/de-DE/api/errors)

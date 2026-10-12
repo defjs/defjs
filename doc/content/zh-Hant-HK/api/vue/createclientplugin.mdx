@@ -1,0 +1,17 @@
+---
+title: 'createClientPlugin'
+description: 建立 Vue plugin，將現有 Defjs client 提供畀 app。
+---
+
+<ApiReference identity="@defjs/vue:createClientPlugin" />
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — `createClient` 建立嘅 instance。Plugin 唔會 create、cache 或者 dispose 佢。
+- **Returns** 畀 `app.use(...)` 用嘅 Vue plugin。安裝時會 call `app.provide(HTTP_CLIENT, client)`，所以 components 可以用 `injectClient()` 讀取 client。
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+[@defjs/vue](/zh-Hant-HK/api/vue)

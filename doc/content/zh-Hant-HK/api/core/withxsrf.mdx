@@ -1,0 +1,25 @@
+---
+title: 'withXSRF'
+description: 'Client option：喺 HTTP requests 將 XSRF token 複製到 request header。'
+---
+
+<ApiReference identity="@defjs/core:withXSRF" />
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+為 **HTTP** requests 啟用 XSRF token 轉發。SSE 同 WebSocket requests 唔會有呢個 header。
+
+- `cookieName` 預設係 `XSRF-TOKEN`，`headerName` 預設係 `X-XSRF-TOKEN`。
+- 只有以下條件全部成立，先會設定 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；client 有 endpoint；而且喺 browser 入面，request URL 同頁面同源。
+- 冇 `tokenProvider` 時，token 從 `document.cookie` 讀取並做 URL-decode。喺 browser 以外冇 cookie，所以唔會設定 header。
+- 有 `tokenProvider` 時，永遠唔會讀 cookie。Provider 會收到 request，佢嘅結果就係 token。空字串、`null` 或者 `undefined` 代表唔設定 header。
+
+Request 層級嘅行為請參閱 [HTTP guide](/zh-Hant-HK/docs/http)。
+
+[Client](/zh-Hant-HK/api/client)

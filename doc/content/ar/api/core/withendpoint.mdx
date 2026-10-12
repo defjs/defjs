@@ -1,0 +1,17 @@
+---
+title: 'withEndpoint'
+description: 'خيار عميل يعيّن عنوان URL الأساس لمسارات الطلب النسبية.'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+يعيّن عنوان URL الأساس الذي يُلحق أمام مسارات الطلب النسبية. الافتراضي سلسلة فارغة.
+
+- **endpoint** — نقطة نهاية أساس مطلقة أو نسبية.
+- في أوامر WebSocket، يصبح الأساس `http:` هو `ws:` ويصبح `https:` هو `wss:`.
+
+[العميل](/ar/api/client)

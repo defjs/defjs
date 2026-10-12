@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'Opción de cliente que habilita la reconexión automática de SSE.'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+Configura la reconexión automática cuando falla un stream SSE. La reconexión es opt-in: sin esta opción, un stream fallido no se reintenta. Pasar `undefined` borra un ajuste anterior.
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` es el presupuesto de reintentos tras el primer intento. Vale `3` por defecto cuando se define `reconnect`, y `0` desactiva los reintentos. Omitirlo no significa ilimitado.
+- Sin `shouldReconnect`, solo se reconectan las solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`. Si se proporciona, su resultado determina si se reconecta para cada método, incluido `POST`; el campo `method` del contexto permite distinguir los endpoints. Devuelve `false` para detener los reintentos ante este fallo. El callback se ejecuta antes de comprobar el límite de intentos.
+- Una solicitud con un cuerpo `ReadableStream` nunca se reconecta y no se llama a `shouldReconnect` para esa solicitud.
+- `delayMs`, `factor`, `jitter` (de 0 a 1) y `maxDelayMs` dan forma al backoff. `factor` vale `1` por defecto y `jitter`, `0`.
+- `delayMs` es solo el retraso base inicial (`1000` por defecto). Un campo `retry:` del servidor (solo dígitos, en milisegundos) lo reemplaza en los intentos posteriores.
+- El último id de evento se vuelve a enviar como `Last-Event-ID` en el siguiente intento.
+
+Consulta [SSE](/es-ES/api/sse) para el handle del stream.
+
+[Cliente](/es-ES/api/client)

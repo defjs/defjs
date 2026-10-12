@@ -1,0 +1,16 @@
+---
+title: 'ERR_TIMEOUT'
+description: 'قيمة Error مشتركة تعلّم الطلب بأنه انتهت مهلته.'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+قيمة `cause` والرسالة المشتركة للمهلات. يربطها `createNetworkFault`، ومعها أي خطأ باسم `TimeoutError`، بالرمز `NET_TIMEOUT`. معترض HTTP الذي يرميها يجعل الاستدعاء ينتهي بخطأ `NET_TIMEOUT`. أما معترضات SSE وWebSocket التي ترميها فيُبلَّغ عنها بالرمز `EXT_INTERCEPTOR_FAILED`.
+
+راجع [دليل الأخطاء](/ar/docs/errors).
+
+[الأخطاء](/ar/api/errors)

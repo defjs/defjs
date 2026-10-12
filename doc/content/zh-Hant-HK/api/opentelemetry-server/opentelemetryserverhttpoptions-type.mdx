@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerHttpOptions'
+description: HTTP transport 嘅 options，即係共用 options，而 responseHook 收到 HttpResponse。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions" />
+
+```ts
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+```
+
+設定喺 `OpenTelemetryServerOptions` 嘅 `http`。佢自己冇欄位：`enabled`、`startSpanHook`、`requestHook` 同 `responseHook` 都來自 `OpenTelemetryServerTransportOptions`。
+
+- `responseHook(span, res, req)` 會收到經 interceptor 返回嘅 `HttpResponse`（喺 client 解碼 declared body 之前），連同原本嘅 `HttpRequest`。Request identity 請讀 `req.operation`；唔好由 endpoint 或者已解析嘅 URL 重新砌。
+- HTTP span 喺 `responseHook` return 嗰刻就結束；hook 唔會被 await，所以只有佢同步嗰部分仍然可以改動 span。Status 係 400 或以上，span 會以 `ERROR` 結束，並將 `error.type` 設為 status 字串；100–399 則保持 status 未設定。
+- 經 interceptor 嘅 rejection（network 失敗、取消、timeout，或者 declared `output` / `error` body 讀唔到成 JSON）冇 response status，亦唔會 call `responseHook`。Span 會以 `ERROR` 結束，`error.type` 設為 throw 出嚟嘅 class 名稱，例如 `TypeError`、`Error` 或者 `BodyFailure`。無論 abort reason 係乜，caller 取消嘅 `error.type` 都係 `Error`。
+
+傳 `{ enabled: false }` 就會略過 HTTP instrumentation。Span hooks 只會喺有傳入 `tracer` 時運行。
+
+[@defjs/opentelemetry-server](/zh-Hant-HK/api/opentelemetry-server)

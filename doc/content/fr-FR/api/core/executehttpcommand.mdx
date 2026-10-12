@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: 'Point d’entrée bas niveau qui exécute une commande HTTP à partir d’une configuration de client.'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+Point d’entrée bas niveau utilisé par `client.execute`. Le code applicatif doit appeler `client.execute(command, options)`. `HttpClientConfig` est la partie HTTP de `ClientConfig`, donc un `ClientConfig` est accepté. `HttpExecuteAwaitResult` est le tuple de résultat interne.
+
+- **Renvoie** `[null, data, response]` ou `[fault, undefined, undefined]`. `data` est le corps `output` décodé, ou `undefined` quand aucun n’est déclaré. `response` est un `DecodedResponse` quand `output` est déclaré et un `HttpMeta` sinon. Le fault est un `Fault<TError>`.
+
+Un statut non-2xx est `HTTP_STATUS` quand aucun struct `error` n’est déclaré (son `data` est `undefined`) ou quand le corps déclaré se décode (son `data` est ce corps). Quand un corps `error` déclaré ne peut pas être lu, le fault est à la place un fault de décodage `RES_*`. En échec, le troisième slot du tuple est `undefined` ; le fault porte les métadonnées de réponse. `options.timeout` retombe sur la valeur par défaut `withTimeout` du client quand il est omis.
+
+[HTTP](/fr-FR/api/http)

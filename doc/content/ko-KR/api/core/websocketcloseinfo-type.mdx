@@ -1,0 +1,22 @@
+---
+title: 'WebSocketCloseInfo'
+description: 'WebSocket session의 논리적인 최종 결과예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCloseInfo" />
+
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
+session이 완전히 끝났을 때 `session.closed`가 resolve하는 값이에요.
+
+- `closed`: session이 정상적으로 끝났어요. 수동 `session.close()`도 여기에 포함돼요.
+- `aborted`: session이 취소됐어요. `cause`는 abort 사유예요.
+- `error`: session이 실패했어요. `cause`는 필수예요.
+- `code`, `reason`, `wasClean`은 네이티브 close 이벤트가 관찰됐을 때 그 이벤트에서 와요. close 이벤트에 값이 없으면 수동 `session.close(code, reason)`이 `code`와 `reason`을 채워요.
+
+[WebSocket](/ko-KR/api/web-socket)

@@ -1,0 +1,20 @@
+---
+title: 'SocketAwaitResult'
+description: 'Tupla que se devuelve al ejecutar un comando WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:SocketAwaitResult" />
+
+```ts
+type SocketAwaitResult<TIncoming, TOutgoing = never> =
+  | [error: null, socket: WebSocketSession<TIncoming, TOutgoing>, connection: WebSocketConnectionInfo]
+  | [error: Fault<undefined>, socket: undefined, connection: WebSocketConnectionInfo | undefined]
+```
+
+El resultado de `client.execute` para un comando WebSocket.
+
+- En caso de éxito: `[null, session, connection]`. `connection` es el primer snapshot de conexión exitosa; `session.connection` avanza en cada reconexión.
+- En caso de fallo: `[fault, undefined, connection]`. `connection` puede ser `undefined`, por ejemplo cuando el constructor falló antes de que el socket se abriera.
+- Aquí solo llegan los fallos de arranque. Una vez devuelta la sesión, los errores posteriores salen por `onRuntimeError`, `receive` y `closed`.
+
+[WebSocket](/es-ES/api/web-socket)

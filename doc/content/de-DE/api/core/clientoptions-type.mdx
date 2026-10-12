@@ -1,0 +1,33 @@
+---
+title: 'ClientOptions'
+description: 'Input-förmige Client-Options, die spiegeln, was die Option-Helper konfigurieren.'
+---
+
+<ApiReference identity="@defjs/core:ClientOptions" />
+
+```ts
+interface ClientOptions extends HttpClientOptions {
+  sse?: ClientSSEOptions
+  webSocket?: ClientWebSocketOptions
+}
+
+// Non-exported base, shown inline.
+interface HttpClientOptions {
+  endpoint: string
+  headers?: Headers
+  http?: { handle?: FetchHandle }
+  interceptors?: Interceptor[]
+  querySerializer?: QuerySerializer
+  timeout?: number
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName?: string
+    headerName?: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+}
+```
+
+Die nutzerseitige Shape der Einstellungen, bevor Defaults angewendet werden. `createClient` akzeptiert dieses Objekt nicht; konfiguriere einen Client mit Option-Helpern wie `withEndpoint` und `withTimeout`. [`ClientConfig`](/de-DE/api/core/clientconfig-type) ist das aufgelöste Gegenstück.
+
+[Client](/de-DE/api/client)

@@ -1,0 +1,20 @@
+---
+title: 'طلبات ETag الشرطية'
+description: عامل 304 كخطأ حالة HTTP؛ وأبقِ خريطة الذاكرة خارج execute.
+---
+
+# أعد التحقق بـ ETag و304
+
+`ok` يعني 2xx، لذا يصل `304` كخطأ `HTTP_STATUS`. حالة إعادة التوجيه ليست جسم خطأ أيضًا، فاترك `error` غير معلَن: الجسم لا يُقرأ أبدًا، والخطأ يحمل الحالة، وأنت تُرجع المنتج المخزَّن بنفسك.
+
+انظر [HTTP](/ar/docs/http).
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+لا تعِد كتابة `304` إلى `200` مزيف داخل Core. ملكية الذاكرة تبقى في كود التطبيق حول `execute`.

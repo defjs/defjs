@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: 'Low-Level-Einstieg, der einen HTTP-Command gegen eine Client-Config ausführt.'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+Low-Level-Einstieg, den `client.execute` nutzt. Anwendungscode sollte `client.execute(command, options)` aufrufen. `HttpClientConfig` ist der HTTP-Teil von `ClientConfig`, daher wird eine `ClientConfig` akzeptiert. `HttpExecuteAwaitResult` ist das interne Result-Tuple.
+
+- **Returns** `[null, data, response]` oder `[fault, undefined, undefined]`. `data` ist der dekodierte `output`-Body oder `undefined`, wenn keiner deklariert ist. `response` ist `DecodedResponse`, wenn `output` deklariert ist, sonst `HttpMeta`. Der Fault ist `Fault<TError>`.
+
+Ein Non-2xx-Status ist `HTTP_STATUS`, wenn kein `error`-Struct deklariert ist (sein `data` ist `undefined`) oder wenn der deklarierte Body dekodiert wird (sein `data` ist dieser Body). Lässt sich ein deklarierter `error`-Body nicht lesen, ist der Fault stattdessen ein `RES_*`-Decode-Fault. Bei einem Failure ist der dritte Slot des Tuples `undefined`; der Fault trägt die Response-Metadaten. `options.timeout` fällt auf den Default `withTimeout` des Clients zurück, wenn er fehlt.
+
+[HTTP](/de-DE/api/http)

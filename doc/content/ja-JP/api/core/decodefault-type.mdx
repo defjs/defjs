@@ -1,0 +1,19 @@
+---
+title: 'DecodeFault'
+description: 'レスポンスは届いたものの、宣言どおりには読めなかったことを表す fault です。'
+---
+
+<ApiReference identity="@defjs/core:DecodeFault" />
+
+```ts
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+`code` は `RES_DECODE_FAILED`、`RES_MEDIA_TYPE_INVALID`、`RES_STRUCT_MISMATCH` のいずれかです。レスポンスは届いたものの、宣言どおりには読めませんでした。`response` はメタデータだけです。ボディとはデコード済みの値であり、そのデコードが失敗したのですから、参照できる `body` フィールドは存在しません。問題の詳細は `cause` にあります。struct 不一致なら `StructError`、表現が読めないならパーサーの失敗です。
+
+[Errors](/ja-JP/api/errors)

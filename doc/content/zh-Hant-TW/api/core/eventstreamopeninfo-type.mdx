@@ -1,0 +1,17 @@
+---
+title: 'EventStreamOpenInfo'
+description: 'SSE 回應開啟後可取得的 metadata。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamOpenInfo" />
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+`response` 是握手回應，`url` 是解析後的 request URL。它是成功之 `client.execute` 結果的第三個元素，也是 `EventStreamHandle.open` 的值。
+
+[SSE](/zh-Hant-TW/api/sse)

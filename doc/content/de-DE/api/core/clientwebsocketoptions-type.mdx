@@ -1,0 +1,40 @@
+---
+title: 'ClientWebSocketOptions'
+description: 'Optionale WebSocket-Einstellungen: Constructor, beforeConnect-Hook, Heartbeat, Protocols und Reconnect-Policy.'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — WebSocket-Constructor; Default ist `globalThis.WebSocket`.
+- **beforeConnect** — Läuft vor jedem Connect- und Reconnect-Versuch.
+- **heartbeat** — Sendet `message()` alle `intervalMs`. Mit `timeoutMs` und `isAck` markiert eine fehlende Bestätigung die Verbindung als ungesund. `intervalMs` und `timeoutMs` müssen positiv und höchstens 2147483647 sein.
+- **protocols** — Subprotocols, die an den Constructor übergeben werden.
+- **reconnect** — Opt-in. `attempts` hat den Default **3**; `0` schaltet Retry aus, und `attempts` wegzulassen heißt nicht unbegrenzt. Weitere Defaults: `delayMs` 1000, `factor` 2, `jitter` 0 (ein multiplikativer Faktor von 0–1), `maxDelayMs` 30000. `shouldReconnect` erhält Close-`code`, `reason` und `wasClean` und kann einen Retry per Veto verhindern.
+
+Setze diese mit `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols` und `withWebSocketReconnect`. `WebSocketExecuteOptions` kann `beforeConnect`, `heartbeat`, `protocols` und `reconnect` pro Aufruf überschreiben.
+
+Siehe [Client-Guide](/de-DE/docs/client).
+
+[Client](/de-DE/api/client)

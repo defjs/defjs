@@ -1,0 +1,14 @@
+---
+title: 'HTTP_CLIENT'
+description: 提供 Defjs client 时所用的 Vue injection key。
+---
+
+<ApiReference identity="@defjs/vue:HTTP_CLIENT" />
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+`createClientPlugin` 提供 client 时所用的 key。优先用 `injectClient()`，别直接 `inject(HTTP_CLIENT)`——没有提供任何内容时，后者返回 `undefined`。子树覆盖：`provide(HTTP_CLIENT, childClient)`。
+
+[@defjs/vue](/zh-Hans/api/vue)

@@ -1,0 +1,20 @@
+---
+title: 'BasicAuthInterceptorOptions'
+description: '사용자 지정 자격 증명 인코더를 포함한 basic-auth 인터셉터의 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:BasicAuthInterceptorOptions" />
+
+```ts
+type BasicAuthInterceptorOptions = {
+  encode?: (credential: { username: string; password: string }) => string
+}
+```
+
+`encode`는 자격 증명 인코더만 교체해요. 기본값은 ``btoa(`${username}:${password}`)``예요. 인터셉터는 반환된 문자열 앞에 항상 `Basic `을 붙이므로 자격 증명 부분만 반환하세요. `'Basic abc'`를 반환하면 헤더가 `Basic Basic abc`가 돼요.
+
+[`basicAuthHttpInterceptor`](/ko-KR/api/core/basicauthhttpinterceptor)와 [`basicAuthSSEInterceptor`](/ko-KR/api/core/basicauthsseinterceptor)가 받아요.
+
+[인터셉터 가이드](/ko-KR/docs/interceptors)를 보세요.
+
+[인터셉터](/ko-KR/api/interceptors)

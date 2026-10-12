@@ -1,0 +1,42 @@
+---
+title: 'ClientSSEOptions'
+description: '선택적 SSE 설정으로, fetch handle, invalid-event 훅, 재연결 정책이 있어요.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — 스트림을 여는 fetch 구현이에요. 사용자 지정 handle은 `Request`를 받아요.
+- **onInvalidEvent** — 이벤트에 맞는 struct도 `default` struct도 없을 때(`'missing-struct'`), 또는 data 검증에 실패했을 때(`'validation-failed'`) 호출돼요. 그 이벤트는 건너뛰어요. 훅이 던진 오류는 스트림을 닫지 않아요.
+- **reconnect** — 직접 켜야 해요. 주지 않으면 스트림은 재연결하지 않아요. `attempts` 기본값은 **3**이에요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략한다고 무제한이 되지는 않아요. `delayMs`는 첫 지연으로 기본 1000이고, 서버가 보낸 `retry:` 값이 이를 대체해요. `factor`는 시도할 때마다 지연에 곱해지며 기본값은 1이에요. `jitter`는 WebSocket과 같은 0-1 곱셈 계수이고 기본값은 0이에요. `maxDelayMs`는 기본적으로 상한이 없어요. `shouldReconnect`가 없으면 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`만 재연결해요. 있으면 그 결과가 모든 메서드의 재연결 여부를 결정하고, 컨텍스트에 `method`가 포함돼요. `ReadableStream` 요청 body는 재연결하지 않아요. 이벤트 id를 한 번 받은 뒤에는 재연결할 때마다 그 id를 `Last-Event-ID` 헤더로 보내요.
+
+이 값들은 `withSSEHandle`, `withSSEOnInvalidEvent`, `withSSEReconnect`로 설정해요. `withSSEReconnect`를 빼면 재시도가 꺼져요.
+
+[클라이언트 가이드](/ko-KR/docs/client)를 보세요.
+
+[클라이언트](/ko-KR/api/client)

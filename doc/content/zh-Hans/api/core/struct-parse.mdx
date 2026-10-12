@@ -1,0 +1,30 @@
+---
+title: 'struct.parse'
+description: '用 struct 解析未知值，返回 error-first tuple。'
+---
+
+<ApiReference identity="@defjs/core:struct.parse" />
+
+```ts
+function parse<S extends StructLike<unknown, unknown, boolean>>(
+  struct: S,
+  value: unknown,
+  options?: { aliases?: boolean; errorMap?: ErrorMap },
+): ParseResult<S['_struct']['output']>
+```
+
+- **struct** 是用来解析的 struct。传入不是 struct 的值会抛出 `TypeError`。
+- **value** 是未知的输入。
+- **options.aliases** 默认为 `false`：对象 key 按**逻辑**名（`displayName`）读取。设为 `true` 时按线上名（`display_name`）读取，和 HTTP/JSON codec 的读法一致。输出始终使用逻辑名。
+- **options.errorMap** 是一个 [`ErrorMap`](/zh-Hans/api/core/errormap-type)，只改写这一次调用的 issue 消息。返回 `undefined` 则保留默认消息。
+- **返回** `[null, output]` 或 `[StructError, undefined]`。无效输入永远不会抛出。
+- 解析是 fail-fast 的：遇到第一个失败就停止，所以 error 只包含一个 issue。输出会剔除对象中的未知 key，输入不会被修改。
+
+```ts
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+if (error) return console.error(error.prettify())
+```
+
+参见 [`ParseResult`](/zh-Hans/api/core/parseresult-type) 和 [`StructError`](/zh-Hans/api/core/structerror-type)。
+
+[Struct](/zh-Hans/api/struct)

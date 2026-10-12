@@ -1,0 +1,30 @@
+---
+title: 'struct.parse'
+description: '未知の値を struct でパースし、エラーを先頭に置くタプルを返します。'
+---
+
+<ApiReference identity="@defjs/core:struct.parse" />
+
+```ts
+function parse<S extends StructLike<unknown, unknown, boolean>>(
+  struct: S,
+  value: unknown,
+  options?: { aliases?: boolean; errorMap?: ErrorMap },
+): ParseResult<S['_struct']['output']>
+```
+
+- **struct** はパースに使う struct です。struct ではない値を渡すと `TypeError` を投げます。
+- **value** は未知の入力です。
+- **options.aliases** のデフォルトは `false` で、オブジェクトのキーは**論理**名（`displayName`）で読まれます。`true` にすると、HTTP/JSON コーデックと同じようにワイヤ名（`display_name`）で読まれます。出力は常に論理名を使います。
+- **options.errorMap** は、この呼び出しだけの issue メッセージを書き換える [`ErrorMap`](/ja-JP/api/core/errormap-type) です。`undefined` を返すとデフォルトのメッセージが残ります。
+- **戻り値** は `[null, output]` または `[StructError, undefined]` です。不正な入力で例外を投げることはありません。
+- パースは fail-fast です。最初の失敗で止まるため、エラーが持つ issue は 1 つです。未知のオブジェクトキーは出力から取り除かれ、入力は変更されません。
+
+```ts
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+if (error) return console.error(error.prettify())
+```
+
+[`ParseResult`](/ja-JP/api/core/parseresult-type) と [`StructError`](/ja-JP/api/core/structerror-type) を参照してください。
+
+[Struct](/ja-JP/api/struct)

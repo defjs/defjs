@@ -1,0 +1,16 @@
+---
+title: 'FetchHandle'
+description: 'Fetch-kompatibler Funktionstyp, der als HTTP- oder SSE-Handle dient.'
+---
+
+<ApiReference identity="@defjs/core:FetchHandle" />
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+Die Aufrufsignatur `(input, init?) => Promise<Response>`, die Defjs aufruft. Sie ist bewusst nicht `typeof fetch`, damit ein Mock keine Host-Extras wie `preconnect` braucht. Ein eigenes Handle wird mit einem `Request` aufgerufen; nur der Library-Default (das globale `fetch`) wird als `(url, init)` aufgerufen.
+
+Akzeptiert von `withHTTPHandle`, `withSSEHandle` und `fetchHandler`.
+
+[Client](/de-DE/api/client)

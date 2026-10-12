@@ -1,0 +1,22 @@
+---
+title: 'EventStreamCommand'
+description: 'أمر SSE معتم قابل للتنفيذ تنتجه نقطة نهاية تدفق الأحداث.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCommand" />
+
+```ts
+interface EventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly endpoint: EventStreamDefinition<TInput, TEvents, TError> & { readonly method: string }
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+يُنشأ باستدعاء `EventStreamEndpoint` بالمدخل. تعامَل معه كأمر معتم ومرّره إلى `client.execute`.
+
+[SSE](/ar/api/sse)

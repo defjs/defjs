@@ -1,0 +1,27 @@
+---
+title: 'OpenTelemetryServerTransportOptions'
+description: 'خيارات مشتركة لكل وسيلة نقل — enabled وخطافات span، عامة على نوع الاستجابة.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions" />
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+```
+
+`TResponse` هو ما يستقبله `responseHook`: `HttpResponse<unknown>` في HTTP، و`EventStreamHandle<unknown>` في SSE، و`WebSocketSessionLike` في WebSocket. انظر [OpenTelemetryServerHttpOptions](/ar/api/opentelemetry-server/opentelemetryserverhttpoptions-type) و[OpenTelemetryServerSSEOptions](/ar/api/opentelemetry-server/opentelemetryserversseoptions-type) و[OpenTelemetryServerWebSocketOptions](/ar/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type).
+
+تكون `enabled` بقيمة `true` افتراضيًا؛ وحده `enabled: false` يعطّل وسيلة النقل. المفتاح البولياني القديم (`http: false`) والخطافات في المستوى الأعلى تُرفض بأنواع TypeScript فقط. لا يوجد فحص وقت التشغيل، لذا يبقى `http: false` وقت التشغيل مبقيًا وسيلة النقل مفعّلة، ويُتجاهل أي خطاف في المستوى الأعلى بصمت.
+
+لا تعمل خطافات span إلا عند تمرير `tracer`. يعمل `startSpanHook` بشكل متزامن قبل إنشاء الـ span لوسيلة النقل الخاصة به. تُطبَّق سماته بعد السمات المدمجة، فيجوز للتطبيق أن يتجاوز `url.full` أو قيمة أولية أخرى. إذا رمى، تنشئ Defjs الـ span بالسمات المدمجة، وتسجّل حدث `defjs.otel.hook.error`، وتكمل الطلب. يعمل `requestHook` بعد إنشاء الـ span وقبل إرسال الطلب؛ ويعمل `responseHook` بعد عودة نتيجة وسيلة النقل. قد يُرجع كلاهما وعدًا، لكن لا ينتظر أيٌّ منهما: يُسجَّل الرمي أو الرفض بالطريقة نفسها ولا يحجب العملية ولا يُفشلها. يستقبل `responseHook` الطلب الأصلي وسيطًا ثالثًا.
+
+افتراضيًا، يحل `url.full` فقط `request.endpoint` مقابل `request.baseEndpoint` الاختياري؛ ولا يُلحَق `request.queryString` مستقل. ذلك الحد ليس حجبًا، والحزمة بلا حاجب مدمج أو سياسة مفاتيح حسّاسة. ابنِ عنوان URL مملوكًا للتطبيق، واحجبه إن لزم، صراحة:
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+[@defjs/opentelemetry-server](/ar/api/opentelemetry-server)

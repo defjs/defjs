@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: 'defineWebSocket에 넘기는 계약 객체예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming`은 받은 모든 프레임을 파싱할 때 쓰는 struct예요. 프레임은 JSON 텍스트예요.
+- `outgoing`은 `session.send`가 검증하고 인코딩할 때 쓰는 struct예요. 없으면 `send`가 throw해요.
+- `maxIncomingQueueSize`는 필수이며 양의 안전 정수여야 해요. `maxOutgoingQueueSize`는 0 이상의 안전 정수여야 하고 기본값은 `0`이에요. `0`이면 session이 `reconnecting`인 동안 보낸 메시지를 큐에 쌓지 않아요.
+- `protocols`는 정적인 기본 서브프로토콜 목록이에요. `protocols` execute 옵션과 [`withWebSocketProtocols`](/ko-KR/api/core/withwebsocketprotocols)가 이를 대체해요.
+- `operation`은 텔레메트리에 쓰는 정적이고 카디널리티가 낮은 이름이에요.
+- `input`은 명령 입력의 struct예요. 선언한 `input`에는 요청 모양과 이미 일치하더라도 항상 명시적인 `builder`가 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. builder는 `path`와 `query`만 돌려줄 수 있어요. [`WebSocketRequestShape`](/ko-KR/api/core/websocketrequestshape-type)를 보세요.
+
+잘못된 큐 한도는 명령을 실행할 때 `REQ_OPTIONS_INVALID` fault로 보고돼요.
+
+[WebSocket](/ko-KR/api/web-socket)

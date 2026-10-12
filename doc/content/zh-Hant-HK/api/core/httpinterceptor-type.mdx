@@ -1,0 +1,17 @@
+---
+title: 'HttpInterceptor'
+description: 'Client interceptor options 接受、帶 tag 嘅 HTTP interceptor。'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptor" />
+
+```ts
+interface HttpInterceptor {
+  kind: 'http'
+  fn: InterceptorFn
+}
+```
+
+由 `createHttpInterceptor` 建立。`kind` 係 discriminant，令 `withInterceptors` 可以喺同一個 list 入面接受 HTTP、SSE 同 WebSocket interceptors。
+
+[Interceptors](/zh-Hant-HK/api/interceptors)

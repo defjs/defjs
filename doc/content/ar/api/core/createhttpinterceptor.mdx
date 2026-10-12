@@ -1,0 +1,17 @@
+---
+title: 'createHttpInterceptor'
+description: 'يغلّف دالة معترض كمعترض HTTP موسوم.'
+---
+
+<ApiReference identity="@defjs/core:createHttpInterceptor" />
+
+```ts
+function createHttpInterceptor(fn: InterceptorFn): HttpInterceptor
+
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+يُرجع `{ kind: 'http', fn }`. استدعِ `next(req)` (مع طلب معدَّل اختياريًا) أو اختصر المسار بـ `makeResponse`. يشغّل `next` المعترضات المسجَّلة بعد هذا المعترض فقط، ثم معالج fetch. معترضات HTTP لا تعمل لأوامر SSE أو WebSocket.
+
+[المعترضات](/ar/api/interceptors)

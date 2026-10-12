@@ -1,0 +1,16 @@
+---
+title: 'STRUCT'
+description: '型のみのエクスポートです。送信側エンコーダーが使う内部のタグキーです。'
+---
+
+<ApiReference identity="@defjs/core:STRUCT" />
+
+```ts
+declare const STRUCT: unique symbol
+```
+
+`STRUCT` は**型**としてのみエクスポートされます（`export type { STRUCT }`）。`@defjs/core` に実行時の `STRUCT` エクスポートはないため、`import { STRUCT } from '@defjs/core'` はコンパイルに失敗し、値も得られません。
+
+これは、エンドポイントの入力をパースする過程で作られるオブジェクトに付く列挙可能なタグの名前で、送信側エンコーダーがどの struct が作ったオブジェクトかを判別するために使います。`struct.parse` やレスポンスのデコードはこれを設定しません。このシンボルは内部用であり、アプリケーションコードは依存しないでください。
+
+[Struct](/ja-JP/api/struct)

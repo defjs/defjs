@@ -1,0 +1,18 @@
+---
+title: 'ManualSocketCloseReason'
+description: 'رمز الإغلاق وسببه المسجَّلان عند إغلاق الجلسة بـ session.close.'
+---
+
+<ApiReference identity="@defjs/core:ManualSocketCloseReason" />
+
+```ts
+type ManualSocketCloseReason = {
+  code?: number
+  kind: 'manual-web-socket-close'
+  reason?: string
+}
+```
+
+يسجّل `code` و`reason` المُمرَّرين إلى `session.close(code?, reason?)`. ويملآن `code` و`reason` في معلومات الإغلاق النهائية `{ kind: 'closed' }` عندما لا يحمل حدث الإغلاق الصادر عن الطرف المقابل أيًّا منهما. يرمي `close` استثناء `DOMException` ما لم يكن `code` يساوي 1000 أو يقع بين 3000 و4999، وكذلك عندما يتجاوز `reason` 123 بايت بترميز UTF-8.
+
+[WebSocket](/ar/api/web-socket)

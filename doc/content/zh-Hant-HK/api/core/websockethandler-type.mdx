@@ -1,0 +1,16 @@
+---
+title: 'WebSocketHandler'
+description: '為 request 開啟 WebSocket session 嘅終端 handler。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandler" />
+
+```ts
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+```
+
+WebSocket interceptor 收到嘅 `next` function。`next(req)` 只會向內走：先經過喺呢個 interceptor 之後註冊嘅 interceptors，再去到開啟 session 嘅 transport。每次 execute 只可以 call 一次；第二次 call，或者喺 chain 已經 settle 之後再 call，都會 reject。
+
+佢會 resolve 成 [`WebSocketSessionLike`](/zh-Hant-HK/api/core/websocketsessionlike-type)。
+
+[Interceptors](/zh-Hant-HK/api/interceptors)

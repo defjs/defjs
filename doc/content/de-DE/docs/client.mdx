@@ -1,0 +1,68 @@
+---
+title: 'Client-Konfiguration / Client'
+description: Expliziten Client erzeugen, Options komponieren, Commands ausführen und Cleanup besitzen.
+---
+
+# Client
+
+Ein `Client` hält Endpoint- + Transport-Config und dispatcht HTTP-, SSE- und WebSocket-Commands. Er legt nichts im Cache ab, wiederholt nicht automatisch und beaufsichtigt keine offenen Streams.
+
+## Grundeinrichtung
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)` gibt Overloads für jede Command-Art zurück.
+
+## Options komponieren
+
+Options gelten von links nach rechts. Setter ersetzen; `withInterceptors(...items)` hängt an.
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+Gemischte Interceptors werden zur Execute-Zeit nach Transport gefiltert; relative Order unter der gewählten Art bleibt.
+
+## Nach Transport ausführen
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]` (`open` ist der Startup-Snapshot; `stream.open` kann nach Reconnect wechseln)
+- WebSocket → `[error, session, connection]`
+
+WebSocket-Execute kann `beforeConnect`, `heartbeat`, `protocols` und `reconnect` überschreiben. `timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein.
+
+Du besitzt Cleanup: HTTP abbrechen, SSE schließen + `await stream.closed`, WebSocket schließen + `await session.closed`.
+
+## Test-Transport injizieren
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## Scope auf Server vs Browser
+
+Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options oder Interceptor-Closures Auth, Cookies, User oder Tenants erfassen. Client-Identität ist für sich keine Security-Grenze.
+
+## Referenz
+
+| Helper                                                                                                        | Effect                                                                 |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Absoluter Base-Endpoint für alle Transports                            |
+| `withHeaders(HeadersInit)`                                                                                    | Statische Default-Headers für HTTP/SSE; Command-Headers überschreiben  |
+| `withTimeout(ms)`                                                                                             | Nur Default-HTTP-`execute`-Timeout (SSE/WS ignorieren ihn)             |
+| `withHTTPHandle(fetch)`                                                                                       | Fetch für HTTP ersetzen                                                |
+| `withSSEHandle(fetch)`                                                                                        | Fetch für SSE ersetzen                                                 |
+| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket-Constructor ersetzen                                         |
+| `withInterceptors(...items)`                                                                                  | Gemischte Interceptors anhängen                                        |
+| `withQuerySerializer(fn)`                                                                                     | Ein schon alias-encodiertes Query-Object in einen Query-String encoden |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` für HTTP/SSE wenn true                  |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF Cookie → Header                                              |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE-Knobs                                                              |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket-Knobs                                                        |
+
+## Verwandte Rezepte
+
+- [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)
+- [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)

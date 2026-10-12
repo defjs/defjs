@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: 'Struct, der anhand des Werts eines Tag-Fields einen Object-Struct auswählt.'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- Jede Option muss ein Object-Struct sein, dessen `discriminator`-Field ein erforderliches [`struct.literal()`](/de-DE/api/core/struct-literal) ist. Ein fehlendes Field, ein Nicht-Literal-Field, ein optionales Field oder ein doppelter Tag-Wert wirft beim Erzeugen des Structs `TypeError`.
+- Der Input muss ein einfaches Objekt sein. Der Tag-Wert wählt die Option aus, und diese Option parst das ganze Objekt.
+- Ein fehlender Tag schlägt mit `missing_key` fehl, ein unbekannter Tag mit `invalid_union`. Beide melden den Pfad des Tag-Fields. Andere Fehler stammen von der gewählten Option.
+- Bei `struct.parse(..., { aliases: true })` wird der Tag aus dem Alias des Fields gelesen.
+
+`RequiredDiscriminatorOptions` und `DiscriminatedUnionStruct` werden nicht exportiert. Der Type-Check lehnt eine Option ab, deren Tag-Field fehlt oder `undefined` sein kann.
+
+[Struct](/de-DE/api/struct)

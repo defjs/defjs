@@ -1,0 +1,17 @@
+---
+title: 'withWebSocketHandle'
+description: 'Client option that replaces the WebSocket constructor.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHandle" />
+
+```ts
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+Replaces the WebSocket constructor used for socket connections. The default is `globalThis.WebSocket`.
+
+- **WebSocketImpl** is a [`WebSocketHandleConstructor`](/api/core/websockethandleconstructor-type) that returns a [`WebSocketHandle`](/api/core/websockethandle-type).
+- If no constructor is available, executing a WebSocket command fails with an `ENV_UNSUPPORTED` fault.
+
+[Client](/api/client)

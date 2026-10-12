@@ -1,0 +1,28 @@
+---
+title: 'OpenTelemetryServerOptions'
+description: 'خيارات withOpenTelemetryServer — tracer وmeter وlogger وpropagator وإعدادات كل وسيلة نقل.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerOptions" />
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+- `tracer` — اختياري. بدونه لا توجد spans محلية ولا خطافات span.
+- `meter` — اختياري. بدونه لا تُسجَّل مقاييس الحزمة.
+- `logger` — اختياري. هو `Logger` من `@opentelemetry/api-logs`، وليس Logger من Winston/Pino. بدونه لا تُصدَر LogRecords تشخيصية. لا تجلب Defjs logger عامًا ولا تملك provider.
+- `propagator` — الافتراضي W3C Trace Context + Baggage.
+- `requireParentSpan` — الافتراضي `false`. مع `tracer`، تتجاوز القيمة `true` كل الرصد، بما فيه السجلات، عند عدم وجود span أب نشط. وبدون `tracer` لا تمنع المقاييس ولا السجلات.
+- `http` و`sse` و`webSocket` — خيارات كل وسيلة نقل. الافتراضي لكل منها `{}`؛ ولا تُعطَّل وسيلة نقل إلا بـ `{ enabled: false }`.
+
+[@defjs/opentelemetry-server](/ar/api/opentelemetry-server)

@@ -1,0 +1,23 @@
+---
+title: 'ObjectStruct'
+description: 'Objektförmiger Struct-Type, den struct.object erzeugt.'
+---
+
+<ApiReference identity="@defjs/core:ObjectStruct" />
+
+```ts
+interface ObjectStruct<T extends ObjectShape>
+  extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
+  readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
+}
+
+type ObjectShape = { [key: string]: any }
+```
+
+Wird von `struct.object(shape)` erzeugt. Fields sind standardmäßig Pflicht; ein mit `optional()` oder `nullish()` markiertes Field wird zu einem optionalen Key. Unbekannte Keys werden beim Parsen entfernt. Wire-Namen können über `.alias()` von den TypeScript-Keys abweichen. Ein fehlgeschlagenes Parse liefert `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, `ObjectStructTypes` und `PreservedStruct` sind interne Helper-Types.
+
+[Struct](/de-DE/api/struct)

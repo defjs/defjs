@@ -1,0 +1,16 @@
+---
+title: 'ERR_TIMEOUT'
+description: '요청이 타임아웃되었음을 나타내는 공유 Error 센티넬이에요.'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+타임아웃을 나타내는 공유 `cause`이자 message 값이에요. `createNetworkFault`는 이것과, 이름이 `TimeoutError`인 모든 오류를 `NET_TIMEOUT`으로 매핑해요. HTTP 인터셉터가 이것을 던지면 호출은 `NET_TIMEOUT` fault로 resolve돼요. SSE와 WebSocket 인터셉터가 던지면 `EXT_INTERCEPTOR_FAILED`로 보고돼요.
+
+[오류 가이드](/ko-KR/docs/errors)를 보세요.
+
+[오류](/ko-KR/api/errors)

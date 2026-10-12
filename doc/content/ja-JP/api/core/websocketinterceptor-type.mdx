@@ -1,0 +1,17 @@
+---
+title: 'WebSocketInterceptor'
+description: 'withInterceptors が受け取る、タグ付きの WebSocket インターセプターです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptor" />
+
+```ts
+interface WebSocketInterceptor {
+  kind: 'web-socket'
+  fn: WebSocketInterceptorFn
+}
+```
+
+`createWebSocketInterceptor(fn)` が作ります。`kind` タグのおかげで、`withInterceptors` は HTTP、SSE、WebSocket のインターセプターを 1 つのリストで受け取れます。WebSocket コマンドで実行されるのは、`kind: 'web-socket'` のインターセプターだけです。
+
+[Interceptors](/ja-JP/api/interceptors)

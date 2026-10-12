@@ -1,0 +1,16 @@
+---
+title: 'struct.any'
+description: '検証せずに、null と undefined を除く任意の値を受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.any" />
+
+```ts
+function any(): Struct<NonNullable<unknown>, any>
+```
+
+- `null` と `undefined` を除くすべての値を受け付け、そのまま返します。内部の値は検証も除去もされません。
+- `null` や `undefined` を受け付けるには、`.null()`、`.optional()`、`.nullish()` をチェーンします。
+- 出力型は `any` です。呼び出し側で値を絞り込ませたい場合は [`struct.unknown()`](/ja-JP/api/core/struct-unknown) を使ってください。
+
+[Struct](/ja-JP/api/struct)

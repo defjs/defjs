@@ -1,0 +1,17 @@
+---
+title: 'createHttpStatusFault'
+description: '错误 body 已解码的 HTTP_STATUS fault 的工厂。'
+---
+
+<ApiReference identity="@defjs/core:createHttpStatusFault" />
+
+```ts
+function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+```
+
+- **response** — 非 2xx 响应，其 body 已按声明的 `error` struct 解码。
+- **返回** 一个名为 `DefjsFault` 的原生 `Error`，`code: 'HTTP_STATUS'`，`data` 设为 `response.body`，`status` 取自该响应，`response` 原样传入。message 是 `Http failure response: <status>`，有 `statusText` 时再追加 ` - <statusText>`。
+
+没有解码出 body 时，请使用 [`createUndecodedHttpStatusFault`](/zh-Hans/api/core/createundecodedhttpstatusfault)。
+
+[Errors](/zh-Hans/api/errors)

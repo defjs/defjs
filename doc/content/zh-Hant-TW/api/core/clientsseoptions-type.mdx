@@ -1,0 +1,42 @@
+---
+title: 'ClientSSEOptions'
+description: '選填的 SSE 設定：fetch handle、無效事件 hook，以及重連策略。'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — 開啟串流的 fetch 實作。自訂 handle 會收到一個 `Request`。
+- **onInvalidEvent** — 當事件沒有對應的 struct 也沒有 `default` struct（`'missing-struct'`），或其資料驗證失敗（`'validation-failed'`）時呼叫。該事件會被略過。hook 拋出的錯誤不會關閉串流。
+- **reconnect** — 需主動啟用。沒有設定時，串流絕不重連。`attempts` 預設為 **3**；`attempts: 0` 停用重試，而省略 `attempts` 並不代表無限次。`delayMs` 是第一次的延遲，預設 1000，伺服器送來的 `retry:` 值會取代它。`factor` 在每次嘗試後乘上延遲，預設為 1。`jitter` 是 0-1 的乘性因子，跟 WebSocket 一樣，預設為 0。`maxDelayMs` 預設無上限。未提供 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 會重新連線；提供後，所有請求方法是否重新連線都由它的回傳值決定，傳入的情境物件包含 `method`。使用 `ReadableStream` 請求主體的請求絕不會重新連線。一旦收到過事件 id，每次重連都會把它放進 `Last-Event-ID` header 送出。
+
+用 `withSSEHandle`、`withSSEOnInvalidEvent` 與 `withSSEReconnect` 來設定。省略 `withSSEReconnect` 就會停用重試。
+
+見 [Client 指南](/zh-Hant-TW/docs/client)。
+
+[Client](/zh-Hant-TW/api/client)

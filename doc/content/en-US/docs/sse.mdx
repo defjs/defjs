@@ -1,0 +1,106 @@
+---
+title: 'SSE event streams'
+description: Consume a typed SSE stream, close it, and await the terminal closed promise.
+---
+
+# Server-Sent Events
+
+Open a stream, iterate it, then release the owned handle with `await using`. Manual `close()` and `closed` remain available; clients and plugins don’t dispose a returned stream for you.
+
+## Basic Setup
+
+<include cwd lang="typescript">
+  examples/sse/basic-setup.ts#example
+</include>
+
+## Define the stream
+
+`defineEventStream(...)` needs `events`, positive safe-integer `maxBufferSize`, positive safe-integer `maxQueueSize`, and a relative `path`. Method defaults to `GET`.
+
+The request shape matches HTTP: `builder` returning `path`, `query`, `headers`, and `body`. `GET` / `HEAD` cannot return a body. A declared `error` struct types the startup fault and decodes a non-2xx handshake body by struct kind (`string` text, `blob` / `file` blob, `arrayBuffer` bytes, otherwise JSON). Defjs sends `Accept: text/event-stream` when you didn’t already set `Accept`. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`. A `ReadableStream` body follows the HTTP rules: on a runtime that cannot stream request bodies, such as Firefox, startup fails with `ENV_UNSUPPORTED` before anything is sent. In Chromium it needs HTTP/2 or later; over HTTP/1.1 startup fails with `NET_UNREACHABLE`. A stream body is sent once and never reconnected (see Reconnect).
+
+One logical stream can span several physical Fetch attempts **when** you opt into reconnect. Without `withSSEReconnect`, transient network and stream-read failures end the logical stream. You still get one handle and one async iterator when the open succeeds.
+
+## Open and inspect
+
+`client.execute(...)` resolves only after status, content-type, and body checks pass:
+
+<include cwd lang="typescript">
+  examples/sse/open-and-inspect.ts#example
+</include>
+
+Response must be successful, media type essence `text/event-stream`, and have a body. Non-2xx startup → `HTTP_STATUS`. When `error` is declared, that fault carries the decoded handshake body; a bad media type is `RES_MEDIA_TYPE_INVALID` and a body that cannot be read as the declared kind is `RES_DECODE_FAILED`. A response snapshot can still sit in the third tuple slot when validation fails after the response arrives.
+
+`startupOpen` is the initial snapshot. `stream.open` is live and changes on later physical opens. Keep the tuple value when the first response matters.
+
+<include cwd lang="typescript">
+  examples/sse/stream-result.ts#example
+</include>
+
+## Decode events
+
+Wire event name → `events[eventName]`; else `events.default`. No matching Struct → event not delivered. Missing SSE `event` field → logical name `message`.
+
+SSE `data` starts as text. A `string` struct keeps that text. Every other kind is JSON: parse the text, then decode with the struct. `struct.object`, `struct.number`, `struct.boolean`, `struct.any`, and `struct.unknown` are JSON, not trimmed text. A bare token such as `ping` does not satisfy `struct.literal('ping')`; the data has to be JSON. A server that sends the JSON string `"abc"` still satisfies `struct.string()`: the delivered value is that raw text, including the quotes, and is not JSON-decoded to `abc`.
+
+Emitted value: `event`, decoded `data`, optional non-empty `id`. With `default`, unknown event names are `string` in the inferred union.
+
+## Observe invalid events
+
+Invalid/undeclared events are dropped, not queued. `withSSEOnInvalidEvent(...)` can observe raw ID, name, text data, plus `missing-struct` or `validation-failed` and an optional cause.
+
+<include cwd>examples/sse/invalid-events.ts#example</include>
+
+Observer runs at the transform boundary. Its failure is isolated unless the active attempt signal is aborted. Keep it short; don’t treat raw event data as trusted.
+
+## Reconnect
+
+**Behavior change:** SSE reconnect is opt-in. Without `withSSEReconnect(...)`, network and stream-read failures are **not** retried (same as `attempts: 0`). Pass `withSSEReconnect({ attempts: 3 })` (or another reviewed budget) to retry those failures. Normal EOF is not retried. Status/content-type validation, parser limits, message transform failures, queue overflow, and normal EOF stay terminal for the logical stream.
+
+<include cwd>examples/sse/reconnect.ts#example</include>
+
+`attempts` counts retries after the initial attempt; defaults to `3` when a reconnect object is set. `attempts: 0` disables retry. Omitting `withSSEReconnect` also disables retry. `delayMs` is the initial interval (default `1000`); `factor` grows it (default `1`, a constant delay); `maxDelayMs` caps the base (default: no cap). SSE `jitter` is a **0–1 multiplicative factor**, same as WebSocket. A stream `retry:` field updates the current interval. Policy callback returning false / throwing / rejecting ends the logical stream.
+
+Latest parsed event ID becomes `Last-Event-ID` on a later attempt. Apart from that header, a later attempt resends the request built for the first one: the builder and interceptors run once per `execute`, so method, URL, headers, and body stay the same. A header that must be fresh on every attempt, such as a short-lived token, belongs in the Fetch passed to `withSSEHandle`, which runs once per attempt. If a credential still expires, the next handshake gets a non-2xx response, which ends the stream with `HTTP_STATUS`.
+
+Reconnect resends a request only when that is safe:
+
+- `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` are idempotent (RFC 9110 §9.2.2) and reconnect within the budget.
+- Any other method, such as `POST` or `PATCH`, reconnects only when `shouldReconnect` returns `true`. A failed connection cannot tell whether the server already acted: a `POST` that starts an LLM generation would run, and be billed, again, and its new events would follow the old ones in the same stream. Passing `shouldReconnect` replaces this default for every method, so check `method` in its context when one client serves both kinds of endpoint.
+- A `ReadableStream` body is consumed by the first attempt. Any failure, before or after the stream opens, ends the stream with the original error; `shouldReconnect` is not called and no delay is spent. Use a string, bytes, `Blob`, form, or JSON body when the request must reconnect.
+
+## Buffer and queue limits
+
+Both must be positive safe integers. Overflow is fatal — no silent discard of older events.
+
+| Limit           | Protects                                           | Terminal code         |
+| --------------- | -------------------------------------------------- | --------------------- |
+| `maxBufferSize` | Incomplete/oversized SSE line/event while parsing  | `CAP_BUFFER_EXCEEDED` |
+| `maxQueueSize`  | Events produced faster than the one consumer reads | `CAP_QUEUE_OVERFLOW`  |
+
+Fatal stream also clears buffered events, cancels the active body, rejects the iterator, and resolves `stream.closed` with `kind: 'error'`.
+
+## Close and dispose
+
+`EventStreamHandle`: one live opening snapshot, one terminal promise, one `close`, one async iterator, and one standard async disposer.
+
+<include cwd lang="typescript">
+  examples/sse/close-and-dispose.ts#example
+</include>
+
+Terminal kinds (`closed.kind`): `eof`, `aborted`, or `error`. An `error` result also carries `closed.code`, an `EventStreamFaultCode`: `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `RES_DECODE_FAILED`, or `RES_MEDIA_TYPE_INVALID`.
+
+`close(reason)` aborts the active attempt, closes the queue, settles as `aborted`. So does aborting the `signal` or `abort` given to `execute` after the stream is open: the iterator ends normally and `closed` reports `aborted`. `timeout` is only a startup deadline and never ends an open stream. Loop `break` / `return` / throw invokes iterator return and closes with `iterator-return`. The code that executes the command owns closure.
+
+`await using` calls the same owned close path and waits until Defjs reading/reconnect work has stopped and the active reader lock has been released. It is intentionally bounded around a provider-controlled `ReadableStream.cancel()` promise that never settles, so it does not guarantee that such a provider promise completed. Explicit `stream.close(reason)` plus `await stream.closed` is still valid when you need a reason or the terminal result.
+
+Custom structural `EventStreamHandle` implementations must now provide `[Symbol.asyncDispose](): PromiseLike<void>` and connect it to the same lifecycle. That is a compile-time breaking change for implementers; consumers that only receive a Defjs handle do not need to invoke anything new at runtime.
+
+The repository-validated and supported minimum lib contract is `ES2022`, `ESNext.Disposable`, `DOM`, and `DOM.Iterable`, with the repository pinned to TypeScript 7. These four entries are verified together as one baseline; this does not claim that every declaration independently forces every entry, and untested older compilers are not promised. An ordinary HTTP client is not `AsyncDisposable`; manage each request with its timeout or `AbortSignal`.
+
+Keep credentials, event data, event IDs, causes, and stream URLs out of routine logs. `withCredentials(true)` affects Fetch cookies for SSE; it does not configure WebSocket auth.
+
+## Related recipes
+
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Cancel an HTTP call](/recipes/cancel-http)

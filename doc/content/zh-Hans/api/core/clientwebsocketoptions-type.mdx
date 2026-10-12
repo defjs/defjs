@@ -1,0 +1,40 @@
+---
+title: 'ClientWebSocketOptions'
+description: '可选的 WebSocket 设置：构造函数、beforeConnect hook、心跳、子协议与重连策略。'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — WebSocket 构造函数；默认为 `globalThis.WebSocket`。
+- **beforeConnect** — 在每次连接和重连尝试之前运行。
+- **heartbeat** — 每隔 `intervalMs` 发送一次 `message()`。同时设置 `timeoutMs` 和 `isAck` 时，缺少确认会把连接标记为不健康。`intervalMs` 与 `timeoutMs` 必须为正数，且不超过 2147483647。
+- **protocols** — 传给构造函数的子协议。
+- **reconnect** — 需主动开启。`attempts` 默认为 **3**；`0` 表示禁用重试，省略 `attempts` 并不是无限次。其他默认值：`delayMs` 为 1000，`factor` 为 2，`jitter` 为 0（0-1 的乘性因子），`maxDelayMs` 为 30000。`shouldReconnect` 会收到关闭的 `code`、`reason` 和 `wasClean`，可以否决一次重试。
+
+用 `withWebSocketHandle`、`withWebSocketBeforeConnect`、`withWebSocketHeartbeat`、`withWebSocketProtocols` 和 `withWebSocketReconnect` 设置这些选项。`WebSocketExecuteOptions` 可以针对单次调用覆盖 `beforeConnect`、`heartbeat`、`protocols` 和 `reconnect`。
+
+见 [Client 指南](/zh-Hans/docs/client)。
+
+[Client](/zh-Hans/api/client)

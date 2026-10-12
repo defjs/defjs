@@ -1,0 +1,19 @@
+---
+title: 'HttpStatusFaultOf'
+description: '以解碼後的 body 型別表示的非 2xx fault。'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFaultOf" />
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+```
+
+以解碼後的 body 型別、而不是產生它的 struct 表示的 `HttpStatusFault`。工廠處理的是解碼後的值，所以使用這種形式；端點型別使用 `HttpStatusFault`，並讓 `Infer` 在兩者之間搭橋。`TData` 為 `undefined` 時，body 從未被讀取，`response` 只有 metadata。
+
+[錯誤](/zh-Hant-TW/api/errors)

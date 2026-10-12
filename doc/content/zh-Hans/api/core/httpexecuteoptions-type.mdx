@@ -1,0 +1,19 @@
+---
+title: 'HttpExecuteOptions'
+description: '单次 HTTP 请求的调用选项：进度回调、abort 或 timeout，以及 signal。'
+---
+
+<ApiReference identity="@defjs/core:HttpExecuteOptions" />
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+取消方式是 `abort` **或** `timeout`，不能同时用。`signal` 可与任一方式组合；它**不是** `abort` 的别名。合法的写法：`{ timeout }`、`{ abort }`、`{ signal, timeout }`、`{ signal, abort }`。`{ abort, timeout }` 不合法，调用会以 `REQ_OPTIONS_INVALID` fault resolve。`timeout` 必须是 `1..2_147_483_647` 范围内的正 safe integer。
+
+省略 `timeout` 时，使用 client 的 `withTimeout` 默认值；`abort` 会与该默认值组合。
+
+[HTTP](/zh-Hans/api/http)

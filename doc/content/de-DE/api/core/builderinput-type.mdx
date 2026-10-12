@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'Geparster Endpoint-Input-Typ, den ein Request-Builder erhält.'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+Geparster Endpoint-Input, wie ihn `builder` sieht. Object-Knoten tragen das Struct, das sie erzeugt hat (die interne `Typed`-Marke), sodass Alias-, `Date`- und `bigint`-Encoding dem Wert in den Request folgen. Record-Einträge und Tuple-Items werden genauso markiert. Zur Runtime wird ein Record-Container zusätzlich markiert, wenn der geparste Wert ein Objekt ist; Array- und Tuple-Container werden nicht markiert, und `null` und `undefined` nie. Nullish-Modifier stellen das Struct wieder her, das sie umhüllt haben, Union-Optionen werden verteilt, und Intersection-Optionen werden kombiniert. Jedes andere Struct fällt auf `Infer<S>` zurück.
+
+`CarriedStruct`, `NullishBuilderInput`, `IntersectBuilderInputs` und `Typed` sind interne Helper-Typen.
+
+[HTTP](/de-DE/api/http)

@@ -1,0 +1,17 @@
+---
+title: 'withHTTPHandle'
+description: 'Client option：取代 HTTP requests 使用嘅 Fetch function。'
+---
+
+<ApiReference identity="@defjs/core:withHTTPHandle" />
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+取代 HTTP requests 使用嘅 Fetch 相容 function。預設係平台嘅 `fetch`。
+
+- **fetchImpl** 係 [`FetchHandle`](/zh-Hant-HK/api/core/fetchhandle-type)，即係 `(input, init?) => Promise<Response>` 呢個 call signature。佢唔係 `typeof fetch`，所以 test double 唔需要 `fetch.preconnect` 呢類 host 額外成員。
+- 佢只影響 HTTP。SSE 用 [`withSSEHandle`](/zh-Hant-HK/api/core/withssehandle)。
+
+[Client](/zh-Hant-HK/api/client)

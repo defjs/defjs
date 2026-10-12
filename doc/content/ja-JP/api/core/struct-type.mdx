@@ -1,0 +1,17 @@
+---
+title: 'Struct'
+description: 'struct の型です。入力型と出力型、および修飾メソッドを持ちます。'
+---
+
+<ApiReference identity="@defjs/core:Struct" />
+
+```ts
+type Struct<Input = unknown, Output = Input, OptionalOut extends boolean = false> = StructMethods<Input, Output, OptionalOut> &
+  StructLike<Input, Output, OptionalOut>
+```
+
+パースできる形です。`Input` は受け付ける型（[`StructInput`](/ja-JP/api/core/structinput-type)）、`Output` はパース成功時に返る型（[`Infer`](/ja-JP/api/core/infer-type)）、`OptionalOut` はオブジェクトの出力で欠けうるフィールドを示します。
+
+struct は [`struct`](/ja-JP/api/core/struct) ファサードで作ります。[`StructMethods`](/ja-JP/api/core/structmethods-type) のすべての修飾メソッドは、新しい struct を返し、元の struct は変更しません。
+
+[Struct](/ja-JP/api/struct)

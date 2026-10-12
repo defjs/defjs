@@ -24,7 +24,7 @@ Defjs is a TypeScript library for defining typed HTTP, SSE, and WebSocket APIs o
 - Streaming support.
 - Interceptor support.
 - Works in browser and server applications that provide the required platform transports.
-- Bun `1.4.3` is the repository's only development, test, build, packaging, and publishing runtime.
+- Bun `1.4.3` drives repository development, testing, and builds; release jobs use `npm publish`.
 - ESM. `@defjs/core` declares no runtime dependencies.
 
 ## Quick Start
@@ -66,7 +66,7 @@ if (error) {
 The full guides live in `doc/` and cover HTTP, SSE, WebSocket, Structs, interceptors, errors, React, Vue, and server-side OpenTelemetry integration.
 
 - Each package tarball keeps its package `README.md` and the repository `LICENSE`; repository-wide guides and examples are not packed.
-- Contributors working from the current checkout can start with `doc/guide/getting-started.md`; these source docs can describe unreleased changes.
+- Contributors working from the current checkout can start with `doc/content/en-US/docs/start.mdx`; these source docs can describe unreleased changes.
 - Choose one of the 11 language tracks from the documentation site.
 - Match the documentation to the package version installed in your application.
 
@@ -83,35 +83,43 @@ The full guides live in `doc/` and cover HTTP, SSE, WebSocket, Structs, intercep
 
 Repository commands are classified by scope. A command being exposed at the root does not mean every workspace should implement it.
 
-| Scope                          | Commands                                                                                 | Execution model                                                                                      |
-| ------------------------------ | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Repository-wide checks         | `bun run verify`, `bun run fmt`, `bun run fmt:check`, `bun run lint`, `bun run lint:fix` | `verify` is the complete CI and local pre-release gate, including packed-consumer verification.      |
-| Workspace aggregation          | `bun run test`, `bun run build`                                                          | The root delegates to workspace-owned tasks; `build` first runs the repository-wide type check once. |
-| Workspace-local lifecycle      | Package `build`/`test`, documentation `build`                                            | Each workspace handles only its own tests or output.                                                 |
-| Explicit, on-demand operations | `bun run test:release`, `bun run test:packed`, documentation `dev`/`preview`             | Focused checks remain available when the full gate is unnecessary.                                   |
+| Scope                          | Commands                                                                                                      | Execution model                                                                                                 |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Repository-wide checks         | `bun run verify`, `bun run typecheck`, `bun run fmt`, `bun run fmt:check`, `bun run lint`, `bun run lint:fix` | `verify` runs lint, formatting, type checks, workspace tests, builds, and documentation browser tests in order. |
+| Workspace aggregation          | `bun run test`, `bun run build`                                                                               | The root delegates to workspace-owned tasks; `build` generates artifacts without running the full type check.   |
+| Workspace-local lifecycle      | Package `build`/`test`, documentation `build`/`typecheck`                                                     | Each workspace handles its own output, tests, or documentation type-checking configuration.                     |
+| Explicit, on-demand operations | Documentation `dev`/`preview`                                                                                 | Start the documentation development or preview server when needed.                                              |
 
-Formatting, linting, and TypeScript checking are repository-wide gates. Workspace manifests must not duplicate them, and CI must not invoke them through `bun run --workspaces`, `--filter`, or per-package filters.
+Formatting and linting are repository-wide gates. The root `typecheck` checks the library project and delegates to the documentation workspace for its separate configuration. CI uses the root `verify` gate to run every required stage once.
 
-`bun run typecheck` uses Bun's built-in checker. TypeScript remains installed for editor and build tooling; documentation keeps its own TypeScript version for Twoslash compatibility.
+`bun run typecheck` uses Bun's built-in checker. Documentation `typecheck` generates route types, checks the documentation project, and checks complete code examples. TypeScript remains installed for editor and declaration build tooling.
 
 <!-- shortcut: @types/bun has not published 1.4.3; remove the bun-types override when upgrading the wrapper to a version that depends on bun-types 1.4.3 or later. -->
 
 Tests and builds are intentionally different. Their environments, configurations, and outputs belong to specific workspaces, so the root commands aggregate the relevant workspace lifecycle scripts.
 
-Documentation builds typecheck code fences marked `twoslash`, including the SSE/WebSocket API quick starts and executable recipes, and fail on unexpected TypeScript errors. API signature sketches and incomplete fragments are not standalone programs. The documentation workspace tests execute the ETag and Bearer recipes and assert their actual status transitions. After rendering, its build checks local page links and anchors, including generated navigation and locale links. Missing translations display an explicit notice and include the English source so fixes stay synchronized.
+Documentation type checks cover the complete TS/TSX examples in `doc/examples`, which content pages embed with `<include>`; signature sketches and fragments stay plain code blocks. The documentation workspace tests execute the ETag and Bearer recipes and assert their actual status transitions. After rendering, its build checks local page links and anchors, including generated navigation and locale links. Every locale carries every page; there is no fallback to English.
+
+### Test conventions
+
+- Run tests the way CI does. The root `bunfig.toml` sets `[run] bun = true`, so `bun run verify` and the root workspace `test` run Vitest and the local test servers on Bun, while `bun run test` inside `packages/core` runs them on Node. A change is accepted only when both pass.
+- Deadline and timeout tests never race the wall clock. Fake time explicitly (`vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })`, or only `'Date'` when a synchronous phase must outlast a real timer), advance it only after the awaited event has happened, and assert the code path that was meant to run, such as a builder or interceptor call count, not only the final fault code. A real `timeout` of a few milliseconds combined with an unconditional `await` on something that only happens before the deadline is a flake.
+- Fix a flake at its race. Do not add `retry` or longer sleeps.
+- Assert the bytes that were sent, not a runtime's re-parse of them. Bun's multipart parser drops a file part's `Content-Type`, so multipart tests compare the raw body (`packages/core/test/multipart-fixture.ts` and the `/e2e/echo-raw` route).
+- Browser projects share a fixed Vitest port, so run one browser test process at a time. Every Playwright launch passes `browserLaunchEnv()` from `test/firefox-app-data.ts` so Firefox starts on macOS 27.
 
 ## Release workflow
 
 Package versions live in their own manifests and advance independently. The repository does not use generated changeset files or coordinated workspace version bumps.
 
-Push one package-specific tag on the commit you want to publish. The tag version must match that package's manifest:
+Run the **Release** workflow manually in GitHub Actions for the intended revision. Select any combination of packages or documentation:
 
-- `release-core-vX.Y.Z`
-- `release-opentelemetry-server-vX.Y.Z`
-- `release-react-vX.Y.Z`
-- `release-vue-vX.Y.Z`
+- `core`, `opentelemetry-server`, `react`, or `vue` publishes the selected package to npm.
+- `docs` builds and deploys the documentation to GitHub Pages using the configured `SITE_URL`.
 
-CI runs the full Bun verification gate on pull requests and `main`. Pushing a matching tag automatically starts the release workflow: it runs `bun ci`, validates the tag and selected manifest through `release-target.ts`, runs `bun --bun run build` only for that package, and publishes from its `dist` directory using the repository's `NPM_TOKEN` secret. Creating a local tag alone does not publish. The release workflow does not require a `main` commit or wait for CI; run `bun run verify` on the intended release commit before pushing its tag. A Core patch within the adapters' `^0.4.0` peer range, such as `0.4.0` to `0.4.3`, does not require another adapter release; publish an adapter only when its own artifact, implementation, public metadata, or peer range changes.
+Each selected package job runs `bun ci`, builds that package, and uses `npm publish` from its `dist` directory with the repository's `NPM_TOKEN` secret. Versions come from the committed package manifests; the workflow does not bump versions or require release tags.
+
+CI runs the full Bun verification gate on pull requests and `main`. The manual release workflow does not require a `main` commit or wait for CI; run `bun run verify` on the intended revision before starting it. A Core patch within the adapters' `^0.4.0` peer range, such as `0.4.0` to `0.4.3`, does not require another adapter release; publish an adapter only when its own artifact, implementation, public metadata, or peer range changes.
 
 ### Dependency ownership
 
@@ -126,7 +134,7 @@ CI runs the full Bun verification gate on pull requests and `main`. Pushing a ma
 - Typed HTTP, SSE, and WebSocket command definitions in `@defjs/core`.
 - Thin framework adapters for React and Vue.
 - Server-side outbound OpenTelemetry instrumentation for defjs clients.
-- Documentation source and local VitePress tooling in `doc/`.
+- Documentation source and local Fumadocs, React Router, and Vite tooling in `doc/`.
 
 See the package READMEs and the metadata for the published releases you install to confirm exact npm availability and API surface.
 
@@ -164,3 +172,7 @@ Most defjs packages are still evolving before stable 1.0; overall API may evolve
 - [Google API design guide](https://cloud.google.com/apis/design)
 - [Tanstack Query](https://tanstack.com/query)
 - [Rxjs](https://rxjs.dev)
+
+Documentation uses Fumadocs with React Router and Vite, built entirely with Bun. Run `bun run --cwd doc dev` locally; the static output is `doc/build/client`. `bun run typecheck` checks workspace sources, the documentation application and the complete TS/TSX examples in `doc/examples`, which pages embed with `<include>`. Vue single-file examples are not statically checked. `bun run verify` also builds and tests the actual static site in Chromium and Firefox.
+
+Set the repository variable `SITE_URL` to the confirmed HTTPS origin before deploying docs. Local builds default to localhost; the release job rejects a missing or local origin.

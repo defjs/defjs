@@ -1,0 +1,17 @@
+---
+title: 'withWebSocketHandle'
+description: 'WebSocket 생성자를 바꾸는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHandle" />
+
+```ts
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+소켓 연결에 쓰는 WebSocket 생성자를 바꿔요. 기본값은 `globalThis.WebSocket`이에요.
+
+- **WebSocketImpl**은 [`WebSocketHandle`](/ko-KR/api/core/websockethandle-type)을 돌려주는 [`WebSocketHandleConstructor`](/ko-KR/api/core/websockethandleconstructor-type)예요.
+- 사용할 수 있는 생성자가 없으면 WebSocket 명령을 실행할 때 `ENV_UNSUPPORTED` fault로 실패해요.
+
+[클라이언트](/ko-KR/api/client)

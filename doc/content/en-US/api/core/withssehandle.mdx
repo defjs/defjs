@@ -1,0 +1,17 @@
+---
+title: 'withSSEHandle'
+description: 'Client option that replaces the Fetch function used to open SSE streams.'
+---
+
+<ApiReference identity="@defjs/core:withSSEHandle" />
+
+```ts
+function withSSEHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+Replaces the Fetch-compatible function used to open SSE event streams. The default is the platform `fetch`.
+
+- **fetchImpl** is a [`FetchHandle`](/api/core/fetchhandle-type).
+- It only affects SSE. HTTP uses [`withHTTPHandle`](/api/core/withhttphandle).
+
+[Client](/api/client)

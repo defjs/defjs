@@ -38,7 +38,7 @@ bun-debug.log*
 # output
 dist
 test-out
-doc/.vitepress/cache/
+doc/.react-router/
 
 # IDEA
 .idea

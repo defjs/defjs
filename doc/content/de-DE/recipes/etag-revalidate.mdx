@@ -1,0 +1,22 @@
+---
+title: 'ETag-Bedingungsanfragen'
+description: Behandle 304 als HTTP-Status-Fault; halte die Cache-Map außerhalb von execute.
+---
+
+# Mit ETag und einem 304 revalidieren
+
+`ok` heißt 2xx, also kommt ein `304` als `HTTP_STATUS`-Fault an. Ein Redirect-Status ist auch kein Error-
+Body, also lass `error` undeclared: der Body wird nie gelesen, der Fault trägt den Status,
+und du gibst das gecachte Product selbst zurück.
+
+Siehe [HTTP](/de-DE/docs/http).
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+Schreibe `304` nicht in ein vorgetäuschtes `200` innerhalb von Core um. Cache-Ownership bleibt im Application-Code um `execute`.

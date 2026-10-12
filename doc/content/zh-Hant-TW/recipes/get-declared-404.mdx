@@ -1,0 +1,22 @@
+---
+title: '處理已宣告的 404'
+description: 執行一次 GET，並依型別化的 200 與已宣告 404 分支。
+---
+
+# 已宣告 404 的 GET
+
+同時宣告成功與 404 body。用 `error.code` 與 `error.status` 分支 — 對已宣告的 miss 會拿到型別化的 `error.data`。
+
+細節見 [HTTP](/zh-Hant-TW/docs/http) 與[錯誤](/zh-Hant-TW/docs/errors)。
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` 是 placeholder。若 server 對 `GET /users/7` 回應 `200` 與 `{ "id": 7, "name": "Ada" }`，這段 snippet 會印出：
+
+```txt
+Loaded Ada from 200
+```
+
+非 2xx 狀態是 `HTTP_STATUS`。宣告 `error` 會給它的 body 一個型別；省略 `error` 則 `error.data` 是 `undefined`，body 也不會被讀。如果已宣告的 `error` body 讀不出來（媒體類型不對、JSON 無效、形狀不符），結果會改成 `RES_*` fault。一個 `error` Struct 覆蓋所有非 2xx 狀態，所以形狀不同時用 `struct.or(...)` 或判別聯集。

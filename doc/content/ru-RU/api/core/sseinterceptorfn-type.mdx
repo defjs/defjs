@@ -1,0 +1,16 @@
+---
+title: 'SSEInterceptorFn'
+description: 'Функциональная форма SSE interceptor’а.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptorFn" />
+
+```ts
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+Может изучить или заменить `req`, затем вызвать [`next`](/ru-RU/api/core/ssehandler-type), чтобы продолжить цепочку, либо вернуть собственный `EventStreamHandle` для short-circuit. Оберни её в `createSSEInterceptor(fn)`, чтобы зарегистрировать через `withInterceptors`.
+
+Handle для short-circuit должен предоставлять `[Symbol.asyncDispose](): PromiseLike<void>` и связывать его с тем же жизненным циклом закрытия.
+
+[Interceptors](/ru-RU/api/interceptors)

@@ -1,0 +1,16 @@
+---
+title: 'WebSocketHandler'
+description: '요청에 대해 WebSocket session을 여는 최종 핸들러예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandler" />
+
+```ts
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+```
+
+WebSocket interceptor가 받는 `next` 함수예요. `next(req)`는 안쪽으로만 진행해요. 이 interceptor 뒤에 등록된 interceptor들을 거쳐 session을 여는 전송까지 가요. execute마다 한 번만 호출할 수 있어요. 두 번째 호출이나 체인이 끝난 뒤의 호출은 reject돼요.
+
+[`WebSocketSessionLike`](/ko-KR/api/core/websocketsessionlike-type)로 resolve돼요.
+
+[인터셉터](/ko-KR/api/interceptors)

@@ -1,0 +1,16 @@
+---
+title: 'ClientProvider'
+description: 透過 context 把 Defjs client 提供給其子樹的 React component。
+---
+
+<ApiReference identity="@defjs/react:ClientProvider" />
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+把 `createClient` 建立的既有 client 當作 `client` 傳進去；後代用 `useClient` 讀取它。這個 component 不會建立、快取或 dispose client。巢狀的 `ClientProvider` 會覆蓋其自身子樹的 client，傳入不同的 `client` prop 則會改變後代拿到的 context 值。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+[@defjs/react](/zh-Hant-TW/api/react)

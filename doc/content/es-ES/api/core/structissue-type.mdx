@@ -1,0 +1,24 @@
+---
+title: 'StructIssue'
+description: 'Un fallo de validación producido al parsear un struct.'
+---
+
+<ApiReference identity="@defjs/core:StructIssue" />
+
+```ts
+interface StructIssue {
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  expected: string
+  message: string
+  path: Array<number | string>
+  received: unknown
+}
+```
+
+- `code` es la categoría legible por máquina. El parser produce `invalid_type`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` y `missing_key`; `custom` forma parte del tipo, pero los structs integrados nunca lo producen.
+- `expected` describe el tipo o valor esperado.
+- `message` es el texto final, tras una reescritura opcional con un [`ErrorMap`](/es-ES/api/core/errormap-type).
+- `path` va desde la raíz del parse hasta la ubicación que falla: nombres de campo e índices de array. Está vacío cuando el fallo es de nivel raíz.
+- `received` es el valor que falló en `path`.
+
+[Struct](/es-ES/api/struct)

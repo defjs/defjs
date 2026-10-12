@@ -1,0 +1,16 @@
+---
+title: 'SSEHandler'
+description: '為 request 開啟 SSE 串流的終端 handler。'
+---
+
+<ApiReference identity="@defjs/core:SSEHandler" />
+
+```ts
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+```
+
+SSE interceptor 收到的 `next` 函式。`next(req)` 只往內走：先經過註冊在這個 interceptor 之後的 interceptors，再到開啟串流的傳輸。chain settle 之後再呼叫它會 reject。
+
+`EventStreamHandle` 擴充了 `AsyncDisposable`。自行建構 handle 的短接實作必須提供 `[Symbol.asyncDispose](): PromiseLike<void>`，並接到同一條 close lifecycle。
+
+[Interceptors](/zh-Hant-TW/api/interceptors)

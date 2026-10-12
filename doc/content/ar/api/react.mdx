@@ -1,0 +1,42 @@
+---
+title: '@defjs/react'
+description: ClientProvider وuseClient وخصائص المزوّد.
+---
+
+# React
+
+وفّر عميل `@defjs/core` موجودًا لشجرة React. هذه الحزمة لا تنشئ العميل ولا تخزّنه ولا تتخلّص منه. مدخلها موسوم بـ `'use client'`، فاستورده من مكوّنات العميل. يلزم React 18 أو أحدث.
+
+انظر [دليل React](/ar/docs/integrations/react).
+
+## ClientProvider
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+موفر السياق. مرّر عميلًا من `createClient`. يتجاوز `ClientProvider` متداخل العميلَ لشجرته الفرعية؛ ويقرأ `useClient` أقربهما. تمرير `client` مختلف يغيّر قيمة السياق للأحفاد.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+```ts
+function useClient(): Client
+```
+
+يقرأ أقرب `ClientProvider`.
+
+- **يعيد** العميل الموفَّر.
+- **يرمي** `Error` إذا استُدعي خارج `ClientProvider`.
+
+## ClientProviderProps
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+`client` مطلوب ويملكه التطبيق. `children` هي الشجرة التي يمكنها استدعاء `useClient`.

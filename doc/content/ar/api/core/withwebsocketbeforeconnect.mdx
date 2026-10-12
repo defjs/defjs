@@ -1,0 +1,23 @@
+---
+title: 'withWebSocketBeforeConnect'
+description: 'خيار عميل يشغّل خطافًا قبل كل محاولة اتصال WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketBeforeConnect" />
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+```
+
+يشغّل خطافًا قبل اتصال WebSocket الأول وقبل كل إعادة اتصال. نوع الخطاف:
+
+```ts
+(context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+```
+
+- `attempt` هو `0` عند الاتصال الأول، ويزداد بواحد مع كل إعادة اتصال.
+- مرّر `signal` إلى تجديدات الرموز وأي عمل غير متزامن آخر حتى يوقفها إلغاء الجلسة.
+- إذا رمى الخطاف تفشل المحاولة بعطل `EXT_HOOK_FAILED`.
+- `beforeConnect` في خيارات execute يستبدل هذا الخطاف لذلك الاستدعاء.
+
+[العميل](/ar/api/client)

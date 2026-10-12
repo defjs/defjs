@@ -1,0 +1,290 @@
+---
+title: Client
+description: createClient, option helpers, and the Client type.
+---
+
+# Client
+
+Create a client, compose options left to right, then `execute` HTTP / SSE / WebSocket commands.
+
+## createClient()
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+Options apply in order. Prefer creating the client inside the request boundary when interceptors close over auth or tenants.
+
+- **options** — Option helpers such as `withEndpoint`.
+- **Returns** a client whose `execute` is overloaded per transport.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## Option helpers
+
+All helpers return `ClientOption`. A later call replaces an earlier one for the same setting, except `withInterceptors`, which appends.
+
+### withEndpoint()
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+Sets the base URL prepended to relative paths.
+
+### withInterceptors()
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+Appends interceptors in registration order. Mixed kinds are filtered per transport at execute time.
+
+### withQuerySerializer()
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+Replaces query encoding for HTTP, SSE, and WebSocket. `serializer(query)` receives the **encoded wire object** (aliases applied, `Date` as ISO, `bigint` as string) and must return the query string without a leading `?`. It is not called when the request has no query. A builder that returns `URLSearchParams` skips it.
+
+### withHeaders()
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+Sets static default headers for HTTP and SSE requests. WebSocket requests do not use them. The init is copied when the option applies, so later changes to the object do not reach the client. A second `withHeaders` replaces the first; it does not merge.
+
+Precedence for one request:
+
+1. The defaults are the starting header set.
+2. `headers` returned by the request builder replace a default of the same name when the value is a scalar or a `Headers` instance. An array value (a record entry such as `{ 'x-a': ['one', 'two'] }`, or a tuple-array `HeadersInit`) appends to the default instead of replacing it.
+3. Interceptors receive the merged headers and may change them.
+4. With the default HTTP transport, the XSRF header is added last, only when still absent (see `withXSRF`).
+
+Use an interceptor for values that change per request: a refreshed Bearer token, or an HMAC over the serialized body.
+
+### withTimeout()
+
+```ts
+function withTimeout(ms: number): ClientOption
+```
+
+Sets the default timeout, in milliseconds, for **HTTP** `execute` only. SSE and WebSocket ignore it; their execute `timeout` is a separate, per-call startup deadline. `ms` must be a positive safe integer no greater than `2_147_483_647`, otherwise `withTimeout` throws a `RangeError` when you call it. A second `withTimeout` replaces the first.
+
+The deadline covers input parsing, the builder, interceptors, the transport, and reading a declared body. It combines with the execute options of each call:
+
+| Execute options             | Effect                                                                                    |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| none                        | The client default applies; expiry is `NET_TIMEOUT`.                                      |
+| `{ timeout }`               | Replaces the client default for this call.                                                |
+| `{ abort }` or `{ signal }` | Combines with the default: the caller's signal is `NET_ABORTED`, the timer `NET_TIMEOUT`. |
+| `{ abort, timeout }`        | Still invalid: `REQ_OPTIONS_INVALID`. The client default never counts as a conflict.      |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+function withSSEHandle(fetchImpl: FetchHandle): ClientOption
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+Replace Fetch (HTTP/SSE) or the WebSocket constructor.
+
+### withCredentials()
+
+```ts
+function withCredentials(value: boolean): ClientOption
+```
+
+When `true`, Fetch uses `credentials: 'include'` for HTTP and SSE. The default is off. WebSocket connections are not affected.
+
+### withXSRF()
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+Adds an XSRF token header to HTTP requests. Defaults: cookie `XSRF-TOKEN`, header `X-XSRF-TOKEN`. SSE and WebSocket requests are not affected.
+
+The default HTTP transport adds the header when all of these hold: the method is not `GET`, `HEAD`, `OPTIONS` or `TRACE`; the request does not already have that header; the request is same-origin (outside a browser, any request with a `baseEndpoint` counts); and a non-empty token is found. The token comes from `tokenProvider` when given, otherwise from the cookie, which is read only in a browser.
+
+### SSE knobs
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+### WebSocket knobs
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): ClientOption
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+## Types
+
+### Client
+
+```ts
+type Client = {
+  execute(command: EventStreamCommand, options?: EventStreamExecuteOptions): Promise<StreamAwaitResult>
+  execute(command: WebSocketCommand, options?: WebSocketExecuteOptions): Promise<SocketAwaitResult>
+  execute(command: HttpCommand, options?: HttpExecuteOptions): Promise<HttpAwaitResult>
+}
+```
+
+Type parameters are omitted here; each overload infers its result from the command.
+
+### ClientOption
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+Mutates the `ClientConfig` that `createClient` builds. Write one when no `with*` helper fits.
+
+### QuerySerializer
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+### FetchHandle
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+The call signature Defjs needs from a Fetch implementation. It is not `typeof fetch`, so a mock does not need host extras such as `preconnect`.
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+Reconnect is opt-in for both transports: without `withSSEReconnect` / `withWebSocketReconnect` there is no retry. Once `reconnect` is set, these defaults apply:
+
+| Field        | SSE    | WebSocket |
+| ------------ | ------ | --------- |
+| `attempts`   | `3`    | `3`       |
+| `delayMs`    | `1000` | `1000`    |
+| `factor`     | `1`    | `2`       |
+| `jitter`     | `0`    | `0`       |
+| `maxDelayMs` | no cap | `30000`   |
+
+For SSE, `delayMs` is only the starting base delay: a server `retry:` field replaces it for later attempts. `attempts: 0` disables retry; omitting `attempts` is not unlimited. `jitter` must be within 0–1: each delay is randomized by up to that fraction in either direction. `shouldReconnect` returning `false` stops retrying. The SSE callback also receives `lastEventId`, the request `method`, and the latest `open` info, and may be async. Without it, SSE reconnects only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests; with it, its result decides for every method. The WebSocket callback receives the close `code`, `reason` and `wasClean` instead.
+
+SSE `onInvalidEvent` handles an event with no matching struct, including no `default` (`missing-struct`), or whose data fails its struct (`validation-failed`). The event is always dropped; the handler's return value is ignored, and an error it throws does not close the stream.
+
+For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can also be passed per call to `execute`; the execute value replaces the client value for that call. `heartbeat.message` builds each ping; nothing is sent when it is omitted or returns `undefined`.
+
+### ClientOptions
+
+```ts
+interface ClientOptions extends HttpClientOptions {
+  sse?: ClientSSEOptions
+  webSocket?: ClientWebSocketOptions
+}
+```
+
+The input-shaped description of a client: `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `timeout`, `xsrf`, `withCredentials`, `sse` and `webSocket`. `createClient` does not take it; it takes option helpers.
+
+### ClientConfig
+
+The resolved snapshot that option helpers mutate and `execute` reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`) and `webSocket` always present.
+
+### ClientSSEConfig
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+The resolved SSE config on `ClientConfig.sse`: `ClientSSEOptions` with a required `handle`.
+
+### WebSocketHandle
+
+The WebSocket instance surface the transport uses: `WebSocket` without `binaryType`, the ready-state constants, `dispatchEvent` and the `on*` handler properties, and with a read-only `readyState: number`.
+
+### WebSocketHandleConstructor
+
+```ts
+type WebSocketHandleConstructor = { readonly OPEN: number } & (new (...args: never[]) => WebSocketHandle)
+```
+
+The constructor passed to `withWebSocketHandle`. It must expose the `OPEN` ready-state constant.
+
+See [Client guide](/docs/client).

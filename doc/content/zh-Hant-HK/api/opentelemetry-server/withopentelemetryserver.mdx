@@ -1,0 +1,23 @@
+---
+title: 'withOpenTelemetryServer'
+description: Client option：為 HTTP、SSE 同 WebSocket 安裝對外發出嘅 OpenTelemetry interceptors。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:withOpenTelemetryServer" />
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+為每個啟用咗嘅 transport append 一條 interceptor，次序係 HTTP、SSE、WebSocket。喺 `createClient` 時套用。佢唔會 initialize OpenTelemetry SDK，亦唔會攞全域 tracer、meter 或者 logger handles：請傳入 application 自己擁有嘅。
+
+- **options** — 必填。`tracer`、`meter`、`logger`、`propagator`、`requireParentSpan`，以及 `http` / `sse` / `webSocket` transport options。如果只想安裝 interceptors 做 propagation，就傳 `{}`。
+- **Returns** 畀 `createClient(...)` 用嘅 `ClientOption`。
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+`tracer`、`meter` 同 `logger` 各自可選，冇咗其他兩個都照樣運作。省略 `tracer` 時，adapter 唔會建立本地 span，亦唔會 call `trace.getTracer(...)`，並且略過 `startSpanHook`、`requestHook` 同 `responseHook`。Propagation 仍然會轉發擷取到嘅 parent context。
+
+HTTP、SSE 同 WebSocket 預設全部開啟。喺某個 transport 傳 `{ enabled: false }` 就會略過佢。
+
+[@defjs/opentelemetry-server](/zh-Hant-HK/api/opentelemetry-server)

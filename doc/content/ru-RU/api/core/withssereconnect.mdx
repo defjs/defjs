@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'Опция клиента, которая включает автоматический reconnect SSE.'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+Настраивает автоматический reconnect после сбоя SSE-потока. Reconnect включается явно: без этой опции упавший поток не повторяется. Передача `undefined` сбрасывает ранее заданное значение.
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` — бюджет повторов после первой попытки. Когда `reconnect` задан, по умолчанию `3`, а `0` отключает повторы. Опустить его — это не «без лимита».
+- Без `shouldReconnect` переподключение выполняется только для запросов `GET`, `HEAD`, `OPTIONS`, `PUT` и `DELETE`. Если колбэк задан, его результат определяет, переподключаться ли для каждого метода, включая `POST`; поле `method` в контексте позволяет различать эндпоинты. Верни `false`, чтобы прекратить повторы после этого сбоя. Колбэк вызывается до проверки лимита попыток.
+- Запрос с телом `ReadableStream` никогда не переподключается, и `shouldReconnect` для него не вызывается.
+- `delayMs`, `factor`, `jitter` (от 0 до 1) и `maxDelayMs` задают backoff. `factor` по умолчанию `1`, `jitter` — `0`.
+- `delayMs` — лишь начальная базовая задержка (по умолчанию `1000`). Поле `retry:` от сервера (только цифры, в миллисекундах) заменяет её для последующих попыток.
+- Последний id события отправляется снова как `Last-Event-ID` при следующей попытке.
+
+О stream handle см. [SSE](/ru-RU/api/sse).
+
+[Клиент](/ru-RU/api/client)

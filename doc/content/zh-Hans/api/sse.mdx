@@ -1,0 +1,125 @@
+---
+title: SSE
+description: defineEventStream、execute options，以及 stream handle。
+---
+
+# SSE
+
+声明一条事件流，execute，迭代事件，再 close。
+
+## defineEventStream()
+
+```ts
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
+```
+
+- **definition** — `path`、`events` map，以及必填的正整数上限 `maxBufferSize` 和 `maxQueueSize`；可选 `method`（默认 `'GET'`）、`operation`、`input` 和 `error`。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
+- **返回** 一个 endpoint。传入 input 调用，得到 `EventStreamCommand`。
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+## executeEventStreamCommand()
+
+```ts
+function executeEventStreamCommand(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult>
+```
+
+`client.execute` 的底层入口。业务代码走 client。
+
+- **返回** `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。
+
+## 执行 options
+
+## EventStreamExecuteOptions
+
+```ts
+type EventStreamExecuteOptions = ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & {
+  signal?: AbortSignal
+}
+```
+
+取消规则和 HTTP 一样：`abort` 或 `timeout`，别两个一起（类型层面会拒绝同时传两者，运行时同时传入则以 `REQ_OPTIONS_INVALID` 失败）；`signal` 可与其中任一组合。`timeout` 是启动期限：它涵盖输入解析、builder、interceptor 和握手，不会中止已经打开的 stream。`withTimeout` 不适用于 SSE。
+
+## EventStreamHandle
+
+```ts
+interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+tuple 第三项是 `open` 的启动快照；重连之后，`stream.open` 跟随最新的连接。自有作用域优先用 `await using stream = handle` 清理。disposer 会停止 Defjs 的读取和重连任务，并等待 reader lock 释放；它不承诺由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手动 `close()` / `closed` 仍可使用。
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+结构化实现 `EventStreamHandle` 的代码现在必须实现 `[Symbol.asyncDispose]()`，并返回同一条自有 teardown 路径。对自定义 handle 实现者而言，这是编译期 breaking change；只接收 Defjs 返回 handle 的代码无需新增运行时调用。
+
+### EventStreamOpenInfo
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+### EventStreamCloseInfo
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+`EventStreamFaultCode`：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
+
+## 事件 map
+
+## EventStructs
+
+```ts
+type EventStructs = { [eventName: string]: AnyStruct }
+```
+
+key 是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有任何 key 匹配时，使用 `default` struct。`string` 事件 struct 保留原始 `data` 文本。其余 kind 都是 JSON 文本：`JSON.parse`，再交给 struct。所以裸的 `struct.literal` 需要 JSON 文本，不是没加引号的 token。握手 `error` body 用和 HTTP 一样的 kind 规则：`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON。
+
+重连在 client 上（`withSSEReconnect`）。SSE `jitter` 是 **0–1 的乘性因子**，和 WebSocket 一样。
+
+见 [SSE 指南](/zh-Hans/docs/sse) 和[消费 SSE 流](/zh-Hans/recipes/consume-sse)。
+
+## EventStreamDefinition
+
+`path`、`events`，必填的 `maxBufferSize` 和 `maxQueueSize`，可选 `method` / `operation` / `input` / `error`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能返回 body。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
+
+## EventStreamEndpoint
+
+`defineEventStream` 的返回值。拿 input 调一下就得到 `EventStreamCommand`。
+
+## EventStreamRequestShape
+
+和这条流的 method、path 对应的 `HttpRequestShape` 字段相同。
+
+## EventStreamCommand
+
+不透明的 SSE command。传给 `client.execute`。
+
+## StreamAwaitResult
+
+`[null, stream, open]` 或 `[error, undefined, open?]`。
+
+## EventStreamData
+
+从 `EventStructs` map 推出来的解析后事件载荷。

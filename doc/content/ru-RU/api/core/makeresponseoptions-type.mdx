@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: 'Поля, которые принимает makeResponse.'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+`status` по умолчанию равен `0`, а `statusText` — `''`. `url` и `headers` по умолчанию берутся из `request`: его разрешённый URL (base endpoint, путь и query) и копия его заголовков. Если у request нет `baseEndpoint`, берётся его `endpoint` как написан. Без `request` `url` равен `''`, а `headers` пусты. Опущенный `body` остаётся `undefined`; JSON `null` получается только из явного `null`.
+
+[HTTP](/ru-RU/api/http)

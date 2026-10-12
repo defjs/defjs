@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: 'Low-level entry that runs an HTTP command against a client config.'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+Low-level entry used by `client.execute`. Application code should call `client.execute(command, options)`. `HttpClientConfig` is the HTTP part of `ClientConfig`, so a `ClientConfig` is accepted. `HttpExecuteAwaitResult` is the internal result tuple.
+
+- **Returns** `[null, data, response]` or `[fault, undefined, undefined]`. `data` is the decoded `output` body, or `undefined` when none is declared. `response` is `DecodedResponse` when `output` is declared and `HttpMeta` otherwise. The fault is `Fault<TError>`.
+
+A non-2xx status is `HTTP_STATUS` when no `error` struct is declared (its `data` is `undefined`) or when the declared body decodes (its `data` is that body). When a declared `error` body cannot be read, the fault is a `RES_*` decode fault instead. On failure the tuple's third slot is `undefined`; the fault carries the response metadata. `options.timeout` falls back to the client's `withTimeout` default when omitted.
+
+[HTTP](/api/http)

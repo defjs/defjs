@@ -1,0 +1,26 @@
+---
+title: 'struct.tuple'
+description: '解析定長 array、每個位置各有一個 struct 嘅 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.tuple" />
+
+```ts
+function tuple<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(
+  items: T,
+): TupleStruct<T>
+```
+
+`struct.tuple` 接受 structs 嘅**單一 array**，而唔係分開嘅參數：
+
+```ts
+const Pair = struct.tuple([struct.string(), struct.number()])
+```
+
+- 每個位置用相同 index 嘅 struct 解析。Input 必須係長度完全一樣嘅 array，否則會以 `invalid_type`（預期 `tuple of length N`）失敗。
+- 將 structs 當分開參數傳入，即 `struct.tuple(a, b)`，會 throw `TypeError`。
+- 如果某個 item 唔係 struct，會 throw `TypeError`。
+
+`TupleStruct<T>` 冇 export。佢係一個 `Struct`，input 同 output 都係各 item type 組成嘅 tuple。
+
+[Struct](/zh-Hant-HK/api/struct)

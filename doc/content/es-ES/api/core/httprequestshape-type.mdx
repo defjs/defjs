@@ -1,0 +1,19 @@
+---
+title: 'HttpRequestShape'
+description: 'Forma de solicitud que devuelve un builder HTTP: path, query, cabeceras y cuerpo.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequestShape" />
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+  headers?: HeadersInit | FlatRecord
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+`P` es el path del endpoint y `M` su método. `GET` y `HEAD` no pueden devolver un body. `BodyValue` es un valor listo para su transmisión que Fetch envía tal cual (`string`, `Blob`, `ArrayBuffer`, un array tipado o `DataView`, `FormData`, `URLSearchParams`, `ReadableStream<Uint8Array>`) o datos JSON (`number`, `boolean`, `bigint`, `Date`, `null`, un array o un tipo de objeto con claves de cadena); para un valor tipado mediante una `interface` o una instancia de clase, hay que usar `{ ...value }`. `path` y `headers` deben ser escalares planos; `query` puede anidarse, y un objeto anidado necesita `withQuerySerializer` en runtime. `FlatRecord`, `QueryRecord`, `PathValue` y `BodyValue` son tipos auxiliares internos.
+
+[HTTP](/es-ES/api/http)

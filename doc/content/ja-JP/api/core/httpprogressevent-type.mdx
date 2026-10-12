@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'アップロードとダウンロードのコールバックに渡される、進捗のスナップショットです。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+`ProgressEvent` のフィールドをそのまま反映します。`loaded` はここまでに転送したバイト数です。全体のサイズが不明な場合、`total` は `0`、`lengthComputable` は `false` です。
+
+[`HttpProgressFn`](/ja-JP/api/core/httpprogressfn-type)、[HTTP ガイド](/ja-JP/docs/http)、[Commands](/ja-JP/docs/commands) を参照してください。
+
+[HTTP](/ja-JP/api/http)

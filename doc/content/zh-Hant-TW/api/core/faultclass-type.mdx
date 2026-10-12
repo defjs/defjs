@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: '從 fault code 取出類別前綴。'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+fault code 的類別是第一個 `_` 之前的那一段。`C` 是一個 `FaultCode`，或它們的聯集。`FaultClass<FaultCode>` 是 `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`。
+
+[錯誤](/zh-Hant-TW/api/errors)

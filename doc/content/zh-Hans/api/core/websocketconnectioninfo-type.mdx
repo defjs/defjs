@@ -1,0 +1,23 @@
+---
+title: 'WebSocketConnectionInfo'
+description: '当前 WebSocket 连接的元数据。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketConnectionInfo" />
+
+```ts
+interface WebSocketConnectionInfo {
+  extensions?: string
+  generation: number
+  protocol?: string
+  url?: string
+}
+```
+
+- `url` 是 socket 报告的 URL。
+- `protocol` 是协商出的子协议，`extensions` 是协商出的扩展。socket 报告空字符串时，两者都是 `undefined`。
+- `generation` 统计到达 `open` 的物理 socket 数量：第一次 open 之后是 `1`，每次重连后再加一。在任何 open 之前取的快照是 `0`。
+
+`session.connection` 始终是最新的快照。execute 结果里的 `connection` 则一直是第一次成功时的那个。
+
+[WebSocket](/zh-Hans/api/web-socket)

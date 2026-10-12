@@ -1,0 +1,24 @@
+---
+title: 'HTTP-SDK paketieren'
+description: Exportiere Endpoints und createClient; Status-Narrowing bleibt am Call-Site.
+---
+
+# Ein HTTP-SDK veröffentlichen, ohne execute zu verstecken
+
+Ein Method-SDK, das `client.execute` schluckt, kollabiert deklariertes `404` meist in einen untypisierten Throw oder einen gemeinsamen „API-Error“. Halte den Vertrag als Endpoints plus expliziten Client; Caller besitzen weiterhin das Status-Branching.
+
+Siehe [Commands](/de-DE/docs/commands), [Client](/de-DE/docs/client) und [Entwurfsentscheidungen](/de-DE/docs/design-decisions).
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+Exportiere Endpoints und eine Client-Factory. Helper dürfen `execute` für einen reviewed Pfad aufrufen, aber ersetze das Tupel nicht für jeden Status, der dich interessiert.

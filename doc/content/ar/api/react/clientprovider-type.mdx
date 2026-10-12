@@ -1,0 +1,16 @@
+---
+title: 'ClientProvider'
+description: 'مكوّن React يوفّر عميل Defjs لشجرته الفرعية عبر السياق.'
+---
+
+<ApiReference identity="@defjs/react:ClientProvider" />
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+مرّر عميلًا موجودًا من `createClient` بوصفه `client`؛ ويقرؤه الأحفاد بـ `useClient`. لا ينشئ المكوّن العميل ولا يخزّنه ولا يتخلّص منه. يتجاوز `ClientProvider` متداخل العميلَ لشجرته الفرعية، وتمرير خاصية `client` مختلفة يغيّر قيمة السياق للأحفاد.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+[@defjs/react](/ar/api/react)

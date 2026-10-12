@@ -1,0 +1,17 @@
+---
+title: 'EventStreamOpenInfo'
+description: 'SSE response 開啟之後可用嘅 metadata。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamOpenInfo" />
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+`response` 係 handshake response，`url` 係 resolve 咗嘅 request URL。佢係成功嘅 `client.execute` 結果嘅第三個元素，亦係 `EventStreamHandle.open` 嘅 value。
+
+[SSE](/zh-Hant-HK/api/sse)

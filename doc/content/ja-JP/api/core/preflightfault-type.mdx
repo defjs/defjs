@@ -1,0 +1,18 @@
+---
+title: 'PreflightFault'
+description: 'レスポンスが存在する前に起きた可能性のある失敗を表す Fault です。'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+レスポンスが存在する前に失敗しえたものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。`response` が付くのは、トランスポートが報告できるメタデータを既に持っていた場合だけ — たとえばダウンロード途中で切れたボディなどです。
+
+[Errors](/ja-JP/api/errors)

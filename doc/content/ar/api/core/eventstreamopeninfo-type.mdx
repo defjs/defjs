@@ -1,0 +1,17 @@
+---
+title: 'EventStreamOpenInfo'
+description: 'البيانات الوصفية المتاحة بعد فتح استجابة SSE.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamOpenInfo" />
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+`response` هي استجابة المصافحة، و`url` هو عنوان الطلب المحلول. وكائن `EventStreamOpenInfo` هذا هو العنصر الثالث في نتيجة `client.execute` الناجحة، وقيمة `EventStreamHandle.open`.
+
+[SSE](/ar/api/sse)

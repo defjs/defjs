@@ -1,0 +1,36 @@
+---
+title: Справка API
+description: Ручной lookup пакетов воркспейса — функции, опции и типы, которые импортируешь.
+---
+
+# Справка API
+
+<ApiIndex />
+
+Это lookup по пакетам воркспейса. Сигнатуры — контракт; гайды и рецепты говорят, когда это брать.
+
+## Пакеты
+
+| Пакет                                                            | Что ищешь                                                         |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/ru-RU/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/ru-RU/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/ru-RU/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/ru-RU/api/opentelemetry-server) | `withOpenTelemetryServer`, опции по транспортам                   |
+
+## @defjs/core
+
+| Страница                                | Что ищешь                                                        |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/ru-RU/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/ru-RU/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/ru-RU/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/ru-RU/api/errors)             | варианты и фабрики `Fault`                                       |
+| [Interceptors](/ru-RU/api/interceptors) | хелперы interceptor HTTP / SSE / WebSocket                       |
+| [SSE](/ru-RU/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/ru-RU/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## Связанное
+
+- [Начало работы](/ru-RU/docs/start)
+- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)

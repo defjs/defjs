@@ -1,0 +1,14 @@
+---
+title: 'ParseResult'
+description: '`struct.parse` 返回的 error-first tuple。'
+---
+
+<ApiReference identity="@defjs/core:ParseResult" />
+
+```ts
+type ParseResult<O> = [error: null, value: O] | [error: StructError, value: undefined]
+```
+
+成功时 error 为 `null`，`value` 是解析后的输出 `O`。失败时 error 是 `StructError`，`value` 一定是 `undefined`。
+
+[Struct](/zh-Hans/api/struct)

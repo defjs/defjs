@@ -1,0 +1,20 @@
+---
+title: 'withTimeout'
+description: 'HTTP execute 호출의 기본 타임아웃을 설정하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withTimeout" />
+
+```ts
+function withTimeout(ms: number): ClientOption
+```
+
+HTTP `execute`에만 적용되는 기본 타임아웃을 밀리초 단위로 설정해요. SSE와 WebSocket은 무시해요.
+
+- **ms**는 `2_147_483_647` 이하의 양의 안전 정수여야 해요. 그 밖의 값은 클라이언트가 실행될 때가 아니라 `withTimeout`을 호출하는 즉시 `RangeError`를 throw해요.
+- 타이머는 interceptor 체인이 실행되기 전에 시작돼요. 타이머가 만료되면 호출은 `NET_TIMEOUT` fault를 돌려줘요.
+- execute에 `{ timeout }`을 주면 그 호출에 한해 이 기본값을 대체해요.
+- execute에 `{ abort }`를 주면 기본값과 합쳐져요. abort는 `NET_ABORTED`, 타이머는 `NET_TIMEOUT`을 만들어요.
+- 같은 `execute` 호출에 `abort`와 `timeout`을 함께 넘기는 것은 여전히 거부돼요.
+
+[클라이언트](/ko-KR/api/client)

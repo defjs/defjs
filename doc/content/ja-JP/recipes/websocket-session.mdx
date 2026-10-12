@@ -1,0 +1,22 @@
+---
+title: 'WebSocket セッションの管理'
+description: 接続し、型付きエンベロープを 1 つ送り、1 つ受け取り、close して closed を await します。
+---
+
+# WebSocket セッションを開く
+
+方向ごとに struct は 1 つです。購読解除、`close`、`await session.closed` は呼び出し側の責任です。不正なフレームは `onRuntimeError` へ行きます。
+
+詳細は [WebSocket](/ja-JP/docs/web-socket) を見てください。
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` はプレースホルダーです。`{ "type": "send", "text": "Hello" }` に `{ "type": "message", "text": "Hello" }` で応答するサーバーに対して、このスニペットは次のように出力します。
+
+```txt
+message Hello
+```
+
+再接続はオプトインです（`withWebSocketReconnect`）。ハートビートもオプトインです。ブラウザーの WebSocket は任意のハンドシェイクヘッダーを取れません — cookie、サブプロトコル、短命チケットを使ってください。

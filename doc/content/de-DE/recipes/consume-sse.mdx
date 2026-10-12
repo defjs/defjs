@@ -1,0 +1,22 @@
+---
+title: 'SSE-Ereignisse verarbeiten'
+description: Typisierten Event-Stream öffnen, einmal iterieren, dann schließen und auf closed warten.
+---
+
+# SSE-Stream konsumieren
+
+Ein Async-Iterator pro Stream. Packe `close` + `await stream.closed` in `finally`, damit frühe Exits den Fetch-Versuch nicht leaken.
+
+Details siehe [SSE](/de-DE/docs/sse).
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com` ist ein Platzhalter. Bei einem Server, dessen erstes Event `message` mit den Daten `{ "text": "hello from the server" }` ist, gibt das Snippet aus:
+
+```txt
+hello from the server
+```
+
+SSE unternimmt nach Netzwerk- oder Lesefehlern nur dann einen erneuten Versuch, wenn du `withSSEReconnect(...)` aktivierst. Mit einem Reconnect-Objekt ist der Standardwert für `attempts` `3`; `attempts: 0` deaktiviert Wiederholungsversuche. Ohne `shouldReconnect` wird die Verbindung nur für `GET`-, `HEAD`-, `OPTIONS`-, `PUT`- und `DELETE`-Requests erneut hergestellt; bei einem Request mit einem `ReadableStream`-Body geschieht das nie.

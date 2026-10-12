@@ -1,0 +1,14 @@
+---
+title: 'WebSocketOutgoingData'
+description: 'النوع الذي يقبله send في جلسة WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketOutgoingData" />
+
+```ts
+type WebSocketOutgoingData<TOutgoing extends AnyStruct | undefined> = TOutgoing extends AnyStruct ? StructInput<TOutgoing> : never
+```
+
+النوع الذي يقبله `session.send`: [`StructInput`](/ar/api/core/structinput-type) لـ struct الـ `outgoing` الخاص بنقطة النهاية، أو `never` عندما لا تصرّح بواحد، فلا يمكن استدعاء `send` بقيمة.
+
+[WebSocket](/ar/api/web-socket)

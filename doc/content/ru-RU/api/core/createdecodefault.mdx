@@ -1,0 +1,17 @@
+---
+title: 'createDecodeFault'
+description: 'Фабрика decode fault: ответ получен, но не может быть прочитан так, как объявлено.'
+---
+
+<ApiReference identity="@defjs/core:createDecodeFault" />
+
+```ts
+function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+```
+
+- **code** — какой шаг чтения не удался: `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID` или `RES_STRUCT_MISMATCH`.
+- **cause** — исходный сбой парсера или struct. Его message становится message fault’а (`String(cause)`, если это не `Error`), а сам он сохраняется как `cause`.
+- **response** — метаданные ответа, который не удалось прочитать. `status` копируется из них.
+- **Возвращает** нативный `Error` с именем `DefjsFault` без `body`.
+
+[Ошибки](/ru-RU/api/errors)

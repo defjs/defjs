@@ -1,0 +1,17 @@
+---
+title: 'Struct'
+description: 'struct 类型：输入类型、输出类型，以及修饰方法。'
+---
+
+<ApiReference identity="@defjs/core:Struct" />
+
+```ts
+type Struct<Input = unknown, Output = Input, OptionalOut extends boolean = false> = StructMethods<Input, Output, OptionalOut> &
+  StructLike<Input, Output, OptionalOut>
+```
+
+一种可解析的形状。`Input` 是它接受的类型（[`StructInput`](/zh-Hans/api/core/structinput-type)），`Output` 是解析成功后返回的类型（[`Infer`](/zh-Hans/api/core/infer-type)），`OptionalOut` 标记在对象输出中可以缺失的字段。
+
+用 [`struct`](/zh-Hans/api/core/struct) 门面来构造 struct。[`StructMethods`](/zh-Hans/api/core/structmethods-type) 里的每个修饰方法都返回一个新 struct，原 struct 保持不变。
+
+[Struct](/zh-Hans/api/struct)

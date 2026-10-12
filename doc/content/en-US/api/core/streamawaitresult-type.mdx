@@ -1,0 +1,20 @@
+---
+title: 'StreamAwaitResult'
+description: 'Tuple returned when an SSE command is executed.'
+---
+
+<ApiReference identity="@defjs/core:StreamAwaitResult" />
+
+```ts
+type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined> =
+  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
+  | [error: Fault<TError>, stream: undefined, open: EventStreamOpenInfo | undefined]
+```
+
+The result of `client.execute` for an SSE command.
+
+- On success: `[null, stream, open]`. `open` is the snapshot taken when the stream opened; `stream.open` can change after a reconnect.
+- On failure: `[fault, undefined, open]`. `open` carries the response snapshot when the failure happened after a response arrived, for example a non-2xx handshake, and is `undefined` otherwise.
+- `TError` is the declared `error` struct. It types the decoded error body on the fault.
+
+[SSE](/api/sse)

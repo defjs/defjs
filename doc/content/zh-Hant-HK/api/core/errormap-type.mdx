@@ -1,0 +1,14 @@
+---
+title: 'ErrorMap'
+description: '改寫 struct issue message 嘅 callback。'
+---
+
+<ApiReference identity="@defjs/core:ErrorMap" />
+
+```ts
+type ErrorMap = (issue: StructIssue) => string | undefined
+```
+
+作為 `struct.parse` 嘅 `errorMap` option 傳入。每個 issue（`code`、`expected`、`message`、`path`、`received`）喺記錄之前都會 call 一次。回傳 string 就取代 default message，回傳 `undefined` 就保留 default。
+
+[Struct](/zh-Hant-HK/api/struct)

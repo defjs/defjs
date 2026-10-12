@@ -1,0 +1,27 @@
+---
+title: 'withSSEOnInvalidEvent'
+description: 'خيار عميل يراقب أحداث SSE التي لا struct لها أو تفشل في التحقق.'
+---
+
+<ApiReference identity="@defjs/core:withSSEOnInvalidEvent" />
+
+```ts
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+يسجّل دالة استدعاء لأحداث SSE التي لا يطابقها struct حدث أو تفشل في التحقق. تستقبل الدالة:
+
+```ts
+{
+  reason: 'missing-struct' | 'validation-failed'
+  message: { id: string; event: string; data: string }
+  cause?: unknown
+  signal: AbortSignal
+}
+```
+
+- يُسقَط الحدث غير الصالح **دائمًا**؛ ولا يُسلَّم إلى التدفق أبدًا. الدالة تراقبه فقط.
+- تُتجاهل قيمة الإرجاع. والخطأ الذي ترميه الدالة يُبتلَع ولا يغلق التدفق، ما لم تكن `signal` قد أُجهضت أصلًا.
+- تُضبط `cause` في `validation-failed`. وبدون معالج يُسقَط الحدث غير الصالح بصمت.
+
+[العميل](/ar/api/client)

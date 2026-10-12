@@ -1,0 +1,22 @@
+---
+title: 'HttpResponse'
+description: 'トランスポートが作り、インターセプターが見る、回線上の形の HTTP レスポンスです。'
+---
+
+<ApiReference identity="@defjs/core:HttpResponse" />
+
+```ts
+type HttpResponse<R> = {
+  readonly [HTTP_RESPONSE]: true // internal brand; build values with makeResponse
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+トランスポートが作り、インターセプターが見る回線上の形です。`body` はテキストか、すでにパースされた JSON で、デコード済みの値ではありません。ボディがなかった場合 `body` は `undefined` で、JSON の `null` は `null` のままです。JSON 表現では、文字列は JSON の文字列ルートであり、もう一度パースされません。バイトと blob は生のままで、一度だけパースされます。`ok` は 2xx で true です。トランスポートの失敗は fault であり、レスポンスにはなりません。呼び出し側に届くのは `DecodedResponse` です。
+
+[HTTP](/ja-JP/api/http)

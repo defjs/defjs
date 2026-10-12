@@ -1,0 +1,20 @@
+---
+title: 'struct.or'
+description: 'Struct, который принимает значение, подходящее под любой из нескольких struct.'
+---
+
+<ApiReference identity="@defjs/core:struct.or" />
+
+```ts
+function or<const T extends readonly [StructLike, ...StructLike[]]>(...options: T): UnionStruct<T>
+```
+
+`struct.or` принимает переменное число аргументов: передавай каждую ветку отдельным аргументом.
+
+- Пробует ветки по порядку и возвращает результат первой, которая разобрала значение.
+- Если не подошла ни одна, возвращает один issue `invalid_union` на собственном path union. Issues отдельных веток не сообщаются.
+- Бросает `TypeError`, если ветка не struct.
+
+`UnionStruct<T>` не экспортируется. Это `Struct`, чьи input и output — union типов веток, без `undefined`. Для объектов с тегом предпочти [`struct.discriminatedUnion()`](/ru-RU/api/core/struct-discriminatedunion), который сообщает issue выбранной ветки.
+
+[Struct](/ru-RU/api/struct)

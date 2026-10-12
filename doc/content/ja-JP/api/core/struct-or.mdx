@@ -1,0 +1,20 @@
+---
+title: 'struct.or'
+description: '複数の struct のうちいずれか 1 つに一致する値を受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.or" />
+
+```ts
+function or<const T extends readonly [StructLike, ...StructLike[]]>(...options: T): UnionStruct<T>
+```
+
+`struct.or` は可変長引数です。各オプションを個別の引数として渡します。
+
+- オプションを順に試し、最初にパースできたものの結果を返します。
+- どれにも一致しない場合は、ユニオン自身のパスに `invalid_union` の issue を 1 つ付けて失敗します。個々のオプションの issue は報告されません。
+- オプションが struct でない場合は `TypeError` を投げます。
+
+`UnionStruct<T>` はエクスポートされません。入力と出力が、`undefined` を除くオプション型のユニオンになる `Struct` です。タグ付きオブジェクトには、選ばれたオプションの issue を報告する [`struct.discriminatedUnion()`](/ja-JP/api/core/struct-discriminatedunion) を使ってください。
+
+[Struct](/ja-JP/api/struct)

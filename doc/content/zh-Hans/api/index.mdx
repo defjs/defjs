@@ -1,0 +1,36 @@
+---
+title: API 参考
+description: 手写的工作区包查阅页——你 import 的函数、options 和类型。
+---
+
+# API 参考
+
+<ApiIndex />
+
+这是工作区包的查阅页。签名是契约；指南和操作示例告诉你什么时候用。
+
+## 包
+
+| 包                                                                 | 你来查什么                                                        |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| [`@defjs/core`](/zh-Hans/api/client)                               | `createClient`、`defineRequest`、`struct`、HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/zh-Hans/api/vue)                                   | `createClientPlugin`、`injectClient`、`HTTP_CLIENT`               |
+| [`@defjs/react`](/zh-Hans/api/react)                               | `ClientProvider`、`useClient`                                     |
+| [`@defjs/opentelemetry-server`](/zh-Hans/api/opentelemetry-server) | `withOpenTelemetryServer`、各传输的 options                       |
+
+## @defjs/core
+
+| 页面                                      | 你来查什么                                                        |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| [Client](/zh-Hans/api/client)             | `createClient`、`with*` options、`Client`                         |
+| [HTTP](/zh-Hans/api/http)                 | `defineRequest`、execute options、 `HttpRequest` / `HttpResponse` |
+| [Struct](/zh-Hans/api/struct)             | `struct.*`、`Infer`、`StructError`                                |
+| [Errors](/zh-Hans/api/errors)             | `Fault` 变体和工厂                                                |
+| [Interceptors](/zh-Hans/api/interceptors) | HTTP / SSE / WebSocket 的 interceptor helper                      |
+| [SSE](/zh-Hans/api/sse)                   | `defineEventStream`、stream handle                                |
+| [WebSocket](/zh-Hans/api/web-socket)      | `defineWebSocket`、session                                        |
+
+## 相关
+
+- [快速开始](/zh-Hans/docs/start)
+- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)

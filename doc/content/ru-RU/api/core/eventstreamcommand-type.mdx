@@ -1,0 +1,22 @@
+---
+title: 'EventStreamCommand'
+description: 'Непрозрачная исполняемая SSE-команда, которую создаёт endpoint потока событий.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCommand" />
+
+```ts
+interface EventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly endpoint: EventStreamDefinition<TInput, TEvents, TError> & { readonly method: string }
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+Создаётся вызовом `EventStreamEndpoint` с input. Считай её непрозрачной и передавай в `client.execute`.
+
+[SSE](/ru-RU/api/sse)

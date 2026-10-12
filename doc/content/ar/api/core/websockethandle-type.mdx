@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'سطح نسخة WebSocket الذي تستخدمه وسيلة نقل العميل.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+هو `WebSocket` في DOM بدون خصائص معالجات الأحداث و`binaryType` و`dispatchEvent` وثوابت الحالة. لذلك يحتاج التنفيذ المخصص إلى `url` و`protocol` و`extensions` و`bufferedAmount` و`send` و`close` و`addEventListener` و`removeEventListener` و`readyState` رقمي.
+
+تعيّن وسيلة النقل `binaryType = 'arraybuffer'` عندما تكون الخاصية موجودة. هذا هو نوع النسخة الذي ينتجه [`WebSocketHandleConstructor`](/ar/api/core/websockethandleconstructor-type).
+
+[العميل](/ar/api/client)

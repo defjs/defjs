@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: 'Contrainte struct large qui accepte n’importe quel struct.'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+Contrainte large utilisée par les génériques d’endpoint et de client comme `defineRequest`, `Fault` et `HttpCommand`. Préfère un `Struct<...>` concret quand tu as besoin d’une inférence précise de l’entrée et de la sortie.
+
+[Struct](/fr-FR/api/struct)

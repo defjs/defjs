@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'Снимок прогресса, передаваемый в callback’и загрузки и выгрузки.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+Повторяет поля `ProgressEvent`. `loaded` — число байт, переданных на данный момент. Если общий размер неизвестен, `total` равен `0`, а `lengthComputable` — `false`.
+
+См. [`HttpProgressFn`](/ru-RU/api/core/httpprogressfn-type), [гайд HTTP](/ru-RU/docs/http) и [Команды](/ru-RU/docs/commands).
+
+[HTTP](/ru-RU/api/http)

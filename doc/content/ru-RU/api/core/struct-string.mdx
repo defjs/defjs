@@ -1,0 +1,15 @@
+---
+title: 'struct.string'
+description: 'Struct, который принимает строковые значения.'
+---
+
+<ApiReference identity="@defjs/core:struct.string" />
+
+```ts
+function string(): Struct<string, string>
+```
+
+- Принимает только значения `string`; всё остальное даёт `invalid_type`.
+- Как корень тела или как входящий struct `output` / `error` байты остаются текстом и не разбираются как JSON.
+
+[Struct](/ru-RU/api/struct)

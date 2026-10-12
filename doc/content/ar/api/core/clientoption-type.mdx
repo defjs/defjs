@@ -1,0 +1,14 @@
+---
+title: 'ClientOption'
+description: 'نوع الدالة لمساعدات الخيارات التي يقبلها createClient.'
+---
+
+<ApiReference identity="@defjs/core:ClientOption" />
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+يعدّل [`ClientConfig`](/ar/api/core/clientconfig-type) التي يبنيها `createClient`. كل مساعد `with*` يُرجع واحدًا منها. يطبّق `createClient` الخيارات بالترتيب، فالخيار اللاحق يستبدل السابق لنفس الإعداد، باستثناء `withInterceptors` فهو يُلحِق.
+
+[العميل](/ar/api/client)

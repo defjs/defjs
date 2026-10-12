@@ -1,0 +1,28 @@
+---
+title: 'EventStreamDefinition'
+description: 'defineEventStream이 받는, SSE 엔드포인트를 기술하는 계약이에요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamDefinition" />
+
+```ts
+type EventStreamDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EventStreamDefinitionBase<TEvents> &
+  EventStreamErrorField<TError> & {
+    builder?: OutboundBuilder
+    input?: TInput
+  }
+```
+
+합쳐진 멤버는 다음과 같아요.
+
+- `events`, `maxBufferSize`, `maxQueueSize`(두 한도는 필수인 양의 안전한 정수), 선택 사항인 `method`와 `operation`, 필수인 `path`.
+- `error`는 `TError`가 struct일 때만 필수예요. 실패한 handshake(non-2xx 응답)의 body를 디코딩해요. 종류 규칙은 HTTP와 같아요. `string`은 텍스트, `blob`과 `file`은 blob, `arrayBuffer`는 바이트, 나머지는 모두 JSON이에요.
+- `input`과 `builder`. 요청 모양은 `body`를 포함해 HTTP와 같고, `GET`과 `HEAD`는 body를 반환할 수 없어요. `input`을 선언하면 입력이 이미 요청 모양과 같아도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+
+`EventStreamDefinitionBase`와 `EventStreamErrorField`는 내부 helper 타입이에요.
+
+[SSE](/ko-KR/api/sse)

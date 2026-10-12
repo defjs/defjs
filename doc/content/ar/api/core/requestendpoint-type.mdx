@@ -1,0 +1,18 @@
+---
+title: 'RequestEndpoint'
+description: 'نقطة النهاية القابلة للاستدعاء التي يُرجعها defineRequest.'
+---
+
+<ApiReference identity="@defjs/core:RequestEndpoint" />
+
+```ts
+type RequestEndpoint<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, HttpCommand<TInput, TOutput, TError>>
+```
+
+يُرجعه `defineRequest`. استدعِه للحصول على `HttpCommand`: بلا معاملات عندما لا تعلن نقطة النهاية `input`، وبمعامل اختياري عندما يقبل struct المدخل `undefined`، وإلا فبقيمة مدخل الـ struct.
+
+[HTTP](/ar/api/http)

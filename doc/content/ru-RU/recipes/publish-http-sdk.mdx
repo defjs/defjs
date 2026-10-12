@@ -1,0 +1,24 @@
+---
+title: 'Упаковка HTTP SDK'
+description: Экспортируй эндпоинты и createClient; сужение по status оставь на call site.
+---
+
+# Опубликуй HTTP SDK, не пряча execute
+
+Method-SDK, который глотает `client.execute`, обычно схлопывает объявленный `404` в нетипизированный throw или общий «API error». Держи контракт как эндпоинты плюс явный клиент; ветвление по status по-прежнему на вызывающем.
+
+См. [Команды](/ru-RU/docs/commands), [Клиент](/ru-RU/docs/client) и [Проектные решения](/ru-RU/docs/design-decisions).
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+Экспортируй эндпоинты и фабрику клиента. Helper может звать `execute` для одного проверенного пути, но не подменяй кортеж для каждого status, который тебе важен.

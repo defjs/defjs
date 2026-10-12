@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: 'مدخل منخفض المستوى ينفّذ أمر HTTP مقابل تهيئة عميل.'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+مدخل منخفض المستوى يستخدمه `client.execute`. ينبغي لشيفرة التطبيق أن تستدعي `client.execute(command, options)`. `HttpClientConfig` هو جزء HTTP من `ClientConfig`، فتُقبل `ClientConfig` هنا. و`HttpExecuteAwaitResult` هو tuple النتيجة الداخلي.
+
+- **يُرجع** `[null, data, response]` أو `[fault, undefined, undefined]`. `data` هو جسم `output` المفكوك، أو `undefined` عند عدم إعلان `output`. و`response` هو `DecodedResponse` عند إعلان `output`، وإلا فهو `HttpMeta`. الخطأ هو `Fault<TError>`.
+
+الحالة غير-2xx تكون `HTTP_STATUS` عندما لا يُعلَن struct للـ `error` (وتكون `data` فيها `undefined`)، أو عندما يُفكّ الجسم المعلَن (وتكون `data` فيها ذلك الجسم). أما إذا تعذّرت قراءة جسم `error` معلَن، فيكون الخطأ خطأ فكّ من `RES_*` بدلًا من ذلك. وعند الفشل يكون العنصر الثالث في الـ tuple هو `undefined`؛ إذ يحمل الخطأ بيانات الاستجابة الوصفية. ويرجع `options.timeout` عند حذفه إلى القيمة الافتراضية `withTimeout` للعميل.
+
+[HTTP](/ar/api/http)

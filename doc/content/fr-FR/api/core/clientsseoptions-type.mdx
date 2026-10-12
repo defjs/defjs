@@ -1,0 +1,42 @@
+---
+title: 'ClientSSEOptions'
+description: 'Réglages SSE facultatifs : handle fetch, hook d’événement invalide et politique de reconnect.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — Implémentation de fetch qui ouvre le flux. Un handle personnalisé reçoit un `Request`.
+- **onInvalidEvent** — Appelé quand un événement n’a aucun struct correspondant et aucun struct `default` (`'missing-struct'`), ou quand ses données échouent à la validation (`'validation-failed'`). L’événement est ignoré. Une erreur levée par le hook ne ferme pas le flux.
+- **reconnect** — Opt-in. Sans lui, le flux ne se reconnecte jamais. `attempts` vaut **3** par défaut ; `attempts: 0` désactive le retry, et omettre `attempts` ne signifie pas illimité. `delayMs` est le premier délai, 1000 par défaut, et une valeur `retry:` envoyée par le serveur le remplace. `factor` multiplie le délai après chaque tentative et vaut 1 par défaut. `jitter` est un facteur multiplicatif de 0 à 1, comme pour WebSocket, et vaut 0 par défaut. `maxDelayMs` n’est pas borné par défaut. Sans `shouldReconnect`, la connexion n’est rétablie que pour les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE` ; si ce callback est fourni, sa valeur de retour détermine la reconnexion pour toutes les méthodes et son contexte contient `method`. Une requête dont le corps est un `ReadableStream` ne fait jamais l’objet d’une reconnexion. Dès qu’un identifiant d’événement a été reçu, chaque reconnexion l’envoie dans l’en-tête `Last-Event-ID`.
+
+Définis-les avec `withSSEHandle`, `withSSEOnInvalidEvent` et `withSSEReconnect`. Omettre `withSSEReconnect` désactive le retry.
+
+Voir le [guide Client](/fr-FR/docs/client).
+
+[Client](/fr-FR/api/client)

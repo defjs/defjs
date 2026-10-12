@@ -1,0 +1,25 @@
+---
+title: 'StructMethods'
+description: 'المعدِّلات المتسلسلة (chainable) المتاحة على كل struct.'
+---
+
+<ApiReference identity="@defjs/core:StructMethods" />
+
+```ts
+interface StructMethods<I, O, OO extends boolean> {
+  alias(name: string): this
+  null(): Struct<I | null, O | null, OO>
+  nullable(): Struct<I | null, O | null, OO>
+  nullish(): Struct<I | null | undefined, O | null | undefined, true>
+  optional(): Struct<I | undefined, O | undefined, true>
+}
+```
+
+كل أسلوب يُرجع struct جديدًا ويترك الأصلي دون تغيير.
+
+- `alias(name)` يضبط اسم السلك لحقل كائن. يقرأ `struct.parse` الأسماء المنطقية ما لم يُمرَّر `aliases: true`؛ وترميزات JSON والترميزات المسطّحة للطلبات تكتب الـ alias. و`name` الذي ليس سلسلة يرمي `TypeError`.
+- `null()` و`nullable()` متطابقان: كلاهما يقبل `null` أيضًا.
+- `optional()` يقبل `undefined` أيضًا. وفي الكائن يجوز أن يغيب المفتاح، ويبقى الحقل الغائب غائبًا في المخرجات.
+- `nullish()` يقبل `null` و`undefined` معًا.
+
+[Struct](/ar/api/struct)

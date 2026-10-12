@@ -1,0 +1,136 @@
+---
+title: 'Datenverträge / Struct'
+description: Request- und Response-Shapes modellieren, Unknowns parsen und Wire-Bodies encoden.
+---
+
+# Struct
+
+Modele einen Request (und seine Responses) als Structs. Du bekommst TypeScript-Types via `Infer` und Runtime-Checks via `struct.parse(...)` — kein Throw, Error-first-Tupel.
+
+## Grundeinrichtung
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup.ts#example
+</include>
+
+Geparster Output behält nur deklarierte Fields. Fehlende required Fields, falsche Primitives, schlechte nested Values, falsche Tuple-Length oder disallowed `null` → `StructError`, kein partial Value. Structs sind immutable; `.optional()` und Friends geben einen neuen Struct zurück.
+
+## Pflicht, optional, null
+
+Vorhandensein und Nullbarkeit sind getrennt:
+
+| Deklaration                  | Fehlt / `undefined`                  | `null`     | Gültiger Wert         |
+| ---------------------------- | ------------------------------------ | ---------- | --------------------- |
+| `struct.string()`            | Lehnt ab                             | Lehnt ab   | Akzeptiert String     |
+| `struct.string().optional()` | Akzeptiert; lässt fehlendes Feld weg | Lehnt ab   | Akzeptiert String     |
+| `struct.string().null()`     | Lehnt ab                             | Akzeptiert | Akzeptiert String     |
+| `struct.string().nullish()`  | Akzeptiert; lässt fehlendes Feld weg | Akzeptiert | Akzeptiert String     |
+| `struct.null()`              | Lehnt ab                             | Akzeptiert | Lehnt andere Werte ab |
+
+<include cwd lang="typescript">
+  examples/struct/required-optional-null.ts#example
+</include>
+
+`struct.any()` und `struct.unknown()` weisen ebenfalls `null` und `undefined` zurück. Hänge `.null()`, `.optional()` oder `.nullish()` an, um sie zu akzeptieren.
+
+Am Root kann optional `undefined` sein. Innerhalb eines Objects bleiben weggelassene optional/nullish Fields absent. Ein request-förmiger Input nutzt gewöhnliche Fields namens `path`, `query`, `headers` und `body`. Markiere eines `.optional()`, wenn der Caller es weglassen darf. Ein required `body`-Field bleibt required, auch wenn jedes Field darin optional ist.
+
+## Request-Platzierung
+
+Path, Query, Headers und Body sind Fields, die der Builder zurückgibt, kein Request-Struct. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen. `struct.urlencoded(shape)` und `struct.formData(shape)` sind Object-Structs mit einem Codec-Tag. Der Tag läuft nur, wenn dieser Wert der Body-Root ist: Keys nutzen Aliasse, und Arrays wiederholen den Field-Namen.
+
+<include cwd lang="typescript">
+  examples/struct/request-placement.ts#example
+</include>
+
+| Body-Root                                          | Gesendet als      | Default Content-Type                              |
+| -------------------------------------------------- | ----------------- | ------------------------------------------------- |
+| typisiertes Object, Array, Number, Boolean, `null` | JSON-Text         | `application/json`                                |
+| `string`-Struct oder ein Raw-String                | Text              | `text/plain;charset=UTF-8`                        |
+| `struct.urlencoded(shape)` am Root                 | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| `struct.formData(shape)` am Root                   | `FormData`        | Platform-Multipart-Boundary                       |
+| `Blob` / `File`                                    | der Blob          | Blob-Type oder `application/octet-stream`         |
+| `ArrayBuffer` / View / Stream                      | Bytes             | `application/octet-stream`                        |
+
+`struct.file()` ist ein Value-Struct für ein Form-Field und für einen Raw-File-Body. WebSocket-Builder können weder `headers` noch `body` zurückgeben. HTTP und SSE können. `GET` und `HEAD` nicht.
+
+## Aliasse
+
+`.alias(...)` trennt logische Namen von Wire-Namen. `struct.parse(...)` nutzt logische Keys. JSON und flat Request-Codecs encoden Aliasse; JSON-Response-Decoding mappt Wire-Keys zurück auf logische Fields.
+
+<include cwd lang="typescript">
+  examples/struct/aliases.ts#example
+</include>
+
+| Grenze                                         | Feld                             |
+| ---------------------------------------------- | -------------------------------- |
+| `struct.parse(User, ...)` und Command-Input    | Logisches `displayName`          |
+| Typisiertes Object, das der Builder zurückgibt | Wire `display_name`              |
+| JSON- / SSE- / WebSocket-Decoding              | Wire → logisches `displayName`   |
+| Anonymes Object, im Builder geschrieben        | Der Key, den du geschrieben hast |
+
+Der Builder selbst liest logische Namen (`input.user.displayName`); der Wire-Name erscheint erst, wenn der Serializer das typisierte Object kodiert, das der Builder zurückgibt.
+
+Aliasse funktionieren auf nested Fields, Arrays, Objects, Unions und Discriminators. Halte logische Namen im App-Code; packe den externen Namen einmal auf den Struct. Ein typisiertes Object per Spread zu übernehmen behält dieses Encoding. Logisches Field und seinen Wire-Key im selben Object zu setzen ist `REQ_BUILD_FAILED`. `JSON.stringify` eines Werts, den du selbst serialisierst, verlässt diesen Pfad: der Serializer sieht logische Namen.
+
+Der Guide wird an jedem Knoten gewählt, nicht nur an der Wurzel. Ein neues Object unter einem anonymen Parent behält die Keys, die du geschrieben hast. Dasselbe Object unter einem typisierten Parent nutzt den Struct dieses Fields.
+
+```ts
+body: { row: { id: '42' } }              // Anonymous root: emits id
+body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
+```
+
+Trifft ein Union-Guide mehr als einen Branch, wird jeder Branch kodiert und verglichen. Identische Wire-Ausgabe bleibt; ein Unterschied ist `REQ_BUILD_FAILED`.
+
+Eine gemischte Intersection, die einen Nicht-Objekt-Teil enthält, bekommt beim Parsen als Tag die Konjunktion der Tags der passenden Teile; ein neu geschriebener Mixed-Intersection-Wert, der nicht geparst wurde, bleibt ein anonymes Object.
+
+## Parse-Failures
+
+`struct.parse(...)` gibt `[null, value]` oder `[StructError, undefined]` zurück. `StructError` extends `Error` und exponiert `issues`, plus `format()`, `flatten()` und `prettify()`.
+
+<include cwd lang="typescript">
+  examples/struct/parse-failures.ts#example
+</include>
+
+Ein `StructIssue` hat `code`, `expected`, `message`, `path` und `received`. `code` ist `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` oder `missing_key`. Issues können untrusted Input halten — redigiere sie vor Logging oder Return. `struct.parse(..., { errorMap })` schreibt Issue-Messages nur für diesen Call um.
+
+Struct-Validierung ist nur strukturell. Keine öffentlichen Range-, Format-, Refinement-, Auth- oder State-Transition-Rules. Mach diese Checks, bevor du einen Command baust.
+
+## Referenz
+
+Öffentliche Constructors auf `@defjs/core` (Internals sind keine Facade-APIs):
+
+<include cwd lang="typescript">
+  examples/struct/any.ts#example
+</include>
+
+| Constructor                      | Input                                             | Inferierter Output              |
+| -------------------------------- | ------------------------------------------------- | ------------------------------- |
+| `struct.number()`                | Number außer `NaN`                                | `number`, inklusive ±`Infinity` |
+| `struct.date()`                  | `Date`, Number oder Date-String                   | Gültiges `Date`                 |
+| `struct.bigint()`                | `bigint` oder String akzeptiert von `BigInt(...)` | `bigint`                        |
+| `struct.enum(...)`               | Deklariertes String- oder Number-Member           | Diese Literal-Union             |
+| `struct.discriminatedUnion(...)` | Object mit required Literal-Discriminator         | Gewählter Object-Branch         |
+| `struct.or(...)`                 | Erster matching Branch; Encoding prüft Ambiguity  | Union der Branch-Outputs        |
+| `struct.intersection(...)`       | Values akzeptiert von jedem Member                | Intersection der Outputs        |
+| `struct.record(value)`           | Plain Object, dessen Values `value` matchen       | Record der geparsten Values     |
+| `struct.tuple(items)`            | Array exakt der deklarierten Length               | Fixed-Length-Tuple              |
+
+Jeder Struct unterstützt `.alias(name)`, `.optional()`, `.null()` und `.nullish()`. `struct.discriminatedUnion` braucht Object-Options mit erforderlichem Literal-Discriminator und lehnt Duplikate ab.
+
+Importiere `struct`, `Infer`, `Struct`, `StructError` und verwandte öffentliche Types aus `@defjs/core`. Nutze `struct.parse(...)` als Parser. Importiere nicht `createObjectStruct`, Definition-Symbols, Codec-Internals oder `packages/core/src`.
+
+Facade Non-Promises:
+
+- Object-/Record-Outputs nutzen Null-Prototype — nimm `Object.prototype`-Methods nicht an.
+- Unknown Object-Keys werden gedroppt.
+- `struct.number()` lehnt `NaN` ab und akzeptiert Infinities.
+- `struct.or(...)` versucht Branches in Order; lehnt mehrdeutige Encodings ab, wenn sich Branches widersprechen.
+- `struct.intersection(...)` parst Members in Declaration-Order.
+- Eine Intersection führt Member-Outputs tief zusammen (`Object.is`-gleiche Werte und Dates mit gleicher Zeit bleiben, einfache Objects und gleich lange Arrays werden rekursiv zusammengeführt, jeder andere Clash ist `invalid_intersection` an diesem Path), `unknown`/`any` tragen nichts bei, und ein logischer Key kann mehreren Wire-Keys entsprechen; nur ungleiche Werte auf demselben Wire-Key sind ein Konflikt.
+- Ein Struct validiert eine Grenze; er legt nichts im Cache ab, autorisiert nicht und besitzt keine Transport-Resource.
+
+## Verwandte Rezepte
+
+- [POST JSON](/de-DE/recipes/post-json)
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)

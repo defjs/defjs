@@ -1,0 +1,73 @@
+---
+title: 'React'
+description: Поставь provider, прочитай клиент, запроси пользователя и abort, когда effect перезапускается.
+---
+
+# React
+
+Подключи существующий `@defjs/core` client к React-дереву. Получаешь Context и `useClient()`. Пакет **не** создаёт client, не вешает кеш, не ретраит команды и не dispose’ит ресурсы транспорта. Компонент, effect или data-библиотека, которые стартуют работу, ей владеют.
+
+## Базовая настройка
+
+Поставь `@defjs/core`, `@defjs/react` и React 18+. ESM:
+
+`bun add @defjs/core @defjs/react react`
+
+Отдай клиент, потом запроси пользователя и abort при смене:
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+<include cwd>examples/react/basic-setup.tsx#example</include>
+
+`ClientProvider` — обычный Context provider. Другой prop `client` меняет то, что видят потомки — без clone, replace или dispose. Вложенные провайдеры создают явные границы.
+
+React в development может поставить и снять effect больше одного раза. Проверка signal не даёт устаревшему promise писать в текущий рендер. Ошибка кортежа всё ещё данные.
+
+## Читай через `useClient`
+
+`useClient()` возвращает ближайший `Client`. Зови во время рендера (компонент или свой хук). Бросает, если провайдера нет:
+
+<include cwd>examples/react/read-with-use-client.tsx#example</include>
+
+Хук только отдаёт клиент. Работу он не стартует, на транспорт не подписывается и error-first кортеж в исключение не превращает.
+
+## Владей query-работой
+
+Query-библиотека может владеть кешем, ретраями, подавлением устаревшего результата и отменой. Отдай ей signal, который она даёт. Для страниц-списков оберни `client.execute(...)` в TanStack Query (или похожее) — `@defjs/react` остаётся только DI и `useRequest` **не** везёт.
+
+<include cwd>examples/react/own-query-work.tsx#example</include>
+
+Не оборачивай ту же команду во второй effect — два владельца делают отмену и обработку устаревшего результата неоднозначными.
+
+## Владей realtime-работой
+
+Handle SSE и WebSocket живут дольше `client.execute(...)`. Зарегистрируй cleanup до ожидания старта, закрой handle, который приехал после disposal, потреби единственный iterator, дождись терминального promise:
+
+<include cwd>examples/react/own-realtime-work.tsx#example</include>
+
+`signal`, переданный в `execute`, продолжает управлять открытой сессией. Его abort в cleanup завершает сессию как `aborted` и reject’ит `receive` с `AbortError`, поэтому `catch` выше игнорирует ошибки, когда effect уже disposed, и сообщает только настоящие сбои (переполнение очереди, heartbeat timeout). Прерванный SSE-стрим, наоборот, завершает свой iterator штатно. Без `catch` reject из цикла стал бы unhandled promise rejection.
+
+То же правило для `EventStreamHandle`: close в `finally`, await `stream.closed`. Потребители WebSocket ещё должны отписать listener’ы state и runtime-error и продолжать читать `session.receive` — непрочитанная ограниченная очередь может переполниться.
+
+## SSR и scope клиента
+
+Точка входа пакета — граница Client Component. Браузерное приложение может делить клиент на уровне модуля, когда эндпоинт, interceptors и захваченное состояние безопасны для браузера и не зависят от запроса. Для SSR создавай отдельный клиент внутри каждой границы запроса, когда различаются заголовки, cookies, пользователи, tenants или credentials.
+
+Unmount провайдера **не** abort’ит HTTP, не закрывает SSE/WebSocket, не отписывает listener’ы и не зовёт `dispose`. У `@defjs/react` такого lifecycle API нет. Код, который стартовал каждую операцию, должен её закончить или отменить.
+
+## Справка
+
+Публичные экспорты `@defjs/react`:
+
+- `ClientProvider` — принимает `ClientProviderProps`, отдаёт переданный клиент
+- `useClient` — ближайший клиент, или бросает
+- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
+
+Клиентов и опции создавай в `@defjs/core`. См. [Клиент](/ru-RU/docs/client), [Ошибки](/ru-RU/docs/errors), [SSE](/ru-RU/docs/sse) и [WebSocket](/ru-RU/docs/web-socket).
+
+## Связанные рецепты
+
+- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)
+- [Отменить HTTP-вызов](/ru-RU/recipes/cancel-http)
+- [Читать SSE-стрим](/ru-RU/recipes/consume-sse)
+- [Открыть WebSocket-сессию](/ru-RU/recipes/websocket-session)

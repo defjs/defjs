@@ -1,0 +1,17 @@
+---
+title: 'createHttpStatusFault'
+description: 'مصنع خطأ HTTP_STATUS الذي فُكّ جسم خطئه.'
+---
+
+<ApiReference identity="@defjs/core:createHttpStatusFault" />
+
+```ts
+function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+```
+
+- **response** — استجابة غير 2xx تحمل الجسم المفكوك وفق struct الـ `error` المعلَن.
+- **يُرجع** `Error` أصليًا باسم `DefjsFault` مع `code: 'HTTP_STATUS'`، وتُضبط `data` على `response.body`، وتُنسخ `status` من الاستجابة، وتكون `response` كما مُرّرت. الرسالة هي `Http failure response: <status>`، يليها ` - <statusText>` عند وجودها.
+
+استخدم [`createUndecodedHttpStatusFault`](/ar/api/core/createundecodedhttpstatusfault) عندما لم يُفكّ أي جسم.
+
+[الأخطاء](/ar/api/errors)

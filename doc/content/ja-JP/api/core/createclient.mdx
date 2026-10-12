@@ -1,0 +1,19 @@
+---
+title: 'createClient'
+description: 'option ヘルパーからクライアントを作成します。'
+---
+
+<ApiReference identity="@defjs/core:createClient" />
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+option は順に適用されます。同じ設定に対しては後の option が前の option を上書きし、インターセプターは累積します。インターセプターが auth やテナントを掴む場合は、クライアントをリクエスト境界の内側で作ってください。
+
+- **options** — `withEndpoint` のような option ヘルパーです。
+- **戻り値** `execute` がトランスポートごとにオーバーロードされたクライアントです。
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+[Client](/ja-JP/api/client)

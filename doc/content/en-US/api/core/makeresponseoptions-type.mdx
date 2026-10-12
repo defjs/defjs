@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: 'Fields accepted by makeResponse.'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+`status` defaults to `0` and `statusText` to `''`. `url` and `headers` default to values taken from `request`: its resolved URL (base endpoint, path and query) and a copy of its headers. A request without `baseEndpoint` gives its `endpoint` as written. Without a request, `url` is `''` and `headers` is empty. An omitted `body` stays `undefined`; only an explicit `null` is a JSON `null`.
+
+[HTTP](/api/http)

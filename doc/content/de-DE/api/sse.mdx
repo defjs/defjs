@@ -1,0 +1,125 @@
+---
+title: SSE
+description: defineEventStream, Execute-Options und das Stream-Handle.
+---
+
+# SSE
+
+Deklariere einen Event-Stream, führe ihn aus, iteriere Events, dann schließe.
+
+## defineEventStream()
+
+```ts
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
+```
+
+- **definition** — `path`, `events`-Map und die erforderlichen positiven Integer-Limits `maxBufferSize` und `maxQueueSize`; optional `method` (Default `'GET'`), `operation`, `input` und `error`. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+- **Returns** einen Endpoint. Ruf ihn mit Input auf und du bekommst einen `EventStreamCommand`.
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+## executeEventStreamCommand()
+
+```ts
+function executeEventStreamCommand(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult>
+```
+
+Low-Level-Einstieg für `client.execute`. Im Application-Code lieber den Client nutzen.
+
+- **Returns** `[null, stream, open]` oder `[error, undefined, open?]`. Ist `error` deklariert, ist der Fault ein `Fault` dieses Structs; sonst `Fault<undefined>`.
+
+## Execute-Optionen
+
+## EventStreamExecuteOptions
+
+```ts
+type EventStreamExecuteOptions = ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & {
+  signal?: AbortSignal
+}
+```
+
+Dieselben Cancellation-Regeln wie HTTP: `abort` oder `timeout`, nicht beides (der Typ lehnt beides ab, und beides zur Laufzeit zu übergeben scheitert mit `REQ_OPTIONS_INVALID`); `signal` kombiniert mit einem von beiden. `timeout` ist eine Startup-Deadline: Sie umfasst Input-Parsing, den Builder, Interceptors und den Handshake und bricht keinen offenen Stream ab. `withTimeout` gilt nicht für SSE.
+
+## EventStreamHandle
+
+```ts
+interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+Der dritte Slot des Tuples ist der Startup-Snapshot von `open`; `stream.open` folgt nach einem Reconnect der jüngsten Verbindung. Nutze lieber `await using stream = handle` für Scope-Cleanup in deiner Verantwortung. Der Disposer stoppt Defjs-Lese- und Reconnect-Arbeit und wartet, bis der Reader-Lock freigegeben ist; er verspricht nicht, dass ein beim Provider hängendes `ReadableStream.cancel()`-Promise fertig wird. Manuelles `close()` / `closed` bleibt verfügbar.
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+Strukturelle Implementierungen von `EventStreamHandle` müssen jetzt `[Symbol.asyncDispose]()` implementieren und denselben eigenen Teardown-Pfad zurückgeben. Das ist eine Compile-Time-Breaking-Änderung für eigene Handles; Code, der nur von Defjs zurückgegebene Handles empfängt, hat keine neue Runtime-Aufrufpflicht.
+
+### EventStreamOpenInfo
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+### EventStreamCloseInfo
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+`EventStreamFaultCode`: `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+
+## Event-Map
+
+## EventStructs
+
+```ts
+type EventStructs = { [eventName: string]: AnyStruct }
+```
+
+Der Key ist der SSE-Event-Name; eine Message ohne `event:`-Feld heißt `message`. Passt kein Key, wird das `default`-Struct genutzt. Ein `string`-Event-Struct behält den rohen `data`-Text. Jedes andere Kind ist JSON-Text: `JSON.parse`, dann der Struct. Ein bloßes `struct.literal` braucht deshalb JSON-Text, kein Token ohne Anführungszeichen. Handshake-`error`-Bodies nutzen dieselbe Kind-Regel wie HTTP: `string` ist Text, `blob` / `file` sind Blobs, `arrayBuffer` sind Bytes, alles andere ist JSON.
+
+Reconnect lebt auf dem Client (`withSSEReconnect`). SSE-`jitter` ist ein **multiplikativer Faktor von 0–1**, genau wie bei WebSocket.
+
+Siehe [SSE-Guide](/de-DE/docs/sse) und [SSE-Stream konsumieren](/de-DE/recipes/consume-sse).
+
+## EventStreamDefinition
+
+`path`, `events`, erforderliche `maxBufferSize` und `maxQueueSize`, optional `method` / `operation` / `input` / `error`. Die Request-Shape entspricht HTTP, inklusive `body`. `GET` und `HEAD` können keinen Body zurückgeben. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+
+## EventStreamEndpoint
+
+Kommt von `defineEventStream`. Mit Input aufrufen → `EventStreamCommand`.
+
+## EventStreamRequestShape
+
+Dieselben Felder wie `HttpRequestShape` für Method und Path des Streams.
+
+## EventStreamCommand
+
+Opakes SSE-Command. Gib es `client.execute`.
+
+## StreamAwaitResult
+
+`[null, stream, open]` oder `[error, undefined, open?]`.
+
+## EventStreamData
+
+Geparstes Event-Payload, inferiert aus einer `EventStructs`-Map.

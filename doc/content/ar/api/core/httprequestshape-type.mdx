@@ -1,0 +1,19 @@
+---
+title: 'HttpRequestShape'
+description: 'شكل الطلب الذي يُرجعه builder الخاص بـ HTTP: المسار والاستعلام والرؤوس والجسم.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequestShape" />
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+  headers?: HeadersInit | FlatRecord
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+`P` هو مسار نقطة النهاية و`M` طريقتها. `GET` و`HEAD` لا يمكنهما إرجاع جسم. `BodyValue` قيمة سلكية يرسلها Fetch كما هي (`string`، `Blob`، `ArrayBuffer`، مصفوفة مُنمَّطة أو `DataView`، `FormData`، `URLSearchParams`، `ReadableStream<Uint8Array>`) أو بيانات JSON (`number`، `boolean`، `bigint`، `Date`، `null`، مصفوفة، أو نوع كائن بمفاتيح نصية)؛ والقيمة المعرَّفة بواسطة `interface` أو نسخة الصنف تحتاج إلى `{ ...value }`. `path` و`headers` يجب أن يكونا قيمًا مفردة مسطّحة؛ و`query` قد يتداخل، والكائن المتداخل يحتاج `withQuerySerializer` وقت التشغيل. `FlatRecord` و`QueryRecord` و`PathValue` و`BodyValue` أنواع مساعدة داخلية.
+
+[HTTP](/ar/api/http)

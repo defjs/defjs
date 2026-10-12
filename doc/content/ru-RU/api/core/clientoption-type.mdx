@@ -1,0 +1,14 @@
+---
+title: 'ClientOption'
+description: 'Функциональный тип хелперов опций, которые принимает createClient.'
+---
+
+<ApiReference identity="@defjs/core:ClientOption" />
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+Изменяет [`ClientConfig`](/ru-RU/api/core/clientconfig-type), который собирает `createClient`. Каждый хелпер `with*` возвращает такую функцию. `createClient` применяет опции по порядку, поэтому более поздняя опция перезаписывает более раннюю для той же настройки; исключение — `withInterceptors`, который добавляет в конец.
+
+[Клиент](/ru-RU/api/client)

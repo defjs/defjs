@@ -1,0 +1,14 @@
+---
+title: 'InterceptorFn'
+description: 'HTTP インターセプターの関数シグネチャです。'
+---
+
+<ApiReference identity="@defjs/core:InterceptorFn" />
+
+```ts
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+```
+
+リクエストを確認または変更したうえで `next(req)` を呼ぶか、`makeResponse` でショートサーキットします。登録するには `createHttpInterceptor` で包みます。
+
+[Interceptors](/ja-JP/api/interceptors)

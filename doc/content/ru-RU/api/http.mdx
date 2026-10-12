@@ -1,0 +1,174 @@
+---
+title: HTTP
+description: defineRequest, опции execute и типы HTTP request/response.
+---
+
+# HTTP
+
+Объяви типизированный запрос, собери команду из input, выполни.
+
+## defineRequest()
+
+```ts
+function defineRequest(definition: RequestDefinition): RequestEndpoint
+```
+
+- **definition** — `method`, `path`, необязательный `input` struct, необязательные `output` и `error` structs, необязательный `operation`. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
+- **Возвращает** эндпоинт. Вызови его с input — получишь `HttpCommand`.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` — один struct для тела 2xx; `error` — один struct для каждого non-2xx тела. Ни то ни другое не ключуется по status. Пропустить одну сторону значит, что это тело не читают — см. [Объявление — это утверждение](/ru-RU/docs/design-decisions#объявление--это-утверждение).
+
+## executeHttpCommand()
+
+```ts
+function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, options?: HttpExecuteOptions): Promise<HttpAwaitResult>
+```
+
+Низкоуровневый вход, которым пользуется `client.execute`. Прикладной код должен звать `client.execute(command, options)`.
+
+- **Возвращает** `[null, data, response]` или `[fault, undefined, undefined]`.
+
+Non-2xx статус — это `HTTP_STATUS`, если struct `error` не объявлен или объявленное тело `error` декодируется. Его `data` — декодированное тело `error`, если оно было объявлено, иначе `undefined`. Если объявленное тело `error` не удаётся прочитать (неверный media type, невалидный JSON) или оно не соответствует своему struct, fault вместо этого — `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED` или `RES_STRUCT_MISMATCH`, а статус ответа по-прежнему указан в его метаданных. При провале третий слот кортежа — `undefined`; метаданные ответа несёт fault.
+
+## fetchHandler()
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+HTTP-транспорт по умолчанию. `fetchImpl` по умолчанию — глобальный `fetch`; другой подставляет `withHTTPHandle`. Он reject’ит — а не резолвится синтетическим ответом — когда до клиента не доехал ни один response или не удалось прочитать объявленное тело.
+
+## makeResponse()
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+Собери `HttpResponse` без сетевого вызова (interceptors, тесты). Status по умолчанию — `0`. `ok` истинен для 2xx. Возвращённое значение проходит ту же проверку media type и тот же объявленный struct, что и ответ с провода; доверенного short-circuit нет.
+
+## Опции execute
+
+## HttpExecuteOptions
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+Отмена — это `abort` **или** `timeout`, не оба: тип отвергает оба сразу, а если передать оба в рантайме, вызов завершится с `REQ_OPTIONS_INVALID`. `signal` сочетается с любым из них; это **не** алиас `abort`. Допустимые формы: `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`. `{ abort, timeout }` невалиден. `timeout` — положительное safe integer в `1..2_147_483_647`. Если в вызове `timeout` опущен, действует значение по умолчанию из `withTimeout` клиента (только HTTP); `abort` и `signal` сочетаются с этим значением.
+
+## Типы
+
+### RequestDefinition
+
+`method`, `path`, необязательные `input`, `output`, `error`, `operation` и `builder`. `responseType` нет: kind struct выбирает, как читать объявленное тело. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
+
+### HttpAwaitResult
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+При успехе третий слот несёт `body`, только если был объявлен `output`. При провале он `undefined` — fault уже держит те метаданные ответа, что были.
+
+### HttpRequest
+
+Нормализованный исходящий запрос: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `timeout`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` и `queryParams`. К моменту, когда interceptors его видят, `body` уже имеет wire-значение — для JSON это строка с JSON-текстом, — поэтому HMAC и дайджесты подписывай по нему, а не по input struct. Interceptors видят `queryParams` как `new URLSearchParams(queryString)`. Builder, который возвращает `URLSearchParams`, протаскивает этот же экземпляр. `responseType` и `errorResponseType` только для чтения: они выводятся из kind struct'ов `output` и `error` эндпоинта, и их нельзя менять.
+
+### HttpMeta
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+Метаданные ответа, доступные, когда response доехал до клиента. `body` тут **нет**: тело существует, только когда объявленный struct его декодировал.
+
+### DecodedResponse
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+Ответ, чьё тело декодировалось против объявленного struct. Держать этот тип — доказательство, что декодирование случилось; поэтому провал decode сообщает один `HttpMeta`.
+
+### HttpResponse
+
+```ts
+type HttpResponse<R> = {
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+`body` отсутствует (`undefined`), если у ответа не было тела; JSON `null` остаётся `null`. Тип брендирован, поэтому создавай его через `makeResponse`, а не литералом объекта. Wire-форма, которую производят транспорты и видят interceptors: `body` — текст или уже распарсенный JSON, не декодированное значение. Для JSON-представления строка — это JSON-строка как корень и повторно не парсится; байты и blob'ы сырые и парсятся один раз. До вызывающего доходит `DecodedResponse`.
+
+### HttpProgressEvent
+
+### HttpProgressFn
+
+`loaded`, `total`, `lengthComputable`. Колбэки могут быть асинхронными. Если `onDownloadProgress` или `onUploadProgress` выбрасывает исключение, вызов завершается с ошибкой `EXT_OBSERVER_FAILED`, а выброшенное значение передаётся в `cause`; отмена и `timeout` по-прежнему возвращают `NET_ABORTED` / `NET_TIMEOUT`. Прогресс выгрузки сообщается только в средах выполнения, поддерживающих потоковую отправку тела запроса (Bun, Node, Deno); в браузерах тела типа `Blob` / `File`, `ArrayBuffer` и `FormData` отправляются без изменений, и `onUploadProgress` не вызывается.
+
+См. [гайд HTTP](/ru-RU/docs/http) и [Команды](/ru-RU/docs/commands).
+
+## RequestEndpoint
+
+То, что возвращает `defineRequest`. Вызови с input — получишь `HttpCommand`.
+
+## BuilderInput
+
+Распарсенный input эндпоинта, который видит `builder`. Узлы-объекты несут struct, который их произвёл, так что кодирование алиаса, `Date` и `bigint` следует за значением.
+
+## HttpRequestShape
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+  headers?: HeadersInit | FlatRecord
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+}
+```
+
+`GET` и `HEAD` не могут вернуть тело. `path` и `headers` должны быть плоскими скалярами; `query` может быть вложенным, и вложенному объекту в рантайме нужен `withQuerySerializer`.
+
+## HttpCommand
+
+Непрозрачная команда от request builder. Отдай в `client.execute`.
+
+## UseRequestConfig
+
+Поля progress и отмены. `HttpExecuteOptions` добавляет `signal`.
+
+## RequestSuccessData
+
+Выведенное success-тело из объявленного struct `output`, или `undefined`, если его нет.
+
+## RequestErrorData
+
+Выведенное error-тело из объявленного struct `error`, или `undefined`, если его нет.
+
+## HttpResponseType
+
+`'arraybuffer' | 'blob' | 'json' | 'text'`
+
+Выбирается по kind объявленного struct (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, всё остальное → `json`). Это не поле `defineRequest`.
+
+## MakeResponseOptions
+
+Поля для `makeResponse`: `status`, `statusText`, `url`, `headers`, `body`, `request`.

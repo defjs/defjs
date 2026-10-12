@@ -1,0 +1,24 @@
+---
+title: 'executeEventStreamCommand'
+description: 'مدخل منخفض المستوى يفتح أمر SSE مقابل تهيئة عميل.'
+---
+
+<ApiReference identity="@defjs/core:executeEventStreamCommand" />
+
+```ts
+function executeEventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand<TInput, TEvents, TError>,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+```
+
+مدخل منخفض المستوى لـ `client.execute`. فضّل العميل في شيفرة التطبيق.
+
+- **يُرجع** `[null, stream, open]` أو `[fault, undefined, open | undefined]`. الخطأ هو `Fault<TError>`: يكون جسم المصافحة المفكوك في `data` عند إعلان `error`، وإلا فهو `Fault<undefined>`.
+
+[SSE](/ar/api/sse)

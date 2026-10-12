@@ -1,0 +1,1187 @@
+[
+  {
+    "package": "@defjs/core",
+    "name": "createClient",
+    "kind": "function",
+    "slug": "core/createclient",
+    "related": ["@defjs/core:Client", "@defjs/core:ClientOption"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withEndpoint",
+    "kind": "function",
+    "slug": "core/withendpoint",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withInterceptors",
+    "kind": "function",
+    "slug": "core/withinterceptors",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withQuerySerializer",
+    "kind": "function",
+    "slug": "core/withqueryserializer",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withHTTPHandle",
+    "kind": "function",
+    "slug": "core/withhttphandle",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withSSEHandle",
+    "kind": "function",
+    "slug": "core/withssehandle",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketHandle",
+    "kind": "function",
+    "slug": "core/withwebsockethandle",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withCredentials",
+    "kind": "function",
+    "slug": "core/withcredentials",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withXSRF",
+    "kind": "function",
+    "slug": "core/withxsrf",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withSSEReconnect",
+    "kind": "function",
+    "slug": "core/withssereconnect",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withSSEOnInvalidEvent",
+    "kind": "function",
+    "slug": "core/withsseoninvalidevent",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketBeforeConnect",
+    "kind": "function",
+    "slug": "core/withwebsocketbeforeconnect",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketProtocols",
+    "kind": "function",
+    "slug": "core/withwebsocketprotocols",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketHeartbeat",
+    "kind": "function",
+    "slug": "core/withwebsocketheartbeat",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withWebSocketReconnect",
+    "kind": "function",
+    "slug": "core/withwebsocketreconnect",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Client",
+    "kind": "type",
+    "slug": "core/client-type",
+    "related": ["@defjs/core:HttpAwaitResult", "@defjs/core:StreamAwaitResult", "@defjs/core:SocketAwaitResult"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientOption",
+    "kind": "type",
+    "slug": "core/clientoption-type",
+    "related": ["@defjs/core:ClientConfig"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientOptions",
+    "kind": "type",
+    "slug": "core/clientoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientConfig",
+    "kind": "type",
+    "slug": "core/clientconfig-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientSSEOptions",
+    "kind": "type",
+    "slug": "core/clientsseoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientSSEConfig",
+    "kind": "type",
+    "slug": "core/clientsseconfig-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ClientWebSocketOptions",
+    "kind": "type",
+    "slug": "core/clientwebsocketoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "QuerySerializer",
+    "kind": "type",
+    "slug": "core/queryserializer-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHandle",
+    "kind": "type",
+    "slug": "core/websockethandle-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHandleConstructor",
+    "kind": "type",
+    "slug": "core/websockethandleconstructor-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "defineRequest",
+    "kind": "function",
+    "slug": "core/definerequest",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "executeHttpCommand",
+    "kind": "function",
+    "slug": "core/executehttpcommand",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "fetchHandler",
+    "kind": "function",
+    "slug": "core/fetchhandler",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "makeResponse",
+    "kind": "function",
+    "slug": "core/makeresponse",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestDefinition",
+    "kind": "type",
+    "slug": "core/requestdefinition-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestEndpoint",
+    "kind": "type",
+    "slug": "core/requestendpoint-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "BuilderInput",
+    "kind": "type",
+    "slug": "core/builderinput-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpRequestShape",
+    "kind": "type",
+    "slug": "core/httprequestshape-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpCommand",
+    "kind": "type",
+    "slug": "core/httpcommand-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpExecuteOptions",
+    "kind": "type",
+    "slug": "core/httpexecuteoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UseRequestConfig",
+    "kind": "type",
+    "slug": "core/userequestconfig-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpAwaitResult",
+    "kind": "type",
+    "slug": "core/httpawaitresult-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestSuccessData",
+    "kind": "type",
+    "slug": "core/requestsuccessdata-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestErrorData",
+    "kind": "type",
+    "slug": "core/requesterrordata-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpRequest",
+    "kind": "type",
+    "slug": "core/httprequest-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpMeta",
+    "kind": "type",
+    "slug": "core/httpmeta-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DecodedResponse",
+    "kind": "type",
+    "slug": "core/decodedresponse-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpResponse",
+    "kind": "type",
+    "slug": "core/httpresponse-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpResponseType",
+    "kind": "type",
+    "slug": "core/httpresponsetype-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpProgressEvent",
+    "kind": "type",
+    "slug": "core/httpprogressevent-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpProgressFn",
+    "kind": "type",
+    "slug": "core/httpprogressfn-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "MakeResponseOptions",
+    "kind": "type",
+    "slug": "core/makeresponseoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct",
+    "kind": "constant",
+    "slug": "core/struct",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.any",
+    "kind": "function",
+    "slug": "core/struct-any",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.array",
+    "kind": "function",
+    "slug": "core/struct-array",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.arrayBuffer",
+    "kind": "function",
+    "slug": "core/struct-arraybuffer",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.bigint",
+    "kind": "function",
+    "slug": "core/struct-bigint",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.blob",
+    "kind": "function",
+    "slug": "core/struct-blob",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.boolean",
+    "kind": "function",
+    "slug": "core/struct-boolean",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.date",
+    "kind": "function",
+    "slug": "core/struct-date",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.discriminatedUnion",
+    "kind": "function",
+    "slug": "core/struct-discriminatedunion",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.enum",
+    "kind": "function",
+    "slug": "core/struct-enum",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.file",
+    "kind": "function",
+    "slug": "core/struct-file",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.formData",
+    "kind": "function",
+    "slug": "core/struct-formdata",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.intersection",
+    "kind": "function",
+    "slug": "core/struct-intersection",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.literal",
+    "kind": "function",
+    "slug": "core/struct-literal",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.null",
+    "kind": "function",
+    "slug": "core/struct-null",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.number",
+    "kind": "function",
+    "slug": "core/struct-number",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.object",
+    "kind": "function",
+    "slug": "core/struct-object",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.or",
+    "kind": "function",
+    "slug": "core/struct-or",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.parse",
+    "kind": "function",
+    "slug": "core/struct-parse",
+    "related": ["@defjs/core:Struct", "@defjs/core:ParseResult"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.record",
+    "kind": "function",
+    "slug": "core/struct-record",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.string",
+    "kind": "function",
+    "slug": "core/struct-string",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.tuple",
+    "kind": "function",
+    "slug": "core/struct-tuple",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.unknown",
+    "kind": "function",
+    "slug": "core/struct-unknown",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "struct.urlencoded",
+    "kind": "function",
+    "slug": "core/struct-urlencoded",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Infer",
+    "kind": "type",
+    "slug": "core/infer-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructInput",
+    "kind": "type",
+    "slug": "core/structinput-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "AnyStruct",
+    "kind": "type",
+    "slug": "core/anystruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Struct",
+    "kind": "type",
+    "slug": "core/struct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructLike",
+    "kind": "type",
+    "slug": "core/structlike-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructMethods",
+    "kind": "type",
+    "slug": "core/structmethods-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ObjectStruct",
+    "kind": "type",
+    "slug": "core/objectstruct-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ParseResult",
+    "kind": "type",
+    "slug": "core/parseresult-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ErrorMap",
+    "kind": "type",
+    "slug": "core/errormap-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructError",
+    "kind": "type",
+    "slug": "core/structerror-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StructIssue",
+    "kind": "type",
+    "slug": "core/structissue-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FormattedStructError",
+    "kind": "type",
+    "slug": "core/formattedstructerror-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FlattenedStructError",
+    "kind": "type",
+    "slug": "core/flattenedstructerror-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FaultCode",
+    "kind": "type",
+    "slug": "core/faultcode-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FaultClass",
+    "kind": "type",
+    "slug": "core/faultclass-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Fault",
+    "kind": "type",
+    "slug": "core/fault-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FaultOf",
+    "kind": "type",
+    "slug": "core/faultof-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpStatusFault",
+    "kind": "type",
+    "slug": "core/httpstatusfault-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpStatusFaultOf",
+    "kind": "type",
+    "slug": "core/httpstatusfaultof-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DecodeFault",
+    "kind": "type",
+    "slug": "core/decodefault-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreflightFault",
+    "kind": "type",
+    "slug": "core/preflightfault-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "AnyFault",
+    "kind": "type",
+    "slug": "core/anyfault-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createHttpStatusFault",
+    "kind": "function",
+    "slug": "core/createhttpstatusfault",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createUndecodedHttpStatusFault",
+    "kind": "function",
+    "slug": "core/createundecodedhttpstatusfault",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createDecodeFault",
+    "kind": "function",
+    "slug": "core/createdecodefault",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createNetworkFault",
+    "kind": "function",
+    "slug": "core/createnetworkfault",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createPreflightFault",
+    "kind": "function",
+    "slug": "core/createpreflightfault",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ERR_ABORTED",
+    "kind": "constant",
+    "slug": "core/err-aborted-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ERR_TIMEOUT",
+    "kind": "constant",
+    "slug": "core/err-timeout-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createHttpInterceptor",
+    "kind": "function",
+    "slug": "core/createhttpinterceptor",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createSSEInterceptor",
+    "kind": "function",
+    "slug": "core/createsseinterceptor",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createWebSocketInterceptor",
+    "kind": "function",
+    "slug": "core/createwebsocketinterceptor",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "basicAuthHttpInterceptor",
+    "kind": "function",
+    "slug": "core/basicauthhttpinterceptor",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "basicAuthSSEInterceptor",
+    "kind": "function",
+    "slug": "core/basicauthsseinterceptor",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "Interceptor",
+    "kind": "type",
+    "slug": "core/interceptor-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "InterceptorFn",
+    "kind": "type",
+    "slug": "core/interceptorfn-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpInterceptor",
+    "kind": "type",
+    "slug": "core/httpinterceptor-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "HttpInterceptorNext",
+    "kind": "type",
+    "slug": "core/httpinterceptornext-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSEInterceptor",
+    "kind": "type",
+    "slug": "core/sseinterceptor-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSEInterceptorFn",
+    "kind": "type",
+    "slug": "core/sseinterceptorfn-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SSEHandler",
+    "kind": "type",
+    "slug": "core/ssehandler-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketInterceptor",
+    "kind": "type",
+    "slug": "core/websocketinterceptor-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketInterceptorFn",
+    "kind": "type",
+    "slug": "core/websocketinterceptorfn-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHandler",
+    "kind": "type",
+    "slug": "core/websockethandler-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketSessionLike",
+    "kind": "type",
+    "slug": "core/websocketsessionlike-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "BasicAuthInterceptorOptions",
+    "kind": "type",
+    "slug": "core/basicauthinterceptoroptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "defineEventStream",
+    "kind": "function",
+    "slug": "core/defineeventstream",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "executeEventStreamCommand",
+    "kind": "function",
+    "slug": "core/executeeventstreamcommand",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamDefinition",
+    "kind": "type",
+    "slug": "core/eventstreamdefinition-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamEndpoint",
+    "kind": "type",
+    "slug": "core/eventstreamendpoint-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamRequestShape",
+    "kind": "type",
+    "slug": "core/eventstreamrequestshape-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamCommand",
+    "kind": "type",
+    "slug": "core/eventstreamcommand-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamExecuteOptions",
+    "kind": "type",
+    "slug": "core/eventstreamexecuteoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "StreamAwaitResult",
+    "kind": "type",
+    "slug": "core/streamawaitresult-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamHandle",
+    "kind": "type",
+    "slug": "core/eventstreamhandle-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamOpenInfo",
+    "kind": "type",
+    "slug": "core/eventstreamopeninfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamCloseInfo",
+    "kind": "type",
+    "slug": "core/eventstreamcloseinfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStructs",
+    "kind": "type",
+    "slug": "core/eventstructs-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamData",
+    "kind": "type",
+    "slug": "core/eventstreamdata-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "defineWebSocket",
+    "kind": "function",
+    "slug": "core/definewebsocket",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "executeWebSocketCommand",
+    "kind": "function",
+    "slug": "core/executewebsocketcommand",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketDefinition",
+    "kind": "type",
+    "slug": "core/websocketdefinition-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketEndpoint",
+    "kind": "type",
+    "slug": "core/websocketendpoint-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketRequestShape",
+    "kind": "type",
+    "slug": "core/websocketrequestshape-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketCommand",
+    "kind": "type",
+    "slug": "core/websocketcommand-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketExecuteOptions",
+    "kind": "type",
+    "slug": "core/websocketexecuteoptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "UseWebSocketConfig",
+    "kind": "type",
+    "slug": "core/usewebsocketconfig-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SocketAwaitResult",
+    "kind": "type",
+    "slug": "core/socketawaitresult-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketSession",
+    "kind": "type",
+    "slug": "core/websocketsession-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketState",
+    "kind": "type",
+    "slug": "core/websocketstate-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketConnectionInfo",
+    "kind": "type",
+    "slug": "core/websocketconnectioninfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketCloseInfo",
+    "kind": "type",
+    "slug": "core/websocketcloseinfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ManualSocketCloseReason",
+    "kind": "type",
+    "slug": "core/manualsocketclosereason-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketHeartbeatConfig",
+    "kind": "type",
+    "slug": "core/websocketheartbeatconfig-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketIncomingData",
+    "kind": "type",
+    "slug": "core/websocketincomingdata-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "WebSocketOutgoingData",
+    "kind": "type",
+    "slug": "core/websocketoutgoingdata-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "SocketLifecycleOutcome",
+    "kind": "type",
+    "slug": "core/socketlifecycleoutcome-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/vue",
+    "name": "createClientPlugin",
+    "kind": "function",
+    "slug": "vue/createclientplugin",
+    "related": ["@defjs/core:Client"]
+  },
+  {
+    "package": "@defjs/vue",
+    "name": "injectClient",
+    "kind": "function",
+    "slug": "vue/injectclient",
+    "related": ["@defjs/core:Client"]
+  },
+  {
+    "package": "@defjs/vue",
+    "name": "HTTP_CLIENT",
+    "kind": "constant",
+    "slug": "vue/http-client",
+    "related": ["@defjs/core:Client", "@defjs/vue:injectClient"]
+  },
+  {
+    "package": "@defjs/react",
+    "name": "ClientProvider",
+    "kind": "function",
+    "slug": "react/clientprovider-type",
+    "related": ["@defjs/core:Client", "@defjs/react:ClientProviderProps"]
+  },
+  {
+    "package": "@defjs/react",
+    "name": "useClient",
+    "kind": "function",
+    "slug": "react/useclient",
+    "related": ["@defjs/core:Client"]
+  },
+  {
+    "package": "@defjs/react",
+    "name": "ClientProviderProps",
+    "kind": "type",
+    "slug": "react/clientproviderprops-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "withOpenTelemetryServer",
+    "kind": "function",
+    "slug": "opentelemetry-server/withopentelemetryserver",
+    "related": ["@defjs/core:ClientOption", "@defjs/opentelemetry-server:OpenTelemetryServerOptions"]
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserveroptions-type",
+    "related": [
+      "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
+      "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
+      "@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions",
+      "@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"
+    ]
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerTransportOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryservertransportoptions-type",
+    "related": [
+      "@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions",
+      "@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions",
+      "@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions"
+    ]
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerHttpOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserverhttpoptions-type",
+    "related": ["@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"]
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerSSEOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserversseoptions-type",
+    "related": ["@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"]
+  },
+  {
+    "package": "@defjs/opentelemetry-server",
+    "name": "OpenTelemetryServerWebSocketOptions",
+    "kind": "type",
+    "slug": "opentelemetry-server/opentelemetryserverwebsocketoptions-type",
+    "related": ["@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "FetchHandle",
+    "kind": "type",
+    "slug": "core/fetchhandle-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withHeaders",
+    "kind": "function",
+    "slug": "core/withheaders",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withTimeout",
+    "kind": "function",
+    "slug": "core/withtimeout",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DecodeFaultCode",
+    "kind": "type",
+    "slug": "core/decodefaultcode-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "PreflightFaultCode",
+    "kind": "type",
+    "slug": "core/preflightfaultcode-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "createResolvedRequestUrl",
+    "kind": "function",
+    "slug": "core/createresolvedrequesturl",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EventStreamFaultCode",
+    "kind": "type",
+    "slug": "core/eventstreamfaultcode-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "STRUCT",
+    "kind": "type",
+    "slug": "core/struct-symbol-type",
+    "related": []
+  }
+]

@@ -1,0 +1,44 @@
+---
+title: 'HttpRequest'
+description: '전송 계층과 인터셉터가 보는, 정규화된 나가는 HTTP 요청이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequest" />
+
+```ts
+interface HttpRequest {
+  abort?: AbortSignal
+  baseEndpoint?: string
+  body?: Blob | ArrayBuffer | FormData | URLSearchParams | ReadableStream<Uint8Array> | object | string | number | boolean | null
+  bodyContentType?: string | null
+  downloadProgress?: HttpProgressFn
+  endpoint: string
+  headers?: Headers
+  method: string
+  operation?: string
+  queryParams?: URLSearchParams
+  queryString?: string
+  readonly responseType?: HttpResponseType
+  readonly errorResponseType?: HttpResponseType
+  timeout?: number
+  uploadProgress?: HttpProgressFn
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  // plus an @internal bodyContentTypeSource field
+}
+```
+
+builder가 실행된 뒤의 요청으로, 핸들러, 인터셉터, `fetchHandler`가 사용해요.
+
+- `body`는 이미 wire 값이에요. JSON이면 **JSON 텍스트 문자열**이므로, HMAC이나 다이제스트는 원래 struct 입력이 아니라 이 문자열에 대해 서명하세요.
+- `endpoint`는 path 매개변수를 채운 path이고, `baseEndpoint`는 클라이언트 endpoint예요.
+- 인터셉터는 `queryParams`를 `new URLSearchParams(queryString)`으로 봐요. builder가 `URLSearchParams`를 반환하면 그 인스턴스가 그대로 전달돼요.
+- `operation`은 텔레메트리와 진단용의 정적이고 카디널리티가 낮은 엔드포인트 식별자예요.
+- `downloadProgress`와 `uploadProgress`는 `HttpExecuteOptions`의 `onDownloadProgress`, `onUploadProgress` 훅이에요.
+- `responseType`과 `errorResponseType`은 readonly예요. 엔드포인트의 `output`과 `error` struct 종류에서 정해지므로 바꾸면 안 돼요. 각각 해당 struct를 선언했을 때만 설정돼요. `makeResponse`로 short-circuit하는 인터셉터는 전송 계층과 맞추려고 이 값을 읽어요.
+
+[HTTP](/ko-KR/api/http)

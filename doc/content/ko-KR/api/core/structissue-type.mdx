@@ -1,0 +1,24 @@
+---
+title: 'StructIssue'
+description: 'struct를 파싱하다 생긴 검증 실패 하나예요.'
+---
+
+<ApiReference identity="@defjs/core:StructIssue" />
+
+```ts
+interface StructIssue {
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  expected: string
+  message: string
+  path: Array<number | string>
+  received: unknown
+}
+```
+
+- `code`는 기계가 읽을 수 있는 분류예요. 파서는 `invalid_type`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection`, `missing_key`를 만들어요. `custom`은 타입에는 있지만 내장 struct는 만들지 않아요.
+- `expected`는 기대한 타입이나 값을 설명해요.
+- `message`는 선택적인 [`ErrorMap`](/ko-KR/api/core/errormap-type) 재작성을 거친 최종 텍스트예요.
+- `path`는 파싱 루트에서 실패한 위치까지의 경로예요. 필드 이름과 배열 인덱스로 이루어져요. 루트 수준 실패면 비어 있어요.
+- `received`는 `path`에서 실패한 값이에요.
+
+[Struct](/ko-KR/api/struct)

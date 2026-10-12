@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'WebSocket 자동 재연결을 켜는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+소켓이 수동 `session.close()` 이외의 이유로 닫혔을 때의 자동 재연결을 설정해요. 재연결은 opt-in이에요. 이 옵션이 없으면 close로 session이 끝나요. `undefined`를 넘기면 이전 설정이 지워져요. 옵션 타입은 다음과 같아요.
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts`는 첫 연결 이후의 재시도 횟수 예산이에요. 기본값은 `3`이고 `0`은 재연결을 꺼요. 생략해도 무제한이 아니에요.
+- `delayMs`의 기본값은 `1000`, `factor`는 `2`, `maxDelayMs`는 `30000`, `jitter` (0에서 1)는 `0`이에요. *n*번째 재시도의 지연은 `delayMs * factor^(n-1)`이고 `maxDelayMs`로 상한이 걸려요.
+- `shouldReconnect`가 `false`를 돌려주면 대신 session을 끝내요. 이 옵션이 없으면 예산이 남아 있는 동안 모든 close를 재시도해요. 수동 `session.close()`에서는 호출되지 않아요.
+- 범위를 벗어난 값은 execute가 `REQ_OPTIONS_INVALID`로 실패하게 해요.
+- execute 옵션의 `reconnect`는 그 호출에 한해 이 옵션을 대체해요.
+
+[클라이언트](/ko-KR/api/client)

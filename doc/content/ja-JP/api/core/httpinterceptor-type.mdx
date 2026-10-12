@@ -1,0 +1,17 @@
+---
+title: 'HttpInterceptor'
+description: 'クライアントのインターセプターオプションが受け取る、タグ付き HTTP インターセプターです。'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptor" />
+
+```ts
+interface HttpInterceptor {
+  kind: 'http'
+  fn: InterceptorFn
+}
+```
+
+`createHttpInterceptor` が作ります。`kind` は判別子で、これによって `withInterceptors` は HTTP、SSE、WebSocket のインターセプターを 1 つのリストで受け取れます。
+
+[Interceptors](/ja-JP/api/interceptors)

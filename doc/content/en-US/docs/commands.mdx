@@ -1,0 +1,61 @@
+---
+title: 'Define and execute / Command'
+description: Define endpoints, build opaque commands, map inputs, and infer transport results.
+---
+
+# Commands
+
+One definition → endpoint → opaque command → `client.execute`. Same pipeline for HTTP, SSE, and WebSocket.
+
+## Basic Setup
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## Choose a definition
+
+| Definition               | Contract                                                           | Successful value                         |
+| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------- |
+| `defineRequest(...)`     | Method, relative path, optional input, optional `output` / `error` | Decoded data + response                  |
+| `defineEventStream(...)` | Path, buffer/queue limits, event-name → Struct map                 | `EventStreamHandle` + open snapshot      |
+| `defineWebSocket(...)`   | Path, one incoming struct, optional outgoing struct, queue limit   | `WebSocketSession` + connection snapshot |
+
+No `input` → the endpoint takes no argument, and `builder` may be `() => request`. With `input` → pass the struct value. An optional field may be omitted; a required field may not.
+
+Keep commands opaque. Don’t dig into tags or symbols.
+
+## Where values go
+
+The struct decides how a value is encoded. The `builder` decides where it goes. `builder` is a synchronous pure function of the **parsed** input. It runs at execute time. A throw becomes `REQ_BUILD_FAILED` on the tuple — the endpoint call itself does not throw.
+
+A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
+
+Hand the typed value through. Alias, `Date` → ISO, and `bigint` → string then apply everywhere that struct is used: request placement, response decoding, SSE events, and WebSocket frames.
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+The body is JSON `{"display_name":"…","email":"…"}`. A hand-written key is the escape hatch: `body: { name: input.user.displayName }` sends `name`, because the parent object is anonymous and the alias does not apply.
+
+## When the shapes differ
+
+Use `builder` for path placeholders, literals, and branches. It receives the real value, so `if`, `??`, templates, and `switch` work.
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.query` sends `page_size`. `headers: { 'x-api-version': '2' }` is a literal. Auth and tracing still belong in interceptors: they see the native request after the builder runs.
+
+## Output and error shapes
+
+`output` is one Struct for the 2xx body; `error` is one Struct for everything else. `ok` is the only
+fork, and only one side ever decodes. Omitting a side means that body is never read: the fault
+carries the status and `data` stays `undefined`.
+
+## Related recipes
+
+- [GET with a declared 404](/recipes/get-declared-404)
+- [POST JSON](/recipes/post-json)

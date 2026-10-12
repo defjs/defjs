@@ -1,0 +1,24 @@
+---
+title: 'RequestDefinition'
+description: 'HTTP 엔드포인트의 계약이에요. method, path, input, 그리고 body를 디코딩하는 struct들을 담아요.'
+---
+
+<ApiReference identity="@defjs/core:RequestDefinition" />
+
+```ts
+type RequestDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = ResponseDeclaration<TOutput, TError> & {
+  builder?: OutboundBuilder
+  input?: TInput
+  method: string
+  operation?: string
+  path: string
+}
+```
+
+`output`은 2xx 응답의 body를, `error`는 그 외 응답의 body를 선언해요. 둘 중 하나만 실행되며, 하나를 생략하면 그 body는 읽지 않아요. `ResponseDeclaration`은 내부 헬퍼 타입이에요. 해당 타입 매개변수가 struct일 때만 `output`과 `error`가 필수예요. `responseType`은 없어요. struct 종류가 선언된 body를 어떻게 읽을지 정해요. 선언된 `input`에는 이미 요청 모양과 같아도 항상 명시적인 `builder`가 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+
+[HTTP](/ko-KR/api/http)

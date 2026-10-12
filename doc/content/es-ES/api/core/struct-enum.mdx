@@ -1,0 +1,18 @@
+---
+title: 'struct.enum'
+description: 'Struct que acepta un valor de una lista de strings o de los valores de un objeto.'
+---
+
+<ApiReference identity="@defjs/core:struct.enum" />
+
+```ts
+function enum<const T extends readonly [string, ...string[]]>(value: T): Struct<T[number], T[number]>
+function enum<const T extends { [key: string]: number | string }>(value: T): Struct<T[keyof T], T[keyof T]>
+```
+
+- Con un array de strings no vacío, los valores aceptados son los items del array.
+- Con un objeto, los valores aceptados son los **valores** string y number del objeto, no sus claves. `{ A: 'a', B: 2 }` acepta `'a'` y `2`.
+- Un objeto `enum` numérico de TypeScript también acepta los nombres de sus miembros, porque el mapeo inverso forma parte de sus valores.
+- Un valor fuera del conjunto falla con `invalid_enum`. Un objeto sin ningún valor string o number lanza `TypeError` al crear el struct.
+
+[Struct](/es-ES/api/struct)

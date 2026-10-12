@@ -1,0 +1,14 @@
+---
+title: 'AnyFault'
+description: '디코딩된 오류 body 타입과 무관하게 모든 fault 변형을 묶은 유니온이에요.'
+---
+
+<ApiReference identity="@defjs/core:AnyFault" />
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+디코딩된 오류 body 타입과 상관없이 모든 fault를 가리켜요. 어느 엔드포인트가 냈는지 신경 쓰지 않고 fault를 분류하는 핸들러에 쓰세요. body 타입이 중요한 곳에서는 `Fault<typeof yourErrorStruct>`를 고르세요.
+
+[오류](/ko-KR/api/errors)

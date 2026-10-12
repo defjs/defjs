@@ -1,0 +1,16 @@
+---
+title: 'EventStreamData'
+description: '由 EventStructs 映射推断出的、已解析 SSE 事件的联合类型。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamData" />
+
+```ts
+type EventStreamData<TEvents extends EventStructs> = TEvents extends EventStructs
+  ? KnownEventUnion<TEvents> | DefaultEventUnion<TEvents>
+  : never
+```
+
+对除 `default` 之外每个已声明的事件名，联合里有 `{ event: <name>; data: Infer<TEvents[name]>; id?: string }`。声明了 `default` struct 时，还会为每个没有自己 struct 的事件名加上 `{ event: string; data: Infer<TEvents['default']>; id?: string }`。`KnownEventUnion` 和 `DefaultEventUnion` 是内部辅助类型。
+
+[SSE](/zh-Hans/api/sse)

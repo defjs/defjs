@@ -1,0 +1,290 @@
+---
+title: Client
+description: createClient、option helpers，同 Client type。
+---
+
+# Client
+
+Create 一個 client，options 由左到右 compose，之後 `execute` HTTP / SSE / WebSocket commands。
+
+## createClient()
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+Options 按次序套用。如果 interceptors close over auth 或者 tenants，prefer 喺 request boundary 入面 create client。
+
+- **options** — Option helpers，例如 `withEndpoint`。
+- **Returns** 一個 client，佢嘅 `execute` 按 transport overload。
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## 選項 helpers
+
+所有 helpers 都 return `ClientOption`。同一個設定，後面嗰次 call 會取代前面嗰次，只有 `withInterceptors` 例外，佢會 append。
+
+### withEndpoint()
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+Set 相對 paths 前面 prepend 嘅 base URL。
+
+### withInterceptors()
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+按 registration order append interceptors。Mixed kinds 會喺 execute 時按 transport filter。
+
+### withQuerySerializer()
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+換走 HTTP、SSE 同 WebSocket 嘅 query encoding。`serializer(query)` 收到嘅係**已經 encode 嘅 wire object**（aliases 已套用，`Date` 係 ISO，`bigint` 係 string），一定要 return query string，而且唔可以有 leading `?`。Request 冇 query 嘅時候唔會 call。Builder return `URLSearchParams` 就會 skip 佢。
+
+### withHeaders()
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+為 HTTP 同 SSE requests set 靜態預設 headers。WebSocket requests 唔會用。Init 會喺 option 套用嗰刻 copy，所以之後改嗰個 object 唔會影響 client。第二次 `withHeaders` 會取代第一次，唔會合併。
+
+單一 request 嘅優先次序：
+
+1. 預設值係起始嘅 header 集合。
+2. Request builder return 嘅 `headers`，如果值係 scalar 或者 `Headers` instance，就會取代同名嘅預設值。Array 值（例如 `{ 'x-a': ['one', 'two'] }` 呢類 record entry，或者 tuple-array 形式嘅 `HeadersInit`）就會 append 去預設值，而唔係取代。
+3. Interceptors 收到合併後嘅 headers，可以修改。
+4. 用預設 HTTP transport 嘅話，XSRF header 最後先加，而且只喺仍然未有嘅時候先加（見 `withXSRF`）。
+
+每個 request 都會變嘅值，例如刷新後嘅 Bearer token，或者對序列化 body 計算嘅 HMAC，請用 interceptor。
+
+### withTimeout()
+
+```ts
+function withTimeout(ms: number): ClientOption
+```
+
+只為 **HTTP** `execute` set 預設 timeout（毫秒）。SSE 同 WebSocket 會忽略佢；佢哋嘅 execute `timeout` 係另一個、逐次 call 嘅啟動 deadline。`ms` 必須係正安全整數，而且唔可以大過 `2_147_483_647`，否則 `withTimeout` 會喺你 call 佢嗰刻 throw `RangeError`。第二次 `withTimeout` 會取代第一次。
+
+呢個 deadline 涵蓋 input 解析、builder、interceptors、transport，以及讀取已聲明嘅 body。佢會同每次 call 嘅 execute options 合併：
+
+| Execute options               | 效果                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| 冇                            | 套用 client 預設值；到期係 `NET_TIMEOUT`。                                |
+| `{ timeout }`                 | 喺該次 call 取代 client 預設值。                                          |
+| `{ abort }` 或者 `{ signal }` | 同預設值合併：caller 嘅 signal 係 `NET_ABORTED`，timer 係 `NET_TIMEOUT`。 |
+| `{ abort, timeout }`          | 依然無效：`REQ_OPTIONS_INVALID`。Client 預設值永遠唔算衝突。              |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+function withSSEHandle(fetchImpl: FetchHandle): ClientOption
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+換走 Fetch（HTTP/SSE）或者 WebSocket constructor。
+
+### withCredentials()
+
+```ts
+function withCredentials(value: boolean): ClientOption
+```
+
+`true` 嘅時候，HTTP 同 SSE 嘅 Fetch 會用 `credentials: 'include'`。預設係關。WebSocket 連線唔受影響。
+
+### withXSRF()
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+為 HTTP requests 加 XSRF token header。Defaults：cookie `XSRF-TOKEN`，header `X-XSRF-TOKEN`。SSE 同 WebSocket requests 唔受影響。
+
+預設 HTTP transport 只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；request 係 same-origin（喺 browser 以外，任何有 `baseEndpoint` 嘅 request 都算）；而且搵到非空嘅 token。Token 有 `tokenProvider` 就由佢提供，否則來自 cookie，而 cookie 只會喺 browser 讀取。
+
+### SSE 調校選項
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+### WebSocket 調校選項
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): ClientOption
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+## 類型
+
+### Client
+
+```ts
+type Client = {
+  execute(command: EventStreamCommand, options?: EventStreamExecuteOptions): Promise<StreamAwaitResult>
+  execute(command: WebSocketCommand, options?: WebSocketExecuteOptions): Promise<SocketAwaitResult>
+  execute(command: HttpCommand, options?: HttpExecuteOptions): Promise<HttpAwaitResult>
+}
+```
+
+呢度省略咗 type parameters；每個 overload 都會由 command 推斷出結果。
+
+### ClientOption
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+修改 `createClient` 建立嘅 `ClientConfig`。冇合適嘅 `with*` helper 時，可以自己寫一個。
+
+### QuerySerializer
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+### FetchHandle
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，所以 mock 唔需要 `preconnect` 呢類 host 額外成員。
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+兩種 transport 嘅 reconnect 都係 opt-in：冇 `withSSEReconnect` / `withWebSocketReconnect` 就唔會重試。一旦設咗 `reconnect`，就會套用以下預設值：
+
+| 欄位         | SSE    | WebSocket |
+| ------------ | ------ | --------- |
+| `attempts`   | `3`    | `3`       |
+| `delayMs`    | `1000` | `1000`    |
+| `factor`     | `1`    | `2`       |
+| `jitter`     | `0`    | `0`       |
+| `maxDelayMs` | 冇上限 | `30000`   |
+
+對 SSE 嚟講，`delayMs` 只係起始嘅 base delay：server 傳嚟嘅 `retry:` field 會取代佢，用喺之後嘅嘗試。`attempts: 0` 停用重試；唔寫 `attempts` 唔代表無限。`jitter` 必須喺 0–1 之內：每次延遲都會向兩個方向隨機浮動，最多係該比例。`shouldReconnect` return `false` 就會停止重試。SSE 嘅 callback 另外會收到 `lastEventId`、request 嘅 `method` 同最新嘅 `open` 資料，亦可以係 async。冇呢個 callback 嘅時候，SSE 只會重連 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request；有呢個 callback 嘅話，每種 method 會唔會重連都由佢嘅結果決定。WebSocket 嘅 callback 則會收到 close 嘅 `code`、`reason` 同 `wasClean`。
+
+SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 event（`missing-struct`），或者 data 通唔過 struct 驗證嘅 event（`validation-failed`）。呢類 event 一定會被丟棄；handler 嘅 return 值會被忽略，佢 throw 出嚟嘅 error 亦唔會關閉 stream。
+
+對 WebSocket 嚟講，`beforeConnect`、`heartbeat`、`protocols` 同 `reconnect` 亦可以逐次 call 傳畀 `execute`；execute 嘅值會喺該次 call 取代 client 嘅值。`heartbeat.message` 建立每個 ping；省略或者 return `undefined` 就唔會傳送任何嘢。
+
+### ClientOptions
+
+```ts
+interface ClientOptions extends HttpClientOptions {
+  sse?: ClientSSEOptions
+  webSocket?: ClientWebSocketOptions
+}
+```
+
+Client 嘅 input 形態描述：`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`timeout`、`xsrf`、`withCredentials`、`sse` 同 `webSocket`。`createClient` 唔接受佢；佢接受 option helpers。
+
+### ClientConfig
+
+Option helpers 修改、`execute` 讀取嘅 resolved snapshot：套用預設值之後嘅 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）同 `webSocket` 一定存在。
+
+### ClientSSEConfig
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+`ClientConfig.sse` 上面解析好嘅 SSE config：`handle` 必填嘅 `ClientSSEOptions`。
+
+### WebSocketHandle
+
+Transport 使用嘅 WebSocket instance surface：`WebSocket` 去掉 `binaryType`、ready-state 常數、`dispatchEvent` 同 `on*` handler 屬性，再加上唯讀嘅 `readyState: number`。
+
+### WebSocketHandleConstructor
+
+```ts
+type WebSocketHandleConstructor = { readonly OPEN: number } & (new (...args: never[]) => WebSocketHandle)
+```
+
+傳畀 `withWebSocketHandle` 嘅 constructor。佢必須公開 `OPEN` ready-state 常數。
+
+睇 [Client guide](/zh-Hant-HK/docs/client)。

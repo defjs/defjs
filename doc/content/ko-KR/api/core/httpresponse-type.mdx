@@ -1,0 +1,22 @@
+---
+title: 'HttpResponse'
+description: '전송 계층이 만들고 인터셉터가 보는, wire 모양의 HTTP 응답이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpResponse" />
+
+```ts
+type HttpResponse<R> = {
+  readonly [HTTP_RESPONSE]: true // internal brand; build values with makeResponse
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+전송 계층이 만들고 인터셉터가 보는 wire 모양이에요. `body`는 텍스트이거나 이미 파싱된 JSON이고, 디코딩된 값이 아니에요. body가 없으면 `body`는 `undefined`이고, JSON `null`은 `null` 그대로 남아요. JSON 표현에서 문자열은 JSON 문자열 루트이므로 다시 파싱하지 않아요. 바이트와 blob은 원시 상태이며 한 번 파싱돼요. `ok`는 2xx이면 true예요. 전송 실패는 fault이지 응답이 아니에요. 호출자에게 닿는 것은 `DecodedResponse`예요.
+
+[HTTP](/ko-KR/api/http)

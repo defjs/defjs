@@ -1,0 +1,18 @@
+---
+title: 'struct.array'
+description: 'Struct, который разбирает массив с одним struct элемента.'
+---
+
+<ApiReference identity="@defjs/core:struct.array" />
+
+```ts
+function array<S extends StructLike<unknown, unknown, boolean>>(item: S): ArrayStruct<S>
+```
+
+- Разбирает каждый элемент через `item` и выдаёт новый массив. Не-массив даёт `invalid_type` (ожидался `array`).
+- Разбор останавливается на первом элементе с ошибкой, а `issue.path` содержит его индекс.
+- Бросает `TypeError`, если `item` не struct.
+
+`ArrayStruct<S>` не экспортируется. Это `Struct<StructInput<S>[], Infer<S>[]>`.
+
+[Struct](/ru-RU/api/struct)

@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: 'Struct que elige un struct de objeto según el valor de un campo de etiqueta.'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- Cada opción debe ser un struct de objeto cuyo campo `discriminator` sea un [`struct.literal()`](/es-ES/api/core/struct-literal) obligatorio. Un campo ausente, un campo que no es literal, un campo opcional o un valor de etiqueta duplicado lanza `TypeError` al crear el struct.
+- La entrada debe ser un objeto plano. El valor de la etiqueta selecciona la opción, y esa opción parsea el objeto completo.
+- Una etiqueta ausente falla con `missing_key` y una etiqueta desconocida falla con `invalid_union`. Ambos reportan el path del campo de etiqueta. Los demás fallos provienen de la opción seleccionada.
+- Con `struct.parse(..., { aliases: true })` la etiqueta se lee del alias del campo.
+
+`RequiredDiscriminatorOptions` y `DiscriminatedUnionStruct` no se exportan. La comprobación de tipos rechaza una opción cuyo campo de etiqueta falta o puede ser `undefined`.
+
+[Struct](/es-ES/api/struct)

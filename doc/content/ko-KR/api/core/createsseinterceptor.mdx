@@ -1,0 +1,19 @@
+---
+title: 'createSSEInterceptor'
+description: 'interceptor 함수를 태그가 붙은 SSE 인터셉터로 감싸요.'
+---
+
+<ApiReference identity="@defjs/core:createSSEInterceptor" />
+
+```ts
+function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor
+
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+`{ kind: 'sse', fn }`을 반환해요. SSE 인터셉터는 SSE 명령에서만, 등록한 순서대로 실행돼요. `next(req)`는 남은 인터셉터들을 거쳐 스트림을 열어요.
+
+`EventStreamHandle`은 `AsyncDisposable`을 상속해요. 구조적인 short-circuit 구현은 `[Symbol.asyncDispose](): PromiseLike<void>`를 제공하고 같은 close lifecycle에 연결해야 해요.
+
+[인터셉터](/ko-KR/api/interceptors)

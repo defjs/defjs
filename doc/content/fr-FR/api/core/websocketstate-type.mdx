@@ -1,0 +1,25 @@
+---
+title: 'WebSocketState'
+description: 'État de cycle de vie d’une session WebSocket gérée.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketState" />
+
+```ts
+type WebSocketState = 'aborted' | 'closed' | 'closing' | 'connecting' | 'error' | 'idle' | 'open' | 'reconnecting'
+```
+
+| État           | Signification                                                                       |
+| -------------- | ----------------------------------------------------------------------------------- |
+| `idle`         | Avant la première tentative de connexion                                            |
+| `connecting`   | Préparation et ouverture de la première connexion                                   |
+| `open`         | Le socket physique est ouvert                                                       |
+| `reconnecting` | Préparation ou attente d’un socket de remplacement après une fermeture              |
+| `closing`      | La fermeture a été demandée via `session.close()` ou par dispose                    |
+| `closed`       | Terminal : la session s’est terminée sans erreur ni annulation                      |
+| `aborted`      | Terminal : la session a été annulée via `abort` ou `signal`                         |
+| `error`        | Terminal : la session a échoué, y compris par un échec de démarrage ou un `timeout` |
+
+Observe-le avec `session.state` et `session.onStateChange`.
+
+[WebSocket](/fr-FR/api/web-socket)

@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'Defjs が報告するすべての失敗 code の、閉じた集合です。'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+閉じた集合ひとつです。最初の `_` より前の部分がクラスで、独立した `kind` フィールドはありません。
+
+| クラス | 意味                                                                       |
+| ------ | -------------------------------------------------------------------------- |
+| `HTTP` | 相手が 2xx 以外の status で応答した。                                      |
+| `REQ`  | リクエストが送信されなかった: 入力、execute オプション、またはビルド。     |
+| `NET`  | 使えるレスポンスがない: キャンセル、タイムアウト、接続、ボディの途中切断。 |
+| `RES`  | レスポンスは届いたが、宣言どおりには読めなかった。                         |
+| `EXT`  | パイプラインに取り付けたコードが throw した。                              |
+| `CAP`  | 宣言したバッファまたはキューの上限を超えた。                               |
+| `ENV`  | ホストのランタイムに必要な機能がない。                                     |
+
+集合を閉じたままにするのは `switch (fault.code)` を網羅的に保つためで、拡張は自分の詳細を新しい code ではなく `cause` で報告します。
+
+[Errors](/ja-JP/api/errors)

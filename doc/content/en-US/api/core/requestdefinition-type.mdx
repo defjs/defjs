@@ -1,0 +1,24 @@
+---
+title: 'RequestDefinition'
+description: 'Contract for an HTTP endpoint: method, path, input, and the structs that decode its bodies.'
+---
+
+<ApiReference identity="@defjs/core:RequestDefinition" />
+
+```ts
+type RequestDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = ResponseDeclaration<TOutput, TError> & {
+  builder?: OutboundBuilder
+  input?: TInput
+  method: string
+  operation?: string
+  path: string
+}
+```
+
+`output` declares the body for a 2xx response and `error` the body for anything else. Only one of the two ever runs, and omitting one means that body is never read. `ResponseDeclaration` is an internal helper type: `output` and `error` are required only when the matching type parameter is a struct. There is no `responseType`: the struct kind selects how a declared body is read. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
+
+[HTTP](/api/http)

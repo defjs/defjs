@@ -1,0 +1,40 @@
+---
+title: 'ClientWebSocketOptions'
+description: '任意の WebSocket 設定です。コンストラクター、beforeConnect フック、ハートビート、サブプロトコル、再接続ポリシーを含みます。'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — WebSocket コンストラクターです。デフォルトは `globalThis.WebSocket` です。
+- **beforeConnect** — 接続と再接続の試行の前に、毎回実行されます。
+- **heartbeat** — `intervalMs` ごとに `message()` を送ります。`timeoutMs` と `isAck` を指定すると、確認応答が返らない場合に接続が異常とみなされます。`intervalMs` と `timeoutMs` は正の値で、2147483647 以下である必要があります。
+- **protocols** — コンストラクターに渡すサブプロトコルです。
+- **reconnect** — オプトインです。`attempts` のデフォルトは **3** で、`0` はリトライを無効にします。`attempts` を省略しても無制限にはなりません。そのほかのデフォルトは、`delayMs` が 1000、`factor` が 2、`jitter` が 0（0〜1 の乗法因子）、`maxDelayMs` が 30000 です。`shouldReconnect` は close の `code`、`reason`、`wasClean` を受け取り、リトライを拒否できます。
+
+これらは `withWebSocketHandle`、`withWebSocketBeforeConnect`、`withWebSocketHeartbeat`、`withWebSocketProtocols`、`withWebSocketReconnect` で設定します。`WebSocketExecuteOptions` では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を呼び出しごとに上書きできます。
+
+[Client ガイド](/ja-JP/docs/client) を参照してください。
+
+[Client](/ja-JP/api/client)

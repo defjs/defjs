@@ -1,0 +1,26 @@
+---
+title: 'SocketLifecycleOutcome'
+description: 'Outcome of one WebSocket connect attempt, used by reconnect logic.'
+---
+
+<ApiReference identity="@defjs/core:SocketLifecycleOutcome" />
+
+```ts
+type SocketLifecycleOutcome = {
+  closeInfo: WebSocketCloseSnapshot
+  connection?: WebSocketConnectionInfo
+  cause?: unknown
+  opened: boolean
+}
+```
+
+The outcome of a **single connect attempt**, not the final result of the session. The reconnect logic uses it to decide whether to try again.
+
+- `closeInfo` holds the close details of that attempt: `{ cause?, code?, reason?, wasClean? }`.
+- `connection` is the connection snapshot, when the attempt got one.
+- `cause` is the error that ended the attempt, if any.
+- `opened` tells whether the socket reached `open` before it ended.
+
+The `shouldReconnect` option does not receive this object. It gets `attempt`, `cause`, `code`, `reason`, and `wasClean`, taken from it. The final result of the session is [`WebSocketCloseInfo`](/api/core/websocketcloseinfo-type).
+
+[WebSocket](/api/web-socket)

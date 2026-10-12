@@ -1,0 +1,14 @@
+---
+title: 'RequestSuccessData'
+description: 'Тип декодированного тела успеха по объявленному output struct endpoint’а.'
+---
+
+<ApiReference identity="@defjs/core:RequestSuccessData" />
+
+```ts
+type RequestSuccessData<TOutput extends AnyStruct | undefined> = [TOutput] extends [undefined] ? undefined : Infer<TOutput>
+```
+
+Тип декодированного тела для объявленного struct `output`, либо `undefined`, если он не объявлен.
+
+[HTTP](/ru-RU/api/http)

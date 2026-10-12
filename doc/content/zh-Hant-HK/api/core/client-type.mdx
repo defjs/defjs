@@ -1,0 +1,31 @@
+---
+title: 'Client'
+description: '`createClient` 回傳嘅 client type，帶 overloaded 嘅 execute method。'
+---
+
+<ApiReference identity="@defjs/core:Client" />
+
+```ts
+type Client = {
+  readonly [CLIENT]: ClientConfig // internal symbol key
+
+  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
+    options?: EventStreamExecuteOptions,
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+
+  execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
+    command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+    options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+  ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+
+  execute<TInput extends AnyStruct | undefined, TOutput extends AnyStruct | undefined, TError extends AnyStruct | undefined>(
+    command: HttpCommand<TInput, TOutput, TError>,
+    options?: HttpExecuteOptions,
+  ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
+}
+```
+
+Client 持有 resolved 嘅 [`ClientConfig`](/zh-Hant-HK/api/core/clientconfig-type)，用嚟執行 HTTP、SSE 同 WebSocket command。Command type 決定用邊個 overload。失敗會以 fault 放喺 result tuple 回傳，唔會 throw；只有傳入嘅 value 唔係 Defjs command 時，promise 先會 reject（`Error: Unsupported command`）。
+
+[Client](/zh-Hant-HK/api/client)

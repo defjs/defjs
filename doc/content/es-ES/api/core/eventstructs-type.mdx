@@ -1,0 +1,20 @@
+---
+title: 'EventStructs'
+description: 'Mapa de nombres de evento SSE a los structs que decodifican sus datos.'
+---
+
+<ApiReference identity="@defjs/core:EventStructs" />
+
+```ts
+type EventStructs = { [key: string]: AnyStruct }
+```
+
+Un evento sin campo `event:` se llama `message`. Un evento cuyo nombre no tiene una entrada propia usa el struct `default`; si no hay ninguno de los dos, el evento se omite y se llama a `onInvalidEvent`. Declara el nombre de evento `__proto__` con una clave propia computada.
+
+Un struct de evento `string` conserva el texto crudo de `data`. Todos los demás tipos son texto JSON: `JSON.parse` y luego el struct. Por eso un `struct.literal` suelto necesita texto JSON, no un token sin comillas.
+
+La reconexión vive en el cliente (`withSSEReconnect`). El `jitter` de SSE es un **factor multiplicativo de 0 a 1**, igual que en WebSocket.
+
+Mira la [guía de SSE](/es-ES/docs/sse) y [Consumir un stream SSE](/es-ES/recipes/consume-sse).
+
+[SSE](/es-ES/api/sse)

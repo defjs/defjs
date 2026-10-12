@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: '宽泛的 struct 约束，可接受任意 struct。'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+`defineRequest`、`Fault`、`HttpCommand` 等 endpoint 与 client 泛型所用的宽泛约束。需要精确的 input 与 output 推断时，优先使用具体的 `Struct<...>`。
+
+[Struct](/zh-Hans/api/struct)

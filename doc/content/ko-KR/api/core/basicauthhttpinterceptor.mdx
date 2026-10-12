@@ -1,0 +1,20 @@
+---
+title: 'basicAuthHttpInterceptor'
+description: '자격 증명으로 Basic Authorization 헤더를 설정하는 HTTP 인터셉터예요.'
+---
+
+<ApiReference identity="@defjs/core:basicAuthHttpInterceptor" />
+
+```ts
+function basicAuthHttpInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): HttpInterceptor
+```
+
+- **fn** — 요청마다 호출돼 자격 증명을 만들어요.
+- **options** — 선택 사항인 [`BasicAuthInterceptorOptions`](/ko-KR/api/core/basicauthinterceptoroptions-type)로, 사용자 지정 `encode`를 담아요.
+- **반환** 요청 헤더의 복사본에 `Authorization: Basic <encoded>`를 설정하는 `HttpInterceptor`예요. 기존 `Authorization` 헤더가 있으면 바꿔요.
+
+기본 인코더는 ``btoa(`${username}:${password}`)``라서 자격 증명은 Latin-1이어야 해요. `encode`를 주지 않았는데 런타임에 `btoa`가 없으면 `basicAuthHttpInterceptor`를 호출할 때 `Error: BasicAuthInterceptor is not supported in this environment`를 던져요. SSE 명령에는 [`basicAuthSSEInterceptor`](/ko-KR/api/core/basicauthsseinterceptor)를 쓰세요.
+
+[인터셉터 가이드](/ko-KR/docs/interceptors)를 보세요.
+
+[인터셉터](/ko-KR/api/interceptors)

@@ -1,0 +1,16 @@
+---
+title: 'struct.literal'
+description: 'boolean、null、number、string のいずれか 1 つの値だけを受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.literal" />
+
+```ts
+function literal<const T extends boolean | null | number | string>(value: T): Struct<T, T>
+```
+
+- 受け付けるのは `value` だけです。比較には `Object.is` を使うため、それ以外の値は `invalid_literal` で失敗します。
+- `value` は `boolean`、`null`、`number`、`string` のいずれかでなければなりません。
+- [`struct.discriminatedUnion()`](/ja-JP/api/core/struct-discriminatedunion) のタグフィールドに使います。
+
+[Struct](/ja-JP/api/struct)

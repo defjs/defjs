@@ -1,0 +1,23 @@
+---
+title: 'withOpenTelemetryServer'
+description: HTTP、SSE、WebSocket のアウトバウンド OpenTelemetry インターセプターを入れるクライアント option です。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:withOpenTelemetryServer" />
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+有効なトランスポートごとにインターセプターを、HTTP、SSE、WebSocket の順に 1 本ずつ足します。`createClient` の時点で適用してください。OpenTelemetry SDK は初期化せず、グローバルな tracer、meter、logger のハンドルも取得しません。アプリケーションが所有するものを渡してください。
+
+- **options** — 必須です。`tracer`、`meter`、`logger`、`propagator`、`requireParentSpan`、および `http` / `sse` / `webSocket` のトランスポート options です。伝播だけでインターセプターを入れたいときは `{}` を渡します。
+- **戻り値** `createClient(...)` 用の `ClientOption` です。
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+`tracer`、`meter`、`logger` はそれぞれ任意で、他がなくても動作します。`tracer` を省略するとローカル span を作成せず、`trace.getTracer(...)`、`startSpanHook`、`requestHook`、`responseHook` も呼びません。抽出した親 context は引き続き伝播します。
+
+HTTP、SSE、WebSocket は既定でオンです。トランスポートに `{ enabled: false }` を渡すとスキップします。
+
+[@defjs/opentelemetry-server](/ja-JP/api/opentelemetry-server)

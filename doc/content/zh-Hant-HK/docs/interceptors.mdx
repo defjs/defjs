@@ -1,0 +1,106 @@
+---
+title: '攔截器'
+description: 用 onion order，喺 transport boundary 為 HTTP、SSE 同 WebSocket 疊 policy。
+---
+
+# 攔截器
+
+加 auth headers、short-circuit maintenance windows，或者 retry safe reads — 又唔掂 command validation。每個 transport 有自己條 chain。你收到 `HttpRequest`；你 return 嗰個 transport 嘅 result（`HttpResponse`、event-stream handle，或者 WebSocket session）。Input validation 喺 chain 之前 run；status dispatch 同 decoded results 喺之後。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## 洋蔥順序
+
+`withInterceptors(...items)` 接受 mixed interceptors。Client 會按選中嘅 transport 用 `kind` filter，並保留相對 registration order。每個 interceptor 可以喺 `next` 前後 run：
+
+| Factory                      | Request       | `next` 嘅結果                         |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+多次 `withInterceptors(...)` 會 append。當外層一定要見到最終 result 時，將 broad observation 放喺 narrower mutation/retry 外面。
+
+## Clone 同加 request headers
+
+將入嚟嘅 `HttpRequest` 當係 chain own 住。改 `Headers` 之前先 clone；傳新 request 去 `next`：
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+SSE 同一套 pattern。Browser WebSocket 唔可以加 arbitrary handshake headers — 改 `request.headers` 唔會 authenticate browser socket。改用 protocol、URL/query policy，或者 server-supported handshake。
+
+Replace HTTP body 時，喺 copied request 上 replace `body`。Body value 變咗之後，Fetch 會 ignore stale content-type metadata。唔好 reuse 已經 consumed 嘅 `ReadableStream` body。
+
+## Short-circuit 一個 request
+
+你可以 skip `next`，但一定要 return 預期嘅 result type。對 HTTP，`makeResponse(...)` 會 build compatible wrapper：
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+Command layer 仍然會按 status dispatch。Callers 需要 typed `error.data` 時，用單一 `error` struct 描述非 2xx side。佢亦照樣會檢查已聲明嗰一邊：JSON `output` 或者 `error` 需要 synthetic response 帶 JSON `content-type` header，而 `body` 應該已經係 parse 好嘅值，同 transport 交付嗰樣一樣（`request.responseType` 同 `request.errorResponseType` 指明 representation）。Short-circuit SSE 或者 WebSocket 需要完整 compatible handle/session（closure promises、live state、ownership 同 `[Symbol.asyncDispose]`）。Partial objects 唔係 valid policy。Structural `EventStreamHandle` 同 `WebSocketSessionLike` implementation 而家 compile 時必須有 standard disposer；淨係接收 Defjs handle 嘅 consumer 唔使加新 runtime call。
+
+## 重試安全嘅讀取
+
+Retries 會改行為。Keep policy 窄 — 呢個例子為 statuses `429`、`502`、`503`、`504` retry replayable `GET` / `HEAD` / `OPTIONS`，將 `Retry-After` cap 喺 30s，兩次 retries 或者 abort 就停：
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+呢個 loop 唔會 retry interceptor/Fetch 拋出嘅 errors——transport failure 係 reject，根本唔會生出一個俾呢個 loop 去 match 嘅 status。Retry `POST` / `PUT` / `PATCH` / `DELETE` 要 replayable bytes、server support、idempotency contract，同 reviewed status policy。Retry 由你自己管——Core 唔會 export `retryAfter()`。
+
+喺呢個例子之外 throw（或者 reject）嘅 interceptor，會以 `EXT_INTERCEPTOR_FAILED` 返到 caller，拋出嘅值
+掛喺 `cause` 上面——睇 [Errors](/zh-Hant-HK/docs/errors)。喺 HTTP interceptor 入面，想表達取消就改為 throw `ERR_ABORTED` 或者 `ERR_TIMEOUT`：call 會以 `NET_ABORTED` 或者 `NET_TIMEOUT` resolve。SSE 同 WebSocket interceptor 冇呢個例外，任何 throw 都會報成 `EXT_INTERCEPTOR_FAILED`。
+
+`next(request)` 可能 reject。Transport failure 係 fault，唔係 status 0 嘅 response，所以想睇到佢嘅
+interceptor 要喺 `next` 外面包 `try` / `catch`。Defjs 嘅歸因照樣正確：由 transport 嚟嘅 reject 依然係
+`NET_*` fault，唔會賴落你個 interceptor 身上。
+
+## 包裝 WebSocket session
+
+WebSocket interceptor 最多 call `next` 一次。如果你 wrap session，就要明確 delegate live getters 同 lifecycle members：
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+Spread session 會將 `state` / `connection` / `bufferedAmount` snapshot 一次。除非你刻意改 ownership，否則保留 `closed`、`receive`、`close`、精確嘅 `[Symbol.asyncDispose]()` delegation 同 listener cleanup。Wrapper 必須 return inner session 嘅 teardown promise，唔可以 return 無關嘅 resolved promise。如果 chain create 咗一個未 deliver 嘅 session，Core 會 settle 同 close 佢；如果成功嘅 interceptor return 唔同 session，Core 會 discard 原本 create 嗰個。
+
+## 參考
+
+Factories return tagged transport values：
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — HTTP 上嘅 Basic credentials
+- `basicAuthSSEInterceptor(provider, options?)` — SSE 上嘅 Basic credentials
+
+`HttpRequest` 可以包括 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`，同 static `operation`。佢係 transport integration value — 唔係 caller 嘅 parsed input。Serialization 之後，`queryParams` 係 `new URLSearchParams(queryString)`。Builder 冇產生 query 嘅時候，configured query serializer 唔會被 call；builder 嘅 `URLSearchParams` 會原樣用。Command validation、output validation 同 domain error mapping 留喺各自嘅 layers。
+
+SSE/WebSocket observers 係 lifecycle hooks，唔係 control flow。Owner 完結時 unsubscribe WebSocket listeners。Observer failures 跟 transport contract；interceptor 本身可以 throw 或者 reject。
+
+Log reviewed allowlist：static `operation`、method、status、duration、stable error code。預設唔好 log resolved URLs、query strings、auth headers、bodies、raw causes、SSE event IDs 或者 WebSocket payloads。
+
+Basic credentials 係 base64，唔係 encrypted。用 TLS，server 上保持 credential providers request-scoped，永遠唔好 log generated header。Default encoder 係 `globalThis.btoa`；runtime 冇 `btoa` 或者需要 reviewed encoder 時，傳 `BasicAuthInterceptorOptions.encode`。
+
+Interceptor 可以 enforce transport policy。佢唔係 input validation、authorization，或者 resource ownership。開始 long-lived work 嘅 code 仍然要用 `await using`，或者 manual close 再 await terminal promise。普通 HTTP 係 request-scoped，用 timeout / `AbortSignal` manage；`Client` 唔係 `AsyncDisposable`。
+
+## 相關配方
+
+- [401 時 refresh Bearer token 一次](/zh-Hant-HK/recipes/refresh-bearer-once)
+- [Publish 一個唔隱藏 execute 嘅 HTTP SDK](/zh-Hant-HK/recipes/publish-http-sdk)
+- [用 local Fetch handle 做 test](/zh-Hant-HK/recipes/test-with-handle)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)

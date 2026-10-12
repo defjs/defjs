@@ -1,0 +1,19 @@
+---
+title: 'HttpStatusFaultOf'
+description: 'خطأ غير 2xx معبَّر عنه بنوع جسمه المفكوك.'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFaultOf" />
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+```
+
+`HttpStatusFault` معبَّرًا عنه بنوع جسمه المفكوك بدل الـ struct الذي أنتجه. المصانع تعمل بالقيم المفكوكة، لذلك تستخدم هذه الصيغة؛ أما أنواع نقاط النهاية فتستخدم `HttpStatusFault` وتترك `Infer` يصل بين الاثنين. وعندما يكون `TData` هو `undefined` فإن الجسم لم يُقرأ أبدًا و`response` بيانات وصفية وحدها.
+
+[الأخطاء](/ar/api/errors)

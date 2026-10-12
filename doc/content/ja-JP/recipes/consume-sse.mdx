@@ -1,0 +1,22 @@
+---
+title: 'SSE イベントの受信'
+description: 型付きイベントストリームを開き、一度だけ反復し、close して closed を await します。
+---
+
+# SSE ストリームを消費する
+
+ストリームあたり非同期イテレータは 1 つです。早めの exit で Fetch 試行を漏らさないよう、`finally` で `close` + `await stream.closed` を置きます。
+
+詳細は [SSE](/ja-JP/docs/sse) を見てください。
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com` はプレースホルダーです。最初のイベントが `message` で、データが `{ "text": "hello from the server" }` のサーバーに対して、このスニペットは次のように出力します。
+
+```txt
+hello from the server
+```
+
+SSE は `withSSEReconnect(...)` を有効にしない限り、ネットワーク/読み取りの失敗をリトライしません。再接続オブジェクトを置くと `attempts` のデフォルトは `3` で、`attempts: 0` はリトライを無効にします。`shouldReconnect` がなければ、再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` のリクエストだけです。`ReadableStream` をボディに持つリクエストは再接続しません。

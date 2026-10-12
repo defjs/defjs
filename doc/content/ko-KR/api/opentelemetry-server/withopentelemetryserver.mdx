@@ -1,0 +1,23 @@
+---
+title: 'withOpenTelemetryServer'
+description: 'HTTP, SSE, WebSocket용 outbound OpenTelemetry interceptor를 설치하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:withOpenTelemetryServer" />
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+활성화된 전송마다 interceptor를 하나씩 HTTP, SSE, WebSocket 순서로 추가해요. `createClient` 시점에 적용하세요. OpenTelemetry SDK를 초기화하거나 전역 tracer, meter, logger 핸들을 얻지 않으니, 애플리케이션이 소유한 것을 넘기세요.
+
+- **options** — 필수예요. `tracer`, `meter`, `logger`, `propagator`, `requireParentSpan`, 그리고 `http` / `sse` / `webSocket` 전송 옵션이에요. 전파만 하는 interceptor를 설치하려면 `{}`를 넘기세요.
+- **반환** `createClient(...)`에 넘기는 `ClientOption`이에요.
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+`tracer`, `meter`, `logger`는 각각 선택이고 서로 없어도 동작해요. `tracer`가 없으면 어댑터는 로컬 span을 만들지 않고, `trace.getTracer(...)`를 호출하지 않으며, `startSpanHook`, `requestHook`, `responseHook`을 건너뛰어요. 전파는 추출한 부모 컨텍스트를 그대로 전달해요.
+
+HTTP, SSE, WebSocket은 기본으로 켜져 있어요. 전송을 건너뛰려면 그 전송에 `{ enabled: false }`를 넘기세요.
+
+[@defjs/opentelemetry-server](/ko-KR/api/opentelemetry-server)

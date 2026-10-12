@@ -1,0 +1,23 @@
+---
+title: 'ObjectStruct'
+description: 'struct.object が作る、オブジェクト形の struct 型です。'
+---
+
+<ApiReference identity="@defjs/core:ObjectStruct" />
+
+```ts
+interface ObjectStruct<T extends ObjectShape>
+  extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
+  readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
+}
+
+type ObjectShape = { [key: string]: any }
+```
+
+`struct.object(shape)` が作ります。フィールドはデフォルトで必須で、`optional()` または `nullish()` を付けたフィールドはオプションのキーになります。パース時に未知のキーは取り除かれます。ワイヤ上の名前は `.alias()` で TypeScript のキーと別にできます。パースに失敗すると `[StructError, undefined]` を返します。`ObjectInput`、`ObjectOutput`、`ObjectStructTypes`、`PreservedStruct` は内部のヘルパー型です。
+
+[Struct](/ja-JP/api/struct)

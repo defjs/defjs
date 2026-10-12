@@ -1,0 +1,14 @@
+---
+title: 'EventStreamRequestShape'
+description: 'SSE builder가 반환하는 요청 모양으로, HTTP 모양과 같아요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamRequestShape" />
+
+```ts
+type EventStreamRequestShape<P extends string, M extends string> = HttpRequestShape<P, M>
+```
+
+스트림의 method `M`과 path `P`에 대해 [`HttpRequestShape`](/ko-KR/api/core/httprequestshape-type)와 같은 필드를 가져요.
+
+[SSE](/ko-KR/api/sse)

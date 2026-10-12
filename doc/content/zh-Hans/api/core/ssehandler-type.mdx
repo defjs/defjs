@@ -1,0 +1,16 @@
+---
+title: 'SSEHandler'
+description: '为请求打开 SSE 流的末端 handler。'
+---
+
+<ApiReference identity="@defjs/core:SSEHandler" />
+
+```ts
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+```
+
+SSE interceptor 收到的 `next` 函数。`next(req)` 只向内走：经过排在当前 interceptor 之后注册的 interceptor，再到打开流的传输层。链路结束后再调用它会 reject。
+
+`EventStreamHandle` 扩展了 `AsyncDisposable`。自己构造 handle 的短路实现必须提供 `[Symbol.asyncDispose](): PromiseLike<void>`，并把它接到同一个关闭生命周期上。
+
+[Interceptors](/zh-Hans/api/interceptors)

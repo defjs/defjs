@@ -1,0 +1,24 @@
+---
+title: 'Structurer un SDK HTTP'
+description: Exporte des endpoints et createClient ; garde le rétrécissement de statut au site d’appel.
+---
+
+# Publier un SDK HTTP sans cacher execute
+
+Un SDK de méthodes qui avale `client.execute` rabaisse en général un `404` déclaré en exception non typée ou en « erreur API » partagée. Garde le contrat comme des endpoints plus un client explicite ; les appelants possèdent encore le branchement sur le statut.
+
+Voir [Commandes](/fr-FR/docs/commands), [Client](/fr-FR/docs/client) et [Décisions de conception](/fr-FR/docs/design-decisions).
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+Exporte des endpoints et une factory de client. Les helpers peuvent appeler `execute` pour un chemin revu, mais ne remplacent pas le tuple pour chaque statut qui t’importe.

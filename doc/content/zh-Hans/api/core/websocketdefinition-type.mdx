@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: '传给 defineWebSocket 的契约对象。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming` 是解析每个收到的 frame 所用的 struct。frame 是 JSON 文本。
+- `outgoing` 是 `session.send` 用来校验和编码的 struct。没有它时，`send` 会抛错。
+- `maxIncomingQueueSize` 必填，必须是正 safe integer。`maxOutgoingQueueSize` 必须是非负 safe integer；默认为 `0`，表示 session 处于 `reconnecting` 时发送的消息不入队。
+- `protocols` 是静态的默认子协议列表。execute 的 `protocols` 选项和 [`withWebSocketProtocols`](/zh-Hans/api/core/withwebsocketprotocols) 会覆盖它。
+- `operation` 是用于遥测的静态、低基数名称。
+- `input` 是 command 输入的 struct。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。builder 只能返回 `path` 和 `query`；见 [`WebSocketRequestShape`](/zh-Hans/api/core/websocketrequestshape-type)。
+
+无效的队列上限会在 command 执行时以 `REQ_OPTIONS_INVALID` fault 报告。
+
+[WebSocket](/zh-Hans/api/web-socket)

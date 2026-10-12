@@ -1,0 +1,14 @@
+---
+title: 'AnyFault'
+description: '所有 fault 變體嘅 union，唔理解碼後嘅 error body 係咩 type。'
+---
+
+<ApiReference identity="@defjs/core:AnyFault" />
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+任何 fault，唔理佢解碼後嘅 error body 係咩 type。寫嗰啲只做分類、唔理係邊個 endpoint 產出嘅 handler 就用佢；body type 緊要嘅地方優先用 `Fault<typeof yourErrorStruct>`。
+
+[Errors](/zh-Hant-HK/api/errors)

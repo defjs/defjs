@@ -1,0 +1,174 @@
+---
+title: HTTP
+description: defineRequest、execute options、HTTP の request/response 型です。
+---
+
+# HTTP
+
+型付きリクエストを宣言し、入力からコマンドを組み立てて実行します。
+
+## defineRequest()
+
+```ts
+function defineRequest(definition: RequestDefinition): RequestEndpoint
+```
+
+- **definition** — `method`、`path`、任意の `input` struct、任意の `output` と `error` struct、任意の `operation`。`input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
+- **戻り値** エンドポイントです。入力を渡して呼ぶと `HttpCommand` になります。
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` は 2xx ボディ用の struct 1 つ、`error` は 2xx 以外すべてのボディ用の struct 1 つです。どちらも status でキー分けされません。省いた側のボディは読まれません — [宣言は断言である](/ja-JP/docs/design-decisions#宣言は断言である) を参照してください。
+
+## executeHttpCommand()
+
+```ts
+function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, options?: HttpExecuteOptions): Promise<HttpAwaitResult>
+```
+
+`client.execute` が使う低レベル入口です。アプリコードでは `client.execute(command, options)` を呼んでください。
+
+- **戻り値** `[null, data, response]` または `[fault, undefined, undefined]`。
+
+2xx 以外の status は、`error` struct を宣言していないか、宣言した `error` ボディがデコードできる場合に `HTTP_STATUS` になります。その `data` は、`error` を宣言していればデコード済みのエラーボディ、していなければ `undefined` です。宣言した `error` ボディを読めない場合（メディアタイプが違う、JSON が不正）や struct に一致しない場合、fault は代わりに `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH` のいずれかになり、レスポンスの status はそのメタデータに引き続き含まれます。失敗時のタプル第三要素は `undefined` で、レスポンスのメタデータは fault が持ちます。
+
+## fetchHandler()
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+デフォルトの HTTP トランスポートです。`fetchImpl` のデフォルトはグローバルの `fetch` で、別のものは `withHTTPHandle` で与えます。レスポンスがクライアントに届かなかったとき、または宣言されたボディの読み取りに失敗したときは、合成レスポンスで解決するのではなく reject します。
+
+## makeResponse()
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+ネットワークなしで `HttpResponse` を作ります（インターセプター、テスト）。デフォルトの status は `0` です。`ok` は 2xx のとき true です。返る値は、回線から来たレスポンスと同じメディアタイプ確認と同じ宣言 struct を通ります。信頼による短絡経路はありません。
+
+## 実行 options
+
+## HttpExecuteOptions
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+キャンセルは `abort` **または** `timeout` の一方だけで、両方は使えません。型は両方の指定を拒否し、実行時に両方を渡すと `REQ_OPTIONS_INVALID` で失敗します。`signal` はどちらかと組み合わせられ、`abort` の別名では**ありません**。有効な形は `{ timeout }`、`{ abort }`、`{ signal, timeout }`、`{ signal, abort }` です。`{ abort, timeout }` は無効です。`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。呼び出しで `timeout` を省くと、クライアントの `withTimeout` のデフォルトが適用されます（HTTP のみ）。`abort` と `signal` はそのデフォルトと組み合わさります。
+
+## 型
+
+### RequestDefinition
+
+`method`、`path`、任意の `input`、`output`、`error`、`operation`、`builder` です。`responseType` はありません。宣言したボディの読み方は struct の kind が選びます。`input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
+
+### HttpAwaitResult
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+成功時、第三要素が `body` を持つのは `output` を宣言していたときだけです。失敗時は `undefined` です — 存在したレスポンスのメタデータはすでに fault が抱えています。
+
+### HttpRequest
+
+正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、`timeout`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでに回線上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。ビルダーが `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。エンドポイントの `output` と `error` の struct kind から導出され、変更してはいけません。
+
+### HttpMeta
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+レスポンスのメタデータで、レスポンスがクライアントに届いていれば使えます。`body` は**持ちません**。ボディは、宣言された struct がデコードしたあとにだけ存在します。
+
+### DecodedResponse
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+ボディが宣言された struct でデコードできたレスポンスです。この型を手にしていること自体がデコードが起きた証拠であり、だからデコード失敗は `HttpMeta` だけを報告します。
+
+### HttpResponse
+
+```ts
+type HttpResponse<R> = {
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+`body` は、レスポンスにボディがなかったときは `undefined` で、JSON の `null` は `null` のままです。この型はブランド付きなので、オブジェクトリテラルではなく `makeResponse` で作ってください。トランスポートが作り、インターセプターが見る回線上の形です。`body` はテキストか、すでにパースされた JSON で、デコード済みの値ではありません。JSON 表現では、文字列は JSON の文字列ルートであり、もう一度パースされません。バイトと blob は生のままで、一度だけパースされます。呼び出し側に届くのは `DecodedResponse` です。
+
+### HttpProgressEvent
+
+### HttpProgressFn
+
+`loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルと `timeout` は引き続き `NET_ABORTED` / `NET_TIMEOUT` を報告します。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます（Bun、Node、Deno）。ブラウザーでは、`Blob` / `File`、`ArrayBuffer`、`FormData` のボディはそのまま送られ、`onUploadProgress` は呼び出されません。
+
+[HTTP ガイド](/ja-JP/docs/http) と [Commands](/ja-JP/docs/commands) を見てください。
+
+## RequestEndpoint
+
+`defineRequest` の戻り値です。入力を渡して呼ぶと `HttpCommand` になります。
+
+## BuilderInput
+
+`builder` が見る、パース済みのエンドポイント入力です。オブジェクトノードはそれを生んだ struct を運ぶので、エイリアス、`Date`、`bigint` のエンコードは値についてきます。
+
+## HttpRequestShape
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+  headers?: HeadersInit | FlatRecord
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+}
+```
+
+`GET` と `HEAD` はボディを返せません。`path` と `headers` はフラットなスカラーである必要があります。`query` は入れ子になれ、入れ子オブジェクトには実行時の `withQuerySerializer` が要ります。
+
+## HttpCommand
+
+リクエストのビルダーが出す不透明なコマンドです。`client.execute` に渡します。
+
+## UseRequestConfig
+
+進捗とキャンセルのフィールドです。`HttpExecuteOptions` は `signal` を足します。
+
+## RequestSuccessData
+
+宣言された `output` struct から推論される成功ボディです。宣言がなければ `undefined` です。
+
+## RequestErrorData
+
+宣言された `error` struct から推論されるエラーボディです。宣言がなければ `undefined` です。
+
+## HttpResponseType
+
+`'arraybuffer' | 'blob' | 'json' | 'text'`
+
+宣言した struct の kind から選ばれます（`string` → `text`、`blob` / `file` → `blob`、`arrayBuffer` → `arraybuffer`、それ以外 → `json`）。`defineRequest` のフィールドではありません。
+
+## MakeResponseOptions
+
+`makeResponse` 用のフィールドです。`status`、`statusText`、`url`、`headers`、`body`、`request`。

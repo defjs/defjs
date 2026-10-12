@@ -1,0 +1,24 @@
+---
+title: 'StructIssue'
+description: 'Один сбой валидации, возникший при разборе struct.'
+---
+
+<ApiReference identity="@defjs/core:StructIssue" />
+
+```ts
+interface StructIssue {
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  expected: string
+  message: string
+  path: Array<number | string>
+  received: unknown
+}
+```
+
+- `code` — машиночитаемая категория. Парсер выдаёт `invalid_type`, `invalid_literal`, `invalid_enum`, `invalid_union`, `invalid_intersection` и `missing_key`; `custom` входит в тип, но встроенные struct’ы его никогда не производят.
+- `expected` описывает ожидаемый тип или значение.
+- `message` — итоговый текст, после необязательной перезаписи через [`ErrorMap`](/ru-RU/api/core/errormap-type).
+- `path` идёт от корня разбора до места сбоя: имена полей и индексы массивов. Для сбоя на корне он пустой.
+- `received` — значение, которое не прошло по `path`.
+
+[Struct](/ru-RU/api/struct)

@@ -1,0 +1,110 @@
+---
+title: 'Interceptors'
+description: Layer HTTP, SSE, and WebSocket policy at the transport boundary in onion order.
+---
+
+# Interceptors
+
+Add auth headers, short-circuit maintenance windows, or retry safe reads — without touching command validation. Each transport has its own chain. You get an `HttpRequest` in; you return that transport’s result (`HttpResponse`, event-stream handle, or WebSocket session). Input validation runs before the chain; status dispatch and decoded results after.
+
+## Basic Setup
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## Onion order
+
+`withInterceptors(...items)` accepts mixed interceptors. The client filters by `kind` for the selected transport and keeps relative registration order. Each interceptor may run before and after `next`:
+
+| Factory                      | Request       | Result from `next`                    |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+Multiple `withInterceptors(...)` calls append. Put broad observation outside narrower mutation/retry when the outer layer must see the final result.
+
+## Clone and add request headers
+
+Treat the incoming `HttpRequest` as owned by the chain. Clone `Headers` before changing them; pass a new request to `next`:
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+Same pattern for SSE. Browser WebSocket can’t add arbitrary handshake headers — changing `request.headers` won’t authenticate a browser socket. Use protocol, URL/query policy, or a server-supported handshake instead.
+
+When replacing an HTTP body, replace `body` on the copied request. Fetch ignores stale content-type metadata when the body value changed. Don’t reuse a consumed `ReadableStream` body.
+
+## Short-circuit a request
+
+You can skip `next`, but you must return the expected result type. For HTTP, `makeResponse(...)` builds a compatible wrapper:
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+The command layer still dispatches by status. Declare one `error` struct for the non-2xx side when callers need typed `error.data`. It also still checks the declared side: a JSON `output` or `error` needs a JSON `content-type` header on the synthetic response, and `body` should already be the parsed value, the way the transport would deliver it (`request.responseType` and `request.errorResponseType` name the representation). Short-circuiting SSE or WebSocket needs a complete compatible handle/session (closure promises, live state, ownership, and `[Symbol.asyncDispose]`). Partial objects aren’t valid policy. Structural `EventStreamHandle` and `WebSocketSessionLike` implementations now need that standard disposer at compile time; consumers that only receive Defjs handles have no new runtime call requirement.
+
+## Retry safe reads
+
+Retries change behavior. Keep the policy narrow — this example retries replayable `GET` / `HEAD` / `OPTIONS` for statuses `429`, `502`, `503`, `504`, caps `Retry-After` at 30s, and stops after two retries or on abort:
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+Thrown interceptor/Fetch errors aren’t retried by this loop — a transport failure rejects instead of producing a status this loop could match on. Retrying `POST` / `PUT` / `PATCH` / `DELETE` needs replayable bytes, server support, an idempotency contract, and a reviewed status policy. You own retry — Core does not export `retryAfter()`.
+
+An interceptor that throws (or rejects) outside this sample is returned to the caller as
+`EXT_INTERCEPTOR_FAILED`, with the thrown value on `cause` — see [Errors](/docs/errors). In an HTTP
+interceptor, throwing `ERR_ABORTED` or `ERR_TIMEOUT` is how you express cancellation instead: the call
+resolves with `NET_ABORTED` or `NET_TIMEOUT`. SSE and WebSocket interceptors have no such exception;
+they report any throw as `EXT_INTERCEPTOR_FAILED`.
+
+`next(request)` can reject. A transport failure is a fault, not a status-0 response, so an
+interceptor that wants to observe one uses `try` / `catch` around `next`. Defjs still attributes it
+correctly: a rejection that came from the transport stays a `NET_*` fault rather than being blamed
+on your interceptor.
+
+## Wrap WebSocket sessions
+
+A WebSocket interceptor may call `next` at most once. If you wrap the session, delegate live getters and lifecycle members explicitly:
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+Spreading a session snapshots `state` / `connection` / `bufferedAmount` once. Preserve `closed`, `receive`, `close`, the exact `[Symbol.asyncDispose]()` delegation, and listener cleanup unless you’re deliberately changing ownership. A wrapper must return the inner session’s teardown promise, not an unrelated resolved promise. If a chain creates a session that isn’t delivered, Core settles and closes it; if a successful interceptor returns a different session, Core discards the created one.
+
+## Reference
+
+Factories return tagged transport values:
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — Basic credentials on HTTP
+- `basicAuthSSEInterceptor(provider, options?)` — Basic credentials on SSE
+
+`HttpRequest` may include `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, and static `operation`. It’s a transport integration value — not the caller’s parsed input. `queryParams` is `new URLSearchParams(queryString)` after serialization. A configured query serializer is not called when the builder produced no query, and a builder `URLSearchParams` is used as-is. Keep command validation, output validation, and domain error mapping in their layers.
+
+SSE/WebSocket observers are lifecycle hooks, not control flow. Unsubscribe WebSocket listeners when the owner ends. Observer failures follow the transport contract; an interceptor itself can throw or reject.
+
+Log a reviewed allowlist: static `operation`, method, status, duration, stable error code. Don’t log resolved URLs, query strings, auth headers, bodies, raw causes, SSE event IDs, or WebSocket payloads by default.
+
+Basic credentials are base64, not encrypted. Use TLS, keep credential providers request-scoped on a server, never log the generated header. Default encoder is `globalThis.btoa`; pass `BasicAuthInterceptorOptions.encode` when the runtime lacks `btoa` or needs a reviewed encoder.
+
+An interceptor can enforce transport policy. It is not input validation, authorization, or resource ownership. The code that starts long-lived work still uses `await using` or manually closes and awaits the terminal promise. Ordinary HTTP remains request-scoped and is managed with its timeout / `AbortSignal`; `Client` is not `AsyncDisposable`.
+
+## Related recipes
+
+- [Refresh a Bearer token once on 401](/recipes/refresh-bearer-once)
+- [Publish an HTTP SDK without hiding execute](/recipes/publish-http-sdk)
+- [Test with a local Fetch handle](/recipes/test-with-handle)
+- [Cancel an HTTP call](/recipes/cancel-http)

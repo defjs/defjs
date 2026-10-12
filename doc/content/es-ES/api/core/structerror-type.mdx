@@ -1,0 +1,27 @@
+---
+title: 'StructError'
+description: 'Error que devuelve un parse de struct fallido, con sus issues y formateadores.'
+---
+
+<ApiReference identity="@defjs/core:StructError" />
+
+```ts
+class StructError extends Error {
+  readonly issues: StructIssue[]
+  constructor(issues: StructIssue[])
+  format(): FormattedStructError
+  flatten(): FlattenedStructError
+  prettify(): string
+}
+```
+
+`name` es `'StructError'`. `message` es el mensaje del issue cuando hay uno solo, `N struct issues: <first message>` cuando hay varios y `Struct parse failed` cuando no hay ninguno.
+
+- `struct.parse` se detiene en el primer fallo, así que `issues` contiene allí un único [`StructIssue`](/es-ES/api/core/structissue-type).
+- `format()` devuelve un árbol [`FormattedStructError`](/es-ES/api/core/formattedstructerror-type). Cada nodo tiene un array `_errors` y las claves anidadas siguen `issue.path`.
+- `flatten()` devuelve un [`FlattenedStructError`](/es-ES/api/core/flattenedstructerror-type): los mensajes con path vacío van a `formErrors` y los demás se agrupan en `fieldErrors` por el primer segmento del path.
+- `prettify()` devuelve una línea `× path: message` por issue. Un path vacío se muestra como `<root>`.
+
+Mira la [guía de Struct](/es-ES/docs/struct).
+
+[Struct](/es-ES/api/struct)

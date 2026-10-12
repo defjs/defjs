@@ -1,0 +1,14 @@
+---
+title: 'InterceptorFn'
+description: 'Funktionssignatur eines HTTP-Interceptors.'
+---
+
+<ApiReference identity="@defjs/core:InterceptorFn" />
+
+```ts
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+```
+
+Darf den Request prüfen oder ändern und ruft dann `next(req)` auf oder short-circuitet mit `makeResponse`. Wrappe sie mit `createHttpInterceptor`, um sie zu registrieren.
+
+[Interceptors](/de-DE/api/interceptors)

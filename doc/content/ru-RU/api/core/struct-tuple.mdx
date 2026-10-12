@@ -1,0 +1,26 @@
+---
+title: 'struct.tuple'
+description: 'Struct, который разбирает массив фиксированной длины с отдельным struct на каждую позицию.'
+---
+
+<ApiReference identity="@defjs/core:struct.tuple" />
+
+```ts
+function tuple<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(
+  items: T,
+): TupleStruct<T>
+```
+
+`struct.tuple` принимает **один массив** struct’ов, а не отдельные аргументы:
+
+```ts
+const Pair = struct.tuple([struct.string(), struct.number()])
+```
+
+- Каждая позиция разбирается struct’ом с тем же индексом. Input должен быть массивом ровно такой же длины, иначе результат — `invalid_type` (ожидался `tuple of length N`).
+- Передача struct’ов отдельными аргументами, `struct.tuple(a, b)`, бросает `TypeError`.
+- Бросает `TypeError`, если элемент не struct.
+
+`TupleStruct<T>` не экспортируется. Это `Struct`, чьи input и output — кортежи типов элементов.
+
+[Struct](/ru-RU/api/struct)

@@ -1,0 +1,18 @@
+---
+title: 'WebSocketHandleConstructor'
+description: 'Tipo de constructor que acepta withWebSocketHandle.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandleConstructor" />
+
+```ts
+type WebSocketHandleConstructor = {
+  readonly OPEN: number
+} & (new (...args: never[]) => WebSocketHandle)
+```
+
+Una clase o función que construye un [`WebSocketHandle`](/es-ES/api/core/websockethandle-type) y expone la constante numérica de ready-state `OPEN`. El transporte compara `readyState` con `OPEN`.
+
+Se invoca como `new WebSocketImpl(url)`, o como `new WebSocketImpl(url, protocols)` cuando hay subprotocolos. Por defecto es `globalThis.WebSocket`. Pasa otro con [`withWebSocketHandle`](/es-ES/api/core/withwebsockethandle).
+
+[Cliente](/es-ES/api/client)

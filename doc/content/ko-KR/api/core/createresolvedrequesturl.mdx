@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: '요청 path를 기본 endpoint에 대해 해석해 URL로 만들어요.'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — 클라이언트 endpoint예요. query와 hash는 버려지고, base path가 유지되도록 pathname 끝에 슬래시가 붙어요. `https://api.example.com/v1`에 `/users`를 주면 `https://api.example.com/v1/users`가 돼요.
+- **path** — 상대 엔드포인트 path예요. 맨 앞의 슬래시 하나는 제거돼요.
+- **queryString** — 앞의 `?`가 없는 query예요. 비어 있지 않으면 그대로 URL의 search로 설정돼요.
+- **반환** 해석된 `URL`이에요.
+
+`baseEndpoint`를 파싱할 수 없으면 `TypeError('Client endpoint must be a valid URL')`를 던져요. `path`에 scheme이 있거나 `//`로 시작하면 `Error`를 던지고 (`Endpoint path must not be an absolute URL`), `?`나 `#`를 포함해도 던져요 (`Endpoint path must not include query or hash`).
+
+[HTTP](/ko-KR/api/http)

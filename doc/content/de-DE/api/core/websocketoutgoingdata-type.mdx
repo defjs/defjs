@@ -1,0 +1,14 @@
+---
+title: 'WebSocketOutgoingData'
+description: 'Typ, den WebSocket-Session-send akzeptiert.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketOutgoingData" />
+
+```ts
+type WebSocketOutgoingData<TOutgoing extends AnyStruct | undefined> = TOutgoing extends AnyStruct ? StructInput<TOutgoing> : never
+```
+
+Der Typ, den `session.send` akzeptiert: der [`StructInput`](/de-DE/api/core/structinput-type) des `outgoing`-Structs des Endpoints, oder `never`, wenn der Endpoint keinen deklariert, sodass `send` mit keinem Wert aufgerufen werden kann.
+
+[WebSocket](/de-DE/api/web-socket)

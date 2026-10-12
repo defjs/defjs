@@ -1,0 +1,16 @@
+---
+title: 'struct.unknown'
+description: 'Struct that accepts any value except null and undefined, typed as unknown.'
+---
+
+<ApiReference identity="@defjs/core:struct.unknown" />
+
+```ts
+function unknown(): Struct<NonNullable<unknown>, unknown>
+```
+
+- Accepts every value except `null` and `undefined` and returns it unchanged. Nothing inside it is validated or stripped.
+- Chain `.null()`, `.optional()`, or `.nullish()` to accept `null` or `undefined`.
+- The output type is `unknown`, so the caller must narrow it before use.
+
+[Struct](/api/struct)

@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: 'Résout un chemin de requête par rapport à un endpoint de base pour obtenir une URL.'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — L’endpoint du client. Sa query et son hash sont supprimés, et une barre oblique finale est ajoutée à son pathname afin de conserver le chemin de base : `https://api.example.com/v1` avec `/users` donne `https://api.example.com/v1/users`.
+- **path** — Un chemin d’endpoint relatif. Une barre oblique initiale unique est retirée.
+- **queryString** — Query sans `?` initial. Quand elle n’est pas vide, elle est définie telle quelle comme search de l’URL.
+- **Renvoie** l’`URL` résolue.
+
+Lève `TypeError('Client endpoint must be a valid URL')` quand `baseEndpoint` ne se parse pas. Lève `Error` quand `path` a un schéma ou commence par `//` (`Endpoint path must not be an absolute URL`), ou contient `?` ou `#` (`Endpoint path must not include query or hash`).
+
+[HTTP](/fr-FR/api/http)

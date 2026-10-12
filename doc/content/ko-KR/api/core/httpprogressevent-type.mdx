@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: '업로드와 다운로드 콜백에 넘기는 진행 스냅샷이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+`ProgressEvent` 필드를 그대로 따라요. `loaded`는 지금까지 전송한 바이트 수예요. 전체 크기를 알 수 없으면 `total`은 `0`이고 `lengthComputable`은 `false`예요.
+
+[`HttpProgressFn`](/ko-KR/api/core/httpprogressfn-type), [HTTP 가이드](/ko-KR/docs/http), [명령](/ko-KR/docs/commands)을 보세요.
+
+[HTTP](/ko-KR/api/http)

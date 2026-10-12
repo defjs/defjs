@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'Client option：啟用 SSE 自動 reconnect。'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+設定 SSE stream 失敗之後嘅自動 reconnect。Reconnect 係 opt-in：冇呢個 option 嘅話，失敗嘅 stream 唔會重試。傳入 `undefined` 會清除之前嘅設定。
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` 係第一次嘗試之後嘅重試額度。設咗 `reconnect` 時預設係 `3`，`0` 就停用重試。唔寫 `attempts` 唔代表無限。
+- 冇 `shouldReconnect` 嘅時候，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` 會重連。有佢嘅話，每種 method 會唔會重連都由佢嘅結果決定，包括 `POST`；context 入面嘅 `method` 用嚟區分 endpoint。回傳 `false` 就唔會因為今次失敗而繼續重試。Callback 會喺檢查 attempts 上限之前執行。
+- 用 `ReadableStream` 做 body 嘅 request 永遠唔會重連，亦唔會呼叫 `shouldReconnect`。
+- `delayMs` 只係起始嘅 base delay（預設 `1000`）。Server 傳嚟嘅 `retry:` field（只限數字，單位毫秒）會取代佢，用喺之後嘅嘗試。
+- `delayMs`、`factor`、`jitter`（0 至 1）同 `maxDelayMs` 決定 backoff 嘅形狀。`factor` 預設係 `1`，`jitter` 預設係 `0`。
+- 最後一個 event id 會喺下一次嘗試時以 `Last-Event-ID` 再次發送。
+
+Stream handle 請參閱 [SSE](/zh-Hant-HK/api/sse)。
+
+[Client](/zh-Hant-HK/api/client)

@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerHttpOptions'
+description: Opciones del transporte HTTP — las opciones compartidas con un HttpResponse en responseHook.
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions" />
+
+```ts
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+```
+
+Se define en `http` de `OpenTelemetryServerOptions`. No tiene campos propios: `enabled`, `startSpanHook`, `requestHook` y `responseHook` provienen de `OpenTelemetryServerTransportOptions`.
+
+- `responseHook(span, res, req)` recibe el `HttpResponse` que volvió por el interceptor, antes de que el cliente decodifique un body declarado, junto con el `HttpRequest` original. Lee `req.operation` para la identidad de la solicitud; no la reconstruyas a partir del endpoint ni de una URL resuelta.
+- El span HTTP termina en cuanto `responseHook` retorna; el hook no se espera (await), así que solo su parte síncrona puede aún cambiar el span. Un status de 400 o superior lo termina como `ERROR` con `error.type` igual a la cadena del status; de 100 a 399 deja su estado sin establecer.
+- Un rechazo a través del interceptor (fallo de red, cancelación, timeout, o un body `output` / `error` declarado que no se puede leer como JSON) no tiene status de respuesta y no llama a `responseHook`. El span termina como `ERROR` con `error.type` igual al nombre de la clase lanzada, como `TypeError`, `Error` o `BodyFailure`. La cancelación del llamador es `Error`, sea cual sea el motivo del abort.
+
+Pasa `{ enabled: false }` para omitir la instrumentación HTTP. Los span hooks solo se ejecutan cuando se proporciona un `tracer`.
+
+[@defjs/opentelemetry-server](/es-ES/api/opentelemetry-server)

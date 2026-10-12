@@ -1,0 +1,17 @@
+---
+title: 'injectClient'
+description: 'دالة Vue composable تُرجع العميل الذي وفّرته createClientPlugin.'
+---
+
+<ApiReference identity="@defjs/vue:injectClient" />
+
+```ts
+function injectClient(): Client
+```
+
+يقرأ أقرب موفر `HTTP_CLIENT`. استدعِه حيث يُسمح بـ `inject` في Vue، مثل `setup()`.
+
+- **يعيد** العميل المحقون.
+- **يرمي** `Error` إذا لم يُوفَّر أي عميل، مثلًا عندما لم تُثبَّت الإضافة.
+
+[@defjs/vue](/ar/api/vue)

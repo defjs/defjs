@@ -1,0 +1,18 @@
+---
+title: 'struct.array'
+description: '1 つの要素 struct で配列をパースする struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.array" />
+
+```ts
+function array<S extends StructLike<unknown, unknown, boolean>>(item: S): ArrayStruct<S>
+```
+
+- すべての要素を `item` でパースし、新しい配列を出力します。配列でない値は `invalid_type`（expected は `array`）で失敗します。
+- 最初に失敗した要素でパースが止まり、`issue.path` にそのインデックスが入ります。
+- `item` が struct でない場合は `TypeError` を投げます。
+
+`ArrayStruct<S>` はエクスポートされません。実体は `Struct<StructInput<S>[], Infer<S>[]>` です。
+
+[Struct](/ja-JP/api/struct)

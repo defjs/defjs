@@ -1,0 +1,18 @@
+---
+title: 'struct.formData'
+description: '作為 request body 時會編碼成 multipart FormData 嘅 object struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.formData" />
+
+```ts
+function formData<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+解析方式同 [`struct.object()`](/zh-Hant-HK/api/core/struct-object) 一樣，另外帶有 `formData` codec tag。
+
+- Tag 只會喺呢個 struct 嘅值係 request body root 嗰陣先生效。Body 之後會以 `FormData` 送出，multipart boundary 由平台提供。
+- Array 會重複欄位名，`undefined` 欄位會被略過，`Blob` / `File` 值會當檔案 append。巢狀 object 會令 request 以 `REQ_BUILD_FAILED` 失敗。
+- `struct.parse` 會忽略個 tag。佢唔接受 `FormData` instance，只接受 plain object。
+
+[Struct](/zh-Hant-HK/api/struct)

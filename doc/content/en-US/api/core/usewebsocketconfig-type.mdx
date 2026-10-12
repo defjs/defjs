@@ -1,0 +1,22 @@
+---
+title: 'UseWebSocketConfig'
+description: 'WebSocket execute options without signal.'
+---
+
+<ApiReference identity="@defjs/core:UseWebSocketConfig" />
+
+```ts
+type UseWebSocketConfig<TIncoming = unknown, TOutgoing = unknown> = {
+  beforeConnect?: ClientWebSocketOptions['beforeConnect']
+  heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>
+  protocols?: readonly string[]
+  reconnect?: ClientWebSocketOptions['reconnect']
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+The WebSocket-specific part of [`WebSocketExecuteOptions`](/api/core/websocketexecuteoptions-type), which adds `signal`.
+
+- `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for one call.
+- Cancellation is either `abort` or `timeout`, never both. The type rejects both, and at runtime passing both fails with a `REQ_OPTIONS_INVALID` fault.
+
+[WebSocket](/api/web-socket)

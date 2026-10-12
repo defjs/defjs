@@ -1,0 +1,16 @@
+---
+title: 'HttpStatusFault'
+description: '非 2xx 回應的 fault，型別由宣告的 error struct 決定。'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFault" />
+
+```ts
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+`TErr` 是端點宣告的 `error` struct；沒有宣告時為 `undefined`。適用於任何非 2xx 的 status。端點宣告了 `error` 且 body 已解碼時，`data` 就是那個 body，`response` 也帶著它。省略 `error` 時，body 永遠不會被讀取，`data` 為 `undefined`，`response` 只有 metadata。成員形狀見 [`HttpStatusFaultOf`](/zh-Hant-TW/api/core/httpstatusfaultof-type)。
+
+[錯誤](/zh-Hant-TW/api/errors)

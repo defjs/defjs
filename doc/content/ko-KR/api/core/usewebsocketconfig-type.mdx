@@ -1,0 +1,22 @@
+---
+title: 'UseWebSocketConfig'
+description: 'signal을 뺀 WebSocket execute 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:UseWebSocketConfig" />
+
+```ts
+type UseWebSocketConfig<TIncoming = unknown, TOutgoing = unknown> = {
+  beforeConnect?: ClientWebSocketOptions['beforeConnect']
+  heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>
+  protocols?: readonly string[]
+  reconnect?: ClientWebSocketOptions['reconnect']
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+[`WebSocketExecuteOptions`](/ko-KR/api/core/websocketexecuteoptions-type)에서 WebSocket에만 해당하는 부분이에요. `WebSocketExecuteOptions`는 여기에 `signal`을 더해요.
+
+- `beforeConnect`, `heartbeat`, `protocols`, `reconnect`는 한 번의 호출에 한해 클라이언트 수준 옵션을 대체해요.
+- 취소는 `abort` 또는 `timeout` 중 하나만 쓸 수 있고, 둘을 함께 쓸 수는 없어요. 타입이 둘 다 주는 것을 막고, 런타임에 둘 다 넘기면 `REQ_OPTIONS_INVALID` fault로 실패해요.
+
+[WebSocket](/ko-KR/api/web-socket)

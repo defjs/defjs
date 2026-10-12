@@ -1,0 +1,17 @@
+---
+title: 'createClientPlugin'
+description: 'Crée un plugin Vue qui fournit à l’app un client Defjs existant.'
+---
+
+<ApiReference identity="@defjs/vue:createClientPlugin" />
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — Instance issue de `createClient`. Le plugin ne la crée pas, ne la met pas en cache et ne la libère pas.
+- **Renvoie** un plugin Vue pour `app.use(...)`. L’installer appelle `app.provide(HTTP_CLIENT, client)`, si bien que les composants lisent le client avec `injectClient()`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+[@defjs/vue](/fr-FR/api/vue)

@@ -1,0 +1,14 @@
+---
+title: 'ErrorMap'
+description: 'Callback qui réécrit le message d’un problème de struct.'
+---
+
+<ApiReference identity="@defjs/core:ErrorMap" />
+
+```ts
+type ErrorMap = (issue: StructIssue) => string | undefined
+```
+
+Passé comme option `errorMap` de `struct.parse`. Il est appelé pour chaque problème (`code`, `expected`, `message`, `path`, `received`) avant que le problème soit enregistré. Renvoie une chaîne pour remplacer le message par défaut, ou `undefined` pour le conserver.
+
+[Struct](/fr-FR/api/struct)

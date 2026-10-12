@@ -1,0 +1,106 @@
+---
+title: 'SSE 이벤트 스트림'
+description: 타입이 있는 SSE 스트림을 소비하고, 닫고, 종료된 closed 프로미스를 await 해요.
+---
+
+# Server-Sent Events
+
+스트림을 열고, 순회한 뒤, 소유한 핸들을 `await using`으로 놓아요. 수동 `close()`와 `closed`도 그대로 쓸 수 있어요. 클라이언트와 플러그인은 돌려준 스트림을 대신 dispose하지 않아요.
+
+## 기본 사용법
+
+<include cwd lang="typescript">
+  examples/sse/basic-setup.ts#example
+</include>
+
+## 스트림 정의하기
+
+`defineEventStream(...)`에는 `events`, 양의 안전 정수 `maxBufferSize`, 양의 안전 정수 `maxQueueSize`, 상대 `path`가 필요해요. method 기본값은 `GET`이에요.
+
+요청 모양은 HTTP와 같아요. `builder`가 `path`, `query`, `headers`, `body`를 돌려줘요. `GET` / `HEAD`는 body를 돌려줄 수 없어요. 선언된 `error` struct는 시작 fault의 타입을 정하고, non-2xx 핸드셰이크 body를 struct kind로 디코딩해요 (`string`은 텍스트, `blob` / `file`은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON). `Accept`를 이미 두지 않았으면 Defjs가 `Accept: text/event-stream`을 보내요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. `ReadableStream` body는 HTTP 규칙을 따르고, 요청 body 스트리밍을 지원하지 않는 런타임(Firefox 등)에서는 아무것도 보내지기 전에 시작이 `ENV_UNSUPPORTED`로 실패해요. Chromium에서는 HTTP/2 이상이 필요하고, HTTP/1.1에서는 시작이 `NET_UNREACHABLE`로 실패해요. 스트림 body는 한 번만 보내지고 재연결되지 않아요(재연결 섹션 참고).
+
+재연결을 고르면 논리 스트림 하나가 여러 물리 Fetch 시도를 가로지를 수 있어요. `withSSEReconnect`가 없으면 일시적인 네트워크 실패와 스트림 읽기 실패는 논리 스트림을 끝내요. 열기에 성공하면 핸들 하나와 async iterator 하나를 받아요.
+
+## 열고 살펴보기
+
+`client.execute(...)`는 status, content-type, body 검사가 통과한 뒤에만 resolve해요.
+
+<include cwd lang="typescript">
+  examples/sse/open-and-inspect.ts#example
+</include>
+
+응답은 성공해야 하고, 미디어 타입 essence는 `text/event-stream`이어야 하고, body가 있어야 해요. non-2xx 시작은 `HTTP_STATUS`예요. `error`를 선언하면 그 fault가 디코딩된 핸드셰이크 body를 가져요. 잘못된 미디어 타입은 `RES_MEDIA_TYPE_INVALID`이고, 선언된 kind로 읽을 수 없는 body는 `RES_DECODE_FAILED`예요. 응답이 도착한 뒤 검증이 실패해도 응답 스냅샷은 튜플의 세 번째 자리에 남을 수 있어요.
+
+`startupOpen`은 처음 스냅샷이에요. `stream.open`은 살아 있고 이후 물리 open에서 바뀌어요. 첫 응답이 중요하면 튜플 값을 붙들어 두세요.
+
+<include cwd lang="typescript">
+  examples/sse/stream-result.ts#example
+</include>
+
+## 이벤트 디코딩하기
+
+와이어 이벤트 이름은 `events[eventName]`으로 가고, 없으면 `events.default`예요. 맞는 Struct가 없으면 이벤트는 전달되지 않아요. SSE `event` 필드가 없으면 논리 이름은 `message`예요.
+
+SSE `data`는 텍스트로 시작해요. `string` struct는 그 텍스트를 유지해요. 그 밖의 kind는 JSON이에요. 텍스트를 파싱한 뒤 struct로 디코딩해요. `struct.object`, `struct.number`, `struct.boolean`, `struct.any`, `struct.unknown`은 JSON이지, 공백을 자른 텍스트가 아니에요. `ping` 같은 bare 토큰은 `struct.literal('ping')`을 만족하지 않아요. data는 JSON이어야 해요. JSON 문자열 `"abc"`를 보내는 서버도 `struct.string()`을 만족해요. 전달되는 값은 따옴표를 포함한 그 원문이고, JSON 디코딩되어 `abc`가 되지 않아요.
+
+나오는 값은 `event`, 디코딩된 `data`, 선택적인 비어 있지 않은 `id`예요. `default`가 있으면 알 수 없는 이벤트 이름은 추론된 유니언에서 `string`이에요.
+
+## 잘못된 이벤트 관찰하기
+
+잘못되거나 선언되지 않은 이벤트는 큐에 넣지 않고 버려요. `withSSEOnInvalidEvent(...)`는 원본 ID, 이름, 텍스트 data와 `missing-struct` 또는 `validation-failed`, 선택 cause를 관찰할 수 있어요.
+
+<include cwd>examples/sse/invalid-events.ts#example</include>
+
+옵저버는 transform 경계에서 돌아요. 활성 시도 signal이 abort되지 않는 한 실패는 격리돼요. 짧게 두세요. raw 이벤트 data를 신뢰된 값으로 다루지 마세요.
+
+## 재연결
+
+**동작 변경:** SSE 재연결은 opt-in이에요. `withSSEReconnect(...)`가 없으면 네트워크와 스트림 읽기 실패는 재시도되지 **않아요** (`attempts: 0`과 같아요). 그런 실패를 재시도하려면 `withSSEReconnect({ attempts: 3 })`(또는 검토된 다른 예산)를 넘기세요. 정상 EOF는 재시도하지 않아요. status/content-type 검증, 파서 한도, 메시지 transform 실패, 큐 오버플로, 정상 EOF는 논리 스트림의 종료로 남아요.
+
+<include cwd>examples/sse/reconnect.ts#example</include>
+
+`attempts`는 처음 시도 뒤의 재시도 횟수예요. reconnect 객체를 주면 기본값은 `3`이에요. `attempts: 0`은 재시도를 꺼요. `withSSEReconnect`를 빼도 재시도가 꺼져요. `delayMs`는 처음 간격이고(기본값 `1000`), `factor`가 키우고(기본값 `1`, 즉 일정한 지연), `maxDelayMs`가 (지터 적용 전) 기본 지연의 상한을 정해요(기본값: 상한 없음). SSE `jitter`는 WebSocket과 같은 **0–1 곱셈 계수**예요. 스트림 `retry:` 필드는 현재 간격을 갱신해요. 정책 콜백이 false를 돌려주거나 throw/reject하면 논리 스트림이 끝나요.
+
+마지막으로 파싱된 이벤트 ID는 다음 시도의 `Last-Event-ID`가 돼요. 그 헤더를 제외하면, 다음 시도에서는 첫 시도를 위해 만든 요청을 그대로 다시 보내요. `builder`와 인터셉터는 `execute`마다 한 번만 실행되므로 메서드, URL, 헤더, 본문은 그대로예요. 유효 기간이 짧은 토큰처럼 시도마다 갱신해야 하는 헤더는 `withSSEHandle`에 넘기는 Fetch에서 설정하세요. 이 Fetch는 시도마다 한 번 실행돼요. 그런데도 자격 증명이 만료되면, 다음 핸드셰이크는 2xx가 아닌 응답을 받고, 그 응답이 스트림을 `HTTP_STATUS`로 끝내요.
+
+재연결은 안전할 때만 요청을 다시 보내요.
+
+- `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`는 멱등성을 가지며(RFC 9110 §9.2.2), 재시도 횟수 예산 안에서 재연결해요.
+- `POST`나 `PATCH` 같은 그 밖의 메서드는 `shouldReconnect`가 `true`를 돌려줄 때만 재연결해요. 연결 실패만으로는 서버가 이미 처리했는지 알 수 없어요. LLM 생성을 시작하는 `POST`는 다시 실행되고 다시 과금되며, 새 이벤트가 옛 이벤트 뒤에 같은 스트림으로 이어져요. `shouldReconnect`를 넘기면 모든 메서드에 대해 이 기본 정책을 대체하므로, 한 클라이언트가 두 종류의 엔드포인트를 함께 다룰 때는 컨텍스트의 `method`를 확인하세요.
+- `ReadableStream` body는 첫 시도에서 소비돼요. 스트림이 열리기 전이든 후든 어떤 실패가 발생해도 원래 오류로 스트림이 종료돼요. `shouldReconnect`는 호출되지 않고 지연 시간도 기다리지 않아요. 요청을 재연결해야 한다면 문자열, 바이트, `Blob`, 폼 또는 JSON 본문을 쓰세요.
+
+## 버퍼와 큐 한도
+
+둘 다 양의 안전 정수여야 해요. 넘치면 치명적이에요. 오래된 이벤트를 조용히 버리지 않아요.
+
+| 한도            | 지키는 것                                      | 종료 code             |
+| --------------- | ---------------------------------------------- | --------------------- |
+| `maxBufferSize` | 파싱 중 미완성/과대한 SSE 줄/이벤트            | `CAP_BUFFER_EXCEEDED` |
+| `maxQueueSize`  | 소비자 하나가 읽는 것보다 빨리 만들어진 이벤트 | `CAP_QUEUE_OVERFLOW`  |
+
+치명적 스트림은 버퍼된 이벤트도 지우고, 활성 body를 취소하고, iterator를 reject하고, `stream.closed`를 `kind: 'error'`로 resolve해요.
+
+## 닫고 dispose하기
+
+`EventStreamHandle`은 살아 있는 열기 스냅샷 하나, 종료 프로미스 하나, `close` 하나, async iterator 하나, 표준 async disposer 하나예요.
+
+<include cwd lang="typescript">
+  examples/sse/close-and-dispose.ts#example
+</include>
+
+종료 종류(`closed.kind`)는 `eof`, `aborted`, `error`예요. `error` 결과는 `closed.code`도 가지며, 이는 `EventStreamFaultCode`예요. `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID`예요.
+
+`close(reason)`은 활성 시도를 abort하고, 큐를 닫고, `aborted`로 정해요. 스트림이 열린 뒤 `execute`에 준 `signal`이나 `abort`를 abort해도 마찬가지예요. 이터레이터는 정상적으로 끝나고 `closed`는 `aborted`를 보고해요. `timeout`은 시작 시점의 마감일 뿐이고 열린 스트림을 끝내지 않아요. 루프의 `break` / `return` / throw는 iterator return을 호출하고 `iterator-return`으로 닫아요. 명령을 실행한 코드가 닫기를 소유해요.
+
+`await using`은 같은 소유 close 경로를 호출하고, Defjs의 읽기/재연결 작업이 멈추고 활성 reader lock이 풀릴 때까지 기다려요. 끝나지 않는 provider 소유의 `ReadableStream.cancel()` promise 주변은 의도적으로 한도가 있어서, 그런 provider promise가 끝났다고 보장하지는 않아요. 이유나 종료 결과가 필요하면 명시적 `stream.close(reason)`과 `await stream.closed`도 유효해요.
+
+커스텀 구조적 `EventStreamHandle` 구현은 이제 `[Symbol.asyncDispose](): PromiseLike<void>`를 제공하고 같은 lifecycle에 연결해야 해요. 구현자에게는 컴파일 타임 breaking change예요. Defjs 핸들만 받는 소비자는 런타임에 새로 호출할 것이 없어요.
+
+저장소에서 검증되고 지원하는 최소 lib 계약은 `ES2022`, `ESNext.Disposable`, `DOM`, `DOM.Iterable`이고, 저장소는 TypeScript 7에 고정돼 있어요. 이 네 항목은 하나의 기준으로 함께 검증돼요. 모든 선언이 각 항목을 독립적으로 강제한다고 말하지 않으며, 시험하지 않은 더 오래된 컴파일러는 약속하지 않아요. 평범한 HTTP 클라이언트는 `AsyncDisposable`이 아니에요. 각 요청은 timeout이나 `AbortSignal`로 관리하세요.
+
+credentials, 이벤트 data, 이벤트 ID, cause, 스트림 URL은 일상적인 로그에서 빼세요. `withCredentials(true)`는 SSE의 Fetch 쿠키에 영향을 줘요. WebSocket 인증은 구성하지 않아요.
+
+## 관련 레시피
+
+- [SSE 스트림 소비하기](/ko-KR/recipes/consume-sse)
+- [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)

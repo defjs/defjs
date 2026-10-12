@@ -1,0 +1,23 @@
+---
+title: 'ObjectStruct'
+description: 'نوع struct على شكل كائن، ينتجه struct.object.'
+---
+
+<ApiReference identity="@defjs/core:ObjectStruct" />
+
+```ts
+interface ObjectStruct<T extends ObjectShape>
+  extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
+  readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
+}
+
+type ObjectShape = { [key: string]: any }
+```
+
+ينتجه `struct.object(shape)`. الحقول مطلوبة افتراضيًا؛ والحقل الموسوم بـ `optional()` أو `nullish()` يصبح مفتاحًا اختياريًا. تُزال المفاتيح غير المعروفة عند التحليل. ويمكن أن تختلف أسماء السلك عن مفاتيح TypeScript عبر `.alias()`. والتحليل الفاشل يُرجع `[StructError, undefined]`. أما `ObjectInput` و`ObjectOutput` و`ObjectStructTypes` و`PreservedStruct` فهي أنواع مساعدة داخلية.
+
+[Struct](/ar/api/struct)

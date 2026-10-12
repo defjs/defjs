@@ -1,0 +1,17 @@
+---
+title: 'createDecodeFault'
+description: 'Factory für einen Decode-Fault: Eine Response kam an, ließ sich aber nicht wie deklariert lesen.'
+---
+
+<ApiReference identity="@defjs/core:createDecodeFault" />
+
+```ts
+function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+```
+
+- **code** — Welcher Lese-Schritt fehlschlug: `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID` oder `RES_STRUCT_MISMATCH`.
+- **cause** — Das zugrunde liegende Parser- oder Struct-Failure. Seine Message wird zur Fault-Message (`String(cause)`, wenn es kein `Error` ist), und es wird als `cause` behalten.
+- **response** — Metadaten der Response, die nicht gelesen werden konnte. `status` wird daraus kopiert.
+- **Returns** einen nativen `Error` namens `DefjsFault` ohne `body`.
+
+[Fehler](/de-DE/api/errors)

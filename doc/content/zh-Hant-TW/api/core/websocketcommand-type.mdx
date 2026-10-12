@@ -1,0 +1,23 @@
+---
+title: 'WebSocketCommand'
+description: '呼叫 WebSocketEndpoint 所建立、可執行的 command。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCommand" />
+
+```ts
+interface WebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> extends BaseCommand<typeof WEB_SOCKET_COMMAND> {
+  readonly endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>
+  readonly input: EndpointInput<TInput> | undefined
+}
+```
+
+由呼叫 [`WebSocketEndpoint`](/zh-Hant-TW/api/core/websocketendpoint-type) 建立。它持有 endpoint 定義與尚未剖析的 input。把它丟給 `client.execute` 才會開啟 session；在那之前不會連線。
+
+`BaseCommand` 帶有以 symbol 為 key 的成員，用來把 command 導向正確的傳輸。它們是內部細節，所以請把 command 當成不透明物件。
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

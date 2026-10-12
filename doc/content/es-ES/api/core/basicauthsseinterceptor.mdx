@@ -1,0 +1,20 @@
+---
+title: 'basicAuthSSEInterceptor'
+description: 'Interceptor SSE que establece una cabecera Authorization Basic a partir de credenciales.'
+---
+
+<ApiReference identity="@defjs/core:basicAuthSSEInterceptor" />
+
+```ts
+function basicAuthSSEInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): SSEInterceptor
+```
+
+- **fn** — Se llama en cada solicitud para producir las credenciales.
+- **options** — [`BasicAuthInterceptorOptions`](/es-ES/api/core/basicauthinterceptoroptions-type) opcional con un `encode` personalizado.
+- **Devuelve** un `SSEInterceptor` que establece `Authorization: Basic <encoded>` en una copia de las cabeceras de la solicitud, reemplazando cualquier cabecera `Authorization` existente.
+
+La codificación y el requisito de `btoa` son los mismos que en [`basicAuthHttpInterceptor`](/es-ES/api/core/basicauthhttpinterceptor), incluido el error lanzado de forma síncrona cuando falta `btoa`.
+
+Mira la [guía de Interceptores](/es-ES/docs/interceptors).
+
+[Interceptores](/es-ES/api/interceptors)

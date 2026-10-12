@@ -1,0 +1,14 @@
+---
+title: 'DecodeFaultCode'
+description: 'レスポンスのメタデータは持つがボディは持たない fault の code です。'
+---
+
+<ApiReference identity="@defjs/core:DecodeFaultCode" />
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+```
+
+`DecodeFault` の `code` の値です。`PreflightFaultCode` は、`HTTP_STATUS` を除くそれ以外のすべての `FaultCode` です。
+
+[Errors](/ja-JP/api/errors)

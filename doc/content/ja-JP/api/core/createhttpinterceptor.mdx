@@ -1,0 +1,17 @@
+---
+title: 'createHttpInterceptor'
+description: 'インターセプター関数をタグ付き HTTP インターセプターとして包みます。'
+---
+
+<ApiReference identity="@defjs/core:createHttpInterceptor" />
+
+```ts
+function createHttpInterceptor(fn: InterceptorFn): HttpInterceptor
+
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`{ kind: 'http', fn }` を返します。`next(req)` を呼ぶ（変更したリクエストを渡してもかまいません）か、`makeResponse` でショートサーキットします。`next` が実行するのは、このインターセプターより後に登録されたインターセプターと、その先の fetch ハンドラーだけです。HTTP インターセプターは SSE や WebSocket のコマンドでは実行されません。
+
+[Interceptors](/ja-JP/api/interceptors)

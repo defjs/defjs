@@ -1,0 +1,16 @@
+---
+title: 'ClientSSEConfig'
+description: 'Resolved 嘅 SSE configuration，`handle` 一定存在。'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEConfig" />
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+`ClientConfig.sse` 嘅 type。佢係 [`ClientSSEOptions`](/zh-Hant-HK/api/core/clientsseoptions-type)，不過 `handle` 一定存在；預設係 global `fetch`。
+
+[Client](/zh-Hant-HK/api/client)

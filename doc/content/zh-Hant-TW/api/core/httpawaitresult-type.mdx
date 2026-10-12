@@ -1,0 +1,16 @@
+---
+title: 'HttpAwaitResult'
+description: 'HTTP 呼叫的 await 結果 tuple：data 與 response，或 fault。'
+---
+
+<ApiReference identity="@defjs/core:HttpAwaitResult" />
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+`TData` 與 `TErrorData` 是解碼後的 body 型別。成功時，只有宣告了 `output`，第三項才帶 `body`。失敗時它是 `undefined`，因為 fault 已經帶著當時存在的所有回應 metadata。
+
+[HTTP](/zh-Hant-TW/api/http)

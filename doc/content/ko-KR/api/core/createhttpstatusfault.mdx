@@ -1,0 +1,17 @@
+---
+title: 'createHttpStatusFault'
+description: '오류 body가 디코딩된 HTTP_STATUS fault를 만드는 팩토리예요.'
+---
+
+<ApiReference identity="@defjs/core:createHttpStatusFault" />
+
+```ts
+function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+```
+
+- **response** — 선언한 `error` struct로 디코딩한 body를 지닌 non-2xx 응답이에요.
+- **반환** `code: 'HTTP_STATUS'`이고, `data`는 `response.body`, `status`는 응답에서 복사하고, `response`는 넘긴 그대로인, 이름이 `DefjsFault`인 네이티브 `Error`예요. message는 `Http failure response: <status>`이며 `statusText`가 있으면 뒤에 ` - <statusText>`가 붙어요.
+
+body를 디코딩하지 않았다면 [`createUndecodedHttpStatusFault`](/ko-KR/api/core/createundecodedhttpstatusfault)를 쓰세요.
+
+[오류](/ko-KR/api/errors)

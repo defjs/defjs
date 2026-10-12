@@ -1,0 +1,26 @@
+---
+title: 'SocketLifecycleOutcome'
+description: '單次 WebSocket 連線嘗試的結果，供重連邏輯使用。'
+---
+
+<ApiReference identity="@defjs/core:SocketLifecycleOutcome" />
+
+```ts
+type SocketLifecycleOutcome = {
+  closeInfo: WebSocketCloseSnapshot
+  connection?: WebSocketConnectionInfo
+  cause?: unknown
+  opened: boolean
+}
+```
+
+**單次連線嘗試**的結果，不是 session 的最終結果。重連邏輯用它來判斷要不要再試一次。
+
+- `closeInfo` 是該次嘗試的 close 細節：`{ cause?, code?, reason?, wasClean? }`。
+- `connection` 是連線快照，前提是該次嘗試取得過。
+- `cause` 是結束該次嘗試的錯誤（如果有）。
+- `opened` 表示 socket 結束前有沒有到達 `open`。
+
+`shouldReconnect` 選項拿不到這個物件。它收到的是取自此物件的 `attempt`、`cause`、`code`、`reason` 與 `wasClean`。session 的最終結果是 [`WebSocketCloseInfo`](/zh-Hant-TW/api/core/websocketcloseinfo-type)。
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

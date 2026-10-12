@@ -1,0 +1,16 @@
+---
+title: 'ClientProvider'
+description: '컨텍스트를 통해 하위 트리에 Defjs 클라이언트를 제공하는 React 컴포넌트예요.'
+---
+
+<ApiReference identity="@defjs/react:ClientProvider" />
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+`createClient`로 만든 기존 클라이언트를 `client`로 넘기면, 하위 컴포넌트가 `useClient`로 읽어요. 이 컴포넌트는 클라이언트를 만들거나, 캐시하거나, dispose하지 않아요. 중첩된 `ClientProvider`는 자신의 하위 트리에 한해 클라이언트를 덮어쓰고, 다른 `client` prop을 넘기면 하위 컴포넌트가 보는 컨텍스트 값이 바뀌어요.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+[@defjs/react](/ko-KR/api/react)

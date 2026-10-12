@@ -1,0 +1,14 @@
+---
+title: 'WebSocketIncomingData'
+description: 'Type décodé d’un message WebSocket reçu.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketIncomingData" />
+
+```ts
+type WebSocketIncomingData<TIncoming extends AnyStruct> = Infer<TIncoming>
+```
+
+Le type de chaque message produit par `session.receive` : la sortie [`Infer`](/fr-FR/api/core/infer-type) du struct `incoming` de l’endpoint. Les champs avec alias utilisent leurs noms logiques.
+
+[WebSocket](/fr-FR/api/web-socket)

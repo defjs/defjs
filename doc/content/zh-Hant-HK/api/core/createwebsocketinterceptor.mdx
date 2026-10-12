@@ -1,0 +1,19 @@
+---
+title: 'createWebSocketInterceptor'
+description: '將 interceptor function 包成帶 tag 嘅 WebSocket interceptor。'
+---
+
+<ApiReference identity="@defjs/core:createWebSocketInterceptor" />
+
+```ts
+function createWebSocketInterceptor(fn: WebSocketInterceptorFn): WebSocketInterceptor
+
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+回傳 `{ kind: 'web-socket', fn }`。WebSocket interceptors 只會為 WebSocket command 執行。
+
+`next` 同 interceptor 都會 return [`WebSocketSessionLike`](/zh-Hant-HK/api/core/websocketsessionlike-type)，即係 interceptor 見到嘅 session。Wrapper 或 short-circuit session 必須 forward 自己嘅 `[Symbol.asyncDispose]()` teardown；呢頁列出 members 同呢個要求。
+
+[Interceptors](/zh-Hant-HK/api/interceptors)

@@ -1,0 +1,16 @@
+---
+title: 'HttpProgressFn'
+description: 'نوع دالة الاستدعاء لتقدم الرفع والتنزيل.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+يُمرَّر بوصفه `onDownloadProgress` أو `onUploadProgress` في `HttpExecuteOptions`. ردود النداء يمكن أن تكون غير متزامنة ويُنتظر إتمامها قبل معالجة القطعة التالية. ردّ النداء الذي يرمي استثناءً أو يُرجع وعدًا مرفوضًا يُفشل الاستدعاء بالرمز `EXT_OBSERVER_FAILED`، مع القيمة المرمية في `cause`، للتنزيل والرفع على السواء. وتبقى الأولوية للإلغاء من جانب المستدعي ولـ `timeout`، ويُبلَّغ عنهما بالرمزين `NET_ABORTED` / `NET_TIMEOUT` على الترتيب. يُبلَّغ عن تقدّم الرفع فقط في بيئات التشغيل التي تدعم إرسال أجسام الطلبات كتدفق (Bun، Node، Deno). في المتصفحات، يُرسل جسم `Blob` / `File` أو `ArrayBuffer` أو `FormData` دون تغيير ولا يُستدعى `onUploadProgress`؛ ولا يتأثر `onDownloadProgress`.
+
+انظر [`HttpProgressEvent`](/ar/api/core/httpprogressevent-type) و[دليل HTTP](/ar/docs/http) و[الأوامر](/ar/docs/commands).
+
+[HTTP](/ar/api/http)

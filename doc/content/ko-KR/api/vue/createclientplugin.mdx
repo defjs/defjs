@@ -1,0 +1,17 @@
+---
+title: 'createClientPlugin'
+description: '기존 Defjs 클라이언트를 앱에 제공하는 Vue 플러그인을 만들어요.'
+---
+
+<ApiReference identity="@defjs/vue:createClientPlugin" />
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — `createClient`가 준 인스턴스예요. 플러그인은 이를 만들거나, 캐시하거나, dispose하지 않아요.
+- **반환** `app.use(...)`용 Vue 플러그인이에요. 설치하면 `app.provide(HTTP_CLIENT, client)`를 호출하므로, 컴포넌트는 `injectClient()`로 클라이언트를 읽어요.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+[@defjs/vue](/ko-KR/api/vue)

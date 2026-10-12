@@ -1,0 +1,184 @@
+---
+title: Errors
+description: Fault variants and factory helpers.
+---
+
+# Errors
+
+Execute returns a discriminated `Fault` in the tuple's first slot — not a thrown exception for
+declared failures.
+
+## FaultCode
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+One closed set. The segment before the first `_` is the class; there is no separate `kind` field.
+The set stays closed so that `switch (fault.code)` is exhaustive — extensions report their own
+detail through `cause`, not through a new code.
+
+## FaultClass
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+`FaultClass<FaultCode>` is `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+## Fault
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = DecodeFault | HttpStatusFault<TErr> | PreflightFault
+```
+
+Switch on `fault.code`.
+
+### FaultOf
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`FaultOf` is `Fault` expressed by the decoded error-body type instead of the struct that produced it. `HttpAwaitResult` and the fault factories work in decoded values, so they use this form.
+
+Every variant is a native `Error` named `DefjsFault`, so `String(fault)` produces a directly
+loggable `DefjsFault: <message>`. `code` and the variant metadata — `status`, `response`, `data` —
+are enumerable own properties. The native `cause` chain is non-enumerable.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+Call `format()`, `flatten()`, or `prettify()` only after narrowing `fault.cause` to `StructError`;
+those helpers are not copied onto the fault.
+
+### HttpStatusFault
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+Any non-2xx status. When the endpoint declared `error` and the body decoded, `data` is that body
+and `response` carries it. When `error` was omitted the body is never read, which leaves `data` as
+`undefined` and `response` as metadata alone.
+
+### DecodeFault
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+A response arrived but could not be read as declared. `response` is metadata only: a body is a
+decoded value, and decoding is what failed, so there is no `body` field to reach for. The offending
+detail lives on `cause` — a `StructError` for a struct mismatch, the parser failure for an
+unreadable representation.
+
+### PreflightFault
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+Everything that may have failed before a response existed: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`,
+`ENV_UNSUPPORTED`. `response` is present only where the transport already had metadata to report,
+such as a body that truncated mid-download.
+
+### AnyFault
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+Any fault regardless of its decoded error-body type. Use it for handlers that classify faults
+without caring which endpoint produced them; prefer `Fault<typeof yourErrorStruct>` where the body
+type matters.
+
+## Factories
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+```ts
+declare function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+
+declare function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+
+declare function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+
+declare function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+
+declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+`createHttpStatusFault` takes a response that already carries the decoded body;
+`createUndecodedHttpStatusFault` takes metadata alone, for an endpoint that declared no `error`.
+
+`createNetworkFault` maps `ERR_ABORTED` and a `DOMException` named `AbortError` onto `NET_ABORTED`,
+`ERR_TIMEOUT` and an error named `TimeoutError` onto `NET_TIMEOUT`, and everything else to `NET_UNREACHABLE`. `createPreflightFault` takes the code directly; with no
+`cause`, the code becomes the message.
+
+All factories return native `Error` instances with the structured fields above; they do not create
+plain object errors and need no adapter for `String(fault)`.
+
+## Sentinels
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+Shared `cause` / message values for abort and timeout. Throwing one from an HTTP interceptor
+resolves the call with `NET_ABORTED` or `NET_TIMEOUT`. SSE and WebSocket interceptors report any
+throw, these included, as `EXT_INTERCEPTOR_FAILED`.
+
+See [Errors guide](/docs/errors).

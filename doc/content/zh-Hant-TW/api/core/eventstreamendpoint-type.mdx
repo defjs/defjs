@@ -1,0 +1,18 @@
+---
+title: 'EventStreamEndpoint'
+description: 'defineEventStream 回傳的可呼叫 endpoint。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamEndpoint" />
+
+```ts
+type EventStreamEndpoint<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, EventStreamCommand<TInput, TEvents, TError>>
+```
+
+由 `defineEventStream` 回傳。呼叫它即可得到 `EventStreamCommand`：端點沒有宣告 `input` 時不帶參數；input struct 接受 `undefined` 時帶選填參數；其餘情況帶 struct 的 input 值。
+
+[SSE](/zh-Hant-TW/api/sse)

@@ -1,0 +1,20 @@
+---
+title: 'GraphQL 請求'
+description: GraphQL 保持 HTTP 200 加 application unwrap；Core 唔 ship GraphQL protocol。
+---
+
+# Unwrap 一個 GraphQL HTTP envelope
+
+Defjs 唔 implement GraphQL `errorPolicy`。將 wire model 成 HTTP POST，builder 擺放 query document 同 variables，然後喺你自己嘅 helper unwrap `errors[]` / 缺失嘅 `data`。
+
+睇 [Design Decisions](/zh-Hant-HK/docs/design-decisions)。
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable
+```
+
+HTTP success 只代表 envelope 到咗。Application errors 會留喺 `errors[]`，直至你嘅 unwrap throw 或者 return。

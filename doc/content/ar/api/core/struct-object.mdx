@@ -1,0 +1,24 @@
+---
+title: 'struct.object'
+description: 'struct يقبل كائنًا عاديًا بحقول ثابتة.'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+يربط `shape` أسماء الحقول بالـ structs.
+
+- كل حقل **مطلوب** افتراضيًا. والمفتاح المفقود يفشل بـ `missing_key`.
+- `.optional()` و`.nullish()` يسمحان بمفتاح مفقود. والحقل الاختياري الغائب يبقى غائبًا في المخرجات.
+- `.null()` / `.nullable()` يسمحان بـ `null`. و`.alias(name)` يقرأ الحقل ويكتبه تحت مفتاح سلك مختلف.
+- المفاتيح غير الموجودة في `shape` تُزال من المخرجات. والمخرجات كائن جديد بـ prototype يساوي `null`.
+- يجب أن يكون المدخل كائنًا عاديًا. والمصفوفات و`Map` ونسخ الأصناف تفشل بـ `invalid_type` (المتوقع `object`).
+- يتوقف التحليل عند أول حقل فاشل، ويحمل `issue.path` مفتاحه.
+- يرمي `TypeError` عندما لا يكون `shape` كائنًا عاديًا.
+
+`ObjectShape` هو `{ [key: string]: any }`؛ ويجب أن تكون كل قيمة struct.
+
+[Struct](/ar/api/struct)

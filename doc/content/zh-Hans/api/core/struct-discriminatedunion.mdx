@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: '按标签字段的值选出一个对象 struct 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- 每个选项都必须是对象 struct，且它的 `discriminator` 字段是必填的 [`struct.literal()`](/zh-Hans/api/core/struct-literal)。缺少该字段、该字段不是 literal、该字段可选，或标签值重复，都会在创建 struct 时抛出 `TypeError`。
+- 输入必须是普通对象。由标签值选出选项，再由该选项解析整个对象。
+- 缺少标签以 `missing_key` 失败，未知标签以 `invalid_union` 失败。两者都报告标签字段的路径。其他失败来自被选中的选项。
+- 使用 `struct.parse(..., { aliases: true })` 时，标签按字段的 alias 读取。
+
+`RequiredDiscriminatorOptions` 和 `DiscriminatedUnionStruct` 没有导出。类型检查会拒绝标签字段缺失或可能为 `undefined` 的选项。
+
+[Struct](/zh-Hans/api/struct)

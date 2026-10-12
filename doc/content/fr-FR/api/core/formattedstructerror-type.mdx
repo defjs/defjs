@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'Arbre d’erreurs imbriqué renvoyé par StructError.format.'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+Le résultat de `StructError.format()`. Les messages des feuilles vivent sous `_errors` ; les clés imbriquées reflètent le chemin en échec. Un segment de chemin littéralement nommé `_errors` est stocké comme `\_errors`.
+
+[Struct](/fr-FR/api/struct)

@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'Опция клиента, которая включает автоматический reconnect WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+Настраивает автоматический reconnect, когда сокет закрывается по любой причине, кроме ручного `session.close()`. Reconnect включается явно: без этой опции закрытие завершает сессию. Передача `undefined` сбрасывает ранее заданное значение. Тип опции:
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` — бюджет повторов после первого подключения. По умолчанию `3`, а `0` отключает reconnect. Опустить его — это не «без лимита».
+- `delayMs` по умолчанию `1000`, `factor` — `2`, `maxDelayMs` — `30000`, `jitter` (от 0 до 1) — `0`. Задержка перед повтором _n_ равна `delayMs * factor^(n-1)` с ограничением `maxDelayMs`.
+- `shouldReconnect` может вернуть `false`, чтобы вместо этого завершить сессию. Без него каждое закрытие повторяется, пока хватает бюджета. Для ручного `session.close()` он не вызывается.
+- Значения вне допустимого диапазона приводят к тому, что execute завершается `REQ_OPTIONS_INVALID`.
+- `reconnect` из execute-опций заменяет этот для данного вызова.
+
+[Клиент](/ru-RU/api/client)

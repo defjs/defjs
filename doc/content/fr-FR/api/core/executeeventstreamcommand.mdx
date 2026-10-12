@@ -1,0 +1,24 @@
+---
+title: 'executeEventStreamCommand'
+description: 'Point d’entrée bas niveau qui ouvre une commande SSE à partir d’une configuration de client.'
+---
+
+<ApiReference identity="@defjs/core:executeEventStreamCommand" />
+
+```ts
+function executeEventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand<TInput, TEvents, TError>,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+```
+
+Point d’entrée bas niveau de `client.execute`. Préfère le client dans le code applicatif.
+
+- **Renvoie** `[null, stream, open]` ou `[fault, undefined, open | undefined]`. Le fault est un `Fault<TError>` : le corps décodé du handshake est dans `data` quand `error` est déclaré, et `Fault<undefined>` sinon.
+
+[SSE](/fr-FR/api/sse)

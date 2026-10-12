@@ -1,0 +1,16 @@
+---
+title: 'HttpAwaitResult'
+description: 'HTTP 호출의 await 결과 튜플이에요. data와 response, 또는 fault예요.'
+---
+
+<ApiReference identity="@defjs/core:HttpAwaitResult" />
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+`TData`와 `TErrorData`는 디코딩된 body 타입이에요. 성공하면 세 번째 자리는 `output`을 선언했을 때만 `body`를 지녀요. 실패하면 `undefined`예요. 응답 메타데이터가 있었다면 fault가 이미 갖고 있어요.
+
+[HTTP](/ko-KR/api/http)

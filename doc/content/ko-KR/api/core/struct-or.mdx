@@ -1,0 +1,20 @@
+---
+title: 'struct.or'
+description: '여러 struct 중 하나와 일치하는 값을 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.or" />
+
+```ts
+function or<const T extends readonly [StructLike, ...StructLike[]]>(...options: T): UnionStruct<T>
+```
+
+`struct.or`는 가변 인자 함수예요. 각 옵션을 별도 인자로 넘기세요.
+
+- 옵션을 순서대로 시도해 처음 파싱에 성공한 결과를 돌려줘요.
+- 어느 것과도 맞지 않으면 유니언 자신의 path에 `invalid_union` issue 하나로 실패해요. 개별 옵션의 issue는 보고하지 않아요.
+- 옵션이 struct가 아니면 `TypeError`를 던져요.
+
+`UnionStruct<T>`는 export되지 않아요. 입력과 출력이 `undefined`를 뺀 옵션 타입들의 유니언인 `Struct`예요. 태그가 있는 객체에는 선택된 옵션의 issue를 보고하는 [`struct.discriminatedUnion()`](/ko-KR/api/core/struct-discriminatedunion)을 권해요.
+
+[Struct](/ko-KR/api/struct)

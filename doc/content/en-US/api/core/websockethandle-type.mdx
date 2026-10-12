@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'WebSocket instance surface used by the client transport.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+The DOM `WebSocket` without its event-handler properties, `binaryType`, `dispatchEvent`, and the state constants. A custom implementation therefore needs `url`, `protocol`, `extensions`, `bufferedAmount`, `send`, `close`, `addEventListener`, `removeEventListener`, and a numeric `readyState`.
+
+The transport sets `binaryType = 'arraybuffer'` when the property exists. This is the instance type produced by a [`WebSocketHandleConstructor`](/api/core/websockethandleconstructor-type).
+
+[Client](/api/client)

@@ -1,0 +1,17 @@
+---
+title: 'withEndpoint'
+description: 'Client-Option, die die Base-URL für relative Request-Paths setzt.'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+Setzt die Base-URL, die den relativen Request-Paths vorangestellt wird. Der Default ist ein leerer String.
+
+- **endpoint** — absoluter oder relativer Base-Endpoint.
+- Bei WebSocket-Commands wird eine `http:`-Base zu `ws:` und `https:` zu `wss:`.
+
+[Client](/de-DE/api/client)

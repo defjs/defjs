@@ -1,0 +1,24 @@
+---
+title: 'EventStreamFaultCode'
+description: 'SSE 스트림이 끝날 때 가질 수 있는 fault code들이에요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamFaultCode" />
+
+```ts
+type EventStreamFaultCode = Extract<
+  FaultCode,
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+>
+```
+
+공유 `FaultCode` 집합의 부분집합이에요. `kind: 'error'`인 `EventStreamCloseInfo`의 `code`예요.
+
+[SSE](/ko-KR/api/sse)

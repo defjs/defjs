@@ -1,0 +1,23 @@
+---
+title: 'StructInput'
+description: 'مساعد أنواع يستخرج نوع المدخل المقبول لـ struct.'
+---
+
+<ApiReference identity="@defjs/core:StructInput" />
+
+```ts
+type StructInput<T> = T extends { readonly _struct: { readonly input: unknown } } ? T['_struct']['input'] : never
+```
+
+النوع الذي يقبله الـ struct، في مقابل [`Infer`](/ar/api/core/infer-type) الذي هو ما يُرجعه التحليل الناجح. `T` هو struct، أو أي [`StructLike`](/ar/api/core/structlike-type). وأي شيء آخر يعطي `never`.
+
+يختلف النوعان عندما يحوّل الـ struct مدخله:
+
+```ts
+const Created = struct.date()
+
+type In = StructInput<typeof Created> // Date | number | string
+type Out = Infer<typeof Created> // Date
+```
+
+[Struct](/ar/api/struct)

@@ -1,0 +1,22 @@
+---
+title: 'Управление сессиями WebSocket'
+description: Подключись, отправь один типизированный envelope, получи один раз, потом close и await closed.
+---
+
+# Открыть WebSocket-сессию
+
+Каждое направление — один struct. Unsubscribe, `close` и `await session.closed` — на тебе. Невалидные кадры идут в `onRuntimeError`.
+
+Подробности — в [WebSocket](/ru-RU/docs/web-socket).
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` — placeholder. Если сервер на `{ "type": "send", "text": "Hello" }` отвечает `{ "type": "message", "text": "Hello" }`, сниппет выведет:
+
+```txt
+message Hello
+```
+
+Reconnect — opt-in (`withWebSocketReconnect`). Heartbeat тоже. Браузерные WebSocket’ы не принимают произвольные handshake-заголовки — используй cookies, subprotocols или short-lived ticket.

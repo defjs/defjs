@@ -1,0 +1,16 @@
+---
+title: 'ClientSSEConfig'
+description: 'Configuración SSE resuelta con un fetch handle obligatorio.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEConfig" />
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+El tipo de `ClientConfig.sse`. Es [`ClientSSEOptions`](/es-ES/api/core/clientsseoptions-type) con `handle` siempre presente; el valor por defecto es el `fetch` global.
+
+[Cliente](/es-ES/api/client)

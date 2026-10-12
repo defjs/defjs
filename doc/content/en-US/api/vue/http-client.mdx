@@ -1,0 +1,14 @@
+---
+title: 'HTTP_CLIENT'
+description: Vue injection key under which the Defjs client is provided.
+---
+
+<ApiReference identity="@defjs/vue:HTTP_CLIENT" />
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+The key that `createClientPlugin` provides the client under. Prefer `injectClient()` over `inject(HTTP_CLIENT)`, which returns `undefined` when nothing was provided. Override a subtree with `provide(HTTP_CLIENT, childClient)`.
+
+[@defjs/vue](/api/vue)

@@ -23,19 +23,31 @@
       "typescript": "^7.0.2",
       "vite": "^8.3.4",
       "vitest": "^5.0.3",
-      "ws": "^8.22.0"
+      "ws": "^8.22.0",
+      "fumadocs-core": "16.17.1",
+      "fumadocs-ui": "16.17.1",
+      "fumadocs-mdx": "15.4.7",
+      "react-router": "8.4.0",
+      "@react-router/dev": "8.4.0",
+      "react": "19.3.0",
+      "react-dom": "19.3.0",
+      "@types/react": "19.3.0",
+      "@types/react-dom": "19.2.3",
+      "@types/mdx": "2.0.13",
+      "tailwindcss": "4.3.3",
+      "@tailwindcss/vite": "4.3.3"
     }
   },
   "type": "module",
   "scripts": {
-    "build": "bun run typecheck && bun run --workspaces --if-present build",
+    "build": "bun run --workspaces --if-present build",
     "fmt": "oxfmt . --write",
     "fmt:check": "oxfmt . --check",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
     "test": "bun run --sequential --workspaces --if-present test",
-    "typecheck": "bun check --project tsconfig.json",
-    "verify": "bun run lint && bun run fmt:check && bun run test && bun run build"
+    "typecheck": "bun check --project tsconfig.json && bun run --cwd doc typecheck",
+    "verify": "bun run lint && bun run fmt:check && bun run typecheck && bun run test && bun run build && bun run --cwd doc test:site"
   },
   "devDependencies": {
     "@hono/node-server": "catalog:",

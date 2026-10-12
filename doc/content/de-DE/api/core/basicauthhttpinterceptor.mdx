@@ -1,0 +1,20 @@
+---
+title: 'basicAuthHttpInterceptor'
+description: 'HTTP-Interceptor, der aus Credentials einen Basic-Authorization-Header setzt.'
+---
+
+<ApiReference identity="@defjs/core:basicAuthHttpInterceptor" />
+
+```ts
+function basicAuthHttpInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): HttpInterceptor
+```
+
+- **fn** — Wird bei jedem Request aufgerufen und liefert die Credentials.
+- **options** — Optionale [`BasicAuthInterceptorOptions`](/de-DE/api/core/basicauthinterceptoroptions-type) mit einem eigenen `encode`.
+- **Returns** einen `HttpInterceptor`, der `Authorization: Basic <encoded>` auf einer Kopie der Request-Header setzt und einen vorhandenen `Authorization`-Header ersetzt.
+
+Der Default-Encoder ist ``btoa(`${username}:${password}`)``, daher müssen die Credentials Latin-1 sein. Ohne `encode` wirft der Aufruf von `basicAuthHttpInterceptor` `Error: BasicAuthInterceptor is not supported in this environment`, wenn `btoa` in der Runtime nicht verfügbar ist. Für SSE-Commands nutze [`basicAuthSSEInterceptor`](/de-DE/api/core/basicauthsseinterceptor).
+
+Siehe [Interceptors-Guide](/de-DE/docs/interceptors).
+
+[Interceptors](/de-DE/api/interceptors)

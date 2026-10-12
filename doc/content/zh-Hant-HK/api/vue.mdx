@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: Vue plugin、injection key，同 injectClient。
+---
+
+# Vue
+
+將現有 `@defjs/core` client 提供畀 Vue app。呢個 package 唔會 create、cache 或者 dispose client。需要 Vue 3 或以上。
+
+見 [Vue guide](/zh-Hant-HK/docs/integrations/vue)。
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — `createClient` 建立嘅 instance。
+- **Returns** 畀 `app.use(...)` 用嘅 Vue plugin。安裝時會 call `app.provide(HTTP_CLIENT, client)`。
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+讀取最近嘅 `HTTP_CLIENT` provider。要喺允許 `inject` 嘅地方 call，例如 `setup()`。
+
+- **Returns** 注入嘅 client。
+- **Throws** 如果冇提供 client（例如冇安裝 plugin），會 throw `Error`。
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+Vue injection key。建議用 `injectClient()`，唔好用 `inject(HTTP_CLIENT)`。要覆蓋 subtree，用 `provide(HTTP_CLIENT, childClient)`。

@@ -1,0 +1,16 @@
+---
+title: 'HttpStatusFault'
+description: 'خطأ استجابة غير 2xx، محدَّد النوع بحسب struct الـ error المعلَن.'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFault" />
+
+```ts
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+`TErr` هو struct الـ `error` الذي أعلنته نقطة النهاية، أو `undefined` عندما لا تعلن أيًّا. أي حالة غير-2xx. فإن أعلنت نقطة النهاية `error` وفُكّ الجسم، كان `data` هو ذلك الجسم و`response` يحمله. وإن حُذف `error` فالجسم لا يُقرأ أبدًا، فيبقى `data` بقيمة `undefined` ويكون `response` بيانات وصفية وحدها. انظر [`HttpStatusFaultOf`](/ar/api/core/httpstatusfaultof-type) لشكل الأعضاء.
+
+[الأخطاء](/ar/api/errors)

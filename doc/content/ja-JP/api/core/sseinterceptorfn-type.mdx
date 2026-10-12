@@ -1,0 +1,16 @@
+---
+title: 'SSEInterceptorFn'
+description: 'SSE インターセプターの関数形式です。'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptorFn" />
+
+```ts
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+`req` を確認または置き換えたうえで、[`next`](/ja-JP/api/core/ssehandler-type) を呼んでチェーンを続けるか、独自の `EventStreamHandle` を返してショートサーキットします。`withInterceptors` で登録するには、`createSSEInterceptor(fn)` で包みます。
+
+ショートサーキットするハンドルは、`[Symbol.asyncDispose](): PromiseLike<void>` を提供し、同じ close ライフサイクルへ繋ぐ必要があります。
+
+[Interceptors](/ja-JP/api/interceptors)

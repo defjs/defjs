@@ -1,0 +1,19 @@
+---
+title: 'struct.record'
+description: 'Struct, который разбирает объект со строковыми ключами и одним struct значения.'
+---
+
+<ApiReference identity="@defjs/core:struct.record" />
+
+```ts
+function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
+```
+
+- Разбирает каждый собственный ключ plain object через `value`. Всё остальное даёт `invalid_type` (ожидался `record`).
+- Разбор останавливается на первом значении с ошибкой, а `issue.path` содержит его ключ.
+- Output — новый объект с `null` prototype.
+- Бросает `TypeError`, если `value` не struct.
+
+`RecordStruct<S>` не экспортируется. Это `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, где `Output` — это `Infer<S>` без `undefined`. Если `S` — опциональный struct, значение `undefined` пропускает свой ключ в output.
+
+[Struct](/ru-RU/api/struct)

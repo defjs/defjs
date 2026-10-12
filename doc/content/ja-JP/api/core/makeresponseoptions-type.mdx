@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: 'makeResponse が受け付けるフィールドです。'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+`status` のデフォルトは `0`、`statusText` のデフォルトは `''` です。`url` と `headers` のデフォルトは `request` から取られる値で、解決済みの URL（ベースエンドポイント、パス、クエリ）とそのヘッダーのコピーになります。`baseEndpoint` のないリクエストでは、`endpoint` が書かれたままの形で使われます。リクエストがない場合、`url` は `''`、`headers` は空です。省略した `body` は `undefined` のままで、明示的な `null` だけが JSON の `null` になります。
+
+[HTTP](/ja-JP/api/http)

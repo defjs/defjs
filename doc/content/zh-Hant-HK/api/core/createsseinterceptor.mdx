@@ -1,0 +1,19 @@
+---
+title: 'createSSEInterceptor'
+description: '將 interceptor function 包成帶 tag 嘅 SSE interceptor。'
+---
+
+<ApiReference identity="@defjs/core:createSSEInterceptor" />
+
+```ts
+function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor
+
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+回傳 `{ kind: 'sse', fn }`。SSE interceptors 只會為 SSE command 執行，按註冊次序；`next(req)` 會經餘下嘅 interceptors 開啟 stream。
+
+`EventStreamHandle` extends `AsyncDisposable`。Structural 嘅 short-circuit implementation 必須提供 `[Symbol.asyncDispose](): PromiseLike<void>`，並接駁去同一個 close lifecycle。
+
+[Interceptors](/zh-Hant-HK/api/interceptors)

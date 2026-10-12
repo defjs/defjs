@@ -1,0 +1,16 @@
+---
+title: 'ERR_ABORTED'
+description: 'Centinela Error compartido que marca una solicitud como abortada.'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+Valor compartido de `cause` y de mensaje para la cancelación por parte del llamador. `createNetworkFault` lo asigna, igual que una `DOMException` llamada `AbortError`, a `NET_ABORTED`. Un interceptor HTTP que lo lanza hace que la llamada se resuelva con un fault `NET_ABORTED`. Los interceptores SSE y WebSocket que lo lanzan se informan como `EXT_INTERCEPTOR_FAILED`.
+
+Mira la [guía de Errores](/es-ES/docs/errors).
+
+[Errores](/es-ES/api/errors)

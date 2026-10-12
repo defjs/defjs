@@ -1,0 +1,26 @@
+---
+title: 'struct.tuple'
+description: '위치마다 struct 하나를 쓰는 고정 길이 배열을 파싱하는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.tuple" />
+
+```ts
+function tuple<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(
+  items: T,
+): TupleStruct<T>
+```
+
+`struct.tuple`은 별도 인자가 아니라 struct **배열 하나**를 받아요.
+
+```ts
+const Pair = struct.tuple([struct.string(), struct.number()])
+```
+
+- 각 위치는 같은 인덱스의 struct로 파싱해요. 입력은 길이가 정확히 같은 배열이어야 하고, 아니면 `invalid_type`(expected `tuple of length N`)으로 실패해요.
+- struct를 별도 인자로 넘기는 `struct.tuple(a, b)`는 `TypeError`를 던져요.
+- 항목이 struct가 아니면 `TypeError`를 던져요.
+
+`TupleStruct<T>`는 export되지 않아요. 입력과 출력이 항목 타입들의 튜플인 `Struct`예요.
+
+[Struct](/ko-KR/api/struct)

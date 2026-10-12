@@ -1,0 +1,17 @@
+---
+title: 'injectClient'
+description: 返回 createClientPlugin 所提供 client 嘅 Vue composable。
+---
+
+<ApiReference identity="@defjs/vue:injectClient" />
+
+```ts
+function injectClient(): Client
+```
+
+讀取最近嘅 `HTTP_CLIENT` provider。要喺 Vue 允許 `inject` 嘅地方 call，例如 `setup()`。
+
+- **Returns** 注入嘅 client。
+- **Throws** 如果冇提供 client（例如冇安裝 plugin），會 throw `Error`。
+
+[@defjs/vue](/zh-Hant-HK/api/vue)

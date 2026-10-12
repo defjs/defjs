@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'المجموعة المغلقة لكل رموز الفشل التي تُبلِّغ عنها Defjs.'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+مجموعة مغلقة واحدة. والمقطع الذي يسبق أول `_` هو الصنف؛ ولا يوجد حقل `kind` منفصل.
+
+| الصنف  | المعنى                                                              |
+| ------ | ------------------------------------------------------------------- |
+| `HTTP` | الطرف المقابل أجاب بحالة غير 2xx.                                   |
+| `REQ`  | الطلب لم يغادر أصلًا: المدخل، أو خيارات التنفيذ، أو البناء.         |
+| `NET`  | لا استجابة صالحة للاستخدام: إلغاء، أو مهلة، أو اتصال، أو جسم مبتور. |
+| `RES`  | وصلت استجابة لكن تعذّرت قراءتها كما أُعلن.                          |
+| `EXT`  | الشيفرة التي وصلتها بخط المعالجة رمت خطأً.                          |
+| `CAP`  | تجاوز حدٍّ معلَن لمخزن مؤقت أو طابور.                               |
+| `ENV`  | بيئة التشغيل المضيفة تفتقر إلى قدرة مطلوبة.                         |
+
+وتبقى المجموعة مغلقة حتى يكون `switch (fault.code)` مستنفدًا — فالإضافات تُبلِّغ عن تفصيلها عبر `cause` لا عبر رمز جديد.
+
+[الأخطاء](/ar/api/errors)

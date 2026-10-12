@@ -1,0 +1,16 @@
+---
+title: 'ClientSSEConfig'
+description: 'تهيئة SSE المحلولة مع مقبض fetch إلزامي.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEConfig" />
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+نوع `ClientConfig.sse`. وهو [`ClientSSEOptions`](/ar/api/core/clientsseoptions-type) مع حضور `handle` دائمًا؛ والافتراضي هو `fetch` العامة.
+
+[العميل](/ar/api/client)

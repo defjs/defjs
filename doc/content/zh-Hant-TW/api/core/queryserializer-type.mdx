@@ -1,0 +1,16 @@
+---
+title: 'QuerySerializer'
+description: '把編碼後的 query 物件序列化成 query string 的函式。'
+---
+
+<ApiReference identity="@defjs/core:QuerySerializer" />
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+`query` 是 wire 物件：alias 已套用，`Date` 值已是 ISO 字串，`bigint` 值已是字串。巢狀物件與陣列會保留。回傳不含開頭 `?` 的 query string；它會原樣使用，不會再經過 `URLSearchParams`。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
+
+用 `withQuerySerializer` 設定。沒有設定時，query 使用 `URLSearchParams`：陣列會重複 key，巢狀物件則失敗。builder 若回傳 `URLSearchParams`，就會跳過 serializer。
+
+[Client](/zh-Hant-TW/api/client)

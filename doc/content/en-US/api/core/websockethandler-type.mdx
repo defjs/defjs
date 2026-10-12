@@ -1,0 +1,16 @@
+---
+title: 'WebSocketHandler'
+description: 'Terminal handler that opens a WebSocket session for a request.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandler" />
+
+```ts
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+```
+
+The `next` function a WebSocket interceptor receives. `next(req)` goes inward only: through the interceptors registered after this one, then the transport that opens the session. It may be called once per execute; a second call, or a call after the chain has settled, rejects.
+
+It resolves to a [`WebSocketSessionLike`](/api/core/websocketsessionlike-type).
+
+[Interceptors](/api/interceptors)

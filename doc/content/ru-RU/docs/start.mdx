@@ -1,0 +1,136 @@
+---
+title: 'Быстрый старт'
+description: Опиши GET /users/:id, прогони через локальный Fetch handle, потом укажи на реальный API.
+---
+
+# Начало работы: один HTTP-запрос
+
+Ты опишешь `GET /users/:id`, выполнишь через явный клиент и декодируешь и `200`, и объявленный `404`. Локальный handler держит первый прогон офлайн; команда не меняется, когда подставишь настоящий сервис.
+
+## Шаг 1 — Установка
+
+`@defjs/core` — ESM и работает на Node.js, Bun или Deno. Node.js 22.18+ (или 24+) запускает `.ts` напрямую через type stripping; более ранним релизам 22.x нужен `--experimental-strip-types`. Оставь в package.json `"type": "module"`. В браузере по-прежнему нужны бандлер и Fetch.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno add npm:@defjs/core
+```
+
+</Tab>
+</Tabs>
+## Шаг 2 — Опиши запрос
+
+Создай `src/get-user.ts`. Input struct — значение вызывающего. `builder` кладёт это значение на запрос. Здесь весь input — объект path, так что скалярные поля без алиаса заполняют `:id`.
+
+<include cwd meta="get-user.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` — тело 2xx. `error` — любой другой status. По одному struct. Когда эти тела различаются, используй `struct.or(...)` или размеченное объединение.
+
+`defineRequest(...)` возвращает эндпоинт. Вызов `getUser(...)` собирает непрозрачную команду, которую отдашь в `client.execute(...)`. `builder` выше — функция, которая раскладывает input; это не эндпоинт.
+
+## Шаг 3 — Выполни локально
+
+Подключи Fetch handle локально для клиента, чтобы прогнать без сети. Defjs всё равно валидирует input, собирает `Request`, диспатчит по status и парсит тело.
+
+<include cwd meta="get-user.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+Запусти:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun src/get-user.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno run src/get-user.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+Попробуй отсутствующего пользователя — смени path id на `8` и запусти снова:
+
+```txt
+User not found
+```
+
+При успехе: `error` — `null`, `user` — output Struct для `200`, `response` — `HttpResponse`. При объявленном `404`: `error.code` — `'HTTP_STATUS'`, `error.status` — `404`, а `error.data` типизирован как `NotFound`. Второй элемент кортежа при провале — `undefined`.
+
+## Шаг 4 — Укажи на реальный API
+
+Убери `withHTTPHandle(...)` и поставь настоящий base URL, когда сервис реализует `GET /v1/users/:id` с этими телами.
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+Та же команда. Другой клиент.
+
+## Когда результат другой
+
+- Плохой input → `REQ_INPUT_INVALID`; конфликтующие опции отмены → `REQ_OPTIONS_INVALID`; упавший `builder` → `REQ_BUILD_FAILED`
+- Non-2xx статус → `HTTP_STATUS`, с типизированным `error.data`, если `error` был объявлен и его тело декодируется
+- Объявленное JSON-тело с другим media type → `RES_MEDIA_TYPE_INVALID`, сообщается до чтения тела
+- Объявленное тело (`output` для 2xx, иначе `error`), которое не декодируется → `RES_DECODE_FAILED` или `RES_STRUCT_MISMATCH`, каким бы ни был статус
+- Сбой Fetch / отмена / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` — положительное safe integer в `1..2_147_483_647`. Валидные формы отмены: `{ timeout }`, `{ abort }` или `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` вместе невалидно. Отмена говорит, что увидел вызывающий, — не то, закоммитилась ли серверная запись.
+
+## Дальше по рецептам
+
+- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)
+- [POST JSON](/ru-RU/recipes/post-json)
+- [Отменить HTTP-вызов](/ru-RU/recipes/cancel-http)
+- [Читать SSE-стрим](/ru-RU/recipes/consume-sse)
+- [Открыть WebSocket-сессию](/ru-RU/recipes/websocket-session)
+- [Тест с локальным Fetch handle](/ru-RU/recipes/test-with-handle)

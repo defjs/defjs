@@ -1,0 +1,163 @@
+---
+title: Errores
+description: Variantes de fault y helpers de fábrica.
+---
+
+# Errores
+
+Execute devuelve un `Fault` discriminado en el primer hueco de la tupla, no una excepción lanzada para los fallos declarados.
+
+## FaultCode
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+Un conjunto cerrado. El segmento antes del primer `_` es la clase; no hay un campo `kind` aparte. El conjunto se mantiene cerrado para que `switch (fault.code)` sea exhaustivo: las extensiones reportan su propio detalle por `cause`, no con un código nuevo.
+
+## FaultClass
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+`FaultClass<FaultCode>` es `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+## Fault
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = DecodeFault | HttpStatusFault<TErr> | PreflightFault
+```
+
+Haz switch sobre `fault.code`.
+
+### FaultOf
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`FaultOf` es `Fault` expresado por el tipo del cuerpo de error decodificado en lugar del struct que lo produjo. `HttpAwaitResult` y las fábricas de faults trabajan con valores decodificados, por eso usan esta forma.
+
+Cada variante es un `Error` nativo llamado `DefjsFault`, así que `String(fault)` produce un `DefjsFault: <message>` directamente logueable. `code` y los metadatos de la variante — `status`, `response`, `data` — son propiedades propias enumerables. La cadena nativa `cause` no es enumerable.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+Llama a `format()`, `flatten()` o `prettify()` solo después de estrechar `fault.cause` a `StructError`; esos helpers no se copian al fault.
+
+### HttpStatusFault
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+Cualquier estado no-2xx. Si el endpoint declaró `error` y el cuerpo decodificó, `data` es ese cuerpo y `response` lo lleva. Si `error` se omitió, el cuerpo nunca se lee, lo que deja `data` en `undefined` y `response` como metadatos a secas.
+
+### DecodeFault
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+Llegó una respuesta, pero no se pudo leer como se declaró. `response` son solo metadatos: un cuerpo es un valor decodificado, y la decodificación es justo lo que falló, así que no hay campo `body` al que acudir. El detalle culpable vive en `cause`: un `StructError` para un desajuste de struct, el fallo del parser para una representación ilegible.
+
+### PreflightFault
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+Todo lo que pudo fallar antes de que existiera una respuesta: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` está presente solo donde el transporte ya tenía metadatos que reportar, como un cuerpo que se truncó a mitad de la descarga.
+
+### AnyFault
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+Cualquier fault, sea cual sea el tipo de su cuerpo de error decodificado. Úsalo para handlers que clasifican faults sin importarles qué endpoint los produjo; prefiere `Fault<typeof yourErrorStruct>` donde el tipo del cuerpo importe.
+
+## Fábricas
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+```ts
+declare function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+
+declare function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+
+declare function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+
+declare function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+
+declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+`createHttpStatusFault` toma una respuesta que ya lleva el cuerpo decodificado; `createUndecodedHttpStatusFault` toma solo metadatos, para un endpoint que no declaró `error`.
+
+`createNetworkFault` mapea `ERR_ABORTED` y una `DOMException` llamada `AbortError` a `NET_ABORTED`, `ERR_TIMEOUT` y un error llamado `TimeoutError` a `NET_TIMEOUT`, y todo lo demás a `NET_UNREACHABLE`. `createPreflightFault` toma el código directamente; sin `cause`, el código pasa a ser el mensaje.
+
+Todas las fábricas devuelven instancias de `Error` nativo con los campos estructurados de arriba; no crean errores de objeto plano y no necesitan adaptador para `String(fault)`.
+
+## Centinelas
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+Valores compartidos de `cause` / mensaje para abort y timeout. Lanzar uno desde un interceptor HTTP resuelve la llamada con `NET_ABORTED` o `NET_TIMEOUT`. Los interceptores SSE y WebSocket reportan cualquier throw, estos incluidos, como `EXT_INTERCEPTOR_FAILED`.
+
+Mira la [guía de Errores](/es-ES/docs/errors).

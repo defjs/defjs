@@ -1,0 +1,19 @@
+---
+title: 'Infer'
+description: '推導 struct 成功 parse 後的輸出型別。'
+---
+
+<ApiReference identity="@defjs/core:Infer" />
+
+```ts
+type Infer<T> = T extends { readonly _struct: { readonly output: unknown } } ? T['_struct']['output'] : never
+```
+
+成功 parse 所產生的型別。用 `Infer<typeof User>` 取得 struct 解碼後的值，用 `StructInput` 取得它接受的輸入型別。
+
+```ts
+const User = struct.object({ id: struct.number(), name: struct.string() })
+type User = Infer<typeof User> // { id: number; name: string }
+```
+
+[Struct](/zh-Hant-TW/api/struct)

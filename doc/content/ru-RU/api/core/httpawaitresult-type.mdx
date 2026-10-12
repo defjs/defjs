@@ -1,0 +1,16 @@
+---
+title: 'HttpAwaitResult'
+description: 'Кортеж await-результата HTTP-вызова: данные и ответ либо fault.'
+---
+
+<ApiReference identity="@defjs/core:HttpAwaitResult" />
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+`TData` и `TErrorData` — типы декодированных тел. При успехе третий слот несёт `body` только если объявлен `output`. При сбое он равен `undefined`: fault уже содержит те метаданные ответа, которые были.
+
+[HTTP](/ru-RU/api/http)

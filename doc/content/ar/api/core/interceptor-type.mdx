@@ -1,0 +1,14 @@
+---
+title: 'Interceptor'
+description: 'اتحاد المعترضات الموسومة التي تقبلها خيارات معترضات العميل.'
+---
+
+<ApiReference identity="@defjs/core:Interceptor" />
+
+```ts
+type Interceptor = HttpInterceptor | SSEInterceptor | WebSocketInterceptor
+```
+
+يحدد `kind` (`'http'` أو `'sse'` أو `'web-socket'`) الأوامر التي يعمل عليها المعترض. يقبل `withInterceptors` أي خليط منها؛ وكل وسيلة نقل تشغّل المعترضات من نوعها فقط، بترتيب التسجيل.
+
+[المعترضات](/ar/api/interceptors)

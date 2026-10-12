@@ -1,0 +1,19 @@
+---
+title: 'HttpRequestShape'
+description: 'HTTP builder가 반환하는 요청 모양이에요. path, query, 헤더, body예요.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequestShape" />
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+  headers?: HeadersInit | FlatRecord
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+`P`는 엔드포인트 path이고 `M`은 그 method예요. `GET`과 `HEAD`는 body를 반환할 수 없어요. `BodyValue`는 Fetch가 그대로 보내는 와이어 값(`string`, `Blob`, `ArrayBuffer`, 형식화 배열 또는 `DataView`, `FormData`, `URLSearchParams`, `ReadableStream<Uint8Array>`)이거나 JSON 데이터(`number`, `boolean`, `bigint`, `Date`, `null`, 배열 또는 문자열 키를 가진 객체 타입)예요. `interface` 값이나 클래스 인스턴스는 `{ ...value }`가 필요해요. `path`와 `headers`는 평평한 스칼라여야 해요. `query`는 중첩될 수 있지만, 중첩된 객체는 런타임에 `withQuerySerializer`가 필요해요. `FlatRecord`, `QueryRecord`, `PathValue`, `BodyValue`는 내부 helper 타입이에요.
+
+[HTTP](/ko-KR/api/http)

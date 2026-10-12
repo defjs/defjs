@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'Client option that enables automatic SSE reconnection.'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+Configures automatic reconnection after an SSE stream fails. Reconnection is opt-in: without this option a failed stream is not retried. Passing `undefined` clears an earlier setting.
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` is the retry budget after the first attempt. It defaults to `3` when `reconnect` is set, and `0` disables retries. Omitting it is not unlimited.
+- Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect. With it, its result decides for every method, `POST` included; `method` in the context tells endpoints apart. Return `false` to stop for this failure. It runs before the attempts limit is checked.
+- A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.
+- `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`.
+- `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.
+- The last event id is sent again as `Last-Event-ID` on the next attempt.
+
+See [SSE](/api/sse) for the stream handle.
+
+[Client](/api/client)

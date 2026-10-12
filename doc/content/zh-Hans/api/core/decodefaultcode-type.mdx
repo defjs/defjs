@@ -1,0 +1,14 @@
+---
+title: 'DecodeFaultCode'
+description: '带响应元数据但没有 body 的 fault 的 code。'
+---
+
+<ApiReference identity="@defjs/core:DecodeFaultCode" />
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+```
+
+`DecodeFault` 的 `code` 取值。`PreflightFaultCode` 是除 `HTTP_STATUS` 之外的所有其他 `FaultCode`。
+
+[Errors](/zh-Hans/api/errors)

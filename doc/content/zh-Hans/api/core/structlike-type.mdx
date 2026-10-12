@@ -1,0 +1,22 @@
+---
+title: 'StructLike'
+description: '每个 struct 都带有的结构品牌。'
+---
+
+<ApiReference identity="@defjs/core:StructLike" />
+
+```ts
+interface StructLike<I = unknown, O = unknown, OO extends boolean = boolean> {
+  readonly _struct: {
+    input: I
+    optionalOut: OO extends true ? true : undefined
+    output: O
+  }
+}
+```
+
+任何带有 `_struct` 类型载荷的东西。[`StructInput`](/zh-Hans/api/core/structinput-type) 和 [`Infer`](/zh-Hans/api/core/infer-type) 从中读取 `input` 和 `output`，对象 struct 用 `optionalOut` 决定哪些输出字段可以缺失。
+
+`_struct` 只存在于类型系统中。struct 在运行时没有 `_struct` 属性，带有该类型的普通对象也不是合法的 struct。
+
+[Struct](/zh-Hans/api/struct)

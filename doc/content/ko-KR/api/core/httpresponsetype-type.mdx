@@ -1,0 +1,14 @@
+---
+title: 'HttpResponseType'
+description: 'struct 검증 전에 HTTP body를 읽는 데 쓰는 표현이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpResponseType" />
+
+```ts
+type HttpResponseType = 'arraybuffer' | 'blob' | 'json' | 'text'
+```
+
+선언한 struct 종류에서 정해져요 (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, 나머지는 모두 `json`). `defineRequest`의 필드는 아니고, `HttpRequest`에 `responseType`과 `errorResponseType`으로 나타나요.
+
+[HTTP](/ko-KR/api/http)

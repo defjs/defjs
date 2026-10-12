@@ -1,0 +1,14 @@
+---
+title: 'DecodedResponse'
+description: 'Метаданные ответа плюс тело, декодированное по объявленному struct.'
+---
+
+<ApiReference identity="@defjs/core:DecodedResponse" />
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+Ответ, тело которого декодировано по объявленному struct. Наличие этого типа и есть доказательство того, что декодирование произошло; поэтому сбой декодирования сообщает один лишь `HttpMeta`.
+
+[HTTP](/ru-RU/api/http)

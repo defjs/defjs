@@ -1,0 +1,21 @@
+---
+title: 'createNetworkFault'
+description: 'NET_* fault를 만드는 팩토리예요. cause의 모양에 따라 code가 정해져요.'
+---
+
+<ApiReference identity="@defjs/core:createNetworkFault" />
+
+```ts
+function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **cause** — 밑바탕의 취소, 타임아웃, 전송 실패예요.
+- **response** — 전송 계층이 이미 보고할 메타데이터를 갖고 있던 경우에만 넘겨요. 주어지면 fault에 붙어요.
+- **반환** `cause`에 따라 code가 달라지는 `PreflightFault`예요.
+  - `ERR_ABORTED` 또는 이름이 `AbortError`인 `DOMException`이면 `NET_ABORTED`예요. message는 `Request was aborted`예요.
+  - `ERR_TIMEOUT` 또는 이름이 `TimeoutError`인 오류이면 `NET_TIMEOUT`이에요. message는 cause의 message이고, 비어 있으면 `Request timed out`이에요.
+  - 그 밖은 모두 `NET_UNREACHABLE`이고 cause의 message를 써요.
+
+cause는 `cause`로 보관돼요.
+
+[오류](/ko-KR/api/errors)

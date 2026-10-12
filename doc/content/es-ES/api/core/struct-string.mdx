@@ -1,0 +1,15 @@
+---
+title: 'struct.string'
+description: 'Struct que acepta valores string.'
+---
+
+<ApiReference identity="@defjs/core:struct.string" />
+
+```ts
+function string(): Struct<string, string>
+```
+
+- Acepta solo valores `string`; cualquier otra cosa falla con `invalid_type`.
+- Como raíz de body, o como struct `output` / `error` de entrada, los bytes siguen siendo texto en lugar de parsearse como JSON.
+
+[Struct](/es-ES/api/struct)

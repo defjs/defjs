@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'Progress-Snapshot, der an Upload- und Download-Callbacks übergeben wird.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+Spiegelt die Felder von `ProgressEvent`. `loaded` ist die Anzahl bisher übertragener Bytes. Ist die Gesamtgröße unbekannt, ist `total` `0` und `lengthComputable` `false`.
+
+Siehe [`HttpProgressFn`](/de-DE/api/core/httpprogressfn-type), [HTTP-Guide](/de-DE/docs/http) und [Commands](/de-DE/docs/commands).
+
+[HTTP](/de-DE/api/http)

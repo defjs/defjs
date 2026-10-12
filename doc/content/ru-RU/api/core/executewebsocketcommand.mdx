@@ -1,0 +1,26 @@
+---
+title: 'executeWebSocketCommand'
+description: 'Низкоуровневая точка входа, открывающая WebSocket-команду по конфигурации клиента.'
+---
+
+<ApiReference identity="@defjs/core:executeWebSocketCommand" />
+
+```ts
+function executeWebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+  options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+```
+
+Низкоуровневая точка входа для `client.execute`. В коде приложения предпочитай клиент.
+
+- **Возвращает** `[null, session, connection]` или `[fault, undefined, connection | undefined]`, где fault — `Fault<undefined>`.
+
+Опции execute для WebSocket могут переопределить `beforeConnect`, `heartbeat`, `protocols` и `reconnect` клиента.
+
+[WebSocket](/ru-RU/api/web-socket)

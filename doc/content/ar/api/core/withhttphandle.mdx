@@ -1,0 +1,17 @@
+---
+title: 'withHTTPHandle'
+description: 'خيار عميل يستبدل دالة Fetch المستخدمة في طلبات HTTP.'
+---
+
+<ApiReference identity="@defjs/core:withHTTPHandle" />
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+يستبدل الدالة المتوافقة مع Fetch المستخدمة في طلبات HTTP. الافتراضي هو `fetch` الخاص بالمنصة.
+
+- **fetchImpl** هو [`FetchHandle`](/ar/api/core/fetchhandle-type)، أي توقيع الاستدعاء `(input, init?) => Promise<Response>`. وهو ليس `typeof fetch`، فلا يحتاج البديل الاختباري إلى إضافات المضيف مثل `fetch.preconnect`.
+- يؤثر في HTTP فقط. يستخدم SSE الخيار [`withSSEHandle`](/ar/api/core/withssehandle).
+
+[العميل](/ar/api/client)

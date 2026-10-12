@@ -1,0 +1,20 @@
+---
+title: 'Отмена и таймауты'
+description: Abort или timeout execute и читай NET_ABORTED / NET_TIMEOUT.
+---
+
+# Отменить HTTP-вызов
+
+Передай `signal` плюс либо `abort`, либо `timeout` — не оба `abort` и `timeout`. `timeout` — положительное safe integer в `1..2_147_483_647`.
+
+Подробности — в [HTTP](/ru-RU/docs/http#отмени-работу).
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+Отмена говорит, что увидел вызывающий. Она не доказывает, что серверная запись откатилась — держи ретраи мутаций за контрактом идемпотентности.

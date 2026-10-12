@@ -1,0 +1,17 @@
+---
+title: 'FlattenedStructError'
+description: 'StructError.flatten が返す、フォーム全体とフィールドごとのフラットなエラー集合です。'
+---
+
+<ApiReference identity="@defjs/core:FlattenedStructError" />
+
+```ts
+interface FlattenedStructError {
+  formErrors: string[]
+  fieldErrors: { [key: string]: string[] }
+}
+```
+
+`StructError.flatten()` の結果です。`formErrors` には path が空の issue（ルートレベルの issue）のメッセージが入ります。`fieldErrors` には最初の path セグメントをキーとしてメッセージが入るので、入れ子の issue は最上位のフィールドにまとめられます。
+
+[Struct](/ja-JP/api/struct)

@@ -1,0 +1,16 @@
+---
+title: 'HttpProgressFn'
+description: 'Type de callback pour la progression de l’envoi et du téléchargement.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+Passé comme `onDownloadProgress` ou `onUploadProgress` dans `HttpExecuteOptions`. Les callbacks peuvent être asynchrones ; on attend la fin de leur exécution avant de traiter le bloc de données suivant. Un callback qui lève une erreur ou renvoie une promesse rejetée fait échouer l’appel avec `EXT_OBSERVER_FAILED` ; la valeur à l’origine de l’échec est conservée dans `cause`. Cela vaut pour les téléchargements comme pour les envois. L’annulation par l’appelant et `timeout` restent prioritaires et signalent `NET_ABORTED` / `NET_TIMEOUT`. La progression de l’envoi n’est signalée que dans les environnements d’exécution capables de transmettre les corps de requête en flux (Bun, Node, Deno). Dans les navigateurs, un corps `Blob` / `File`, `ArrayBuffer` ou `FormData` est envoyé inchangé et `onUploadProgress` n’est pas appelé ; `onDownloadProgress` n’est pas affecté.
+
+Voir [`HttpProgressEvent`](/fr-FR/api/core/httpprogressevent-type), le [guide HTTP](/fr-FR/docs/http) et [Commandes](/fr-FR/docs/commands).
+
+[HTTP](/fr-FR/api/http)

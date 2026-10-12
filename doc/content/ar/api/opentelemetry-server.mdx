@@ -1,0 +1,103 @@
+---
+title: '@defjs/opentelemetry-server'
+description: withOpenTelemetryServer وخيارات كل وسيلة نقل.
+---
+
+# OpenTelemetry server
+
+رصد (instrumentation) صادر لـ HTTP / SSE / WebSocket على هيئة معترضات أساسية. هذه الحزمة لا تهيئ OpenTelemetry SDK، وليست رصدًا لخادم وارد.
+
+انظر [دليل OpenTelemetry server](/ar/docs/integrations/opentelemetry-server).
+
+## withOpenTelemetryServer()
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+يُلحق معترضًا واحدًا لكل وسيلة نقل مفعّلة، بالترتيب HTTP ثم SSE ثم WebSocket. طبّقه عند `createClient`. الوسيط `options` مطلوب؛ مرّر `{}` لتثبيت المعترضات مع الانتشار فقط.
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+كل من `tracer` و`meter` و`logger` اختياري. بلا `propagator` → W3C Trace Context + Baggage.
+
+بدون `tracer` لا تُنشأ spans محلية ولا تُستدعى `trace.getTracer(...)` أو `startSpanHook` أو `requestHook` أو `responseHook`. يعمل `meter` و`logger` بشكل مستقل. يستمر نشر السياق الأب المستخرج، وتبقى `queryPropagation` في WebSocket بقيمة `false` افتراضيًا. مع tracer، يتجاوز `requireParentSpan: true` كل الرصد بما فيه السجلات عند غياب span أب نشط. بدون tracer لا يمنع المقاييس أو السجلات.
+
+HTTP وSSE وWebSocket مفعّلة افتراضيًا. مرّر `{ enabled: false }` على وسيلة نقل لتخطيها.
+
+## OpenTelemetryServerOptions
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+| الحقل               | الافتراضي                   | الأثر                                                                      |
+| ------------------- | --------------------------- | -------------------------------------------------------------------------- |
+| `tracer`            | لا شيء                      | بدونه لا توجد spans محلية ولا خطافات span.                                 |
+| `meter`             | لا شيء                      | بدونه لا تُسجَّل مقاييس الحزمة.                                            |
+| `logger`            | لا شيء                      | `Logger` من `@opentelemetry/api-logs`. بدونه لا تُصدَر LogRecords تشخيصية. |
+| `propagator`        | W3C Trace Context + Baggage | يستخرج السياق الأب ويحقن السياق الصادر.                                    |
+| `requireParentSpan` | `false`                     | مع `tracer`، يتجاوز الرصد عند عدم وجود span أب نشط. يُتجاهل بدون `tracer`. |
+| `http`              | `{}`                        | خيارات وسيلة نقل HTTP.                                                     |
+| `sse`               | `{}`                        | خيارات وسيلة نقل SSE.                                                      |
+| `webSocket`         | `{}`                        | خيارات وسيلة نقل WebSocket.                                                |
+
+## OpenTelemetryServerTransportOptions
+
+### OpenTelemetryServerHttpOptions
+
+### OpenTelemetryServerSSEOptions
+
+### OpenTelemetryServerWebSocketOptions
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<EventStreamHandle<unknown>>
+interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTransportOptions<WebSocketSessionLike> {
+  queryPropagation?: boolean
+}
+```
+
+تكون `enabled` بقيمة `true` افتراضيًا؛ وحده `enabled: false` يعطّل وسيلة النقل. المفتاح البولياني القديم (`http: false`) والخطافات في المستوى الأعلى تُرفض بأنواع TypeScript فقط. لا يوجد فحص وقت التشغيل، لذا يبقى `http: false` وقت التشغيل مبقيًا وسيلة النقل مفعّلة، ويُتجاهل أي خطاف في المستوى الأعلى بصمت.
+
+لا تُستدعى خطافات span إلا عند تمرير `tracer`. يعمل `startSpanHook` بشكل متزامن قبل إنشاء الـ span لوسيلة HTTP أو SSE أو WebSocket الخاصة به. تُطبَّق سماته بعد السمات المدمجة، فيجوز للتطبيق أن يتجاوز `url.full` أو قيمة أولية أخرى. إذا رمى، تنشئ Defjs الـ span بالسمات المدمجة، وتسجّل حدث `defjs.otel.hook.error`، وتكمل الطلب؛ ويعمل `requestHook` و`responseHook` بعد إنشاء الـ span. لا ينتظر أيٌّ منهما: يُسجَّل الرمي أو الرفض بالطريقة نفسها ولا يحجب العملية ولا يُفشلها.
+
+يستقبل `responseHook` ما أعادته وسيلة النقل: `HttpResponse` في HTTP، ومقبض التدفق في SSE بعد نجاح البدء، والجلسة في WebSocket بعد فتحها. وسيطه الثالث هو الطلب الأصلي.
+
+افتراضيًا، يحل `url.full` فقط `request.endpoint` مقابل `request.baseEndpoint` الاختياري؛ ولا يُلحَق `request.queryString` مستقل. ذلك الحد ليس حجبًا، والحزمة بلا حاجب مدمج أو سياسة مفاتيح حسّاسة. ابنِ عنوان URL مملوكًا للتطبيق، واحجبه إن لزم، صراحة:
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+`queryPropagation` افتراضيًا `false`. فعّله فقط بعد أن تقبل سياق التتبع في عنوان WebSocket.
+
+## تشخيصات Logger
+
+الخيار العلوي `logger?: Logger` يقبل واجهة `@opentelemetry/api-logs` وليس Logger من Winston/Pino. يمكن حذفه أو استخدامه وحده. لا تجلب Defjs logger عامًا ولا تدير provider. يُصدر على الأكثر LogRecord واحدًا بمستوى `WARN` (رقم الشدة 13) لكل طلب أو اتصال منطقي، برسالة ثابتة والسمات `server.address` و`server.port` (عند معرفتهما) و`defjs.phase` و`exception.type`، إضافة إلى `http.request.method` في HTTP، و`defjs.sse.fault.code` عندما ينتهي تدفق SSE بخطأ، و`websocket.close.code` عندما تحمل معلومات إغلاق WebSocket رمزًا رقميًا:
+
+| النتيجة                                                     | الحدث                                                             | `defjs.phase` |
+| ----------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |
+| رفض `next()` في HTTP، باستثناء الإلغاء و`HTTP_STATUS` العام | `http.client.request.exception`                                   | `request`     |
+| فشل اتصال SSE أو WebSocket                                  | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
+| انتهاء اتصال SSE أو WebSocket بخطأ، بما في ذلك رفض `closed` | حدث وسيلة النقل نفسه                                              | `connection`  |
+
+الاستجابات ذات الحالة العادية (بما فيها 4xx/5xx التي يُفك فيها جسم `error` المصرَّح به) والنجاح والإغلاق الطبيعي ونهاية التدفق (EOF) وإلغاء المستدعي لا تنتج LogRecord. مهلة تنفيذ HTTP رفضٌ فتُسجَّل مرة واحدة (والإلغاء الذي يكون سببه `TimeoutError`، مثل `AbortSignal.timeout()`، يُعدّ مهلة لا إلغاءً)، وكذلك جسم `output` / `error` مصرَّح به نوع وسائطه ليس JSON، أو تفشل قراءته، أو لا يُحلَّل JSON فيه، أيًّا كانت حالة HTTP. الجسم غير المصرَّح به لا يُقرأ أبدًا ولا يمكن أن يُسجَّل. التحقق من Struct وغياب جسم مصرَّح به مثل 204 وتحويل `HTTP_STATUS` اللاحق تحدث بعد المعترض ولا تُسجَّل. مصافحة SSE غير 2xx تُسجَّل دائمًا مرة واحدة؛ وإطار الإغلاق (close frame) القادم من خادم WebSocket لا يُسجَّل أبدًا، أيًّا كان رمزه. أما الانقطاع المفاجئ بلا إطار إغلاق (1006) فيعتمد على بيئة التشغيل: حيث يُطلق WebSocket الخاص بالمنصة `error` قبل `close` (Node.js) تنتهي الجلسة بخطأ وتُسجَّل مرة واحدة؛ وحيث لا يفعل (Bun) يكون الانقطاع إغلاقًا طبيعيًا ولا يُسجَّل شيء.
+
+`exception.type` هو اسم صنف ما لاحظه المعترض، وليس رمز عطل Defjs: مثل `BodyFailure` (جسم HTTP) و`EventStreamFatalError` (مصافحة SSE) و`DefjsFault` (بدء WebSocket) و`TypeError` (فشل الشبكة) أو `Error` (المهلة). التطبيق مسؤول عن المرشحات والمصدّرين وflush وshutdown.
+
+راجع الأمثلة الكاملة للتسجيل والتكامل مع مكتبات الطرف الثالث في [دليل OpenTelemetry](/ar/docs/integrations/opentelemetry-server#السجلات-ومكتبات-السجلات-الخارجية).

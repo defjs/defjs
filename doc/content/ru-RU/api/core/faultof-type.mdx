@@ -1,0 +1,14 @@
+---
+title: 'FaultOf'
+description: 'Объединение fault’ов, выраженное через тип его декодированного тела ошибки.'
+---
+
+<ApiReference identity="@defjs/core:FaultOf" />
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+```
+
+`TData` — декодированное тело `error`, либо `undefined`, если struct ошибки не объявлен. `Fault<TErr>` — это `FaultOf`, применённый к `Infer<TErr>`, а `HttpAwaitResult` использует `FaultOf<TErrorData>`. Передавай декодированный тип, а не struct: пиши `FaultOf<Infer<typeof errorStruct>>` или используй `Fault<typeof errorStruct>`.
+
+[Ошибки](/ru-RU/api/errors)

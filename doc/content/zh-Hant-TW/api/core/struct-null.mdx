@@ -1,0 +1,16 @@
+---
+title: 'struct.null'
+description: '只接受 null 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.null" />
+
+```ts
+function null(): Struct<null, null>
+```
+
+只接受 `null`。其他所有值都以 `invalid_type` 失敗。這包括位於 root 或陣列、tuple 中的 `undefined`；缺少的物件或 record 欄位則改報 `missing_key`。
+
+這不是 `.null()` modifier。modifier 是把 `null` 加進另一個 struct 所接受的值。
+
+[Struct](/zh-Hant-TW/api/struct)

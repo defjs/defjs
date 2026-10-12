@@ -1,0 +1,27 @@
+---
+title: 'StructError'
+description: 'الخطأ الذي يُرجعه تحليل struct فاشل، مع مشاكله ودوال تنسيقه.'
+---
+
+<ApiReference identity="@defjs/core:StructError" />
+
+```ts
+class StructError extends Error {
+  readonly issues: StructIssue[]
+  constructor(issues: StructIssue[])
+  format(): FormattedStructError
+  flatten(): FlattenedStructError
+  prettify(): string
+}
+```
+
+`name` هو `'StructError'`. و`message` هي رسالة المشكلة عند وجود مشكلة واحدة، و`N struct issues: <first message>` عند وجود عدة مشاكل، و`Struct parse failed` عند عدم وجود أي منها.
+
+- يتوقف `struct.parse` عند أول إخفاق، فتحمل `issues` هناك [`StructIssue`](/ar/api/core/structissue-type) واحدة.
+- يُرجع `format()` شجرة [`FormattedStructError`](/ar/api/core/formattedstructerror-type). لكل عقدة مصفوفة `_errors`، وتتبع المفاتيح المتداخلة `issue.path`.
+- يُرجع `flatten()` الكائن [`FlattenedStructError`](/ar/api/core/flattenedstructerror-type): الرسائل ذات path الفارغ تذهب إلى `formErrors`، وتُجمَّع البقية بحسب أول مقطع في path داخل `fieldErrors`.
+- يُرجع `prettify()` سطرًا واحدًا لكل مشكلة بالصيغة `× path: message`. ويظهر الـ path الفارغ بالشكل `<root>`.
+
+انظر [دليل Struct](/ar/docs/struct).
+
+[Struct](/ar/api/struct)

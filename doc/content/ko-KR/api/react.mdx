@@ -1,0 +1,42 @@
+---
+title: '@defjs/react'
+description: ClientProvider, useClient, provider props예요.
+---
+
+# React
+
+기존 `@defjs/core` 클라이언트를 React 트리에 제공해요. 이 패키지는 클라이언트를 만들거나, 캐시하거나, dispose하지 않아요. 진입점에 `'use client'`가 표시돼 있으므로 클라이언트 컴포넌트에서 import하세요. React 18 이상이 필요해요.
+
+[React 가이드](/ko-KR/docs/integrations/react)를 보세요.
+
+## ClientProvider
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+Context provider예요. `createClient`가 준 클라이언트를 넣어요. 중첩된 `ClientProvider`는 자신의 하위 트리에 한해 클라이언트를 덮어쓰고, `useClient`는 가장 가까운 것을 읽어요. 다른 `client`를 넘기면 하위 컴포넌트가 보는 컨텍스트 값이 바뀌어요.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+```ts
+function useClient(): Client
+```
+
+가장 가까운 `ClientProvider`를 읽어요.
+
+- **반환** 제공된 클라이언트예요.
+- **던짐** `ClientProvider` 밖에서 호출하면 `Error`를 던져요.
+
+## ClientProviderProps
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+`client`는 필수이며 애플리케이션이 소유해요. `children`은 `useClient`를 호출할 수 있는 트리예요.

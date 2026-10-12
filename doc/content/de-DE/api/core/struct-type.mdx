@@ -1,0 +1,17 @@
+---
+title: 'Struct'
+description: 'Der Struct-Type: Input- und Output-Types plus die Modifier-Methoden.'
+---
+
+<ApiReference identity="@defjs/core:Struct" />
+
+```ts
+type Struct<Input = unknown, Output = Input, OptionalOut extends boolean = false> = StructMethods<Input, Output, OptionalOut> &
+  StructLike<Input, Output, OptionalOut>
+```
+
+Eine parsebare Form. `Input` ist, was sie akzeptiert ([`StructInput`](/de-DE/api/core/structinput-type)), `Output` ist, was ein erfolgreiches Parse zurückgibt ([`Infer`](/de-DE/api/core/infer-type)), und `OptionalOut` markiert ein Field, das im Objekt-Output fehlen darf.
+
+Baue Structs mit der [`struct`](/de-DE/api/core/struct)-Facade. Jeder Modifier in [`StructMethods`](/de-DE/api/core/structmethods-type) gibt einen neuen Struct zurück und lässt das Original unverändert.
+
+[Struct](/de-DE/api/struct)

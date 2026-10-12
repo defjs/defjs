@@ -1,0 +1,18 @@
+---
+title: 'withHeaders'
+description: 'Client option：為 HTTP 同 SSE requests 設定靜態預設 headers。'
+---
+
+<ApiReference identity="@defjs/core:withHeaders" />
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+為呢個 client 建立嘅 HTTP 同 SSE requests 設定靜態預設 headers。WebSocket 連線唔會使用佢哋。
+
+- `HeadersInit` 會喺套用 option 時 copy 入 `Headers` 物件。之後再 call 會取代之前嘅 headers，而唔係合併。
+- Request builder return 嘅 headers，如果值係 scalar 或者 `Headers` instance，就會取代同名嘅預設值。Array 值（內含 array 嘅 record entry，或者 tuple-array 形式嘅 `HeadersInit`）會 append 去預設值。
+- 每個 request 或者即時計算嘅 credentials，例如刷新後嘅 Bearer token 或者 HMAC signature，應該放喺 [interceptor](/zh-Hant-HK/api/interceptors)，因為佢哋需要最終 body 或者新鮮嘅值。
+
+[Client](/zh-Hant-HK/api/client)

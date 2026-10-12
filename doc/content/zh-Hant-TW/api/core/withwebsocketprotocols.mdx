@@ -1,0 +1,18 @@
+---
+title: 'withWebSocketProtocols'
+description: '設定握手時 WebSocket subprotocols 的 client option。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketProtocols" />
+
+```ts
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+```
+
+依 RFC 6455，設定握手時提供的 subprotocols。它們會作為第二個引數傳給 WebSocket constructor，而且只有在清單不為空時才會傳。
+
+只有伺服器要求特定 subprotocol 時才需要，例如 `['json']` 或 `['v1']`。
+
+優先順序由高到低：execute 的 `protocols` option、這個 client option，最後是 endpoint 定義上的 `protocols`。
+
+[Client](/zh-Hant-TW/api/client)

@@ -1,0 +1,20 @@
+---
+title: 'Cancelación y tiempos de espera'
+description: Aborta o aplica timeout a un execute y lee NET_ABORTED / NET_TIMEOUT.
+---
+
+# Cancelar una llamada HTTP
+
+Pasa `signal` más `abort` o `timeout` — no ambos `abort` y `timeout`. `timeout` debe ser un entero seguro positivo en `1..2_147_483_647`.
+
+Ver detalles en [HTTP](/es-ES/docs/http#cancelar-el-trabajo).
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+La cancelación te dice lo que observó el llamador. No demuestra que una escritura en el servidor se revirtió — mantén los reintentos de mutación detrás de un contrato de idempotencia.

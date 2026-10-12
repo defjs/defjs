@@ -1,0 +1,136 @@
+---
+title: '快速开始'
+description: 定义 GET /users/:id，对着本地 Fetch handle 跑一遍，再换成真实 API。
+---
+
+# 快速开始：一次 HTTP 请求
+
+你会定义 `GET /users/:id`，用显式 Client 去 `execute`，并把 `200` 和声明过的 `404` 都解出来。本地 handler 保证第一次能离线跑；换成真实服务时，command 不用改。
+
+## 第 1 步 — 安装
+
+`@defjs/core` 是 ESM，可运行在 Node.js、Bun 或 Deno 上。Node.js 22.18+（或 24+）通过 type stripping 直接运行 `.ts`；更早的 22.x 需要 `--experimental-strip-types`。package.json 里保留 `"type": "module"`。浏览器里照样需要 bundler 和 Fetch。
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno add npm:@defjs/core
+```
+
+</Tab>
+</Tabs>
+## 第 2 步 — 定义请求
+
+建 `src/get-user.ts`。Input struct 是调用方的值。`builder` 把这个值放到请求上。这里整个 input 就是 path 对象，所以没有 alias 的标量字段会填上 `:id`。
+
+<include cwd meta="get-user.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` 是 2xx body。`error` 是其余每个状态。各一个 struct。这些 body 形状不同时，用 `struct.or(...)` 或判别联合。
+
+`defineRequest(...)` 返回 endpoint。调用 `getUser(...)` 打出 opaque command，再交给 `client.execute(...)`。上面的 `builder` 是摆放 input 的函数，它不是 endpoint。
+
+## 第 3 步 — 本地执行
+
+给 Client 接上一个 Client 级的本地 Fetch handle，不用联网也能跑。Defjs 照样会校验输入、拼 `Request`、按状态分派、解析 body。
+
+<include cwd meta="get-user.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+跑起来：
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun src/get-user.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno run src/get-user.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+试试找不到的用户——把 path id 改成 `8` 再跑：
+
+```txt
+User not found
+```
+
+成功时：`error` 是 `null`，`user` 是 `200` Struct 输出，`response` 是 `HttpResponse`。声明过的 `404`：`error.code` 是 `'HTTP_STATUS'`，`error.status` 是 `404`，`error.data` 类型是 `NotFound`。失败时第二项是 `undefined`。
+
+## 第 4 步 — 指向真实 API
+
+服务实现了 `GET /v1/users/:id` 且 body 对得上时，去掉 `withHTTPHandle(...)`，换成真实 base URL。
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+同一个 command，换不同 Client。
+
+## 结果对不上时
+
+- 坏输入 → `REQ_INPUT_INVALID`；冲突的取消 options → `REQ_OPTIONS_INVALID`；`builder` 失败 → `REQ_BUILD_FAILED`
+- 非 2xx 状态 → `HTTP_STATUS`；声明过 `error` 且其 body 解码成功时，`error.data` 带类型
+- 声明过的 JSON body 媒体类型不对 → `RES_MEDIA_TYPE_INVALID`，在读 body 之前就报
+- 声明过的 body（2xx 是 `output`，其余是 `error`）解不出来 → `RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，与状态无关
+- Fetch 失败 / 取消 / 超时 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` 必须是 `1..2_147_483_647` 的正 safe integer。合法取消形状：`{ timeout }`、`{ abort }`，或 `{ signal, timeout }` / `{ signal, abort }`。`{ abort, timeout }` 一起传是非法的。取消只说明调用方看到了什么——不代表服务端写入已经提交。
+
+## 接下来的操作示例
+
+- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)
+- [POST JSON](/zh-Hans/recipes/post-json)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)
+- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)
+- [用本地 Fetch handle 做测试](/zh-Hans/recipes/test-with-handle)

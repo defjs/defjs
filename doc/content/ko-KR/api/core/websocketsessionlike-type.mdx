@@ -1,0 +1,27 @@
+---
+title: 'WebSocketSessionLike'
+description: 'interceptor가 보는 WebSocket session 인터페이스예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSessionLike" />
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: { extensions?: string; generation: number; protocol?: string; url?: string }
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+interceptor가 보는 최소한의 session 면이에요. [`WebSocketSession`](/ko-KR/api/core/websocketsession-type)와 구조적으로 호환되지만 메시지는 `unknown`으로 타입이 지정돼요.
+
+래퍼나 단락 session은 `close` / `closed` 생명주기의 일부로 같은 `[Symbol.asyncDispose]()` teardown을 전달해야 해요. 관련 없는 이미 resolve된 promise를 돌려주는 것으로는 충분하지 않아요. 이 멤버를 필수로 요구하는 것은 구조적으로 구현한 코드에 대해 컴파일 타임 breaking change예요. Defjs가 돌려준 session만 받는 코드에는 런타임에 추가로 호출해야 할 것이 없어요.
+
+[인터셉터](/ko-KR/api/interceptors)

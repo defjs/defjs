@@ -1,0 +1,17 @@
+---
+title: 'withInterceptors'
+description: 'خيار عميل يُلحق معترضات بسلسلة العميل.'
+---
+
+<ApiReference identity="@defjs/core:withInterceptors" />
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+يُلحق معترضات بسلسلة معترضات العميل. استدعاؤه مرة أخرى يُلحق المزيد؛ ولا يستبدل السابقة أبدًا.
+
+- أول معترض مسجَّل هو الطبقة الخارجية.
+- يمكن خلط معترضات HTTP وSSE وWebSocket في استدعاء واحد. عند التنفيذ لا تعمل إلا معترضات وسيلة نقل الأمر، بترتيب تسجيلها.
+
+[العميل](/ar/api/client)

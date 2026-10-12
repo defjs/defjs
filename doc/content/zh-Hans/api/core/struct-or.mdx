@@ -1,0 +1,20 @@
+---
+title: 'struct.or'
+description: '接受匹配若干 struct 中任意一个的值的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.or" />
+
+```ts
+function or<const T extends readonly [StructLike, ...StructLike[]]>(...options: T): UnionStruct<T>
+```
+
+`struct.or` 是可变参数：每个选项作为单独的参数传入。
+
+- 按顺序尝试各选项，返回第一个解析成功的结果。
+- 都不匹配时，在联合自身的路径上以一个 `invalid_union` issue 失败。各选项自己的 issue 不会被报告。
+- 选项不是 struct 时抛出 `TypeError`。
+
+`UnionStruct<T>` 没有导出。它是一个 `Struct`，其输入和输出是各选项类型的联合，不含 `undefined`。对带标签的对象，优先用 [`struct.discriminatedUnion()`](/zh-Hans/api/core/struct-discriminatedunion)，它会报告被选中选项的 issue。
+
+[Struct](/zh-Hans/api/struct)

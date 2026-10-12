@@ -1,0 +1,20 @@
+---
+title: 'StreamAwaitResult'
+description: '執行 SSE command 時回傳的 tuple。'
+---
+
+<ApiReference identity="@defjs/core:StreamAwaitResult" />
+
+```ts
+type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined> =
+  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
+  | [error: Fault<TError>, stream: undefined, open: EventStreamOpenInfo | undefined]
+```
+
+`client.execute` 執行 SSE command 的結果。
+
+- 成功：`[null, stream, open]`。`open` 是串流開啟時的快照；`stream.open` 在重連後可能改變。
+- 失敗：`[fault, undefined, open]`。失敗發生在回應抵達之後（例如握手回非 2xx）時，`open` 帶著回應快照，否則是 `undefined`。
+- `TError` 是宣告的 `error` struct，用來為 fault 上解碼後的 error body 定型。
+
+[SSE](/zh-Hant-TW/api/sse)

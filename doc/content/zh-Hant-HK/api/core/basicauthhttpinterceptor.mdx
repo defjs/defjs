@@ -1,0 +1,20 @@
+---
+title: 'basicAuthHttpInterceptor'
+description: '按 credentials 設定 Basic Authorization header 嘅 HTTP interceptor。'
+---
+
+<ApiReference identity="@defjs/core:basicAuthHttpInterceptor" />
+
+```ts
+function basicAuthHttpInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): HttpInterceptor
+```
+
+- **fn** — 每個 request 都會 call 一次，用嚟產生 credentials。
+- **options** — 可選嘅 [`BasicAuthInterceptorOptions`](/zh-Hant-HK/api/core/basicauthinterceptoroptions-type)，可以傳自訂 `encode`。
+- **Returns** 一個 `HttpInterceptor`，會喺 request headers 嘅複本上設定 `Authorization: Basic <encoded>`，並取代任何已有嘅 `Authorization` header。
+
+預設 encoder 係 ``btoa(`${username}:${password}`)``，所以 credentials 必須係 Latin-1。唔傳 `encode` 而 runtime 又冇 `btoa` 嘅話，call `basicAuthHttpInterceptor` 會 throw `Error: BasicAuthInterceptor is not supported in this environment`。SSE command 請用 [`basicAuthSSEInterceptor`](/zh-Hant-HK/api/core/basicauthsseinterceptor)。
+
+睇 [Interceptors guide](/zh-Hant-HK/docs/interceptors)。
+
+[Interceptors](/zh-Hant-HK/api/interceptors)

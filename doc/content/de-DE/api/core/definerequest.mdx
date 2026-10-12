@@ -1,0 +1,34 @@
+---
+title: 'defineRequest'
+description: 'Deklariert einen typisierten HTTP-Request-Endpoint.'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method`, `path`, optionaler `input`-Struct, optionale `output`- und `error`-Structs, optionales `operation`. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+- **Returns** einen Endpoint. Ruf ihn mit Input auf und du bekommst einen `HttpCommand`.
+
+`ResponseDeclaration` und `BuilderField` sind interne Helper-Typen: `output` und `error` sind nur verpflichtend, wenn der passende Typparameter ein Struct ist, und `builder` ist `(input: BuilderInput<TInput>) => HttpRequestShape`, wenn `input` deklariert ist.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` ist ein Struct für den 2xx-Body; `error` ist ein Struct für jeden Non-2xx-Body. Keines von beiden wird nach Status gekeyt. Lässt du eines weg, wird dieser Body nie gelesen — siehe [Deklaration ist eine Zusicherung](/de-DE/docs/design-decisions#deklaration-ist-eine-zusicherung).
+
+[HTTP](/de-DE/api/http)

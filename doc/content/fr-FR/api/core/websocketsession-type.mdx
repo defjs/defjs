@@ -1,0 +1,41 @@
+---
+title: 'WebSocketSession'
+description: 'Session WebSocket typée : envoyer, recevoir, observer l’état et fermer.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSession" />
+
+```ts
+interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<TIncoming>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  send(message: TOutgoing): void
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+}
+```
+
+- `state` est le [`WebSocketState`](/fr-FR/api/core/websocketstate-type) logique ; `connection` est le dernier [`WebSocketConnectionInfo`](/fr-FR/api/core/websocketconnectioninfo-type). `bufferedAmount` est le nombre d’octets natifs non envoyés, ou `0` sans socket physique.
+- `receive` produit les messages entrants déjà parsés avec le struct `incoming`. Il n’a qu’un seul consommateur : demander un second itérateur lève un `TypeError`. Une frame qui ne peut pas être parsée est signalée aux listeners `onRuntimeError` puis ignorée.
+- `send(message)` valide et encode le message avec le struct `outgoing`, puis envoie du texte JSON. Il envoie immédiatement en `open`, met en file pendant `reconnecting` quand `maxOutgoingQueueSize` le permet, et lève une `DOMException` nommée `InvalidStateError` quand la session n’est pas inscriptible. Il lève aussi une exception quand aucun struct `outgoing` n’est déclaré, que le message échoue au struct, ou que la file est désactivée ou pleine.
+- `close(code?, reason?)` demande la fermeture et arrête le heartbeat. `code` doit valoir `1000` ou se situer dans `3000..4999`, et `reason` faire au plus 123 octets UTF-8 ; des arguments invalides lèvent une exception avant que l’état change.
+- `closed` se résout avec le [`WebSocketCloseInfo`](/fr-FR/api/core/websocketcloseinfo-type) terminal logique.
+- `onStateChange` et `onRuntimeError` renvoient une fonction de désabonnement.
+
+Préfère `await using ownedSession = session` pour le nettoyage d’une portée possédée. `session.close()` manuel et `await session.closed` restent disponibles.
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+Le `[Symbol.asyncDispose]()` demande la fermeture native et attend le teardown possédé par Defjs, mais borne un événement de close manquant à une seconde et peut être rejeté avec une `DOMException` nommée `TimeoutError`. Il ne peut pas prouver que la connexion TCP physique s’est fermée.
+
+[WebSocket](/fr-FR/api/web-socket)

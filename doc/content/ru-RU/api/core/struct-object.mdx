@@ -1,0 +1,24 @@
+---
+title: 'struct.object'
+description: 'Struct, который разбирает plain object с фиксированным набором полей.'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+`shape` отображает имена полей на struct’ы.
+
+- Каждое поле по умолчанию **обязательно**. Отсутствующий ключ даёт `missing_key`.
+- `.optional()` и `.nullish()` разрешают отсутствующий ключ. Отсутствующее необязательное поле остаётся отсутствующим в output.
+- `.null()` / `.nullable()` разрешают `null`. `.alias(name)` читает и записывает поле под другим wire-ключом.
+- Ключи, которых нет в `shape`, удаляются из output. Output — новый объект с `null` prototype.
+- Input должен быть plain object. Массивы, `Map` и экземпляры классов дают `invalid_type` (ожидался `object`).
+- Разбор останавливается на первом поле с ошибкой, а `issue.path` содержит его ключ.
+- Бросает `TypeError`, если `shape` не plain object.
+
+`ObjectShape` — это `{ [key: string]: any }`; каждое значение должно быть struct.
+
+[Struct](/ru-RU/api/struct)

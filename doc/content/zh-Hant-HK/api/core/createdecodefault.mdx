@@ -1,0 +1,17 @@
+---
+title: 'createDecodeFault'
+description: 'Decode fault 嘅工廠：response 到咗，但冇辦法按聲明讀出嚟。'
+---
+
+<ApiReference identity="@defjs/core:createDecodeFault" />
+
+```ts
+function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+```
+
+- **code** — 邊一步讀取失敗：`RES_DECODE_FAILED`、`RES_MEDIA_TYPE_INVALID` 或 `RES_STRUCT_MISMATCH`。
+- **cause** — 底層嘅 parser 或 struct 失敗。佢嘅 message 會成為 fault message（如果佢唔係 `Error`，就用 `String(cause)`），而佢本身會保留為 `cause`。
+- **response** — 讀唔到嘅 response 嘅 metadata。`status` 由佢複製。
+- **Returns** 一個名為 `DefjsFault`、冇 `body` 嘅原生 `Error`。
+
+[Errors](/zh-Hant-HK/api/errors)

@@ -1,0 +1,17 @@
+---
+title: 'createUndecodedHttpStatusFault'
+description: 'مصنع خطأ HTTP_STATUS الذي لم يُفكّ جسمه أبدًا.'
+---
+
+<ApiReference identity="@defjs/core:createUndecodedHttpStatusFault" />
+
+```ts
+function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+```
+
+- **response** — البيانات الوصفية لاستجابة غير 2xx. لم يُقرأ أي جسم، لأن نقطة النهاية لم تُعلن struct للـ `error`.
+- **يُرجع** `Error` أصليًا باسم `DefjsFault` مع `code: 'HTTP_STATUS'` و`data: undefined`، وتُنسخ `status` من الاستجابة، وتكون `response` كما مُرّرت.
+
+استخدم [`createHttpStatusFault`](/ar/api/core/createhttpstatusfault) عندما فُكّ الجسم.
+
+[الأخطاء](/ar/api/errors)

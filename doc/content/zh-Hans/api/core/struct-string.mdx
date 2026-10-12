@@ -1,0 +1,15 @@
+---
+title: 'struct.string'
+description: '接受字符串值的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.string" />
+
+```ts
+function string(): Struct<string, string>
+```
+
+- 只接受 `string` 值；其他值以 `invalid_type` 失败。
+- 作为 body 根，或作为入站的 `output` / `error` struct 时，字节保持为文本，不会按 JSON 解析。
+
+[Struct](/zh-Hans/api/struct)

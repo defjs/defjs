@@ -1,0 +1,16 @@
+---
+title: 'struct.literal'
+description: 'boolean, null, number, string 값 정확히 하나만 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.literal" />
+
+```ts
+function literal<const T extends boolean | null | number | string>(value: T): Struct<T, T>
+```
+
+- `value`만 받아요. 비교에 `Object.is`를 쓰므로 다른 값은 `invalid_literal`로 실패해요.
+- `value`는 `boolean`, `null`, `number`, `string` 중 하나여야 해요.
+- [`struct.discriminatedUnion()`](/ko-KR/api/core/struct-discriminatedunion)의 tag 필드에 쓰세요.
+
+[Struct](/ko-KR/api/struct)

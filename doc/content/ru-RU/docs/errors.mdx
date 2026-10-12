@@ -1,0 +1,151 @@
+---
+title: 'Обработка ошибок'
+description: Ветвись по одному замкнутому набору кодов fault для 404, timeout, нечитаемых тел и сбоев транспорта.
+---
+
+# Ошибки
+
+404, timeout или нечитаемое тело обрабатывай, читая error-first кортеж, а не ловя throw. `Fault` — нативный `Error` (`instanceof Error` истинен), размеченный одним полем: `code`.
+
+`kind` нет. Класс провала — отрезок до первого `_` в коде, так что `NET_TIMEOUT` — провал `NET`, а `RES_STRUCT_MISMATCH` — провал `RES`. Префикс читай для грубой сортировки, весь код — для точного случая.
+
+## Базовая настройка
+
+<include cwd lang="typescript">
+  examples/errors/basic-setup.ts#example
+</include>
+
+Раз набор замкнут, `switch` по `code` исчерпывающий:
+
+<include cwd lang="typescript">
+  examples/errors/triage.ts#example
+</include>
+
+## Стабильные коды
+
+| Класс  | Коды                                                                   | Кому меняться                                      |
+| ------ | ---------------------------------------------------------------------- | -------------------------------------------------- |
+| `HTTP` | `HTTP_STATUS`                                                          | Пир ответил non-2xx; обрабатывай как бизнес-логику |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | Вызов или объявление эндпоинта                     |
+| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Никому, или ретрай                                 |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | Объявление и пир надо свести                       |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Код, который ты повесил на pipeline                |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | Объявленный лимит или темп consumer                |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | Рантайм хоста                                      |
+
+Набор замкнут нарочно: именно это держит `switch` исчерпывающим. Расширения сообщают свою деталь через `cause`, а не через новый код.
+
+### Поля по форме
+
+| Код           | `status` | `response`                                                      | `data`                                      |
+| ------------- | -------- | --------------------------------------------------------------- | ------------------------------------------- |
+| `HTTP_STATUS` | Всегда   | Всегда; `body` есть, только если `error` объявлен и декодирован | Декодированное тело `error` или `undefined` |
+| `RES_*`       | Всегда   | Всегда, только метаданные — **нет `body`**                      | Нет                                         |
+| Всё остальное | Нет      | Только там, где у транспорта уже были метаданные                | Нет                                         |
+
+`cause` несёт нижележащее значение: `StructError` при расхождении struct, провал парсера при нечитаемой representation, что бы ни бросило расширение.
+
+## Формы кортежа по транспортам
+
+<include cwd lang="typescript">
+  examples/errors/tuple-shapes.ts#example
+</include>
+
+При HTTP-провале третий слот — `undefined`: fault уже несёт те метаданные ответа, что были. Это важно, потому что fault — то, что ты отдаёшь handler’у, логируешь или пробрасываешь, так что метаданные должны ехать _вместе_ с ним, а не рядом.
+
+У SSE и WebSocket третий слот — снимок старта, который может быть даже когда старт упал. После возврата handle или session поздние провалы живут на его lifecycle — осевший кортеж старта они не переписывают.
+
+## Как читается тело
+
+`ok` — единственная развилка, и декодирует всегда одна сторона. `output` читает тело 2xx; `error` читает всё остальное. Пропустить сторону значит, что это тело не читают.
+
+| Ситуация                                              | Исход                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| 2xx, `output` объявлен, тело декодируется             | Успех; `data` и `response.body` типизированы            |
+| 2xx, `output` опущен                                  | Успех; `data` — `undefined`, у response нет `body`      |
+| Non-2xx, `error` объявлен, тело декодируется          | `HTTP_STATUS` с типизированным `data`                   |
+| Non-2xx, `error` опущен                               | `HTTP_STATUS` с `data: undefined`                       |
+| Media type не тот, что нужен representation           | `RES_MEDIA_TYPE_INVALID`, сообщается **до** чтения тела |
+| Байты — не эта representation                         | `RES_DECODE_FAILED`                                     |
+| Значение — не этот struct                             | `RES_STRUCT_MISMATCH`                                   |
+| Нечитаемое тело на стороне, которую ты **не** объявил | Игнорируется целиком — см. ниже                         |
+
+Последнюю строку стоит помнить. Если ты объявил `output`, но не `error`, 500 с битым JSON-телом сообщается как `HTTP_STATUS` со `status: 500`. Ты сказал, что тела ошибок тебе не важны, и это включает неважность того, что одно не прочиталось.
+
+Struct применяется один раз, после цепочки interceptor. Ответ, который interceptor собрал через `makeResponse(...)`, проходит ту же проверку media type, преобразование представления и тот же Struct, что и пришедший с провода. Встроенный транспорт Fetch уже читает и JSON-парсит объявленное тело, прежде чем вернуть ответ в цепочку; сбой на этом шаге сообщается как тот же fault `RES_*` или `NET_BODY_INCOMPLETE`.
+
+`HttpResponse.ok` значит только `200 <= status < 300`. Провал транспорта — это fault, никогда не response: status-0 ответа, стоящего вместо него, нет.
+
+## Сужение объединения тел ошибок
+
+Один struct `error` покрывает каждый non-2xx статус, так что при разных формах объявляй union. Что потом можно делать с `fault.data`, целиком зависит от того, как ты объявил этот union — библиотека отдаёт ровно тот тип, который ты попросил.
+
+`struct.or(...)` даёт обычный union, который TypeScript сам не сужает. Проверь нужное поле:
+
+<include cwd lang="typescript">
+  examples/errors/narrow-union.ts#example
+</include>
+
+`struct.discriminatedUnion(...)` сужает по полю, которое тело реально несёт — удобная форма, когда API уже тегирует ошибки:
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-kind.ts#example
+</include>
+
+Когда API кладёт status **внутрь** тела, дискриминируй по нему, а не по `fault.status`:
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-status.ts#example
+</include>
+
+Последнюю форму стоит предпочитать, где API это поддерживает. `fault.status` — число HTTP-слоя, которое прокси, gateway или CDN может переписать; `data.status` декодирован из тела, которое утвердил твой struct `error`, так что дотянуться до него — доказательство, что его произвёл бэкенд.
+
+Union без дискриминатора, который не сужается, — свойство объявления, не библиотеки: она отдаёт тип, который ты объявил. Добавь дискриминатор в struct, если он нужен.
+
+## Старт и после открытия
+
+SSE валидирует status, `text/event-stream` и наличие тела до резолва handle. Non-2xx → `HTTP_STATUS`. Неверный media type → `RES_MEDIA_TYPE_INVALID`. Нет тела → `RES_DECODE_FAILED`. Снимок открытия всё ещё может лечь в третий слот кортежа.
+
+Старт WebSocket покрывает handshake плюс первое физическое open. Провал конструктора, close до open, timeout или cancel — всё это стартовый кортеж. Снимок connection может существовать, даже если сокет так и не дошёл до `open`.
+
+| Транспорт | После старта                                                                                                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | Iterator reject’ит на фатальной ошибке; `stream.closed` резолвится с `kind: 'error'` и `code` fault                                                                                                            |
+| WebSocket | `onRuntimeError` для провалов message/queue/heartbeat; `receive` падает на терминальных ошибках; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                   |
+| HTTP      | Промис execute завершается один раз, возвращая кортеж. Если интерцептор или колбэк прогресса выбрасывает исключение, оно передаётся в этом кортеже как fault (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+
+`NET_ABORTED` / `NET_TIMEOUT` описывают, что увидел вызывающий на старте. Возвращённый стрим или сессию ты всё равно закрываешь и ждёшь терминальный promise.
+
+## Логирование нативного Error и cause
+
+Faults — экземпляры нативного `Error`, так что диагностический адаптер не нужен. `String(fault)` даёт стабильную нативную форму `DefjsFault: <message>`. `code` и поля варианта — `status`, `response`, `data` — остаются перечислимыми для структурного лога; `name` и нативная цепочка `cause` не перечислимы.
+
+<include cwd lang="typescript">
+  examples/errors/log-fault.ts#example
+</include>
+
+Сузь `fault.cause instanceof StructError`, прежде чем звать `format()`, `flatten()` или `prettify()`. Эти helper’ы живут на cause Struct; на fault они не копируются. Не строй control flow на разборе `message` или `String(fault)` — контракт это `code` и проверенный `status`.
+
+## Справка
+
+| Ветка                 | Проверка control flow              | Полезные стабильные поля                    | Обычно нет / чувствительно          |
+| --------------------- | ---------------------------------- | ------------------------------------------- | ----------------------------------- |
+| Политика HTTP status  | `fault.code === 'HTTP_STATUS'`     | `fault.status`, проверенный `fault.data`    | Тело, заголовки, URL, `cause`       |
+| Отмена вызывающим     | `fault.code === 'NET_ABORTED'`     | `code`                                      | Причина abort и стек                |
+| Timeout               | `fault.code === 'NET_TIMEOUT'`     | `code`                                      | URL запроса и нижележащий cause     |
+| Контракт сломался     | `fault.code.startsWith('RES_')`    | `code`, проверенный `fault.response.status` | Issues struct, тело, значения input |
+| Бросил твой код       | `fault.code.startsWith('EXT_')`    | `code`, `cause`                             | Что приложило расширение            |
+| Runtime стрима/сессии | `stream.closed` / `session.closed` | Терминальные `kind` и `code`                | Payload событий, кадры, cause       |
+
+Считай чувствительными `cause`, `data`, заголовки и тела ответа, URL, issues Struct, значения input и стеки. Консервативная сводка:
+
+<include cwd lang="typescript">
+  examples/errors/summarize-fault.ts#example
+</include>
+
+`createNetworkFault`, `createPreflightFault`, `createDecodeFault`, `createHttpStatusFault` и `createUndecodedHttpStatusFault` собирают эти нативные значения Error. Обычные провалы запроса всё равно возвращают их в кортеже; их не бросают лишь потому, что они наследуют поведение нативного Error. `ERR_ABORTED` и `ERR_TIMEOUT` — общие cause, которые узнаёт нормализатор транспорта.
+
+## Связанные рецепты
+
+- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)
+- [Отменить HTTP-вызов](/ru-RU/recipes/cancel-http)

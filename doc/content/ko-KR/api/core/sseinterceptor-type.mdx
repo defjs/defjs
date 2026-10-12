@@ -1,0 +1,17 @@
+---
+title: 'SSEInterceptor'
+description: 'withInterceptors가 받는, 태그가 붙은 SSE 인터셉터예요.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptor" />
+
+```ts
+interface SSEInterceptor {
+  kind: 'sse'
+  fn: SSEInterceptorFn
+}
+```
+
+`createSSEInterceptor(fn)`이 만들어요. `kind` 태그 덕분에 `withInterceptors`가 HTTP, SSE, WebSocket 인터셉터를 한 목록으로 받을 수 있어요. SSE 명령에서는 `kind: 'sse'` 인터셉터만 실행돼요.
+
+[인터셉터](/ko-KR/api/interceptors)

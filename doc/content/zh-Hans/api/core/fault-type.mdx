@@ -1,0 +1,20 @@
+---
+title: 'Fault'
+description: 'client.execute 可能返回的所有失败的联合类型，以 code 区分。'
+---
+
+<ApiReference identity="@defjs/core:Fault" />
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`TErr` 是 endpoint 声明的 `error` struct，没有声明时为 `undefined`。`Fault<TErr>` 就是把 [`FaultOf`](/zh-Hans/api/core/faultof-type) 应用到解码后的 body 类型上，所以它是三个变体的联合：[`DecodeFault`](/zh-Hans/api/core/decodefault-type)、[`HttpStatusFault<TErr>`](/zh-Hans/api/core/httpstatusfault-type) 和 [`PreflightFault`](/zh-Hans/api/core/preflightfault-type)。请对 `fault.code` 做 switch。
+
+每个变体都是名为 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 直接得到可用于日志的 `DefjsFault: <message>`。`code` 和变体的元数据（`status`、`response`、`data`）都是可枚举的自有属性；原生的 `cause` 链不可枚举。
+
+<include cwd>examples/api/fault.ts#example</include>
+
+只有先把 `fault.cause` 收窄为 `StructError`，才能调用 `format()`、`flatten()` 或 `prettify()`；这些 helper 不会被复制到 fault 上。
+
+[Errors](/zh-Hans/api/errors)

@@ -1,0 +1,42 @@
+---
+title: 'ClientSSEOptions'
+description: '任意の SSE 設定です。fetch ハンドル、不正イベントのフック、再接続ポリシーを含みます。'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — ストリームを開く fetch 実装です。独自のハンドルには `Request` が渡されます。
+- **onInvalidEvent** — イベントに対応する struct も `default` struct もない場合（`'missing-struct'`）、またはデータの検証に失敗した場合（`'validation-failed'`）に呼ばれます。そのイベントはスキップされます。フックが throw したエラーでストリームが閉じることはありません。
+- **reconnect** — オプトインです。指定しなければ、ストリームは再接続しません。`attempts` のデフォルトは **3** で、`attempts: 0` はリトライを無効にします。`attempts` を省略しても無制限にはなりません。`delayMs` は最初の待ち時間で、デフォルトは 1000 です。サーバーが送る `retry:` の値があれば、それで置き換えられます。`factor` は試行のたびに待ち時間へ掛ける係数で、デフォルトは 1 です。`jitter` は WebSocket と同じ 0〜1 の乗法因子で、デフォルトは 0 です。`maxDelayMs` は、デフォルトでは上限なしです。`shouldReconnect` がなければ、再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` だけです。指定されていれば、すべてのメソッドについて、その戻り値で再接続するかどうかを決めます。コンテキストには `method` が含まれます。`ReadableStream` をボディに持つリクエストは再接続しません。イベント ID を一度受信すると、以降の再接続ではそれを `Last-Event-ID` ヘッダーで送ります。
+
+これらは `withSSEHandle`、`withSSEOnInvalidEvent`、`withSSEReconnect` で設定します。`withSSEReconnect` を使わなければ、リトライは無効です。
+
+[Client ガイド](/ja-JP/docs/client) を参照してください。
+
+[Client](/ja-JP/api/client)

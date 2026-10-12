@@ -1,0 +1,16 @@
+---
+title: 'makeResponse'
+description: 'Baut eine HttpResponse ohne Network-Call.'
+---
+
+<ApiReference identity="@defjs/core:makeResponse" />
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+Baue eine `HttpResponse` ohne Network-Call (Interceptors, Tests). Default-Status ist `0`; übergib also für einen Erfolg einen 2xx-`status`. `ok` ist
+true für 2xx. Der zurückgegebene Wert geht durch dieselbe Media-Type-Prüfung und denselben deklarierten
+Struct wie eine Response von der Leitung; es gibt keinen vertrauten Short-Circuit. Setze für einen JSON-Body einen JSON-`content-type`-Header.
+
+[HTTP](/de-DE/api/http)

@@ -1,0 +1,16 @@
+---
+title: 'WebSocketInterceptorFn'
+description: 'Funktionsform eines WebSocket-Interceptors.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptorFn" />
+
+```ts
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+Darf `req` prüfen oder ersetzen und dann [`next`](/de-DE/api/core/websockethandler-type) aufrufen, um die Kette fortzusetzen, oder eine eigene [`WebSocketSessionLike`](/de-DE/api/core/websocketsessionlike-type) zurückgeben, um zu short-circuiten. Wickle sie in `createWebSocketInterceptor(fn)`, um sie über `withInterceptors` zu registrieren.
+
+Die Kette läuft einmal pro `execute`. Reconnects passieren innerhalb der zurückgegebenen Session und führen sie nicht erneut aus.
+
+[Interceptors](/de-DE/api/interceptors)

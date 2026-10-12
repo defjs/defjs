@@ -1,0 +1,14 @@
+---
+title: 'HttpResponseType'
+description: 'Representación usada para leer un cuerpo HTTP antes de validar el struct.'
+---
+
+<ApiReference identity="@defjs/core:HttpResponseType" />
+
+```ts
+type HttpResponseType = 'arraybuffer' | 'blob' | 'json' | 'text'
+```
+
+Se elige según el tipo del struct declarado (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, todo lo demás → `json`). No es un campo de `defineRequest`. Aparece en `HttpRequest` como `responseType` y `errorResponseType`.
+
+[HTTP](/es-ES/api/http)

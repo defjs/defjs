@@ -1,0 +1,17 @@
+---
+title: 'SSEInterceptor'
+description: 'Getaggter SSE-Interceptor, den withInterceptors akzeptiert.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptor" />
+
+```ts
+interface SSEInterceptor {
+  kind: 'sse'
+  fn: SSEInterceptorFn
+}
+```
+
+Wird von `createSSEInterceptor(fn)` erzeugt. Über den `kind`-Tag kann `withInterceptors` HTTP-, SSE- und WebSocket-Interceptors in einer Liste akzeptieren; für SSE-Commands laufen nur Interceptors mit `kind: 'sse'`.
+
+[Interceptors](/de-DE/api/interceptors)

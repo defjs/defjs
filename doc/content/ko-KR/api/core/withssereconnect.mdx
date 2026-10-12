@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'SSE 자동 재연결을 켜는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+SSE 스트림이 실패한 뒤의 자동 재연결을 설정해요. 재연결은 opt-in이에요. 이 옵션이 없으면 실패한 스트림을 재시도하지 않아요. `undefined`를 넘기면 이전 설정이 지워져요.
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts`는 첫 시도 이후의 재시도 횟수 예산이에요. `reconnect`를 설정하면 기본값은 `3`이고, `0`은 재시도를 꺼요. 생략해도 무제한이 아니에요.
+- `shouldReconnect`가 없으면 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`만 재연결해요. 있으면 그 결과가 `POST`를 포함한 모든 메서드의 재연결 여부를 결정해요. 컨텍스트의 `method`로 엔드포인트를 구분할 수 있어요. 이번 실패에 대한 재시도를 멈추려면 `false`를 돌려주세요. attempts 한도를 확인하기 전에 실행돼요.
+- `ReadableStream` body가 있는 요청은 재연결하지 않고, 그 요청에 대해 `shouldReconnect`도 호출되지 않아요.
+- `delayMs`, `factor`, `jitter` (0에서 1), `maxDelayMs`가 백오프를 정해요. `factor`의 기본값은 `1`이고 `jitter`의 기본값은 `0`이에요.
+- `delayMs`는 시작 기준 지연(기본값 `1000`)일 뿐이에요. 서버의 `retry:` 필드(숫자만, 밀리초)가 있으면 이후 시도에서는 그 값으로 바뀌어요.
+- 마지막 이벤트 id는 다음 시도에서 `Last-Event-ID`로 다시 전송돼요.
+
+스트림 핸들은 [SSE](/ko-KR/api/sse)를 보세요.
+
+[클라이언트](/ko-KR/api/client)

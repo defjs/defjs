@@ -6,8 +6,9 @@
       "@defjs/opentelemetry-server": ["./packages/opentelemetry-server/src"],
       "@defjs/react": ["./packages/react/src"],
       "@defjs/vue": ["./packages/vue/src"]
-    }
+    },
+    "jsx": "react-jsx"
   },
-  "include": ["**/*.ts", "**/*.mts", "**/*.cts", "doc/.vitepress/**/*.ts"],
-  "exclude": ["node_modules", "**/dist", "**/coverage", "test-out", "doc/.vitepress/cache", "doc/.vitepress/dist"]
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+  "exclude": ["node_modules", "**/dist", "**/coverage", "test-out", "doc", ".superpowers"]
 }

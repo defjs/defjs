@@ -1,0 +1,27 @@
+---
+title: 'StructError'
+description: 'struct 解析失敗時回傳嘅 error，載有 issues 同 formatters。'
+---
+
+<ApiReference identity="@defjs/core:StructError" />
+
+```ts
+class StructError extends Error {
+  readonly issues: StructIssue[]
+  constructor(issues: StructIssue[])
+  format(): FormattedStructError
+  flatten(): FlattenedStructError
+  prettify(): string
+}
+```
+
+`name` 係 `'StructError'`。`message`：單一 issue 嗰陣係該 issue 嘅 message，多個 issue 嗰陣係 `N struct issues: <first message>`，冇 issue 嗰陣係 `Struct parse failed`。
+
+- `struct.parse` 喺第一個失敗處停低，所以嗰度 `issues` 只有一個 [`StructIssue`](/zh-Hant-HK/api/core/structissue-type)。
+- `format()` 回傳 [`FormattedStructError`](/zh-Hant-HK/api/core/formattedstructerror-type) 樹。每個節點都有 `_errors` array，巢狀 keys 跟隨 `issue.path`。
+- `flatten()` 回傳 [`FlattenedStructError`](/zh-Hant-HK/api/core/flattenedstructerror-type)：path 為空嘅 messages 歸入 `formErrors`，其餘按 path 第一段喺 `fieldErrors` 入面分組。
+- `prettify()` 每個 issue 回傳一行 `× path: message`。Path 為空就顯示做 `<root>`。
+
+睇 [Struct guide](/zh-Hant-HK/docs/struct)。
+
+[Struct](/zh-Hant-HK/api/struct)

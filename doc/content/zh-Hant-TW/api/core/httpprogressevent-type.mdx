@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: '傳給上傳與下載 callbacks 的進度快照。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+對應 `ProgressEvent` 的欄位。`loaded` 是目前已傳輸的位元組數。總大小未知時，`total` 為 `0`，`lengthComputable` 為 `false`。
+
+見 [`HttpProgressFn`](/zh-Hant-TW/api/core/httpprogressfn-type)、[HTTP 指南](/zh-Hant-TW/docs/http) 與 [Commands](/zh-Hant-TW/docs/commands)。
+
+[HTTP](/zh-Hant-TW/api/http)

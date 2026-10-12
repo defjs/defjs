@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'لقطة تقدم تُمرَّر إلى ردود نداء الرفع والتنزيل.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+تعكس حقول `ProgressEvent`. `loaded` هو عدد البايتات المنقولة حتى الآن. وعندما يكون الحجم الكلي مجهولًا يكون `total` هو `0` و`lengthComputable` هو `false`.
+
+انظر [`HttpProgressFn`](/ar/api/core/httpprogressfn-type) و[دليل HTTP](/ar/docs/http) و[الأوامر](/ar/docs/commands).
+
+[HTTP](/ar/api/http)

@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: 'Breite Struct-Constraint, die jedes Struct akzeptiert.'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+Breite Constraint, die Endpoint- und Client-Generics wie `defineRequest`, `Fault` und `HttpCommand` verwenden. Bevorzuge ein konkretes `Struct<...>`, wenn du präzise Input- und Output-Inferenz brauchst.
+
+[Struct](/de-DE/api/struct)

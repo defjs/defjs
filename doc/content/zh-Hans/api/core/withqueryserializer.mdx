@@ -1,0 +1,19 @@
+---
+title: 'withQuerySerializer'
+description: '替换 query 对象转成 query string 方式的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withQuerySerializer" />
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+替换 HTTP、SSE 和 WebSocket 的 query 编码。
+
+- `serializer(query)` 收到的是**已经编码的线上对象**：alias 已应用，`Date` 为 ISO 字符串，`bigint` 为字符串。嵌套对象和数组保持原样。
+- 它必须返回不带前导 `?` 的 query string，该字符串会原样使用。
+- 请求没有 query 时不会调用它。builder 返回 `URLSearchParams` 时会跳过它。
+- 没有这个 option 时，query 使用 `URLSearchParams`：数组会重复 key，嵌套对象则会失败。
+
+[Client](/zh-Hans/api/client)

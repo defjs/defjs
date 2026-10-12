@@ -1,0 +1,20 @@
+---
+title: 'struct.or'
+description: 'Struct qui accepte une valeur correspondant à l’un de plusieurs structs.'
+---
+
+<ApiReference identity="@defjs/core:struct.or" />
+
+```ts
+function or<const T extends readonly [StructLike, ...StructLike[]]>(...options: T): UnionStruct<T>
+```
+
+`struct.or` est variadique : passe chaque option comme argument séparé.
+
+- Essaie les options dans l’ordre et renvoie le résultat de la première qui parse.
+- Si aucune ne correspond, il échoue avec une seule issue `invalid_union` au path propre de l’union. Les issues des options individuelles ne sont pas rapportées.
+- Lève `TypeError` quand une option n’est pas un struct.
+
+`UnionStruct<T>` n’est pas exporté. C’est un `Struct` dont l’entrée et la sortie sont les unions des types d’options, sans `undefined`. Pour des objets tagués, préfère [`struct.discriminatedUnion()`](/fr-FR/api/core/struct-discriminatedunion), qui rapporte l’issue de l’option sélectionnée.
+
+[Struct](/fr-FR/api/struct)

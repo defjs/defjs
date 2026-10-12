@@ -1,0 +1,34 @@
+---
+title: 'defineRequest'
+description: '型付きの HTTP リクエストエンドポイントを宣言します。'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method`、`path`、任意の `input` struct、任意の `output` と `error` struct、任意の `operation` です。`input` を宣言した場合は、入力がすでにリクエストの形と一致していても、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
+- **戻り値** エンドポイントです。入力を渡して呼ぶと `HttpCommand` になります。
+
+`ResponseDeclaration` と `BuilderField` は内部ヘルパー型です。`output` と `error` が必須になるのは、対応する型パラメーターが struct の場合だけで、`input` を宣言した場合の `builder` は `(input: BuilderInput<TInput>) => HttpRequestShape` です。
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` は 2xx ボディ用の struct 1 つ、`error` は 2xx 以外すべてのボディ用の struct 1 つです。どちらも status でキー分けされません。省いた側のボディは読まれません — [宣言は断言である](/ja-JP/docs/design-decisions#宣言は断言である) を参照してください。
+
+[HTTP](/ja-JP/api/http)

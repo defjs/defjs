@@ -1,0 +1,77 @@
+---
+title: 'Vue'
+description: 安裝 plugin、提供 client、抓使用者，並在響應式變更時 abort。
+---
+
+# Vue
+
+把既有的 `@defjs/core` client 接進 Vue。你拿到 plugin、injection key，以及 `injectClient()`。這個套件**不會**建立 clients、快取結果、重試 commands，或在 unmount 時關閉傳輸資源。
+
+## 基本用法
+
+安裝 `@defjs/core`、`@defjs/vue`，以及 Vue 3.2+（adapter 只需要 `provide`／`inject`，但範例用了 `<script setup>` 和 `onScopeDispose`，它們是 3.2 才有的）。ESM：
+
+`bun add @defjs/core @defjs/vue vue`
+
+建立 client、安裝 plugin，然後用變更時 abort 的方式抓資料：
+
+<include cwd lang="typescript">
+  examples/vue/main.ts#example
+</include>
+
+<include cwd>examples/vue/basic-setup.vue#example</include>
+
+`createClientPlugin(client)` 提供你傳入的那個物件。不 clone，也沒有 disposal hook。在建立 client 時設定 core options 與 interceptors。
+
+`onCleanup` 在 watcher 重跑前與停止時執行。在啟動 async 工作前先註冊。Error-first tuple 仍是應用資料。
+
+## Inject 與覆寫
+
+`injectClient()` 讀最近的 `HTTP_CLIENT` provider；沒有時會 throw。用 Vue 的 `provide(HTTP_CLIENT, childClient)` 覆寫子樹：
+
+<include cwd>examples/vue/inject-and-override.vue#example</include>
+
+最近的 provider 勝出。後代拿到 `childClient`；子樹外的兄弟仍用 app 層級 client。
+
+## 在 watcher 外擁有 HTTP 工作
+
+由 composable 或元件在 watcher 外啟動的工作，用 `AbortController` + `onScopeDispose`。Abort 啟動與進行中的工作；在賦值響應式狀態前檢查 signal。Plugin 或 injection scope 不會推斷誰擁有 command。列表頁請把 `execute` 包進 Vue Query（或類似方案）——`@defjs/vue` 只做 DI，**不會**附帶 `useRequest`。
+
+當某個 scope 擁有 client 時，若要瀏覽器全域重用，保持它與請求無關。若它捕捉 headers、cookies、users、tenants 或 credentials，請在對應的 app／SSR 請求邊界建立，並在那裡 provide 該實例。
+
+## 清掉 realtime scope
+
+即使 scope 在連線中途消失，也要關閉 stream 或 session。Abort 啟動、關閉晚到的 handle、消費單一 iterator、await 終端 promise：
+
+<include cwd>examples/vue/realtime-scope.vue#example</include>
+
+致命的串流錯誤與 queue overflow 會讓 iterator reject，所以迴圈要有 `catch`；否則那個 reject 就是未處理的。範例只保留最後 100 則訊息，並用 id 當 row 的 key，因為內容相同的 payload 會造成重複的 key。停止 scope 時，SSE 的 iteration 正常結束；被 abort 的 WebSocket session 則會讓 `receive` 以 `AbortError` reject，所以要用同樣的方式保護 `catch`。
+
+WebSocket：同一序列 — abort prep、關閉晚到的 session、消費 `session.receive`、unsubscribe `onStateChange`／`onRuntimeError`、close、await `session.closed`。Cleanup 保持冪等；disposal 與 iterator 完成可能碰上。
+
+## SSR 範圍
+
+`createClientPlugin(client)` 把一個實例提供給一個 Vue app。瀏覽器中，若 endpoint、interceptors、捕捉狀態可安全共用就共用。SSR 時，若 headers、cookies、users、tenants 或 credentials 不同，每個請求建立並安裝分開的 client。
+
+App unmount、plugin 移除、元件 scope disposal **不會** abort HTTP、關閉 SSE／WebSocket、unsubscribe listeners，或 dispose core client。啟動工作的擁有者必須把它做完。
+
+## 參考
+
+`@defjs/vue` 的公開 exports：
+
+<include cwd lang="typescript">
+  examples/vue/exports.ts#example
+</include>
+
+- `HTTP_CLIENT` — 給原生 `provide`／`inject` 的 `InjectionKey<Client>`
+- `createClientPlugin(client)` — 提供該 client 的 Vue `Plugin`
+- `injectClient()` — 最近的 `Client`，或 throw
+
+在 `@defjs/core` 建立 clients 與 options。見 [Client](/zh-Hant-TW/docs/client)、[Commands](/zh-Hant-TW/docs/commands)、[Interceptors](/zh-Hant-TW/docs/interceptors)、[SSE](/zh-Hant-TW/docs/sse)、[WebSocket](/zh-Hant-TW/docs/web-socket)。
+
+## 相關操作範例
+
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)

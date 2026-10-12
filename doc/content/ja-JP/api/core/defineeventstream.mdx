@@ -1,0 +1,32 @@
+---
+title: 'defineEventStream'
+description: '型付きの Server-Sent Events エンドポイントを宣言します。'
+---
+
+<ApiReference identity="@defjs/core:defineEventStream" />
+
+```ts
+function defineEventStream<
+  const P extends string,
+  const M extends string = 'GET',
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<EventStreamDefinitionBase<TEvents>, 'method' | 'path'> &
+    EventStreamErrorField<TError> & {
+      input?: TInput
+      method?: M
+      path: P
+    } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>,
+): EventStreamEndpoint<TInput, TEvents, TError>
+```
+
+- **definition** — `path`、`events` マップ、そして必須の上限 `maxBufferSize` と `maxQueueSize`（どちらも正の安全な整数）です。任意で `method`（デフォルトは `'GET'`）、`operation`、`input`、`error` を指定できます。`input` を宣言した場合は、入力がすでにリクエストの形と一致していても、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
+- **戻り値** エンドポイントです。入力を渡して呼ぶと `EventStreamCommand` になります。
+
+`EventStreamDefinitionBase`、`EventStreamErrorField`、`BuilderField` は内部ヘルパー型です。`error` が必須になるのは `TError` が struct の場合だけで、`input` を宣言した場合の `builder` は `(input: BuilderInput<TInput>) => EventStreamRequestShape` です。
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+[SSE](/ja-JP/api/sse)

@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'Option de client qui active la reconnexion SSE automatique.'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+Configure la reconnexion automatique après l’échec d’un flux SSE. La reconnexion est opt-in : sans cette option, un flux en échec n’est pas retenté. Passer `undefined` efface un réglage précédent.
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` est le budget de nouvelles tentatives après la première tentative. Il vaut `3` par défaut quand `reconnect` est défini, et `0` désactive les nouvelles tentatives. L’omettre ne veut pas dire illimité.
+- Sans `shouldReconnect`, la connexion n’est rétablie que pour les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE`. Si ce callback est fourni, sa valeur de retour détermine la reconnexion pour toutes les méthodes, y compris `POST` ; le champ `method` de son contexte permet de distinguer les endpoints. Renvoie `false` pour arrêter les nouvelles tentatives après cet échec. Le callback s’exécute avant la vérification du nombre maximal de tentatives.
+- Une requête dont le corps est un `ReadableStream` ne fait jamais l’objet d’une reconnexion ; `shouldReconnect` n’est pas appelé dans ce cas.
+- `delayMs`, `factor`, `jitter` (0 à 1) et `maxDelayMs` façonnent le backoff. `factor` vaut `1` par défaut et `jitter` vaut `0`.
+- `delayMs` n’est que le délai de base initial (`1000` par défaut). Un champ `retry:` du serveur (chiffres uniquement, en millisecondes) le remplace pour les tentatives suivantes.
+- Le dernier id d’événement est renvoyé en `Last-Event-ID` à la tentative suivante.
+
+Voir [SSE](/fr-FR/api/sse) pour le handle du flux.
+
+[Client](/fr-FR/api/client)

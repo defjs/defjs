@@ -1,0 +1,73 @@
+---
+title: 'React'
+description: 安裝 provider、讀取 client、抓使用者，並在 effect 重跑時 abort。
+---
+
+# React
+
+把既有的 `@defjs/core` client 接進 React tree。你拿到 Context 與 `useClient()`。這個套件**不會**建立 client、加快取、重試 commands，或 dispose 傳輸資源。啟動工作的元件、effect 或資料請求函式庫才是擁有者。
+
+## 基本用法
+
+安裝 `@defjs/core`、`@defjs/react`，以及 React 18+。ESM：
+
+`bun add @defjs/core @defjs/react react`
+
+提供 client，然後抓使用者並在變更時 abort：
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+<include cwd>examples/react/basic-setup.tsx#example</include>
+
+`ClientProvider` 是一般的 Context provider。換掉 `client` prop 會改變後代看到的東西 — 不會 clone、replace 或 dispose。巢狀 providers 建立明確邊界。
+
+開發模式下 React 可能多次 setup／clean up effect。Signal 檢查可避免過期 promise 寫進目前的 render。Tuple 錯誤仍是資料。
+
+## 用 `useClient` 讀取
+
+`useClient()` 回傳最近的 `Client`。在 render 期間呼叫（元件或自訂 hook）。沒有 provider 時會 throw：
+
+<include cwd>examples/react/read-with-use-client.tsx#example</include>
+
+Hook 只提供 client。它不會啟動工作、訂閱傳輸，或把 error-first tuple 變成 exception。
+
+## 自己擁有 query 工作
+
+Query library 可以擁有快取、重試、壓制過期結果、取消。把函式庫提供的 signal 傳進去。列表頁請把 `client.execute(...)` 包進 TanStack Query（或類似方案）——`@defjs/react` 只做 DI，**不會**附帶 `useRequest`。
+
+<include cwd>examples/react/own-query-work.tsx#example</include>
+
+別把同一個 command 再包一層 effect — 兩個擁有者會讓取消與過期結果處理變模糊。
+
+## 自己擁有 realtime 工作
+
+SSE 與 WebSocket handles 比 `client.execute(...)` 活得更久。在 await 啟動前先註冊 cleanup；若 dispose 後才拿到 handle 就關閉它；消費它的單一 iterator；await 終端 promise：
+
+<include cwd>examples/react/own-realtime-work.tsx#example</include>
+
+傳給 `execute` 的 `signal` 會持續管轄已開啟的 session。在 cleanup 裡 abort 它，session 會以 `aborted` 結束，`receive` 會以 `AbortError` reject，所以上面的 `catch` 在 effect 被 dispose 之後會忽略錯誤，只回報真正的失敗（queue overflow、heartbeat 逾時）。被 abort 的 SSE 串流則是 iterator 正常結束。沒有 `catch` 的話，迴圈的 reject 會變成未處理的 promise rejection。
+
+`EventStreamHandle` 同規則：在 `finally` close，await `stream.closed`。WebSocket 消費者還要 unsubscribe state／runtime-error listeners，並持續讀 `session.receive` — 未讀的有界 queue 可能 overflow。
+
+## SSR 與 client 範圍
+
+套件進入點是 Client Component 邊界。瀏覽器應用在 endpoint、interceptors、捕捉狀態都對瀏覽器安全且與請求無關時，可以共用 module-scoped client。SSR 時，若 headers、cookies、users、tenants 或 credentials 不同，請在每個請求邊界內建立分開的 client。
+
+Provider unmount **不會** abort HTTP、關閉 SSE／WebSocket、unsubscribe listeners，或呼叫 `dispose`。`@defjs/react` 沒有這種生命週期 API。啟動每次操作的程式碼必須把它做完或取消。
+
+## 參考
+
+`@defjs/react` 的公開 exports：
+
+- `ClientProvider` — 接受 `ClientProviderProps`，提供傳入的 client
+- `useClient` — 最近的 client，或 throw
+- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
+
+在 `@defjs/core` 建立 clients 與 options。見 [Client](/zh-Hant-TW/docs/client)、[錯誤](/zh-Hant-TW/docs/errors)、[SSE](/zh-Hant-TW/docs/sse)、[WebSocket](/zh-Hant-TW/docs/web-socket)。
+
+## 相關操作範例
+
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)

@@ -1,0 +1,17 @@
+---
+title: 'withSSEHandle'
+description: 'Client option：取代用嚟開啟 SSE streams 嘅 Fetch function。'
+---
+
+<ApiReference identity="@defjs/core:withSSEHandle" />
+
+```ts
+function withSSEHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+取代用嚟開啟 SSE event streams 嘅 Fetch 相容 function。預設係平台嘅 `fetch`。
+
+- **fetchImpl** 係 [`FetchHandle`](/zh-Hant-HK/api/core/fetchhandle-type)。
+- 佢只影響 SSE。HTTP 用 [`withHTTPHandle`](/zh-Hant-HK/api/core/withhttphandle)。
+
+[Client](/zh-Hant-HK/api/client)

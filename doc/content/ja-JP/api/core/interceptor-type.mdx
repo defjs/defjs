@@ -1,0 +1,14 @@
+---
+title: 'Interceptor'
+description: 'クライアントのインターセプターオプションが受け付ける、タグ付きインターセプターのユニオン型です。'
+---
+
+<ApiReference identity="@defjs/core:Interceptor" />
+
+```ts
+type Interceptor = HttpInterceptor | SSEInterceptor | WebSocketInterceptor
+```
+
+`kind`（`'http'`、`'sse'`、`'web-socket'`）が、そのインターセプターをどのコマンドで実行するかを決めます。`withInterceptors` はどの組み合わせでも受け付け、各トランスポートは自身の kind のインターセプターだけを登録順に実行します。
+
+[Interceptors](/ja-JP/api/interceptors)

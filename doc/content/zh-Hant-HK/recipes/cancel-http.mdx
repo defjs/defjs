@@ -1,0 +1,20 @@
+---
+title: '取消與逾時'
+description: Abort 或者 time out 一次 execute，再讀 NET_ABORTED / NET_TIMEOUT。
+---
+
+# Cancel 一個 HTTP call
+
+傳 `signal`，再加 `abort` 或者 `timeout` 其中一個 — 唔好同時傳 `abort` 同 `timeout`。`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。
+
+詳情睇 [HTTP](/zh-Hant-HK/docs/http#取消工作)。
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+Cancellation 淨係話你 caller 觀察到咩。佢唔證明 server-side write 已經 rollback — mutation retries 要靠 idempotency contract。

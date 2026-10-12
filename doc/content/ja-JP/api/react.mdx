@@ -1,0 +1,42 @@
+---
+title: '@defjs/react'
+description: ClientProvider、useClient、provider の props です。
+---
+
+# React
+
+既存の `@defjs/core` クライアントを React ツリーに渡します。このパッケージはクライアントを作らず、キャッシュせず、破棄しません。エントリーは `'use client'` が付いているので、クライアントコンポーネントから import してください。React 18 以降が必要です。
+
+[React ガイド](/ja-JP/docs/integrations/react) を見てください。
+
+## ClientProvider
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+Context provider です。`createClient` のクライアントを渡します。入れ子の `ClientProvider` はそのサブツリーのクライアントを上書きし、`useClient` は一番近いものを読みます。別の `client` を渡すと、子孫から見える context の値が変わります。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+```ts
+function useClient(): Client
+```
+
+一番近い `ClientProvider` を読みます。
+
+- **戻り値** 渡されたクライアントです。
+- **例外** `ClientProvider` の外で呼ぶと `Error` を throw します。
+
+## ClientProviderProps
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+`client` は必須で、アプリケーションが所有します。`children` は `useClient` を呼べるツリーです。

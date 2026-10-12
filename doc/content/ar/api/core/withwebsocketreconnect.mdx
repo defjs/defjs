@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'خيار عميل يفعّل إعادة اتصال WebSocket التلقائية.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+يضبط إعادة الاتصال التلقائية عندما يُغلق المقبس لأي سبب غير `session.close()` اليدوي. إعادة الاتصال اختيارية: بدون هذا الخيار ينهي الإغلاقُ الجلسةَ. تمرير `undefined` يمسح إعدادًا سابقًا. نوع الخيار:
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` هو ميزانية إعادة المحاولة بعد الاتصال الأول. قيمته الافتراضية `3`، و`0` يعطّل إعادة الاتصال. حذفه ليس بلا حد.
+- القيمة الافتراضية لـ `delayMs` هي `1000`، ولـ `factor` هي `2`، ولـ `maxDelayMs` هي `30000`، ولـ `jitter` (من 0 إلى 1) هي `0`. تأخير المحاولة _n_ هو `delayMs * factor^(n-1)`، بحد أقصى `maxDelayMs`.
+- يمكن أن يُرجع `shouldReconnect` القيمة `false` لإنهاء الجلسة بدلًا من ذلك. بدونه تُعاد المحاولة عند كل إغلاق ما دامت الميزانية قائمة. ولا يُستدعى عند `session.close()` اليدوي.
+- القيم خارج النطاق تجعل execute يفشل بـ `REQ_OPTIONS_INVALID`.
+- `reconnect` في خيارات execute يستبدل هذا الخيار لذلك الاستدعاء.
+
+[العميل](/ar/api/client)

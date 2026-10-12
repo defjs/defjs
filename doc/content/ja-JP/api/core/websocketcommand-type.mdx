@@ -1,0 +1,23 @@
+---
+title: 'WebSocketCommand'
+description: 'WebSocketEndpoint を呼んで作られる、実行可能なコマンドです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCommand" />
+
+```ts
+interface WebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> extends BaseCommand<typeof WEB_SOCKET_COMMAND> {
+  readonly endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>
+  readonly input: EndpointInput<TInput> | undefined
+}
+```
+
+[`WebSocketEndpoint`](/ja-JP/api/core/websocketendpoint-type) を呼ぶと作られます。エンドポイントの定義と、未パースの入力を保持します。`client.execute` に渡すとセッションが開きます。それまでは何も接続しません。
+
+`BaseCommand` は、コマンドを正しいトランスポートへ振り分ける、シンボルをキーにしたメンバーを持ちます。これらは内部のものなので、コマンドは不透明なものとして扱ってください。
+
+[WebSocket](/ja-JP/api/web-socket)

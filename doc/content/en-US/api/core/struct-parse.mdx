@@ -1,0 +1,30 @@
+---
+title: 'struct.parse'
+description: 'Parses an unknown value with a struct and returns an error-first tuple.'
+---
+
+<ApiReference identity="@defjs/core:struct.parse" />
+
+```ts
+function parse<S extends StructLike<unknown, unknown, boolean>>(
+  struct: S,
+  value: unknown,
+  options?: { aliases?: boolean; errorMap?: ErrorMap },
+): ParseResult<S['_struct']['output']>
+```
+
+- **struct** is the struct to parse with. A value that is not a struct throws `TypeError`.
+- **value** is the unknown input.
+- **options.aliases** defaults to `false`: object keys are read by their **logical** names (`displayName`). With `true` they are read by their wire names (`display_name`), the way HTTP/JSON codecs read them. The output always uses logical names.
+- **options.errorMap** is an [`ErrorMap`](/api/core/errormap-type) that rewrites issue messages for this call only. Returning `undefined` keeps the default message.
+- **Returns** `[null, output]` or `[StructError, undefined]`. Invalid input never throws.
+- Parsing is fail-fast: it stops at the first failure, so the error holds one issue. Unknown object keys are stripped from the output, and the input is not modified.
+
+```ts
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+if (error) return console.error(error.prettify())
+```
+
+See [`ParseResult`](/api/core/parseresult-type) and [`StructError`](/api/core/structerror-type).
+
+[Struct](/api/struct)

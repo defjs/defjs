@@ -1,0 +1,25 @@
+---
+title: 'WebSocketHeartbeatConfig'
+description: '心跳 ping 与确认的设置。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHeartbeatConfig" />
+
+```ts
+interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
+  intervalMs: number
+  isAck?: (message: TIncoming) => boolean
+  message?: () => TOutgoing
+  timeoutMs?: number
+}
+```
+
+- `intervalMs` 是两次心跳消息之间的间隔。
+- `message()` 构造载荷，并通过 `outgoing` struct 发送。省略它或它返回 `undefined` 时，不发送任何内容。
+- `isAck(message)` 接收每条解码后的入站消息。返回 `true` 时，该消息被视为确认，不会交给 `receive`。
+- `timeoutMs` 是心跳之后等待确认的时长。等不到确认，session 就会失败。
+- `intervalMs` 和 `timeoutMs` 必须为正的有限数，且不超过 `2_147_483_647`。
+
+用 [`withWebSocketHeartbeat`](/zh-Hans/api/core/withwebsocketheartbeat) 或 execute 的 `heartbeat` 选项来设置。
+
+[WebSocket](/zh-Hans/api/web-socket)

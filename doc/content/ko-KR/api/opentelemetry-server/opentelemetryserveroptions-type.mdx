@@ -1,0 +1,28 @@
+---
+title: 'OpenTelemetryServerOptions'
+description: 'withOpenTelemetryServer의 옵션으로, tracer, meter, logger, propagator, 전송별 설정이에요.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerOptions" />
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+- `tracer` — 선택이에요. 없으면 로컬 span도 span 훅도 없어요.
+- `meter` — 선택이에요. 없으면 패키지 메트릭을 기록하지 않아요.
+- `logger` — 선택이에요. Winston/Pino Logger가 아니라 `@opentelemetry/api-logs`의 `Logger`예요. 없으면 진단 LogRecord를 내보내지 않아요. Defjs는 전역 logger를 얻지도, provider를 소유하지도 않아요.
+- `propagator` — 기본값은 W3C Trace Context + Baggage예요.
+- `requireParentSpan` — 기본값은 `false`예요. `tracer`가 있을 때 `true`이면 활성 부모 span이 없는 경우 로그를 포함한 모든 instrumentation을 건너뛰어요. `tracer`가 없으면 메트릭도 로그도 막지 않아요.
+- `http`, `sse`, `webSocket` — 전송별 옵션이에요. 각각 기본값은 `{}`이고, 전송은 `{ enabled: false }`일 때만 비활성화돼요.
+
+[@defjs/opentelemetry-server](/ko-KR/api/opentelemetry-server)

@@ -1,0 +1,24 @@
+---
+title: 'struct.object'
+description: 'Struct, der ein einfaches Objekt mit einer festen Menge von Fields parst.'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+`shape` ordnet Field-Namen Structs zu.
+
+- Jedes Field ist standardmäßig **Pflicht**. Ein fehlender Key schlägt mit `missing_key` fehl.
+- `.optional()` und `.nullish()` erlauben einen fehlenden Key. Ein fehlendes optionales Field bleibt im Output fehlend.
+- `.null()` / `.nullable()` erlauben `null`. `.alias(name)` liest und schreibt das Field unter einem anderen Wire-Key.
+- Keys, die nicht in `shape` stehen, werden aus dem Output entfernt. Der Output ist ein neues Objekt mit `null`-Prototype.
+- Der Input muss ein einfaches Objekt sein. Arrays, `Map` und Klasseninstanzen schlagen mit `invalid_type` fehl (erwartet `object`).
+- Das Parsen stoppt beim ersten fehlerhaften Field, und `issue.path` enthält dessen Key.
+- Wirft `TypeError`, wenn `shape` kein einfaches Objekt ist.
+
+`ObjectShape` ist `{ [key: string]: any }`; jeder Wert muss ein Struct sein.
+
+[Struct](/de-DE/api/struct)

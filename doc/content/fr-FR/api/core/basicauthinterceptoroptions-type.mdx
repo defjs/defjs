@@ -1,0 +1,20 @@
+---
+title: 'BasicAuthInterceptorOptions'
+description: 'Options des intercepteurs basic-auth, dont un encodeur d’identifiants personnalisé.'
+---
+
+<ApiReference identity="@defjs/core:BasicAuthInterceptorOptions" />
+
+```ts
+type BasicAuthInterceptorOptions = {
+  encode?: (credential: { username: string; password: string }) => string
+}
+```
+
+`encode` ne remplace que l’encodeur d’identifiants. La valeur par défaut est ``btoa(`${username}:${password}`)``. L’intercepteur préfixe toujours la chaîne renvoyée par `Basic ` : renvoie donc uniquement la partie identifiants, car renvoyer `'Basic abc'` produit l’en-tête `Basic Basic abc`.
+
+Accepté par [`basicAuthHttpInterceptor`](/fr-FR/api/core/basicauthhttpinterceptor) et [`basicAuthSSEInterceptor`](/fr-FR/api/core/basicauthsseinterceptor).
+
+Voir le [guide Intercepteurs](/fr-FR/docs/interceptors).
+
+[Intercepteurs](/fr-FR/api/interceptors)

@@ -1,0 +1,16 @@
+---
+title: 'HttpStatusFault'
+description: 'non-2xx 응답의 fault로, 선언한 error struct로 타입이 정해져요.'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFault" />
+
+```ts
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+`TErr`는 엔드포인트가 선언한 `error` struct이고, 선언하지 않았다면 `undefined`예요. 2xx가 아닌 모든 status가 해당돼요. 엔드포인트가 `error`를 선언했고 body가 디코딩됐다면 `data`가 그 body이고 `response`도 그것을 지녀요. `error`를 생략했다면 body는 읽히지 않으니 `data`는 `undefined`이고 `response`는 메타데이터만 남아요. 멤버 모양은 [`HttpStatusFaultOf`](/ko-KR/api/core/httpstatusfaultof-type)를 보세요.
+
+[오류](/ko-KR/api/errors)

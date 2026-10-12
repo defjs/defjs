@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: '클라이언트 전송이 쓰는 WebSocket 인스턴스 면이에요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+이벤트 핸들러 프로퍼티, `binaryType`, `dispatchEvent`, 상태 상수를 뺀 DOM `WebSocket`이에요. 그래서 직접 만든 구현에는 `url`, `protocol`, `extensions`, `bufferedAmount`, `send`, `close`, `addEventListener`, `removeEventListener`, 숫자형 `readyState`가 필요해요.
+
+전송은 `binaryType` 프로퍼티가 있으면 `binaryType = 'arraybuffer'`로 설정해요. [`WebSocketHandleConstructor`](/ko-KR/api/core/websockethandleconstructor-type)가 만들어 내는 인스턴스 타입이에요.
+
+[클라이언트](/ko-KR/api/client)

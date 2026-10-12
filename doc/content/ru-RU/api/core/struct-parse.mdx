@@ -1,0 +1,30 @@
+---
+title: 'struct.parse'
+description: 'Разбирает unknown-значение через struct и возвращает error-first кортеж.'
+---
+
+<ApiReference identity="@defjs/core:struct.parse" />
+
+```ts
+function parse<S extends StructLike<unknown, unknown, boolean>>(
+  struct: S,
+  value: unknown,
+  options?: { aliases?: boolean; errorMap?: ErrorMap },
+): ParseResult<S['_struct']['output']>
+```
+
+- **struct** — struct, которым разбирается значение. Значение, не являющееся struct, бросает `TypeError`.
+- **value** — unknown input.
+- **options.aliases** по умолчанию `false`: ключи объекта читаются по **логическим** именам (`displayName`). При `true` они читаются по wire-именам (`display_name`), как их читают кодеки HTTP/JSON. Output всегда использует логические имена.
+- **options.errorMap** — [`ErrorMap`](/ru-RU/api/core/errormap-type), который переписывает сообщения issue только для этого вызова. Возврат `undefined` сохраняет сообщение по умолчанию.
+- **Возвращает** `[null, output]` или `[StructError, undefined]`. Невалидный input никогда не бросает.
+- Разбор fail-fast: он останавливается на первом сбое, поэтому в error один issue. Неизвестные ключи объекта отбрасываются из output, а input не изменяется.
+
+```ts
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+if (error) return console.error(error.prettify())
+```
+
+См. [`ParseResult`](/ru-RU/api/core/parseresult-type) и [`StructError`](/ru-RU/api/core/structerror-type).
+
+[Struct](/ru-RU/api/struct)

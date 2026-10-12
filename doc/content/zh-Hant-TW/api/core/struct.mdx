@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: '包含 struct constructors 與 struct.parse 的 facade 物件。'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct` 是裝滿 helper 的純物件。請走這個，別個別 import constructors。每個 helper 都有自己的頁面。
+
+### 純量與容器
+
+| Helper                                                                                                 | 用途                                         |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------- |
+| [`struct.string()`](/zh-Hant-TW/api/core/struct-string)                                                | 文字                                         |
+| [`struct.number()`](/zh-Hant-TW/api/core/struct-number)                                                | 數字，拒絕 `NaN`                             |
+| [`struct.boolean()`](/zh-Hant-TW/api/core/struct-boolean)                                              | 布林值                                       |
+| [`struct.bigint()`](/zh-Hant-TW/api/core/struct-bigint)                                                | `bigint`，或能解析成 bigint 的字串           |
+| [`struct.date()`](/zh-Hant-TW/api/core/struct-date)                                                    | `Date`，來源可為 `Date`、時間戳或字串        |
+| [`struct.literal(value)`](/zh-Hant-TW/api/core/struct-literal)                                         | 精確字面值                                   |
+| [`struct.null()`](/zh-Hant-TW/api/core/struct-null)                                                    | 只接受 `null`                                |
+| [`struct.any()`](/zh-Hant-TW/api/core/struct-any) / [`unknown()`](/zh-Hant-TW/api/core/struct-unknown) | `null` 與 `undefined` 以外的任何值           |
+| [`struct.array(item)`](/zh-Hant-TW/api/core/struct-array)                                              | 由單一 item struct 組成的陣列                |
+| [`struct.tuple(items)`](/zh-Hant-TW/api/core/struct-tuple)                                             | 固定長度陣列；`items` 是 structs 的單一陣列  |
+| [`struct.record(value)`](/zh-Hant-TW/api/core/struct-record)                                           | 字串 key、單一 value struct 的純物件         |
+| [`struct.object(shape)`](/zh-Hant-TW/api/core/struct-object)                                           | 欄位固定的純物件；未知 key 會被移除          |
+| [`struct.or(...options)`](/zh-Hant-TW/api/core/struct-or)                                              | 第一個符合的 option                          |
+| [`struct.intersection(...structs)`](/zh-Hant-TW/api/core/struct-intersection)                          | 每個 struct 都必須符合；物件結果會合併       |
+| [`struct.discriminatedUnion(tag, options)`](/zh-Hant-TW/api/core/struct-discriminatedunion)            | 依 `tag` 欄位的值挑選物件 option             |
+| [`struct.enum(values)`](/zh-Hant-TW/api/core/struct-enum)                                              | 字串陣列，或 `{ Name: value }` 物件的 values |
+
+### Body codecs 與二進位值
+
+| Helper                                                                                                                                                          | 用途                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [`struct.formData(shape)`](/zh-Hant-TW/api/core/struct-formdata) / [`urlencoded(shape)`](/zh-Hant-TW/api/core/struct-urlencoded)                                | 物件 struct 加上 codec tag。只有該值是 request body 根時，tag 才生效              |
+| [`struct.arrayBuffer()`](/zh-Hant-TW/api/core/struct-arraybuffer) / [`blob()`](/zh-Hant-TW/api/core/struct-blob) / [`file()`](/zh-Hant-TW/api/core/struct-file) | 二進位值。當 body 根時以 bytes 送出；當 `output`／`error` 時選那個 representation |
+| [`struct.string()`](/zh-Hant-TW/api/core/struct-string)                                                                                                         | 文字。當 body 根，或當入站的 `string` struct 時，bytes 維持文字                   |
+
+### Parse 與 modifier
+
+[`struct.parse(struct, value, options?)`](/zh-Hant-TW/api/core/struct-parse) 解析未知的值，並回傳 `[null, value]` 或 `[StructError, undefined]`。
+
+每個 struct 都有可串接的 modifier `.optional()`、`.null()` / `.nullable()`、`.nullish()` 與 `.alias(name)`。見 [`StructMethods`](/zh-Hant-TW/api/core/structmethods-type)。
+
+[Struct](/zh-Hant-TW/api/struct)

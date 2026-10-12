@@ -1,0 +1,17 @@
+---
+title: 'createHttpInterceptor'
+description: 'interceptor 함수를 태그가 붙은 HTTP 인터셉터로 감싸요.'
+---
+
+<ApiReference identity="@defjs/core:createHttpInterceptor" />
+
+```ts
+function createHttpInterceptor(fn: InterceptorFn): HttpInterceptor
+
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`{ kind: 'http', fn }`을 반환해요. `next(req)`를 호출하거나 (바꾼 요청도 가능) `makeResponse`로 short-circuit하세요. `next`는 이 인터셉터 뒤에 등록된 인터셉터들과 fetch 핸들러만 실행해요. HTTP 인터셉터는 SSE나 WebSocket 명령에서는 실행되지 않아요.
+
+[인터셉터](/ko-KR/api/interceptors)

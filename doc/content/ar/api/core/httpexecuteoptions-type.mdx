@@ -1,0 +1,19 @@
+---
+title: 'HttpExecuteOptions'
+description: 'خيارات كل استدعاء لطلب HTTP: ردود نداء التقدم، وabort أو timeout، وsignal.'
+---
+
+<ApiReference identity="@defjs/core:HttpExecuteOptions" />
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+الإلغاء هو `abort` **أو** `timeout`، لا كلاهما. `signal` يُجمَع مع أيٍّ منهما؛ وهو **ليس** اسمًا بديلًا لـ `abort`. الأشكال الصالحة: `{ timeout }`، `{ abort }`، `{ signal, timeout }`، `{ signal, abort }`. `{ abort, timeout }` غير صالح ويجعل الاستدعاء ينتهي بخطأ `REQ_OPTIONS_INVALID`. يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`.
+
+عند حذف `timeout` تنطبق القيمة الافتراضية `withTimeout` للعميل؛ ويُجمَع `abort` مع تلك القيمة الافتراضية.
+
+[HTTP](/ar/api/http)

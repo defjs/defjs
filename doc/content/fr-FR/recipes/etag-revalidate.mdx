@@ -1,0 +1,20 @@
+---
+title: 'Requêtes conditionnelles ETag'
+description: Traite 304 comme un fault de statut HTTP ; garde la Map de cache hors d’execute.
+---
+
+# Revalider avec un ETag et un 304
+
+`ok` veut dire 2xx, donc un `304` arrive comme un fault `HTTP_STATUS`. Un statut de redirection n’est pas non plus un corps d’erreur, donc laisse `error` non déclaré : le corps n’est jamais lu, le fault porte le statut, et tu renvoies toi-même le produit en cache.
+
+Voir [HTTP](/fr-FR/docs/http).
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+Ne réécris pas `304` en faux `200` dans Core. La propriété du cache reste dans le code applicatif autour d’`execute`.

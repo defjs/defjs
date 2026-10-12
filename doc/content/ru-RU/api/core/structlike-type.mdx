@@ -1,0 +1,22 @@
+---
+title: 'StructLike'
+description: 'Структурный бренд, который несёт каждый struct.'
+---
+
+<ApiReference identity="@defjs/core:StructLike" />
+
+```ts
+interface StructLike<I = unknown, O = unknown, OO extends boolean = boolean> {
+  readonly _struct: {
+    input: I
+    optionalOut: OO extends true ? true : undefined
+    output: O
+  }
+}
+```
+
+Всё, у чего есть type-payload `_struct`. [`StructInput`](/ru-RU/api/core/structinput-type) и [`Infer`](/ru-RU/api/core/infer-type) читают из него `input` и `output`, а object struct’ы используют `optionalOut`, чтобы решить, какие поля output могут отсутствовать.
+
+`_struct` существует только в системе типов. У struct’ов нет свойства `_struct` в рантайме, а plain object с таким типом не является валидным struct.
+
+[Struct](/ru-RU/api/struct)

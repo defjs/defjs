@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'Defjs 回報的所有失敗 code 所構成的封閉集合。'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+一個封閉的集合。第一個 `_` 之前的那一段就是類別；沒有獨立的 `kind` 欄位。
+
+| 類別   | 意義                                                  |
+| ------ | ----------------------------------------------------- |
+| `HTTP` | 對端回了非 2xx 的 status。                            |
+| `REQ`  | request 根本沒送出：input、execute options 或 build。 |
+| `NET`  | 沒有可用的回應：取消、逾時、連線、body 被截斷。       |
+| `RES`  | 收到了回應，但無法照宣告的方式讀取。                  |
+| `EXT`  | 你掛到流水線上的程式碼拋出了錯誤。                    |
+| `CAP`  | 超過了宣告的 buffer 或 queue 上限。                   |
+| `ENV`  | 宿主執行環境缺少必要的能力。                          |
+
+這個集合保持封閉，`switch (fault.code)` 才能窮盡；擴充要回報自己的細節，走 `cause`，而不是新增 code。
+
+[錯誤](/zh-Hant-TW/api/errors)

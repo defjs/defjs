@@ -1,0 +1,14 @@
+---
+title: 'Interceptor'
+description: '用戶端 interceptor options 所接受的 tagged interceptor 聯集型別。'
+---
+
+<ApiReference identity="@defjs/core:Interceptor" />
+
+```ts
+type Interceptor = HttpInterceptor | SSEInterceptor | WebSocketInterceptor
+```
+
+`kind`（`'http'`、`'sse'` 或 `'web-socket'`）決定 interceptor 會對哪種 command 執行。`withInterceptors` 接受任意混搭；每種傳輸只執行自己 kind 的 interceptor，順序依註冊先後。
+
+[Interceptors](/zh-Hant-TW/api/interceptors)

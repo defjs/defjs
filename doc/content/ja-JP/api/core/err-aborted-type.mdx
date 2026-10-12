@@ -1,0 +1,16 @@
+---
+title: 'ERR_ABORTED'
+description: 'リクエストが中断されたことを示す、共有の Error センチネルです。'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+呼び出し側によるキャンセルを表す、共有の `cause` とメッセージの値です。`createNetworkFault` は、これと名前が `AbortError` の `DOMException` を `NET_ABORTED` に対応づけます。HTTP インターセプターがこれを throw すると、呼び出しは `NET_ABORTED` fault で解決されます。SSE や WebSocket のインターセプターがこれを throw した場合は、`EXT_INTERCEPTOR_FAILED` として報告されます。
+
+[Errors ガイド](/ja-JP/docs/errors) を参照してください。
+
+[Errors](/ja-JP/api/errors)

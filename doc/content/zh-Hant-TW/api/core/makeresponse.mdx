@@ -1,0 +1,14 @@
+---
+title: 'makeResponse'
+description: '不經網路呼叫，直接組出 HttpResponse。'
+---
+
+<ApiReference identity="@defjs/core:makeResponse" />
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+不打網路也能組出 `HttpResponse`（interceptors、測試）。預設 status 是 `0`，所以要表示成功就得傳 2xx 的 `status`。2xx 時 `ok` 為 true。它回傳的值會走和線上回應完全一樣的媒體類型檢查與宣告 struct；不存在受信任的短接。若是 JSON body，請設定 JSON 的 `content-type` header。
+
+[HTTP](/zh-Hant-TW/api/http)

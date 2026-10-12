@@ -1,0 +1,14 @@
+---
+title: 'Interceptor'
+description: 'Union interceptor’ов с тегом, которые принимают опции interceptor’ов клиента.'
+---
+
+<ApiReference identity="@defjs/core:Interceptor" />
+
+```ts
+type Interceptor = HttpInterceptor | SSEInterceptor | WebSocketInterceptor
+```
+
+`kind` (`'http'`, `'sse'` или `'web-socket'`) определяет, для каких команд работает interceptor. `withInterceptors` принимает любую смесь; каждый транспорт запускает только interceptor’ы своего kind, в порядке регистрации.
+
+[Interceptors](/ru-RU/api/interceptors)

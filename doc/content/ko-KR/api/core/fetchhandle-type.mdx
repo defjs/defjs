@@ -1,0 +1,16 @@
+---
+title: 'FetchHandle'
+description: 'HTTP나 SSE handle로 쓰는 fetch 호환 함수 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:FetchHandle" />
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+Defjs가 호출하는 `(input, init?) => Promise<Response>` 호출 시그니처예요. 일부러 `typeof fetch`로 하지 않아서, mock이 `preconnect` 같은 호스트의 추가 멤버를 갖출 필요가 없어요. 사용자 지정 handle은 `Request`를 받아 호출돼요. `(url, init)`으로 호출되는 것은 라이브러리 기본값(전역 `fetch`)뿐이에요.
+
+`withHTTPHandle`, `withSSEHandle`, `fetchHandler`가 받아요.
+
+[클라이언트](/ko-KR/api/client)

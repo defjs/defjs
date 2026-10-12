@@ -1,0 +1,17 @@
+---
+title: 'EventStreamOpenInfo'
+description: 'SSE 응답이 열린 뒤에 쓸 수 있는 메타데이터예요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamOpenInfo" />
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+`response`는 handshake 응답이고 `url`은 해석된 요청 URL이에요. 성공한 `client.execute` 결과의 세 번째 요소이자 `EventStreamHandle.open`의 값이에요.
+
+[SSE](/ko-KR/api/sse)

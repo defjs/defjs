@@ -1,0 +1,17 @@
+---
+title: 'withInterceptors'
+description: 'Client-Option, die Interceptors an die Client-Kette anhängt.'
+---
+
+<ApiReference identity="@defjs/core:withInterceptors" />
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+Hängt Interceptors an die Interceptor-Kette des Clients an. Ein erneuter Aufruf hängt weitere an; frühere werden nie ersetzt.
+
+- Der zuerst registrierte Interceptor ist die äußerste Schicht.
+- HTTP-, SSE- und WebSocket-Interceptors lassen sich in einem Aufruf mischen. Zur Execute-Zeit laufen nur die Interceptors des Transports des Commands, in ihrer Registration-Order.
+
+[Client](/de-DE/api/client)

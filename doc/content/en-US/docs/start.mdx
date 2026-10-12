@@ -1,0 +1,137 @@
+---
+title: 'Quick start'
+description: Define GET /users/:id, run it against a local Fetch handle, then point it at a real API.
+---
+
+# Getting Started: one HTTP request
+
+You’ll define `GET /users/:id`, execute it through an explicit client, and decode both `200` and declared `404`. The local handler keeps the first run offline; the command stays the same when you swap in a real service.
+
+## Step 1 — Install
+
+`@defjs/core` is ESM and runs on Node.js, Bun, or Deno. Node.js 22.18+ (or 24+) runs the `.ts` file directly through type stripping; older 22.x releases need `--experimental-strip-types`. Keep `"type": "module"` in package.json. In a browser you still need your bundler and Fetch.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno add npm:@defjs/core
+```
+
+</Tab>
+</Tabs>
+## Step 2 — Define the request
+
+Create `src/get-user.ts`. The input struct is the caller's value. `builder` places that value on the request. Here the whole input is the path object, so alias-free scalar fields fill `:id`.
+
+<include cwd meta="get-user.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` is the 2xx body. `error` is every other status. One struct each. Use `struct.or(...)` or a discriminated union when those bodies differ.
+
+`defineRequest(...)` returns an endpoint. Calling `getUser(...)` builds the opaque command you’ll pass to `client.execute(...)`. The `builder` above is the function that places input; it is not the endpoint.
+
+## Step 3 — Execute it locally
+
+Wire a client-local Fetch handle so you can run without a network. Defjs still validates input, builds the `Request`, dispatches by status, and parses the body.
+
+<include cwd meta="get-user.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+Run it:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun src/get-user.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno run src/get-user.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+Try a missing user — change the path id to `8` and run again:
+
+```txt
+User not found
+```
+
+On success: `error` is `null`, `user` is the `200` Struct output, `response` is an `HttpResponse`. On a declared `404`: `error.code` is `'HTTP_STATUS'`, `error.status` is `404`, and `error.data` is typed `NotFound`. The second tuple item is `undefined` on failure.
+
+## Step 4 — Point at a real API
+
+Drop `withHTTPHandle(...)` and set the real base URL when the service implements `GET /v1/users/:id` with those bodies.
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+Same command. Different client.
+
+## When the result differs
+
+- Bad input → `REQ_INPUT_INVALID`; conflicting cancel options → `REQ_OPTIONS_INVALID`; a failing
+  `builder` → `REQ_BUILD_FAILED`
+- A non-2xx status → `HTTP_STATUS`, with typed `error.data` when `error` was declared and its body decodes
+- A declared JSON body with another media type → `RES_MEDIA_TYPE_INVALID`, reported before the body is read
+- A declared body (`output` for 2xx, `error` otherwise) that won't decode → `RES_DECODE_FAILED` or `RES_STRUCT_MISMATCH`, whatever the status
+- Fetch fail / cancel / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` must be a positive safe integer in `1..2_147_483_647`. Valid cancel shapes: `{ timeout }`, `{ abort }`, or `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` together is invalid. Cancellation tells you what the caller saw — not whether a server write committed.
+
+## Next recipes
+
+- [GET with a declared 404](/recipes/get-declared-404)
+- [POST JSON](/recipes/post-json)
+- [Cancel an HTTP call](/recipes/cancel-http)
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Open a WebSocket session](/recipes/websocket-session)
+- [Test with a local Fetch handle](/recipes/test-with-handle)

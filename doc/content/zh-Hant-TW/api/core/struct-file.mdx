@@ -1,0 +1,16 @@
+---
+title: 'struct.file'
+description: '接受 File 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.file" />
+
+```ts
+function file(): Struct<File, File>
+```
+
+- 只接受 `File`；單純的 `Blob` 以 `invalid_type` 失敗。
+- 用於 [`struct.formData()`](/zh-Hant-TW/api/core/struct-formdata) 的欄位，或原始檔案 body。
+- 當 `output` 或 `error` struct 時，回應 body 會以 blob 讀取。
+
+[Struct](/zh-Hant-TW/api/struct)

@@ -1,0 +1,14 @@
+---
+title: 'Interceptor'
+description: 'Union des intercepteurs tagués acceptés par les options d’intercepteurs du client.'
+---
+
+<ApiReference identity="@defjs/core:Interceptor" />
+
+```ts
+type Interceptor = HttpInterceptor | SSEInterceptor | WebSocketInterceptor
+```
+
+`kind` (`'http'`, `'sse'` ou `'web-socket'`) choisit les commandes pour lesquelles un intercepteur s’exécute. `withInterceptors` accepte n’importe quel mélange ; chaque transport n’exécute que son propre kind, dans l’ordre d’enregistrement.
+
+[Intercepteurs](/fr-FR/api/interceptors)

@@ -1,0 +1,24 @@
+---
+title: 'HttpResponse'
+description: 'استجابة HTTP بشكل الشبكة التي تنتجها وسائل النقل ويراها المعترضون.'
+---
+
+<ApiReference identity="@defjs/core:HttpResponse" />
+
+```ts
+type HttpResponse<R> = {
+  readonly [HTTP_RESPONSE]: true // internal brand; build values with makeResponse
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+هذا شكل الشبكة الذي تنتجه وسائل النقل ويراه المعترضون: `body` نصٌّ أو JSON مُحلَّل مسبقًا، لا
+قيمة مفكوكة. يكون `body` هو `undefined` عند غياب الجسم؛ أما `null` في JSON فيبقى `null`. في تمثيل JSON، السلسلة النصية هي جذر نصي JSON ولا تُحلَّل مرة أخرى؛ البايتات والـ blobs خامّة
+وتُحلَّل مرة واحدة. و`ok` صحيح لحالات 2xx. وفشل النقل خطأ، لا استجابة أبدًا. والذي يصل المستدعي هو `DecodedResponse`.
+
+[HTTP](/ar/api/http)

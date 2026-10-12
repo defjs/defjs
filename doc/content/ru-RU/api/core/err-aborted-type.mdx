@@ -1,0 +1,16 @@
+---
+title: 'ERR_ABORTED'
+description: 'Общий sentinel Error, помечающий request как отменённый.'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+Общее значение `cause` и message для отмены вызывающей стороной. `createNetworkFault` отображает его, как и `DOMException` с именем `AbortError`, на `NET_ABORTED`. Если HTTP interceptor бросает его, вызов завершается fault’ом `NET_ABORTED`. SSE и WebSocket interceptor’ы, которые его бросают, сообщаются как `EXT_INTERCEPTOR_FAILED`.
+
+См. [гайд Errors](/ru-RU/docs/errors).
+
+[Ошибки](/ru-RU/api/errors)

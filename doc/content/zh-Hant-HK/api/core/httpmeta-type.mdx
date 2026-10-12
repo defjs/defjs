@@ -1,0 +1,20 @@
+---
+title: 'HttpMeta'
+description: 'Response 去到 client 時一定有嘅 response metadata。'
+---
+
+<ApiReference identity="@defjs/core:HttpMeta" />
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+Response metadata，只要有 response 去到 client 就有。佢**冇** `body`：body 只會喺聲明嘅 struct 解碼出一個之後先存在。
+
+[HTTP](/zh-Hant-HK/api/http)

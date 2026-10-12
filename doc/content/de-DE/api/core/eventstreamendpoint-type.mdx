@@ -1,0 +1,18 @@
+---
+title: 'EventStreamEndpoint'
+description: 'Aufrufbarer Endpoint, den defineEventStream zurückgibt.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamEndpoint" />
+
+```ts
+type EventStreamEndpoint<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, EventStreamCommand<TInput, TEvents, TError>>
+```
+
+Wird von `defineEventStream` zurückgegeben. Ruf ihn auf, um einen `EventStreamCommand` zu erhalten: ohne Argumente, wenn der Endpoint keinen `input` deklariert, mit optionalem Argument, wenn das Input-Struct `undefined` akzeptiert, und sonst mit dem Input-Wert des Structs.
+
+[SSE](/de-DE/api/sse)

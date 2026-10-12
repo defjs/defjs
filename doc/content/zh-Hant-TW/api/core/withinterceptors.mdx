@@ -1,0 +1,17 @@
+---
+title: 'withInterceptors'
+description: '把 interceptors 追加到 client 鏈上的 client option。'
+---
+
+<ApiReference identity="@defjs/core:withInterceptors" />
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+把 interceptors 追加到 client 的 interceptor 鏈上。再次呼叫會繼續追加，絕不會取代先前的。
+
+- 最先註冊的 interceptor 是最外層。
+- HTTP、SSE 與 WebSocket interceptors 可以混在同一次呼叫中。執行時只會依註冊順序執行該 command 所屬傳輸的 interceptors。
+
+[Client](/zh-Hant-TW/api/client)

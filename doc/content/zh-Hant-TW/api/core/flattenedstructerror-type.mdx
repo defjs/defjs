@@ -1,0 +1,17 @@
+---
+title: 'FlattenedStructError'
+description: 'StructError.flatten 回傳的、扁平的表單與欄位錯誤集合。'
+---
+
+<ApiReference identity="@defjs/core:FlattenedStructError" />
+
+```ts
+interface FlattenedStructError {
+  formErrors: string[]
+  fieldErrors: { [key: string]: string[] }
+}
+```
+
+`StructError.flatten()` 的結果。`formErrors` 存放 path 為空之 issue（根層級 issue）的 message。`fieldErrors` 存放以第一段 path 為 key 的 message，所以巢狀的 issue 會歸到其最上層的欄位底下。
+
+[Struct](/zh-Hant-TW/api/struct)

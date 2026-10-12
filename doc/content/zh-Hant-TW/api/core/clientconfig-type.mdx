@@ -1,0 +1,31 @@
+---
+title: 'ClientConfig'
+description: 'option helpers 套用完後，解析好的 client 設定。'
+---
+
+<ApiReference identity="@defjs/core:ClientConfig" />
+
+```ts
+interface ClientConfig {
+  endpoint: string
+  headers?: Headers
+  http: { handle: FetchHandle }
+  interceptors: Interceptor[]
+  querySerializer?: QuerySerializer
+  timeout?: number
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  sse: ClientSSEConfig
+  webSocket: ClientWebSocketOptions
+}
+```
+
+`createClient` 建出、並由每個 option helper 修改的解析後快照。HTTP 相關成員來自一個未匯出的 `HttpClientConfig` 基底型別，這裡直接展開顯示。
+
+在任何 option 套用之前，`endpoint` 是 `''`，`interceptors` 是空的，`http.handle` 與 `sse.handle` 是全域 `fetch`。`webSocket.handle` 是 `globalThis.WebSocket`，`webSocket` 的其他設定都未設定。`withXSRF` 在省略時，會把 `xsrf.cookieName` 填成 `XSRF-TOKEN`，把 `xsrf.headerName` 填成 `X-XSRF-TOKEN`。
+
+[Client](/zh-Hant-TW/api/client)

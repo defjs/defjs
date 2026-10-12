@@ -1,0 +1,23 @@
+---
+title: 'WebSocketCommand'
+description: 'Исполняемая команда, которую создаёт вызов WebSocketEndpoint.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCommand" />
+
+```ts
+interface WebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> extends BaseCommand<typeof WEB_SOCKET_COMMAND> {
+  readonly endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>
+  readonly input: EndpointInput<TInput> | undefined
+}
+```
+
+Создаётся вызовом [`WebSocketEndpoint`](/ru-RU/api/core/websocketendpoint-type). Хранит определение эндпоинта и ещё не разобранный input. Передай её в `client.execute`, чтобы открыть сессию; до этого никакого подключения не происходит.
+
+`BaseCommand` несёт члены с symbol-ключами, которые направляют команду в нужный транспорт. Они внутренние, поэтому считай команду непрозрачной.
+
+[WebSocket](/ru-RU/api/web-socket)

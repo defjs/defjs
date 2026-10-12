@@ -1,0 +1,18 @@
+---
+title: 'withHeaders'
+description: 'HTTP と SSE のリクエストに静的なデフォルトヘッダーを設定するクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withHeaders" />
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+このクライアントが組み立てる HTTP と SSE のリクエストに、静的なデフォルトヘッダーをセットします。WebSocket 接続では使われません。
+
+- `HeadersInit` は、option の適用時に `Headers` オブジェクトへコピーされます。あとの呼び出しは、先のヘッダーとマージせず置き換えます。
+- リクエストビルダーが返すヘッダーは、値がスカラーか `Headers` インスタンスなら同名のデフォルトを置き換えます。配列の値（配列を持つ record のエントリや、タプル配列の `HeadersInit`）は、デフォルトに追加されます。
+- リクエストごとの値や計算が必要な認証情報、たとえば更新した Bearer トークンや HMAC 署名は、最終的なボディや新しい値が必要なので、[インターセプター](/ja-JP/api/interceptors) に置いてください。
+
+[Client](/ja-JP/api/client)

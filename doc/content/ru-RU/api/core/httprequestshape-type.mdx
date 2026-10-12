@@ -1,0 +1,19 @@
+---
+title: 'HttpRequestShape'
+description: 'Форма request’а, которую возвращает HTTP builder: path, query, заголовки и body.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequestShape" />
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+  headers?: HeadersInit | FlatRecord
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+`P` — path endpoint’а, `M` — его метод. `GET` и `HEAD` не могут вернуть body. `BodyValue` — это значение, готовое к передаче, которое Fetch отправляет как есть (`string`, `Blob`, `ArrayBuffer`, типизированный массив или `DataView`, `FormData`, `URLSearchParams`, `ReadableStream<Uint8Array>`), либо JSON-данные (`number`, `boolean`, `bigint`, `Date`, `null`, массив или объектный тип со строковыми ключами); для значения с типом, объявленным через `interface`, или экземпляра класса нужно использовать `{ ...value }`. `path` и `headers` должны состоять из плоских скаляров; `query` может быть вложенным, а для вложенного объекта в runtime нужен `withQuerySerializer`. `FlatRecord`, `QueryRecord`, `PathValue` и `BodyValue` — внутренние вспомогательные типы.
+
+[HTTP](/ru-RU/api/http)

@@ -1,0 +1,24 @@
+---
+title: 'WebSocketEndpoint'
+description: 'defineWebSocket 回傳的 callable。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketEndpoint" />
+
+```ts
+type WebSocketEndpoint<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
+```
+
+由 [`defineWebSocket`](/zh-Hant-TW/api/core/definewebsocket) 回傳。呼叫它會建立 [`WebSocketCommand`](/zh-Hant-TW/api/core/websocketcommand-type)，再把它傳給 `client.execute`。呼叫簽章取決於 `input`：
+
+- 沒有宣告 `input`：`() => WebSocketCommand`。
+- `input` 接受 `undefined`：`(input?: StructInput<TInput>) => WebSocketCommand`。
+- 其他情況：`(input: StructInput<TInput>) => WebSocketCommand`。
+
+呼叫 endpoint 不會連線。input 會在 command 執行時才剖析。
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

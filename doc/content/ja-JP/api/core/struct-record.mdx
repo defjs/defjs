@@ -1,0 +1,19 @@
+---
+title: 'struct.record'
+description: '文字列キーと 1 つの値 struct を持つオブジェクトをパースする struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.record" />
+
+```ts
+function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
+```
+
+- プレーンオブジェクトの自身のキーをすべて `value` でパースします。それ以外は `invalid_type`（expected は `record`）で失敗します。
+- 最初に失敗した値でパースが止まり、`issue.path` にそのキーが入ります。
+- 出力は `null` プロトタイプを持つ新しいオブジェクトです。
+- `value` が struct でない場合は `TypeError` を投げます。
+
+`RecordStruct<S>` はエクスポートされません。実体は `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>` で、`Output` は `undefined` を除いた `Infer<S>` です。`S` が optional な struct の場合、値が `undefined` のキーは出力から省かれます。
+
+[Struct](/ja-JP/api/struct)

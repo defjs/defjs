@@ -1,0 +1,17 @@
+---
+title: 'injectClient'
+description: Vue composable that returns the client provided by createClientPlugin.
+---
+
+<ApiReference identity="@defjs/vue:injectClient" />
+
+```ts
+function injectClient(): Client
+```
+
+Reads the nearest `HTTP_CLIENT` provider. Call it where Vue's `inject` is allowed, such as `setup()`.
+
+- **Returns** the injected client.
+- **Throws** an `Error` if no client was provided, for example when the plugin was not installed.
+
+[@defjs/vue](/api/vue)

@@ -1,0 +1,14 @@
+---
+title: 'HttpInterceptorNext'
+description: '執行餘下 HTTP interceptor chain 嘅 continuation。'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptorNext" />
+
+```ts
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`next(req)` 只會向**內**走：先係排喺呢個 interceptor 之後註冊嘅 interceptors，然後係 fetch handler。佢唔係由外面重新 dispatch `client.execute`。要做安全 replay（例如 refresh 一次 401），就喺同一個 interceptor 內再 call `next`；外層唔會再執行第二次。Chain settle 之後再 call `next`，會以 `HTTP interceptor next() cannot be called after the chain has settled` reject。
+
+[Interceptors](/zh-Hant-HK/api/interceptors)

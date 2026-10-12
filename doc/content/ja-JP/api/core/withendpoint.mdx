@@ -1,0 +1,17 @@
+---
+title: 'withEndpoint'
+description: '相対的なリクエスト path のベース URL を設定するクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+相対的なリクエスト path の前に付けるベース URL をセットします。デフォルトは空文字列です。
+
+- **endpoint** — 絶対または相対のベースエンドポイントです。
+- WebSocket コマンドでは、`http:` のベースは `ws:` に、`https:` は `wss:` になります。
+
+[Client](/ja-JP/api/client)

@@ -1,0 +1,16 @@
+---
+title: 'struct.literal'
+description: 'struct يقبل قيمة boolean أو null أو number أو string واحدة بعينها.'
+---
+
+<ApiReference identity="@defjs/core:struct.literal" />
+
+```ts
+function literal<const T extends boolean | null | number | string>(value: T): Struct<T, T>
+```
+
+- يقبل `value` فقط. تستخدم المقارنة `Object.is`، فأي قيمة أخرى تفشل بـ `invalid_literal`.
+- يجب أن تكون `value` من النوع `boolean` أو `null` أو `number` أو `string`.
+- استخدمه لحقل الوسم في [`struct.discriminatedUnion()`](/ar/api/core/struct-discriminatedunion).
+
+[Struct](/ar/api/struct)

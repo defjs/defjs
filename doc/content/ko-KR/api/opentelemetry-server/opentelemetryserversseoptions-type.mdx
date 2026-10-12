@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerSSEOptions'
+description: 'SSE 전송의 옵션으로, 공통 옵션에 responseHook이 스트림 핸들을 받도록 한 것이에요.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions" />
+
+```ts
+type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<EventStreamHandle<unknown>>
+```
+
+`OpenTelemetryServerOptions`의 `sse`에 설정해요. 자체 필드는 없어요. `enabled`, `startSpanHook`, `requestHook`, `responseHook`은 `OpenTelemetryServerTransportOptions`에서 와요.
+
+- `responseHook(span, stream, req)`는 스트림이 열린 뒤, span이 `sse.connected`를 기록하기 전에 한 번 실행돼요. `stream`은 전송이 돌려준 `EventStreamHandle`이고, `req`는 원래의 `HttpRequest`예요.
+- SSE는 연결 수준에서 추적해요. 시작 이후 span은 `stream.closed`가 settle될 때까지 열려 있고, `sse.connected`를 기록한 뒤 `sse.closed`(서버 EOF), `sse.aborted`(`stream.close()` 또는 열린 스트림에 대한 호출자의 abort. span은 오류 없이 끝나요), `sse.error` 중 하나를 기록해요. 이벤트별 span은 만들지 않아요.
+- 2xx가 아닌 핸드셰이크는 연결 실패로 관찰돼요. span은 `ERROR`로 끝나고, `logger`가 있으면 응답 body와 관계없이 `WARN`이 하나 발생해요.
+
+SSE instrumentation을 건너뛰려면 `{ enabled: false }`를 넘기세요. span 훅은 `tracer`를 준 경우에만 실행돼요.
+
+[@defjs/opentelemetry-server](/ko-KR/api/opentelemetry-server)

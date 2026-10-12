@@ -1,0 +1,16 @@
+---
+title: 'struct.date'
+description: 'struct يقبل Date أو طابعًا زمنيًا أو سلسلة تاريخ ويُخرج Date.'
+---
+
+<ApiReference identity="@defjs/core:struct.date" />
+
+```ts
+function date(): Struct<Date | number | string, Date>
+```
+
+- يقبل `Date` أو طابعًا زمنيًا بالميلي ثانية أو سلسلة، ويحوّلها بـ `new Date(value)`.
+- المخرجات `Date`. والقيمة التي تنتج تاريخًا غير صالح تفشل بـ `invalid_type`.
+- عند الترميز للسلك تصبح القيمة سلسلة ISO 8601 (`toISOString()`).
+
+[Struct](/ar/api/struct)

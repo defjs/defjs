@@ -1,0 +1,16 @@
+---
+title: 'struct.blob'
+description: 'Struct, который принимает Blob.'
+---
+
+<ApiReference identity="@defjs/core:struct.blob" />
+
+```ts
+function blob(): Struct<Blob, Blob>
+```
+
+- Принимает `Blob` (`File` — это `Blob`). Всё остальное даёт `invalid_type`.
+- Как корень тела отправляется как есть, с собственным типом blob или `application/octet-stream`.
+- Как struct `output` или `error` заставляет читать тело ответа как `Blob`.
+
+[Struct](/ru-RU/api/struct)

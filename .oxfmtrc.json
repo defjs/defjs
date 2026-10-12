@@ -12,7 +12,9 @@
     "**/playwright-report/**",
     "**/blob-report/**",
     "**/test-results/**",
-    "field-study/**"
+    "field-study/**",
+    "**/.superpowers/**",
+    "**/.react-router/**"
   ],
   "printWidth": 140,
   "semi": false,

@@ -1,0 +1,22 @@
+---
+title: 'HttpResponse'
+description: 'Transports 產生、interceptors 見到嘅 wire-shape HTTP response。'
+---
+
+<ApiReference identity="@defjs/core:HttpResponse" />
+
+```ts
+type HttpResponse<R> = {
+  readonly [HTTP_RESPONSE]: true // internal brand; build values with makeResponse
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+Transports 產生、interceptors 見到嘅 wire shape：`body` 係 text 或者已 parse 嘅 JSON，唔係解碼後嘅 value。冇 body 時 `body` 係 `undefined`；JSON `null` 就保持 `null`。對 JSON representation 嚟講，string 係 JSON string root，唔會再 parse 多一次；bytes 同 blobs 係 raw，會 parse 一次。2xx 時 `ok` 為 true。Transport 失敗係 fault，永遠唔會係 response。去到 caller 手上嘅係 `DecodedResponse`。
+
+[HTTP](/zh-Hant-HK/api/http)

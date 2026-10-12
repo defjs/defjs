@@ -1,0 +1,27 @@
+---
+title: 'OpenTelemetryServerTransportOptions'
+description: すべてのトランスポートに共通する options — enabled と span フックで、レスポンス型についてジェネリックです。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions" />
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+```
+
+`TResponse` は `responseHook` が受け取るものです。HTTP では `HttpResponse<unknown>`、SSE では `EventStreamHandle<unknown>`、WebSocket では `WebSocketSessionLike` です。[OpenTelemetryServerHttpOptions](/ja-JP/api/opentelemetry-server/opentelemetryserverhttpoptions-type)、[OpenTelemetryServerSSEOptions](/ja-JP/api/opentelemetry-server/opentelemetryserversseoptions-type)、[OpenTelemetryServerWebSocketOptions](/ja-JP/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type) を見てください。
+
+`enabled` の既定は `true` で、トランスポートをオフにするのは `enabled: false` だけです。古い真偽値のスイッチ（`http: false`）とトップレベルのフックは、TypeScript の型でのみ拒否されます。実行時のチェックはないため、実行時には `http: false` でもトランスポートは有効のままで、トップレベルのフックは黙って無視されます。
+
+span フックは `tracer` が渡された場合にのみ呼び出されます。`startSpanHook` は、自分のトランスポートについて、span 作成前に同期実行されます。その属性は組み込み属性のあとに適用されるので、アプリケーションは `url.full` や別の初期値を上書きできます。throw すると Defjs は組み込み属性で span を作り、`defjs.otel.hook.error` イベントを記録し、リクエストを続けます。`requestHook` は span 作成後、リクエスト送信前に実行され、`responseHook` はトランスポートの結果が返ったあとに実行されます。どちらも promise を返せますが await はされず、throw や reject は同じ方法で記録されるだけで、操作をブロックしたり失敗させたりしません。`responseHook` は第 3 引数として元のリクエストを受け取ります。
+
+デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` は付けません。その境界は redaction ではなく、このパッケージに組み込みの redactor や機微キーの方針もありません。必要なら、アプリケーションが所有する URL を明示的に組み立て、必要に応じて redact してください。
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+[@defjs/opentelemetry-server](/ja-JP/api/opentelemetry-server)

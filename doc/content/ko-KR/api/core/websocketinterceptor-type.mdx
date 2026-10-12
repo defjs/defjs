@@ -1,0 +1,17 @@
+---
+title: 'WebSocketInterceptor'
+description: 'withInterceptors가 받는 태그된 WebSocket interceptor예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptor" />
+
+```ts
+interface WebSocketInterceptor {
+  kind: 'web-socket'
+  fn: WebSocketInterceptorFn
+}
+```
+
+`createWebSocketInterceptor(fn)`으로 만들어요. `kind` 태그 덕분에 `withInterceptors`가 HTTP, SSE, WebSocket interceptor를 한 목록으로 받을 수 있어요. WebSocket 명령에는 `kind: 'web-socket'` interceptor만 실행돼요.
+
+[인터셉터](/ko-KR/api/interceptors)

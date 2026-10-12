@@ -1,0 +1,20 @@
+---
+title: 'ETag 條件請求'
+description: 把 304 當成 HTTP status fault；快取 Map 留在 execute 外面。
+---
+
+# 用 ETag 與 304 重新驗證
+
+`ok` 表示 2xx，所以 `304` 會以 `HTTP_STATUS` fault 到達。重新導向狀態也不是錯誤 body，所以不要宣告 `error`：body 根本不會被讀，fault 帶著 status，你自己回傳快取的內容。
+
+見 [HTTP](/zh-Hant-TW/docs/http)。
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+不要在 Core 裡把 `304` 改寫成假的 `200`。快取的擁有權留在 `execute` 周圍的應用程式碼。

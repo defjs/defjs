@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'Вложенное дерево ошибок, которое возвращает StructError.format.'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+Результат `StructError.format()`. Message’ы листьев лежат в `_errors`; вложенные ключи повторяют path сбоя. Сегмент path, буквально названный `_errors`, сохраняется как `\_errors`.
+
+[Struct](/ru-RU/api/struct)

@@ -1,0 +1,16 @@
+---
+title: 'EventStreamExecuteOptions'
+description: 'SSE 스트림을 여는 호출별 옵션이에요. abort 또는 timeout, 그리고 선택적인 signal이 있어요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamExecuteOptions" />
+
+```ts
+type EventStreamExecuteOptions = ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+취소는 `abort` **또는** `timeout` 중 하나이고 둘 다는 안 돼요. 둘 다 넘기면 호출이 `REQ_OPTIONS_INVALID` fault로 resolve돼요. `signal`은 둘 중 어느 쪽과도 함께 쓸 수 있고 `abort`의 별칭이 아니에요. `timeout`은 2147483647 이하의 양의 안전한 정수여야 해요.
+
+SSE에서 `timeout`은 시작 데드라인이에요. 입력 파싱, builder, 인터셉터, 연결 열기까지를 포함하고, 스트림이 열린 뒤에는 더 이상 적용되지 않아요. 클라이언트 수준의 `withTimeout` 기본값은 SSE에 적용되지 않아요.
+
+[SSE](/ko-KR/api/sse)

@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'request builder 收到的、已剖析的 endpoint input 型別。'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+`builder` 看到的、已剖析的 endpoint input。物件節點帶著產出它們的 struct（內部的 `Typed` 標記），所以 alias、`Date`、`bigint` 的編碼會跟著值進入 request。record 的項目與 tuple 的元素也以同樣方式標記。在執行階段，當剖析出的值是物件時，record 容器本身也會被標記；array 與 tuple 容器不會，`null` 與 `undefined` 也絕不會被標記。nullish 修飾會還原它所包裝的 struct，union 的各選項會被分配展開，intersection 的各選項會被合併。其他任何 struct 一律退回 `Infer<S>`。
+
+`CarriedStruct`、`NullishBuilderInput`、`IntersectBuilderInputs` 與 `Typed` 是內部輔助型別。
+
+[HTTP](/zh-Hant-TW/api/http)

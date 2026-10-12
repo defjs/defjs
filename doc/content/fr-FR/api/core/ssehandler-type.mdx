@@ -1,0 +1,16 @@
+---
+title: 'SSEHandler'
+description: 'Handler terminal qui ouvre un flux SSE pour une requête.'
+---
+
+<ApiReference identity="@defjs/core:SSEHandler" />
+
+```ts
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+```
+
+La fonction `next` que reçoit un intercepteur SSE. `next(req)` ne va que vers l’intérieur : à travers les intercepteurs enregistrés après celui-ci, puis le transport qui ouvre le flux. L’appeler après que la chaîne s’est terminée est rejeté.
+
+`EventStreamHandle` étend `AsyncDisposable`. Une implémentation qui court-circuite et construit son propre handle doit fournir `[Symbol.asyncDispose](): PromiseLike<void>` et le relier au même cycle de fermeture.
+
+[Intercepteurs](/fr-FR/api/interceptors)

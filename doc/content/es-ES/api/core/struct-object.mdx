@@ -1,0 +1,24 @@
+---
+title: 'struct.object'
+description: 'Struct que parsea un objeto plano con un conjunto fijo de campos.'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+`shape` asigna a cada nombre de campo un struct.
+
+- Todos los campos son **obligatorios** por defecto. Una clave ausente falla con `missing_key`.
+- `.optional()` y `.nullish()` permiten una clave ausente. Un campo opcional ausente sigue ausente en la salida.
+- `.null()` / `.nullable()` permiten `null`. `.alias(name)` lee y escribe el campo bajo otra clave de cable.
+- Las claves que no están en `shape` se eliminan de la salida. La salida es un objeto nuevo con prototipo `null`.
+- La entrada debe ser un objeto plano. Los arrays, `Map` y las instancias de clase fallan con `invalid_type` (se esperaba `object`).
+- El parseo se detiene en el primer campo que falla, y `issue.path` contiene su clave.
+- Lanza `TypeError` cuando `shape` no es un objeto plano.
+
+`ObjectShape` es `{ [key: string]: any }`; cada valor debe ser un struct.
+
+[Struct](/es-ES/api/struct)

@@ -1,0 +1,24 @@
+---
+title: 'تغليف HTTP SDK'
+description: صدّر نقاط النهاية وcreateClient؛ وأبقِ تضييق الحالة عند موقع الاستدعاء.
+---
+
+# انشر SDK لـ HTTP دون إخفاء execute
+
+SDK من الطرائق يبتلع `client.execute` عادةً يطوي `404` المعلَن في رمي غير محدَّد النوع أو «خطأ API» مشترك. أبقِ العقد كنقاط نهاية مع عميل صريح؛ وما زال المستدعون يملكون التفرّع على الحالة.
+
+انظر [الأوامر](/ar/docs/commands) و[العميل](/ar/docs/client) و[قرارات التصميم](/ar/docs/design-decisions).
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+صدّر نقاط النهاية ومصنع عميل. يجوز للمساعدات أن تستدعي `execute` لمسار واحد مراجع، لكن لا تستبدل الـ tuple لكل حالة تهمّك.

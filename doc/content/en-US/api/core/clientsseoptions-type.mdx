@@ -1,0 +1,42 @@
+---
+title: 'ClientSSEOptions'
+description: 'Optional SSE settings: fetch handle, invalid-event hook, and reconnect policy.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — Fetch implementation that opens the stream. A custom handle receives a `Request`.
+- **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.
+- **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3**; `attempts: 0` disables retry, and omitting `attempts` is not unlimited. `delayMs` is the first delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` multiplies the delay after each attempt and defaults to 1. `jitter` is a 0-1 multiplicative factor, the same as WebSocket, and defaults to 0. `maxDelayMs` is unbounded by default. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. Once an event id has been received, each reconnect sends it in the `Last-Event-ID` header.
+
+Set these with `withSSEHandle`, `withSSEOnInvalidEvent`, and `withSSEReconnect`. Omitting `withSSEReconnect` disables retry.
+
+See [Client guide](/docs/client).
+
+[Client](/api/client)

@@ -1,0 +1,21 @@
+---
+title: 'struct.intersection'
+description: '값이 주어진 모든 struct를 만족해야 하는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+```
+
+`struct.intersection`은 가변 인자 함수예요. 각 struct를 별도 인자로 넘기세요.
+
+- 모든 struct로 입력을 파싱하고 결과를 병합해요.
+- 모든 struct가 객체 struct이면, 출력은 이들의 필드를 모두 가진 객체 하나예요. 어느 struct도 선언하지 않은 키는 제거돼요.
+- 두 struct가 같은 키에 호환되지 않는 값을 만들면 `invalid_intersection`으로 실패해요.
+- struct 하나만 주면 그대로 반환해요. struct 없이 호출하면 `TypeError`를 던지고, struct가 아닌 인자도 마찬가지예요.
+
+`IntersectionStruct<T>`는 export되지 않아요. 입력과 출력이 멤버 타입들의 교차 타입인 `Struct`예요.
+
+[Struct](/ko-KR/api/struct)

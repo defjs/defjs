@@ -1,0 +1,17 @@
+---
+title: 'fetchHandler'
+description: '用 fetch 发出请求的默认 HTTP 传输。'
+---
+
+<ApiReference identity="@defjs/core:fetchHandler" />
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+- **httpRequest** — 规范化后的请求（URL、headers、body、abort signal、进度 hook）。
+- **fetchImpl** — 一个 [`FetchHandle`](/zh-Hans/api/core/fetchhandle-type)；默认为全局 `fetch`。自定义 handle 收到的是一个 `Request`，其 body 按块逐段读取。
+
+默认的 HTTP 传输。client 始终使用它；`withHTTPHandle` 只替换它所调用的 `fetchImpl`。没有任何响应到达 client 时，它会 reject，而不是以一个合成的响应 resolve。
+
+[HTTP](/zh-Hans/api/http)

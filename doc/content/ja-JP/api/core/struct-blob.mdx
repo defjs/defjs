@@ -1,0 +1,16 @@
+---
+title: 'struct.blob'
+description: 'Blob を受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.blob" />
+
+```ts
+function blob(): Struct<Blob, Blob>
+```
+
+- `Blob` を受け付けます（`File` は `Blob` です）。それ以外は `invalid_type` で失敗します。
+- ボディのルートでは、Blob 自身の型、または `application/octet-stream` を付けて、そのまま送られます。
+- `output` または `error` の struct にすると、レスポンスボディは `Blob` として読み取られます。
+
+[Struct](/ja-JP/api/struct)

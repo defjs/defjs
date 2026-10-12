@@ -1,0 +1,22 @@
+---
+title: 'HttpCommand'
+description: 'Comando HTTP ejecutable y opaco que produce un endpoint de solicitud.'
+---
+
+<ApiReference identity="@defjs/core:HttpCommand" />
+
+```ts
+interface HttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly definition: RequestDefinition<TInput, TOutput, TError>
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+Se crea al llamar a un `RequestEndpoint` con una entrada. Trátalo como opaco y pásalo a `client.execute`.
+
+[HTTP](/es-ES/api/http)

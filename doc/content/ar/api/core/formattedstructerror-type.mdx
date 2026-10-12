@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'شجرة الأخطاء المتداخلة التي يعيدها StructError.format.'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+نتيجة `StructError.format()`. رسائل الأوراق توجد تحت `_errors`؛ والمفاتيح المتداخلة تعكس مسار الفشل. وأي مقطع مسار اسمه حرفيًا `_errors` يُخزَّن بالشكل `\_errors`.
+
+[Struct](/ar/api/struct)

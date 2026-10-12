@@ -1,0 +1,19 @@
+---
+title: 'withQuerySerializer'
+description: 'خيار عميل يستبدل طريقة تحويل كائنات الاستعلام إلى سلاسل استعلام.'
+---
+
+<ApiReference identity="@defjs/core:withQuerySerializer" />
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+يستبدل ترميز الاستعلام لـ HTTP وSSE وWebSocket.
+
+- يستقبل `serializer(query)` **كائن السلك المرمَّز**: الأسماء المستعارة مُطبَّقة، و`Date` سلسلة ISO، و`bigint` سلسلة. وتبقى الكائنات والمصفوفات المتداخلة كما هي.
+- يجب أن يُرجع سلسلة الاستعلام دون `?` بادئة. وتُستخدم السلسلة كما هي حرفيًا.
+- لا يُستدعى عندما لا يملك الطلب استعلامًا. والـ builder الذي يُرجع `URLSearchParams` يتخطاه.
+- بدون هذا الخيار تستخدم الاستعلامات `URLSearchParams`: المصفوفات تكرر المفتاح، والكائن المتداخل يفشل.
+
+[العميل](/ar/api/client)

@@ -1,0 +1,16 @@
+---
+title: 'QuerySerializer'
+description: 'Funktion, die ein kodiertes Query-Objekt in einen Query-String serialisiert.'
+---
+
+<ApiReference identity="@defjs/core:QuerySerializer" />
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+`query` ist das Wire-Objekt: Aliases sind bereits angewendet, `Date`-Werte sind bereits ISO-Strings, `bigint`-Werte bereits Strings. Verschachtelte Objekte und Arrays bleiben erhalten. Gib den Query-String ohne führendes `?` zurück; er wird unverändert verwendet und nicht durch `URLSearchParams` geschickt. Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`.
+
+Setze sie mit `withQuerySerializer`. Ohne Serializer verwenden Queries `URLSearchParams`: Arrays wiederholen den Key, und ein verschachteltes Objekt schlägt fehl. Ein Builder, der `URLSearchParams` zurückgibt, überspringt den Serializer.
+
+[Client](/de-DE/api/client)

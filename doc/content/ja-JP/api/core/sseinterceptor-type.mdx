@@ -1,0 +1,17 @@
+---
+title: 'SSEInterceptor'
+description: 'withInterceptors が受け付ける、タグ付きの SSE インターセプターです。'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptor" />
+
+```ts
+interface SSEInterceptor {
+  kind: 'sse'
+  fn: SSEInterceptorFn
+}
+```
+
+`createSSEInterceptor(fn)` が作ります。`kind` タグにより、`withInterceptors` は HTTP、SSE、WebSocket のインターセプターを 1 つのリストで受け付けられます。SSE コマンドで実行されるのは `kind: 'sse'` のインターセプターだけです。
+
+[Interceptors](/ja-JP/api/interceptors)

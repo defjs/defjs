@@ -1,0 +1,27 @@
+---
+title: 'withSSEOnInvalidEvent'
+description: 'Опция клиента, которая наблюдает за SSE-событиями без struct или с провалом валидации.'
+---
+
+<ApiReference identity="@defjs/core:withSSEOnInvalidEvent" />
+
+```ts
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+Регистрирует колбэк для SSE-событий, у которых нет подходящего event struct или которые не проходят валидацию. Колбэк получает:
+
+```ts
+{
+  reason: 'missing-struct' | 'validation-failed'
+  message: { id: string; event: string; data: string }
+  cause?: unknown
+  signal: AbortSignal
+}
+```
+
+- Недопустимое событие **всегда отбрасывается**; в поток оно никогда не доставляется. Колбэк только наблюдает за ним.
+- Возвращаемое значение игнорируется. Ошибка, брошенная колбэком, глотается и поток не закрывает, если только `signal` уже не прерван.
+- `cause` задан для `validation-failed`. Без handler’а недопустимое событие отбрасывается молча.
+
+[Клиент](/ru-RU/api/client)

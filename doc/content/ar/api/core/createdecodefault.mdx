@@ -1,0 +1,17 @@
+---
+title: 'createDecodeFault'
+description: 'مصنع خطأ فك الترميز: وصلت استجابة لكن تعذّرت قراءتها كما أُعلن.'
+---
+
+<ApiReference identity="@defjs/core:createDecodeFault" />
+
+```ts
+function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+```
+
+- **code** — خطوة القراءة التي فشلت: `RES_DECODE_FAILED` أو `RES_MEDIA_TYPE_INVALID` أو `RES_STRUCT_MISMATCH`.
+- **cause** — فشل المحلِّل أو الـ struct الأساسي. رسالته تصبح رسالة الخطأ (`String(cause)` إذا لم يكن `Error`)، ويُحتفظ به في `cause`.
+- **response** — البيانات الوصفية للاستجابة التي تعذّرت قراءتها. تُنسخ منها `status`.
+- **يُرجع** `Error` أصليًا باسم `DefjsFault` بلا `body`.
+
+[الأخطاء](/ar/api/errors)

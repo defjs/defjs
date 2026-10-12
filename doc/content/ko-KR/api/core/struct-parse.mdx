@@ -1,0 +1,30 @@
+---
+title: 'struct.parse'
+description: 'unknown 값을 struct로 파싱하고 error-first 튜플을 돌려줘요.'
+---
+
+<ApiReference identity="@defjs/core:struct.parse" />
+
+```ts
+function parse<S extends StructLike<unknown, unknown, boolean>>(
+  struct: S,
+  value: unknown,
+  options?: { aliases?: boolean; errorMap?: ErrorMap },
+): ParseResult<S['_struct']['output']>
+```
+
+- **struct**는 파싱에 쓸 struct예요. struct가 아닌 값은 `TypeError`를 던져요.
+- **value**는 unknown 입력이에요.
+- **options.aliases**의 기본값은 `false`예요. 객체 키를 **논리** 이름(`displayName`)으로 읽어요. `true`이면 HTTP/JSON 코덱처럼 와이어 이름(`display_name`)으로 읽어요. 출력은 항상 논리 이름을 써요.
+- **options.errorMap**은 이번 호출에 한해 issue 메시지를 다시 쓰는 [`ErrorMap`](/ko-KR/api/core/errormap-type)이에요. `undefined`를 반환하면 기본 메시지를 유지해요.
+- **반환값**은 `[null, output]` 또는 `[StructError, undefined]`예요. 잘못된 입력은 절대 throw하지 않아요.
+- 파싱은 fail-fast예요. 처음 실패에서 멈추므로 error에는 issue가 하나만 들어 있어요. 알 수 없는 객체 키는 출력에서 제거되고, 입력은 수정하지 않아요.
+
+```ts
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+if (error) return console.error(error.prettify())
+```
+
+[`ParseResult`](/ko-KR/api/core/parseresult-type)와 [`StructError`](/ko-KR/api/core/structerror-type)를 보세요.
+
+[Struct](/ko-KR/api/struct)

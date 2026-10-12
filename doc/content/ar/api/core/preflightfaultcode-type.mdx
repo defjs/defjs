@@ -1,0 +1,14 @@
+---
+title: 'PreflightFaultCode'
+description: 'رموز الخطأ الذي ربما لم يصل قط إلى استجابة.'
+---
+
+<ApiReference identity="@defjs/core:PreflightFaultCode" />
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+```
+
+كل `FaultCode` عدا `HTTP_STATUS` ورموز فك الترميز: `CAP_BUFFER_EXCEEDED` و`CAP_QUEUE_OVERFLOW` و`ENV_UNSUPPORTED` و`EXT_HOOK_FAILED` و`EXT_INTERCEPTOR_FAILED` و`EXT_OBSERVER_FAILED` و`NET_ABORTED` و`NET_BODY_INCOMPLETE` و`NET_TIMEOUT` و`NET_UNREACHABLE` و`REQ_BUILD_FAILED` و`REQ_INPUT_INVALID` و`REQ_OPTIONS_INVALID`. هذه هي قيم `code` الخاصة بـ `PreflightFault`.
+
+[الأخطاء](/ar/api/errors)

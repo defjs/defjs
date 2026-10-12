@@ -1,0 +1,21 @@
+---
+title: 'struct.intersection'
+description: '要求值同時滿足所有給定 struct 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+```
+
+`struct.intersection` 是可變參數：每個 struct 各自作為一個引數傳入。
+
+- 用每個 struct 解析輸入，並合併結果。
+- 所有 struct 都是物件 struct 時，輸出是一個含有全部欄位的物件。任何 struct 都沒有宣告的 key 會被移除。
+- 兩個 struct 對同一個 key 產生不相容的值時，以 `invalid_intersection` 失敗。
+- 只傳一個 struct 時原樣回傳。不傳任何 struct 會丟出 `TypeError`，傳入非 struct 的引數也一樣。
+
+`IntersectionStruct<T>` 沒有匯出。它是 `Struct`，其輸入與輸出是各成員型別的交集。
+
+[Struct](/zh-Hant-TW/api/struct)

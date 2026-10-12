@@ -1,0 +1,17 @@
+---
+title: 'createUndecodedHttpStatusFault'
+description: 'ボディが一度もデコードされなかった HTTP_STATUS fault のファクトリーです。'
+---
+
+<ApiReference identity="@defjs/core:createUndecodedHttpStatusFault" />
+
+```ts
+function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+```
+
+- **response** — 2xx 以外のレスポンスのメタデータです。エンドポイントが `error` struct を宣言していないため、ボディは読まれていません。
+- **戻り値** `DefjsFault` という名前のネイティブ `Error` で、`code: 'HTTP_STATUS'`、`data: undefined`、レスポンスからコピーした `status`、渡されたままの `response` を持ちます。
+
+ボディがデコードされた場合は [`createHttpStatusFault`](/ja-JP/api/core/createhttpstatusfault) を使ってください。
+
+[Errors](/ja-JP/api/errors)

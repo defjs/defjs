@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'Instantané de progression passé aux callbacks d’envoi et de téléchargement.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+Reprend les champs de `ProgressEvent`. `loaded` est le nombre d’octets transférés jusqu’ici. Quand la taille totale est inconnue, `total` vaut `0` et `lengthComputable` vaut `false`.
+
+Voir [`HttpProgressFn`](/fr-FR/api/core/httpprogressfn-type), le [guide HTTP](/fr-FR/docs/http) et [Commandes](/fr-FR/docs/commands).
+
+[HTTP](/fr-FR/api/http)

@@ -1,0 +1,16 @@
+---
+title: 'struct.null'
+description: 'null만 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.null" />
+
+```ts
+function null(): Struct<null, null>
+```
+
+`null`만 받아요. 다른 모든 값은 `invalid_type`으로 실패해요. `undefined`도 루트나 배열·튜플 안에서는 `invalid_type`이고, 객체나 record의 필드가 빠진 경우에는 대신 `missing_key`를 보고해요.
+
+`.null()` 수정자와는 달라요. 수정자는 다른 struct가 받는 값에 `null`을 더해요.
+
+[Struct](/ko-KR/api/struct)

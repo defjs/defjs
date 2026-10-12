@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'Request builder 接收到、已經 parse 嘅 endpoint input type。'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+`builder` 見到嘅、已經 parse 嘅 endpoint input。Object node 帶住產生佢哋嘅 struct（內部 `Typed` brand），所以 alias、`Date` 同 `bigint` encoding 會跟住個 value 去到 request。Record entries 同 tuple items 都會用同樣方式 brand。喺 runtime，當 parse 出嚟嘅 value 係 object 時，record container 亦會被標記；array 同 tuple container 唔會，而 `null` 同 `undefined` 永遠唔會被標記。Nullish modifier 會還原佢包住嘅 struct，union options 會逐個展開，intersection options 會合併。其他 struct 一律 fall back 去 `Infer<S>`。
+
+`CarriedStruct`、`NullishBuilderInput`、`IntersectBuilderInputs` 同 `Typed` 係內部 helper types。
+
+[HTTP](/zh-Hant-HK/api/http)

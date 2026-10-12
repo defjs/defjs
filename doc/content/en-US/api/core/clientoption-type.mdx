@@ -1,0 +1,14 @@
+---
+title: 'ClientOption'
+description: 'Function type of the option helpers accepted by createClient.'
+---
+
+<ApiReference identity="@defjs/core:ClientOption" />
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+Mutates the [`ClientConfig`](/api/core/clientconfig-type) that `createClient` is building. Every `with*` helper returns one. `createClient` applies the options in order, so a later option overwrites an earlier one for the same setting, except `withInterceptors`, which appends.
+
+[Client](/api/client)

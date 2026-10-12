@@ -1,0 +1,14 @@
+---
+title: 'ErrorMap'
+description: 'struct issue의 message를 다시 쓰는 콜백이에요.'
+---
+
+<ApiReference identity="@defjs/core:ErrorMap" />
+
+```ts
+type ErrorMap = (issue: StructIssue) => string | undefined
+```
+
+`struct.parse`의 `errorMap` 옵션으로 넘겨요. issue(`code`, `expected`, `message`, `path`, `received`)를 기록하기 전에 issue마다 호출돼요. 문자열을 반환하면 기본 message를 대체하고, `undefined`를 반환하면 그대로 둬요.
+
+[Struct](/ko-KR/api/struct)

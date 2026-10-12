@@ -1,0 +1,25 @@
+---
+title: 'StructMethods'
+description: '每个 struct 上都有的可链式调用的修饰方法。'
+---
+
+<ApiReference identity="@defjs/core:StructMethods" />
+
+```ts
+interface StructMethods<I, O, OO extends boolean> {
+  alias(name: string): this
+  null(): Struct<I | null, O | null, OO>
+  nullable(): Struct<I | null, O | null, OO>
+  nullish(): Struct<I | null | undefined, O | null | undefined, true>
+  optional(): Struct<I | undefined, O | undefined, true>
+}
+```
+
+每个方法都返回一个新 struct，原 struct 保持不变。
+
+- `alias(name)` 设置对象字段的线上名称。`struct.parse` 默认读逻辑名，除非传入 `aliases: true`；JSON 和扁平的请求 codec 写出的是 alias。`name` 不是字符串时抛出 `TypeError`。
+- `null()` 和 `nullable()` 完全相同：它们都额外接受 `null`。
+- `optional()` 额外接受 `undefined`。在对象里 key 可以缺失，缺失的字段在输出中依然缺失。
+- `nullish()` 同时接受 `null` 和 `undefined`。
+
+[Struct](/zh-Hans/api/struct)

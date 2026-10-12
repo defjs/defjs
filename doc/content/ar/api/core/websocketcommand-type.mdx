@@ -1,0 +1,23 @@
+---
+title: 'WebSocketCommand'
+description: 'أمر قابل للتنفيذ يُنشأ باستدعاء WebSocketEndpoint.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCommand" />
+
+```ts
+interface WebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> extends BaseCommand<typeof WEB_SOCKET_COMMAND> {
+  readonly endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>
+  readonly input: EndpointInput<TInput> | undefined
+}
+```
+
+يُنشأ باستدعاء [`WebSocketEndpoint`](/ar/api/core/websocketendpoint-type). يحمل تعريف نقطة النهاية والمدخل غير المحلَّل. مرّره إلى `client.execute` لفتح جلسة؛ ولا يتصل شيء قبل ذلك.
+
+يحمل `BaseCommand` أعضاء مفاتيحها رموز (symbols) توجّه الأمر إلى وسيلة النقل الصحيحة. وهي داخلية، فتعامل مع الأمر بوصفه كائنًا معتمًا.
+
+[WebSocket](/ar/api/web-socket)

@@ -1,0 +1,26 @@
+---
+title: 'SocketLifecycleOutcome'
+description: 'نتيجة محاولة اتصال WebSocket واحدة، يستخدمها منطق إعادة الاتصال.'
+---
+
+<ApiReference identity="@defjs/core:SocketLifecycleOutcome" />
+
+```ts
+type SocketLifecycleOutcome = {
+  closeInfo: WebSocketCloseSnapshot
+  connection?: WebSocketConnectionInfo
+  cause?: unknown
+  opened: boolean
+}
+```
+
+نتيجة **محاولة اتصال واحدة**، لا النتيجة النهائية للجلسة. يستخدمها منطق إعادة الاتصال ليقرر هل يحاول مجددًا.
+
+- `closeInfo` تحمل تفاصيل إغلاق تلك المحاولة: `{ cause?, code?, reason?, wasClean? }`.
+- `connection` هي لقطة الاتصال، إن حصلت المحاولة على واحدة.
+- `cause` هو الخطأ الذي أنهى المحاولة، إن وُجد.
+- `opened` تبيّن هل بلغ المقبس حالة `open` قبل أن تنتهي المحاولة.
+
+الخيار `shouldReconnect` لا يتلقى هذا الكائن. بل يتلقى `attempt` و`cause` و`code` و`reason` و`wasClean`، مأخوذة منه. أما النتيجة النهائية للجلسة فهي [`WebSocketCloseInfo`](/ar/api/core/websocketcloseinfo-type).
+
+[WebSocket](/ar/api/web-socket)

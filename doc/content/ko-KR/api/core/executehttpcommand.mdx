@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: '클라이언트 설정을 바탕으로 HTTP 명령을 실행하는 저수준 진입점이에요.'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+`client.execute`가 쓰는 저수준 진입점이에요. 애플리케이션 코드는 `client.execute(command, options)`를 호출해야 해요. `HttpClientConfig`는 `ClientConfig`의 HTTP 부분이라서 `ClientConfig`도 받아요. `HttpExecuteAwaitResult`는 내부 결과 튜플이에요.
+
+- **반환** `[null, data, response]` 또는 `[fault, undefined, undefined]`예요. `data`는 디코딩된 `output` body이고, `output`을 선언하지 않았다면 `undefined`예요. `response`는 `output`을 선언했다면 `DecodedResponse`, 아니면 `HttpMeta`예요. fault는 `Fault<TError>`예요.
+
+non-2xx status는 `error` struct를 선언하지 않았을 때(`data`는 `undefined`)나 선언한 body가 디코딩될 때(`data`는 그 body)는 `HTTP_STATUS`예요. 선언한 `error` body를 읽을 수 없으면 fault는 대신 `RES_*` 디코드 fault가 돼요. 실패하면 튜플의 세 번째 자리는 `undefined`이고, 응답 메타데이터는 fault가 지녀요. `options.timeout`을 생략하면 클라이언트의 `withTimeout` 기본값을 써요.
+
+[HTTP](/ko-KR/api/http)

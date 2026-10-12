@@ -1,0 +1,20 @@
+---
+title: 'Fault'
+description: '`client.execute` 可能回傳嘅所有失敗嘅 union，以 code 區分。'
+---
+
+<ApiReference identity="@defjs/core:Fault" />
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`TErr` 係 endpoint 聲明嘅 `error` struct，冇聲明就係 `undefined`。`Fault<TErr>` 係將 [`FaultOf`](/zh-Hant-HK/api/core/faultof-type) 套用喺解碼後嘅 body type 上，所以佢係三個變體嘅 union：[`DecodeFault`](/zh-Hant-HK/api/core/decodefault-type)、[`HttpStatusFault<TErr>`](/zh-Hant-HK/api/core/httpstatusfault-type) 同 [`PreflightFault`](/zh-Hant-HK/api/core/preflightfault-type)。對 `fault.code` 做 switch。
+
+每個變體都係名為 `DefjsFault` 嘅原生 `Error`，所以 `String(fault)` 直接俾出可以寫 log 嘅 `DefjsFault: <message>`。`code` 同各變體 metadata——`status`、`response`、`data`——都係可枚舉嘅自有屬性。原生 `cause` chain 唔可枚舉。
+
+<include cwd>examples/api/fault.ts#example</include>
+
+一定要先將 `fault.cause` 窄化到 `StructError`，之後才可以 call `format()`、`flatten()` 或者 `prettify()`；呢啲 helper 唔會被複製到 fault 上面。
+
+[Errors](/zh-Hant-HK/api/errors)

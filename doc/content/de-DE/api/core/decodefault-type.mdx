@@ -1,0 +1,19 @@
+---
+title: 'DecodeFault'
+description: 'Fault für eine Response, die ankam, sich aber nicht wie deklariert lesen ließ.'
+---
+
+<ApiReference identity="@defjs/core:DecodeFault" />
+
+```ts
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+`code` ist `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID` oder `RES_STRUCT_MISMATCH`. Eine Response kam an, ließ sich aber nicht wie deklariert lesen. `response` besteht nur aus Metadaten: Ein Body ist ein dekodierter Wert, und das Dekodieren ist gescheitert, also gibt es kein `body`-Feld, nach dem man greifen könnte. Das ursächliche Detail steckt in `cause` — ein `StructError` bei einem Struct-Mismatch, das Parser-Failure bei einer unlesbaren Representation.
+
+[Fehler](/de-DE/api/errors)

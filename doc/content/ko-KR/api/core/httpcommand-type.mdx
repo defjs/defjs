@@ -1,0 +1,22 @@
+---
+title: 'HttpCommand'
+description: '요청 엔드포인트가 만드는, 내부를 가린 실행 가능한 HTTP 명령이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpCommand" />
+
+```ts
+interface HttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly definition: RequestDefinition<TInput, TOutput, TError>
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+`RequestEndpoint`에 입력을 넣어 호출하면 만들어져요. 내부를 들여다보지 말고 그대로 `client.execute`에 넘기세요.
+
+[HTTP](/ko-KR/api/http)

@@ -1,0 +1,20 @@
+---
+title: 'Fault'
+description: 'Объединение всех сбоев, которые может вернуть client.execute, с дискриминантом code.'
+---
+
+<ApiReference identity="@defjs/core:Fault" />
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`TErr` — объявленный struct `error` endpoint’а, либо `undefined`, если он его не объявляет. `Fault<TErr>` — это [`FaultOf`](/ru-RU/api/core/faultof-type), применённый к типу декодированного тела, то есть объединение трёх вариантов: [`DecodeFault`](/ru-RU/api/core/decodefault-type), [`HttpStatusFault<TErr>`](/ru-RU/api/core/httpstatusfault-type) и [`PreflightFault`](/ru-RU/api/core/preflightfault-type). Делай switch по `fault.code`.
+
+Каждый вариант — нативный `Error` с именем `DefjsFault`, поэтому `String(fault)` даёт сразу пригодную для логов строку `DefjsFault: <message>`. `code` и метаданные варианта — `status`, `response`, `data` — это перечислимые собственные свойства. Нативная цепочка `cause` неперечислима.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+Вызывай `format()`, `flatten()` или `prettify()` только после сужения `fault.cause` до `StructError`; эти хелперы не копируются на fault.
+
+[Ошибки](/ru-RU/api/errors)

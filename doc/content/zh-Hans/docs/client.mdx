@@ -1,0 +1,68 @@
+---
+title: '客户端配置 / Client'
+description: 创建显式 Client，组合 options，execute command，自己管清理。
+---
+
+# Client
+
+`Client` 拿着 endpoint + 传输配置，分派 HTTP、SSE、WebSocket command。它不缓存、不自动重试、也不替你照看开着的流。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)` 按 command 种类给出重载。
+
+## 组合 options
+
+Options 从左到右生效。Setter 会替换；`withInterceptors(...items)` 是追加。
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+混着注册的 interceptor 在 execute 时按传输过滤；同类之间的相对顺序保留。
+
+## 按传输 execute
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`（`open` 是启动快照；`stream.open` 重连后可能变）
+- WebSocket → `[error, session, connection]`
+
+WebSocket execute 可以覆盖 `beforeConnect`、`heartbeat`、`protocols`、`reconnect`。`timeout` 必须是 `1..2_147_483_647` 的正 safe integer。
+
+清理归你：abort HTTP，close SSE + `await stream.closed`，close WebSocket + `await session.closed`。
+
+## 注入测试传输
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## 服务端 vs 浏览器作用域
+
+服务端上，options 或 interceptor 闭包会捕获鉴权、cookie、用户、租户时，把 Client 建在请求边界里。Client 身份本身不是安全边界。
+
+## 参考
+
+| Helper                                                                                                        | 作用                                                  |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | 所有传输的绝对 base endpoint                          |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE 的静态默认 headers；command headers 覆盖     |
+| `withTimeout(ms)`                                                                                             | 只当 HTTP `execute` 的默认 timeout（SSE/WS 忽略）     |
+| `withHTTPHandle(fetch)`                                                                                       | 替换 HTTP 的 Fetch                                    |
+| `withSSEHandle(fetch)`                                                                                        | 替换 SSE 的 Fetch                                     |
+| `withWebSocketHandle(WebSocket)`                                                                              | 替换 WebSocket 构造函数                               |
+| `withInterceptors(...items)`                                                                                  | 追加混合 interceptor                                  |
+| `withQuerySerializer(fn)`                                                                                     | 把已经 alias 过的 query 对象编成 query string         |
+| `withCredentials(boolean)`                                                                                    | 为 true 时 HTTP/SSE 用 Fetch `credentials: 'include'` |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                             |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 旋钮                                              |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 旋钮                                        |
+
+## 相关操作示例
+
+- [用本地 Fetch handle 做测试](/zh-Hans/recipes/test-with-handle)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)

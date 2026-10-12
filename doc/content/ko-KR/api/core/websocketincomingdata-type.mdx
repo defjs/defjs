@@ -1,0 +1,14 @@
+---
+title: 'WebSocketIncomingData'
+description: '수신한 WebSocket 메시지의 디코딩된 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketIncomingData" />
+
+```ts
+type WebSocketIncomingData<TIncoming extends AnyStruct> = Infer<TIncoming>
+```
+
+`session.receive`가 내보내는 각 메시지의 타입이에요. endpoint의 `incoming` struct의 [`Infer`](/ko-KR/api/core/infer-type) 출력이에요. alias가 붙은 필드는 논리 이름을 써요.
+
+[WebSocket](/ko-KR/api/web-socket)

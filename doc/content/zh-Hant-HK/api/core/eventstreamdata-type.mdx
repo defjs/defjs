@@ -1,0 +1,16 @@
+---
+title: 'EventStreamData'
+description: '由 EventStructs map 推斷出嚟、已 parse SSE events 嘅 union。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamData" />
+
+```ts
+type EventStreamData<TEvents extends EventStructs> = TEvents extends EventStructs
+  ? KnownEventUnion<TEvents> | DefaultEventUnion<TEvents>
+  : never
+```
+
+對每個已聲明嘅 event name（`default` 除外），union 包含 `{ event: <name>; data: Infer<TEvents[name]>; id?: string }`。聲明咗 `default` struct 時，就會為每個冇自己 struct 嘅 event name 加入 `{ event: string; data: Infer<TEvents['default']>; id?: string }`。`KnownEventUnion` 同 `DefaultEventUnion` 係內部 helper types。
+
+[SSE](/zh-Hant-HK/api/sse)

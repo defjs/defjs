@@ -1,0 +1,32 @@
+---
+title: 'EventStreamHandle'
+description: 'تدفق SSE مفتوح: كرّر الأحداث، واقرأ بيانات الفتح، وأغلقه مبكرًا.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamHandle" />
+
+```ts
+interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+`EventStreamMessage` هي الرسالة الخام `{ id: string; event: string; data: string }`. أما المقابض التي يعيدها `client.execute` فتحمل [`EventStreamData`](/ar/api/core/eventstreamdata-type) المحلَّلة.
+
+`open` هي لقطة البدء ([`EventStreamOpenInfo`](/ar/api/core/eventstreamopeninfo-type))؛ وبعد إعادة الاتصال يمكن أن تتغيّر، فاقرأ `stream.open` من جديد. و`closed` يُحَل بـ [`EventStreamCloseInfo`](/ar/api/core/eventstreamcloseinfo-type) عندما ينتهي التدفق.
+
+فضّل `await using stream = handle` لتنظيف النطاق المملوك. المتخلّص يوقف قراءة Defjs وعمل إعادة الاتصال وينتظر تحرير قفل القارئ؛ ولا يعد بأن وعد `ReadableStream.cancel()` العالق الذي يتحكم به المزوّد سينتهي. يبقى `close()` / `closed` اليدويان متاحين.
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+التنفيذات البنيوية لـ `EventStreamHandle` يجب أن تنفّذ `[Symbol.asyncDispose]()` وتُرجع مسار التخلّص المملوك نفسه. هذا متطلب وقت الترجمة للمقابض المخصّصة؛ والكود الذي يستقبل فقط مقابض تعيدها Defjs بلا متطلب استدعاء إضافي وقت التشغيل.
+
+[SSE](/ar/api/sse)

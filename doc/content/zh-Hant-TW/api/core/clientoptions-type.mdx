@@ -1,0 +1,33 @@
+---
+title: 'ClientOptions'
+description: '輸入形態的 client 選項，對應 option helpers 所設定的內容。'
+---
+
+<ApiReference identity="@defjs/core:ClientOptions" />
+
+```ts
+interface ClientOptions extends HttpClientOptions {
+  sse?: ClientSSEOptions
+  webSocket?: ClientWebSocketOptions
+}
+
+// Non-exported base, shown inline.
+interface HttpClientOptions {
+  endpoint: string
+  headers?: Headers
+  http?: { handle?: FetchHandle }
+  interceptors?: Interceptor[]
+  querySerializer?: QuerySerializer
+  timeout?: number
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName?: string
+    headerName?: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+}
+```
+
+套用預設值之前、面向使用者的設定形態。`createClient` 不接受這個物件；請用 `withEndpoint`、`withTimeout` 等 option helpers 來設定 client。[`ClientConfig`](/zh-Hant-TW/api/core/clientconfig-type) 是它解析後的對應型別。
+
+[Client](/zh-Hant-TW/api/client)

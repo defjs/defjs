@@ -1,0 +1,44 @@
+---
+title: 'HttpRequest'
+description: 'transport 与 interceptor 所见的、规范化后的出站 HTTP 请求。'
+---
+
+<ApiReference identity="@defjs/core:HttpRequest" />
+
+```ts
+interface HttpRequest {
+  abort?: AbortSignal
+  baseEndpoint?: string
+  body?: Blob | ArrayBuffer | FormData | URLSearchParams | ReadableStream<Uint8Array> | object | string | number | boolean | null
+  bodyContentType?: string | null
+  downloadProgress?: HttpProgressFn
+  endpoint: string
+  headers?: Headers
+  method: string
+  operation?: string
+  queryParams?: URLSearchParams
+  queryString?: string
+  readonly responseType?: HttpResponseType
+  readonly errorResponseType?: HttpResponseType
+  timeout?: number
+  uploadProgress?: HttpProgressFn
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  // plus an @internal bodyContentTypeSource field
+}
+```
+
+builder 运行之后的请求，供 handler、interceptor 和 `fetchHandler` 使用。
+
+- `body` 已经是线上传输的值。对 JSON 而言，它是一个 **JSON 文本字符串**；HMAC 签名或摘要请针对这个字符串计算，而不是原始的 struct input。
+- `endpoint` 是填好 path 参数的 path；`baseEndpoint` 是 client 的 endpoint。
+- interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。builder 返回 `URLSearchParams` 时，该实例会原样透传。
+- `operation` 是静态、低基数的 endpoint 标识，用于 telemetry 和诊断。
+- `downloadProgress` 和 `uploadProgress` 就是 `HttpExecuteOptions` 里的 `onDownloadProgress` 和 `onUploadProgress` hook。
+- `responseType` 和 `errorResponseType` 是只读的：它们由 endpoint 的 `output` 与 `error` struct 的 kind 推导而来，不能修改。只有声明了对应 struct 才会设置。用 `makeResponse` 短路的 interceptor 会读取它们，以便与 transport 保持一致。
+
+[HTTP](/zh-Hans/api/http)

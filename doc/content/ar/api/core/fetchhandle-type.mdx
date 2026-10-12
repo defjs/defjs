@@ -1,0 +1,16 @@
+---
+title: 'FetchHandle'
+description: 'نوع دالة متوافق مع fetch يُستخدم كمقبض لـ HTTP أو SSE.'
+---
+
+<ApiReference identity="@defjs/core:FetchHandle" />
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+توقيع الاستدعاء `(input, init?) => Promise<Response>` الذي تستدعيه Defjs. وهو عن قصد ليس `typeof fetch`، فلا تحتاج المحاكاة (mock) إلى إضافات المضيف مثل `preconnect`. المقبض المخصّص يُستدعى بـ `Request`؛ وحده الافتراضي في المكتبة (`fetch` العامة) يُستدعى بالشكل `(url, init)`.
+
+يقبله `withHTTPHandle` و`withSSEHandle` و`fetchHandler`.
+
+[العميل](/ar/api/client)

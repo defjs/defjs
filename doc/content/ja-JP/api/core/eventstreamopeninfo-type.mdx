@@ -1,0 +1,17 @@
+---
+title: 'EventStreamOpenInfo'
+description: 'SSE レスポンスが開いた時点で使えるメタデータです。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamOpenInfo" />
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+`response` はハンドシェイクのレスポンス、`url` は解決済みのリクエスト URL です。`client.execute` が成功したときの結果の第 3 要素であり、`EventStreamHandle.open` の値でもあります。
+
+[SSE](/ja-JP/api/sse)

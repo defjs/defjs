@@ -1,0 +1,17 @@
+---
+title: 'FlattenedStructError'
+description: 'StructError.flatten이 반환하는 평평한 form 오류와 field 오류 묶음이에요.'
+---
+
+<ApiReference identity="@defjs/core:FlattenedStructError" />
+
+```ts
+interface FlattenedStructError {
+  formErrors: string[]
+  fieldErrors: { [key: string]: string[] }
+}
+```
+
+`StructError.flatten()`의 결과예요. `formErrors`는 path가 빈 issue(루트 수준 issue)의 message를 담아요. `fieldErrors`는 path의 첫 구간을 키로 message를 담으므로, 중첩된 issue는 최상위 필드 아래로 묶여요.
+
+[Struct](/ko-KR/api/struct)

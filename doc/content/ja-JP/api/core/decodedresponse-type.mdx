@@ -1,0 +1,14 @@
+---
+title: 'DecodedResponse'
+description: 'メタデータに加え、宣言された struct でデコードできたボディを持つレスポンスです。'
+---
+
+<ApiReference identity="@defjs/core:DecodedResponse" />
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+ボディが宣言された struct でデコードできたレスポンスです。この型を手にしていること自体がデコードが起きた証拠であり、だからデコード失敗は `HttpMeta` だけを報告します。
+
+[HTTP](/ja-JP/api/http)

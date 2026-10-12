@@ -1,0 +1,42 @@
+---
+title: 'ClientSSEOptions'
+description: 'Ajustes SSE opcionales: fetch handle, hook de evento inválido y política de reconexión.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — Implementación de fetch que abre el stream. Un handle personalizado recibe un `Request`.
+- **onInvalidEvent** — Se llama cuando un evento no tiene un struct que le corresponda ni un struct `default` (`'missing-struct'`), o cuando la validación de sus datos falla (`'validation-failed'`). El evento se omite. Un error lanzado por el hook no cierra el stream.
+- **reconnect** — Debe activarse explícitamente. Sin esta opción, el stream nunca se reconecta. `attempts` vale **3** por defecto; `attempts: 0` desactiva el reintento, y omitir `attempts` no significa ilimitado. `delayMs` es el primer retardo, 1000 por defecto, y un valor `retry:` enviado por el servidor lo reemplaza. `factor` multiplica el retardo después de cada intento y vale 1 por defecto. `jitter` es un factor multiplicativo de 0 a 1, igual que en WebSocket, y vale 0 por defecto. `maxDelayMs` no tiene límite por defecto. Sin `shouldReconnect`, solo se reconectan las solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`; si se proporciona, su resultado determina si se reconecta para cada método y su contexto incluye `method`. Las solicitudes con un cuerpo `ReadableStream` nunca se reconectan. Una vez recibido un id de evento, cada reconexión lo envía en la cabecera `Last-Event-ID`.
+
+Configúralos con `withSSEHandle`, `withSSEOnInvalidEvent` y `withSSEReconnect`. Omitir `withSSEReconnect` desactiva el reintento.
+
+Mira la [guía de Cliente](/es-ES/docs/client).
+
+[Cliente](/es-ES/api/client)

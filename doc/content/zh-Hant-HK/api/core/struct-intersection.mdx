@@ -1,0 +1,21 @@
+---
+title: 'struct.intersection'
+description: '要求值同時滿足所有給定 struct 嘅 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+```
+
+`struct.intersection` 係 variadic：每個 struct 都作為獨立參數傳入。
+
+- 用每個 struct 解析 input，再合併結果。
+- 當所有 struct 都係 object struct，輸出係一個包含所有欄位嘅 object。冇任何 struct 聲明過嘅 keys 會被剔走。
+- 當兩個 struct 對同一個 key 產出不相容嘅值，就會以 `invalid_intersection` 失敗。
+- 只傳一個 struct 會原樣回傳。唔傳任何 struct 會 throw `TypeError`，傳入非 struct 參數亦一樣。
+
+`IntersectionStruct<T>` 冇 export。佢係一個 `Struct`，input 同 output 都係各成員 type 嘅交集。
+
+[Struct](/zh-Hant-HK/api/struct)

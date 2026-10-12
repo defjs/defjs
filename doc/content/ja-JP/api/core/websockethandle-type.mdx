@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'クライアントのトランスポートが使う WebSocket インスタンス面です。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+イベントハンドラープロパティ、`binaryType`、`dispatchEvent`、状態の定数を除いた、DOM の `WebSocket` です。そのため独自実装には、`url`、`protocol`、`extensions`、`bufferedAmount`、`send`、`close`、`addEventListener`、`removeEventListener`、数値の `readyState` が必要です。
+
+トランスポートは、プロパティが存在すれば `binaryType = 'arraybuffer'` をセットします。これは [`WebSocketHandleConstructor`](/ja-JP/api/core/websockethandleconstructor-type) が作るインスタンスの型です。
+
+[Client](/ja-JP/api/client)

@@ -1,0 +1,27 @@
+---
+title: 'OpenTelemetryServerTransportOptions'
+description: 所有传输共享的 options——enabled 和 span hooks，按响应类型泛型化。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions" />
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+```
+
+`TResponse` 是 `responseHook` 收到的内容：HTTP 为 `HttpResponse<unknown>`，SSE 为 `EventStreamHandle<unknown>`，WebSocket 为 `WebSocketSessionLike`。见 [OpenTelemetryServerHttpOptions](/zh-Hans/api/opentelemetry-server/opentelemetryserverhttpoptions-type)、[OpenTelemetryServerSSEOptions](/zh-Hans/api/opentelemetry-server/opentelemetryserversseoptions-type) 和 [OpenTelemetryServerWebSocketOptions](/zh-Hans/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type)。
+
+`enabled` 默认为 `true`；只有 `enabled: false` 才会关闭该传输。旧的布尔开关（`http: false`）和顶层 hook 只会被 TypeScript 类型拒绝，没有运行时检查，所以运行时 `http: false` 仍保持该传输启用，顶层 hook 则被静默忽略。
+
+仅在传入 `tracer` 时运行 span hooks。`startSpanHook` 在其所属传输创建 span 前同步运行。返回属性在内建属性之后应用，因此应用可以覆盖 `url.full` 或其他初始值。Hook 抛错时，Defjs 会用内建属性创建 span、记录 `defjs.otel.hook.error` 事件，并继续请求。`requestHook` 在 span 创建之后、请求发出之前运行；`responseHook` 在传输结果返回之后运行。两者都可以返回 promise，但都不会被 await：抛错或 reject 会以同样方式记录，永远不会阻塞操作或使其失败。`responseHook` 的第三个参数是原始 request。
+
+默认 `url.full` 只把 `request.endpoint` 相对可选 `request.baseEndpoint` 解析，不会追加独立的 `request.queryString`。这条边界不是脱敏；包内没有内建 redactor 或敏感 key 策略。请显式构造应用自有 URL，并按需删除敏感参数：
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+[@defjs/opentelemetry-server](/zh-Hans/api/opentelemetry-server)

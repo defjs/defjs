@@ -1,0 +1,16 @@
+---
+title: 'struct.arrayBuffer'
+description: '接受 ArrayBuffer 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.arrayBuffer" />
+
+```ts
+function arrayBuffer(): Struct<ArrayBuffer, ArrayBuffer>
+```
+
+- 只接受 `ArrayBuffer`。typed array 和其他视图以 `invalid_type` 失败。
+- 作为 body 根时，按字节发送，`Content-Type` 为 `application/octet-stream`。
+- 作为 `output` 或 `error` struct 时，响应 body 会按 `ArrayBuffer` 读取。
+
+[Struct](/zh-Hans/api/struct)

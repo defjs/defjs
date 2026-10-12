@@ -1,0 +1,18 @@
+---
+title: 'WebSocketHandleConstructor'
+description: 'withWebSocketHandle 接受嘅 constructor type。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandleConstructor" />
+
+```ts
+type WebSocketHandleConstructor = {
+  readonly OPEN: number
+} & (new (...args: never[]) => WebSocketHandle)
+```
+
+一個 class 或者 function，用嚟建立 [`WebSocketHandle`](/zh-Hant-HK/api/core/websockethandle-type)，並公開數值型嘅 `OPEN` ready-state 常數。Transport 會將 `readyState` 同 `OPEN` 比較。
+
+呢個 constructor 係用 `new WebSocketImpl(url)` call；設咗 subprotocols 就用 `new WebSocketImpl(url, protocols)`。預設係 `globalThis.WebSocket`，可以用 [`withWebSocketHandle`](/zh-Hant-HK/api/core/withwebsockethandle) 傳入其他實作。
+
+[Client](/zh-Hant-HK/api/client)

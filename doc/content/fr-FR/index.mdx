@@ -1,0 +1,56 @@
+---
+title: Defjs
+description: Commandes HTTP, SSE et WebSocket typées, avec un client explicite et des résultats erreur en premier.
+---
+
+# Defjs
+
+Définis un endpoint, construis une commande opaque, puis exécute-la. Même forme pour HTTP, SSE et WebSocket.
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Defjs ne met pas les résultats en cache, ne relance pas pour toi et ne ferme pas les flux si tu oublies. L’annulation et le nettoyage te regardent.
+
+## Choisis un transport
+
+| Ton besoin                        | Commence par                        | Résultat en succès                                 |
+| --------------------------------- | ----------------------------------- | -------------------------------------------------- |
+| Requête + réponse selon le statut | [HTTP](/fr-FR/docs/http)            | Données décodées + `HttpResponse`                  |
+| Flux d’événements serveur durable | [SSE](/fr-FR/docs/sse)              | Un flux + instantané `open` au démarrage           |
+| Session bidirectionnelle          | [WebSocket](/fr-FR/docs/web-socket) | Une session + instantané `connection` au démarrage |
+
+Tu débutes ? Fais [Bien démarrer](/fr-FR/docs/start), puis prends une [recette](/fr-FR/recipes/get-declared-404). Tu veux le « pourquoi » ? Lis [Décisions de conception](/fr-FR/docs/design-decisions) après avoir exécuté quelque chose.
+
+## Choisis un package
+
+| Package                       | Quand                                                                                                          |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | `createClient` (HTTP + SSE + WebSocket)                                                                        |
+| `@defjs/react`                | `ClientProvider` / `useClient` — voir [React](/fr-FR/docs/integrations/react)                                  |
+| `@defjs/vue`                  | Plugin + `injectClient` — voir [Vue](/fr-FR/docs/integrations/vue)                                             |
+| `@defjs/opentelemetry-server` | Spans, métriques et logs sortants — voir [OpenTelemetry Server](/fr-FR/docs/integrations/opentelemetry-server) |
+
+## Formes de résultat
+
+Les trois transports renvoient un tuple de trois éléments, erreur en premier. Les positions correspondent ; les sens non :
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+En cas d’échec, le deuxième élément vaut `undefined`. Pour HTTP, le troisième vaut aussi `undefined`, car le fault porte les métadonnées de la réponse. Pour SSE et WebSocket, le troisième élément est l’instantané de démarrage s’il a été capturé avant l’échec. Voir [Erreurs](/fr-FR/docs/errors).
+
+## Propriété en une phrase
+
+Annule HTTP quand c’est périmé. Ferme SSE et `await stream.closed`. Ferme WebSocket et `await session.closed`. Sur un serveur, crée le client dans la frontière de la requête quand les options capturent cookies, auth ou données de tenant. Masque les URL, en-têtes et corps avant de les journaliser.
+
+## Recettes liées
+
+- [GET avec un 404 déclaré](/fr-FR/recipes/get-declared-404)
+- [POST JSON](/fr-FR/recipes/post-json)
+- [Annuler un appel HTTP](/fr-FR/recipes/cancel-http)
+- [Consommer un flux SSE](/fr-FR/recipes/consume-sse)
+- [Ouvrir une session WebSocket](/fr-FR/recipes/websocket-session)
+- [Tester avec un handle Fetch local](/fr-FR/recipes/test-with-handle)

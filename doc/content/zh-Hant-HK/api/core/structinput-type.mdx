@@ -1,0 +1,23 @@
+---
+title: 'StructInput'
+description: '取出 struct 所接受 input type 嘅 type helper。'
+---
+
+<ApiReference identity="@defjs/core:StructInput" />
+
+```ts
+type StructInput<T> = T extends { readonly _struct: { readonly input: unknown } } ? T['_struct']['input'] : never
+```
+
+Struct 接受嘅 type，同 [`Infer`](/zh-Hant-HK/api/core/infer-type)（解析成功後回傳嘅 type）相對。`T` 係 struct，或者任何 [`StructLike`](/zh-Hant-HK/api/core/structlike-type)。其他嘢會得出 `never`。
+
+Struct 轉換 input 嗰陣，兩者就會唔同：
+
+```ts
+const Created = struct.date()
+
+type In = StructInput<typeof Created> // Date | number | string
+type Out = Infer<typeof Created> // Date
+```
+
+[Struct](/zh-Hant-HK/api/struct)

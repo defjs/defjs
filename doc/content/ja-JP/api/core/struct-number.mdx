@@ -1,0 +1,15 @@
+---
+title: 'struct.number'
+description: 'NaN を除く number 値を受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.number" />
+
+```ts
+function number(): Struct<number, number>
+```
+
+- `Infinity` を含む `number` 値を受け付けます。`NaN` と数値でない値は `invalid_type` で失敗します。
+- 文字列は型変換されません。
+
+[Struct](/ja-JP/api/struct)

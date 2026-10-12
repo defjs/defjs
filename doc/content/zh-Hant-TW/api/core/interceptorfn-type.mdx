@@ -1,0 +1,14 @@
+---
+title: 'InterceptorFn'
+description: 'HTTP interceptor 的函式簽章。'
+---
+
+<ApiReference identity="@defjs/core:InterceptorFn" />
+
+```ts
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+```
+
+可以檢查或修改 request，然後呼叫 `next(req)`，或用 `makeResponse` 短接。用 `createHttpInterceptor` 包起來才能註冊。
+
+[Interceptors](/zh-Hant-TW/api/interceptors)

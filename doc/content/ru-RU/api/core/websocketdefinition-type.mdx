@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: 'Объект-контракт, который передают в defineWebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming` — struct, которым разбирается каждый полученный фрейм. Фреймы — это JSON-текст.
+- `outgoing` — struct, которым `session.send` валидирует и кодирует сообщение. Без него `send` бросает ошибку.
+- `maxIncomingQueueSize` обязателен и должен быть положительным safe integer. `maxOutgoingQueueSize` должен быть неотрицательным safe integer; по умолчанию `0`, что отключает очередь для сообщений, отправленных, пока сессия в состоянии `reconnecting`.
+- `protocols` — статический список subprotocol по умолчанию. Его переопределяют execute-опция `protocols` и [`withWebSocketProtocols`](/ru-RU/api/core/withwebsocketprotocols).
+- `operation` — статическое имя с низкой кардинальностью для телеметрии.
+- `input` — struct для input команды. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`. Builder может вернуть только `path` и `query`; см. [`WebSocketRequestShape`](/ru-RU/api/core/websocketrequestshape-type).
+
+Недопустимые лимиты очереди сообщаются при выполнении команды как fault `REQ_OPTIONS_INVALID`.
+
+[WebSocket](/ru-RU/api/web-socket)

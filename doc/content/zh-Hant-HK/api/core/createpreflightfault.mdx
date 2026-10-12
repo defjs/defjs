@@ -1,0 +1,17 @@
+---
+title: 'createPreflightFault'
+description: '可能喺任何 response 出現之前就發生嘅 fault 嘅工廠。'
+---
+
+<ApiReference identity="@defjs/core:createPreflightFault" />
+
+```ts
+function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **code** — 具體嘅失敗。
+- **cause** — 底層 value（如果有）。佢嘅 message 會成為 fault message；冇 `cause` 嘅話，code 就係 message。
+- **response** — Metadata，只在 transport 已經有 metadata 可以報告時先有。
+- **Returns** 一個名為 `DefjsFault` 嘅原生 `Error`，帶 `code`；如果有提供 response，亦會帶 `response`。
+
+[Errors](/zh-Hant-HK/api/errors)

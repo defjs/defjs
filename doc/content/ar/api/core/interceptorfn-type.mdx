@@ -1,0 +1,14 @@
+---
+title: 'InterceptorFn'
+description: 'توقيع دالة معترض HTTP.'
+---
+
+<ApiReference identity="@defjs/core:InterceptorFn" />
+
+```ts
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+```
+
+يجوز لها فحص الطلب أو تعديله، ثم استدعاء `next(req)` أو اختصار المسار بـ `makeResponse`. غلّفها بـ `createHttpInterceptor` لتسجيلها.
+
+[المعترضات](/ar/api/interceptors)

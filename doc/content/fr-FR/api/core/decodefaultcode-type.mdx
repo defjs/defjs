@@ -1,0 +1,14 @@
+---
+title: 'DecodeFaultCode'
+description: 'Codes d’un fault qui porte des métadonnées de réponse mais pas de corps.'
+---
+
+<ApiReference identity="@defjs/core:DecodeFaultCode" />
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+```
+
+Les valeurs de `code` de `DecodeFault`. `PreflightFaultCode` désigne tous les autres `FaultCode` sauf `HTTP_STATUS`.
+
+[Erreurs](/fr-FR/api/errors)

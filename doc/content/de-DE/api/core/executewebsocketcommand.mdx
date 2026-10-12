@@ -1,0 +1,26 @@
+---
+title: 'executeWebSocketCommand'
+description: 'Low-Level-Einstieg, der einen WebSocket-Command gegen eine Client-Config öffnet.'
+---
+
+<ApiReference identity="@defjs/core:executeWebSocketCommand" />
+
+```ts
+function executeWebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+  options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+```
+
+Low-Level-Einstieg für `client.execute`. Bevorzuge in Anwendungscode den Client.
+
+- **Returns** `[null, session, connection]` oder `[fault, undefined, connection | undefined]`, wobei der Fault `Fault<undefined>` ist.
+
+WebSocket-Execute-Options können `beforeConnect`, `heartbeat`, `protocols` und `reconnect` des Clients überschreiben.
+
+[WebSocket](/de-DE/api/web-socket)

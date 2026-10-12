@@ -1,0 +1,16 @@
+---
+title: 'struct.date'
+description: '接受 Date、时间戳或日期字符串并输出 Date 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.date" />
+
+```ts
+function date(): Struct<Date | number | string, Date>
+```
+
+- 接受 `Date`、毫秒时间戳或字符串，并用 `new Date(value)` 转换。
+- 输出是 `Date`。产生无效日期的值以 `invalid_type` 失败。
+- 为线上传输编码时，该值变成 ISO 8601 字符串（`toISOString()`）。
+
+[Struct](/zh-Hans/api/struct)

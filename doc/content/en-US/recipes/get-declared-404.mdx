@@ -1,0 +1,26 @@
+---
+title: 'Handle a declared 404'
+description: Execute one GET and branch on typed 200 vs declared 404.
+---
+
+# GET with a declared 404
+
+Declare both success and 404 bodies. Branch on `error.code` and `error.status` — you get typed `error.data` for the declared miss.
+
+See [HTTP](/docs/http) and [Errors](/docs/errors) for details.
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` is a placeholder. With a server that answers `GET /users/7` with `200` and `{ "id": 7, "name": "Ada" }`, the snippet prints:
+
+```txt
+Loaded Ada from 200
+```
+
+A non-2xx status is `HTTP_STATUS`. Declaring `error` gives its body a type; omitting `error`
+leaves `error.data` as `undefined` and the body unread. If a declared `error` body cannot be read
+(wrong media type, invalid JSON, wrong shape), the result is a `RES_*` fault instead. One `error`
+Struct covers every non-2xx status, so use `struct.or(...)` or a discriminated union when the
+shapes differ.

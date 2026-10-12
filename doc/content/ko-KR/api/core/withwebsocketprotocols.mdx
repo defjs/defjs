@@ -1,0 +1,18 @@
+---
+title: 'withWebSocketProtocols'
+description: '핸드셰이크에 쓸 WebSocket 서브프로토콜을 설정하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketProtocols" />
+
+```ts
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+```
+
+RFC 6455에 따라 핸드셰이크 중에 제시할 서브프로토콜을 설정해요. WebSocket 생성자의 두 번째 인자로 전달되며, 목록이 비어 있지 않을 때만 전달돼요.
+
+서버가 특정 서브프로토콜을 요구할 때, 예를 들어 `['json']`이나 `['v1']`일 때만 의미가 있어요.
+
+우선순위는 높은 순서대로 `protocols` execute 옵션, 이 클라이언트 옵션, endpoint 정의의 `protocols`예요.
+
+[클라이언트](/ko-KR/api/client)

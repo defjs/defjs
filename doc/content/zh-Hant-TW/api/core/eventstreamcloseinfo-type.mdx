@@ -1,0 +1,17 @@
+---
+title: 'EventStreamCloseInfo'
+description: 'SSE 串流如何結束：正常 EOF、中止，或帶 fault code 的錯誤。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCloseInfo" />
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+`EventStreamHandle.closed` 的值。`eof` 表示回應正常結束。`aborted` 表示串流被 `close()` 或 dispose 關閉，或它的 signal 被中止；`reason` 與 `cause` 帶著傳給 `close` 的值。`error` 帶著 fault 的 `code`（見 `EventStreamFaultCode`），失敗原因放在 `cause`。
+
+[SSE](/zh-Hant-TW/api/sse)

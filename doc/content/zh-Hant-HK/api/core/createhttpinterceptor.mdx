@@ -1,0 +1,17 @@
+---
+title: 'createHttpInterceptor'
+description: '將 interceptor function 包成帶 tag 嘅 HTTP interceptor。'
+---
+
+<ApiReference identity="@defjs/core:createHttpInterceptor" />
+
+```ts
+function createHttpInterceptor(fn: InterceptorFn): HttpInterceptor
+
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+回傳 `{ kind: 'http', fn }`。Call `next(req)`（可以傳修改過嘅 request），或者用 `makeResponse` short-circuit。`next` 只會執行排喺呢個 interceptor 之後註冊嘅 interceptors，然後去到 fetch handler。HTTP interceptors 唔會為 SSE 或 WebSocket command 執行。
+
+[Interceptors](/zh-Hant-HK/api/interceptors)

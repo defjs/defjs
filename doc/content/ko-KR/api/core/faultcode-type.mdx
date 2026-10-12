@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'Defjs가 보고하는 모든 실패 code의 닫힌 집합이에요.'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+닫힌 집합 하나예요. 첫 `_` 앞의 구간이 class이고, 별도의 `kind` 필드는 없어요.
+
+| Class  | 의미                                                           |
+| ------ | -------------------------------------------------------------- |
+| `HTTP` | 상대가 non-2xx status로 응답했어요.                            |
+| `REQ`  | 요청이 나가지 못했어요. 입력, 실행 옵션, 또는 build 단계예요.  |
+| `NET`  | 쓸 수 있는 응답이 없어요. 취소, 타임아웃, 연결, 잘린 body예요. |
+| `RES`  | 응답은 도착했지만 선언한 대로 읽을 수 없었어요.                |
+| `EXT`  | 파이프라인에 붙인 코드가 던졌어요.                             |
+| `CAP`  | 선언한 buffer 또는 queue 한도를 넘었어요.                      |
+| `ENV`  | 호스트 런타임에 필요한 기능이 없어요.                          |
+
+`switch (fault.code)`가 빠짐없이 처리되도록 집합을 닫아 둬요. 확장은 새 code가 아니라 `cause`로 자기만의 세부를 보고해요.
+
+[오류](/ko-KR/api/errors)

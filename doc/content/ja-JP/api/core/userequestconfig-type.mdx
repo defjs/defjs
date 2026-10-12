@@ -1,0 +1,21 @@
+---
+title: 'UseRequestConfig'
+description: 'HTTP の execute options のうち、進捗コールバックとキャンセルです。'
+---
+
+<ApiReference identity="@defjs/core:UseRequestConfig" />
+
+```ts
+type UseRequestConfig = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+[`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) の HTTP 固有の部分です。`HttpExecuteOptions` はこれに `signal` を足します。
+
+- `onDownloadProgress` と `onUploadProgress` は [`HttpProgressFn`](/ja-JP/api/core/httpprogressfn-type) のコールバックです。`loaded`、`total`、`lengthComputable` を持つ [`HttpProgressEvent`](/ja-JP/api/core/httpprogressevent-type) を受け取ります。
+- キャンセルは `abort` か `timeout` の一方だけで、両方は使えません。型は両方の指定を拒否し、実行時に両方を渡すと `REQ_OPTIONS_INVALID` の fault で失敗します。
+- `timeout` は `2_147_483_647` 以下の正の安全な整数でなければなりません。その呼び出しに限り、[`withTimeout`](/ja-JP/api/core/withtimeout) で設定したデフォルトを置き換えます。`abort` はそのデフォルトと組み合わさります。
+
+[HTTP](/ja-JP/api/http)

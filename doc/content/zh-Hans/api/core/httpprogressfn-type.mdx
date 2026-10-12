@@ -1,0 +1,16 @@
+---
+title: 'HttpProgressFn'
+description: '上传和下载进度的回调类型。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+作为 `HttpExecuteOptions` 中的 `onDownloadProgress` 或 `onUploadProgress` 传入。回调可以异步执行；处理下一个数据块之前，会等待回调完成。无论上传还是下载，回调抛出异常或返回的 Promise 被拒绝时，调用都会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`。调用方取消和 `timeout` 仍优先处理，分别报告 `NET_ABORTED` 和 `NET_TIMEOUT`。只有支持流式发送请求体的运行时（Bun、Node、Deno）才会报告上传进度。在浏览器中，`Blob` / `File`、`ArrayBuffer` 或 `FormData` 请求体会原样发送，不会调用 `onUploadProgress`；`onDownloadProgress` 不受影响。
+
+见 [`HttpProgressEvent`](/zh-Hans/api/core/httpprogressevent-type)、[HTTP 指南](/zh-Hans/docs/http) 和 [Commands](/zh-Hans/docs/commands)。
+
+[HTTP](/zh-Hans/api/http)

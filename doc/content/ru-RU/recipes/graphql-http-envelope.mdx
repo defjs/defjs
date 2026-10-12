@@ -1,0 +1,20 @@
+---
+title: 'Запросы GraphQL'
+description: GraphQL остаётся HTTP 200 плюс прикладной unwrap; у Core нет протокола GraphQL.
+---
+
+# Разверни GraphQL HTTP envelope
+
+Defjs не реализует GraphQL `errorPolicy`. Моделируй wire как HTTP POST, чей builder кладёт query document и variables, а `errors[]` / отсутствующий `data` разворачивай в своём helper’е.
+
+См. [Проектные решения](/ru-RU/docs/design-decisions).
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable
+```
+
+HTTP-успех значит только то, что envelope доехал. Прикладные ошибки остаются в `errors[]`, пока твой unwrap не бросит или не вернёт.

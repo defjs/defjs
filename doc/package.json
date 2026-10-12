@@ -9,11 +9,17 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "vitepress dev",
-    "build": "vitepress build && bun .vitepress/check-links.ts",
-    "docs:build": "bun run build",
-    "test": "bun test ./.vitepress/recipes.spec.ts",
-    "preview": "vitepress preview"
+    "dev": "bun --bun react-router dev",
+    "typegen": "bun --bun react-router typegen",
+    "typecheck": "bun run typegen && bun check --project tsconfig.json && bun check --project examples/tsconfig.json",
+    "build": "bun scripts/build.ts",
+    "test": "bun test ./test",
+    "test:site": "bun test ./e2e",
+    "example:otel-logging": "bun examples/opentelemetry-logging/winston.ts",
+    "preview": "bun scripts/preview.ts"
+  },
+  "dependencies": {
+    "isbot": "^5"
   },
   "devDependencies": {
     "@defjs/core": "workspace:^",
@@ -21,15 +27,28 @@
     "@defjs/react": "workspace:*",
     "@defjs/vue": "workspace:*",
     "@opentelemetry/api": "1.9.1",
+    "@opentelemetry/api-logs": "0.223.0",
+    "@opentelemetry/context-async-hooks": "2.12.0",
     "@opentelemetry/core": "2.12.0",
-    "@shikijs/vitepress-twoslash": "4.5.0",
-    "@types/react": "19.3.0",
-    "oxc-minify": "^0.153.0",
-    "react": "19.3.0",
-    "typescript": "6.0.3",
-    "vitepress": "2.0.0-alpha.20",
-    "vitepress-plugin-llms": "1.14.0",
-    "vitepress-plugin-tabs": "0.9.1",
-    "vue": "3.5.43"
+    "@opentelemetry/instrumentation-pino": "0.69.0",
+    "@opentelemetry/sdk-logs": "0.223.0",
+    "@opentelemetry/sdk-node": "0.223.0",
+    "@opentelemetry/winston-transport": "0.33.0",
+    "@react-router/dev": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@types/mdx": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "fumadocs-core": "catalog:",
+    "fumadocs-mdx": "catalog:",
+    "fumadocs-ui": "catalog:",
+    "pino": "10.4.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:",
+    "vue": "3.5.43",
+    "winston": "3.19.0"
   }
 }

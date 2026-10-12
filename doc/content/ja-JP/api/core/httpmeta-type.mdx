@@ -1,0 +1,20 @@
+---
+title: 'HttpMeta'
+description: 'レスポンスがクライアントに届いていれば常に使える、レスポンスのメタデータです。'
+---
+
+<ApiReference identity="@defjs/core:HttpMeta" />
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+レスポンスのメタデータで、レスポンスがクライアントに届いていれば使えます。`body` は**持ちません**。ボディは、宣言された struct がデコードしたあとにだけ存在します。
+
+[HTTP](/ja-JP/api/http)

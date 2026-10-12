@@ -1,0 +1,16 @@
+---
+title: 'FetchHandle'
+description: '用作 HTTP 或 SSE handle 的、与 fetch 兼容的函数类型。'
+---
+
+<ApiReference identity="@defjs/core:FetchHandle" />
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+Defjs 调用的 `(input, init?) => Promise<Response>` 调用签名。它特意不是 `typeof fetch`，这样 mock 就不必实现 `preconnect` 之类的宿主扩展。自定义 handle 收到的是一个 `Request`；只有库的默认值（全局 `fetch`）才以 `(url, init)` 方式调用。
+
+`withHTTPHandle`、`withSSEHandle` 和 `fetchHandler` 都接受它。
+
+[Client](/zh-Hans/api/client)

@@ -1,0 +1,24 @@
+---
+title: 'StructIssue'
+description: 'struct のパース中に生じた 1 件の検証失敗です。'
+---
+
+<ApiReference identity="@defjs/core:StructIssue" />
+
+```ts
+interface StructIssue {
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  expected: string
+  message: string
+  path: Array<number | string>
+  received: unknown
+}
+```
+
+- `code` は機械可読なカテゴリーです。パーサーが生成するのは `invalid_type`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection`、`missing_key` です。`custom` は型には含まれますが、組み込みの struct は生成しません。
+- `expected` は期待される型または値の説明です。
+- `message` は、任意の [`ErrorMap`](/ja-JP/api/core/errormap-type) による書き換えを経た最終的なテキストです。
+- `path` はパースのルートから失敗した位置までのフィールド名と配列インデックスです。ルートでの失敗では空になります。
+- `received` は `path` で失敗した値です。
+
+[Struct](/ja-JP/api/struct)

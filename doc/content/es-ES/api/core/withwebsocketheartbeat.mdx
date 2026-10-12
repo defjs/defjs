@@ -1,0 +1,29 @@
+---
+title: 'withWebSocketHeartbeat'
+description: 'Opción de cliente que habilita los mensajes de heartbeat de WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHeartbeat" />
+
+```ts
+function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): ClientOption
+```
+
+Habilita mensajes de heartbeat con detección opcional de confirmación. Pasar `undefined` borra un ajuste anterior. El tipo de la opción es:
+
+```ts
+{
+  intervalMs: number
+  isAck?: (message: unknown) => boolean
+  message?: <T = unknown>() => T | unknown
+  timeoutMs?: number
+}
+```
+
+- Cada `intervalMs` se llama a `message()` y su resultado se envía a través del struct `outgoing` del endpoint. No se envía ningún mensaje cuando se omite `message` o devuelve `undefined`.
+- Con `timeoutMs`, se espera una confirmación tras cada heartbeat. `isAck` recibe el mensaje entrante decodificado; cuando devuelve `true`, se limpia el temporizador y ese mensaje **no** se entrega a `receive`.
+- Si no llega ningún ack dentro de `timeoutMs`, o no se puede enviar un heartbeat, la sesión falla. Esto no dispara un reconnect.
+- `intervalMs` y `timeoutMs` deben ser positivos, finitos y como máximo `2_147_483_647`; de lo contrario, execute falla con `REQ_OPTIONS_INVALID`.
+- Un `heartbeat` en las opciones de execute sustituye a este para esa llamada.
+
+[Cliente](/es-ES/api/client)

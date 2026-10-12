@@ -1,0 +1,42 @@
+---
+title: '@defjs/react'
+description: ClientProvider、useClient 和 provider props。
+---
+
+# React
+
+把已有的 `@defjs/core` Client 接到 React 树。这个包**不会**创建、缓存或释放这个 Client。它的入口标有 `'use client'`，所以请在 client component 中导入。需要 React 18 或更高版本。
+
+见 [React 指南](/zh-Hans/docs/integrations/react)。
+
+## ClientProvider
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+Context provider。把 `createClient` 给的 Client 传进去。嵌套的 `ClientProvider` 会覆盖其子树里的 Client；`useClient` 读取最近的那一个。传入不同的 `client` 会改变后代拿到的 context 值。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+```ts
+function useClient(): Client
+```
+
+读最近的 `ClientProvider`。
+
+- **返回** 提供的 Client。
+- **抛出** 在 `ClientProvider` 外面调用时抛出 `Error`。
+
+## ClientProviderProps
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+`client` 必填，由应用持有。`children` 是可以调用 `useClient` 的子树。

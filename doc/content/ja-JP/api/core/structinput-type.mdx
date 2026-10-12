@@ -1,0 +1,23 @@
+---
+title: 'StructInput'
+description: 'struct が受け付ける入力型を取り出す型ヘルパーです。'
+---
+
+<ApiReference identity="@defjs/core:StructInput" />
+
+```ts
+type StructInput<T> = T extends { readonly _struct: { readonly input: unknown } } ? T['_struct']['input'] : never
+```
+
+struct が受け付ける型です。パース成功時に返る型である [`Infer`](/ja-JP/api/core/infer-type) と対になります。`T` は struct、または任意の [`StructLike`](/ja-JP/api/core/structlike-type) です。それ以外は `never` になります。
+
+struct が入力を変換する場合、この 2 つは異なります。
+
+```ts
+const Created = struct.date()
+
+type In = StructInput<typeof Created> // Date | number | string
+type Out = Infer<typeof Created> // Date
+```
+
+[Struct](/ja-JP/api/struct)

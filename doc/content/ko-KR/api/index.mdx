@@ -1,0 +1,36 @@
+---
+title: API 레퍼런스
+description: 워크스페이스 패키지 조회예요. import하는 함수, 옵션, 타입이에요.
+---
+
+# API 레퍼런스
+
+<ApiIndex />
+
+워크스페이스 패키지 조회예요. 시그니처가 계약이에요. 가이드와 레시피는 언제 쓸지 설명해요.
+
+## 패키지
+
+| 패키지                                                           | 여기서 찾는 것                                                    |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/ko-KR/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/ko-KR/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/ko-KR/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/ko-KR/api/opentelemetry-server) | `withOpenTelemetryServer`, 전송별 옵션                            |
+
+## @defjs/core
+
+| 페이지                                  | 여기서 찾는 것                                                   |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/ko-KR/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/ko-KR/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/ko-KR/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/ko-KR/api/errors)             | `Fault` 종류와 팩토리                                            |
+| [Interceptors](/ko-KR/api/interceptors) | HTTP / SSE / WebSocket interceptor 헬퍼                          |
+| [SSE](/ko-KR/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/ko-KR/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## 관련
+
+- [시작하기](/ko-KR/docs/start)
+- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)

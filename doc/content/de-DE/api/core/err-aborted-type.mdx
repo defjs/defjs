@@ -1,0 +1,16 @@
+---
+title: 'ERR_ABORTED'
+description: 'Geteiltes Error-Sentinel, das einen Request als abgebrochen markiert.'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+Geteilter `cause`- und Message-Wert für Abbruch durch den Aufrufer. `createNetworkFault` mappt ihn, ebenso eine `DOMException` namens `AbortError`, auf `NET_ABORTED`. Wirft ein HTTP-Interceptor ihn, löst der Aufruf mit einem `NET_ABORTED`-Fault auf. Werfen SSE- und WebSocket-Interceptors ihn, wird das als `EXT_INTERCEPTOR_FAILED` gemeldet.
+
+Siehe [Errors-Guide](/de-DE/docs/errors).
+
+[Fehler](/de-DE/api/errors)

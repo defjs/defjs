@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: 'fault code からクラスのプレフィックスを取り出します。'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+fault code のクラスは、最初の `_` より前の部分です。`C` は `FaultCode` またはそのユニオンです。`FaultClass<FaultCode>` は `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'` です。
+
+[Errors](/ja-JP/api/errors)

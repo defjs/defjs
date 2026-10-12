@@ -1,0 +1,23 @@
+---
+title: 'withWebSocketBeforeConnect'
+description: '各 WebSocket 接続試行の前にフックを実行するクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketBeforeConnect" />
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+```
+
+最初の WebSocket 接続の前と、再接続のたびにフックを実行します。フックの型は次のとおりです。
+
+```ts
+(context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+```
+
+- `attempt` は最初の接続では `0` で、再接続のたびに 1 ずつ増えます。
+- トークンの更新などの非同期処理には `signal` を渡してください。セッションをキャンセルすると、それらも止まります。
+- フックが throw すると、その試行は `EXT_HOOK_FAILED` の fault で失敗します。
+- execute の options に `beforeConnect` があれば、その呼び出しに限りこれを置き換えます。
+
+[Client](/ja-JP/api/client)

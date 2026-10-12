@@ -1,0 +1,34 @@
+---
+title: 'defineRequest'
+description: '声明带类型的 HTTP 请求 endpoint。'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method`、`path`、可选的 `input` struct、可选的 `output` 与 `error` struct、可选的 `operation`。声明了 `input` 就必须显式提供 `builder`，即使它已经与请求形状一致；只有没有 `input` 的 definition 才可以省略 `builder`。
+- **返回** 一个 endpoint。带上 input 调用它，得到 `HttpCommand`。
+
+`ResponseDeclaration` 和 `BuilderField` 是内部辅助类型：只有对应的类型参数是 struct 时才需要 `output` 与 `error`，声明了 `input` 时 `builder` 是 `(input: BuilderInput<TInput>) => HttpRequestShape`。
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` 是 2xx body 的单个 struct；`error` 是所有非 2xx body 共用的单个 struct。两者都不按状态码区分。省略其中一个，就意味着该 body 永远不会被读取，见[声明即断言](/zh-Hans/docs/design-decisions#声明即断言)。
+
+[HTTP](/zh-Hans/api/http)

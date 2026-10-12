@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: '由 fault code 抽出 class prefix。'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+Fault code 嘅 class 係第一個 `_` 之前嗰段。`C` 係一個 `FaultCode` 或者幾個 `FaultCode` 嘅 union。`FaultClass<FaultCode>` 係 `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`。
+
+[Errors](/zh-Hant-HK/api/errors)

@@ -1,0 +1,40 @@
+---
+title: 'ClientWebSocketOptions'
+description: 'Ajustes WebSocket opcionales: constructor, hook beforeConnect, heartbeat, protocolos y política de reconexión.'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — Constructor de WebSocket; por defecto `globalThis.WebSocket`.
+- **beforeConnect** — Se ejecuta antes de cada intento de conexión y de reconexión.
+- **heartbeat** — Envía `message()` cada `intervalMs`. Con `timeoutMs` e `isAck`, la falta de un acuse de recibo marca la conexión como no saludable. `intervalMs` y `timeoutMs` deben ser positivos y como máximo 2147483647.
+- **protocols** — Subprotocolos que se pasan al constructor.
+- **reconnect** — Opt-in. `attempts` vale **3** por defecto; `0` desactiva el reintento, y omitir `attempts` no significa ilimitado. Otros valores por defecto: `delayMs` 1000, `factor` 2, `jitter` 0 (un factor multiplicativo de 0 a 1), `maxDelayMs` 30000. `shouldReconnect` recibe el `code`, el `reason` y el `wasClean` del cierre y puede vetar un reintento.
+
+Configúralos con `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols` y `withWebSocketReconnect`. `WebSocketExecuteOptions` puede sobrescribir `beforeConnect`, `heartbeat`, `protocols` y `reconnect` por llamada.
+
+Mira la [guía de Cliente](/es-ES/docs/client).
+
+[Cliente](/es-ES/api/client)

@@ -1,0 +1,17 @@
+---
+title: 'EventStreamCloseInfo'
+description: 'Как завершился SSE-поток: чистый EOF, abort или ошибка с кодом fault’а.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCloseInfo" />
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+Значение `EventStreamHandle.closed`. `eof` означает, что ответ завершился штатно. `aborted` означает, что поток закрыт через `close()` или dispose либо его signal был прерван; `reason` и `cause` несут значение, переданное в `close`. `error` несёт `code` fault’а (см. `EventStreamFaultCode`), а сам сбой — в `cause`.
+
+[SSE](/ru-RU/api/sse)

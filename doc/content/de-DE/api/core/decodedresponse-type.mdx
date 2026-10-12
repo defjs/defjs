@@ -1,0 +1,14 @@
+---
+title: 'DecodedResponse'
+description: 'Response-Metadaten plus ein Body, der gegen ein deklariertes Struct dekodiert wurde.'
+---
+
+<ApiReference identity="@defjs/core:DecodedResponse" />
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+Eine Response, deren Body gegen das deklarierte Struct dekodiert wurde. Wer diesen Typ hält, hat damit den Nachweis, dass dekodiert wurde; deshalb meldet ein Decode-Failure allein `HttpMeta`.
+
+[HTTP](/de-DE/api/http)

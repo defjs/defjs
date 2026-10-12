@@ -1,0 +1,16 @@
+---
+title: 'WebSocketInterceptorFn'
+description: 'WebSocket interceptor의 함수 형태예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptorFn" />
+
+```ts
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+`req`를 살펴보거나 바꾼 뒤 [`next`](/ko-KR/api/core/websockethandler-type)를 호출해서 체인을 이어 가요. 또는 자체 [`WebSocketSessionLike`](/ko-KR/api/core/websocketsessionlike-type)를 돌려주고 체인을 단락시킬 수 있어요. `withInterceptors`로 등록하려면 `createWebSocketInterceptor(fn)`으로 감싸세요.
+
+체인은 `execute`마다 한 번 실행돼요. 재연결은 체인이 돌려준 session 안에서 일어나며 체인을 다시 실행하지 않아요.
+
+[인터셉터](/ko-KR/api/interceptors)

@@ -1,0 +1,33 @@
+---
+title: 'ClientOptions'
+description: 'Опции клиента во входной форме, отражающие то, что настраивают хелперы опций.'
+---
+
+<ApiReference identity="@defjs/core:ClientOptions" />
+
+```ts
+interface ClientOptions extends HttpClientOptions {
+  sse?: ClientSSEOptions
+  webSocket?: ClientWebSocketOptions
+}
+
+// Non-exported base, shown inline.
+interface HttpClientOptions {
+  endpoint: string
+  headers?: Headers
+  http?: { handle?: FetchHandle }
+  interceptors?: Interceptor[]
+  querySerializer?: QuerySerializer
+  timeout?: number
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName?: string
+    headerName?: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+}
+```
+
+Пользовательская форма настроек до применения значений по умолчанию. `createClient` не принимает этот объект; настраивай клиент хелперами опций вроде `withEndpoint` и `withTimeout`. Готовый аналог — [`ClientConfig`](/ru-RU/api/core/clientconfig-type).
+
+[Клиент](/ru-RU/api/client)

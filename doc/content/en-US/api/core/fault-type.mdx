@@ -1,0 +1,23 @@
+---
+title: 'Fault'
+description: 'Union of every failure client.execute can return, discriminated by code.'
+---
+
+<ApiReference identity="@defjs/core:Fault" />
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`TErr` is the endpoint's declared `error` struct, or `undefined` when it declares none. `Fault<TErr>` is [`FaultOf`](/api/core/faultof-type) applied to the decoded body type, so it is the union of three variants: [`DecodeFault`](/api/core/decodefault-type), [`HttpStatusFault<TErr>`](/api/core/httpstatusfault-type), and [`PreflightFault`](/api/core/preflightfault-type). Switch on `fault.code`.
+
+Every variant is a native `Error` named `DefjsFault`, so `String(fault)` produces a directly
+loggable `DefjsFault: <message>`. `code` and the variant metadata — `status`, `response`, `data` —
+are enumerable own properties. The native `cause` chain is non-enumerable.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+Call `format()`, `flatten()`, or `prettify()` only after narrowing `fault.cause` to `StructError`;
+those helpers are not copied onto the fault.
+
+[Errors](/api/errors)

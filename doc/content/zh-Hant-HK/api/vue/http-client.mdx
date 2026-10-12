@@ -1,0 +1,14 @@
+---
+title: 'HTTP_CLIENT'
+description: 用嚟提供 Defjs client 嘅 Vue injection key。
+---
+
+<ApiReference identity="@defjs/vue:HTTP_CLIENT" />
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+`createClientPlugin` 用嚟提供 client 嘅 key。建議用 `injectClient()`，唔好用 `inject(HTTP_CLIENT)`，因為冇提供任何嘢時，後者會 return `undefined`。要覆蓋 subtree，用 `provide(HTTP_CLIENT, childClient)`。
+
+[@defjs/vue](/zh-Hant-HK/api/vue)

@@ -1,0 +1,24 @@
+---
+title: 'WebSocketEndpoint'
+description: 'defineWebSocket 返回的可调用对象。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketEndpoint" />
+
+```ts
+type WebSocketEndpoint<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
+```
+
+由 [`defineWebSocket`](/zh-Hans/api/core/definewebsocket) 返回。调用它会创建一个 [`WebSocketCommand`](/zh-Hans/api/core/websocketcommand-type)，再交给 `client.execute`。调用签名取决于 `input`：
+
+- 没有声明 `input`：`() => WebSocketCommand`。
+- `input` 接受 `undefined`：`(input?: StructInput<TInput>) => WebSocketCommand`。
+- 其他情况：`(input: StructInput<TInput>) => WebSocketCommand`。
+
+调用 endpoint 不会发起连接。input 在 command 执行时才被解析。
+
+[WebSocket](/zh-Hans/api/web-socket)

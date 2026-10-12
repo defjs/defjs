@@ -1,0 +1,17 @@
+---
+title: 'EventStreamCloseInfo'
+description: 'SSE ストリームの終わり方です。正常な EOF、中断、または fault code を伴うエラーのいずれかです。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCloseInfo" />
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+`EventStreamHandle.closed` の値です。`eof` はレスポンスが正常に終了したことを表します。`aborted` は、ストリームが `close()` や dispose で閉じられた、またはその signal が中断されたことを表し、`reason` と `cause` には `close` に渡された値が入ります。`error` は fault の `code`（`EventStreamFaultCode` を参照）を持ち、失敗そのものを `cause` として持ちます。
+
+[SSE](/ja-JP/api/sse)

@@ -1,0 +1,24 @@
+---
+title: 'EventStreamFaultCode'
+description: 'رموز الأخطاء التي قد ينتهي بها تدفق SSE.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamFaultCode" />
+
+```ts
+type EventStreamFaultCode = Extract<
+  FaultCode,
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+>
+```
+
+مجموعة جزئية من مجموعة `FaultCode` المشتركة. وهو `code` الخاص بـ `EventStreamCloseInfo` ذي `kind: 'error'`.
+
+[SSE](/ar/api/sse)

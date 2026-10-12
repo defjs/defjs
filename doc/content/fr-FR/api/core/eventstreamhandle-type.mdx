@@ -1,0 +1,32 @@
+---
+title: 'EventStreamHandle'
+description: 'Flux SSE ouvert : itère les événements, lit les métadonnées d’ouverture et ferme tôt.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamHandle" />
+
+```ts
+interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+`EventStreamMessage` est le message brut `{ id: string; event: string; data: string }`. Les handles renvoyés par `client.execute` portent des [`EventStreamData`](/fr-FR/api/core/eventstreamdata-type) parsés.
+
+`open` est l’instantané de démarrage ([`EventStreamOpenInfo`](/fr-FR/api/core/eventstreamopeninfo-type)) ; après un reconnect il peut changer, relis donc `stream.open`. `closed` se résout avec un [`EventStreamCloseInfo`](/fr-FR/api/core/eventstreamcloseinfo-type) quand le flux se termine.
+
+Préfère `await using stream = handle` pour le nettoyage d’une portée possédée. La libération asynchrone (`Symbol.asyncDispose`) arrête la lecture et le travail de reconnect Defjs et attend que son reader lock soit relâché ; elle ne promet pas qu’une promesse `ReadableStream.cancel()` bloquée, contrôlée par le provider, se terminera. `close()` / `closed` manuels restent disponibles.
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+Les implémentations structurelles d’`EventStreamHandle` doivent implémenter `[Symbol.asyncDispose]()` et renvoyer le même chemin de teardown possédé. C’est une exigence à la compilation pour les handles custom ; le code qui ne reçoit que des handles renvoyés par Defjs n’a aucune exigence d’appel runtime supplémentaire.
+
+[SSE](/fr-FR/api/sse)

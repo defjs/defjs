@@ -1,0 +1,18 @@
+---
+title: 'RequestEndpoint'
+description: 'defineRequest が返す、呼び出し可能なエンドポイントです。'
+---
+
+<ApiReference identity="@defjs/core:RequestEndpoint" />
+
+```ts
+type RequestEndpoint<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, HttpCommand<TInput, TOutput, TError>>
+```
+
+`defineRequest` の戻り値です。呼び出すと `HttpCommand` が得られます。エンドポイントが `input` を宣言していなければ引数なし、入力 struct が `undefined` を受け付ければ省略可能な引数、それ以外は struct の入力値を渡します。
+
+[HTTP](/ja-JP/api/http)

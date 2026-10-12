@@ -1,0 +1,17 @@
+---
+title: 'withEndpoint'
+description: '为相对请求路径设置 base URL 的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+设置拼在相对请求路径前面的 base URL。默认是空字符串。
+
+- **endpoint** — 绝对或相对的 base endpoint。
+- 对 WebSocket command，`http:` 的 base 会变成 `ws:`，`https:` 会变成 `wss:`。
+
+[Client](/zh-Hans/api/client)

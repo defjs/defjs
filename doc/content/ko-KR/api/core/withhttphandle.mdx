@@ -1,0 +1,17 @@
+---
+title: 'withHTTPHandle'
+description: 'HTTP 요청에 쓰는 Fetch 함수를 바꾸는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withHTTPHandle" />
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+HTTP 요청에 쓰는 Fetch 호환 함수를 바꿔요. 기본값은 플랫폼의 `fetch`예요.
+
+- **fetchImpl**은 [`FetchHandle`](/ko-KR/api/core/fetchhandle-type)로, `(input, init?) => Promise<Response>` 호출 시그니처예요. `typeof fetch`가 아니므로 테스트 더블에 `fetch.preconnect` 같은 호스트 전용 멤버가 필요 없어요.
+- HTTP에만 영향을 줘요. SSE는 [`withSSEHandle`](/ko-KR/api/core/withssehandle)을 써요.
+
+[클라이언트](/ko-KR/api/client)

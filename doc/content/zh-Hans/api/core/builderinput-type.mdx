@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'request builder 收到的、已解析的 endpoint input 类型。'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+`builder` 看到的、已经 parse 过的 endpoint input。对象节点带着产出它的 struct（内部的 `Typed` brand），所以 alias、`Date`、`bigint` 编码会跟着这个值进入请求。record 条目和 tuple 元素以同样方式带上 brand。运行时，parse 出的值是对象时，record 容器也会被标记；array 和 tuple 容器不会，`null` 与 `undefined` 也永远不会被标记。nullish 修饰符会还原它所包裹的 struct，union 的各个选项会分别处理，intersection 的各个选项会合并。其他 struct 退回到 `Infer<S>`。
+
+`CarriedStruct`、`NullishBuilderInput`、`IntersectBuilderInputs` 和 `Typed` 是内部辅助类型。
+
+[HTTP](/zh-Hans/api/http)

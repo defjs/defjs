@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'SSE の自動再接続を有効にするクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+SSE ストリームが失敗したあとの自動再接続を設定します。再接続はオプトインで、この option がなければ失敗したストリームはリトライされません。`undefined` を渡すと、先の設定を解除します。
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` は最初の試行のあとのリトライ回数の上限です。`reconnect` を置いたときのデフォルトは `3` で、`0` はリトライを無効にします。省いても無制限にはなりません。
+- `shouldReconnect` がなければ、再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` だけです。指定されていれば、`POST` を含むすべてのメソッドについて、その戻り値で再接続するかどうかを決めます。コンテキストの `method` でエンドポイントを区別できます。この失敗に対するリトライを止めるには `false` を返します。`attempts` の上限を確認する前に実行されます。
+- `ReadableStream` をボディに持つリクエストは再接続せず、そのリクエストに対して `shouldReconnect` が呼ばれることもありません。
+- `delayMs`、`factor`、`jitter`（0 から 1）、`maxDelayMs` がバックオフの形を決めます。`factor` のデフォルトは `1`、`jitter` は `0` です。
+- `delayMs` は開始時の基準の待ち時間（デフォルトは `1000`）にすぎません。サーバーの `retry:` フィールド（数字のみ、ミリ秒）があれば、以降の試行ではそれに置き換わります。
+- 最後のイベント id は、次の試行で `Last-Event-ID` としてもう一度送られます。
+
+ストリームハンドルは [SSE](/ja-JP/api/sse) を見てください。
+
+[Client](/ja-JP/api/client)

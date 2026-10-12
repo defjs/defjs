@@ -1,0 +1,17 @@
+---
+title: 'EventStreamCloseInfo'
+description: 'SSE 스트림이 끝난 방식이에요. 정상 EOF, 중단, 또는 fault code가 붙은 오류예요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCloseInfo" />
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+`EventStreamHandle.closed`의 값이에요. `eof`는 응답이 정상적으로 끝났다는 뜻이에요. `aborted`는 `close()`나 dispose로 스트림을 닫았거나 signal이 abort되었다는 뜻이며, `reason`과 `cause`는 `close`에 넘긴 값을 담아요. `error`는 fault `code`(`EventStreamFaultCode` 참고)와 실패 원인을 `cause`로 담아요.
+
+[SSE](/ko-KR/api/sse)

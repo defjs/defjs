@@ -1,0 +1,21 @@
+---
+title: 'struct.intersection'
+description: 'Struct that requires a value to satisfy every given struct.'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+```
+
+`struct.intersection` is variadic: pass each struct as its own argument.
+
+- Parses the input with every struct and merges the results.
+- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.
+- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.
+- A single struct is returned unchanged. Calling it with no structs throws `TypeError`, and so does a non-struct argument.
+
+`IntersectionStruct<T>` is not exported. It is a `Struct` whose input and output are the intersections of the member types.
+
+[Struct](/api/struct)

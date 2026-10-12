@@ -1,0 +1,18 @@
+---
+title: 'WebSocketHandleConstructor'
+description: 'withWebSocketHandle が受け取るコンストラクタ型です。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandleConstructor" />
+
+```ts
+type WebSocketHandleConstructor = {
+  readonly OPEN: number
+} & (new (...args: never[]) => WebSocketHandle)
+```
+
+[`WebSocketHandle`](/ja-JP/api/core/websockethandle-type) を作り、数値の ready state 定数 `OPEN` を公開しているクラスまたは関数です。トランスポートは `readyState` を `OPEN` と比較します。
+
+`new WebSocketImpl(url)` として呼ばれ、サブプロトコルが設定されているときは `new WebSocketImpl(url, protocols)` として呼ばれます。デフォルトは `globalThis.WebSocket` です。別のものを渡すには [`withWebSocketHandle`](/ja-JP/api/core/withwebsockethandle) を使います。
+
+[Client](/ja-JP/api/client)

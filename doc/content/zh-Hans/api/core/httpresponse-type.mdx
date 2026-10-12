@@ -1,0 +1,22 @@
+---
+title: 'HttpResponse'
+description: 'transport 产生、interceptor 所见的线上形状 HTTP 响应。'
+---
+
+<ApiReference identity="@defjs/core:HttpResponse" />
+
+```ts
+type HttpResponse<R> = {
+  readonly [HTTP_RESPONSE]: true // internal brand; build values with makeResponse
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+transport 产生、interceptor 所见的线上形状：`body` 是文本或已解析的 JSON，而不是解码后的值。没有 body 时 `body` 是 `undefined`；JSON 的 `null` 仍是 `null`。对 JSON 表示形式，字符串是 JSON 字符串根，不会被再次解析；字节和 blob 是原始数据，会解析一次。`ok` 在 2xx 时为 true。transport 失败是 fault，绝不是响应。到达调用方的是 `DecodedResponse`。
+
+[HTTP](/zh-Hans/api/http)

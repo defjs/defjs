@@ -1,0 +1,17 @@
+---
+title: 'HttpInterceptor'
+description: 'معترض HTTP موسوم تقبله خيارات معترضات العميل.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptor" />
+
+```ts
+interface HttpInterceptor {
+  kind: 'http'
+  fn: InterceptorFn
+}
+```
+
+يُنشأ بـ `createHttpInterceptor`. `kind` هو الحقل المميِّز الذي يتيح لـ `withInterceptors` قبول معترضات HTTP وSSE وWebSocket في قائمة واحدة.
+
+[المعترضات](/ar/api/interceptors)

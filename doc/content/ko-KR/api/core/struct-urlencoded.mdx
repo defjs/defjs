@@ -1,0 +1,18 @@
+---
+title: 'struct.urlencoded'
+description: '요청 body일 때 URL 인코딩 폼으로 인코딩되는 객체 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.urlencoded" />
+
+```ts
+function urlencoded<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+[`struct.object()`](/ko-KR/api/core/struct-object)처럼 파싱하고, `urlencoded` 코덱 태그를 지녀요.
+
+- 태그는 이 struct의 값이 요청 body 루트일 때만 적용돼요. 그러면 body는 `application/x-www-form-urlencoded;charset=UTF-8`의 `URLSearchParams`로 보내요.
+- 배열은 필드 이름을 반복하고 `undefined` 필드는 건너뛰어요. 중첩 객체나 `Blob`은 요청을 `REQ_BUILD_FAILED`로 실패시켜요.
+- `struct.parse`는 태그를 무시해요. `URLSearchParams` 인스턴스는 받지 않고 plain 객체만 받아요.
+
+[Struct](/ko-KR/api/struct)

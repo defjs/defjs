@@ -1,0 +1,16 @@
+---
+title: 'HttpProgressFn'
+description: 'Callback-Typ für Upload- und Download-Progress.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+Wird in `HttpExecuteOptions` als `onDownloadProgress` oder `onUploadProgress` übergeben. Callbacks dürfen asynchron sein und werden mit `await` abgewartet, bevor der nächste Chunk verarbeitet wird. Wirft ein Callback einen Fehler oder wird das von ihm zurückgegebene Promise abgelehnt, scheitert der Aufruf mit `EXT_OBSERVER_FAILED`; der geworfene Wert wird als `cause` gespeichert. Das gilt für Downloads und Uploads gleichermaßen. Ein Abbruch durch den Aufrufer und `timeout` haben weiterhin Vorrang und führen zu `NET_ABORTED` / `NET_TIMEOUT`. Der Upload-Fortschritt wird nur in Runtimes gemeldet, die Request-Bodys streamen können (Bun, Node, Deno). In Browsern wird ein `Blob`-/`File`-, `ArrayBuffer`- oder `FormData`-Body unverändert gesendet und `onUploadProgress` nicht aufgerufen; `onDownloadProgress` bleibt unberührt.
+
+Siehe [`HttpProgressEvent`](/de-DE/api/core/httpprogressevent-type), [HTTP-Guide](/de-DE/docs/http) und [Commands](/de-DE/docs/commands).
+
+[HTTP](/de-DE/api/http)

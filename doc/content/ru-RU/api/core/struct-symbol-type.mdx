@@ -1,0 +1,16 @@
+---
+title: 'STRUCT'
+description: 'Экспорт только для типов: внутренний ключ-тег, который использует исходящий кодировщик.'
+---
+
+<ApiReference identity="@defjs/core:STRUCT" />
+
+```ts
+declare const STRUCT: unique symbol
+```
+
+`STRUCT` экспортируется только как **тип** (`export type { STRUCT }`). В `@defjs/core` нет runtime-экспорта `STRUCT`, поэтому `import { STRUCT } from '@defjs/core'` не компилируется и не даёт значения.
+
+Он называет перечислимый тег, которым помечаются объекты, созданные при разборе input endpoint’а, чтобы исходящий кодировщик знал, какой struct их произвёл. `struct.parse` и декодирование ответа его не ставят. Символ внутренний; код приложения не должен на него опираться.
+
+[Struct](/ru-RU/api/struct)

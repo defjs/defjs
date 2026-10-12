@@ -1,0 +1,14 @@
+---
+title: 'PreflightFaultCode'
+description: '可能从未收到响应的 fault 的 code。'
+---
+
+<ApiReference identity="@defjs/core:PreflightFaultCode" />
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+```
+
+除 `HTTP_STATUS` 和 decode code 之外的所有 `FaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`ENV_UNSUPPORTED`、`EXT_HOOK_FAILED`、`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`、`NET_ABORTED`、`NET_BODY_INCOMPLETE`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`REQ_BUILD_FAILED`、`REQ_INPUT_INVALID` 和 `REQ_OPTIONS_INVALID`。它们就是 `PreflightFault` 的 `code` 取值。
+
+[Errors](/zh-Hans/api/errors)

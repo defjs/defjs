@@ -1,0 +1,23 @@
+---
+title: 'WebSocketConnectionInfo'
+description: 'بيانات وصفية للاتصال الحالي بـ WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketConnectionInfo" />
+
+```ts
+interface WebSocketConnectionInfo {
+  extensions?: string
+  generation: number
+  protocol?: string
+  url?: string
+}
+```
+
+- `url` هو عنوان URL الذي يبلّغ عنه المقبس.
+- `protocol` هو البروتوكول الفرعي المتفاوض عليه، و`extensions` هي الامتدادات المتفاوض عليها. كلاهما `undefined` عندما يبلّغ المقبس عن سلسلة فارغة.
+- `generation` يعدّ المقابس المادية التي بلغت `open`: `1` بعد أول فتح، وواحد إضافي بعد كل إعادة اتصال. اللقطة المأخوذة قبل أي فتح قيمتها `0`.
+
+يحمل `session.connection` دائمًا أحدث لقطة. أما `connection` في نتيجة execute فيبقى أول لقطة ناجحة.
+
+[WebSocket](/ar/api/web-socket)

@@ -1,0 +1,14 @@
+---
+title: 'FaultOf'
+description: '以解码后的错误 body 类型表示的 fault 联合类型。'
+---
+
+<ApiReference identity="@defjs/core:FaultOf" />
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+```
+
+`TData` 是解码后的 `error` body，没有声明 error struct 时为 `undefined`。`Fault<TErr>` 就是把 `FaultOf` 应用到 `Infer<TErr>` 上，`HttpAwaitResult` 用的是 `FaultOf<TErrorData>`。传入的是解码后的类型，而不是 struct：写 `FaultOf<Infer<typeof errorStruct>>`，或者直接用 `Fault<typeof errorStruct>`。
+
+[Errors](/zh-Hans/api/errors)

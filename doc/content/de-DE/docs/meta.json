@@ -1,0 +1,5 @@
+{
+  "title": "Leitfaden",
+  "root": true,
+  "pages": ["index", "..."]
+}

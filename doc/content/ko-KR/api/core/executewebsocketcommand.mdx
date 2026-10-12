@@ -1,0 +1,26 @@
+---
+title: 'executeWebSocketCommand'
+description: '클라이언트 설정을 바탕으로 WebSocket 명령을 여는 저수준 진입점이에요.'
+---
+
+<ApiReference identity="@defjs/core:executeWebSocketCommand" />
+
+```ts
+function executeWebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+  options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+```
+
+`client.execute`의 저수준 진입점이에요. 애플리케이션 코드에서는 클라이언트를 쓰세요.
+
+- **반환** `[null, session, connection]` 또는 `[fault, undefined, connection | undefined]`예요. 여기서 fault는 `Fault<undefined>`예요.
+
+WebSocket 실행 옵션은 클라이언트의 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 덮어쓸 수 있어요.
+
+[WebSocket](/ko-KR/api/web-socket)

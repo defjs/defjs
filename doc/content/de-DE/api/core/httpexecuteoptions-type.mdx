@@ -1,0 +1,19 @@
+---
+title: 'HttpExecuteOptions'
+description: 'Per-Call-Options für einen HTTP-Request: Progress-Callbacks, abort oder timeout und ein signal.'
+---
+
+<ApiReference identity="@defjs/core:HttpExecuteOptions" />
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+Abbruch ist `abort` **oder** `timeout`, nicht beides. `signal` lässt sich mit beiden kombinieren; es ist **kein** Alias für `abort`. Gültige Shapes: `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`. `{ abort, timeout }` ist ungültig und lässt den Aufruf mit einem `REQ_OPTIONS_INVALID`-Fault auflösen. `timeout` muss ein positiver Safe Integer in `1..2_147_483_647` sein.
+
+Fehlt `timeout`, gilt der Default `withTimeout` des Clients; `abort` kombiniert sich mit diesem Default.
+
+[HTTP](/de-DE/api/http)

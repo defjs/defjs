@@ -1,0 +1,17 @@
+---
+title: 'fetchHandler'
+description: 'Transporte HTTP por defecto que realiza una solicitud con fetch.'
+---
+
+<ApiReference identity="@defjs/core:fetchHandler" />
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+- **httpRequest** — Solicitud normalizada (URL, cabeceras, cuerpo, abort signal, hooks de progreso).
+- **fetchImpl** — Un [`FetchHandle`](/es-ES/api/core/fetchhandle-type); por defecto el `fetch` global. Un handle personalizado recibe un `Request`, y su cuerpo se lee chunk por chunk.
+
+Transporte HTTP por defecto. El cliente siempre lo usa; `withHTTPHandle` solo reemplaza el `fetchImpl` al que llama. Se rechaza, en lugar de resolverse con una respuesta sintética, cuando ninguna respuesta llegó al cliente.
+
+[HTTP](/es-ES/api/http)

@@ -1,0 +1,41 @@
+---
+title: 'WebSocketSession'
+description: '型付きの WebSocket セッション: 送信、受信、状態の観察、close を行います。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSession" />
+
+```ts
+interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<TIncoming>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  send(message: TOutgoing): void
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+}
+```
+
+- `state` は論理的な [`WebSocketState`](/ja-JP/api/core/websocketstate-type)、`connection` は最新の [`WebSocketConnectionInfo`](/ja-JP/api/core/websocketconnectioninfo-type) です。`bufferedAmount` はネイティブの未送信バイト数で、物理ソケットがなければ `0` です。
+- `receive` は、`incoming` struct でパース済みの受信メッセージを返します。消費者は 1 つだけで、2 つ目のイテレーターを求めると `TypeError` を throw します。パースできないフレームは `onRuntimeError` のリスナーに報告され、スキップされます。
+- `send(message)` は `outgoing` struct でメッセージを検証・エンコードし、JSON テキストを送ります。`open` の間はすぐに送り、`reconnecting` の間は `maxOutgoingQueueSize` が許せばキューに入れ、セッションが書き込み可能でないときは `InvalidStateError` という名前の `DOMException` を throw します。`outgoing` struct が宣言されていない場合、メッセージが struct に合わない場合、キューが無効または満杯の場合にも throw します。
+- `close(code?, reason?)` は close を要求し、ハートビートを止めます。`code` は `1000` か `3000..4999` の範囲、`reason` は UTF-8 で 123 バイト以内でなければならず、不正な引数は状態が変わる前に throw します。
+- `closed` は、論理的な終端の [`WebSocketCloseInfo`](/ja-JP/api/core/websocketcloseinfo-type) で解決されます。
+- `onStateChange` と `onRuntimeError` は、購読解除の関数を返します。
+
+所有するスコープのクリーンアップには `await using ownedSession = session` を選んでください。手動の `session.close()` と `await session.closed` も残っています。
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+非同期 disposer はネイティブ close を要求し、Defjs が所有する teardown を待ちますが、close イベントが無い場合は 1 秒で打ち切り、`TimeoutError` という名前の `DOMException` で reject することがあります。物理 TCP 接続が閉じたことは証明できません。
+
+[WebSocket](/ja-JP/api/web-socket)

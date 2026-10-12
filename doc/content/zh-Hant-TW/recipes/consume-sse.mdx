@@ -1,0 +1,22 @@
+---
+title: '使用 SSE 事件串流'
+description: 開啟型別化的事件串流，迭代一次，然後 close 並 await closed。
+---
+
+# 消費 SSE 串流
+
+每個串流只有一個 async iterator。把 `close` + `await stream.closed` 放在 `finally`，避免提早離開時洩漏 Fetch attempt。
+
+細節見 [SSE](/zh-Hant-TW/docs/sse)。
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com` 是 placeholder。若 server 的第一個 event 是 `message`，data 為 `{ "text": "hello from the server" }`，這段 snippet 會印出：
+
+```txt
+hello from the server
+```
+
+SSE 預設不重試網路或讀取失敗；必須用 `withSSEReconnect(...)` 明確啟用。提供重新連線設定物件後，`attempts` 預設為 `3`；`attempts: 0` 停用重試。未提供 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求會重新連線，而使用 `ReadableStream` 請求主體的請求絕不會重新連線。

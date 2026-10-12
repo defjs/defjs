@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'Распарсенный тип input эндпоинта, который получает builder request’а.'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+Распарсенный input эндпоинта, каким его видит `builder`. Узлы-объекты несут struct, который их произвёл (внутренний бренд `Typed`), поэтому кодирование алиасов, `Date` и `bigint` следует за значением до самого request’а. Записи record и элементы tuple помечаются так же. В runtime контейнер record дополнительно помечается, если распарсенное значение — объект; контейнеры array и tuple не помечаются, а `null` и `undefined` не помечаются никогда. Nullish-модификаторы восстанавливают обёрнутый ими struct, опции union распределяются, а опции intersection объединяются. Любой другой struct сводится к `Infer<S>`.
+
+`CarriedStruct`, `NullishBuilderInput`, `IntersectBuilderInputs` и `Typed` — внутренние вспомогательные типы.
+
+[HTTP](/ru-RU/api/http)

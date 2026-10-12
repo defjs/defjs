@@ -1,0 +1,14 @@
+---
+title: 'HttpInterceptorNext'
+description: 'HTTP インターセプターチェーンの残りを実行する継続です。'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptorNext" />
+
+```ts
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`next(req)` が進むのは**内側**だけです。このインターセプターより後に登録されたインターセプターと、その先の fetch ハンドラーです。外側から `client.execute` を再ディスパッチするものではありません。たとえば 401 のリフレッシュを 1 回行うような安全な再実行をしたい場合は、同じインターセプターから `next` をもう一度呼んでください。外側のレイヤーが 2 回実行されることはありません。チェーンが完了したあとで `next` を呼ぶと、`HTTP interceptor next() cannot be called after the chain has settled` で reject されます。
+
+[Interceptors](/ja-JP/api/interceptors)

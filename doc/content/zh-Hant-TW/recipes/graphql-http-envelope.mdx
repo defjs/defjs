@@ -1,0 +1,20 @@
+---
+title: 'GraphQL 請求'
+description: GraphQL 維持 HTTP 200 加應用程式自己拆封；Core 不附帶 GraphQL 協定。
+---
+
+# 拆開 GraphQL HTTP envelope
+
+Defjs 不實作 GraphQL `errorPolicy`。把 wire 建成 HTTP POST，由 builder 放上 query document 與 variables，再在你自己的 helper 裡拆 `errors[]`／缺少的 `data`。
+
+見 [設計決策](/zh-Hant-TW/docs/design-decisions)。
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable
+```
+
+HTTP 成功只表示 envelope 到了。應用程式錯誤留在 `errors[]`，直到你的拆封函式 throw 或回傳。

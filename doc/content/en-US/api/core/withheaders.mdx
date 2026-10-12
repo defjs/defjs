@@ -1,0 +1,18 @@
+---
+title: 'withHeaders'
+description: 'Client option that sets static default headers for HTTP and SSE requests.'
+---
+
+<ApiReference identity="@defjs/core:withHeaders" />
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+Sets static default headers for HTTP and SSE requests built by this client. WebSocket connections do not use them.
+
+- The `HeadersInit` is copied into a `Headers` object when the option is applied. A later call replaces the earlier headers instead of merging.
+- Headers returned by a request builder replace a default of the same name when the value is a scalar or a `Headers` instance. Array values (a record entry holding an array, or a tuple-array `HeadersInit`) are appended to the default.
+- Per-request or computed credentials, such as a refreshed Bearer token or an HMAC signature, belong in an [interceptor](/api/interceptors), because they need the final body or a fresh value.
+
+[Client](/api/client)

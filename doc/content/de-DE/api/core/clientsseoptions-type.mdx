@@ -1,0 +1,42 @@
+---
+title: 'ClientSSEOptions'
+description: 'Optionale SSE-Einstellungen: Fetch-Handle, Hook für ungültige Events und Reconnect-Policy.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — Fetch-Implementierung, die den Stream öffnet. Ein eigenes Handle erhält einen `Request`.
+- **onInvalidEvent** — Wird aufgerufen, wenn ein Event kein passendes Struct und kein `default`-Struct hat (`'missing-struct'`) oder seine Daten die Validierung nicht bestehen (`'validation-failed'`). Das Event wird übersprungen. Ein Error, den der Hook wirft, schließt den Stream nicht.
+- **reconnect** — Opt-in. Ohne ihn verbindet sich der Stream nie neu. `attempts` hat den Default **3**; `attempts: 0` schaltet Retry aus, und `attempts` wegzulassen heißt nicht unbegrenzt. `delayMs` ist die erste Wartezeit, standardmäßig 1000, und ein vom Server gesendeter `retry:`-Wert ersetzt sie. `factor` multipliziert die Wartezeit nach jedem Versuch und ist standardmäßig 1. `jitter` ist ein multiplikativer Faktor von 0–1, genau wie bei WebSocket, und standardmäßig 0. `maxDelayMs` ist standardmäßig unbegrenzt. Ohne `shouldReconnect` wird die Verbindung nur für Requests mit `GET`, `HEAD`, `OPTIONS`, `PUT` und `DELETE` erneut hergestellt; ist der Callback vorhanden, entscheidet sein Rückgabewert bei jeder Methode über den Reconnect, und sein Kontext enthält `method`. Bei einem Request mit einem `ReadableStream`-Body wird die Verbindung nie erneut hergestellt. Sobald eine Event-ID empfangen wurde, sendet jeder Reconnect sie im Header `Last-Event-ID`.
+
+Setze diese mit `withSSEHandle`, `withSSEOnInvalidEvent` und `withSSEReconnect`. Lässt du `withSSEReconnect` weg, ist Retry ausgeschaltet.
+
+Siehe [Client-Guide](/de-DE/docs/client).
+
+[Client](/de-DE/api/client)

@@ -1,0 +1,16 @@
+---
+title: 'ERR_TIMEOUT'
+description: 'リクエストがタイムアウトしたことを示す、共有の Error センチネルです。'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+タイムアウトを表す、共有の `cause` とメッセージの値です。`createNetworkFault` は、これと名前が `TimeoutError` のエラーを `NET_TIMEOUT` に対応づけます。HTTP インターセプターがこれを throw すると、呼び出しは `NET_TIMEOUT` fault で解決されます。SSE や WebSocket のインターセプターがこれを throw した場合は、`EXT_INTERCEPTOR_FAILED` として報告されます。
+
+[Errors ガイド](/ja-JP/docs/errors) を参照してください。
+
+[Errors](/ja-JP/api/errors)

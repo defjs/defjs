@@ -1,0 +1,152 @@
+---
+title: 'HTTP 请求'
+description: 定义请求，execute，按状态分支，用 signal 或 timeout 取消。
+---
+
+# HTTP
+
+定义 → execute → 看 tuple 分支 → 页面走了就取消。HTTP 环就这些。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/http/basic-setup.ts#example
+</include>
+
+## 解析 URL
+
+`withEndpoint(...)` 要合法绝对 URL。Endpoint pathname 当目录留下；query 和 hash 在 command 解析前丢掉。
+
+<include cwd>examples/http/resolve-url.ts#example</include>
+
+Path 占位符是原始标量，恰好编码一次。空值和 `.` / `..` 会被拒。一个占位符里的斜杠、`?`、`#`、`%`、空格、Unicode 仍是一段编码后的 path——别预先编码。
+
+Definition path 不能含 `?` 或 `#`，也不能是绝对或协议相对。默认 query 编码器接受标量和标量数组（数组重复 key）。嵌套对象会 `REQ_BUILD_FAILED`，除非 client 有 `withQuerySerializer(...)`。`path`、`query`、`headers` 里的 `null` 同样失败。`undefined` 省略。
+
+## 摆放 input
+
+Struct 编码值。`builder` 把它放上去。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
+
+<include cwd lang="typescript">
+  examples/http/place-input.ts#example
+</include>
+
+这个 body 是 `{"display_name":"Ada"}`，`application/json`。Header 的线上名字是 `x-request-id`。调用方和 parse 结果仍用 `displayName`。
+
+优先把带类型的值交过去，别手写线上 key。Alias 在字段上声明一次，两个方向都生效：`output` / `error` / 事件 / incoming frame 把 `display_name` 解成 `displayName`，`body: input.order` 会改写整棵树。同一个 `User` struct 可以既是创建 body，也是 GET 的 output。手写 key 是例外：外层对象是匿名的，alias 不跑。
+
+| Builder 表达式                                  | 线上                                             |
+| ----------------------------------------------- | ------------------------------------------------ |
+| `body: input.profile`                           | 带类型的对象：alias，以及 `Date` / `bigint` 编码 |
+| `body: { profile: input.profile }`              | 外层 key 是字面量，内层对象仍带类型              |
+| `body: { ...input.profile, role: 'admin' }`     | 展开保住 struct；多出来的 key 是字面量           |
+| `body: { name: input.profile.displayName }`     | 匿名父对象：alias 不生效                         |
+| `query: input.query` / `headers: input.headers` | 带类型的扁平对象：alias 变成线上 key             |
+
+展开带类型的对象，同时又写下它的线上 key（`display_name` 挨着 `displayName`）就是 `REQ_BUILD_FAILED`。`path` 或 `headers` 里的嵌套对象同样失败。
+
+引导按每个节点决定，不只在根上。匿名父对象下面新写的对象保留你写下的 key。带类型的父对象下面，同一个对象改用该字段的 struct。
+
+```ts
+body: { row: { id: '42' } }              // 根匿名：发出 id
+body: { ...input, row: { id: '42' } }    // 根带类型，row 字段声明了 alias：发出 wire_id
+```
+
+union 引导同时命中多个分支时，每个分支都编码再比较。线上结果一致就采用；有差异就是 `REQ_BUILD_FAILED`。
+
+混合 intersection（包含非 object 部分）解析时，标签是各匹配部分已有标签的合取；未经解析、新写的混合 intersection 值按匿名对象处理。
+
+### 查询参数
+
+嵌套 query 形状（`a[b]`、`a.b`、逗号列表）是后端约定，所以钩子在 client 上：
+
+<include cwd>examples/http/query-serializer.ts#example</include>
+
+这里的 `query` 是已经编码的线上对象。Alias 已经应用，所以像 `qs` 这样的 serializer 不会丢掉它们。返回的 string 就是 query string。Defjs 不依赖 `qs`。
+
+没有 serializer 时，数组重复 key，嵌套对象是 `REQ_BUILD_FAILED`。builder 返回 `URLSearchParams` 时原样使用，并跳过 serializer。没有 query 时不会调用 serializer。之后 interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
+
+### 请求体
+
+先匹配的赢：
+
+| `body` 值                                              | 发出去的是                                                 | 默认 content type                                     |
+| ------------------------------------------------------ | ---------------------------------------------------------- | ----------------------------------------------------- |
+| 省略 / `undefined`                                     | 没有 body                                                  | —                                                     |
+| 根上带 `urlencoded` 或 `formData` codec 的带类型对象   | `URLSearchParams` / `FormData`；key 是线上名；数组重复 key | 表单类型 / 平台 boundary                              |
+| `FormData`、`URLSearchParams`                          | 原样                                                       | 同上；Defjs 会清掉 `FormData` 上过期的 `Content-Type` |
+| `Blob` / `File`                                        | 原样                                                       | `blob.type`，或 `application/octet-stream`            |
+| `ArrayBuffer`、`TypedArray`、`DataView`                | 原样                                                       | `application/octet-stream`                            |
+| `ReadableStream`                                       | 流式（运行时允许时 `duplex: 'half'`）                      | `application/octet-stream`                            |
+| `string`                                               | 原样                                                       | `text/plain;charset=UTF-8`                            |
+| 普通对象、数组、数字、布尔值、`null`、`Date`、`bigint` | 编码后再 `JSON.stringify`                                  | `application/json`                                    |
+
+在 `headers` 上设 `content-type` 可以覆盖默认。codec tag 只在 body 根生效：`body: { meta: input.form }` 是 JSON，表单字段是普通 JSON 字段。string 是原始文本；`"abc"` 这种 JSON 字符串需要 `JSON.stringify` 加上 `application/json`。`undefined` 字段省略；`nullable` 字段发出 `null` 就是 JSON `null`。
+
+JSON 的每一层都必须是 JSON 数据：普通对象、数组、字符串、有限数值、布尔值和 `null`，以及 `toJSON()` 返回上述数据的值，例如 `Date` 或 `URL`。其他值无论出现在根节点还是嵌套层级，都会在发送任何内容之前导致 `REQ_BUILD_FAILED`，而不会被转换成 `{}`、`null` 发送，也不会被当作无请求体处理。这些值包括 `Map` 或 `Set`、没有 `toJSON` 的类实例、函数、`NaN`、Node 的 `Readable` 或可迭代对象或异步可迭代对象，包括带有 `Symbol.iterator` 或 `Symbol.asyncIterator` 方法的对象字面量。错误消息会指出具体字段。作为 `query` 或 `headers` 给出的可迭代对象会以同样的方式失败，而不会被丢弃；请以数组形式传入标头键值对。发送流时，应使用 Web `ReadableStream`：通过 `ReadableStream.from(iterable)` 或 `Readable.toWeb(readable)` 转换。`body` 类型会在编译期拒绝其中大多数值；使用 `interface` 类型的值或类实例时，需要通过 `{ ...value }` 展开。
+
+`GET` 和 `HEAD` 不能返回 body——这是类型错误。WebSocket builder 不能返回 `headers` 或 `body`。
+
+<include cwd lang="typescript">
+  examples/http/body.ts#example
+</include>
+
+你自己跑的 `JSON.stringify`、`qs` 或 protobuf 看到的是逻辑名。那条路上 alias 不生效。没有公开的 `struct.encode`。
+
+builder 可以按真实 input 分支，每种情况返回不同 body（JSON 记录、`File`，或 `URLSearchParams`）。原生 `Headers` 也会原样传过去，不会重新编码。
+
+## body 怎么读
+
+`output` 是 2xx body 的单一 Struct；`error` 是其余一切的单一 Struct。struct kind 选出表示：`string` 是原始文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余 kind 是 JSON。两边都没声明时，body 根本不会被读。
+
+顺序：
+
+1. `ok` 挑边：2xx 走 `output`，其余走 `error`。永不两者都走。
+2. 那一侧没声明 → body 根本不会被读。2xx 成功且 `data === undefined`；非 2xx 是 `HTTP_STATUS` 且 `data === undefined`。你没声明的那一侧 body 读不出来会被整个忽略，连「它读不出来」这件事也忽略。
+3. 媒体类型在读 body **之前**就检查。不匹配就是 `RES_MEDIA_TYPE_INVALID`，不解析也不解码。
+4. 读取表示。失败是 `RES_DECODE_FAILED`。传输来的 JSON 只解析一次：该值上的字符串是 JSON 字符串根，不会再次解析；字节和 blob 仍是原始数据，只解析一次。
+5. Struct 解析值。失败是 `RES_STRUCT_MISMATCH`。
+6. 2xx → 结果加一个带类型的 `response.body`；非 2xx → `HTTP_STATUS` 上带类型的 `data`。
+
+对于声明过的一侧，内置 Fetch 传输在响应还在 interceptor 链里时就执行第 3、4 步，所以 interceptor 收到的响应，其 `body` 已经是解析后的 JSON、文本、`Blob` 或字节；这些步骤失败时，仍以同样的 `RES_*` fault 报出，body 流中断时则是 `NET_BODY_INCOMPLETE`。第 5 步在链之后只执行一次，因此 interceptor 用 `makeResponse(...)` 造的响应，和线上来的走同一套媒体类型检查、表示转换和 Struct。对于 JSON 表示，字符串 body 是 JSON 字符串根。
+
+成功的响应是 `DecodedResponse<T>`：`url`、`status`、`statusText`、`headers`、`ok`，外加一个带类型的 `body`。什么都没解码时你拿到 `HttpMeta`——同样的字段，只是没有 `body`。`ok` 只表示 `200 <= status < 300`。两者都不是原生 `Response`。传输失败是 fault，所以不存在代表它的 status-0 响应。
+
+## 取消工作
+
+执行 options 收 `signal`，再配 `abort` 或 `timeout` 其一。**`abort` 和 `timeout` 互斥。** `signal` 可以跟其中任一个搭配。
+
+<include cwd>examples/http/cancel.ts#example</include>
+
+`timeout` 必须是 `1..2_147_483_647` 的正 safe integer。省略 `timeout` 的调用使用 Client 的 `withTimeout` 默认值。识别出的取消 → `NET_ABORTED`；执行超时 → `NET_TIMEOUT`；interceptor `throw` → `EXT_INTERCEPTOR_FAILED`，但 `ERR_ABORTED` / `ERR_TIMEOUT` 例外，它们给出 `NET_ABORTED` / `NET_TIMEOUT`；其他 Fetch 失败 → `NET_UNREACHABLE`。服务端已接受写入后的取消，**不能**证明写入回滚了。
+
+## 凭据与 XSRF
+
+`withCredentials(true)` 给 HTTP 和 SSE 设 Fetch `credentials: 'include'`。它不创建 `Authorization`，也不配置 WebSocket 鉴权。`false` 则不指定 credentials。
+
+`withXSRF(...)` 只作用于 HTTP。默认：`cookieName: 'XSRF-TOKEN'`，`headerName: 'X-XSRF-TOKEN'`。Header 只在非安全方法、调用方还没设、且（在浏览器中）是同源请求时注入。跳过 `GET`、`HEAD`、`OPTIONS`、`TRACE`。浏览器外若要注入，传同步的请求作用域 `tokenProvider`。
+
+日常日志里别带 credentials、XSRF token、query 字符串。别把 query 当通用凭证通道。
+
+## 进度与 Fetch 边界
+
+`onDownloadProgress` 在声明过的响应 body 被读取时跑。只有正的 `Content-Length` 时 `lengthComputable` 才为 true。那一侧没有 struct → body 不会被读 → 也没有 body 读取进度。
+
+`onUploadProgress` 会在 Fetch 读取 `ReadableStream<Uint8Array>` 请求体时报告进度。只有支持流式发送请求体的运行时才会报告上传进度：在 Bun、Node 和 Deno 中，Defjs 还会把 `Blob` / `File`、`ArrayBuffer` 和 `FormData` 请求体转成流，因此这些请求体也会报告进度。浏览器不进行这种转换，因为 Chromium 只有在 HTTP/2 或更高版本中才能流式发送请求体，而 Firefox 完全不支持流式发送请求体；在浏览器中，上述请求体会原样发送，不会调用 `onUploadProgress`。JSON、文本、`URLSearchParams` 和类型化数组请求体会整体发送，不产生进度事件。长度未知的流，`total` 为 `0`（即 `lengthComputable` 为 `false`）。在不支持流式发送请求体的运行时（例如 Firefox）中，传入 `ReadableStream` 请求体会在发送任何内容之前以 `ENV_UNSUPPORTED` 失败；底层原因的错误消息为 `ERR_STREAMING_REQUEST_UNSUPPORTED`。在 Chromium 中，发送 `ReadableStream` 请求体需要 HTTP/2 或更高版本；使用 HTTP/1.1 时，调用会以 `NET_UNREACHABLE` 失败。`onDownloadProgress` 在每个运行时中的行为都相同。
+
+无论上传还是下载，进度回调抛出异常或返回的 Promise 被拒绝时，调用都会以 `EXT_OBSERVER_FAILED` 失败，抛出的值作为 `cause`。调用方取消和 `timeout` 仍分别报告 `NET_ABORTED` / `NET_TIMEOUT`。
+
+`fetchHandler(httpRequest, fetchImpl?)` 是更底层的 Fetch 边界：拼原生 `Request`、调 Fetch、读表示、返回 `HttpResponse`。它**不**校验 command 输入、不按 `output` 分派、不跑 interceptor。适合注入传输测试——不能替代 `client.execute`。
+
+## 重放限制
+
+Defjs **不会**自动重试 HTTP。重试读仍要有审过的超时/网络/重复策略。重试 mutation 需要可重放字节、服务端支持、绑定鉴权作用域 + 请求字节的幂等 key，以及接收方去重策略。
+
+Client/command/Fetch 边界没法知道失败写入是否已提交。重放决策放在应用或审过的 interceptor。Interceptor 可以短路或替换底层请求；最终状态和 body 仍须满足 command 契约。
+
+## 相关操作示例
+
+- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)
+- [POST JSON](/zh-Hans/recipes/post-json)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)
+- [用本地 Fetch handle 做测试](/zh-Hans/recipes/test-with-handle)

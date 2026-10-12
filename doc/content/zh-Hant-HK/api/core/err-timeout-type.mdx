@@ -1,0 +1,16 @@
+---
+title: 'ERR_TIMEOUT'
+description: '標記 request 已 timeout 嘅共用 Error sentinel。'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+Timeout 時共用嘅 `cause` 同 message 值。`createNetworkFault` 會將佢，仲有任何名為 `TimeoutError` 嘅 error，映射去 `NET_TIMEOUT`。HTTP interceptor throw 呢個 sentinel，call 會以 `NET_TIMEOUT` fault resolve。SSE 同 WebSocket interceptors throw 佢嘅話，就會被報告為 `EXT_INTERCEPTOR_FAILED`。
+
+睇 [Errors guide](/zh-Hant-HK/docs/errors)。
+
+[Errors](/zh-Hant-HK/api/errors)

@@ -1,0 +1,23 @@
+---
+title: 'withWebSocketBeforeConnect'
+description: 'Client-Option, die vor jedem WebSocket-Verbindungsversuch einen Hook ausführt.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketBeforeConnect" />
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+```
+
+Führt einen Hook vor dem ersten WebSocket-Connect und vor jedem Reconnect aus. Der Hook-Typ ist:
+
+```ts
+(context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+```
+
+- `attempt` ist `0` beim ersten Connect und wächst bei jedem Reconnect um eins.
+- Reiche `signal` an Token-Refreshes und andere asynchrone Arbeit weiter, damit ein Abbruch der Session sie stoppt.
+- Wirft der Hook, scheitert der Versuch mit einem `EXT_HOOK_FAILED`-Fault.
+- Ein `beforeConnect` in den Execute-Options ersetzt dieses für den Aufruf.
+
+[Client](/de-DE/api/client)

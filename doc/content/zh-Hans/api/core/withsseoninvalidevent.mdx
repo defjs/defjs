@@ -1,0 +1,27 @@
+---
+title: 'withSSEOnInvalidEvent'
+description: '观察没有 struct 或未通过校验的 SSE 事件的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withSSEOnInvalidEvent" />
+
+```ts
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+为没有匹配的事件 struct、或未通过校验的 SSE 事件注册一个回调。回调收到：
+
+```ts
+{
+  reason: 'missing-struct' | 'validation-failed'
+  message: { id: string; event: string; data: string }
+  cause?: unknown
+  signal: AbortSignal
+}
+```
+
+- 无效事件**一律被丢弃**，不会交给 stream。回调只是观察它。
+- 返回值会被忽略。回调抛出的错误会被吞掉，不会关闭 stream，除非 `signal` 已经中止。
+- `validation-failed` 时会设置 `cause`。没有 handler 时，无效事件被静默丢弃。
+
+[Client](/zh-Hans/api/client)

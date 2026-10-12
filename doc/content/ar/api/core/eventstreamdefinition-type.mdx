@@ -1,0 +1,28 @@
+---
+title: 'EventStreamDefinition'
+description: 'العقد الذي يصف نقطة نهاية SSE لـ defineEventStream.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamDefinition" />
+
+```ts
+type EventStreamDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EventStreamDefinitionBase<TEvents> &
+  EventStreamErrorField<TError> & {
+    builder?: OutboundBuilder
+    input?: TInput
+  }
+```
+
+الأعضاء المركَّبة هي:
+
+- `events` و`maxBufferSize` و`maxQueueSize` (الحدّان إلزاميان وهما أعداد صحيحة آمنة موجبة)، و`method` و`operation` اختياريان، و`path` إلزامي.
+- `error`، وهو إلزامي فقط عندما يكون `TError` هو struct. يفكّ جسم مصافحة فاشلة (استجابة غير 2xx). قاعدة النوع هي نفسها في HTTP: `string` نص، و`blob` و`file` كائنات blob، و`arrayBuffer` بايتات، وكل ما عدا ذلك JSON.
+- `input` و`builder`. شكل الطلب يطابق HTTP، بما في ذلك `body`؛ و`GET` و`HEAD` لا يمكنهما إرجاع جسم. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+
+`EventStreamDefinitionBase` و`EventStreamErrorField` نوعان مساعدان داخليان.
+
+[SSE](/ar/api/sse)

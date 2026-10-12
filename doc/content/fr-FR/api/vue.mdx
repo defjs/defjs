@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: 'Plugin Vue, clé d’injection et injectClient.'
+---
+
+# Vue
+
+Fournis un client `@defjs/core` existant à une app Vue. Ce paquet ne crée pas, ne met pas en cache et ne libère pas le client. Vue 3 ou plus récent est requis.
+
+Voir le [guide Vue](/fr-FR/docs/integrations/vue).
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — Instance issue de `createClient`.
+- **Renvoie** un plugin Vue pour `app.use(...)`. L’installer appelle `app.provide(HTTP_CLIENT, client)`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+Lit le provider `HTTP_CLIENT` le plus proche. Appelle-le là où `inject` est autorisé, par exemple dans `setup()`.
+
+- **Renvoie** le client injecté.
+- **Lève** une `Error` si aucun client n’a été fourni, par exemple quand le plugin n’a pas été installé.
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+Clé d’injection Vue. Préfère `injectClient()` à `inject(HTTP_CLIENT)`. Remplace un sous-arbre avec `provide(HTTP_CLIENT, childClient)`.

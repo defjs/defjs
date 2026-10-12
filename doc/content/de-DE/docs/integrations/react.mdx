@@ -1,0 +1,73 @@
+---
+title: 'React'
+description: Provider installieren, Client lesen, User laden und abbrechen, wenn der Effect neu läuft.
+---
+
+# React
+
+Verdrahte einen bestehenden `@defjs/core`-Client in einen React-Tree. Du bekommst Context und `useClient()`. Das Paket erzeugt **keinen** Client, fügt keinen Cache hinzu, wiederholt keine Commands und gibt keine Transport-Resources frei. Die Komponente, der Effect oder die Data-Library, die Arbeit startet, besitzt sie.
+
+## Grundeinrichtung
+
+Installiere `@defjs/core`, `@defjs/react` und React 18+. ESM:
+
+`bun add @defjs/core @defjs/react react`
+
+Stelle den Client bereit, lade dann einen User und brich bei einer Änderung ab:
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+<include cwd>examples/react/basic-setup.tsx#example</include>
+
+`ClientProvider` ist ein normaler Context-Provider. Ein anderer `client`-Prop ändert, was Descendants sehen — kein Clone, Replace oder Dispose. Nested Provider erzeugen explizite Boundaries.
+
+React kann einen Effect in Development mehr als einmal aufsetzen und aufräumen. Der Signal-Check stoppt ein veraltetes Promise daran, in den aktuellen Render zu schreiben. Der Tupel-Error bleibt Data.
+
+## Mit `useClient` lesen
+
+`useClient()` gibt den nächsten `Client` zurück. Ruf ihn während Render auf (Komponente oder Custom Hook). Wirft, wenn kein Provider existiert:
+
+<include cwd>examples/react/read-with-use-client.tsx#example</include>
+
+Der Hook liefert nur den Client. Er startet keine Arbeit, subscribed keinen Transport und macht aus dem Error-first-Tupel keine Exception.
+
+## Query-Arbeit besitzen
+
+Eine Query-Library kann Caching, Retries, Unterdrückung veralteter Results und Abbruch besitzen. Gib ihr das Signal, das sie liefert. Für List-Pages umhülle `client.execute(...)` mit TanStack Query (oder ähnlich) — `@defjs/react` bleibt nur DI und liefert **kein** `useRequest`.
+
+<include cwd>examples/react/own-query-work.tsx#example</include>
+
+Wrappe denselben Command nicht in einen zweiten Effect — zwei Owner machen Abbruch und den Umgang mit veralteten Results mehrdeutig.
+
+## Realtime-Arbeit besitzen
+
+SSE- und WebSocket-Handles überleben `client.execute(...)`. Registriere Cleanup vor dem Await von Startup, schließe ein Handle, das nach Disposal ankommt, konsumiere seinen einzelnen Iterator, warte auf sein Terminal-Promise:
+
+<include cwd>examples/react/own-realtime-work.tsx#example</include>
+
+Das `signal`, das an `execute` übergeben wurde, regiert weiterhin eine geöffnete Session. Es im Cleanup abzubrechen beendet die Session als `aborted` und lässt `receive` mit `AbortError` ablehnen; das `catch` oben ignoriert daher Errors, sobald der Effect aufgeräumt ist, und meldet nur echte Failures (Queue-Overflow, Heartbeat-Timeout). Ein abgebrochener SSE-Stream beendet stattdessen seinen Iterator normal. Ohne das `catch` wäre eine Ablehnung aus dem Loop eine unbehandelte Promise Rejection.
+
+Dieselbe Regel für `EventStreamHandle`: in `finally` schließen, auf `stream.closed` warten. WebSocket-Consumer müssen auch State-/Runtime-Error-Listener abmelden und `session.receive` weiterlesen — eine ungelesene begrenzte Queue kann überlaufen.
+
+## SSR und Client-Scope
+
+Der Package-Entry ist eine Client-Component-Boundary. Eine Browser-App kann einen Module-scoped Client teilen, wenn Endpoint, Interceptors und captured State browser-safe und request-independent sind. Für SSR erzeuge einen separaten Client innerhalb jeder Request-Grenze, wenn Headers, Cookies, User, Tenants oder Credentials differieren.
+
+Provider-Unmount bricht HTTP **nicht** ab, schließt SSE/WebSocket nicht, meldet keine Listener ab und ruft kein `dispose` auf. `@defjs/react` hat keine solche Lifecycle-API. Der Code, der jede Operation startet, muss sie beenden oder abbrechen.
+
+## Referenz
+
+Öffentliche Exports aus `@defjs/react`:
+
+- `ClientProvider` — akzeptiert `ClientProviderProps`, provides den gelieferten Client
+- `useClient` — nächster Client, oder wirft
+- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
+
+Erzeuge Clients und Options in `@defjs/core`. Siehe [Client](/de-DE/docs/client), [Fehler](/de-DE/docs/errors), [SSE](/de-DE/docs/sse) und [WebSocket](/de-DE/docs/web-socket).
+
+## Verwandte Rezepte
+
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)
+- [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)
+- [SSE-Stream konsumieren](/de-DE/recipes/consume-sse)
+- [WebSocket-Session öffnen](/de-DE/recipes/websocket-session)

@@ -1,0 +1,17 @@
+---
+title: 'createPreflightFault'
+description: '응답이 존재하기 전에 발생했을 수 있는 fault를 만드는 팩토리예요.'
+---
+
+<ApiReference identity="@defjs/core:createPreflightFault" />
+
+```ts
+function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **code** — 구체적인 실패예요.
+- **cause** — 있다면 밑바탕 값이에요. 그 message가 fault의 message가 되고, `cause`가 없으면 code가 그대로 message가 돼요.
+- **response** — 전송 계층이 이미 보고할 메타데이터를 갖고 있던 경우에만 넘겨요.
+- **반환** `code`를 가진, 이름이 `DefjsFault`인 네이티브 `Error`예요. `response`를 넘겼다면 그것도 담겨요.
+
+[오류](/ko-KR/api/errors)

@@ -1,0 +1,14 @@
+---
+title: 'RequestErrorData'
+description: 'Dekodierter Error-Body-Type des deklarierten error-Structs eines Endpoints.'
+---
+
+<ApiReference identity="@defjs/core:RequestErrorData" />
+
+```ts
+type RequestErrorData<TError extends AnyStruct | undefined> = [TError] extends [undefined] ? undefined : Infer<TError>
+```
+
+Der Type des dekodierten Bodys für den deklarierten `error`-Struct, oder `undefined`, wenn keiner deklariert ist.
+
+[HTTP](/de-DE/api/http)

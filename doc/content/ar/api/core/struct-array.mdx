@@ -1,0 +1,18 @@
+---
+title: 'struct.array'
+description: 'struct يحلّل مصفوفة بـ struct واحد للعناصر.'
+---
+
+<ApiReference identity="@defjs/core:struct.array" />
+
+```ts
+function array<S extends StructLike<unknown, unknown, boolean>>(item: S): ArrayStruct<S>
+```
+
+- يحلّل كل عنصر بـ `item` ويُخرج مصفوفة جديدة. وما ليس مصفوفة يفشل بـ `invalid_type` (المتوقع `array`).
+- يتوقف التحليل عند أول عنصر فاشل، ويحمل `issue.path` فهرسه.
+- يرمي `TypeError` عندما لا يكون `item` struct.
+
+`ArrayStruct<S>` غير مُصدَّر. وهو `Struct<StructInput<S>[], Infer<S>[]>`.
+
+[Struct](/ar/api/struct)

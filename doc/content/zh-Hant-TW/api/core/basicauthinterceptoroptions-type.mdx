@@ -1,0 +1,20 @@
+---
+title: 'BasicAuthInterceptorOptions'
+description: 'basic-auth interceptors 的選項，包含自訂的憑證 encoder。'
+---
+
+<ApiReference identity="@defjs/core:BasicAuthInterceptorOptions" />
+
+```ts
+type BasicAuthInterceptorOptions = {
+  encode?: (credential: { username: string; password: string }) => string
+}
+```
+
+`encode` 只取代憑證的 encoder，預設是 ``btoa(`${username}:${password}`)``。interceptor 一律會在回傳的字串前加上 `Basic `，所以只回傳憑證部分：如果回傳 `'Basic abc'`，產生的 header 會是 `Basic Basic abc`。
+
+[`basicAuthHttpInterceptor`](/zh-Hant-TW/api/core/basicauthhttpinterceptor) 與 [`basicAuthSSEInterceptor`](/zh-Hant-TW/api/core/basicauthsseinterceptor) 都接受它。
+
+見 [Interceptors 指南](/zh-Hant-TW/docs/interceptors)。
+
+[Interceptors](/zh-Hant-TW/api/interceptors)

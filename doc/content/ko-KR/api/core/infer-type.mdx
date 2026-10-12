@@ -1,0 +1,19 @@
+---
+title: 'Infer'
+description: 'struct의 파싱된 출력 타입을 추론해요.'
+---
+
+<ApiReference identity="@defjs/core:Infer" />
+
+```ts
+type Infer<T> = T extends { readonly _struct: { readonly output: unknown } } ? T['_struct']['output'] : never
+```
+
+파싱이 성공했을 때 나오는 타입이에요. struct가 디코딩한 값은 `Infer<typeof User>`로, struct가 받아들이는 입력 타입은 `StructInput`으로 얻어요.
+
+```ts
+const User = struct.object({ id: struct.number(), name: struct.string() })
+type User = Infer<typeof User> // { id: number; name: string }
+```
+
+[Struct](/ko-KR/api/struct)

@@ -1,0 +1,41 @@
+---
+title: 'WebSocketSession'
+description: 'Typed WebSocket session: send, receive, observe state, and close.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSession" />
+
+```ts
+interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<TIncoming>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  send(message: TOutgoing): void
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+}
+```
+
+- `state` is the logical [`WebSocketState`](/api/core/websocketstate-type); `connection` is the latest [`WebSocketConnectionInfo`](/api/core/websocketconnectioninfo-type). `bufferedAmount` is the native unsent byte count, or `0` with no physical socket.
+- `receive` yields incoming messages already parsed with the `incoming` struct. It is one-consumer: asking for a second iterator throws a `TypeError`. A frame that cannot be parsed is reported to `onRuntimeError` listeners and skipped.
+- `send(message)` validates and encodes the message with the `outgoing` struct, then sends JSON text. It sends immediately while `open`, queues while `reconnecting` when `maxOutgoingQueueSize` allows, and throws a `DOMException` named `InvalidStateError` when the session is not writable. It also throws when no `outgoing` struct is declared, the message fails the struct, or the queue is disabled or full.
+- `close(code?, reason?)` requests closure and stops the heartbeat. `code` must be `1000` or in `3000..4999`, and `reason` at most 123 UTF-8 bytes; invalid arguments throw before the state changes.
+- `closed` resolves with the logical terminal [`WebSocketCloseInfo`](/api/core/websocketcloseinfo-type).
+- `onStateChange` and `onRuntimeError` return an unsubscribe function.
+
+Prefer `await using ownedSession = session` for owned scope cleanup. Manual `session.close()` and `await session.closed` remain available.
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+The async disposer requests native close and waits for Defjs-owned teardown, but it bounds a missing close event at one second and may reject with a `DOMException` named `TimeoutError`. It cannot prove that the physical TCP connection closed.
+
+[WebSocket](/api/web-socket)

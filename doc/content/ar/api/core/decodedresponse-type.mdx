@@ -1,0 +1,15 @@
+---
+title: 'DecodedResponse'
+description: 'بيانات وصفية للاستجابة مع جسم فُكّ مقابل struct معلَن.'
+---
+
+<ApiReference identity="@defjs/core:DecodedResponse" />
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+استجابة فُكّ جسمها مقابل الـ struct المعلَن. وامتلاك هذا النوع هو نفسه الدليل على أن
+الفكّ قد حدث، ولذلك يُبلِّغ فشل الفكّ عن `HttpMeta` وحده.
+
+[HTTP](/ar/api/http)

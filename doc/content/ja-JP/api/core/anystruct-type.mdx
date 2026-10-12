@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: 'あらゆる struct を受け付ける、広い struct 制約です。'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+`defineRequest`、`Fault`、`HttpCommand` などのエンドポイントやクライアント向けジェネリクスで使われる、広い制約です。入力と出力を正確に推論したい場合は、具体的な `Struct<...>` を選んでください。
+
+[Struct](/ja-JP/api/struct)

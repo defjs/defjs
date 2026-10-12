@@ -1,0 +1,22 @@
+---
+title: 'EventStreamCommand'
+description: 'event-stream エンドポイントが生成する、実行可能で不透明な SSE コマンドです。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCommand" />
+
+```ts
+interface EventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly endpoint: EventStreamDefinition<TInput, TEvents, TError> & { readonly method: string }
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+入力を渡して `EventStreamEndpoint` を呼ぶと作られます。不透明な値として扱い、`client.execute` に渡してください。
+
+[SSE](/ja-JP/api/sse)

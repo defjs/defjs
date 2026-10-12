@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'Client option that enables automatic WebSocket reconnection.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+Configures automatic reconnection when the socket closes for any reason other than a manual `session.close()`. Reconnection is opt-in: without this option a close ends the session. Passing `undefined` clears an earlier setting. The option type is:
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` is the retry budget after the first connect. It defaults to `3`, and `0` disables reconnection. Omitting it is not unlimited.
+- `delayMs` defaults to `1000`, `factor` to `2`, `maxDelayMs` to `30000`, and `jitter` (0 to 1) to `0`. The delay for retry _n_ is `delayMs * factor^(n-1)`, capped at `maxDelayMs`.
+- `shouldReconnect` can return `false` to end the session instead. Without it every close is retried while the budget lasts. It is not called for a manual `session.close()`.
+- Out-of-range values make execute fail with `REQ_OPTIONS_INVALID`.
+- A `reconnect` in the execute options replaces this one for that call.
+
+[Client](/api/client)

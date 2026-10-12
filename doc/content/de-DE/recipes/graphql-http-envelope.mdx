@@ -1,0 +1,20 @@
+---
+title: 'GraphQL-Anfragen'
+description: GraphQL bleibt HTTP 200 plus Application-Unwrap; Core liefert kein GraphQL-Protocol.
+---
+
+# Einen GraphQL-HTTP-Envelope auspacken
+
+Defjs implementiert keine GraphQL-`errorPolicy`. Modelle die Leitung als HTTP-POST, dessen Builder Query-Document und Variables platziert, dann packe `errors[]` / fehlendes `data` in deinem eigenen Helper aus.
+
+Siehe [Entwurfsentscheidungen](/de-DE/docs/design-decisions).
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable
+```
+
+HTTP-Erfolg heißt nur, dass der Envelope angekommen ist. Application-Errors bleiben in `errors[]`, bis dein Unwrap einen Fehler wirft oder zurückgibt.

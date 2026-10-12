@@ -1,0 +1,27 @@
+---
+title: 'OpenTelemetryServerTransportOptions'
+description: 'Опции, общие для всех транспортов, — enabled и span hooks, generic по типу ответа.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions" />
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+```
+
+`TResponse` — то, что получает `responseHook`: `HttpResponse<unknown>` для HTTP, `EventStreamHandle<unknown>` для SSE, `WebSocketSessionLike` для WebSocket. См. [OpenTelemetryServerHttpOptions](/ru-RU/api/opentelemetry-server/opentelemetryserverhttpoptions-type), [OpenTelemetryServerSSEOptions](/ru-RU/api/opentelemetry-server/opentelemetryserversseoptions-type) и [OpenTelemetryServerWebSocketOptions](/ru-RU/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type).
+
+`enabled` по умолчанию `true`; transport отключает только `enabled: false`. Старый булев переключатель (`http: false`) и hooks верхнего уровня отвергаются только типами TypeScript. Проверки в рантайме нет, поэтому в рантайме `http: false` оставляет transport включённым, а hook верхнего уровня молча игнорируется.
+
+Hooks для span вызываются только при переданном `tracer`. `startSpanHook` выполняется синхронно до создания span для своего транспорта. Возвращённые attributes применяются после встроенных, поэтому приложение может переопределить `url.full` или другое начальное значение. Если hook бросает ошибку, Defjs создаёт span со встроенными attributes, записывает событие `defjs.otel.hook.error` и продолжает запрос. `requestHook` выполняется после создания span и до отправки запроса; `responseHook` — после того как вернулся результат транспорта. Оба могут вернуть promise, но ни один не ожидается через await: брошенная ошибка или reject записываются так же и никогда не блокируют и не проваливают операцию. `responseHook` получает исходный request третьим аргументом.
+
+По умолчанию `url.full` только resolve’ит `request.endpoint` относительно опционального `request.baseEndpoint`; отдельный `request.queryString` не добавляется. Эта граница не является redaction, а у пакета нет встроенного redactor или политики sensitive keys. Явно собери application-owned URL и при необходимости удали чувствительные параметры:
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+[@defjs/opentelemetry-server](/ru-RU/api/opentelemetry-server)

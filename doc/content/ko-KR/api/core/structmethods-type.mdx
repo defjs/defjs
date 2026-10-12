@@ -1,0 +1,25 @@
+---
+title: 'StructMethods'
+description: '모든 struct에서 쓸 수 있는, 체인으로 이어 붙이는 수정자예요.'
+---
+
+<ApiReference identity="@defjs/core:StructMethods" />
+
+```ts
+interface StructMethods<I, O, OO extends boolean> {
+  alias(name: string): this
+  null(): Struct<I | null, O | null, OO>
+  nullable(): Struct<I | null, O | null, OO>
+  nullish(): Struct<I | null | undefined, O | null | undefined, true>
+  optional(): Struct<I | undefined, O | undefined, true>
+}
+```
+
+각 메서드는 새 struct를 돌려주고 원본은 바꾸지 않아요.
+
+- `alias(name)`은 객체 필드의 와이어 이름을 정해요. `struct.parse`는 `aliases: true`를 넘기지 않으면 논리 이름을 읽어요. JSON과 flat 요청 코덱은 alias를 써서 써요. `name`이 문자열이 아니면 `TypeError`를 던져요.
+- `null()`과 `nullable()`은 같아요. `null`도 받아요.
+- `optional()`은 `undefined`도 받아요. 객체에서는 키가 없어도 되고, 없는 필드는 출력에서도 없는 채로 남아요.
+- `nullish()`는 `null`과 `undefined`를 둘 다 받아요.
+
+[Struct](/ko-KR/api/struct)

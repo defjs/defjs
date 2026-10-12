@@ -1,0 +1,14 @@
+---
+title: 'ClientOption'
+description: 'createClient가 받는 option 헬퍼의 함수 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:ClientOption" />
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+`createClient`가 만드는 중인 [`ClientConfig`](/ko-KR/api/core/clientconfig-type)를 변경해요. 모든 `with*` 헬퍼가 이것을 반환해요. `createClient`는 option을 순서대로 적용하므로 같은 설정에 대해서는 나중 option이 앞의 것을 덮어써요. 덧붙이는 `withInterceptors`만 예외예요.
+
+[클라이언트](/ko-KR/api/client)

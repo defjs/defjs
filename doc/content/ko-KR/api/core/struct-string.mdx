@@ -1,0 +1,15 @@
+---
+title: 'struct.string'
+description: 'string 값을 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.string" />
+
+```ts
+function string(): Struct<string, string>
+```
+
+- `string` 값만 받아요. 그 외는 `invalid_type`으로 실패해요.
+- body 루트이거나 들어오는 `output` / `error` struct로 쓰면, 바이트를 JSON으로 파싱하지 않고 텍스트로 남겨요.
+
+[Struct](/ko-KR/api/struct)

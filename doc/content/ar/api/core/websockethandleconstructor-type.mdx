@@ -1,0 +1,18 @@
+---
+title: 'WebSocketHandleConstructor'
+description: 'نوع المُنشئ الذي يقبله withWebSocketHandle.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandleConstructor" />
+
+```ts
+type WebSocketHandleConstructor = {
+  readonly OPEN: number
+} & (new (...args: never[]) => WebSocketHandle)
+```
+
+صنف أو دالة تبني [`WebSocketHandle`](/ar/api/core/websockethandle-type) وتكشف ثابت حالة الجاهزية الرقمي `OPEN`. تقارن وسيلة النقل `readyState` بـ `OPEN`.
+
+يُستدعى بالصيغة `new WebSocketImpl(url)`، أو `new WebSocketImpl(url, protocols)` عند ضبط البروتوكولات الفرعية. الافتراضي هو `globalThis.WebSocket`. مرّر مُنشئًا آخر عبر [`withWebSocketHandle`](/ar/api/core/withwebsockethandle).
+
+[العميل](/ar/api/client)

@@ -1,0 +1,163 @@
+---
+title: Fehler
+description: Fault-Varianten und Factory-Helper.
+---
+
+# Fehler
+
+Execute gibt einen diskriminierten `Fault` im ersten Tuple-Slot zurück — keine geworfene Exception für deklarierte Failures.
+
+## FaultCode
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+Eine geschlossene Menge. Das Segment vor dem ersten `_` ist die Klasse; ein separates `kind`-Feld gibt es nicht. Die Menge bleibt geschlossen, damit `switch (fault.code)` exhaustiv ist — Extensions melden ihr eigenes Detail über `cause`, nicht über einen neuen Code.
+
+## FaultClass
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+`FaultClass<FaultCode>` ist `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+## Fault
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = DecodeFault | HttpStatusFault<TErr> | PreflightFault
+```
+
+Switche über `fault.code`.
+
+### FaultOf
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`FaultOf` ist `Fault`, ausgedrückt über den Typ des dekodierten Error-Bodys statt über das Struct, das ihn erzeugt hat. `HttpAwaitResult` und die Fault-Factories arbeiten mit dekodierten Werten und nutzen deshalb diese Form.
+
+Jede Variante ist ein nativer `Error` mit dem Namen `DefjsFault`, `String(fault)` liefert also ein direkt loggbares `DefjsFault: <message>`. `code` und die Varianten-Metadaten — `status`, `response`, `data` — sind enumerable Own-Properties. Die native `cause`-Chain ist non-enumerable.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+Rufe `format()`, `flatten()` oder `prettify()` erst auf, nachdem du `fault.cause` auf `StructError` eingeengt hast; diese Helper werden nicht auf den Fault kopiert.
+
+### HttpStatusFault
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+Jeder Non-2xx-Status. Hat der Endpoint `error` deklariert und der Body dekodiert, ist `data` dieser Body und `response` trägt ihn. Wurde `error` ausgelassen, wird der Body nie gelesen — `data` bleibt damit `undefined` und `response` sind Metadaten allein.
+
+### DecodeFault
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+Eine Response kam an, ließ sich aber nicht wie deklariert lesen. `response` sind nur Metadaten: ein Body **ist** ein dekodierter Wert, und genau das Dekodieren ist fehlgeschlagen, es gibt also kein `body`-Feld, nach dem man greifen könnte. Das auslösende Detail liegt auf `cause` — ein `StructError` bei einem Struct-Mismatch, das Parser-Failure bei einer unlesbaren Representation.
+
+### PreflightFault
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+Alles, was fehlschlagen konnte, bevor eine Response existierte: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` ist nur dort vorhanden, wo der Transport schon Metadaten zu melden hatte — etwa bei einem Body, der mitten im Download abbrach.
+
+### AnyFault
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+Jeder Fault, unabhängig vom Typ seines dekodierten Error-Bodys. Nutze ihn für Handler, die Faults klassifizieren, ohne sich dafür zu interessieren, welcher Endpoint sie erzeugt hat; bevorzuge `Fault<typeof yourErrorStruct>`, wo der Body-Typ zählt.
+
+## Factories
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+```ts
+declare function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+
+declare function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+
+declare function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+
+declare function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+
+declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+`createHttpStatusFault` nimmt eine Response, die den dekodierten Body schon trägt; `createUndecodedHttpStatusFault` nimmt nur Metadaten — für einen Endpoint, der kein `error` deklariert hat.
+
+`createNetworkFault` mappt `ERR_ABORTED` und eine `DOMException` mit dem Namen `AbortError` auf `NET_ABORTED`, `ERR_TIMEOUT` und einen Error mit dem Namen `TimeoutError` auf `NET_TIMEOUT` und alles andere auf `NET_UNREACHABLE`. `createPreflightFault` nimmt den Code direkt; ohne `cause` wird der Code zur Message.
+
+Alle Factories geben native `Error`-Instanzen mit den obigen strukturierten Feldern zurück; sie erzeugen keine Plain-Object-Errors und brauchen für `String(fault)` keinen Adapter.
+
+## Sentinels
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+Gemeinsame `cause`-/Message-Werte für Abort und Timeout. Wirft ein HTTP-Interceptor einen davon, endet der Aufruf mit `NET_ABORTED` oder `NET_TIMEOUT`. SSE- und WebSocket-Interceptors melden jeden geworfenen Fehler, auch diese beiden, als `EXT_INTERCEPTOR_FAILED`.
+
+Siehe [Errors-Guide](/de-DE/docs/errors).

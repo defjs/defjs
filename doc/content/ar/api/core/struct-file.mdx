@@ -1,0 +1,16 @@
+---
+title: 'struct.file'
+description: 'struct يقبل File.'
+---
+
+<ApiReference identity="@defjs/core:struct.file" />
+
+```ts
+function file(): Struct<File, File>
+```
+
+- يقبل `File` فقط؛ و`Blob` العادي يفشل بـ `invalid_type`.
+- استخدمه لحقل في [`struct.formData()`](/ar/api/core/struct-formdata)، أو لجسم ملف خام.
+- وكـ struct من نوع `output` أو `error` يجعل جسم الاستجابة يُقرأ كـ blob.
+
+[Struct](/ar/api/struct)

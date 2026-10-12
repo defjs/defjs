@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: '把 request path 依基底 endpoint 解析成 URL。'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — client 的 endpoint。它的 query 與 hash 會被丟棄，並在 pathname 後補上結尾斜線，以保留基底路徑：`https://api.example.com/v1` 搭配 `/users` 得到 `https://api.example.com/v1/users`。
+- **path** — 相對的 endpoint path。開頭的單一斜線會被移除。
+- **queryString** — 不含開頭 `?` 的 query。非空時會原樣設為 URL 的 search。
+- **回傳** 解析後的 `URL`。
+
+`baseEndpoint` 無法剖析時，拋出 `TypeError('Client endpoint must be a valid URL')`。`path` 帶有 scheme 或以 `//` 開頭時拋出 `Error`（`Endpoint path must not be an absolute URL`），含有 `?` 或 `#` 時也拋出 `Error`（`Endpoint path must not include query or hash`）。
+
+[HTTP](/zh-Hant-TW/api/http)

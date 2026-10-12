@@ -1,0 +1,44 @@
+---
+title: 'HttpRequest'
+description: 'Solicitud HTTP saliente normalizada que ven los transportes y los interceptores.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequest" />
+
+```ts
+interface HttpRequest {
+  abort?: AbortSignal
+  baseEndpoint?: string
+  body?: Blob | ArrayBuffer | FormData | URLSearchParams | ReadableStream<Uint8Array> | object | string | number | boolean | null
+  bodyContentType?: string | null
+  downloadProgress?: HttpProgressFn
+  endpoint: string
+  headers?: Headers
+  method: string
+  operation?: string
+  queryParams?: URLSearchParams
+  queryString?: string
+  readonly responseType?: HttpResponseType
+  readonly errorResponseType?: HttpResponseType
+  timeout?: number
+  uploadProgress?: HttpProgressFn
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  // plus an @internal bodyContentTypeSource field
+}
+```
+
+La solicitud después de ejecutar el builder, tal como la usan los handlers, los interceptores y `fetchHandler`.
+
+- `body` ya es el valor que viaja por la red. Para JSON es una **cadena de texto JSON**; firma HMAC o digests sobre esa cadena, no sobre la entrada original del struct.
+- `endpoint` es el path con los parámetros de path rellenados; `baseEndpoint` es el endpoint del cliente.
+- Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual.
+- `operation` es una identidad de endpoint estática y de baja cardinalidad para telemetría y diagnóstico.
+- `downloadProgress` y `uploadProgress` son los hooks `onDownloadProgress` y `onUploadProgress` de `HttpExecuteOptions`.
+- `responseType` y `errorResponseType` son de solo lectura: se derivan de los tipos de los structs `output` y `error` del endpoint y no deben cambiarse. Cada uno se establece solo cuando su struct está declarado. Un interceptor que cortocircuita con `makeResponse` los lee para coincidir con el transporte.
+
+[HTTP](/es-ES/api/http)

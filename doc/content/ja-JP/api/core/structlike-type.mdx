@@ -1,0 +1,22 @@
+---
+title: 'StructLike'
+description: 'すべての struct が持つ構造的ブランドです。'
+---
+
+<ApiReference identity="@defjs/core:StructLike" />
+
+```ts
+interface StructLike<I = unknown, O = unknown, OO extends boolean = boolean> {
+  readonly _struct: {
+    input: I
+    optionalOut: OO extends true ? true : undefined
+    output: O
+  }
+}
+```
+
+`_struct` の型ペイロードを持つものです。[`StructInput`](/ja-JP/api/core/structinput-type) と [`Infer`](/ja-JP/api/core/infer-type) はここから `input` と `output` を読み取り、オブジェクト struct は `optionalOut` で、出力のどのフィールドが欠けうるかを判断します。
+
+`_struct` は型システム上にだけ存在します。struct は実行時に `_struct` プロパティを持たず、その型を持つだけのプレーンオブジェクトは有効な struct ではありません。
+
+[Struct](/ja-JP/api/struct)

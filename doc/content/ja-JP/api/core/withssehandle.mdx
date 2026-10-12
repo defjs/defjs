@@ -1,0 +1,17 @@
+---
+title: 'withSSEHandle'
+description: 'SSE ストリームを開くのに使う Fetch 関数を差し替えるクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withSSEHandle" />
+
+```ts
+function withSSEHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+SSE のイベントストリームを開くのに使う、Fetch 互換の関数を差し替えます。デフォルトはプラットフォームの `fetch` です。
+
+- **fetchImpl** は [`FetchHandle`](/ja-JP/api/core/fetchhandle-type) です。
+- 影響するのは SSE だけです。HTTP は [`withHTTPHandle`](/ja-JP/api/core/withhttphandle) を使います。
+
+[Client](/ja-JP/api/client)

@@ -1,0 +1,137 @@
+---
+title: 'Schnellstart'
+description: Definiere GET /users/:id, führe ihn gegen ein lokales Fetch-Handle aus, dann zeige auf eine echte API.
+---
+
+# Erste Schritte: ein HTTP-Request
+
+Du definierst `GET /users/:id`, führst ihn über einen expliziten Client aus und dekodierst sowohl `200` als auch deklariertes `404`. Der lokale Handler hält den ersten Lauf offline; der Command bleibt derselbe, wenn du einen echten Service einhängst.
+
+## Schritt 1 — Installieren
+
+`@defjs/core` ist ESM und läuft auf Node.js, Bun oder Deno. Node.js 22.18+ (oder 24+) führt die `.ts`-Datei direkt per Type Stripping aus; ältere 22.x-Releases brauchen `--experimental-strip-types`. Behalte `"type": "module"` in der package.json. Im Browser brauchst du weiterhin Bundler und Fetch.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno add npm:@defjs/core
+```
+
+</Tab>
+</Tabs>
+## Schritt 2 — Request definieren
+
+Lege `src/get-user.ts` an. Der Input-Struct ist der Wert des Callers. `builder` platziert diesen Wert auf dem Request. Hier ist der ganze Input das Path-Object, also füllen alias-freie Scalar-Fields `:id`.
+
+<include cwd meta="get-user.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` ist der 2xx-Body. `error` ist jeder andere Status. Je ein Struct. Nutze `struct.or(...)` oder eine Discriminated Union, wenn diese Bodies auseinanderlaufen.
+
+`defineRequest(...)` gibt einen Endpoint zurück. Der Aufruf `getUser(...)` baut den opaken Command, den du an `client.execute(...)` übergibst. Der `builder` oben ist die Function, die Input platziert; er ist nicht der Endpoint.
+
+## Schritt 3 — Lokal ausführen
+
+Verdrahte ein client-lokales Fetch-Handle, damit du ohne Netzwerk laufen kannst. Defjs validiert weiterhin Input, baut den `Request`, dispatcht nach Status und parst den Body.
+
+<include cwd meta="get-user.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+So startest du:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun src/get-user.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno run src/get-user.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+Probier einen fehlenden User — ändere die Path-id auf `8` und lauf nochmal:
+
+```txt
+User not found
+```
+
+Bei Erfolg: `error` ist `null`, `user` ist der `200`-Struct-Output, `response` ist ein `HttpResponse`. Bei deklariertem `404`: `error.code` ist `'HTTP_STATUS'`, `error.status` ist `404`, und `error.data` ist typisiert als `NotFound`. Der zweite Tupel-Eintrag ist bei Fehler `undefined`.
+
+## Schritt 4 — Auf eine echte API zeigen
+
+Lass `withHTTPHandle(...)` weg und setze die echte Base-URL, wenn der Service `GET /v1/users/:id` mit diesen Bodies implementiert.
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+Gleicher Command. Anderer Client.
+
+## Wenn das Ergebnis abweicht
+
+- Schlechter Input → `REQ_INPUT_INVALID`; konfliktierende Abbruch-Optionen → `REQ_OPTIONS_INVALID`; ein fehlschlagendes
+  `builder` → `REQ_BUILD_FAILED`
+- Ein Non-2xx-Status → `HTTP_STATUS`, mit typisiertem `error.data`, wenn `error` deklariert war und sein Body dekodiert
+- Ein deklarierter JSON-Body mit anderem Media-Type → `RES_MEDIA_TYPE_INVALID`, gemeldet bevor der Body gelesen wird
+- Ein deklarierter Body (`output` bei 2xx, sonst `error`), der nicht dekodiert → `RES_DECODE_FAILED` oder `RES_STRUCT_MISMATCH`, egal bei welchem Status
+- Fetch-Fehler / Abbruch / Timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein. Gültige Cancel-Shapes: `{ timeout }`, `{ abort }` oder `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` zusammen ist ungültig. Cancellation sagt dir, was der Caller gesehen hat — nicht, ob ein Server-Write übernommen wurde.
+
+## Nächste Rezepte
+
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)
+- [POST JSON](/de-DE/recipes/post-json)
+- [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)
+- [SSE-Stream konsumieren](/de-DE/recipes/consume-sse)
+- [WebSocket-Session öffnen](/de-DE/recipes/websocket-session)
+- [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)

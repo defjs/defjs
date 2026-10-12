@@ -1,0 +1,17 @@
+---
+title: 'Struct'
+description: 'struct 타입이에요. 입력/출력 타입과 수정자 메서드를 담아요.'
+---
+
+<ApiReference identity="@defjs/core:Struct" />
+
+```ts
+type Struct<Input = unknown, Output = Input, OptionalOut extends boolean = false> = StructMethods<Input, Output, OptionalOut> &
+  StructLike<Input, Output, OptionalOut>
+```
+
+파싱할 수 있는 모양이에요. `Input`은 받아들이는 타입([`StructInput`](/ko-KR/api/core/structinput-type)), `Output`은 파싱이 성공했을 때 돌려주는 타입([`Infer`](/ko-KR/api/core/infer-type)), `OptionalOut`은 객체 출력에서 없을 수 있는 필드를 표시해요.
+
+struct는 [`struct`](/ko-KR/api/core/struct) 퍼사드로 만드세요. [`StructMethods`](/ko-KR/api/core/structmethods-type)의 모든 수정자는 새 struct를 돌려주고 원본은 바꾸지 않아요.
+
+[Struct](/ko-KR/api/struct)

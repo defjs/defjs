@@ -1,0 +1,16 @@
+---
+title: 'struct.arrayBuffer'
+description: 'Struct qui accepte un ArrayBuffer.'
+---
+
+<ApiReference identity="@defjs/core:struct.arrayBuffer" />
+
+```ts
+function arrayBuffer(): Struct<ArrayBuffer, ArrayBuffer>
+```
+
+- Accepte uniquement un `ArrayBuffer`. Les tableaux typés et autres vues échouent avec `invalid_type`.
+- En racine de corps, il est envoyé en octets avec `application/octet-stream`.
+- Comme struct `output` ou `error`, il fait lire le corps de la réponse en `ArrayBuffer`.
+
+[Struct](/fr-FR/api/struct)

@@ -1,0 +1,14 @@
+---
+title: 'WebSocketOutgoingData'
+description: 'WebSocket session 的 send 接受的型別。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketOutgoingData" />
+
+```ts
+type WebSocketOutgoingData<TOutgoing extends AnyStruct | undefined> = TOutgoing extends AnyStruct ? StructInput<TOutgoing> : never
+```
+
+`session.send` 接受的型別：endpoint 的 `outgoing` struct 的 [`StructInput`](/zh-Hant-TW/api/core/structinput-type)；endpoint 沒有宣告時是 `never`，因此無法帶著值呼叫 `send`。
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

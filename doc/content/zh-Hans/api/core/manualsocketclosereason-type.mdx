@@ -1,0 +1,18 @@
+---
+title: 'ManualSocketCloseReason'
+description: '用 session.close 关闭 session 时记录的关闭码和原因。'
+---
+
+<ApiReference identity="@defjs/core:ManualSocketCloseReason" />
+
+```ts
+type ManualSocketCloseReason = {
+  code?: number
+  kind: 'manual-web-socket-close'
+  reason?: string
+}
+```
+
+记录传给 `session.close(code?, reason?)` 的 `code` 和 `reason`。当对端的 close 事件没有带这两个值时，它们会填入最终 `{ kind: 'closed' }` 关闭信息的 `code` 和 `reason`。`close` 在 `code` 不是 1000 且不在 3000 到 4999 之间，或 `reason` 超过 123 个 UTF-8 字节时，会抛出 `DOMException`。
+
+[WebSocket](/zh-Hans/api/web-socket)

@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: '传给上传和下载回调的进度快照。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+对应 `ProgressEvent` 的字段。`loaded` 是目前已传输的字节数。总大小未知时，`total` 为 `0`，`lengthComputable` 为 `false`。
+
+见 [`HttpProgressFn`](/zh-Hans/api/core/httpprogressfn-type)、[HTTP 指南](/zh-Hans/docs/http) 和 [Commands](/zh-Hans/docs/commands)。
+
+[HTTP](/zh-Hans/api/http)

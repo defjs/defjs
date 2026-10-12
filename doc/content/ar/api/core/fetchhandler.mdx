@@ -1,0 +1,17 @@
+---
+title: 'fetchHandler'
+description: 'نقل HTTP الافتراضي الذي ينفّذ الطلب بـ fetch.'
+---
+
+<ApiReference identity="@defjs/core:fetchHandler" />
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+- **httpRequest** — الطلب المطبَّع (عنوان URL، والرؤوس، والجسم، وإشارة الإلغاء، وخطّافات التقدم).
+- **fetchImpl** — [`FetchHandle`](/ar/api/core/fetchhandle-type)؛ والافتراضي `fetch` العامة. المقبض المخصّص يستقبل `Request`، ويُقرأ جسمه قطعةً قطعة.
+
+نقل HTTP الافتراضي. يستخدمه العميل دائمًا؛ و`withHTTPHandle` لا يستبدل سوى `fetchImpl` الذي يستدعيه. وهو يرفض — بدل أن يستقر باستجابة مُصطنعة — حين لا تصل أي استجابة إلى العميل.
+
+[HTTP](/ar/api/http)

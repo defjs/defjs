@@ -1,0 +1,14 @@
+---
+title: 'ParseResult'
+description: 'Error-first-Tuple, das struct.parse zurückgibt.'
+---
+
+<ApiReference identity="@defjs/core:ParseResult" />
+
+```ts
+type ParseResult<O> = [error: null, value: O] | [error: StructError, value: undefined]
+```
+
+Bei Erfolg ist der Error `null` und `value` der geparste Output `O`. Bei einem Fehler ist der Error ein `StructError` und `value` immer `undefined`.
+
+[Struct](/de-DE/api/struct)

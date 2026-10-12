@@ -1,0 +1,26 @@
+---
+title: 'SocketLifecycleOutcome'
+description: 'WebSocket 연결 시도 한 번의 결과예요. 재연결 로직이 써요.'
+---
+
+<ApiReference identity="@defjs/core:SocketLifecycleOutcome" />
+
+```ts
+type SocketLifecycleOutcome = {
+  closeInfo: WebSocketCloseSnapshot
+  connection?: WebSocketConnectionInfo
+  cause?: unknown
+  opened: boolean
+}
+```
+
+세션의 최종 결과가 아니라 **연결 시도 한 번**의 결과예요. 재연결 로직이 다시 시도할지 정할 때 써요.
+
+- `closeInfo`는 그 시도의 close 상세 정보예요. `{ cause?, code?, reason?, wasClean? }`.
+- `connection`은 연결 스냅샷이에요. 시도가 스냅샷을 얻었을 때만 있어요.
+- `cause`는 시도를 끝낸 오류예요 (있다면).
+- `opened`는 소켓이 끝나기 전에 `open`에 도달했는지 알려줘요.
+
+`shouldReconnect` 옵션은 이 객체를 받지 않아요. 여기서 가져온 `attempt`, `cause`, `code`, `reason`, `wasClean`을 받아요. 세션의 최종 결과는 [`WebSocketCloseInfo`](/ko-KR/api/core/websocketcloseinfo-type)예요.
+
+[WebSocket](/ko-KR/api/web-socket)

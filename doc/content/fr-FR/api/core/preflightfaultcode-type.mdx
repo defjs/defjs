@@ -1,0 +1,14 @@
+---
+title: 'PreflightFaultCode'
+description: 'Codes d’un fault qui n’a peut-être jamais atteint une réponse.'
+---
+
+<ApiReference identity="@defjs/core:PreflightFaultCode" />
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+```
+
+Tous les `FaultCode` sauf `HTTP_STATUS` et les codes de décodage : `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `ENV_UNSUPPORTED`, `EXT_HOOK_FAILED`, `EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`, `NET_ABORTED`, `NET_BODY_INCOMPLETE`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `REQ_BUILD_FAILED`, `REQ_INPUT_INVALID` et `REQ_OPTIONS_INVALID`. Ce sont les valeurs de `code` de `PreflightFault`.
+
+[Erreurs](/fr-FR/api/errors)

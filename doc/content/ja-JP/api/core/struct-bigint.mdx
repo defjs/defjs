@@ -1,0 +1,16 @@
+---
+title: 'struct.bigint'
+description: 'bigint または bigint 文字列を受け付け、bigint を出力する struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.bigint" />
+
+```ts
+function bigint(): Struct<bigint | string, bigint>
+```
+
+- `bigint`、または `BigInt()` でパースできる文字列を受け付けます。`number` は拒否されます。
+- 出力は常に `bigint` です。パースできない文字列は `invalid_type` で失敗します。
+- ワイヤ向けにエンコードするときは、10 進数の文字列になります。
+
+[Struct](/ja-JP/api/struct)

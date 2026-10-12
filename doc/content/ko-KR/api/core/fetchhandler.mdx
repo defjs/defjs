@@ -1,0 +1,17 @@
+---
+title: 'fetchHandler'
+description: 'fetch로 요청을 수행하는 기본 HTTP 전송이에요.'
+---
+
+<ApiReference identity="@defjs/core:fetchHandler" />
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+- **httpRequest** — 정규화된 요청이에요 (URL, 헤더, body, abort signal, progress 훅).
+- **fetchImpl** — [`FetchHandle`](/ko-KR/api/core/fetchhandle-type)이고, 기본값은 전역 `fetch`예요. 사용자 지정 handle은 `Request`를 받으며, body는 청크 단위로 읽어요.
+
+기본 HTTP 전송이에요. 클라이언트는 항상 이것을 쓰고, `withHTTPHandle`은 이것이 호출하는 `fetchImpl`만 바꿔요. 클라이언트에 응답이 하나도 닿지 않았을 때는 가짜 응답으로 resolve하지 않고 reject해요.
+
+[HTTP](/ko-KR/api/http)

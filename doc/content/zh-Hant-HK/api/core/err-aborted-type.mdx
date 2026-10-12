@@ -1,0 +1,16 @@
+---
+title: 'ERR_ABORTED'
+description: '標記 request 已被 abort 嘅共用 Error sentinel。'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+Caller 取消時共用嘅 `cause` 同 message 值。`createNetworkFault` 會將佢，仲有名為 `AbortError` 嘅 `DOMException`，映射去 `NET_ABORTED`。HTTP interceptor throw 呢個 sentinel，call 會以 `NET_ABORTED` fault resolve。SSE 同 WebSocket interceptors throw 佢嘅話，就會被報告為 `EXT_INTERCEPTOR_FAILED`。
+
+睇 [Errors guide](/zh-Hant-HK/docs/errors)。
+
+[Errors](/zh-Hant-HK/api/errors)

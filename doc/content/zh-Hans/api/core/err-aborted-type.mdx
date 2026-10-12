@@ -1,0 +1,16 @@
+---
+title: 'ERR_ABORTED'
+description: '标记请求已被中止的共享 Error 哨兵值。'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+调用方取消时共用的 `cause` 与 message 值。`createNetworkFault` 会把它，以及名为 `AbortError` 的 `DOMException`，映射为 `NET_ABORTED`。HTTP interceptor 抛出它，调用会以 `NET_ABORTED` fault resolve。SSE 与 WebSocket interceptor 抛出它，则会被报告为 `EXT_INTERCEPTOR_FAILED`。
+
+见 [Errors 指南](/zh-Hans/docs/errors)。
+
+[Errors](/zh-Hans/api/errors)

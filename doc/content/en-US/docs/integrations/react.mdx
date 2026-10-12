@@ -1,0 +1,73 @@
+---
+title: 'React'
+description: Install the provider, read the client, fetch a user, and abort when the effect re-runs.
+---
+
+# React
+
+Wire an existing `@defjs/core` client into a React tree. You get Context and `useClient()`. The package does **not** create a client, add a cache, retry commands, or dispose transport resources. The component, effect, or data library that starts work owns it.
+
+## Basic Setup
+
+Install `@defjs/core`, `@defjs/react`, and React 18+. ESM:
+
+`bun add @defjs/core @defjs/react react`
+
+Provide the client, then fetch a user and abort on change:
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+<include cwd>examples/react/basic-setup.tsx#example</include>
+
+`ClientProvider` is a normal Context provider. A different `client` prop changes what descendants see — no clone, replace, or dispose. Nested providers create explicit boundaries.
+
+React may set up and clean up an effect more than once in development. The signal check stops a stale promise from writing into the current render. The tuple error is still data.
+
+## Read with `useClient`
+
+`useClient()` returns the nearest `Client`. Call it during render (component or custom hook). Throws when no provider exists:
+
+<include cwd>examples/react/read-with-use-client.tsx#example</include>
+
+The hook only supplies the client. It doesn’t start work, subscribe to a transport, or turn the error-first tuple into an exception.
+
+## Own query work
+
+A query library can own caching, retries, stale-result suppression, and cancellation. Give it the signal it provides. For list pages, wrap `client.execute(...)` with TanStack Query (or similar) — `@defjs/react` stays DI only and does **not** ship `useRequest`.
+
+<include cwd>examples/react/own-query-work.tsx#example</include>
+
+Don’t wrap the same command in a second effect — two owners make cancel and stale-result handling ambiguous.
+
+## Own realtime work
+
+SSE and WebSocket handles outlive `client.execute(...)`. Register cleanup before awaiting startup, close a handle that arrives after disposal, consume its single iterator, await its terminal promise:
+
+<include cwd>examples/react/own-realtime-work.tsx#example</include>
+
+The `signal` passed to `execute` keeps governing an opened session. Aborting it in the cleanup ends the session as `aborted` and rejects `receive` with `AbortError`, so the `catch` above ignores errors once the effect is disposed and reports only real failures (queue overflow, heartbeat timeout). An aborted SSE stream instead ends its iterator normally. Without the `catch`, a rejection from the loop would be an unhandled promise rejection.
+
+Same rule for `EventStreamHandle`: close in `finally`, await `stream.closed`. WebSocket consumers must also unsubscribe state/runtime-error listeners and keep reading `session.receive` — an unread bounded queue can overflow.
+
+## SSR and client scope
+
+The package entry is a Client Component boundary. A browser app can share a module-scoped client when endpoint, interceptors, and captured state are browser-safe and request-independent. For SSR, create a separate client inside each request boundary when headers, cookies, users, tenants, or credentials differ.
+
+Provider unmount does **not** abort HTTP, close SSE/WebSocket, unsubscribe listeners, or call `dispose`. `@defjs/react` has no such lifecycle API. The code that starts each operation must finish or cancel it.
+
+## Reference
+
+Public exports from `@defjs/react`:
+
+- `ClientProvider` — accepts `ClientProviderProps`, provides the supplied client
+- `useClient` — nearest client, or throws
+- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
+
+Create clients and options in `@defjs/core`. See [Client](/docs/client), [Errors](/docs/errors), [SSE](/docs/sse), and [WebSocket](/docs/web-socket).
+
+## Related recipes
+
+- [GET with a declared 404](/recipes/get-declared-404)
+- [Cancel an HTTP call](/recipes/cancel-http)
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Open a WebSocket session](/recipes/websocket-session)

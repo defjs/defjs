@@ -1,0 +1,20 @@
+---
+title: 'withTimeout'
+description: '設定 HTTP execute 呼叫預設 timeout 的 client option。'
+---
+
+<ApiReference identity="@defjs/core:withTimeout" />
+
+```ts
+function withTimeout(ms: number): ClientOption
+```
+
+設定預設 timeout（單位為毫秒），只適用於 HTTP 的 `execute`。SSE 與 WebSocket 會忽略它。
+
+- **ms** 必須是不大於 `2_147_483_647` 的正 safe integer。其他值會在呼叫 `withTimeout` 時就立刻丟出 `RangeError`，而不是等到 client 執行時。
+- 計時器在 interceptor 鏈執行之前就開始。時間到時，該呼叫會回傳 `NET_TIMEOUT` fault。
+- Execute 的 `{ timeout }` 會在該次呼叫取代這個預設值。
+- Execute 的 `{ abort }` 與預設值組合：abort 得到 `NET_ABORTED`，計時器得到 `NET_TIMEOUT`。
+- 對同一次 `execute` 呼叫同時傳入 `abort` 與 `timeout`，仍然會被拒絕。
+
+[Client](/zh-Hant-TW/api/client)

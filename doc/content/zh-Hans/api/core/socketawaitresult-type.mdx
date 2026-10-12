@@ -1,0 +1,20 @@
+---
+title: 'SocketAwaitResult'
+description: '执行 WebSocket 命令时返回的 tuple。'
+---
+
+<ApiReference identity="@defjs/core:SocketAwaitResult" />
+
+```ts
+type SocketAwaitResult<TIncoming, TOutgoing = never> =
+  | [error: null, socket: WebSocketSession<TIncoming, TOutgoing>, connection: WebSocketConnectionInfo]
+  | [error: Fault<undefined>, socket: undefined, connection: WebSocketConnectionInfo | undefined]
+```
+
+`client.execute` 执行 WebSocket 命令的结果。
+
+- 成功时：`[null, session, connection]`。`connection` 是首次成功连接的快照；重连后 `session.connection` 会向前更新。
+- 失败时：`[fault, undefined, connection]`。`connection` 可能是 `undefined`，例如构造函数在 socket 打开之前就失败了。
+- 这里只会收到启动阶段的失败。session 返回之后，后续错误通过 `onRuntimeError`、`receive` 和 `closed` 浮现。
+
+[WebSocket](/zh-Hans/api/web-socket)

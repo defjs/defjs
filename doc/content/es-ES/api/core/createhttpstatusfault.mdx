@@ -1,0 +1,17 @@
+---
+title: 'createHttpStatusFault'
+description: 'Factory de un fault HTTP_STATUS cuyo cuerpo de error se decodificó.'
+---
+
+<ApiReference identity="@defjs/core:createHttpStatusFault" />
+
+```ts
+function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+```
+
+- **response** — Una respuesta no 2xx con el cuerpo decodificado contra el struct `error` declarado.
+- **Devuelve** un `Error` nativo llamado `DefjsFault` con `code: 'HTTP_STATUS'`, `data` igual a `response.body`, `status` copiado de la respuesta y `response` tal como se pasó. El mensaje es `Http failure response: <status>`, seguido de ` - <statusText>` cuando lo hay.
+
+Usa [`createUndecodedHttpStatusFault`](/es-ES/api/core/createundecodedhttpstatusfault) cuando no se decodificó ningún cuerpo.
+
+[Errores](/es-ES/api/errors)

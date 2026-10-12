@@ -1,0 +1,17 @@
+---
+title: 'HttpInterceptor'
+description: 'Tagged HTTP interceptor accepted by client interceptor options.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptor" />
+
+```ts
+interface HttpInterceptor {
+  kind: 'http'
+  fn: InterceptorFn
+}
+```
+
+Created by `createHttpInterceptor`. `kind` is the discriminant that lets `withInterceptors` accept HTTP, SSE, and WebSocket interceptors in one list.
+
+[Interceptors](/api/interceptors)

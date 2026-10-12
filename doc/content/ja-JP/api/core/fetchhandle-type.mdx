@@ -1,0 +1,16 @@
+---
+title: 'FetchHandle'
+description: 'HTTP または SSE のハンドルとして使う、fetch 互換の関数型です。'
+---
+
+<ApiReference identity="@defjs/core:FetchHandle" />
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+Defjs が呼び出す `(input, init?) => Promise<Response>` というシグネチャです。意図的に `typeof fetch` にはしていないので、モックが `preconnect` のようなホスト固有の追加メンバーを持つ必要はありません。独自のハンドルは `Request` で呼ばれます。`(url, init)` で呼ばれるのは、ライブラリのデフォルト（グローバルの `fetch`）だけです。
+
+`withHTTPHandle`、`withSSEHandle`、`fetchHandler` が受け取ります。
+
+[Client](/ja-JP/api/client)

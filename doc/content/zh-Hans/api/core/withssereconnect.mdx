@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: '启用 SSE 自动重连的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+配置 SSE 流失败后的自动重连。重连是可选开启的：没有这个 option，失败的流不会重试。传入 `undefined` 会清除之前的设置。
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` 是第一次尝试之后的重试预算。设了 `reconnect` 时默认为 `3`，`0` 表示禁用重试。省略它不是无限次。
+- 未提供 `shouldReconnect` 时，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求会重连。提供后，所有请求方法是否重连都由回调的返回结果决定，包括 `POST`；上下文中的 `method` 用来区分端点。返回 `false` 即停止针对本次失败的重试。该回调在检查重试次数上限之前运行。
+- 请求体为 `ReadableStream` 的请求不会重连，也不会调用 `shouldReconnect`。
+- `delayMs`、`factor`、`jitter`（0 到 1）和 `maxDelayMs` 决定退避的形状。`factor` 默认为 `1`，`jitter` 默认为 `0`。
+- `delayMs` 只是起始的基础延迟（默认 `1000`）。服务器发来的 `retry:` 字段（仅限数字，单位毫秒）会在之后的尝试中取代它。
+- 最后一个 event id 会在下一次尝试中作为 `Last-Event-ID` 再次发送。
+
+stream handle 见 [SSE](/zh-Hans/api/sse)。
+
+[Client](/zh-Hans/api/client)

@@ -1,0 +1,16 @@
+---
+title: 'HttpProgressFn'
+description: 'Тип callback’а для прогресса выгрузки и загрузки.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+Передаётся как `onDownloadProgress` или `onUploadProgress` в `HttpExecuteOptions`. Колбэки могут быть асинхронными: перед обработкой следующего блока данных ожидается их завершение. Если колбэк выбрасывает исключение или возвращает отклонённый промис, вызов завершается с ошибкой `EXT_OBSERVER_FAILED`, а выброшенное значение передаётся в `cause`. Это относится как к загрузке, так и к выгрузке. Отмена со стороны вызывающего кода и `timeout` по-прежнему имеют приоритет и возвращают `NET_ABORTED` / `NET_TIMEOUT`. Прогресс выгрузки сообщается только в средах выполнения, поддерживающих потоковую отправку тела запроса (Bun, Node, Deno). В браузерах тело типа `Blob` / `File`, `ArrayBuffer` или `FormData` отправляется без изменений, и `onUploadProgress` не вызывается; на `onDownloadProgress` это не влияет.
+
+См. [`HttpProgressEvent`](/ru-RU/api/core/httpprogressevent-type), [гайд HTTP](/ru-RU/docs/http) и [Команды](/ru-RU/docs/commands).
+
+[HTTP](/ru-RU/api/http)

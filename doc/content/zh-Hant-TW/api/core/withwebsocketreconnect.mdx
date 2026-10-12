@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: '啟用 WebSocket 自動重新連線的 client option。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+設定 socket 因手動 `session.close()` 以外的任何原因關閉時的自動重新連線。重新連線需要主動啟用：沒有這個 option，關閉就會結束 session。傳入 `undefined` 會清除先前的設定。option 的型別是：
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` 是第一次連線之後的重試額度。預設為 `3`，`0` 停用重新連線。省略它不是無限次。
+- `delayMs` 預設為 `1000`，`factor` 為 `2`，`maxDelayMs` 為 `30000`，`jitter`（0 到 1）為 `0`。第 _n_ 次重試的延遲是 `delayMs * factor^(n-1)`，上限為 `maxDelayMs`。
+- `shouldReconnect` 可以回傳 `false`，改為結束 session。沒有它時，只要額度還在，每次關閉都會重試。手動 `session.close()` 不會呼叫它。
+- 超出範圍的值會讓 execute 以 `REQ_OPTIONS_INVALID` 失敗。
+- execute options 中的 `reconnect` 會在該次呼叫取代這一個。
+
+[Client](/zh-Hant-TW/api/client)

@@ -1,0 +1,17 @@
+---
+title: 'FlattenedStructError'
+description: 'حاويتا أخطاء النموذج والحقول بشكل مسطّح، يعيدهما StructError.flatten.'
+---
+
+<ApiReference identity="@defjs/core:FlattenedStructError" />
+
+```ts
+interface FlattenedStructError {
+  formErrors: string[]
+  fieldErrors: { [key: string]: string[] }
+}
+```
+
+نتيجة `StructError.flatten()`. يحمل `formErrors` رسائل المشكلات ذات المسار الفارغ (مشكلات الجذر). ويحمل `fieldErrors` الرسائل مفهرسةً بأول مقطع من المسار، فتُجمَع المشكلات المتداخلة تحت حقلها الأعلى.
+
+[Struct](/ar/api/struct)

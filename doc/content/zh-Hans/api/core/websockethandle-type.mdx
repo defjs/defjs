@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'client 传输层使用的 WebSocket 实例接口。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+去掉事件 handler 属性、`binaryType`、`dispatchEvent` 以及状态常量之后的 DOM `WebSocket`。因此自定义实现需要提供 `url`、`protocol`、`extensions`、`bufferedAmount`、`send`、`close`、`addEventListener`、`removeEventListener`，以及数值型的 `readyState`。
+
+属性存在时，传输层会设置 `binaryType = 'arraybuffer'`。这是 [`WebSocketHandleConstructor`](/zh-Hans/api/core/websockethandleconstructor-type) 所产生的实例类型。
+
+[Client](/zh-Hans/api/client)

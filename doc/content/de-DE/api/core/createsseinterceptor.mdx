@@ -1,0 +1,19 @@
+---
+title: 'createSSEInterceptor'
+description: 'Verpackt eine Interceptor-Funktion als getaggten SSE-Interceptor.'
+---
+
+<ApiReference identity="@defjs/core:createSSEInterceptor" />
+
+```ts
+function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor
+
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+Gibt `{ kind: 'sse', fn }` zurück. SSE-Interceptors laufen nur für SSE-Commands, in Registrierungsreihenfolge; `next(req)` öffnet den Stream durch die übrigen Interceptors.
+
+`EventStreamHandle` erweitert `AsyncDisposable`. Eine strukturelle Short-Circuit-Implementierung muss `[Symbol.asyncDispose](): PromiseLike<void>` liefern und ihn an denselben Close-Lifecycle hängen.
+
+[Interceptors](/de-DE/api/interceptors)

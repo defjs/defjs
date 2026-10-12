@@ -1,0 +1,16 @@
+---
+title: 'ERR_TIMEOUT'
+description: 'Centinela Error compartido que marca una solicitud como agotada por timeout.'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+Valor compartido de `cause` y de mensaje para los timeouts. `createNetworkFault` lo asigna, igual que cualquier error llamado `TimeoutError`, a `NET_TIMEOUT`. Un interceptor HTTP que lo lanza hace que la llamada se resuelva con un fault `NET_TIMEOUT`. Los interceptores SSE y WebSocket que lo lanzan se informan como `EXT_INTERCEPTOR_FAILED`.
+
+Mira la [guía de Errores](/es-ES/docs/errors).
+
+[Errores](/es-ES/api/errors)

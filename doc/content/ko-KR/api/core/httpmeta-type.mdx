@@ -1,0 +1,20 @@
+---
+title: 'HttpMeta'
+description: '응답이 클라이언트에 닿았을 때마다 쓸 수 있는 응답 메타데이터예요.'
+---
+
+<ApiReference identity="@defjs/core:HttpMeta" />
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+응답이 클라이언트에 닿았을 때마다 쓸 수 있는 응답 메타데이터예요. `body`는 **없어요**. body는 선언한 struct가 디코딩했을 때에만 존재해요.
+
+[HTTP](/ko-KR/api/http)

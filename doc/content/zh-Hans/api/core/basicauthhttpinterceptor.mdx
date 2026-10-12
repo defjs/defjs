@@ -1,0 +1,20 @@
+---
+title: 'basicAuthHttpInterceptor'
+description: '根据凭据设置 Basic Authorization header 的 HTTP interceptor。'
+---
+
+<ApiReference identity="@defjs/core:basicAuthHttpInterceptor" />
+
+```ts
+function basicAuthHttpInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): HttpInterceptor
+```
+
+- **fn** — 每个请求都会调用，用来产生凭据。
+- **options** — 可选的 [`BasicAuthInterceptorOptions`](/zh-Hans/api/core/basicauthinterceptoroptions-type)，可自定义 `encode`。
+- **返回** 一个 `HttpInterceptor`，它在请求 header 的副本上设置 `Authorization: Basic <encoded>`，并替换已有的 `Authorization` header。
+
+默认编码器是 ``btoa(`${username}:${password}`)``，因此凭据必须是 Latin-1。没有提供 `encode` 时，如果运行时没有 `btoa`，调用 `basicAuthHttpInterceptor` 会抛出 `Error: BasicAuthInterceptor is not supported in this environment`。SSE 命令请使用 [`basicAuthSSEInterceptor`](/zh-Hans/api/core/basicauthsseinterceptor)。
+
+见 [Interceptors 指南](/zh-Hans/docs/interceptors)。
+
+[Interceptors](/zh-Hans/api/interceptors)

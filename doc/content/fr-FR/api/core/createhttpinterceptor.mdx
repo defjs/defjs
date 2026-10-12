@@ -1,0 +1,17 @@
+---
+title: 'createHttpInterceptor'
+description: 'Enveloppe une fonction d’intercepteur en intercepteur HTTP étiqueté.'
+---
+
+<ApiReference identity="@defjs/core:createHttpInterceptor" />
+
+```ts
+function createHttpInterceptor(fn: InterceptorFn): HttpInterceptor
+
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+Renvoie `{ kind: 'http', fn }`. Appelle `next(req)` (éventuellement avec une requête modifiée) ou court-circuite avec `makeResponse`. `next` n’exécute que les intercepteurs enregistrés après celui-ci, puis le fetch handler. Les intercepteurs HTTP ne s’exécutent pas pour les commandes SSE ou WebSocket.
+
+[Intercepteurs](/fr-FR/api/interceptors)

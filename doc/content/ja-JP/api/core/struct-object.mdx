@@ -1,0 +1,24 @@
+---
+title: 'struct.object'
+description: '固定のフィールド集合を持つプレーンオブジェクトをパースする struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+`shape` はフィールド名を struct に対応付けます。
+
+- すべてのフィールドはデフォルトで**必須**です。キーがない場合は `missing_key` で失敗します。
+- `.optional()` と `.nullish()` はキーが欠けていることを許します。欠けているオプションのフィールドは、出力でも欠けたままです。
+- `.null()` / `.nullable()` は `null` を許します。`.alias(name)` は、そのフィールドを別のワイヤキーで読み書きします。
+- `shape` にないキーは出力から取り除かれます。出力は `null` プロトタイプを持つ新しいオブジェクトです。
+- 入力はプレーンオブジェクトでなければなりません。配列、`Map`、クラスインスタンスは `invalid_type`（expected は `object`）で失敗します。
+- 最初に失敗したフィールドでパースが止まり、`issue.path` にそのキーが入ります。
+- `shape` がプレーンオブジェクトでない場合は `TypeError` を投げます。
+
+`ObjectShape` は `{ [key: string]: any }` で、各値は struct でなければなりません。
+
+[Struct](/ja-JP/api/struct)

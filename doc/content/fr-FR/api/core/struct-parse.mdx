@@ -1,0 +1,30 @@
+---
+title: 'struct.parse'
+description: 'Parse une valeur inconnue avec un struct et renvoie un tuple erreur en premier.'
+---
+
+<ApiReference identity="@defjs/core:struct.parse" />
+
+```ts
+function parse<S extends StructLike<unknown, unknown, boolean>>(
+  struct: S,
+  value: unknown,
+  options?: { aliases?: boolean; errorMap?: ErrorMap },
+): ParseResult<S['_struct']['output']>
+```
+
+- **struct** est le struct avec lequel parser. Une valeur qui n’est pas un struct lève `TypeError`.
+- **value** est l’entrée inconnue.
+- **options.aliases** vaut `false` par défaut : les clés d’objet sont lues par leurs noms **logiques** (`displayName`). Avec `true`, elles sont lues par leurs noms wire (`display_name`), comme les codecs HTTP/JSON les lisent. La sortie utilise toujours les noms logiques.
+- **options.errorMap** est une [`ErrorMap`](/fr-FR/api/core/errormap-type) qui réécrit les messages d’issue pour cet appel seulement. Renvoyer `undefined` garde le message par défaut.
+- **Renvoie** `[null, output]` ou `[StructError, undefined]`. Une entrée invalide ne lève jamais.
+- Le parse est fail-fast : il s’arrête au premier échec, donc l’erreur contient une seule issue. Les clés d’objet inconnues sont retirées de la sortie, et l’entrée n’est pas modifiée.
+
+```ts
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+if (error) return console.error(error.prettify())
+```
+
+Voir [`ParseResult`](/fr-FR/api/core/parseresult-type) et [`StructError`](/fr-FR/api/core/structerror-type).
+
+[Struct](/fr-FR/api/struct)

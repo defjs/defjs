@@ -1,0 +1,14 @@
+---
+title: 'EventStreamRequestShape'
+description: 'SSE builder 回傳的 request 形狀，與 HTTP 的形狀相同。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamRequestShape" />
+
+```ts
+type EventStreamRequestShape<P extends string, M extends string> = HttpRequestShape<P, M>
+```
+
+對串流的 method `M` 與 path `P`，欄位與 [`HttpRequestShape`](/zh-Hant-TW/api/core/httprequestshape-type) 相同。
+
+[SSE](/zh-Hant-TW/api/sse)

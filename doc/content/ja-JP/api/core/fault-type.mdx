@@ -1,0 +1,20 @@
+---
+title: 'Fault'
+description: 'client.execute が返しうるすべての失敗を、code で判別するユニオン型です。'
+---
+
+<ApiReference identity="@defjs/core:Fault" />
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`TErr` はエンドポイントが宣言した `error` struct で、宣言がなければ `undefined` です。`Fault<TErr>` は、デコード済みボディの型に [`FaultOf`](/ja-JP/api/core/faultof-type) を適用したものなので、[`DecodeFault`](/ja-JP/api/core/decodefault-type)、[`HttpStatusFault<TErr>`](/ja-JP/api/core/httpstatusfault-type)、[`PreflightFault`](/ja-JP/api/core/preflightfault-type) という 3 つのバリアントのユニオンです。`fault.code` で switch してください。
+
+どのバリアントも `DefjsFault` という名前のネイティブ `Error` なので、`String(fault)` はそのままログに出せる `DefjsFault: <message>` を返します。`code` と各バリアントのメタデータ — `status`、`response`、`data` — は列挙可能な自前プロパティです。ネイティブの `cause` チェーンは列挙されません。
+
+<include cwd>examples/api/fault.ts#example</include>
+
+`format()`、`flatten()`、`prettify()` は `fault.cause` を `StructError` に絞り込んだあとでのみ呼んでください。これらの helper は fault にコピーされません。
+
+[Errors](/ja-JP/api/errors)

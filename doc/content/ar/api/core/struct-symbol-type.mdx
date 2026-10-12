@@ -1,0 +1,16 @@
+---
+title: 'STRUCT'
+description: 'تصدير نوع فقط: مفتاح الوسم الداخلي الذي يستخدمه المرمِّز الصادر.'
+---
+
+<ApiReference identity="@defjs/core:STRUCT" />
+
+```ts
+declare const STRUCT: unique symbol
+```
+
+يُصدَّر `STRUCT` كـ **نوع** فقط (`export type { STRUCT }`). ولا يملك `@defjs/core` تصدير `STRUCT` وقت التشغيل، فـ `import { STRUCT } from '@defjs/core'` يفشل في الترجمة ولا يعطي قيمة.
+
+وهو يسمّي الوسم القابل للعدّ الذي يعلّم الكائنات الناتجة أثناء تحليل مدخل نقطة النهاية، ليعرف المرمِّز الصادر أي struct أنتجها. أما `struct.parse` وفك ترميز الاستجابة فلا يضبطانه. الرمز داخلي؛ ولا ينبغي أن يعتمد عليه كود التطبيق.
+
+[Struct](/ar/api/struct)

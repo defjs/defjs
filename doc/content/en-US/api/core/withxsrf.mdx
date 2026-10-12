@@ -1,0 +1,25 @@
+---
+title: 'withXSRF'
+description: 'Client option that copies an XSRF token onto a request header for HTTP requests.'
+---
+
+<ApiReference identity="@defjs/core:withXSRF" />
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+Enables XSRF token forwarding for **HTTP** requests. SSE and WebSocket requests do not get the header.
+
+- `cookieName` defaults to `XSRF-TOKEN` and `headerName` to `X-XSRF-TOKEN`.
+- The header is set only when all of these hold: the method is not `GET`, `HEAD`, `OPTIONS`, or `TRACE`; the request does not already have that header; the client has an endpoint; and, in a browser, the request URL has the same origin as the page.
+- Without `tokenProvider`, the token is read from `document.cookie` and URL-decoded. Outside a browser there is no cookie, so no header is set.
+- With `tokenProvider`, the cookie is never read. The provider receives the request, and its result is the token. An empty string, `null`, or `undefined` means no header.
+
+See the [HTTP guide](/docs/http) for the request-level behavior.
+
+[Client](/api/client)

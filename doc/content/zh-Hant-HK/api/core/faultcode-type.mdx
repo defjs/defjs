@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'Defjs 報告嘅所有失敗 code 嘅封閉集合。'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+一個封閉集合。第一個 `_` 之前嗰段就係 class；冇獨立嘅 `kind` field。
+
+| Class  | 含義                                                         |
+| ------ | ------------------------------------------------------------ |
+| `HTTP` | Peer 回應咗非 2xx status。                                   |
+| `REQ`  | Request 根本冇發出去：input、execute options 或 build 出錯。 |
+| `NET`  | 冇可用嘅 response：cancel、timeout、連線失敗、body 被截斷。  |
+| `RES`  | Response 到咗，但冇辦法按聲明讀出嚟。                        |
+| `EXT`  | 你接駁喺 pipeline 嘅 code throw 咗 error。                   |
+| `CAP`  | 超出咗聲明嘅 buffer 或 queue 上限。                          |
+| `ENV`  | Host runtime 欠缺所需嘅 capability。                         |
+
+集合保持封閉，`switch (fault.code)` 才可以窮盡——extension 報自己嘅細節走 `cause`，唔係加新 code。
+
+[Errors](/zh-Hant-HK/api/errors)

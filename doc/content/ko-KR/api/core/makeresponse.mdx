@@ -1,0 +1,14 @@
+---
+title: 'makeResponse'
+description: '네트워크 호출 없이 HttpResponse를 만들어요.'
+---
+
+<ApiReference identity="@defjs/core:makeResponse" />
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+네트워크 호출 없이 `HttpResponse`를 만들어요 (인터셉터, 테스트). 기본 status는 `0`이라서 성공 응답을 만들려면 2xx `status`를 넘겨야 해요. `ok`는 2xx일 때 true예요. 반환값은 와이어에서 온 응답과 같은 미디어 타입 검사와 같은 선언된 struct를 거쳐요. 신뢰하는 short-circuit은 없어요. JSON body라면 JSON `content-type` 헤더를 설정하세요.
+
+[HTTP](/ko-KR/api/http)

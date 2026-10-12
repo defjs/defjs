@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'Parsed endpoint input type that a request builder receives.'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+Parsed endpoint input as seen by `builder`. Object nodes carry the struct that produced them (the internal `Typed` brand), so alias, `Date`, and `bigint` encoding follow the value into the request. Record entries and tuple items are branded the same way. At runtime a record container is also tagged when the parsed value is an object; array and tuple containers are not, and `null` and `undefined` are never tagged. Nullish modifiers recover the struct they wrapped, union options are distributed, and intersection options are combined. Any other struct falls back to `Infer<S>`.
+
+`CarriedStruct`, `NullishBuilderInput`, `IntersectBuilderInputs`, and `Typed` are internal helper types.
+
+[HTTP](/api/http)

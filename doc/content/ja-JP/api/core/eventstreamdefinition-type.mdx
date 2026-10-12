@@ -1,0 +1,28 @@
+---
+title: 'EventStreamDefinition'
+description: 'defineEventStream 向けに SSE エンドポイントを記述するコントラクトです。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamDefinition" />
+
+```ts
+type EventStreamDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EventStreamDefinitionBase<TEvents> &
+  EventStreamErrorField<TError> & {
+    builder?: OutboundBuilder
+    input?: TInput
+  }
+```
+
+構成要素は次のとおりです。
+
+- `events`、`maxBufferSize`、`maxQueueSize`（上限はどちらも必須の正の安全な整数）、任意の `method` と `operation`、必須の `path`。
+- `error`。必須になるのは `TError` が struct の場合だけです。失敗したハンドシェイク（2xx 以外のレスポンス）のボディをデコードします。kind の規則は HTTP と同じで、`string` はテキスト、`blob` と `file` は blob、`arrayBuffer` はバイト列、それ以外は JSON です。
+- `input` と `builder`。リクエストの形は `body` を含めて HTTP と同じで、`GET` と `HEAD` はボディを返せません。`input` を宣言した場合は、入力がすでにリクエストの形と一致していても、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
+
+`EventStreamDefinitionBase` と `EventStreamErrorField` は内部ヘルパー型です。
+
+[SSE](/ja-JP/api/sse)

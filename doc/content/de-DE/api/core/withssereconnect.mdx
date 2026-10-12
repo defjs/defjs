@@ -1,0 +1,40 @@
+---
+title: 'withSSEReconnect'
+description: 'Client-Option, die automatischen SSE-Reconnect aktiviert.'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+Konfiguriert den automatischen Reconnect, nachdem ein SSE-Stream fehlgeschlagen ist. Reconnect ist Opt-in: Ohne diese Option wird ein fehlgeschlagener Stream nicht erneut versucht. `undefined` zu übergeben löscht eine frühere Einstellung.
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` ist das Retry-Budget nach dem ersten Versuch. Der Default ist `3`, wenn `reconnect` gesetzt ist, und `0` schaltet Retries aus. Es wegzulassen heißt nicht unbegrenzt.
+- Ohne `shouldReconnect` wird die Verbindung nur für Requests mit `GET`, `HEAD`, `OPTIONS`, `PUT` und `DELETE` erneut hergestellt. Ist der Callback vorhanden, entscheidet sein Rückgabewert bei jeder Methode über den Reconnect, auch bei `POST`; anhand von `method` im Kontext lassen sich die Endpoints unterscheiden. Gib `false` zurück, um nach diesem Fehler keine weiteren Versuche zu unternehmen. Der Callback wird aufgerufen, bevor die Höchstzahl der Versuche geprüft wird.
+- Bei einem Request mit einem `ReadableStream`-Body wird die Verbindung nie erneut hergestellt; `shouldReconnect` wird dafür nicht aufgerufen.
+- `delayMs`, `factor`, `jitter` (0 bis 1) und `maxDelayMs` formen das Backoff. `factor` ist standardmäßig `1` und `jitter` `0`.
+- `delayMs` ist nur die Start-Basisverzögerung (standardmäßig `1000`). Ein `retry:`-Feld des Servers (nur Ziffern, in Millisekunden) ersetzt sie für spätere Versuche.
+- Die letzte Event-ID wird beim nächsten Versuch erneut als `Last-Event-ID` gesendet.
+
+Das Stream-Handle steht unter [SSE](/de-DE/api/sse).
+
+[Client](/de-DE/api/client)

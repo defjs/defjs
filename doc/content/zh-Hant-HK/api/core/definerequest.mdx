@@ -1,0 +1,35 @@
+---
+title: 'defineRequest'
+description: '聲明 typed 嘅 HTTP request endpoint。'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method`、`path`，可選 `input` struct、可選 `output` 同 `error` structs，仲有可選 `operation`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
+- **Returns** 一個 endpoint。用 input call 佢，就會得到 `HttpCommand`。
+
+`ResponseDeclaration` 同 `BuilderField` 係內部 helper types：只有對應嘅 type parameter 係 struct 時，`output` 同 `error` 先必填，而聲明咗 `input` 時，`builder` 係 `(input: BuilderInput<TInput>) => HttpRequestShape`。
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` 係 2xx body 嘅單一 struct；`error` 係每個非 2xx body 嘅單一 struct。兩者都唔會按 status code 分 key。唔寫邊個，嗰個 body 就根本唔會被讀——睇
+[聲明即斷言](/zh-Hant-HK/docs/design-decisions#聲明即斷言)。
+
+[HTTP](/zh-Hant-HK/api/http)

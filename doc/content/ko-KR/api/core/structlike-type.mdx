@@ -1,0 +1,22 @@
+---
+title: 'StructLike'
+description: '모든 struct가 지니는 구조적 브랜드예요.'
+---
+
+<ApiReference identity="@defjs/core:StructLike" />
+
+```ts
+interface StructLike<I = unknown, O = unknown, OO extends boolean = boolean> {
+  readonly _struct: {
+    input: I
+    optionalOut: OO extends true ? true : undefined
+    output: O
+  }
+}
+```
+
+`_struct` 타입 페이로드를 가진 모든 것이에요. [`StructInput`](/ko-KR/api/core/structinput-type)과 [`Infer`](/ko-KR/api/core/infer-type)가 여기서 `input`과 `output`을 읽고, 객체 struct는 `optionalOut`으로 어떤 출력 필드가 없을 수 있는지 정해요.
+
+`_struct`는 타입 시스템에만 있어요. struct에는 런타임에 `_struct` 속성이 없고, 그 타입만 맞춘 plain 객체는 유효한 struct가 아니에요.
+
+[Struct](/ko-KR/api/struct)

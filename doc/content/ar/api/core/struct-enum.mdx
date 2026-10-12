@@ -1,0 +1,18 @@
+---
+title: 'struct.enum'
+description: 'struct يقبل قيمة واحدة من قائمة سلاسل أو من قيم كائن.'
+---
+
+<ApiReference identity="@defjs/core:struct.enum" />
+
+```ts
+function enum<const T extends readonly [string, ...string[]]>(value: T): Struct<T[number], T[number]>
+function enum<const T extends { [key: string]: number | string }>(value: T): Struct<T[keyof T], T[keyof T]>
+```
+
+- مع مصفوفة سلاسل غير فارغة، القيم المقبولة هي عناصر المصفوفة.
+- مع كائن، القيم المقبولة هي **قيم** الكائن من السلاسل والأرقام، لا مفاتيحه. فـ `{ A: 'a', B: 2 }` يقبل `'a'` و`2`.
+- كائن `enum` رقمي في TypeScript يقبل أيضًا أسماء أعضائه، لأن الربط العكسي جزء من قيمه.
+- القيمة خارج المجموعة تفشل بـ `invalid_enum`. والكائن الذي لا يحوي أي قيمة سلسلة أو رقم يرمي `TypeError` عند إنشاء الـ struct.
+
+[Struct](/ar/api/struct)

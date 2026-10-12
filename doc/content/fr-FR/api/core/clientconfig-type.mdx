@@ -1,0 +1,31 @@
+---
+title: 'ClientConfig'
+description: 'Configuration du client résolue, une fois les helpers d’options appliqués.'
+---
+
+<ApiReference identity="@defjs/core:ClientConfig" />
+
+```ts
+interface ClientConfig {
+  endpoint: string
+  headers?: Headers
+  http: { handle: FetchHandle }
+  interceptors: Interceptor[]
+  querySerializer?: QuerySerializer
+  timeout?: number
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  sse: ClientSSEConfig
+  webSocket: ClientWebSocketOptions
+}
+```
+
+L’instantané résolu que `createClient` construit et que chaque helper d’options modifie. Les membres HTTP proviennent d’une base `HttpClientConfig` non exportée et sont montrés en ligne.
+
+Avant l’application de toute option, `endpoint` vaut `''`, `interceptors` est vide, et `http.handle` et `sse.handle` sont le `fetch` global. `webSocket.handle` vaut `globalThis.WebSocket`, et les autres réglages `webSocket` ne sont pas définis. `withXSRF` renseigne `xsrf.cookieName` avec `XSRF-TOKEN` et `xsrf.headerName` avec `X-XSRF-TOKEN` quand ils sont omis.
+
+[Client](/fr-FR/api/client)

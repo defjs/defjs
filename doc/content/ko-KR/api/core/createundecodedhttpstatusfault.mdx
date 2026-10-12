@@ -1,0 +1,17 @@
+---
+title: 'createUndecodedHttpStatusFault'
+description: 'body를 디코딩하지 않은 HTTP_STATUS fault를 만드는 팩토리예요.'
+---
+
+<ApiReference identity="@defjs/core:createUndecodedHttpStatusFault" />
+
+```ts
+function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+```
+
+- **response** — non-2xx 응답의 메타데이터예요. 엔드포인트가 `error` struct를 선언하지 않았으므로 body는 읽지 않았어요.
+- **반환** `code: 'HTTP_STATUS'`이고, `data: undefined`, `status`는 응답에서 복사하고, `response`는 넘긴 그대로인, 이름이 `DefjsFault`인 네이티브 `Error`예요.
+
+body를 디코딩했다면 [`createHttpStatusFault`](/ko-KR/api/core/createhttpstatusfault)를 쓰세요.
+
+[오류](/ko-KR/api/errors)

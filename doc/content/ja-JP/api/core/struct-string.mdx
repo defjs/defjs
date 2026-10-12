@@ -1,0 +1,15 @@
+---
+title: 'struct.string'
+description: '文字列を受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.string" />
+
+```ts
+function string(): Struct<string, string>
+```
+
+- 受け付けるのは `string` 値だけで、それ以外は `invalid_type` で失敗します。
+- ボディのルート、または受信側の `output` / `error` struct として使うと、バイト列は JSON としてパースされず、テキストのままになります。
+
+[Struct](/ja-JP/api/struct)

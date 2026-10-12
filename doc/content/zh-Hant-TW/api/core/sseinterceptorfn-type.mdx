@@ -1,0 +1,16 @@
+---
+title: 'SSEInterceptorFn'
+description: 'SSE interceptor 的函式形式。'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptorFn" />
+
+```ts
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+可以檢查或替換 `req`，然後呼叫 [`next`](/zh-Hant-TW/api/core/ssehandler-type) 繼續 chain，或回傳自己的 `EventStreamHandle` 來短接。用 `createSSEInterceptor(fn)` 包起來，才能透過 `withInterceptors` 註冊。
+
+短接 handle 必須提供 `[Symbol.asyncDispose](): PromiseLike<void>`，並接到同一條 close lifecycle。
+
+[Interceptors](/zh-Hant-TW/api/interceptors)

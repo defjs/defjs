@@ -1,0 +1,73 @@
+---
+title: 'React'
+description: Install provider，讀 client，fetch 一個 user，effect 再 run 時 abort。
+---
+
+# React
+
+將現有 `@defjs/core` client wire 入 React tree。你拎到 Context 同 `useClient()`。Package **唔會** create client、加 cache、retry commands，或者 dispose transport resources。開始工作嘅 component、effect 或者 data library own 住佢。
+
+## 基本用法
+
+Install `@defjs/core`、`@defjs/react` 同 React 18+。ESM：
+
+`bun add @defjs/core @defjs/react react`
+
+Provide client，之後 fetch user，change 時 abort：
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+<include cwd>examples/react/basic-setup.tsx#example</include>
+
+`ClientProvider` 係普通 Context provider。唔同 `client` prop 會改 descendants 見到嘅嘢 — 冇 clone、replace 或者 dispose。Nested providers 建立明確 boundaries。
+
+React 喺 development 可能 setup 同 clean up effect 多過一次。Signal check 阻止 stale promise 寫入而家嘅 render。Tuple error 仍然係 data。
+
+## 用 `useClient` 讀
+
+`useClient()` return 最近嘅 `Client`。喺 render 期間 call（component 或者 custom hook）。冇 provider 就 throw：
+
+<include cwd>examples/react/read-with-use-client.tsx#example</include>
+
+Hook 淨係供應 client。佢唔會開始工作、subscribe transport，或者將 error-first tuple 變做 exception。
+
+## 由 query library own 嘅工作
+
+Query library 可以 own caching、retries、stale-result suppression 同 cancellation。將佢提供嘅 signal 傳過去。List pages 用 TanStack Query（或者類似嘅）包住 `client.execute(...)`——`@defjs/react` 只做 DI，**唔會** ship `useRequest`。
+
+<include cwd>examples/react/own-query-work.tsx#example</include>
+
+唔好將同一個 command wrap 入第二個 effect — 兩個 owners 會令 cancel 同 stale-result handling 變模糊。
+
+## 自己 own realtime 工作
+
+SSE 同 WebSocket handles 會 outlive `client.execute(...)`。Await startup 之前先 register cleanup，dispose 之後先到嘅 handle 要 close，consume 佢唯一個 iterator，await terminal promise：
+
+<include cwd>examples/react/own-realtime-work.tsx#example</include>
+
+傳俾 `execute` 嘅 `signal` 會繼續管住已經 open 嘅 session。喺 cleanup abort 佢，session 會以 `aborted` 完結，`receive` 以 `AbortError` reject，所以上面個 `catch` 喺 effect dispose 之後會忽略 errors，只報真正嘅失敗（queue overflow、heartbeat timeout）。Abort 咗嘅 SSE stream 就反過來，iterator 會正常完結。冇呢個 `catch` 嘅話，loop 嘅 rejection 就會變成 unhandled promise rejection。
+
+`EventStreamHandle` 同一條規則：喺 `finally` close，await `stream.closed`。WebSocket consumers 亦要 unsubscribe state/runtime-error listeners，同保持讀 `session.receive` — unread bounded queue 可以 overflow。
+
+## SSR 同 client scope
+
+Package entry 係 Client Component boundary。Browser app 可以 share module-scoped client，當 endpoint、interceptors 同 captured state 係 browser-safe 同 request-independent。SSR 時，當 headers、cookies、users、tenants 或者 credentials 唔同時，喺每個 request boundary 入面 create 分開嘅 client。
+
+Provider unmount **唔會** abort HTTP、close SSE/WebSocket、unsubscribe listeners，或者 call `dispose`。`@defjs/react` 冇呢類 lifecycle API。開始每次 operation 嘅 code 一定要 finish 或者 cancel 佢。
+
+## 參考
+
+`@defjs/react` 嘅 public exports：
+
+- `ClientProvider` — 接受 `ClientProviderProps`，provide 傳入嘅 client
+- `useClient` — 最近嘅 client，或者 throw
+- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
+
+Clients 同 options 喺 `@defjs/core` create。睇 [Client](/zh-Hant-HK/docs/client)、[Errors](/zh-Hant-HK/docs/errors)、[SSE](/zh-Hant-HK/docs/sse) 同 [WebSocket](/zh-Hant-HK/docs/web-socket)。
+
+## 相關配方
+
+- [GET 配 declared 404](/zh-Hant-HK/recipes/get-declared-404)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)
+- [Consume 一條 SSE stream](/zh-Hant-HK/recipes/consume-sse)
+- [開一個 WebSocket session](/zh-Hant-HK/recipes/websocket-session)

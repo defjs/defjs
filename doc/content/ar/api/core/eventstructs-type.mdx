@@ -1,0 +1,20 @@
+---
+title: 'EventStructs'
+description: 'خريطة من أسماء أحداث SSE إلى structs التي تفكّ بياناتها.'
+---
+
+<ApiReference identity="@defjs/core:EventStructs" />
+
+```ts
+type EventStructs = { [key: string]: AnyStruct }
+```
+
+الحدث الذي بلا حقل `event:` اسمه `message`. والحدث الذي ليس لاسمه مدخل خاص يستخدم struct باسم `default`؛ وإن لم يوجد أيٌّ منهما يُتخطّى الحدث وتُستدعى `onInvalidEvent`. أعلن اسم الحدث `__proto__` بمفتاح محسوب خاص (computed own key).
+
+struct حدث من نوع `string` يُبقي نص `data` الخام. كل نوع آخر هو نص JSON: `JSON.parse`، ثم الـ struct. لذلك يحتاج `struct.literal` العاري نص JSON، لا رمزًا بلا اقتباس.
+
+إعادة الاتصال تُضبط على العميل (`withSSEReconnect`). `jitter` في SSE **عامل ضربي بين 0 و1**، مثل WebSocket.
+
+انظر [دليل SSE](/ar/docs/sse) و[استهلاك تدفق SSE](/ar/recipes/consume-sse).
+
+[SSE](/ar/api/sse)

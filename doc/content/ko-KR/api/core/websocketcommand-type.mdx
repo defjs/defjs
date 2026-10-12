@@ -1,0 +1,23 @@
+---
+title: 'WebSocketCommand'
+description: 'WebSocketEndpoint를 호출해서 만드는 실행 가능한 명령이에요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCommand" />
+
+```ts
+interface WebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> extends BaseCommand<typeof WEB_SOCKET_COMMAND> {
+  readonly endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>
+  readonly input: EndpointInput<TInput> | undefined
+}
+```
+
+[`WebSocketEndpoint`](/ko-KR/api/core/websocketendpoint-type)를 호출해서 만들어요. endpoint 정의와 파싱하지 않은 입력을 담고 있어요. `client.execute`에 넘기면 session이 열리고, 그 전에는 아무것도 연결되지 않아요.
+
+`BaseCommand`에는 명령을 올바른 전송으로 라우팅하는 심볼 키 멤버가 있어요. 내부용이므로 명령은 opaque 값으로 다루세요.
+
+[WebSocket](/ko-KR/api/web-socket)

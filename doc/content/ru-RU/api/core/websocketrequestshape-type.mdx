@@ -1,0 +1,23 @@
+---
+title: 'WebSocketRequestShape'
+description: 'Форма запроса, которую может вернуть builder WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketRequestShape" />
+
+```ts
+type WebSocketRequestShape<P extends string> = {
+  body?: never
+  headers?: never
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+Что может вернуть `builder` для [`WebSocketDefinition`](/ru-RU/api/core/websocketdefinition-type); `P` — path эндпоинта.
+
+- `path` задаёт сегменты `:name` из `P`: одно скалярное значение на имя. Если в path таких сегментов нет, это `never`.
+- `query` — `URLSearchParams` или запись из скаляров, массивов и вложенных записей.
+- `headers` и `body` — `never`. Handshake WebSocket не берёт ни то ни другое из builder; credentials клади в `beforeConnect` или interceptor.
+
+[WebSocket](/ru-RU/api/web-socket)

@@ -1,0 +1,27 @@
+---
+title: 'OpenTelemetryServerTransportOptions'
+description: Opciones compartidas por todos los transportes — enabled y los span hooks, genéricas sobre el tipo de respuesta.
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions" />
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+```
+
+`TResponse` es lo que recibe `responseHook`: `HttpResponse<unknown>` para HTTP, `EventStreamHandle<unknown>` para SSE y `WebSocketSessionLike` para WebSocket. Consulta [OpenTelemetryServerHttpOptions](/es-ES/api/opentelemetry-server/opentelemetryserverhttpoptions-type), [OpenTelemetryServerSSEOptions](/es-ES/api/opentelemetry-server/opentelemetryserversseoptions-type) y [OpenTelemetryServerWebSocketOptions](/es-ES/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type).
+
+`enabled` vale `true` por defecto; solo `enabled: false` apaga el transporte. El antiguo interruptor booleano (`http: false`) y los hooks de nivel superior los rechazan únicamente los tipos de TypeScript. No hay comprobación en runtime, así que en runtime `http: false` deja el transporte habilitado y un hook de nivel superior se ignora en silencio.
+
+Los span hooks solo se ejecutan cuando se proporciona un `tracer`. `startSpanHook` se ejecuta de forma síncrona antes de crear el span de su propio transporte. Sus atributos se aplican después de los atributos integrados, así que la aplicación puede sustituir `url.full` u otro valor inicial. Si lanza, Defjs crea el span con los atributos integrados, registra un evento `defjs.otel.hook.error` y continúa la solicitud. `requestHook` se ejecuta tras crear el span y antes de enviar la solicitud; `responseHook` se ejecuta una vez devuelto el resultado del transporte. Ambos pueden devolver una promesa, pero ninguno se espera (await): un throw o un rechazo se registra del mismo modo y nunca bloquea ni hace fallar la operación. `responseHook` recibe la solicitud original como tercer argumento.
+
+Por defecto, `url.full` resuelve únicamente `request.endpoint` contra el `request.baseEndpoint` opcional; un `request.queryString` independiente no se añade. Ese límite no es redacción (ocultación de datos sensibles), y el paquete no incluye ningún redactor ni política de claves sensibles. Construye y, si hace falta, redacta explícitamente una URL propia de la aplicación:
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+[@defjs/opentelemetry-server](/es-ES/api/opentelemetry-server)

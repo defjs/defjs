@@ -1,0 +1,16 @@
+---
+title: 'ERR_ABORTED'
+description: 'قيمة Error مشتركة تعلّم الطلب بأنه أُلغي.'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+قيمة `cause` والرسالة المشتركة لإلغاء المستدعي. يربطها `createNetworkFault`، ومعها `DOMException` باسم `AbortError`، بالرمز `NET_ABORTED`. معترض HTTP الذي يرميها يجعل الاستدعاء ينتهي بخطأ `NET_ABORTED`. أما معترضات SSE وWebSocket التي ترميها فيُبلَّغ عنها بالرمز `EXT_INTERCEPTOR_FAILED`.
+
+راجع [دليل الأخطاء](/ar/docs/errors).
+
+[الأخطاء](/ar/api/errors)

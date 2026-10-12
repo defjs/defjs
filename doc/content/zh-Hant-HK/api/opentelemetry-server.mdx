@@ -1,0 +1,103 @@
+---
+title: '@defjs/opentelemetry-server'
+description: withOpenTelemetryServer 同 per-transport options。
+---
+
+# OpenTelemetry server
+
+以 core interceptors 形式提供對外發出嘅 HTTP / SSE / WebSocket instrumentation。呢個 package 唔會 initialize OpenTelemetry SDK，亦唔係 inbound server instrumentation。
+
+見 [OpenTelemetry server guide](/zh-Hant-HK/docs/integrations/opentelemetry-server)。
+
+## withOpenTelemetryServer()
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+為每個啟用咗嘅 transport append 一條 interceptor，次序係 HTTP、SSE、WebSocket。喺 `createClient` 時套用。`options` 必填；如果只想安裝 interceptors 做 propagation，就傳 `{}`。
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+`tracer`、`meter` 同 `logger` 各自可選。唔傳 `propagator` → W3C Trace Context + Baggage。
+
+省略 `tracer` 時，adapter 唔會建立本地 span，亦唔會 call `trace.getTracer(...)`，並且略過 `startSpanHook`、`requestHook` 同 `responseHook`。傳入嘅 `meter` 同 `logger` 會獨立運作。Propagation 仍然會轉發擷取到嘅 parent context；WebSocket 嘅 `queryPropagation` 預設仍然係 `false`。有 tracer 時，`requireParentSpan: true` 會喺冇活躍 parent 嘅情況下略過所有 instrumentation，包括 logs；冇 tracer 時，佢既唔會阻止 metrics，亦唔會阻止 logs。
+
+HTTP、SSE 同 WebSocket 預設全部開啟。喺某個 transport 傳 `{ enabled: false }` 就會略過佢。
+
+## OpenTelemetryServerOptions
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+| 欄位                | 預設                        | 效果                                                                                    |
+| ------------------- | --------------------------- | --------------------------------------------------------------------------------------- |
+| `tracer`            | 冇                          | 冇佢就冇本地 span，亦冇 span hooks。                                                    |
+| `meter`             | 冇                          | 冇佢就唔會記錄呢個 package 嘅 metrics。                                                 |
+| `logger`            | 冇                          | 來自 `@opentelemetry/api-logs` 嘅 `Logger`。冇佢就唔會發出診斷 LogRecords。             |
+| `propagator`        | W3C Trace Context + Baggage | 擷取 parent context，並注入對外發出嘅 context。                                         |
+| `requireParentSpan` | `false`                     | 有 `tracer` 時，如果冇活躍 parent span 就略過 instrumentation。冇 `tracer` 時會被忽略。 |
+| `http`              | `{}`                        | HTTP transport options。                                                                |
+| `sse`               | `{}`                        | SSE transport options。                                                                 |
+| `webSocket`         | `{}`                        | WebSocket transport options。                                                           |
+
+## OpenTelemetryServerTransportOptions
+
+### OpenTelemetryServerHttpOptions
+
+### OpenTelemetryServerSSEOptions
+
+### OpenTelemetryServerWebSocketOptions
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<EventStreamHandle<unknown>>
+interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTransportOptions<WebSocketSessionLike> {
+  queryPropagation?: boolean
+}
+```
+
+`enabled` 預設係 `true`；只有 `enabled: false` 先會關閉某個 transport。舊嘅 boolean 開關（`http: false`）同頂層 hooks 只會被 TypeScript types 拒絕，runtime 並冇檢查，所以 runtime 時 `http: false` 會令 transport 保持啟用，頂層 hook 亦會被靜靜咁忽略。
+
+Span hooks 只會喺有傳入 `tracer` 時運行。`startSpanHook` 會喺所屬 HTTP、SSE 或 WebSocket transport 建立 span 之前同步運行。佢 return 嘅 attributes 會喺 built-in attributes 之後套用，所以 application 可以覆蓋 `url.full` 或者其他初始值。如果佢 throw，Defjs 會用 built-in attributes 建立 span、記錄 `defjs.otel.hook.error` event，然後繼續處理 request；`requestHook` 同 `responseHook` 會喺 span 建立之後運行。兩者都唔會被 await：throw 或者 rejection 會用同樣方式記錄，永遠唔會阻擋或者令操作失敗。
+
+`responseHook` 收到 transport 返回嘅內容：HTTP 係 `HttpResponse`，SSE 係啟動成功之後嘅 stream handle，WebSocket 係開啟成功之後嘅 session。第三個參數係原本嘅 request。
+
+預設情況下，`url.full` 只會將 `request.endpoint` 對可選嘅 `request.baseEndpoint` 解析；獨立嘅 `request.queryString` 唔會附加上去。呢條界線並唔係 redaction，而且 package 冇內建 redactor 或者 sensitive-key policy。請明確建立 application 自己擁有嘅 URL，有需要時再自行 redact：
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+`queryPropagation` 預設係 `false`。只有喺你接受 trace context 出現喺 WebSocket URL 之後先好開啟。
+
+## Logger 診斷
+
+頂層 `logger?: Logger` option 用嘅係 `@opentelemetry/api-logs`，而唔係 Winston/Pino Logger。佢係可選嘅，亦可以單獨使用。Defjs 永遠唔會攞全域 logger，亦唔擁有佢嘅 provider。每個 request 或者邏輯連線最多發出一個 `WARN` LogRecord（severity number 13），message 固定，attributes 有 `server.address` 同 `server.port`（已知時）、`defjs.phase`、`exception.type`，HTTP 另外有 `http.request.method`，SSE stream 以 error 結束時有 `defjs.sse.fault.code`，WebSocket close 資料帶數字 code 時有 `websocket.close.code`：
+
+| 結果                                                    | Event                                                             | `defjs.phase` |
+| ------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |
+| HTTP `next()` reject，不包括取消同公開嘅 `HTTP_STATUS`  | `http.client.request.exception`                                   | `request`     |
+| SSE 或 WebSocket 連線失敗                               | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
+| SSE 或 WebSocket 以 error 結束，包括 `closed` 被 reject | 同一個 transport event                                            | `connection`  |
+
+一般 status 嘅 response（包括 declared `error` body 可以解碼嘅 4xx/5xx）、成功、正常關閉、EOF 同 caller 取消，都唔會產生 LogRecord。HTTP execute timeout 屬於 rejection，會記錄一次（reason 係 `TimeoutError` 嘅 abort，例如 `AbortSignal.timeout()`，算係 timeout 而唔係取消）；declared `output` / `error` body 嘅 media type 唔係 JSON、讀取失敗或者 JSON 解析唔到，亦會記錄一次，與 HTTP status 無關。冇聲明嘅 body 永遠唔會被讀取，所以唔會 log。Struct 驗證、冇 body 嘅已聲明 body（例如 204），以及之後嘅 `HTTP_STATUS` 轉換都發生喺 interceptor 之後，所以唔會 log。非 2xx 嘅 SSE handshake 一定會記錄一次；Server 傳嚟嘅 WebSocket close frame 永遠唔會 log，無論 code 係乜。冇 close frame 就突然斷線（1006）要視乎 runtime：如果平台 WebSocket 喺 `close` 之前先觸發 `error`（Node.js），session 就以 error 結束並記錄一次；如果唔會（Bun），就當正常關閉，唔會 log。
+
+`exception.type` 係 interceptor 觀察到嘅對象嘅 class 名稱，而唔係 Defjs fault code：例如 `BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE handshake）、`DefjsFault`（WebSocket 啟動）、`TypeError`（網絡失敗）或者 `Error`（timeout）。過濾、exporter、flush 同 shutdown 由 application 負責。
+
+完整嘅 logging 同第三方整合範例，請見 [OpenTelemetry guide](/zh-Hant-HK/docs/integrations/opentelemetry-server#logs-同第三方-loggers)。

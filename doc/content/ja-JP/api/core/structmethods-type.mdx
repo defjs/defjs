@@ -1,0 +1,25 @@
+---
+title: 'StructMethods'
+description: 'すべての struct で使える、チェーン可能な修飾メソッドです。'
+---
+
+<ApiReference identity="@defjs/core:StructMethods" />
+
+```ts
+interface StructMethods<I, O, OO extends boolean> {
+  alias(name: string): this
+  null(): Struct<I | null, O | null, OO>
+  nullable(): Struct<I | null, O | null, OO>
+  nullish(): Struct<I | null | undefined, O | null | undefined, true>
+  optional(): Struct<I | undefined, O | undefined, true>
+}
+```
+
+各メソッドは新しい struct を返し、元の struct は変更しません。
+
+- `alias(name)` はオブジェクトフィールドのワイヤ名を設定します。`struct.parse` は `aliases: true` を渡さない限り論理名を読みます。JSON とフラットなリクエストコーデックはエイリアスを書き出します。文字列でない `name` を渡すと `TypeError` を投げます。
+- `null()` と `nullable()` は同じもので、`null` も受け付けます。
+- `optional()` は `undefined` も受け付けます。オブジェクトではキーが欠けていてもよく、欠けているフィールドは出力でも欠けたままです。
+- `nullish()` は `null` と `undefined` の両方を受け付けます。
+
+[Struct](/ja-JP/api/struct)

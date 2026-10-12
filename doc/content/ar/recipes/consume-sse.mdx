@@ -1,0 +1,22 @@
+---
+title: 'استهلاك أحداث SSE'
+description: افتح تدفق أحداث محدَّد النوع، كرّر مرة واحدة، ثم أغلق وانتظر closed.
+---
+
+# استهلاك تدفق SSE
+
+مكرّر غير متزامن واحد لكل تدفق. ضع `close` + `await stream.closed` في `finally` حتى لا تسرّب محاولة Fetch عند الخروج المبكر.
+
+انظر [SSE](/ar/docs/sse) للتفاصيل.
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com` عنوان توضيحي. مع خادم يكون أول حدث فيه `message` وبياناته `{ "text": "hello from the server" }`، تطبع الشيفرة:
+
+```txt
+hello from the server
+```
+
+لا تعيد SSE المحاولة عند فشل الشبكة أو القراءة افتراضيًا. فعّل ذلك صراحةً باستخدام `withSSEReconnect(...)`. عند ضبط كائن إعادة اتصال تكون القيمة الافتراضية لـ `attempts` هي `3`؛ وتعطّل `attempts: 0` إعادة المحاولة. في غياب `shouldReconnect`، تقتصر إعادة الاتصال على طلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`، ولا تُعاد محاولة الاتصال لأي طلب جسمه `ReadableStream`.

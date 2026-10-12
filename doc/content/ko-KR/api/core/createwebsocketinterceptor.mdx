@@ -1,0 +1,19 @@
+---
+title: 'createWebSocketInterceptor'
+description: 'interceptor 함수를 태그가 붙은 WebSocket 인터셉터로 감싸요.'
+---
+
+<ApiReference identity="@defjs/core:createWebSocketInterceptor" />
+
+```ts
+function createWebSocketInterceptor(fn: WebSocketInterceptorFn): WebSocketInterceptor
+
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+`{ kind: 'web-socket', fn }`을 반환해요. WebSocket 인터셉터는 WebSocket 명령에서만 실행돼요.
+
+`next`와 인터셉터는 인터셉터가 보는 세션인 [`WebSocketSessionLike`](/ko-KR/api/core/websocketsessionlike-type)를 반환해요. Wrapper나 short-circuit session은 그 `[Symbol.asyncDispose]()` teardown을 전달해야 해요. 멤버와 요구 사항은 해당 페이지에 나와 있어요.
+
+[인터셉터](/ko-KR/api/interceptors)

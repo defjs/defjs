@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'Поверхность WebSocket-инстанса, которую использует транспорт клиента.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+DOM-`WebSocket` без свойств-обработчиков событий, `binaryType`, `dispatchEvent` и констант состояния. Поэтому кастомной реализации нужны `url`, `protocol`, `extensions`, `bufferedAmount`, `send`, `close`, `addEventListener`, `removeEventListener` и числовой `readyState`.
+
+Транспорт ставит `binaryType = 'arraybuffer'`, если такое свойство есть. Это тип инстанса, который создаёт [`WebSocketHandleConstructor`](/ru-RU/api/core/websockethandleconstructor-type).
+
+[Клиент](/ru-RU/api/client)

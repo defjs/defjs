@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'Client transport 使用嘅 WebSocket instance surface。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+即係 DOM `WebSocket` 去掉 event-handler 屬性、`binaryType`、`dispatchEvent` 同 state 常數。所以自訂實作需要有 `url`、`protocol`、`extensions`、`bufferedAmount`、`send`、`close`、`addEventListener`、`removeEventListener`，以及數值型嘅 `readyState`。
+
+當 `binaryType` 屬性存在時，transport 會將佢設為 `'arraybuffer'`。呢個係 [`WebSocketHandleConstructor`](/zh-Hant-HK/api/core/websockethandleconstructor-type) 所產生嘅 instance type。
+
+[Client](/zh-Hant-HK/api/client)

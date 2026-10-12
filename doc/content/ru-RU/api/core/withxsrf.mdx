@@ -1,0 +1,25 @@
+---
+title: 'withXSRF'
+description: 'Опция клиента, которая копирует XSRF-токен в заголовок HTTP-запросов.'
+---
+
+<ApiReference identity="@defjs/core:withXSRF" />
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+Включает передачу XSRF-токена для **HTTP**-запросов. Запросы SSE и WebSocket этот заголовок не получают.
+
+- `cookieName` по умолчанию `XSRF-TOKEN`, а `headerName` — `X-XSRF-TOKEN`.
+- Заголовок ставится, только когда выполняется всё перечисленное: метод не `GET`, `HEAD`, `OPTIONS` и не `TRACE`; у запроса ещё нет такого заголовка; у клиента есть endpoint; а в браузере URL запроса имеет тот же origin, что и страница.
+- Без `tokenProvider` токен читается из `document.cookie` и URL-декодируется. Вне браузера cookie нет, поэтому заголовок не ставится.
+- С `tokenProvider` cookie не читается никогда. Провайдер получает запрос, и его результат — токен. Пустая строка, `null` или `undefined` означают отсутствие заголовка.
+
+О поведении на уровне запроса см. [гайд HTTP](/ru-RU/docs/http).
+
+[Клиент](/ru-RU/api/client)

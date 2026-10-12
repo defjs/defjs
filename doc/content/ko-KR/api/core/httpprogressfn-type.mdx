@@ -1,0 +1,16 @@
+---
+title: 'HttpProgressFn'
+description: '업로드와 다운로드 진행 상황을 받는 콜백 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+`HttpExecuteOptions`의 `onDownloadProgress` 또는 `onUploadProgress`로 넘겨요. 콜백은 비동기 함수일 수 있어요. 다음 청크를 처리하기 전에 콜백이 완료되기를 기다려요. 콜백이 예외를 던지거나 반환한 프로미스가 거부되면 다운로드와 업로드 모두 호출이 `EXT_OBSERVER_FAILED`로 실패하고, 던진 값이 `cause`가 돼요. 호출자의 취소와 `timeout`이 여전히 우선하며, 각각 `NET_ABORTED`와 `NET_TIMEOUT`으로 보고돼요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요(Bun, Node, Deno). 브라우저에서는 `Blob` / `File`, `ArrayBuffer` 또는 `FormData` body가 그대로 보내지고 `onUploadProgress`는 호출되지 않으며, `onDownloadProgress`는 영향을 받지 않아요.
+
+[`HttpProgressEvent`](/ko-KR/api/core/httpprogressevent-type), [HTTP 가이드](/ko-KR/docs/http), [명령](/ko-KR/docs/commands)을 보세요.
+
+[HTTP](/ko-KR/api/http)

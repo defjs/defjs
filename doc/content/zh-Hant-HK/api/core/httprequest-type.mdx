@@ -1,0 +1,44 @@
+---
+title: 'HttpRequest'
+description: 'Transports 同 interceptors 見到、正規化咗嘅外發 HTTP request。'
+---
+
+<ApiReference identity="@defjs/core:HttpRequest" />
+
+```ts
+interface HttpRequest {
+  abort?: AbortSignal
+  baseEndpoint?: string
+  body?: Blob | ArrayBuffer | FormData | URLSearchParams | ReadableStream<Uint8Array> | object | string | number | boolean | null
+  bodyContentType?: string | null
+  downloadProgress?: HttpProgressFn
+  endpoint: string
+  headers?: Headers
+  method: string
+  operation?: string
+  queryParams?: URLSearchParams
+  queryString?: string
+  readonly responseType?: HttpResponseType
+  readonly errorResponseType?: HttpResponseType
+  timeout?: number
+  uploadProgress?: HttpProgressFn
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  // plus an @internal bodyContentTypeSource field
+}
+```
+
+Builder 執行完之後嘅 request，由 handlers、interceptors 同 `fetchHandler` 使用。
+
+- `body` 已經係 wire value。JSON 嘅話佢係 **JSON text string**；HMAC 或 digest 要對呢個 string 簽，唔好對原本嘅 struct input。
+- `endpoint` 係已填好 path parameters 嘅 path；`baseEndpoint` 係 client endpoint。
+- Interceptors 見到嘅 `queryParams` 係 `new URLSearchParams(queryString)`。Builder 如果回傳 `URLSearchParams`，就會原個 instance 傳過去。
+- `operation` 係靜態、低 cardinality 嘅 endpoint identity，供 telemetry 同 diagnostics 用。
+- `downloadProgress` 同 `uploadProgress` 係 `HttpExecuteOptions` 嘅 `onDownloadProgress` 同 `onUploadProgress` hooks。
+- `responseType` 同 `errorResponseType` 係 readonly：佢哋由 endpoint 嘅 `output` 同 `error` struct kind 推導出嚟，唔可以改。只有對應嘅 struct 聲明咗，先會設定。用 `makeResponse` short-circuit 嘅 interceptor 會讀佢哋，以配合 transport。
+
+[HTTP](/zh-Hant-HK/api/http)

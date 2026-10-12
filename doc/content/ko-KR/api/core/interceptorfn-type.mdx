@@ -1,0 +1,14 @@
+---
+title: 'InterceptorFn'
+description: 'HTTP 인터셉터의 함수 시그니처예요.'
+---
+
+<ApiReference identity="@defjs/core:InterceptorFn" />
+
+```ts
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+```
+
+요청을 살펴보거나 바꾼 뒤 `next(req)`를 호출하거나, `makeResponse`로 short-circuit할 수 있어요. 등록하려면 `createHttpInterceptor`로 감싸세요.
+
+[인터셉터](/ko-KR/api/interceptors)

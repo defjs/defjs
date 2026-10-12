@@ -1,0 +1,17 @@
+---
+title: 'withEndpoint'
+description: '상대 요청 path에 붙는 base URL을 설정하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+상대 요청 path 앞에 붙는 base URL을 설정해요. 기본값은 빈 문자열이에요.
+
+- **endpoint** — 절대 또는 상대 base endpoint예요.
+- WebSocket 명령에서는 `http:` base가 `ws:`로, `https:`가 `wss:`로 바뀌어요.
+
+[클라이언트](/ko-KR/api/client)

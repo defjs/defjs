@@ -1,0 +1,14 @@
+---
+title: 'HttpInterceptorNext'
+description: 'Продолжение, которое запускает остаток цепочки HTTP interceptor’ов.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptorNext" />
+
+```ts
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`next(req)` идёт только **внутрь**: к interceptor’ам, зарегистрированным после этого, а затем к fetch handler. Это не повторная отправка `client.execute` снаружи. Для безопасного повтора, например одного обновления после 401, вызови `next` ещё раз из того же interceptor’а; внешние слои второй раз не выполняются. Когда цепочка уже завершилась, вызов `next` отклоняется с `HTTP interceptor next() cannot be called after the chain has settled`.
+
+[Interceptors](/ru-RU/api/interceptors)

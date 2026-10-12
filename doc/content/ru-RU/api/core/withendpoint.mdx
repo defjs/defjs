@@ -1,0 +1,17 @@
+---
+title: 'withEndpoint'
+description: 'Опция клиента, которая задаёт base URL для относительных path запроса.'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+Задаёт base URL, который дописывается к относительным path запроса. По умолчанию — пустая строка.
+
+- **endpoint** — абсолютный или относительный базовый endpoint.
+- Для команд WebSocket базовый `http:` становится `ws:`, а `https:` — `wss:`.
+
+[Клиент](/ru-RU/api/client)

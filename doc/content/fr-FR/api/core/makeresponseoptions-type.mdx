@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: 'Champs acceptés par makeResponse.'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+`status` vaut `0` par défaut et `statusText` vaut `''`. `url` et `headers` prennent par défaut des valeurs tirées de `request` : son URL résolue (endpoint de base, chemin et query) et une copie de ses en-têtes. Une requête sans `baseEndpoint` donne son `endpoint` tel qu’écrit. Sans requête, `url` vaut `''` et `headers` est vide. Un `body` omis reste `undefined` ; seul un `null` explicite est un `null` JSON.
+
+[HTTP](/fr-FR/api/http)

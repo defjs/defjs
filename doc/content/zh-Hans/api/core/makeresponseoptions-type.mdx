@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: '`makeResponse` 接受的字段。'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+`status` 默认为 `0`，`statusText` 默认为 `''`。`url` 和 `headers` 默认取自 `request`：它解析后的 URL（base endpoint、路径和 query）和 headers 的副本。没有 `baseEndpoint` 的请求则取它原样书写的 `endpoint`。没有 `request` 时，`url` 为 `''`，`headers` 为空。省略的 `body` 保持 `undefined`；只有显式传 `null` 才是 JSON `null`。
+
+[HTTP](/zh-Hans/api/http)

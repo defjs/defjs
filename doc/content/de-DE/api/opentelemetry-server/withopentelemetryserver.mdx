@@ -1,0 +1,23 @@
+---
+title: 'withOpenTelemetryServer'
+description: 'Client-Option, die ausgehende OpenTelemetry-Interceptors für HTTP, SSE und WebSocket installiert.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:withOpenTelemetryServer" />
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+Hängt pro aktivem Transport einen Interceptor an, in der Reihenfolge HTTP, SSE, WebSocket. Beim `createClient` drauflegen. Er initialisiert kein OpenTelemetry-SDK und holt keine globalen Tracer-, Meter- oder Logger-Handles: Übergib die, die deiner Anwendung gehören.
+
+- **options** — Erforderlich. `tracer`, `meter`, `logger`, `propagator`, `requireParentSpan` und die Transport-Optionen `http` / `sse` / `webSocket`. Übergib `{}`, um die Interceptors nur mit Propagation zu installieren.
+- **Returns** eine `ClientOption` für `createClient(...)`.
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+`tracer`, `meter` und `logger` sind jeweils optional und funktionieren ohne die anderen. Ohne `tracer` entstehen keine lokalen Spans; `trace.getTracer(...)`, `startSpanHook`, `requestHook` und `responseHook` werden nicht aufgerufen. Der extrahierte Elternkontext wird weiterhin weitergegeben.
+
+HTTP, SSE und WebSocket sind standardmäßig an. Übergib `{ enabled: false }` auf einem Transport, um ihn zu überspringen.
+
+[@defjs/opentelemetry-server](/de-DE/api/opentelemetry-server)

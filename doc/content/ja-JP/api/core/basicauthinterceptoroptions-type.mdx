@@ -1,0 +1,20 @@
+---
+title: 'BasicAuthInterceptorOptions'
+description: 'basic 認証インターセプターのオプションです。資格情報の独自エンコーダーを指定できます。'
+---
+
+<ApiReference identity="@defjs/core:BasicAuthInterceptorOptions" />
+
+```ts
+type BasicAuthInterceptorOptions = {
+  encode?: (credential: { username: string; password: string }) => string
+}
+```
+
+`encode` が置き換えるのは資格情報のエンコーダーだけです。デフォルトは ``btoa(`${username}:${password}`)`` です。インターセプターは返された文字列の前に常に `Basic ` を付けるので、資格情報部分だけを返してください。`'Basic abc'` を返すと、ヘッダーは `Basic Basic abc` になります。
+
+[`basicAuthHttpInterceptor`](/ja-JP/api/core/basicauthhttpinterceptor) と [`basicAuthSSEInterceptor`](/ja-JP/api/core/basicauthsseinterceptor) が受け取ります。
+
+[Interceptors ガイド](/ja-JP/docs/interceptors) を参照してください。
+
+[Interceptors](/ja-JP/api/interceptors)

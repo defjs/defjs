@@ -1,0 +1,25 @@
+---
+title: 'WebSocketState'
+description: '관리되는 WebSocket session의 생명주기 상태예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketState" />
+
+```ts
+type WebSocketState = 'aborted' | 'closed' | 'closing' | 'connecting' | 'error' | 'idle' | 'open' | 'reconnecting'
+```
+
+| 상태           | 의미                                                  |
+| -------------- | ----------------------------------------------------- |
+| `idle`         | 첫 연결 시도 전                                       |
+| `connecting`   | 첫 연결을 준비하고 여는 중                            |
+| `open`         | 물리 소켓이 열려 있음                                 |
+| `reconnecting` | close 뒤에 교체할 소켓을 준비하거나 기다리는 중       |
+| `closing`      | `session.close()` 또는 dispose로 종료를 요청함        |
+| `closed`       | 최종: 오류나 취소 없이 session이 끝남                 |
+| `aborted`      | 최종: `abort` 또는 `signal`로 session이 취소됨        |
+| `error`        | 최종: 시작 실패나 `timeout`을 포함해 session이 실패함 |
+
+`session.state`와 `session.onStateChange`로 관찰해요.
+
+[WebSocket](/ko-KR/api/web-socket)

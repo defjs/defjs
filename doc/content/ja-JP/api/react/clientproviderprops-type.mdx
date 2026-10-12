@@ -1,0 +1,18 @@
+---
+title: 'ClientProviderProps'
+description: ClientProvider の props — 必須の client と任意の children です。
+---
+
+<ApiReference identity="@defjs/react:ClientProviderProps" />
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+- `client` — 必須です。アプリケーションが所有する Defjs クライアントです。
+- `children` — 任意です。`useClient` を呼べる React ツリーです。
+
+[@defjs/react](/ja-JP/api/react)

@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: 플러그인, injection key, injectClient예요.
+---
+
+# Vue
+
+기존 `@defjs/core` 클라이언트를 Vue 앱에 제공해요. 이 패키지는 클라이언트를 만들거나, 캐시하거나, dispose하지 않아요. Vue 3 이상이 필요해요.
+
+[Vue 가이드](/ko-KR/docs/integrations/vue)를 보세요.
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — `createClient`가 준 인스턴스예요.
+- **반환** `app.use(...)`용 Vue 플러그인이에요. 설치하면 `app.provide(HTTP_CLIENT, client)`를 호출해요.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+가장 가까운 `HTTP_CLIENT` provider를 읽어요. `setup()`처럼 `inject`를 쓸 수 있는 곳에서 호출하세요.
+
+- **반환** 주입된 클라이언트예요.
+- **던짐** 클라이언트가 제공되지 않았을 때, 예를 들어 플러그인을 설치하지 않았을 때 `Error`를 던져요.
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+Vue injection key예요. `inject(HTTP_CLIENT)`보다 `injectClient()`를 쓰세요. 하위 트리는 `provide(HTTP_CLIENT, childClient)`로 덮어요.

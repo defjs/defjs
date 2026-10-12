@@ -1,0 +1,36 @@
+---
+title: API 參考
+description: 手寫嘅 workspace packages 查閱頁 — 你 import 嗰啲 functions、options 同 types。
+---
+
+# API 參考
+
+<ApiIndex />
+
+呢度係 workspace packages 嘅查閱頁。Signatures 就係 contract；guides 同 recipes 先講幾時用。
+
+## 套件
+
+| 套件                                                                  | 你嚟查咩                                                          |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/zh-Hant-HK/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/zh-Hant-HK/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/zh-Hant-HK/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/zh-Hant-HK/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                  |
+
+## @defjs/core
+
+| 頁面                                         | 你嚟查咩                                                         |
+| -------------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/zh-Hant-HK/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/zh-Hant-HK/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/zh-Hant-HK/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/zh-Hant-HK/api/errors)             | `Fault` variants 同 factories                                    |
+| [Interceptors](/zh-Hant-HK/api/interceptors) | HTTP / SSE / WebSocket interceptor helpers                       |
+| [SSE](/zh-Hant-HK/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/zh-Hant-HK/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## 相關
+
+- [快速開始](/zh-Hant-HK/docs/start)
+- [處理已聲明嘅 404](/zh-Hant-HK/recipes/get-declared-404)

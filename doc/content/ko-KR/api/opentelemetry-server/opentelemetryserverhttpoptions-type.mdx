@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerHttpOptions'
+description: 'HTTP 전송의 옵션으로, 공통 옵션에 responseHook이 HttpResponse를 받도록 한 것이에요.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions" />
+
+```ts
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+```
+
+`OpenTelemetryServerOptions`의 `http`에 설정해요. 자체 필드는 없어요. `enabled`, `startSpanHook`, `requestHook`, `responseHook`은 `OpenTelemetryServerTransportOptions`에서 와요.
+
+- `responseHook(span, res, req)`는 interceptor를 거쳐 돌아온 `HttpResponse`를, 클라이언트가 선언된 body를 디코딩하기 전에, 원래의 `HttpRequest`와 함께 받아요. 요청 식별에는 `req.operation`을 읽으세요. endpoint나 해석된 URL로 다시 만들지 마세요.
+- HTTP span은 `responseHook`이 반환되는 즉시 끝나요. 훅을 await하지 않으므로 훅의 동기 부분만 span을 바꿀 수 있어요. 상태가 400 이상이면 `ERROR`로 끝나고 `error.type`에 status 문자열이 설정돼요. 100–399이면 상태를 설정하지 않아요.
+- interceptor를 통한 reject(네트워크 실패, 취소, 타임아웃, 또는 JSON으로 읽을 수 없는 선언된 `output` / `error` body)는 응답 status가 없고 `responseHook`을 호출하지 않아요. span은 `ERROR`로 끝나고 `error.type`에 `TypeError`, `Error`, `BodyFailure` 같이 던져진 클래스 이름이 설정돼요. 호출자의 취소는 abort 이유와 관계없이 `Error`예요.
+
+HTTP instrumentation을 건너뛰려면 `{ enabled: false }`를 넘기세요. span 훅은 `tracer`를 준 경우에만 실행돼요.
+
+[@defjs/opentelemetry-server](/ko-KR/api/opentelemetry-server)

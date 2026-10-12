@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: '可接受任何 struct 的寬鬆 struct 約束。'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+`defineRequest`、`Fault`、`HttpCommand` 等端點與 client 泛型使用的寬鬆約束。需要精確的 input 與 output 推論時，優先使用具體的 `Struct<...>`。
+
+[Struct](/zh-Hant-TW/api/struct)

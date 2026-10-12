@@ -1,0 +1,16 @@
+---
+title: 'struct.arrayBuffer'
+description: 'ArrayBuffer를 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.arrayBuffer" />
+
+```ts
+function arrayBuffer(): Struct<ArrayBuffer, ArrayBuffer>
+```
+
+- `ArrayBuffer`만 받아요. typed array와 다른 view는 `invalid_type`으로 실패해요.
+- body 루트로 쓰면 `application/octet-stream`으로 바이트를 보내요.
+- `output`이나 `error` struct로 쓰면 응답 body를 `ArrayBuffer`로 읽어요.
+
+[Struct](/ko-KR/api/struct)

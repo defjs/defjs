@@ -1,0 +1,21 @@
+---
+title: 'MakeResponseOptions'
+description: 'makeResponse가 받는 필드예요.'
+---
+
+<ApiReference identity="@defjs/core:MakeResponseOptions" />
+
+```ts
+type MakeResponseOptions<R> = {
+  status?: number
+  statusText?: string
+  url?: string
+  headers?: Headers
+  body?: R | null
+  request?: HttpRequest
+}
+```
+
+`status`의 기본값은 `0`이고 `statusText`의 기본값은 `''`예요. `url`과 `headers`의 기본값은 `request`에서 가져와요. 해석된 URL(기본 endpoint, 경로, 쿼리)과 헤더 복사본이에요. `baseEndpoint`가 없는 요청이면 `endpoint`를 쓴 그대로 써요. `request`가 없으면 `url`은 `''`이고 `headers`는 비어 있어요. 생략한 `body`는 `undefined`로 남고, 명시적인 `null`만 JSON `null`이에요.
+
+[HTTP](/ko-KR/api/http)
