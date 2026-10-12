@@ -2093,3 +2093,129 @@ describe('request event stream runtime', () => {
     expect(error?.code).toBe('REQ_INPUT_INVALID')
   })
 })
+
+describe('sse reconnect method policy', () => {
+  function eventBytes(text: string, failure?: TypeError): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(text))
+        if (!failure) {
+          controller.close()
+        }
+      },
+      pull(controller) {
+        if (failure) {
+          controller.error(failure)
+        }
+      },
+    })
+  }
+
+  const usePost = defineEventStream({
+    builder: () => ({ body: 'prompt' }),
+    events: { message: struct.string() },
+    maxBufferSize: 1024,
+    maxQueueSize: 8,
+    method: 'POST',
+    path: '/events',
+  })
+
+  test('should not reconnect a POST body without shouldReconnect', async () => {
+    const failure = new TypeError('network down')
+    const handle = vi.fn(async () => {
+      return new Response(eventBytes('id: 1\ndata: a\n\n', failure), {
+        headers: { 'content-type': 'text/event-stream' },
+        status: 200,
+      })
+    })
+    const client = createClient(withEndpoint('https://example.com'), withSSEHandle(handle), withSSEReconnect({ attempts: 2, delayMs: 0 }))
+
+    const [fault, stream] = await client.execute(usePost())
+
+    expect(fault).toBeNull()
+    if (!stream) {
+      throw new Error('Expected stream')
+    }
+    const closed = await stream.closed
+    expect(closed).toMatchObject({ kind: 'error', code: 'NET_UNREACHABLE' })
+    expect(closed.cause).toBe(failure)
+    expect(handle).toHaveBeenCalledTimes(1)
+  })
+
+  test('should reconnect POST when shouldReconnect allows the method', async () => {
+    const failure = new TypeError('network down')
+    const bodies: string[] = []
+    const lastEventIds: Array<string | null> = []
+    const handle = vi.fn(async (request: Request) => {
+      bodies.push(await request.text())
+      lastEventIds.push(request.headers.get('last-event-id'))
+      if (bodies.length === 1) {
+        return new Response(eventBytes('id: 1\ndata: a\n\n', failure), {
+          headers: { 'content-type': 'text/event-stream' },
+          status: 200,
+        })
+      }
+      return new Response(eventBytes('data: b\n\n'), {
+        headers: { 'content-type': 'text/event-stream' },
+        status: 200,
+      })
+    }) as unknown as typeof globalThis.fetch
+    const client = createClient(
+      withEndpoint('https://example.com'),
+      withSSEHandle(handle),
+      withSSEReconnect({
+        attempts: 2,
+        delayMs: 0,
+        shouldReconnect: ({ attempt, method }) => method === 'POST' && attempt < 2,
+      }),
+    )
+
+    const [fault, stream] = await client.execute(usePost())
+
+    expect(fault).toBeNull()
+    if (!stream) {
+      throw new Error('Expected stream')
+    }
+    await stream.closed
+    expect(handle).toHaveBeenCalledTimes(2)
+    expect(bodies).toEqual(['prompt', 'prompt'])
+    expect(lastEventIds).toEqual([null, '1'])
+  })
+
+  test('should let the SSE handle stamp each reconnect attempt', async () => {
+    const failure = new TypeError('network down')
+    const recorded: string[] = []
+    let n = 0
+    const handle = vi.fn(async (request: Request) => {
+      request.headers.set('x-attempt', String(++n))
+      recorded.push(request.headers.get('x-attempt') ?? '')
+      if (n === 1) {
+        return new Response(eventBytes('id: 1\ndata: a\n\n', failure), {
+          headers: { 'content-type': 'text/event-stream' },
+          status: 200,
+        })
+      }
+      return new Response(eventBytes('data: b\n\n'), {
+        headers: { 'content-type': 'text/event-stream' },
+        status: 200,
+      })
+    }) as unknown as typeof globalThis.fetch
+    const client = createClient(withEndpoint('https://example.com'), withSSEHandle(handle), withSSEReconnect({ attempts: 1, delayMs: 0 }))
+    const useGet = defineEventStream({
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 8,
+      method: 'GET',
+      path: '/events',
+    })
+
+    const [fault, stream] = await client.execute(useGet())
+
+    expect(fault).toBeNull()
+    if (!stream) {
+      throw new Error('Expected stream')
+    }
+    await stream.closed
+    expect(recorded).toEqual(['1', '2'])
+  })
+})

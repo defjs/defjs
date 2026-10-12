@@ -8,15 +8,14 @@ import { join } from 'node:path'
 // with "Could not find profile folder." even when Playwright passes -profile.
 //
 // TODO(remove-workaround): delete this file once playwright-core bundles Firefox >= 158.
-// Check with: node -e "console.log(require('playwright-core/browsers.json').browsers.find(b=>b.name==='firefox'))"
+// Check with: bun -e "console.log(require('playwright-core/browsers.json').browsers.find(b=>b.name==='firefox'))"
 // Still needed as of 2026-10-09 against playwright-core@latest (1.64.0, Firefox 157) and the
 // newest alpha (1.65.0-alpha-2026-10-08, still Firefox 157).
 // When it's fixed upstream, also remove:
 //   - the `provider: playwright({ launchOptions: { env: browserLaunchEnv() } })` override (and the
 //     now-unused `browserLaunchEnv` import) in packages/{core,react,vue}/vitest.config.browser.ts
-//   - packages/core/test/regression/browser-startup.spec.ts (tests this function directly)
-//   - the `browserLaunchEnv` import and conditional `env` spread in
-//     packages/core/test/regression/web-socket.spec.ts
+//   - packages/core/test/regression/firefox-app-data.spec.ts (tests this function directly)
+//   - the `env: browserLaunchEnv()` launch option in doc/e2e/browser.ts and doc/e2e/browser.test.ts
 export function browserLaunchEnv(): { [key: string]: string } | undefined {
   if (process.platform !== 'darwin') {
     return undefined

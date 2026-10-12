@@ -16,7 +16,7 @@ export default defineConfig({
     include: ['react', 'react-dom/client', '@testing-library/react'],
   },
   test: {
-    api: 63317,
+    api: { host: '127.0.0.1' },
     name: 'react-browser',
     globalSetup: resolve(packageRoot, '../../test/browser-api-server-setup.ts'),
     browser: {

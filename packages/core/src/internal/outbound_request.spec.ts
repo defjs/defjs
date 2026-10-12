@@ -506,6 +506,174 @@ describe('outbound request builder', () => {
     expect(bigintRequest.headers?.get('content-type')).toBe('application/json')
   })
 
+  test.each([
+    ['AsyncGenerator', (async function* () {})()],
+    ['Map', new Map()],
+    ['Set', new Set()],
+    ['Response', new Response('x')],
+    ['Promise', Promise.resolve(1)],
+    [
+      'Payload',
+      new (class Payload {
+        value = 7
+      })(),
+    ],
+    ['function', () => 1],
+    ['symbol', Symbol('s')],
+    ['NaN', Number.NaN],
+    ['Infinity', Number.POSITIVE_INFINITY],
+  ])('rejects a root %s body', (kind, body) => {
+    const send = () => buildHttp('POST', '/users', undefined, () => ({ body }))
+
+    expect(send).toThrow(TypeError)
+    expect(send).toThrow(`body is not JSON data: ${kind}.`)
+    expect(send).toThrow('ReadableStream.from(iterable)')
+  })
+
+  test.each([
+    ['set field', { tags: new Set() }, 'body field "tags" is not JSON data: Set.'],
+    ['function element', { items: [() => 1] }, 'body field "0" is not JSON data: function.'],
+    ['NaN field', { n: Number.NaN }, 'body field "n" is not JSON data: NaN.'],
+    ['bytes field', { bytes: new Uint8Array(2) }, 'body field "bytes" is not JSON data: Uint8Array.'],
+    ['blob field', { file: new Blob(['x']) }, 'body field "file" is not JSON data: Blob.'],
+    ['map element', [new Map()], 'body field "0" is not JSON data: Map.'],
+    ['constructorless object', { odd: Object.create(Object.create(null)) }, 'body field "odd" is not JSON data: Object.'],
+  ])('rejects a nested %s', (_label, body, message) => {
+    const send = () => buildHttp('POST', '/users', undefined, () => ({ body }))
+
+    expect(send).toThrow(TypeError)
+    expect(send).toThrow(message)
+  })
+
+  const asyncIterable = () => ({
+    async *[Symbol.asyncIterator]() {
+      yield new TextEncoder().encode('chunk')
+    },
+  })
+  const syncIterable = () => ({
+    *[Symbol.iterator]() {
+      yield 1
+    },
+  })
+
+  test.each([
+    ['root async iterable body', 'POST', () => ({ body: asyncIterable() }), 'value is an iterable object, not a record.', undefined],
+    ['root sync iterable body', 'POST', () => ({ body: syncIterable() }), 'value is an iterable object, not a record.', undefined],
+    [
+      'root null-prototype async iterable body',
+      'POST',
+      () => ({
+        body: Object.assign(Object.create(null), {
+          async *[Symbol.asyncIterator]() {
+            yield new TextEncoder().encode('chunk')
+          },
+        }),
+      }),
+      'value is an iterable object, not a record.',
+      undefined,
+    ],
+    [
+      'nested async iterable body field',
+      'POST',
+      () => ({ body: { chunks: asyncIterable() } }),
+      'field "chunks" is an iterable object, not a record.',
+      undefined,
+    ],
+    [
+      'iterable body that also has string data',
+      'POST',
+      () => ({
+        body: {
+          items: [1],
+          *[Symbol.iterator]() {
+            yield 1
+          },
+        },
+      }),
+      'value is an iterable object, not a record.',
+      undefined,
+    ],
+    [
+      'iterable body array element',
+      'POST',
+      () => ({ body: [syncIterable()] }),
+      'field "0" is an iterable object, not a record.',
+      undefined,
+    ],
+    ['root iterable query', 'GET', () => ({ query: syncIterable() }), 'value is an iterable object, not a record.', undefined],
+    [
+      'nested iterable query field',
+      'GET',
+      () => ({ query: { filter: syncIterable() } }),
+      'field "filter" is an iterable object, not a record.',
+      (query: { [key: string]: unknown }) => JSON.stringify(query),
+    ],
+    [
+      'iterable header pairs',
+      'POST',
+      () => ({
+        headers: {
+          *[Symbol.iterator]() {
+            yield ['x-a', '1']
+          },
+        },
+      }),
+      'value is an iterable object, not a record.',
+      undefined,
+    ],
+  ])('rejects an iterable object: %s', (_label, method, build, message, serializer) => {
+    const send = () => buildHttp(method, '/users', undefined, build, serializer)
+
+    expect(send).toThrow(TypeError)
+    expect(send).toThrow(message)
+    expect(send).toThrow('ReadableStream.from(iterable) for a streamed body')
+  })
+
+  test('still sends non-iterator symbol objects as json and header pair arrays', () => {
+    const inspect = buildHttp('POST', '/users', undefined, () => ({
+      body: {
+        a: 1,
+        [Symbol.for('nodejs.util.inspect.custom')]() {
+          return 'x'
+        },
+      },
+    }))
+    const tagged = buildHttp('POST', '/users', undefined, () => ({
+      body: { a: 1, [Symbol.toStringTag]: 'Thing' },
+    }))
+    const pairs = buildHttp('POST', '/users', undefined, () => ({ headers: [['x-a', '1']] }))
+
+    expect(inspect.body).toBe('{"a":1}')
+    expect(inspect.headers?.get('content-type')).toBe('application/json')
+    expect(tagged.body).toBe('{"a":1}')
+    expect(tagged.headers?.get('content-type')).toBe('application/json')
+    expect(pairs.headers?.get('x-a')).toBe('1')
+  })
+
+  test('encodes toJSON values, URLs, null-prototype objects, and omitted undefined as json', () => {
+    class Payload {
+      value = 7
+      toJSON() {
+        return { value: 7 }
+      }
+    }
+    const withJson = buildHttp('POST', '/users', undefined, () => ({ body: new Payload() }))
+    const withUrl = buildHttp('POST', '/users', undefined, () => ({ body: { link: new URL('https://a.test/x') } }))
+    const nullProto = buildHttp('POST', '/users', undefined, () => ({
+      body: Object.assign(Object.create(null), { a: 1 }),
+    }))
+    const omitted = buildHttp('POST', '/users', undefined, () => ({ body: { a: undefined, b: 1 } }))
+
+    expect(withJson.body).toBe('{"value":7}')
+    expect(withJson.headers?.get('content-type')).toBe('application/json')
+    expect(withUrl.body).toBe('{"link":"https://a.test/x"}')
+    expect(withUrl.headers?.get('content-type')).toBe('application/json')
+    expect(nullProto.body).toBe('{"a":1}')
+    expect(nullProto.headers?.get('content-type')).toBe('application/json')
+    expect(omitted.body).toBe('{"b":1}')
+    expect(omitted.headers?.get('content-type')).toBe('application/json')
+  })
+
   test('treats an undefined builder result as an empty request', () => {
     const request = buildHttp('POST', '/users', { id: 1 }, () => undefined)
 
@@ -550,7 +718,8 @@ describe('outbound request builder', () => {
       form: { file, title: 'Hi' },
     })
     const root = buildHttp('POST', '/files', input, (value) => ({ body: value.form }))
-    const nested = buildHttp('POST', '/files', input, (value) => ({ body: { meta: value.form } }))
+    // The nested call is the JSON path. A File is not JSON data, so it is left out; the root call still sends it.
+    const nested = buildHttp('POST', '/files', input, (value) => ({ body: { meta: { ...value.form, file: undefined } } }))
 
     expect(root.body).toBeInstanceOf(FormData)
     expect((root.body as FormData).get('t')).toBe('Hi')

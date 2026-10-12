@@ -19,6 +19,7 @@ import {
   createClient,
   defineEventStream,
   struct,
+  withSSEReconnect,
   type AnyStruct,
   type EventStreamData,
   type EventStreamEndpoint,
@@ -227,5 +228,12 @@ async function assertUndeclaredSseStartupFault(): Promise<void> {
   expectTypeOf(error).toEqualTypeOf<Fault<undefined>>()
 }
 void assertUndeclaredSseStartupFault
+
+withSSEReconnect({
+  shouldReconnect: ({ method }) => {
+    expectTypeOf(method).toEqualTypeOf<string>()
+    return method === 'GET'
+  },
+})
 
 export type Cases = true

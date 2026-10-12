@@ -153,6 +153,7 @@ export async function setup({ provide }: TestProject) {
 
   app.get('/sse/basic', basicSSEHandler)
   app.post('/sse/basic', basicSSEHandler)
+  app.post('/sse/redirect/:status', (c) => c.redirect('/sse/basic', Number(c.req.param('status')) as 303 | 307))
 
   app.get('/sse/retry', (c) => {
     const lastEventId = c.req.header('last-event-id')
@@ -518,6 +519,40 @@ export async function setup({ provide }: TestProject) {
             ws.close(1000, 'done')
           }
         }, 200)
+      },
+    })),
+  )
+
+  // Preserve the original 10ms closes independently of the padded browser fixtures.
+  app.get(
+    '/ws/regression/error-before-close',
+    upgradeWebSocket(() => ({
+      onOpen(_event, socket) {
+        setTimeout(() => {
+          if (socket.readyState === 1) {
+            socket.send(JSON.stringify({ type: 'message', text: 123 }))
+            socket.close(1000, 'done')
+          }
+        }, 10)
+      },
+    })),
+  )
+  app.get(
+    '/ws/regression/binary',
+    upgradeWebSocket(() => ({
+      onOpen(_event, socket) {
+        socket.send(new TextEncoder().encode(JSON.stringify({ type: 'message', text: 'hello-binary' })))
+        setTimeout(() => {
+          if (socket.readyState === 1) socket.close(1000, 'done')
+        }, 10)
+      },
+    })),
+  )
+  app.get(
+    '/ws/regression/capture',
+    upgradeWebSocket(() => ({
+      onMessage(event, socket) {
+        socket.send(JSON.stringify({ received: String(event.data) }))
       },
     })),
   )

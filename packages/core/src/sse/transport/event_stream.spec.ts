@@ -1,6 +1,8 @@
-import { describe, expect, inject, test } from 'vitest'
+import { afterEach, describe, expect, inject, test, vi } from 'vitest'
 import { ERR_ABORTED } from '../../error'
 import type { HttpRequest } from '../../http'
+import { __resetStreamingRequestBodySupportForTests, ERR_STREAMING_REQUEST_UNSUPPORTED } from '../../http/transport/fetch_init'
+import { simulateUnsupportedStreaming } from '../../../test/streaming-support'
 import type { FetchEventStreamOptions } from './event_stream'
 import { fetchEventStream as fetchEventStreamInternal, getErrorOpenInfo } from './event_stream'
 import type { EventStreamMessage } from './parser'
@@ -279,5 +281,44 @@ describe('fetchEventStream', () => {
     }
 
     await expect(fetchEventStream(request)).rejects.toBe(ERR_ABORTED)
+  })
+})
+
+describe('unsupported streaming request body', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    __resetStreamingRequestBodySupportForTests()
+  })
+
+  test('should reject a ReadableStream body with the shared sentinel before onerror or reconnect', async () => {
+    simulateUnsupportedStreaming()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(Uint8Array.from([1, 2, 3, 4]))
+        controller.close()
+      },
+    })
+    const onerror = vi.fn(() => undefined)
+    const shouldReconnect = vi.fn(() => false)
+    const fetch = vi.fn(async () => new Response(null, { status: 204 }))
+    const pending = fetchEventStream(
+      {
+        baseEndpoint: 'https://example.com',
+        body,
+        endpoint: '/events',
+        method: 'POST',
+      },
+      {
+        fetch: fetch as unknown as typeof globalThis.fetch,
+        onerror,
+        reconnect: { delayMs: 60_000, shouldReconnect },
+      },
+    )
+
+    await expect(pending).rejects.toBe(ERR_STREAMING_REQUEST_UNSUPPORTED)
+    expect(onerror).toHaveBeenCalledTimes(0)
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+    expect(fetch).toHaveBeenCalledTimes(0)
+    expect(body.locked).toBe(false)
   })
 })

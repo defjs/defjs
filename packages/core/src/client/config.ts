@@ -106,11 +106,15 @@ export interface ClientSSEOptions {
     jitter?: number
     /** Upper bound for computed backoff delay. */
     maxDelayMs?: number
-    /** Return `false` to skip reconnecting for this failure. */
+    /**
+     * Without this callback only `GET`, `HEAD`, `OPTIONS`, `PUT` and `DELETE` reconnect. With it, the result decides
+     * for every method. It is never called for a `ReadableStream` body.
+     */
     shouldReconnect?: (context: {
       attempt: number
       cause?: unknown
       lastEventId: string
+      method: string
       open?: { response: { status: number; statusText: string; url: string }; url: string }
     }) => boolean | Promise<boolean>
   }

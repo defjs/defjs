@@ -203,7 +203,6 @@ export function createFetchRequestInit(request: HttpRequest): RequestInit & { du
     defaultAccept: 'application/json, text/plain, */*',
     headers,
     signal: request.abort,
-    streamingRequestUnsupportedError: ERR_STREAMING_REQUEST_UNSUPPORTED,
     wrapReadableStreamBody: uploadProgress
       ? (body) => wrapUploadProgressStream(body, uploadProgress, getContentLength(headers), request.abort)
       : undefined,
@@ -347,19 +346,52 @@ async function parseFetchResponse(
 
 /**
  * Default HTTP transport: perform `httpRequest` with `fetch` and return an `HttpResponse`.
- * Used by the client unless `withHTTPHandle` replaces it; also usable in tests and custom handlers.
+ * The client always uses it; `withHTTPHandle` only supplies the `fetchImpl` it calls. Also usable in tests and custom handlers.
  *
  * @param httpRequest - Normalized request (URL, headers, body, abort, progress hooks).
  * @param fetchImpl - Fetch implementation; defaults to global `fetch`. The library default handle is called as
  *   `(url, init)` and its body is read in one piece unless download progress is observed. Any other handle receives a
  *   `Request` and its body is read chunk by chunk.
- * @returns Parsed `HttpResponse`. Rejects when no response reached the client, or when reading the
- *   body failed — a transport failure is a fault, never a response.
+ * @returns Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body
+ *   failed, or when an upload observer threw (`EXT_OBSERVER_FAILED`). Cancellation still wins.
  */
 export async function fetchHandler(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle = resolveGlobalFetch(),
 ): Promise<HttpResponse<unknown>> {
+  const uploadProgress = httpRequest.uploadProgress
+  if (!uploadProgress) {
+    return sendFetchRequest(httpRequest, fetchImpl)
+  }
+
+  let observerFailure: BodyFailure<'EXT_OBSERVER_FAILED'> | undefined
+  const observed: HttpRequest = {
+    ...httpRequest,
+    uploadProgress: async (event) => {
+      try {
+        await uploadProgress(event)
+      } catch (error) {
+        observerFailure ??= new BodyFailure('EXT_OBSERVER_FAILED', error, undefined)
+        throw error
+      }
+    },
+  }
+
+  let response: HttpResponse<unknown>
+  try {
+    response = await sendFetchRequest(observed, fetchImpl)
+  } catch (error) {
+    // sendFetchRequest already turned cancellation into the abort cause, and cancellation outranks the observer.
+    throw observerFailure !== undefined && !httpRequest.abort?.aborted ? observerFailure : error
+  }
+  // A handle can swallow the errored upload body and still answer, or the observer can fail while the response is read.
+  if (observerFailure !== undefined) {
+    throw observerFailure
+  }
+  return response
+}
+
+async function sendFetchRequest(httpRequest: HttpRequest, fetchImpl: FetchHandle): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.abort
   const platform = fetchImpl === DEFAULT_FETCH
   let prepared = httpRequest
@@ -395,9 +427,20 @@ export async function fetchHandler(
   }
 }
 
+function isBrowserWindowOrWorker(): boolean {
+  return typeof document !== 'undefined' || 'importScripts' in globalThis
+}
+
+/**
+ * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where the runtime streams
+ * request bodies over any HTTP version (Bun, Node, Deno). Browsers are excluded: Chromium rejects a streamed
+ * body on HTTP/1.1 and the protocol is unknown beforehand, and Firefox cannot stream request bodies.
+ * `importScripts` marks browser workers (Deno workers have `WorkerGlobalScope` but no `importScripts`).
+ * There the body is sent unchanged and `onUploadProgress` is not called. Download progress is unaffected.
+ */
 async function prepareUploadProgressRequest(request: HttpRequest): Promise<HttpRequest> {
   const { uploadProgress, body } = request
-  if (!uploadProgress || body == null || isReadableStreamBody(body) || !supportsStreamingRequestBody()) {
+  if (!uploadProgress || body == null || isReadableStreamBody(body) || !supportsStreamingRequestBody() || isBrowserWindowOrWorker()) {
     return request
   }
 

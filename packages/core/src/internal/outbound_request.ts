@@ -338,11 +338,32 @@ function materializeBody(body: unknown): { body?: unknown; defaultContentType?: 
     return { body }
   }
 
-  const encoded = encodeOutbound(body)
   return {
-    body: JSON.stringify(encoded),
+    body: JSON.stringify(encodeOutbound(body), rejectNonJson),
     defaultContentType: 'application/json',
   }
+}
+
+// JSON.stringify drops a function or symbol, writes NaN and Infinity as null, and turns a Map, Set, stream or
+// class instance into `{}`. The replacer sees each value after toJSON, so what is still not JSON data is rejected.
+function rejectNonJson(key: string, value: unknown): unknown {
+  if (
+    typeof value === 'function' ||
+    typeof value === 'symbol' ||
+    (typeof value === 'number' && !Number.isFinite(value)) ||
+    (typeof value === 'object' && value !== null && !Array.isArray(value) && !isPlainObject(value))
+  ) {
+    const kind =
+      typeof value === 'number'
+        ? String(value)
+        : typeof value === 'object'
+          ? (value as { constructor?: { name?: string } }).constructor?.name || Object.prototype.toString.call(value).slice(8, -1)
+          : typeof value
+    throw new TypeError(
+      `body${key ? ` field "${key}"` : ''} is not JSON data: ${kind}. Send JSON data, a string, bytes, Blob, FormData, URLSearchParams or a Web ReadableStream (ReadableStream.from(iterable), Readable.toWeb(readable)).`,
+    )
+  }
+  return value
 }
 
 function encodeCodecBody(body: { [key: string]: unknown }, codec: FormCodec): FormData | URLSearchParams {
@@ -723,6 +744,13 @@ function encodeRecord(valueStruct: RuntimeStruct, value: { [key: string]: unknow
 }
 
 function encodeAnonymousObject(value: { [key: string]: unknown }, path: Path): { [key: string]: unknown } {
+  // Only string keys reach the wire. An object that iterates is a list or a stream; dropping that protocol omits it.
+  if (Symbol.iterator in value || Symbol.asyncIterator in value) {
+    const key = path.at(-1)
+    throw new TypeError(
+      `${key === undefined ? 'value' : `field "${key}"`} is an iterable object, not a record. Convert it first: Array.from(iterable) for a list or header pairs, ReadableStream.from(iterable) for a streamed body.`,
+    )
+  }
   const output = nullObject()
   for (const key of Object.keys(value)) {
     const item = value[key]

@@ -422,7 +422,9 @@ describe('request builder through the real server', () => {
       name: 'file',
       text: 'hello-file',
     })
-    // Text file parts stay text/plain. Bun's multipart serializer also appends `;charset=utf-8`.
+    // Bun's serializer emits the part's real Content-Type. Bun's multipart parser (`formData()`, via Hono
+    // `parseBody`) drops a file part's Content-Type and reports `text/plain;charset=utf-8`, so on Bun this
+    // assertion cannot tell which type was sent (this file is text/plain anyway).
     expect(fileField?.type?.toLowerCase().replace(/\s+/g, '')).toMatch(/^text\/plain(?:;charset=utf-8)?$/)
     expect(coded.fields.find((field) => field.name === 't')).toEqual({ name: 't', text: 'Ada' })
     expect(coded.fields.filter((field) => field.name === 'tags').map((field) => field.text)).toEqual(['red', 'blue'])

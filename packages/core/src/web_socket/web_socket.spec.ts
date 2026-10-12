@@ -627,7 +627,7 @@ describe('web socket runtime', () => {
     })
 
     const controller = new AbortController()
-    const command = useSocket({ query: { key: 'abort-during-delay' } })
+    const command = useSocket({ query: { key: `abort-during-delay-${crypto.randomUUID()}` } })
     const [error, socket] = await run(command, {
       abort: controller.signal,
       // The delay is the clock under test: abort is joined to the reconnecting signal, so the
@@ -667,7 +667,7 @@ describe('web socket runtime', () => {
       path: '/ws/reconnect',
     })
 
-    const command = useSocket({ query: { key: 'immediate-case' } })
+    const command = useSocket({ query: { key: `immediate-case-${crypto.randomUUID()}` } })
     const [error, socket] = await run(command, {
       reconnect: { attempts: 1, delayMs: 0 },
     })

@@ -2,6 +2,7 @@ import type { HttpRequest } from '../../internal/http_request'
 import { isReadableStream } from '../../internal/type_guards'
 import { serializeHttpBody } from './body'
 
+// Shared by HTTP and SSE. `fetchHandler` rejects with it as is; the HTTP and SSE clients report it as `ENV_UNSUPPORTED`.
 export const ERR_STREAMING_REQUEST_UNSUPPORTED = new Error('ERR_STREAMING_REQUEST_UNSUPPORTED')
 
 export function isReadableStreamBody(body: HttpRequest['body'] | unknown): body is ReadableStream<Uint8Array> {
@@ -10,6 +11,14 @@ export function isReadableStreamBody(body: HttpRequest['body'] | unknown): body 
 
 let streamingRequestBodySupport: boolean | undefined
 
+/**
+ * Whether a ReadableStream can be a Request body: a non-null body and no Content-Type.
+ * A runtime without stream bodies stringifies the stream and adds a text/plain Content-Type (Firefox).
+ * The `duplex` getter is not used: Bun and Deno stream request bodies without reading it.
+ * This does not predict whether the connection takes the stream (Chromium streams only over HTTP/2+).
+ * Upload-progress conversion is also skipped in browsers (`prepareUploadProgressRequest`): the body is sent
+ * unchanged and the callback is not called. Download progress is unaffected.
+ */
 export function supportsStreamingRequestBody(): boolean {
   if (streamingRequestBodySupport !== undefined) {
     return streamingRequestBodySupport
@@ -32,7 +41,7 @@ export function supportsStreamingRequestBody(): boolean {
       method: 'POST',
     } as RequestInit & { duplex?: 'half' })
 
-    streamingRequestBodySupport = request.body !== null
+    streamingRequestBodySupport = request.body !== null && !request.headers.has('Content-Type')
     return streamingRequestBodySupport
   } catch {
     streamingRequestBodySupport = false
@@ -50,7 +59,6 @@ export function createFetchInitBase(
     defaultAccept: string
     headers: Headers
     signal?: AbortSignal
-    streamingRequestUnsupportedError: unknown
     wrapReadableStreamBody?: (body: ReadableStream<Uint8Array>) => ReadableStream<Uint8Array>
   },
 ): RequestInit & { duplex?: 'half' } {
@@ -71,7 +79,7 @@ export function createFetchInitBase(
 
   if (isReadableStreamBody(body)) {
     if (!supportsStreamingRequestBody()) {
-      throw options.streamingRequestUnsupportedError
+      throw ERR_STREAMING_REQUEST_UNSUPPORTED
     }
 
     body = options.wrapReadableStreamBody?.(body) ?? body

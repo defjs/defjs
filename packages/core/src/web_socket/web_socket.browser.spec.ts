@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, inject, test } from 'vitest'
+import { beforeEach, describe, expect, inject, onTestFinished, test } from 'vitest'
 
 import { createClient, withEndpoint, type Client } from '../client'
 import { struct, StructError } from '../struct'
-import { defineWebSocket, type SocketAwaitResult } from './index'
+import { defineWebSocket, type SocketAwaitResult, type WebSocketExecuteOptions, type WebSocketSession } from './index'
 
 describe('web socket browser runtime', () => {
   let client: Client
@@ -11,12 +11,28 @@ describe('web socket browser runtime', () => {
     client = createClient(withEndpoint(inject('testServerHost')))
   })
 
-  afterEach(() => {
-    // cleanup only
-  })
-
-  async function run(command: unknown, options?: unknown): Promise<SocketAwaitResult<unknown, unknown>> {
-    return client.execute(command as never, options as never) as Promise<SocketAwaitResult<unknown, unknown>>
+  async function run(command: unknown, options?: Omit<WebSocketExecuteOptions, 'abort'>): Promise<SocketAwaitResult<unknown, unknown>> {
+    const controller = new AbortController()
+    let pending: Promise<SocketAwaitResult<unknown, unknown>> | undefined
+    let session: WebSocketSession<unknown, unknown> | undefined
+    onTestFinished(async () => {
+      try {
+        if (!session) {
+          controller.abort()
+          session = (await pending)?.[1]
+        }
+        await session?.[Symbol.asyncDispose]()
+      } finally {
+        controller.abort()
+      }
+    })
+    pending = (
+      client.execute(command as never, { ...options, abort: controller.signal } as never) as Promise<SocketAwaitResult<unknown, unknown>>
+    ).then((result) => {
+      session = result[1]
+      return result
+    })
+    return pending
   }
 
   test('should connect and exchange typed messages in real browsers', async () => {
@@ -120,7 +136,7 @@ describe('web socket browser runtime', () => {
         }),
       }),
       path: '/ws/reconnect',
-    })({ query: { key: 'browser-reconnect' } })
+    })({ query: { key: `browser-reconnect-${crypto.randomUUID()}` } })
     const [error, socket] = await run(command, {
       reconnect: { attempts: 1, delayMs: 0 },
     })

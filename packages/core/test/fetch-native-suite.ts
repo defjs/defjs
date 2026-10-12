@@ -66,20 +66,26 @@ function settleWithin<T>(promise: Promise<T>, ms = 1000): Promise<T> {
 type FetchCall = Parameters<FetchHandle>
 
 const realFetch = globalThis.fetch
-let current: { calls: FetchCall[]; origin: string; platform: FetchHandle } = { calls: [], origin: '', platform: realFetch }
+let current: { calls: FetchCall[]; receivers: unknown[]; origin: string; platform: FetchHandle } = {
+  calls: [],
+  receivers: [],
+  origin: '',
+  platform: realFetch,
+}
 
 /**
  * The platform fetch as the library sees it. The library default handle is a bound copy of whatever `fetch` is global when
  * the library loads, so this one function is installed before the first import and each test points it at its own platform
  * behavior. Traffic outside the test's origin (the test runner's own) goes to the real fetch untouched.
  */
-const recorder: FetchHandle = (...args) => {
+const recorder: FetchHandle = function (this: unknown, ...args) {
   const [input] = args
-  const { calls, origin, platform } = current
+  const { calls, receivers, origin, platform } = current
   if (!(input instanceof Request ? input.url : String(input)).startsWith(origin)) {
     return realFetch(...args)
   }
   calls.push(args)
+  receivers.push(this)
   // A plain call: browsers reject fetch invoked as a method of another object.
   return platform(...args)
 }
@@ -99,6 +105,8 @@ async function importLibrary() {
     client,
     createFetchRequest: transport.createFetchRequest,
     DEFAULT_FETCH: config.DEFAULT_FETCH,
+    DEFAULT_HTTP_OPTIONS: config.DEFAULT_HTTP_OPTIONS,
+    DEFAULT_SSE_OPTIONS: config.DEFAULT_SSE_OPTIONS,
     ERR_ABORTED: error.ERR_ABORTED,
     ERR_TIMEOUT: error.ERR_TIMEOUT,
     fetchHandler: transport.fetchHandler,
@@ -121,8 +129,9 @@ function ensureLibrary() {
  */
 async function loadTransport(origin: string, platform: FetchHandle = realFetch) {
   const calls: FetchCall[] = []
-  current = { calls, origin, platform }
-  return { ...(await ensureLibrary()), calls, realFetch }
+  const receivers: unknown[] = []
+  current = { calls, receivers, origin, platform }
+  return { ...(await ensureLibrary()), calls, receivers, realFetch }
 }
 
 /** An upload source that stays open and never finishes cancelling; `onCancel` sees only the reason. */
@@ -182,6 +191,27 @@ export function defineNativeFetchSuite(): void {
   })
 
   describe('default handle', () => {
+    test('binds both default option handles to globalThis and returns platform responses when detached', async () => {
+      const httpResponse = new Response('http')
+      const sseResponse = new Response('sse')
+      const platform = vi.fn<FetchHandle>().mockResolvedValueOnce(httpResponse).mockResolvedValueOnce(sseResponse)
+      const { calls, receivers, DEFAULT_FETCH, DEFAULT_HTTP_OPTIONS, DEFAULT_SSE_OPTIONS } = await loadTransport(ORIGIN, platform)
+      const { handle: httpDetached } = DEFAULT_HTTP_OPTIONS
+      const { handle: sseDetached } = DEFAULT_SSE_OPTIONS
+
+      expect(httpDetached).toBe(DEFAULT_FETCH)
+      expect(sseDetached).toBe(DEFAULT_FETCH)
+      const httpResult = await httpDetached(`${ORIGIN}/http`)
+      const sseResult = await sseDetached(`${ORIGIN}/sse`)
+
+      expect(httpResult).toBe(httpResponse)
+      expect(sseResult).toBe(sseResponse)
+      expect(calls).toHaveLength(2)
+      expect(receivers).toHaveLength(2)
+      expect(receivers[0]).toBe(globalThis)
+      expect(receivers[1]).toBe(globalThis)
+    })
+
     test('calls the platform fetch with (url, init) and never builds a Request', async () => {
       const { calls, DEFAULT_FETCH, fetchHandler } = await loadTransport(
         ORIGIN,
@@ -604,7 +634,7 @@ export function defineNativeFetchSuite(): void {
       '%s handle: abort mid-body settles with ERR_ABORTED and frees the connection',
       async (kind) => {
         const { DEFAULT_FETCH, ERR_ABORTED, fetchHandler, realFetch } = await loadTransport(host)
-        const key = `abort-${kind}`
+        const key = `abort-${kind}-${crypto.randomUUID()}`
         const controller = new AbortController()
         const handle: FetchHandle = kind === 'default' ? DEFAULT_FETCH : (input, init) => realFetch(input, init)
 
@@ -621,7 +651,7 @@ export function defineNativeFetchSuite(): void {
       '%s handle: timeout mid-body settles with ERR_TIMEOUT and frees the connection',
       async (kind) => {
         const { DEFAULT_FETCH, ERR_TIMEOUT, fetchHandler, realFetch } = await loadTransport(host)
-        const key = `timeout-${kind}`
+        const key = `timeout-${kind}-${crypto.randomUUID()}`
         const controller = new AbortController()
         const handle: FetchHandle = kind === 'default' ? DEFAULT_FETCH : (input, init) => realFetch(input, init)
 

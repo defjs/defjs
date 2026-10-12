@@ -1,7 +1,7 @@
-import type { FetchHandle } from '../../client/config'
+import type { ClientSSEOptions, FetchHandle } from '../../client/config'
 import type { FaultCode } from '../../error'
 import { ERR_TIMEOUT } from '../../error'
-import { createFetchInitBase } from '../../http/transport/fetch_init'
+import { createFetchInitBase, isReadableStreamBody } from '../../http/transport/fetch_init'
 import { concatChunks, parseBytesBody } from '../../internal/bytes'
 import { parseMediaTypeEssence } from '../../internal/media_type'
 import { isMediaTypeParametersWellFormed } from '../../internal/media_type_parameters'
@@ -24,6 +24,8 @@ import { createLineParser, createMessageParser, readStreamBytes, SSEParserLimitE
 export const EVENT_STREAM_CONTENT_TYPE = 'text/event-stream'
 export const LAST_EVENT_ID_HEADER = 'last-event-id'
 const DEFAULT_RETRY_INTERVAL = 1000
+// RFC 9110 §9.2.2 idempotent methods that Fetch can send (it forbids TRACE).
+const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set(['DELETE', 'GET', 'HEAD', 'OPTIONS', 'PUT'])
 
 /** Metadata available after an SSE response opens successfully. */
 export interface EventStreamOpenInfo {
@@ -71,20 +73,6 @@ export interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIte
   [Symbol.asyncDispose](): PromiseLike<void>
 }
 
-export interface SSEReconnectOptions {
-  attempts?: number
-  delayMs?: number
-  factor?: number
-  jitter?: number
-  maxDelayMs?: number
-  shouldReconnect?: (context: {
-    attempt: number
-    cause?: unknown
-    lastEventId: string
-    open?: EventStreamOpenInfo
-  }) => boolean | Promise<boolean>
-}
-
 export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
   fetch?: FetchHandle
   /** Optional struct for a non-2xx handshake body; fills the fault's `data` when declared. */
@@ -94,7 +82,7 @@ export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
   onerror?: (error: unknown, context: FetchEventStreamErrorContext) => number | null | undefined | Promise<number | null | undefined>
   transformMessage?: (message: EventStreamMessage, signal: AbortSignal) => Promise<TEvent | undefined> | TEvent | undefined
   retryInterval?: number
-  reconnect?: SSEReconnectOptions
+  reconnect?: ClientSSEOptions['reconnect']
   maxBufferSize: number
   maxQueueSize: number
 }
@@ -318,6 +306,14 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           return
         }
 
+        // A stream body is spent by the first attempt and the request is built once per execute, so nothing can be
+        // retried: no observer, reconnect policy or delay, and the caller gets the real failure. Keyed on the body
+        // type, not `locked`: when a failed attempt locks the stream differs by runtime.
+        if (isReadableStreamBody(request.body)) {
+          finishError(retryError)
+          return
+        }
+
         let retryDelay: number | null
         try {
           retryDelay = await resolveRetryDelay(retryError, attemptAbort)
@@ -438,7 +434,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
       return null
     }
 
-    // 2. Check shouldReconnect
+    // 2. The caller's policy decides; without one, only an idempotent request is sent again.
     if (reconnect.shouldReconnect) {
       const should = await awaitWithSignal(
         () =>
@@ -446,6 +442,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
             attempt: retryCount,
             cause: error,
             lastEventId,
+            method: request.method,
             open: latestOpen,
           }),
         signal,
@@ -453,6 +450,8 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
       if (!should) {
         return null
       }
+    } else if (!IDEMPOTENT_METHODS.has(request.method.toUpperCase())) {
+      return null
     }
 
     // 3. Check attempts limit (default 3 when reconnect is configured, like WebSocket)
@@ -656,7 +655,6 @@ function createEventStreamRequestInit(request: HttpRequest, headers: Headers, ab
     defaultAccept: EVENT_STREAM_CONTENT_TYPE,
     headers,
     signal: abort,
-    streamingRequestUnsupportedError: new Error('ERR_STREAMING_REQUEST_UNSUPPORTED'),
   })
 }
 

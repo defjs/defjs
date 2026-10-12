@@ -40,9 +40,9 @@ import { decodeJson } from '../struct/codec/json'
 import { StructError } from '../struct/errors'
 import { parseStructValue } from '../struct/introspection'
 import { createHttpRequest } from './request'
-import type { BodyFailure } from './transport/body_failure'
+import type { AnyBodyFailure } from './transport/body_failure'
 import { isBodyFailure } from './transport/body_failure'
-import { fetchHandler } from './transport/fetch'
+import { ERR_STREAMING_REQUEST_UNSUPPORTED, fetchHandler } from './transport/fetch'
 import { getContentType, isJsonMediaType } from './transport/utils'
 
 /**
@@ -380,10 +380,13 @@ export async function executeHttpCommand<
         }
         return fail(aborted)
       }
-      // The transport only reads a side that declared a struct, so a tagged body failure —
-      // including a representation failure — always belongs to that side and surfaces as its fault.
+      // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
+      // An upload observer failure is also tagged, without response metadata.
       if (isBodyFailure(error)) {
         return fail(fromBodyFailure(error))
+      }
+      if (fromTransport && error === ERR_STREAMING_REQUEST_UNSUPPORTED) {
+        return fail(createPreflightFault('ENV_UNSUPPORTED', error))
       }
       // Recognized cancellation shapes stay cancellation wherever they came from; anything else
       // belongs to whoever produced it.
@@ -509,7 +512,7 @@ async function decodeDeclaredBody(struct: AnyStruct, response: HttpResponse<unkn
 }
 
 /** Map a transport-tagged body failure onto the fault it was classified as. */
-function fromBodyFailure(failure: BodyFailure): AnyFault {
+function fromBodyFailure(failure: AnyBodyFailure): AnyFault {
   const { cause, code, meta } = failure
 
   if (code === 'RES_DECODE_FAILED' || code === 'RES_MEDIA_TYPE_INVALID') {

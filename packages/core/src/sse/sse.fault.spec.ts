@@ -1,5 +1,7 @@
-import { describe, expect, test } from 'vitest'
-import { createClient, withEndpoint, withInterceptors, withSSEHandle } from '../client'
+import { afterEach, describe, expect, test, vi } from 'vitest'
+import { createClient, withEndpoint, withInterceptors, withSSEHandle, withSSEReconnect } from '../client'
+import { ERR_STREAMING_REQUEST_UNSUPPORTED, __resetStreamingRequestBodySupportForTests } from '../http/transport/fetch_init'
+import { simulateUnsupportedStreaming } from '../../test/streaming-support'
 import type { Client } from '../client'
 import { createSSEInterceptor } from '../interceptor'
 import { struct } from '../struct'
@@ -154,3 +156,238 @@ describe('sse runtime faults', () => {
     expect(closed).not.toHaveProperty('code')
   })
 })
+
+describe('unsupported streaming request body', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    __resetStreamingRequestBodySupportForTests()
+  })
+
+  test('should report ENV_UNSUPPORTED for a ReadableStream body before calling the handle', async () => {
+    simulateUnsupportedStreaming()
+    const body = byteStream()
+    const handle = vi.fn(async () => new Response(null, { status: 204 }))
+    const client = createClient(withEndpoint('https://example.com'), withSSEHandle(handle))
+    const useStream = defineEventStream({
+      builder: () => ({ body }),
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 8,
+      method: 'POST',
+      path: '/events',
+    })
+
+    const [error, events, open] = await client.execute(useStream())
+
+    expect(error?.code).toBe('ENV_UNSUPPORTED')
+    expect(error?.cause).toBe(ERR_STREAMING_REQUEST_UNSUPPORTED)
+    expect(error?.cause instanceof Error ? error.cause.message : '').toBe('ERR_STREAMING_REQUEST_UNSUPPORTED')
+    expect(events).toBeUndefined()
+    expect(open).toBeUndefined()
+    expect(handle).toHaveBeenCalledTimes(0)
+    expect(body.locked).toBe(false)
+  })
+
+  test('should report ENV_UNSUPPORTED without consulting reconnect', async () => {
+    simulateUnsupportedStreaming()
+    const body = byteStream()
+    const handle = vi.fn(async () => new Response(null, { status: 204 }))
+    const shouldReconnect = vi.fn(() => false)
+    const client = createClient(
+      withEndpoint('https://example.com'),
+      withSSEHandle(handle),
+      withSSEReconnect({ delayMs: 60_000, shouldReconnect }),
+    )
+    const useStream = defineEventStream({
+      builder: () => ({ body }),
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 8,
+      method: 'POST',
+      path: '/events',
+    })
+
+    const [error, events, open] = await client.execute(useStream())
+
+    expect(error?.code).toBe('ENV_UNSUPPORTED')
+    expect(error?.cause).toBe(ERR_STREAMING_REQUEST_UNSUPPORTED)
+    expect(events).toBeUndefined()
+    expect(open).toBeUndefined()
+    expect(handle).toHaveBeenCalledTimes(0)
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+    expect(body.locked).toBe(false)
+  })
+})
+
+test('should return REQ_BUILD_FAILED when the JSON body is a Map', async () => {
+  const handle = vi.fn(async () => new Response(streamOf('data: a\n\n'), { headers: SSE_HEADERS }))
+  const client = createClient(withEndpoint('https://example.com'), withSSEHandle(handle))
+  const useStream = defineEventStream({
+    builder: () => ({ body: new Map() as never }),
+    events: { message: struct.string() },
+    maxBufferSize: 1024,
+    maxQueueSize: 8,
+    method: 'POST',
+    path: '/events',
+  })
+
+  const [fault, events, open] = await client.execute(useStream())
+
+  expect(fault?.code).toBe('REQ_BUILD_FAILED')
+  expect(events).toBeUndefined()
+  expect(open).toBeUndefined()
+  expect(fault?.cause).toBeInstanceOf(TypeError)
+  expect(fault?.cause instanceof TypeError ? fault.cause.message : '').toMatch(/Map/)
+  expect(handle).toHaveBeenCalledTimes(0)
+})
+
+test('should return REQ_BUILD_FAILED when the JSON body is an async iterable object', async () => {
+  const handle = vi.fn(async () => new Response(streamOf('data: a\n\n'), { headers: SSE_HEADERS }))
+  const client = createClient(withEndpoint('https://example.com'), withSSEHandle(handle))
+  const useStream = defineEventStream({
+    builder: () => ({
+      body: {
+        async *[Symbol.asyncIterator]() {
+          yield new TextEncoder().encode('chunk')
+        },
+      },
+    }),
+    events: { message: struct.string() },
+    maxBufferSize: 1024,
+    maxQueueSize: 8,
+    method: 'POST',
+    path: '/events',
+  })
+
+  const [fault, events, open] = await client.execute(useStream())
+
+  expect(fault?.code).toBe('REQ_BUILD_FAILED')
+  expect(events).toBeUndefined()
+  expect(open).toBeUndefined()
+  expect(fault?.cause).toBeInstanceOf(TypeError)
+  expect(fault?.cause instanceof TypeError ? fault.cause.message : '').toMatch(/iterable object/)
+  expect(handle).toHaveBeenCalledTimes(0)
+})
+
+describe('ReadableStream body and reconnect', () => {
+  test('should not reconnect when the handle reads a stream body and fails', async () => {
+    const failure = new TypeError('network down')
+    const body = byteStream()
+    const shouldReconnect = vi.fn(() => true)
+    const handle = vi.fn(async (request: Request) => {
+      await request.arrayBuffer()
+      throw failure
+    }) as unknown as typeof globalThis.fetch
+    const client = createClient(
+      withEndpoint('https://example.com'),
+      withSSEHandle(handle),
+      withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+    )
+    const useStream = defineEventStream({
+      builder: () => ({ body }),
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 8,
+      method: 'POST',
+      path: '/events',
+    })
+
+    const [fault, events, open] = await client.execute(useStream())
+
+    expect(events).toBeUndefined()
+    expect(open).toBeUndefined()
+    expect(fault?.code).toBe('NET_UNREACHABLE')
+    expect(fault?.cause).toBe(failure)
+    expect(handle).toHaveBeenCalledTimes(1)
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+  })
+
+  test('should not reconnect when an interceptor replaces the body with a stream', async () => {
+    const failure = new TypeError('network down')
+    const shouldReconnect = vi.fn(() => true)
+    const handle = vi.fn(async (request: Request) => {
+      await request.arrayBuffer()
+      throw failure
+    }) as unknown as typeof globalThis.fetch
+    const client = createClient(
+      withEndpoint('https://example.com'),
+      withSSEHandle(handle),
+      withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+      withInterceptors(
+        createSSEInterceptor(async (request, next) => {
+          return await next({ ...request, body: byteStream() })
+        }),
+      ),
+    )
+    const useStream = defineEventStream({
+      builder: () => ({ body: 'prompt' }),
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 8,
+      method: 'POST',
+      path: '/events',
+    })
+
+    const [fault, events, open] = await client.execute(useStream())
+
+    expect(events).toBeUndefined()
+    expect(open).toBeUndefined()
+    expect(fault?.code).toBe('NET_UNREACHABLE')
+    expect(fault?.cause).toBe(failure)
+    expect(handle).toHaveBeenCalledTimes(1)
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+  })
+
+  test('should reconnect when an interceptor replaces a stream body with a blob', async () => {
+    const failure = new TypeError('network down')
+    const shouldReconnect = vi.fn(() => true)
+    let attempt = 0
+    const handle = vi.fn(async () => {
+      attempt += 1
+      if (attempt === 1) {
+        throw failure
+      }
+      return new Response(streamOf('data: hi\n\n'), { headers: SSE_HEADERS })
+    })
+    const client = createClient(
+      withEndpoint('https://example.com'),
+      withSSEHandle(handle),
+      withSSEReconnect({ attempts: 2, delayMs: 0, shouldReconnect }),
+      withInterceptors(
+        createSSEInterceptor(async (request, next) => {
+          return await next({ ...request, body: new Blob(['x']) })
+        }),
+      ),
+    )
+    const useStream = defineEventStream({
+      builder: () => ({ body: byteStream() }),
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 8,
+      method: 'POST',
+      path: '/events',
+    })
+
+    const [fault, stream] = await client.execute(useStream())
+
+    expect(fault).toBeNull()
+    if (!stream) {
+      throw new Error('Expected the stream to open')
+    }
+    const events: string[] = []
+    for await (const event of stream) {
+      events.push(event.data)
+    }
+    expect(events).toEqual(['hi'])
+    expect(handle).toHaveBeenCalledTimes(2)
+  })
+})
+
+function byteStream(): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(Uint8Array.from([1, 2, 3, 4]))
+      controller.close()
+    },
+  })
+}

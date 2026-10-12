@@ -1,3 +1,4 @@
+import { Readable } from 'node:stream'
 import { expectTypeOf } from 'vitest'
 import { defineEventStream, defineRequest, defineWebSocket, struct, type BuilderInput, type WebSocketExecuteOptions } from '../../src'
 import { STRUCT } from '../../src/struct/symbols'
@@ -165,3 +166,57 @@ defineWebSocket({
   // @ts-expect-error Contextual builder returns still prohibit WebSocket headers.
   builder: () => ({ headers: {} }),
 })
+
+class Payload {
+  value = 7
+}
+interface UserDto {
+  name: string
+}
+type UserAlias = { name: string }
+declare const dto: UserDto
+declare const aliasBody: UserAlias
+declare const parsedBody: ParsedRequest
+
+// @ts-expect-error A Node Readable is not JSON data.
+defineRequest({ builder: () => ({ body: Readable.from(['x']) }), method: 'POST', path: '/users' })
+
+// @ts-expect-error An async generator is not JSON data.
+defineRequest({ builder: () => ({ body: (async function* () {})() }), method: 'POST', path: '/users' })
+
+// @ts-expect-error A Map is not JSON data.
+defineRequest({ builder: () => ({ body: new Map() }), method: 'POST', path: '/users' })
+
+// @ts-expect-error A Set is not JSON data.
+defineRequest({ builder: () => ({ body: new Set() }), method: 'POST', path: '/users' })
+
+// @ts-expect-error A class instance is not JSON data.
+defineRequest({ builder: () => ({ body: new Payload() }), method: 'POST', path: '/users' })
+
+// @ts-expect-error A function is not JSON data.
+defineRequest({ builder: () => ({ body: () => 1 }), method: 'POST', path: '/users' })
+
+// @ts-expect-error An interface value is not JSON data.
+defineRequest({ builder: () => ({ body: dto }), method: 'POST', path: '/users' })
+
+defineEventStream({
+  // @ts-expect-error A Map is not JSON data.
+  builder: () => ({ body: new Map() }),
+  events: { message: struct.string() },
+  maxBufferSize: 1,
+  maxQueueSize: 1,
+  method: 'POST',
+  path: '/events',
+})
+
+defineRequest({ builder: () => ({ body: parsedBody }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: { name: 'Ada' } }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: aliasBody }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: { ...dto } }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: new Uint8Array(1) }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: new Blob([]) }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: new ReadableStream<Uint8Array>() }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: new Date() }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: 1n }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: null }), method: 'POST', path: '/users' })
+defineRequest({ builder: () => ({ body: ['a'] }), method: 'POST', path: '/users' })

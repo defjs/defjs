@@ -1,7 +1,7 @@
-import { describe, expect, inject, test, vi } from 'vitest'
+import { describe, expect, inject, onTestFinished, test, vi } from 'vitest'
 import { ERR_ABORTED, ERR_TIMEOUT } from '../../error'
 import type { HttpRequest } from '../../http'
-import type { FetchEventStreamOptions } from './event_stream'
+import type { EventStreamHandle, FetchEventStreamOptions } from './event_stream'
 import { fetchEventStream as fetchEventStreamInternal, getErrorOpenInfo, getEventStreamFatalCode } from './event_stream'
 import { type EventStreamMessage, SSEParserLimitError } from './parser'
 
@@ -16,6 +16,15 @@ function fetchEventStream<T = EventStreamMessage>(request: HttpRequest, options:
     maxQueueSize: 16,
     ...options,
   } as FetchEventStreamOptions<T>)
+}
+
+function byteStream(): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(Uint8Array.from([1, 2, 3, 4]))
+      controller.close()
+    },
+  })
 }
 
 function settleWithin<T>(promise: Promise<T>): Promise<T> {
@@ -132,12 +141,17 @@ describe('fetchEventStream advanced', () => {
   })
 
   test('should attach open info to error for getErrorOpenInfo', async () => {
+    let unexpectedHandle: EventStreamHandle<EventStreamMessage> | undefined
+    onTestFinished(async () => {
+      await unexpectedHandle?.[Symbol.asyncDispose]()
+    })
+    let failure: unknown
     try {
-      await fetchEventStream(createRequest('/sse/500-always'))
+      unexpectedHandle = await fetchEventStream(createRequest('/sse/500-always'))
     } catch (error) {
-      const openInfo = getErrorOpenInfo(error)
-      expect(openInfo?.response.status).toBe(500)
+      failure = error
     }
+    expect(getErrorOpenInfo(failure)?.response.status).toBe(500)
   })
 
   test('getErrorOpenInfo returns undefined for non-object errors', () => {
@@ -266,13 +280,19 @@ describe('fetchEventStream advanced', () => {
       abort: controller.signal,
     }
 
-    setTimeout(() => controller.abort(timeoutError), 50)
+    let unexpectedHandle: EventStreamHandle<EventStreamMessage> | undefined
+    let timer: ReturnType<typeof setTimeout> | undefined
+    onTestFinished(async () => {
+      clearTimeout(timer)
+      await unexpectedHandle?.[Symbol.asyncDispose]()
+    })
+    timer = setTimeout(() => controller.abort(timeoutError), 50)
 
-    try {
-      await fetchEventStream(request)
-    } catch (error) {
-      expect(error).toBe(ERR_TIMEOUT)
-    }
+    const opening = fetchEventStream(request).then((handle) => {
+      unexpectedHandle = handle
+      return handle
+    })
+    await expect(opening).rejects.toBe(ERR_TIMEOUT)
   })
 
   test('should throw for non-event-stream content type', async () => {
@@ -1044,6 +1064,152 @@ describe('fetchEventStream advanced', () => {
     expect(events.length).toBeGreaterThan(0)
   })
 
+  test('should not reconnect a ReadableStream body after a startup failure', async () => {
+    const failure = new TypeError('network down')
+    const shouldReconnect = vi.fn(() => true)
+    const fetch = vi.fn(async (request: Request) => {
+      await request.arrayBuffer()
+      throw failure
+    }) as unknown as typeof globalThis.fetch
+
+    await expect(
+      fetchEventStream(
+        { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'POST', body: byteStream() },
+        { fetch, reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+      ),
+    ).rejects.toBe(failure)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+  })
+
+  test('should end an opened ReadableStream-body stream with the original read error', async () => {
+    const failure = new TypeError('network down')
+    const shouldReconnect = vi.fn(() => true)
+    const fetch = vi.fn(async (request: Request) => {
+      await request.arrayBuffer()
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('id: 1\ndata: a\n\n'))
+          },
+          pull(controller) {
+            controller.error(failure)
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' }, status: 200 },
+      )
+    }) as unknown as typeof globalThis.fetch
+
+    const stream = await fetchEventStream(
+      { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'POST', body: byteStream() },
+      { fetch, reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+    )
+    const iterator = stream[Symbol.asyncIterator]()
+    await expect(iterator.next()).resolves.toEqual({ done: false, value: { data: 'a', event: '', id: '1' } })
+    await expect(iterator.next()).rejects.toBe(failure)
+    const closed = await stream.closed
+    expect(closed).toMatchObject({ kind: 'error', code: 'NET_UNREACHABLE' })
+    expect(closed.cause).toBe(failure)
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+  })
+
+  test('should not reconnect a ReadableStream body after a 307 redirect', async () => {
+    const shouldReconnect = vi.fn(() => true)
+    const error: unknown = await fetchEventStream(
+      { ...createRequest('/sse/redirect/307'), body: byteStream(), method: 'POST' },
+      { reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+    ).then(
+      () => undefined,
+      (cause: unknown) => cause,
+    )
+
+    expect(error).toBeInstanceOf(TypeError)
+    expect(error instanceof Error ? error.message : '').not.toMatch(/disturbed|locked/)
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+  })
+
+  test('should open a ReadableStream body after a 303 redirect', async () => {
+    const shouldReconnect = vi.fn(() => true)
+    const stream = await fetchEventStream(
+      { ...createRequest('/sse/redirect/303'), body: byteStream(), method: 'POST' },
+      { reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+    )
+    const events: EventStreamMessage[] = []
+    for await (const event of stream) {
+      events.push(event)
+    }
+
+    expect(events).toEqual([
+      { id: '1', event: 'message', data: 'first' },
+      { id: '2', event: 'message', data: 'second line 1\nsecond line 2' },
+    ])
+    expect(shouldReconnect).toHaveBeenCalledTimes(0)
+  })
+
+  test.each([
+    ['string', 'hello' as const, async (request: Request) => request.text(), 'hello' as const],
+    [
+      'bytes',
+      Uint8Array.from([1, 2, 3]),
+      async (request: Request) => new Uint8Array(await request.arrayBuffer()),
+      Uint8Array.from([1, 2, 3]),
+    ],
+    [
+      'form',
+      (() => {
+        const form = new FormData()
+        form.append('a', '1')
+        return form
+      })(),
+      async (request: Request) => Object.fromEntries(await request.formData()),
+      { a: '1' },
+    ],
+  ])('resends a replayable %s body with the last event id', async (_name, body, read, expected) => {
+    const failure = new TypeError('network down')
+    const recorded: unknown[] = []
+    const lastEventIds: Array<string | null> = []
+    const fetch = vi.fn(async (request: Request) => {
+      recorded.push(await read(request))
+      lastEventIds.push(request.headers.get('last-event-id'))
+      if (recorded.length === 1) {
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('id: 1\ndata: a\n\n'))
+            },
+            pull(controller) {
+              controller.error(failure)
+            },
+          }),
+          { headers: { 'content-type': 'text/event-stream' }, status: 200 },
+        )
+      }
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('data: b\n\n'))
+            controller.close()
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' }, status: 200 },
+      )
+    }) as unknown as typeof globalThis.fetch
+
+    const stream = await fetchEventStream(
+      { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'PUT', body },
+      { fetch, reconnect: { attempts: 1, delayMs: 0 } },
+    )
+    const events: EventStreamMessage[] = []
+    for await (const event of stream) {
+      events.push(event)
+    }
+
+    expect(events.map((event) => event.data)).toEqual(['a', 'b'])
+    expect(recorded).toEqual([expected, expected])
+    expect(lastEventIds).toEqual([null, '1'])
+  })
+
   test('should not retry when reconnect is omitted', async () => {
     let fetchCount = 0
     const mockFetch = vi.fn(async () => {
@@ -1530,5 +1696,110 @@ describe('fetchEventStream message path', () => {
     await expect(settleWithin(stream.closed)).resolves.toMatchObject({ cause: ERR_ABORTED, kind: 'aborted' })
     expect(transformed).toEqual(['a'])
     await expect(stream[Symbol.asyncIterator]().next()).resolves.toEqual({ done: true, value: undefined })
+  })
+})
+
+describe('reconnect method policy', () => {
+  function rejectingFetch(failure: TypeError): typeof fetch {
+    return vi.fn(async () => {
+      throw failure
+    }) as unknown as typeof fetch
+  }
+
+  test('should not reconnect POST without shouldReconnect', async () => {
+    const failure = new TypeError('network down')
+    const fetch = rejectingFetch(failure)
+
+    await expect(
+      fetchEventStream(
+        { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'POST' },
+        { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+      ),
+    ).rejects.toBe(failure)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  test.each(['PATCH', 'post'])('should not reconnect %s without shouldReconnect', async (method) => {
+    const failure = new TypeError('network down')
+    const fetch = rejectingFetch(failure)
+
+    await expect(
+      fetchEventStream(
+        { baseEndpoint: 'https://example.com', endpoint: '/events', method },
+        { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+      ),
+    ).rejects.toBe(failure)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  test.each(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE', 'delete'])(
+    'should reconnect idempotent %s without shouldReconnect',
+    async (method) => {
+      const failure = new TypeError('network down')
+      const fetch = rejectingFetch(failure)
+
+      await expect(
+        fetchEventStream(
+          { baseEndpoint: 'https://example.com', endpoint: '/events', method },
+          { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+        ),
+      ).rejects.toBe(failure)
+      expect(fetch).toHaveBeenCalledTimes(3)
+    },
+  )
+
+  test('should reconnect POST when shouldReconnect returns true and report the method', async () => {
+    const failure = new TypeError('network down')
+    const fetch = rejectingFetch(failure)
+    const shouldReconnect = vi.fn(() => true)
+
+    await expect(
+      fetchEventStream(
+        { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'POST' },
+        { fetch, reconnect: { attempts: 2, delayMs: 0, shouldReconnect } },
+      ),
+    ).rejects.toBe(failure)
+    expect(fetch).toHaveBeenCalledTimes(3)
+    expect(shouldReconnect).toHaveBeenNthCalledWith(1, expect.objectContaining({ attempt: 1, lastEventId: '', method: 'POST' }))
+  })
+
+  test('should stop POST when shouldReconnect returns false', async () => {
+    const failure = new TypeError('network down')
+    const fetch = rejectingFetch(failure)
+
+    await expect(
+      fetchEventStream(
+        { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'POST' },
+        { fetch, reconnect: { attempts: 2, delayMs: 0, shouldReconnect: () => false } },
+      ),
+    ).rejects.toBe(failure)
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
+
+  test('should end an opened POST stream with the original read error when shouldReconnect is absent', async () => {
+    const failure = new TypeError('network down')
+    const fetch = vi.fn(async () => {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode('id: 1\ndata: a\n\n'))
+          },
+          pull(controller) {
+            controller.error(failure)
+          },
+        }),
+        { headers: { 'content-type': 'text/event-stream' }, status: 200 },
+      )
+    }) as unknown as typeof globalThis.fetch
+
+    const stream = await fetchEventStream(
+      { baseEndpoint: 'https://example.com', body: 'prompt', endpoint: '/events', method: 'POST' },
+      { fetch, reconnect: { attempts: 2, delayMs: 0 } },
+    )
+    const closed = await stream.closed
+
+    expect(closed).toMatchObject({ kind: 'error', code: 'NET_UNREACHABLE' })
+    expect(closed.cause).toBe(failure)
+    expect(fetch).toHaveBeenCalledTimes(1)
   })
 })

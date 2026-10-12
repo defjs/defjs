@@ -179,9 +179,12 @@ export function withWebSocketReconnect(options: ClientWebSocketOptions['reconnec
 }
 
 /**
- * Handles SSE events that lack a matching struct or fail validation.
+ * Observes SSE events that lack a matching struct or fail validation.
  *
- * @param handler - Callback for invalid events; may throw or return a value.
+ * The event is always dropped. The handler may be async and is awaited; its return value is ignored,
+ * and an error it throws is swallowed unless the stream was aborted.
+ *
+ * @param handler - Observer callback for invalid events.
  * @returns An option that sets `config.sse.onInvalidEvent`.
  */
 export function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption {

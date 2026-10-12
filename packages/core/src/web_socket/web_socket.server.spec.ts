@@ -509,8 +509,10 @@ describe('web socket runtime environment edge cases', () => {
   })
 
   test('should settle a hanging websocket interceptor on timeout', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     vi.stubGlobal('WebSocket', createMockWebSocketClass())
     const entered = createDeferred<void>()
+    let settled = false
     const hangingInterceptor = createWebSocketInterceptor(() => {
       entered.resolve(undefined)
       return new Promise<WebSocketSessionLike>(() => undefined)
@@ -519,15 +521,15 @@ describe('web socket runtime environment edge cases', () => {
     const executePromise = run(createClient(withEndpoint('http://localhost'), withInterceptors(hangingInterceptor)), useSocket(), {
       timeout: 5,
     })
+    void executePromise.then(() => {
+      settled = true
+    })
 
     await entered.promise
-    const result = await Promise.race([executePromise, new Promise<false>((resolve) => setTimeout(() => resolve(false), 50))])
-
-    expect(result).not.toBe(false)
-    if (result === false) {
-      throw new Error('Expected timeout to settle the interceptor chain')
-    }
-    const [error, socket, connection] = result
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(5)
+    expect(settled).toBe(true)
+    const [error, socket, connection] = await executePromise
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
     expect(socket).toBeUndefined()
     expect(connection).toBeUndefined()
@@ -587,11 +589,22 @@ describe('web socket runtime environment edge cases', () => {
   })
 
   test('should surface a startup timeout while waiting for the physical socket to open', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false }))
     const useSocket = defineWebSocket({ maxIncomingQueueSize: 1, incoming: struct.unknown(), path: '/ws/test' })
+    let settled = false
+    const executePromise = run(createClient(withEndpoint('http://localhost')), useSocket(), { timeout: 10 })
+    void executePromise.then(() => {
+      settled = true
+    })
 
-    const [error, socket, connection] = await run(createClient(withEndpoint('http://localhost')), useSocket(), { timeout: 10 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(lastMockInstance).toBeDefined()
+    expect(settled).toBe(false)
+    await vi.advanceTimersByTimeAsync(10)
+    expect(settled).toBe(true)
 
+    const [error, socket, connection] = await executePromise
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
     expect(socket).toBeUndefined()
     expect(connection).toMatchObject({ generation: 0 })

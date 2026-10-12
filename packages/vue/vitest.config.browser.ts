@@ -17,7 +17,7 @@ export default defineConfig({
     },
   },
   test: {
-    api: 63316,
+    api: { host: '127.0.0.1' },
     name: 'vue-browser',
     globalSetup: resolve(packageRoot, '../../test/browser-api-server-setup.ts'),
     browser: {

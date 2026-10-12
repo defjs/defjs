@@ -1,4 +1,4 @@
-import { describe, expect, inject, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, inject, test, vi } from 'vitest'
 import {
   createClient,
   createHttpInterceptor,
@@ -180,13 +180,19 @@ describe('builder refactor adversarial audit', () => {
     ).toThrow()
   })
 
-  test('rejects non-plain query objects while JSON-encoding class body objects', () => {
+  test('rejects non-plain query objects and class body objects without toJSON', () => {
     expect(() => materializeOutboundRequest({ query: new Map([['q', 'x']]) }, 'http')).toThrow(/query value/)
     class Payload {
       value = 7
     }
-    const request = materializeOutboundRequest({ body: new Payload() }, 'http')
-    expect(request.body).toBe('{"value":7}')
+    expect(() => materializeOutboundRequest({ body: new Payload() }, 'http')).toThrow(/body is not JSON data: Payload/)
+    class EncodedPayload {
+      value = 7
+      toJSON() {
+        return { value: 7 }
+      }
+    }
+    expect(materializeOutboundRequest({ body: new EncodedPayload() }, 'http').body).toBe('{"value":7}')
   })
 
   test('passes deeply nested and large queries to the serializer after alias encoding', async () => {
@@ -451,13 +457,10 @@ const Proto = struct.object({ value: struct.string().alias('__proto__') })
 const PHASE_TIMEOUT_MS = 15
 const SLOW_PHASE_MS = 40
 
-function occupyEventLoop(ms: number): void {
-  // Synchronous parse/build holds the thread, so a queued timeout cannot run until the turn ends.
-  let elapsed = 0
-  const startedAt = Date.now()
-  while (elapsed < ms) {
-    elapsed = Date.now() - startedAt
-  }
+// Only Date is faked (see the hooks in 'builder fixes re-audit'): the clock moves where a test advances it,
+// while the real deadline timer still cannot fire during synchronous work.
+function advanceClock(ms: number): void {
+  vi.setSystemTime(Date.now() + ms)
 }
 
 function slowInput(): { id: string } {
@@ -465,7 +468,7 @@ function slowInput(): { id: string } {
   Object.defineProperty(input, 'id', {
     enumerable: true,
     get() {
-      occupyEventLoop(SLOW_PHASE_MS)
+      advanceClock(SLOW_PHASE_MS)
       return 'ok'
     },
   })
@@ -550,6 +553,14 @@ function createOpeningSocket(): { Socket: new (url: string) => unknown; counters
 }
 
 describe('builder fixes re-audit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   test('preserves __proto__ aliases through outgoing WebSocket records and incoming JSON', () => {
     const Message = struct.object({ nested: struct.array(Proto), records: struct.record(Proto) })
     const records = JSON.parse('{"__proto__":{"value":"record"}}') as Record<string, { value: string }>
@@ -727,11 +738,13 @@ describe('builder fixes re-audit', () => {
   })
 
   test('returns NET_TIMEOUT when a WebSocket builder outlasts the execute timeout', async () => {
+    let builderCalls = 0
     const opened = createOpeningSocket()
     const client = createClient(withEndpoint('https://example.test'), withWebSocketHandle(opened.Socket as unknown as typeof WebSocket))
     const endpoint = defineWebSocket({
       builder: () => {
-        occupyEventLoop(SLOW_PHASE_MS)
+        builderCalls += 1
+        advanceClock(SLOW_PHASE_MS)
         return {}
       },
       incoming: struct.unknown(),
@@ -742,16 +755,21 @@ describe('builder fixes re-audit', () => {
     const [error, session] = await client.execute(endpoint(), { timeout: PHASE_TIMEOUT_MS })
     await closeIfOpened(session)
 
+    expect(builderCalls).toBe(1)
     expect(opened.counters.sockets).toBe(0)
     expect(session).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
   })
 
   test('returns NET_TIMEOUT when WebSocket input parsing outlasts the execute timeout', async () => {
+    let builderCalls = 0
     const opened = createOpeningSocket()
     const client = createClient(withEndpoint('https://example.test'), withWebSocketHandle(opened.Socket as unknown as typeof WebSocket))
     const endpoint = defineWebSocket({
-      builder: () => ({}),
+      builder: () => {
+        builderCalls += 1
+        return {}
+      },
       incoming: struct.unknown(),
       input: struct.object({ id: struct.string() }),
       maxIncomingQueueSize: 1,
@@ -761,6 +779,7 @@ describe('builder fixes re-audit', () => {
     const [error, session] = await client.execute(endpoint(slowInput()), { timeout: PHASE_TIMEOUT_MS })
     await closeIfOpened(session)
 
+    expect(builderCalls).toBe(0)
     expect(opened.counters.sockets).toBe(0)
     expect(session).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
@@ -792,11 +811,13 @@ describe('builder fixes re-audit', () => {
   })
 
   test('returns NET_TIMEOUT when a WebSocket builder throws after the execute timeout', async () => {
+    let builderCalls = 0
     const opened = createOpeningSocket()
     const client = createClient(withEndpoint('https://example.test'), withWebSocketHandle(opened.Socket as unknown as typeof WebSocket))
     const endpoint = defineWebSocket({
       builder: () => {
-        occupyEventLoop(SLOW_PHASE_MS)
+        builderCalls += 1
+        advanceClock(SLOW_PHASE_MS)
         throw new Error('build failed after the deadline')
       },
       incoming: struct.unknown(),
@@ -806,6 +827,7 @@ describe('builder fixes re-audit', () => {
 
     const [error, session] = await client.execute(endpoint(), { timeout: PHASE_TIMEOUT_MS })
 
+    expect(builderCalls).toBe(1)
     expect(opened.counters.sockets).toBe(0)
     expect(session).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
@@ -877,6 +899,7 @@ describe('builder fixes re-audit', () => {
   })
 
   test('returns NET_TIMEOUT when an HTTP builder outlasts the execute timeout', async () => {
+    let builderCalls = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -887,7 +910,8 @@ describe('builder fixes re-audit', () => {
     )
     const endpoint = defineRequest({
       builder: () => {
-        occupyEventLoop(SLOW_PHASE_MS)
+        builderCalls += 1
+        advanceClock(SLOW_PHASE_MS)
         return {}
       },
       method: 'GET',
@@ -896,12 +920,14 @@ describe('builder fixes re-audit', () => {
 
     const [error, result] = await client.execute(endpoint(), { timeout: PHASE_TIMEOUT_MS })
 
+    expect(builderCalls).toBe(1)
     expect(fetches).toBe(0)
     expect(result).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
   })
 
   test('returns NET_TIMEOUT when HTTP input parsing outlasts the execute timeout', async () => {
+    let builderCalls = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -911,7 +937,10 @@ describe('builder fixes re-audit', () => {
       }),
     )
     const endpoint = defineRequest({
-      builder: () => ({}),
+      builder: () => {
+        builderCalls += 1
+        return {}
+      },
       input: struct.object({ id: struct.string() }),
       method: 'GET',
       path: '/item',
@@ -919,6 +948,7 @@ describe('builder fixes re-audit', () => {
 
     const [error, result] = await client.execute(endpoint(slowInput()), { timeout: PHASE_TIMEOUT_MS })
 
+    expect(builderCalls).toBe(0)
     expect(fetches).toBe(0)
     expect(result).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
@@ -954,6 +984,7 @@ describe('builder fixes re-audit', () => {
   })
 
   test('returns NET_TIMEOUT when an HTTP builder throws after the execute timeout', async () => {
+    let builderCalls = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -964,7 +995,8 @@ describe('builder fixes re-audit', () => {
     )
     const endpoint = defineRequest({
       builder: () => {
-        occupyEventLoop(SLOW_PHASE_MS)
+        builderCalls += 1
+        advanceClock(SLOW_PHASE_MS)
         throw new Error('build failed after the deadline')
       },
       method: 'GET',
@@ -973,6 +1005,7 @@ describe('builder fixes re-audit', () => {
 
     const [error, result] = await client.execute(endpoint(), { timeout: PHASE_TIMEOUT_MS })
 
+    expect(builderCalls).toBe(1)
     expect(fetches).toBe(0)
     expect(result).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
@@ -1067,6 +1100,7 @@ describe('builder fixes re-audit', () => {
   })
 
   test('returns NET_TIMEOUT when an SSE builder outlasts the execute timeout', async () => {
+    let builderCalls = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -1077,7 +1111,8 @@ describe('builder fixes re-audit', () => {
     )
     const endpoint = defineEventStream({
       builder: () => {
-        occupyEventLoop(SLOW_PHASE_MS)
+        builderCalls += 1
+        advanceClock(SLOW_PHASE_MS)
         return {}
       },
       events: { message: struct.string() },
@@ -1089,12 +1124,14 @@ describe('builder fixes re-audit', () => {
     const [error, stream] = await client.execute(endpoint(), { timeout: PHASE_TIMEOUT_MS })
     await closeIfOpened(stream)
 
+    expect(builderCalls).toBe(1)
     expect(fetches).toBe(0)
     expect(stream).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
   })
 
   test('returns NET_TIMEOUT when SSE input parsing outlasts the execute timeout', async () => {
+    let builderCalls = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -1104,7 +1141,10 @@ describe('builder fixes re-audit', () => {
       }),
     )
     const endpoint = defineEventStream({
-      builder: () => ({}),
+      builder: () => {
+        builderCalls += 1
+        return {}
+      },
       events: { message: struct.string() },
       input: struct.object({ id: struct.string() }),
       maxBufferSize: 1024,
@@ -1115,6 +1155,7 @@ describe('builder fixes re-audit', () => {
     const [error, stream] = await client.execute(endpoint(slowInput()), { timeout: PHASE_TIMEOUT_MS })
     await closeIfOpened(stream)
 
+    expect(builderCalls).toBe(0)
     expect(fetches).toBe(0)
     expect(stream).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
@@ -1153,6 +1194,7 @@ describe('builder fixes re-audit', () => {
   })
 
   test('returns NET_TIMEOUT when an SSE builder throws after the execute timeout', async () => {
+    let builderCalls = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -1163,7 +1205,8 @@ describe('builder fixes re-audit', () => {
     )
     const endpoint = defineEventStream({
       builder: () => {
-        occupyEventLoop(SLOW_PHASE_MS)
+        builderCalls += 1
+        advanceClock(SLOW_PHASE_MS)
         throw new Error('build failed after the deadline')
       },
       events: { message: struct.string() },
@@ -1175,6 +1218,7 @@ describe('builder fixes re-audit', () => {
     const [error, stream] = await client.execute(endpoint(), { timeout: PHASE_TIMEOUT_MS })
     await closeIfOpened(stream)
 
+    expect(builderCalls).toBe(1)
     expect(fetches).toBe(0)
     expect(stream).toBeUndefined()
     expect(error).toMatchObject({ code: 'NET_TIMEOUT' })

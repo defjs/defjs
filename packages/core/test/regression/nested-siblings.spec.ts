@@ -1,11 +1,12 @@
 import { expect, test } from 'vitest'
 import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle } from '../../src'
+import type { BodyValue } from '../../src/internal/builder_types'
 import { parseEndpointInput } from '../../src/internal/endpoint_input'
 
 const Item = struct.object({ id: struct.string().alias('wire_id') })
 const wireItem = { wire_id: '42', extra: 'kept' }
 
-async function sendBody(body: unknown) {
+async function sendBody(body: BodyValue) {
   const sent: unknown[] = []
   const client = createClient(
     withEndpoint('https://example.test'),

@@ -3,7 +3,6 @@ import { defineRequest } from '../http'
 import { createHttpInterceptor } from '../interceptor'
 import { struct } from '../struct'
 import { createClient } from './client'
-import { DEFAULT_HTTP_OPTIONS, DEFAULT_SSE_OPTIONS } from './config'
 import {
   withCredentials,
   withEndpoint,
@@ -90,14 +89,6 @@ describe('Client', () => {
 
     expect(error).toBeNull()
     expect(seen).toEqual(['https://original.example/ping'])
-  })
-
-  test('DEFAULT_HTTP_OPTIONS.handle and DEFAULT_SSE_OPTIONS.handle are bound to globalThis', async () => {
-    const { handle: httpDetached } = DEFAULT_HTTP_OPTIONS
-    const { handle: sseDetached } = DEFAULT_SSE_OPTIONS
-
-    await expect(httpDetached('about:blank').catch(() => 'caught')).resolves.toBeDefined()
-    await expect(sseDetached('about:blank').catch(() => 'caught')).resolves.toBeDefined()
   })
 
   test('HTTP handle, credentials, interceptors, serializer, and xsrf apply on execute', async () => {

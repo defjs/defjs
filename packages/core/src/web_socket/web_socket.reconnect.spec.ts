@@ -36,7 +36,7 @@ describe('web socket runtime reconnect', () => {
       path: '/ws/reconnect',
     })
 
-    const command = useReconnectSocket({ query: { key: 'queue-case' } })
+    const command = useReconnectSocket({ query: { key: `queue-case-${crypto.randomUUID()}` } })
 
     const states: string[] = []
     let session:

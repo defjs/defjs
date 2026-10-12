@@ -19,6 +19,16 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
+function isClientUploadAbort(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  if ('code' in error && error.code === 'ECONNRESET') {
+    return true
+  }
+  return error.message === 'aborted' || error.message === 'Client connection prematurely closed.'
+}
+
 /** Response bodies for the platform-fetch read paths: several chunks, empty, stalled mid-flight, cut short. */
 export function registerBodyRoutes(app: Hono): void {
   const stalls = new Map<string, StallState>()
@@ -57,6 +67,19 @@ export function registerBodyRoutes(app: Hono): void {
     })
   })
   app.get('/body/stall-state', (c) => c.json(stallOf(c.req.query('key') ?? 'default')))
+
+  // Upload tests abort the body while it is being read. Hono's default error handler would print that
+  // ECONNRESET; a client abort is the case under test, and any other read failure still propagates.
+  app.post('/body/upload', async (c) => {
+    try {
+      await c.req.arrayBuffer()
+    } catch (error) {
+      if (!isClientUploadAbort(error)) {
+        throw error
+      }
+    }
+    return c.body(null, 204)
+  })
 
   // Drops the socket after the first chunk: no terminating chunk, so the client sees a transport failure.
   app.get('/body/truncated', (c) => {

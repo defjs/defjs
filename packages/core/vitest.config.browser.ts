@@ -1,7 +1,7 @@
 import { playwright } from '@vitest/browser-playwright'
 import { defineConfig } from 'vitest/config'
 import { browserLaunchEnv } from '../../test/firefox-app-data.ts'
-import { globalSetupPath, packageRoot } from './test/shared.ts'
+import { packageRoot } from './test/shared.ts'
 import { xsrfProxyPlugin } from './test/vite-xsrf-plugin.ts'
 
 export default defineConfig({
@@ -9,7 +9,8 @@ export default defineConfig({
   plugins: [xsrfProxyPlugin()],
   test: {
     name: 'core-browser',
-    globalSetup: globalSetupPath,
+    // Keep browser navigation on the same IP family as the test server.
+    api: { host: '127.0.0.1' },
     browser: {
       enabled: true,
       provider: playwright(),

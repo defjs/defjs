@@ -223,6 +223,50 @@ describe('request http runtime errors', () => {
     }
   })
 
+  test('should return REQ_BUILD_FAILED when the JSON body is a Map', async () => {
+    const handle = vi.fn(async () => new Response(null, { status: 204 }))
+    const guardedClient = createClient(withEndpoint('https://example.com'), withHTTPHandle(handle))
+    const useRequest = defineRequest({
+      builder: () => ({ body: new Map() as never }),
+      method: 'POST',
+      path: '/users',
+    })
+
+    const [fault, result, response] = await guardedClient.execute(useRequest())
+
+    expect(fault?.code).toBe('REQ_BUILD_FAILED')
+    expect(result).toBeUndefined()
+    expect(response).toBeUndefined()
+    expect(fault?.cause).toBeInstanceOf(TypeError)
+    expect(fault?.cause instanceof TypeError ? fault.cause.message : '').toMatch(/Map/)
+    expect(handle).toHaveBeenCalledTimes(0)
+  })
+
+  test('should return REQ_BUILD_FAILED when the JSON body is an async iterable object', async () => {
+    const handle = vi.fn(async () => new Response(null, { status: 204 }))
+    const guardedClient = createClient(withEndpoint('https://example.com'), withHTTPHandle(handle))
+    const useRequest = defineRequest({
+      builder: () => ({
+        body: {
+          async *[Symbol.asyncIterator]() {
+            yield new TextEncoder().encode('chunk')
+          },
+        },
+      }),
+      method: 'POST',
+      path: '/users',
+    })
+
+    const [fault, result, response] = await guardedClient.execute(useRequest())
+
+    expect(fault?.code).toBe('REQ_BUILD_FAILED')
+    expect(result).toBeUndefined()
+    expect(response).toBeUndefined()
+    expect(fault?.cause).toBeInstanceOf(TypeError)
+    expect(fault?.cause instanceof TypeError ? fault.cause.message : '').toMatch(/iterable object/)
+    expect(handle).toHaveBeenCalledTimes(0)
+  })
+
   test('should return a definition error when interceptor chain throws', async () => {
     const throwingInterceptor = createHttpInterceptor(async () => {
       throw new Error('interceptor boom')
@@ -1270,12 +1314,19 @@ describe('request http runtime errors', () => {
   })
 
   test('should settle interceptor finally before returning TIMEOUT', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
     const logs: string[] = []
+    let markEntered!: () => void
+    const entered = new Promise<void>((resolve) => {
+      markEntered = resolve
+    })
+    let settled = false
     const hangingClient = createClient(
       withEndpoint('https://example.com'),
       withHTTPHandle(() => new Promise<Response>(() => undefined)),
       withInterceptors(
         createHttpInterceptor(async (req, next) => {
+          markEntered()
           try {
             return await next(req)
           } finally {
@@ -1286,10 +1337,23 @@ describe('request http runtime errors', () => {
     )
     const useRequest = defineRequest({ method: 'GET', path: '/hang' })
 
-    const [error] = await hangingClient.execute(useRequest(), { timeout: 40 })
+    try {
+      const pending = hangingClient.execute(useRequest(), { timeout: 40 })
+      void pending.then(() => {
+        settled = true
+      })
 
-    expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
-    expect(logs).toEqual(['after'])
+      await entered
+      expect(settled).toBe(false)
+      expect(logs).toEqual([])
+      await vi.advanceTimersByTimeAsync(40)
+      expect(settled).toBe(true)
+      const [error] = await pending
+      expect(error).toMatchObject({ code: 'NET_TIMEOUT' })
+      expect(logs).toEqual(['after'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   test.each(['abort', 'timeout'] as const)('should classify a pre-cancelled interceptor signal as %s without fetching', async (mode) => {

@@ -27,6 +27,13 @@ export function registerE2eRoutes(app: Hono): void {
 
   app.all('/e2e/echo', echoReceived)
   app.all('/e2e/echo/*', echoReceived)
+  app.post('/e2e/echo-raw', async (c) => {
+    const bytes = new Uint8Array(await c.req.arrayBuffer())
+    return c.json({
+      bodyBase64: Buffer.from(bytes).toString('base64'),
+      contentType: c.req.header('content-type') ?? '',
+    })
+  })
 
   app.get('/e2e/in/text', (c) => c.text('hello-text'))
   app.get('/e2e/in/text-error', (c) => c.text('bad-text', 400))

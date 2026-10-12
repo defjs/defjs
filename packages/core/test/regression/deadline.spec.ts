@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   createClient,
   createHttpInterceptor,
@@ -58,11 +58,10 @@ function replacementSession(): WebSocketSessionLike {
   }
 }
 
-function occupyEventLoop(ms: number): void {
-  const startedAt = Date.now()
-  while (Date.now() - startedAt < ms) {
-    // Deliberately block the event loop to exercise the wall-clock deadline check.
-  }
+// Date is faked in the describe below, so the clock moves only where a test advances it while the
+// real deadline timer still cannot fire during synchronous work.
+function advanceClock(ms: number): void {
+  vi.setSystemTime(Date.now() + ms)
 }
 
 function reconnectingSocketClass(onConstruct: () => number): typeof WebSocket {
@@ -168,13 +167,19 @@ function openingSocketClass(): typeof WebSocket {
 }
 
 describe('transport deadline lifecycle re-audit', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+  })
+
   test('rejects an HTTP transport that starts after a synchronous interceptor exceeds timeout', async () => {
+    let slowRuns = 0
     const client = createClient(
       withEndpoint('https://example.test'),
       withHTTPHandle(async () => new Response(null, { status: 204 })),
       withInterceptors(
         createHttpInterceptor((request, next) => {
-          occupyEventLoop(30)
+          slowRuns += 1
+          advanceClock(30)
           return next(request)
         }),
       ),
@@ -182,6 +187,7 @@ describe('transport deadline lifecycle re-audit', () => {
     const endpoint = defineRequest({ method: 'GET', path: '/slow-interceptor' })
 
     const [error] = await client.execute(endpoint(), { timeout: 5 })
+    expect(slowRuns).toBe(1)
     expect(error?.code).toBe('NET_TIMEOUT')
   })
 
@@ -192,7 +198,7 @@ describe('transport deadline lifecycle re-audit', () => {
       enumerable: true,
       get() {
         controller.abort('caller stopped')
-        occupyEventLoop(30)
+        advanceClock(30)
         return 'ok'
       },
     })
@@ -209,10 +215,12 @@ describe('transport deadline lifecycle re-audit', () => {
   })
 
   test('rejects a WebSocket query serializer that starts transport after timeout', async () => {
+    let slowRuns = 0
     const client = createClient(
       withEndpoint('https://example.test'),
       withQuerySerializer((query) => {
-        occupyEventLoop(30)
+        slowRuns += 1
+        advanceClock(30)
         return new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)])).toString()
       }),
       withWebSocketHandle(openingSocketClass()),
@@ -227,10 +235,12 @@ describe('transport deadline lifecycle re-audit', () => {
     const [error, session] = await client.execute(endpoint(), { timeout: 5 })
     session?.close()
     await session?.closed
+    expect(slowRuns).toBe(1)
     expect(error?.code).toBe('NET_TIMEOUT')
   })
 
   test('does not construct a WebSocket after a synchronous beforeConnect exceeds timeout', async () => {
+    let slowRuns = 0
     let constructed = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -247,11 +257,13 @@ describe('transport deadline lifecycle re-audit', () => {
 
     const [error, session] = await client.execute(endpoint(), {
       beforeConnect() {
-        occupyEventLoop(30)
+        slowRuns += 1
+        advanceClock(30)
       },
       timeout: 5,
     })
 
+    expect(slowRuns).toBe(1)
     expect(constructed).toBe(0)
     expect(session).toBeUndefined()
     expect(error?.code).toBe('NET_TIMEOUT')
@@ -334,6 +346,7 @@ describe('transport deadline lifecycle re-audit', () => {
   })
 
   test('does not start an HTTP fetch after a synchronous interceptor exceeds timeout', async () => {
+    let slowRuns = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
@@ -343,7 +356,8 @@ describe('transport deadline lifecycle re-audit', () => {
       }),
       withInterceptors(
         createHttpInterceptor((request, next) => {
-          occupyEventLoop(30)
+          slowRuns += 1
+          advanceClock(30)
           return next(request)
         }),
       ),
@@ -351,17 +365,20 @@ describe('transport deadline lifecycle re-audit', () => {
     const endpoint = defineRequest({ method: 'GET', path: '/slow-interceptor' })
 
     const [error] = await client.execute(endpoint(), { timeout: 5 })
+    expect(slowRuns).toBe(1)
     expect(fetches).toBe(0)
     expect(error?.code).toBe('NET_TIMEOUT')
   })
 
   test('does not start an SSE fetch after a synchronous interceptor exceeds timeout', async () => {
+    let slowRuns = 0
     let fetches = 0
     const client = createClient(
       withEndpoint('https://example.test'),
       withInterceptors(
         createSSEInterceptor((request, next) => {
-          occupyEventLoop(30)
+          slowRuns += 1
+          advanceClock(30)
           return next(request)
         }),
       ),
@@ -376,6 +393,7 @@ describe('transport deadline lifecycle re-audit', () => {
 
     const [error, stream] = await client.execute(endpoint(), { timeout: 5 })
     stream?.close()
+    expect(slowRuns).toBe(1)
     expect(fetches).toBe(0)
     expect(error?.code).toBe('NET_TIMEOUT')
   })

@@ -17,6 +17,12 @@ export interface HttpProgressEvent {
 
 /**
  * Callback invoked as request bytes are uploaded or response bytes are downloaded.
+ *
+ * A callback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`.
+ * Cancellation and timeout still win.
+ * Upload progress for a Blob, File, ArrayBuffer, or FormData body is reported only where the runtime can
+ * stream request bodies (Bun, Node, Deno); in browsers that body is sent unchanged and the callback is not called.
+ * A caller-supplied ReadableStream still reports progress wherever the runtime accepts it. Download progress is unaffected.
  */
 export type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
 

@@ -33,6 +33,7 @@ import { isTransportOrigin, markTransportOrigin } from '../internal/transport_or
 import type { HttpMeta, HttpResponse } from '../internal/http_response'
 import type { BuilderField, EventStreamRequestShape } from '../internal/builder_types'
 import type { OutboundBuilder } from '../internal/outbound_request'
+import { ERR_STREAMING_REQUEST_UNSUPPORTED } from '../http/transport/fetch_init'
 import { createBaseTransportRequest } from '../internal/transport_request'
 import type { AnyStruct, Infer } from '../struct'
 import { decodeJson } from '../struct/codec/json'
@@ -541,6 +542,10 @@ function createEventStreamFault(cause: unknown, fromTransport: boolean, response
   // `CAP_*` and `EXT_*` happen after the stream opens, so they settle `closed` rather than startup.
   if (response && fatal === 'RES_DECODE_FAILED') {
     return createDecodeFault(fatal, handshakeDecodeCause(cause), toEventStreamMeta(response))
+  }
+
+  if (fromTransport && cause === ERR_STREAMING_REQUEST_UNSUPPORTED) {
+    return createPreflightFault('ENV_UNSUPPORTED', cause)
   }
 
   return fromTransport ? createNetworkFault(cause) : createPreflightFault('EXT_INTERCEPTOR_FAILED', cause)

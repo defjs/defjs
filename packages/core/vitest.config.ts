@@ -1,5 +1,5 @@
 import { defineConfig } from 'vitest/config'
-import { coverageConfig } from './test/shared.ts'
+import { coverageConfig, globalSetupPath } from './test/shared.ts'
 
 /**
  * Package-level workspace aggregator.
@@ -13,6 +13,7 @@ import { coverageConfig } from './test/shared.ts'
  */
 export default defineConfig({
   test: {
+    globalSetup: globalSetupPath,
     coverage: {
       ...coverageConfig,
     },

@@ -26,6 +26,19 @@ export type QueryValue = Scalar | readonly QueryValue[] | { readonly [key: strin
 
 export type QueryRecord = { readonly [key: string]: QueryValue }
 
+/** A builder body: a wire value Fetch sends as is, or JSON data. An `interface` value or class instance needs `{ ...value }`. */
+export type BodyValue =
+  | Scalar
+  | null
+  | Blob
+  | ArrayBuffer
+  | ArrayBufferView
+  | FormData
+  | URLSearchParams
+  | ReadableStream<Uint8Array>
+  | readonly unknown[]
+  | { readonly [key: string]: unknown }
+
 export type PathParams<P extends string> = P extends `${string}:${infer Name}/${infer Rest}`
   ? Name | PathParams<`/${Rest}`>
   : P extends `${string}:${infer Name}`
@@ -37,7 +50,7 @@ export type PathValue<P extends string> = [PathParams<P>] extends [never]
   : ({ readonly [K in PathParams<P>]: Scalar } & { readonly [STRUCT]?: never }) | (Typed & { readonly [key: string]: Scalar })
 
 export type HttpRequestShape<P extends string, M extends string> = {
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
   headers?: HeadersInit | FlatRecord
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord

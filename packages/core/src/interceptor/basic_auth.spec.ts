@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { HttpRequest } from '../http'
 import { makeFakeHandler } from '../../test/make_fake_handler'
 import type { EventStreamHandle } from '../sse/transport/event_stream'
@@ -7,6 +7,10 @@ import { basicAuthHttpInterceptor, basicAuthSSEInterceptor } from './basic_auth'
 import { makeChain } from './interceptor'
 
 describe('Basic Auth Interceptor', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   const credential: BasicCredential = {
     username: 'user',
     password: '123',
@@ -20,19 +24,23 @@ describe('Basic Auth Interceptor', () => {
     }
     const interceptor = basicAuthHttpInterceptor(() => credential)
     const chain = makeChain([interceptor.fn])
+    const requests: HttpRequest[] = []
     const handler = makeFakeHandler({
       response: {
         status: 200,
         statusText: 'OK',
       },
       onRequestBefore: (req) => {
-        const authorization = req.headers?.get('Authorization')
-        expect(req.headers).toBeInstanceOf(Headers)
-        expect(authorization).toEqual(`Basic ${btoa(`${credential.username}:${credential.password}`)}`)
+        requests.push(req)
       },
     })
 
     await chain(hq, handler)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.headers).toBeInstanceOf(Headers)
+    expect(requests[0]?.headers?.get('Authorization')).toBe('Basic dXNlcjoxMjM=')
+    expect(hq.headers).toBeUndefined()
   })
 
   test('basicAuthHttpInterceptor should not mutate incoming headers', async () => {
@@ -45,20 +53,23 @@ describe('Basic Auth Interceptor', () => {
     }
     const interceptor = basicAuthHttpInterceptor(() => credential)
     const chain = makeChain([interceptor.fn])
+    const requests: HttpRequest[] = []
     const handler = makeFakeHandler({
       response: {
         status: 200,
         statusText: 'OK',
       },
       onRequestBefore: (req) => {
-        expect(req.headers).not.toBe(headers)
-        expect(req.headers?.get('Authorization')).toEqual(`Basic ${btoa(`${credential.username}:${credential.password}`)}`)
-        expect(req.headers?.get('x-request-id')).toBe('req-1')
+        requests.push(req)
       },
     })
 
     await chain(hq, handler)
 
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.headers).not.toBe(headers)
+    expect(requests[0]?.headers?.get('Authorization')).toBe('Basic dXNlcjoxMjM=')
+    expect(requests[0]?.headers?.get('x-request-id')).toBe('req-1')
     expect(hq.headers).toBe(headers)
     expect(headers.has('Authorization')).toBe(false)
     expect(headers.get('x-request-id')).toBe('req-1')
@@ -71,21 +82,26 @@ describe('Basic Auth Interceptor', () => {
       method: 'GET',
     }
     const interceptor = basicAuthHttpInterceptor(() => credential, {
-      encode: (data) => btoa(`${data.username}:${data.password}`),
+      encode: (data) => `custom:${data.username}:${data.password}`,
     })
     const chain = makeChain([interceptor.fn])
+    const requests: HttpRequest[] = []
     const handler = makeFakeHandler({
       response: {
         status: 200,
         statusText: 'OK',
       },
       onRequestBefore: (req) => {
-        const authorization = req.headers?.get('Authorization')
-        expect(authorization).toEqual(`Basic ${btoa(`${credential.username}:${credential.password}`)}`)
+        requests.push(req)
       },
     })
 
     await chain(hq, handler)
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.headers).toBeInstanceOf(Headers)
+    expect(requests[0]?.headers?.get('Authorization')).toBe('Basic custom:user:123')
+    expect(hq.headers).toBeUndefined()
   })
 
   test('basicAuthSSEInterceptor should set Authorization header', async () => {
@@ -110,14 +126,10 @@ describe('Basic Auth Interceptor', () => {
   })
 
   test('should throw error if btoa is not supported', () => {
-    const _btoa = globalThis.btoa
-    // @ts-expect-error temporarily removing btoa to test unsupported-runtime behavior
-    globalThis.btoa = undefined
+    vi.stubGlobal('btoa', undefined)
 
     expect(() => basicAuthHttpInterceptor(() => credential)).toThrowError()
     expect(() => basicAuthSSEInterceptor(() => credential)).toThrowError()
-
-    globalThis.btoa = _btoa
   })
 
   test('basicAuthHttpInterceptor should return kind http', () => {
