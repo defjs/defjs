@@ -1,5 +1,15 @@
 import type { HttpRequest } from '@defjs/core'
-import { createNetworkFault, ERR_ABORTED, ERR_TIMEOUT } from '@defjs/core'
+import {
+  createClient,
+  createHttpInterceptor,
+  createNetworkFault,
+  defineRequest,
+  ERR_ABORTED,
+  ERR_TIMEOUT,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+} from '@defjs/core'
 import { context, diag, ROOT_CONTEXT, SpanStatusCode, trace } from '@opentelemetry/api'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
@@ -111,6 +121,33 @@ describe('createOpenTelemetryHttpInterceptor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockPropagator = createMockPropagator()
+  })
+
+  test('preserves inferred body media type for a signing interceptor after trace propagation', async () => {
+    let signedType: string | null = null
+    let contentType: string | null = null
+    const client = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createOpenTelemetryHttpInterceptor({ propagator: mockPropagator }),
+        createHttpInterceptor((request, next) => {
+          request.headers?.set('x-signed-content-type', request.bodyContentType ?? 'missing')
+          return next(request)
+        }),
+      ),
+      withHTTPHandle(async (input) => {
+        signedType = (input as Request).headers.get('x-signed-content-type')
+        contentType = (input as Request).headers.get('content-type')
+        return new Response(null, { status: 204 })
+      }),
+    )
+    const request = defineRequest({ builder: () => ({ body: { signed: true } }), method: 'POST', path: '/' })
+    const [fault] = await client.execute(request())
+
+    expect(fault).toBeNull()
+    expect(mockPropagator.inject).toHaveBeenCalled()
+    expect(signedType).toBe('application/json')
+    expect(contentType).toBe(signedType)
   })
 
   test('should inject traceparent header via propagator', async () => {
@@ -408,7 +445,10 @@ describe('createOpenTelemetryHttpInterceptor', () => {
 
   test('should call responseHook before span ends', async () => {
     const { tracer } = createMockTracer()
-    const responseHook = vi.fn()
+    let recordingDuringHook: boolean | undefined
+    const responseHook = vi.fn((span: { isRecording(): boolean }) => {
+      recordingDuringHook = span.isRecording()
+    })
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -421,7 +461,8 @@ describe('createOpenTelemetryHttpInterceptor', () => {
 
     expect(responseHook).toHaveBeenCalledTimes(1)
     expect(responseHook).toHaveBeenCalledWith(activeSpans[0], res, req)
-    expect(activeSpans[0]?.ended).toBe(true) // span ends after hook
+    expect(recordingDuringHook).toBe(true)
+    expect(activeSpans[0]?.ended).toBe(true)
   })
 
   test('should keep request running when requestHook throws', async () => {

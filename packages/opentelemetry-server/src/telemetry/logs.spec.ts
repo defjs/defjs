@@ -72,6 +72,73 @@ describe('client exception logs', () => {
     },
   )
 
+  test('does not log an abort sentinel from another core copy', () => {
+    const { logger, records } = createMockLogger()
+    const foreign = new Error('Request was aborted')
+    Object.defineProperty(foreign, Symbol.for('defjs.cause.aborted'), { value: true })
+    emitClientException(logger, {
+      context: ROOT_CONTEXT,
+      error: foreign,
+      phase: 'request',
+      request: makeHttpRequest(),
+      transport: 'http',
+    })
+    expect(foreign).not.toBe(ERR_ABORTED)
+    expect(records).toEqual([])
+  })
+
+  test('does not log when the request signal reason is caller cancellation', () => {
+    const { logger, records } = createMockLogger()
+    emitClientException(logger, {
+      context: ROOT_CONTEXT,
+      error: new TypeError('lost the race'),
+      phase: 'request',
+      request: { ...makeHttpRequest(), abort: AbortSignal.abort() },
+      transport: 'http',
+    })
+    expect(records).toEqual([])
+  })
+
+  test('still logs when the aborted signal reason is a timeout', () => {
+    const { logger, records } = createMockLogger()
+    emitClientException(logger, {
+      context: ROOT_CONTEXT,
+      error: new Error('socket hang up'),
+      phase: 'request',
+      request: { ...makeHttpRequest(), abort: AbortSignal.abort(ERR_TIMEOUT) },
+      transport: 'http',
+    })
+    expect(records).toHaveLength(1)
+    expect(records[0]?.attributes?.['exception.type']).toBe('Error')
+  })
+
+  test('still logs a network error when the signal aborted for a non-abort reason', () => {
+    const { logger, records } = createMockLogger()
+    const abort = new AbortController()
+    abort.abort({ kind: 'error', cause: new Error('refused') })
+    emitClientException(logger, {
+      context: ROOT_CONTEXT,
+      error: new TypeError('refused'),
+      phase: 'connect',
+      request: { ...makeHttpRequest(), abort: abort.signal },
+      transport: 'websocket',
+    })
+    expect(records).toHaveLength(1)
+    expect(records[0]?.eventName).toBe('defjs.client.websocket.exception')
+  })
+
+  test('still logs a network error while the request signal is live', () => {
+    const { logger, records } = createMockLogger()
+    emitClientException(logger, {
+      context: ROOT_CONTEXT,
+      error: new TypeError('offline'),
+      phase: 'request',
+      request: { ...makeHttpRequest(), abort: new AbortController().signal },
+      transport: 'http',
+    })
+    expect(records).toHaveLength(1)
+  })
+
   test.each([
     [ERR_TIMEOUT, 'Error'],
     [new DOMException('timeout', 'TimeoutError'), 'TimeoutError'],

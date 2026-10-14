@@ -1,5 +1,5 @@
 import type { HttpRequest } from '@defjs/core'
-import { ERR_ABORTED } from '@defjs/core'
+import { isAbortCause, isTimeoutCause } from '@defjs/core'
 import type { Context } from '@opentelemetry/api'
 import { diag } from '@opentelemetry/api'
 import type { Logger, LogAttributes } from '@opentelemetry/api-logs'
@@ -22,12 +22,25 @@ interface ClientExceptionLog {
   closeInfo?: { code?: unknown }
 }
 
+/**
+ * Caller cancellation produces no log. A timeout still logs.
+ *
+ * The request signal alone is not cancellation: WebSocket `finish()` aborts that same signal
+ * when a connect fails. Cancellation is an abort sentinel from any `@defjs/core` copy, or an
+ * `AbortError`, on the rejection or on the signal reason. `TimeoutError` and `ERR_TIMEOUT` log.
+ */
+function isCallerCancellation(request: HttpRequest, error: unknown): boolean {
+  const reason = request.abort?.reason
+  if (isTimeoutCause(error) || isTimeoutCause(reason)) return false
+  return isAbortCause(error) || isAbortCause(reason)
+}
+
 export function emitClientException(logger: Logger | undefined, details: ClientExceptionLog): void {
   if (!logger) return
 
   try {
     const { error, transport, request } = details
-    if (error === ERR_ABORTED || (error instanceof DOMException && error.name === 'AbortError')) return
+    if (isCallerCancellation(request, error)) return
     if (error instanceof Error && 'code' in error) {
       if (error.code === 'NET_ABORTED' || (transport === 'http' && error.code === 'HTTP_STATUS')) return
     }
