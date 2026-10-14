@@ -45,7 +45,7 @@
     "fmt:check": "oxfmt . --check",
     "lint": "oxlint .",
     "lint:fix": "oxlint . --fix",
-    "test": "bun run --sequential --workspaces --if-present test",
+    "test": "bun run --sequential --workspaces --if-present test && bun test ./test",
     "typecheck": "bun check --project tsconfig.json && bun run --cwd doc typecheck",
     "verify": "bun run lint && bun run fmt:check && bun run typecheck && bun run test && bun run build && bun run --cwd doc test:site"
   },

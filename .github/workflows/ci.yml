@@ -18,3 +18,39 @@ jobs:
       - name: Install Playwright browsers
         run: bunx --bun playwright install --with-deps chromium firefox
       - run: bun run verify
+
+  # Vitest's bin is `#!/usr/bin/env node`. `bunx` (without `--bun`) runs that bin on Node.
+  # `bun run` follows bunfig `[run] bun = true` and would stay on Bun, which is the `checks` job.
+  # Node 24 is inside vitest's engines (`^22.12.0 || ^24.0.0 || >=26.0.0`) and does not drift with the runner image.
+  node-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - name: core-server on Node
+        working-directory: packages/core
+        run: bunx --no-install vitest run --config vitest.config.ts --project core-server --coverage.enabled=false
+      - name: opentelemetry-server on Node
+        working-directory: packages/opentelemetry-server
+        run: bunx --no-install vitest run --config vitest.config.ts --coverage.enabled=false
+
+  # Docs say `@defjs/core` runs on Deno. This job builds the published bundle and smoke-tests it.
+  # `v2.x` pins the Deno 2 major and still takes patch releases.
+  deno-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - name: Build @defjs/core
+        run: bun --bun run build
+        working-directory: packages/core
+      - uses: denoland/setup-deno@v2.0.5
+        with:
+          deno-version: v2.x
+      - run: deno run -A test/deno-smoke.ts
