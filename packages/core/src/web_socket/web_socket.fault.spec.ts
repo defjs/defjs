@@ -144,4 +144,49 @@ describe('web socket startup faults', () => {
 
     expect(fault?.code).toBe('REQ_OPTIONS_INVALID')
   })
+
+  test('should close every socket when binaryType is read-only', async () => {
+    const sockets: Array<{ closeCalls: number; readyState: number }> = []
+    class ReadOnlyBinaryTypeSocket {
+      static readonly OPEN = 1
+      bufferedAmount = 0
+      closeCalls = 0
+      extensions = ''
+      protocol = ''
+      readyState = 1
+      readonly url: string
+
+      constructor(url: string | URL) {
+        this.url = String(url)
+        sockets.push(this)
+      }
+
+      get binaryType(): string {
+        return 'blob'
+      }
+
+      close(): void {
+        this.closeCalls += 1
+        this.readyState = 3
+      }
+
+      send(_data: string): void {}
+
+      addEventListener(): void {}
+
+      removeEventListener(): void {}
+    }
+
+    const client = createClient(withEndpoint('https://example.test'), withWebSocketHandle(ReadOnlyBinaryTypeSocket))
+    const [fault, session] = await client.execute(useRoom(), {
+      reconnect: { attempts: 2, delayMs: 0 },
+    })
+
+    expect(session).toBeUndefined()
+    expect(fault?.code).toBe('NET_UNREACHABLE')
+    expect(fault?.cause).toBeInstanceOf(TypeError)
+    expect(sockets).toHaveLength(3)
+    expect(sockets.filter((socket) => socket.readyState === ReadOnlyBinaryTypeSocket.OPEN)).toHaveLength(0)
+    expect(sockets.every((socket) => socket.closeCalls === 1)).toBe(true)
+  })
 })

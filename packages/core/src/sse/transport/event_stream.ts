@@ -9,6 +9,7 @@ import { getContentType, isJsonMediaType } from '../../http/transport/utils'
 import { awaitWithSignal, mergeAbortSignals, releaseAbortSignal, resolveAbortedCause } from '../../internal/abort'
 import { AsyncQueue } from '../../internal/async_queue'
 import { computeReconnectDelay, wait } from '../../internal/backoff'
+import { normalizeReconnectOptions } from '../../internal/reconnect_options'
 import { fetchWithSignal } from '../../internal/fetch'
 import type { HttpRequest, HttpResponseType } from '../../internal/http_request'
 import type { HttpResponse } from '../../internal/http_response'
@@ -24,6 +25,7 @@ import { createLineParser, createMessageParser, readStreamBytes, SSEParserLimitE
 export const EVENT_STREAM_CONTENT_TYPE = 'text/event-stream'
 export const LAST_EVENT_ID_HEADER = 'last-event-id'
 const DEFAULT_RETRY_INTERVAL = 1000
+export const SSE_RECONNECT_DEFAULTS = { delayMs: DEFAULT_RETRY_INTERVAL, factor: 1, jitter: 0, maxDelayMs: Number.POSITIVE_INFINITY }
 // RFC 9110 §9.2.2 idempotent methods that Fetch can send (it forbids TRACE).
 const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set(['DELETE', 'GET', 'HEAD', 'OPTIONS', 'PUT'])
 
@@ -73,8 +75,15 @@ export interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIte
   [Symbol.asyncDispose](): PromiseLike<void>
 }
 
+/** Failure snapshot owned by one fetchEventStream invocation. */
+export interface EventStreamFailureInfo {
+  open?: EventStreamOpenInfo
+}
+
 export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
   fetch?: FetchHandle
+  /** @internal Carries startup failure metadata without annotating shared cause values. */
+  failure?: EventStreamFailureInfo
   /** Optional struct for a non-2xx handshake body; fills the fault's `data` when declared. */
   handshakeError?: AnyStruct
   onopen?: (open: EventStreamOpenInfo) => void | Promise<void>
@@ -140,6 +149,9 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   request: HttpRequest,
   options: FetchEventStreamOptions<TEvent>,
 ): Promise<EventStreamHandle<TEvent>> {
+  const reconnect = normalizeReconnectOptions(options.reconnect, SSE_RECONNECT_DEFAULTS, 'SSE')
+  const url = resolveRequestUrl(request)
+  const failure: EventStreamFailureInfo = options.failure ?? {}
   const queue = new AsyncQueue<TEvent>({ maxSize: options.maxQueueSize })
   const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>()
   const openDeferred = Promise.withResolvers<EventStreamHandle<TEvent>>()
@@ -153,7 +165,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
 
   let settledClosed = false
   let settledOpen = false
-  let retryInterval = options.retryInterval ?? options.reconnect?.delayMs ?? DEFAULT_RETRY_INTERVAL
+  let retryInterval = options.retryInterval ?? reconnect?.delayMs ?? DEFAULT_RETRY_INTERVAL
   let retryCount = 0
   let lastEventId = ''
   // Headers validate every write. The id only matters to the next attempt, so it is applied there.
@@ -238,20 +250,23 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
 
   async function start(): Promise<void> {
     while (!closeController.signal.aborted) {
-      if (lastEventIdDirty) {
-        lastEventIdDirty = false
-        if (lastEventId) {
-          headers.set(LAST_EVENT_ID_HEADER, lastEventId)
-        } else {
-          headers.delete(LAST_EVENT_ID_HEADER)
-        }
-      }
       const attemptAbort = mergeAbortSignals(closeController.signal, [request.abort])
       let response: Response | undefined
       let readerStarted = false
 
       try {
-        const eventRequest = new Request(resolveRequestUrl(request), createEventStreamRequestInit(request, headers, attemptAbort))
+        if (lastEventIdDirty) {
+          if (lastEventId) {
+            const bytes = new TextEncoder().encode(lastEventId)
+            let value = ''
+            for (const byte of bytes) value += String.fromCharCode(byte)
+            headers.set(LAST_EVENT_ID_HEADER, value)
+          } else {
+            headers.delete(LAST_EVENT_ID_HEADER)
+          }
+          lastEventIdDirty = false
+        }
+        const eventRequest = new Request(url, createEventStreamRequestInit(request, headers, attemptAbort))
         response = await fetchWithSignal(() => fetchImpl(eventRequest), attemptAbort, cancelLateResponseBody)
         // The JSON media-type precheck throws before an open info exists. Attach the response
         // first so the startup fault can still report that status.
@@ -269,6 +284,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         }
 
         await runFatalHook(() => options.onopen?.(open), attemptAbort, 'Event stream onopen callback failed')
+        retryCount = 0
 
         if (!settledOpen) {
           settledOpen = true
@@ -429,16 +445,15 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     }
 
     // Opt-in reconnect (match WebSocket): no reconnect object → do not retry.
-    const reconnect = options.reconnect
     if (!reconnect) {
       return null
     }
 
     // 2. The caller's policy decides; without one, only an idempotent request is sent again.
-    if (reconnect.shouldReconnect) {
+    if (options.reconnect?.shouldReconnect) {
       const should = await awaitWithSignal(
         () =>
-          reconnect.shouldReconnect?.({
+          options.reconnect?.shouldReconnect?.({
             attempt: retryCount,
             cause: error,
             lastEventId,
@@ -455,19 +470,12 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     }
 
     // 3. Check attempts limit (default 3 when reconnect is configured, like WebSocket)
-    const attempts = reconnect.attempts ?? 3
-    if (retryCount > attempts) {
+    if (retryCount > reconnect.attempts) {
       return null
     }
 
     const delayMs = typeof next === 'number' ? next : retryInterval
-    const factor = reconnect.factor ?? 1
-    const jitter = reconnect.jitter ?? 0
-    if (!Number.isFinite(jitter) || jitter < 0 || jitter > 1) {
-      throw new RangeError('SSE reconnect jitter is out of range')
-    }
-    const maxDelayMs = reconnect.maxDelayMs ?? Number.POSITIVE_INFINITY
-    return computeReconnectDelay({ delayMs, factor, jitter, maxDelayMs }, retryCount)
+    return computeReconnectDelay({ ...reconnect, delayMs }, retryCount)
   }
 
   async function observeFatalError(error: EventStreamFatalError, signal: AbortSignal): Promise<void> {
@@ -509,7 +517,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
       return
     }
     const closeCause = signal.reason
-    attachOpenInfo(abortedError, latestOpen)
+    failure.open = latestOpen
 
     if (settledOpen) {
       queue.close()
@@ -526,7 +534,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   }
 
   function finishError(error: unknown): void {
-    attachOpenInfo(error, latestOpen)
+    failure.open = latestOpen
     if (settledOpen) {
       queue.fail(error)
     } else {
@@ -698,21 +706,4 @@ function toCloseReason(reason: unknown): string | undefined {
   }
 
   return undefined
-}
-
-const errorOpenInfoMap = new WeakMap<object, EventStreamOpenInfo>()
-
-function attachOpenInfo(error: unknown, open?: EventStreamOpenInfo): void {
-  if (!open || typeof error !== 'object' || error === null) {
-    return
-  }
-
-  errorOpenInfoMap.set(error, open)
-}
-
-export function getErrorOpenInfo(error: unknown): EventStreamOpenInfo | undefined {
-  if (typeof error !== 'object' || error === null) {
-    return undefined
-  }
-  return errorOpenInfoMap.get(error)
 }

@@ -1,5 +1,5 @@
 import type { FetchHandle } from '../../client/config'
-import { DEFAULT_FETCH, resolveGlobalFetch } from '../../client/config'
+import { DEFAULT_FETCH, PLATFORM_FETCH_HANDLE, resolveGlobalFetch } from '../../client/config'
 import { awaitWithSignal, resolveAbortCause } from '../../internal/abort'
 import { fetchWithSignal } from '../../internal/fetch'
 import type { HttpProgressFn, HttpRequest } from '../../internal/http_request'
@@ -23,10 +23,6 @@ const XSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'TRACE'])
 
 function isSafeMethod(method: string): boolean {
   return XSRF_SAFE_METHODS.has(method.toUpperCase())
-}
-
-function isBrowserRuntime(): boolean {
-  return typeof document !== 'undefined' && typeof location !== 'undefined'
 }
 
 function readBrowserXSRFCookie(name: string): string | undefined {
@@ -54,7 +50,7 @@ function isSameOriginRequest(request: HttpRequest): boolean {
     return false
   }
 
-  if (!isBrowserRuntime()) {
+  if (typeof location === 'undefined') {
     return true
   }
 
@@ -81,7 +77,7 @@ function resolveXSRFToken(
     return normalizeXSRFToken(xsrf.tokenProvider({ request }))
   }
 
-  if (!isBrowserRuntime()) {
+  if (typeof document === 'undefined') {
     return undefined
   }
 
@@ -261,7 +257,8 @@ async function parseFetchResponse(
     return makeResponse({ status, statusText, headers, url })
   }
 
-  const contentLength = getContentLength(headers)
+  const contentEncoding = headers.get('Content-Encoding')?.trim().toLowerCase()
+  let contentLength = contentEncoding !== undefined && contentEncoding !== 'identity' ? 0 : getContentLength(headers)
   const contentType = getContentType(headers)
   const meta: HttpMeta = { headers, ok: status >= 200 && status < 300, status, statusText, url }
   // No stream is an absent body. A parsed JSON null stays null.
@@ -305,6 +302,9 @@ async function parseFetchResponse(
 
         chunks.push(result.value)
         receivedLength += result.value.byteLength
+        if (receivedLength > contentLength) {
+          contentLength = 0
+        }
 
         if (downloadProgress) {
           const event = { lengthComputable: contentLength > 0, loaded: receivedLength, total: contentLength }
@@ -350,7 +350,7 @@ async function parseFetchResponse(
  *
  * @param httpRequest - Normalized request (URL, headers, body, abort, progress hooks).
  * @param fetchImpl - Fetch implementation; defaults to global `fetch`. The library default handle is called as
- *   `(url, init)` and its body is read in one piece unless download progress is observed. Any other handle receives a
+ *   `(url, init)` while the global is untouched, and its body is read in one piece unless download progress is observed. Any other handle receives a
  *   `Request` and its body is read chunk by chunk.
  * @returns Parsed `HttpResponse`. Rejects when no response reached the client, when reading the body
  *   failed, or when an upload observer threw (`EXT_OBSERVER_FAILED`). Cancellation still wins.
@@ -359,6 +359,9 @@ export async function fetchHandler(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle = resolveGlobalFetch(),
 ): Promise<HttpResponse<unknown>> {
+  if (fetchImpl === DEFAULT_FETCH) {
+    fetchImpl = resolveGlobalFetch()
+  }
   const uploadProgress = httpRequest.uploadProgress
   if (!uploadProgress) {
     return sendFetchRequest(httpRequest, fetchImpl)
@@ -393,7 +396,7 @@ export async function fetchHandler(
 
 async function sendFetchRequest(httpRequest: HttpRequest, fetchImpl: FetchHandle): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.abort
-  const platform = fetchImpl === DEFAULT_FETCH
+  const platform = fetchImpl === PLATFORM_FETCH_HANDLE
   let prepared = httpRequest
   let request: Request | undefined
   let platformBody: RequestInit['body']
@@ -428,15 +431,16 @@ async function sendFetchRequest(httpRequest: HttpRequest, fetchImpl: FetchHandle
 }
 
 function isBrowserWindowOrWorker(): boolean {
-  return typeof document !== 'undefined' || 'importScripts' in globalThis
+  return typeof location !== 'undefined' || typeof document !== 'undefined' || 'importScripts' in globalThis
 }
 
 /**
  * Turns Blob/File, ArrayBuffer, and FormData into a stream to count bytes, only where the runtime streams
  * request bodies over any HTTP version (Bun, Node, Deno). Browsers are excluded: Chromium rejects a streamed
  * body on HTTP/1.1 and the protocol is unknown beforehand, and Firefox cannot stream request bodies.
- * `importScripts` marks browser workers (Deno workers have `WorkerGlobalScope` but no `importScripts`).
- * There the body is sent unchanged and `onUploadProgress` is not called. Download progress is unaffected.
+ * `location`, `document`, or `importScripts` mark browser windows/workers: there the body is sent unchanged
+ * and `onUploadProgress` is not called. Download progress is unaffected.
+ * FormData uses the serialized stream and boundary directly; its total length is unknown unless declared in a header.
  */
 async function prepareUploadProgressRequest(request: HttpRequest): Promise<HttpRequest> {
   const { uploadProgress, body } = request
@@ -444,20 +448,23 @@ async function prepareUploadProgressRequest(request: HttpRequest): Promise<HttpR
     return request
   }
 
-  const converted = await convertBodyToUploadStream(body)
+  request.abort?.throwIfAborted()
+  const converted = convertBodyToUploadStream(body)
   if (!converted) {
     return request
   }
 
   const headers = new Headers(request.headers)
-  if (converted.contentType) {
+  applyRequestContentType(request, headers)
+  if (converted.contentType && (body instanceof FormData || (!headers.has('Content-Type') && request.bodyContentType !== null))) {
     headers.set('Content-Type', converted.contentType)
   }
   if (converted.total > 0) {
     headers.set('Content-Length', String(converted.total))
   }
 
-  const startEvent = { lengthComputable: converted.total > 0, loaded: 0, total: converted.total }
+  const total = getContentLength(headers)
+  const startEvent = { lengthComputable: total > 0, loaded: 0, total }
   try {
     if (request.abort) {
       await awaitWithSignal(() => uploadProgress(startEvent), request.abort)
@@ -465,22 +472,22 @@ async function prepareUploadProgressRequest(request: HttpRequest): Promise<HttpR
       await uploadProgress(startEvent)
     }
   } catch (error) {
-    void converted.stream.cancel(error)
+    void converted.stream.cancel(error).catch(() => undefined)
     throw error
   }
 
   return {
     ...request,
     body: converted.stream,
-    bodyContentType: converted.contentType ?? request.bodyContentType,
+    bodyContentType: headers.get('Content-Type'),
     bodyContentTypeSource: converted.stream,
     headers,
   }
 }
 
-async function convertBodyToUploadStream(
+function convertBodyToUploadStream(
   body: HttpRequest['body'],
-): Promise<{ contentType?: string | null; stream: ReadableStream<Uint8Array>; total: number } | undefined> {
+): { contentType?: string | null; stream: ReadableStream<Uint8Array>; total: number } | undefined {
   if (typeof Blob !== 'undefined' && body instanceof Blob) {
     return { contentType: body.type || undefined, stream: body.stream(), total: body.size }
   }
@@ -495,8 +502,8 @@ async function convertBodyToUploadStream(
 
   if (typeof FormData !== 'undefined' && body instanceof FormData) {
     const serialized = new Response(body)
-    const blob = await serialized.blob()
-    return { contentType: serialized.headers.get('Content-Type'), stream: blob.stream(), total: blob.size }
+    const contentType = serialized.headers.get('Content-Type')
+    return { contentType, stream: serialized.body as ReadableStream<Uint8Array>, total: 0 }
   }
 
   return undefined

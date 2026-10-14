@@ -22,6 +22,19 @@ describe('url helpers', () => {
     )
   })
 
+  test('should reject parser failures and same-origin absolute paths', () => {
+    expect(() => createResolvedRequestUrl('https://example.test/api', 'https://[')).toThrow('Endpoint path must resolve to a valid URL')
+    expect(() => createResolvedRequestUrl('https://example.test/api', 'https://example.test/api/user')).toThrow(
+      'Endpoint path must not be an absolute URL',
+    )
+    expect(() => createResolvedRequestUrl('https://example.test/api', '//example.test/api/user')).toThrow(
+      'Endpoint path must not be an absolute URL',
+    )
+    expect(() => createResolvedRequestUrl('https://example.test/api', 'nested\\leaf')).toThrow(
+      'Endpoint path must not include C0 controls or backslashes',
+    )
+  })
+
   test('should fill urls and create search params from request values', () => {
     expect(fillUrl('/users/:id', { id: 'a/b ?#%猫' })).toBe('/users/a%2Fb%20%3F%23%25%E7%8C%AB')
     expect(fillUrl('/:id/:id', { id: 'a/b' })).toBe('/a%2Fb/a%2Fb')

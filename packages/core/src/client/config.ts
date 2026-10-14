@@ -68,15 +68,15 @@ export interface ClientWebSocketOptions {
   protocols?: readonly string[]
   /** Automatic reconnect policy after unexpected closes. */
   reconnect?: {
-    /** Retry budget after the first connect. Defaults to 3 when `reconnect` is set. `0` disables. Omitting this field is not unlimited. */
+    /** Retries per outage; a successful open resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
     attempts?: number
     /** Initial backoff delay in milliseconds. */
     delayMs?: number
-    /** Multiplier applied to the delay after each failed attempt. */
+    /** Multiplier applied after each failed attempt of the current outage. A successful `open` resets the exponent. */
     factor?: number
     /** Random jitter factor applied to the delay (0–1). */
     jitter?: number
-    /** Upper bound for computed backoff delay. */
+    /** Non-negative cap on the final backoff delay, including jitter; `Infinity` removes the configured cap. */
     maxDelayMs?: number
     /** Return `false` to skip reconnecting for this close. */
     shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
@@ -85,7 +85,7 @@ export interface ClientWebSocketOptions {
 
 /** Optional SSE settings applied when creating a client. */
 export interface ClientSSEOptions {
-  /** Fetch implementation used to open the event stream. */
+  /** Fetch implementation used to open the event stream; defaults to resolving global `fetch` on each call. */
   handle?: FetchHandle
   /** Called when an event has no matching struct or fails validation. */
   onInvalidEvent?: (context: {
@@ -96,15 +96,15 @@ export interface ClientSSEOptions {
   }) => unknown
   /** Automatic reconnect policy after stream failures. */
   reconnect?: {
-    /** Retry budget after the first attempt. Defaults to 3 when `reconnect` is set. `0` disables. Omitting this field is not unlimited. */
+    /** Retries per outage; a successful handshake resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
     attempts?: number
-    /** Initial backoff delay in milliseconds. */
+    /** Initial backoff delay in milliseconds, finite and non-negative. Defaults to 1000. */
     delayMs?: number
-    /** Multiplier applied to the delay after each failed attempt. */
+    /** Finite positive multiplier per failed retry, reset after a successful handshake. Defaults to 1. */
     factor?: number
-    /** Random jitter factor applied to the delay (0–1). */
+    /** Finite random jitter factor applied to the delay (0–1). Defaults to 0. */
     jitter?: number
-    /** Upper bound for computed backoff delay. */
+    /** Non-negative cap on the final delay, including jitter; no configured cap when omitted or `Infinity`. */
     maxDelayMs?: number
     /**
      * Without this callback only `GET`, `HEAD`, `OPTIONS`, `PUT` and `DELETE` reconnect. With it, the result decides
@@ -132,7 +132,7 @@ export interface HttpClientOptions {
   endpoint: string
   /** Static default headers merged under command headers for HTTP/SSE. */
   headers?: Headers
-  /** HTTP transport overrides. */
+  /** HTTP transport overrides; the default resolves global `fetch` on each call. */
   http?: { handle?: FetchHandle }
   /** Interceptors applied in registration order. */
   interceptors?: Interceptor[]
@@ -197,16 +197,22 @@ export interface ClientConfig extends HttpClientConfig {
 }
 
 const PLATFORM_FETCH = globalThis.fetch
+export const PLATFORM_FETCH_HANDLE: FetchHandle | undefined = PLATFORM_FETCH?.bind(globalThis)
+/** @internal Classified as ENV_UNSUPPORTED only when a transport reports it. */
+export const ERR_FETCH_UNSUPPORTED = new Error('fetch is not supported in current runtime')
 
 /**
- * The library default handle. The HTTP transport recognizes it by identity: only it is the platform fetch called with the
- * request signal, so only it may be called as `(url, init)` and have its body read in one piece.
+ * Resolves global `fetch` on each call, including calls made by detached HTTP/SSE default handles.
+ * HTTP recognizes it as the platform fast path only while the global fetch is untouched.
  */
-export const DEFAULT_FETCH: FetchHandle = PLATFORM_FETCH.bind(globalThis)
+export const DEFAULT_FETCH: FetchHandle = (input, init) => resolveGlobalFetch()(input, init)
 
-/** `DEFAULT_FETCH` while the global fetch is untouched; a replaced global is an ordinary custom handle. */
+/** The bound platform fast path while global fetch is untouched; a replaced global is an ordinary custom handle. */
 export function resolveGlobalFetch(): FetchHandle {
-  return globalThis.fetch === PLATFORM_FETCH ? DEFAULT_FETCH : globalThis.fetch.bind(globalThis)
+  if (typeof globalThis.fetch !== 'function') {
+    throw ERR_FETCH_UNSUPPORTED
+  }
+  return globalThis.fetch === PLATFORM_FETCH && PLATFORM_FETCH_HANDLE ? PLATFORM_FETCH_HANDLE : globalThis.fetch.bind(globalThis)
 }
 
 export const DEFAULT_HTTP_OPTIONS: { handle: FetchHandle } = {

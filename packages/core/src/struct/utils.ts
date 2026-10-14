@@ -1,6 +1,6 @@
 import { combineGuides, readOwnGuide, tagOwnNode } from './guide'
-import { DEFINITION, FAILED } from './symbols'
-import type { EnumDefinition, Path, RuntimeStruct, StructDefinition, StructIssue } from './types'
+import { DEFINITION } from './symbols'
+import type { EnumDefinition, Path, RuntimeStruct, StructDefinition } from './types'
 
 export type IntersectionMerge = { ok: true; value: unknown } | { ok: false; path: Path; received: unknown }
 
@@ -93,29 +93,9 @@ export function matchesEnum(definition: EnumDefinition<string | number>, value: 
   return (definition.valueSet ??= new Set(definition.values)).has(value as string | number)
 }
 
-// Holds the issue of the failure a parse is handing back. `failure()` writes it right before `FAILED` travels up to the
-// parse entry point, which reads it, and no user code runs in between (a union that goes on to its next candidate just
-// drops it). The entry point puts back what it found, so a parse started from an errorMap, a decode hook or a getter
-// cannot disturb a pending failure, and the slot is empty between top-level parses.
-let parkedIssue: StructIssue | undefined
-
 /** What a decode hook returns for a value it accepts: the decoded value itself. */
 export function success<T>(value: T): T {
   return value
-}
-
-/** Parks the issue for the parse entry point and returns FAILED. A decode hook receives it as `fail`. */
-export function failure(issue: StructIssue): typeof FAILED {
-  parkedIssue = issue
-  return FAILED
-}
-
-export function parkedFailure(): StructIssue | undefined {
-  return parkedIssue
-}
-
-export function restoreFailure(issue: StructIssue | undefined): void {
-  parkedIssue = issue
 }
 
 export function expectedType(definition: StructDefinition): string {
@@ -235,42 +215,43 @@ export function sameWireValue(left: unknown, right: unknown): boolean {
   return leftKeys.length === rightKeys.length && leftKeys.every((key) => hasOwnKey(right, key) && sameWireValue(left[key], right[key]))
 }
 
-export function describeValue(value: unknown): string {
+/**
+ * Kind of a received value, safe to put in a log line.
+ *
+ * Names the kind and never the value. `File` is checked before `Blob` because a file is a blob.
+ */
+export function describeKind(value: unknown): string {
   if (value === null) {
     return 'null'
-  }
-
-  if (value === undefined) {
-    return 'undefined'
-  }
-
-  if (typeof value === 'string') {
-    return JSON.stringify(value)
-  }
-
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value)
-  }
-
-  if (value instanceof File) {
-    return `File(${value.name})`
-  }
-
-  if (value instanceof Blob) {
-    return `Blob(${value.type || 'application/octet-stream'})`
-  }
-
-  if (value instanceof ArrayBuffer) {
-    return `ArrayBuffer(${value.byteLength})`
   }
 
   if (Array.isArray(value)) {
     return 'array'
   }
 
-  if (isPlainObject(value)) {
-    return 'object'
+  if (typeof value !== 'object') {
+    return typeof value
   }
 
-  return Object.prototype.toString.call(value)
+  if (value instanceof File) {
+    return 'File'
+  }
+
+  if (value instanceof Blob) {
+    return 'Blob'
+  }
+
+  if (value instanceof ArrayBuffer) {
+    return 'ArrayBuffer'
+  }
+
+  if (value instanceof Date) {
+    return 'Date'
+  }
+
+  return 'object'
+}
+
+export function describeValue(value: unknown): string {
+  return typeof value === 'string' ? JSON.stringify(value) : String(value)
 }

@@ -2,7 +2,9 @@ import type { DecodedResponse, HttpMeta } from '../internal/http_response'
 import type { Fault, FaultClass, FaultCode } from './types'
 import { struct } from '../struct'
 
-type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+type IsAny<T> = 0 extends 1 & T ? true : false
+type StrictEqual<A, B> =
+  IsAny<A> extends true ? false : IsAny<B> extends true ? false : [A] extends [B] ? ([B] extends [A] ? true : false) : false
 type Expect<T extends true> = T
 
 const User = struct.object({
@@ -116,15 +118,15 @@ void triage
 // The class is derived from the code prefix; there is no separate `kind` field.
 // ---------------------------------------------------------------------------
 type Classes = FaultClass<FaultCode>
-type ClassCases = Expect<Equal<Classes, 'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'>>
-type NetworkClass = Expect<Equal<FaultClass<'NET_TIMEOUT'>, 'NET'>>
+type ClassCases = Expect<StrictEqual<Classes, 'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'>>
+type NetworkClass = Expect<StrictEqual<FaultClass<'NET_TIMEOUT'>, 'NET'>>
 
 // ---------------------------------------------------------------------------
 // A decoded response adds `body` on top of the shared metadata.
 // ---------------------------------------------------------------------------
-type MetaKeys = Expect<Equal<keyof HttpMeta, 'headers' | 'ok' | 'status' | 'statusText' | 'url'>>
-type DecodedKeys = Expect<Equal<keyof DecodedResponse<string>, 'body' | keyof HttpMeta>>
-type DecodedBody = Expect<Equal<DecodedResponse<typeof User>['body'], typeof User>>
+type MetaKeys = Expect<StrictEqual<keyof HttpMeta, 'headers' | 'ok' | 'status' | 'statusText' | 'url'>>
+type DecodedKeys = Expect<StrictEqual<keyof DecodedResponse<string>, 'body' | keyof HttpMeta>>
+type DecodedBody = Expect<StrictEqual<DecodedResponse<typeof User>['body'], typeof User>>
 
 // ---------------------------------------------------------------------------
 // Negative cases.

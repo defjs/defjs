@@ -1,5 +1,7 @@
 import { describe, expect, test, vi } from 'vitest'
-import { issue } from './errors'
+import { failure, issue, parkedFailure } from './errors'
+
+const errorsModule = import('./errors')
 import type { ErrorMap } from './index'
 import { struct } from './index'
 import { parseStructTuple as parse, parseStructValue } from './introspection'
@@ -7,7 +9,7 @@ import { parseValue } from './parse'
 import { createPrimitiveStruct } from './runtime'
 import { OMIT } from './symbols'
 import type { ParseResult, Path, RuntimeStruct, StructIssue, StructLike } from './types'
-import { failure, parkedFailure, success } from './utils'
+import { success } from './utils'
 
 function runtime(value: unknown): RuntimeStruct {
   return value as RuntimeStruct
@@ -23,7 +25,8 @@ function firstIssue(result: ParseResult<unknown>): StructIssue {
 
 const ISO = '2026-01-01T00:00:00.000Z'
 
-// describeValue reads Symbol.toStringTag on a class instance, so building any message that mentions this value throws.
+// The tag getter throws if a message reads the value. A reported message names the kind and does not.
+// Spies on `issue` check that a quiet miss builds no message at all.
 class Hostile {
   get [Symbol.toStringTag](): string {
     throw new Error('a message was built for a quiet candidate')
@@ -43,7 +46,7 @@ describe('parse failure paths', () => {
     const expected = {
       code: 'invalid_type',
       expected: 'string',
-      message: 'Expected string at rows[1].tags[1], received 3',
+      message: 'Expected string at rows[1].tags[1], received number',
       path: ['rows', 1, 'tags', 1],
       received: 3,
     }
@@ -51,7 +54,7 @@ describe('parse failure paths', () => {
     const result = parse(Table, input)
     expect(result[1]).toBeUndefined()
     expect(result[0]?.issues).toEqual([expected])
-    expect(() => parseStructValue(Table, input, { tagObjects: true })).toThrow('Expected string at rows[1].tags[1], received 3')
+    expect(() => parseStructValue(Table, input, { tagObjects: true })).toThrow('Expected string at rows[1].tags[1], received number')
   })
 
   test('reports intersection conflicts under the element that produced them', () => {
@@ -65,7 +68,7 @@ describe('parse failure paths', () => {
     const conflict = (path: Path, at: string): unknown => ({
       code: 'invalid_intersection',
       expected: 'compatible intersection value',
-      message: `Expected compatible intersection value at ${at}, received "${ISO}"`,
+      message: `Expected compatible intersection value at ${at}, received string`,
       path,
       received: ISO,
     })
@@ -167,7 +170,7 @@ describe('union candidates that fail deep inside', () => {
     expect(firstIssue(parse(Doc, input))).toEqual({
       code: 'invalid_type',
       expected: 'string',
-      message: 'Expected string at second, received 1',
+      message: 'Expected string at second, received number',
       path: ['second'],
       received: 1,
     })
@@ -265,26 +268,31 @@ describe('every kind of failure', () => {
     received,
   })
   const cases: { name: string; field: StructLike; value?: unknown; aliases?: true; issue: StructIssue }[] = [
-    { name: 'a wrong string', field: struct.string(), value: 1, issue: found('invalid_type', 'string', 'x', ['x'], 1, '1') },
-    { name: 'a wrong number', field: struct.number(), value: 'a', issue: found('invalid_type', 'number', 'x', ['x'], 'a', '"a"') },
-    { name: 'a wrong boolean', field: struct.boolean(), value: 'a', issue: found('invalid_type', 'boolean', 'x', ['x'], 'a', '"a"') },
+    { name: 'a wrong string', field: struct.string(), value: 1, issue: found('invalid_type', 'string', 'x', ['x'], 1, 'number') },
+    { name: 'a wrong number', field: struct.number(), value: 'a', issue: found('invalid_type', 'number', 'x', ['x'], 'a', 'string') },
+    { name: 'a wrong boolean', field: struct.boolean(), value: 'a', issue: found('invalid_type', 'boolean', 'x', ['x'], 'a', 'string') },
     { name: 'a missing key', field: struct.string(), issue: found('missing_key', 'string', 'x', ['x'], undefined, 'undefined') },
     { name: 'a null', field: struct.string(), value: null, issue: found('invalid_type', 'string', 'x', ['x'], null, 'null') },
     {
       name: 'a wrong enum member',
       field: struct.enum(['a', 'b']),
       value: 'c',
-      issue: found('invalid_enum', '"a" | "b"', 'x', ['x'], 'c', '"c"'),
+      issue: found('invalid_enum', '"a" | "b"', 'x', ['x'], 'c', 'string'),
     },
-    { name: 'a wrong literal', field: struct.literal('a'), value: 'b', issue: found('invalid_literal', '"a"', 'x', ['x'], 'b', '"b"') },
+    { name: 'a wrong literal', field: struct.literal('a'), value: 'b', issue: found('invalid_literal', '"a"', 'x', ['x'], 'b', 'string') },
     {
       name: 'a non-array',
       field: struct.array(struct.string()),
       value: 'no',
-      issue: found('invalid_type', 'array', 'x', ['x'], 'no', '"no"'),
+      issue: found('invalid_type', 'array', 'x', ['x'], 'no', 'string'),
     },
-    { name: 'a non-object', field: struct.object({}), value: 5, issue: found('invalid_type', 'object', 'x', ['x'], 5, '5') },
-    { name: 'a non-record', field: struct.record(struct.string()), value: 5, issue: found('invalid_type', 'record', 'x', ['x'], 5, '5') },
+    { name: 'a non-object', field: struct.object({}), value: 5, issue: found('invalid_type', 'object', 'x', ['x'], 5, 'number') },
+    {
+      name: 'a non-record',
+      field: struct.record(struct.string()),
+      value: 5,
+      issue: found('invalid_type', 'record', 'x', ['x'], 5, 'number'),
+    },
     {
       name: 'a short tuple',
       field: struct.tuple([struct.string(), struct.number()]),
@@ -295,9 +303,14 @@ describe('every kind of failure', () => {
       name: 'no matching union member',
       field: struct.or(struct.string(), struct.number()),
       value: true,
-      issue: found('invalid_union', 'string | number', 'x', ['x'], true, 'true'),
+      issue: found('invalid_union', 'string | number', 'x', ['x'], true, 'boolean'),
     },
-    { name: 'a non-object for a discriminated union', field: Shape, value: 5, issue: found('invalid_type', 'object', 'x', ['x'], 5, '5') },
+    {
+      name: 'a non-object for a discriminated union',
+      field: Shape,
+      value: 5,
+      issue: found('invalid_type', 'object', 'x', ['x'], 5, 'number'),
+    },
     {
       name: 'a missing discriminator',
       field: Shape,
@@ -308,7 +321,7 @@ describe('every kind of failure', () => {
       name: 'an unknown discriminator',
       field: Shape,
       value: { t: 'z' },
-      issue: found('invalid_union', '"a" | "b"', 'x.t', ['x', 't'], 'z', '"z"'),
+      issue: found('invalid_union', '"a" | "b"', 'x.t', ['x', 't'], 'z', 'string'),
     },
     {
       name: 'a missing wire discriminator',
@@ -329,50 +342,50 @@ describe('every kind of failure', () => {
       field: Tagged,
       value: { kind: 'zzz' },
       aliases: true,
-      issue: found('invalid_union', '"text" | "image"', 'x.type', ['x', 'type'], 'zzz', '"zzz"'),
+      issue: found('invalid_union', '"text" | "image"', 'x.type', ['x', 'type'], 'zzz', 'string'),
     },
     {
       name: 'a discriminator under the wire key of another option',
       field: Tagged,
       value: { kind: 'image', url: 'u' },
       aliases: true,
-      issue: found('invalid_union', '"text" | "image"', 'x.type', ['x', 'type'], 'image', '"image"'),
+      issue: found('invalid_union', '"text" | "image"', 'x.type', ['x', 'type'], 'image', 'string'),
     },
     {
       name: 'a decode hook that rejects a date',
       field: struct.date(),
       value: 'nope',
-      issue: found('invalid_type', 'Date', 'x', ['x'], 'nope', '"nope"'),
+      issue: found('invalid_type', 'Date', 'x', ['x'], 'nope', 'string'),
     },
     {
       name: 'a decode hook that rejects a bigint',
       field: struct.bigint(),
       value: 'abc',
-      issue: found('invalid_type', 'bigint', 'x', ['x'], 'abc', '"abc"'),
+      issue: found('invalid_type', 'bigint', 'x', ['x'], 'abc', 'string'),
     },
     {
       name: 'the first failing option of a plain intersection',
       field: struct.intersection(struct.string(), struct.number()),
       value: 'x',
-      issue: found('invalid_type', 'number', 'x', ['x'], 'x', '"x"'),
+      issue: found('invalid_type', 'number', 'x', ['x'], 'x', 'string'),
     },
     {
       name: 'a non-object for an object intersection',
       field: struct.intersection(struct.object({ a: struct.string() }), struct.object({ b: struct.string() })),
       value: 5,
-      issue: found('invalid_type', 'object', 'x', ['x'], 5, '5'),
+      issue: found('invalid_type', 'object', 'x', ['x'], 5, 'number'),
     },
     {
       name: 'a conflict between object sides',
       field: struct.intersection(struct.object({ n: maybeDate }), struct.object({ n: struct.string() })),
       value: { n: ISO },
-      issue: found('invalid_intersection', 'compatible intersection value', 'x.n', ['x', 'n'], ISO, `"${ISO}"`),
+      issue: found('invalid_intersection', 'compatible intersection value', 'x.n', ['x', 'n'], ISO, 'string'),
     },
     {
       name: 'a conflict between plain sides',
       field: struct.intersection(struct.array(maybeDate), struct.array(struct.string())),
       value: [ISO],
-      issue: found('invalid_intersection', 'compatible intersection value', 'x[0]', ['x', 0], ISO, `"${ISO}"`),
+      issue: found('invalid_intersection', 'compatible intersection value', 'x[0]', ['x', 0], ISO, 'string'),
     },
   ]
 
@@ -415,7 +428,7 @@ describe('parse re-entrancy', () => {
       {
         code: 'invalid_type',
         expected: 'number',
-        message: 'Expected number at rows[1].id, received "x"',
+        message: 'Expected number at rows[1].id, received string',
         path: ['rows', 1, 'id'],
         received: 'x',
       },
@@ -423,7 +436,7 @@ describe('parse re-entrancy', () => {
     expect(nested[0]).toEqual([null, { ok: true }])
     expect(firstIssue(nested[1] as ParseResult<unknown>)).toMatchObject({ message: 'inner message', path: ['ok'], received: 'no' })
     expect(firstIssue(nested[2] as ParseResult<unknown>)).toMatchObject({
-      message: 'Expected number at rows[1].id, received "inner"',
+      message: 'Expected number at rows[1].id, received string',
       path: ['rows', 1, 'id'],
     })
   })
@@ -514,7 +527,7 @@ describe('parse re-entrancy', () => {
     expect(firstIssue(parse(Schema, { names: ['a', 'bad', 'never'] }))).toEqual({
       code: 'custom',
       expected: 'good value',
-      message: 'Expected good value at names[1], received "bad"',
+      message: 'Expected good value at names[1], received string',
       path: ['names', 1],
       received: 'bad',
     })
@@ -642,7 +655,7 @@ describe('parse outputs and quiet candidates', () => {
     expect(out.y['r']).not.toBe(input.y.r)
   })
 
-  test('candidates that fail without an errorMap never build an issue message', () => {
+  test('candidates that fail without an errorMap never build an issue message', async () => {
     const hostile = new Hostile()
     const Shallow = struct.or(struct.string(), struct.unknown())
     const Deep = struct.object({
@@ -650,9 +663,14 @@ describe('parse outputs and quiet candidates', () => {
     })
     const deepInput = { box: { items: [{ v: hostile }] } }
 
+    const spy = vi.spyOn(await errorsModule, 'issue')
     expect(parse(Shallow, hostile)[1]).toBe(hostile)
     expect(parse(Deep, deepInput)[0]).toBeNull()
-    expect(() => parse(struct.string(), hostile)).toThrow('a message was built for a quiet candidate')
+    expect(spy).not.toHaveBeenCalled()
+    const [reported] = parse(struct.string(), hostile)
+    expect(reported?.issues[0]?.message).toBe('Expected string at <root>, received object')
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   const hostile = new Hostile()
@@ -680,10 +698,13 @@ describe('parse outputs and quiet candidates', () => {
   ]
 
   // Only the catch-all accepts the value, so the candidate in front of it has to fail quietly first.
-  test.each(quietCandidates)('a %s candidate fails without building a message', (_name, candidate, value) => {
+  test.each(quietCandidates)('a %s candidate fails without building a message', async (_name, candidate, value) => {
+    const spy = vi.spyOn(await errorsModule, 'issue')
     const [error, result] = parse(struct.or(candidate, struct.unknown()), value)
     expect(error).toBeNull()
     expect(result).toBe(value)
+    expect(spy).not.toHaveBeenCalled()
+    spy.mockRestore()
   })
 
   test('errorMap sees every discarded candidate issue exactly once, in order, with a complete path', () => {
@@ -732,7 +753,7 @@ describe('parseValue boundary', () => {
       issue: {
         code: 'invalid_type',
         expected: 'string',
-        message: 'Expected string at caller.a[1], received 2',
+        message: 'Expected string at caller.a[1], received number',
         path: ['caller', 'a', 1],
         received: 2,
       },
@@ -794,6 +815,27 @@ describe('structs built by another copy of the package', () => {
       expect(value).toBeUndefined()
       expect(error?.issues).toHaveLength(1)
       expect(error?.issues).toEqual(parse(own, input)[0]?.issues)
+    }
+
+    // The parsing copy's error map applies to conversion failures raised by the other copy's decode hooks.
+    const seen: string[] = []
+    const errorMap: ErrorMap = (item) => {
+      seen.push(item.message)
+      return 'redacted'
+    }
+    const mappedCases: [StructLike, string, string][] = [
+      [other.struct.bigint(), 'x1', 'bigint'],
+      [other.struct.date(), 'not a date', 'Date'],
+    ]
+    for (const [foreign, input, expected] of mappedCases) {
+      seen.length = 0
+      const [mapped, mappedValue] = parse(foreign, input, { errorMap })
+      expect(mappedValue).toBeUndefined()
+      expect(seen).toEqual([`Expected ${expected} at <root>, received string`])
+      expect(seen[0]).not.toContain(input)
+      expect(mapped?.issues[0]?.message).toBe('redacted')
+      expect(mapped?.issues[0]?.received).toBe(input)
+      expect(String(mapped)).not.toContain(input)
     }
   })
 

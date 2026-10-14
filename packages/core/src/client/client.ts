@@ -47,6 +47,7 @@ export type Client = {
  *
  * Options are applied in order. Prefer creating the client inside the
  * request boundary when interceptors close over auth or tenants.
+ * Default HTTP/SSE fetch availability is checked when the interceptor chain invokes transport.
  *
  * @param options - Client option helpers such as `withEndpoint`.
  * @returns A client that can `execute` HTTP, SSE, and WebSocket commands.

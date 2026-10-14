@@ -434,7 +434,7 @@ describe('Fetch handler streaming', () => {
       body: () => new TextEncoder().encode('bytes-upload').buffer,
       name: 'ArrayBuffer',
     },
-  ])('should call uploadProgress for a $name body', async ({ body }) => {
+  ])('should call uploadProgress for a $name body', async ({ body, name }) => {
     if (!supportsStreamingRequestBody()) {
       return
     }
@@ -477,12 +477,16 @@ describe('Fetch handler streaming', () => {
 
     expect(response.body).toBe('ok')
     expect(progressEvents.length).toBeGreaterThanOrEqual(2)
-    expect(progressEvents[0]).toMatchObject({ lengthComputable: true, loaded: 0 })
-    expect(progressEvents[0]?.total).toBeGreaterThan(0)
+    expect(progressEvents[0]).toMatchObject({ lengthComputable: name !== 'FormData', loaded: 0 })
     const complete = progressEvents.at(-1)
-    expect(complete?.lengthComputable).toBe(true)
-    expect(complete?.loaded).toBe(complete?.total)
-    expect(complete?.total).toBeGreaterThan(0)
+    expect(complete?.lengthComputable).toBe(name !== 'FormData')
+    expect(complete?.loaded).toBeGreaterThan(0)
+    if (name === 'FormData') {
+      expect(progressEvents.every((event) => event.total === 0)).toBe(true)
+    } else {
+      expect(complete?.loaded).toBe(complete?.total)
+      expect(complete?.total).toBeGreaterThan(0)
+    }
   })
 
   test('should skip upload wrapping for non-streamable bodies without a counted type', async () => {

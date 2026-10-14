@@ -89,16 +89,16 @@ describe('http utils', () => {
     expect(headers.get('content-type')).toBe('application/merge-patch+json')
   })
 
-  test('should apply final request content type from body after headers', () => {
+  test('should let a header win over bodyContentType', () => {
     const body = { ok: true }
     const headers = new Headers({ 'Content-Type': 'application/custom' })
     applyRequestContentType(makeRequest({ body, bodyContentType: 'application/json', bodyContentTypeSource: body }), headers)
 
-    expect(headers.get('content-type')).toBe('application/json')
+    expect(headers.get('content-type')).toBe('application/custom')
   })
 
   test('should ignore stale body content type metadata', () => {
-    const headers = new Headers({ 'Content-Type': 'application/json' })
+    const headers = new Headers()
     applyRequestContentType(
       makeRequest({
         body: 'plain',
@@ -113,7 +113,7 @@ describe('http utils', () => {
 
   test('should allow explicit content type opt-out', () => {
     const body = 'plain'
-    const headers = new Headers({ 'Content-Type': 'application/json' })
+    const headers = new Headers()
     applyRequestContentType(makeRequest({ body, bodyContentType: null, bodyContentTypeSource: body }), headers)
 
     expect(headers.has('content-type')).toBe(false)

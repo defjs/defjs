@@ -699,6 +699,7 @@ describe('builder fixes re-audit', () => {
   test('exposes derived response representations to interceptors', async () => {
     const requests: HttpRequest[] = []
     const client = createClient(
+      withEndpoint('https://example.test'),
       withInterceptors(
         createHttpInterceptor(async (request) => {
           requests.push(request)

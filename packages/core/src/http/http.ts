@@ -1,6 +1,7 @@
 import { COMMAND_EXECUTE, COMMAND_TYPE, HTTP_COMMAND, type CommandExecutor } from '../client/command'
 import type { BaseCommand } from '../client/command'
 import type { HttpClientConfig } from '../client/config'
+import { ERR_FETCH_UNSUPPORTED } from '../client/config'
 import type { AnyFault, Fault, FaultOf, PreflightFault } from '../error'
 import {
   createDecodeFault,
@@ -28,7 +29,8 @@ import {
 import { readBytesText } from '../internal/bytes'
 import type { EndpointCallable } from '../internal/endpoint_command'
 import { resolveInboundRepresentation } from '../internal/inbound_representation'
-import { isTransportOrigin, markTransportOrigin } from '../internal/transport_origin'
+import { createTransportOrigin } from '../internal/transport_origin'
+import { RequestUrlError, resolveRequestUrl } from '../internal/url'
 import type { EndpointInput, ParsedInput } from '../internal/endpoint_input'
 import { parseEndpointInput } from '../internal/endpoint_input'
 import type { HttpProgressFn } from '../internal/http_request'
@@ -304,6 +306,7 @@ export async function executeHttpCommand<
 
   const releaseRequestTimeout = deadline.release
 
+  const transportOrigin = createTransportOrigin()
   const transportController = new AbortController()
   let chainSettled = false
   let inflightTransport: Promise<HttpResponse<unknown>> | undefined
@@ -313,6 +316,14 @@ export async function executeHttpCommand<
       const rejected = Promise.reject<HttpResponse<unknown>>(
         new Error('HTTP interceptor next() cannot be called after the chain has settled'),
       )
+      void rejected.catch(() => undefined)
+      return rejected
+    }
+
+    try {
+      resolveRequestUrl(nextRequest)
+    } catch (error) {
+      const rejected = Promise.reject<HttpResponse<unknown>>(error)
       void rejected.catch(() => undefined)
       return rejected
     }
@@ -327,7 +338,7 @@ export async function executeHttpCommand<
     const due = resolveTransportCancellation(deadline, transportAbort)
     if (due) {
       // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
-      const rejected = Promise.reject<HttpResponse<unknown>>(markTransportOrigin(resolveAbortCause(transportAbort) as Error))
+      const rejected = Promise.reject<HttpResponse<unknown>>(transportOrigin.mark(resolveAbortCause(transportAbort) as Error))
       releaseAbortSignal(transportAbort)
       void rejected.catch(() => undefined)
       return rejected
@@ -343,7 +354,7 @@ export async function executeHttpCommand<
         // Cancellation outranks whatever the transport was doing when it noticed. Tagging here is
         // the only way to tell a dead server from an interceptor that threw the same value: both
         // reach the chain's catch as one bare cause.
-        throw markTransportOrigin(resolveAbortCause(transportAbort) ?? error)
+        throw transportOrigin.mark(resolveAbortCause(transportAbort) ?? error)
       })
       .finally(() => {
         releaseAbortSignal(transportAbort)
@@ -371,7 +382,7 @@ export async function executeHttpCommand<
       void chainPromise.catch(() => undefined)
       response = await awaitWithSignal(() => chainPromise, requestSignal)
     } catch (error) {
-      const fromTransport = isTransportOrigin(error)
+      const fromTransport = transportOrigin.has(error)
       const aborted = resolveAbortFault(requestSignal)
       if (aborted) {
         abortTransport()
@@ -380,12 +391,15 @@ export async function executeHttpCommand<
         }
         return fail(aborted)
       }
+      if (error instanceof RequestUrlError) {
+        return fail(createPreflightFault('REQ_BUILD_FAILED', error))
+      }
       // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
       // An upload observer failure is also tagged, without response metadata.
       if (isBodyFailure(error)) {
         return fail(fromBodyFailure(error))
       }
-      if (fromTransport && error === ERR_STREAMING_REQUEST_UNSUPPORTED) {
+      if (fromTransport && (error === ERR_STREAMING_REQUEST_UNSUPPORTED || error === ERR_FETCH_UNSUPPORTED)) {
         return fail(createPreflightFault('ENV_UNSUPPORTED', error))
       }
       // Recognized cancellation shapes stay cancellation wherever they came from; anything else

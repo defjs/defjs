@@ -336,17 +336,11 @@ describe('struct coverage boundary cases', () => {
     }
   })
 
-  test('describeValue covers human-readable runtime labels', () => {
+  test('describeValue formats literal primitives', () => {
     expect(describeValue(null)).toBe('null')
-    expect(describeValue(undefined)).toBe('undefined')
     expect(describeValue('x')).toBe('"x"')
     expect(describeValue(true)).toBe('true')
-    expect(describeValue(new File(['x'], 'avatar.png'))).toBe('File(avatar.png)')
-    expect(describeValue(new Blob(['x']))).toBe('Blob(application/octet-stream)')
-    expect(describeValue(new ArrayBuffer(3))).toBe('ArrayBuffer(3)')
-    expect(describeValue([])).toBe('array')
-    expect(describeValue({})).toBe('object')
-    expect(describeValue(Symbol('s'))).toBe('[object Symbol]')
+    expect(describeValue(123)).toBe('123')
   })
 
   test('aliased object codec covers skip, non-object, primitive, and nested paths', () => {

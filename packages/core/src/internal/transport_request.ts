@@ -1,10 +1,10 @@
 import type { QuerySerializer } from '../client/config'
-import { applyRequestContentType } from '../http/transport/body'
+import { applyRequestContentType, resolveHttpBodyContentType } from '../http/transport/body'
 import type { HttpRequest } from './http_request'
 import type { OutboundBuilder } from './outbound_request'
 import { materializeOutboundRequest, runOutboundBuilder } from './outbound_request'
 import type { RequestBuildValue } from './request_values'
-import { appendRecordToHeaders, fillUrl, resolveTransportQuery } from './url'
+import { appendRecordToHeaders, fillUrl, resolveRequestUrl, resolveTransportQuery } from './url'
 
 type BaseTransport = 'http' | 'sse'
 
@@ -44,7 +44,8 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
   const headers = options.defaultHeaders ? new Headers(options.defaultHeaders) : new Headers()
 
   appendRecordToHeaders(headers, built.headers as HeadersInit | { [key: string]: RequestBuildValue } | undefined)
-  if (built.defaultContentType && !headers.has('content-type')) {
+  const declaredContentType = headers.has('content-type')
+  if (options.transport === 'sse' && built.defaultContentType && !declaredContentType) {
     headers.set('content-type', built.defaultContentType)
   }
 
@@ -63,6 +64,12 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
     withCredentials: options.withCredentials ?? false,
   }
 
-  applyRequestContentType(request, headers)
+  resolveRequestUrl(request)
+  if (options.transport === 'sse' || declaredContentType) {
+    applyRequestContentType(request, headers)
+  }
+  if (options.transport === 'http') {
+    request.bodyContentType = built.defaultContentType ?? resolveHttpBodyContentType(request.body)
+  }
   return request
 }

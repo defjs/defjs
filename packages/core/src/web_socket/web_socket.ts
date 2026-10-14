@@ -430,6 +430,7 @@ async function runWebSocketCommand<
         // Type boundary: createWebSocketSession is generic over TIncoming/TOutgoing; the cast aligns the locally-typed session with the endpoint's struct types.
       ) as WebSocketSession<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>
 
+      /* istanbul ignore next -- @preserve defensive: run() settles every attempt, hook and delay inside its own failure boundaries */
       const lifecycleTask = run().catch((cause) => {
         finish({ cause, kind: 'error' })
       })
@@ -606,17 +607,20 @@ async function runWebSocketCommand<
         let socket: WebSocketHandle
         try {
           socket = protocols.length > 0 ? new WebSocketImpl(url, [...protocols]) : new WebSocketImpl(url)
+        } catch (error) {
+          return connectFailure(error)
+        }
+
+        try {
           /* istanbul ignore else -- @preserve defensive: binaryType may not exist on injected nonstandard WebSocket handles */
           if ('binaryType' in socket) {
             socket.binaryType = 'arraybuffer'
           }
         } catch (error) {
-          return {
-            closeInfo: { cause: error, reason: error instanceof Error ? error.message : 'WebSocket connection error' },
-            connection: undefined,
-            cause: error,
-            opened: false,
-          }
+          // A missing property is only an ArrayBuffer hint. A setter that throws has already
+          // constructed a socket no later cleanup can see, so close it before reporting the failure.
+          requestNativeCloseBestEffort(socket)
+          return connectFailure(error)
         }
 
         sessionController.currentSocket = socket
@@ -694,6 +698,8 @@ async function runWebSocketCommand<
               return
             }
             opened = true
+            // Per outage: the next close starts again at attempt 1 and the base delay.
+            attempt = 0
             generation += 1
             latestConnection = connectionInfo()
             state.connection = latestConnection
@@ -1332,6 +1338,15 @@ function validateWebSocketClose(code: number | undefined, reason: string | undef
   }
   if (typeof reason !== 'undefined' && new TextEncoder().encode(reason).byteLength > 123) {
     throw new DOMException('The close reason must not exceed 123 UTF-8 bytes', 'SyntaxError')
+  }
+}
+
+function connectFailure(error: unknown): SocketLifecycleOutcome {
+  return {
+    closeInfo: { cause: error, reason: error instanceof Error ? error.message : 'WebSocket connection error' },
+    connection: undefined,
+    cause: error,
+    opened: false,
   }
 }
 

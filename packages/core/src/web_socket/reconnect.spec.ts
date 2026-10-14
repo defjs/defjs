@@ -8,8 +8,8 @@ describe('reconnect config', () => {
     expect(normalizeReconnectConfig(undefined)).toBeUndefined()
   })
 
-  test('normalizeReconnectConfig returns undefined when attempts is zero', () => {
-    expect(normalizeReconnectConfig({ attempts: 0 })).toBeUndefined()
+  test('normalizeReconnectConfig keeps a validated zero retry budget', () => {
+    expect(normalizeReconnectConfig({ attempts: 0 })).toMatchObject({ attempts: 0 })
   })
 
   test.each([
@@ -24,7 +24,12 @@ describe('reconnect config', () => {
     ['jitter', { jitter: 1.1 }],
     ['jitter', { jitter: Number.NaN }],
     ['maxDelayMs', { maxDelayMs: -1 }],
-    ['maxDelayMs', { maxDelayMs: Number.POSITIVE_INFINITY }],
+    ['maxDelayMs', { maxDelayMs: Number.NEGATIVE_INFINITY }],
+    ['maxDelayMs', { maxDelayMs: Number.NaN }],
+    ['delayMs', { attempts: 0, delayMs: -1 }],
+    ['factor', { attempts: 0, factor: 0 }],
+    ['jitter', { attempts: 0, jitter: Number.NaN }],
+    ['maxDelayMs', { attempts: 0, maxDelayMs: -1 }],
   ])('rejects invalid %s instead of creating a timer or retry loop', (field, config) => {
     expect(() => normalizeReconnectConfig(config)).toThrow(`WebSocket reconnect ${field}`)
   })
@@ -56,6 +61,13 @@ describe('reconnect config', () => {
       jitter: 0.5,
       maxDelayMs: 10000,
     })
+  })
+
+  test('normalizeReconnectConfig accepts an unbounded positive infinite cap', () => {
+    const config = normalizeReconnectConfig({ delayMs: 1000, factor: 2, maxDelayMs: Number.POSITIVE_INFINITY })
+    expect(config?.maxDelayMs).toBe(Number.POSITIVE_INFINITY)
+    if (!config) throw new Error('Expected reconnect config')
+    expect(computeReconnectDelay(config, 10)).toBe(512_000)
   })
 
   test('normalizeReconnectConfig custom shouldReconnect receives correct context', () => {
@@ -156,7 +168,7 @@ describe('computeReconnectDelay', () => {
     expect(computeReconnectDelay(config, 1)).toBe(2_147_483_647)
   })
 
-  test('rejects a non-finite computed delay instead of passing it to setTimeout', () => {
+  test('saturates a computed overflow instead of passing it to setTimeout', () => {
     const config: NormalizedReconnectConfig = {
       attempts: 1,
       delayMs: Number.MAX_VALUE,
@@ -167,7 +179,7 @@ describe('computeReconnectDelay', () => {
       shouldReconnect: () => true,
     }
     vi.spyOn(Math, 'random').mockReturnValue(1)
-    expect(() => computeReconnectDelay(config, 2)).toThrow('Reconnect delay must be finite')
+    expect(computeReconnectDelay(config, 2)).toBe(2_147_483_647)
     vi.restoreAllMocks()
   })
 

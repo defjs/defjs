@@ -29,36 +29,19 @@ export function serializeHttpBody(
 
 export function applyRequestContentType(request: HttpRequest, headers: Headers): void {
   const body = request.body
-  if (typeof body === 'undefined') {
-    return
-  }
-
   if (isFormData(body)) {
     headers.delete('Content-Type')
     return
   }
-
-  const hasBodyContentTypeSource = Object.hasOwn(request, BODY_CONTENT_TYPE_SOURCE)
-  const bodyContentType = !hasBodyContentTypeSource || request.bodyContentTypeSource === body ? request.bodyContentType : undefined
-
-  if (bodyContentType === null) {
-    headers.delete('Content-Type')
+  // An explicit header always wins. HTTP never stores inferred types in headers, so a header is a declaration.
+  if (body === undefined || headers.has('Content-Type')) {
     return
   }
-
-  if (typeof bodyContentType === 'string') {
-    headers.set('Content-Type', bodyContentType)
-    return
-  }
-
-  // A builder-declared header wins over detection. Requests without source metadata still recompute.
-  if (hasBodyContentTypeSource && request.bodyContentTypeSource === body && headers.has('content-type')) {
-    return
-  }
-
-  const detectedType = resolveHttpBodyContentType(body)
-  if (detectedType) {
-    headers.set('Content-Type', detectedType)
+  // bodyContentType describes the body the builder produced; a replaced body is detected again.
+  const sameBody = !Object.hasOwn(request, BODY_CONTENT_TYPE_SOURCE) || request.bodyContentTypeSource === body
+  const contentType = sameBody && request.bodyContentType !== undefined ? request.bodyContentType : resolveHttpBodyContentType(body)
+  if (contentType) {
+    headers.set('Content-Type', contentType)
   }
 }
 

@@ -311,7 +311,6 @@ export function createDiscriminatedUnionStruct<
   for (const option of unionOptions) {
     assertStruct(option, 'discriminatedUnion option')
     const optionDef = (option as unknown as RuntimeStruct)[DEFINITION]
-    /* istanbul ignore next -- type-safe: createDiscriminatedUnionStruct only accepts ObjectStruct */
     if (optionDef.kind !== 'object') {
       throw new TypeError('discriminatedUnion options must be object structs')
     }

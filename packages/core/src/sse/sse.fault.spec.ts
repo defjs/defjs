@@ -41,6 +41,105 @@ const useStream = defineEventStream({
 })
 
 describe('sse startup faults', () => {
+  test.each([
+    { attempts: -1 },
+    { attempts: 1.5 },
+    { attempts: NaN },
+    { attempts: Infinity },
+    { attempts: Number.MAX_SAFE_INTEGER + 1 },
+    { delayMs: -1 },
+    { delayMs: NaN },
+    { delayMs: Infinity },
+    { maxDelayMs: -1 },
+    { maxDelayMs: NaN },
+    { maxDelayMs: -Infinity },
+    { factor: 0 },
+    { factor: -1 },
+    { factor: NaN },
+    { factor: Infinity },
+    { jitter: -0.1 },
+    { jitter: 1.1 },
+    { jitter: NaN },
+    { jitter: Infinity },
+    { attempts: 0, factor: 0 },
+  ])('should reject invalid reconnect options %j before making a request', async (reconnect) => {
+    const handle = vi.fn(async () => new Response('data: ok\n\n', { headers: SSE_HEADERS }))
+    const client = clientReturning(handle, withSSEReconnect(reconnect))
+
+    const [fault, stream, open] = await client.execute(useStream())
+
+    expect(fault?.code).toBe('REQ_OPTIONS_INVALID')
+    expect(stream).toBeUndefined()
+    expect(open).toBeUndefined()
+    expect(handle).not.toHaveBeenCalled()
+  })
+
+  test('should accept an unbounded positive infinite reconnect cap', async () => {
+    const client = clientReturning(
+      async () => new Response('data: ok\n\n', { headers: SSE_HEADERS }),
+      withSSEReconnect({ maxDelayMs: Infinity }),
+    )
+
+    const [fault, stream] = await client.execute(useStream())
+
+    expect(fault).toBeNull()
+    if (!stream) throw new Error('Expected an event stream')
+    expect(await Array.fromAsync(stream)).toEqual([{ event: 'message', data: 'ok', id: undefined }])
+    expect(await stream.closed).toMatchObject({ kind: 'eof' })
+  })
+
+  test('should use the reconnect values validated before the interceptor runs', async () => {
+    const reads = { delayMs: 0, maxDelayMs: 0 }
+    const client = clientReturning(
+      async () => new Response('data: ok\n\n', { headers: SSE_HEADERS }),
+      withSSEReconnect({
+        get delayMs() {
+          reads.delayMs += 1
+          return reads.delayMs === 1 ? 0 : NaN
+        },
+        get maxDelayMs() {
+          reads.maxDelayMs += 1
+          return reads.maxDelayMs === 1 ? 1000 : NaN
+        },
+      }),
+      withInterceptors(
+        createSSEInterceptor((request, next) => {
+          expect(reads).toEqual({ delayMs: 1, maxDelayMs: 1 })
+          return next(request)
+        }),
+      ),
+    )
+
+    const [fault, stream] = await client.execute(useStream())
+
+    expect(fault).toBeNull()
+    if (!stream) throw new Error('Expected an event stream')
+    expect(await Array.fromAsync(stream)).toEqual([{ event: 'message', data: 'ok', id: undefined }])
+    expect(reads).toEqual({ delayMs: 1, maxDelayMs: 1 })
+    expect(await stream.closed).toMatchObject({ kind: 'eof' })
+  })
+
+  test('should preserve the disabled reconnect snapshot if an interceptor adds options', async () => {
+    const client = clientReturning(
+      async () => new Response('data: ok\n\n', { headers: SSE_HEADERS }),
+      (config) => {
+        config.interceptors = [
+          createSSEInterceptor((request, next) => {
+            config.sse.reconnect = { delayMs: NaN }
+            return next(request)
+          }),
+        ]
+      },
+    )
+
+    const [fault, stream] = await client.execute(useStream())
+
+    expect(fault).toBeNull()
+    if (!stream) throw new Error('Expected an event stream')
+    expect(await Array.fromAsync(stream)).toEqual([{ event: 'message', data: 'ok', id: undefined }])
+    expect(await stream.closed).toMatchObject({ kind: 'eof' })
+  })
+
   test('should report a non-2xx handshake as HTTP_STATUS with the declared error body', async () => {
     const useDeclared = defineEventStream({
       error: struct.object({ reason: struct.string() }),

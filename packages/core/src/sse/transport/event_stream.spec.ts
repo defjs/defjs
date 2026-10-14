@@ -1,11 +1,14 @@
-import { afterEach, describe, expect, inject, test, vi } from 'vitest'
+import { afterEach, describe, expect, inject, onTestFinished, test, vi } from 'vitest'
+import { createServer, type Socket } from 'node:net'
 import { ERR_ABORTED } from '../../error'
 import type { HttpRequest } from '../../http'
 import { __resetStreamingRequestBodySupportForTests, ERR_STREAMING_REQUEST_UNSUPPORTED } from '../../http/transport/fetch_init'
 import { simulateUnsupportedStreaming } from '../../../test/streaming-support'
-import type { FetchEventStreamOptions } from './event_stream'
-import { fetchEventStream as fetchEventStreamInternal, getErrorOpenInfo } from './event_stream'
+import type { EventStreamFailureInfo, FetchEventStreamOptions } from './event_stream'
+import { fetchEventStream as fetchEventStreamInternal } from './event_stream'
 import type { EventStreamMessage } from './parser'
+
+const backoff = await import('../../internal/backoff')
 
 type TestOptions<T> = Omit<FetchEventStreamOptions<T>, 'maxBufferSize' | 'maxQueueSize'> & {
   maxBufferSize?: number
@@ -41,6 +44,148 @@ function scriptedConnection(chunks: readonly string[], end: 'drop' | 'eof'): Res
 }
 
 describe('fetchEventStream', () => {
+  test('should reset the retry budget and first delay after each successful reconnect handshake', async () => {
+    vi.useFakeTimers()
+    const timer = vi.spyOn(backoff, 'wait')
+    const shouldReconnect = vi.fn((_context: { attempt: number }) => true)
+    let requests = 0
+    try {
+      const stream = await fetchEventStream(
+        { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'GET' },
+        {
+          fetch: async () => {
+            requests += 1
+            return scriptedConnection([`data: ${requests}\n\n`], requests < 5 ? 'drop' : 'eof')
+          },
+          reconnect: { attempts: 1, delayMs: 10, factor: 2, shouldReconnect },
+        },
+      )
+      const consumed = (async () => {
+        const messages: string[] = []
+        for await (const message of stream) messages.push(message.data)
+        return messages
+      })()
+      void consumed.catch(() => undefined)
+
+      await vi.runAllTimersAsync()
+
+      await expect(consumed).resolves.toEqual(['1', '2', '3', '4', '5'])
+      expect(requests).toBe(5)
+      expect(shouldReconnect.mock.calls.map(([context]) => context.attempt)).toEqual([1, 1, 1, 1])
+      expect(timer.mock.calls.map((call) => call[0])).toEqual([10, 10, 10, 10])
+      await expect(stream.closed).resolves.toEqual({ kind: 'eof' })
+    } finally {
+      timer.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  test('should reset the retry budget even when a recovered handshake delivers no events', async () => {
+    let requests = 0
+    const stream = await fetchEventStream(
+      { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'GET' },
+      {
+        fetch: async () => {
+          requests += 1
+          return requests < 5 ? scriptedConnection([], 'drop') : scriptedConnection(['data: recovered\n\n'], 'eof')
+        },
+        reconnect: { attempts: 1, delayMs: 0 },
+      },
+    )
+    const messages: string[] = []
+    for await (const message of stream) messages.push(message.data)
+
+    expect(requests).toBe(5)
+    expect(messages).toEqual(['recovered'])
+    await expect(stream.closed).resolves.toEqual({ kind: 'eof' })
+  })
+
+  test.each([
+    ['猫', [0xe7, 0x8c, 0xab]],
+    ['été', [0xc3, 0xa9, 0x74, 0xc3, 0xa9]],
+  ])('should send UTF-8 Last-Event-ID bytes on the wire for %s', async (id, expectedBytes) => {
+    const sockets = new Set<Socket>()
+    const headers: Buffer[] = []
+    const firstSeen = Promise.withResolvers<void>()
+    const server = createServer((socket) => {
+      sockets.add(socket)
+      socket.on('close', () => sockets.delete(socket))
+      let incoming = Buffer.alloc(0)
+      socket.on('data', (chunk: Buffer) => {
+        incoming = Buffer.concat([incoming, chunk])
+        if (!incoming.includes('\r\n\r\n')) return
+        headers.push(incoming)
+        const body = headers.length === 1 ? `id: ${id}\ndata: first\n\n` : 'data: second\n\n'
+        const payload = Buffer.from(body)
+        const reply = Buffer.concat([
+          Buffer.from(
+            `HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n${payload.length.toString(16)}\r\n`,
+          ),
+          payload,
+          Buffer.from(headers.length === 1 ? '\r\n' : '\r\n0\r\n\r\n'),
+        ])
+        if (headers.length === 1) {
+          socket.write(reply)
+          void firstSeen.promise.then(() => socket.end())
+        } else {
+          socket.end(reply)
+        }
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const address = server.address()
+    if (!address || typeof address === 'string') throw new Error('Expected a loopback port')
+    try {
+      const stream = await fetchEventStream(
+        { baseEndpoint: `http://127.0.0.1:${address.port}`, endpoint: '/events', method: 'GET' },
+        {
+          reconnect: { attempts: 1, delayMs: 0 },
+          transformMessage(message) {
+            firstSeen.resolve()
+            return message
+          },
+        },
+      )
+      const messages: string[] = []
+      for await (const message of stream) messages.push(message.data)
+
+      expect(messages).toEqual(['first', 'second'])
+      expect(headers).toHaveLength(2)
+      const header = /\r\nlast-event-id: ([^\r\n]*)\r\n/i.exec(headers[1]?.toString('latin1') ?? '')?.[1]
+      expect(header).toBeDefined()
+      if (header === undefined) throw new Error('Expected Last-Event-ID on the wire')
+      expect([...Buffer.from(header, 'latin1')]).toEqual(expectedBytes)
+      await expect(stream.closed).resolves.toEqual({ kind: 'eof' })
+    } finally {
+      for (const socket of sockets) socket.destroy()
+      await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
+    }
+  })
+
+  test('should handle a platform Last-Event-ID header rejection through the per-attempt retry policy', async () => {
+    const originalSet = Headers.prototype.set
+    const writeHeader = vi.spyOn(Headers.prototype, 'set').mockImplementation(function (this: Headers, name, value) {
+      if (name === 'last-event-id') throw new TypeError('Header rejected by the platform')
+      originalSet.call(this, name, value)
+    })
+    onTestFinished(() => writeHeader.mockRestore())
+    const policy = vi.fn((_context: { attempt: number }) => true)
+    const fetch = vi.fn(async () => scriptedConnection(['id: 猫\ndata: first\n\n'], 'drop'))
+    const stream = await fetchEventStream(
+      { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'GET' },
+      {
+        fetch,
+        reconnect: { attempts: 1, delayMs: 0, shouldReconnect: policy },
+      },
+    )
+    const iterator = stream[Symbol.asyncIterator]()
+    await expect(iterator.next()).resolves.toMatchObject({ value: { data: 'first' } })
+    await expect(iterator.next()).rejects.toThrow()
+    expect(policy.mock.calls.map(([context]) => context.attempt)).toEqual([1, 2])
+    expect(fetch).toHaveBeenCalledOnce()
+    await expect(stream.closed).resolves.toMatchObject({ kind: 'error', code: 'NET_UNREACHABLE' })
+  })
+
   test('should read basic sse messages with open and closed info', async () => {
     const request: HttpRequest = {
       baseEndpoint: inject('testServerHost'),
@@ -217,7 +362,17 @@ describe('fetchEventStream', () => {
       method: 'GET',
     }
 
-    const stream = await fetchEventStream(request)
+    const stream = await fetchEventStream(request, {
+      fetch: async () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode('event: tick\ndata: 1\n\n'))
+            },
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
+    })
     const iterator = stream[Symbol.asyncIterator]()
     const first = await iterator.next()
 
@@ -250,9 +405,11 @@ describe('fetchEventStream', () => {
       method: 'GET',
     }
     let thrown: unknown
+    const failure: EventStreamFailureInfo = {}
 
     try {
       await fetchEventStream(request, {
+        failure,
         fetch: (async () =>
           new Response('data: ignored\n\n', {
             headers: { 'content-type': 'text/event-stream' },
@@ -264,7 +421,7 @@ describe('fetchEventStream', () => {
       thrown = error
     }
 
-    const open = getErrorOpenInfo(thrown)
+    const open = failure.open
     expect(thrown).toBeInstanceOf(Error)
     expect(open?.response.ok).toBe(false)
   })

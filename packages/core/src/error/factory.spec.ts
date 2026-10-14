@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { describe, expect, test } from 'vitest'
 import type { DecodedResponse, HttpMeta } from '../internal/http_response'
 import { ERR_ABORTED, ERR_TIMEOUT } from './cause'
@@ -106,6 +107,18 @@ describe('fault factories', () => {
       expect(fault.message).toBe('unexpected token <')
       expect(fault.cause).toBe('unexpected token <')
     })
+
+    test('should leave a JSON parser fragment out of a RES_DECODE_FAILED message', () => {
+      const cause = new SyntaxError('Unexpected token \'s\', "session=FA"... is not valid JSON')
+      const response = meta()
+      const fault = createDecodeFault('RES_DECODE_FAILED', cause, response)
+
+      expect(fault.message).toBe('Response body could not be decoded')
+      expect(fault.cause).toBe(cause)
+      expect(String(fault)).toBe('DefjsFault: Response body could not be decoded')
+      expect(String(fault)).not.toContain('session=FA')
+      expectNativeFault(fault, ['code', 'response', 'status'], cause)
+    })
   })
 
   describe('createPreflightFault', () => {
@@ -144,11 +157,39 @@ describe('fault factories', () => {
   })
 
   describe('createNetworkFault', () => {
+    test.each([
+      ['aborted', 'NET_ABORTED'],
+      ['timeout', 'NET_TIMEOUT'],
+    ] as const)('should recognize the %s brand on an error from another realm', (brand, code) => {
+      const cause = runInNewContext(
+        `Object.defineProperty(new Error('foreign cause'), Symbol.for('defjs.cause.${brand}'), { value: true })`,
+      )
+
+      expect(cause).not.toBeInstanceOf(Error)
+      const fault = createNetworkFault(cause)
+      expect(fault.code).toBe(code)
+      expect(fault.cause).toBe(cause)
+    })
+
     test('should recognize the shared abort sentinel', () => {
       const fault = createNetworkFault(ERR_ABORTED)
 
       expect(fault.code).toBe('NET_ABORTED')
       expect(fault.message).toBe(ERR_ABORTED.message)
+    })
+
+    test('should recognize abort and timeout sentinels branded by another copy', () => {
+      const foreignAbort = new Error('Request was aborted')
+      const foreignTimeout = new Error('Request timed out')
+      Object.defineProperty(foreignAbort, Symbol.for('defjs.cause.aborted'), { value: true })
+      Object.defineProperty(foreignTimeout, Symbol.for('defjs.cause.timeout'), { value: true })
+
+      expect(foreignAbort).not.toBe(ERR_ABORTED)
+      expect(foreignTimeout).not.toBe(ERR_TIMEOUT)
+      expect(createNetworkFault(foreignAbort).code).toBe('NET_ABORTED')
+      expect(createNetworkFault(foreignTimeout)).toMatchObject({ code: 'NET_TIMEOUT', message: 'Request timed out' })
+      expect(Object.getOwnPropertyDescriptor(ERR_ABORTED, Symbol.for('defjs.cause.aborted'))?.enumerable).toBe(false)
+      expect(Object.getOwnPropertyDescriptor(ERR_TIMEOUT, Symbol.for('defjs.cause.timeout'))?.enumerable).toBe(false)
     })
 
     test('should recognize a DOMException abort', () => {

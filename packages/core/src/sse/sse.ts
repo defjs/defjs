@@ -1,6 +1,7 @@
 import { COMMAND_EXECUTE, COMMAND_TYPE, EVENT_STREAM_COMMAND, type CommandExecutor } from '../client/command'
 import type { BaseCommand } from '../client/command'
 import type { ClientConfig, ClientSSEOptions } from '../client/config'
+import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from '../client/config'
 import type { AnyFault, Fault, PreflightFault } from '../error'
 import {
   createDecodeFault,
@@ -29,7 +30,9 @@ import type { EndpointCallable } from '../internal/endpoint_command'
 import { resolveInboundRepresentation } from '../internal/inbound_representation'
 import type { EndpointInput, ParsedInput } from '../internal/endpoint_input'
 import { parseEndpointInput } from '../internal/endpoint_input'
-import { isTransportOrigin, markTransportOrigin } from '../internal/transport_origin'
+import { createTransportOrigin } from '../internal/transport_origin'
+import { normalizeReconnectOptions } from '../internal/reconnect_options'
+import { RequestUrlError, resolveRequestUrl } from '../internal/url'
 import type { HttpMeta, HttpResponse } from '../internal/http_response'
 import type { BuilderField, EventStreamRequestShape } from '../internal/builder_types'
 import type { OutboundBuilder } from '../internal/outbound_request'
@@ -38,14 +41,9 @@ import { createBaseTransportRequest } from '../internal/transport_request'
 import type { AnyStruct, Infer } from '../struct'
 import { decodeJson } from '../struct/codec/json'
 import { parseStructValue } from '../struct/introspection'
-import type { EventStreamHandle, EventStreamOpenInfo } from './transport/event_stream'
-import {
-  fetchEventStream,
-  getErrorOpenInfo,
-  getEventStreamFatalCode,
-  handshakeDecodeCause,
-  isHandshakeStatusSignal,
-} from './transport/event_stream'
+import type { EventStreamFailureInfo, EventStreamHandle, EventStreamOpenInfo, FetchEventStreamOptions } from './transport/event_stream'
+import { SSE_RECONNECT_DEFAULTS } from './transport/event_stream'
+import { fetchEventStream, getEventStreamFatalCode, handshakeDecodeCause, isHandshakeStatusSignal } from './transport/event_stream'
 import type { EventStreamMessage } from './transport/parser'
 
 /** Map of SSE event names to payload structs. Declare `__proto__` with a computed own key. */
@@ -251,8 +249,13 @@ async function runEventStreamCommand<
     return [resolveAbortedFault(preAbortedSignal), undefined, undefined]
   }
 
+  // Snapshot the validated reconnect policy at preflight so an interceptor cannot change it.
+  let reconnect: FetchEventStreamOptions<unknown>['reconnect']
   try {
     validateEventStreamLimits(endpoint)
+    const configured = clientConfig.sse.reconnect
+    const normalized = normalizeReconnectOptions(configured, SSE_RECONNECT_DEFAULTS, 'SSE')
+    reconnect = normalized && { ...normalized, shouldReconnect: configured?.shouldReconnect }
   } catch (error) {
     return [createPreflightFault('REQ_OPTIONS_INVALID', error), undefined, undefined]
   }
@@ -310,6 +313,8 @@ async function runEventStreamCommand<
   let chainSettled = false
   let streamDelivered = false
   const ownedStreams = new Set<OwnedStream>()
+  const transportOrigin = createTransportOrigin()
+  const errorOpenInfo = new Map<unknown, EventStreamOpenInfo | undefined>()
   try {
     const sseInterceptors = resolveSSEInterceptors(clientConfig.interceptors)
     const sseHandler: SSEHandler = (req) => {
@@ -320,13 +325,26 @@ async function runEventStreamCommand<
         void rejected.catch(() => undefined)
         return rejected
       }
+      try {
+        resolveRequestUrl(req)
+      } catch (error) {
+        const rejected = Promise.reject<EventStreamHandle<unknown>>(error)
+        void rejected.catch(() => undefined)
+        return rejected
+      }
       // Interceptors run after the post-builder check. A deadline that expired there must not start the fetch.
       const transportAbort = mergeAbortSignals(requestSignal, [req.abort])
       const due = resolveTransportCancellation(deadline, transportAbort)
       if (due) {
         // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
         // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(markTransportOrigin(resolveAbortCause(transportAbort) as Error))
+        const rejected = Promise.reject<EventStreamHandle<unknown>>(transportOrigin.mark(resolveAbortCause(transportAbort) as Error))
+        releaseAbortSignal(transportAbort)
+        void rejected.catch(() => undefined)
+        return rejected
+      }
+      if (clientConfig.sse.handle === DEFAULT_FETCH && typeof globalThis.fetch !== 'function') {
+        const rejected = Promise.reject<EventStreamHandle<unknown>>(transportOrigin.mark(ERR_FETCH_UNSUPPORTED))
         releaseAbortSignal(transportAbort)
         void rejected.catch(() => undefined)
         return rejected
@@ -342,15 +360,17 @@ async function runEventStreamCommand<
         releaseAbortSignal(transportAbort)
       }
       // Type boundary: SSEHandler returns EventStreamHandle<unknown>; the concrete type is narrowed by the interceptor chain.
+      const failure: EventStreamFailureInfo = {}
       const promise = fetchEventStream(
         { ...req, abort: streamAbort },
         {
           fetch: clientConfig.sse.handle,
+          failure,
           handshakeError: endpoint.error,
           transformMessage(message, signal) {
             return transformStreamMessage(endpoint.events, message, clientConfig.sse.onInvalidEvent, signal)
           },
-          reconnect: clientConfig.sse.reconnect,
+          reconnect,
           maxBufferSize: endpoint.maxBufferSize,
           maxQueueSize: endpoint.maxQueueSize,
         },
@@ -362,7 +382,8 @@ async function runEventStreamCommand<
         },
         (cause: unknown) => {
           owned.release?.()
-          throw markTransportOrigin(cause)
+          errorOpenInfo.set(cause, failure.open)
+          throw transportOrigin.mark(cause)
         },
       )
       void promise.catch(() => undefined)
@@ -386,12 +407,14 @@ async function runEventStreamCommand<
     chainSettled = true
     discardOwnedStreams(error)
 
-    const fromTransport = isTransportOrigin(error)
+    const fromTransport = transportOrigin.has(error)
     const cause = error
-    const openInfo = getErrorOpenInfo(cause)
+    const openInfo = errorOpenInfo.get(cause)
     const fault = requestSignal.aborted
       ? resolveAbortedFault(requestSignal)
-      : createEventStreamFault(cause, fromTransport, openInfo?.response)
+      : error instanceof RequestUrlError
+        ? createPreflightFault('REQ_BUILD_FAILED', error)
+        : createEventStreamFault(cause, fromTransport, openInfo?.response)
     return [fault as Fault<TError>, undefined, openInfo]
   } finally {
     deadline.release()
@@ -544,7 +567,7 @@ function createEventStreamFault(cause: unknown, fromTransport: boolean, response
     return createDecodeFault(fatal, handshakeDecodeCause(cause), toEventStreamMeta(response))
   }
 
-  if (fromTransport && cause === ERR_STREAMING_REQUEST_UNSUPPORTED) {
+  if (fromTransport && (cause === ERR_STREAMING_REQUEST_UNSUPPORTED || cause === ERR_FETCH_UNSUPPORTED)) {
     return createPreflightFault('ENV_UNSUPPORTED', cause)
   }
 

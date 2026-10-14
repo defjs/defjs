@@ -1,9 +1,11 @@
 import { describe, expect, inject, onTestFinished, test, vi } from 'vitest'
 import { ERR_ABORTED, ERR_TIMEOUT } from '../../error'
 import type { HttpRequest } from '../../http'
-import type { EventStreamHandle, FetchEventStreamOptions } from './event_stream'
-import { fetchEventStream as fetchEventStreamInternal, getErrorOpenInfo, getEventStreamFatalCode } from './event_stream'
+import type { EventStreamFailureInfo, EventStreamHandle, FetchEventStreamOptions } from './event_stream'
+import { fetchEventStream as fetchEventStreamInternal, getEventStreamFatalCode } from './event_stream'
 import { type EventStreamMessage, SSEParserLimitError } from './parser'
+
+const backoff = await import('../../internal/backoff')
 
 type TestOptions<T> = Omit<FetchEventStreamOptions<T>, 'maxBufferSize' | 'maxQueueSize'> & {
   maxBufferSize?: number
@@ -140,24 +142,33 @@ describe('fetchEventStream advanced', () => {
     await expect(fetchEventStream(createRequest('/sse/500-always'))).rejects.toThrow()
   })
 
-  test('should attach open info to error for getErrorOpenInfo', async () => {
+  test('should provide execution-owned failure open info', async () => {
     let unexpectedHandle: EventStreamHandle<EventStreamMessage> | undefined
     onTestFinished(async () => {
       await unexpectedHandle?.[Symbol.asyncDispose]()
     })
-    let failure: unknown
+    const failure: EventStreamFailureInfo = {}
     try {
-      unexpectedHandle = await fetchEventStream(createRequest('/sse/500-always'))
-    } catch (error) {
-      failure = error
+      unexpectedHandle = await fetchEventStream(createRequest('/sse/500-always'), { failure })
+    } catch {
+      // The invocation reports its own response snapshot alongside the unchanged rejection.
     }
-    expect(getErrorOpenInfo(failure)?.response.status).toBe(500)
+    expect(failure.open?.response.status).toBe(500)
   })
 
-  test('getErrorOpenInfo returns undefined for non-object errors', () => {
-    expect(getErrorOpenInfo('string error')).toBeUndefined()
-    expect(getErrorOpenInfo(null)).toBeUndefined()
-    expect(getErrorOpenInfo(42)).toBeUndefined()
+  test('failure info stays empty for non-object errors before a response', async () => {
+    for (const cause of ['string error', null, 42]) {
+      const failure: EventStreamFailureInfo = {}
+      await expect(
+        fetchEventStream(createRequest('/events'), {
+          failure,
+          fetch: async () => {
+            throw cause
+          },
+        }),
+      ).rejects.toBe(cause)
+      expect(failure.open).toBeUndefined()
+    }
   })
 
   test('should throw when transformMessage throws', async () => {
@@ -1316,6 +1327,28 @@ describe('fetchEventStream advanced', () => {
     expect(fetchCount).toBe(1)
   })
 
+  test('should preserve a reconnect policy exception instead of retrying', async () => {
+    const cause = new Error('reconnect policy failed')
+    const fetch = vi.fn(async () => {
+      throw new Error('network error')
+    })
+
+    await expect(
+      fetchEventStream(
+        { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'GET' },
+        {
+          fetch,
+          reconnect: {
+            shouldReconnect() {
+              throw cause
+            },
+          },
+        },
+      ),
+    ).rejects.toBe(cause)
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
   test('should continue retry when shouldReconnect returns true', async () => {
     let fetchCount = 0
     const mockFetch = vi.fn(async () => {
@@ -1353,6 +1386,12 @@ describe('fetchEventStream advanced', () => {
   })
 
   test('should use exponential backoff with factor', async () => {
+    vi.useFakeTimers()
+    const timer = vi.spyOn(backoff, 'wait')
+    onTestFinished(() => {
+      timer.mockRestore()
+      vi.useRealTimers()
+    })
     let fetchCount = 0
     const mockFetch = vi.fn(async () => {
       fetchCount += 1
@@ -1361,14 +1400,13 @@ describe('fetchEventStream advanced', () => {
 
     const request = { baseEndpoint: 'https://example.com', endpoint: '/fail', method: 'GET' }
 
-    // Use a short delay so the test completes quickly; we verify attempts work
-    await expect(
-      fetchEventStream(request, {
-        fetch: mockFetch,
-        reconnect: { attempts: 2, delayMs: 1, factor: 2 },
-      }),
-    ).rejects.toThrow()
-
+    const rejected = fetchEventStream(request, {
+      fetch: mockFetch,
+      reconnect: { attempts: 2, delayMs: 1, factor: 2 },
+    }).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await rejected).toBeInstanceOf(Error)
+    expect(timer.mock.calls.map((call) => call[0])).toEqual([1, 2])
     expect(fetchCount).toBe(3)
   })
 
@@ -1385,14 +1423,14 @@ describe('fetchEventStream advanced', () => {
           reconnect: { attempts: 1, delayMs: Infinity },
         },
       ),
-    ).rejects.toThrow('Reconnect delay must be finite')
+    ).rejects.toThrow('SSE reconnect delayMs is out of range')
 
-    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   test('should clamp the final retry delay after applying a factor to a wire retry value', async () => {
     vi.useFakeTimers()
-    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout')
+    const waitSpy = vi.spyOn(backoff, 'wait')
     let fetchCount = 0
     const mockFetch = vi.fn(async () => {
       fetchCount += 1
@@ -1403,7 +1441,7 @@ describe('fetchEventStream advanced', () => {
             pull(controller) {
               if (!pulled) {
                 pulled = true
-                controller.enqueue(new TextEncoder().encode('retry: 999999999999999999999999\n\n'))
+                controller.enqueue(new TextEncoder().encode('retry: 1500000000\n\n'))
                 return
               }
               controller.error(new Error('connection lost'))
@@ -1424,20 +1462,26 @@ describe('fetchEventStream advanced', () => {
         },
       )
 
-      await vi.advanceTimersByTimeAsync(2_147_483_647)
+      await vi.advanceTimersByTimeAsync(1_500_000_000)
 
       expect(fetchCount).toBe(2)
-      expect(setTimeoutSpy.mock.calls.at(-1)?.[1]).toBe(2_147_483_647)
+      expect(waitSpy.mock.calls.map((call) => call[0])).toEqual([1_500_000_000, 2_147_483_647])
 
       stream.close('test complete')
       await expect(stream.closed).resolves.toMatchObject({ kind: 'aborted' })
     } finally {
-      setTimeoutSpy.mockRestore()
+      waitSpy.mockRestore()
       vi.useRealTimers()
     }
   })
 
   test('should cap delay with maxDelayMs', async () => {
+    vi.useFakeTimers()
+    const timer = vi.spyOn(backoff, 'wait')
+    onTestFinished(() => {
+      timer.mockRestore()
+      vi.useRealTimers()
+    })
     let fetchCount = 0
     const mockFetch = vi.fn(async () => {
       fetchCount += 1
@@ -1446,17 +1490,25 @@ describe('fetchEventStream advanced', () => {
 
     const request = { baseEndpoint: 'https://example.com', endpoint: '/fail', method: 'GET' }
 
-    await expect(
-      fetchEventStream(request, {
-        fetch: mockFetch,
-        reconnect: { attempts: 2, delayMs: 1, factor: 10, maxDelayMs: 5 },
-      }),
-    ).rejects.toThrow()
-
+    const rejected = fetchEventStream(request, {
+      fetch: mockFetch,
+      reconnect: { attempts: 2, delayMs: 1, factor: 10, maxDelayMs: 5 },
+    }).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await rejected).toBeInstanceOf(Error)
+    expect(timer.mock.calls.map((call) => call[0])).toEqual([1, 5])
     expect(fetchCount).toBe(3)
   })
 
   test('should apply jitter to retry delay', async () => {
+    vi.useFakeTimers()
+    const timer = vi.spyOn(backoff, 'wait')
+    const random = vi.spyOn(Math, 'random').mockReturnValue(1)
+    onTestFinished(() => {
+      timer.mockRestore()
+      random.mockRestore()
+      vi.useRealTimers()
+    })
     let fetchCount = 0
     const mockFetch = vi.fn(async () => {
       fetchCount += 1
@@ -1465,13 +1517,13 @@ describe('fetchEventStream advanced', () => {
 
     const request = { baseEndpoint: 'https://example.com', endpoint: '/fail', method: 'GET' }
 
-    await expect(
-      fetchEventStream(request, {
-        fetch: mockFetch,
-        reconnect: { attempts: 1, delayMs: 1, jitter: 0.5 },
-      }),
-    ).rejects.toThrow()
-
+    const rejected = fetchEventStream(request, {
+      fetch: mockFetch,
+      reconnect: { attempts: 1, delayMs: 10, jitter: 0.5 },
+    }).catch((error: unknown) => error)
+    await vi.runAllTimersAsync()
+    expect(await rejected).toBeInstanceOf(Error)
+    expect(timer.mock.calls.map((call) => call[0])).toEqual([15])
     expect(fetchCount).toBe(2)
   })
 
@@ -1489,6 +1541,30 @@ describe('fetchEventStream advanced', () => {
         },
       ),
     ).rejects.toThrow('SSE reconnect jitter is out of range')
+  })
+
+  test('should cap the scheduled retry delay after jitter', async () => {
+    vi.useFakeTimers()
+    const timer = vi.spyOn(backoff, 'wait')
+    const random = vi.spyOn(Math, 'random').mockReturnValue(1)
+    onTestFinished(() => {
+      timer.mockRestore()
+      random.mockRestore()
+      vi.useRealTimers()
+    })
+    const fetch = vi.fn(async () => {
+      throw new Error('network error')
+    })
+    const rejected = fetchEventStream(
+      { baseEndpoint: 'https://example.com', endpoint: '/events', method: 'GET' },
+      { fetch, reconnect: { attempts: 1, delayMs: 10, jitter: 0.5, maxDelayMs: 12 } },
+    ).catch((error: unknown) => error)
+
+    await vi.runAllTimersAsync()
+    expect(await rejected).toMatchObject({ message: 'network error' })
+
+    expect(timer.mock.calls.map((call) => call[0])).toEqual([12])
+    expect(fetch).toHaveBeenCalledTimes(2)
   })
 
   test('should enforce maxBufferSize in parser', async () => {

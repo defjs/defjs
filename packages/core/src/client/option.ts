@@ -16,7 +16,7 @@ export type ClientOption = (config: ClientConfig) => void
 /**
  * Sets the base URL prepended to relative request paths.
  *
- * @param endpoint - Absolute or relative base endpoint.
+ * @param endpoint - Absolute base endpoint. Missing or invalid endpoints fail request building.
  * @returns An option that writes `config.endpoint`.
  */
 export function withEndpoint(endpoint: string): ClientOption {
@@ -46,7 +46,7 @@ export function withHeaders(headers: HeadersInit): ClientOption {
  *
  * Timeout is applied before the interceptor chain (`mergeAbortSignals`). Execute
  * `{ timeout }` overrides this default. Execute `{ abort }` combines with the
- * default (abort → `ABORTED`, timer → `TIMEOUT`). SSE and WebSocket ignore this
+ * default (abort → `NET_ABORTED`, timer → `NET_TIMEOUT`). SSE and WebSocket ignore this
  * option. XOR still rejects execute options that pass both `abort` and `timeout`.
  *
  * @param ms - Positive safe integer timeout in milliseconds.

@@ -1,5 +1,6 @@
 import type { AnyStruct } from '../struct'
 import { decodeBytes, readBytesText } from '../internal/bytes'
+import { rejectNonJson } from '../internal/outbound_request'
 import { decodeJson, encodeJson } from '../struct/codec/json'
 import { parseStructValue } from '../struct/introspection'
 
@@ -8,7 +9,10 @@ export function serializeOutgoingWebSocketMessage(outgoing: AnyStruct | undefine
     throw new Error('No outgoing WebSocket messages are declared for this endpoint')
   }
 
-  const wire = JSON.stringify(encodeJson(outgoing, parseStructValue(outgoing, message)))
+  // Same guard as an HTTP JSON body: non-finite numbers, functions, symbols and non-plain objects throw.
+  const wire = JSON.stringify(encodeJson(outgoing, parseStructValue(outgoing, message)), (key, value: unknown) =>
+    rejectNonJson(key, value, 'Outgoing WebSocket message'),
+  )
   // JSON.stringify(undefined) is undefined, and the socket would send the text "undefined".
   if (typeof wire !== 'string') {
     throw new TypeError('Outgoing WebSocket message has no JSON representation')

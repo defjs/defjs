@@ -17,9 +17,11 @@ function watch(signal: AbortSignal) {
   const remove = vi.spyOn(signal, 'removeEventListener')
   return {
     expectReleased() {
-      expect(add.mock.calls.filter(([type]) => type === 'abort')).toHaveLength(
-        remove.mock.calls.filter(([type]) => type === 'abort').length,
-      )
+      const added = add.mock.calls.filter(([type]) => type === 'abort')
+      expect(remove.mock.calls.filter(([type]) => type === 'abort')).toHaveLength(added.length)
+      for (const [type, listener] of added) {
+        expect(remove).toHaveBeenCalledWith(type, listener)
+      }
       add.mockRestore()
       remove.mockRestore()
     },

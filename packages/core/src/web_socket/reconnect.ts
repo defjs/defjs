@@ -1,4 +1,5 @@
 import type { ClientWebSocketOptions } from '../client/config'
+import { normalizeReconnectOptions } from '../internal/reconnect_options'
 import type { SocketLifecycleOutcome } from './web_socket'
 
 export type NormalizedReconnectConfig = {
@@ -12,35 +13,15 @@ export type NormalizedReconnectConfig = {
 }
 
 export function normalizeReconnectConfig(config: ClientWebSocketOptions['reconnect'] | undefined): NormalizedReconnectConfig | undefined {
-  if (!config) {
+  const reconnectPredicate = config?.shouldReconnect
+  const normalized = normalizeReconnectOptions(config, { delayMs: 1_000, factor: 2, jitter: 0, maxDelayMs: 30_000 }, 'WebSocket')
+  if (!normalized) {
     return undefined
   }
-
-  const reconnectPredicate = config.shouldReconnect
-  const attempts = config.attempts ?? 3
-  if (!Number.isSafeInteger(attempts) || attempts < 0) {
-    throw new RangeError('WebSocket reconnect attempts must be a non-negative safe integer')
-  }
-  if (attempts === 0) {
-    return undefined
-  }
-
-  const delayMs = config.delayMs ?? 1_000
-  assertFiniteRange('delayMs', delayMs, 0)
-  const factor = config.factor ?? 2
-  assertFiniteRange('factor', factor, Number.MIN_VALUE)
-  const jitter = config.jitter ?? 0
-  assertFiniteRange('jitter', jitter, 0, 1)
-  const maxDelayMs = config.maxDelayMs ?? 30_000
-  assertFiniteRange('maxDelayMs', maxDelayMs, 0)
 
   return {
-    attempts,
-    delayMs,
-    factor,
+    ...normalized,
     hasShouldReconnect: typeof reconnectPredicate === 'function',
-    jitter,
-    maxDelayMs,
     shouldReconnect: (outcome, attempt) => {
       if (typeof reconnectPredicate === 'function') {
         return Boolean(
@@ -69,10 +50,4 @@ export function shouldReconnect(config: NormalizedReconnectConfig | undefined, o
   }
 
   return config.shouldReconnect(outcome, attempt)
-}
-
-function assertFiniteRange(field: string, value: number, minimum: number, maximum = Number.POSITIVE_INFINITY): void {
-  if (!Number.isFinite(value) || value < minimum || value > maximum) {
-    throw new RangeError(`WebSocket reconnect ${field} is out of range`)
-  }
 }

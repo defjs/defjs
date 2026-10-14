@@ -38,7 +38,7 @@ describe('abort helpers', () => {
     expect(add).toHaveBeenCalledOnce()
     releaseAbortSignal(merged)
 
-    expect(remove).toHaveBeenCalledOnce()
+    expect(remove).toHaveBeenCalledExactlyOnceWith('abort', add.mock.calls[0]?.[1])
   })
 
   test('should merge timeout into abort signals', () => {
@@ -149,17 +149,24 @@ describe('abort helpers', () => {
 
   test('should resolve an asynchronous callback result', async () => {
     const signal = new AbortController().signal
+    const add = vi.spyOn(signal, 'addEventListener')
+    const remove = vi.spyOn(signal, 'removeEventListener')
 
     await expect(awaitWithSignal(() => Promise.resolve(1), signal)).resolves.toBe(1)
+
+    expect(remove).toHaveBeenCalledExactlyOnceWith('abort', add.mock.calls[0]?.[1])
   })
 
   test('should stop waiting for a callback when aborted', async () => {
     const controller = new AbortController()
+    const add = vi.spyOn(controller.signal, 'addEventListener')
+    const remove = vi.spyOn(controller.signal, 'removeEventListener')
     const result = awaitWithSignal(() => new Promise<never>(() => undefined), controller.signal)
 
     controller.abort(new Error('stop'))
 
     await expect(result).rejects.toThrow('stop')
+    expect(remove).toHaveBeenCalledExactlyOnceWith('abort', add.mock.calls[0]?.[1])
   })
 
   test('should not invoke a callback when already aborted', async () => {

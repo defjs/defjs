@@ -365,7 +365,7 @@ describe('Fetch handler request creation', () => {
     expect(request.headers.get('Content-Type')).toEqual('application/json')
   })
 
-  test('should apply final body content type after configured headers', () => {
+  test('should keep a configured content-type header over body detection and bodyContentType', () => {
     const jsonBody = { id: 1 }
     const jsonRequest: HttpRequest = {
       baseEndpoint: 'https://example.com',
@@ -394,9 +394,9 @@ describe('Fetch handler request creation', () => {
       body: new ArrayBuffer(0),
     }
 
-    expect((createFetchRequestInit(jsonRequest).headers as Headers).get('content-type')).toBe('application/json')
-    expect((createFetchRequestInit(builderRequest).headers as Headers).get('content-type')).toBe('application/json')
-    expect((createFetchRequestInit(binaryRequest).headers as Headers).get('content-type')).toBe('application/octet-stream')
+    expect((createFetchRequestInit(jsonRequest).headers as Headers).get('content-type')).toBe('text/plain')
+    expect((createFetchRequestInit(builderRequest).headers as Headers).get('content-type')).toBe('text/plain')
+    expect((createFetchRequestInit(binaryRequest).headers as Headers).get('content-type')).toBe('text/plain')
   })
 
   test('should remove or suppress Content-Type from final body rules', () => {
@@ -412,7 +412,6 @@ describe('Fetch handler request creation', () => {
     const suppressedRequest: HttpRequest = {
       baseEndpoint: 'https://example.com',
       endpoint: '/v1/text',
-      headers: new Headers([['Content-Type', 'text/plain']]),
       method: 'POST',
       body: textBody,
       bodyContentType: null,
@@ -464,13 +463,23 @@ describe('Fetch handler request creation', () => {
     expect(init.duplex).toBe('half')
   })
 
-  test('should return zero for negative Content-Length', () => {
+  test.each([
+    { contentLength: '-1', total: 0 },
+    { contentLength: 'not-a-number', total: 0 },
+    { contentLength: 'Infinity', total: 0 },
+    { contentLength: '100', total: 100 },
+    { contentLength: undefined, total: 0 },
+    { contentLength: '0', total: 0 },
+  ])('should count upload bytes with Content-Length $contentLength', async ({ contentLength, total }) => {
+    const events: Array<{ lengthComputable: boolean; loaded: number; total: number }> = []
     const requestConfig: HttpRequest = {
       baseEndpoint: 'https://example.com',
       endpoint: '/v1/user',
-      headers: new Headers([['Content-Length', '-1']]),
+      headers: new Headers(contentLength === undefined ? {} : { 'Content-Length': contentLength }),
       method: 'POST',
-      uploadProgress: vi.fn(),
+      uploadProgress(event) {
+        events.push(event)
+      },
       body: new ReadableStream<Uint8Array>({
         start(controller) {
           controller.enqueue(new TextEncoder().encode('hello'))
@@ -479,108 +488,16 @@ describe('Fetch handler request creation', () => {
       }),
     }
 
-    if (!supportsStreamingRequestBody()) {
-      return
-    }
-
+    expect(supportsStreamingRequestBody()).toBe(true)
     const init = createFetchRequestInit(requestConfig)
     expect(init.duplex).toBe('half')
+    expect(await new Response(init.body).text()).toBe('hello')
+    expect(events).toEqual([{ lengthComputable: total > 0, loaded: 5, total }])
   })
 
   test('should return false when ReadableStream is undefined', () => {
     vi.stubGlobal('ReadableStream', undefined)
     expect(supportsStreamingRequestBody()).toBe(false)
-  })
-
-  test('should return zero for invalid Content-Length', () => {
-    const requestConfig: HttpRequest = {
-      baseEndpoint: 'https://example.com',
-      endpoint: '/v1/user',
-      headers: new Headers([['Content-Length', 'not-a-number']]),
-      method: 'POST',
-      uploadProgress: vi.fn(),
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('hello'))
-          controller.close()
-        },
-      }),
-    }
-
-    if (!supportsStreamingRequestBody()) {
-      return
-    }
-
-    const init = createFetchRequestInit(requestConfig)
-    expect(init.duplex).toBe('half')
-  })
-
-  test('should return zero for non-finite Content-Length', () => {
-    const requestConfig: HttpRequest = {
-      baseEndpoint: 'https://example.com',
-      endpoint: '/v1/user',
-      headers: new Headers([['Content-Length', 'Infinity']]),
-      method: 'POST',
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('hello'))
-          controller.close()
-        },
-      }),
-    }
-
-    if (!supportsStreamingRequestBody()) {
-      return
-    }
-
-    const init = createFetchRequestInit(requestConfig)
-    expect(init.duplex).toBe('half')
-  })
-
-  test('should parse positive Content-Length for upload progress', () => {
-    const requestConfig: HttpRequest = {
-      baseEndpoint: 'https://example.com',
-      endpoint: '/v1/user',
-      headers: new Headers([['Content-Length', '100']]),
-      method: 'POST',
-      uploadProgress: vi.fn(),
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('hello'))
-          controller.close()
-        },
-      }),
-    }
-
-    if (!supportsStreamingRequestBody()) {
-      return
-    }
-
-    const init = createFetchRequestInit(requestConfig)
-    expect(init.duplex).toBe('half')
-  })
-
-  test('should return zero for missing Content-Length', () => {
-    const requestConfig: HttpRequest = {
-      baseEndpoint: 'https://example.com',
-      endpoint: '/v1/user',
-      headers: new Headers(),
-      method: 'POST',
-      uploadProgress: vi.fn(),
-      body: new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(new TextEncoder().encode('hello'))
-          controller.close()
-        },
-      }),
-    }
-
-    if (!supportsStreamingRequestBody()) {
-      return
-    }
-
-    const init = createFetchRequestInit(requestConfig)
-    expect(init.duplex).toBe('half')
   })
 
   test('should handle fetch network error', async () => {

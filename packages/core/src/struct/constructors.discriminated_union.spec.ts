@@ -46,7 +46,8 @@ describe('constructors.ts discriminatedUnion', () => {
     expect(issue?.code).toBe('invalid_union')
     expect(issue?.path).toEqual(['type'])
     expect(issue?.expected).toBe('"click" | "scroll" | "keypress"')
-    expect(issue?.message).toContain('"unknown"')
+    expect(issue?.received).toBe('unknown')
+    expect(issue?.message).toBe('Expected "click" | "scroll" | "keypress" at type, received string')
   })
 
   test('reports missing_key when the discriminator is absent', () => {
@@ -85,6 +86,12 @@ describe('constructors.ts discriminatedUnion', () => {
 
     const [e2] = parse(event, [])
     expect(e2).toBeInstanceOf(StructError)
+  })
+
+  test('rejects a non-object option', () => {
+    expect(() => struct.discriminatedUnion('type', [struct.string()] as never)).toThrow(
+      new TypeError('discriminatedUnion options must be object structs'),
+    )
   })
 
   test('rejects option list with duplicate discriminator value at chain time', () => {

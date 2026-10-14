@@ -4,6 +4,8 @@ import type { HttpRequest } from './http_request'
 import type { RequestBuildValue, RequestScalarValue } from './request_values'
 import { isRequestScalarValue, serializeRequestScalarValue } from './request_values'
 
+export class RequestUrlError extends TypeError {}
+
 type UrlScalarValue = Exclude<RequestScalarValue, bigint>
 
 export function fillUrl(path: string, params?: { [key: string]: RequestBuildValue }): string {
@@ -132,11 +134,24 @@ export function appendRecordToHeaders(headers: Headers, value?: HeadersInit | { 
   }
 }
 
+/**
+ * Resolve a relative definition path under the base endpoint's origin and directory.
+ * Reject absolute paths, backslashes, C0 controls, query/hash and directory escapes; encode plain path spaces.
+ * @throws TypeError when the endpoint or path is invalid.
+ */
 export function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString = ''): URL {
   const base = createEndpointDirectoryBase(baseEndpoint)
-  const normalizedPath = normalizeEndpointPath(path)
-  const url = new URL(normalizedPath, base)
-  // The normalized path carries no query, so an empty string would only reassign an empty search.
+  let url: URL
+  try {
+    url = new URL(path.replace(/^\/(?!\/)/, ''), base)
+  } catch {
+    throw new RequestUrlError('Endpoint path must resolve to a valid URL')
+  }
+  if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) {
+    throw new RequestUrlError('Endpoint path must not be an absolute URL or leave the client endpoint directory')
+  }
+  validateEndpointPath(path)
+  // The validated path carries no query, so an empty string would only reassign an empty search.
   if (queryString) {
     url.search = queryString
   }
@@ -147,7 +162,7 @@ export function createResolvedRequestUrl(baseEndpoint: string, path: string, que
 // Replaces the near-identical `createRequestUrl` helpers previously duplicated in fetch/sse/test_handler.
 export function resolveRequestUrl(request: HttpRequest): URL {
   if (!request.baseEndpoint) {
-    throw new TypeError('Client endpoint is required')
+    throw new RequestUrlError('Client endpoint is required')
   }
   const queryString =
     typeof request.queryString === 'string' ? request.queryString : request.queryParams ? request.queryParams.toString() : ''
@@ -199,7 +214,7 @@ function createEndpointDirectoryBase(baseEndpoint: string): URL {
   try {
     base = new URL(baseEndpoint)
   } catch {
-    throw new TypeError('Client endpoint must be a valid URL')
+    throw new RequestUrlError('Client endpoint must be a valid URL')
   }
 
   base.search = ''
@@ -214,14 +229,17 @@ function createEndpointDirectoryBase(baseEndpoint: string): URL {
   return base
 }
 
-function normalizeEndpointPath(path: string): string {
-  if (/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(path) || path.startsWith('//')) {
-    throw new Error('Endpoint path must not be an absolute URL')
+function validateEndpointPath(path: string): void {
+  if (URL.canParse(path) || /^ *\/\//.test(path)) {
+    throw new RequestUrlError('Endpoint path must not be an absolute URL')
   }
 
   if (path.includes('?') || path.includes('#')) {
-    throw new Error('Endpoint path must not include query or hash')
+    throw new RequestUrlError('Endpoint path must not include query or hash')
   }
 
-  return path.replace(/^\/+/, '')
+  // eslint-disable-next-line no-control-regex -- C0 controls are an intentional request URL security boundary.
+  if (/[\u0000-\u001f\\]/.test(path)) {
+    throw new RequestUrlError('Endpoint path must not include C0 controls or backslashes')
+  }
 }

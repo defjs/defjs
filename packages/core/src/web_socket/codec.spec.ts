@@ -56,6 +56,15 @@ describe('codec helpers', () => {
     expect(cause).toBe(ERR_TIMEOUT)
   })
 
+  test('resolveAbortCause maps another copy timeout sentinel to this ERR_TIMEOUT', () => {
+    const foreign = new Error('Request timed out')
+    Object.defineProperty(foreign, Symbol.for('defjs.cause.timeout'), { value: true })
+    const controller = new AbortController()
+    controller.abort(foreign)
+    expect(foreign).not.toBe(ERR_TIMEOUT)
+    expect(resolveAbortCause(controller.signal)).toBe(ERR_TIMEOUT)
+  })
+
   test('resolveAbortCause falls back to ERR_ABORTED when reason is undefined', () => {
     const signal = Object.create(AbortSignal.prototype)
     Object.defineProperty(signal, 'aborted', { value: true })
@@ -106,6 +115,39 @@ describe('serializeOutgoingWebSocketMessage', () => {
 
     expect(serializeOutgoingWebSocketMessage(outgoing, { profile: null })).toBe('{"profile":null}')
     expect(serializeOutgoingWebSocketMessage(outgoing, { profile: { name: 'N' } })).toBe('{"profile":{"display_name":"N"}}')
+  })
+
+  test('encodes a finite number', () => {
+    expect(serializeOutgoingWebSocketMessage(struct.number(), 1)).toBe('1')
+  })
+
+  test.each([
+    ['Infinity', struct.number(), Number.POSITIVE_INFINITY, 'is not JSON data: Infinity'],
+    ['NaN', struct.any(), Number.NaN, 'is not JSON data: NaN'],
+    ['Map', struct.any(), new Map([['k', 1]]), 'is not JSON data: Map'],
+    ['Set', struct.any(), new Set([1]), 'is not JSON data: Set'],
+    ['function', struct.any(), () => 1, 'is not JSON data: function'],
+    ['symbol', struct.any(), Symbol('wire'), 'is not JSON data: symbol'],
+    ['class instance', struct.any(), new (class Payload {})(), 'is not JSON data: Payload'],
+  ])('rejects a %s value instead of rewriting it', (_label, outgoing, message, fragment) => {
+    expect(() => serializeOutgoingWebSocketMessage(outgoing, message)).toThrow(TypeError)
+    expect(() => serializeOutgoingWebSocketMessage(outgoing, message)).toThrow(fragment)
+  })
+
+  test('rejects a non-finite field and a non-plain field inside an object', () => {
+    const numeric = struct.object({ n: struct.number() })
+    const pocket = struct.object({ p: struct.any() })
+    const mixed = struct.object({ fn: struct.any(), keep: struct.number() })
+
+    expect(() => serializeOutgoingWebSocketMessage(numeric, { n: Number.NEGATIVE_INFINITY })).toThrow(
+      'Outgoing WebSocket message field "n" is not JSON data: -Infinity',
+    )
+    expect(() => serializeOutgoingWebSocketMessage(pocket, { p: new Map([['k', 1]]) })).toThrow(
+      'Outgoing WebSocket message field "p" is not JSON data: Map',
+    )
+    expect(() => serializeOutgoingWebSocketMessage(mixed, { fn: () => 1, keep: 1 })).toThrow(
+      'Outgoing WebSocket message field "fn" is not JSON data: function',
+    )
   })
 })
 

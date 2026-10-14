@@ -346,7 +346,8 @@ function materializeBody(body: unknown): { body?: unknown; defaultContentType?: 
 
 // JSON.stringify drops a function or symbol, writes NaN and Infinity as null, and turns a Map, Set, stream or
 // class instance into `{}`. The replacer sees each value after toJSON, so what is still not JSON data is rejected.
-function rejectNonJson(key: string, value: unknown): unknown {
+// HTTP JSON bodies and WebSocket text frames share this guard.
+export function rejectNonJson(key: string, value: unknown, source: 'body' | 'Outgoing WebSocket message' = 'body'): unknown {
   if (
     typeof value === 'function' ||
     typeof value === 'symbol' ||
@@ -359,9 +360,11 @@ function rejectNonJson(key: string, value: unknown): unknown {
         : typeof value === 'object'
           ? (value as { constructor?: { name?: string } }).constructor?.name || Object.prototype.toString.call(value).slice(8, -1)
           : typeof value
-    throw new TypeError(
-      `body${key ? ` field "${key}"` : ''} is not JSON data: ${kind}. Send JSON data, a string, bytes, Blob, FormData, URLSearchParams or a Web ReadableStream (ReadableStream.from(iterable), Readable.toWeb(readable)).`,
-    )
+    const advice =
+      source === 'body'
+        ? 'Send JSON data, a string, bytes, Blob, FormData, URLSearchParams or a Web ReadableStream (ReadableStream.from(iterable), Readable.toWeb(readable)).'
+        : 'Send JSON data.'
+    throw new TypeError(`${source}${key ? ` field "${key}"` : ''} is not JSON data: ${kind}. ${advice}`)
   }
   return value
 }

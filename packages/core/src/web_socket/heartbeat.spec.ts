@@ -234,6 +234,26 @@ describe('heartbeat', () => {
     }
   })
 
+  test('should reject a non-JSON heartbeat payload before the socket send', () => {
+    const socket = createMockSocket()
+    const onFatal = vi.fn()
+
+    startHeartbeat(
+      socket,
+      createMockSession(socket),
+      { intervalMs: 100, message: () => Number.POSITIVE_INFINITY as never },
+      struct.number(),
+      onFatal,
+      WebSocket.OPEN,
+    )
+
+    vi.advanceTimersByTime(100)
+    expect(socket.send).not.toHaveBeenCalled()
+    expect(onFatal).toHaveBeenCalledTimes(1)
+    expect(onFatal.mock.calls[0]?.[0]).toBeInstanceOf(TypeError)
+    expect(onFatal.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ message: expect.stringContaining('is not JSON data: Infinity') }))
+  })
+
   test('should report timeout without owning socket close or queues', () => {
     const socket = createMockSocket()
     const onFatal = vi.fn()

@@ -14,7 +14,7 @@ export function createWebSocketRequest(params: {
   withCredentials?: boolean
 }): HttpRequest {
   const { queryParams, queryString } = resolveTransportQuery(params.query, params.querySerializer)
-  return {
+  const request: HttpRequest = {
     abort: params.abort,
     baseEndpoint: params.baseEndpoint,
     endpoint: fillUrl(params.path, params.params),
@@ -25,6 +25,8 @@ export function createWebSocketRequest(params: {
     queryString,
     withCredentials: params.withCredentials ?? false,
   }
+  resolveRequestUrl(request)
+  return request
 }
 
 export function createWebSocketUrlFromRequest(request: HttpRequest): string {

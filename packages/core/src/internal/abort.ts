@@ -1,5 +1,6 @@
 import type { PreflightFault } from '../error'
 import { createNetworkFault, createPreflightFault, ERR_ABORTED, ERR_TIMEOUT } from '../error'
+import { isTimeoutCause } from '../error/cause'
 
 export const ABORT_TIMEOUT_CONFLICT_MESSAGE = 'abort and timeout cannot be used together'
 const MAX_TIMER_DELAY_MS = 2_147_483_647
@@ -47,12 +48,9 @@ export function resolveAbortCause(signal: AbortSignal): Error | undefined {
   return resolveAbortedCause(signal)
 }
 
-/** `ERR_TIMEOUT` or `ERR_ABORTED`, chosen from the signal's abort reason. */
+/** `ERR_TIMEOUT` or `ERR_ABORTED`, chosen from the signal's abort reason, including another copy's timeout sentinel. */
 export function resolveAbortedCause(signal: AbortSignal): Error {
-  const reason = signal.reason
-  const timedOut = reason === ERR_TIMEOUT || (reason instanceof Error && reason.name === 'TimeoutError')
-
-  return timedOut ? ERR_TIMEOUT : ERR_ABORTED
+  return isTimeoutCause(signal.reason) ? ERR_TIMEOUT : ERR_ABORTED
 }
 
 /** `REQ_OPTIONS_INVALID` for execute options that pass both `abort` and `timeout`. */

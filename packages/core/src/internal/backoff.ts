@@ -8,13 +8,15 @@ export type BackoffConfig = {
 }
 
 export function computeReconnectDelay(config: BackoffConfig, attempt: number): number {
-  const exponential = Math.min(config.delayMs * config.factor ** Math.max(0, attempt - 1), config.maxDelayMs)
-  const delay = config.jitter <= 0 ? exponential : Math.max(0, Math.round(exponential * (1 + (Math.random() * 2 - 1) * config.jitter)))
-
-  if (!Number.isFinite(delay)) {
+  // SSE can replace the normalized base with onerror's delay or retryInterval.
+  if (!Number.isFinite(config.delayMs)) {
     throw new RangeError('Reconnect delay must be finite')
   }
-  return Math.min(delay, MAX_TIMER_DELAY_MS)
+
+  const exponential =
+    config.delayMs === 0 ? 0 : Math.min(config.delayMs * config.factor ** Math.max(0, attempt - 1), config.maxDelayMs, Number.MAX_VALUE)
+  const delay = config.jitter <= 0 ? exponential : Math.max(0, Math.round(exponential * (1 + (Math.random() * 2 - 1) * config.jitter)))
+  return Math.min(delay, config.maxDelayMs, MAX_TIMER_DELAY_MS)
 }
 
 export async function wait(ms: number, signal: AbortSignal): Promise<void> {

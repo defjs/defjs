@@ -21,7 +21,7 @@ describe('StructError format / flatten / prettify', () => {
 
     const tree = err.format()
     expect(tree._errors).toEqual([])
-    expect(tree['id']).toEqual({ _errors: ['Expected string at id, received 42'] })
+    expect(tree['id']).toEqual({ _errors: ['Expected string at id, received number'] })
     expect(tree['profile']).toBeUndefined()
     expect(tree['tags']).toBeUndefined()
     expect(err.issues).toHaveLength(1)
@@ -36,7 +36,7 @@ describe('StructError format / flatten / prettify', () => {
 
     const flat = err.flatten()
     expect(flat.formErrors).toEqual([])
-    expect(flat.fieldErrors['id']).toEqual(['Expected string at id, received 42'])
+    expect(flat.fieldErrors['id']).toEqual(['Expected string at id, received number'])
     expect(flat.fieldErrors['profile']).toBeUndefined()
     expect(flat.fieldErrors['tags']).toBeUndefined()
   })
@@ -65,7 +65,7 @@ describe('StructError format / flatten / prettify', () => {
     }
 
     const text = err.prettify()
-    expect(text).toContain('× id: Expected string at id, received 42')
+    expect(text).toContain('× id: Expected string at id, received number')
     expect(text).not.toContain('profile.email')
     expect(text).not.toContain('tags[0]')
   })
@@ -79,7 +79,7 @@ describe('StructError format / flatten / prettify', () => {
 
     const tree = err.format()
     expect(tree._errors).toEqual([])
-    expect(tree['\\_errors']).toEqual({ _errors: ['Expected string at _errors, received 42'] })
+    expect(tree['\\_errors']).toEqual({ _errors: ['Expected string at _errors, received number'] })
   })
 
   test('format and flatten keep attacker-controlled paths out of object prototypes', () => {
@@ -133,7 +133,7 @@ describe('StructError format / flatten / prettify', () => {
     const [err] = parse(matrix, [[[1]]])
     expect(err).toBeInstanceOf(StructError)
 
-    expect(err?.prettify()).toContain('× [0][0][0]: Expected string at [0][0][0], received 1')
+    expect(err?.prettify()).toContain('× [0][0][0]: Expected string at [0][0][0], received number')
   })
 
   test('prettify on empty issues falls back to a sane string', () => {
@@ -159,12 +159,64 @@ describe('errors.ts errorMap', () => {
   test('errorMap returning undefined preserves the default message', () => {
     const [err] = parse(struct.string(), 42, { errorMap: () => undefined })
     expect(err).toBeInstanceOf(StructError)
-    expect(err?.issues[0]?.message).toBe('Expected string at <root>, received 42')
+    expect(err?.issues[0]?.message).toBe('Expected string at <root>, received number')
+  })
+
+  test('errorMap returning an empty string replaces the default message', () => {
+    const secret = 'secret-value'
+    const [err] = parse(struct.number(), secret, { errorMap: () => '' })
+    expect(err).toBeInstanceOf(StructError)
+    expect(err?.issues[0]?.message).toBe('')
+    expect(err?.issues[0]?.received).toBe(secret)
+    expect(err?.message).toBe('')
+    expect(err?.prettify()).toBe('× <root>: ')
+    expect(String(err)).not.toContain(secret)
   })
 
   test('omitting errorMap uses default messages', () => {
     const [after] = parse(struct.string(), 42)
     expect(after).toBeInstanceOf(StructError)
-    expect(after?.issues[0]?.message).toBe('Expected string at <root>, received 42')
+    expect(after?.issues[0]?.message).toBe('Expected string at <root>, received number')
+  })
+
+  test('default messages name the received kind and keep the value on the issue', () => {
+    const secret = 'ada.lovelace@example.test'
+    const file = new File([secret], 'secret-name.png')
+    const blob = new Blob([secret], { type: 'text/plain' })
+    const when = new Date('2020-01-01T00:00:00.000Z')
+    const cases: [unknown, string][] = [
+      [secret, 'string'],
+      [123456789, 'number'],
+      [false, 'boolean'],
+      [10n, 'bigint'],
+      [Symbol('secret'), 'symbol'],
+      [() => secret, 'function'],
+      [null, 'null'],
+      [undefined, 'undefined'],
+      [[secret], 'array'],
+      [{ email: secret }, 'object'],
+      [file, 'File'],
+      [blob, 'Blob'],
+      [new ArrayBuffer(4), 'ArrayBuffer'],
+      [when, 'Date'],
+    ]
+
+    for (const [value, kind] of cases) {
+      // A number is valid for struct.number(), so that one case is rejected by struct.string() instead.
+      const expected = typeof value === 'number' ? 'string' : 'number'
+      const schema = expected === 'string' ? struct.string() : struct.number()
+      const [err] = parse(schema, value)
+      expect(err).toBeInstanceOf(StructError)
+      const issue = err?.issues[0]
+      expect(issue?.message).toBe(`Expected ${expected} at <root>, received ${kind}`)
+      expect(issue?.received).toBe(value)
+      expect(issue?.message).not.toContain(secret)
+      expect(issue?.message).not.toContain('secret-name')
+      expect(issue?.message).not.toContain('123456789')
+      expect(issue?.message).not.toContain('text/plain')
+      expect(err?.prettify()).toBe(`× <root>: Expected ${expected} at <root>, received ${kind}`)
+      expect(String(err)).toBe(`StructError: Expected ${expected} at <root>, received ${kind}`)
+      expect(String(err)).not.toContain(secret)
+    }
   })
 })

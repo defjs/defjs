@@ -169,12 +169,12 @@ test('equal shared primitives merge and conflicting ones fail at that path', () 
       received: 'R',
     }),
   ])
-  expect(fastError?.format()['id']).toEqual({ _errors: ['Expected compatible intersection value at id, received "R"'] })
+  expect(fastError?.format()['id']).toEqual({ _errors: ['Expected compatible intersection value at id, received string'] })
   expect(fastError?.flatten()).toEqual({
-    fieldErrors: { id: ['Expected compatible intersection value at id, received "R"'] },
+    fieldErrors: { id: ['Expected compatible intersection value at id, received string'] },
     formErrors: [],
   })
-  expect(fastError?.prettify()).toContain('× id: Expected compatible intersection value at id, received "R"')
+  expect(fastError?.prettify()).toContain('× id: Expected compatible intersection value at id, received string')
 })
 
 test('nested objects and equal-length arrays merge element-wise', () => {
@@ -204,8 +204,8 @@ test('nested objects and equal-length arrays merge element-wise', () => {
 
   const [rootError] = struct.parse(struct.intersection(struct.date(), struct.string()), '2020-01-01T00:00:00.000Z')
   expect(rootError?.issues[0]).toMatchObject({ code: 'invalid_intersection', path: [], received: '2020-01-01T00:00:00.000Z' })
-  expect(rootError?.flatten().formErrors).toEqual(['Expected compatible intersection value at <root>, received "2020-01-01T00:00:00.000Z"'])
-  expect(rootError?.format()._errors).toEqual(['Expected compatible intersection value at <root>, received "2020-01-01T00:00:00.000Z"'])
+  expect(rootError?.flatten().formErrors).toEqual(['Expected compatible intersection value at <root>, received string'])
+  expect(rootError?.format()._errors).toEqual(['Expected compatible intersection value at <root>, received string'])
 
   const [dateError, date] = struct.parse(struct.intersection(struct.date(), struct.date()), '2020-01-01T00:00:00.000Z')
   expect(dateError).toBeNull()

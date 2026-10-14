@@ -127,7 +127,8 @@ describe('outbound request builder', () => {
     }))
 
     expect(request.body).toBe('{"display_name":"Ada","birthday":"1815-12-10T00:00:00.000Z"}')
-    expect(request.headers?.get('content-type')).toBe('application/json')
+    expect(request.headers?.has('content-type')).toBe(false)
+    expect(request.bodyContentType).toBe('application/json')
   })
 
   test('encodes a tagged object nested under an anonymous parent', async () => {
@@ -501,9 +502,11 @@ describe('outbound request builder', () => {
     const bigintRequest = buildHttp('POST', '/users', undefined, () => ({ body: 10n }))
 
     expect(dateRequest.body).toBe('"1970-01-01T00:00:00.000Z"')
-    expect(dateRequest.headers?.get('content-type')).toBe('application/json')
+    expect(dateRequest.headers?.has('content-type')).toBe(false)
+    expect(dateRequest.bodyContentType).toBe('application/json')
     expect(bigintRequest.body).toBe('"10"')
-    expect(bigintRequest.headers?.get('content-type')).toBe('application/json')
+    expect(bigintRequest.headers?.has('content-type')).toBe(false)
+    expect(bigintRequest.bodyContentType).toBe('application/json')
   })
 
   test.each([
@@ -644,9 +647,11 @@ describe('outbound request builder', () => {
     const pairs = buildHttp('POST', '/users', undefined, () => ({ headers: [['x-a', '1']] }))
 
     expect(inspect.body).toBe('{"a":1}')
-    expect(inspect.headers?.get('content-type')).toBe('application/json')
+    expect(inspect.headers?.has('content-type')).toBe(false)
+    expect(inspect.bodyContentType).toBe('application/json')
     expect(tagged.body).toBe('{"a":1}')
-    expect(tagged.headers?.get('content-type')).toBe('application/json')
+    expect(tagged.headers?.has('content-type')).toBe(false)
+    expect(tagged.bodyContentType).toBe('application/json')
     expect(pairs.headers?.get('x-a')).toBe('1')
   })
 
@@ -665,13 +670,17 @@ describe('outbound request builder', () => {
     const omitted = buildHttp('POST', '/users', undefined, () => ({ body: { a: undefined, b: 1 } }))
 
     expect(withJson.body).toBe('{"value":7}')
-    expect(withJson.headers?.get('content-type')).toBe('application/json')
+    expect(withJson.headers?.has('content-type')).toBe(false)
+    expect(withJson.bodyContentType).toBe('application/json')
     expect(withUrl.body).toBe('{"link":"https://a.test/x"}')
-    expect(withUrl.headers?.get('content-type')).toBe('application/json')
+    expect(withUrl.headers?.has('content-type')).toBe(false)
+    expect(withUrl.bodyContentType).toBe('application/json')
     expect(nullProto.body).toBe('{"a":1}')
-    expect(nullProto.headers?.get('content-type')).toBe('application/json')
+    expect(nullProto.headers?.has('content-type')).toBe(false)
+    expect(nullProto.bodyContentType).toBe('application/json')
     expect(omitted.body).toBe('{"b":1}')
-    expect(omitted.headers?.get('content-type')).toBe('application/json')
+    expect(omitted.headers?.has('content-type')).toBe(false)
+    expect(omitted.bodyContentType).toBe('application/json')
   })
 
   test('treats an undefined builder result as an empty request', () => {
@@ -703,9 +712,11 @@ describe('outbound request builder', () => {
     expect(root.body).toBeInstanceOf(URLSearchParams)
     expect((root.body as URLSearchParams).get('query')).toBe('ada')
     expect((root.body as URLSearchParams).getAll('tags')).toEqual(['a', 'b'])
-    expect(root.headers?.get('content-type')).toBe('application/x-www-form-urlencoded;charset=UTF-8')
+    expect(root.headers?.has('content-type')).toBe(false)
+    expect(root.bodyContentType).toBe('application/x-www-form-urlencoded;charset=UTF-8')
     expect(nested.body).toBe('{"meta":{"query":"ada","tags":["a","b"]}}')
-    expect(nested.headers?.get('content-type')).toBe('application/json')
+    expect(nested.headers?.has('content-type')).toBe(false)
+    expect(nested.bodyContentType).toBe('application/json')
   })
 
   test('encodes a formData codec object only at the body root', async () => {
@@ -729,7 +740,8 @@ describe('outbound request builder', () => {
     expect((appended as File).name).toBe(file.name)
     expect(root.headers?.get('content-type')).toBeNull()
     expect(String(nested.body)).toContain('"t":"Hi"')
-    expect(nested.headers?.get('content-type')).toBe('application/json')
+    expect(nested.headers?.has('content-type')).toBe(false)
+    expect(nested.bodyContentType).toBe('application/json')
   })
 
   test('encodes form scalars, arrays, blobs, and omitted undefined fields', async () => {
@@ -798,13 +810,17 @@ describe('outbound request builder', () => {
     expect(formRequest.body).toBe(form)
     expect(formRequest.headers?.get('content-type')).toBeNull()
     expect(paramsRequest.body).toBe(params)
-    expect(paramsRequest.headers?.get('content-type')).toBe('application/x-www-form-urlencoded;charset=UTF-8')
+    expect(paramsRequest.headers?.has('content-type')).toBe(false)
+    expect(paramsRequest.bodyContentType).toBe('application/x-www-form-urlencoded;charset=UTF-8')
     expect(blobRequest.body).toBe(blob)
-    expect(blobRequest.headers?.get('content-type')).toBe(blob.type)
+    expect(blobRequest.headers?.has('content-type')).toBe(false)
+    expect(blobRequest.bodyContentType).toBe(blob.type)
     expect(fileRequest.body).toBe(file)
-    expect(fileRequest.headers?.get('content-type')).toBe(file.type)
+    expect(fileRequest.headers?.has('content-type')).toBe(false)
+    expect(fileRequest.bodyContentType).toBe(file.type)
     expect(bareRequest.body).toBe(bare)
-    expect(bareRequest.headers?.get('content-type')).toBe('application/octet-stream')
+    expect(bareRequest.headers?.has('content-type')).toBe(false)
+    expect(bareRequest.bodyContentType).toBe('application/octet-stream')
   })
 
   test('sends BufferSource values as octet-stream', () => {
@@ -819,9 +835,12 @@ describe('outbound request builder', () => {
     expect(bytesRequest.body).toBe(bytes)
     expect(bufferRequest.body).toBe(buffer)
     expect(viewRequest.body).toBe(view)
-    expect(bytesRequest.headers?.get('content-type')).toBe('application/octet-stream')
-    expect(bufferRequest.headers?.get('content-type')).toBe('application/octet-stream')
-    expect(viewRequest.headers?.get('content-type')).toBe('application/octet-stream')
+    expect(bytesRequest.headers?.has('content-type')).toBe(false)
+    expect(bytesRequest.bodyContentType).toBe('application/octet-stream')
+    expect(bufferRequest.headers?.has('content-type')).toBe(false)
+    expect(bufferRequest.bodyContentType).toBe('application/octet-stream')
+    expect(viewRequest.headers?.has('content-type')).toBe(false)
+    expect(viewRequest.bodyContentType).toBe('application/octet-stream')
   })
 
   test('sends a ReadableStream as octet-stream', () => {
@@ -833,14 +852,16 @@ describe('outbound request builder', () => {
     const request = buildHttp('POST', '/files', undefined, () => ({ body: stream }))
 
     expect(request.body).toBe(stream)
-    expect(request.headers?.get('content-type')).toBe('application/octet-stream')
+    expect(request.headers?.has('content-type')).toBe(false)
+    expect(request.bodyContentType).toBe('application/octet-stream')
   })
 
   test('sends a string as text/plain', () => {
     const request = buildHttp('POST', '/files', undefined, () => ({ body: 'hello' }))
 
     expect(request.body).toBe('hello')
-    expect(request.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
+    expect(request.headers?.has('content-type')).toBe(false)
+    expect(request.bodyContentType).toBe('text/plain;charset=UTF-8')
   })
 
   test('json-encodes objects, arrays, numbers, booleans, and null', () => {
@@ -849,7 +870,9 @@ describe('outbound request builder', () => {
     expect(buildHttp('POST', '/files', undefined, () => ({ body: 1 })).body).toBe('1')
     expect(buildHttp('POST', '/files', undefined, () => ({ body: true })).body).toBe('true')
     expect(buildHttp('POST', '/files', undefined, () => ({ body: null })).body).toBe('null')
-    expect(buildHttp('POST', '/files', undefined, () => ({ body: { ok: true } })).headers?.get('content-type')).toBe('application/json')
+    const request = buildHttp('POST', '/files', undefined, () => ({ body: { ok: true } }))
+    expect(request.headers?.has('content-type')).toBe(false)
+    expect(request.bodyContentType).toBe('application/json')
   })
 
   test('lets a header content-type override the json default', () => {

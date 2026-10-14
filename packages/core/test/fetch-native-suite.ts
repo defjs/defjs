@@ -74,9 +74,9 @@ let current: { calls: FetchCall[]; receivers: unknown[]; origin: string; platfor
 }
 
 /**
- * The platform fetch as the library sees it. The library default handle is a bound copy of whatever `fetch` is global when
- * the library loads, so this one function is installed before the first import and each test points it at its own platform
- * behavior. Traffic outside the test's origin (the test runner's own) goes to the real fetch untouched.
+ * The platform fetch as the library sees it. Installing this before import keeps the platform fast path available while
+ * the request-time default handle still resolves the current global. Each test points it at its own platform behavior.
+ * Traffic outside the test's origin (the test runner's own) goes to the real fetch untouched.
  */
 const recorder: FetchHandle = function (this: unknown, ...args) {
   const [input] = args
@@ -265,6 +265,7 @@ export function defineNativeFetchSuite(): void {
       for (const overrides of [
         { endpoint: '/plain' },
         { endpoint: '/a b/ü' },
+        { endpoint: '/a%20b/ü' },
         { endpoint: 'relative' },
         { endpoint: '/deep//up/../path' },
         { endpoint: '/encoded/%E2%9C%93' },

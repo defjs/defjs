@@ -3,6 +3,7 @@ import { parseEndpointInput } from '../internal/endpoint_input'
 import type { OutboundBuilder } from '../internal/outbound_request'
 import { struct } from '../struct'
 import { createHttpRequest } from './request'
+import { createFetchRequestInit } from './transport/fetch'
 
 async function formBlob(value: unknown): Promise<{ text: string; type: string }> {
   expect(value).toBeInstanceOf(Blob)
@@ -67,7 +68,8 @@ describe('http request helpers', () => {
     expect(request.queryParams?.getAll('tags')).toEqual(['a', 'b'])
     expect(request.queryString).toBe('custom=include=true&tags=a&tags=b')
     expect(request.headers?.get('x-token')).toBe('secret')
-    expect(request.headers?.get('content-type')).toBe('application/json')
+    expect(request.headers?.has('content-type')).toBe(false)
+    expect(request.bodyContentType).toBe('application/json')
     expect(request.responseType).toBe('json')
     expect(request.withCredentials).toBe(true)
     expect(request.body).toBe('{"nickname":"Miao"}')
@@ -124,7 +126,8 @@ describe('http request helpers', () => {
     expect(request.endpoint).toBe('/orgs/org_1/users')
     expect(request.queryString).toBe('')
     expect(request.body).toBe('{"profile":{"display_name":"Miao","internalNote":"local"}}')
-    expect(request.headers?.get('content-type')).toBe('application/json')
+    expect(request.headers?.has('content-type')).toBe(false)
+    expect(request.bodyContentType).toBe('application/json')
   })
 
   test('should encode path query and json body aliases independently', async () => {
@@ -163,7 +166,8 @@ describe('http request helpers', () => {
     const textRequest = createHttpRequest('POST', '/text', undefined, (() => ({ body: 'hello' })) as OutboundBuilder, options)
 
     expect(textRequest.body).toBe('hello')
-    expect(textRequest.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
+    expect(textRequest.headers?.has('content-type')).toBe(false)
+    expect(textRequest.bodyContentType).toBe('text/plain;charset=UTF-8')
 
     const xmlRequest = createHttpRequest(
       'POST',
@@ -187,7 +191,8 @@ describe('http request helpers', () => {
 
     expect(encodedRequest.body).toBeInstanceOf(URLSearchParams)
     expect((encodedRequest.body as URLSearchParams).toString()).toBe('ids=1&ids=2')
-    expect(encodedRequest.headers?.get('content-type')).toBe('application/x-www-form-urlencoded;charset=UTF-8')
+    expect(encodedRequest.headers?.has('content-type')).toBe(false)
+    expect(encodedRequest.bodyContentType).toBe('application/x-www-form-urlencoded;charset=UTF-8')
 
     const rawRequest = createHttpRequest(
       'POST',
@@ -198,7 +203,8 @@ describe('http request helpers', () => {
     )
 
     expect(rawRequest.body).toBeInstanceOf(ArrayBuffer)
-    expect(rawRequest.headers?.get('content-type')).toBe('application/octet-stream')
+    expect(rawRequest.headers?.has('content-type')).toBe(false)
+    expect(rawRequest.bodyContentType).toBe('application/octet-stream')
   })
 
   test('should let a declared content-type win and classify each body once', async () => {
@@ -221,10 +227,13 @@ describe('http request helpers', () => {
 
     expect(jsonRequest.body).toBe('{"ok":true}')
     expect(jsonRequest.headers?.get('content-type')).toBe('text/plain')
-    expect(textRequest.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
-    expect(urlencodedRequest.headers?.get('content-type')).toBe('application/x-www-form-urlencoded;charset=UTF-8')
+    expect(textRequest.headers?.has('content-type')).toBe(false)
+    expect(textRequest.bodyContentType).toBe('text/plain;charset=UTF-8')
+    expect(urlencodedRequest.headers?.has('content-type')).toBe(false)
+    expect(urlencodedRequest.bodyContentType).toBe('application/x-www-form-urlencoded;charset=UTF-8')
     expect(nullBodyRequest.body).toBe('null')
-    expect(nullBodyRequest.headers?.get('content-type')).toBe('application/json')
+    expect(nullBodyRequest.headers?.has('content-type')).toBe(false)
+    expect(nullBodyRequest.bodyContentType).toBe('application/json')
     expect(noBodyRequest.body).toBeUndefined()
     expect(noBodyRequest.headers?.has('content-type')).toBe(false)
   })
@@ -236,11 +245,42 @@ describe('http request helpers', () => {
     const nullRequest = createHttpRequest('POST', '/json-null', undefined, (() => ({ body: null })) as OutboundBuilder, options)
 
     expect(stringRequest.body).toBe('hello')
-    expect(stringRequest.headers?.get('content-type')).toBe('text/plain;charset=UTF-8')
+    expect(stringRequest.headers?.has('content-type')).toBe(false)
+    expect(stringRequest.bodyContentType).toBe('text/plain;charset=UTF-8')
     expect(numberRequest.body).toBe('1')
     expect(booleanRequest.body).toBe('true')
     expect(nullRequest.body).toBe('null')
-    expect(numberRequest.headers?.get('content-type')).toBe('application/json')
+    expect(numberRequest.headers?.has('content-type')).toBe(false)
+    expect(numberRequest.bodyContentType).toBe('application/json')
+  })
+
+  test('should carry the inferred type through a request copy', () => {
+    const request = createHttpRequest('POST', '/', undefined, () => ({ body: { before: true } }), options)
+    const copied = { ...request, headers: new Headers(request.headers) }
+    expect(copied.bodyContentType).toBe('application/json')
+    expect(new Headers(createFetchRequestInit(copied).headers).get('content-type')).toBe('application/json')
+  })
+
+  test.each([
+    { type: 'application/custom', header: undefined, sent: 'text/plain;charset=UTF-8' },
+    { type: null, header: undefined, sent: 'text/plain;charset=UTF-8' },
+    { type: undefined, header: 'application/json', sent: 'application/json' },
+  ])('should detect a replaced body unless a header declares it ($type, $header)', ({ type, header, sent }) => {
+    const request = createHttpRequest('POST', '/', undefined, () => ({ body: { before: true } }), options)
+    const replaced = {
+      ...request,
+      body: 'changed',
+      bodyContentType: type,
+      headers: new Headers(header ? { 'content-type': header } : undefined),
+    }
+    expect(new Headers(createFetchRequestInit(replaced).headers).get('content-type')).toBe(sent)
+  })
+
+  test('should retain inferred media type when an interceptor removes the optional headers', () => {
+    const request = createHttpRequest('POST', '/', undefined, () => ({ body: { before: true } }), options)
+    request.headers = undefined
+    expect(request.bodyContentType).toBe('application/json')
+    expect(new Headers(createFetchRequestInit(request).headers).get('content-type')).toBe('application/json')
   })
 
   test('should build form data bodies and reject unsupported nested values', async () => {

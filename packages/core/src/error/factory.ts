@@ -2,7 +2,7 @@ import type { DecodedResponse, HttpMeta } from '../internal/http_response'
 import { getHttpErrorMessage } from '../internal/http_response'
 import { describeCause, ERR_ABORTED, ERR_TIMEOUT, isAbortCause, isTimeoutCause } from './cause'
 
-export { ERR_ABORTED, ERR_TIMEOUT } from './cause'
+export { ERR_ABORTED, ERR_TIMEOUT, isAbortCause, isTimeoutCause } from './cause'
 import type { DecodeFault, DecodeFaultCode, HttpStatusFaultOf, PreflightFault, PreflightFaultCode } from './types'
 
 const FAULT_NAME = 'DefjsFault'
@@ -50,6 +50,8 @@ export function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFa
  * Build the fault for a response that arrived but could not be read as declared.
  *
  * Carries metadata only: a body is a decoded value, and decoding is what failed.
+ * A `SyntaxError` is reported as `Response body could not be decoded`. The original error stays on `cause`,
+ * so `String(fault)` does not include a body fragment.
  *
  * @param code - Which read step failed.
  * @param cause - Underlying parser or struct failure.
@@ -57,7 +59,11 @@ export function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFa
  * @returns A decode fault with no body.
  */
 export function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault {
-  const fault = createFault<DecodeFault>(describeCause(cause), cause)
+  const message =
+    code === 'RES_DECODE_FAILED' && cause instanceof Error && cause.name === 'SyntaxError'
+      ? 'Response body could not be decoded'
+      : describeCause(cause)
+  const fault = createFault<DecodeFault>(message, cause)
   fault.code = code
   fault.response = response
   fault.status = response.status

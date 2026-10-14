@@ -6,6 +6,7 @@ import { createHttpInterceptor } from '../interceptor'
 import type { HttpResponse } from '../internal/http_response'
 import { makeResponse } from '../internal/http_response'
 import { StructError, struct } from '../struct'
+import { createPrimitiveStruct } from '../struct/runtime'
 import { defineRequest } from './index'
 import type { HttpExecuteOptions } from './http'
 
@@ -14,6 +15,35 @@ describe('request http runtime errors', () => {
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject('testServerHost')))
+  })
+
+  test('should report a SyntaxError from a text decode hook without claiming invalid JSON', async () => {
+    const cause = new SyntaxError('private text decode failure')
+    const text = createPrimitiveStruct<string>({
+      decode: () => {
+        throw cause
+      },
+      expected: 'string',
+      is: (value): value is string => typeof value === 'string',
+      kind: 'string',
+    })
+    const client = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(
+        createHttpInterceptor(async () =>
+          makeResponse({ body: 'plain text', headers: new Headers({ 'content-type': 'text/plain' }), status: 200 }),
+        ),
+      ),
+    )
+    const useRequest = defineRequest({ method: 'GET', output: text, path: '/text' })
+
+    const [error, result] = await client.execute(useRequest())
+
+    expect(result).toBeUndefined()
+    expect(error?.code).toBe('RES_DECODE_FAILED')
+    expect(error?.cause).toBe(cause)
+    expect(error?.message).toBe('Response body could not be decoded')
+    expect(String(error)).not.toContain('private text')
   })
 
   test('should resolve non-2xx responses as http errors with typed data', async () => {
@@ -73,8 +103,11 @@ describe('request http runtime errors', () => {
       throw new Error('Expected the original StructError cause')
     }
     expect(error.cause.format()._errors).toEqual([])
-    expect(error.cause.flatten().fieldErrors['id']).toEqual(['Expected number at id, received "oops"'])
-    expect(error.cause.prettify()).toBe('× id: Expected number at id, received "oops"')
+    expect(error.cause.flatten().fieldErrors['id']).toEqual(['Expected number at id, received string'])
+    expect(error.cause.prettify()).toBe('× id: Expected number at id, received string')
+    expect(error.cause.issues[0]?.received).toBe('oops')
+    expect(String(error)).toBe('DefjsFault: Expected number at id, received string')
+    expect(String(error)).not.toContain('oops')
   })
 
   test('should stop before build and transport when a required request section is missing', async () => {

@@ -235,4 +235,33 @@ describe('web socket single struct messages', () => {
     native.triggerClose({ code: 1000, reason: 'done', wasClean: true })
     await session.closed
   })
+
+  test('send rejects non-JSON fields with advice that applies to WebSocket messages', async () => {
+    const { Socket, latest } = createControllableSocketClass()
+    const endpoint = defineWebSocket({
+      incoming: struct.string(),
+      maxIncomingQueueSize: 1,
+      outgoing: struct.object({ n: struct.number() }),
+      path: '/socket',
+    })
+    const client = createClient(withEndpoint('https://example.test'), withWebSocketHandle(Socket as unknown as typeof WebSocket))
+    const [error, session] = await openControllableSocket(client.execute(endpoint()), latest)
+    const native = latest()
+
+    expect(error).toBeNull()
+    if (!session || !native) {
+      throw new Error('Expected socket session')
+    }
+
+    try {
+      expect(() => session.send({ n: Infinity })).toThrow(
+        new TypeError('Outgoing WebSocket message field "n" is not JSON data: Infinity. Send JSON data.'),
+      )
+      expect(native.sent).toEqual([])
+    } finally {
+      session.close(1000, 'done')
+      native.triggerClose({ code: 1000, reason: 'done', wasClean: true })
+      await session.closed
+    }
+  })
 })

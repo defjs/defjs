@@ -1,4 +1,4 @@
-import { hasErrorMap, issue } from './errors'
+import { failure, hasErrorMap, issue, parkedFailure, restoreFailure } from './errors'
 import { resolveStructFields, type ResolvedStructField } from './fields'
 import { defineStructTag, guideMembers, guideTag, readOwnGuide, tagOwnNode, type Guide } from './guide'
 import { selectUnionOptions } from './match'
@@ -22,18 +22,7 @@ import type {
   TupleDefinition,
   UnionDefinition,
 } from './types'
-import {
-  expectedType,
-  failure,
-  hasOwnKey,
-  isIntersectionIdentity,
-  isPlainObject,
-  matchesEnum,
-  mergeIntersectionValues,
-  nullObject,
-  parkedFailure,
-  restoreFailure,
-} from './utils'
+import { expectedType, hasOwnKey, isIntersectionIdentity, isPlainObject, matchesEnum, mergeIntersectionValues, nullObject } from './utils'
 
 // Every parser below returns the parsed value itself, or FAILED after `failure()` parked the issue. A value that parses
 // costs no result object, and FAILED cannot be mistaken for one: it is private, so any other symbol is just a value.
@@ -169,8 +158,9 @@ function parsePrimitiveValue(
     return reportIssues ? failure(issue([...path], 'invalid_type', definition.expected, input)) : FAILED
   }
 
-  // The hook reports through this parser's own `failure`. A hook built by another copy of the package would otherwise
-  // hand back a FAILED this copy does not know and park its issue where this copy never looks.
+  // The hook reports through this parser's own `failure`, which also applies this parse's error map. A hook built by
+  // another copy of the package would otherwise hand back a FAILED this copy does not know and park its issue where
+  // this copy never looks.
   return definition.decode ? definition.decode(input, [...path], failure) : input
 }
 

@@ -45,7 +45,7 @@ export interface StructIssue {
   code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
   /** Human-readable description of the expected type or value. */
   expected: string
-  /** Final message after optional `ErrorMap` rewriting. */
+  /** Final message after optional `ErrorMap` rewriting. The default names the received kind, not the value. */
   message: string
   /** Path from the parse root to the failing location. */
   path: Path
@@ -365,14 +365,19 @@ export type BaseDefinition = {
 
 export type PrimitiveKind = 'arrayBuffer' | 'bigint' | 'blob' | 'boolean' | 'date' | 'file' | 'null' | 'number' | 'string'
 
-/** What a decode hook returns for a value it rejects; the parser that calls the hook hands over its own. */
+/**
+ * What a decode hook returns for a value it rejects.
+ *
+ * The parser passes its own `failure`. That function parks the issue and applies the error map of the parse in
+ * progress, including when the hook was built by another copy of this package.
+ */
 export type DecodeFailure = (issue: StructIssue) => typeof FAILED
 
 export type PrimitiveDefinition<K extends PrimitiveKind, TInput, TOutput = TInput> = BaseDefinition & {
   /**
    * Returns the decoded value, or what `fail` returns for a value it rejects. `path` is a copy the hook may keep or change.
    * `fail` comes from the parser, not from the module that defined the hook, so a struct built by another copy of this
-   * package reports its failures to the copy that is parsing.
+   * package reports its failures to the copy that is parsing. That same `fail` applies the parsing copy's error map.
    */
   decode?: (value: TInput, path: Path, fail: DecodeFailure) => TOutput | typeof FAILED
   encode?: (value: TOutput) => unknown
