@@ -24,6 +24,6 @@ type WebSocketHandle = Omit<
 
 即係 DOM `WebSocket` 去掉 event-handler 屬性、`binaryType`、`dispatchEvent` 同 state 常數。所以自訂實作需要有 `url`、`protocol`、`extensions`、`bufferedAmount`、`send`、`close`、`addEventListener`、`removeEventListener`，以及數值型嘅 `readyState`。
 
-當 `binaryType` 屬性存在時，transport 會將佢設為 `'arraybuffer'`。呢個係 [`WebSocketHandleConstructor`](/zh-Hant-HK/api/core/websockethandleconstructor-type) 所產生嘅 instance type。
+當 `binaryType` 屬性存在時，transport 會將佢設為 `'arraybuffer'`；冇呢個屬性就會忽略。如果 setter throw，transport 會先盡力請求關閉已建立嘅 handle，再以 `NET_UNREACHABLE` 令該次嘗試失敗；socket 唔會被排除喺清理範圍之外。呢個屬性係一項優化，decoder 亦接受 Blob frames。呢個係 [`WebSocketHandleConstructor`](/zh-Hant-HK/api/core/websockethandleconstructor-type) 所產生嘅 instance type。
 
 [Client](/zh-Hant-HK/api/client)

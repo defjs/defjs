@@ -35,6 +35,8 @@ Como el conjunto es cerrado, un `switch` sobre `code` es exhaustivo:
 
 El conjunto es cerrado a propósito: eso es lo que mantiene exhaustivo un `switch`. Las extensiones reportan su propio detalle por `cause`, no con un código nuevo.
 
+Un `endpoint` de cliente absoluto y válido es obligatorio en HTTP, SSE y WebSocket. Tras resolver la URL, el path debe permanecer dentro del origen y del directorio del endpoint base. Se rechazan las URLs absolutas, los paths relativos al protocolo, los caracteres de control C0 (incluidos tab, CR y LF), las barras invertidas, `?`, `#` y los escapes de directorio. Las formas similares a un esquema y las relativas al protocolo se rechazan incluso con espacios iniciales; se permite un espacio ordinario en el interior y se envía como `%20`. Los endpoints ausentes, relativos o no válidos y los paths ilegales producen `REQ_BUILD_FAILED` durante la construcción de la solicitud, antes de que corran los interceptores; un interceptor que cortocircuita no puede saltarse esta comprobación. Antes del transporte, el `req.endpoint` final de un interceptor se comprueba contra su `req.baseEndpoint` final con las mismas reglas; cambiar explícitamente a otra base absoluta válida está permitido. Estos faults de URL deterministas no son reintentables.
+
 ### Campos por forma
 
 | Código        | `status` | `response`                                                    | `data`                                     |
@@ -67,12 +69,12 @@ Para SSE y WebSocket el tercer hueco es una instantánea del arranque, que puede
 | No-2xx, `error` omitido                               | `HTTP_STATUS` con `data: undefined`                           |
 | El media type no es el que la representación necesita | `RES_MEDIA_TYPE_INVALID`, avisado **antes** de leer el cuerpo |
 | Los bytes no son esa representación                   | `RES_DECODE_FAILED`                                           |
-| El valor no es ese struct                             | `RES_STRUCT_MISMATCH`                                         |
+| El valor no es ese struct                             | `RES_STRUCT_MISMATCH` (solo HTTP)                             |
 | Un cuerpo ilegible en el lado que **no** declaraste   | Ignorado por completo — mira abajo                            |
 
 Esa última fila es la que vale la pena recordar. Si declaraste `output` pero no `error`, un 500 cuyo cuerpo es JSON malformado se reporta como `HTTP_STATUS` con `status: 500`. Dijiste que no te importaban los cuerpos de error, y eso incluye no importarte que uno no se pudiera leer.
 
-El Struct se aplica una sola vez, después de la cadena de interceptores. Una respuesta que un interceptor construyó con `makeResponse(...)` pasa por la misma comprobación de media type, conversión de representación y Struct que una del cable. El transporte Fetch integrado ya lee y parsea como JSON un cuerpo declarado antes de devolver la respuesta a la cadena; un fallo ahí se reporta como el mismo fault `RES_*` o `NET_BODY_INCOMPLETE`.
+En HTTP, el Struct se aplica una sola vez, después de la cadena de interceptores. Una respuesta que un interceptor construyó con `makeResponse(...)` pasa por la misma comprobación de media type, conversión de representación y Struct que una del cable. El transporte Fetch integrado lee un cuerpo declarado como JSON, texto, `Blob` o bytes antes de devolverlo a la cadena. Solo las representaciones JSON exigen un media type JSON y `JSON.parse`; el texto, los blobs y los bytes que no son JSON son válidos para su representación declarada. Los fallos de lectura se aplican a cualquier representación; los fallos de lectura o de parseo ahí aparecen como el mismo fault `RES_*` o `NET_BODY_INCOMPLETE`.
 
 `HttpResponse.ok` solo significa `200 <= status < 300`. Un fallo de transporte es un fault, nunca una respuesta: no hay ninguna respuesta con estado 0 que haga sus veces.
 
@@ -98,13 +100,13 @@ Cuando la API pone el estado **dentro** del cuerpo, discrimina por eso en lugar 
   examples/errors/narrow-by-status.ts#example
 </include>
 
-Esa última forma es preferible donde la API la soporte. `fault.status` es el número de la capa HTTP, que un proxy, un gateway o un CDN pueden reescribir; `data.status` se decodificó del cuerpo que tu struct `error` afirmó, así que llegar a él es prueba de que el backend lo produjo.
+Esa última forma es preferible donde la API la soporte. `fault.status` es el número de la capa HTTP, que un proxy, un gateway o un CDN pueden reescribir; `data.status` pasó la validación del struct `error` que declaraste. Eso demuestra la forma del cuerpo, no su procedencia en el backend: un proxy, un gateway o un CDN también pueden devolver un cuerpo que coincida.
 
 Una unión no discriminada que no se estrecha es una propiedad de la declaración, no de la librería: te entrega el tipo que declaraste. Añade un discriminante al struct si quieres uno.
 
 ## Arranque frente a después de abrir
 
-SSE valida el estado, `text/event-stream` y la presencia de un cuerpo antes de resolver el handle. No-2xx → `HTTP_STATUS`. Media type incorrecto → `RES_MEDIA_TYPE_INVALID`. Cuerpo ausente → `RES_DECODE_FAILED`. La instantánea de apertura aún puede caer en el tercer hueco de la tupla.
+SSE valida el estado, `text/event-stream` y la presencia de un cuerpo antes de resolver el handle. No-2xx → `HTTP_STATUS` cuando se omite `error` o su cuerpo decodifica. Un cuerpo de handshake declarado que no se puede leer o parsear, o que falla su Struct, produce `RES_DECODE_FAILED`; un fallo de Struct lleva `StructError` como `cause`. Media type incorrecto → `RES_MEDIA_TYPE_INVALID`. Un handshake correcto sin cuerpo → `RES_DECODE_FAILED`. La instantánea de apertura aún puede caer en el tercer hueco de la tupla.
 
 El arranque de WebSocket cubre el handshake más la primera apertura física. Un fallo del constructor, un cierre antes de abrir, un timeout o una cancelación producen todos una tupla de arranque. Puede existir una instantánea de conexión incluso si el socket nunca llegó a `open`.
 
@@ -126,6 +128,8 @@ Los faults son instancias de `Error` nativo, así que no hace falta ningún adap
 
 Estrecha `fault.cause instanceof StructError` antes de llamar a `format()`, `flatten()` o `prettify()`. Esos helpers viven en la cause del Struct; no se copian al fault. No hagas que el flujo de control parsee `message` ni `String(fault)`: el contrato es `code` y un `status` revisado.
 
+Los mensajes por defecto de Struct nombran el kind recibido, nunca su valor: `Expected number at email, received string`. El mismo mensaje aparece en `prettify()` y en `String(fault)`. Para un `RES_DECODE_FAILED` causado por un `SyntaxError` de JSON, el mensaje del fault es `Response body could not be decoded`; el error original del parser permanece en `cause`. Los valores crudos de `StructIssue.received` y las causas del parser siguen siendo sensibles, y un mensaje personalizado de `errorMap` se usa tal cual, así que revisa el texto personalizado antes de registrarlo.
+
 ## Referencia
 
 | Rama                       | Comprobación de flujo              | Campos estables útiles                   | Normalmente ausente / sensible               |
@@ -137,13 +141,13 @@ Estrecha `fault.cause instanceof StructError` antes de llamar a `format()`, `fla
 | Tu propio código lanzó     | `fault.code.startsWith('EXT_')`    | `code`, `cause`                          | Lo que la extensión adjuntara                |
 | Runtime de stream/sesión   | `stream.closed` / `session.closed` | `kind` y `code` terminales               | Payloads de eventos, frames, causes          |
 
-Trata `cause`, `data`, los headers y cuerpos de respuesta, las URLs, los issues de Struct, los valores de entrada y los stacks como sensibles. Un resumen conservador:
+Trata `cause`, `data`, los headers y cuerpos de respuesta, las URLs, `StructIssue.received`, los valores de entrada, los mensajes personalizados y los stacks como sensibles. Los paths de los issues son estructurales y conservan las claves de los registros: `struct.record(...)` puede producir `Expected number at alice@example.com, received string`, así que las claves pueden seguir siendo sensibles en los mensajes por defecto, `prettify()` y `String(fault)`. Los mensajes por defecto de Struct y `prettify()` omiten los valores recibidos; registrar el issue completo o la causa del parser JSON aún puede exponerlos. Un resumen conservador:
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example
 </include>
 
-`createNetworkFault`, `createPreflightFault`, `createDecodeFault`, `createHttpStatusFault` y `createUndecodedHttpStatusFault` construyen estos valores de Error nativo. Los fallos normales de petición siguen devolviéndose en la tupla; no se lanzan solo por heredar el comportamiento de Error nativo. `ERR_ABORTED` y `ERR_TIMEOUT` son las causes compartidas que reconoce el normalizador de transporte.
+`createNetworkFault`, `createPreflightFault`, `createDecodeFault`, `createHttpStatusFault` y `createUndecodedHttpStatusFault` construyen estos valores de Error nativo. Los fallos normales de petición siguen devolviéndose en la tupla; no se lanzan solo por heredar el comportamiento de Error nativo. `ERR_ABORTED` y `ERR_TIMEOUT` son las causes compartidas que reconoce el normalizador de transporte. Llevan marcas no enumerables `Symbol.for('defjs.cause.aborted')` y `Symbol.for('defjs.cause.timeout')`, así que la clasificación de la cancelación funciona entre copias de Core sin identidad de objeto. [`isAbortCause`](/es-ES/api/core/isabortcause) y [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) exponen esas comprobaciones y las de los errores de plataforma admitidos; pasa el `fault.cause` subyacente al clasificar la causa de un fault. OpenTelemetry suprime los logs de cancelación del llamador entre copias y sigue registrando los timeouts.
 
 ## Recetas relacionadas
 

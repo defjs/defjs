@@ -12,8 +12,8 @@ function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
 - **cause** — L’annulation, le timeout ou l’échec de transport sous-jacent.
 - **response** — Métadonnées, uniquement quand le transport en avait déjà à signaler. Elles sont attachées au fault si elles sont fournies.
 - **Renvoie** un `PreflightFault` dont le code dépend de `cause` :
-  - `NET_ABORTED` pour `ERR_ABORTED` ou une `DOMException` nommée `AbortError`. Le message est `Request was aborted`.
-  - `NET_TIMEOUT` pour `ERR_TIMEOUT` ou une erreur nommée `TimeoutError`. Le message est celui de la cause, ou `Request timed out` quand il est vide.
+  - `NET_ABORTED` quand [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît une `Error` marquée abort (y compris `ERR_ABORTED` issu d’une autre copie de Core) ou une `DOMException` nommée `AbortError`. Le message est `Request was aborted`.
+  - `NET_TIMEOUT` quand [`isTimeoutCause`](/fr-FR/api/core/istimeoutcause) reconnaît une `Error` marquée timeout (y compris `ERR_TIMEOUT` issu d’une autre copie de Core) ou une `DOMException` / `Error` nommée `TimeoutError`. Le message est celui de la cause, ou `Request timed out` quand il est vide.
   - `NET_UNREACHABLE` pour tout le reste, avec le message de la cause.
 
 La cause est conservée comme `cause`.

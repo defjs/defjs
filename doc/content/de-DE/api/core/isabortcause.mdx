@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: 'Erkennt Abbruch durch den Aufrufer über Core-Kopien hinweg und Plattform-Abort-Fehler.'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+Liefert `true` für einen `Error`, der das Brand `Symbol.for('defjs.cause.aborted')` trägt, einschließlich `ERR_ABORTED` aus einer anderen Core-Kopie, oder für eine `DOMException` namens `AbortError`. Ein gewöhnlicher ungebrandeter `Error` mit diesem Namen passt nicht. Andere Werte liefern `false`.
+
+Übergib die zugrunde liegende `fault.cause`; diese Funktion packt Faults nicht aus. `createNetworkFault` nutzt diese Prüfung, um `NET_ABORTED` zu wählen. OpenTelemetry nutzt sie, um Logs für Abbruch durch den Aufrufer zu unterdrücken und Timeout-Logs zu behalten.
+
+Siehe [Errors-Guide](/de-DE/docs/errors) und [`isTimeoutCause`](/de-DE/api/core/istimeoutcause).
+
+[Fehler](/de-DE/api/errors)

@@ -118,7 +118,7 @@ function withXSRF(options?: {
 
 Ajoute un header de token XSRF aux requêtes HTTP. Valeurs par défaut : cookie `XSRF-TOKEN`, header `X-XSRF-TOKEN`. Les requêtes SSE et WebSocket ne sont pas affectées.
 
-Le transport HTTP par défaut ajoute le header quand toutes ces conditions sont réunies : la méthode n’est pas `GET`, `HEAD`, `OPTIONS` ni `TRACE` ; la requête n’a pas déjà ce header ; la requête est de même origine (hors navigateur, toute requête avec un `baseEndpoint` compte) ; et un token non vide est trouvé. Le token vient de `tokenProvider` s’il est fourni, sinon du cookie, lu uniquement dans un navigateur.
+Le transport HTTP par défaut ajoute le header quand toutes ces conditions sont réunies : la méthode n’est pas `GET`, `HEAD`, `OPTIONS` ni `TRACE` ; la requête n’a pas déjà ce header ; la requête est de même origine ; et un token non vide est trouvé. Lorsque `location` existe, y compris dans un Worker, l’origine résolue de la requête doit correspondre à `location.origin` ; en son absence, une requête avec un `baseEndpoint` compte comme de même origine. Les requêtes cross-origin n’appellent pas `tokenProvider`. Le token vient de ce provider s’il est fourni, sinon de `document.cookie`, lu uniquement quand `document` existe.
 
 ### Réglages SSE
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-La signature d’appel dont Defjs a besoin pour une implémentation de Fetch. Ce n’est pas `typeof fetch`, donc un mock n’a pas besoin des extras de l’hôte comme `preconnect`.
+La signature d’appel dont Defjs a besoin pour une implémentation de Fetch. Ce n’est pas `typeof fetch`, donc un mock n’a pas besoin des extras de l’hôte comme `preconnect`. Les handles HTTP/SSE par défaut résolvent `globalThis.fetch` à chaque appel. HTTP n’utilise `(url, init)` que pour le Fetch de plateforme non modifié ; les globaux remplacés et les handles personnalisés reçoivent un `Request`. SSE passe toujours un `Request`. Importer Core sans Fetch est valide ; une exécution par défaut signale `ENV_UNSUPPORTED` si Fetch manque encore, tandis que les handles personnalisés restent utilisables.
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 La reconnexion est opt-in pour les deux transports : sans `withSSEReconnect` / `withWebSocketReconnect`, il n’y a aucune nouvelle tentative. Une fois `reconnect` défini, ces valeurs par défaut s’appliquent :
 
-| Champ        | SSE            | WebSocket |
-| ------------ | -------------- | --------- |
-| `attempts`   | `3`            | `3`       |
-| `delayMs`    | `1000`         | `1000`    |
-| `factor`     | `1`            | `2`       |
-| `jitter`     | `0`            | `0`       |
-| `maxDelayMs` | pas de plafond | `30000`   |
+| Champ        | SSE             | WebSocket       |
+| ------------ | --------------- | --------------- |
+| `attempts`   | `3` par coupure | `3` par coupure |
+| `delayMs`    | `1000`          | `1000`          |
+| `factor`     | `1`             | `2`             |
+| `jitter`     | `0`             | `0`             |
+| `maxDelayMs` | pas de plafond  | `30000`         |
 
-Pour SSE, `delayMs` n’est que le délai de base initial : un champ `retry:` du serveur le remplace pour les tentatives suivantes. `attempts: 0` désactive les nouvelles tentatives ; omettre `attempts` ne rend pas leur nombre illimité. `jitter` doit être compris entre 0 et 1 : chaque délai est augmenté ou réduit aléatoirement d’une proportion allant jusqu’à cette valeur. Si `shouldReconnect` renvoie `false`, les nouvelles tentatives s’arrêtent. Le callback SSE reçoit aussi `lastEventId`, la méthode de la requête (`method`) et les dernières informations `open`, et peut être asynchrone. En l’absence de ce callback, SSE ne rétablit la connexion que pour les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE` ; s’il est fourni, sa valeur de retour détermine la reconnexion pour toutes les méthodes. Le callback WebSocket reçoit à la place le `code`, la `reason` et le `wasClean` de la fermeture.
+Pour les deux transports, un handshake réussi réinitialise le budget de nouvelles tentatives de la coupure, la tentative du callback et l’exposant de backoff. `attempts: 0` désactive les nouvelles tentatives ; omettre `attempts` ne donne pas un nombre illimité de nouvelles tentatives au sein d’une même coupure. `maxDelayMs` plafonne le délai final après le jitter et l’arrondi ; la limite de timer de la plateforme, `2_147_483_647` ms, s’applique aussi, y compris quand SSE n’a pas de plafond configuré. Une base nulle reste nulle ; le dépassement d’un nombre valide sature aux plafonds.
+
+Les options de reconnexion sont validées avant le transport : `attempts` doit être un entier sûr positif ou nul ; `delayMs` et un `maxDelayMs` explicite doivent être finis et positifs ou nuls ; `factor` doit être fini et strictement positif ; `jitter` doit être fini et compris entre 0 et 1. Les valeurs invalides renvoient `REQ_OPTIONS_INVALID`. Pour WebSocket, `attempts: 0` désactive immédiatement les nouvelles tentatives et ignore les champs de reconnexion inutilisés ; SSE les valide quand même. Le jitter met à l’échelle la base déjà plafonnée dans un sens ou dans l’autre, avant l’application du plafond final.
+
+Pour SSE, `delayMs` n’est que le délai de base initial : un champ `retry:` du serveur, composé uniquement de chiffres, le remplace pour les tentatives suivantes, y compris après un rétablissement. Si `shouldReconnect` renvoie `false`, les nouvelles tentatives s’arrêtent. Le callback SSE reçoit aussi `lastEventId`, la méthode de la requête (`method`) et les dernières informations `open`, et peut être asynchrone. En l’absence de ce callback, SSE ne rétablit la connexion que pour les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE` ; s’il est fourni, sa valeur de retour détermine la reconnexion pour toutes les méthodes. Le dernier identifiant d’événement est envoyé en octets UTF-8 dans `Last-Event-ID` ; un identifiant vide l’efface, et un identifiant qui contient NUL est ignoré. Le callback WebSocket reçoit à la place le `code`, la `reason` et le `wasClean` de la fermeture.
 
 `onInvalidEvent` SSE gère un événement sans struct correspondant, y compris sans `default` (`missing-struct`), ou dont les données échouent à leur struct (`validation-failed`). L’événement est toujours abandonné ; la valeur de retour du handler est ignorée, et une erreur qu’il lève ne ferme pas le flux.
 

@@ -9,6 +9,6 @@ description: '클라이언트 인터셉터 옵션이 받는, 태그가 붙은 �
 type Interceptor = HttpInterceptor | SSEInterceptor | WebSocketInterceptor
 ```
 
-`kind`(`'http'`, `'sse'`, `'web-socket'`)가 인터셉터를 어떤 명령에서 실행할지 정해요. `withInterceptors`는 어떤 조합이든 받고, 각 전송은 자기 `kind`의 인터셉터만 등록 순서대로 실행해요.
+`kind`(`'http'`, `'sse'`, `'web-socket'`)가 인터셉터를 어떤 명령에서 실행할지 정해요. `withInterceptors`는 어떤 조합이든 받고, 각 전송은 자기 kind의 인터셉터만 등록 순서대로 실행해요.
 
 [인터셉터](/ko-KR/api/interceptors)

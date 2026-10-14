@@ -5,7 +5,7 @@ description: defineEventStream、execute options，同 stream handle。
 
 # SSE
 
-Declare 一條 event stream，execute 佢，iterate events，之後 close。
+聲明一條 event stream，執行佢，逐個讀取 events，之後關閉。
 
 ## defineEventStream()
 
@@ -28,7 +28,7 @@ function executeEventStreamCommand(
 ): Promise<StreamAwaitResult>
 ```
 
-`client.execute` 嘅 low-level entry。Application code prefer 用 client。
+`client.execute` 嘅 low-level entry。Application code 優先用 client。
 
 - **Returns** `[null, stream, open]` 或者 `[error, undefined, open?]`。聲明過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。
 
@@ -96,7 +96,11 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 Key 係 SSE event 名稱；冇 `event:` 欄位嘅訊息名為 `message`。冇 key 配得上嗰陣，就用 `default` struct。`string` event struct 會保留 raw `data` text。其他 kind 都係 JSON text：先 `JSON.parse`，再過 struct。所以 bare `struct.literal` 要 JSON text，唔係冇引號嘅 token。Handshake `error` bodies 用同 HTTP 一樣嘅 kind rule：`string` 係 text，`blob` / `file` 係 blobs，`arrayBuffer` 係 bytes，其他就係 JSON。
 
-Reconnect 住喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0–1 multiplicative factor**，同 WebSocket 一樣。
+重連設定喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0–1 multiplicative factor**，同 WebSocket 一樣。
+
+成功握手之後，重試預算同退避指數會重設；兩者都適用於每次斷線。無效嘅數值選項會喺開啟 stream 之前回傳 `REQ_OPTIONS_INVALID`，而 `maxDelayMs` 會限制套用 jitter 之後嘅最終延遲。驗證規則、預設值同 UTF-8 `Last-Event-ID` 處理見 [`withSSEReconnect`](/zh-Hant-HK/api/core/withssereconnect)。
+
+Parser 遵循 WHATWG SSE 嘅行同欄位規則，每條實體 stream 只會移除開頭一個 UTF-8 BOM。Data 或 ID 值入面嘅 U+FEFF 會保留；之後以 BOM 開頭嘅欄位名會當成未知欄位而被忽略。多行 data 會用 `\n` 連接，空行會送出帶 data 嘅 event，EOF 時未完成嘅 event 會被丟棄。
 
 睇 [SSE guide](/zh-Hant-HK/docs/sse) 同 [Consume an SSE stream](/zh-Hant-HK/recipes/consume-sse)。
 

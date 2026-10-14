@@ -57,7 +57,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `FaultOf` ist `Fault`, ausgedrückt über den Typ des dekodierten Error-Bodys statt über das Struct, das ihn erzeugt hat. `HttpAwaitResult` und die Fault-Factories arbeiten mit dekodierten Werten und nutzen deshalb diese Form.
 
-Jede Variante ist ein nativer `Error` mit dem Namen `DefjsFault`, `String(fault)` liefert also ein direkt loggbares `DefjsFault: <message>`. `code` und die Varianten-Metadaten — `status`, `response`, `data` — sind enumerable Own-Properties. Die native `cause`-Chain ist non-enumerable.
+Jede Variante ist ein nativer `Error` mit dem Namen `DefjsFault`, `String(fault)` liefert also `DefjsFault: <message>`. `code` und die Varianten-Metadaten — `status`, `response`, `data` — sind enumerable Own-Properties. Die native `cause`-Chain ist non-enumerable.
+
+Default-Struct-Messages sagen `received <kind>`, nie den empfangenen Wert, zum Beispiel `Expected number at email, received string`. Ein JSON-`SyntaxError` hinter `RES_DECODE_FAILED` ergibt die Message `Response body could not be decoded`. Issue-Pfade sind strukturell und behalten Record-Keys bei: `struct.record(...)` kann `Expected number at alice@example.com, received string` erzeugen, daher können Keys in Default-Messages, `prettify()` und `String(fault)` weiterhin sensibel sein. Rohes `StructIssue.received` und Parser-Causes bleiben sensibel; eigene `errorMap`- und Extension-Messages werden wörtlich verwendet und müssen vor dem Loggen geprüft werden.
 
 <include cwd>examples/api/fault.ts#example</include>
 
@@ -143,7 +145,7 @@ declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown,
 
 `createHttpStatusFault` nimmt eine Response, die den dekodierten Body schon trägt; `createUndecodedHttpStatusFault` nimmt nur Metadaten — für einen Endpoint, der kein `error` deklariert hat.
 
-`createNetworkFault` mappt `ERR_ABORTED` und eine `DOMException` mit dem Namen `AbortError` auf `NET_ABORTED`, `ERR_TIMEOUT` und einen Error mit dem Namen `TimeoutError` auf `NET_TIMEOUT` und alles andere auf `NET_UNREACHABLE`. `createPreflightFault` nimmt den Code direkt; ohne `cause` wird der Code zur Message.
+`createNetworkFault` nutzt [`isAbortCause`](/de-DE/api/core/isabortcause) für `NET_ABORTED` und [`isTimeoutCause`](/de-DE/api/core/istimeoutcause) für `NET_TIMEOUT`: Sie erkennen gebrandete Sentinels aus jeder Core-Kopie, eine `DOMException` namens `AbortError` beziehungsweise eine `DOMException` oder einen `Error` namens `TimeoutError`. Alles andere wird auf `NET_UNREACHABLE` gemappt. `createPreflightFault` nimmt den Code direkt; ohne `cause` wird der Code zur Message.
 
 Alle Factories geben native `Error`-Instanzen mit den obigen strukturierten Feldern zurück; sie erzeugen keine Plain-Object-Errors und brauchen für `String(fault)` keinen Adapter.
 
@@ -159,5 +161,16 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 ```
 
 Gemeinsame `cause`-/Message-Werte für Abort und Timeout. Wirft ein HTTP-Interceptor einen davon, endet der Aufruf mit `NET_ABORTED` oder `NET_TIMEOUT`. SSE- und WebSocket-Interceptors melden jeden geworfenen Fehler, auch diese beiden, als `EXT_INTERCEPTOR_FAILED`.
+
+Die Sentinels tragen nicht enumerierbare Brands `Symbol.for('defjs.cause.aborted')` und `Symbol.for('defjs.cause.timeout')`. Die Klassifikation hängt nicht von der Objektidentität des Sentinels oder von früheren, davon unabhängigen Ausführungen ab.
+
+## Cause-Prüfungen
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/de-DE/api/core/isabortcause) erkennt einen mit Abort gebrandeten `Error` oder eine `DOMException` namens `AbortError`. [`isTimeoutCause`](/de-DE/api/core/istimeoutcause) erkennt einen mit Timeout gebrandeten `Error` oder eine `DOMException` / einen `Error` namens `TimeoutError`. Übergib `fault.cause`, um den zugrunde liegenden Wert zu klassifizieren; diese Funktionen packen einen Fault nicht aus. Sie funktionieren mit Sentinels aus einer anderen Core-Kopie.
 
 Siehe [Errors-Guide](/de-DE/docs/errors).

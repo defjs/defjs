@@ -28,12 +28,13 @@ type SSEReconnect = {
 }
 ```
 
-- `attempts` 係第一次嘗試之後嘅重試額度。設咗 `reconnect` 時預設係 `3`，`0` 就停用重試。唔寫 `attempts` 唔代表無限。
+- `attempts` 係每次斷線嘅重試預算。設咗 `reconnect` 時預設係 `3`，`0` 就停用重試。成功握手會重設預算、callback 嘅 `attempt` 同退避指數。省略佢唔代表同一次斷線可以無限重試。反覆成功 open 之後立刻遇到可重試嘅 stream failure，會按目前嘅 base delay 持續重連（受 jitter 同上限約束），因為每次 open 都會重設預算；用 `shouldReconnect` 停低佢哋。Normal EOF 仍然係 terminal。
 - 冇 `shouldReconnect` 嘅時候，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` 會重連。有佢嘅話，每種 method 會唔會重連都由佢嘅結果決定，包括 `POST`；context 入面嘅 `method` 用嚟區分 endpoint。回傳 `false` 就唔會因為今次失敗而繼續重試。Callback 會喺檢查 attempts 上限之前執行。
 - 用 `ReadableStream` 做 body 嘅 request 永遠唔會重連，亦唔會呼叫 `shouldReconnect`。
+- `delayMs`、`factor`、`jitter`（0 至 1）同 `maxDelayMs` 決定退避。`factor` 預設係 `1`，`jitter` 預設係 `0`。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲。冇設定上限時，平台 timer 上限 `2_147_483_647` ms 仍然適用。Base 係零就會維持零；有效數值運算溢位時，會限制喺上限。
 - `delayMs` 只係起始嘅 base delay（預設 `1000`）。Server 傳嚟嘅 `retry:` field（只限數字，單位毫秒）會取代佢，用喺之後嘅嘗試。
-- `delayMs`、`factor`、`jitter`（0 至 1）同 `maxDelayMs` 決定 backoff 嘅形狀。`factor` 預設係 `1`，`jitter` 預設係 `0`。
-- 最後一個 event id 會喺下一次嘗試時以 `Last-Event-ID` 再次發送。
+- 最後一個 event id 會喺下一次嘗試時，以 UTF-8 bytes 放喺 `Last-Event-ID` 再次發送。空 `id:` 會清除佢；包含 NUL 嘅 ID 會被忽略。
+- 重連選項會喺 interceptors 或 Fetch 執行之前驗證：`attempts` 必須係非負安全整數；`delayMs` 同明確設定嘅 `maxDelayMs` 必須係有限非負數；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會喺 execute 時回傳 `REQ_OPTIONS_INVALID`。
 
 Stream handle 請參閱 [SSE](/zh-Hant-HK/api/sse)。
 

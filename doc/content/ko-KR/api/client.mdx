@@ -118,7 +118,7 @@ function withXSRF(options?: {
 
 HTTP 요청에 XSRF 토큰 헤더를 추가해요. 기본값: 쿠키 `XSRF-TOKEN`, 헤더 `X-XSRF-TOKEN`이에요. SSE와 WebSocket 요청에는 영향이 없어요.
 
-기본 HTTP 전송은 다음이 모두 성립할 때 헤더를 추가해요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 요청이 same-origin이고 (브라우저 밖에서는 `baseEndpoint`가 있는 모든 요청이 해당해요), 비어 있지 않은 토큰을 찾았을 때예요. 토큰은 `tokenProvider`가 있으면 거기서, 없으면 쿠키에서 가져오며 쿠키는 브라우저에서만 읽어요.
+기본 HTTP 전송은 다음이 모두 성립할 때 헤더를 추가해요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 요청이 같은 origin이고, 비어 있지 않은 토큰을 찾았을 때예요. `location`이 있으면 Worker를 포함해 해석된 요청 origin이 `location.origin`과 같아야 해요. 없으면 `baseEndpoint`가 있는 요청을 같은 origin으로 봐요. 교차 출처 요청은 `tokenProvider`를 호출하지 않아요. 토큰은 provider가 있으면 거기서, 없으면 `document`가 있을 때만 읽는 `document.cookie`에서 가져와요.
 
 ### SSE 설정
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`가 아니므로 목(mock)에 `preconnect` 같은 호스트 전용 멤버가 필요 없어요.
+Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`가 아니므로 목(mock)에 `preconnect` 같은 호스트 전용 멤버가 필요 없어요. 기본 HTTP/SSE handle은 호출마다 `globalThis.fetch`를 해석해요. HTTP는 손대지 않은 플랫폼 Fetch에만 `(url, init)`을 쓰고, 교체된 전역과 사용자 지정 handle은 `Request`를 받아요. SSE는 항상 `Request`를 넘겨요. Fetch 없이 Core를 import하는 것은 유효해요. Fetch가 여전히 없으면 기본 실행은 `ENV_UNSUPPORTED`를 보고하고, 사용자 지정 handle은 그대로 쓸 수 있어요.
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 재연결은 두 전송 모두 opt-in이에요. `withSSEReconnect` / `withWebSocketReconnect`가 없으면 재시도하지 않아요. `reconnect`를 설정하면 다음 기본값이 적용돼요.
 
-| 필드         | SSE       | WebSocket |
-| ------------ | --------- | --------- |
-| `attempts`   | `3`       | `3`       |
-| `delayMs`    | `1000`    | `1000`    |
-| `factor`     | `1`       | `2`       |
-| `jitter`     | `0`       | `0`       |
-| `maxDelayMs` | 상한 없음 | `30000`   |
+| 필드         | SSE          | WebSocket    |
+| ------------ | ------------ | ------------ |
+| `attempts`   | 단절마다 `3` | 단절마다 `3` |
+| `delayMs`    | `1000`       | `1000`       |
+| `factor`     | `1`          | `2`          |
+| `jitter`     | `0`          | `0`          |
+| `maxDelayMs` | 상한 없음    | `30000`      |
 
-SSE에서 `delayMs`는 시작 기준 지연일 뿐이고, 서버의 `retry:` 필드가 있으면 이후 시도에서는 그 값으로 바뀌어요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 무제한이 아니에요. `jitter`는 0–1 범위여야 해요. 각 지연은 그 비율만큼 양쪽 어느 방향으로든 무작위로 달라져요. `shouldReconnect`가 `false`를 돌려주면 재시도를 멈춰요. SSE 콜백은 `lastEventId`, 요청 `method`, 최신 `open` 정보도 받으며 비동기 함수일 수 있어요. 이 콜백이 없으면 SSE는 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE` 요청만 재연결해요. 있으면 그 결과가 모든 메서드의 재연결 여부를 결정해요. WebSocket 콜백은 대신 close `code`, `reason`, `wasClean`을 받아요.
+두 전송 모두, 핸드셰이크가 성공하면 단절마다의 재시도 예산, 콜백 attempt, 백오프 지수가 초기화돼요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. SSE에 설정한 상한이 없어도 플랫폼 타이머 한계인 `2_147_483_647` ms가 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요.
+
+재연결 옵션은 전송 전에 검증돼요. `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`와 명시한 `maxDelayMs`는 유한하고 음이 아니어야 하며, `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. WebSocket `attempts: 0`은 재시도를 즉시 끄고 쓰이지 않는 재연결 필드를 무시해요. SSE는 그 필드도 여전히 검증해요. jitter는 상한이 걸린 기준을 양쪽으로 늘리거나 줄인 뒤 최종 상한을 적용해요.
+
+SSE에서 `delayMs`는 시작 기준 지연일 뿐이고, 숫자만 있는 서버 `retry:` 필드가 있으면 복구 이후를 포함해 이후 시도에서 그 값으로 바뀌어요. `shouldReconnect`가 `false`를 돌려주면 재시도를 멈춰요. SSE 콜백은 `lastEventId`, 요청 `method`, 최신 `open` 정보도 받으며 비동기 함수일 수 있어요. 이 콜백이 없으면 SSE는 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE` 요청만 재연결해요. 있으면 그 결과가 모든 메서드의 재연결 여부를 결정해요. 최신 이벤트 ID는 UTF-8 바이트로 `Last-Event-ID`에 보내요. 빈 ID는 이를 지우고, NUL이 들어 있는 ID는 무시해요. WebSocket 콜백은 대신 close `code`, `reason`, `wasClean`을 받아요.
 
 SSE `onInvalidEvent`는 일치하는 struct가 없는 이벤트(`default`도 없는 경우 포함, `missing-struct`)나 데이터가 struct 검증에 실패한 이벤트(`validation-failed`)를 처리해요. 이벤트는 항상 버려지고, 핸들러의 반환값은 무시되며, 핸들러가 던진 오류는 스트림을 닫지 않아요.
 

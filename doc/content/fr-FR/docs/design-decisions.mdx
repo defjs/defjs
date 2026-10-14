@@ -67,7 +67,7 @@ Les trois transports utilisent un tuple erreur en premier. Une seule « response
 
 En succès, la troisième valeur est toujours présente. Un échec HTTP est `[error, undefined, undefined]` :
 le fault porte déjà les métadonnées de réponse, et c’est ce fault qui est passé à un handler,
-loggé ou rethrow. Les échecs de démarrage SSE et WebSocket peuvent encore inclure l’instantané open ou connection
+journalisé ou relancé. Les échecs de démarrage SSE et WebSocket peuvent encore inclure l’instantané open ou connection
 quand il a été capturé.
 
 Pour SSE et WebSocket, la troisième valeur est un instantané, pas une promesse que de futurs reconnects gardent la
@@ -78,15 +78,15 @@ session renvoyés.
 
 L’inférence TypeScript décrit ce que tu attends ; elle ne peut pas vérifier une réponse serveur à l’exécution. Le parsing Struct est la seconde moitié du contrat. Defjs valide l’entrée de la commande avant la construction de la requête, vérifie la représentation, puis parse le struct du côté de `ok` qui s’applique.
 
-Le Struct est appliqué **une seule fois, après la chaîne d’intercepteurs**. Une réponse qu’un intercepteur a construite avec `makeResponse(...)` passe par la même vérification du media type, la même conversion de représentation et le même Struct qu’une réponse venue du réseau : l’origine d’une réponse ne change pas la façon dont elle est lue, donc il n’y a aucun chemin « faire confiance à l’intercepteur » à examiner. Le transport Fetch intégré lit et parse déjà en JSON un corps déclaré (après sa vérification du media type) avant de rendre la réponse à la chaîne ; les intercepteurs voient donc ce `body` déjà parsé, et un échec à ce stade remonte comme le même fault `RES_*` ou `NET_BODY_INCOMPLETE`.
+Pour HTTP, le Struct est appliqué **une seule fois, après la chaîne d’intercepteurs**. Une réponse qu’un intercepteur a construite avec `makeResponse(...)` passe par la même vérification du media type, la même conversion de représentation et le même Struct qu’une réponse venue du réseau : l’origine d’une réponse ne change pas la façon dont elle est lue, donc il n’y a aucun chemin « faire confiance à l’intercepteur » à examiner. Le transport Fetch intégré lit un corps déclaré comme JSON, texte, `Blob` ou octets avant de le rendre à la chaîne. Seules les représentations JSON exigent un media type JSON et `JSON.parse` ; le texte, les blobs et les octets non JSON sont valides pour leur représentation déclarée. Les intercepteurs voient cette représentation, pas encore la valeur décodée par le Struct. Les échecs de lecture s’appliquent à chaque représentation ; les échecs de lecture ou de parse à ce stade remontent comme le même fault `RES_*` ou `NET_BODY_INCOMPLETE`.
 
-L’ordre est : media type, puis représentation, puis Struct.
+L’ordre est : media type (pour le JSON), puis représentation, puis Struct.
 
 | Ce qui n’a pas tenu                                               | Fault                                                            |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
 | Le media type n’est pas celui qu’exige la représentation déclarée | `RES_MEDIA_TYPE_INVALID` — signalé **avant** la lecture du corps |
 | Les octets ne sont pas cette représentation                       | `RES_DECODE_FAILED`                                              |
-| La valeur n’est pas ce Struct                                     | `RES_STRUCT_MISMATCH`                                            |
+| La valeur n’est pas ce Struct                                     | `RES_STRUCT_MISMATCH` (HTTP seulement)                           |
 | Non-2xx, et `error` a décodé                                      | `HTTP_STATUS` avec `data` typé                                   |
 | Non-2xx, et `error` n’était pas déclaré                           | `HTTP_STATUS` avec `data: undefined`                             |
 
@@ -116,7 +116,7 @@ Le kind du corps se décide d’après la valeur, premier match :
 
 Les champs `undefined` sont omis. `null` sur un champ nullable est envoyé. Une string n’est pas du JSON sauf si tu la stringifies et poses `content-type`. Sérialiser toi-même (`JSON.stringify`, qs, protobuf) quitte l’encodeur de struct, donc les alias ne s’appliquent pas. Il n’y a pas de `struct.encode` public.
 
-`GET` et `HEAD` ne peuvent pas porter un corps. Les builders WebSocket ne peuvent pas renvoyer d’en-têtes ni de corps. Les sous-protocoles WebSocket statiques restent sur la définition (`protocols`), pas dans le builder. Les frames WebSocket invalides vont à l’écouteur d’erreur runtime de la session. Un struct `error` SSE type le fault de démarrage, et son corps de handshake suit la même règle de kind qu’un corps HTTP : `string` est du texte, les blobs et les fichiers sont des blobs, `arrayBuffer` est des octets, et tout le reste est du JSON.
+`GET` et `HEAD` ne peuvent pas porter un corps. Les builders WebSocket ne peuvent pas renvoyer d’en-têtes ni de corps. Les sous-protocoles WebSocket statiques restent sur la définition (`protocols`), pas dans le builder. Les frames WebSocket invalides vont à l’écouteur d’erreur runtime de la session. Un struct `error` SSE type le fault de démarrage, et son corps de handshake suit la même règle de kind qu’un corps HTTP : `string` est du texte, les blobs et les fichiers sont des blobs, `arrayBuffer` est des octets, et tout le reste est du JSON. La sélection de représentation est partagée, mais pas le mapping des faults : les échecs de lecture, de parse ou de Struct du handshake SSE sont `RES_DECODE_FAILED`, avec `StructError` comme `cause` pour un échec de Struct ; HTTP signale les échecs de Struct comme `RES_STRUCT_MISMATCH`.
 
 ## Placement des observateurs et des politiques
 

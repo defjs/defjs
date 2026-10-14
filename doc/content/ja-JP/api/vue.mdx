@@ -15,7 +15,7 @@ description: Vue プラグイン、injection key、injectClient です。
 function createClientPlugin(client: Client): Plugin
 ```
 
-- **client** — `createClient` のインスタンスです。
+- **client** — `createClient` で作ったクライアントインスタンスです。
 - **戻り値** `app.use(...)` 用の Vue プラグインです。インストールすると `app.provide(HTTP_CLIENT, client)` が呼ばれます。
 
 <include cwd>examples/api/create-client-plugin.ts#example</include>

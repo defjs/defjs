@@ -12,6 +12,6 @@ type EventStreamCloseInfo =
   | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamHandle.closed` 的值。`eof` 表示回應正常結束。`aborted` 表示串流被 `close()` 或 dispose 關閉，或它的 signal 被中止；`reason` 與 `cause` 帶著傳給 `close` 的值。`error` 帶著 fault 的 `code`（見 `EventStreamFaultCode`），失敗原因放在 `cause`。
+`EventStreamHandle.closed` 的值。`eof` 表示回應正常結束。`aborted` 表示串流被 `close()` 或 dispose 關閉，或其呼叫方 signal 以非逾時原因中止；`reason` 與 `cause` 帶著傳給 `close` 的值。若呼叫方 signal 在 open 之後以 `TimeoutError` 或 `ERR_TIMEOUT` 中止，iterator 會丟出 `ERR_TIMEOUT`，且 `closed` 為 `{ kind: 'error', code: 'NET_TIMEOUT', ... }`。明確的 `close(timeoutError)` 仍回報 `aborted`。`error` 帶著 fault 的 `code`（見 `EventStreamFaultCode`），失敗原因放在 `cause`。
 
 [SSE](/zh-Hant-TW/api/sse)

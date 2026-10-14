@@ -39,7 +39,9 @@ Traite le `HttpRequest` entrant comme appartenant à la chaîne. Clone `Headers`
 
 Même pattern pour SSE. Le WebSocket navigateur ne peut pas ajouter d’en-têtes de handshake arbitraires — changer `request.headers` n’authentifiera pas un socket navigateur. Utilise plutôt protocole, politique URL/query, ou un handshake supporté par le serveur.
 
-Quand tu remplaces un body HTTP, remplace `body` sur la requête copiée. Fetch ignore les métadonnées content-type périmées quand la valeur du body a changé. Ne réutilise pas un body `ReadableStream` consommé.
+HTTP n’écrit jamais de Content-Type inféré dans `request.headers` ; les intercepteurs ne voient que les headers déclarés. `request.bodyContentType` conserve le type inféré du corps du builder dans un champ ordinaire, qui est donc préservé dans les copies `{ ...req }`. Un header `content-type` explicite a toujours priorité sur ce champ et la détection, qu’il soit déclaré par le builder, les valeurs par défaut du client, un intercepteur ou une requête directe à `fetchHandler`. Le code qui signe les requêtes doit lire `headers.get('content-type') ?? request.bodyContentType`.
+
+Quand tu remplaces un body HTTP, remplace `body` sur la requête copiée et déclare son type avec un header `content-type`. `bodyContentType` ne s’applique que tant que `body` est la valeur du builder ; les corps de remplacement sont détectés à nouveau, donc une string de remplacement est du texte sauf si le header déclare un autre type. Poser `body: undefined` ne laisse aucun Content-Type inféré par la bibliothèque. Pour le corps du builder inchangé, `bodyContentType: null` supprime l’inférence de la bibliothèque en l’absence de header explicite, bien que le Fetch natif puisse encore ajouter son propre type pour une string. FormData utilise toujours sa boundary multipart réelle. Ne réutilise pas un body `ReadableStream` consommé.
 
 ## Short-circuit une requête
 
@@ -94,13 +96,15 @@ Les factories renvoient des valeurs de transport taguées :
 
 `HttpRequest` peut inclure `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` et `operation` statique. C’est une valeur d’intégration transport — pas l’entrée parsée de l’appelant. `queryParams` est `new URLSearchParams(queryString)` après sérialisation. Un serializer de query configuré n’est pas appelé quand le builder n’a produit aucune query, et un `URLSearchParams` du builder est utilisé tel quel. Garde la validation de commande, la validation de sortie et le mapping d’erreurs de domaine dans leurs couches.
 
+La validation d’URL commence pendant la construction de la requête : un endpoint de base absent, relatif ou invalide, ou un chemin illégal, échoue avec `REQ_BUILD_FAILED` avant tout intercepteur ou transport, y compris un intercepteur qui court-circuite. Avant le dispatch, le `req.endpoint` final est validé contre le `req.baseEndpoint` final : l’URL résolue doit conserver l’origine de cette base et rester sous son répertoire ; les caractères de contrôle C0 (dont tab, CR et LF), les barres obliques inverses, `?`, `#` et les traversées de répertoire dans le chemin sont rejetés. Les formes ressemblant à un schéma et celles relatives au protocole sont rejetées même avec des espaces initiaux ; un espace ordinaire à l’intérieur est autorisé et envoyé sous la forme `%20`. Un intercepteur peut remplacer délibérément `baseEndpoint` par une autre URL absolue valide. HTTP, SSE et WebSocket partagent la règle, et les erreurs d’URL déterministes ne sont jamais retentées.
+
 Les observateurs SSE/WebSocket sont des hooks de cycle de vie, pas du contrôle de flux. Désabonne les écouteurs WebSocket quand le propriétaire se termine. Les échecs d’observateur suivent le contrat du transport ; un intercepteur lui-même peut lever une erreur ou être rejeté.
 
 Journalise une allowlist revue : `operation` statique, méthode, statut, durée, code d’erreur stable. Ne journalise pas par défaut les URL résolues, query strings, en-têtes d’auth, corps, causes brutes, IDs d’événements SSE ou payloads WebSocket.
 
 Les credentials Basic sont en base64, pas chiffrés. Utilise TLS, garde les providers de credentials scopés à la requête sur un serveur, ne journalise jamais l’en-tête généré. L’encodeur par défaut est `globalThis.btoa` ; passe `BasicAuthInterceptorOptions.encode` quand le runtime n’a pas `btoa` ou a besoin d’un encodeur revu.
 
-Un intercepteur peut appliquer une politique de transport. Ce n’est pas de la validation d’entrée, de l’autorisation, ni de la propriété de ressource. Le code qui démarre un travail de longue durée utilise encore `await using` ou annule, ferme et attend manuellement la promesse terminale. Le HTTP ordinaire reste limité à la requête et est géré avec son timeout / `AbortSignal` ; `Client` n’est pas `AsyncDisposable`.
+Un intercepteur peut appliquer une politique de transport. Ce n’est pas de la validation d’entrée, de l’autorisation, ni de la propriété de ressource. Le code qui démarre un travail de longue durée utilise encore `await using`, ou ferme manuellement et attend la promesse terminale. Le HTTP ordinaire reste limité à la requête et est géré avec son timeout / `AbortSignal` ; `Client` n’est pas `AsyncDisposable`.
 
 ## Recettes liées
 

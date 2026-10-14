@@ -85,7 +85,7 @@ type WebSocketCloseInfo =
 
 socket 结束后的关闭快照（code、reason、clean 标记、可选 cause）。手动 close 可以带 `ManualSocketCloseReason`。
 
-## 执行 options
+## 执行选项
 
 ## WebSocketExecuteOptions
 
@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` 和 `timeout` 互斥：类型层面会拒绝同时传两者，运行时同时传入则以 `REQ_OPTIONS_INVALID` fault 失败。`signal` 可与其中任一组合。`timeout` 是连接的启动期限：之后的重连不会重新计时，`withTimeout` 也不适用于 WebSocket。
 
-设了 `reconnect` 时，`attempts` 默认 3；`0` 禁用。省略 `attempts` 不是无限次。默认值见 [Client](/zh-Hans/api/client)。
+设了 `reconnect` 时，每次连接中断的 `attempts` 默认 3；`0` 禁用。成功 `open` 后会重置预算和退避指数，因此每次新的中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断期间可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
 
 ## 消息
 
 `incoming` 是一个 struct。文本、`ArrayBuffer`、typed-array、`Blob` frame 都按 UTF-8 读，JSON parse，再拿这个 struct 校验。JSON parse 或 struct 失败的 frame 报到 `session.onRuntimeError`，不进队列。没有 client 级的非法 frame option。
 
-`outgoing` 是一个 struct。`session.send` 接受该 struct 的 `StructInput`，编码 alias，再 `JSON.stringify`。好几种消息用 `struct.discriminatedUnion`。
+`outgoing` 是一个 struct。`session.send` 接受该 struct 的 `StructInput`，编码 alias，再 `JSON.stringify`。编码后 JSON 无法忠实表示的值会在发送或进入重连队列之前抛出 `TypeError`，包括非有限数字、函数、symbol、`Map`、`Set`、流，以及没有 JSON 表示形式的类实例。嵌套值使用与 HTTP JSON 请求体相同的检查。心跳也使用这项检查；心跳序列化失败会结束 session。多种消息类型可用 `struct.discriminatedUnion` 表达。
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

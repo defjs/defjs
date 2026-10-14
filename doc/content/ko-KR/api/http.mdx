@@ -13,7 +13,7 @@ description: defineRequest, 실행 options, HTTP request/response 타입이에�
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`, `path`, 선택 `input` struct, `output`과 `error` struct, `operation`이에요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+- **definition** — `method`, `path`, 선택 `input` struct, 선택 `output`과 `error` struct, 선택 `operation`이에요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
 - **반환** 엔드포인트예요. 입력을 넣어 호출하면 `HttpCommand`가 나와요.
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -30,7 +30,7 @@ function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, op
 
 - **반환** `[null, data, response]` 또는 `[fault, undefined, undefined]`예요.
 
-2xx가 아닌 status는 `error` struct를 선언하지 않았거나 선언한 `error` body가 디코딩되면 `HTTP_STATUS`예요. `data`는 `error`를 선언했을 때 디코딩된 `error` body이고, 아니면 `undefined`예요. 선언한 `error` body를 읽을 수 없거나(미디어 타입 불일치, 잘못된 JSON) struct와 맞지 않으면 fault는 대신 `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH` 중 하나이고, 응답 status는 그 메타데이터에 그대로 담겨요. 실패하면 튜플의 세 번째 자리는 `undefined`이고, fault가 응답 메타데이터를 가져요.
+2xx가 아닌 status는 `error` struct를 선언하지 않았거나 선언한 `error` body가 디코딩되면 `HTTP_STATUS`예요. `data`는 선언됐을 때 디코딩된 `error` body이고, 아니면 `undefined`예요. 선언한 `error` body를 읽을 수 없거나(미디어 타입 불일치, 잘못된 JSON) struct와 맞지 않으면 fault는 대신 `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH` 중 하나이고, 응답 status는 그 메타데이터에 그대로 담겨요. 실패하면 튜플의 세 번째 자리는 `undefined`이고, fault가 응답 메타데이터를 가져요.
 
 ## fetchHandler()
 
@@ -38,7 +38,7 @@ function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, op
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-기본 HTTP 전송이에요. `fetchImpl`의 기본값은 전역 `fetch`이고, `withHTTPHandle`로 다른 것을 줄 수 있어요. 응답이 클라이언트에 닿지 않았거나 선언된 body를 읽는 데 실패하면 synthetic 응답으로 resolve하지 않고 reject해요.
+기본 HTTP 전송이에요. `fetchImpl`의 기본값은 보내는 시점에 해석되는 전역 `fetch`이고, `withHTTPHandle`로 다른 것을 줄 수 있어요. 손대지 않은 플랫폼 Fetch는 `(url, init)`을 받고, 교체된 전역이나 사용자 지정 handle은 `Request`를 받아요. 응답이 클라이언트에 닿지 않았거나 선언된 body를 읽는 데 실패하면 synthetic 응답으로 resolve하지 않고 reject해요.
 
 ## makeResponse()
 
@@ -124,6 +124,8 @@ type HttpResponse<R> = {
 
 `loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소와 `timeout`은 여전히 `NET_ABORTED` / `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요(Bun, Node, Deno). 브라우저에서는 `Blob` / `File`, `ArrayBuffer`, `FormData` body가 그대로 보내지고 `onUploadProgress`는 호출되지 않아요.
 
+서버 런타임에서 FormData는 본문 전체를 Blob으로 버퍼링하지 않고 직렬화된 스트림을 쓰며, 실제 multipart boundary를 유지해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 명시 content type은 업로드 변환 뒤에도 남지만, FormData는 그 직렬화의 boundary를 써야 해요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
+
 [HTTP 가이드](/ko-KR/docs/http)와 [명령](/ko-KR/docs/commands)을 보세요.
 
 ## RequestEndpoint
@@ -141,11 +143,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
 `GET`과 `HEAD`는 body를 돌려줄 수 없어요. `path`와 `headers`는 평평한 스칼라여야 하고, `query`는 중첩될 수 있어요. 중첩 객체는 런타임에 `withQuerySerializer`가 필요해요.
+
+`BodyValue`가 받는 와이어 값과 JSON 값은 [`HttpRequestShape`](/ko-KR/api/core/httprequestshape-type)를 보세요.
 
 ## HttpCommand
 

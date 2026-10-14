@@ -13,4 +13,6 @@ type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
 
 انظر [`HttpProgressEvent`](/ar/api/core/httpprogressevent-type) و[دليل HTTP](/ar/docs/http) و[الأوامر](/ar/docs/commands).
 
+في بيئات تشغيل الخادم، تقرأ FormData مع `onUploadProgress` تدفقها المتسلسل مباشرةً، وتحافظ على فاصل multipart الخاص بها، وتُرسَل دون `Content-Length` تولّده المكتبة (مجزّأة عبر HTTP/1.1)، فيعمل التقدّم والمهلة والإلغاء دون تخزين الجسم كاملًا. ويُبلّغ عن إجمالي مجهول ما لم يحدّده رأس `Content-Length` صريح صالح. ولنقطة نهاية تتطلب `Content-Length`، مثل بعض وجهات الرفع الموقَّعة مسبقًا، احذف `onUploadProgress`؛ عندئذٍ يرسل Fetch الخاص بالمنصة FormData مع طولها. وتُبلّغ التنزيلات ذات ترميز غير `identity` أيضًا عن `total: 0` و`lengthComputable: false`، لأن `loaded` يحسب بايتات التدفق بعد فك الترميز. يحرّر الإلغاء تدفق الرفع المغلّف.
+
 [HTTP](/ar/api/http)

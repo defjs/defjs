@@ -1,6 +1,6 @@
 ---
 title: 'Vue'
-description: 装插件、provide Client、拉用户，并在响应式变化时 abort。
+description: 安装插件、提供 Client、获取用户，并在响应式变化时取消请求。
 ---
 
 # Vue
@@ -13,7 +13,7 @@ description: 装插件、provide Client、拉用户，并在响应式变化时 a
 
 `bun add @defjs/core @defjs/vue vue`
 
-创建 Client，装插件，再按变化 abort 去拉：
+创建 Client，安装插件，然后获取用户，并在相关值变化时取消请求：
 
 <include cwd lang="typescript">
   examples/vue/main.ts#example
@@ -21,7 +21,7 @@ description: 装插件、provide Client、拉用户，并在响应式变化时 a
 
 <include cwd>examples/vue/basic-setup.vue#example</include>
 
-`createClientPlugin(client)` provide 的就是你传进去的那个对象。不 clone，也没有释放钩子。Core options 和 interceptor 在创建 Client 时配好。
+`createClientPlugin(client)` 提供的就是你传进去的那个对象。不 clone，也没有释放钩子。Core options 和 interceptor 在创建 Client 时配好。
 
 `onCleanup` 在 watcher 重跑前和停掉时执行。先注册它，再开始异步工作。错误优先 tuple 仍是应用数据。
 
@@ -64,7 +64,7 @@ App 卸载、插件移除、组件作用域释放**不会** abort HTTP、关 SSE
 </include>
 
 - `HTTP_CLIENT` — 给原生 `provide` / `inject` 用的 `InjectionKey<Client>`
-- `createClientPlugin(client)` — provide 该 Client 的 Vue `Plugin`
+- `createClientPlugin(client)` — 提供该 Client 的 Vue `Plugin`
 - `injectClient()` — 最近的 `Client`，没有就抛
 
 Client 和 options 在 `@defjs/core` 里创建。见 [Client](/zh-Hans/docs/client)、[Commands](/zh-Hans/docs/commands)、[Interceptors](/zh-Hans/docs/interceptors)、[SSE](/zh-Hans/docs/sse)、[WebSocket](/zh-Hans/docs/web-socket)。

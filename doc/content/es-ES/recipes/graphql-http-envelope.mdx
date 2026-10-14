@@ -5,7 +5,7 @@ description: Deja GraphQL como HTTP 200 más un unwrap de aplicación; Core no t
 
 # Desenvolver un envelope GraphQL por HTTP
 
-Defjs no implementa `errorPolicy` de GraphQL. Modela el cable como un POST HTTP cuyo builder coloca el documento de query y las variables, y luego desenvuelve `errors[]` / un `data` ausente en tu propio helper.
+Defjs no implementa `errorPolicy` de GraphQL. Modela el cable como un POST HTTP cuyo builder coloca el documento de query y las variables. Declara el `data` del envelope como `.nullish()` para que tanto un `data` ausente como `data: null` lleguen a tu helper, y luego desenvuelve `errors[]` antes de comprobar `data`.
 
 Ver [Decisiones de diseño](/es-ES/docs/design-decisions).
 
@@ -14,7 +14,7 @@ Ver [Decisiones de diseño](/es-ES/docs/design-decisions).
 </include>
 
 ```txt
-ada viewer unavailable
+ada viewer unavailable viewer unavailable
 ```
 
-El éxito HTTP solo significa que llegó el envelope. Los errores de aplicación se quedan en `errors[]` hasta que tu unwrap lance o devuelva.
+El éxito HTTP solo significa que llegó el envelope. Los errores de aplicación se quedan en `errors[]` hasta que tu unwrap lance o devuelva, incluida una respuesta con `data: null`. El ejemplo trata tanto un `data` ausente como `data: null` junto con `errors[]` como errores de aplicación, no como desajustes de Struct.

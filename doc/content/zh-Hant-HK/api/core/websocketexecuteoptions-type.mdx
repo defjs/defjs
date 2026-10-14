@@ -27,7 +27,7 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 - `signal` 可以同兩者任何一個合併使用；佢唔係 `abort` 嘅別名。
 - `timeout` 必須係正安全整數，而且唔可以大過 `2_147_483_647`。佢限制開啟 session 最多可以用幾耐，reconnect 時唔會再套用。
 - `beforeConnect`、`heartbeat`、`protocols` 同 `reconnect` 會喺今次 call 覆蓋 client 層級嘅 options。
-- 設定 `reconnect` 時，`attempts` 預設係 `3`；`0` 就停用。唔寫 `attempts` 唔代表無限。
+- 設定 `reconnect` 時，`attempts` 預設係每次斷線 `3` 次；`0` 就停用。成功 `open` 會重設預算同退避指數。省略 `attempts` 唔代表同一次斷線可以無限重試。驗證規則同最終延遲上限見 [`withWebSocketReconnect`](/zh-Hant-HK/api/core/withwebsocketreconnect)。
 
 參閱 [`WebSocketHeartbeatConfig`](/zh-Hant-HK/api/core/websocketheartbeatconfig-type)。
 

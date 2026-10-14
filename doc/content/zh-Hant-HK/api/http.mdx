@@ -5,7 +5,7 @@ description: defineRequest、execute options，同 HTTP request/response types�
 
 # HTTP
 
-Declare 一個 typed request，用 input build command，之後 execute。
+聲明一個 typed request，用 input 建立 command，之後執行。
 
 ## defineRequest()
 
@@ -13,13 +13,13 @@ Declare 一個 typed request，用 input build command，之後 execute。
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`、`path`，可選 `input` struct、`output` 同 `error` structs，以及 `operation`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
+- **definition** — `method`、`path`，可選 `input` struct、可選 `output` 同 `error` structs，以及可選 `operation`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
 - **Returns** 一個 endpoint。用 input call 佢，就會得到 `HttpCommand`。
 
 <include cwd>examples/api/define-request.ts#example</include>
 
 `output` 係 2xx body 嘅單一 struct；`error` 係每個非 2xx body 嘅單一 struct。兩者都唔會按 status code 分 key。唔寫邊個，嗰個 body 就根本唔會被讀——睇
-[聲明即斷言](/zh-Hant-HK/docs/design-decisions#聲明即斷言)。
+[聲明即斷言](/zh-Hant-HK/docs/design-decisions#declaration-is-an-assertion)。
 
 ## executeHttpCommand()
 
@@ -39,7 +39,7 @@ Low-level entry，`client.execute` 用呢個。Application code 應該 call `cli
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-Default HTTP transport。`fetchImpl` 預設係全域 `fetch`；`withHTTPHandle` 可以提供另一個。冇 response 到達 client，或者讀取已聲明嘅 body 失敗嘅時候，佢會 reject，而唔係 resolve 一個合成 response。
+預設 HTTP transport。`fetchImpl` 預設會喺送出時解析 global `fetch`；`withHTTPHandle` 可以提供另一個。未被取代嘅平台 Fetch 會收到 `(url, init)`，被取代嘅 global Fetch 或自訂 handle 就會收到 `Request`。冇 response 到達 client，或者讀取已聲明嘅 body 失敗嘅時候，佢會 reject，而唔係 resolve 一個合成 response。
 
 ## makeResponse()
 
@@ -125,6 +125,8 @@ Response 冇 body 嘅時候，`body` 係 `undefined`；JSON `null` 就保持係 
 
 `loaded`、`total`、`lengthComputable`。Callbacks 可以係 async。如果 `onDownloadProgress` 或者 `onUploadProgress` 拋出錯誤，該次 call 就會以 `EXT_OBSERVER_FAILED` 失敗，並以拋出嘅值作為 `cause`；取消操作同 `timeout` 仍然會報 `NET_ABORTED` / `NET_TIMEOUT`。只有 runtime 支援以 stream 方式送出 request body，先會回報 upload progress（Bun、Node、Deno）；喺 browser，`Blob` / `File`、`ArrayBuffer` 同 `FormData` body 會原樣送出，而且唔會 call `onUploadProgress`。
 
+喺 server runtimes，FormData 會用序列化後嘅 stream，唔會先將完整 body 緩衝成 Blob，並會保留實際 multipart boundary。除非明確設定有效嘅 `Content-Length`，否則 total 係未知。Upload 轉換會保留明確設定嘅 content types，但 FormData 必須用佢序列化時嘅 boundary。`loaded` 計算 stream bytes，唔係 server 確認收到嘅 bytes。使用非 identity `Content-Encoding` 嘅 download 會回報 `total: 0` 同 `lengthComputable: false`；stream bytes 可能已經解壓。
+
 睇 [HTTP guide](/zh-Hant-HK/docs/http) 同 [Commands](/zh-Hant-HK/docs/commands)。
 
 ## RequestEndpoint
@@ -142,11 +144,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
-`GET` 同 `HEAD` 唔可以 return body。`path` 同 `headers` 一定要係 flat scalars；`query` 可以 nest，nested object 喺 runtime 要有 `withQuerySerializer`。
+`GET` 同 `HEAD` 唔可以 return body。`path` 同 `headers` 一定要係 flat scalars；`query` 可以巢狀，巢狀 object 喺 runtime 要有 `withQuerySerializer`。
+
+`BodyValue` 接受嘅 wire 同 JSON 值見 [`HttpRequestShape`](/zh-Hant-HK/api/core/httprequestshape-type)。
 
 ## HttpCommand
 

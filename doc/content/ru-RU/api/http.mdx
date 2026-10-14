@@ -38,7 +38,7 @@ Non-2xx статус — это `HTTP_STATUS`, если struct `error` не об
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-HTTP-транспорт по умолчанию. `fetchImpl` по умолчанию — глобальный `fetch`; другой подставляет `withHTTPHandle`. Он reject’ит — а не резолвится синтетическим ответом — когда до клиента не доехал ни один response или не удалось прочитать объявленное тело.
+HTTP-транспорт по умолчанию. `fetchImpl` по умолчанию — глобальный `fetch`, получаемый в момент отправки; другой подставляет `withHTTPHandle`. Неизменённая платформенная реализация Fetch получает `(url, init)`, а заменённая глобальная функция и пользовательский обработчик — `Request`. Promise отклоняется, если ответ не дошёл до клиента или объявленное тело не удалось прочитать; синтетический ответ не создаётся.
 
 ## makeResponse()
 
@@ -124,6 +124,8 @@ type HttpResponse<R> = {
 
 `loaded`, `total`, `lengthComputable`. Колбэки могут быть асинхронными. Если `onDownloadProgress` или `onUploadProgress` выбрасывает исключение, вызов завершается с ошибкой `EXT_OBSERVER_FAILED`, а выброшенное значение передаётся в `cause`; отмена и `timeout` по-прежнему возвращают `NET_ABORTED` / `NET_TIMEOUT`. Прогресс выгрузки сообщается только в средах выполнения, поддерживающих потоковую отправку тела запроса (Bun, Node, Deno); в браузерах тела типа `Blob` / `File`, `ArrayBuffer` и `FormData` отправляются без изменений, и `onUploadProgress` не вызывается.
 
+В серверных средах FormData использует сериализованный поток без буферизации всего тела в Blob и сохраняет фактический разделитель multipart. Полный размер неизвестен, если он не задан явно корректным `Content-Length`. Явно заданные типы содержимого сохраняются при преобразовании загрузки, но FormData должен использовать разделитель своей сериализации. `loaded` считает байты потока, а не подтверждённые сервером байты. При скачивании с `Content-Encoding`, отличным от `identity`, сообщаются `total: 0` и `lengthComputable: false`; байты потока уже могут быть распакованы.
+
 См. [гайд HTTP](/ru-RU/docs/http) и [Команды](/ru-RU/docs/commands).
 
 ## RequestEndpoint
@@ -141,11 +143,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
 `GET` и `HEAD` не могут вернуть тело. `path` и `headers` должны быть плоскими скалярами; `query` может быть вложенным, и вложенному объекту в рантайме нужен `withQuerySerializer`.
+
+Допустимые для `BodyValue` значения тела запроса и JSON перечислены в [`HttpRequestShape`](/ru-RU/api/core/httprequestshape-type).
 
 ## HttpCommand
 

@@ -10,7 +10,7 @@ function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: Http
 ```
 
 - **code** — 邊一步讀取失敗：`RES_DECODE_FAILED`、`RES_MEDIA_TYPE_INVALID` 或 `RES_STRUCT_MISMATCH`。
-- **cause** — 底層嘅 parser 或 struct 失敗。佢嘅 message 會成為 fault message（如果佢唔係 `Error`，就用 `String(cause)`），而佢本身會保留為 `cause`。
+- **cause** — 底層嘅 parser 或 struct 失敗，保留為 `cause`。佢嘅 message 通常會成為 fault message（如果佢唔係 `Error`，就用 `String(cause)`）。當 `RES_DECODE_FAILED` 嘅 cause 係名為 `SyntaxError` 嘅 `Error`，message 會係 `Response body could not be decoded`，避免 parser 片段出現喺 `String(fault)`。預設 Struct 訊息只包含收到嘅種類，唔包含值；原始值同 parser 文字仍然保留喺 cause。
 - **response** — 讀唔到嘅 response 嘅 metadata。`status` 由佢複製。
 - **Returns** 一個名為 `DefjsFault`、冇 `body` 嘅原生 `Error`。
 

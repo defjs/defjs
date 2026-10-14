@@ -10,7 +10,7 @@ function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promis
 ```
 
 - **httpRequest** — 规范化后的请求（URL、headers、body、abort signal、进度 hook）。
-- **fetchImpl** — 一个 [`FetchHandle`](/zh-Hans/api/core/fetchhandle-type)；默认为全局 `fetch`。自定义 handle 收到的是一个 `Request`，其 body 按块逐段读取。
+- **fetchImpl** — 一个 [`FetchHandle`](/zh-Hans/api/core/fetchhandle-type)；默认在发送时获取全局 `fetch`。未被替换的平台 Fetch 收到 `(url, init)`；被替换的全局 Fetch 或自定义 handle 收到 `Request`，其响应体按块读取。未监听进度的平台响应使用整段响应体读取；监听下载进度时则分块读取。
 
 默认的 HTTP 传输。client 始终使用它；`withHTTPHandle` 只替换它所调用的 `fetchImpl`。没有任何响应到达 client 时，它会 reject，而不是以一个合成的响应 resolve。
 

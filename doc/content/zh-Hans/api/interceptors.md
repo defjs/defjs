@@ -1,11 +1,11 @@
 ---
-title: Interceptors
+title: 拦截器
 description: HTTP、SSE、WebSocket interceptor 构造函数。
 ---
 
-# Interceptors
+# 拦截器
 
-包一层 `next`，一种传输一条。用 `withInterceptors` 注册。混着的列表在 execute 时按 kind 过滤。
+为某一种传输包装 `next`。用 `withInterceptors` 注册。混着的列表在 execute 时按 kind 过滤。
 
 ## createHttpInterceptor()
 
@@ -104,4 +104,4 @@ type BasicAuthInterceptorOptions = {
 
 在每个请求上设置 `Authorization: Basic <encoded>`。`fn` 每个请求调一次。`encode` 返回 `Basic ` 之后的那一部分；默认是 `btoa('username:password')`。不传 `encode` 时，如果 `btoa` 不可用，创建 interceptor 会抛错。
 
-见 [Interceptors 指南](/zh-Hans/docs/interceptors)。
+见 [拦截器指南](/zh-Hans/docs/interceptors)。

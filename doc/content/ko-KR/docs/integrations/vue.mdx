@@ -23,7 +23,7 @@ description: 플러그인을 설치하고, 클라이언트를 제공하고, 사�
 
 `createClientPlugin(client)`는 넘긴 객체를 그대로 제공해요. 복제나 dispose 훅은 없어요. core 옵션과 인터셉터는 클라이언트를 만들 때 설정하세요.
 
-`onCleanup`은 watcher가 다시 돌거나 멈출 때 전에 실행돼요. 비동기 작업을 시작하기 전에 등록하세요. error-first 튜플은 애플리케이션 data로 남아요.
+`onCleanup`은 watcher가 다시 돌기 전에 실행되고, watcher가 멈출 때도 실행돼요. 비동기 작업을 시작하기 전에 등록하세요. error-first 튜플은 애플리케이션 data로 남아요.
 
 ## inject와 덮어쓰기
 

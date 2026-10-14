@@ -13,4 +13,6 @@ type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
 
 见 [`HttpProgressEvent`](/zh-Hans/api/core/httpprogressevent-type)、[HTTP 指南](/zh-Hans/docs/http) 和 [Commands](/zh-Hans/docs/commands)。
 
+在服务端运行时，带 `onUploadProgress` 的 FormData 直接读取序列化后的流，保留其 multipart boundary，并且发送时不带库生成的 `Content-Length`（在 HTTP/1.1 上分块传输），因此进度、超时和中止都能工作，而不必缓冲整个 body。除非显式设置的有效 `Content-Length` 提供了总量，否则总量未知。对于要求 `Content-Length` 的端点（例如某些预签名上传目标），请省略 `onUploadProgress`；此时平台 Fetch 会带上 FormData 的长度发送。使用非 `identity` 编码的下载也会报告 `total: 0` 和 `lengthComputable: false`，因为 `loaded` 统计的是解码后流的字节数。取消会释放包装后的上传流。
+
 [HTTP](/zh-Hans/api/http)

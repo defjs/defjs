@@ -1,9 +1,9 @@
 ---
 title: '定义与执行 / Command'
-description: 定义端点，打出 opaque command，映射输入，推断传输结果。
+description: 定义端点，创建不透明命令，映射输入，推断传输结果。
 ---
 
-# Commands
+# 命令
 
 一份 definition → endpoint → opaque command → `client.execute`。HTTP、SSE、WebSocket 同一条管线。
 
@@ -41,7 +41,7 @@ Body 是 JSON `{"display_name":"…","email":"…"}`。手写的 key 是逃生�
 
 ## 形状对不上时
 
-path 占位符、字面量、分支，用 `builder`。它收到的是真值，所以 `if`、`??`、模板字符串、`switch` 都能用。
+path 占位符、字面量、分支，用 `builder`。它收到的是实际输入值，所以 `if`、`??`、模板字符串、`switch` 都能用。
 
 <include cwd lang="typescript">
   examples/commands/different-shapes.ts#example

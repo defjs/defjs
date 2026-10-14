@@ -1,9 +1,9 @@
 ---
-title: Errors
-description: Fault 的各个变体与工厂 helper。
+title: 错误
+description: Fault 的各个变体与工厂辅助函数。
 ---
 
-# Errors
+# 错误
 
 Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的失败不抛异常。
 
@@ -57,7 +57,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `FaultOf` 就是 `Fault`，只是用解码后的错误 body 类型来表达，而不是用产出它的 struct。`HttpAwaitResult` 和各 fault 工厂处理的是解码后的值，所以用这种形式。
 
-每个变体都是名为 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 直接给出可写日志的 `DefjsFault: <message>`。`code` 和各变体元数据——`status`、`response`、`data`——都是可枚举的自有属性。原生 `cause` 链不可枚举。
+每个变体都是名为 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 给出 `DefjsFault: <message>`。`code` 和各变体元数据——`status`、`response`、`data`——都是可枚举的自有属性。原生 `cause` 链不可枚举。
+
+默认 Struct 消息使用 `received <kind>`，不包含接收到的值本身，例如 `Expected number at email, received string`。`RES_DECODE_FAILED` 的底层原因若是 JSON `SyntaxError`，消息为 `Response body could not be decoded`。问题路径是结构性的，会保留 record 的键：`struct.record(...)` 可能产生 `Expected number at alice@example.com, received string`，因此键在默认消息、`prettify()` 和 `String(fault)` 中仍可能敏感。原始 `StructIssue.received` 和解析器 cause 仍是敏感信息；自定义 `errorMap` 和扩展消息会原样使用，写日志前需要审查。
 
 <include cwd>examples/api/fault.ts#example</include>
 
@@ -143,7 +145,7 @@ declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown,
 
 `createHttpStatusFault` 收一个已经带着解码后 body 的响应；`createUndecodedHttpStatusFault` 只收元数据，给那些没声明 `error` 的端点用。
 
-`createNetworkFault` 把 `ERR_ABORTED` 和名为 `AbortError` 的 `DOMException` 映射到 `NET_ABORTED`，把 `ERR_TIMEOUT` 和名为 `TimeoutError` 的错误映射到 `NET_TIMEOUT`，其余一律映射到 `NET_UNREACHABLE`。`createPreflightFault` 直接收 code；不给 `cause` 时，code 就成了 message。
+`createNetworkFault` 使用 [`isAbortCause`](/zh-Hans/api/core/isabortcause) 判断 `NET_ABORTED`，使用 [`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 判断 `NET_TIMEOUT`：它们分别识别来自任意 Core 副本的带标记哨兵、名为 `AbortError` 的 `DOMException`，以及名为 `TimeoutError` 的 `DOMException` 或 `Error`。其他情况一律映射到 `NET_UNREACHABLE`。`createPreflightFault` 直接接收 code；不给 `cause` 时，code 就成为 message。
 
 所有工厂都返回带上述结构化字段的原生 `Error` 实例；它们不造普通对象错误，`String(fault)` 也不需要适配器。
 
@@ -160,4 +162,15 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 abort 和 timeout 共享的 `cause` / message 值。从 HTTP interceptor 里抛一个出来，调用会以 `NET_ABORTED` 或 `NET_TIMEOUT` 结束。SSE 和 WebSocket 的 interceptor 则把任何抛出（包括这两个）都报告为 `EXT_INTERCEPTOR_FAILED`。
 
-见 [Errors 指南](/zh-Hans/docs/errors)。
+这些哨兵带有不可枚举的 `Symbol.for('defjs.cause.aborted')` 和 `Symbol.for('defjs.cause.timeout')` 标记。分类不依赖哨兵的对象身份，也不受之前无关执行的影响。
+
+## Cause 检查
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/zh-Hans/api/core/isabortcause) 识别带中止标记的 `Error` 或名为 `AbortError` 的 `DOMException`。[`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 识别带超时标记的 `Error`，或名为 `TimeoutError` 的 `DOMException` / `Error`。传入 `fault.cause` 来分类底层值；这些函数不会解包 fault，也能识别另一份 Core 的哨兵。
+
+见 [错误指南](/zh-Hans/docs/errors)。

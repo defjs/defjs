@@ -23,4 +23,4 @@ description: Courtes recettes pour les tâches courantes en HTTP, authentificati
 ## Tests et SDK
 
 - [Tests HTTP locaux](/fr-FR/recipes/test-with-handle)
-- [Structurer un SDK HTTP](/fr-FR/recipes/publish-http-sdk)
+- [Empaqueter un SDK HTTP](/fr-FR/recipes/publish-http-sdk)

@@ -20,9 +20,10 @@ Active les messages de heartbeat avec détection optionnelle de l’acquittement
 }
 ```
 
-- Toutes les `intervalMs`, `message()` est appelé et son résultat est envoyé à travers le struct `outgoing` de l’endpoint. Aucun message n’est envoyé quand `message` est omis ou renvoie `undefined`.
+- Toutes les `intervalMs` ms, `message()` est appelé et son résultat est envoyé à travers le struct `outgoing` de l’endpoint. Aucun message n’est envoyé quand `message` est omis ou renvoie `undefined`.
 - Avec `timeoutMs`, un acquittement est attendu après chaque heartbeat. `isAck` reçoit le message entrant décodé ; quand elle renvoie `true`, le timer est effacé et ce message n’est **pas** livré à `receive`.
 - Si aucun ack n’arrive dans `timeoutMs`, ou si un heartbeat ne peut pas être envoyé, la session échoue. Cela ne déclenche pas de reconnect.
+- Le heartbeat utilise le même garde JSON que `session.send` : une valeur que JSON ne peut pas représenter après l’encodage du struct provoque `TypeError` et met fin à la session logique.
 - `intervalMs` et `timeoutMs` doivent être strictement positifs, finis, et au plus égaux à `2_147_483_647` ; sinon execute échoue avec `REQ_OPTIONS_INVALID`.
 - Un `heartbeat` dans les options d’execute remplace celui-ci pour cet appel.
 

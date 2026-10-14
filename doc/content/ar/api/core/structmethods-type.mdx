@@ -17,7 +17,7 @@ interface StructMethods<I, O, OO extends boolean> {
 
 كل أسلوب يُرجع struct جديدًا ويترك الأصلي دون تغيير.
 
-- `alias(name)` يضبط اسم السلك لحقل كائن. يقرأ `struct.parse` الأسماء المنطقية ما لم يُمرَّر `aliases: true`؛ وترميزات JSON والترميزات المسطّحة للطلبات تكتب الـ alias. و`name` الذي ليس سلسلة يرمي `TypeError`.
+- `alias(name)` يضبط اسم حقل الكائن بصيغة النقل. يقرأ `struct.parse` الأسماء المنطقية ما لم يُمرَّر `aliases: true`؛ وترميزات JSON والترميزات المسطّحة للطلبات تكتب الـ alias. و`name` الذي ليس سلسلة يرمي `TypeError`.
 - `null()` و`nullable()` متطابقان: كلاهما يقبل `null` أيضًا.
 - `optional()` يقبل `undefined` أيضًا. وفي الكائن يجوز أن يغيب المفتاح، ويبقى الحقل الغائب غائبًا في المخرجات.
 - `nullish()` يقبل `null` و`undefined` معًا.

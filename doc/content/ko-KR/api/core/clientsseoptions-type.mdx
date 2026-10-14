@@ -31,9 +31,11 @@ interface ClientSSEOptions {
 }
 ```
 
-- **handle** — 스트림을 여는 fetch 구현이에요. 사용자 지정 handle은 `Request`를 받아요.
+- **handle** — 스트림을 여는 Fetch 구현이에요. 기본값은 import 뒤에 설치한 교체본을 포함해 시도마다 `globalThis.fetch`를 해석해요. 모든 SSE handle은 `Request`를 받아요. 전역 Fetch가 없으면 기본 실행은 `ENV_UNSUPPORTED`로 실패하고, 사용자 지정 handle은 그대로 쓸 수 있어요.
 - **onInvalidEvent** — 이벤트에 맞는 struct도 `default` struct도 없을 때(`'missing-struct'`), 또는 data 검증에 실패했을 때(`'validation-failed'`) 호출돼요. 그 이벤트는 건너뛰어요. 훅이 던진 오류는 스트림을 닫지 않아요.
-- **reconnect** — 직접 켜야 해요. 주지 않으면 스트림은 재연결하지 않아요. `attempts` 기본값은 **3**이에요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략한다고 무제한이 되지는 않아요. `delayMs`는 첫 지연으로 기본 1000이고, 서버가 보낸 `retry:` 값이 이를 대체해요. `factor`는 시도할 때마다 지연에 곱해지며 기본값은 1이에요. `jitter`는 WebSocket과 같은 0-1 곱셈 계수이고 기본값은 0이에요. `maxDelayMs`는 기본적으로 상한이 없어요. `shouldReconnect`가 없으면 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`만 재연결해요. 있으면 그 결과가 모든 메서드의 재연결 여부를 결정하고, 컨텍스트에 `method`가 포함돼요. `ReadableStream` 요청 body는 재연결하지 않아요. 이벤트 id를 한 번 받은 뒤에는 재연결할 때마다 그 id를 `Last-Event-ID` 헤더로 보내요.
+- **reconnect** — 직접 켜야 해요. 주지 않으면 스트림은 재연결하지 않아요. `attempts` 기본값은 단절마다 **3**이에요. `attempts: 0`은 재시도를 꺼요. 핸드셰이크가 성공하면 예산, 콜백 `attempt`, 백오프 지수가 초기화돼요. `delayMs`는 첫 기준 지연으로 기본 1000이고, 서버가 보낸 `retry:` 값이 이를 대체해요. `factor` 기본값은 1이에요. `jitter`는 0–1 곱셈 계수이고 기본값은 0이에요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. 설정한 상한이 없어도 플랫폼 한계인 `2_147_483_647` ms는 그대로 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요. `shouldReconnect`가 없으면 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`만 재연결해요. 있으면 그 결과가 모든 메서드의 재연결 여부를 결정하고, 컨텍스트에 `method`가 포함돼요. `ReadableStream` 요청 body는 재연결하지 않아요. 재연결은 최신 ID를 UTF-8 바이트로 `Last-Event-ID`에 보내요. 빈 ID는 이를 지우고, NUL이 들어 있는 ID는 무시해요.
+
+재연결 옵션은 인터셉터나 Fetch보다 먼저 검증돼요. `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`와 명시한 `maxDelayMs`는 유한하고 음이 아니어야 하며, `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 실행 시점에 `REQ_OPTIONS_INVALID`를 반환해요.
 
 이 값들은 `withSSEHandle`, `withSSEOnInvalidEvent`, `withSSEReconnect`로 설정해요. `withSSEReconnect`를 빼면 재시도가 꺼져요.
 

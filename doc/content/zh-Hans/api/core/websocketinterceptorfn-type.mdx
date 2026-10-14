@@ -13,4 +13,4 @@ type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Prom
 
 这条链每次 `execute` 只运行一次。重连发生在它返回的 session 内部，不会再次运行它。
 
-[Interceptors](/zh-Hans/api/interceptors)
+[拦截器](/zh-Hans/api/interceptors)

@@ -9,7 +9,7 @@ description: '用 option helper 创建 client。'
 function createClient(...options: ClientOption[]): Client
 ```
 
-Options 按顺序生效；同一设置上后面的 option 会覆盖前面的，interceptor 则会累加。interceptor 闭包会捕获鉴权或租户时，把 client 建在请求边界里。
+Options 按顺序生效；同一设置上后面的 option 会覆盖前面的，interceptor 则会累加。当 interceptor 通过闭包捕获鉴权信息或租户上下文时，优先在请求边界内创建 client。
 
 - **options** — 像 `withEndpoint` 这种 option helper。
 - **返回** 一个 client，`execute` 按传输重载。

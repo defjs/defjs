@@ -13,4 +13,4 @@ type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStr
 
 短路时返回的 handle 必须提供 `[Symbol.asyncDispose](): PromiseLike<void>`，并把它接到同一个关闭生命周期上。
 
-[Interceptors](/zh-Hans/api/interceptors)
+[拦截器](/zh-Hans/api/interceptors)

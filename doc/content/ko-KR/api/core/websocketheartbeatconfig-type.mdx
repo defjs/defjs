@@ -16,6 +16,7 @@ interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
 
 - `intervalMs`는 heartbeat 메시지 사이의 간격이에요.
 - `message()`는 페이로드를 만들어요. 페이로드는 `outgoing` struct를 거쳐 전송돼요. 생략하거나 `undefined`를 돌려주면 아무것도 보내지 않아요.
+- struct 인코딩 뒤에 JSON이 아닌 값은 `session.send`와 같은 직렬화기를 통해 `TypeError`로 실패해요. 그 heartbeat 실패는 재연결 없이 논리 session을 끝내요.
 - `isAck(message)`는 디코딩된 수신 메시지를 하나씩 받아요. `true`를 돌려주면 그 메시지는 응답 확인으로 취급되고 `receive`로 전달되지 않아요.
 - `timeoutMs`는 heartbeat를 보낸 뒤 응답 확인을 기다리는 시간이에요. 이 시간을 넘기면 session이 실패해요.
 - `intervalMs`와 `timeoutMs`는 양수이고 유한하며 `2_147_483_647` 이하여야 해요.

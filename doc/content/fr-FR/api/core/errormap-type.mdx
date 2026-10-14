@@ -9,6 +9,6 @@ description: 'Callback qui réécrit le message d’un problème de struct.'
 type ErrorMap = (issue: StructIssue) => string | undefined
 ```
 
-Passé comme option `errorMap` de `struct.parse`. Il est appelé pour chaque problème (`code`, `expected`, `message`, `path`, `received`) avant que le problème soit enregistré. Renvoie une chaîne pour remplacer le message par défaut, ou `undefined` pour le conserver.
+Passé comme option `errorMap` de `struct.parse`. Il est appelé pour chaque problème (`code`, `expected`, `message`, `path`, `received`) avant que le problème soit enregistré. Toute chaîne, y compris `''`, remplace le message par défaut ; seul `undefined` le conserve. La map appartient à cet appel de parse et traite aussi les échecs de conversion bigint/date d’un struct créé par une autre copie de Core. Les messages par défaut omettent les valeurs reçues ; le texte personnalisé est utilisé tel quel, donc n’y inclus pas de valeurs `received` sensibles.
 
 [Struct](/fr-FR/api/struct)

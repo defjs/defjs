@@ -23,6 +23,7 @@ function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): C
 - كل `intervalMs` تُستدعى `message()` وتُرسل نتيجتها عبر struct الـ `outgoing` الخاص بنقطة النهاية. لا تُرسل رسالة عند حذف `message` أو عندما تُرجع `undefined`.
 - مع `timeoutMs` يُنتظر إقرار بعد كل نبض. تستقبل `isAck` الرسالة الواردة المفكوكة؛ وعندما تُرجع `true` يُمسح المؤقت و**لا** تُسلَّم تلك الرسالة إلى `receive`.
 - إذا لم يصل إقرار خلال `timeoutMs`، أو تعذّر إرسال نبض، تفشل الجلسة. لا يؤدي هذا إلى إعادة اتصال.
+- يستخدم النبض التحقق نفسه من JSON الذي يستخدمه `session.send`: القيمة التي لا يستطيع JSON تمثيلها بعد ترميز الـ struct تتسبب في `TypeError` وتنهي الجلسة المنطقية.
 - يجب أن يكون `intervalMs` و`timeoutMs` موجبين ومنتهيين وبحد أقصى `2_147_483_647`؛ وإلا يفشل execute بـ `REQ_OPTIONS_INVALID`.
 - `heartbeat` في خيارات execute يستبدل هذا الخيار لذلك الاستدعاء.
 

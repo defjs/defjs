@@ -5,7 +5,7 @@ description: واجهة struct، وInfer، وStructError.
 
 # Struct
 
-ابنِ أشكال حدود السلك، حلّل القيم، واستنتج أنواع TypeScript.
+ابنِ أشكال البيانات عند حدود النقل، حلّل القيم، واستنتج أنواع TypeScript.
 
 ## struct
 
@@ -24,7 +24,7 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 
 | المساعد                                                                     | الدور                                                                      |
 | --------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `struct.string()` / `number()` / `boolean()` / `bigint()`                   | قيم قياسية                                                                 |
+| `struct.string()` / `number()` / `boolean()` / `bigint()`                   | قيم مفردة (scalar)                                                         |
 | `struct.literal(value)`                                                     | حرفي مطابق                                                                 |
 | `struct.null()` / `any()` / `unknown()`                                     | Null / any / unknown. `any()` و`unknown()` ترفضان `null` و`undefined`      |
 | `struct.date()`                                                             | `Date`                                                                     |
@@ -50,7 +50,7 @@ function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; erro
 - **يُرجع** `[null, value]` أو `[StructError, undefined]`. يتوقف التحليل عند أول فشل، فيحمل الخطأ مشكلة واحدة.
 - حقول الكائن مطلوبة ما لم تُوسَم بـ `.optional()` أو `.nullish()`. المفاتيح التي لا يصرّح بها الشكل تُحذف من النتيجة.
 - `errorMap` الاختياري يعيد كتابة رسائل المشاكل لهذا التحليل فقط.
-- الافتراضي يقرأ المفاتيح **المنطقية** (`displayName`). مرّر `{ aliases: true }` لتقرأ مفاتيح السلك (`display_name`) بالطريقة نفسها التي تفعلها ترميزات HTTP/JSON.
+- الافتراضي يقرأ المفاتيح **المنطقية** (`displayName`). مرّر `{ aliases: true }` لتقرأ المفاتيح بصيغة النقل (`display_name`) بالطريقة نفسها التي تفعلها ترميزات HTTP/JSON.
 
 ## ErrorMap
 

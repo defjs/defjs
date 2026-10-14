@@ -1,0 +1,18 @@
+---
+title: 'isTimeoutCause'
+description: 'يتعرّف على انتهاء المهلة عبر نسخ Core وعلى أخطاء المهلة الخاصة بالمنصة.'
+---
+
+<ApiReference identity="@defjs/core:isTimeoutCause" />
+
+```ts
+function isTimeoutCause(cause: unknown): boolean
+```
+
+يُرجع `true` إذا كان السبب `Error` يحمل العلامة `Symbol.for('defjs.cause.timeout')`، بما في ذلك `ERR_TIMEOUT` من نسخة أخرى من Core، أو `DOMException` / `Error` باسم `TimeoutError`. ويُرجع `false` للقيم الأخرى.
+
+مرّر السبب الأصلي `fault.cause`؛ فهذه الدالة لا تستخرج السبب تلقائيًا من كائنات الخطأ. يستخدم `createNetworkFault` هذا الفحص لاختيار `NET_TIMEOUT`. ويواصل OpenTelemetry تسجيل حالات انتهاء المهلة حتى عندما تكون إشارة الإلغاء قد أُلغيت أيضًا.
+
+راجع [دليل الأخطاء](/ar/docs/errors) و[`isAbortCause`](/ar/api/core/isabortcause).
+
+[الأخطاء](/ar/api/errors)

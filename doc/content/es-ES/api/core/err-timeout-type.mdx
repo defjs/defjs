@@ -13,4 +13,6 @@ Valor compartido de `cause` y de mensaje para los timeouts. `createNetworkFault`
 
 Mira la [guía de Errores](/es-ES/docs/errors).
 
+El centinela lleva una marca no enumerable `Symbol.for('defjs.cause.timeout')`. [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) reconoce este centinela de cualquier copia de Core sin comparar la identidad del objeto. La clasificación es independiente de ejecuciones anteriores no relacionadas.
+
 [Errores](/es-ES/api/errors)

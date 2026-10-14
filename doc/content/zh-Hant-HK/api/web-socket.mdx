@@ -5,7 +5,7 @@ description: defineWebSocket、session，同 execute options。
 
 # WebSocket
 
-Declare 一個 socket，execute 佢，send/receive typed messages，之後 close。
+聲明一個 socket，執行佢，傳送／接收 typed messages，之後關閉。
 
 ## defineWebSocket()
 
@@ -32,7 +32,7 @@ function executeWebSocketCommand<
 ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
 ```
 
-`client.execute` 嘅 low-level entry。Application code prefer 用 client。
+`client.execute` 嘅 low-level entry。Application code 優先用 client。
 
 - **Returns** `[null, session, connection]` 或者 `[error, undefined, connection?]`。
 
@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` 同 `timeout` 互斥：type 會拒絕兩者並存，runtime 時兩者都傳會以 `REQ_OPTIONS_INVALID` fault 失敗。`signal` 可以同其中一個合併使用。`timeout` 係連線嘅啟動 deadline：之後嘅 reconnect 唔會重新計時，而且 `withTimeout` 唔適用於 WebSocket。
 
-`reconnect` 有 set 嘅時候，`attempts` 預設係 3；`0` 就停用。唔寫 `attempts` 唔代表無限。預設值請見 [Client](/zh-Hant-HK/api/client)。
+設定 `reconnect` 時，`attempts` 預設係每次斷線 3 次；`0` 就停用。成功 `open` 會重設預算同退避指數，所以每次新嘅斷線都由第 1 次重試開始。省略 `attempts` 唔代表同一次斷線可以無限重試。預設值同驗證規則請見 [Client](/zh-Hant-HK/api/client)。
 
 ## 訊息
 
 `incoming` 係一個 struct。Text、`ArrayBuffer`、typed-array 同 `Blob` frames 會當 UTF-8 讀、`JSON.parse`，再對住個 struct 檢查。JSON parse 或者 struct 失敗嘅 frame 會報去 `session.onRuntimeError`，而且唔會入 queue。冇 client invalid-frame option。
 
-`outgoing` 係一個 struct。`session.send` 接受嗰個 struct 嘅 `StructInput`，encode aliases，然後 `JSON.stringify`。幾種 message kinds 就用 `struct.discriminatedUnion`。
+`outgoing` 係一個 struct。`session.send` 接受嗰個 struct 嘅 `StructInput`，encode aliases，然後 `JSON.stringify`。編碼之後，如果 JSON 無法忠實表示某個值，會喺傳送或者加入重連 queue 之前 throw `TypeError`，包括非有限數、functions、symbols、`Map`、`Set`、streams，同冇 JSON 表示方式嘅 class instances。巢狀值會用同 HTTP JSON bodies 一樣嘅檢查。Heartbeat 亦會用呢個檢查；heartbeat 序列化失敗會結束 session。幾種 message kinds 就用 `struct.discriminatedUnion`。
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

@@ -28,13 +28,15 @@ interface HttpRequest {
     headerName: string
     tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
   }
-  // plus an @internal bodyContentTypeSource field
+  // plus the @internal bodyContentTypeSource field
 }
 ```
 
 builder 執行之後的 request，供 handlers、interceptors 與 `fetchHandler` 使用。
 
 - `body` 已經是 wire 值。JSON 的話，它是一個 **JSON 文字字串**；HMAC 或摘要要對這個字串簽，而不是對原本的 struct input。
+- `bodyContentType` 以一般欄位保存 builder body 的推斷型別，因此在 `{ ...req }` 複製後仍會保留。它只在 `body` 仍是 builder 的值時適用；替換後的 body 會重新偵測，因此請用 `content-type` header 宣告其型別。對未變更的 body，若沒有明確的 header，`null` 會抑制函式庫的推斷，但原生 Fetch 仍可能加上自己的字串型別。FormData 則改用它實際的 multipart boundary。
+- HTTP 絕不會把推斷的 Content-Type 寫入 `headers`；interceptors 只看得到已宣告的 header。明確的 `content-type` header 一律優先於 `bodyContentType` 與偵測結果，無論它由 builder、client 預設值、interceptor 或直接傳給 `fetchHandler` 的 request 設定。`body: undefined` 不會有函式庫推斷的 Content-Type。簽章程式應讀取 `headers.get('content-type') ?? request.bodyContentType`；不要設定內部欄位。
 - `endpoint` 是填入 path 參數之後的路徑；`baseEndpoint` 是 client 的 endpoint。
 - interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。builder 若回傳 `URLSearchParams`，該實例會直接傳過去。
 - `operation` 是靜態、低基數的 endpoint 識別，用於遙測與診斷。

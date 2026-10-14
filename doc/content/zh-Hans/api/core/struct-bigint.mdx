@@ -11,6 +11,6 @@ function bigint(): Struct<bigint | string, bigint>
 
 - 接受 `bigint`，或 `BigInt()` 能解析的字符串。`number` 会被拒绝。
 - 输出始终是 `bigint`；无法解析的字符串以 `invalid_type` 失败。
-- 为线上传输编码时，该值变成十进制字符串。
+- 编码为传输格式时，该值变成十进制字符串。
 
 [Struct](/zh-Hans/api/struct)

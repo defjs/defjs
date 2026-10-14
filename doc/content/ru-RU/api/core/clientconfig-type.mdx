@@ -26,6 +26,6 @@ interface ClientConfig {
 
 Готовый снимок, который собирает `createClient` и который изменяет каждый хелпер опций. Члены HTTP берутся из неэкспортируемой базы `HttpClientConfig` и показаны здесь целиком.
 
-Пока ни одна опция не применена, `endpoint` равен `''`, `interceptors` пуст, а `http.handle` и `sse.handle` — глобальный `fetch`. `webSocket.handle` — это `globalThis.WebSocket`, остальные настройки `webSocket` не заданы. `withXSRF` заполняет `xsrf.cookieName` значением `XSRF-TOKEN`, а `xsrf.headerName` — значением `X-XSRF-TOKEN`, если они опущены.
+Пока ни одна опция не применена, `endpoint` равен `''`, `interceptors` пуст, а `http.handle` и `sse.handle` используют общую обёртку по умолчанию, которая обращается к `globalThis.fetch` при каждом вызове. Замена Fetch после импорта влияет на оба обработчика по умолчанию. Core можно импортировать без Fetch; если Fetch по-прежнему отсутствует при выполнении HTTP/SSE-команды с обработчиком по умолчанию, вызов завершается с `ENV_UNSUPPORTED`. Пользовательским обработчикам глобальный Fetch не нужен. `webSocket.handle` — это `globalThis.WebSocket`, остальные настройки `webSocket` не заданы. `withXSRF` заполняет `xsrf.cookieName` значением `XSRF-TOKEN`, а `xsrf.headerName` — значением `X-XSRF-TOKEN`, если они опущены.
 
 [Клиент](/ru-RU/api/client)

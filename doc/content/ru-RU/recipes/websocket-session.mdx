@@ -5,7 +5,7 @@ description: Подключись, отправь один типизирова�
 
 # Открыть WebSocket-сессию
 
-Каждое направление — один struct. Unsubscribe, `close` и `await session.closed` — на тебе. Невалидные кадры идут в `onRuntimeError`.
+Каждое направление — один struct. Отмена подписок, `close` и `await session.closed` — на тебе. Невалидные кадры идут в `onRuntimeError`.
 
 Подробности — в [WebSocket](/ru-RU/docs/web-socket).
 
@@ -19,4 +19,4 @@ description: Подключись, отправь один типизирова�
 message Hello
 ```
 
-Reconnect — opt-in (`withWebSocketReconnect`). Heartbeat тоже. Браузерные WebSocket’ы не принимают произвольные handshake-заголовки — используй cookies, subprotocols или short-lived ticket.
+Переподключение включается явно (`withWebSocketReconnect`), как и heartbeat. Браузерные WebSocket’ы не принимают произвольные заголовки при установлении соединения — используй cookies, подпротоколы или билет с коротким сроком действия.

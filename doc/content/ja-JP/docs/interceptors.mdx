@@ -5,7 +5,7 @@ description: HTTP・SSE・WebSocket の方針を、トランスポート境界�
 
 # Interceptors
 
-認証ヘッダーの追加、メンテナンス窓のショートサーキット、安全な読み取りのリトライ — コマンド検証には触れずに。トランスポートごとにチェーンがあります。入ってくるのは `HttpRequest`。返すのはそのトランスポートの結果（`HttpResponse`、イベントストリームハンドル、または WebSocket セッション）です。入力検証はチェーンの前、status 振り分けとデコード済み結果は後です。
+認証ヘッダーの追加、メンテナンス中のリクエストのショートサーキット、安全な読み取りのリトライ — コマンド検証には触れずに。トランスポートごとにチェーンがあります。入ってくるのは `HttpRequest`。返すのはそのトランスポートの結果（`HttpResponse`、イベントストリームハンドル、または WebSocket セッション）です。入力検証はチェーンの前、status 振り分けとデコード済み結果は後です。
 
 ## 基本セットアップ
 
@@ -39,7 +39,9 @@ description: HTTP・SSE・WebSocket の方針を、トランスポート境界�
 
 SSE も同じパターンです。ブラウザー WebSocket は任意のハンドシェイクヘッダーを足せません — `request.headers` を変えてもブラウザーソケットは認証されません。プロトコル、URL/query 方針、サーバーが対応するハンドシェイクを使ってください。
 
-HTTP ボディを差し替えるときは、コピーしたリクエストの `body` を差し替えます。ボディ値が変わると、Fetch は古い content-type メタデータを無視します。消費済みの `ReadableStream` ボディを再利用しないでください。
+HTTP は推論した Content-Type を `request.headers` に書き込みません。インターセプターが見るのは宣言されたヘッダーだけです。`request.bodyContentType` は、ビルダーのボディから推論した型をプレーンなフィールドとして保持するので、`{ ...req }` のコピー後も残ります。明示的な `content-type` ヘッダーは、ビルダー、クライアントのデフォルト、インターセプター、生の `fetchHandler` リクエストのどれが宣言しても、常にそのフィールドと自動検出より優先されます。署名側は `headers.get('content-type') ?? request.bodyContentType` を読んでください。
+
+HTTP ボディを差し替えるときは、コピーしたリクエストの `body` を差し替え、型は `content-type` ヘッダーで宣言します。`bodyContentType` が効くのは `body` がビルダーの値のままのあいだだけです。差し替えたボディは再検出されるので、ヘッダーが別の型を宣言しない限り、差し替えた文字列はテキストです。`body: undefined` にすると、ライブラリが推論した Content-Type は残りません。変更していないビルダーのボディでは、明示的なヘッダーが無いとき `bodyContentType: null` がライブラリの推論を抑止しますが、文字列ではネイティブ Fetch が独自の型を付けることがあります。FormData は常に実際の multipart boundary を使います。消費済みの `ReadableStream` ボディを再利用しないでください。
 
 ## リクエストをショートサーキットする
 
@@ -91,6 +93,8 @@ WebSocket インターセプターは `next` を高々一度しか呼べませ�
 - `basicAuthSSEInterceptor(provider, options?)` — SSE の Basic 資格情報
 
 `HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。`queryParams` はシリアライズ後の `new URLSearchParams(queryString)` です。ビルダーが query を作らなかったとき、設定済みの query シリアライザは呼ばれません。ビルダーの `URLSearchParams` はそのまま使われます。コマンド検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
+
+URL の検証はリクエストの組み立て中に始まります。ベースエンドポイントの欠落、相対 URL、無効な URL、不正な path は、ショートサーキットするものも含め、インターセプターやトランスポートが実行される前に `REQ_BUILD_FAILED` になります。ディスパッチ前には、最終的な `req.endpoint` が最終的な `req.baseEndpoint` に対して検証されます。解決後の URL はそのベースのオリジンを保ち、ディレクトリ内に収まる必要があります。path 内の C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への移動は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。インターセプターが意図的に `baseEndpoint` を別の有効な絶対 URL に差し替えることは許可されます。HTTP、SSE、WebSocket で共通の規則で、決定的な URL エラーは決してリトライされません。
 
 SSE/WebSocket のオブザーバーはライフサイクルフックであり、制御フローではありません。所有者が終わるとき WebSocket リスナーを購読解除してください。オブザーバーの失敗はトランスポート契約に従います。インターセプター自体は throw や reject できます。
 

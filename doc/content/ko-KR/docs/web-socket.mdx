@@ -25,6 +25,8 @@ description: 타입이 있는 JSON 세션을 시작하고, envelope를 받고 �
 
 `session.send(...)`는 동기적으로 검증하고 직렬화해요. struct 인코딩 다음 `JSON.stringify`예요. open이면 바로 보내고, outgoing 큐가 켜져 있으면 `reconnecting` 동안 큐에 넣고, 쓸 수 없으면 `InvalidStateError`를 throw해요. outgoing struct가 없거나, payload가 struct에 실패하거나, outgoing 큐가 꺼져 있거나 가득 찼거나, 네이티브 send가 실패해도 throw해요. 정의의 정적 `protocols` 목록이 엔드포인트 계약이에요 (예를 들어 `graphql-transport-ws`). 실행 옵션과 `withWebSocketProtocols`는 여전히 그걸 덮어쓸 수 있어요. 서브프로토콜은 그 옵션들만 정해요. builder, `beforeConnect`, interceptor는 바꿀 수 없으므로, 서브프로토콜 안의 토큰은 그 호출의 execute `protocols` 옵션으로 넘겨요. builder는 `path`와 `query`만 돌려줄 수 있어요.
 
+struct 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거나 재연결 큐에 넣기 전에 `TypeError`를 throw해요. 유한하지 않은 수, 함수, symbol, `Map`, `Set`, 스트림, JSON 표현이 없는 클래스 인스턴스예요. 중첩 값도 HTTP JSON body와 같은 규칙을 따라요. `struct.number()`는 여전히 무한대를 받고 `NaN`은 거부해요. struct 계층에서 값을 받아들였다고 해서 유효한 JSON이 되는 것은 아니에요. heartbeat도 같은 직렬화기를 쓰고, 그 직렬화 실패는 논리 세션을 끝내요.
+
 `receive`는 소비자 하나예요. 두 번째 iterator를 요청하면 `TypeError`를 throw해요.
 
 ## 상태 스냅샷
@@ -49,13 +51,13 @@ description: 타입이 있는 JSON 세션을 시작하고, envelope를 받고 �
 
 ## 재연결
 
-재연결은 opt-in이에요. `reconnect` 객체가 없으면 물리 close가 논리 세션을 끝내요. 설정하면 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`이에요. `attempts`는 처음 시도 뒤의 재시도 횟수예요. `attempts: 0`은 꺼요. 기본 predicate는 모든 close 결과를 받아요.
+재연결은 opt-in이에요. `reconnect` 객체가 없으면 물리 close가 논리 세션을 끝내요. 설정하면 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`이에요. `attempts`는 단절마다의 재시도 예산이고, `open`이 성공하면 예산과 백오프 지수가 초기화돼요. 그래서 다음 단절은 다시 재시도 1과 `delayMs` 기준에서 시작해요. `attempts: 0`은 꺼요. 기본 predicate는 그 단절의 예산 안에서 수동이 아닌 모든 close 결과를 받아요. 성공한 open이 반복돼도 평생 재시도 한도는 없어요. 소켓이 열리는 데 성공한 직후 서버에 의해 다시 닫히면, 매번 열릴 때 예산이 초기화되므로 기준 지연(jitter와 상한 적용)으로 계속 재연결할 수 있어요. 이를 중단하려면 `shouldReconnect`를 쓰세요.
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 `shouldReconnect`는 다음 재시도 횟수, close cause, code, reason, `wasClean`을 받아요. 수동 `session.close(...)`는 predicate에 들어가지 않아요. 준비/정책이 throw하면 논리 세션이 오류로 끝나요.
 
-WebSocket backoff jitter는 **곱셈**이에요 (`jitter: 0.2` → 지연이 `0.8x`와 `1.2x` 사이). SSE jitter는 WebSocket과 같은 0–1 곱셈 계수예요. delay/factor/jitter/attempt 값은 생성자 전에 검증돼요. 타이머 지연은 `2_147_483_647` ms를 넘을 수 없어요.
+WebSocket backoff jitter는 **곱셈**이에요 (`jitter: 0.2`는 상한이 걸린 기준을 반올림 전에 `0.8x`–`1.2x`로 늘리거나 줄여요). 최종 지연은 다시 `maxDelayMs`와 플랫폼 타이머 한계 `2_147_483_647` ms로 제한되므로, 그 범위의 위쪽은 잘릴 수 있어요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 throw하지 않고 잘려요. SSE도 같은 0–1 jitter 규칙을 써요. 재시도가 켜져 있으면 옵션은 생성자 전에 검증돼요. `attempts`는 음이 아닌 안전한 정수이고, `delayMs`와 `maxDelayMs`는 유한하고 음이 아니며, `factor`는 유한하고 양수이고, `jitter`는 유한하고 0–1 범위예요. 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. WebSocket `attempts: 0`은 재시도를 즉시 끄고 쓰이지 않는 재연결 필드를 무시해요. SSE는 그 필드도 여전히 검증해요.
 
 `beforeConnect({ attempt, signal })`는 처음 생성자와 모든 재연결 전에 돌아요. 취소가 준비와 연결을 모두 멈추게 하려면 그 signal을 토큰 갱신에 넘기세요.
 
@@ -84,11 +86,13 @@ WebSocket backoff jitter는 **곱셈**이에요 (`jitter: 0.2` → 지연이 `0.
 
 브라우저 WebSocket 생성자는 임의 handshake 헤더를 받지 않고, builder는 `headers`나 `body`를 돌려줄 수 없어요. Defjs는 `http:`를 `ws:`로, `https:`를 `wss:`로 바꾸고, path placeholder를 한 번 인코딩하고, HTTP와 같은 query 규칙을 써요. 기본은 스칼라와 반복 키이고, 중첩 객체는 `withQuerySerializer`이고, query가 없으면 serializer를 호출하지 않아요.
 
+HTTP, SSE와 같이, 없거나 상대적이거나 잘못된 base endpoint나 불법 path는 만드는 동안, 인터셉터나 전송이 돌기 전에 `REQ_BUILD_FAILED`로 실패해요. interceptor가 단축하더라도 마찬가지예요. 해석된 URL은 base origin을 유지하고 그 디렉터리 안에 머물러야 해요. path의 C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`, 디렉터리 탈출은 거부돼요. 앞에 공백이 있어도 스킴 형태와 프로토콜 상대 형식은 거부돼요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. 인터셉터의 최종 `req.endpoint`는 최종 `req.baseEndpoint`에 같은 규칙으로 검증되지만, base를 다른 유효한 절대 URL로 일부러 바꿀 수는 있어요. 결정적인 URL 오류는 재시도하지 않아요.
+
 `withCredentials(true)`는 HTTP/SSE의 Fetch credentials예요. WebSocket 인증이 아니에요. 검토된 쿠키/세션 정책, 서브프로토콜, 또는 짧은 수명의 연결 티켓을 쓰세요. 일반적인 자격 증명이나 오래 사는 비밀을 query 문자열에 넣지 마세요.
 
 ## 종료와 소유권
 
-`session.close(code?, reason?)`는 종료를 요청하고 heartbeat를 멈춰요. code는 `1000` 또는 `3000..4999`여야 하고, reason은 UTF-8 123바이트 이하여야 해요. 잘못된 close 인자는 상태를 바꾸기 전에 throw해요. 수동 close 이유나 논리 종료 결과가 필요하면 `await session.closed`와 함께 쓰세요.
+`session.close(code?, reason?)`는 종료를 요청하고 heartbeat를 멈춰요. code는 `1000` 또는 `3000..4999`여야 하고, reason은 123 UTF-8 바이트 이하여야 해요. 잘못된 close 인자는 상태를 바꾸기 전에 throw해요. 수동 close 이유나 논리 종료 결과가 필요하면 `await session.closed`와 함께 쓰세요.
 
 `execute`에 넘긴 `signal`이나 `abort`는 열린 세션에 계속 붙어 있어요. 나중에 abort하면 세션은 `'aborted'`로 끝나고 `receive`는 `AbortError`로 reject돼요. `timeout`은 시작 시점의 마감일 뿐이에요.
 

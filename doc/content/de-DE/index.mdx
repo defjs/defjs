@@ -44,7 +44,7 @@ Bei einem Fehler ist der zweite Eintrag `undefined`. Bei HTTP ist auch der dritt
 
 ## Ownership in einem Atemzug
 
-Brich HTTP ab, wenn sie veraltet ist. Schließe SSE und `await stream.closed`. Schließe WebSocket und `await session.closed`. Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options Cookies, Auth oder Tenant-Daten erfassen. Redigiere URLs, Headers und Bodies, bevor du sie loggst.
+Brich HTTP ab, wenn sie veraltet ist. Schließe SSE und `await stream.closed`. Schließe WebSocket und `await session.closed`. Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options Cookies, Auth oder Tenant-Daten erfassen. Schwärze URLs, Headers und Bodies, bevor du sie loggst.
 
 ## Verwandte Rezepte
 

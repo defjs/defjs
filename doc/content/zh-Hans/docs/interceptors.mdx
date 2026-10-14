@@ -3,7 +3,7 @@ title: '拦截器'
 description: 在传输边界按洋葱顺序叠 HTTP、SSE、WebSocket 策略。
 ---
 
-# Interceptors
+# 拦截器
 
 加鉴权 header、短路维护窗口、重试安全读——不用碰 command 校验。每种传输各有一条链。你拿进 `HttpRequest`，返回该传输的结果（`HttpResponse`、事件流 handle 或 WebSocket session）。输入校验在链前；状态分派和解码结果在链后。
 
@@ -27,11 +27,11 @@ description: 在传输边界按洋葱顺序叠 HTTP、SSE、WebSocket 策略。
   examples/interceptors/onion-order.ts#example
 </include>
 
-多次 `withInterceptors(...)` 会追加。外层要看到最终结果时，把宽观察放在窄变更/重试外面。
+多次 `withInterceptors(...)` 会追加。外层需要看到最终结果时，把覆盖范围更广的观测放在针对性变更或重试的外层。
 
 ## 克隆并加请求 headers
 
-把进来的 `HttpRequest` 当链拥有的。改 headers 前先 clone；把新请求传给 `next`：
+传入的 `HttpRequest` 由拦截器链拥有。修改前先克隆 `Headers`；把新请求传给 `next`：
 
 <include cwd lang="typescript">
   examples/interceptors/add-request-headers.ts#example
@@ -39,7 +39,9 @@ description: 在传输边界按洋葱顺序叠 HTTP、SSE、WebSocket 策略。
 
 SSE 同理。浏览器 WebSocket 不能加任意握手 headers——改 `request.headers` 鉴权不了浏览器 socket。用协议、URL/query 策略，或服务端支持的握手。
 
-替换 HTTP body 时，在拷贝请求上换 `body`。Body 值变了，Fetch 会忽略过期的 content-type 元数据。别复用已消费的 `ReadableStream` body。
+HTTP 从不把推断出的 Content-Type 写入 `request.headers`；interceptor 只能看到已声明的 header。`request.bodyContentType` 以普通字段保存构建器请求体推断出的类型，因此 `{ ...req }` 拷贝后仍然保留。显式的 `content-type` header 始终优先于该字段和自动检测，无论由构建器、客户端默认值、interceptor，还是原始 `fetchHandler` 请求声明。签名方应读取 `headers.get('content-type') ?? request.bodyContentType`。
+
+替换 HTTP body 时，在拷贝的请求上替换 `body`，并用 `content-type` header 声明其类型。`bodyContentType` 只在 `body` 仍是构建器的值时生效；替换后的请求体会重新检测，因此替换后的字符串是文本，除非 header 另行声明。设置 `body: undefined` 后不会留下库推断的 Content-Type。对未改动的构建器请求体，在没有显式 header 时，`bodyContentType: null` 会抑制库的推断，但原生 Fetch 仍可能为字符串添加自己的类型。FormData 始终使用实际序列化的 multipart 边界。别复用已消费的 `ReadableStream` body。
 
 ## 短路请求
 
@@ -89,6 +91,8 @@ Factory 返回带标签的传输值：
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic 凭证
 
 `HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静态 `operation`。它是传输集成值——不是调用方解析后的输入。`queryParams` 是序列化之后的 `new URLSearchParams(queryString)`。builder 没产出 query 时，配好的 query serializer 不会被调用；builder 返回的 `URLSearchParams` 原样使用。Command 校验、output 校验、领域错误映射留在各自层。
+
+URL 校验从请求构建时开始：基础端点缺失、相对或无效，或者路径非法，都会在任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，短路 interceptor 也不例外。分派前，还会相对于最终 `req.baseEndpoint` 校验最终 `req.endpoint`：解析后的 URL 必须与该基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 可以有意把 `baseEndpoint` 换成另一个有效的绝对 URL。HTTP、SSE 和 WebSocket 共用这项规则，确定性的 URL 错误不会重试。
 
 SSE/WebSocket observer 是生命周期钩子，不是控制流。所有者结束时退订 WebSocket 监听。Observer 失败跟传输契约走；interceptor 本身可以抛或 reject。
 

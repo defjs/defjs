@@ -9,7 +9,7 @@ description: 定义 GET /users/:id，对着本地 Fetch handle 跑一遍，再�
 
 ## 第 1 步 — 安装
 
-`@defjs/core` 是 ESM，可运行在 Node.js、Bun 或 Deno 上。Node.js 22.18+（或 24+）通过 type stripping 直接运行 `.ts`；更早的 22.x 需要 `--experimental-strip-types`。package.json 里保留 `"type": "module"`。浏览器里照样需要 bundler 和 Fetch。
+`@defjs/core` 是 ESM，可运行在 Node.js、Bun 或 Deno 上。Node.js 22.18+（或 24+）通过类型擦除直接运行 `.ts`；更早的 22.x 需要 `--experimental-strip-types`。package.json 里保留 `"type": "module"`。浏览器里照样需要 bundler 和 Fetch。
 
 <Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
 <Tab value="bun">
@@ -53,7 +53,7 @@ deno add npm:@defjs/core
 
 `output` 是 2xx body。`error` 是其余每个状态。各一个 struct。这些 body 形状不同时，用 `struct.or(...)` 或判别联合。
 
-`defineRequest(...)` 返回 endpoint。调用 `getUser(...)` 打出 opaque command，再交给 `client.execute(...)`。上面的 `builder` 是摆放 input 的函数，它不是 endpoint。
+`defineRequest(...)` 返回 endpoint。调用 `getUser(...)` 创建不透明命令，再交给 `client.execute(...)`。上面的 `builder` 是摆放 input 的函数，它不是 endpoint。
 
 ## 第 3 步 — 本地执行
 
@@ -124,7 +124,7 @@ User not found
 - 声明过的 body（2xx 是 `output`，其余是 `error`）解不出来 → `RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，与状态无关
 - Fetch 失败 / 取消 / 超时 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` 必须是 `1..2_147_483_647` 的正 safe integer。合法取消形状：`{ timeout }`、`{ abort }`，或 `{ signal, timeout }` / `{ signal, abort }`。`{ abort, timeout }` 一起传是非法的。取消只说明调用方看到了什么——不代表服务端写入已经提交。
+`timeout` 必须是 `1..2_147_483_647` 的正安全整数。合法取消形状：`{ timeout }`、`{ abort }`，或 `{ signal, timeout }` / `{ signal, abort }`。`{ abort, timeout }` 一起传是非法的。取消只说明调用方看到了什么——无法说明服务端写入是否已经提交。
 
 ## 接下来的操作示例
 

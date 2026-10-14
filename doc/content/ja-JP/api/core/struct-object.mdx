@@ -12,8 +12,9 @@ function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
 `shape` はフィールド名を struct に対応付けます。
 
 - すべてのフィールドはデフォルトで**必須**です。キーがない場合は `missing_key` で失敗します。
-- `.optional()` と `.nullish()` はキーが欠けていることを許します。欠けているオプションのフィールドは、出力でも欠けたままです。
-- `.null()` / `.nullable()` は `null` を許します。`.alias(name)` は、そのフィールドを別のワイヤキーで読み書きします。
+- `.optional()` と `.nullish()` はキーが欠けていることを許します。省略可能なフィールドが入力にない場合、出力にもそのフィールドはありません。
+- `.null()` / `.nullable()` は `null` を許します。
+- `.alias(name)` はフィールドのワイヤキーを設定します。`struct.parse` はデフォルトで論理キーを読み取ります。`{ aliases: true }` と HTTP JSON デコードではワイヤキーを読み取り、HTTP JSON エンコードではワイヤキーを書き出します。パース後の出力は論理キーを使います。
 - `shape` にないキーは出力から取り除かれます。出力は `null` プロトタイプを持つ新しいオブジェクトです。
 - 入力はプレーンオブジェクトでなければなりません。配列、`Map`、クラスインスタンスは `invalid_type`（expected は `object`）で失敗します。
 - 最初に失敗したフィールドでパースが止まり、`issue.path` にそのキーが入ります。

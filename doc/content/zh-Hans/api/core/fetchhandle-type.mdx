@@ -9,7 +9,7 @@ description: '用作 HTTP 或 SSE handle 的、与 fetch 兼容的函数类型�
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Defjs 调用的 `(input, init?) => Promise<Response>` 调用签名。它特意不是 `typeof fetch`，这样 mock 就不必实现 `preconnect` 之类的宿主扩展。自定义 handle 收到的是一个 `Request`；只有库的默认值（全局 `fetch`）才以 `(url, init)` 方式调用。
+Defjs 调用的 `(input, init?) => Promise<Response>` 调用签名。它特意不是 `typeof fetch`，这样 mock 就不必实现 `preconnect` 之类的宿主扩展。HTTP 以 `(url, init)` 方式调用未被替换的平台 Fetch；被替换的全局 Fetch 或自定义 handle 收到的是 `Request`。默认实现在每次调用时获取全局 Fetch。SSE 始终传入 `Request`，其默认 handle 也一样。
 
 `withHTTPHandle`、`withSSEHandle` 和 `fetchHandler` 都接受它。
 

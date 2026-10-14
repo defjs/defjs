@@ -25,9 +25,9 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 - `abort` 和 `timeout` 互斥。类型层面会拒绝同时传两者，运行时同时传入则以 `REQ_OPTIONS_INVALID` fault 失败。
 - `signal` 可与其中任一组合；它不是 `abort` 的别名。
-- `timeout` 必须是不超过 `2_147_483_647` 的正 safe integer。它限制打开 session 最多可以花多久，重连时不会再次应用。
+- `timeout` 必须是不超过 `2_147_483_647` 的正安全整数。它限制打开 session 最多可以花多久，重连时不会再次应用。
 - `beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 在本次调用中覆盖 client 级别的 options。
-- 设了 `reconnect` 时，`attempts` 默认为 `3`；`0` 禁用。省略 `attempts` 不是无限次。
+- 设了 `reconnect` 时，每次连接中断的 `attempts` 默认为 `3`；`0` 禁用。成功 `open` 后会重置预算和退避指数。省略 `attempts` 并不表示单次中断期间可以无限重试。校验规则和最终延迟上限见 [`withWebSocketReconnect`](/zh-Hans/api/core/withwebsocketreconnect)。
 
 见 [`WebSocketHeartbeatConfig`](/zh-Hans/api/core/websocketheartbeatconfig-type)。
 

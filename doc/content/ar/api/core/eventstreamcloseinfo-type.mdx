@@ -12,6 +12,6 @@ type EventStreamCloseInfo =
   | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-قيمة `EventStreamHandle.closed`. `eof` يعني أن الاستجابة انتهت طبيعيًا. و`aborted` يعني أن التدفق أُغلق بـ `close()` أو بالتخلّص، أو أُلغيت إشارته؛ ويحمل `reason` و`cause` القيمة الممرَّرة إلى `close`. و`error` يحمل رمز الخطأ `code` (انظر `EventStreamFaultCode`) والفشل في `cause`.
+قيمة `EventStreamHandle.closed`. `eof` يعني أن الاستجابة انتهت طبيعيًا. و`aborted` يعني أن التدفق أُغلق بـ `close()` أو بالتخلّص، أو أُلغيت إشارة المستدعي لسبب غير انتهاء المهلة؛ ويحمل `reason` و`cause` القيمة الممرَّرة إلى `close`. إذا أُلغيت إشارة المستدعي بعد الفتح بسبب `TimeoutError` أو `ERR_TIMEOUT`، يرمي المكرّر `ERR_TIMEOUT` وتكون `closed` هي `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. أما استدعاء `close(timeoutError)` الصريح فيظل يُبلّغ عن `aborted`. و`error` يحمل رمز الخطأ `code` (انظر `EventStreamFaultCode`) والفشل في `cause`.
 
 [SSE](/ar/api/sse)

@@ -7,7 +7,7 @@ description: 點解 Defjs 要將 contracts、commands、transport results、deco
 
 Defjs 刻意做咗幾個 trade-offs。Convenience APIs 好多時會隱藏邊個 own 住 request、stream 或者 session。Defjs 要呢條 boundary 睇得見，等你可以 reuse 同一個 endpoint contract，又唔會靜靜雞拎住 cache、retry scheduler 或者 resource manager。
 
-## 聲明即斷言
+## 聲明即斷言 [#declaration-is-an-assertion]
 
 呢六條規則決定咗「response 點讀」嘅所有問題。編咗號，方便日後討論時直接引用，唔使重新推導一次。
 
@@ -73,15 +73,15 @@ Background job 同 UI owner 可以用唔同 cancel/retry policy 去 execute 同�
 
 TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check server response。Struct parsing 係 contract 嘅另一半。Defjs 會喺 request construction 之前 validate command input，檢查 representation，再 parse `ok` 適用嗰邊嘅 struct。
 
-Struct **只會套用一次，而且係喺 interceptor chain 之後**。Interceptor 用 `makeResponse(...)` 造出嚟嘅 response，會經過同線上真實嚟嘅 response 一樣嘅 media type 檢查、representation 轉換同 Struct：response 由邊嚟，唔影響佢點被讀，所以唔存在「信 interceptor」呢條要考慮嘅岔路。內置嘅 Fetch transport 會喺 media type 檢查之後，先讀取並 JSON parse 已聲明嘅 body，再將 response 交返俾 chain，所以 interceptor 見到嘅係已經 parse 咗嘅 `body`；嗰度失敗，就會顯示為同一個 `RES_*` 或者 `NET_BODY_INCOMPLETE` fault。
+對 HTTP 嚟講，Struct **只會套用一次，而且係喺 interceptor chain 之後**。Interceptor 用 `makeResponse(...)` 造出嚟嘅 response，會經過同線上真實嚟嘅 response 一樣嘅 media type 檢查、representation 轉換同 Struct：response 由邊嚟，唔影響佢點被讀，所以唔存在「信 interceptor」呢條要考慮嘅岔路。內置 Fetch transport 會先將已聲明嘅 body 讀成 JSON、text、`Blob` 或 bytes，再交返俾 chain。只有 JSON representation 需要 JSON media type 同 `JSON.parse`；非 JSON text、blobs 同 bytes，只要符合聲明嘅 representation 就有效。Interceptors 見到嘅係嗰個 representation，未係經 Struct 解碼嘅值。讀取失敗適用於所有 representation；嗰度嘅讀取或解析失敗會顯示為同一個 `RES_*` 或者 `NET_BODY_INCOMPLETE` fault。
 
-次序係：media type，然後 representation，然後 Struct。
+次序係：media type（JSON 先需要），然後 representation，然後 struct。
 
 | 冇守住嘅係                                | Fault                                          |
 | ----------------------------------------- | ---------------------------------------------- |
 | Media type 唔係所聲明 representation 要嘅 | `RES_MEDIA_TYPE_INVALID`——讀 body **之前**就報 |
 | Bytes 唔係嗰個 representation             | `RES_DECODE_FAILED`                            |
-| 值唔符合嗰個 Struct                       | `RES_STRUCT_MISMATCH`                          |
+| 值唔符合嗰個 Struct                       | `RES_STRUCT_MISMATCH`（只限 HTTP）             |
 | 非 2xx，而 `error` 解到                   | `HTTP_STATUS`，`data` 有 type                  |
 | 非 2xx，而冇聲明 `error`                  | `HTTP_STATUS`，`data: undefined`               |
 
@@ -111,7 +111,7 @@ Body kind 由 value 決定，第一個 match 贏：
 
 `undefined` fields 會被 omit。Nullable field 嘅 `null` 會送出。String 唔係 JSON，除非你 stringify 佢再 set `content-type`。你自己 serialize（`JSON.stringify`、qs、protobuf）就離開 struct encoder，所以 aliases 唔會套用。冇 public `struct.encode`。
 
-`GET` 同 `HEAD` 唔可以帶 body。WebSocket builders 唔可以 return headers 或者 body。Static WebSocket subprotocols 留喺 definition（`protocols`），唔係 builder。Invalid WebSocket frames 去 session runtime-error listener。SSE `error` struct 會 type 住 startup fault，handshake body 跟 HTTP body 同一套 kind rule：`string` 係 text，blobs 同 files 係 blobs，`arrayBuffer` 係 bytes，其他就係 JSON。
+`GET` 同 `HEAD` 唔可以帶 body。WebSocket builders 唔可以 return headers 或者 body。Static WebSocket subprotocols 留喺 definition（`protocols`），唔係 builder。Invalid WebSocket frames 去 session runtime-error listener。SSE `error` struct 會為 startup fault 提供 type，handshake body 跟 HTTP body 同一套 kind rule：`string` 係 text，blobs 同 files 係 blobs，`arrayBuffer` 係 bytes，其他就係 JSON。Representation 選擇係共用嘅，但 fault 映射唔同：SSE handshake 嘅讀取、解析或者 Struct 失敗都係 `RES_DECODE_FAILED`；Struct 失敗會以 `StructError` 作為 `cause`。HTTP 嘅 Struct 失敗就係 `RES_STRUCT_MISMATCH`。
 
 ## Observers 同 policy placement
 

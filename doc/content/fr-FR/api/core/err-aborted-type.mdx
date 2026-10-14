@@ -13,4 +13,6 @@ Valeur partagée de `cause` et de message pour l’annulation par l’appelant. 
 
 Voir le [guide Gestion des erreurs](/fr-FR/docs/errors).
 
+La sentinelle porte une marque non énumérable `Symbol.for('defjs.cause.aborted')`. [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît cette sentinelle depuis n’importe quelle copie de Core, sans comparer l’identité d’objet. La classification est indépendante des exécutions antérieures sans rapport.
+
 [Erreurs](/fr-FR/api/errors)

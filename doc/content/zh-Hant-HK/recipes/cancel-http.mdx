@@ -7,7 +7,7 @@ description: Abort 或者 time out 一次 execute，再讀 NET_ABORTED / NET_TIM
 
 傳 `signal`，再加 `abort` 或者 `timeout` 其中一個 — 唔好同時傳 `abort` 同 `timeout`。`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。
 
-詳情睇 [HTTP](/zh-Hant-HK/docs/http#取消工作)。
+詳情睇 [HTTP](/zh-Hant-HK/docs/http#cancel-the-work)。
 
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example

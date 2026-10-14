@@ -98,6 +98,10 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 재연결은 클라이언트에 있어요 (`withSSEReconnect`). SSE `jitter`는 WebSocket과 같은 **0–1 곱셈 계수**예요.
 
+재시도 예산과 백오프 지수는 핸드셰이크가 성공한 뒤 초기화되고, 단절마다 적용돼요. 잘못된 숫자 옵션은 스트림을 열기 전에 `REQ_OPTIONS_INVALID`를 반환하고, `maxDelayMs`는 jitter 뒤의 최종 지연을 제한해요. 검증 규칙, 기본값, UTF-8 `Last-Event-ID` 처리는 [`withSSEReconnect`](/ko-KR/api/core/withssereconnect)를 보세요.
+
+파서는 WHATWG SSE 줄과 필드 규칙을 따르고, 각 물리 스트림의 시작에서 선행 UTF-8 BOM 하나만 제거해요. data나 ID 값 안의 U+FEFF는 유지되고, 뒤에 나오는 BOM이 붙은 필드 이름은 알 수 없는 필드로 무시돼요. 여러 줄 data는 `\n`으로 이어지고, 빈 줄은 data가 있는 이벤트를 내며, EOF의 미완성 이벤트는 버려져요.
+
 [SSE 가이드](/ko-KR/docs/sse)와 [SSE 스트림 소비하기](/ko-KR/recipes/consume-sse)를 보세요.
 
 ## EventStreamDefinition

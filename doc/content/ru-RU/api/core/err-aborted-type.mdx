@@ -13,4 +13,6 @@ const ERR_ABORTED: Error // message: 'Request was aborted'
 
 См. [гайд Errors](/ru-RU/docs/errors).
 
+Этот sentinel несёт неперечислимую метку `Symbol.for('defjs.cause.aborted')`. [`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт его из любой копии Core без сравнения идентичности объектов. Классификация не зависит от предыдущих несвязанных вызовов.
+
 [Ошибки](/ru-RU/api/errors)

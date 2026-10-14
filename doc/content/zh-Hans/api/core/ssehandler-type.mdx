@@ -13,4 +13,4 @@ SSE interceptor 收到的 `next` 函数。`next(req)` 只向内走：经过排�
 
 `EventStreamHandle` 扩展了 `AsyncDisposable`。自己构造 handle 的短路实现必须提供 `[Symbol.asyncDispose](): PromiseLike<void>`，并把它接到同一个关闭生命周期上。
 
-[Interceptors](/zh-Hans/api/interceptors)
+[拦截器](/zh-Hans/api/interceptors)

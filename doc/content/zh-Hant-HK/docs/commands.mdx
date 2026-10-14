@@ -1,6 +1,6 @@
 ---
 title: '定義與執行 / Command'
-description: Define endpoints，build opaque commands，map inputs，再 infer transport results。
+description: 定義 endpoints，建立 opaque commands，映射 inputs，再推斷 transport results。
 ---
 
 # 命令
@@ -23,7 +23,7 @@ description: Define endpoints，build opaque commands，map inputs，再 infer t
 
 冇 `input` → endpoint 唔收 argument，而 `builder` 可以係 `() => request`。有 `input` → 傳 struct value。Optional field 可以 omit；required field 唔可以。
 
-Keep commands opaque。唔好挖 tags 或者 symbols。
+保持 commands opaque。唔好依賴內部 tags 或者 symbols。
 
 ## Values 去邊
 

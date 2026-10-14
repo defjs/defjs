@@ -16,7 +16,7 @@ type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<Ht
 type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
 ```
 
-`next(req)`를 호출하거나 (바꾼 요청도 가능) `makeResponse`로 short-circuit해요. `next`는 안쪽으로만 진행해요. 이 interceptor 뒤에 등록된 interceptor들을 거쳐 전송까지 가요. 다시 호출하면 그 안쪽 부분을 이 interceptor부터 다시 실행하고, 바깥쪽 interceptor는 두 번 실행되지 않아요.
+`next(req)`를 호출하거나 (바꾼 요청도 가능) `makeResponse`로 short-circuit해요. `next`는 안쪽으로만 진행해요. 이 interceptor 뒤에 등록된 interceptor들을 거쳐 전송까지 가요. 다시 호출하면 이 interceptor 뒤에 등록된 안쪽만 다시 실행하고, 바깥쪽 interceptor는 두 번 실행되지 않아요.
 
 ## createSSEInterceptor()
 

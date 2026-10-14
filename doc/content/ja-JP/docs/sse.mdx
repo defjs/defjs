@@ -31,7 +31,9 @@ description: 型付き SSE ストリームを消費し、閉じ、終端の clos
 
 レスポンスは成功で、メディアタイプの essence が `text/event-stream` で、ボディがある必要があります。起動時の non-2xx → `HTTP_STATUS` です。`error` を宣言していれば、その fault はデコード済みのハンドシェイクボディを運びます。メディアタイプが悪いときは `RES_MEDIA_TYPE_INVALID`、宣言した kind として読めないボディは `RES_DECODE_FAILED` です。レスポンス到着後に検証が失敗しても、レスポンススナップショットがタプルの 3 番目に残ることがあります。
 
-`startupOpen` は初期スナップショットです。`stream.open` はライブで、後の物理 open で変わります。最初のレスポンスが重要なときはタプル側の値を残してください。
+ベースエンドポイントの欠落、相対 URL、無効な URL、不正な path は、組み立て中に `REQ_BUILD_FAILED` になります。インターセプターがショートサーキットする場合でも、インターセプターやトランスポートの実行前に失敗します。解決後の URL はベースのオリジンを保ち、ディレクトリ内に収まる必要があります。path 内の C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への移動は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。インターセプターの最終的な `req.endpoint` は、最終的な `req.baseEndpoint` に対して同じ規則で検証されます。ベースを意図的に別の有効な絶対 URL に差し替えることは許可されます。決定的な URL エラーは決してリトライされません。
+
+`startupOpen` はその実行の初期スナップショットです。新しい `execute` は、レスポンス到着前に失敗した場合でも、前の実行のスナップショットを再利用しません。`stream.open` はライブで、後の物理 open で変わります。最初のレスポンスが重要なときはタプル側の値を残してください。
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -42,6 +44,8 @@ description: 型付き SSE ストリームを消費し、閉じ、終端の clos
 ワイヤのイベント名 → `events[eventName]`。なければ `events.default`。一致する Struct がなければイベントは届けられません。SSE の `event` フィールド欠落 → 論理名 `message`。
 
 SSE の `data` はまずテキストです。`string` の struct はそのテキストをそのまま保ちます。それ以外の kind は JSON です。テキストをパースしてから struct でデコードします。`struct.object`、`struct.number`、`struct.boolean`、`struct.any`、`struct.unknown` は JSON であり、trim したテキストではありません。`ping` のような裸のトークンは `struct.literal('ping')` を満たしません。data は JSON である必要があります。JSON 文字列 `"abc"` を送るサーバーでも `struct.string()` は満たします。届く値はその生テキストで、引用符も含み、JSON デコードされて `abc` にはなりません。
+
+パースは WHATWG の SSE の行とフィールドの規則に従います。CR、LF、CRLF が行を終え、空行がデータを持つイベントをディスパッチし、複数の `data:` 行は `\n` で結合されます。コメントと未知のフィールドは無視され、EOF で未完了のイベントはディスパッチされません。各物理ストリームの先頭にある UTF-8 BOM は 1 つだけ除去されます。`data` や `id` の値の中の U+FEFF は保持され、途中で現れる `﻿data` のような BOM 付きのフィールド名は未知として無視されます。
 
 発行される値は `event`、デコード済み `data`、任意の空でない `id` です。`default` があると、未知のイベント名は推論されたユニオンで `string` になります。
 
@@ -59,9 +63,11 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-`attempts` は最初の試行のあとのリトライ回数を数えます。再接続オブジェクトを置いたときのデフォルトは `3` です。`attempts: 0` はリトライを無効にします。`withSSEReconnect` を省いてもリトライは無効です。`delayMs` は初期間隔（デフォルト `1000`）です。`factor` で伸ばし（デフォルト `1`、つまり一定の間隔）、`maxDelayMs` がベースを上限します（デフォルトは上限なし）。SSE の `jitter` は WebSocket と同じ、**0–1 の乗法因子**です。ストリームの `retry:` フィールドは現在の間隔を更新します。方針コールバックが false / throw / reject を返すと、論理ストリームは終わります。
+`attempts` は中断ごとのリトライ予算です。再接続オブジェクトを設定したときのデフォルトは `3` です。ハンドシェイクが成功すると予算、コールバックの試行番号、バックオフ指数がリセットされるので、別々の中断が全ライフサイクル共通の予算を消費することはありません。`attempts: 0` はリトライを無効にします。`withSSEReconnect` を省いてもリトライは無効です。`delayMs` は初期間隔（デフォルト `1000`）です。`factor` で伸ばし（デフォルト `1`、つまり一定の間隔）、`maxDelayMs` は jitter と丸めのあとの最終遅延の厳密な上限です（デフォルトは設定上の上限なし）。SSE の `jitter` は WebSocket と同じ、**0–1 の乗法因子**です。上限を設定しなくても、プラットフォームのタイマー上限は `2_147_483_647` ms です。ベースがゼロならゼロのままで、それ以外の有効な数値から生じるオーバーフローは上限で飽和します。数字だけからなるストリームの `retry:` フィールドは、復旧後も含め、現在のベース間隔を更新します。方針コールバックが false を返す、例外を投げる、または返した Promise が reject されると、論理ストリームは終わります。オープン成功の直後に再試行可能なストリーム失敗が繰り返されると、オープンのたびに予算がリセットされるため、現在のベース遅延（jitter と上限の制約下）で再接続が続き得ます。止めるには `shouldReconnect` を使ってください。通常の EOF は引き続き終端です。
 
-最後にパースしたイベント ID は、後の試行で `Last-Event-ID` になります。そのヘッダーを除けば、後の試行が送り直すのは最初の一回のために組み立てたリクエストです。`builder` とインターセプターは `execute` ごとに一度だけ実行されるので、メソッド、URL、ヘッダー、ボディは変わりません。有効期間の短いトークンなど、試行のたびに最新の値が必要なヘッダーは、`withSSEHandle` に渡す Fetch で設定します。その Fetch は試行ごとに一度実行されます。それでも資格情報が期限切れになった場合、次のハンドシェイクで 2xx 以外のレスポンスを受け取り、ストリームは `HTTP_STATUS` で終了します。
+再接続 options はインターセプターや Fetch の前に検証されます。`attempts` は非負の安全な整数、`delayMs` と明示した `maxDelayMs` は有限で非負、`factor` は有限で正、`jitter` は有限で 0–1 の範囲である必要があります。無効な値では、ストリームを開かずに `REQ_OPTIONS_INVALID` が返ります。
+
+最後にパースしたイベント ID は、後の試行で `Last-Event-ID` になり、非 ASCII の ID も含め、ワイヤ上では UTF-8 バイトとしてエンコードされます。空の `id:` はヘッダーを消し、NUL を含む ID は無視されます。そのヘッダーを除けば、後の試行が送り直すのは最初の一回のために組み立てたリクエストです。`builder` とインターセプターは `execute` ごとに一度だけ実行されるので、メソッド、URL、ヘッダー、ボディは変わりません。有効期間の短いトークンなど、試行のたびに最新の値が必要なヘッダーは、`withSSEHandle` に渡す Fetch で設定します。その Fetch は試行ごとに一度実行されます。それでも資格情報が期限切れになった場合、ストリームが開いたあとの再接続ハンドシェイクが non-2xx だと、ストリームは `RES_DECODE_FAILED` で終了します。status は `stream.open.response.status` で確認してください。一方、最初のハンドシェイクが non-2xx なら、宣言したエラーボディがデコードできた場合は起動時の `HTTP_STATUS` フォールトを返します。
 
 再接続がリクエストを送り直すのは、それが安全なときだけです。
 
@@ -90,13 +96,13 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 終端の種別（`closed.kind`）は `eof`、`aborted`、`error` のいずれかです。`error` 結果は `closed.code` も持ち、これは `EventStreamFaultCode` です。`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED`、または `RES_MEDIA_TYPE_INVALID` です。
 
-`close(reason)` はアクティブな試行を abort し、キューを閉じ、`aborted` として確定します。open 後のストリームで `execute` に渡した `signal` や `abort` を abort したときも同じです。イテレータは通常どおり終了し、`closed` は `aborted` を報告します。`timeout` は起動時の期限にすぎず、open 済みのストリームを終わらせることはありません。ループの `break` / `return` / throw はイテレータ return を呼び、`iterator-return` で閉じます。コマンドを実行したコードが閉鎖を所有します。
+`close(reason)` はアクティブな試行を abort し、キューを閉じ、理由が `TimeoutError` でも `aborted` として確定します。ストリームが open されたあとに `execute` に渡した `signal` や `abort` を abort すると、通常はイテレータが終了し、`aborted` を報告します。ただし abort の理由が `TimeoutError` または `ERR_TIMEOUT`（たとえば `AbortSignal.timeout(...)`）なら、イテレータは `ERR_TIMEOUT` を throw し、`closed` は `kind: 'error'` と `code: 'NET_TIMEOUT'` を報告します。execute の `timeout` option は起動時の期限にすぎず、open 済みのストリームを終わらせることはありません。ループの `break` / `return` / throw はイテレータ return を呼び、`iterator-return` で閉じます。コマンドを実行したコードが閉鎖を所有します。
 
 `await using` は同じ所有クローズ経路を呼び、Defjs の読み取り/再接続処理が止まり、アクティブな reader lock が解放されるまで待ちます。provider が制御する、決して settle しない `ReadableStream.cancel()` の promise については意図的に上限付きなので、その provider promise が完了したことは保証しません。理由や終端結果が要るときは、明示的な `stream.close(reason)` と `await stream.closed` も有効です。
 
 構造的な独自 `EventStreamHandle` 実装は、今や `[Symbol.asyncDispose](): PromiseLike<void>` を提供し、同じライフサイクルへ繋ぐ必要があります。実装者にとってはコンパイル時の破壊的変更です。Defjs のハンドルを受け取るだけの利用者は、実行時に新しいものを呼ぶ必要はありません。
 
-リポジトリで検証済みかつサポートされる最低 lib 契約は `ES2022`、`ESNext.Disposable`、`DOM`、`DOM.Iterable` で、リポジトリは TypeScript 7 に固定されています。この 4 つは 1 つの baseline として一緒に検証されています。各宣言が独立してすべての項目を強制する、という意味ではありません。未検証の古いコンパイラも約束しません。通常の HTTP クライアントは `AsyncDisposable` ではありません。各リクエストは timeout か `AbortSignal` で管理してください。
+サポートされる最低 lib 集合は `ES2022`、`ESNext.Disposable`、`DOM`、`DOM.Iterable` です。リポジトリの宣言用ツールは TypeScript 7 を使いますが、自動の packed-consumer 検証や最低 lib の検証ゲートはなく、古いコンパイラの対応も保証しません。この集合が提供するのは型であり、実行時の Web API の polyfill ではありません。通常の HTTP クライアントは `AsyncDisposable` ではありません。各リクエストは timeout か `AbortSignal` で管理してください。
 
 資格情報、イベントデータ、イベント ID、cause、ストリーム URL は日常ログに出さないでください。`withCredentials(true)` は SSE の Fetch cookie に効きますが、WebSocket 認証は設定しません。
 

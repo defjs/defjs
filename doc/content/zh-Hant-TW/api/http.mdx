@@ -13,7 +13,7 @@ description: defineRequest、execute options，以及 HTTP request／response �
 function defineRequest(definition: RequestDefinition): RequestEndpoint
 ```
 
-- **definition** — `method`、`path`，選填 `input` struct、`output` 與 `error` struct，以及 `operation`。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
+- **definition** — `method`、`path`，選填 `input` struct、選填 `output` 與 `error` struct，以及選填 `operation`。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
 - **回傳** endpoint。帶 input 呼叫就得到 `HttpCommand`。
 
 <include cwd>examples/api/define-request.ts#example</include>
@@ -38,7 +38,7 @@ function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, op
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-預設 HTTP 傳輸。`fetchImpl` 預設為全域 `fetch`；`withHTTPHandle` 可以提供另一個。在沒有回應到達 client，或讀取已宣告的 body 失敗時，它會 reject，而不是 resolve 成一個合成回應。
+預設 HTTP 傳輸。`fetchImpl` 預設為送出當下才解析的全域 `fetch`；`withHTTPHandle` 可以提供另一個。未被替換的平台 Fetch 會收到 `(url, init)`，被替換的全域 Fetch 或自訂 handle 則會收到 `Request`。在沒有回應到達 client，或讀取已宣告的 body 失敗時，它會 reject，而不是 resolve 成一個合成回應。
 
 ## makeResponse()
 
@@ -124,6 +124,8 @@ type HttpResponse<R> = {
 
 `loaded`、`total`、`lengthComputable`。回呼可以採用非同步形式。`onDownloadProgress` 或 `onUploadProgress` 拋出錯誤時，該次呼叫會以 `EXT_OBSERVER_FAILED` 失敗，拋出的值作為 `cause`；取消與 `timeout` 仍分別回報 `NET_ABORTED`／`NET_TIMEOUT`。上傳進度只在支援串流請求主體的執行環境中回報（Bun、Node、Deno）；在瀏覽器中，`Blob`／`File`、`ArrayBuffer` 與 `FormData` 主體會原樣送出，不會呼叫 `onUploadProgress`。
 
+在伺服器執行環境中，FormData 使用序列化後的 stream，不會把整個主體緩衝成 Blob，並保留實際的 multipart boundary。除非有效且明確的 `Content-Length` 提供總量，否則 total 未知。明確的 content type 在上傳轉換後仍會保留，但 FormData 必須使用其序列化產生的 boundary。`loaded` 計算的是 stream 位元組，不是伺服器已確認的位元組。帶有非 identity 的 `Content-Encoding` 的下載會回報 `total: 0` 與 `lengthComputable: false`；這些 stream 位元組可能已經解壓縮。
+
 見 [HTTP 指南](/zh-Hant-TW/docs/http) 與 [Commands](/zh-Hant-TW/docs/commands)。
 
 ## RequestEndpoint
@@ -141,11 +143,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
 `GET` 與 `HEAD` 不能回傳 body。`path` 與 `headers` 必須是扁平 scalars；`query` 可以巢狀，巢狀物件在執行階段需要 `withQuerySerializer`。
+
+見 [`HttpRequestShape`](/zh-Hant-TW/api/core/httprequestshape-type)，了解 `BodyValue` 接受的線上值與 JSON 值。
 
 ## HttpCommand
 

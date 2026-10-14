@@ -19,4 +19,4 @@ Ver detalles en [SSE](/es-ES/docs/sse).
 hello from the server
 ```
 
-SSE no reintenta fallos de red/lectura salvo que actives `withSSEReconnect(...)`. Cuando se configura la reconexión, `attempts` vale `3` por defecto; `attempts: 0` desactiva el reintento. Sin `shouldReconnect`, solo se reconectan las solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`; las solicitudes con un cuerpo `ReadableStream` nunca se reconectan.
+SSE no reintenta fallos de red/lectura salvo que actives `withSSEReconnect(...)`. Cuando se configura la reconexión, `attempts` vale por defecto `3` por interrupción; un handshake correcto reinicia el presupuesto y el exponente de backoff. `attempts: 0` desactiva el reintento. Las opciones numéricas de reconexión no válidas fallan antes de cualquier solicitud con `REQ_OPTIONS_INVALID`; consulta las [reglas de validación](/es-ES/api/core/withssereconnect). Sin `shouldReconnect`, solo se reconectan las solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`; las solicitudes con un cuerpo `ReadableStream` nunca se reconectan.

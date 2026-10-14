@@ -23,6 +23,7 @@ interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends Async
 - `state` 是逻辑上的 [`WebSocketState`](/zh-Hans/api/core/websocketstate-type)；`connection` 是最新的 [`WebSocketConnectionInfo`](/zh-Hans/api/core/websocketconnectioninfo-type)。`bufferedAmount` 是原生尚未发出的字节数；没有物理 socket 时为 `0`。
 - `receive` 产出已经按 `incoming` struct 解析好的入站消息。它只能有一个消费者：请求第二个迭代器会抛出 `TypeError`。无法解析的 frame 会报告给 `onRuntimeError` 的监听器并被跳过。
 - `send(message)` 用 `outgoing` struct 校验并编码消息，然后发送 JSON 文本。`open` 时立即发送；`reconnecting` 时，若 `maxOutgoingQueueSize` 允许就入队；session 不可写时，抛出名为 `InvalidStateError` 的 `DOMException`。在没有声明 `outgoing` struct、消息未通过 struct 校验，或队列被禁用或已满时同样会抛错。
+- 编码后，如果 JSON 无法忠实表示该值，则会在发送或入队之前抛出 `TypeError`。这包括根值或嵌套的非有限数字、函数、symbol、`Map`、`Set`、流，以及没有 JSON 表示形式的类实例。相同的检查也保护心跳消息；心跳序列化失败会结束 session。struct 校验可能先拒绝该值。
 - `close(code?, reason?)` 请求关闭并停止心跳。`code` 必须是 `1000` 或落在 `3000..4999`，`reason` 最多 123 个 UTF-8 字节；参数无效时，在状态改变之前就会抛错。
 - `closed` 以逻辑上的终态 [`WebSocketCloseInfo`](/zh-Hans/api/core/websocketcloseinfo-type) resolve。
 - `onStateChange` 和 `onRuntimeError` 返回一个取消订阅函数。

@@ -16,8 +16,8 @@ function withXSRF(options?: {
 Habilita el reenvío del token XSRF para las solicitudes **HTTP**. Las solicitudes SSE y WebSocket no reciben el header.
 
 - `cookieName` vale `XSRF-TOKEN` por defecto y `headerName`, `X-XSRF-TOKEN`.
-- El header se establece solo cuando se cumple todo lo siguiente: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya ese header; el cliente tiene un endpoint; y, en un navegador, la URL de la solicitud tiene el mismo origen que la página.
-- Sin `tokenProvider`, el token se lee de `document.cookie` y se decodifica como URL. Fuera de un navegador no hay cookie, así que no se establece ningún header.
+- El header se establece solo cuando se cumple todo lo siguiente: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya ese header; el cliente tiene un endpoint; y, siempre que exista `location` (Window o Worker), la URL resuelta de la solicitud tiene el mismo origen que `location.origin`. Una solicitud de origen cruzado no llama al provider.
+- Sin `tokenProvider`, el token se lee de `document.cookie` y se decodifica como URL solo cuando existe `document`. Los Workers y los servidores necesitan un provider para aportar un token.
 - Con `tokenProvider`, la cookie nunca se lee. El provider recibe la solicitud y su resultado es el token. Una cadena vacía, `null` o `undefined` significa que no hay header.
 
 Consulta la [guía HTTP](/es-ES/docs/http) para el comportamiento a nivel de solicitud.

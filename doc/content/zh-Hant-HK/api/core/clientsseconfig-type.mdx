@@ -11,6 +11,6 @@ interface ClientSSEConfig extends ClientSSEOptions {
 }
 ```
 
-`ClientConfig.sse` 嘅 type。佢係 [`ClientSSEOptions`](/zh-Hant-HK/api/core/clientsseoptions-type)，不過 `handle` 一定存在；預設係 global `fetch`。
+`ClientConfig.sse` 嘅 type。佢係 [`ClientSSEOptions`](/zh-Hant-HK/api/core/clientsseoptions-type)，不過 `handle` 一定存在；預設 wrapper 會喺每次嘗試解析當時嘅 global `fetch`，唔會喺 import 時捕獲佢。
 
 [Client](/zh-Hant-HK/api/client)

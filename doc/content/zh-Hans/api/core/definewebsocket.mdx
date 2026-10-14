@@ -19,7 +19,7 @@ function defineWebSocket<
 ): WebSocketEndpoint<TInput, TIncoming, TOutgoing>
 ```
 
-- **definition** — `path`、一个 `incoming` struct，以及必填的 `maxIncomingQueueSize`（正的 safe integer）。可选的有 `outgoing` 与 `input` struct、静态的 `protocols`、`maxOutgoingQueueSize`（非负 safe integer）和 `operation`。声明了 `input` 就必须显式提供 `builder`，即使它已经与请求形状一致；只有没有 `input` 的 definition 才可以省略 `builder`。
+- **definition** — `path`、一个 `incoming` struct，以及必填的 `maxIncomingQueueSize`（正的安全整数）。可选的有 `outgoing` 与 `input` struct、静态的 `protocols`、`maxOutgoingQueueSize`（非负安全整数）和 `operation`。声明了 `input` 就必须显式提供 `builder`，即使它已经与请求形状一致；只有没有 `input` 的 definition 才可以省略 `builder`。
 - **返回** 一个 endpoint。带上 input 调用它，得到 `WebSocketCommand`。
 
 WebSocket 的 `builder` 只能返回 `path` 和 `query`；`headers` 和 `body` 会被拒绝。`WebSocketDefinitionBase` 和 `BuilderField` 是内部辅助类型。

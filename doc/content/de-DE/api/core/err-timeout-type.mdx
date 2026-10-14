@@ -13,4 +13,6 @@ Geteilter `cause`- und Message-Wert für Timeouts. `createNetworkFault` mappt ih
 
 Siehe [Errors-Guide](/de-DE/docs/errors).
 
+Das Sentinel trägt ein nicht enumerierbares Brand `Symbol.for('defjs.cause.timeout')`. [`isTimeoutCause`](/de-DE/api/core/istimeoutcause) erkennt dieses Sentinel aus jeder Core-Kopie, ohne Objektidentität zu vergleichen. Die Klassifikation ist unabhängig von früheren, davon unabhängigen Ausführungen.
+
 [Fehler](/de-DE/api/errors)

@@ -24,6 +24,6 @@ type WebSocketHandle = Omit<
 
 هو `WebSocket` في DOM بدون خصائص معالجات الأحداث و`binaryType` و`dispatchEvent` وثوابت الحالة. لذلك يحتاج التنفيذ المخصص إلى `url` و`protocol` و`extensions` و`bufferedAmount` و`send` و`close` و`addEventListener` و`removeEventListener` و`readyState` رقمي.
 
-تعيّن وسيلة النقل `binaryType = 'arraybuffer'` عندما تكون الخاصية موجودة. هذا هو نوع النسخة الذي ينتجه [`WebSocketHandleConstructor`](/ar/api/core/websockethandleconstructor-type).
+تعيّن وسيلة النقل `binaryType = 'arraybuffer'` عندما تكون الخاصية موجودة، وتتجاهل غيابها. إذا رمت دالة ضبط الخاصية استثناءً، تطلب وسيلة النقل إغلاق المقبض الذي أُنشئ قدر الإمكان قبل إفشال تلك المحاولة بـ `NET_UNREACHABLE`؛ فلا يُترك المقبس خارج عملية التنظيف. هذه الخاصية لتحسين الأداء، ويقبل مفكِّك الترميز إطارات Blob أيضًا. هذا هو نوع النسخة الذي ينتجه [`WebSocketHandleConstructor`](/ar/api/core/websockethandleconstructor-type).
 
 [العميل](/ar/api/client)

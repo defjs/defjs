@@ -48,7 +48,7 @@ description: نمذج أشكال الطلب والاستجابة، حلّل ال
 | كائن محدَّد النوع، مصفوفة، عدد، قيمة منطقية، `null` | نص JSON           | `application/json`                                |
 | struct `string` أو سلسلة خام                        | نص                | `text/plain;charset=UTF-8`                        |
 | `struct.urlencoded(shape)` عند الجذر                | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| `struct.formData(shape)` عند الجذر                  | `FormData`        | حد multipart للمنصة                               |
+| `struct.formData(shape)` عند الجذر                  | `FormData`        | فاصل multipart للمنصة                             |
 | `Blob` / `File`                                     | الـ blob          | نوع الـ blob أو `application/octet-stream`        |
 | `ArrayBuffer` / عرض / تدفق                          | بايتات            | `application/octet-stream`                        |
 
@@ -56,20 +56,20 @@ description: نمذج أشكال الطلب والاستجابة، حلّل ال
 
 ## الأسماء المستعارة
 
-`.alias(...)` يفصل الأسماء المنطقية عن أسماء السلك. `struct.parse(...)` يستخدم المفاتيح المنطقية. ترميزات JSON والطلب المسطّح ترمّز الأسماء المستعارة؛ وفك استجابة JSON يعيّن مفاتيح السلك إلى الحقول المنطقية.
+`.alias(...)` يفصل الأسماء المنطقية عن أسماء الحقول بصيغة النقل. `struct.parse(...)` يستخدم المفاتيح المنطقية. ترميزات JSON والطلب المسطّح ترمّز الأسماء المستعارة؛ وفك استجابة JSON يعيّن مفاتيح السلك إلى الحقول المنطقية.
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-| الحد                                  | الحقل                     |
-| ------------------------------------- | ------------------------- |
-| `struct.parse(User, ...)` ومدخل الأمر | منطقي `displayName`       |
-| كائن محدَّد النوع يُرجعه الـ builder  | سلك `display_name`        |
-| فك JSON / SSE / WebSocket             | سلك ← منطقي `displayName` |
-| كائن مجهول مكتوب في الـ builder       | المفتاح الذي كتبته        |
+| الحد                                  | الحقل                                   |
+| ------------------------------------- | --------------------------------------- |
+| `struct.parse(User, ...)` ومدخل الأمر | منطقي `displayName`                     |
+| كائن محدَّد النوع يُرجعه الـ builder  | اسم النقل `display_name`                |
+| فك JSON / SSE / WebSocket             | اسم النقل ← الاسم المنطقي `displayName` |
+| كائن مجهول مكتوب في الـ builder       | المفتاح الذي كتبته                      |
 
-يقرأ الـ builder نفسه الأسماء المنطقية (`input.user.displayName`)؛ ولا يظهر اسم السلك إلا عندما يرمّز المُسلسِل الكائن محدَّد النوع الذي يُرجعه الـ builder.
+يقرأ الـ builder نفسه الأسماء المنطقية (`input.user.displayName`)؛ ولا يظهر اسم الحقل بصيغة النقل إلا عندما يرمّز المُسلسِل الكائن محدَّد النوع الذي يُرجعه الـ builder.
 
 الأسماء المستعارة تعمل على الحقول المتداخلة والمصفوفات والكائنات والاتحادات والمميّزات. أبقِ الأسماء المنطقية في كود التطبيق؛ ضع الاسم الخارجي على الـ struct مرة واحدة. نشر كائن محدَّد النوع يُبقي ذلك الترميز. تعيين الحقل المنطقي ومفتاح سلكه معًا في الكائن نفسه هو `REQ_BUILD_FAILED`. `JSON.stringify` لقيمة بنفسك يغادر هذا المسار: المُسلسِل يرى الأسماء المنطقية.
 
@@ -92,7 +92,7 @@ body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias
   examples/struct/parse-failures.ts#example
 </include>
 
-`StructIssue` يملك `code` و`expected` و`message` و`path` و`received`. `code` هو `custom` أو `invalid_enum` أو `invalid_intersection` أو `invalid_literal` أو `invalid_type` أو `invalid_union` أو `missing_key`. المشاكل يمكن أن تحمل مدخلًا غير موثوق — احجب قبل التسجيل أو الإرجاع. `struct.parse(..., { errorMap })` يعيد كتابة رسائل المشاكل لذلك الاستدعاء فقط.
+`StructIssue` يملك `code` و`expected` و`message` و`path` و`received`. `code` هو `custom` أو `invalid_enum` أو `invalid_intersection` أو `invalid_literal` أو `invalid_type` أو `invalid_union` أو `missing_key`. تذكر الرسائل الافتراضية نوع القيمة المستلَمة، ولا تذكر قيمتها أبدًا: `Expected number at id, received string`. مسارات المشكلة بنيوية وتحتفظ بمفاتيح record: يمكن أن ينتج `struct.record(...)` الرسالة `Expected number at alice@example.com, received string`، لذا قد تظل المفاتيح حساسة في الرسائل الافتراضية و`prettify()` و`String(fault)`. لذلك لا تتضمن `message` و`prettify()` الحمولات المستلَمة؛ أما `received` فيحتفظ بالقيمة الأصلية ويحتاج إلى الحجب قبل التسجيل أو الإرجاع. `struct.parse(..., { errorMap })` يعيد كتابة الرسائل لذلك الاستدعاء فقط، بما في ذلك فشل تحويل bigint/date في struct من نسخة Core أخرى. أي سلسلة نصية مُعادة، بما فيها `''`، تستبدل الرسالة الافتراضية؛ وحده `undefined` يُبقيها. يُستخدم النص المخصص كما هو، وقد يكشف القيم إذا تضمّنها الـ map.
 
 تحقق Struct بنيوي فقط. بلا قواعد عامة للنطاق أو التنسيق أو التحسين أو المصادقة أو انتقال الحالة. افعل تلك الفحوص قبل أن تبني أمرًا.
 

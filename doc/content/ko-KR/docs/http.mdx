@@ -15,13 +15,17 @@ description: 요청을 정의하고, 실행하고, status로 분기하고, signa
 
 ## URL 해석하기
 
-`withEndpoint(...)`에는 유효한 절대 URL이 필요해요. endpoint pathname은 디렉터리로 남고, query와 hash는 명령을 해석하기 전에 버려져요.
+`withEndpoint(...)`에는 유효한 절대 URL이 필요해요. endpoint pathname은 디렉터리로 남고, query와 hash는 명령을 해석하기 전에 버려져요. 없거나 상대적이거나 잘못된 base endpoint는 요청을 만드는 동안, interceptor나 전송이 돌기 전에 `REQ_BUILD_FAILED`로 실패해요. interceptor가 요청을 단축하더라도 마찬가지예요. HTTP, SSE, WebSocket이 이 규칙을 공유해요.
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
 path placeholder는 raw 스칼라라서 정확히 한 번만 인코딩돼요. 빈 값과 `.` / `..`는 거부돼요. 슬래시, `?`, `#`, `%`, 공백, 유니코드가 한 placeholder 안에 있으면 인코딩된 세그먼트 하나로 남아요. 미리 인코딩하지 마세요.
 
-정의 path에는 `?`나 `#`가 들어갈 수 없고, 절대 경로나 프로토콜 상대 경로도 안 돼요. 기본 query 인코더는 스칼라와 스칼라 배열을 받아요 (배열은 키를 반복해요). 중첩 객체는 클라이언트에 `withQuerySerializer(...)`가 없으면 `REQ_BUILD_FAILED`예요. `path`, `query`, `headers`의 `null`도 같은 방식으로 실패해요. `undefined`는 빠져요.
+placeholder 이름은 `:`에서 시작해 path의 다음 `/` 또는 끝까지예요. `/files/:name.json`의 매개변수 이름은 `name`이 아니라 `name.json`이에요. 정적 세그먼트의 리터럴 콜론은 지원하지 않아요.
+
+정의 path는 앞에 공백이 있더라도 스킴 형태나 프로토콜 상대 형식일 수 없고, C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`를 담을 수 없어요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. 해석 뒤 URL은 base origin을 유지하고 그 디렉터리 안에 머물러야 해요. `../users` 같은 path로 빠져나갈 수 없어요. 불법 path는 전송 전에, 만드는 동안 `REQ_BUILD_FAILED`로 실패해요. 인터셉터의 최종 `req.endpoint`는 최종 `req.baseEndpoint`에 같은 규칙으로 검사돼요. interceptor는 base를 다른 유효한 절대 URL로 일부러 바꿀 수 있어요. 결정적인 URL 오류는 재시도하지 않아요.
+
+기본 query 인코더는 스칼라와 스칼라 배열을 받아요 (배열은 키를 반복해요). 중첩 객체는 클라이언트에 `withQuerySerializer(...)`가 없으면 `REQ_BUILD_FAILED`예요. `path`, `query`, `headers`의 `null`도 같은 방식으로 실패해요. `undefined`는 빠져요.
 
 ## 입력 배치하기
 
@@ -81,7 +85,7 @@ serializer가 없으면 배열은 키를 반복하고, 중첩 객체는 `REQ_BUI
 | `string`                                                         | 그대로                                                             | `text/plain;charset=UTF-8`                              |
 | 평범한 객체, 배열, 숫자, 불리언, `null`, `Date`, `bigint`        | 인코딩한 뒤 `JSON.stringify`                                       | `application/json`                                      |
 
-기본값을 덮으려면 `headers`에 `content-type`을 두세요. 코덱 태그는 body 루트에서만 적용돼요. `body: { meta: input.form }`은 JSON이고, form 필드는 평범한 JSON 필드예요. 문자열은 raw 텍스트예요. `"abc"` 같은 JSON 문자열은 `JSON.stringify`와 `application/json`이 필요해요. `undefined` 필드는 빠져요. `nullable` 필드를 `null`로 보내면 JSON `null`이에요.
+HTTP는 builder의 body에서 추론한 타입을 일반 `request.bodyContentType` 필드에 보관해요. 이 필드는 `{ ...req }`로 복사해도 유지되며, 추론한 타입을 `request.headers`에 쓰지는 않아요. builder, 클라이언트 기본값, 인터셉터, 원시 `fetchHandler` 요청 중 어디에서 설정했든 명시한 `content-type` 헤더가 항상 우선해요. 업로드 진행률이 body를 스트림으로 바꿀 때도 그래요. `bodyContentType`은 `body`가 builder의 값인 동안에만 적용돼요. 교체된 body는 다시 탐지하므로 인터셉터는 `content-type` 헤더로 그 타입을 선언해요. `body: undefined`는 라이브러리가 추론한 Content-Type을 보내지 않아요. 예외는 FormData예요. content type은 실제 직렬화의 boundary를 써야 해요. 코덱 태그는 body 루트에서만 적용돼요. `body: { meta: input.form }`은 JSON이고, form 필드는 평범한 JSON 필드예요. 문자열은 raw 텍스트예요. `"abc"` 같은 JSON 문자열은 `JSON.stringify`와 `application/json`이 필요해요. `undefined` 필드는 빠져요. `nullable` 필드를 `null`로 보내면 JSON `null`이에요.
 
 JSON은 중첩된 값까지 모두 JSON 데이터여야 해요. 허용되는 값은 평범한 객체, 배열, 문자열, 유한한 숫자, 불리언, `null`, 그리고 `toJSON()`이 이런 데이터를 돌려주는 `Date`나 `URL` 같은 값이에요. 그 밖의 값은 루트에 있든 중첩되어 있든 아무것도 보내기 전에 `REQ_BUILD_FAILED`로 실패해요. `{}`나 `null`로 전송되거나 body가 아예 생략되는 일은 없어요. `Map`이나 `Set`, `toJSON`이 없는 클래스 인스턴스, 함수, `NaN`, Node `Readable`, 이터러블이나 비동기 이터러블(`Symbol.iterator` 또는 `Symbol.asyncIterator` 메서드가 있는 객체 리터럴 포함) 등이 여기에 해당해요. 오류 메시지에 해당 필드 이름이 표시돼요. `query`나 `headers`로 넘긴 이터러블 객체는 버려지는 대신 같은 방식으로 실패해요. 헤더 쌍은 배열로 넘기세요. 스트림은 Web `ReadableStream`으로 보내세요. `ReadableStream.from(iterable)` 또는 `Readable.toWeb(readable)`를 쓰면 돼요. `body` 타입은 이 중 대부분을 컴파일 타임에 거부해요. `interface` 값이나 클래스 인스턴스는 `{ ...value }`가 필요해요.
 
@@ -97,7 +101,7 @@ builder는 실제 입력으로 분기해서 경우마다 다른 body를 돌려�
 
 ## body를 읽는 방법
 
-`output`은 2xx body를 위한 Struct 하나이고, `error`는 그 밖 전부를 위한 Struct 하나예요. struct kind가 표현을 골라요. `string`은 raw 텍스트, `blob` / `file`은 blob, `arrayBuffer`는 바이트, 그 밖의 kind는 JSON이에요. 양쪽을 모두 선언하지 않으면 body는 읽히지 않아요.
+`output`은 2xx body를 위한 Struct 하나이고, `error`는 그 밖 전부를 위한 Struct 하나예요. struct kind가 표현을 골라요. `string`은 raw 텍스트, `blob` / `file`은 blob, `arrayBuffer`는 바이트, 그 밖의 kind는 JSON이에요. 어느 쪽도 선언하지 않으면 body는 읽히지 않아요.
 
 처리 순서예요.
 
@@ -124,19 +128,19 @@ builder는 실제 입력으로 분기해서 경우마다 다른 body를 돌려�
 
 `withCredentials(true)`는 HTTP와 SSE에서 Fetch `credentials: 'include'`를 설정해요. `Authorization`을 만들지 않고, WebSocket 인증도 구성하지 않아요. `false`는 credentials를 지정하지 않은 채로 둬요.
 
-`withXSRF(...)`는 HTTP 전용이에요. 기본값: `cookieName: 'XSRF-TOKEN'`, `headerName: 'X-XSRF-TOKEN'`. 헤더는 안전하지 않은 method에만, 호출자가 이미 설정하지 않았을 때만, 그리고 브라우저에서는 같은 출처의 요청에만 들어가요. `GET`, `HEAD`, `OPTIONS`, `TRACE`는 건너뛰어요. 브라우저 밖에서는 주입이 필요하면 동기적이고 요청 범위의 `tokenProvider`를 넘기세요.
+`withXSRF(...)`는 HTTP 전용이에요. 기본값: `cookieName: 'XSRF-TOKEN'`, `headerName: 'X-XSRF-TOKEN'`. 헤더는 안전하지 않은 method에만, 호출자가 이미 설정하지 않았을 때만 들어가요. `location`이 있으면 Worker를 포함해 해석된 요청 URL이 `location.origin`과 같아야 하고, 교차 출처 요청은 `tokenProvider`를 호출하지 않아요. 쿠키 조회는 별도로 `document`가 필요해요. `GET`, `HEAD`, `OPTIONS`, `TRACE`는 건너뛰어요. Worker나 서버에서 주입이 필요하면 동기적이고 요청 범위의 `tokenProvider`를 넘기세요.
 
 credentials, XSRF 토큰, query 문자열은 일상적인 로그에서 빼세요. query params를 일반적인 자격 증명 채널로 쓰지 마세요.
 
 ## 진행률과 Fetch 경계
 
-`onDownloadProgress`는 선언된 응답 body를 읽는 동안 돌아요. `lengthComputable`은 양의 `Content-Length`가 있을 때만 true예요. 그 쪽에 struct가 없으면 body를 읽지 않으니 body 읽기 진행률도 없어요.
+`onDownloadProgress`는 선언된 응답 body를 읽는 동안 돌아요. `loaded`는 응답 스트림에서 읽은 바이트를 세고, Fetch가 이미 압축을 풀었을 수 있어요. `lengthComputable`은 양의 `Content-Length`가 있고 `Content-Encoding`이 없거나 `identity`일 때만 true예요. gzip과 br을 포함한 다른 인코딩은 `total: 0`과 `lengthComputable: false`를 보고하므로, 디코드된 바이트를 압축된 와이어 길이와 비교하지 않아요. 그 쪽에 struct가 없으면 body를 읽지 않으니 body 읽기 진행률도 없어요.
 
-`onUploadProgress`는 Fetch가 `ReadableStream<Uint8Array>` body를 읽는 동안의 진행률을 보고해요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요. Bun, Node, Deno에서는 Defjs가 `Blob` / `File`, `ArrayBuffer`, `FormData` body도 스트림으로 변환하므로 이들도 진행률을 보고해요. Chromium은 HTTP/2 이상에서만 요청 body 스트리밍을 지원하고 Firefox는 이를 전혀 지원하지 않으므로 브라우저는 제외돼요. 브라우저에서는 그 body들이 그대로 보내지고 `onUploadProgress`는 호출되지 않아요. JSON, 텍스트, `URLSearchParams`, 형식화 배열 body는 통째로 보내져서 이벤트가 없어요. 길이를 알 수 없는 스트림은 `total`이 `0`이에요(그래서 `lengthComputable`은 `false`). 요청 스트리밍을 지원하지 않는 런타임(Firefox 등)에서 `ReadableStream` body는 아무것도 보내지기 전에 `ENV_UNSUPPORTED`로 실패하고, cause 메시지는 `ERR_STREAMING_REQUEST_UNSUPPORTED`예요. Chromium에서 `ReadableStream` body는 HTTP/2 이상이 필요하고, HTTP/1.1에서는 호출이 `NET_UNREACHABLE`로 실패해요. `onDownloadProgress`는 모든 런타임에서 같게 동작해요.
+`onUploadProgress`는 Fetch가 `ReadableStream<Uint8Array>` body를 읽는 동안의 진행률을 보고해요. 서버가 확인한 시점이 아니에요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요. Bun, Node, Deno에서는 Defjs가 `Blob` / `File`, `ArrayBuffer`, `FormData` body도 스트림으로 변환하므로 이들도 진행률을 보고해요. 서버 런타임에서 `onUploadProgress`를 쓰는 FormData는 직렬화된 스트림을 직접 쓰고 multipart boundary를 유지하며, 라이브러리가 생성한 `Content-Length` 없이 전송돼요(HTTP/1.1에서는 청크 전송). 따라서 body 전체를 버퍼링하지 않고도 진행률, 타임아웃, 취소가 동작해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 일부 사전 서명된 업로드 대상처럼 `Content-Length`가 필요한 엔드포인트에서는 `onUploadProgress`를 생략하세요. 그러면 플랫폼 Fetch가 FormData를 길이와 함께 전송해요. 취소하면 감싼 스트림이 해제돼요. Chromium은 HTTP/2 이상에서만 요청 body 스트리밍을 지원하고 Firefox는 이를 전혀 지원하지 않으므로 Worker를 포함한 브라우저는 제외돼요. 브라우저에서는 그 body들이 그대로 보내지고 `onUploadProgress`는 호출되지 않아요. JSON, 텍스트, `URLSearchParams`, 형식화 배열 body는 통째로 보내져서 이벤트가 없어요. 길이를 알 수 없는 스트림은 `total`이 `0`이에요(그래서 `lengthComputable`은 `false`). 요청 스트리밍을 지원하지 않는 런타임(Firefox 등)에서 `ReadableStream` body는 아무것도 보내지기 전에 `ENV_UNSUPPORTED`로 실패하고, cause 메시지는 `ERR_STREAMING_REQUEST_UNSUPPORTED`예요. Chromium에서 `ReadableStream` body는 HTTP/2 이상이 필요하고, HTTP/1.1에서는 호출이 `NET_UNREACHABLE`로 실패해요. `onDownloadProgress`는 모든 런타임에서 같게 동작해요.
 
 진행률 콜백이 예외를 던지거나 반환한 프로미스가 거부되면 다운로드와 업로드 모두 호출이 `EXT_OBSERVER_FAILED`로 실패하고, 던진 값이 `cause`가 돼요. 호출자의 취소와 `timeout`은 여전히 `NET_ABORTED` / `NET_TIMEOUT`을 보고해요.
 
-`fetchHandler(httpRequest, fetchImpl?)`는 더 낮은 Fetch 경계예요. 네이티브 `Request`를 만들고, Fetch를 호출하고, 표현을 읽고, `HttpResponse`를 돌려줘요. 명령 입력을 검증하지 않고, `output`을 디스패치하지 않고, interceptor도 돌리지 **않아요**. 주입한 전송 테스트에는 쓸모 있지만 `client.execute`를 대신하지는 않아요.
+`fetchHandler(httpRequest, fetchImpl?)`는 더 낮은 Fetch 경계예요. URL을 해석하고, Fetch를 호출하고, 표현을 읽고, `HttpResponse`를 돌려줘요. 기본 HTTP와 SSE handle은 호출마다 `globalThis.fetch`를 해석하므로, import 뒤에 설치한 교체본을 써요. HTTP는 손대지 않은 플랫폼 Fetch에만 `(url, init)`을 쓰고, 교체된 전역이나 사용자 지정 handle은 네이티브 `Request`를 받아요. Fetch 없이 Core를 import하는 것은 유효해요. Fetch가 여전히 없으면 기본 HTTP/SSE 실행은 `ENV_UNSUPPORTED`로 실패하고, 사용자 지정 handle은 그대로 쓸 수 있어요. 이 경계는 명령 입력을 검증하지 않고, `output`을 디스패치하지 않고, interceptor도 돌리지 **않아요**. 주입한 전송 테스트에는 쓸모 있지만 `client.execute`를 대신하지는 않아요.
 
 ## 재시도 한도
 

@@ -27,7 +27,7 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 - `signal`은 둘 중 어느 쪽과도 합쳐져요. `abort`의 별칭이 아니에요.
 - `timeout`은 `2_147_483_647` 이하의 양의 안전 정수여야 해요. session을 여는 데 걸리는 시간을 제한하며, 재연결할 때는 다시 적용되지 않아요.
 - `beforeConnect`, `heartbeat`, `protocols`, `reconnect`는 이 호출에 한해 클라이언트 수준 옵션을 대체해요.
-- `reconnect`를 주면 `attempts` 기본값은 `3`이고, `0`은 재연결을 꺼요. `attempts`를 빼도 무제한이 아니에요.
+- `reconnect`를 주면 `attempts` 기본값은 단절마다 `3`이고, `0`은 재연결을 꺼요. `open`이 성공하면 예산과 백오프 지수가 초기화돼요. `attempts`를 빼도 한 단절 안에서 무제한 재시도가 되지는 않아요. 검증과 최종 지연 상한은 [`withWebSocketReconnect`](/ko-KR/api/core/withwebsocketreconnect)를 보세요.
 
 [`WebSocketHeartbeatConfig`](/ko-KR/api/core/websocketheartbeatconfig-type)를 보세요.
 

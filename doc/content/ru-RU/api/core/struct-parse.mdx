@@ -14,10 +14,10 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 ```
 
 - **struct** — struct, которым разбирается значение. Значение, не являющееся struct, бросает `TypeError`.
-- **value** — unknown input.
+- **value** — входное значение неизвестного типа.
 - **options.aliases** по умолчанию `false`: ключи объекта читаются по **логическим** именам (`displayName`). При `true` они читаются по wire-именам (`display_name`), как их читают кодеки HTTP/JSON. Output всегда использует логические имена.
-- **options.errorMap** — [`ErrorMap`](/ru-RU/api/core/errormap-type), который переписывает сообщения issue только для этого вызова. Возврат `undefined` сохраняет сообщение по умолчанию.
-- **Возвращает** `[null, output]` или `[StructError, undefined]`. Невалидный input никогда не бросает.
+- **options.errorMap** — [`ErrorMap`](/ru-RU/api/core/errormap-type), который переписывает сообщения issue только для этого вызова, включая ошибки преобразования bigint/date при использовании struct, созданного другой копией Core. Любая строка, включая `''`, заменяет сообщение; только `undefined` сохраняет текст по умолчанию. Пользовательский текст используется дословно.
+- **Возвращает** `[null, output]` или `[StructError, undefined]`. Некорректное входное значение никогда не приводит к исключению.
 - Разбор fail-fast: он останавливается на первом сбое, поэтому в error один issue. Неизвестные ключи объекта отбрасываются из output, а input не изменяется.
 
 ```ts

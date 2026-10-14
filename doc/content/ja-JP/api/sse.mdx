@@ -98,6 +98,10 @@ type EventStructs = { [eventName: string]: AnyStruct }
 
 再接続はクライアントにあります（`withSSEReconnect`）。SSE の `jitter` は WebSocket と同じ、**0–1 の乗法因子**です。
 
+リトライ予算とバックオフの指数は、ハンドシェイクの成功後にリセットされ、障害ごとに適用されます。不正な数値オプションは、ストリームを開く前に `REQ_OPTIONS_INVALID` を返します。`maxDelayMs` はジッター後の最終的な待ち時間に上限を設けます。検証規則、デフォルト、UTF-8 の `Last-Event-ID` の扱いについては、[`withSSEReconnect`](/ja-JP/api/core/withssereconnect) を参照してください。
+
+パーサーは WHATWG SSE の行とフィールドの規則に従い、各物理ストリームの先頭にある UTF-8 BOM を 1 つだけ除去します。データや ID 値の U+FEFF は保持されます。ストリームの途中で BOM が付いたフィールド名は、未知のフィールドとして無視されます。複数行のデータは `\n` で結合され、空行でデータを持つイベントが配信されます。EOF 時点で未完了のイベントは破棄されます。
+
 [SSE ガイド](/ja-JP/docs/sse) と [SSE ストリームを消費する](/ja-JP/recipes/consume-sse) を見てください。
 
 ## EventStreamDefinition

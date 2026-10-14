@@ -73,15 +73,15 @@ SSE와 WebSocket에서 세 번째 값은 스냅샷이지, 이후 재연결이 �
 
 TypeScript 추론은 기대를 설명할 뿐, 런타임에 서버 응답을 검사하지는 못해요. Struct 파싱이 계약의 나머지 반쪽이에요. Defjs는 요청을 만들기 전에 명령 입력을 검증하고, 표현을 검사한 뒤, `ok`의 해당 쪽에 struct를 파싱해요.
 
-Struct는 **interceptor 체인 뒤에 한 번** 적용돼요. interceptor가 `makeResponse(...)`로 만든 응답도 와이어에서 온 응답과 같은 미디어 타입 검사, 표현 변환, Struct를 거쳐요. 응답이 어디서 왔는지는 읽는 방법을 바꾸지 않으니, 따로 따질 "interceptor를 신뢰하는" 경로는 없어요. 내장 Fetch 전송은 선언된 body를 (미디어 타입 검사 후) 이미 읽고 JSON으로 파싱한 다음 응답을 체인에 돌려주므로, interceptor는 파싱된 `body`를 보게 돼요. 거기서의 실패는 같은 `RES_*` 또는 `NET_BODY_INCOMPLETE` fault로 드러나요.
+HTTP에서는 Struct가 **interceptor 체인 뒤에 한 번** 적용돼요. interceptor가 `makeResponse(...)`로 만든 응답도 와이어에서 온 응답과 같은 미디어 타입 검사, 표현 변환, Struct를 거쳐요. 응답이 어디서 왔는지는 읽는 방법을 바꾸지 않으니, 따로 따질 "interceptor를 신뢰하는" 경로는 없어요. 내장 Fetch 전송은 선언된 body를 JSON, 텍스트, `Blob`, 바이트로 읽은 다음 체인에 돌려줘요. JSON 미디어 타입과 `JSON.parse`가 필요한 것은 JSON 표현뿐이고, JSON이 아닌 텍스트, blob, 바이트는 선언된 표현으로서 유효해요. interceptor가 보는 것은 그 표현이지, 아직 Struct로 디코딩된 값이 아니에요. 읽기 실패는 모든 표현에 적용되고, 거기서의 읽기나 파싱 실패는 같은 `RES_*` 또는 `NET_BODY_INCOMPLETE` fault로 드러나요.
 
-순서는 미디어 타입, 그다음 표현, 그다음 struct예요.
+순서는 JSON일 때의 미디어 타입, 그다음 표현, 그다음 struct예요.
 
 | 무엇이 성립하지 않았나                            | Fault                                                  |
 | ------------------------------------------------- | ------------------------------------------------------ |
 | 미디어 타입이 선언된 표현이 필요로 하는 것이 아님 | `RES_MEDIA_TYPE_INVALID` — body를 읽기 _전에_ 보고돼요 |
 | 바이트가 그 표현이 아님                           | `RES_DECODE_FAILED`                                    |
-| 값이 그 struct가 아님                             | `RES_STRUCT_MISMATCH`                                  |
+| 값이 그 struct가 아님                             | `RES_STRUCT_MISMATCH` (HTTP 전용)                      |
 | non-2xx이고 `error`가 디코딩됨                    | 타입이 있는 `data`가 있는 `HTTP_STATUS`                |
 | non-2xx이고 `error`를 선언하지 않음               | `data: undefined`인 `HTTP_STATUS`                      |
 
@@ -111,7 +111,7 @@ body 종류는 값에서, 먼저 맞는 규칙으로 결정돼요.
 
 `undefined` 필드는 빠져요. nullable 필드의 `null`은 보내져요. 문자열은 stringify하고 `content-type`을 두지 않는 한 JSON이 아니에요. 직접 직렬화하면 (`JSON.stringify`, qs, protobuf) struct encoder를 떠나서 alias가 적용되지 않아요. 공개 `struct.encode`는 없어요.
 
-`GET`과 `HEAD`는 body를 실을 수 없어요. WebSocket builder는 헤더나 body를 돌려줄 수 없어요. 정적 WebSocket 서브프로토콜은 builder가 아니라 정의의 `protocols`에 있어요. 잘못된 WebSocket 프레임은 세션 런타임 오류 리스너로 가요. SSE `error` struct는 시작 fault의 타입을 정하고, 핸드셰이크 body는 HTTP body와 같은 kind 규칙을 따라요. `string`은 텍스트, blob과 파일은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON이에요.
+`GET`과 `HEAD`는 body를 실을 수 없어요. WebSocket builder는 헤더나 body를 돌려줄 수 없어요. 정적 WebSocket 서브프로토콜은 builder가 아니라 정의의 `protocols`에 있어요. 잘못된 WebSocket 프레임은 세션 런타임 오류 리스너로 가요. SSE `error` struct는 시작 fault의 타입을 정하고, 핸드셰이크 body는 HTTP body와 같은 kind 규칙을 따라요. `string`은 텍스트, blob과 파일은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON이에요. 표현 선택은 공유되지만 fault 매핑은 달라요. SSE 핸드셰이크의 읽기, 파싱, Struct 실패는 `RES_DECODE_FAILED`이고, Struct 실패의 `cause`는 `StructError`예요. HTTP는 Struct 실패를 `RES_STRUCT_MISMATCH`로 보고해요.
 
 ## 옵저버와 정책 위치
 

@@ -32,7 +32,7 @@ function executeEventStreamCommand(
 
 - **返回** `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。
 
-## 执行 options
+## 执行选项
 
 ## EventStreamExecuteOptions
 
@@ -86,7 +86,7 @@ type EventStreamCloseInfo =
 
 `EventStreamFaultCode`：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
 
-## 事件 map
+## 事件映射
 
 ## EventStructs
 
@@ -98,11 +98,15 @@ key 是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有
 
 重连在 client 上（`withSSEReconnect`）。SSE `jitter` 是 **0–1 的乘性因子**，和 WebSocket 一样。
 
+成功握手后会重置重试预算和退避指数；它们按每次连接中断计算。无效的数字选项会在打开流之前返回 `REQ_OPTIONS_INVALID`，`maxDelayMs` 限制抖动后的最终延迟。校验规则、默认值和 UTF-8 `Last-Event-ID` 的处理方式见 [`withSSEReconnect`](/zh-Hans/api/core/withssereconnect)。
+
+解析器遵循 WHATWG SSE 的行和字段规则，只移除每条物理流开头的一个 UTF-8 BOM。data 或 ID 值中的 U+FEFF 会被保留；后续带 BOM 前缀的字段名会按未知字段忽略。多行 data 用 `\n` 连接，空行触发携带 data 的事件分发，EOF 时尚未完成的事件会被丢弃。
+
 见 [SSE 指南](/zh-Hans/docs/sse) 和[消费 SSE 流](/zh-Hans/recipes/consume-sse)。
 
 ## EventStreamDefinition
 
-`path`、`events`，必填的 `maxBufferSize` 和 `maxQueueSize`，可选 `method` / `operation` / `input` / `error`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 不能返回 body。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`events`，必填的 `maxBufferSize` 和 `maxQueueSize`，可选 `method` / `operation` / `input` / `error`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 的 builder 不能返回请求体。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
 
 ## EventStreamEndpoint
 

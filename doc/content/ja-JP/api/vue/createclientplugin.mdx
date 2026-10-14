@@ -9,7 +9,7 @@ description: 既存の Defjs クライアントをアプリに提供する Vue �
 function createClientPlugin(client: Client): Plugin
 ```
 
-- **client** — `createClient` のインスタンスです。プラグインはこれを作らず、キャッシュせず、破棄しません。
+- **client** — `createClient` で作ったクライアントインスタンスです。プラグインはこれを作らず、キャッシュせず、破棄しません。
 - **戻り値** `app.use(...)` 用の Vue プラグインです。インストールすると `app.provide(HTTP_CLIENT, client)` が呼ばれるので、コンポーネントは `injectClient()` でクライアントを読めます。
 
 <include cwd>examples/api/create-client-plugin.ts#example</include>

@@ -18,6 +18,6 @@ interface ObjectStruct<T extends ObjectShape>
 type ObjectShape = { [key: string]: any }
 ```
 
-ينتجه `struct.object(shape)`. الحقول مطلوبة افتراضيًا؛ والحقل الموسوم بـ `optional()` أو `nullish()` يصبح مفتاحًا اختياريًا. تُزال المفاتيح غير المعروفة عند التحليل. ويمكن أن تختلف أسماء السلك عن مفاتيح TypeScript عبر `.alias()`. والتحليل الفاشل يُرجع `[StructError, undefined]`. أما `ObjectInput` و`ObjectOutput` و`ObjectStructTypes` و`PreservedStruct` فهي أنواع مساعدة داخلية.
+ينتجه `struct.object(shape)`. الحقول مطلوبة افتراضيًا؛ والحقل الموسوم بـ `optional()` أو `nullish()` يصبح مفتاحًا اختياريًا. تُزال المفاتيح غير المعروفة عند التحليل. ويمكن أن تختلف أسماء الحقول في البيانات المتبادلة عن مفاتيح TypeScript عبر `.alias()`. والتحليل الفاشل يُرجع `[StructError, undefined]`. أما `ObjectInput` و`ObjectOutput` و`ObjectStructTypes` و`PreservedStruct` فهي أنواع مساعدة داخلية.
 
 [Struct](/ar/api/struct)

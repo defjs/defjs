@@ -27,7 +27,7 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 - `signal` se combine avec l’un ou l’autre ; ce n’est pas un alias de `abort`.
 - `timeout` doit être un entier sûr strictement positif, au plus égal à `2_147_483_647`. Il borne la durée d’ouverture de la session et n’est pas réappliqué lors d’un reconnect.
 - `beforeConnect`, `heartbeat`, `protocols` et `reconnect` remplacent, pour cet appel, les options posées au niveau du client.
-- Quand `reconnect` est défini, `attempts` vaut `3` par défaut ; `0` désactive. Omettre `attempts` ne veut pas dire illimité.
+- Quand `reconnect` est défini, `attempts` vaut `3` par défaut et par coupure ; `0` désactive. Un `open` réussi réinitialise le budget de la coupure et l’exposant de backoff. Omettre `attempts` ne donne pas un nombre illimité de nouvelles tentatives au sein d’une même coupure. Voir [`withWebSocketReconnect`](/fr-FR/api/core/withwebsocketreconnect) pour la validation et les plafonds du délai final.
 
 Voir [`WebSocketHeartbeatConfig`](/fr-FR/api/core/websocketheartbeatconfig-type).
 

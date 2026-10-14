@@ -13,7 +13,7 @@ description: أنشئ عميلًا صريحًا، ركّب الخيارات، ن
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` يُرجع تحميلات زائدة لكل نوع أمر.
+`createClient(...)` يُرجع توقيعات متعددة لكل نوع أمر.
 
 ## ركّب الخيارات
 
@@ -47,20 +47,20 @@ description: أنشئ عميلًا صريحًا، ركّب الخيارات، ن
 
 ## المرجع
 
-| المساعد                                                                                                       | الأثر                                                      |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | نقطة نهاية أساس مطلقة لكل وسائل النقل                      |
-| `withHeaders(HeadersInit)`                                                                                    | رؤوس افتراضية ثابتة لـ HTTP/SSE؛ رؤوس الأمر تتجاوزها       |
-| `withTimeout(ms)`                                                                                             | مهلة `execute` الافتراضية لـ HTTP فقط (SSE/WS يتجاهلانها)  |
-| `withHTTPHandle(fetch)`                                                                                       | استبدل Fetch لـ HTTP                                       |
-| `withSSEHandle(fetch)`                                                                                        | استبدل Fetch لـ SSE                                        |
-| `withWebSocketHandle(WebSocket)`                                                                              | استبدل مُنشئ WebSocket                                     |
-| `withInterceptors(...items)`                                                                                  | ألحق معترضات مختلطة                                        |
-| `withQuerySerializer(fn)`                                                                                     | رمّز كائن استعلام مُسمّى أصلًا إلى سلسلة استعلام           |
-| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` لـ HTTP/SSE عندما يكون true |
-| `withXSRF(options?)`                                                                                          | ملف تعريف ارتباط XSRF لـ HTTP ← رأس                        |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | مفاتيح SSE                                                 |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | مفاتيح WebSocket                                           |
+| المساعد                                                                                                       | الأثر                                                             |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | نقطة نهاية أساس مطلقة لكل وسائل النقل                             |
+| `withHeaders(HeadersInit)`                                                                                    | رؤوس افتراضية ثابتة لـ HTTP/SSE؛ رؤوس الأمر تتجاوزها              |
+| `withTimeout(ms)`                                                                                             | مهلة `execute` الافتراضية لـ HTTP فقط (SSE/WS يتجاهلانها)         |
+| `withHTTPHandle(fetch)`                                                                                       | استبدل Fetch لـ HTTP                                              |
+| `withSSEHandle(fetch)`                                                                                        | استبدل Fetch لـ SSE                                               |
+| `withWebSocketHandle(WebSocket)`                                                                              | استبدل مُنشئ WebSocket                                            |
+| `withInterceptors(...items)`                                                                                  | ألحق معترضات مختلطة                                               |
+| `withQuerySerializer(fn)`                                                                                     | رمّز كائن استعلام طُبّقت عليه الأسماء المستعارة إلى سلسلة استعلام |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` لـ HTTP/SSE عندما يكون true        |
+| `withXSRF(options?)`                                                                                          | ملف تعريف ارتباط XSRF لـ HTTP ← رأس                               |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | مفاتيح SSE                                                        |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | مفاتيح WebSocket                                                  |
 
 ## وصفات ذات صلة
 

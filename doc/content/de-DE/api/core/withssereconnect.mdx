@@ -28,12 +28,13 @@ type SSEReconnect = {
 }
 ```
 
-- `attempts` ist das Retry-Budget nach dem ersten Versuch. Der Default ist `3`, wenn `reconnect` gesetzt ist, und `0` schaltet Retries aus. Es wegzulassen heißt nicht unbegrenzt.
+- `attempts` ist das Retry-Budget je Ausfall. Der Default ist `3`, wenn `reconnect` gesetzt ist, und `0` schaltet Retries aus. Ein erfolgreicher Handshake setzt Budget, Callback-`attempt` und Backoff-Exponenten zurück. Es wegzulassen ergibt innerhalb eines Ausfalls keine unbegrenzten Retries. Wenn auf wiederholte erfolgreiche Opens unmittelbar Stream-Failures folgen, für die ein Retry zulässig ist, kann der Reconnect mit der aktuellen Basisverzögerung fortlaufend weitergehen (unter Berücksichtigung von Jitter und Caps), weil jedes Open das Budget zurücksetzt; nutze `shouldReconnect`, um dies zu stoppen. Normales EOF bleibt terminal.
 - Ohne `shouldReconnect` wird die Verbindung nur für Requests mit `GET`, `HEAD`, `OPTIONS`, `PUT` und `DELETE` erneut hergestellt. Ist der Callback vorhanden, entscheidet sein Rückgabewert bei jeder Methode über den Reconnect, auch bei `POST`; anhand von `method` im Kontext lassen sich die Endpoints unterscheiden. Gib `false` zurück, um nach diesem Fehler keine weiteren Versuche zu unternehmen. Der Callback wird aufgerufen, bevor die Höchstzahl der Versuche geprüft wird.
 - Bei einem Request mit einem `ReadableStream`-Body wird die Verbindung nie erneut hergestellt; `shouldReconnect` wird dafür nicht aufgerufen.
-- `delayMs`, `factor`, `jitter` (0 bis 1) und `maxDelayMs` formen das Backoff. `factor` ist standardmäßig `1` und `jitter` `0`.
+- `delayMs`, `factor`, `jitter` (0 bis 1) und `maxDelayMs` formen das Backoff. `factor` ist standardmäßig `1` und `jitter` `0`. `maxDelayMs` deckelt die endgültige Wartezeit nach Jitter und Rundung. Ohne konfiguriertes Cap gilt weiterhin das Plattform-Timer-Limit von `2_147_483_647` ms. Eine Basis von null bleibt null; ein Überlauf gültiger Zahlen sättigt an den Caps.
 - `delayMs` ist nur die Start-Basisverzögerung (standardmäßig `1000`). Ein `retry:`-Feld des Servers (nur Ziffern, in Millisekunden) ersetzt sie für spätere Versuche.
-- Die letzte Event-ID wird beim nächsten Versuch erneut als `Last-Event-ID` gesendet.
+- Die letzte Event-ID wird beim nächsten Versuch erneut als UTF-8-Bytes in `Last-Event-ID` gesendet. Ein leeres `id:` löscht sie; eine ID mit NUL wird ignoriert.
+- Reconnect-Optionen werden vor Interceptors oder Fetch geprüft: `attempts` muss eine nicht negative sichere Ganzzahl sein; `delayMs` und ein explizites `maxDelayMs` müssen endlich und nicht negativ sein; `factor` muss endlich und positiv sein; `jitter` muss endlich sein und in 0–1 liegen. Ungültige Werte liefern zur Execute-Zeit `REQ_OPTIONS_INVALID`.
 
 Das Stream-Handle steht unter [SSE](/de-DE/api/sse).
 

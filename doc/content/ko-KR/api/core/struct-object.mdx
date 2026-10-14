@@ -13,7 +13,8 @@ function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
 
 - 모든 필드는 기본적으로 **필수**예요. 키가 없으면 `missing_key`로 실패해요.
 - `.optional()`과 `.nullish()`는 키가 없는 것을 허용해요. 없는 선택 필드는 출력에서도 없는 채로 남아요.
-- `.null()` / `.nullable()`은 `null`을 허용해요. `.alias(name)`은 필드를 다른 와이어 키로 읽고 써요.
+- `.null()` / `.nullable()`은 `null`을 허용해요.
+- `.alias(name)`은 필드의 와이어 키를 정해요. `struct.parse`는 기본적으로 논리 키를 읽어요. `{ aliases: true }`와 HTTP JSON 디코딩은 와이어 키를 읽고, HTTP JSON 인코딩은 와이어 키를 써요. 파싱 결과는 논리 키를 써요.
 - `shape`에 없는 키는 출력에서 제거돼요. 출력은 `null` 프로토타입을 가진 새 객체예요.
 - 입력은 plain 객체여야 해요. 배열, `Map`, 클래스 인스턴스는 `invalid_type`(expected `object`)으로 실패해요.
 - 파싱은 처음 실패한 필드에서 멈추고, `issue.path`에 그 키가 들어 있어요.

@@ -22,7 +22,7 @@ const Event = struct.discriminatedUnion('kind', [
 ])
 ```
 
-- すべてのオプションは、`discriminator` フィールドが必須の [`struct.literal()`](/ja-JP/api/core/struct-literal) であるオブジェクト struct でなければなりません。フィールドがない、リテラルでない、オプションである、またはタグの値が重複している場合、struct の作成時に `TypeError` を投げます。
+- すべてのオプションは、`discriminator` フィールドが必須の [`struct.literal()`](/ja-JP/api/core/struct-literal) であるオブジェクト struct でなければなりません。フィールドがない、リテラルでない、省略可能である、またはタグの値が重複している場合、struct の作成時に `TypeError` を投げます。
 - 入力はプレーンオブジェクトでなければなりません。タグの値でオプションが選ばれ、そのオプションがオブジェクト全体をパースします。
 - タグがない場合は `missing_key`、未知のタグの場合は `invalid_union` で失敗します。どちらもタグフィールドのパスを報告します。それ以外の失敗は、選ばれたオプションによるものです。
 - `struct.parse(..., { aliases: true })` では、タグはフィールドのエイリアスから読み取られます。

@@ -57,7 +57,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `FaultOf` 係用解碼後嘅 error-body type（而唔係產生佢嘅 struct）嚟表達嘅 `Fault`。`HttpAwaitResult` 同各個 fault factories 都係以解碼後嘅值運作，所以用呢個形式。
 
-每個變體都係名為 `DefjsFault` 嘅原生 `Error`，所以 `String(fault)` 直接俾出可以寫 log 嘅 `DefjsFault: <message>`。`code` 同各變體 metadata——`status`、`response`、`data`——都係可枚舉嘅自有屬性。原生 `cause` chain 唔可枚舉。
+每個變體都係名為 `DefjsFault` 嘅原生 `Error`，所以 `String(fault)` 俾出 `DefjsFault: <message>`。`code` 同各變體 metadata——`status`、`response`、`data`——都係可枚舉嘅自有屬性。原生 `cause` chain 唔可枚舉。
+
+預設 Struct 訊息會寫 `received <kind>`，永遠唔會包含收到嘅值，例如 `Expected number at email, received string`。`RES_DECODE_FAILED` 背後嘅 JSON `SyntaxError` 會產生 `Response body could not be decoded` 訊息。Issue path 係結構性嘅，會保留 record 嘅 key：`struct.record(...)` 可以產生 `Expected number at alice@example.com, received string`，所以 key 喺預設訊息、`prettify()` 同 `String(fault)` 入面仍然可能敏感。原始 `StructIssue.received` 同 parser causes 仍然可能包含敏感資料；自訂 `errorMap` 同 extension 訊息會原樣使用，寫 log 前需要檢查。
 
 <include cwd>examples/api/fault.ts#example</include>
 
@@ -143,7 +145,7 @@ declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown,
 
 `createHttpStatusFault` 收一個已經帶住解碼後 body 嘅 response；`createUndecodedHttpStatusFault` 只收 metadata，俾嗰啲冇聲明 `error` 嘅 endpoint 用。
 
-`createNetworkFault` 將 `ERR_ABORTED` 同名為 `AbortError` 嘅 `DOMException` 映射去 `NET_ABORTED`，將 `ERR_TIMEOUT` 同名為 `TimeoutError` 嘅 error 映射去 `NET_TIMEOUT`，其餘一律映射去 `NET_UNREACHABLE`。`createPreflightFault` 直接收 code；唔俾 `cause` 嘅時候，code 就變成 message。
+`createNetworkFault` 用 [`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 揀 `NET_ABORTED`，用 [`isTimeoutCause`](/zh-Hant-HK/api/core/istimeoutcause) 揀 `NET_TIMEOUT`：兩者會識別任何 Core 副本帶 brand 嘅 sentinel，前者亦識別名為 `AbortError` 嘅 `DOMException`，後者亦識別名為 `TimeoutError` 嘅 `DOMException` 或 `Error`。其餘一律映射去 `NET_UNREACHABLE`。`createPreflightFault` 直接收 code；唔俾 `cause` 嘅時候，code 就變成 message。
 
 所有工廠都 return 帶住上述結構化 field 嘅原生 `Error` instance；佢哋唔會造普通 object error，`String(fault)` 亦唔需要 adapter。
 
@@ -159,5 +161,16 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 ```
 
 Abort 同 timeout 共享嘅 `cause` / message 值。喺 HTTP interceptor 入面 throw 其中一個，該次 call 就會 resolve 成 `NET_ABORTED` 或者 `NET_TIMEOUT`。SSE 同 WebSocket interceptors 會將任何 throw（包括呢兩個）都回報為 `EXT_INTERCEPTOR_FAILED`。
+
+Sentinels 帶有不可枚舉嘅 `Symbol.for('defjs.cause.aborted')` 同 `Symbol.for('defjs.cause.timeout')` brands。分類唔依賴 sentinel 嘅 object identity，亦唔受之前無關嘅執行影響。
+
+## Cause 檢查
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 識別帶 abort brand 嘅 `Error`，或者名為 `AbortError` 嘅 `DOMException`。[`isTimeoutCause`](/zh-Hant-HK/api/core/istimeoutcause) 識別帶 timeout brand 嘅 `Error`，或者名為 `TimeoutError` 嘅 `DOMException` / `Error`。請傳入 `fault.cause` 去分類底層值；呢啲函數唔會解開 fault。佢哋亦適用於另一份 Core 嘅 sentinels。
 
 睇 [Errors guide](/zh-Hant-HK/docs/errors)。

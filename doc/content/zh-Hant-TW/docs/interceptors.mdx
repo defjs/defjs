@@ -39,7 +39,9 @@ description: 在傳輸邊界以洋蔥順序疊加 HTTP、SSE、WebSocket 策略�
 
 SSE 同套路。瀏覽器 WebSocket 不能加任意 handshake headers — 改 `request.headers` 不會幫瀏覽器 socket 做認證。改用 protocol、URL／query 策略，或伺服器支援的 handshake。
 
-替換 HTTP body 時，在複製後的 request 上換 `body`。Body 值變了時，Fetch 會忽略過期的 content-type metadata。別重用已消耗的 `ReadableStream` body。
+HTTP 絕不會把推斷的 Content-Type 寫入 `request.headers`；interceptors 只看得到已宣告的 header。`request.bodyContentType` 以一般欄位保存 builder body 的推斷型別，因此在 `{ ...req }` 複製後仍會保留。明確的 `content-type` header 一律優先於該欄位與偵測結果，無論它由 builder、client 預設值、interceptor 或直接傳給 `fetchHandler` 的 request 宣告。簽章程式應讀取 `headers.get('content-type') ?? request.bodyContentType`。
+
+替換 HTTP body 時，在複製後的 request 上換 `body`，並用 `content-type` header 宣告其型別。`bodyContentType` 只在 `body` 仍是 builder 的值時適用；替換後的 body 會重新偵測，因此替換進來的字串會是文字，除非 header 另有宣告。設成 `body: undefined` 就不會有函式庫推斷的 Content-Type。對未變更的 builder body，若沒有明確的 header，`bodyContentType: null` 會抑制函式庫的推斷，不過原生 Fetch 仍可能為字串加上它自己的型別。FormData 一律使用它實際的 multipart boundary。別重用已消耗的 `ReadableStream` body。
 
 ## Short-circuit 請求
 
@@ -91,6 +93,8 @@ Factories 回傳帶 tag 的傳輸值：
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic credentials
 
 `HttpRequest` 可能包含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、static `operation`。它是傳輸整合值 — 不是呼叫端已剖析的 input。序列化之後，`queryParams` 是 `new URLSearchParams(queryString)`。Builder 沒產出 query 時，不會呼叫設定好的 query serializer；builder 的 `URLSearchParams` 會原樣使用。Command 驗證、output 驗證、領域錯誤對應留在各自的層。
+
+URL 驗證從建構請求時就開始：缺少、相對或無效的 base endpoint，或非法 path，會在任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，包括會 short-circuit 的 interceptor。分派之前，最終的 `req.endpoint` 會對最終的 `req.baseEndpoint` 驗證：解析後的 URL 必須維持該 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 可以刻意把 `baseEndpoint` 換成另一個有效的絕對 URL。HTTP、SSE 與 WebSocket 共用這條規則，確定性的 URL 錯誤絕不會重試。
 
 SSE／WebSocket observers 是生命週期 hooks，不是控制流程。擁有者結束時要 unsubscribe WebSocket listeners。Observer 失敗跟傳輸契約走；interceptor 本身可以 throw 或 reject。
 

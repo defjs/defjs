@@ -25,7 +25,7 @@ type WebSocketDefinition<
 ```
 
 - `incoming` هو الـ struct الذي يُحلَّل به كل إطار مستلَم. الإطارات نص JSON.
-- `outgoing` هو الـ struct الذي يتحقق منه `session.send` ويرمّز به. بدونه يرمي `send`.
+- `outgoing` هو الـ struct الذي يستخدمه `session.send` للتحقق من الرسالة وترميزها. بدونه يرمي `send`.
 - `maxIncomingQueueSize` مطلوب ويجب أن يكون عددًا صحيحًا آمنًا موجبًا. أما `maxOutgoingQueueSize` فيجب أن يكون عددًا صحيحًا آمنًا غير سالب؛ وقيمته الافتراضية `0`، وهي تعطّل وضع الرسائل المرسَلة أثناء حالة `reconnecting` في الطابور.
 - `protocols` هي قائمة البروتوكولات الفرعية الافتراضية الثابتة. يتجاوزها خيار execute `protocols` و[`withWebSocketProtocols`](/ar/api/core/withwebsocketprotocols).
 - `operation` اسم ثابت منخفض التعددية (low-cardinality) للقياس عن بُعد (telemetry).

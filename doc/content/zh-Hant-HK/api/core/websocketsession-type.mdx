@@ -23,6 +23,7 @@ interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends Async
 - `state` 係邏輯上嘅 [`WebSocketState`](/zh-Hant-HK/api/core/websocketstate-type)；`connection` 係最新嘅 [`WebSocketConnectionInfo`](/zh-Hant-HK/api/core/websocketconnectioninfo-type)。`bufferedAmount` 係原生尚未送出嘅 byte 數；冇實體 socket 時係 `0`。
 - `receive` 產出已經用 `incoming` struct 解析好嘅 incoming 訊息。佢只可以有一個 consumer：要求第二個 iterator 會 throw `TypeError`。解析唔到嘅 frame 會報告畀 `onRuntimeError` listeners，然後略過。
 - `send(message)` 用 `outgoing` struct 驗證同 encode 訊息，然後傳送 JSON 文字。Session 處於 `open` 時即時傳送；處於 `reconnecting` 時，如果 `maxOutgoingQueueSize` 容許就會排隊；Session 唔可寫入時，會 throw 名為 `InvalidStateError` 嘅 `DOMException`。冇聲明 `outgoing` struct、訊息通唔過 struct，或者 queue 被停用或者已滿，亦會 throw。
+- 編碼之後，如果 JSON 無法忠實表示某個值，會喺傳送或者入 queue 之前 throw `TypeError`。包括非有限數、functions、symbols、`Map`、`Set`、streams，同冇 JSON 表示方式嘅 class instances；root 同巢狀值都一樣。Heartbeat 訊息亦有同一個檢查；heartbeat 序列化失敗會結束 session。Struct 驗證可能會先拒絕某個值。
 - `close(code?, reason?)` 請求關閉並停止 heartbeat。`code` 必須係 `1000` 或者喺 `3000..4999` 之內，`reason` 最多 123 個 UTF-8 bytes；無效參數會喺 state 改變之前 throw。
 - `closed` 會 resolve 成邏輯上嘅終結 [`WebSocketCloseInfo`](/zh-Hant-HK/api/core/websocketcloseinfo-type)。
 - `onStateChange` 同 `onRuntimeError` 都會 return 一個取消訂閱 function。

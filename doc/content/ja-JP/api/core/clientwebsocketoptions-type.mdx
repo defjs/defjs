@@ -33,6 +33,8 @@ interface ClientWebSocketOptions {
 - **protocols** — コンストラクターに渡すサブプロトコルです。
 - **reconnect** — オプトインです。`attempts` のデフォルトは **3** で、`0` はリトライを無効にします。`attempts` を省略しても無制限にはなりません。そのほかのデフォルトは、`delayMs` が 1000、`factor` が 2、`jitter` が 0（0〜1 の乗法因子）、`maxDelayMs` が 30000 です。`shouldReconnect` は close の `code`、`reason`、`wasClean` を受け取り、リトライを拒否できます。
 
+リトライ回数の上限は接続断ごとに適用されます。`open` が成功すると、残りのリトライ回数、コールバックの試行番号、バックオフの指数がリセットされ、次の接続断ではリトライ 1 から始まります。`maxDelayMs` は jitter と丸めを適用した後の最終的な待ち時間の上限で、`2_147_483_647` ms も上限となります。検証規則とオーバーフロー時の動作は [`withWebSocketReconnect`](/ja-JP/api/core/withwebsocketreconnect) を参照してください。
+
 これらは `withWebSocketHandle`、`withWebSocketBeforeConnect`、`withWebSocketHeartbeat`、`withWebSocketProtocols`、`withWebSocketReconnect` で設定します。`WebSocketExecuteOptions` では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を呼び出しごとに上書きできます。
 
 [Client ガイド](/ja-JP/docs/client) を参照してください。

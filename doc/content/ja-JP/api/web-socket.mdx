@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` と `timeout` は同時に使えません。型は両方の指定を拒否し、実行時に両方を渡すと `REQ_OPTIONS_INVALID` の fault で失敗します。`signal` はどちらとも組み合わせられます。`timeout` は接続の開始期限です。あとの再接続で再び設定されることはなく、`withTimeout` は WebSocket には適用されません。
 
-`reconnect` を置いたとき、`attempts` のデフォルトは 3 です。`0` は無効にします。`attempts` を省いても無制限にはなりません。デフォルトは [Client](/ja-JP/api/client) を見てください。
+`reconnect` を指定したとき、`attempts` のデフォルトは障害ごとに 3 です。`0` はリトライを無効にします。`open` に成功すると予算とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。デフォルトと検証規則は [Client](/ja-JP/api/client) を参照してください。
 
 ## メッセージ
 
 `incoming` は struct 1 つです。テキスト、`ArrayBuffer`、typed-array、`Blob` のフレームは UTF-8 として読まれ、JSON パースされ、その struct に対して検査されます。JSON パースか struct に失敗したフレームは `session.onRuntimeError` に報告され、キューには入りません。クライアント側の不正フレーム option はありません。
 
-`outgoing` は struct 1 つです。`session.send` はその struct の `StructInput` を受け、エイリアスをエンコードしてから `JSON.stringify` します。メッセージの種類が複数なら `struct.discriminatedUnion` です。
+`outgoing` は struct 1 つです。`session.send` はその struct の `StructInput` を受け、エイリアスをエンコードしてから `JSON.stringify` します。エンコード後に JSON で忠実に表現できない値は、送信や再接続キューへの追加の前に `TypeError` を投げます。非有限数、関数、symbol、`Map`、`Set`、ストリーム、JSON 表現を持たないクラスインスタンスなどが該当します。入れ子の値にも HTTP の JSON ボディと同じチェックを使います。ハートビートにもこのチェックが適用され、ハートビートのシリアライズに失敗するとセッションが終了します。メッセージの種類が複数なら `struct.discriminatedUnion` です。
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

@@ -12,6 +12,6 @@ type EventStreamCloseInfo =
   | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamHandle.closed`의 값이에요. `eof`는 응답이 정상적으로 끝났다는 뜻이에요. `aborted`는 `close()`나 dispose로 스트림을 닫았거나 signal이 abort되었다는 뜻이며, `reason`과 `cause`는 `close`에 넘긴 값을 담아요. `error`는 fault `code`(`EventStreamFaultCode` 참고)와 실패 원인을 `cause`로 담아요.
+`EventStreamHandle.closed`의 값이에요. `eof`는 응답이 정상적으로 끝났다는 뜻이에요. `aborted`는 `close()`나 dispose로 스트림을 닫았거나, 호출자 signal이 타임아웃이 아닌 이유로 abort되었다는 뜻이며, `reason`과 `cause`는 `close`에 넘긴 값을 담아요. 호출자 signal이 open 뒤에 `TimeoutError`나 `ERR_TIMEOUT`으로 abort되면 이터레이터는 `ERR_TIMEOUT`을 던지고 `closed`는 `{ kind: 'error', code: 'NET_TIMEOUT', ... }`가 돼요. `close(timeoutError)`를 명시하면 여전히 `aborted`로 보고돼요. `error`는 fault `code`(`EventStreamFaultCode` 참고)와 실패를 `cause`로 담아요.
 
 [SSE](/ko-KR/api/sse)

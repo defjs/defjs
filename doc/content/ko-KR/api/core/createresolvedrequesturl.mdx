@@ -9,11 +9,11 @@ description: '요청 path를 기본 endpoint에 대해 해석해 URL로 만들�
 function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
 ```
 
-- **baseEndpoint** — 클라이언트 endpoint예요. query와 hash는 버려지고, base path가 유지되도록 pathname 끝에 슬래시가 붙어요. `https://api.example.com/v1`에 `/users`를 주면 `https://api.example.com/v1/users`가 돼요.
-- **path** — 상대 엔드포인트 path예요. 맨 앞의 슬래시 하나는 제거돼요.
+- **baseEndpoint** — 유효한 절대 클라이언트 endpoint예요. query와 hash는 버려지고, base path가 유지되도록 pathname 끝에 슬래시가 붙어요. `https://api.example.com/v1`에 `/users`를 주면 `https://api.example.com/v1/users`가 돼요.
+- **path** — 상대 엔드포인트 path예요. 맨 앞의 슬래시 하나는 제거돼요. 해석 뒤 URL은 base origin을 유지하고 그 디렉터리 안에 머물러야 해요. 절대 path, 프로토콜 상대 path, C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`, 디렉터리 탈출은 거부돼요. 앞에 공백이 있어도 스킴 형태와 프로토콜 상대 형식은 거부돼요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요.
 - **queryString** — 앞의 `?`가 없는 query예요. 비어 있지 않으면 그대로 URL의 search로 설정돼요.
 - **반환** 해석된 `URL`이에요.
 
-`baseEndpoint`를 파싱할 수 없으면 `TypeError('Client endpoint must be a valid URL')`를 던져요. `path`에 scheme이 있거나 `//`로 시작하면 `Error`를 던지고 (`Endpoint path must not be an absolute URL`), `?`나 `#`를 포함해도 던져요 (`Endpoint path must not include query or hash`).
+base endpoint나 path가 잘못되면 `TypeError`를 던져요. `client.execute` 중에는 없거나 상대적이거나 잘못된 base, 또는 불법 path가 인터셉터나 전송이 돌기 전에 `REQ_BUILD_FAILED`가 돼요. 단축하는 인터셉터도 예외가 아니고, HTTP, SSE, WebSocket이 같아요. 인터셉터의 최종 `req.endpoint`도 최종 `req.baseEndpoint`에 대해 검증돼요. base를 다른 유효한 절대 URL로 일부러 바꾸는 것은 허용돼요. 결정적인 URL 오류는 재시도하지 않아요.
 
 [HTTP](/ko-KR/api/http)

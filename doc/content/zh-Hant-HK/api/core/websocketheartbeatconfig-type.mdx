@@ -16,6 +16,7 @@ interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
 
 - `intervalMs` 係兩次 heartbeat 訊息之間嘅間隔。
 - `message()` 建立 payload，並經 `outgoing` struct 傳送。省略佢，或者佢 return `undefined` 嘅話，就唔會傳送任何嘢。
+- Struct 編碼之後，非 JSON 值會經同 `session.send` 一樣嘅 serializer 以 `TypeError` 失敗；呢個 heartbeat 失敗會結束邏輯 session，唔會重連。
 - `isAck(message)` 會收到每個已解碼嘅 incoming 訊息。Return `true` 時，該訊息被視為 acknowledgement，唔會交畀 `receive`。
 - `timeoutMs` 係 heartbeat 之後等待 acknowledgement 嘅時間。等唔到會令 session 失敗。
 - `intervalMs` 同 `timeoutMs` 必須係正數、有限，而且最大係 `2_147_483_647`。

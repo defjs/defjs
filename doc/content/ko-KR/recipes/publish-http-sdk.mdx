@@ -5,7 +5,7 @@ description: 엔드포인트와 createClient를 export하고, status 좁히기�
 
 # execute를 숨기지 않고 HTTP SDK 공개하기
 
-`client.execute`를 삼키는 method SDK는 선언된 `404`를 타입이 없는 throw나 공유 “API 오류”로 눌러 버려요. 계약은 엔드포인트와 명시적인 클라이언트로 두고, status 분기는 호출자가 소유하게 하세요.
+`client.execute`를 삼키는 method SDK는 보통 선언된 `404`를 타입이 없는 throw나 공유 “API 오류”로 눌러 버려요. 계약은 엔드포인트와 명시적인 클라이언트로 두고, status 분기는 호출자가 소유하게 하세요.
 
 [명령](/ko-KR/docs/commands), [클라이언트](/ko-KR/docs/client), [설계 결정](/ko-KR/docs/design-decisions)을 보세요.
 

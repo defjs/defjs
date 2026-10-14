@@ -15,8 +15,8 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 
 - **struct** 是用来解析的 struct。传入不是 struct 的值会抛出 `TypeError`。
 - **value** 是未知的输入。
-- **options.aliases** 默认为 `false`：对象 key 按**逻辑**名（`displayName`）读取。设为 `true` 时按线上名（`display_name`）读取，和 HTTP/JSON codec 的读法一致。输出始终使用逻辑名。
-- **options.errorMap** 是一个 [`ErrorMap`](/zh-Hans/api/core/errormap-type)，只改写这一次调用的 issue 消息。返回 `undefined` 则保留默认消息。
+- **options.aliases** 默认为 `false`：对象 key 按**逻辑**名（`displayName`）读取。设为 `true` 时按传输名称（`display_name`）读取，和 HTTP/JSON codec 的读法一致。输出始终使用逻辑名。
+- **options.errorMap** 是一个 [`ErrorMap`](/zh-Hans/api/core/errormap-type)，只改写这一次调用的 issue 消息，包括由另一份 Core 创建的 struct 在 bigint/date 转换时产生的失败。任何字符串（包括 `''`）都会替换消息；只有 `undefined` 才保留默认消息。自定义文本会原样使用。
 - **返回** `[null, output]` 或 `[StructError, undefined]`。无效输入永远不会抛出。
 - 解析是 fail-fast 的：遇到第一个失败就停止，所以 error 只包含一个 issue。输出会剔除对象中的未知 key，输入不会被修改。
 

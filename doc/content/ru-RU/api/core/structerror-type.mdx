@@ -17,6 +17,8 @@ class StructError extends Error {
 
 `name` равен `'StructError'`. `message` — это сообщение issue при одном issue, `N struct issues: <first message>` при нескольких и `Struct parse failed` при отсутствии issues.
 
+Сообщения issue по умолчанию указывают вид полученных данных, но никогда не их значение, например `Expected number at id, received string`. `message` и форматтеры используют этот текст. Исходные входные данные остаются в `StructIssue.received`; пользовательский текст `errorMap` используется дословно и может снова включить чувствительные значения.
+
 - `struct.parse` останавливается на первом сбое, поэтому `issues` содержит там один [`StructIssue`](/ru-RU/api/core/structissue-type).
 - `format()` возвращает дерево [`FormattedStructError`](/ru-RU/api/core/formattedstructerror-type). У каждого узла есть массив `_errors`, а вложенные ключи следуют `issue.path`.
 - `flatten()` возвращает [`FlattenedStructError`](/ru-RU/api/core/flattenedstructerror-type): сообщения с пустым path попадают в `formErrors`, остальные группируются по первому сегменту path в `fieldErrors`.

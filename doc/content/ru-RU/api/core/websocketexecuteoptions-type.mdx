@@ -27,7 +27,7 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 - `signal` сочетается с любым из них; это не алиас `abort`.
 - `timeout` должен быть положительным safe integer не больше `2_147_483_647`. Он ограничивает, сколько может занять открытие сессии, и при reconnect заново не применяется.
 - `beforeConnect`, `heartbeat`, `protocols` и `reconnect` переопределяют опции уровня клиента для этого вызова.
-- Когда `reconnect` задан, `attempts` по умолчанию `3`; `0` отключает. Опустить `attempts` — это не «без лимита».
+- Когда `reconnect` задан, `attempts` по умолчанию `3` для каждого периода недоступности соединения; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени в расчёте задержки. Отсутствие `attempts` не даёт неограниченных повторов в пределах одного периода недоступности. Правила валидации и ограничения итоговой задержки см. в [`withWebSocketReconnect`](/ru-RU/api/core/withwebsocketreconnect).
 
 См. [`WebSocketHeartbeatConfig`](/ru-RU/api/core/websocketheartbeatconfig-type).
 

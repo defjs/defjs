@@ -15,13 +15,17 @@ description: リクエストを定義し、実行し、status で分岐し、sig
 
 ## URL を解決する
 
-`withEndpoint(...)` には有効な絶対 URL が要ります。エンドポイントの pathname はディレクトリとして残り、query と hash はコマンド解決の前に捨てられます。
+`withEndpoint(...)` には有効な絶対 URL が要ります。エンドポイントの pathname はディレクトリとして残り、query と hash はコマンド解決の前に捨てられます。ベースエンドポイントの欠落、相対 URL、無効な URL は、インターセプターやトランスポートが実行される前のリクエスト組み立て中に `REQ_BUILD_FAILED` になります。インターセプターがリクエストをショートサーキットする場合でも同じです。HTTP、SSE、WebSocket で共通の規則です。
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
 path のプレースホルダは生のスカラーで、ちょうど一度だけエンコードされます。空の値と `.` / `..` は拒否されます。1 つのプレースホルダの中のスラッシュ、`?`、`#`、`%`、空白、Unicode は、エンコードされた 1 セグメントのままです — 事前エンコードしないでください。
 
-定義の path に `?` や `#` は入れられず、絶対やプロトコル相対にもできません。デフォルトの query エンコーダはスカラーとスカラーの配列を受け付けます（配列はキーを繰り返します）。入れ子オブジェクトは、クライアントに `withQuerySerializer(...)` が無ければ `REQ_BUILD_FAILED` で失敗します。`path`、`query`、`headers` の `null` も同じように失敗します。`undefined` は省略されます。
+プレースホルダ名は `:` から始まり、次の `/` または path の末尾まで続きます。`/files/:name.json` のパラメータ名は `name.json` で、`name` ではありません。静的セグメント内のリテラルのコロンには対応していません。
+
+定義の path は、先頭に空白がある場合も含め、スキームらしき形式やプロトコル相対にはできず、C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#` も含められません。パス内部の普通の空白は許可され、`%20` として送られます。解決後の URL はベースのオリジンを保ち、そのディレクトリ内に収まる必要があります。`../users` のような path で外へ出ることはできません。不正な path はトランスポートの前、組み立て中に `REQ_BUILD_FAILED` で失敗します。インターセプターの最終的な `req.endpoint` は、最終的な `req.baseEndpoint` に対して同じ規則で検証されます。インターセプターが意図的に別の有効な絶対 URL をベースにすることは許可されます。決定的な URL エラーは決してリトライされません。
+
+デフォルトの query エンコーダはスカラーとスカラーの配列を受け付けます（配列はキーを繰り返します）。入れ子オブジェクトは、クライアントに `withQuerySerializer(...)` が無ければ `REQ_BUILD_FAILED` で失敗します。`path`、`query`、`headers` の `null` も同じように失敗します。`undefined` は省略されます。
 
 ## 入力を配置する
 
@@ -81,7 +85,7 @@ union のガイドが複数の分岐に一致したら、分岐ごとにエン�
 | `string`                                                                   | そのまま                                                             | `text/plain;charset=UTF-8`                             |
 | プレーンオブジェクト、配列、数値、真偽値、`null`、`Date`、`bigint`         | エンコードしてから `JSON.stringify`                                  | `application/json`                                     |
 
-デフォルトを上書きするには、`headers` に `content-type` を置きます。コーデックのタグが効くのはボディのルートだけです。`body: { meta: input.form }` は JSON になり、フォームのフィールドは普通の JSON フィールドです。文字列は生テキストです。`"abc"` のような JSON 文字列には `JSON.stringify` と `application/json` が要ります。`undefined` のフィールドは省略されます。`nullable` なフィールドを `null` で送ると JSON の `null` になります。
+HTTP は、ビルダーのボディから推論した型をプレーンなフィールド `request.bodyContentType` に保持し、`{ ...req }` のコピー後も残します。その推論を `request.headers` に書き込むことはありません。明示的な `content-type` ヘッダーは、ビルダー、クライアントのデフォルト、インターセプター、生の `fetchHandler` リクエストのどれが設定しても常に優先され、アップロード進捗のためにボディがストリームへ変換される場合も同じです。`bodyContentType` が効くのは `body` がビルダーの値のままのあいだだけです。差し替えたボディは再検出されるので、インターセプターはその型を `content-type` ヘッダーで宣言します。`body: undefined` では、ライブラリが推論した Content-Type は送られません。FormData は例外で、content type には実際のシリアライズで使われた boundary が必要です。コーデックのタグが効くのはボディのルートだけです。`body: { meta: input.form }` は JSON になり、フォームのフィールドは普通の JSON フィールドです。文字列は生テキストです。`"abc"` のような JSON 文字列には `JSON.stringify` と `application/json` が要ります。`undefined` のフィールドは省略されます。`nullable` なフィールドを `null` で送ると JSON の `null` になります。
 
 JSON は、ネストした値も含めて、すべて JSON データでなければなりません。プレーンオブジェクト、配列、文字列、有限の数値、真偽値、`null`、そして `toJSON()` がそれらを返す値、たとえば `Date` や `URL` です。それ以外の値は、ルートにあってもネストされていても、何も送られる前に `REQ_BUILD_FAILED` で失敗します。`{}` や `null` として送られたり、ボディなしになったりすることはありません。該当するのは、`Map` や `Set`、`toJSON` のないクラスインスタンス、関数、`NaN`、Node の `Readable`、イテラブルまたは非同期イテラブル（`Symbol.iterator` または `Symbol.asyncIterator` メソッドを持つオブジェクトリテラルを含む）などです。エラーメッセージには該当するフィールド名が含まれます。`query` または `headers` として渡したイテラブルオブジェクトは、捨てられずに同じように失敗します。ヘッダーのペアは配列として渡してください。ストリームは Web の `ReadableStream` として送ってください。`ReadableStream.from(iterable)` または `Readable.toWeb(readable)` を使います。`body` 型はこれらの大半をコンパイル時に拒否します。`interface` の値やクラスインスタンスには `{ ...value }` が必要です。
 
@@ -124,19 +128,19 @@ JSON は、ネストした値も含めて、すべて JSON データでなけれ
 
 `withCredentials(true)` は HTTP と SSE の Fetch に `credentials: 'include'` を設定します。`Authorization` は作らず、WebSocket 認証も設定しません。`false` は credentials を未指定のままにします。
 
-`withXSRF(...)` は HTTP 専用です。デフォルトは `cookieName: 'XSRF-TOKEN'`、`headerName: 'X-XSRF-TOKEN'` です。ヘッダーを注入するのは非安全メソッドだけで、呼び出し側がすでに立てていないときだけで、ブラウザーでは同一オリジンのリクエストだけです。`GET`、`HEAD`、`OPTIONS`、`TRACE` は飛ばします。ブラウザーの外で注入が要るなら、同期的でリクエストスコープの `tokenProvider` を渡してください。
+`withXSRF(...)` は HTTP 専用です。デフォルトは `cookieName: 'XSRF-TOKEN'`、`headerName: 'X-XSRF-TOKEN'` です。ヘッダーを注入するのは非安全メソッドだけで、呼び出し側がすでに設定していないときだけです。Worker を含め、`location` が存在する場合は、解決済みリクエスト URL のオリジンが `location.origin` と一致しなければなりません。クロスオリジンのリクエストでは `tokenProvider` は呼ばれません。cookie の参照には、別途 `document` が必要です。`GET`、`HEAD`、`OPTIONS`、`TRACE` は飛ばします。Worker やサーバーで注入が要るなら、同期的でリクエストスコープの `tokenProvider` を渡してください。
 
 資格情報、XSRF トークン、query 文字列は日常のログに出さないでください。query パラメータを一般的な資格情報の通り道にしないでください。
 
 ## 進捗と Fetch 境界
 
-`onDownloadProgress` は、宣言されたレスポンスボディを読んでいるあいだ動きます。`lengthComputable` が true になるのは、正の `Content-Length` があるときだけです。その側に struct が無い → ボディは読まれない → ボディ読み取りの進捗もありません。
+`onDownloadProgress` は、宣言されたレスポンスボディを読んでいるあいだ動きます。`loaded` はレスポンスストリームから読んだバイト数を数え、そのストリームは Fetch がすでに展開済みの場合があります。`lengthComputable` が true になるのは、正の `Content-Length` があり、`Content-Encoding` が無いか `identity` のときだけです。gzip や br を含むその他のエンコードでは `total: 0`、`lengthComputable: false` と報告するので、展開済みバイト数を圧縮されたワイヤ上の長さと比較することはありません。その側に struct が無い → ボディは読まれない → ボディ読み取りの進捗もありません。
 
-`onUploadProgress` は、Fetch が `ReadableStream<Uint8Array>` のボディを読む際の進捗を報告します。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます。Bun、Node、Deno では、Defjs は `Blob` / `File`、`ArrayBuffer`、`FormData` のボディもストリームに変換するので、それらも進捗を報告します。Chromium はリクエストボディを HTTP/2 以降でしかストリームせず、Firefox はまったくストリームできないため、ブラウザーは除外されます。ブラウザーではそれらのボディはそのまま送られ、`onUploadProgress` は呼び出されません。JSON、テキスト、`URLSearchParams`、型付き配列のボディはまとめて送られ、イベントは出ません。長さが分からないストリームでは `total` は `0`（つまり `lengthComputable` は `false`）です。ストリームのリクエストを送れないランタイム（Firefox など）での `ReadableStream` ボディは、何も送られる前に `ENV_UNSUPPORTED` で失敗し、cause のメッセージは `ERR_STREAMING_REQUEST_UNSUPPORTED` です。Chromium では `ReadableStream` ボディに HTTP/2 以降が必要で、HTTP/1.1 では呼び出しが `NET_UNREACHABLE` で失敗します。`onDownloadProgress` はどのランタイムでも同じように振る舞います。
+`onUploadProgress` は、Fetch が `ReadableStream<Uint8Array>` のボディを読む際の進捗を報告し、サーバーが受領を確認した時点の進捗ではありません。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます。Bun、Node、Deno では、Defjs は `Blob` / `File`、`ArrayBuffer`、`FormData` のボディもストリームに変換するので、それらも進捗を報告します。サーバーランタイムでは、`onUploadProgress` 付きの FormData はシリアライズされたストリームを直接使い、multipart boundary を保ち、ライブラリが生成した `Content-Length` なしで送られます（HTTP/1.1 では chunked）。そのため、ボディ全体をバッファせずに進捗、タイムアウト、中止が働きます。有効な明示的 `Content-Length` が無ければ、全体の長さは不明です。一部の事前署名アップロード先のように `Content-Length` を要求するエンドポイントでは、`onUploadProgress` を省いてください。その場合、プラットフォームの Fetch が FormData を長さ付きで送ります。キャンセルするとラップされたストリームを解放します。Chromium はリクエストボディを HTTP/2 以降でしかストリームせず、Firefox はまったくストリームできないため、Worker を含むブラウザーは除外されます。ブラウザーではそれらのボディはそのまま送られ、`onUploadProgress` は呼び出されません。JSON、テキスト、`URLSearchParams`、型付き配列のボディはまとめて送られ、イベントは出ません。長さが分からないストリームでは `total` は `0`（つまり `lengthComputable` は `false`）です。ストリームのリクエストを送れないランタイム（Firefox など）での `ReadableStream` ボディは、何も送られる前に `ENV_UNSUPPORTED` で失敗し、cause のメッセージは `ERR_STREAMING_REQUEST_UNSUPPORTED` です。Chromium では `ReadableStream` ボディに HTTP/2 以降が必要で、HTTP/1.1 では呼び出しが `NET_UNREACHABLE` で失敗します。`onDownloadProgress` はどのランタイムでも同じように振る舞います。
 
 進捗コールバックが例外を投げるか、返したプロミスが拒否されると、ダウンロードでもアップロードでも、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。呼び出し側のキャンセルと `timeout` は引き続き `NET_ABORTED` / `NET_TIMEOUT` を報告します。
 
-`fetchHandler(httpRequest, fetchImpl?)` はより低レベルの Fetch 境界です。ネイティブの `Request` を組み立て、Fetch を呼び、表現を読み、`HttpResponse` を返します。コマンド入力の検証も、`output` の振り分けも、インターセプターも**しません**。注入したトランスポートのテストには便利ですが、`client.execute` の代わりにはなりません。
+`fetchHandler(httpRequest, fetchImpl?)` はより低レベルの Fetch 境界です。URL を解決し、Fetch を呼び、表現を読み、`HttpResponse` を返します。デフォルトの HTTP と SSE のハンドルは呼び出しごとに `globalThis.fetch` を解決するので、import 後に差し替えた Fetch も使われます。HTTP が `(url, init)` を使うのは、変更されていないプラットフォームの Fetch だけです。差し替えたグローバル Fetch やカスタムハンドルにはネイティブの `Request` が渡されます。Fetch が無くても Core の import は可能です。Fetch が無いままデフォルトの HTTP/SSE を実行すると `ENV_UNSUPPORTED` で失敗しますが、カスタムハンドルは使えます。この境界はコマンド入力の検証も、`output` の振り分けも、インターセプターの実行も**しません**。注入したトランスポートのテストには便利ですが、`client.execute` の代わりにはなりません。
 
 ## 再送の限界
 

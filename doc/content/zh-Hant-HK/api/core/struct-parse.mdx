@@ -16,7 +16,7 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 - **struct** 係用嚟解析嘅 struct。傳入唔係 struct 嘅值會 throw `TypeError`。
 - **value** 係未知 input。
 - **options.aliases** 預設係 `false`：object keys 按**邏輯**名稱（`displayName`）讀取。設為 `true` 就按線上名稱（`display_name`）讀取，同 HTTP/JSON codecs 讀法一樣。輸出一律用邏輯名稱。
-- **options.errorMap** 係 [`ErrorMap`](/zh-Hant-HK/api/core/errormap-type)，只會改寫今次呼叫嘅 issue messages。回傳 `undefined` 就保留預設 message。
+- **options.errorMap** 係 [`ErrorMap`](/zh-Hant-HK/api/core/errormap-type)，只會改寫今次呼叫嘅 issue messages，包括另一份 Core 建立嘅 struct 所產生嘅 bigint/date 轉換失敗。任何 string（包括 `''`）都會取代訊息；只有 `undefined` 先會保留預設值。自訂文字會原樣使用。
 - **Returns** `[null, output]` 或者 `[StructError, undefined]`。無效 input 永遠唔會 throw。
 - 解析係 fail-fast：喺第一個失敗處停低，所以 error 只有一個 issue。輸出會剔走未知 object keys，input 唔會被修改。
 

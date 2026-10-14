@@ -11,6 +11,6 @@ interface ClientSSEConfig extends ClientSSEOptions {
 }
 ```
 
-`ClientConfig.sse` 的类型。它就是 [`ClientSSEOptions`](/zh-Hans/api/core/clientsseoptions-type)，只是 `handle` 一定存在；默认值是全局 `fetch`。
+`ClientConfig.sse` 的类型。它就是 [`ClientSSEOptions`](/zh-Hans/api/core/clientsseoptions-type)，只是 `handle` 一定存在；默认包装函数在每次尝试时获取当前的全局 `fetch`，而非在导入时捕获它。
 
 [Client](/zh-Hans/api/client)

@@ -43,7 +43,7 @@ en sus metadatos. Al fallar, el tercer hueco de la tupla es `undefined`; el faul
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-Transporte HTTP por defecto. `fetchImpl` es por defecto el `fetch` global; `withHTTPHandle` proporciona otro. Rechaza — en lugar de resolver
+Transporte HTTP por defecto. `fetchImpl` es por defecto el `fetch` global resuelto en el momento del envío; `withHTTPHandle` proporciona otro. El Fetch de la plataforma sin sustituir recibe `(url, init)`, mientras que un global reemplazado o un handle personalizado recibe un `Request`. Rechaza — en lugar de resolver
 con una respuesta sintética — cuando ninguna respuesta llegó al cliente o falló la lectura de un cuerpo declarado.
 
 ## makeResponse()
@@ -140,6 +140,8 @@ se vuelve a parsear; los bytes y los blobs son crudos y se parsean una vez. Lo q
 Solo se informa del progreso de subida en los entornos de ejecución que permiten enviar cuerpos de solicitud como flujos (Bun, Node, Deno); en los
 navegadores, los cuerpos de tipo `Blob` / `File`, `ArrayBuffer` y `FormData` se envían sin cambios y no se llama a `onUploadProgress`.
 
+En los runtimes de servidor, FormData usa su stream serializado sin almacenar el cuerpo entero en un Blob y conserva el boundary multipart real. Su total es desconocido salvo que lo aporte un `Content-Length` explícito válido. Los content types explícitos sobreviven a la conversión de la subida, salvo que FormData deba usar el boundary de su serialización. `loaded` cuenta bytes del stream, no confirmaciones del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
+
 Mira la [guía de HTTP](/es-ES/docs/http) y [Comandos](/es-ES/docs/commands).
 
 ## RequestEndpoint
@@ -157,11 +159,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
 `GET` y `HEAD` no pueden devolver un body. `path` y `headers` deben ser escalares planos; `query` puede anidar, y un objeto anidado necesita `withQuerySerializer` en runtime.
+
+Consulta [`HttpRequestShape`](/es-ES/api/core/httprequestshape-type) para los valores de cable y JSON que acepta `BodyValue`.
 
 ## HttpCommand
 

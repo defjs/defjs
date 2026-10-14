@@ -57,7 +57,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `FaultOf` — это `Fault`, выраженный через тип декодированного тела ошибки, а не через struct, который его создал. `HttpAwaitResult` и фабрики fault’ов работают с декодированными значениями, поэтому используют эту форму.
 
-Каждый вариант — нативный `Error` с именем `DefjsFault`, так что `String(fault)` даёт готовый к логированию `DefjsFault: <message>`. `code` и метаданные варианта — `status`, `response`, `data` — это перечислимые собственные свойства. Нативная цепочка `cause` не перечислима.
+Каждый вариант — нативный `Error` с именем `DefjsFault`, так что `String(fault)` даёт `DefjsFault: <message>`. `code` и метаданные варианта — `status`, `response`, `data` — это перечислимые собственные свойства. Нативная цепочка `cause` не перечислима.
+
+Сообщения Struct по умолчанию содержат `received <kind>`, но никогда не само полученное значение, например `Expected number at email, received string`. Ошибка JSON `SyntaxError`, лежащая в основе `RES_DECODE_FAILED`, даёт сообщение `Response body could not be decoded`. Пути issue структурные и сохраняют ключи record: `struct.record(...)` может дать `Expected number at alice@example.com, received string`, поэтому ключи могут оставаться чувствительными в сообщениях по умолчанию, `prettify()` и `String(fault)`. Исходные `StructIssue.received` и причины ошибок парсера остаются чувствительными данными; сообщения пользовательского `errorMap` и расширений используются дословно и требуют проверки перед записью в лог.
 
 <include cwd>examples/api/fault.ts#example</include>
 
@@ -143,11 +145,11 @@ declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown,
 
 `createHttpStatusFault` берёт response, который уже несёт декодированное тело; `createUndecodedHttpStatusFault` берёт одни метаданные — для endpoint’а, не объявившего `error`.
 
-`createNetworkFault` отображает `ERR_ABORTED` и `DOMException` с именем `AbortError` на `NET_ABORTED`, `ERR_TIMEOUT` и ошибку с именем `TimeoutError` на `NET_TIMEOUT`, а всё остальное — на `NET_UNREACHABLE`. `createPreflightFault` берёт код напрямую; без `cause` код становится message.
+`createNetworkFault` использует [`isAbortCause`](/ru-RU/api/core/isabortcause) для `NET_ABORTED` и [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) для `NET_TIMEOUT`: они распознают помеченные сигнальные ошибки из любой копии Core, а также соответственно `DOMException` с именем `AbortError` и `DOMException` или `Error` с именем `TimeoutError`. Всё остальное отображается на `NET_UNREACHABLE`. `createPreflightFault` берёт код напрямую; без `cause` код становится сообщением.
 
 Все фабрики возвращают экземпляры нативного `Error` с перечисленными выше структурированными полями; они не создают ошибок-простых-объектов и не нуждаются в адаптере для `String(fault)`.
 
-## Sentinel’ы
+## Сигнальные ошибки
 
 ## ERR_ABORTED
 
@@ -159,5 +161,16 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 ```
 
 Общие значения `cause` / message для abort и timeout. Если бросить одно из них из HTTP-interceptor’а, вызов завершится с `NET_ABORTED` или `NET_TIMEOUT`. Interceptor’ы SSE и WebSocket сообщают о любом брошенном значении, включая эти, как `EXT_INTERCEPTOR_FAILED`.
+
+Сигнальные ошибки имеют неперечислимые метки `Symbol.for('defjs.cause.aborted')` и `Symbol.for('defjs.cause.timeout')`. Классификация не зависит от идентичности объекта сигнальной ошибки или от предыдущих несвязанных вызовов.
+
+## Проверка причин
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт `Error` с меткой отмены или `DOMException` с именем `AbortError`. [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) распознаёт `Error` с меткой таймаута или `DOMException` / `Error` с именем `TimeoutError`. Передавай `fault.cause`, чтобы классифицировать исходное значение; эти функции не извлекают причину из fault. Они работают и с сигнальными ошибками из другой копии Core.
 
 См. [гайд Errors](/ru-RU/docs/errors).

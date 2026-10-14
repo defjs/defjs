@@ -13,7 +13,8 @@ function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
 
 - Chaque champ est **requis** par défaut. Une clé manquante échoue avec `missing_key`.
 - `.optional()` et `.nullish()` autorisent une clé manquante. Un champ optionnel absent reste absent dans la sortie.
-- `.null()` / `.nullable()` autorisent `null`. `.alias(name)` lit et écrit le champ sous une autre clé wire.
+- `.null()` / `.nullable()` autorisent `null`.
+- `.alias(name)` définit la clé wire du champ. `struct.parse` lit les clés logiques par défaut ; `{ aliases: true }` et le décodage JSON HTTP lisent les clés wire, et l’encodage JSON HTTP les écrit. La sortie parsée utilise les clés logiques.
 - Les clés absentes de `shape` sont retirées de la sortie. La sortie est un nouvel objet à prototype `null`.
 - L’entrée doit être un objet simple. Les tableaux, `Map` et instances de classe échouent avec `invalid_type` (attendu `object`).
 - Le parse s’arrête au premier champ en échec, et `issue.path` contient sa clé.

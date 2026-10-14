@@ -10,7 +10,7 @@ function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: Http
 ```
 
 - **code** — Welcher Lese-Schritt fehlschlug: `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID` oder `RES_STRUCT_MISMATCH`.
-- **cause** — Das zugrunde liegende Parser- oder Struct-Failure. Seine Message wird zur Fault-Message (`String(cause)`, wenn es kein `Error` ist), und es wird als `cause` behalten.
+- **cause** — Das zugrunde liegende Parser- oder Struct-Failure, behalten als `cause`. Seine Message wird normalerweise zur Fault-Message (`String(cause)`, wenn es kein `Error` ist). Bei `RES_DECODE_FAILED` mit einem `Error` namens `SyntaxError` lautet die Message `Response body could not be decoded`, damit Parser-Fragmente nicht in `String(fault)` landen. Default-Struct-Messages nennen empfangene Kinds, nicht Werte; Rohwerte und Parser-Text bleiben an der Cause.
 - **response** — Metadaten der Response, die nicht gelesen werden konnte. `status` wird daraus kopiert.
 - **Returns** einen nativen `Error` namens `DefjsFault` ohne `body`.
 

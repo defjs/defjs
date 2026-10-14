@@ -64,7 +64,7 @@ async function consume(session: WebSocketSession<unknown, never>): Promise<void>
 }
 ```
 
-`closed` 報告邏輯終止狀態。Async disposer 會要求原生 close 並等待 Defjs 自有 teardown；若持續沒有 close event，則以 1 秒為界，並可能用名為 `TimeoutError` 的 `DOMException` reject。它無法證明實體 TCP 連線已經關閉。
+`closed` 報告邏輯終止狀態。Async disposer 會要求原生 close 並等待 Defjs 自有 teardown；若持續沒有 close event，則以一秒為界，並可能用名為 `TimeoutError` 的 `DOMException` reject。它無法證明實體 TCP 連線已經關閉。
 
 ### WebSocketState
 
@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` 與 `timeout` 互斥：型別會拒絕兩者並存，執行時同時傳入則以 `REQ_OPTIONS_INVALID` fault 失敗。`signal` 可與其中任一組合。`timeout` 是連線的啟動期限：之後的重連不會重新啟動它，`withTimeout` 也不適用於 WebSocket。
 
-設定了 `reconnect` 時，`attempts` 預設是 3；`0` 停用。省略 `attempts` 不是無限次。預設值見 [Client](/zh-Hant-TW/api/client)。
+設定了 `reconnect` 時，`attempts` 預設是每一次中斷 3 次；`0` 停用。成功的 `open` 會重設額度與 backoff 指數，所以每一次新的中斷都從重試 1 開始。省略 `attempts` 並不會在同一次中斷內給予無限次重試。預設值與驗證規則見 [Client](/zh-Hant-TW/api/client)。
 
 ## 訊息
 
 `incoming` 是一個 struct。文字、`ArrayBuffer`、typed-array、`Blob` frames 會讀成 UTF-8，再 JSON parse，然後對這個 struct 檢查。JSON parse 或 struct 失敗的 frame 會報給 `session.onRuntimeError`，而且不會進 queue。沒有 client 端的 invalid-frame option。
 
-`outgoing` 是一個 struct。`session.send` 接受該 struct 的 `StructInput`，編碼 aliases，再 `JSON.stringify`。多種訊息用 `struct.discriminatedUnion`。
+`outgoing` 是一個 struct。`session.send` 接受該 struct 的 `StructInput`，編碼 aliases，再 `JSON.stringify`。編碼之後 JSON 無法忠實表示的值，會在送出或進入重新連線 queue 之前丟出 `TypeError`，包含非有限數字、函式、symbol、`Map`、`Set`、stream，以及沒有 JSON 表示的 class instance。巢狀值使用與 HTTP JSON body 相同的檢查。Heartbeat 也使用這項檢查；heartbeat 序列化失敗會結束 session。多種訊息用 `struct.discriminatedUnion`。
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

@@ -14,4 +14,6 @@ type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
 
 `{ kind: 'http', fn }` を返します。`next(req)` を呼ぶ（変更したリクエストを渡してもかまいません）か、`makeResponse` でショートサーキットします。`next` が実行するのは、このインターセプターより後に登録されたインターセプターと、その先の fetch ハンドラーだけです。HTTP インターセプターは SSE や WebSocket のコマンドでは実行されません。
 
+`next(req)` の決定的な URL エラーは、返された Promise を reject します。そのため `.then` / `.catch` による復旧が実行されます。復旧しなければ、`client.execute` は引き続き `REQ_BUILD_FAILED` を報告します。
+
 [Interceptors](/ja-JP/api/interceptors)

@@ -11,7 +11,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `TErr` 是 endpoint 声明的 `error` struct，没有声明时为 `undefined`。`Fault<TErr>` 就是把 [`FaultOf`](/zh-Hans/api/core/faultof-type) 应用到解码后的 body 类型上，所以它是三个变体的联合：[`DecodeFault`](/zh-Hans/api/core/decodefault-type)、[`HttpStatusFault<TErr>`](/zh-Hans/api/core/httpstatusfault-type) 和 [`PreflightFault`](/zh-Hans/api/core/preflightfault-type)。请对 `fault.code` 做 switch。
 
-每个变体都是名为 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 直接得到可用于日志的 `DefjsFault: <message>`。`code` 和变体的元数据（`status`、`response`、`data`）都是可枚举的自有属性；原生的 `cause` 链不可枚举。
+每个变体都是名为 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 得到 `DefjsFault: <message>`。`code` 和变体的元数据（`status`、`response`、`data`）都是可枚举的自有属性；原生的 `cause` 链不可枚举。
+
+默认 Struct 消息写作 `received <kind>`，不会包含接收到的原值。`RES_DECODE_FAILED` 的原因是 JSON `SyntaxError` 时，message 为 `Response body could not be decoded`。结构路径会保留 record 的键，这些键可能敏感。原始 `StructIssue.received` 和解析器 cause 仍属于敏感数据；自定义 `errorMap` 与扩展消息会原样使用，写入日志前需要审查。
 
 <include cwd>examples/api/fault.ts#example</include>
 

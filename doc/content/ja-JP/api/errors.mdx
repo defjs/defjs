@@ -57,7 +57,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `FaultOf` は、`Fault` を、それを生んだ struct ではなくデコード済みのエラーボディの型で表したものです。`HttpAwaitResult` とファクトリーはデコード済みの値で動くので、この形を使います。
 
-どのバリアントも `DefjsFault` という名前のネイティブ `Error` なので、`String(fault)` はそのままログに出せる `DefjsFault: <message>` を返します。`code` と各バリアントのメタデータ — `status`、`response`、`data` — は列挙可能な自前プロパティです。ネイティブの `cause` チェーンは列挙されません。
+どのバリアントも `DefjsFault` という名前のネイティブ `Error` なので、`String(fault)` は `DefjsFault: <message>` を返します。`code` と各バリアントのメタデータ — `status`、`response`、`data` — は列挙可能な自前プロパティです。ネイティブの `cause` チェーンは列挙されません。
+
+デフォルトの Struct メッセージは、たとえば `Expected number at email, received string` のように `received <kind>` と表示し、受け取った値自体は含めません。`RES_DECODE_FAILED` の原因が JSON の `SyntaxError` なら、メッセージは `Response body could not be decoded` になります。issue の path は構造的で、record のキーを保持します。`struct.record(...)` は `Expected number at alice@example.com, received string` を生成し得るため、キーはデフォルトメッセージ、`prettify()`、`String(fault)` の中でも機微情報になり得ます。生の `StructIssue.received` とパーサーの原因は引き続き機密情報として扱ってください。カスタムの `errorMap` や拡張のメッセージはそのまま使われるため、ログに出す前に確認が必要です。
 
 <include cwd>examples/api/fault.ts#example</include>
 
@@ -143,7 +145,7 @@ declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown,
 
 `createHttpStatusFault` はデコード済みのボディを既に持つレスポンスを受け取ります。`createUndecodedHttpStatusFault` はメタデータだけを受け取り、`error` を宣言していないエンドポイント向けです。
 
-`createNetworkFault` は `ERR_ABORTED` と `AbortError` という名前の `DOMException` を `NET_ABORTED` に、`ERR_TIMEOUT` と `TimeoutError` という名前のエラーを `NET_TIMEOUT` に、それ以外をすべて `NET_UNREACHABLE` に対応づけます。`createPreflightFault` は code を直接受け取り、`cause` を渡さなければ code がそのまま message になります。
+`createNetworkFault` は、`NET_ABORTED` の判定に [`isAbortCause`](/ja-JP/api/core/isabortcause)、`NET_TIMEOUT` の判定に [`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) を使います。これらは、どの Core のコピーから来たものでも、対応するブランドを持つセンチネルを認識します。それぞれ、`AbortError` という名前の `DOMException`、`TimeoutError` という名前の `DOMException` または `Error` も認識します。それ以外はすべて `NET_UNREACHABLE` になります。`createPreflightFault` は code を直接受け取り、`cause` を渡さなければ code がそのまま message になります。
 
 どのファクトリーも、上記の構造化 field を備えたネイティブ `Error` インスタンスを返します。素のオブジェクトエラーは作らないので、`String(fault)` にアダプターは不要です。
 
@@ -159,5 +161,16 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 ```
 
 abort と timeout で共有される `cause` / message の値です。HTTP インターセプターからどちらかを throw すると、呼び出しは `NET_ABORTED` または `NET_TIMEOUT` で解決します。SSE と WebSocket のインターセプターは、これらを含むあらゆる throw を `EXT_INTERCEPTOR_FAILED` として報告します。
+
+センチネルには、列挙されない `Symbol.for('defjs.cause.aborted')` と `Symbol.for('defjs.cause.timeout')` のブランドが付いています。分類は、センチネルのオブジェクト同一性や、無関係な過去の実行には依存しません。
+
+## 原因の判定
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/ja-JP/api/core/isabortcause) は、中止のブランドを持つ `Error` または `AbortError` という名前の `DOMException` を認識します。[`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) は、タイムアウトのブランドを持つ `Error` または `TimeoutError` という名前の `DOMException` / `Error` を認識します。原因となった値を分類するには `fault.cause` を渡してください。これらの関数は fault の中身を取り出しません。別の Core のコピーから来たセンチネルでも使えます。
 
 [Errors ガイド](/ja-JP/docs/errors) を参照してください。

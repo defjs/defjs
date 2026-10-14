@@ -1,6 +1,6 @@
 ---
 title: Client
-description: createClient、option helpers，以及 Client 类型。
+description: createClient、选项辅助函数，以及 Client 类型。
 ---
 
 # Client
@@ -20,9 +20,9 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 
 <include cwd>examples/api/create-client.ts#example</include>
 
-## 选项 helpers
+## 选项辅助函数
 
-每个 helper 都返回 `ClientOption`。对同一项设置，后一次调用会替换前一次，`withInterceptors` 例外，它是追加。
+每个辅助函数都返回 `ClientOption`。对同一项设置，后一次调用会替换前一次，`withInterceptors` 例外，它是追加。
 
 ### withEndpoint()
 
@@ -46,7 +46,7 @@ function withInterceptors(...interceptors: Interceptor[]): ClientOption
 function withQuerySerializer(serializer: QuerySerializer): ClientOption
 ```
 
-换掉 HTTP、SSE、WebSocket 的 query 编码。`serializer(query)` 收到的是**已经编码的线上对象**（alias 已应用，`Date` 为 ISO，`bigint` 为 string），必须返回 query string，不要带前导 `?`。请求没有 query 时不会调用。builder 返回 `URLSearchParams` 时会跳过它。
+换掉 HTTP、SSE、WebSocket 的 query 编码。`serializer(query)` 收到的是**已经编码的传输对象**（alias 已应用，`Date` 为 ISO，`bigint` 为 string），必须返回 query string，不要带前导 `?`。请求没有 query 时不会调用。builder 返回 `URLSearchParams` 时会跳过它。
 
 ### withHeaders()
 
@@ -71,11 +71,11 @@ function withHeaders(headers: HeadersInit): ClientOption
 function withTimeout(ms: number): ClientOption
 ```
 
-为**仅 HTTP** 的 `execute` 设置默认超时，单位毫秒。SSE 和 WebSocket 忽略它；它们 execute 的 `timeout` 是另一个按调用计的启动期限。`ms` 必须是不超过 `2_147_483_647` 的正 safe integer，否则调用 `withTimeout` 时会抛出 `RangeError`。第二次调用 `withTimeout` 会替换第一次。
+为**仅 HTTP** 的 `execute` 设置默认超时，单位毫秒。SSE 和 WebSocket 忽略它；它们 execute 的 `timeout` 是另一个按调用计的启动期限。`ms` 必须是不超过 `2_147_483_647` 的正安全整数，否则调用 `withTimeout` 时会抛出 `RangeError`。第二次调用 `withTimeout` 会替换第一次。
 
 该期限涵盖输入解析、builder、interceptor、transport，以及读取已声明的 body。它会与每次调用的 execute options 组合：
 
-| Execute options             | 效果                                                                             |
+| 执行选项                    | 效果                                                                             |
 | --------------------------- | -------------------------------------------------------------------------------- |
 | 无                          | 使用 client 默认值；到期为 `NET_TIMEOUT`。                                       |
 | `{ timeout }`               | 本次调用替换 client 默认值。                                                     |
@@ -118,9 +118,9 @@ function withXSRF(options?: {
 
 给 HTTP 请求加上 XSRF token header。默认 cookie `XSRF-TOKEN`，header `X-XSRF-TOKEN`。SSE 和 WebSocket 请求不受影响。
 
-默认 HTTP transport 在以下条件全部满足时添加该 header：方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；请求尚未带有该 header；请求同源（在浏览器之外，任何带 `baseEndpoint` 的请求都算同源）；并且找到了非空 token。token 优先取自 `tokenProvider`，否则取自 cookie，而 cookie 只在浏览器中读取。
+默认 HTTP transport 在以下条件全部满足时添加该 header：方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；请求尚未带有该 header；请求同源；并且找到了非空 token。只要存在 `location`（包括 Worker 中），解析后的请求源就必须与 `location.origin` 一致；不存在 `location` 时，带 `baseEndpoint` 的请求视为同源。跨源请求不会调用 `tokenProvider`。提供了该 provider 时，token 取自它，否则取自 `document.cookie`；只有存在 `document` 时才会读取 cookie。
 
-### SSE 旋钮
+### SSE 设置
 
 ### withSSEReconnect()
 
@@ -131,7 +131,7 @@ function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
 function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
 ```
 
-### WebSocket 旋钮
+### WebSocket 设置
 
 ### withWebSocketBeforeConnect()
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Defjs 对 Fetch 实现所要求的调用签名。它不是 `typeof fetch`，所以 mock 不需要提供 `preconnect` 之类的宿主额外成员。
+Defjs 对 Fetch 实现所要求的调用签名。它不是 `typeof fetch`，所以 mock 不需要提供 `preconnect` 之类的宿主额外成员。默认的 HTTP/SSE handle 每次调用时都会解析 `globalThis.fetch`。HTTP 只有在平台 Fetch 未被替换时才使用 `(url, init)`；被替换的全局实现和自定义 handle 收到的是 `Request`。SSE 始终传入 `Request`。没有 Fetch 时也可以导入 Core；如果默认执行时 Fetch 仍然缺失，则报告 `ENV_UNSUPPORTED`，自定义 handle 仍可使用。
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 两种传输的重连都是可选开启：没有 `withSSEReconnect` / `withWebSocketReconnect` 就不会重试。一旦设置了 `reconnect`，以下默认值生效：
 
-| 字段         | SSE    | WebSocket |
-| ------------ | ------ | --------- |
-| `attempts`   | `3`    | `3`       |
-| `delayMs`    | `1000` | `1000`    |
-| `factor`     | `1`    | `2`       |
-| `jitter`     | `0`    | `0`       |
-| `maxDelayMs` | 无上限 | `30000`   |
+| 字段         | SSE             | WebSocket       |
+| ------------ | --------------- | --------------- |
+| `attempts`   | 每次中断 `3` 次 | 每次中断 `3` 次 |
+| `delayMs`    | `1000`          | `1000`          |
+| `factor`     | `1`             | `2`             |
+| `jitter`     | `0`             | `0`             |
+| `maxDelayMs` | 无上限          | `30000`         |
 
-对 SSE，`delayMs` 只是起始的基础延迟：服务器发来的 `retry:` 字段会在之后的尝试中取代它。`attempts: 0` 禁用重试；省略 `attempts` 不是无限次。`jitter` 必须在 0–1 之间：每次延迟会向任一方向随机浮动，幅度最多为该比例。`shouldReconnect` 返回 `false` 即停止重试。SSE 的回调还会收到 `lastEventId`、请求的 `method` 和最近一次的 `open` 信息，并且可以是异步的。未提供该回调时，SSE 只对 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求进行重连；提供后，所有请求方法是否重连都由回调的返回结果决定。WebSocket 的回调则收到 close 的 `code`、`reason` 和 `wasClean`。
+两种传输在成功握手后，都会重置每次连接中断的重试预算、回调中的尝试次数和退避指数。`attempts: 0` 禁用重试；省略 `attempts` 并不表示单次中断期间可以无限重试。`maxDelayMs` 限制抖动和取整后的最终延迟；平台计时器上限 `2_147_483_647` 毫秒也始终生效，包括 SSE 未配置上限时。基础延迟为零时始终为零；有效数字在计算中溢出时会被限制在这些上限。
+
+重连选项在传输层运行前校验：`attempts` 必须是非负安全整数；`delayMs` 和显式提供的 `maxDelayMs` 必须是非负有限数；`factor` 必须是正的有限数；`jitter` 必须是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 会立即禁用重试，并忽略不再使用的重连字段；SSE 仍会校验这些字段。抖动会在最终上限应用前，让已经受限的基础延迟向任一方向按比例浮动。
+
+对 SSE，`delayMs` 只是起始的基础延迟：服务器发来的 `retry:` 字段只有包含纯数字时，才会在之后的尝试中取代它，恢复连接后也继续生效。`shouldReconnect` 返回 `false` 即停止重试。SSE 的回调还会收到 `lastEventId`、请求的 `method` 和最近一次的 `open` 信息，并且可以是异步的。未提供该回调时，SSE 只对 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求进行重连；提供后，所有请求方法是否重连都由回调的返回结果决定。最新的事件 ID 以 UTF-8 字节写入 `Last-Event-ID`；空 ID 会清除它，包含 NUL 的 ID 会被忽略。WebSocket 的回调则收到 close 的 `code`、`reason` 和 `wasClean`。
 
 SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `default`，即 `missing-struct`），或数据未通过其 struct 校验的事件（`validation-failed`）。该事件一律被丢弃；handler 的返回值会被忽略，它抛出的错误也不会关闭 stream。
 
@@ -273,7 +277,7 @@ interface ClientSSEConfig extends ClientSSEOptions {
 }
 ```
 
-`ClientConfig.sse` 上解析好的 SSE config：`handle` 为必填的 `ClientSSEOptions`。
+`ClientConfig.sse` 上解析好的 SSE 配置：在 `ClientSSEOptions` 的基础上，把 `handle` 设为必填。
 
 ### WebSocketHandle
 

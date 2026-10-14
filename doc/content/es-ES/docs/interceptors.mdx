@@ -39,7 +39,9 @@ Trata el `HttpRequest` entrante como propiedad de la cadena. Clona `Headers` ant
 
 El mismo patrón para SSE. El WebSocket del navegador no puede añadir cabeceras arbitrarias de handshake — cambiar `request.headers` no autenticará un socket del navegador. Usa protocolo, política de URL/query o un handshake soportado por el servidor.
 
-Al reemplazar un cuerpo HTTP, reemplaza `body` en la solicitud copiada. Fetch ignora metadatos de content-type obsoletos cuando cambió el valor del cuerpo. No reutilices un cuerpo `ReadableStream` consumido.
+HTTP nunca escribe un Content-Type inferido en `request.headers`; los interceptores ven solo los headers declarados. `request.bodyContentType` conserva el tipo inferido del cuerpo del builder como un campo ordinario, por lo que se mantiene en las copias `{ ...req }`. Un header `content-type` explícito siempre tiene prioridad sobre ese campo y la detección, tanto si lo declara el builder, los valores por defecto del cliente, un interceptor o una solicitud directa a `fetchHandler`. El código que firma solicitudes debe leer `headers.get('content-type') ?? request.bodyContentType`.
+
+Al reemplazar un cuerpo HTTP, reemplaza `body` en la solicitud copiada y declara su tipo con un header `content-type`. `bodyContentType` solo se aplica mientras `body` sea el valor del builder; los cuerpos de reemplazo se detectan de nuevo, así que un string de reemplazo es texto salvo que el header declare otro tipo. Poner `body: undefined` no deja ningún Content-Type inferido por la librería. Para el cuerpo del builder sin cambios, `bodyContentType: null` suprime la inferencia de la librería cuando no hay un header explícito, aunque el Fetch nativo aún puede añadir su propio tipo para un string. FormData siempre usa su boundary multipart real. No reutilices un cuerpo `ReadableStream` consumido.
 
 ## Cortocircuitar una solicitud
 
@@ -93,6 +95,8 @@ Las factories devuelven valores de transporte etiquetados:
 - `basicAuthSSEInterceptor(provider, options?)` — credenciales Basic en SSE
 
 `HttpRequest` puede incluir `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` y `operation` estático. Es un valor de integración de transporte — no la entrada parseada del llamador. `queryParams` es `new URLSearchParams(queryString)` después de la serialización. Un serializador de query configurado no se llama cuando el builder no produjo query, y un `URLSearchParams` del builder se usa tal cual. Mantén la validación del comando, la validación de salida y el mapeo de errores de dominio en sus capas.
+
+La validación de URL empieza durante la construcción de la solicitud: un endpoint base ausente, relativo o no válido, o un path ilegal, falla con `REQ_BUILD_FAILED` antes de que se ejecute cualquier interceptor o transporte, incluido un interceptor que cortocircuita. Antes del despacho, el `req.endpoint` final se valida contra el `req.baseEndpoint` final: la URL resuelta debe conservar el origen de esa base y permanecer bajo su directorio; se rechazan los caracteres de control C0 (incluidos tab, CR y LF), las barras invertidas, `?`, `#` y los escapes de directorio en el path. Las formas similares a un esquema y las relativas al protocolo se rechazan incluso con espacios iniciales; se permite un espacio ordinario en el interior y se envía como `%20`. Un interceptor puede sustituir deliberadamente `baseEndpoint` por otra URL absoluta válida. HTTP, SSE y WebSocket comparten la regla, y los errores de URL deterministas nunca se reintentan.
 
 Los observadores SSE/WebSocket son hooks de ciclo de vida, no control de flujo. Haz unsubscribe de los listeners WebSocket cuando termine el dueño. Los fallos del observador siguen el contrato del transporte; un interceptor en sí puede lanzar o rechazar.
 

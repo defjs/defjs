@@ -98,6 +98,10 @@ La clé est le nom de l’événement SSE ; un message sans champ `event:` s’a
 
 Le reconnect vit sur le client (`withSSEReconnect`). Le `jitter` SSE est un **facteur multiplicatif 0–1**, comme WebSocket.
 
+Le budget de nouvelles tentatives et l’exposant de backoff sont réinitialisés après un handshake réussi ; ils s’appliquent par coupure. Les options numériques invalides renvoient `REQ_OPTIONS_INVALID` avant l’ouverture d’un flux, et `maxDelayMs` plafonne le délai final après le jitter. Voir [`withSSEReconnect`](/fr-FR/api/core/withssereconnect) pour les règles de validation, les valeurs par défaut et le traitement UTF-8 de `Last-Event-ID`.
+
+Le parseur suit les règles de lignes et de champs SSE du WHATWG et ne retire qu’un seul BOM UTF-8 initial au début de chaque flux physique. U+FEFF dans les valeurs de data ou d’ID est conservé ; un nom de champ préfixé par un BOM plus loin est ignoré comme inconnu. Les données multi-lignes sont jointes par `\n`, une ligne vide dispatche un événement qui porte des données, et un événement inachevé à l’EOF est écarté.
+
 Voir le [guide SSE](/fr-FR/docs/sse) et [Consommer un flux SSE](/fr-FR/recipes/consume-sse).
 
 ## EventStreamDefinition

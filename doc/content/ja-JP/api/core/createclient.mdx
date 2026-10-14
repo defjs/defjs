@@ -9,7 +9,7 @@ description: 'option ヘルパーからクライアントを作成します。'
 function createClient(...options: ClientOption[]): Client
 ```
 
-option は順に適用されます。同じ設定に対しては後の option が前の option を上書きし、インターセプターは累積します。インターセプターが auth やテナントを掴む場合は、クライアントをリクエスト境界の内側で作ってください。
+option は順に適用されます。同じ設定に対しては後の option が前の option を上書きし、インターセプターは累積します。インターセプターが認証情報やテナント情報をクロージャーで参照する場合は、リクエスト境界の内側でクライアントを作成することを推奨します。
 
 - **options** — `withEndpoint` のような option ヘルパーです。
 - **戻り値** `execute` がトランスポートごとにオーバーロードされたクライアントです。

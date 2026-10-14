@@ -13,7 +13,7 @@ description: 装 provider、读 Client、拉用户，并在 effect 重跑时 abo
 
 `bun add @defjs/core @defjs/react react`
 
-Provide Client，再按变化 abort 拉用户：
+提供 Client，然后获取用户，并在相关值变化时取消请求：
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -41,7 +41,7 @@ Query 库可以拥有缓存、重试、过期结果抑制、取消。把库给�
 
 ## 自己管 realtime 工作
 
-SSE 和 WebSocket handle 比 `client.execute(...)` 活得久。await 启动前先注册清理，关晚到释放之后才到的 handle，消费唯一 iterator，await 终止 promise：
+SSE 和 WebSocket handle 的生命周期长于 `client.execute(...)`。等待启动之前先注册清理；关闭在所有者释放之后才到达的 handle；消费唯一的迭代器，并等待终态 promise：
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
@@ -59,7 +59,7 @@ Provider 卸载**不会** abort HTTP、关 SSE/WebSocket、退订监听，也不
 
 `@defjs/react` 的公开导出：
 
-- `ClientProvider` — 收 `ClientProviderProps`，provide 传入的 Client
+- `ClientProvider` — 接收 `ClientProviderProps`，提供传入的 Client
 - `useClient` — 最近的 Client，没有就抛
 - `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
 

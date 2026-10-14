@@ -5,7 +5,7 @@ description: struct 门面、Infer，以及 StructError。
 
 # Struct
 
-建线上边界的形状，parse 值，推断 TypeScript 类型。
+建传输边界的形状，parse 值，推断 TypeScript 类型。
 
 ## struct
 
@@ -22,7 +22,7 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 
 ### 原语和容器
 
-| Helper                                                                      | 作用                                                                      |
+| 辅助函数                                                                    | 作用                                                                      |
 | --------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | `struct.string()` / `number()` / `boolean()` / `bigint()`                   | 标量                                                                      |
 | `struct.literal(value)`                                                     | 精确字面量                                                                |
@@ -33,9 +33,9 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 | `struct.or(...)` / `intersection(...)` / `discriminatedUnion(tag, options)` | 联合                                                                      |
 | `struct.enum(values)`                                                       | 字符串列表或 `{ Name: value }` map；map 接受它的值，不接受它的 key        |
 
-### Body codec 和二进制值
+### 请求体编解码器和二进制值
 
-| Helper                                         | 作用                                                                       |
+| 辅助函数                                       | 作用                                                                       |
 | ---------------------------------------------- | -------------------------------------------------------------------------- |
 | `struct.formData(shape)` / `urlencoded(shape)` | 对象 struct 再加一个 codec tag。这个 tag 只在该值是请求 body 根时生效      |
 | `struct.arrayBuffer()` / `blob()` / `file()`   | 二进制值。作为 body 根时按字节发送；作为 `output` / `error` 时选出那种表示 |
@@ -50,7 +50,7 @@ function parse<S>(struct: S, value: unknown, options?: { aliases?: boolean; erro
 - **返回** `[null, value]` 或 `[StructError, undefined]`。解析在第一个失败处停止，所以错误只带一个 issue。
 - 对象字段默认必填，除非标了 `.optional()` 或 `.nullish()`。shape 没有声明的 key 会从结果中丢弃。
 - 可选 `errorMap` 只改这一次 parse 的 issue 文案。
-- 默认读**逻辑** key（`displayName`）。传 `{ aliases: true }` 则读线上 key（`display_name`），和 HTTP/JSON codec 一样。
+- 默认读**逻辑** key（`displayName`）。传 `{ aliases: true }` 则读传输 key（`display_name`），和 HTTP/JSON codec 一样。
 
 ## ErrorMap
 

@@ -22,10 +22,10 @@ Configure la reconnexion automatique quand le socket se ferme pour toute raison 
 }
 ```
 
-- `attempts` est le budget de nouvelles tentatives après la première connexion. Il vaut `3` par défaut, et `0` désactive la reconnexion. L’omettre ne veut pas dire illimité.
-- `delayMs` vaut `1000` par défaut, `factor` `2`, `maxDelayMs` `30000`, et `jitter` (0 à 1) `0`. Le délai de la nouvelle tentative _n_ est `delayMs * factor^(n-1)`, plafonné à `maxDelayMs`.
+- `attempts` est le budget de nouvelles tentatives de chaque coupure. Il vaut `3` par défaut, et `0` désactive la reconnexion. Un `open` réussi réinitialise le budget et l’exposant de backoff ; la coupure suivante repart au retry 1. L’omettre ne donne pas un nombre illimité de nouvelles tentatives au sein d’une même coupure. Un socket qui s’ouvre avec succès puis est immédiatement refermé par le serveur peut continuer à se reconnecter avec le délai de base (sous réserve du jitter et des plafonds), car chaque ouverture réinitialise le budget ; utilise `shouldReconnect` pour l’arrêter.
+- `delayMs` vaut `1000` par défaut, `factor` `2`, `maxDelayMs` `30000`, et `jitter` (0 à 1) `0`. La nouvelle tentative _n_ commence par `delayMs * factor^(n-1)`, plafonné à `maxDelayMs` ; le jitter et l’arrondi suivent, puis le délai final est de nouveau plafonné à `maxDelayMs` et à `2_147_483_647` ms. Une base nulle reste nulle ; le dépassement d’un nombre valide sature à ces plafonds.
 - `shouldReconnect` peut renvoyer `false` pour mettre fin à la session. Sans elle, chaque fermeture est retentée tant que le budget dure. Elle n’est pas appelée pour un `session.close()` manuel.
-- Les valeurs hors plage font échouer execute avec `REQ_OPTIONS_INVALID`.
+- Quand le retry est activé, `attempts` doit être un entier sûr positif ou nul ; `delayMs` et `maxDelayMs` doivent être finis et positifs ou nuls ; `factor` doit être fini et strictement positif ; `jitter` doit être fini et compris entre 0 et 1. Les valeurs invalides font échouer execute avec `REQ_OPTIONS_INVALID` avant la connexion. `attempts: 0` désactive immédiatement le retry et ignore les champs de reconnexion inutilisés.
 - Un `reconnect` dans les options d’execute remplace celui-ci pour cet appel.
 
 [Client](/fr-FR/api/client)

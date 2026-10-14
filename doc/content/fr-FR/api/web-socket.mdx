@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` et `timeout` sont mutuellement exclusifs : le type refuse les deux, et les passer ensemble à l’exécution échoue avec une fault `REQ_OPTIONS_INVALID`. `signal` se combine avec l’un ou l’autre. `timeout` est une échéance de démarrage de la connexion : un reconnect ultérieur ne la réarme pas, et `withTimeout` ne s’applique pas à WebSocket.
 
-Quand `reconnect` est défini, `attempts` vaut 3 par défaut ; `0` désactive. Omettre `attempts` ne veut pas dire illimité. Voir [Client](/fr-FR/api/client) pour les valeurs par défaut.
+Quand `reconnect` est défini, `attempts` vaut 3 par défaut et par coupure ; `0` désactive. Un `open` réussi réinitialise le budget et l’exposant de backoff, donc chaque nouvelle coupure repart au retry 1. Omettre `attempts` ne donne pas un nombre illimité de nouvelles tentatives au sein d’une même coupure. Voir [Client](/fr-FR/api/client) pour les valeurs par défaut et les règles de validation.
 
 ## Messages
 
 `incoming` est un seul struct. Les frames texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UTF-8, parsées en JSON, puis vérifiées contre ce struct. Une frame qui échoue au parse JSON ou au struct est rapportée à `session.onRuntimeError` et n’est pas mise en queue. Il n’y a pas d’option client pour les frames invalides.
 
-`outgoing` est un seul struct. `session.send` accepte le `StructInput` de ce struct, encode les alias, puis `JSON.stringify`. Plusieurs kinds de messages sont un `struct.discriminatedUnion`.
+`outgoing` est un seul struct. `session.send` accepte le `StructInput` de ce struct, encode les alias, puis `JSON.stringify`. Les valeurs que JSON ne peut pas représenter fidèlement après l’encodage lèvent `TypeError` avant l’envoi ou l’entrée dans la file de reconnexion, y compris les nombres non finis, les fonctions, les symbols, `Map`, `Set`, les flux et les instances de classe sans représentation JSON. Les valeurs imbriquées utilisent le même garde que les corps JSON HTTP. Le heartbeat utilise aussi ce garde ; un échec de sérialisation du heartbeat met fin à la session. Plusieurs kinds de messages sont un `struct.discriminatedUnion`.
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

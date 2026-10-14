@@ -31,9 +31,11 @@ interface ClientSSEOptions {
 }
 ```
 
-- **handle** — 開啟串流的 fetch 實作。自訂 handle 會收到一個 `Request`。
+- **handle** — 開啟串流的 Fetch 實作。預設會在每次嘗試時解析 `globalThis.fetch`，包含 import 之後才裝上的替換。每個 SSE handle 都會收到 `Request`。缺少全域 Fetch 時，預設執行會以 `ENV_UNSUPPORTED` 失敗；自訂 handle 仍可使用。
 - **onInvalidEvent** — 當事件沒有對應的 struct 也沒有 `default` struct（`'missing-struct'`），或其資料驗證失敗（`'validation-failed'`）時呼叫。該事件會被略過。hook 拋出的錯誤不會關閉串流。
-- **reconnect** — 需主動啟用。沒有設定時，串流絕不重連。`attempts` 預設為 **3**；`attempts: 0` 停用重試，而省略 `attempts` 並不代表無限次。`delayMs` 是第一次的延遲，預設 1000，伺服器送來的 `retry:` 值會取代它。`factor` 在每次嘗試後乘上延遲，預設為 1。`jitter` 是 0-1 的乘性因子，跟 WebSocket 一樣，預設為 0。`maxDelayMs` 預設無上限。未提供 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 會重新連線；提供後，所有請求方法是否重新連線都由它的回傳值決定，傳入的情境物件包含 `method`。使用 `ReadableStream` 請求主體的請求絕不會重新連線。一旦收到過事件 id，每次重連都會把它放進 `Last-Event-ID` header 送出。
+- **reconnect** — 需主動啟用。沒有設定時，串流絕不重連。`attempts` 在每次中斷時預設為 **3**；`attempts: 0` 停用重試。握手成功會重設重試額度、callback 的 `attempt`，以及 backoff 指數。`delayMs` 是第一次的基底延遲，預設 1000，伺服器送來的 `retry:` 值會取代它。`factor` 預設為 1。`jitter` 是 0–1 的乘性因子，預設為 0。`maxDelayMs` 會在 jitter 與捨入之後為最終延遲加上上限；沒有設定上限時，平台上限 `2_147_483_647` ms 仍然適用。零基底維持為零；合法數字溢位會飽和在這些上限。未提供 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 會重新連線；提供後，所有請求方法是否重新連線都由它的回傳值決定，傳入的情境物件包含 `method`。使用 `ReadableStream` 請求主體的請求絕不會重新連線。重新連線會把最新的 ID 以 UTF-8 位元組放進 `Last-Event-ID`；空的 ID 會清除它，含有 NUL 的 ID 會被忽略。
+
+重新連線選項會在 interceptors 或 Fetch 之前驗證：`attempts` 必須是非負安全整數；`delayMs` 與明確指定的 `maxDelayMs` 必須有限且非負；`factor` 必須有限且為正；`jitter` 必須有限且在 0–1 之內。無效值會在 execute 時回傳 `REQ_OPTIONS_INVALID`。
 
 用 `withSSEHandle`、`withSSEOnInvalidEvent` 與 `withSSEReconnect` 來設定。省略 `withSSEReconnect` 就會停用重試。
 

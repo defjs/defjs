@@ -16,6 +16,7 @@ interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
 
 - `intervalMs` هو التأخير بين رسائل النبض.
 - `message()` تبني الحمولة. تُرسَل عبر struct الـ `outgoing`. لا يُرسل شيء عند حذفها أو عندما تُرجع `undefined`.
+- بعد ترميز الـ struct، تفشل القيم التي لا يمكن تمثيلها بصيغة JSON بـ `TypeError` عبر المُسلسِل نفسه الذي يستخدمه `session.send`؛ وينهي فشل النبض هذا الجلسة المنطقية دون إعادة الاتصال.
 - `isAck(message)` تستقبل كل رسالة واردة مفكوكة. عندما تُرجع `true` تُعامَل الرسالة بوصفها الإقرار ولا تُسلَّم إلى `receive`.
 - `timeoutMs` هو مدة انتظار الإقرار بعد النبض. تفويته يُفشل الجلسة.
 - يجب أن يكون `intervalMs` و`timeoutMs` موجبين ومنتهيين وبحد أقصى `2_147_483_647`.

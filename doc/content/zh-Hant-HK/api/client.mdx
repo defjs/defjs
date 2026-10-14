@@ -5,7 +5,7 @@ description: createClient、option helpers，同 Client type。
 
 # Client
 
-Create 一個 client，options 由左到右 compose，之後 `execute` HTTP / SSE / WebSocket commands。
+建立一個 client，options 由左到右套用，之後 `execute` HTTP / SSE / WebSocket commands。
 
 ## createClient()
 
@@ -13,7 +13,7 @@ Create 一個 client，options 由左到右 compose，之後 `execute` HTTP / SS
 function createClient(...options: ClientOption[]): Client
 ```
 
-Options 按次序套用。如果 interceptors close over auth 或者 tenants，prefer 喺 request boundary 入面 create client。
+Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料，建議喺 request boundary 入面建立 client。
 
 - **options** — Option helpers，例如 `withEndpoint`。
 - **Returns** 一個 client，佢嘅 `execute` 按 transport overload。
@@ -30,7 +30,7 @@ Options 按次序套用。如果 interceptors close over auth 或者 tenants，p
 function withEndpoint(endpoint: string): ClientOption
 ```
 
-Set 相對 paths 前面 prepend 嘅 base URL。
+設定加喺相對 paths 前面嘅 base URL。
 
 ### withInterceptors()
 
@@ -118,7 +118,7 @@ function withXSRF(options?: {
 
 為 HTTP requests 加 XSRF token header。Defaults：cookie `XSRF-TOKEN`，header `X-XSRF-TOKEN`。SSE 同 WebSocket requests 唔受影響。
 
-預設 HTTP transport 只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；request 係 same-origin（喺 browser 以外，任何有 `baseEndpoint` 嘅 request 都算）；而且搵到非空嘅 token。Token 有 `tokenProvider` 就由佢提供，否則來自 cookie，而 cookie 只會喺 browser 讀取。
+預設 HTTP transport 只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；request 係 same-origin；而且搵到非空嘅 token。只要有 `location`（包括 Worker），解析後嘅 request origin 就必須同 `location.origin` 一致；冇 `location` 時，有 `baseEndpoint` 嘅 request 就算 same-origin。跨 origin request 唔會 call `tokenProvider`。有提供該 provider 就由佢取得 token，否則由 `document.cookie` 取得；只有 `document` 存在時先會讀取 cookie。
 
 ### SSE 調校選項
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，所以 mock 唔需要 `preconnect` 呢類 host 額外成員。
+Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，所以 mock 唔需要 `preconnect` 呢類 host 額外成員。預設 HTTP/SSE handles 每次 call 都會解析 `globalThis.fetch`。HTTP 只有喺平台原生 Fetch 未被取代時先用 `(url, init)`；被取代嘅 global Fetch 同自訂 handles 都會收到 `Request`。SSE 一律傳入 `Request`。冇 Fetch 亦可以 import Core；如果執行時仍然冇 Fetch，預設執行會回報 `ENV_UNSUPPORTED`，自訂 handles 就仍然可用。
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 兩種 transport 嘅 reconnect 都係 opt-in：冇 `withSSEReconnect` / `withWebSocketReconnect` 就唔會重試。一旦設咗 `reconnect`，就會套用以下預設值：
 
-| 欄位         | SSE    | WebSocket |
-| ------------ | ------ | --------- |
-| `attempts`   | `3`    | `3`       |
-| `delayMs`    | `1000` | `1000`    |
-| `factor`     | `1`    | `2`       |
-| `jitter`     | `0`    | `0`       |
-| `maxDelayMs` | 冇上限 | `30000`   |
+| 欄位         | SSE             | WebSocket       |
+| ------------ | --------------- | --------------- |
+| `attempts`   | 每次斷線 `3` 次 | 每次斷線 `3` 次 |
+| `delayMs`    | `1000`          | `1000`          |
+| `factor`     | `1`             | `2`             |
+| `jitter`     | `0`             | `0`             |
+| `maxDelayMs` | 冇上限          | `30000`         |
 
-對 SSE 嚟講，`delayMs` 只係起始嘅 base delay：server 傳嚟嘅 `retry:` field 會取代佢，用喺之後嘅嘗試。`attempts: 0` 停用重試；唔寫 `attempts` 唔代表無限。`jitter` 必須喺 0–1 之內：每次延遲都會向兩個方向隨機浮動，最多係該比例。`shouldReconnect` return `false` 就會停止重試。SSE 嘅 callback 另外會收到 `lastEventId`、request 嘅 `method` 同最新嘅 `open` 資料，亦可以係 async。冇呢個 callback 嘅時候，SSE 只會重連 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request；有呢個 callback 嘅話，每種 method 會唔會重連都由佢嘅結果決定。WebSocket 嘅 callback 則會收到 close 嘅 `code`、`reason` 同 `wasClean`。
+兩種 transport 每次成功握手，都會重設該次斷線嘅重試預算、callback 嘅嘗試次數同退避指數。`attempts: 0` 停用重試；省略 `attempts` 唔代表同一次斷線可以無限重試。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲；平台 timer 上限 `2_147_483_647` ms 亦適用，包括 SSE 冇設定上限嘅情況。Base 係零就會維持零；有效數值運算溢位時，會限制喺上限。
+
+重連選項會喺 transport 執行之前驗證：`attempts` 必須係非負安全整數；`delayMs` 同明確設定嘅 `maxDelayMs` 必須係有限非負數；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket `attempts: 0` 會即時停用重試，並忽略其餘未使用嘅重連欄位；SSE 仍然會驗證佢哋。Jitter 會向兩個方向縮放已設上限嘅 base，之後再套用最終上限。
+
+對 SSE 嚟講，`delayMs` 只係起始嘅 base delay：server 傳嚟、只包含數字嘅 `retry:` field 會取代佢，用喺之後嘅嘗試，恢復連線之後亦一樣。`shouldReconnect` 回傳 `false` 就會停止重試。SSE 嘅 callback 另外會收到 `lastEventId`、request 嘅 `method` 同最新嘅 `open` 資料，亦可以係 async。冇呢個 callback 嘅時候，SSE 只會重連 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request；有呢個 callback 嘅話，每種 method 會唔會重連都由佢嘅結果決定。最新 event ID 會以 UTF-8 bytes 放喺 `Last-Event-ID` 送出；空 ID 會清除佢，包含 NUL 嘅 ID 會被忽略。WebSocket 嘅 callback 則會收到 close 嘅 `code`、`reason` 同 `wasClean`。
 
 SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 event（`missing-struct`），或者 data 通唔過 struct 驗證嘅 event（`validation-failed`）。呢類 event 一定會被丟棄；handler 嘅 return 值會被忽略，佢 throw 出嚟嘅 error 亦唔會關閉 stream。
 

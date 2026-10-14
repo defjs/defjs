@@ -101,15 +101,15 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `WebSocketHeartbeatConfig`: `intervalMs`, optionales `message`, `isAck`, `timeoutMs`.
 
-`abort` und `timeout` schließen sich gegenseitig aus: der Typ lehnt beides ab, und beides zur Laufzeit zu übergeben scheitert mit einem `REQ_OPTIONS_INVALID`-Fault. `signal` kombiniert mit einem von beiden. `timeout` ist eine Startup-Deadline für die Verbindung: ein späterer Reconnect schärft sie nicht neu, und `withTimeout` gilt nicht für WebSocket.
+`abort` und `timeout` schließen sich gegenseitig aus: der Typ lehnt beides ab, und beides zur Laufzeit zu übergeben scheitert mit einem `REQ_OPTIONS_INVALID`-Fault. `signal` kombiniert mit einem von beiden. `timeout` ist eine Startup-Deadline für die Verbindung: ein späterer Reconnect startet sie nicht erneut, und `withTimeout` gilt nicht für WebSocket.
 
-Ist `reconnect` gesetzt, ist der Default für `attempts` 3; `0` schaltet aus. `attempts` weglassen heißt nicht unbegrenzt. Die Defaults stehen unter [Client](/de-DE/api/client).
+Ist `reconnect` gesetzt, ist der Default für `attempts` 3 je Ausfall; `0` schaltet aus. Ein erfolgreiches `open` setzt Budget und Backoff-Exponenten zurück, daher beginnt jeder neue Ausfall bei Retry 1. `attempts` wegzulassen ergibt innerhalb eines Ausfalls keine unbegrenzten Retries. Defaults und Validierungsregeln stehen unter [Client](/de-DE/api/client).
 
 ## Messages
 
 `incoming` ist ein Struct. Text-, `ArrayBuffer`-, Typed-Array- und `Blob`-Frames werden als UTF-8 gelesen, JSON-geparst und dann gegen diesen Struct geprüft. Ein Frame, der JSON-Parse oder den Struct nicht besteht, geht an `session.onRuntimeError` und wird nicht gequeued. Es gibt keine Client-Option für ungültige Frames.
 
-`outgoing` ist ein Struct. `session.send` akzeptiert `StructInput` dieses Structs, encodet Aliasse, dann `JSON.stringify`. Mehrere Message-Kinds sind ein `struct.discriminatedUnion`.
+`outgoing` ist ein Struct. `session.send` akzeptiert `StructInput` dieses Structs, encodet Aliasse, dann `JSON.stringify`. Werte, die JSON nach der Kodierung nicht treu darstellen kann, werfen `TypeError`, bevor gesendet oder in die Reconnect-Queue eingereiht wird, darunter nicht endliche Zahlen, Funktionen, Symbols, `Map`, `Set`, Streams und Klasseninstanzen ohne JSON-Darstellung. Verschachtelte Werte nutzen dieselbe Prüfung wie HTTP-JSON-Bodys. Der Heartbeat nutzt diese Prüfung ebenfalls; ein Serialisierungsfehler des Heartbeats beendet die Session. Mehrere Message-Kinds sind ein `struct.discriminatedUnion`.
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

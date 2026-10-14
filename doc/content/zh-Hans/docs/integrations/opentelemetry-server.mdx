@@ -3,7 +3,7 @@ title: 'OpenTelemetry'
 description: 使用可选的 Tracer、Meter 和 Logger，开启出站 Defjs 传输观测。
 ---
 
-# OpenTelemetry server
+# OpenTelemetry 服务端集成
 
 创建 Client 时打开出站插桩。`@defjs/opentelemetry-server` 追加 HTTP、SSE、WebSocket interceptor。它**不是**入站服务端插桩，也**不会**初始化 OpenTelemetry SDK。
 
@@ -68,8 +68,8 @@ HTTP 和 SSE 把传播字段注入请求 headers。已有 `Headers` 实例会复
 
 Adapter 量的是传输寿命，不是 command 解释的每一阶段。
 
-- **HTTP** — span 在 HTTP interceptor 里开始，拿到 Defjs `HttpResponse` 就结束。对声明过的 `output`/`error` body，JSON 媒体类型检查、body 读取和 JSON 解析发生在返回该响应**之前**，即在 interceptor 链内。那里的失败（`RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`NET_BODY_INCOMPLETE`）会穿过 interceptor reject：span 以 `ERROR` 结束，`error.type` 为 `BodyFailure` 且没有 `http.response.status_code`，metric 记录 `BodyFailure`，并记一条 WARN 日志。只有 Struct 校验（`RES_STRUCT_MISMATCH`）、未声明 body 的情况（例如 204）和 `HTTP_STATUS` 转换发生在之后，所以后续的 fault 改不了已结束的 span。又因为 span 存在于链内，传输层的 reject 会按 OTel 惯例记成异常类，而不是执行阶段随后判定的 fault code。
-- **SSE** — span 开到 `stream.closed` settle。记 `sse.connected`，再记 `sse.closed` / `sse.aborted` / `sse.error`。`sse.aborted` 涵盖 `stream.close()` 和调用方对已打开 stream 的 abort；span 以 `OK` 结束。一条逻辑流（含重连）→ 一个 span。没有按事件的 span。
+- **HTTP** — span 在 HTTP interceptor 里开始，拿到 Defjs `HttpResponse` 就结束。声明过的 `output`/`error` body 会在返回该响应**之前**、即在 interceptor 链内，被读取为 JSON、文本、`Blob` 或字节。JSON 媒体类型检查和 `JSON.parse` 仅适用于 JSON 表示；非 JSON 的文本、blob 和字节都可以是有效表示。任何表示的读取失败，或 JSON 媒体类型/解析失败（`RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`NET_BODY_INCOMPLETE`），都会通过 interceptor 拒绝：span 以 `ERROR` 结束，`error.type` 为 `BodyFailure` 且没有 `http.response.status_code`，metric 记录 `BodyFailure`，并记一条 WARN 日志。Struct 校验（`RES_STRUCT_MISMATCH`）、已声明的 body 缺失（例如 204）和 `HTTP_STATUS` 转换发生在之后，所以后续 fault 无法更新已结束的 span。只有超时拒绝到达 OTel interceptor 的 `next()` / 传输边界时，execute 超时才会记日志。如果只有外层执行在输入解析、构建、`next()` 之后的应用 interceptor 工作或链后的 body 转换期间观察到期限已到，就不会生成 LogRecord；应改为观察外层 command 结果。又因为 span 存在于链内，传输层的拒绝会按 OTel 惯例记成异常类，而不是执行阶段随后判定的 fault code。
+- **SSE** — span 保持开启，直到 `stream.closed` 完成。记录 `sse.connected`，再记录 `sse.closed` / `sse.aborted` / `sse.error`。`sse.aborted` 涵盖 `stream.close()` 和调用方对已打开流的非超时中止；span 以 `OK` 结束。超时型调用方中止（`TimeoutError` 或 `ERR_TIMEOUT`）则使 `stream.closed` 以 `kind: 'error'` 和 `code: 'NET_TIMEOUT'` 完成；span 以 `ERROR` 结束，记录 `sse.error`。一条逻辑流（含重连）→ 一个 span。没有按事件的 span。
 - **WebSocket** — span 开到 `session.closed` settle。事件：`websocket.connected`、`websocket.closed`、`websocket.error`。重连的物理 socket 仍属逻辑会话。调用方 abort 一个已打开的 session，span 以 `ERROR` 结束，记 `websocket.error`，无日志；`error.type` 跟随 abort 的 reason（默认 `abort()` 为 `AbortError`，`Error` reason 取其 `Error.name`，字符串 reason 为 `string`）。服务端发来的 close frame，无论 code 是什么，都以 `OK` 结束，记 `websocket.closed`。没有 close frame 的突然断开（1006）取决于运行时：在 socket `error` 不会先于 `close` 触发的运行时（Bun）以 `OK` 结束，在会先触发的运行时（Node.js）以 `ERROR` 结束并记一条日志。没有按消息的 span。
 
 要最终 command 结果而不只是传输？用应用 span 包住 `client.execute(...)`：
@@ -157,16 +157,16 @@ OTel 每组等级预留四个数值。Winston 的 `http` 映射为 7，`verbose`
 
 ### Defjs 诊断日志契约
 
-| 观察到的结果                                                                                                     | Defjs LogRecord                                                                                   |
-| ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| HTTP transport 拒绝（网络失败、超时、声明 body 失败），排除取消和公开 HTTP_STATUS fault                          | 一条 WARN，`http.client.request.exception`，phase 为 `request`                                    |
-| 普通 HTTP 响应，包括声明的 `error` body 解码成功（或 body 未声明）的 4xx/5xx，或 status 0                        | 不生成；保留既有 span/metric 行为                                                                 |
-| 声明的 `output`/`error` body 媒体类型不是 JSON、读取失败或 JSON 无法解析（任何 HTTP 状态）                       | 一条 WARN，`http.client.request.exception`，phase 为 `request`，`exception.type` 为 `BodyFailure` |
-| SSE / WebSocket 建连失败                                                                                         | 一条 WARN，`defjs.client.sse.exception` / `defjs.client.websocket.exception`，phase 为 `connect`  |
-| SSE / WebSocket 终止错误或 `closed` 拒绝，包括运行时先触发 socket `error` 的 WebSocket 突然断开（1006，Node.js） | 一条 WARN，使用对应传输事件名，phase 为 `connection`                                              |
-| 成功、消息、EOF、正常关闭、服务端发来的 WebSocket close frame（任何 code，包括 1011）或主动取消                  | 不生成                                                                                            |
+| 观察到的结果                                                                                                          | Defjs LogRecord                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| HTTP OTel `next()` 拒绝（网络失败、观察到的超时、已声明 body 的失败），排除取消和公开 HTTP_STATUS fault               | 一条 WARN，`http.client.request.exception`，phase 为 `request`                                    |
+| 普通 HTTP 响应，包括声明的 `error` body 解码成功（或 body 未声明）的 4xx/5xx，或 status 0                             | 不生成；保留既有 span/metric 行为                                                                 |
+| 声明的 `output`/`error` body 读取失败（任意表示），或其 JSON 表示的媒体类型不是 JSON、JSON 解析失败（任何 HTTP 状态） | 一条 WARN，`http.client.request.exception`，phase 为 `request`，`exception.type` 为 `BodyFailure` |
+| SSE / WebSocket 建连失败                                                                                              | 一条 WARN，`defjs.client.sse.exception` / `defjs.client.websocket.exception`，phase 为 `connect`  |
+| SSE / WebSocket 终止错误或 `closed` 拒绝，包括运行时先触发 socket `error` 的 WebSocket 突然断开（1006，Node.js）      | 一条 WARN，使用对应传输事件名，phase 为 `connection`                                              |
+| 成功、消息、EOF、正常关闭、服务端发来的 WebSocket close frame（任何 code，包括 1011）或主动取消                       | 不生成                                                                                            |
 
-HTTP exception 事件参考的语义约定目前处于 Development；SSE/WS 名称由 Defjs 定义。SSE 非 2xx 握手在此处表现为建连失败，稍后才会在 interceptor 外转换为公开 HTTP_STATUS。HTTP handler 内的响应读取、JSON 媒体类型检查和 JSON 解析仍处于 interceptor 覆盖范围：声明的 `output`（2xx）或 `error`（其他状态）上，畸形 JSON 或媒体类型错误的响应（例如 HTML 网关页面）会先产生一条 WARN，再转换为 `RES_DECODE_FAILED` / `RES_MEDIA_TYPE_INVALID`，与 HTTP 状态无关。未声明的 body 不会被读取，也就不会产生日志。只有 Struct 校验（`RES_STRUCT_MISMATCH`）、未声明 body 的情况（例如 204）和 `HTTP_STATUS` 转换发生在 interceptor 之后，不产生日志。`exception.type` 是 interceptor 观察到的对象的类名，不是 Defjs fault code：`BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE 握手）、`DefjsFault`（WebSocket 启动），或平台类，例如 `TypeError`（网络失败）、`Error`（超时）。abort 的 reason 是 `TimeoutError`（例如 `AbortSignal.timeout()`）时算超时而不是取消，所以同样会记日志。SSE 非 2xx 握手无论 body 如何都恰好记一次日志；WebSocket 服务端发来的 close frame 无论 code 是什么（包括 1011）都不记日志。没有 close frame 的突然断开（1006）取决于运行时：平台 WebSocket 在 `close` 之前先触发 `error` 时（Node.js），session 以 error 结束并记一次日志，带 `websocket.close.code` 为 `1006`；不会先触发时（Bun），这次断开算正常关闭，不记日志。除此之外，只有以 error 结束的 session（队列溢出、心跳超时）才记日志。诊断日志不覆盖每一种 command 参数校验或解码失败，不逐次记录内部重连，也不把 hook 失败另写为 Logs。
+HTTP exception 事件参考的语义约定目前处于 Development；SSE/WS 名称由 Defjs 定义。SSE 非 2xx 握手在此处表现为建连失败，稍后才会在 interceptor 外转换为公开 HTTP_STATUS。所有表示的已声明 body 读取都发生在 HTTP handler 边界内；JSON 媒体类型检查和 `JSON.parse` 仅适用于 JSON 表示。任何已声明表示的读取失败，或声明为 JSON 的 `output`（2xx）或 `error`（其他状态）上畸形 JSON 或媒体类型错误的响应，都会产生一条 WARN，与 HTTP 状态无关。非 JSON 的文本、blob 和字节不会仅因媒体类型不是 JSON 就失败。未声明的 body 不会被读取，也就不会产生日志。Struct 校验（`RES_STRUCT_MISMATCH`）、已声明的 body 缺失（例如 204）和 `HTTP_STATUS` 转换发生在 interceptor 之后，不产生日志。只有超时拒绝到达 OTel interceptor 的 `next()` / 传输边界时，HTTP execute 超时才会记日志。如果只有外层执行在输入解析、构建、`next()` 之后的应用 interceptor 工作或链后的 body 转换期间观察到期限已到，就不会生成 LogRecord；应在外层 command 边界观察 `client.execute(...)`。`exception.type` 是 interceptor 观察到的对象的类名，不是 Defjs fault code：`BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE 握手）、`DefjsFault`（WebSocket 启动），或平台类，例如 `TypeError`（网络失败）、`Error`（超时）。abort 的 reason 是 `TimeoutError`（例如 `AbortSignal.timeout()`）时算超时而不是取消，并在其拒绝到达这个边界时记日志。SSE 非 2xx 握手无论 body 如何都恰好记一次日志；WebSocket 服务端发来的 close frame 无论 code 是什么（包括 1011）都不记日志。没有 close frame 的突然断开（1006）取决于运行时：平台 WebSocket 在 `close` 之前先触发 `error` 时（Node.js），session 以 error 结束并记一次日志，带 `websocket.close.code` 为 `1006`；不会先触发时（Bun），这次断开算正常关闭，不记日志。除此之外，只有以 error 结束的 session（队列溢出、心跳超时）才记日志。诊断日志不覆盖每一种 command 参数校验或解码失败，不逐次记录内部重连，也不把 hook 失败另写为 Logs。
 
 本集成对一次请求或逻辑连接最多发送一条终止诊断。外层重试是新的生命周期，应用自己的日志和其他插桩不在这个去重保证内。日志不依赖 span 是否 recording 或被采样，应用 Logs 管道另有过滤规则时除外。传入 tracer 后，`requireParentSpan: true` 保留无活跃父 span 就整体跳过的行为，包括日志；不传 tracer 时不阻止日志或指标。
 

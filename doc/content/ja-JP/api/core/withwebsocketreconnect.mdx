@@ -22,10 +22,10 @@ function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): C
 }
 ```
 
-- `attempts` は最初の接続のあとのリトライ回数の上限です。デフォルトは `3` で、`0` は再接続を無効にします。省いても無制限にはなりません。
-- `delayMs` のデフォルトは `1000`、`factor` は `2`、`maxDelayMs` は `30000`、`jitter`（0 から 1）は `0` です。_n_ 回目のリトライの待ち時間は `delayMs * factor^(n-1)` で、`maxDelayMs` が上限です。
+- `attempts` は接続障害 1 回ごとの再試行回数の上限です。デフォルトは `3` で、`0` は再接続を無効にします。`open` が成功すると、再試行の残り回数が初期値に戻り、バックオフの指数がリセットされ、次の接続障害では再試行 1 回目から始まります。省略しても、1 回の接続障害に対する再試行が無制限になるわけではありません。正常に開いた直後にサーバーから再び閉じられるソケットは、open のたびに予算がリセットされるため、ベース遅延（jitter と上限の制約下）で再接続が続き得ます。止めるには `shouldReconnect` を使ってください。
+- `delayMs` のデフォルトは `1000`、`factor` は `2`、`maxDelayMs` は `30000`、`jitter`（0 から 1）は `0` です。_n_ 回目の再試行では、まず `delayMs * factor^(n-1)` を `maxDelayMs` 以下に制限し、ジッターと丸めを適用してから、最終的な待ち時間を再び `maxDelayMs` と `2_147_483_647` ミリ秒の上限以下に制限します。基準値がゼロなら待ち時間もゼロのままです。有効な数値による計算がオーバーフローした場合は、これらの上限値に制限されます。
 - `shouldReconnect` は `false` を返すと、再接続せずセッションを終わらせられます。ない場合は、上限が尽きるまですべての close がリトライされます。手動の `session.close()` では呼ばれません。
-- 範囲外の値があると、execute は `REQ_OPTIONS_INVALID` で失敗します。
+- 再試行が有効な場合、`attempts` は非負の安全な整数、`delayMs` と `maxDelayMs` は非負の有限値、`factor` は正の有限値、`jitter` は 0–1 の範囲内の有限値でなければなりません。不正な値があると、execute は接続前に `REQ_OPTIONS_INVALID` で失敗します。`attempts: 0` は再試行を即座に無効にし、使われない再接続フィールドは無視します。
 - execute の options に `reconnect` があれば、その呼び出しに限りこれを置き換えます。
 
 [Client](/ja-JP/api/client)

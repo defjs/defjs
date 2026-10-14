@@ -9,7 +9,7 @@ description: 'Struct qui accepte une Date, un timestamp ou une string de date et
 function date(): Struct<Date | number | string, Date>
 ```
 
-- Accepte une `Date`, un timestamp en millisecondes ou une string, et la convertit avec `new Date(value)`.
+- Accepte une `Date`, un timestamp en millisecondes ou une string, et convertit cette valeur avec `new Date(value)`.
 - La sortie est une `Date`. Une valeur qui produit une date invalide échoue avec `invalid_type`.
 - Encodée pour le wire, la valeur devient une string ISO 8601 (`toISOString()`).
 

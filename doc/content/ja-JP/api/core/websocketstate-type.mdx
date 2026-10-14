@@ -12,7 +12,7 @@ type WebSocketState = 'aborted' | 'closed' | 'closing' | 'connecting' | 'error' 
 | 状態           | 意味                                                         |
 | -------------- | ------------------------------------------------------------ |
 | `idle`         | 最初の接続試行の前                                           |
-| `connecting`   | 最初の接続を準備し、開いている                               |
+| `connecting`   | 最初の接続を準備し、確立している途中                         |
 | `open`         | 物理ソケットが開いている                                     |
 | `reconnecting` | close のあと、代わりのソケットを準備中または待機中           |
 | `closing`      | `session.close()` または dispose で close が要求された       |

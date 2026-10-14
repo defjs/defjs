@@ -28,13 +28,15 @@ interface HttpRequest {
     headerName: string
     tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
   }
-  // plus an @internal bodyContentTypeSource field
+  // plus the @internal bodyContentTypeSource field
 }
 ```
 
 الطلب بعد تشغيل الـ builder، كما تستخدمه المعالِجات والمعترضات و`fetchHandler`.
 
 - `body` هو بالفعل القيمة التي تُرسَل على الشبكة. وفي JSON يكون **سلسلة نص JSON**؛ فوقّع HMAC أو الملخّصات (digests) على تلك السلسلة، لا على مدخل الـ struct الأصلي.
+- يحمل `bodyContentType` النوع المستنتج لجسم المنشئ كحقل عادي، فيبقى بعد نسخ `{ ...req }`. ولا ينطبق إلا ما دام `body` قيمة المنشئ؛ أما الجسم البديل فيُكتشف من جديد، لذا أعلن نوعه برأس `content-type`. وللجسم غير المتغير، تكبت `null` استنتاج المكتبة عند غياب رأس صريح، لكن Fetch الأصلي قد يضيف نوعه النصي. ويستخدم FormData فاصل multipart الفعلي بدلًا من ذلك.
+- لا يكتب HTTP أبدًا Content-Type المستنتج في `headers`؛ وترى المعترضات الرؤوس المُعلنة فقط. ويتقدّم رأس `content-type` الصريح دائمًا على `bodyContentType` والاكتشاف، سواء ضبطه المنشئ أو قيم العميل الافتراضية أو معترض أو طلب `fetchHandler` خام. وليس لـ `body: undefined` Content-Type تستنتجه المكتبة. وعلى الموقّعين قراءة `headers.get('content-type') ?? request.bodyContentType`؛ ولا تضبط الحقول الداخلية.
 - `endpoint` هو المسار بعد ملء معاملات المسار؛ و`baseEndpoint` هو نقطة نهاية العميل.
 - يرى المعترضون `queryParams` كـ `new URLSearchParams(queryString)`. والـ builder الذي يُرجع `URLSearchParams` يمرّر تلك النسخة كما هي.
 - `operation` هوية ثابتة منخفضة الكاردينالية (low-cardinality) لنقطة النهاية، للقياس عن بُعد (telemetry) والتشخيص.

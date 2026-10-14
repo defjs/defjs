@@ -13,7 +13,7 @@ interface HttpProgressEvent {
 }
 ```
 
-對應 `ProgressEvent` 嘅 fields。`loaded` 係目前已傳輸嘅 bytes 數。總大小未知時，`total` 係 `0`，`lengthComputable` 係 `false`。
+對應 `ProgressEvent` 嘅 fields。`loaded` 計算由 upload 或 download stream 讀取嘅 bytes，唔係 server 確認收到嘅 bytes。Download bytes 可能已經解壓。只有 `Content-Length` 係正數，而且冇 `Content-Encoding` 或者佢係 `identity`，先可以計算 download total；壓縮下載會回報 `total: 0` 同 `lengthComputable: false`。以 stream 方式 upload FormData 時，total 亦係未知，除非有明確設定嘅有效 `Content-Length` 提供大小。其他長度未知嘅 stream 一樣會用 `0` / `false`。
 
 睇 [`HttpProgressFn`](/zh-Hant-HK/api/core/httpprogressfn-type)、[HTTP guide](/zh-Hant-HK/docs/http) 同 [Commands](/zh-Hant-HK/docs/commands)。
 

@@ -80,7 +80,7 @@ Span hooks 只有在傳入 `tracer` 時才會執行。`startSpanHook` 會在對�
 
 `responseHook` 收到的是傳輸層回傳的東西：HTTP 是 `HttpResponse`，SSE 是啟動成功之後的 stream handle，WebSocket 是連線開啟之後的 session。它的第三個參數是原始 request。
 
-預設 `url.full` 只會把 `request.endpoint` 相對於選填的 `request.baseEndpoint` 解析，不會附加獨立的 `request.queryString`。這條邊界不是 sanitization；套件沒有內建 redactor 或敏感 key 策略。請明確建構應用程式自有的 URL，並視需要自行遮罩：
+預設 `url.full` 只會把 `request.endpoint` 相對於選填的 `request.baseEndpoint` 解析，不會附加獨立的 `request.queryString`。這條邊界不是 redaction；套件沒有內建 redactor 或敏感 key 策略。請明確建構應用程式自有的 URL，並視需要自行遮罩：
 
 <include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
 
@@ -96,7 +96,7 @@ Span hooks 只有在傳入 `tracer` 時才會執行。`startSpanHook` 會在對�
 | SSE 或 WebSocket 連線失敗                            | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
 | SSE 或 WebSocket 以錯誤結束，包含 `closed` 被 reject | 同一個傳輸事件                                                    | `connection`  |
 
-一般狀態的回應（包含已宣告的 `error` body 可以解碼的 4xx／5xx）、成功、正常關閉、EOF 與呼叫端取消，都不會產生 LogRecord。HTTP execute 逾時是一次 rejection，會記錄一次（reason 為 `TimeoutError` 的 abort，例如 `AbortSignal.timeout()`，算是逾時而不是取消）；已宣告的 `output`／`error` body 的媒體類型不是 JSON、讀取失敗，或 JSON 無法解析時也一樣，無論 HTTP 狀態為何。沒有宣告的 body 根本不會被讀，因此不會記錄。Struct 驗證、已宣告的 body 不存在（例如 204），以及後續的 `HTTP_STATUS` 轉換，都發生在 interceptor 之後，不會記錄。非 2xx 的 SSE handshake 一律記錄一次；伺服器送來的 WebSocket close frame，無論 code 為何，都不會記錄。沒有 close frame 的突然斷線（1006）則視 runtime 而定：若平台 WebSocket 在 `close` 之前先觸發 `error`（Node.js），session 會以錯誤結束並記錄一次；若不會（Bun），則視為正常關閉，不會記錄。
+一般狀態的回應（包含已宣告的 `error` body 可以解碼的 4xx／5xx）、成功、正常關閉、EOF 與呼叫端取消，都不會產生 LogRecord。HTTP execute 逾時只有在逾時 rejection 到達 OTel interceptor 的 `next()`／傳輸邊界時才會記錄一次（reason 為 `TimeoutError` 的 abort，例如 `AbortSignal.timeout()`，算是逾時而不是取消）。如果只有外層執行在 input 解析、建立、`next()` 之後的應用程式 interceptor 工作，或鏈之後的 body 轉換期間觀察到期限，就不會發出 LogRecord；請在外層 command 邊界觀察 `client.execute(...)`。在 HTTP handler 邊界內，已宣告的 `output`／`error` body 讀取失敗會對每一種表示記錄；媒體類型與 `JSON.parse` 失敗只對 JSON 表示記錄，而且不論 HTTP 狀態為何。非 JSON 的文字、blob 與 bytes 不會只因為媒體類型不是 JSON 就算失敗。沒有宣告的 body 根本不會被讀，因此不會記錄。Struct 驗證、已宣告但不存在的 body（例如 204），以及後續的 `HTTP_STATUS` 轉換，都發生在 interceptor 之後，不會記錄。非 2xx 的 SSE handshake 一律記錄一次；伺服器送來的 WebSocket close frame，無論 code 為何，都不會記錄。沒有 close frame 的突然斷線（1006）則視 runtime 而定：若平台 WebSocket 在 `close` 之前先觸發 `error`（Node.js），session 會以錯誤結束並記錄一次；若不會（Bun），則視為正常關閉，不會記錄。
 
 `exception.type` 是 interceptor 實際觀察到的東西的 class 名稱，不是 Defjs 的 fault code：例如 `BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE handshake）、`DefjsFault`（WebSocket 啟動）、`TypeError`（網路失敗）或 `Error`（逾時）。過濾、exporter、flush 與 shutdown 由應用程式負責。
 

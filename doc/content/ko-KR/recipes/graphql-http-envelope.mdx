@@ -5,7 +5,7 @@ description: GraphQL은 HTTP 200과 애플리케이션 unwrap로 두고, Core는
 
 # GraphQL HTTP envelope 풀기
 
-Defjs는 GraphQL `errorPolicy`를 구현하지 않아요. 와이어는 builder가 query 문서와 변수를 배치하는 HTTP POST로 두고, `errors[]`와 빠진 `data`는 직접 만든 헬퍼에서 푸세요.
+Defjs는 GraphQL `errorPolicy`를 구현하지 않아요. 와이어는 builder가 query 문서와 변수를 배치하는 HTTP POST로 두세요. envelope `data`를 `.nullish()`로 선언하면 빠진 `data`와 `data: null`이 모두 헬퍼에 닿아요. 그다음 `data`를 보기 전에 `errors[]`를 푸세요.
 
 [설계 결정](/ko-KR/docs/design-decisions)을 보세요.
 
@@ -14,7 +14,7 @@ Defjs는 GraphQL `errorPolicy`를 구현하지 않아요. 와이어는 builder�
 </include>
 
 ```txt
-ada viewer unavailable
+ada viewer unavailable viewer unavailable
 ```
 
-HTTP 성공은 envelope가 도착했다는 뜻일 뿐이에요. 애플리케이션 오류는 unwrap이 throw하거나 돌려줄 때까지 `errors[]`에 남아요.
+HTTP 성공은 envelope가 도착했다는 뜻일 뿐이에요. 애플리케이션 오류는 unwrap이 throw하거나 돌려줄 때까지 `errors[]`에 남아요. `data: null`인 응답도 그래요. 예제는 빠진 `data`와 `data: null`을 `errors[]`와 함께 Struct 불일치가 아니라 애플리케이션 오류로 다뤄요.

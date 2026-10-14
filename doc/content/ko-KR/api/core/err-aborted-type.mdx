@@ -13,4 +13,6 @@ const ERR_ABORTED: Error // message: 'Request was aborted'
 
 [오류 가이드](/ko-KR/docs/errors)를 보세요.
 
+센티넬은 열거되지 않는 `Symbol.for('defjs.cause.aborted')` 브랜드를 가져요. [`isAbortCause`](/ko-KR/api/core/isabortcause)는 객체 동일성을 비교하지 않고 어느 Core 사본의 이 센티넬이든 알아봐요. 분류는 관련 없는 이전 실행과 무관해요.
+
 [오류](/ko-KR/api/errors)

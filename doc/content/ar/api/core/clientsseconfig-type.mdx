@@ -11,6 +11,6 @@ interface ClientSSEConfig extends ClientSSEOptions {
 }
 ```
 
-نوع `ClientConfig.sse`. وهو [`ClientSSEOptions`](/ar/api/core/clientsseoptions-type) مع حضور `handle` دائمًا؛ والافتراضي هو `fetch` العامة.
+نوع `ClientConfig.sse`. وهو [`ClientSSEOptions`](/ar/api/core/clientsseoptions-type) مع حضور `handle` دائمًا؛ والغلاف الافتراضي يستخدم `fetch` العامة الحالية عند كل محاولة، بدلًا من تثبيتها وقت الاستيراد.
 
 [العميل](/ar/api/client)

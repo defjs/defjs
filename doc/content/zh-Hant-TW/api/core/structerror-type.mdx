@@ -17,6 +17,8 @@ class StructError extends Error {
 
 `name` 是 `'StructError'`。只有一個 issue 時，`message` 是該 issue 的 message；有多個時是 `N struct issues: <first message>`；沒有 issue 時是 `Struct parse failed`。
 
+預設的 issue message 只指出收到的種類，絕不會包含它的值，例如 `Expected number at id, received string`。`message` 與格式化方法都使用這段文字。原始輸入留在 `StructIssue.received`；自訂 `errorMap` 文字會原樣使用，並可能重新帶入敏感值。
+
 - `struct.parse` 在第一個失敗就停止，所以這裡的 `issues` 只有一個 [`StructIssue`](/zh-Hant-TW/api/core/structissue-type)。
 - `format()` 回傳 [`FormattedStructError`](/zh-Hant-TW/api/core/formattedstructerror-type) 樹。每個節點都有 `_errors` 陣列，巢狀 key 跟著 `issue.path`。
 - `flatten()` 回傳 [`FlattenedStructError`](/zh-Hant-TW/api/core/flattenedstructerror-type)：path 為空的 message 放進 `formErrors`，其他的依 path 第一段分組放進 `fieldErrors`。

@@ -41,13 +41,13 @@ Quand une portée possède un client, garde-le indépendant de la requête pour 
 
 ## Nettoyer la portée realtime
 
-Ferme un flux ou une session même quand la portée disparaît mid-connect. Abandonne le démarrage, ferme un handle arrivé tard, consomme l’unique itérateur, attends la promesse terminale :
+Ferme un flux ou une session même quand la portée disparaît pendant l’ouverture de la connexion. Abandonne le démarrage, ferme un handle arrivé tard, consomme l’unique itérateur, attends la promesse terminale :
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
-Les erreurs fatales de flux et les dépassements de file font rejeter l’itérateur, donc la boucle a un `catch` ; sinon ce rejet n’est pas géré. L’exemple ne garde que les 100 derniers messages et indexe les lignes par un id, car des payloads identiques donneraient des clés en double. Arrêter la portée termine l’itération normalement pour SSE ; une session WebSocket abandonnée fait à la place rejeter `receive` avec `AbortError`, donc protège le `catch` de la même façon.
+Les erreurs fatales de flux et les dépassements de file font rejeter l’itérateur, donc la boucle a un `catch` ; sinon ce rejet n’est pas géré. L’exemple ne garde que les 100 derniers messages et utilise un id comme clé de ligne, car des payloads identiques donneraient des clés en double. Arrêter la portée termine l’itération normalement pour SSE ; une session WebSocket abandonnée fait à la place rejeter `receive` avec `AbortError`, donc protège le `catch` de la même façon.
 
-WebSocket : même séquence — abort la prep, ferme une session tardive, consomme `session.receive`, désabonne `onStateChange` / `onRuntimeError`, ferme, attends `session.closed`. Garde le cleanup idempotent ; la libération et la complétion d’itérateur peuvent se rencontrer.
+WebSocket : même séquence — abandonne la préparation, ferme une session tardive, consomme `session.receive`, désabonne `onStateChange` / `onRuntimeError`, ferme, attends `session.closed`. Garde le cleanup idempotent ; la libération et la complétion d’itérateur peuvent se rencontrer.
 
 ## Portée SSR
 

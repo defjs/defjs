@@ -9,6 +9,6 @@ description: '改寫 struct issue message 嘅 callback。'
 type ErrorMap = (issue: StructIssue) => string | undefined
 ```
 
-作為 `struct.parse` 嘅 `errorMap` option 傳入。每個 issue（`code`、`expected`、`message`、`path`、`received`）喺記錄之前都會 call 一次。回傳 string 就取代 default message，回傳 `undefined` 就保留 default。
+作為 `struct.parse` 嘅 `errorMap` option 傳入。每個 issue（`code`、`expected`、`message`、`path`、`received`）喺記錄之前都會 call 一次。任何 string（包括 `''`）都會取代預設訊息；只有 `undefined` 先會保留預設值。呢個 map 只屬於該次 parse，亦會處理另一份 Core 建立嘅 struct 所產生嘅 bigint/date 轉換失敗。預設訊息唔包含收到嘅值；自訂文字會原樣使用，所以避免加入敏感嘅 `received` 值。
 
 [Struct](/zh-Hant-HK/api/struct)

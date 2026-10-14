@@ -19,4 +19,4 @@ description: 開啟型別化的事件串流，迭代一次，然後 close 並 aw
 hello from the server
 ```
 
-SSE 預設不重試網路或讀取失敗；必須用 `withSSEReconnect(...)` 明確啟用。提供重新連線設定物件後，`attempts` 預設為 `3`；`attempts: 0` 停用重試。未提供 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求會重新連線，而使用 `ReadableStream` 請求主體的請求絕不會重新連線。
+SSE 預設不重試網路或讀取失敗；必須用 `withSSEReconnect(...)` 明確啟用。提供重新連線設定物件後，`attempts` 預設為每次斷線 `3`；成功的握手會重設預算與 backoff 指數。`attempts: 0` 停用重試。無效的數值重連選項會在任何請求之前以 `REQ_OPTIONS_INVALID` 失敗；見 [驗證規則](/zh-Hant-TW/api/core/withssereconnect)。未提供 `shouldReconnect` 時，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求會重新連線，而使用 `ReadableStream` 請求主體的請求絕不會重新連線。

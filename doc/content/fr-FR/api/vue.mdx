@@ -37,4 +37,4 @@ Lit le provider `HTTP_CLIENT` le plus proche. Appelle-le là où `inject` est au
 const HTTP_CLIENT: InjectionKey<Client>
 ```
 
-Clé d’injection Vue. Préfère `injectClient()` à `inject(HTTP_CLIENT)`. Remplace un sous-arbre avec `provide(HTTP_CLIENT, childClient)`.
+Clé d’injection Vue. Préfère `injectClient()` à `inject(HTTP_CLIENT)`. Surcharge le client injecté pour un sous-arbre avec `provide(HTTP_CLIENT, childClient)`.

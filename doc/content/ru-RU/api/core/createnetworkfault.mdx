@@ -12,8 +12,8 @@ function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
 - **cause** — исходная отмена, таймаут или сбой транспорта.
 - **response** — метаданные; только если транспорт уже имел что сообщить. При наличии прикрепляются к fault’у.
 - **Возвращает** `PreflightFault`, код которого зависит от `cause`:
-  - `NET_ABORTED` для `ERR_ABORTED` или `DOMException` с именем `AbortError`. Message — `Request was aborted`.
-  - `NET_TIMEOUT` для `ERR_TIMEOUT` или ошибки с именем `TimeoutError`. Message — message причины, а если оно пусто, то `Request timed out`.
+  - `NET_ABORTED`, когда [`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт `Error` с меткой отмены (включая `ERR_ABORTED` из другой копии Core) или `DOMException` с именем `AbortError`. Сообщение — `Request was aborted`.
+  - `NET_TIMEOUT`, когда [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) распознаёт `Error` с меткой таймаута (включая `ERR_TIMEOUT` из другой копии Core) или `DOMException` / `Error` с именем `TimeoutError`. Сообщение берётся из причины, а если оно пусто, используется `Request timed out`.
   - `NET_UNREACHABLE` для всего остального, с message причины.
 
 Причина сохраняется как `cause`.

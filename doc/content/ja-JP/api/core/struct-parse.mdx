@@ -16,7 +16,7 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 - **struct** はパースに使う struct です。struct ではない値を渡すと `TypeError` を投げます。
 - **value** は未知の入力です。
 - **options.aliases** のデフォルトは `false` で、オブジェクトのキーは**論理**名（`displayName`）で読まれます。`true` にすると、HTTP/JSON コーデックと同じようにワイヤ名（`display_name`）で読まれます。出力は常に論理名を使います。
-- **options.errorMap** は、この呼び出しだけの issue メッセージを書き換える [`ErrorMap`](/ja-JP/api/core/errormap-type) です。`undefined` を返すとデフォルトのメッセージが残ります。
+- **options.errorMap** は、この呼び出しだけの issue メッセージを書き換える [`ErrorMap`](/ja-JP/api/core/errormap-type) です。別の Core コピーで作られた struct の bigint/date 変換失敗にも適用されます。`''` を含む任意の文字列でメッセージを置き換え、`undefined` の場合だけデフォルトを維持します。カスタムテキストはそのまま使われます。
 - **戻り値** は `[null, output]` または `[StructError, undefined]` です。不正な入力で例外を投げることはありません。
 - パースは fail-fast です。最初の失敗で止まるため、エラーが持つ issue は 1 つです。未知のオブジェクトキーは出力から取り除かれ、入力は変更されません。
 

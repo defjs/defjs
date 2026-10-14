@@ -11,7 +11,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `TErr` はエンドポイントが宣言した `error` struct で、宣言がなければ `undefined` です。`Fault<TErr>` は、デコード済みボディの型に [`FaultOf`](/ja-JP/api/core/faultof-type) を適用したものなので、[`DecodeFault`](/ja-JP/api/core/decodefault-type)、[`HttpStatusFault<TErr>`](/ja-JP/api/core/httpstatusfault-type)、[`PreflightFault`](/ja-JP/api/core/preflightfault-type) という 3 つのバリアントのユニオンです。`fault.code` で switch してください。
 
-どのバリアントも `DefjsFault` という名前のネイティブ `Error` なので、`String(fault)` はそのままログに出せる `DefjsFault: <message>` を返します。`code` と各バリアントのメタデータ — `status`、`response`、`data` — は列挙可能な自前プロパティです。ネイティブの `cause` チェーンは列挙されません。
+どのバリアントも `DefjsFault` という名前のネイティブ `Error` なので、`String(fault)` は `DefjsFault: <message>` を返します。`code` と各バリアントのメタデータ — `status`、`response`、`data` — は列挙可能な自前プロパティです。ネイティブの `cause` チェーンは列挙されません。
+
+デフォルトの Struct メッセージは `received <kind>` と表し、受け取った値そのものは含みません。`RES_DECODE_FAILED` の原因が JSON の `SyntaxError` であれば、メッセージは `Response body could not be decoded` になります。構造上のパスは record のキーを保持し、そのキーは機微情報になり得ます。生の `StructIssue.received` とパーサーの cause は引き続き機密性のあるデータです。独自の `errorMap` と拡張のメッセージはそのまま使われるため、ログに記録する前に内容を確認する必要があります。
 
 <include cwd>examples/api/fault.ts#example</include>
 

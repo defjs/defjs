@@ -92,7 +92,7 @@ object가 아닌 부분을 포함한 혼합 intersection은 파싱될 때 일치
   examples/struct/parse-failures.ts#example
 </include>
 
-`StructIssue`에는 `code`, `expected`, `message`, `path`, `received`가 있어요. `code`는 `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, `missing_key` 중 하나예요. issue는 신뢰할 수 없는 입력을 담을 수 있으니 로그하거나 돌려주기 전에 마스킹하세요. `struct.parse(..., { errorMap })`은 그 호출의 issue 메시지만 다시 써요.
+`StructIssue`에는 `code`, `expected`, `message`, `path`, `received`가 있어요. `code`는 `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, `missing_key` 중 하나예요. 기본 message는 받은 값이 아니라 받은 종류를 말해요. `Expected number at id, received string`이에요. issue path는 구조를 나타내며 record 키를 유지해요. `struct.record(...)`는 `Expected number at alice@example.com, received string`을 만들 수 있으므로, 기본 message, `prettify()`, `String(fault)`에도 민감한 키가 남을 수 있어요. 그래서 `message`와 `prettify()`는 받은 payload를 빼요. `received`는 원래 값을 유지하므로 로그하거나 돌려주기 전에 마스킹이 필요해요. `struct.parse(..., { errorMap })`은 그 호출의 message만 다시 쓰며, 다른 Core 사본 struct의 bigint/date 변환 실패도 포함해요. `''`를 포함한 어떤 반환 문자열이든 기본값을 대체하고, `undefined`만 유지해요. 사용자 텍스트는 그대로 쓰이며, map이 값을 넣으면 그 값이 드러날 수 있어요.
 
 Struct 검증은 구조적일 뿐이에요. 공개된 범위, 형식, refinement, 인증, 상태 전이 규칙은 없어요. 그런 검사는 명령을 만들기 전에 하세요.
 

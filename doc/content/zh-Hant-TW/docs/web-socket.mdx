@@ -25,6 +25,8 @@ description: 啟動型別化的 JSON session、收發 envelopes，然後 close �
 
 `session.send(...)` 同步驗證並序列化：先 struct encode，再 `JSON.stringify`。Open 時立刻送；有啟用 outgoing queue 時，在 `reconnecting` 期間會排隊；不可寫時丟 `InvalidStateError`。沒有 outgoing struct、payload 驗證失敗、停用／滿的 outgoing queue，或原生 send 失敗時也會 throw。定義上的靜態 `protocols` list 是 endpoint 契約（例如 `graphql-transport-ws`）。Execute options 與 `withWebSocketProtocols` 仍可覆寫它。只有這些 options 能選 subprotocols：builder、`beforeConnect` 與 interceptors 都改不了，所以把 token 放進 subprotocol 時，要在該次呼叫以 execute 的 `protocols` option 傳入。Builder 只能回傳 `path` 與 `query`。
 
+Struct 編碼之後，JSON 無法忠實表示的值會在送出或進入重連佇列之前丟出 `TypeError`：非有限數字、函式、symbol、`Map`、`Set`、串流，以及沒有 JSON 表示的類別實例。巢狀值跟 HTTP JSON body 同一套規則。`struct.number()` 仍然接受 infinities 並拒絕 `NaN`；在 struct 層被接受，不代表它是有效的 JSON。Heartbeat 用同一個 serializer；它的序列化失敗會結束邏輯 session。
+
 `receive` 是單消費者。要求第二個 iterator 會丟出 `TypeError`。
 
 ## State 快照
@@ -49,13 +51,13 @@ description: 啟動型別化的 JSON session、收發 envelopes，然後 close �
 
 ## 重連
 
-重連是選擇性開啟。沒有 `reconnect` 物件 → 實體 close 結束邏輯 session。設定後，預設是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 計算初始 attempt 之後的重試；`attempts: 0` 關掉。預設 predicate 接受所有 close 結果。
+重連是選擇性開啟。沒有 `reconnect` 物件 → 實體 close 結束邏輯 session。設定後，預設是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 是每次斷線的重試預算；成功的 `open` 會重設預算與 backoff 指數。因此之後每一次斷線都從 retry 1 與 `delayMs` 基底重新開始。`attempts: 0` 關掉。預設 predicate 接受該次斷線預算內的每一個非手動 close 結果。反覆成功的 open 沒有終身重試上限。socket 若成功開啟後立刻又被伺服器關閉，可能持續以基底延遲重新連線（仍受 jitter 與上限約束），因為每次開啟都會重設預算；請用 `shouldReconnect` 停止這種情況。
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 `shouldReconnect` 拿到下一次重試 attempt、close cause、code、reason、`wasClean`。手動 `session.close(...)` 不會進 predicate。Preparation／策略 throw 會以錯誤結束邏輯 session。
 
-WebSocket backoff jitter 是**乘法**（`jitter: 0.2` → delay 在 `0.8x` 與 `1.2x` 之間）。SSE jitter 是 0–1 乘性因子，跟 WebSocket 一樣。Delay／factor／jitter／attempt 值在 constructor 前驗證；timer delays 不能超過 `2_147_483_647` ms。
+WebSocket backoff jitter 是**乘法**（`jitter: 0.2` 會在捨入前，把已設上限的基底縮放成 `0.8x`–`1.2x`）。最終延遲會再次被 `maxDelayMs` 與平台 timer 上限 `2_147_483_647` ms 卡住，所以那個範圍的上端可能被截掉。基底為零就維持零；有效數字的溢位會被夾住，而不是丟出錯誤。SSE 用同一套 0–1 jitter 規則。啟用重試時，選項會在 constructor 之前驗證：`attempts` 是非負的 safe integer；`delayMs` 與 `maxDelayMs` 是有限且非負；`factor` 是有限且為正；`jitter` 是有限且落在 0–1。無效的值會回傳 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 會立刻停用重試，並忽略用不到的重連欄位；SSE 仍會驗證它們。
 
 `beforeConnect({ attempt, signal })` 在初始 constructor 與每次重連前跑。把它的 signal 傳進 token refresh，讓取消同時停掉 prep 與 connect。
 
@@ -84,6 +86,8 @@ WebSocket backoff jitter 是**乘法**（`jitter: 0.2` → delay 在 `0.8x` 與 
 
 瀏覽器 WebSocket constructors 不接受任意 handshake headers，而且 builder 不能回傳 `headers` 或 `body`。Defjs 把 `http:` → `ws:`、`https:` → `wss:`，path placeholders encode 一次，並使用跟 HTTP 一樣的 query 規則：預設是 scalars 與重複的 keys，巢狀物件用 `withQuerySerializer`，沒有 query 時不呼叫 serializer。
 
+跟 HTTP 與 SSE 一樣，缺少、相對或無效的 base endpoint，或非法 path，會在建構期間、任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 也一樣。解析後的 URL 必須維持 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 最終的 `req.endpoint` 會按其最終的 `req.baseEndpoint`、用同一條規則驗證，但它可以刻意把 base 換成另一個有效的絕對 URL。確定性的 URL 錯誤絕不會重試。
+
 `withCredentials(true)` 是 HTTP／SSE 的 Fetch credentials — 不是 WebSocket auth。用審過的 cookie／session 策略、subprotocol，或短效 connection ticket。別把一般憑證或長效 secrets 放進 query string。
 
 ## 關閉與擁有權
@@ -98,7 +102,7 @@ WebSocket backoff jitter 是**乘法**（`jitter: 0.2` → delay 在 `0.8x` 與 
 
 `session.closed` 是邏輯終端快照：`'closed'`、`'aborted'` 或 `'error'`，可帶選填的原生 `code`／`reason`／`wasClean`，以及 aborted／error 的 `cause`。觀察到的原生 close 欄位勝過擁有者請求的 fallback。
 
-標準 async disposer 會要求 best-effort 原生 close，再等待 Defjs 自有 lifecycle、message pump、timers、listeners、queues 與 socket references teardown。若 1 秒內始終沒有觀察到 close event，teardown 會被強制完成，disposer 可能用名為 `TimeoutError` 的 `DOMException` reject；這無法證明實體 TCP 連線已經關閉。重複呼叫 disposer 會共用同一個 teardown。結構化實作 session 的程式碼現在必須提供同一份 `[Symbol.asyncDispose](): PromiseLike<void>` 契約。
+標準 async disposer 會要求 best-effort 原生 close，再等待 Defjs 自有 lifecycle、message pump、timers、listeners、queues 與 socket references teardown。若一秒內始終沒有觀察到 close event，teardown 會被強制完成，disposer 可能用名為 `TimeoutError` 的 `DOMException` reject；這無法證明實體 TCP 連線已經關閉。重複呼叫 disposer 會共用同一個 teardown。結構化實作 session 的程式碼現在必須提供同一份 `[Symbol.asyncDispose](): PromiseLike<void>` 契約。
 
 ## GraphQL 邊界
 

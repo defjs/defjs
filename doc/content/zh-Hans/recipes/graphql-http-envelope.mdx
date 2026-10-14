@@ -5,7 +5,7 @@ description: GraphQL 保持 HTTP 200 加应用层拆包；Core 不带 GraphQL �
 
 # 拆开 GraphQL HTTP 信封
 
-Defjs 不实现 GraphQL `errorPolicy`。把线上建模成一次 HTTP POST，builder 放上 query 文档和变量，再在你自己的 helper 里拆 `errors[]` / 缺失的 `data`。
+Defjs 不实现 GraphQL `errorPolicy`。把传输协议建模成一次 HTTP POST，由 builder 放入查询文档和变量。将响应信封中的 `data` 声明为 `.nullish()`，让缺失的 `data` 和 `data: null` 都能传到你的辅助函数，再先处理 `errors[]`，后检查 `data`。
 
 见 [设计决策](/zh-Hans/docs/design-decisions)。
 
@@ -14,7 +14,7 @@ Defjs 不实现 GraphQL `errorPolicy`。把线上建模成一次 HTTP POST，bui
 </include>
 
 ```txt
-ada viewer unavailable
+ada viewer unavailable viewer unavailable
 ```
 
-HTTP 成功只说明信封到了。应用错误留在 `errors[]` 里，直到你的拆包函数抛出或返回。
+HTTP 成功只说明信封到了。应用错误留在 `errors[]` 里，直到你的拆包函数抛出或返回；响应中 `data: null` 的情况也一样。示例把伴随 `errors[]` 的缺失 `data` 和 `data: null` 都作为应用错误处理，而非 Struct 不匹配。

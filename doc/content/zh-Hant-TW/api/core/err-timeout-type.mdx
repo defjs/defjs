@@ -13,4 +13,6 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 見 [Errors 指南](/zh-Hant-TW/docs/errors)。
 
+這個哨兵帶有不可列舉的 `Symbol.for('defjs.cause.timeout')` brand。[`isTimeoutCause`](/zh-Hant-TW/api/core/istimeoutcause) 不必比較物件同一性，就能辨認來自任何 Core 副本的這個哨兵。分類獨立於無關的先前執行。
+
 [錯誤](/zh-Hant-TW/api/errors)

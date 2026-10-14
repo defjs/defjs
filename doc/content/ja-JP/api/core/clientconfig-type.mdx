@@ -26,6 +26,6 @@ interface ClientConfig {
 
 `createClient` が組み立て、すべての option ヘルパーが書き換える、解決済みスナップショットです。HTTP のメンバーは非公開の `HttpClientConfig` 基底型に由来し、ここではインラインで示しています。
 
-option が何も適用されていない状態では、`endpoint` は `''`、`interceptors` は空で、`http.handle` と `sse.handle` はグローバルの `fetch` です。`webSocket.handle` は `globalThis.WebSocket` で、`webSocket` のその他の設定は未設定です。`withXSRF` は、`xsrf.cookieName` と `xsrf.headerName` が省略された場合に、それぞれ `XSRF-TOKEN` と `X-XSRF-TOKEN` で埋めます。
+option が何も適用されていない状態では、`endpoint` は `''`、`interceptors` は空です。`http.handle` と `sse.handle` は、呼び出しごとに `globalThis.fetch` を解決するデフォルトのラッパーを共有します。インポート後に Fetch を差し替えると、両方のデフォルトに反映されます。Fetch がなくても Core はインポートできますが、実行時にも Fetch がなければ、デフォルトの HTTP/SSE 実行は `ENV_UNSUPPORTED` で失敗します。独自のハンドルはグローバルの Fetch を必要としません。`webSocket.handle` は `globalThis.WebSocket` で、`webSocket` のその他の設定は未設定です。`withXSRF` は、`xsrf.cookieName` と `xsrf.headerName` が省略された場合に、それぞれ `XSRF-TOKEN` と `X-XSRF-TOKEN` で埋めます。
 
 [Client](/ja-JP/api/client)

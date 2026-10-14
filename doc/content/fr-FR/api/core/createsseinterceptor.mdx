@@ -14,6 +14,8 @@ type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStr
 
 Renvoie `{ kind: 'sse', fn }`. Les intercepteurs SSE ne s’exécutent que pour les commandes SSE, dans l’ordre d’enregistrement ; `next(req)` ouvre le flux via les intercepteurs restants.
 
+Une erreur d’URL déterministe provenant de `next(req)` rejette la promesse renvoyée, ce qui permet à la récupération via `.then` / `.catch` de s’exécuter ; si l’erreur n’est pas récupérée, `client.execute` signale toujours `REQ_BUILD_FAILED`.
+
 `EventStreamHandle` étend `AsyncDisposable`. Une implémentation qui court-circuite structurellement doit fournir `[Symbol.asyncDispose](): PromiseLike<void>` et le relier au même cycle de vie de fermeture.
 
 [Intercepteurs](/fr-FR/api/interceptors)

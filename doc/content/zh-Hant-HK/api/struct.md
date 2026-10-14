@@ -5,11 +5,11 @@ description: struct facade、Infer，同 StructError。
 
 # Struct
 
-Build wire-boundary shapes，parse values，再 infer TypeScript types。
+建立傳輸邊界嘅資料形狀，解析值，再推斷 TypeScript types。
 
 ## struct
 
-Facade。Prefer 用呢個，唔好用 internal constructors。
+統一入口。優先用呢個，唔好用內部 constructors。
 
 ```ts
 const User = struct.object({
@@ -25,7 +25,7 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 | Helper                                                                      | 做咩                                                                         |
 | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
 | `struct.string()` / `number()` / `boolean()` / `bigint()`                   | Scalars                                                                      |
-| `struct.literal(value)`                                                     | Exact literal                                                                |
+| `struct.literal(value)`                                                     | 精確 literal                                                                 |
 | `struct.null()` / `any()` / `unknown()`                                     | Null / any / unknown。`any()` 同 `unknown()` 會拒絕 `null` 同 `undefined`    |
 | `struct.date()`                                                             | `Date`                                                                       |
 | `struct.array(item)` / `tuple(items)` / `record(value)`                     | Collections。`tuple` 收一個 array：`struct.tuple([a, b])`                    |

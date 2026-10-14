@@ -13,7 +13,7 @@ interface HttpProgressEvent {
 }
 ```
 
-Повторяет поля `ProgressEvent`. `loaded` — число байт, переданных на данный момент. Если общий размер неизвестен, `total` равен `0`, а `lengthComputable` — `false`.
+Повторяет поля `ProgressEvent`. `loaded` считает байты, прочитанные из потока выгрузки или загрузки, а не байты, получение которых подтвердил сервер. При загрузке байты уже могут быть распакованы. Общий размер загрузки вычислим только при положительном `Content-Length` и отсутствующем `Content-Encoding` либо значении `identity`; для сжатых загрузок сообщаются `total: 0` и `lengthComputable: false`. При потоковой выгрузке FormData общий размер также неизвестен, если он не задан корректным явным `Content-Length`. Для других потоков неизвестной длины используются те же поля `0` / `false`.
 
 См. [`HttpProgressFn`](/ru-RU/api/core/httpprogressfn-type), [гайд HTTP](/ru-RU/docs/http) и [Команды](/ru-RU/docs/commands).
 

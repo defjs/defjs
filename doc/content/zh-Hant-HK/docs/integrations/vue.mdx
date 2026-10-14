@@ -1,6 +1,6 @@
 ---
 title: 'Vue'
-description: Install plugin，provide client，fetch 一個 user，reactive change 時 abort。
+description: 安裝 plugin，提供 client，取得一個 user，響應式資料改變時取消請求。
 ---
 
 # Vue
@@ -13,7 +13,7 @@ Install `@defjs/core`、`@defjs/vue` 同 Vue 3.2+（adapter 淨係需要 `provid
 
 `bun add @defjs/core @defjs/vue vue`
 
-Create client，install plugin，之後用 abort-on-change fetch：
+建立 client，安裝 plugin，之後取得資料；相關值改變時取消請求：
 
 <include cwd lang="typescript">
   examples/vue/main.ts#example

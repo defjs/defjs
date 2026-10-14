@@ -23,6 +23,7 @@ function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): C
 - 每隔 `intervalMs` 就呼叫一次 `message()`，並把結果透過 endpoint 的 `outgoing` struct 送出。省略 `message` 或它回傳 `undefined` 時，不會送出任何 message。
 - 有 `timeoutMs` 時，每次 heartbeat 之後都預期收到 acknowledgement。`isAck` 會收到解碼後的入站 message；回傳 `true` 時，計時器會被清除，而且該 message **不會**交給 `receive`。
 - 在 `timeoutMs` 內沒收到 ack，或 heartbeat 無法送出時，session 會失敗。這不會觸發重連。
+- heartbeat 使用與 `session.send` 相同的 JSON 檢查：struct 編碼之後，JSON 無法表示的值會造成 `TypeError`，並結束邏輯 session。
 - `intervalMs` 與 `timeoutMs` 必須為正、有限，且不大於 `2_147_483_647`；否則 execute 會以 `REQ_OPTIONS_INVALID` 失敗。
 - execute options 中的 `heartbeat` 會在該次呼叫取代這一個。
 

@@ -13,7 +13,7 @@ Erzeuge einen Client, komponiere Options von links nach rechts, dann `execute` H
 function createClient(...options: ClientOption[]): Client
 ```
 
-Options gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants closen.
+Options gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants per Closure einschließen.
 
 - **options** — Option-Helper wie `withEndpoint`.
 - **Returns** einen Client, dessen `execute` pro Transport overloaded ist.
@@ -118,7 +118,7 @@ function withXSRF(options?: {
 
 Fügt HTTP-Requests einen XSRF-Token-Header hinzu. Defaults: Cookie `XSRF-TOKEN`, Header `X-XSRF-TOKEN`. SSE- und WebSocket-Requests sind nicht betroffen.
 
-Der Default-HTTP-Transport setzt den Header, wenn alle Bedingungen zutreffen: Die Methode ist nicht `GET`, `HEAD`, `OPTIONS` oder `TRACE`; der Request hat diesen Header noch nicht; der Request ist same-origin (außerhalb eines Browsers zählt jeder Request mit `baseEndpoint`); und ein nicht leeres Token wird gefunden. Das Token kommt von `tokenProvider`, falls angegeben, sonst aus dem Cookie, das nur im Browser gelesen wird.
+Der Default-HTTP-Transport setzt den Header, wenn alle Bedingungen zutreffen: Die Methode ist nicht `GET`, `HEAD`, `OPTIONS` oder `TRACE`; der Request hat diesen Header noch nicht; der Request ist same-origin; und ein nicht leeres Token wird gefunden. Existiert `location`, auch in einem Worker, muss der aufgelöste Request-Origin `location.origin` entsprechen; ohne es zählt ein Request mit `baseEndpoint` als same-origin. Cross-Origin-Requests rufen `tokenProvider` nicht auf. Das Token kommt von diesem Provider, falls angegeben, sonst aus `document.cookie`, das nur gelesen wird, wenn `document` existiert.
 
 ### SSE-Optionen
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Die Call-Signatur, die Defjs von einer Fetch-Implementierung braucht. Es ist nicht `typeof fetch`, daher braucht ein Mock keine Host-Extras wie `preconnect`.
+Die Call-Signatur, die Defjs von einer Fetch-Implementierung braucht. Es ist nicht `typeof fetch`, daher braucht ein Mock keine Host-Extras wie `preconnect`. Die Default-Handles für HTTP und SSE lösen `globalThis.fetch` bei jedem Aufruf auf. HTTP nutzt `(url, init)` nur für unangetastetes Plattform-Fetch; ersetzte Globals und eigene Handles erhalten einen `Request`. SSE übergibt immer einen `Request`. Core ohne Fetch zu importieren ist gültig; eine Default-Ausführung meldet `ENV_UNSUPPORTED`, wenn Fetch dann noch fehlt, während eigene Handles nutzbar bleiben.
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 Reconnect ist bei beiden Transports Opt-in: ohne `withSSEReconnect` / `withWebSocketReconnect` gibt es keinen Retry. Sobald `reconnect` gesetzt ist, gelten diese Defaults:
 
-| Feld         | SSE        | WebSocket |
-| ------------ | ---------- | --------- |
-| `attempts`   | `3`        | `3`       |
-| `delayMs`    | `1000`     | `1000`    |
-| `factor`     | `1`        | `2`       |
-| `jitter`     | `0`        | `0`       |
-| `maxDelayMs` | kein Limit | `30000`   |
+| Feld         | SSE            | WebSocket      |
+| ------------ | -------------- | -------------- |
+| `attempts`   | `3` je Ausfall | `3` je Ausfall |
+| `delayMs`    | `1000`         | `1000`         |
+| `factor`     | `1`            | `2`            |
+| `jitter`     | `0`            | `0`            |
+| `maxDelayMs` | kein Limit     | `30000`        |
 
-Bei SSE ist `delayMs` nur die anfängliche Basisverzögerung: Ein `retry:`-Feld des Servers ersetzt sie für spätere Versuche. `attempts: 0` deaktiviert Wiederholungsversuche; ohne `attempts` ist deren Anzahl nicht unbegrenzt. `jitter` muss zwischen 0 und 1 liegen: Jede Verzögerung wird zufällig um höchstens diesen Anteil verlängert oder verkürzt. Gibt `shouldReconnect` `false` zurück, werden keine weiteren Versuche unternommen. Der SSE-Callback erhält außerdem `lastEventId`, die Methode des Requests (`method`) und die neuesten `open`-Informationen und darf asynchron sein. Ohne diesen Callback stellt SSE die Verbindung nur für `GET`-, `HEAD`-, `OPTIONS`-, `PUT`- und `DELETE`-Requests erneut her; ist er vorhanden, entscheidet sein Rückgabewert bei jeder Methode über den Reconnect. Der WebSocket-Callback bekommt stattdessen den Close-`code`, `reason` und `wasClean`.
+Bei beiden Transports setzt ein erfolgreicher Handshake das Retry-Budget je Ausfall, den Callback-Versuch und den Backoff-Exponenten zurück. `attempts: 0` deaktiviert Wiederholungsversuche; `attempts` wegzulassen ergibt innerhalb eines Ausfalls keine unbegrenzten Retries. `maxDelayMs` deckelt die endgültige Wartezeit nach Jitter und Rundung; das Plattform-Timer-Limit von `2_147_483_647` ms gilt ebenfalls, auch wenn SSE kein konfiguriertes Cap hat. Eine Basis von null bleibt null; ein Überlauf gültiger Zahlen sättigt an den Caps.
+
+Reconnect-Optionen werden vor dem Transport geprüft: `attempts` muss eine nicht negative sichere Ganzzahl sein; `delayMs` und ein explizites `maxDelayMs` müssen endlich und nicht negativ sein; `factor` muss endlich und positiv sein; `jitter` muss endlich sein und in 0–1 liegen. Ungültige Werte liefern `REQ_OPTIONS_INVALID`. WebSocket-`attempts: 0` schaltet Retry sofort aus und ignoriert die ungenutzten Reconnect-Felder; SSE validiert sie trotzdem. Jitter skaliert die gedeckelte Basis in beide Richtungen, bevor das endgültige Cap angewendet wird.
+
+Bei SSE ist `delayMs` nur die anfängliche Basisverzögerung: Ein `retry:`-Feld des Servers, das nur aus Ziffern besteht, ersetzt sie für spätere Versuche, auch nach einer Erholung. Gibt `shouldReconnect` `false` zurück, werden keine weiteren Versuche unternommen. Der SSE-Callback erhält außerdem `lastEventId`, die Methode des Requests (`method`) und die neuesten `open`-Informationen und darf asynchron sein. Ohne diesen Callback stellt SSE die Verbindung nur für `GET`-, `HEAD`-, `OPTIONS`-, `PUT`- und `DELETE`-Requests erneut her; ist er vorhanden, entscheidet sein Rückgabewert bei jeder Methode über den Reconnect. Die letzte Event-ID wird als UTF-8-Bytes in `Last-Event-ID` gesendet; eine leere ID löscht sie, und eine ID mit NUL wird ignoriert. Der WebSocket-Callback bekommt stattdessen den Close-`code`, `reason` und `wasClean`.
 
 SSE-`onInvalidEvent` behandelt ein Event ohne passendes Struct, auch ohne `default` (`missing-struct`), oder dessen Daten an ihrem Struct scheitern (`validation-failed`). Das Event wird immer verworfen; der Rückgabewert des Handlers wird ignoriert, und ein Fehler, den er wirft, schließt den Stream nicht.
 
@@ -277,7 +281,7 @@ Das aufgelöste SSE-Config auf `ClientConfig.sse`: `ClientSSEOptions` mit einem 
 
 ### WebSocketHandle
 
-Die WebSocket-Instanzfläche, die der Transport nutzt: `WebSocket` ohne `binaryType`, die Ready-State-Konstanten, `dispatchEvent` und die `on*`-Handler-Properties, mit einem schreibgeschützten `readyState: number`.
+Die WebSocket-Instanzfläche, die der Transport nutzt: `WebSocket` ohne `binaryType`, ohne die Ready-State-Konstanten, ohne `dispatchEvent` und ohne die `on*`-Handler-Properties, aber mit einem schreibgeschützten `readyState: number`.
 
 ### WebSocketHandleConstructor
 

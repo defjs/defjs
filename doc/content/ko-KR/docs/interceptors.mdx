@@ -39,7 +39,9 @@ description: HTTP, SSE, WebSocket 정책을 전송 경계에서 onion 순서로 
 
 SSE도 같은 패턴이에요. 브라우저 WebSocket은 임의 handshake 헤더를 추가할 수 없어요 — `request.headers`를 바꿔도 브라우저 소켓을 인증하지 못해요. 프로토콜, URL/query 정책, 또는 서버가 지원하는 handshake를 쓰세요.
 
-HTTP body를 바꿀 때는 복사한 요청의 `body`를 교체해요. body 값이 바뀌면 Fetch는 낡은 content-type 메타데이터를 무시해요. 이미 소비된 `ReadableStream` body를 재사용하지 마세요.
+HTTP는 추론한 Content-Type을 `request.headers`에 쓰지 않으므로 인터셉터는 선언된 헤더만 봐요. `request.bodyContentType`은 builder의 body에서 추론한 타입을 일반 필드로 보관하므로 `{ ...req }`로 복사해도 유지돼요. builder, 클라이언트 기본값, 인터셉터, 원시 `fetchHandler` 요청 중 어디에서 선언했든 명시한 `content-type` 헤더가 항상 이 필드와 탐지보다 우선해요. 서명 시에는 `headers.get('content-type') ?? request.bodyContentType`을 읽으세요.
+
+HTTP body를 바꿀 때는 복사한 요청의 `body`를 교체하고 `content-type` 헤더로 그 타입을 선언해요. `bodyContentType`은 `body`가 builder의 값인 동안에만 적용돼요. 교체된 body는 다시 탐지하므로 헤더로 다른 타입을 선언하지 않으면 교체된 문자열은 텍스트예요. `body: undefined`를 두면 라이브러리가 추론한 Content-Type이 없어요. 바뀌지 않은 builder body에서는 명시 헤더가 없을 때 `bodyContentType: null`이 라이브러리의 추론을 억제하지만, 네이티브 Fetch가 문자열에 자기 타입을 여전히 붙일 수 있어요. FormData는 항상 실제 multipart boundary를 써요. 이미 소비된 `ReadableStream` body를 재사용하지 마세요.
 
 ## 요청 short-circuit하기
 
@@ -92,6 +94,8 @@ WebSocket 인터셉터는 `next`를 최대 한 번만 호출할 수 있어요. �
 - `basicAuthSSEInterceptor(provider, options?)` — SSE용 Basic 자격 증명
 
 `HttpRequest`에는 `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, 정적 `operation`이 있을 수 있어요. 전송 통합 값이지 호출자의 파싱된 입력이 아니에요. `queryParams`는 직렬화 뒤의 `new URLSearchParams(queryString)`이에요. 설정된 query serializer는 builder가 query를 만들지 않으면 호출되지 않고, builder의 `URLSearchParams`는 그대로 쓰여요. 명령 검증, 출력 검증, 도메인 오류 매핑은 각자 레이어에 두세요.
+
+URL 검증은 요청을 만드는 동안 시작해요. 없거나 상대적이거나 잘못된 base endpoint나 불법 path는 인터셉터나 전송이 돌기 전에, 단축하는 인터셉터를 포함해 `REQ_BUILD_FAILED`로 실패해요. 디스패치 전에 최종 `req.endpoint`를 최종 `req.baseEndpoint`에 대해 검증해요. 해석된 URL은 그 base의 origin을 유지하고 디렉터리 안에 머물러야 하며, path의 C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`, 디렉터리 탈출은 거부돼요. 앞에 공백이 있어도 스킴 형태와 프로토콜 상대 형식은 거부돼요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. interceptor는 `baseEndpoint`를 다른 유효한 절대 URL로 일부러 바꿀 수 있어요. HTTP, SSE, WebSocket이 이 규칙을 공유하고, 결정적인 URL 오류는 재시도하지 않아요.
 
 SSE/WebSocket 옵저버는 수명 훅이지 제어 흐름이 아니에요. 소유자가 끝날 때 WebSocket 리스너를 구독 해제하세요. 옵저버 실패는 전송 계약을 따르고, 인터셉터 자체는 throw하거나 reject할 수 있어요.
 

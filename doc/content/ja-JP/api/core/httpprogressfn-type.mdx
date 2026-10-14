@@ -13,4 +13,6 @@ type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
 
 [`HttpProgressEvent`](/ja-JP/api/core/httpprogressevent-type)、[HTTP ガイド](/ja-JP/docs/http)、[Commands](/ja-JP/docs/commands) を参照してください。
 
+サーバーランタイムでは、`onUploadProgress` 付きの FormData はシリアライズされたストリームを直接読み取り、multipart の boundary を保ち、ライブラリが生成した `Content-Length` なしで送られます（HTTP/1.1 では chunked）。そのため、ボディ全体をバッファせずに進捗、タイムアウト、中止が働きます。有効な明示的 `Content-Length` が総量を示していなければ、総量は不明と報告されます。一部の事前署名アップロード先のように `Content-Length` を要求するエンドポイントでは、`onUploadProgress` を省いてください。その場合、プラットフォームの Fetch が FormData を長さ付きで送ります。`loaded` はデコード済みストリームのバイト数を数えるため、identity 以外のエンコーディングを使うダウンロードでも `total: 0` と `lengthComputable: false` が報告されます。キャンセルすると、ラップしたアップロードストリームを解放します。
+
 [HTTP](/ja-JP/api/http)

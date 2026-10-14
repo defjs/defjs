@@ -16,6 +16,7 @@ interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
 
 - `intervalMs` est le délai entre deux messages de heartbeat.
 - `message()` construit le payload. Il est envoyé à travers le struct `outgoing`. Rien n’est envoyé s’il est omis ou s’il renvoie `undefined`.
+- Après l’encodage du struct, les valeurs non JSON échouent avec `TypeError` par le même sérialiseur que `session.send` ; cet échec de heartbeat met fin à la session logique sans reconnexion.
 - `isAck(message)` reçoit chaque message entrant décodé. Quand elle renvoie `true`, le message est traité comme l’acquittement et n’est pas livré à `receive`.
 - `timeoutMs` est la durée d’attente d’un acquittement après un heartbeat. Le manquer fait échouer la session.
 - `intervalMs` et `timeoutMs` doivent être strictement positifs, finis, et au plus égaux à `2_147_483_647`.

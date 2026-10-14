@@ -92,7 +92,7 @@ union 引導同時命中多個分支時，每個分支都編碼再比較。線�
   examples/struct/parse-failures.ts#example
 </include>
 
-`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。Issues 可能持有不可信 input — 記錄或回傳前先遮罩。`struct.parse(..., { errorMap })` 只覆蓋那一次 parse 的文案。
+`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。預設訊息只點出收到的 kind，絕不包含值本身：`Expected number at id, received string`。Issue path 反映結構並保留 record 的 key：`struct.record(...)` 可能產生 `Expected number at alice@example.com, received string`，因此預設訊息、`prettify()` 與 `String(fault)` 中的 key 仍可能含有敏感資訊。因此 `message` 與 `prettify()` 會省略收到的 payload；`received` 仍保留原始值，記錄或回傳前需要遮罩。`struct.parse(..., { errorMap })` 只改寫那一次呼叫的訊息，也包括另一份 Core 副本所建立的 struct 在 bigint／date 轉換上的失敗。任何回傳的字串，包括 `''`，都會取代預設；只有 `undefined` 會保留預設。自訂文字會原樣使用，若 map 把值放進去，就可能把它們暴露出來。
 
 Struct 驗證只做結構。沒有公開的 range、format、refinement、auth 或狀態轉移規則。那些檢查在建 command 之前做。
 

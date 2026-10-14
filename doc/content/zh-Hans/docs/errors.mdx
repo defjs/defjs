@@ -3,7 +3,7 @@ title: '错误处理'
 description: 按一个封闭的 fault code 集合分支处理 404、超时、读不出来的 body 和传输失败。
 ---
 
-# Errors
+# 错误处理
 
 处理 404、超时或读不出来的 body，靠的是读 error-first tuple，而不是 catch 抛出。`Fault` 是原生 `Error`（`instanceof Error` 为真），由一个字段判别：`code`。
 
@@ -34,6 +34,8 @@ description: 按一个封闭的 fault code 集合分支处理 404、超时、读
 | `ENV`  | `ENV_UNSUPPORTED`                                                      | 宿主运行时                     |
 
 集合是故意封闭的：这正是 `switch` 能穷尽的原因。扩展要报自己的细节就走 `cause`，不是加新 code。
+
+HTTP、SSE 和 WebSocket 都要求客户端 `endpoint` 是有效的绝对 URL。URL 解析后，路径必须与基础端点同源，且位于其目录内。路径不得是绝对 URL 或协议相对路径，也不得包含 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。缺失、相对或无效的端点，以及非法路径，都会在请求构建时、interceptor 运行前产生 `REQ_BUILD_FAILED`；短路 interceptor 也无法绕过这项检查。传输前还会按相同规则，相对于最终 `req.baseEndpoint` 检查 interceptor 的最终 `req.endpoint`；允许显式切换到另一个有效的绝对基础端点。这些确定性的 URL 错误不会重试。
 
 ### 各形状带哪些字段
 
@@ -67,12 +69,12 @@ SSE 和 WebSocket 的第三项是启动快照，即使启动失败也可能有�
 | 非 2xx，省略了 `error`                | `HTTP_STATUS`，`data: undefined`               |
 | 媒体类型不是那个表示需要的            | `RES_MEDIA_TYPE_INVALID`，在读 body **之前**报 |
 | 字节不是那个表示                      | `RES_DECODE_FAILED`                            |
-| 值不符合那个 struct                   | `RES_STRUCT_MISMATCH`                          |
+| 值不符合那个 struct                   | `RES_STRUCT_MISMATCH`（仅 HTTP）               |
 | 你**没有**声明的那一侧 body 读不出来  | 整个忽略——见下                                 |
 
 最后一行值得记住。如果你声明了 `output` 而没声明 `error`，那么一个 body 是坏 JSON 的 500，报出来是 `HTTP_STATUS` 加 `status: 500`。你说过你不关心错误 body，这也包括不关心它读不出来这件事。
 
-Struct 只应用一次，且在 interceptor 链之后。interceptor 用 `makeResponse(...)` 造的响应，和线上来的走同一套媒体类型检查、表示转换和 Struct。内置 Fetch 传输在把响应交回链之前，已经读取并 JSON 解析了声明过的 body；那一步失败时，会以同样的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 报出来。
+对于 HTTP，Struct 只应用一次，且在 interceptor 链之后。interceptor 用 `makeResponse(...)` 构造的响应，与真实网络响应经过同一套媒体类型检查、表示转换和 Struct 校验。内置 Fetch 传输在把响应交回链之前，会按声明将 body 读取为 JSON、文本、`Blob` 或字节。只有 JSON 表示要求 JSON 媒体类型和 `JSON.parse`；非 JSON 的文本、blob 和字节都可以是符合声明的有效表示。任何表示都可能读取失败；这里的读取或解析失败会以同样的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 报出。
 
 `HttpResponse.ok` 只表示 `200 <= status < 300`。传输失败是 fault，绝不是响应——不存在代表它的 status-0 响应。
 
@@ -98,13 +100,13 @@ Struct 只应用一次，且在 interceptor 链之后。interceptor 用 `makeRes
   examples/errors/narrow-by-status.ts#example
 </include>
 
-只要 API 支持，最后这种写法值得优先。`fault.status` 是 HTTP 层的数字，代理、网关或 CDN 都能改写它；而 `data.status` 是从你 `error` struct 断言过的 body 里解码出来的，能取到它就是后端确实产出过它的证明。
+只要 API 支持，最后这种写法值得优先。`fault.status` 是 HTTP 层的数字，代理、网关或 CDN 都能改写它；`data.status` 则通过了你声明的 `error` struct 校验。这只能证明 body 的形状，不能证明它来自后端：代理、网关或 CDN 也能返回符合该形状的 body。
 
 一个不带判别字段、因此窄化不了的联合，是声明本身的属性，不是库的——库交给你的就是你声明的类型。想要窄化，就给 struct 加一个判别字段。
 
 ## 启动期与开启之后
 
-SSE 在 resolve handle 之前会校验状态、`text/event-stream` 以及 body 是否存在。非 2xx → `HTTP_STATUS`。媒体类型不对 → `RES_MEDIA_TYPE_INVALID`。缺 body → `RES_DECODE_FAILED`。开启快照照样可能落在 tuple 第三项。
+SSE 在 resolve handle 之前会校验状态、`text/event-stream` 以及 body 是否存在。非 2xx 在未声明 `error` 或其 body 解码成功时 → `HTTP_STATUS`。已声明的握手 body 无法读取、无法解析或未通过 Struct 校验时 → `RES_DECODE_FAILED`；Struct 失败会以 `StructError` 作为 `cause`。媒体类型不对 → `RES_MEDIA_TYPE_INVALID`。成功握手却没有 body → `RES_DECODE_FAILED`。开启快照照样可能落在 tuple 第三项。
 
 WebSocket 的启动期覆盖握手加第一次物理 open。构造器失败、open 之前就关闭、超时或取消，都会产出一个启动 tuple。即使 socket 从没到过 `open`，连接快照也可能存在。
 
@@ -124,7 +126,9 @@ Fault 是原生 `Error` 实例，所以不需要诊断适配器。`String(fault)
   examples/errors/log-fault.ts#example
 </include>
 
-调 `format()`、`flatten()` 或 `prettify()` 之前，先把 `fault.cause` 窄化到 `StructError`。这些 helper 长在 Struct 的 cause 上，不会被复制到 fault 上。不要让控制流去解析 `message` 或 `String(fault)`——契约是 `code` 和一个审过的 `status`。
+调 `format()`、`flatten()` 或 `prettify()` 之前，先通过 `fault.cause instanceof StructError` 窄化底层原因。这些辅助方法属于 Struct 的 cause，不会被复制到 fault 上。不要让控制流去解析 `message` 或 `String(fault)`——契约是 `code` 和一个审过的 `status`。
+
+Struct 的默认错误消息只描述收到的类型，不包含具体值，例如 `Expected number at email, received string`。`prettify()` 和 `String(fault)` 中也使用同一条消息。对于 JSON `SyntaxError` 导致的 `RES_DECODE_FAILED`，fault 消息为 `Response body could not be decoded`，原始解析器错误保留在 `cause` 上。原始 `StructIssue.received` 值和解析器 cause 仍是敏感信息；自定义 `errorMap` 消息会原样使用，因此记录日志前需审查自定义文本。
 
 ## 参考
 
@@ -137,13 +141,13 @@ Fault 是原生 `Error` 实例，所以不需要诊断适配器。`String(fault)
 | 你自己的代码抛了 | `fault.code.startsWith('EXT_')`    | `code`、`cause`                        | 扩展挂上来的任何东西        |
 | 流／会话运行期   | `stream.closed` / `session.closed` | 终态 `kind` 和 `code`                  | 事件载荷、帧、cause         |
 
-把 `cause`、`data`、响应 headers 和 body、URL、Struct issue、输入值和栈都当敏感信息。一个保守的摘要：
+把 `cause`、`data`、响应 headers 和 body、URL、`StructIssue.received`、输入值、自定义消息和栈都当敏感信息。问题路径是结构性的，会保留 record 的键：`struct.record(...)` 可能产生 `Expected number at alice@example.com, received string`，因此键在默认消息、`prettify()` 和 `String(fault)` 中仍可能敏感。默认 Struct 消息和 `prettify()` 不包含收到的具体值，但记录完整 issue 或 JSON 解析器 cause 仍可能泄露这些值。一个保守的摘要：
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example
 </include>
 
-`createNetworkFault`、`createPreflightFault`、`createDecodeFault`、`createHttpStatusFault` 和 `createUndecodedHttpStatusFault` 构造这些原生 Error 值。普通的请求失败照样在 tuple 里返回它们；不会因为它们继承了原生 Error 行为就被抛出。`ERR_ABORTED` 和 `ERR_TIMEOUT` 是传输归一化器能认出来的共享 cause。
+`createNetworkFault`、`createPreflightFault`、`createDecodeFault`、`createHttpStatusFault` 和 `createUndecodedHttpStatusFault` 构造这些原生 Error 值。普通的请求失败照样在 tuple 里返回它们；不会因为它们继承了原生 Error 行为就被抛出。`ERR_ABORTED` 和 `ERR_TIMEOUT` 是传输归一化器能认出来的共享 cause。它们带有不可枚举的 `Symbol.for('defjs.cause.aborted')` 和 `Symbol.for('defjs.cause.timeout')` 标记，因此跨 Core 副本也能判定取消，无需依赖对象身份。[`isAbortCause`](/zh-Hans/api/core/isabortcause) 和 [`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 提供这些检查及所支持的平台错误检查；判定 fault 的底层原因时，应传入 `fault.cause`。OpenTelemetry 跨副本也会抑制调用方取消的日志，同时继续记录超时。
 
 ## 相关操作示例
 

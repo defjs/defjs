@@ -5,7 +5,7 @@ description: GraphQL 保持 HTTP 200 加 application unwrap；Core 唔 ship Grap
 
 # Unwrap 一個 GraphQL HTTP envelope
 
-Defjs 唔 implement GraphQL `errorPolicy`。將 wire model 成 HTTP POST，builder 擺放 query document 同 variables，然後喺你自己嘅 helper unwrap `errors[]` / 缺失嘅 `data`。
+Defjs 唔會實作 GraphQL `errorPolicy`。將 wire model 成 HTTP POST，由 builder 擺放 query document 同 variables。Envelope 嘅 `data` 要聲明為 `.nullish()`，等缺少 `data` 同 `data: null` 都可以交到你嘅 helper，再先處理 `errors[]`，之後先檢查 `data`。
 
 睇 [Design Decisions](/zh-Hant-HK/docs/design-decisions)。
 
@@ -14,7 +14,7 @@ Defjs 唔 implement GraphQL `errorPolicy`。將 wire model 成 HTTP POST，build
 </include>
 
 ```txt
-ada viewer unavailable
+ada viewer unavailable viewer unavailable
 ```
 
-HTTP success 只代表 envelope 到咗。Application errors 會留喺 `errors[]`，直至你嘅 unwrap throw 或者 return。
+HTTP 成功只代表 envelope 到咗。Application errors 會留喺 `errors[]`，直至你嘅 unwrap throw 或回傳，包括 `data: null` 嘅 response。例子會將缺少 `data` 或 `data: null` 並帶有 `errors[]` 嘅情況，當成 application errors，唔係 Struct mismatches。

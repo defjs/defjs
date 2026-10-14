@@ -49,7 +49,7 @@ Client 负责分派 command，并不拥有正在进行的工作。谁启动了 H
 
 ## Definition、endpoint、command
 
-Definition 是稳定契约：method、path、input struct、解码 `ok` 两侧的 struct、传输限制。`defineRequest` 返回 endpoint。调用它会打出一次执行用的 opaque command。
+Definition 是稳定契约：method、path、input struct、解码 `ok` 两侧的 struct、传输限制。`defineRequest` 返回 endpoint。调用它会创建用于单次执行的不透明命令。
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
@@ -73,15 +73,15 @@ Definition 是稳定契约：method、path、input struct、解码 `ok` 两侧�
 
 TypeScript 推断只描述你期望什么，拦不住服务端真返回什么。Struct 解析是契约的另一半。Defjs 在构造请求前校验 command 输入，检查表示，再 parse `ok` 那一侧的 struct。
 
-Struct **只应用一次，且在 interceptor 链之后**。interceptor 用 `makeResponse(...)` 造出来的响应，和线上真实来的响应走同一套媒体类型检查、表示转换和 Struct：响应从哪来，不影响它怎么被读，所以不存在「信任 interceptor」这条需要推敲的岔路。内置 Fetch 传输在把响应交回链之前，已经读取并 JSON 解析了声明过的 body（在媒体类型检查之后），所以 interceptor 看到的是解析后的 `body`；那一步失败时，会以同样的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 报出来。
+对于 HTTP，Struct **只应用一次，且在 interceptor 链之后**。interceptor 用 `makeResponse(...)` 构造的响应，与真实网络响应经过同一套媒体类型检查、表示转换和 Struct 校验：响应来源不影响读取方式，因此无需单独考虑「信任 interceptor」的路径。内置 Fetch 传输在把响应交回链之前，会按声明将 body 读取为 JSON、文本、`Blob` 或字节。只有 JSON 表示要求 JSON 媒体类型和 `JSON.parse`；非 JSON 的文本、blob 和字节都可以是符合声明的有效表示。interceptor 看到的是这种表示，还不是 Struct 解码后的值。任何表示都可能读取失败；这里的读取或解析失败会以同样的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 报出。
 
-顺序是：媒体类型，然后表示，然后 Struct。
+顺序是：媒体类型（仅 JSON），然后表示，然后 Struct。
 
 | 没守住的是                       | Fault                                            |
 | -------------------------------- | ------------------------------------------------ |
 | 媒体类型不是所声明表示需要的那个 | `RES_MEDIA_TYPE_INVALID`——在读 body **之前**就报 |
 | 字节不是那个表示                 | `RES_DECODE_FAILED`                              |
-| 值不符合那个 Struct              | `RES_STRUCT_MISMATCH`                            |
+| 值不符合那个 Struct              | `RES_STRUCT_MISMATCH`（仅 HTTP）                 |
 | 非 2xx，且 `error` 解出来了      | `HTTP_STATUS`，`data` 带类型                     |
 | 非 2xx，且没声明 `error`         | `HTTP_STATUS`，`data: undefined`                 |
 
@@ -89,17 +89,17 @@ Struct **只应用一次，且在 interceptor 链之后**。interceptor 用 `mak
 
 ## Builder、编码器、alias
 
-Struct 是字段契约，两个方向都是。`.alias(name)` 是线上名字。Struct 决定值怎么编码。`builder` 决定这个值放哪。
+Struct 是字段契约，两个方向都是。`.alias(name)` 是传输字段名。Struct 决定值怎么编码。`builder` 决定这个值放哪。
 
-`builder` 是同步纯函数。它收到的是 parse 过的 input——真值，不是绑定视图——并返回请求：`path`、`query`、`headers`、`body`。command 执行时才跑。抛错会变成 tuple 上的 `REQ_BUILD_FAILED`；调用 endpoint 本身不抛。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
+`builder` 是同步纯函数。它收到的是 解析后的 input——实际值，不是绑定视图——并返回请求：`path`、`query`、`headers`、`body`。command 执行时才跑。抛错会变成 tuple 上的 `REQ_BUILD_FAILED`；调用 endpoint 本身不抛。只要声明了 `input`，就必须显式提供 `builder`，即使输入已经是请求形状也一样。只有没有 `input` 的定义可以省略 `builder`。
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-默认路径是把带类型的值交过去。`body: { users: input.users }` 保留每个用户的 alias，所以线上字段是 `display_name`。你自己写的 key（`account_id`、`x-api-version`）是字面量。展开带类型的对象会保住它的 struct；逻辑字段旁边再写线上 key 就是 `REQ_BUILD_FAILED`。
+默认路径是把带类型的值交过去。`body: { users: input.users }` 保留每个用户的 alias，所以传输字段是 `display_name`。你自己写的 key（`account_id`、`x-api-version`）是字面量。展开带类型的对象会保住它的 struct；逻辑字段旁边再写传输字段名 就是 `REQ_BUILD_FAILED`。
 
-Query 嵌套是后端的事，所以放在 client 上：`withQuerySerializer((query) => string)` 看到的是已经编码的线上对象，alias 包括在内。没有 query 时不会调用。builder 返回的 `URLSearchParams` 会跳过它。没有 serializer 时，数组重复 key，嵌套对象失败。Interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
+Query 嵌套是后端的事，所以放在 client 上：`withQuerySerializer((query) => string)` 看到的是已经编码的传输对象，alias 包括在内。没有 query 时不会调用。builder 返回的 `URLSearchParams` 会跳过它。没有 serializer 时，数组重复 key，嵌套对象失败。Interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
 
 Body kind 按值决定，先匹配的赢：
 
@@ -111,7 +111,7 @@ Body kind 按值决定，先匹配的赢：
 
 `undefined` 字段省略。nullable 字段的 `null` 会发出去。string 不是 JSON，除非你自己 stringify 并设 `content-type`。自己序列化（`JSON.stringify`、qs、protobuf）就离开了 struct 编码器，alias 不再生效。没有公开的 `struct.encode`。
 
-`GET` 和 `HEAD` 不能带 body。WebSocket builder 不能返回 headers 或 body。静态 WebSocket 子协议留在 definition 的 `protocols` 上，不进 builder。非法 WebSocket frame 进 session 的 runtime-error 监听。SSE 的 `error` struct 给启动 fault 定类型，握手 body 和 HTTP body 同一套 kind 规则：`string` 是文本，blob 和 file 是 blob，`arrayBuffer` 是字节，其余是 JSON。
+`GET` 和 `HEAD` 不能带 body。WebSocket builder 不能返回 headers 或 body。静态 WebSocket 子协议留在 definition 的 `protocols` 上，不进 builder。非法 WebSocket frame 进 session 的 runtime-error 监听。SSE 的 `error` struct 给启动 fault 定类型，握手 body 和 HTTP body 同一套 kind 规则：`string` 是文本，blob 和 file 是 blob，`arrayBuffer` 是字节，其余是 JSON。两者共用表示选择规则，但错误映射不同：SSE 握手的读取、解析或 Struct 失败都报 `RES_DECODE_FAILED`，Struct 失败时以 `StructError` 作为 `cause`；HTTP 的 Struct 失败则报 `RES_STRUCT_MISMATCH`。
 
 ## Observer 和策略放哪
 
@@ -121,7 +121,7 @@ Observer 只报告发生了什么，不当第二任所有者。SSE 的 `onInvali
 
 ## OpenAPI、sourcemap、telemetry
 
-Defjs 不会生成或同步第二份 OpenAPI 契约。OpenAPI 已经是权威源时，继续以它为准，在应用边界加运行时校验。新服务可以直接把端点 definition 和 Struct 当线上契约——不必再搞第二真相源。
+Defjs 不会生成或同步第二份 OpenAPI 契约。OpenAPI 已经是权威源时，继续以它为准，在应用边界加运行时校验。新服务可以直接把端点 definition 和 Struct 当传输契约——不必再搞第二真相源。
 
 `withOpenTelemetryServer(...)` 给 Client 加上**出站** Defjs 插桩。它不会初始化 OpenTelemetry SDK。`tracer`、`meter`、`logger` 均可选（省略 `tracer` 会关闭本地 span 和 span hook），三种传输默认开启，WebSocket query 传播默认关闭。操作名保持静态、低基数。传播、hooks、URL、headers、payload、cause、保留策略都当敏感信息审一遍。
 

@@ -23,6 +23,7 @@ interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends Async
 - `state` は論理的な [`WebSocketState`](/ja-JP/api/core/websocketstate-type)、`connection` は最新の [`WebSocketConnectionInfo`](/ja-JP/api/core/websocketconnectioninfo-type) です。`bufferedAmount` はネイティブの未送信バイト数で、物理ソケットがなければ `0` です。
 - `receive` は、`incoming` struct でパース済みの受信メッセージを返します。消費者は 1 つだけで、2 つ目のイテレーターを求めると `TypeError` を throw します。パースできないフレームは `onRuntimeError` のリスナーに報告され、スキップされます。
 - `send(message)` は `outgoing` struct でメッセージを検証・エンコードし、JSON テキストを送ります。`open` の間はすぐに送り、`reconnecting` の間は `maxOutgoingQueueSize` が許せばキューに入れ、セッションが書き込み可能でないときは `InvalidStateError` という名前の `DOMException` を throw します。`outgoing` struct が宣言されていない場合、メッセージが struct に合わない場合、キューが無効または満杯の場合にも throw します。
+- エンコード後、JSON で忠実に表現できない値は、送信やキューへの追加の前に `TypeError` を投げます。非有限の数値、関数、シンボル、`Map`、`Set`、ストリーム、JSON 表現を持たないクラスインスタンスが対象で、ルートでもネストした値でも同じです。この検証はハートビートにも適用され、ハートビートのシリアライズに失敗するとセッションは終了します。その前に struct の検証で値が拒否される場合もあります。
 - `close(code?, reason?)` は close を要求し、ハートビートを止めます。`code` は `1000` か `3000..4999` の範囲、`reason` は UTF-8 で 123 バイト以内でなければならず、不正な引数は状態が変わる前に throw します。
 - `closed` は、論理的な終端の [`WebSocketCloseInfo`](/ja-JP/api/core/websocketcloseinfo-type) で解決されます。
 - `onStateChange` と `onRuntimeError` は、購読解除の関数を返します。

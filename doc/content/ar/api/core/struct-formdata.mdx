@@ -11,7 +11,7 @@ function formData<T extends ObjectShape>(shape: T): ObjectStruct<T>
 
 يحلّل مثل [`struct.object()`](/ar/api/core/struct-object)، ويحمل وسم ترميز `formData`.
 
-- لا ينطبق الوسم إلا عندما تكون قيمة هذا الـ struct هي جذر جسم الطلب. عندها يُرسَل الجسم كـ `FormData` بحد multipart تحدده المنصة.
+- لا ينطبق الوسم إلا عندما تكون قيمة هذا الـ struct هي جذر جسم الطلب. عندها يُرسَل الجسم كـ `FormData` بفاصل multipart تحدده المنصة.
 - المصفوفات تكرّر اسم الحقل، والحقول `undefined` تُتخطى، وقيم `Blob` / `File` تُضاف كملفات. والكائن المتداخل يُفشل الطلب بـ `REQ_BUILD_FAILED`.
 - `struct.parse` يتجاهل الوسم. ولا يقبل نسخة `FormData`، بل كائنًا عاديًا فقط.
 

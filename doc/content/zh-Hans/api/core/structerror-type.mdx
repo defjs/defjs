@@ -15,7 +15,9 @@ class StructError extends Error {
 }
 ```
 
-`name` 是 `'StructError'`。只有一个 issue 时，`message` 是该 issue 的消息；有多个时是 `N struct issues: <第一条消息>`；没有 issue 时是 `Struct parse failed`。
+`name` 是 `'StructError'`。只有一个 issue 时，`message` 是该 issue 的消息；有多个时是 `N struct issues: <first message>`；没有 issue 时是 `Struct parse failed`。
+
+默认 issue 消息只写出接收到的值的种类，不包含值本身，例如 `Expected number at id, received string`。`message` 和格式化方法都使用该文本。原始输入保留在 `StructIssue.received` 上；自定义 `errorMap` 文本会原样使用，可能再次带入敏感值。
 
 - `struct.parse` 在第一个失败处停止，所以这里的 `issues` 只有一个 [`StructIssue`](/zh-Hans/api/core/structissue-type)。
 - `format()` 返回 [`FormattedStructError`](/zh-Hans/api/core/formattedstructerror-type) 树。每个节点有一个 `_errors` 数组，嵌套 key 对应 `issue.path`。

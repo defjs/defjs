@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` y `timeout` son mutuamente excluyentes: el tipo rechaza los dos y pasarlos en runtime falla con un fault `REQ_OPTIONS_INVALID`. `signal` se combina con cualquiera. `timeout` es un plazo de arranque para la conexión: un reconnect posterior no lo rearma, y `withTimeout` no se aplica a WebSocket.
 
-Cuando `reconnect` está definido, `attempts` vale 3 por defecto; `0` lo desactiva. Omitir `attempts` no significa ilimitado. Consulta [Cliente](/es-ES/api/client) para los valores por defecto.
+Cuando `reconnect` está definido, `attempts` vale por defecto 3 por interrupción; `0` lo desactiva. Un `open` correcto reinicia el presupuesto y el exponente de backoff, así que cada nueva interrupción empieza en el reintento 1. Omitir `attempts` no da reintentos ilimitados dentro de una misma interrupción. Consulta [Cliente](/es-ES/api/client) para los valores por defecto y las reglas de validación.
 
 ## Mensajes
 
 `incoming` es un struct. Los frames de texto, `ArrayBuffer`, typed array y `Blob` se leen como UTF-8, se parsean como JSON y luego se comprueban contra ese struct. Un frame que falla el parse JSON o el struct se reporta a `session.onRuntimeError` y no se encola. No hay opción de cliente para frames inválidos.
 
-`outgoing` es un struct. `session.send` acepta el `StructInput` de ese struct, codifica los alias y luego hace `JSON.stringify`. Varios kinds de mensaje son un `struct.discriminatedUnion`.
+`outgoing` es un struct. `session.send` acepta el `StructInput` de ese struct, codifica los alias y luego hace `JSON.stringify`. Los valores que JSON no puede representar con fidelidad tras la codificación lanzan `TypeError` antes de enviarlos o de meterlos en la cola de reconexión, incluidos números no finitos, funciones, símbolos, `Map`, `Set`, streams e instancias de clase sin representación JSON. Los valores anidados usan la misma guarda que los cuerpos JSON de HTTP. El heartbeat también usa esa guarda; un fallo de serialización del heartbeat termina la sesión. Varios kinds de mensaje son un `struct.discriminatedUnion`.
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

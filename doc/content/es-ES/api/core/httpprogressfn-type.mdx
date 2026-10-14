@@ -13,4 +13,6 @@ Se pasa como `onDownloadProgress` o `onUploadProgress` en `HttpExecuteOptions`. 
 
 Mira [`HttpProgressEvent`](/es-ES/api/core/httpprogressevent-type), la [guía de HTTP](/es-ES/docs/http) y [Comandos](/es-ES/docs/commands).
 
+En los entornos de ejecución del servidor, FormData con `onUploadProgress` lee su stream serializado directamente, conserva su boundary multipart y se envía sin un `Content-Length` generado por la librería (con transferencia chunked en HTTP/1.1), de modo que el progreso, el timeout y la cancelación funcionan sin almacenar todo el cuerpo en un búfer. Informa un total desconocido salvo que lo aporte un `Content-Length` explícito válido. Para un endpoint que exige `Content-Length`, como algunos destinos de subida con URL prefirmada, omite `onUploadProgress`; el Fetch de la plataforma envía entonces FormData con su longitud. Las descargas con una codificación distinta de identity también informan `total: 0` y `lengthComputable: false`, porque `loaded` cuenta los bytes decodificados del stream. La cancelación libera el stream de subida envuelto.
+
 [HTTP](/es-ES/api/http)

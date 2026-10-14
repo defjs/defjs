@@ -28,13 +28,15 @@ interface HttpRequest {
     headerName: string
     tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
   }
-  // plus an @internal bodyContentTypeSource field
+  // plus the @internal bodyContentTypeSource field
 }
 ```
 
 ビルダーの実行後のリクエストで、ハンドラー、インターセプター、`fetchHandler` が使います。
 
 - `body` はすでに回線上の値です。JSON の場合は **JSON テキストの文字列**です。HMAC やダイジェストの署名は、元の struct 入力ではなくその文字列に対して行ってください。
+- `bodyContentType` は、ビルダーのボディから推論した型をプレーンなフィールドとして保持するので、`{ ...req }` のコピー後も残ります。それが効くのは `body` がビルダーの値のままのあいだだけです。差し替えたボディは再検出されるので、型は `content-type` ヘッダーで宣言してください。変更していないボディでは、明示的なヘッダーが無いとき `null` がライブラリの推論を抑止しますが、ネイティブの Fetch が文字列用の型を付けることがあります。FormData は、代わりに実際の multipart boundary を使います。
+- HTTP は推論した Content-Type を `headers` に書き込みません。インターセプターが見るのは宣言されたヘッダーだけです。明示的な `content-type` ヘッダーは、ビルダー、クライアントのデフォルト、インターセプター、生の `fetchHandler` リクエストのどれが設定しても、常に `bodyContentType` と自動検出より優先されます。`body: undefined` にはライブラリが推論した Content-Type はありません。署名側は `headers.get('content-type') ?? request.bodyContentType` を読んでください。内部フィールドは設定しないでください。
 - `endpoint` はパスパラメーターを埋めたパスで、`baseEndpoint` はクライアントのエンドポイントです。
 - インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。ビルダーが `URLSearchParams` を返した場合は、そのインスタンスがそのまま渡されます。
 - `operation` は、テレメトリと診断のための、静的でカーディナリティの低いエンドポイント識別子です。

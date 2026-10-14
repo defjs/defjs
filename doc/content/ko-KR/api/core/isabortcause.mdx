@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: 'Core 사본과 플랫폼 abort 오류에 걸쳐 호출자 취소를 알아봐요.'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+`Symbol.for('defjs.cause.aborted')` 브랜드를 가진 `Error`(다른 Core 사본의 `ERR_ABORTED` 포함)이거나, 이름이 `AbortError`인 `DOMException`이면 `true`를 반환해요. 그 이름을 가진 평범한 브랜드 없는 `Error`는 일치하지 않아요. 그 밖은 `false`예요.
+
+밑바탕의 `fault.cause`를 넘기세요. 이 함수는 fault를 풀지 않아요. `createNetworkFault`는 이 검사로 `NET_ABORTED`를 선택해요. OpenTelemetry는 이것으로 호출자 취소 로그를 억제하면서 타임아웃 로그는 남겨요.
+
+[오류 가이드](/ko-KR/docs/errors)와 [`isTimeoutCause`](/ko-KR/api/core/istimeoutcause)를 보세요.
+
+[오류](/ko-KR/api/errors)

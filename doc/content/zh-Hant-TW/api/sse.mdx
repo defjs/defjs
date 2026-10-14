@@ -98,6 +98,10 @@ Key 是 SSE 事件名稱；沒有 `event:` 欄位的 message 名為 `message`。
 
 重連放在 client 上（`withSSEReconnect`）。SSE 的 `jitter` 是 **0–1 乘性因子**，跟 WebSocket 一樣。
 
+成功的握手會重設重試額度與 backoff 指數；它們適用於每一次中斷。無效的數值選項會在開啟 stream 之前回傳 `REQ_OPTIONS_INVALID`，而 `maxDelayMs` 會在 jitter 之後為最終延遲加上上限。驗證規則、預設值，以及 UTF-8 的 `Last-Event-ID` 處理，見 [`withSSEReconnect`](/zh-Hant-TW/api/core/withssereconnect)。
+
+剖析器遵循 WHATWG SSE 的行與欄位規則，並且在每條實體 stream 開頭只移除一個前導 UTF-8 BOM。data 或 ID 值中的 U+FEFF 會保留；較晚出現、以 BOM 為前綴的欄位名稱會當作未知欄位而忽略。多行 data 以 `\n` 連接，空白行會派送一個帶有 data 的事件，EOF 時尚未完成的事件則會丟棄。
+
 見 [SSE 指南](/zh-Hant-TW/docs/sse) 與 [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)。
 
 ## EventStreamDefinition

@@ -15,7 +15,7 @@ description: ClientProvider وuseClient وخصائص المزوّد.
 function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
 ```
 
-موفر السياق. مرّر عميلًا من `createClient`. يتجاوز `ClientProvider` متداخل العميلَ لشجرته الفرعية؛ ويقرأ `useClient` أقربهما. تمرير `client` مختلف يغيّر قيمة السياق للأحفاد.
+موفر السياق. مرّر عميلًا من `createClient`. يتجاوز `ClientProvider` متداخل العميلَ لشجرته الفرعية؛ ويقرأ `useClient` أقرب مزوّد. تمرير `client` مختلف يغيّر قيمة السياق للأحفاد.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 

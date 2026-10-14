@@ -118,7 +118,7 @@ function withXSRF(options?: {
 
 在 HTTP request 加上 XSRF token header。預設：cookie `XSRF-TOKEN`，header `X-XSRF-TOKEN`。SSE 與 WebSocket request 不受影響。
 
-預設的 HTTP 傳輸在下列條件全部成立時才會加上該 header：method 不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；request 尚未帶有該 header；request 是同源的（在瀏覽器之外，只要帶有 `baseEndpoint` 的 request 都算）；而且找得到非空的 token。有提供 `tokenProvider` 時 token 來自它，否則來自 cookie，而 cookie 只會在瀏覽器中讀取。
+預設的 HTTP 傳輸在下列條件全部成立時才會加上該 header：method 不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；request 尚未帶有該 header；request 是同源的；而且找得到非空的 token。只要 `location` 存在，包含 Worker，解析後的 request origin 就必須與 `location.origin` 相符；沒有它時，帶有 `baseEndpoint` 的 request 算作同源。跨來源的 request 不會呼叫 `tokenProvider`。有提供該 provider 時，token 來自它，否則來自 `document.cookie`，且只會在 `document` 存在時讀取。
 
 ### SSE 旋鈕
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Defjs 對 Fetch 實作所需的呼叫簽章。它不是 `typeof fetch`，因此 mock 不需要 `preconnect` 這類宿主額外成員。
+Defjs 對 Fetch 實作所需的呼叫簽章。它不是 `typeof fetch`，因此 mock 不需要 `preconnect` 這類宿主額外成員。預設的 HTTP／SSE handle 會在每次呼叫時解析 `globalThis.fetch`。HTTP 只對未被替換的平台 Fetch 使用 `(url, init)`；被替換的全域 Fetch 與自訂 handle 會收到 `Request`。SSE 一律傳入 `Request`。沒有 Fetch 也可以匯入 Core；若預設執行時 Fetch 仍然缺少，會回報 `ENV_UNSUPPORTED`，自訂 handle 則仍然可用。
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 兩種傳輸的重新連線都需要主動啟用：沒有 `withSSEReconnect`／`withWebSocketReconnect` 就不會重試。一旦設定了 `reconnect`，就套用以下預設值：
 
-| 欄位         | SSE    | WebSocket |
-| ------------ | ------ | --------- |
-| `attempts`   | `3`    | `3`       |
-| `delayMs`    | `1000` | `1000`    |
-| `factor`     | `1`    | `2`       |
-| `jitter`     | `0`    | `0`       |
-| `maxDelayMs` | 無上限 | `30000`   |
+| 欄位         | SSE            | WebSocket      |
+| ------------ | -------------- | -------------- |
+| `attempts`   | `3` 每一次中斷 | `3` 每一次中斷 |
+| `delayMs`    | `1000`         | `1000`         |
+| `factor`     | `1`            | `2`            |
+| `jitter`     | `0`            | `0`            |
+| `maxDelayMs` | 無上限         | `30000`        |
 
-對 SSE 而言，`delayMs` 只是起始的 base delay：server 傳來的 `retry:` field 會取代它，用於之後的嘗試。`attempts: 0` 停用重試；省略 `attempts` 並不代表無限次。`jitter` 必須在 0–1 之間：每次延遲會在正負兩個方向上，隨機浮動最多該比例。`shouldReconnect` 回傳 `false` 就停止重試。SSE 的回呼另外會收到 `lastEventId`、請求的 `method` 與最新的 `open` 資訊，也可以採用非同步形式。未提供此回呼時，SSE 只會對 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求重新連線；提供後，所有請求方法是否重新連線都由它的回傳值決定。WebSocket 的回呼則會收到關閉時的 `code`、`reason` 與 `wasClean`。
+兩種傳輸在握手成功後，都會重設每一次中斷的重試額度、回呼的 attempt，以及 backoff 指數。`attempts: 0` 停用重試；省略 `attempts` 並不會在同一次中斷內給予無限次重試。`maxDelayMs` 會在 jitter 與捨入之後，為最終延遲加上上限；平台計時器上限 `2_147_483_647` ms 同樣適用，包含 SSE 沒有設定上限的情況。base 為零時維持零；有效數值溢位時會飽和在這些上限。
+
+重新連線選項會在傳輸之前驗證：`attempts` 必須是非負安全整數；`delayMs` 與明確的 `maxDelayMs` 必須有限且非負；`factor` 必須有限且為正；`jitter` 必須有限且在 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 會立刻停用重試，並忽略未使用的重新連線欄位；SSE 仍會驗證它們。Jitter 會在套用最終上限之前，把已加上限的 base 往正負兩個方向縮放。
+
+對 SSE 而言，`delayMs` 只是起始的 base delay：只含數字的伺服器 `retry:` field 會取代它，用於之後的嘗試，包含恢復之後。`shouldReconnect` 回傳 `false` 就停止重試。SSE 的回呼另外會收到 `lastEventId`、請求的 `method` 與最新的 `open` 資訊，也可以採用非同步形式。未提供此回呼時，SSE 只會對 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求重新連線；提供後，所有請求方法是否重新連線都由它的回傳值決定。最新的事件 ID 會以 UTF-8 位元組放進 `Last-Event-ID` 送出；空的 ID 會清除它，含有 NUL 的 ID 則會被忽略。WebSocket 的回呼則會收到關閉時的 `code`、`reason` 與 `wasClean`。
 
 SSE 的 `onInvalidEvent` 會處理兩種事件：沒有對應 struct 的事件，包括連 `default` 也沒有的情況（`missing-struct`），以及資料未通過其 struct 驗證的事件（`validation-failed`）。這類事件一律會被丟棄；handler 的回傳值會被忽略，它丟出的錯誤也不會關閉 stream。
 

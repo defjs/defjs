@@ -9,6 +9,6 @@ description: '改写 struct issue 的 message 的回调。'
 type ErrorMap = (issue: StructIssue) => string | undefined
 ```
 
-作为 `struct.parse` 的 `errorMap` 选项传入。记录每个 issue（`code`、`expected`、`message`、`path`、`received`）之前都会调用它。返回字符串会替换默认 message，返回 `undefined` 则保留默认值。
+作为 `struct.parse` 的 `errorMap` 选项传入。记录每个 issue（`code`、`expected`、`message`、`path`、`received`）之前都会调用它。任何字符串（包括 `''`）都会替换默认 message；只有 `undefined` 才保留默认值。此映射仅属于本次 parse 调用，也能处理由其他 Core 副本创建的 struct 的 bigint/date 转换失败。默认消息不包含接收到的原值；自定义文本会原样使用，因此应避免包含敏感的 `received` 值。
 
 [Struct](/zh-Hans/api/struct)

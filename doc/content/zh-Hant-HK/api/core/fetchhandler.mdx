@@ -10,7 +10,7 @@ function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promis
 ```
 
 - **httpRequest** — 正規化咗嘅 request（URL、headers、body、abort signal、progress hooks）。
-- **fetchImpl** — [`FetchHandle`](/zh-Hant-HK/api/core/fetchhandle-type)；預設係 global `fetch`。自訂 handle 會收到 `Request`，而且 body 係逐 chunk 讀取。
+- **fetchImpl** — [`FetchHandle`](/zh-Hant-HK/api/core/fetchhandle-type)；預設會喺送出時解析 global `fetch`。未被取代嘅平台 Fetch 會收到 `(url, init)`；被取代嘅 global Fetch 或自訂 handle 會收到 `Request`，而佢嘅 response body 會逐 chunk 讀取。冇 progress 監察嘅平台 response 會一次過讀取完整 body；download progress 就會逐 chunk 讀取。
 
 Default HTTP transport。Client 一定會用佢；`withHTTPHandle` 只係取代佢 call 嘅 `fetchImpl`。當冇任何 response 去到 client 時，佢會 reject，而唔係 resolve 一個合成 response。
 

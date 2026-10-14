@@ -23,6 +23,7 @@ function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): C
 - `intervalMs` ごとに `message()` が呼ばれ、その結果がエンドポイントの `outgoing` struct を通して送られます。`message` を省いた場合や `undefined` を返す場合は、何も送られません。
 - `timeoutMs` があると、ハートビートのたびに確認応答が期待されます。`isAck` はデコードされた受信メッセージを受け取り、`true` を返すとタイマーが解除され、そのメッセージは `receive` には渡**されません**。
 - `timeoutMs` 以内に確認応答が来ない場合や、ハートビートを送れない場合は、セッションが失敗します。これで再接続が始まることはありません。
+- ハートビートは `session.send` と同じ JSON 検証を使います。struct によるエンコード後に JSON で表現できない値は `TypeError` になり、論理セッションを終了させます。
 - `intervalMs` と `timeoutMs` は、正の有限な値で、`2_147_483_647` 以下でなければなりません。そうでなければ execute は `REQ_OPTIONS_INVALID` で失敗します。
 - execute の options に `heartbeat` があれば、その呼び出しに限りこれを置き換えます。
 

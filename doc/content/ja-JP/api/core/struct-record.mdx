@@ -9,7 +9,7 @@ description: '文字列キーと 1 つの値 struct を持つオブジェクト�
 function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
 ```
 
-- プレーンオブジェクトの自身のキーをすべて `value` でパースします。それ以外は `invalid_type`（expected は `record`）で失敗します。
+- プレーンオブジェクトが自身に持つ各キーの値を `value` でパースします。それ以外は `invalid_type`（expected は `record`）で失敗します。
 - 最初に失敗した値でパースが止まり、`issue.path` にそのキーが入ります。
 - 出力は `null` プロトタイプを持つ新しいオブジェクトです。
 - `value` が struct でない場合は `TypeError` を投げます。

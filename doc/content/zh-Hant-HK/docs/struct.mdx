@@ -1,6 +1,6 @@
 ---
 title: '資料契約 / Struct'
-description: Model request 同 response shapes，parse unknowns，再 encode wire bodies。
+description: 建立 request 同 response 嘅資料形狀，解析未知值，再編碼傳輸 bodies。
 ---
 
 # Struct 資料契約
@@ -13,19 +13,19 @@ description: Model request 同 response shapes，parse unknowns，再 encode wir
   examples/struct/basic-setup.ts#example
 </include>
 
-Parsed output 淨係保留 declared fields。Missing required fields、wrong primitives、bad nested values、wrong tuple length，或者 disallowed `null` → `StructError`，冇 partial value。Structs 係 immutable；`.optional()` 同朋友會 return 新 Struct。
+Parsed output 只會保留已聲明嘅欄位。缺少必填欄位、primitive 類型錯誤、巢狀值錯誤、tuple 長度錯誤，或者唔容許嘅 `null` → `StructError`，唔會有部分結果。Structs 係 immutable；`.optional()` 等 modifiers 都會回傳新 Struct。
 
 ## Required、optional、null
 
 Presence 同 nullability 係分開嘅：
 
-| 聲明                         | 缺少／`undefined`                | `null` | 有效值              |
-| ---------------------------- | -------------------------------- | ------ | ------------------- |
-| `struct.string()`            | Reject                           | Reject | Accept string       |
-| `struct.string().optional()` | Accept；omit absent object field | Reject | Accept string       |
-| `struct.string().null()`     | Reject                           | Accept | Accept string       |
-| `struct.string().nullish()`  | Accept；omit absent object field | Accept | Accept string       |
-| `struct.null()`              | Reject                           | Accept | Reject other values |
+| 聲明                         | 缺少／`undefined`            | `null` | 有效值     |
+| ---------------------------- | ---------------------------- | ------ | ---------- |
+| `struct.string()`            | 拒絕                         | 拒絕   | 接受字串   |
+| `struct.string().optional()` | 接受；省略缺失嘅 object 欄位 | 拒絕   | 接受字串   |
+| `struct.string().null()`     | 拒絕                         | 接受   | 接受字串   |
+| `struct.string().nullish()`  | 接受；省略缺失嘅 object 欄位 | 接受   | 接受字串   |
+| `struct.null()`              | 拒絕                         | 接受   | 拒絕其他值 |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
@@ -92,7 +92,7 @@ union 引導同時 match 多過一個 branch 嘅時候，每個 branch 都 encod
   examples/struct/parse-failures.ts#example
 </include>
 
-`StructIssue` 有 `code`、`expected`、`message`、`path` 同 `received`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。Issues 可以持有 untrusted input — log 或者 return 之前先 redact。`struct.parse(..., { errorMap })` 只改寫嗰一次 call 嘅 issue messages。
+`StructIssue` 有 `code`、`expected`、`message`、`path` 同 `received`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。預設訊息只會寫收到嘅種類，永遠唔會包含值：`Expected number at id, received string`。Issue path 係結構性嘅，會保留 record 嘅 key：`struct.record(...)` 可以產生 `Expected number at alice@example.com, received string`，所以 key 喺預設訊息、`prettify()` 同 `String(fault)` 入面仍然可能敏感。所以 `message` 同 `prettify()` 唔會包含收到嘅 payloads；`received` 保留原始值，寫 log 或回傳之前需要遮蓋敏感資料。`struct.parse(..., { errorMap })` 只改寫該次 call 嘅訊息，包括另一份 Core 嘅 struct 所產生嘅 bigint/date 轉換失敗。任何回傳嘅 string（包括 `''`）都會取代預設值；只有 `undefined` 先會保留佢。自訂文字會原樣使用，如果 map 加入咗值，就可能洩露資料。
 
 Struct validation 淨係 structural。冇 public range、format、refinement、auth 或者 state-transition rules。嗰啲 checks 喺你 build command 之前自己做。
 
@@ -107,14 +107,14 @@ Struct validation 淨係 structural。冇 public range、format、refinement、a
 | Constructor                      | Input                                               | 推斷輸出                   |
 | -------------------------------- | --------------------------------------------------- | -------------------------- |
 | `struct.number()`                | 除咗 `NaN` 以外嘅 number                            | `number`，包括 ±`Infinity` |
-| `struct.date()`                  | `Date`、number，或者 date string                    | Valid `Date`               |
+| `struct.date()`                  | `Date`、number，或者 date string                    | 有效嘅 `Date`              |
 | `struct.bigint()`                | `bigint` 或者 `BigInt(...)` 接受嘅 string           | `bigint`                   |
 | `struct.enum(...)`               | Declared string 或者 number member                  | 嗰個 literal union         |
-| `struct.discriminatedUnion(...)` | 帶 required literal discriminator 嘅 object         | Selected object branch     |
+| `struct.discriminatedUnion(...)` | 帶 required literal discriminator 嘅 object         | 被選中嘅 object 分支       |
 | `struct.or(...)`                 | 第一個 matching branch；encoding 會 check ambiguity | Branch outputs 嘅 union    |
 | `struct.intersection(...)`       | 每個 member 都接受嘅 values                         | Outputs 嘅 intersection    |
 | `struct.record(value)`           | Values 符合 `value` 嘅 plain object                 | Parsed values 嘅 record    |
-| `struct.tuple(items)`            | Exactly declared length 嘅 array                    | Fixed-length tuple         |
+| `struct.tuple(items)`            | 長度同聲明完全一致嘅 array                          | 定長 tuple                 |
 
 每個 Struct 都支援 `.alias(name)`、`.optional()`、`.null()` 同 `.nullish()`。`struct.discriminatedUnion` 要有 required literal discriminator 嘅 object options，並 reject duplicates。
 

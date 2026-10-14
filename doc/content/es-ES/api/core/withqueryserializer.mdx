@@ -13,7 +13,7 @@ Reemplaza la codificación de query para HTTP, SSE y WebSocket.
 
 - `serializer(query)` recibe el **objeto de cable codificado**: alias aplicados, `Date` como cadena ISO, `bigint` como cadena. Los objetos anidados y los arrays se conservan tal cual.
 - Debe devolver la query string sin un `?` inicial. La cadena se usa tal cual.
-- No se llama cuando la solicitud no tiene query. Un builder que devuelve `URLSearchParams` la omite.
+- No se llama cuando la solicitud no tiene query. Un builder que devuelve `URLSearchParams` no pasa por el serializador.
 - Sin esta opción, las queries usan `URLSearchParams`: los arrays repiten la clave y un objeto anidado falla.
 
 [Cliente](/es-ES/api/client)

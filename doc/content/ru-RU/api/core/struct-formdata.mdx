@@ -11,7 +11,7 @@ function formData<T extends ObjectShape>(shape: T): ObjectStruct<T>
 
 Разбирает как [`struct.object()`](/ru-RU/api/core/struct-object) и несёт тег кодека `formData`.
 
-- Тег применяется, только когда значение этого struct — корень тела запроса. Тогда тело уходит как `FormData` с platform multipart boundary.
+- Тег применяется, только когда значение этого struct — корень тела запроса. Тогда тело уходит как `FormData` с разделителем multipart, который задаёт платформа.
 - Массивы повторяют имя поля, поля со значением `undefined` пропускаются, а значения `Blob` / `File` добавляются как файлы. Вложенный объект приводит к сбою запроса с `REQ_BUILD_FAILED`.
 - `struct.parse` игнорирует тег. Он не принимает экземпляр `FormData`, только plain object.
 

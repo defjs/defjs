@@ -16,8 +16,8 @@ type WebSocketRequestShape<P extends string> = {
 
 ما قد يُرجعه `builder` في [`WebSocketDefinition`](/ar/api/core/websocketdefinition-type)، حيث `P` مسار نقطة النهاية.
 
-- يوفّر `path` مقاطع `:name` في `P`: قيمة قياسية واحدة لكل اسم. وهو `never` عندما لا يحتوي المسار على أي منها.
-- `query` هو `URLSearchParams` أو سجل من القيم القياسية والمصفوفات والسجلات المتداخلة.
+- يوفّر `path` مقاطع `:name` في `P`: قيمة مفردة (scalar) واحدة لكل اسم. وهو `never` عندما لا يحتوي المسار على أي منها.
+- `query` هو `URLSearchParams` أو سجل من القيم المفردة والمصفوفات والسجلات المتداخلة.
 - `headers` و`body` هما `never`. مصافحة WebSocket لا تأخذ أيًّا منهما من الـ builder؛ ضع بيانات الاعتماد في `beforeConnect` أو في معترض.
 
 [WebSocket](/ar/api/web-socket)

@@ -16,6 +16,7 @@ interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
 
 - `intervalMs` ist die Pause zwischen Heartbeat-Messages.
 - `message()` baut die Payload. Sie wird über den `outgoing`-Struct gesendet. Fehlt es oder gibt es `undefined` zurück, wird nichts gesendet.
+- Nach der Struct-Kodierung scheitern Nicht-JSON-Werte mit `TypeError` über denselben Serializer wie `session.send`; dieser Heartbeat-Fehler beendet die logische Session, ohne neu zu verbinden.
 - `isAck(message)` bekommt jede dekodierte eingehende Message. Gibt es `true` zurück, gilt die Message als Bestätigung und wird nicht an `receive` ausgeliefert.
 - `timeoutMs` ist, wie lange nach einem Heartbeat auf eine Bestätigung gewartet wird. Bleibt sie aus, scheitert die Session.
 - `intervalMs` und `timeoutMs` müssen positiv, endlich und höchstens `2_147_483_647` sein.

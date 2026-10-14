@@ -14,6 +14,6 @@ type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Prom
 
 Gibt `{ kind: 'web-socket', fn }` zurück. WebSocket-Interceptors laufen nur für WebSocket-Commands.
 
-`next` und der Interceptor geben eine [`WebSocketSessionLike`](/de-DE/api/core/websocketsessionlike-type) zurück, die Session aus Interceptor-Sicht. Eine Wrapper- oder Short-Circuit-Session muss ihr `[Symbol.asyncDispose]()`-Teardown weiterreichen; diese Seite listet die Member und die Anforderung auf.
+`next` und der Interceptor geben eine [`WebSocketSessionLike`](/de-DE/api/core/websocketsessionlike-type) zurück, die Session aus Interceptor-Sicht. Eine Wrapper- oder Short-Circuit-Session muss ihr `[Symbol.asyncDispose]()`-Teardown weiterreichen; die verlinkte Seite listet die Member und die Anforderung auf.
 
 [Interceptors](/de-DE/api/interceptors)

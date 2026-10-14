@@ -39,7 +39,9 @@ description: 用 onion order，喺 transport boundary 為 HTTP、SSE 同 WebSock
 
 SSE 同一套 pattern。Browser WebSocket 唔可以加 arbitrary handshake headers — 改 `request.headers` 唔會 authenticate browser socket。改用 protocol、URL/query policy，或者 server-supported handshake。
 
-Replace HTTP body 時，喺 copied request 上 replace `body`。Body value 變咗之後，Fetch 會 ignore stale content-type metadata。唔好 reuse 已經 consumed 嘅 `ReadableStream` body。
+HTTP 永遠唔會將推斷出嚟嘅 Content-Type 寫入 `request.headers`；interceptors 只會見到已聲明嘅 headers。`request.bodyContentType` 以普通 field 保存 builder body 推斷出嚟嘅類型，所以 `{ ...req }` 複本仍然保留。明確嘅 `content-type` header 永遠優先於呢個 field 同自動偵測，無論由 builder、client defaults、interceptor，定係原始 `fetchHandler` request 聲明。簽名方應讀取 `headers.get('content-type') ?? request.bodyContentType`。
+
+替換 HTTP body 時，喺 request 複本上替換 `body`，並用 `content-type` header 聲明佢嘅類型。`bodyContentType` 只喺 `body` 仍然係 builder 嘅值時生效；替換後嘅 body 會重新偵測，所以替換後嘅 string 係 text，除非 header 另行聲明。設定 `body: undefined` 就唔會留低 library 推斷嘅 Content-Type。對未改動嘅 builder body，冇明確 header 時，`bodyContentType: null` 會抑制 library 嘅推斷，但原生 Fetch 仍然可能為 string 加返佢自己嘅 type。FormData 一律用實際 multipart boundary。唔好重用已經消耗過嘅 `ReadableStream` body。
 
 ## Short-circuit 一個 request
 
@@ -80,7 +82,7 @@ Spread session 會將 `state` / `connection` / `bufferedAmount` snapshot 一次�
 
 ## 參考
 
-Factories return tagged transport values：
+工廠函數會回傳帶 transport 標籤嘅值：
 
 - `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
 - `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
@@ -89,6 +91,8 @@ Factories return tagged transport values：
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上嘅 Basic credentials
 
 `HttpRequest` 可以包括 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`，同 static `operation`。佢係 transport integration value — 唔係 caller 嘅 parsed input。Serialization 之後，`queryParams` 係 `new URLSearchParams(queryString)`。Builder 冇產生 query 嘅時候，configured query serializer 唔會被 call；builder 嘅 `URLSearchParams` 會原樣用。Command validation、output validation 同 domain error mapping 留喺各自嘅 layers。
+
+URL 驗證喺 request building 時開始：缺少、相對或無效嘅 base endpoint，以及非法 path，都會以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit 嘅 interceptor。Dispatch 之前，最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 驗證：解析後嘅 URL 必須保持嗰個 base 嘅 origin，並留喺佢嘅目錄之下；path 入面嘅C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?`、`#`，以及逃出目錄嘅路徑都會被拒絕。形似 scheme 同 protocol-relative 嘅形式，就算前面有空格都會被拒絕；路徑入面嘅普通空格允許，並會以 `%20` 送出。Interceptor 可以刻意將 `baseEndpoint` 換成另一個有效嘅絕對 URL。HTTP、SSE 同 WebSocket 共用呢個規則，確定嘅 URL 錯誤永遠唔會重試。
 
 SSE/WebSocket observers 係 lifecycle hooks，唔係 control flow。Owner 完結時 unsubscribe WebSocket listeners。Observer failures 跟 transport contract；interceptor 本身可以 throw 或者 reject。
 

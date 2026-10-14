@@ -10,7 +10,7 @@ function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: Http
 ```
 
 - **code** — خطوة القراءة التي فشلت: `RES_DECODE_FAILED` أو `RES_MEDIA_TYPE_INVALID` أو `RES_STRUCT_MISMATCH`.
-- **cause** — فشل المحلِّل أو الـ struct الأساسي. رسالته تصبح رسالة الخطأ (`String(cause)` إذا لم يكن `Error`)، ويُحتفظ به في `cause`.
+- **cause** — فشل المحلِّل أو الـ struct الأصلي، ويُحتفظ به في `cause`. تصبح رسالته عادةً رسالة الخطأ (`String(cause)` إذا لم يكن `Error`). وعند `RES_DECODE_FAILED` مع `Error` اسمه `SyntaxError`، تكون الرسالة `Response body could not be decoded`، كي لا تظهر مقتطفات المحلِّل في `String(fault)`. تتضمّن رسائل Struct الافتراضية أنواع القيم المستلمة، لا القيم نفسها؛ وتظل القيم الخام ونص المحلِّل في السبب.
 - **response** — البيانات الوصفية للاستجابة التي تعذّرت قراءتها. تُنسخ منها `status`.
 - **يُرجع** `Error` أصليًا باسم `DefjsFault` بلا `body`.
 

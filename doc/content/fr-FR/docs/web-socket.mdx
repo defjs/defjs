@@ -25,6 +25,8 @@ Les frames entrantes texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UT
 
 `session.send(...)` valide et sérialise de façon synchrone : encode du struct, puis `JSON.stringify`. Il envoie tout de suite quand la session est ouverte, met en file pendant `reconnecting` quand une queue sortante est activée, et lève `InvalidStateError` quand l’écriture est impossible. Il lève aussi une erreur quand il n’y a pas de struct sortant, que le payload échoue au struct, que la queue sortante est désactivée ou pleine, ou que le send natif échoue. Une liste `protocols` statique sur la définition est le contrat de l’endpoint (par exemple `graphql-transport-ws`). Les options d’execute et `withWebSocketProtocols` peuvent encore la remplacer. Seules ces options choisissent les sous-protocoles : le builder, `beforeConnect` et les intercepteurs ne peuvent pas les changer, donc un token dans un sous-protocole se passe via l’option `protocols` d’execute pour cet appel. Le builder ne peut renvoyer que `path` et `query`.
 
+Après l’encodage du struct, les valeurs que JSON ne peut pas représenter fidèlement lèvent `TypeError` avant l’envoi ou l’entrée dans la file de reconnexion : nombres non finis, fonctions, symbols, `Map`, `Set`, flux et instances de classe sans représentation JSON. Les valeurs imbriquées suivent la même règle que les corps JSON HTTP. `struct.number()` accepte encore les infinis et rejette `NaN` ; accepter une valeur au niveau du struct ne la rend pas un JSON valide. Le heartbeat utilise le même sérialiseur ; son échec de sérialisation met fin à la session logique.
+
 `receive` est à un seul consommateur. Demander un second itérateur lève une `TypeError`.
 
 ## Instantanés d’état
@@ -49,13 +51,13 @@ Les frames entrantes texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UT
 
 ## Reconnect
 
-Le reconnect est opt-in. Pas d’objet `reconnect` → une fermeture physique termine la session logique. Une fois configuré, les défauts sont `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. `attempts` compte les retries après la tentative initiale ; `attempts: 0` désactive. Le prédicat par défaut accepte chaque résultat de close.
+Le reconnect est opt-in. Pas d’objet `reconnect` → une fermeture physique termine la session logique. Une fois configuré, les défauts sont `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. `attempts` est le budget de nouvelles tentatives de chaque coupure ; un `open` réussi réinitialise le budget et l’exposant de backoff. Chaque coupure suivante repart donc au retry 1 et à la base `delayMs`. `attempts: 0` désactive. Le prédicat par défaut accepte chaque résultat de fermeture non manuelle dans le budget de cette coupure. Des ouvertures réussies répétées n’ont pas de limite de nouvelles tentatives à vie. Un socket qui s’ouvre avec succès puis est immédiatement refermé par le serveur peut continuer à se reconnecter avec le délai de base (sous réserve du jitter et des plafonds), car chaque ouverture réinitialise le budget ; utilise `shouldReconnect` pour l’arrêter.
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 `shouldReconnect` reçoit la prochaine tentative de retry, la cause de close, le code, la reason et `wasClean`. Un `session.close(...)` manuel n’entre pas dans le prédicat. Une préparation ou une politique qui lève une erreur termine la session logique avec une erreur.
 
-Le jitter de backoff WebSocket est **multiplicatif** (`jitter: 0.2` → délai entre `0.8x` et `1.2x`). Le jitter SSE est un facteur multiplicatif 0–1, comme WebSocket. Les valeurs de delay/factor/jitter/attempt sont validées avant le constructeur ; les délais de timer ne peuvent pas dépasser `2_147_483_647` ms.
+Le jitter de backoff WebSocket est **multiplicatif** (`jitter: 0.2` met à l’échelle la base déjà plafonnée de `0.8x` à `1.2x` avant l’arrondi). Le délai final est de nouveau plafonné à `maxDelayMs` et à la limite de timer de la plateforme, `2_147_483_647` ms, donc la partie haute de cette plage peut être tronquée. Une base nulle reste nulle ; le dépassement de nombres valides est borné au lieu de lever. SSE utilise la même règle de jitter 0–1. Quand le retry est activé, les options sont validées avant le constructeur : `attempts` est un entier sûr positif ou nul ; `delayMs` et `maxDelayMs` sont finis et positifs ou nuls ; `factor` est fini et strictement positif ; `jitter` est fini et compris entre 0 et 1. Les valeurs invalides renvoient `REQ_OPTIONS_INVALID`. Pour WebSocket, `attempts: 0` désactive immédiatement le retry et ignore les champs de reconnexion inutilisés ; SSE les valide quand même.
 
 `beforeConnect({ attempt, signal })` tourne avant le constructeur initial et chaque reconnect. Passe son signal au refresh de token pour que l’annulation arrête à la fois la prep et le connect.
 
@@ -65,13 +67,13 @@ Opt-in au scope execute ou client. L’intervalle envoie `message()` à travers 
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
-`intervalMs` et `timeoutMs` doivent être des timers finis positifs ≤ `2_147_483_647`. Le message de heartbeat doit être valide pour le struct sortant. Les échecs de sérialisation, de send natif, de classification d’ack et de timeout sont fatals pour la session logique — ils ne deviennent pas des reconnects ordinaires.
+`intervalMs` et `timeoutMs` doivent être des timers finis et strictement positifs ≤ `2_147_483_647`. Le message de heartbeat doit être valide pour le struct sortant. Les échecs de sérialisation, de send natif, de classification d’ack et de timeout sont fatals pour la session logique — ils ne deviennent pas des reconnects ordinaires.
 
 ## Queues
 
 | Réglage                | Valeur requise                                | Comportement                                                                                                                |
 | ---------------------- | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `maxIncomingQueueSize` | Entier sûr positif                            | Borne les messages parsés en attente de `receive` et les frames brutes en attente de transform. Overflow → `state: 'error'` |
+| `maxIncomingQueueSize` | Entier sûr strictement positif                | Borne les messages parsés en attente de `receive` et les frames brutes en attente de transform. Overflow → `state: 'error'` |
 | `maxOutgoingQueueSize` | Entier sûr non négatif optionnel ; défaut `0` | FIFO seulement tant que `state === 'reconnecting'`. Pleine/désactivée → `send(...)` lève une erreur                         |
 
 Les frames sortantes en file sont envoyées avant que le socket de remplacement publie `open`. Les frames déjà envoyées sur un socket précédent ne sont jamais rejouées auto. Les queues de reconnect sont pour les messages que tu envoies pendant le reconnect — pas pour reconstruire l’état de l’app.
@@ -83,6 +85,8 @@ L’overflow entrant vide la séquence en attente, fait échouer `receive`, arr�
 Les `protocols` de définition, `withWebSocketProtocols(...)` du client, et `protocols` d’execute posent la liste de sous-protocoles du constructeur. Précédence : exécution → client → définition. La première liste définie est copiée pour la session logique et réutilisée au reconnect.
 
 Les constructeurs WebSocket navigateur n’acceptent pas d’en-têtes de handshake arbitraires, et le builder ne peut pas renvoyer `headers` ni `body`. Defjs convertit `http:` → `ws:` et `https:` → `wss:`, encode les placeholders de path une fois, et utilise les mêmes règles de query que HTTP : scalaires et clés répétées par défaut, `withQuerySerializer` pour les objets imbriqués, et pas d’appel de serializer quand il n’y a pas de query.
+
+Comme pour HTTP et SSE, un endpoint de base absent, relatif ou invalide, ou un chemin illégal, échoue avec `REQ_BUILD_FAILED` pendant la construction, avant tout intercepteur ou transport, même si un intercepteur court-circuiterait. L’URL résolue doit conserver l’origine de base et rester sous son répertoire ; les caractères de contrôle C0 (dont tab, CR et LF), les barres obliques inverses, `?`, `#` et les traversées de répertoire dans le chemin sont rejetés. Les formes ressemblant à un schéma et celles relatives au protocole sont rejetées même avec des espaces initiaux ; un espace ordinaire à l’intérieur est autorisé et envoyé sous la forme `%20`. Le `req.endpoint` final d’un intercepteur est validé contre son `req.baseEndpoint` final avec la même règle, mais il peut remplacer délibérément la base par une autre URL absolue valide. Les erreurs d’URL déterministes ne sont jamais retentées.
 
 `withCredentials(true)` est les credentials Fetch pour HTTP/SSE — pas l’auth WebSocket. Utilise une politique cookie/session revue, un sous-protocole, ou un ticket de connexion de courte durée. Ne mets pas de credentials généraux ni de secrets longue durée dans la query string.
 

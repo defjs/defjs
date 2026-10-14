@@ -57,7 +57,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `FaultOf` es `Fault` expresado por el tipo del cuerpo de error decodificado en lugar del struct que lo produjo. `HttpAwaitResult` y las fábricas de faults trabajan con valores decodificados, por eso usan esta forma.
 
-Cada variante es un `Error` nativo llamado `DefjsFault`, así que `String(fault)` produce un `DefjsFault: <message>` directamente logueable. `code` y los metadatos de la variante — `status`, `response`, `data` — son propiedades propias enumerables. La cadena nativa `cause` no es enumerable.
+Cada variante es un `Error` nativo llamado `DefjsFault`, así que `String(fault)` produce `DefjsFault: <message>`. `code` y los metadatos de la variante — `status`, `response`, `data` — son propiedades propias enumerables. La cadena nativa `cause` no es enumerable.
+
+Los mensajes por defecto de Struct dicen `received <kind>`, nunca el valor recibido, por ejemplo `Expected number at email, received string`. Un `SyntaxError` de JSON detrás de `RES_DECODE_FAILED` da el mensaje `Response body could not be decoded`. Los paths de los issues son estructurales y conservan las claves de los registros: `struct.record(...)` puede producir `Expected number at alice@example.com, received string`, así que las claves pueden seguir siendo sensibles en los mensajes por defecto, `prettify()` y `String(fault)`. Los `StructIssue.received` crudos y las causas del parser siguen siendo sensibles; los mensajes personalizados de `errorMap` y de las extensiones se usan tal cual y hay que revisarlos antes de registrarlos.
 
 <include cwd>examples/api/fault.ts#example</include>
 
@@ -143,7 +145,7 @@ declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown,
 
 `createHttpStatusFault` toma una respuesta que ya lleva el cuerpo decodificado; `createUndecodedHttpStatusFault` toma solo metadatos, para un endpoint que no declaró `error`.
 
-`createNetworkFault` mapea `ERR_ABORTED` y una `DOMException` llamada `AbortError` a `NET_ABORTED`, `ERR_TIMEOUT` y un error llamado `TimeoutError` a `NET_TIMEOUT`, y todo lo demás a `NET_UNREACHABLE`. `createPreflightFault` toma el código directamente; sin `cause`, el código pasa a ser el mensaje.
+`createNetworkFault` usa [`isAbortCause`](/es-ES/api/core/isabortcause) para `NET_ABORTED` y [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) para `NET_TIMEOUT`: reconocen centinelas con marca de cualquier copia de Core, un `DOMException` llamado `AbortError` y un `DOMException` o `Error` llamado `TimeoutError`, respectivamente. Todo lo demás se mapea a `NET_UNREACHABLE`. `createPreflightFault` toma el código directamente; sin `cause`, el código pasa a ser el mensaje.
 
 Todas las fábricas devuelven instancias de `Error` nativo con los campos estructurados de arriba; no crean errores de objeto plano y no necesitan adaptador para `String(fault)`.
 
@@ -159,5 +161,16 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 ```
 
 Valores compartidos de `cause` / mensaje para abort y timeout. Lanzar uno desde un interceptor HTTP resuelve la llamada con `NET_ABORTED` o `NET_TIMEOUT`. Los interceptores SSE y WebSocket reportan cualquier throw, estos incluidos, como `EXT_INTERCEPTOR_FAILED`.
+
+Los centinelas llevan marcas no enumerables `Symbol.for('defjs.cause.aborted')` y `Symbol.for('defjs.cause.timeout')`. La clasificación no depende de la identidad de objeto del centinela ni de ejecuciones anteriores no relacionadas.
+
+## Comprobaciones de causa
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/es-ES/api/core/isabortcause) reconoce un `Error` con marca de aborto o un `DOMException` llamado `AbortError`. [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) reconoce un `Error` con marca de timeout o un `DOMException` / `Error` llamado `TimeoutError`. Pasa `fault.cause` para clasificar el valor subyacente; estas funciones no desenvuelven un fault. Funcionan con centinelas de otra copia de Core.
 
 Mira la [guía de Errores](/es-ES/docs/errors).

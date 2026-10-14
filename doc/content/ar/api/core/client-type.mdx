@@ -1,6 +1,6 @@
 ---
 title: 'Client'
-description: 'نوع العميل الذي يعيده createClient، مع دالة execute المحمّلة زائدًا.'
+description: 'نوع العميل الذي يعيده createClient، مع صيغ الاستدعاء المتعددة لدالة execute.'
 ---
 
 <ApiReference identity="@defjs/core:Client" />
@@ -26,6 +26,6 @@ type Client = {
 }
 ```
 
-يحمل العميل [`ClientConfig`](/ar/api/core/clientconfig-type) المحلولة وينفّذ أوامر HTTP وSSE وWebSocket. نوع الأمر هو الذي يختار الصيغة المحمّلة زائدًا. تُعاد حالات الفشل أخطاءً في tuple النتيجة ولا تُرمى؛ ولا يُرفض الوعد إلا لقيمة ليست أمر Defjs (`Error: Unsupported command`).
+يحمل العميل [`ClientConfig`](/ar/api/core/clientconfig-type) المحلولة وينفّذ أوامر HTTP وSSE وWebSocket. نوع الأمر هو الذي يختار صيغة الاستدعاء. تُعاد حالات الفشل أخطاءً في tuple النتيجة ولا تُرمى؛ ولا يُرفض الوعد إلا لقيمة ليست أمر Defjs (`Error: Unsupported command`).
 
 [العميل](/ar/api/client)

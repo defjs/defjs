@@ -33,6 +33,8 @@ interface ClientWebSocketOptions {
 - **protocols** — البروتوكولات الفرعية الممرَّرة إلى المُنشئ.
 - **reconnect** — يتطلّب تفعيلًا صريحًا. الافتراضي لـ `attempts` هو **3**؛ و`0` يعطّل إعادة المحاولة، وحذف `attempts` ليس بلا حد. القيم الافتراضية الأخرى: `delayMs` 1000، و`factor` 2، و`jitter` 0 (عامل ضربي بين 0 و1)، و`maxDelayMs` 30000. يستقبل `shouldReconnect` رمز الإغلاق `code` و`reason` و`wasClean` ويستطيع نقض إعادة المحاولة (veto).
 
+تُطبّق ميزانية إعادة المحاولة على كل انقطاع على حدة. يعيد `open` الناجح ضبط الميزانية ورقم المحاولة الممرّر إلى دالة الاستدعاء وأُسّ التراجع؛ ويبدأ الانقطاع التالي من إعادة المحاولة 1. يحدّ `maxDelayMs` التأخير النهائي بعد تطبيق `jitter` والتقريب، مع الالتزام أيضًا بحدّ `2_147_483_647` مللي ثانية. انظر [`withWebSocketReconnect`](/ar/api/core/withwebsocketreconnect) لقواعد التحقق وسلوك تجاوز السعة العددية.
+
 اضبطها بـ `withWebSocketHandle` و`withWebSocketBeforeConnect` و`withWebSocketHeartbeat` و`withWebSocketProtocols` و`withWebSocketReconnect`. ويمكن لـ `WebSocketExecuteOptions` تجاوز `beforeConnect` و`heartbeat` و`protocols` و`reconnect` لكل استدعاء.
 
 انظر [دليل العميل](/ar/docs/client).

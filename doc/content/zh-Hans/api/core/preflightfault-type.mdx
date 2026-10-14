@@ -15,4 +15,4 @@ type PreflightFault = Error & {
 
 所有可能在响应存在之前就失败的情况：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。只有传输层当时确实有元数据可报时才带 `response`，比如下载中途被截断的 body。
 
-[Errors](/zh-Hans/api/errors)
+[错误](/zh-Hans/api/errors)

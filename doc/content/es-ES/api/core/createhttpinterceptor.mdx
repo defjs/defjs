@@ -14,4 +14,6 @@ type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
 
 Devuelve `{ kind: 'http', fn }`. Llama a `next(req)` (opcionalmente con una solicitud modificada) o cortocircuita con `makeResponse`. `next` ejecuta solo los interceptores registrados después de este y luego el fetch handler. Los interceptores HTTP no se ejecutan para comandos SSE ni WebSocket.
 
+Un error de URL determinista de `next(req)` rechaza la promesa devuelta, por lo que se ejecuta la recuperación de `.then` / `.catch`; si no se recupera del error, `client.execute` sigue notificando `REQ_BUILD_FAILED`.
+
 [Interceptores](/es-ES/api/interceptors)

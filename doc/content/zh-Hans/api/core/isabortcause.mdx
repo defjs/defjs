@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: '识别不同 Core 副本中的调用方取消，以及平台的中止错误。'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+带有 `Symbol.for('defjs.cause.aborted')` 标记的 `Error`（包括其他 Core 副本中的 `ERR_ABORTED`），或名为 `AbortError` 的 `DOMException`，都会返回 `true`。名称相同但没有标记的普通 `Error` 不匹配。其他值返回 `false`。
+
+请传入底层的 `fault.cause`；此函数不会解包 fault。`createNetworkFault` 用此检查来选择 `NET_ABORTED`。OpenTelemetry 用它抑制调用方取消的日志，同时保留超时日志。
+
+见 [Errors 指南](/zh-Hans/docs/errors) 和 [`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause)。
+
+[Errors](/zh-Hans/api/errors)

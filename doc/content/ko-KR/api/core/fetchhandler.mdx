@@ -10,7 +10,7 @@ function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promis
 ```
 
 - **httpRequest** — 정규화된 요청이에요 (URL, 헤더, body, abort signal, progress 훅).
-- **fetchImpl** — [`FetchHandle`](/ko-KR/api/core/fetchhandle-type)이고, 기본값은 전역 `fetch`예요. 사용자 지정 handle은 `Request`를 받으며, body는 청크 단위로 읽어요.
+- **fetchImpl** — [`FetchHandle`](/ko-KR/api/core/fetchhandle-type)이고, 기본값은 보내는 시점에 해석되는 전역 `fetch`예요. 손대지 않은 플랫폼 Fetch는 `(url, init)`을 받고, 교체된 전역이나 사용자 지정 handle은 `Request`를 받으며 그 응답 body는 청크 단위로 읽어요. 관찰하지 않는 플랫폼 응답은 본문 전체를 읽고, 다운로드 진행률은 청크를 써요.
 
 기본 HTTP 전송이에요. 클라이언트는 항상 이것을 쓰고, `withHTTPHandle`은 이것이 호출하는 `fetchImpl`만 바꿔요. 클라이언트에 응답이 하나도 닿지 않았을 때는 가짜 응답으로 resolve하지 않고 reject해요.
 

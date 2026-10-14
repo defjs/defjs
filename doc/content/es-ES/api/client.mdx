@@ -118,7 +118,7 @@ function withXSRF(options?: {
 
 Añade un header con el token XSRF a las solicitudes HTTP. Por defecto: cookie `XSRF-TOKEN`, header `X-XSRF-TOKEN`. Las solicitudes SSE y WebSocket no se ven afectadas.
 
-El transporte HTTP por defecto añade el header cuando se cumple todo lo siguiente: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya ese header; la solicitud es del mismo origen (fuera de un navegador cuenta cualquier solicitud con un `baseEndpoint`); y se encuentra un token no vacío. El token proviene de `tokenProvider` cuando se da y, si no, de la cookie, que solo se lee en un navegador.
+El transporte HTTP por defecto añade el header cuando se cumple todo lo siguiente: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya ese header; la solicitud es del mismo origen; y se encuentra un token no vacío. Siempre que exista `location`, incluso en un Worker, el origen resuelto de la solicitud debe coincidir con `location.origin`; si no existe, una solicitud con `baseEndpoint` cuenta como del mismo origen. Las solicitudes de origen cruzado no llaman a `tokenProvider`. El token proviene de ese provider cuando se da y, si no, de `document.cookie`, que solo se lee cuando existe `document`.
 
 ### Ajustes SSE
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-La firma de llamada que Defjs necesita de una implementación de Fetch. No es `typeof fetch`, así que un mock no necesita extras del host como `preconnect`.
+La firma de llamada que Defjs necesita de una implementación de Fetch. No es `typeof fetch`, así que un mock no necesita extras del host como `preconnect`. Los handles HTTP/SSE por defecto resuelven `globalThis.fetch` en cada llamada. HTTP usa `(url, init)` solo para el Fetch de la plataforma sin sustituir; los globales reemplazados y los handles personalizados reciben un `Request`. SSE siempre pasa un `Request`. Importar Core sin Fetch es válido; una ejecución por defecto reporta `ENV_UNSUPPORTED` si Fetch sigue ausente, mientras que los handles personalizados siguen siendo utilizables.
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 El reconnect es opt-in en ambos transportes: sin `withSSEReconnect` / `withWebSocketReconnect` no hay reintento. Una vez definido `reconnect`, se aplican estos valores por defecto:
 
-| Campo        | SSE      | WebSocket |
-| ------------ | -------- | --------- |
-| `attempts`   | `3`      | `3`       |
-| `delayMs`    | `1000`   | `1000`    |
-| `factor`     | `1`      | `2`       |
-| `jitter`     | `0`      | `0`       |
-| `maxDelayMs` | sin tope | `30000`   |
+| Campo        | SSE                  | WebSocket            |
+| ------------ | -------------------- | -------------------- |
+| `attempts`   | `3` por interrupción | `3` por interrupción |
+| `delayMs`    | `1000`               | `1000`               |
+| `factor`     | `1`                  | `2`                  |
+| `jitter`     | `0`                  | `0`                  |
+| `maxDelayMs` | sin tope             | `30000`              |
 
-En SSE, `delayMs` es solo el retraso base inicial: un campo `retry:` del servidor lo reemplaza en los intentos posteriores. `attempts: 0` desactiva el reintento; omitir `attempts` no significa ilimitado. `jitter` debe estar entre 0 y 1: cada retraso se aleatoriza hasta esa fracción en cualquiera de los dos sentidos. Si `shouldReconnect` devuelve `false`, cesan los reintentos. El callback de SSE recibe además `lastEventId`, el `method` de la solicitud y la última información de `open`, y puede ser asíncrono. Sin este callback, SSE solo reconecta solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`; si se proporciona, su resultado determina si se reconecta para cada método. El callback de WebSocket recibe en su lugar el `code`, `reason` y `wasClean` del cierre.
+En ambos transportes, un handshake correcto reinicia el presupuesto de reintentos de esa interrupción, el attempt del callback y el exponente de backoff. `attempts: 0` desactiva el reintento; omitir `attempts` no da reintentos ilimitados dentro de una misma interrupción. `maxDelayMs` limita el retraso final tras el jitter y el redondeo; también se aplica el límite del temporizador de la plataforma, `2_147_483_647` ms, incluso cuando SSE no tiene tope configurado. Una base cero sigue siendo cero; el desbordamiento de números válidos se satura en los topes.
+
+Las opciones de reconexión se validan antes del transporte: `attempts` debe ser un entero seguro no negativo; `delayMs` y un `maxDelayMs` explícito deben ser finitos y no negativos; `factor` debe ser finito y positivo; `jitter` debe ser finito y estar entre 0 y 1. Los valores no válidos devuelven `REQ_OPTIONS_INVALID`. En WebSocket, `attempts: 0` desactiva el reintento de inmediato e ignora los campos de reconexión que no se usan; SSE sigue validándolos. El jitter escala la base ya limitada en cualquiera de los dos sentidos antes de aplicar el tope final.
+
+En SSE, `delayMs` es solo el retraso base inicial: un campo `retry:` del servidor formado solo por dígitos lo reemplaza en los intentos posteriores, también después de la recuperación. Si `shouldReconnect` devuelve `false`, cesan los reintentos. El callback de SSE recibe además `lastEventId`, el `method` de la solicitud y la última información de `open`, y puede ser asíncrono. Sin este callback, SSE solo reconecta solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`; si se proporciona, su resultado determina si se reconecta para cada método. El último ID de evento se envía como bytes UTF-8 en `Last-Event-ID`; un ID vacío lo borra y un ID que contiene NUL se ignora. El callback de WebSocket recibe en su lugar el `code`, `reason` y `wasClean` del cierre.
 
 El `onInvalidEvent` de SSE gestiona un evento sin struct correspondiente, incluido el caso sin `default` (`missing-struct`), o cuyos datos fallan su struct (`validation-failed`). El evento siempre se descarta; el valor de retorno del handler se ignora y un error que lance no cierra el stream.
 

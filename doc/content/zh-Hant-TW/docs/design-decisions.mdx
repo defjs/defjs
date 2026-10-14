@@ -13,7 +13,7 @@ Defjs 做了幾項刻意取捨。便利 API 常把「誰擁有 request、stream�
 
 ### 1. 你宣告的就是你斷言的
 
-`output` 的意思是「`ok` 為 true 時，body **就是**這個形狀」。`error` 的意思是「`ok` 為 false 時，body **就是**這個形狀」。宣告不是提示，也不是盡力而為的期望，而是對「會收到什麼」的主張。
+`output` 的意思是「`ok` 為 true 時，body *就是*這個形狀」。`error` 的意思是「`ok` 為 false 時，body *就是*這個形狀」。宣告不是提示，也不是盡力而為的期望，而是對「會收到什麼」的主張。
 
 ### 2. `ok` 是唯一分流點，而且只走一邊
 
@@ -27,7 +27,7 @@ Defjs 做了幾項刻意取捨。便利 API 常把「誰擁有 request、stream�
 
 ### 4. 解碼失敗就沒有 body
 
-body **就是**解碼後的值。解碼失敗就沒有值——不存在半成品 body 供你檢查。出錯細節在 `cause` 上；回應只保留 metadata，其他都沒有。
+body *就是*解碼後的值。解碼失敗就沒有值——不存在半成品 body 供你檢查。出錯細節在 `cause` 上；回應只保留 metadata，其他都沒有。
 
 這條由型別系統強制，不靠約定：解碼 fault 的 `response` 是 `HttpMeta`，根本沒有 `body` 欄位，去取它就是編譯錯誤。
 
@@ -73,17 +73,17 @@ SSE 與 WebSocket 的第三個值是快照，不是對「未來重連仍是同�
 
 TypeScript 推導描述的是你期待的形狀；它無法在執行階段檢查伺服器回應。Struct 剖析是契約的另一半。Defjs 會在建構請求前驗證 command input，檢查 representation，再剖析 `ok` 適用那一側的 struct。
 
-Struct **只套用一次，而且在 interceptor 鏈之後**。Interceptor 用 `makeResponse(...)` 造出來的回應，和線上真實來的回應一樣會經過同樣的媒體類型檢查、表示轉換與 Struct：回應從哪來，不影響它怎麼被讀，所以不存在「信任 interceptor」這條需要推敲的岔路。內建的 Fetch 傳輸在把回應交回 interceptor 鏈之前，就已經（在通過媒體類型檢查後）讀取並以 JSON 剖析所宣告的 body，所以 interceptor 看到的是剖析後的 `body`；這一步失敗時，會以同樣的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 回報。
+對於 HTTP，Struct **只套用一次，而且在 interceptor 鏈之後**。Interceptor 用 `makeResponse(...)` 造出來的回應，和線上真實來的回應一樣會經過同樣的媒體類型檢查、表示轉換與 Struct：回應從哪來，不影響它怎麼被讀，所以不存在「信任 interceptor」這條需要推敲的岔路。內建的 Fetch 傳輸在把回應交回鏈之前，會把已宣告的 body 讀成 JSON、文字、`Blob` 或 bytes。只有 JSON 表示才要求 JSON 媒體類型與 `JSON.parse`；非 JSON 的文字、blobs 與 bytes 對其宣告的表示是有效的。Interceptor 看到的是那個表示，還不是 Struct 解碼後的值。讀取失敗適用於每一種表示；那裡的讀取或剖析失敗會以同樣的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 回報。
 
-順序是：媒體類型，然後表示，然後 struct。
+順序是：媒體類型（針對 JSON），然後表示，然後 struct。
 
-| 沒守住的是                       | Fault                                              |
-| -------------------------------- | -------------------------------------------------- |
-| 媒體類型不是所宣告表示需要的那個 | `RES_MEDIA_TYPE_INVALID`——在讀 body **之前**就回報 |
-| bytes 不是那個表示               | `RES_DECODE_FAILED`                                |
-| 值不符合那個 struct              | `RES_STRUCT_MISMATCH`                              |
-| 非 2xx，且 `error` 解出來了      | `HTTP_STATUS`，`data` 有型別                       |
-| 非 2xx，且沒宣告 `error`         | `HTTP_STATUS`，`data: undefined`                   |
+| 沒守住的是                       | Fault                                            |
+| -------------------------------- | ------------------------------------------------ |
+| 媒體類型不是所宣告表示需要的那個 | `RES_MEDIA_TYPE_INVALID`——在讀 body *之前*就回報 |
+| bytes 不是那個表示               | `RES_DECODE_FAILED`                              |
+| 值不符合那個 struct              | `RES_STRUCT_MISMATCH`（僅 HTTP）                 |
+| 非 2xx，且 `error` 解出來了      | `HTTP_STATUS`，`data` 有型別                     |
+| 非 2xx，且沒宣告 `error`         | `HTTP_STATUS`，`data: undefined`                 |
 
 先檢查媒體類型，就是把「我要的是 JSON，收到的是 HTML」變成一個精確的 fault 而不是一個 parser 錯誤，而且整個跳過讀取、解析和 struct。
 
@@ -111,7 +111,7 @@ Body kind 依值決定，第一個相符者勝出：
 
 `undefined` 欄位會省略。可為 null 的欄位上的 `null` 會送出。字串不是 JSON，除非你自己 stringify 並設定 `content-type`。自己序列化（`JSON.stringify`、qs、protobuf）就離開 struct encoder，所以 aliases 不套用。沒有公開的 `struct.encode`。
 
-`GET` 與 `HEAD` 不能帶 body。WebSocket builder 不能回傳 headers 或 body。靜態 WebSocket subprotocols 留在定義上（`protocols`），不放進 builder。無效的 WebSocket frames 走 session 的 runtime-error listener。SSE 的 `error` struct 給啟動 fault 定型，握手 body 跟 HTTP body 用同一套 kind 規則：`string` 是文字，blobs 與 files 是 blobs，`arrayBuffer` 是 bytes，其餘是 JSON。
+`GET` 與 `HEAD` 不能帶 body。WebSocket builder 不能回傳 headers 或 body。靜態 WebSocket subprotocols 留在定義上（`protocols`），不放進 builder。無效的 WebSocket frames 走 session 的 runtime-error listener。SSE 的 `error` struct 給啟動 fault 定型，握手 body 跟 HTTP body 用同一套 kind 規則：`string` 是文字，blobs 與 files 是 blobs，`arrayBuffer` 是 bytes，其餘是 JSON。表示的選擇是共用的，但 fault 對應不是：SSE 握手的讀取、剖析或 Struct 失敗是 `RES_DECODE_FAILED`，Struct 失敗時 `cause` 是 `StructError`；HTTP 把 Struct 失敗報成 `RES_STRUCT_MISMATCH`。
 
 ## Observer 與策略放哪裡
 

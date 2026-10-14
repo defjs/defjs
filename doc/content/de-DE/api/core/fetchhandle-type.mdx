@@ -9,7 +9,7 @@ description: 'Fetch-kompatibler Funktionstyp, der als HTTP- oder SSE-Handle dien
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Die Aufrufsignatur `(input, init?) => Promise<Response>`, die Defjs aufruft. Sie ist bewusst nicht `typeof fetch`, damit ein Mock keine Host-Extras wie `preconnect` braucht. Ein eigenes Handle wird mit einem `Request` aufgerufen; nur der Library-Default (das globale `fetch`) wird als `(url, init)` aufgerufen.
+Die Aufrufsignatur `(input, init?) => Promise<Response>`, die Defjs aufruft. Sie ist bewusst nicht `typeof fetch`, damit ein Mock keine Host-Extras wie `preconnect` braucht. HTTP ruft unangetastetes Plattform-Fetch als `(url, init)` auf; ein ersetztes globales Fetch oder ein eigenes Handle erhält einen `Request`. Der Default löst das Globale bei jedem Aufruf auf. SSE übergibt immer einen `Request`, auch an sein Default-Handle.
 
 Akzeptiert von `withHTTPHandle`, `withSSEHandle` und `fetchHandler`.
 

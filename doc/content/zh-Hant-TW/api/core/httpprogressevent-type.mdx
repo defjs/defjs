@@ -13,7 +13,7 @@ interface HttpProgressEvent {
 }
 ```
 
-對應 `ProgressEvent` 的欄位。`loaded` 是目前已傳輸的位元組數。總大小未知時，`total` 為 `0`，`lengthComputable` 為 `false`。
+對應 `ProgressEvent` 的欄位。`loaded` 計算從上傳或下載 stream 讀到的位元組，而不是伺服器已確認的位元組。下載位元組可能已經解壓縮。下載總量只有在 `Content-Length` 為正，且 `Content-Encoding` 不存在或為 `identity` 時才可計算；壓縮的下載會回報 `total: 0` 與 `lengthComputable: false`。串流的 FormData 上傳，除非有效且明確的 `Content-Length` 提供總量，否則總量也未知。其他長度未知的 stream 使用同樣的 `0` / `false` 欄位。
 
 見 [`HttpProgressFn`](/zh-Hant-TW/api/core/httpprogressfn-type)、[HTTP 指南](/zh-Hant-TW/docs/http) 與 [Commands](/zh-Hant-TW/docs/commands)。
 

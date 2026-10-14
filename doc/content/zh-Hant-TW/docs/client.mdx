@@ -23,7 +23,7 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
   examples/client/compose-options.ts#example
 </include>
 
-混合的 interceptors 在執行時依傳輸篩選；被選中種類之間的相對順序會保留。
+混合的 interceptors 在執行時依傳輸篩選；被選中的同一種類內，相對順序會保留。
 
 ## 依傳輸執行
 
@@ -58,7 +58,7 @@ WebSocket execute 可覆寫 `beforeConnect`、`heartbeat`、`protocols`、`recon
 | `withInterceptors(...items)`                                                                                  | 追加混合 interceptors                                      |
 | `withQuerySerializer(fn)`                                                                                     | 把已經套過 alias 的 query 物件編成 query string            |
 | `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP／SSE 的 Fetch 用 `credentials: 'include'` |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                  |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF：cookie 寫入 header                              |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 旋鈕                                                   |
 | `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 旋鈕                                             |
 

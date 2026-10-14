@@ -98,21 +98,23 @@ Session.
 
 TypeScript-Inferenz beschreibt, was du erwartest; sie kann eine Server-Response zur Laufzeit nicht prüfen. Struct-Parsing ist die zweite Hälfte des Vertrags. Defjs validiert Command-Input vor dem Request-Bau, prüft die Representation und parst dann den Struct der Seite von `ok`, die gilt.
 
-Der Struct wird **einmal, nach der Interceptor-Chain**, angewendet. Eine Response, die ein Interceptor mit
+Bei HTTP wird der Struct **einmal, nach der Interceptor-Chain**, angewendet. Eine Response, die ein Interceptor mit
 `makeResponse(...)` gebaut hat, durchläuft dieselbe Media-Type-Prüfung, Representation-Konvertierung und denselben
 Struct wie eine von der Leitung: woher eine Response kam, ändert nicht, wie sie gelesen wird — es gibt also keinen
-"dem Interceptor vertrauen"-Pfad, über den man nachdenken müsste. Der eingebaute Fetch-Transport liest und
-JSON-parst einen deklarierten Body (nach seiner Media-Type-Prüfung) bereits, bevor er die Response an die Chain
-zurückgibt; Interceptors sehen also diesen geparsten `body`. Ein Fehler dabei erscheint als derselbe `RES_*`- oder
+"dem Interceptor vertrauen"-Pfad, über den man nachdenken müsste. Der eingebaute Fetch-Transport liest einen
+deklarierten Body als JSON, Text, `Blob` oder Bytes, bevor er ihn an die Chain zurückgibt. Nur JSON-Representations
+brauchen einen JSON-Media-Type und `JSON.parse`; Text, Blobs und Bytes, die kein JSON sind, sind für ihre deklarierte
+Representation gültig. Interceptors sehen diese Representation, noch nicht den vom Struct dekodierten Wert. Lesefehler
+gelten für jede Representation; Lese- oder Parse-Fehler dort erscheinen als derselbe `RES_*`- oder
 `NET_BODY_INCOMPLETE`-Fault.
 
-Die Reihenfolge ist: Media-Type, dann Representation, dann Struct.
+Die Reihenfolge ist: Media-Type (für JSON), dann Representation, dann Struct.
 
 | Was nicht gehalten hat                                                   | Fault                                                              |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
 | Der Media-Type ist nicht der, den die deklarierte Representation braucht | `RES_MEDIA_TYPE_INVALID` — gemeldet, _bevor_ der Body gelesen wird |
 | Die Bytes sind nicht diese Representation                                | `RES_DECODE_FAILED`                                                |
-| Der Wert ist nicht dieser Struct                                         | `RES_STRUCT_MISMATCH`                                              |
+| Der Wert ist nicht dieser Struct                                         | `RES_STRUCT_MISMATCH` (nur HTTP)                                   |
 | Non-2xx, und `error` hat dekodiert                                       | `HTTP_STATUS` mit typisiertem `data`                               |
 | Non-2xx, und `error` war nicht deklariert                                | `HTTP_STATUS` mit `data: undefined`                                |
 
@@ -143,7 +145,7 @@ Der Body-Kind wird am Wert entschieden, erster Match:
 
 `undefined`-Fields werden weggelassen. `null` auf einem nullable Field wird gesendet. Ein String ist kein JSON, außer du stringifizierst ihn und setzt `content-type`. Selbst serialisieren (`JSON.stringify`, qs, Protobuf) verlässt den Struct-Encoder, Aliasse gelten dann nicht. Es gibt kein öffentliches `struct.encode`.
 
-`GET` und `HEAD` können keinen Body tragen. WebSocket-Builder können weder Headers noch einen Body zurückgeben. Statische WebSocket-Subprotocols bleiben auf der Definition (`protocols`), nicht im Builder. Ungültige WebSocket-Frames gehen an den Session-Runtime-Error-Listener. Ein SSE-`error`-Struct typisiert den Startup-Fault, und sein Handshake-Body folgt derselben Kind-Regel wie ein HTTP-Body: `string` ist Text, Blobs und Files sind Blobs, `arrayBuffer` sind Bytes, und alles andere ist JSON.
+`GET` und `HEAD` können keinen Body tragen. WebSocket-Builder können weder Headers noch einen Body zurückgeben. Statische WebSocket-Subprotocols bleiben auf der Definition (`protocols`), nicht im Builder. Ungültige WebSocket-Frames gehen an den Session-Runtime-Error-Listener. Ein SSE-`error`-Struct typisiert den Startup-Fault, und sein Handshake-Body folgt derselben Kind-Regel wie ein HTTP-Body: `string` ist Text, Blobs und Files sind Blobs, `arrayBuffer` sind Bytes, und alles andere ist JSON. Die Wahl der Representation ist gemeinsam, das Fault-Mapping nicht: Lese-, Parse- oder Struct-Fehler des SSE-Handshakes sind `RES_DECODE_FAILED`, bei einem Struct-Fehler mit `StructError` als `cause`; HTTP meldet Struct-Fehler als `RES_STRUCT_MISMATCH`.
 
 ## Observer und Policy-Platzierung
 

@@ -17,7 +17,7 @@ function executeHttpCommand<
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>>
 ```
 
-Entrada de bajo nivel que usa `client.execute`. El código de la aplicación debe llamar a `client.execute(command, options)`. `HttpClientConfig` es la parte HTTP de `ClientConfig`, así que se acepta un `ClientConfig`. `HttpExecuteAwaitResult` es la tupla de resultado interna.
+Entrada de bajo nivel usada por `client.execute`. El código de la aplicación debe llamar a `client.execute(command, options)`. `HttpClientConfig` es la parte HTTP de `ClientConfig`, así que se acepta un `ClientConfig`. `HttpExecuteAwaitResult` es la tupla de resultado interna.
 
 - **Devuelve** `[null, data, response]` o `[fault, undefined, undefined]`. `data` es el cuerpo `output` decodificado, o `undefined` cuando no se declara ninguno. `response` es `DecodedResponse` cuando se declara `output` y `HttpMeta` en caso contrario. El fault es `Fault<TError>`.
 

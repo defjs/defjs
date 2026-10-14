@@ -1,6 +1,6 @@
 ---
 title: 'WebSocket 会话'
-description: 打开类型化 JSON 会话，收发信封，再 close 并 await closed。
+description: 打开带类型的 JSON 会话，收发消息，再关闭并等待 closed。
 ---
 
 # WebSocket
@@ -15,7 +15,7 @@ description: 打开类型化 JSON 会话，收发信封，再 close 并 await cl
 
 ## 每个方向一个 struct
 
-`incoming` 是每个文本 frame 的一个 struct。`outgoing` 是 `session.send(...)` 的一个 struct。好几种消息用 `struct.discriminatedUnion`。这些字段上的 alias 就是两个方向的线上名字。没有单独的 type 信封，也没有 normalizer。
+`incoming` 是每个文本 frame 的一个 struct。`outgoing` 是 `session.send(...)` 的一个 struct。好几种消息用 `struct.discriminatedUnion`。这些字段上的 alias 就是两个方向的传输字段名。没有单独的 type 信封，也没有 normalizer。
 
 ```json
 { "type": "message", "text": "Hello" }
@@ -24,6 +24,8 @@ description: 打开类型化 JSON 会话，收发信封，再 close 并 await cl
 入站的文本、`ArrayBuffer`、typed-array、`Blob` frame 按 UTF-8 读，JSON parse，再拿 `incoming` 校验。坏 JSON 和 struct 失败进 `session.onRuntimeError`，不进队列。session 继续活着。不是文本、字节或 `Blob` 的 frame 会被忽略。没有 `withWebSocketOnInvalidEvent`。
 
 `session.send(...)` 同步校验并序列化：struct 编码，再 `JSON.stringify`。open 时立刻发；开了 outgoing 队列且处于 `reconnecting` 时入队；不可写时抛 `InvalidStateError`。没有 outgoing struct、payload 过不了 struct、outgoing 队列关掉或满了、原生 send 失败，也会抛。definition 上的静态 `protocols` 列表是 endpoint 契约（例如 `graphql-transport-ws`）。execute options 和 `withWebSocketProtocols` 仍可覆盖。只有这些 options 能选子协议：builder、`beforeConnect` 和 interceptor 都改不了，所以把 token 放在子协议里时，要作为这次调用的 execute `protocols` option 传入。builder 只能返回 `path` 和 `query`。
+
+Struct 编码之后，JSON 无法忠实表示的值会在发送或进入重连队列之前抛出 `TypeError`：非有限数值、函数、symbol、`Map`、`Set`、流，以及没有 JSON 表示的类实例。嵌套值遵循与 HTTP JSON body 相同的规则。`struct.number()` 仍接受无穷值并拒绝 `NaN`；值通过 Struct 校验，并不代表它是有效的 JSON。心跳使用同一序列化器；序列化失败会结束逻辑会话。
 
 `receive` 只有一个消费者。再要第二个 iterator 会抛 `TypeError`。
 
@@ -49,13 +51,13 @@ description: 打开类型化 JSON 会话，收发信封，再 close 并 await cl
 
 ## 重连
 
-重连是 opt-in。没有 `reconnect` 对象 → 物理关闭就结束逻辑 session。配了之后，默认是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 计的是初次尝试之后的重试；`attempts: 0` 禁用。默认谓词接受每一种关闭结果。
+重连需显式开启。没有 `reconnect` 对象 → 物理关闭就结束逻辑会话。配置后，默认是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 是每次中断的重试预算；成功 `open` 会重置预算和退避指数，因此后续每次中断都重新从重试 1 和 `delayMs` 基数开始。`attempts: 0` 禁用重试。默认谓词接受本次中断预算内的每一种非手动关闭结果。多次成功打开后，不存在整个生命周期的重试次数上限。成功打开后立刻被服务端再次关闭的 socket，会按基础延迟持续重连（受 jitter 和上限约束），因为每次打开都会重置预算；用 `shouldReconnect` 停止它。
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
 `shouldReconnect` 拿到下一次重试的 attempt、关闭 cause、code、reason、`wasClean`。手动 `session.close(...)` 不进这个谓词。准备或策略抛错会以 error 结束逻辑 session。
 
-WebSocket 退避 jitter 是**乘性**的（`jitter: 0.2` → 延迟在 `0.8x` 和 `1.2x` 之间）。SSE jitter 是 0–1 的乘性因子，和 WebSocket 一样。delay/factor/jitter/attempt 在构造函数之前校验；定时器延迟不能超过 `2_147_483_647` ms。
+WebSocket 退避 jitter 是**乘性**的（`jitter: 0.2` 会在取整前，把已限制上限的基数乘以 `0.8x`–`1.2x`）。最终延迟还会再次限制在 `maxDelayMs` 和平台定时器上限 `2_147_483_647` ms 内，因此该范围的上半部分可能被截断。基数为零时仍保持零；有效数值计算时发生溢出，结果会被限制在上限，而不是抛错。SSE 使用同样的 0–1 jitter 规则。启用重试时，会在构造函数之前校验 options：`attempts` 是非负安全整数；`delayMs` 和 `maxDelayMs` 是有限的非负数；`factor` 是有限的正数；`jitter` 是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 会立即禁用重试，并忽略未使用的重连字段；SSE 仍会校验这些字段。
 
 `beforeConnect({ attempt, signal })` 在初次构造和每次重连之前跑。把这个 signal 传进 token 刷新，取消才能同时停住准备和连接。
 
@@ -69,10 +71,10 @@ WebSocket 退避 jitter 是**乘性**的（`jitter: 0.2` → 延迟在 `0.8x` �
 
 ## 队列
 
-| 设置                   | 要求的值                          | 行为                                                                                         |
-| ---------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `maxIncomingQueueSize` | 正 safe integer                   | 限制等着 `receive` 的已 parse 消息，以及等着 transform 的原始 frame。溢出 → `state: 'error'` |
-| `maxOutgoingQueueSize` | 可选的非负 safe integer；默认 `0` | 只在 `state === 'reconnecting'` 时 FIFO。满了或关掉 → `send(...)` 抛                         |
+| 设置                   | 要求的值                     | 行为                                                                                         |
+| ---------------------- | ---------------------------- | -------------------------------------------------------------------------------------------- |
+| `maxIncomingQueueSize` | 正安全整数                   | 限制等着 `receive` 的已 parse 消息，以及等着 transform 的原始 frame。溢出 → `state: 'error'` |
+| `maxOutgoingQueueSize` | 可选的非负安全整数；默认 `0` | 只在 `state === 'reconnecting'` 时 FIFO。满了或关掉 → `send(...)` 抛                         |
 
 排队的 outgoing frame 在替换 socket 公布 `open` 之前刷出去。已经在更早的 socket 上发出去的 frame 永不自动重放。重连队列是给重连期间你发出的消息用的——不是用来重建应用状态。
 
@@ -80,9 +82,11 @@ WebSocket 退避 jitter 是**乘性**的（`jitter: 0.2` → 延迟在 `0.8x` �
 
 ## 协议与鉴权
 
-Definition 的 `protocols`、client 的 `withWebSocketProtocols(...)`、execute 的 `protocols` 设定构造函数的子协议列表。优先级：执行 → client → definition。逻辑 session 复制第一份定下来的列表，重连时复用。
+Definition 的 `protocols`、client 的 `withWebSocketProtocols(...)`、execute 的 `protocols` 设定构造函数的子协议列表。优先级：执行 → client → definition。逻辑 session 复制按上述优先级找到的第一份已定义列表，重连时复用。
 
 浏览器 WebSocket 构造函数不接受任意握手 headers，builder 也不能返回 `headers` 或 `body`。Defjs 把 `http:` 转成 `ws:`、`https:` 转成 `wss:`，path 占位符编码一次，query 规则和 HTTP 一样：默认标量和重复 key，嵌套对象用 `withQuerySerializer`，没有 query 时不调用 serializer。
+
+与 HTTP 和 SSE 一样，基础端点缺失、相对或无效，或者路径非法时，会在构建时、任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，即使 interceptor 本来会短路请求也一样。解析后的 URL 必须与基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 的最终 `req.endpoint` 会相对于最终 `req.baseEndpoint` 按相同规则校验，但可以有意把基础端点换成另一个有效的绝对 URL。确定性的 URL 错误不会重试。
 
 `withCredentials(true)` 是 HTTP/SSE 的 Fetch credentials——不是 WebSocket 鉴权。用审过的 cookie/session 策略、子协议，或短命连接 ticket。别把通用凭证或长命密钥放进 query string。
 

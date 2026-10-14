@@ -9,9 +9,11 @@ description: '設定相對 request path 所用 base URL 的 client option。'
 function withEndpoint(endpoint: string): ClientOption
 ```
 
-設定會接到相對 request path 前面的 base URL。預設為空字串。
+設定會接到相對 request path 前面的有效絕對 base URL。預設為空字串，因此執行時必須有明確的 endpoint。
 
-- **endpoint** — 絕對或相對的 base endpoint。
+- **endpoint** — 有效的絕對 base endpoint。它的 pathname 會保留成目錄；query 與 hash 會被捨棄。
 - 對 WebSocket commands 而言，`http:` 的 base 會變成 `ws:`，`https:` 會變成 `wss:`。
+
+缺少、相對或無效的 endpoint，或非法的 request path，會在建立 request 時、任何 interceptor 或傳輸執行之前，以 `REQ_BUILD_FAILED` 失敗，即使某個 interceptor 本來會 short-circuit 也一樣。HTTP、SSE 與 WebSocket 共用這條規則。解析後的 request 必須維持 base 的 origin，並留在它的目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#`，以及跳出目錄的片段，都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。interceptor 最終的 `req.endpoint` 會用同一條規則對照最終的 `req.baseEndpoint` 檢查，但它可以刻意把 base 換成另一個有效的絕對 URL。確定性的 URL 錯誤絕不會重試。
 
 [Client](/zh-Hant-TW/api/client)

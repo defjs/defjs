@@ -3,9 +3,9 @@ title: 'Запросы GraphQL'
 description: GraphQL остаётся HTTP 200 плюс прикладной unwrap; у Core нет протокола GraphQL.
 ---
 
-# Разверни GraphQL HTTP envelope
+# Разбор HTTP-ответа GraphQL
 
-Defjs не реализует GraphQL `errorPolicy`. Моделируй wire как HTTP POST, чей builder кладёт query document и variables, а `errors[]` / отсутствующий `data` разворачивай в своём helper’е.
+Defjs не реализует GraphQL `errorPolicy`. Опиши обмен как HTTP POST, в котором builder размещает документ запроса и переменные. Объяви `data` в оболочке ответа через `.nullish()`, чтобы и отсутствие `data`, и `data: null` дошли до твоего хелпера, затем обработай `errors[]` до проверки `data`.
 
 См. [Проектные решения](/ru-RU/docs/design-decisions).
 
@@ -14,7 +14,7 @@ Defjs не реализует GraphQL `errorPolicy`. Моделируй wire к�
 </include>
 
 ```txt
-ada viewer unavailable
+ada viewer unavailable viewer unavailable
 ```
 
-HTTP-успех значит только то, что envelope доехал. Прикладные ошибки остаются в `errors[]`, пока твой unwrap не бросит или не вернёт.
+Успешный HTTP-ответ означает только получение оболочки ответа. Прикладные ошибки остаются в `errors[]`, пока твой обработчик не выбросит исключение или не вернёт результат, в том числе для ответа с `data: null`. Пример обрабатывает и отсутствие `data`, и `data: null` вместе с `errors[]` как прикладные ошибки, а не как несоответствие Struct.

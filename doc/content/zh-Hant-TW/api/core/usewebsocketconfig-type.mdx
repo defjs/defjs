@@ -14,7 +14,7 @@ type UseWebSocketConfig<TIncoming = unknown, TOutgoing = unknown> = {
 } & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
 ```
 
-[`WebSocketExecuteOptions`](/zh-Hant-TW/api/core/websocketexecuteoptions-type) 中 WebSocket 專屬的部分；`WebSocketExecuteOptions` 再加一個 `signal`。
+[`WebSocketExecuteOptions`](/zh-Hant-TW/api/core/websocketexecuteoptions-type) 中 WebSocket 專屬、不含 `signal` 的部分。
 
 - `beforeConnect`、`heartbeat`、`protocols` 與 `reconnect` 在單次呼叫中覆寫 client 層級的 options。
 - 取消用 `abort` 或 `timeout`，不能兩個一起。型別會拒絕兩者並存，執行時同時傳入則以 `REQ_OPTIONS_INVALID` fault 失敗。

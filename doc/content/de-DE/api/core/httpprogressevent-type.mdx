@@ -13,7 +13,7 @@ interface HttpProgressEvent {
 }
 ```
 
-Spiegelt die Felder von `ProgressEvent`. `loaded` ist die Anzahl bisher übertragener Bytes. Ist die Gesamtgröße unbekannt, ist `total` `0` und `lengthComputable` `false`.
+Spiegelt die Felder von `ProgressEvent`. `loaded` zählt Bytes, die aus dem Upload- oder Download-Stream gelesen wurden, nicht Bytes, die der Server bestätigt hat. Download-Bytes können bereits dekomprimiert sein. Ein Download-Total ist nur mit positivem `Content-Length` und fehlendem oder `identity`-`Content-Encoding` berechenbar; komprimierte Downloads melden `total: 0` und `lengthComputable: false`. Auch ein gestreamter FormData-Upload hat ein unbekanntes Total, sofern kein gültiges explizites `Content-Length` es liefert. Andere Streams unbekannter Länge nutzen dieselben Felder `0` / `false`.
 
 Siehe [`HttpProgressFn`](/de-DE/api/core/httpprogressfn-type), [HTTP-Guide](/de-DE/docs/http) und [Commands](/de-DE/docs/commands).
 

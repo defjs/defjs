@@ -14,4 +14,6 @@ type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
 
 يُرجع `{ kind: 'http', fn }`. استدعِ `next(req)` (مع طلب معدَّل اختياريًا) أو اختصر المسار بـ `makeResponse`. يشغّل `next` المعترضات المسجَّلة بعد هذا المعترض فقط، ثم معالج fetch. معترضات HTTP لا تعمل لأوامر SSE أو WebSocket.
 
+خطأ URL الحتمي الآتي من `next(req)` يرفض الـ promise المُعاد، فيعمل التعافي عبر `.then` / `.catch`؛ وإذا لم يُسترجع، يظل `client.execute` يبلّغ عن `REQ_BUILD_FAILED`.
+
 [المعترضات](/ar/api/interceptors)

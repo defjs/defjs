@@ -16,8 +16,8 @@ function withXSRF(options?: {
 **HTTP** 요청에 XSRF 토큰 전달을 켜요. SSE와 WebSocket 요청에는 헤더가 붙지 않아요.
 
 - `cookieName`의 기본값은 `XSRF-TOKEN`이고 `headerName`의 기본값은 `X-XSRF-TOKEN`이에요.
-- 헤더는 다음이 모두 성립할 때만 설정돼요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 클라이언트에 endpoint가 있고, 브라우저에서는 요청 URL이 페이지와 same-origin이에요.
-- `tokenProvider`가 없으면 토큰을 `document.cookie`에서 읽고 URL 디코딩해요. 브라우저 밖에는 쿠키가 없으므로 헤더가 설정되지 않아요.
+- 헤더는 다음이 모두 성립할 때만 설정돼요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 클라이언트에 endpoint가 있고, `location`이 있을 때(Window 또는 Worker)는 해석된 요청 URL이 `location.origin`과 같은 origin이에요. 교차 출처 요청은 provider를 호출하지 않아요.
+- `tokenProvider`가 없으면 `document`가 있을 때만 `document.cookie`에서 토큰을 읽고 URL 디코딩해요. Worker와 서버에서 토큰을 넣으려면 provider가 필요해요.
 - `tokenProvider`가 있으면 쿠키는 읽지 않아요. provider가 요청을 받고, 그 결과가 토큰이에요. 빈 문자열, `null`, `undefined`는 헤더를 설정하지 않는다는 뜻이에요.
 
 [HTTP 가이드](/ko-KR/docs/http)에서 요청 수준의 동작을 보세요.

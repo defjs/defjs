@@ -13,4 +13,6 @@ type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
 
 見 [`HttpProgressEvent`](/zh-Hant-TW/api/core/httpprogressevent-type)、[HTTP 指南](/zh-Hant-TW/docs/http) 與 [Commands](/zh-Hant-TW/docs/commands)。
 
+在伺服器執行環境中，搭配 `onUploadProgress` 的 FormData 會直接讀取其序列化後的串流，保留它的 multipart boundary，且送出時不會附上函式庫產生的 `Content-Length`（在 HTTP/1.1 上以分塊方式傳輸），因此進度、逾時與取消都能運作，而不必緩衝整個主體。除非有效且明確的 `Content-Length` 提供總量，否則回報的總量為未知。若端點要求 `Content-Length`，例如某些預簽名上傳目標，請省略 `onUploadProgress`；平台 Fetch 就會以附帶長度的方式送出 FormData。非 identity 編碼的下載也會回報 `total: 0` 與 `lengthComputable: false`，因為 `loaded` 計算的是解碼後的串流位元組。取消會釋放被包裝的上傳串流。
+
 [HTTP](/zh-Hant-TW/api/http)

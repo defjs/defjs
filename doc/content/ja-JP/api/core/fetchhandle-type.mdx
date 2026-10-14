@@ -9,7 +9,7 @@ description: 'HTTP または SSE のハンドルとして使う、fetch 互換�
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Defjs が呼び出す `(input, init?) => Promise<Response>` というシグネチャです。意図的に `typeof fetch` にはしていないので、モックが `preconnect` のようなホスト固有の追加メンバーを持つ必要はありません。独自のハンドルは `Request` で呼ばれます。`(url, init)` で呼ばれるのは、ライブラリのデフォルト（グローバルの `fetch`）だけです。
+Defjs が呼び出す `(input, init?) => Promise<Response>` というシグネチャです。意図的に `typeof fetch` にはしていないので、モックが `preconnect` のようなホスト固有の追加メンバーを持つ必要はありません。HTTP は、差し替えられていないプラットフォームの Fetch を `(url, init)` で呼び出します。差し替えられたグローバルの Fetch または独自のハンドルには `Request` が渡されます。デフォルトは呼び出しごとにグローバルの Fetch を解決します。SSE はデフォルトのハンドルにも常に `Request` を渡します。
 
 `withHTTPHandle`、`withSSEHandle`、`fetchHandler` が受け取ります。
 

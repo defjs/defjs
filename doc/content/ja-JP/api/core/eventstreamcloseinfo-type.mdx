@@ -12,6 +12,6 @@ type EventStreamCloseInfo =
   | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
 ```
 
-`EventStreamHandle.closed` の値です。`eof` はレスポンスが正常に終了したことを表します。`aborted` は、ストリームが `close()` や dispose で閉じられた、またはその signal が中断されたことを表し、`reason` と `cause` には `close` に渡された値が入ります。`error` は fault の `code`（`EventStreamFaultCode` を参照）を持ち、失敗そのものを `cause` として持ちます。
+`EventStreamHandle.closed` の値です。`eof` はレスポンスが正常に終了したことを表します。`aborted` は、ストリームが `close()` や dispose で閉じられた、または呼び出し側の signal がタイムアウト以外の理由で中断されたことを表し、`reason` と `cause` には `close` に渡された値が入ります。ストリームが開いた後、呼び出し側の signal が `TimeoutError` または `ERR_TIMEOUT` を理由に中断されると、イテレーターは `ERR_TIMEOUT` を throw し、`closed` は `{ kind: 'error', code: 'NET_TIMEOUT', ... }` になります。明示的な `close(timeoutError)` は引き続き `aborted` として報告されます。`error` は fault の `code`（`EventStreamFaultCode` を参照）を持ち、失敗そのものを `cause` として持ちます。
 
 [SSE](/ja-JP/api/sse)

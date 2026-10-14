@@ -13,4 +13,6 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 См. [гайд Errors](/ru-RU/docs/errors).
 
+Этот sentinel несёт неперечислимую метку `Symbol.for('defjs.cause.timeout')`. [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) распознаёт его из любой копии Core без сравнения идентичности объектов. Классификация не зависит от предыдущих несвязанных вызовов.
+
 [Ошибки](/ru-RU/api/errors)

@@ -13,4 +13,6 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 [Errors ガイド](/ja-JP/docs/errors) を参照してください。
 
+このセンチネルは、列挙不可の `Symbol.for('defjs.cause.timeout')` ブランドを持ちます。[`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) はオブジェクトの同一性を比較せず、どの Core コピーのセンチネルも認識します。分類は、それ以前の無関係な実行に左右されません。
+
 [Errors](/ja-JP/api/errors)

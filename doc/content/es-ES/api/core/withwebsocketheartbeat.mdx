@@ -23,6 +23,7 @@ Habilita mensajes de heartbeat con detección opcional de confirmación. Pasar `
 - Cada `intervalMs` se llama a `message()` y su resultado se envía a través del struct `outgoing` del endpoint. No se envía ningún mensaje cuando se omite `message` o devuelve `undefined`.
 - Con `timeoutMs`, se espera una confirmación tras cada heartbeat. `isAck` recibe el mensaje entrante decodificado; cuando devuelve `true`, se limpia el temporizador y ese mensaje **no** se entrega a `receive`.
 - Si no llega ningún ack dentro de `timeoutMs`, o no se puede enviar un heartbeat, la sesión falla. Esto no dispara un reconnect.
+- El heartbeat usa la misma guarda JSON que `session.send`: un valor que JSON no puede representar tras la codificación del struct provoca `TypeError` y termina la sesión lógica.
 - `intervalMs` y `timeoutMs` deben ser positivos, finitos y como máximo `2_147_483_647`; de lo contrario, execute falla con `REQ_OPTIONS_INVALID`.
 - Un `heartbeat` en las opciones de execute sustituye a este para esa llamada.
 

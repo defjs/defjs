@@ -11,6 +11,6 @@ interface ClientSSEConfig extends ClientSSEOptions {
 }
 ```
 
-Тип `ClientConfig.sse`. Это [`ClientSSEOptions`](/ru-RU/api/core/clientsseoptions-type), у которого `handle` присутствует всегда; по умолчанию это глобальный `fetch`.
+Тип `ClientConfig.sse`. Это [`ClientSSEOptions`](/ru-RU/api/core/clientsseoptions-type), у которого `handle` присутствует всегда; обёртка по умолчанию обращается к текущему глобальному `fetch` при каждой попытке, а не сохраняет его при импорте.
 
 [Клиент](/ru-RU/api/client)

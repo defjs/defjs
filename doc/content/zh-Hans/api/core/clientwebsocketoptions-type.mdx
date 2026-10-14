@@ -33,6 +33,8 @@ interface ClientWebSocketOptions {
 - **protocols** — 传给构造函数的子协议。
 - **reconnect** — 需主动开启。`attempts` 默认为 **3**；`0` 表示禁用重试，省略 `attempts` 并不是无限次。其他默认值：`delayMs` 为 1000，`factor` 为 2，`jitter` 为 0（0-1 的乘性因子），`maxDelayMs` 为 30000。`shouldReconnect` 会收到关闭的 `code`、`reason` 和 `wasClean`，可以否决一次重试。
 
+重试预算按每次断线计算。`open` 成功后会重置重试预算、回调的尝试次数和退避指数；下一次断线从第 1 次重试开始。`maxDelayMs` 限制应用抖动并取整后的最终延迟，延迟同时受 `2_147_483_647` ms 的上限约束。校验规则与溢出行为见 [`withWebSocketReconnect`](/zh-Hans/api/core/withwebsocketreconnect)。
+
 用 `withWebSocketHandle`、`withWebSocketBeforeConnect`、`withWebSocketHeartbeat`、`withWebSocketProtocols` 和 `withWebSocketReconnect` 设置这些选项。`WebSocketExecuteOptions` 可以针对单次调用覆盖 `beforeConnect`、`heartbeat`、`protocols` 和 `reconnect`。
 
 见 [Client 指南](/zh-Hans/docs/client)。

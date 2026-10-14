@@ -26,6 +26,6 @@ interface ClientConfig {
 
 اللقطة المحلولة التي يبنيها `createClient` وتعدّلها كل مساعدات الخيارات. أعضاء HTTP فيها آتية من الأساس غير المصدَّر `HttpClientConfig` وهي معروضة هنا مباشرةً.
 
-قبل تطبيق أي خيار تكون قيمة `endpoint` هي `''`، و`interceptors` فارغة، و`http.handle` و`sse.handle` هما `fetch` العامة. و`webSocket.handle` هي `globalThis.WebSocket`، وبقية إعدادات `webSocket` غير مضبوطة. ويملأ `withXSRF` الحقل `xsrf.cookieName` بالقيمة `XSRF-TOKEN` والحقل `xsrf.headerName` بالقيمة `X-XSRF-TOKEN` عند حذفهما.
+قبل تطبيق أي خيار تكون قيمة `endpoint` هي `''`، و`interceptors` فارغة، ويشترك `http.handle` و`sse.handle` في غلاف افتراضي يستدعي `globalThis.fetch` الحالية عند كل استدعاء. يؤثر استبدال Fetch بعد الاستيراد في كلا المقبضين الافتراضيين. يمكن استيراد Core دون وجود Fetch؛ لكن تنفيذ HTTP أو SSE بالمقبض الافتراضي يفشل بـ `ENV_UNSUPPORTED` إذا ظلت غير متاحة. لا تتطلب المقابض المخصّصة وجود Fetch عامة. و`webSocket.handle` هي `globalThis.WebSocket`، وبقية إعدادات `webSocket` غير مضبوطة. ويملأ `withXSRF` الحقل `xsrf.cookieName` بالقيمة `XSRF-TOKEN` والحقل `xsrf.headerName` بالقيمة `X-XSRF-TOKEN` عند عدم تحديدهما.
 
 [العميل](/ar/api/client)

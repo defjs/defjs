@@ -27,7 +27,7 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 - `signal` はどちらとも組み合わせられます。`abort` の別名ではありません。
 - `timeout` は `2_147_483_647` 以下の正の安全な整数でなければなりません。セッションを開くのにかけられる時間を制限するもので、再接続では再び適用されません。
 - `beforeConnect`、`heartbeat`、`protocols`、`reconnect` は、この呼び出しに限ってクライアントレベルの options を上書きします。
-- `reconnect` を置いたとき、`attempts` のデフォルトは `3` です。`0` は無効にします。`attempts` を省いても無制限にはなりません。
+- `reconnect` を設定すると、`attempts` のデフォルトは接続障害 1 回ごとに `3` です。`0` は再試行を無効にします。`open` が成功すると、再試行の残り回数が初期値に戻り、バックオフの指数もリセットされます。`attempts` を省略しても、1 回の接続障害に対する再試行が無制限になるわけではありません。検証規則と最終的な待ち時間の上限は [`withWebSocketReconnect`](/ja-JP/api/core/withwebsocketreconnect) を参照してください。
 
 [`WebSocketHeartbeatConfig`](/ja-JP/api/core/websocketheartbeatconfig-type) を見てください。
 

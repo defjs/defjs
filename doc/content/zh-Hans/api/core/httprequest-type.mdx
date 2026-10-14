@@ -28,13 +28,15 @@ interface HttpRequest {
     headerName: string
     tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
   }
-  // plus an @internal bodyContentTypeSource field
+  // plus the @internal bodyContentTypeSource field
 }
 ```
 
 builder 运行之后的请求，供 handler、interceptor 和 `fetchHandler` 使用。
 
-- `body` 已经是线上传输的值。对 JSON 而言，它是一个 **JSON 文本字符串**；HMAC 签名或摘要请针对这个字符串计算，而不是原始的 struct input。
+- `body` 是已经编码好的传输值。对 JSON 而言，它是一个 **JSON 文本字符串**；HMAC 签名或摘要请针对这个字符串计算，而不是原始的 struct input。
+- `bodyContentType` 以普通字段保存构建器请求体推断出的类型，因此 `{ ...req }` 拷贝后仍然保留。它只在 `body` 仍是构建器的值时生效；替换后的请求体会重新检测，所以要用 `content-type` header 声明其类型。对未改动的请求体，在没有显式 header 时，`null` 会抑制库的推断，但原生 Fetch 仍可能为字符串添加自己的类型。FormData 则使用其实际的 multipart boundary。
+- HTTP 从不把推断出的 Content-Type 写入 `headers`；interceptor 只能看到已声明的 header。显式的 `content-type` header 始终优先于 `bodyContentType` 和自动检测，无论它由构建器、客户端默认值、interceptor，还是原始 `fetchHandler` 请求设置。`body: undefined` 没有库推断的 Content-Type。签名方应读取 `headers.get('content-type') ?? request.bodyContentType`；不要配置内部字段。
 - `endpoint` 是填好 path 参数的 path；`baseEndpoint` 是 client 的 endpoint。
 - interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。builder 返回 `URLSearchParams` 时，该实例会原样透传。
 - `operation` 是静态、低基数的 endpoint 标识，用于 telemetry 和诊断。

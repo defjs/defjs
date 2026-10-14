@@ -37,4 +37,4 @@ function injectClient(): Client
 const HTTP_CLIENT: InjectionKey<Client>
 ```
 
-مفتاح حقن Vue. فضّل `injectClient()` على `inject(HTTP_CLIENT)`. لفرع فرعي: `provide(HTTP_CLIENT, childClient)`.
+مفتاح حقن Vue. فضّل `injectClient()` على `inject(HTTP_CLIENT)`. استبدل العميل لشجرة فرعية باستخدام `provide(HTTP_CLIENT, childClient)`.

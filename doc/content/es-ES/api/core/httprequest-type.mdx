@@ -28,13 +28,15 @@ interface HttpRequest {
     headerName: string
     tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
   }
-  // plus an @internal bodyContentTypeSource field
+  // plus the @internal bodyContentTypeSource field
 }
 ```
 
 La solicitud después de ejecutar el builder, tal como la usan los handlers, los interceptores y `fetchHandler`.
 
 - `body` ya es el valor que viaja por la red. Para JSON es una **cadena de texto JSON**; firma HMAC o digests sobre esa cadena, no sobre la entrada original del struct.
+- `bodyContentType` conserva el tipo inferido del cuerpo del builder como un campo ordinario, por lo que se mantiene en las copias `{ ...req }`. Solo se aplica mientras `body` sea el valor del builder; un cuerpo de reemplazo se detecta de nuevo, así que declara su tipo con un header `content-type`. Para el cuerpo sin cambios, `null` suprime la inferencia de la librería cuando no hay un header explícito, pero el Fetch nativo puede añadir su propio tipo de cadena. FormData usa su boundary multipart real.
+- HTTP nunca escribe el Content-Type inferido en `headers`; los interceptores ven solo los headers declarados. Un header `content-type` explícito siempre tiene prioridad sobre `bodyContentType` y la detección, tanto si lo establece el builder, los valores por defecto del cliente, un interceptor o una solicitud directa a `fetchHandler`. `body: undefined` no tiene Content-Type inferido por la librería. El código que firma solicitudes debe leer `headers.get('content-type') ?? request.bodyContentType`; no configures campos internos.
 - `endpoint` es el path con los parámetros de path rellenados; `baseEndpoint` es el endpoint del cliente.
 - Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual.
 - `operation` es una identidad de endpoint estática y de baja cardinalidad para telemetría y diagnóstico.

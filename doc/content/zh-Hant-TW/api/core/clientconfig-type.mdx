@@ -26,6 +26,6 @@ interface ClientConfig {
 
 `createClient` 建出、並由每個 option helper 修改的解析後快照。HTTP 相關成員來自一個未匯出的 `HttpClientConfig` 基底型別，這裡直接展開顯示。
 
-在任何 option 套用之前，`endpoint` 是 `''`，`interceptors` 是空的，`http.handle` 與 `sse.handle` 是全域 `fetch`。`webSocket.handle` 是 `globalThis.WebSocket`，`webSocket` 的其他設定都未設定。`withXSRF` 在省略時，會把 `xsrf.cookieName` 填成 `XSRF-TOKEN`，把 `xsrf.headerName` 填成 `X-XSRF-TOKEN`。
+在任何 option 套用之前，`endpoint` 是 `''`，`interceptors` 是空的，`http.handle` 與 `sse.handle` 共用一個預設 wrapper，該 wrapper 會在每次呼叫時解析 `globalThis.fetch`。import 之後替換 Fetch 會同時影響這兩個預設值。Core 可以在沒有 Fetch 時 import；預設的 HTTP/SSE 執行若當時仍沒有 Fetch，會以 `ENV_UNSUPPORTED` 失敗。自訂 handle 不需要全域 Fetch。`webSocket.handle` 是 `globalThis.WebSocket`，`webSocket` 的其他設定都未設定。`withXSRF` 在省略時，會把 `xsrf.cookieName` 填成 `XSRF-TOKEN`，把 `xsrf.headerName` 填成 `X-XSRF-TOKEN`。
 
 [Client](/zh-Hant-TW/api/client)

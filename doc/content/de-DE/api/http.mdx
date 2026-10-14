@@ -43,7 +43,7 @@ in den Metadaten. Bei einem Failure ist der dritte Tuple-Slot `undefined`; die R
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-Default-HTTP-Transport. `fetchImpl` ist standardmäßig das globale `fetch`; `withHTTPHandle` liefert ein anderes. Er lehnt ab — statt mit einer
+Default-HTTP-Transport. `fetchImpl` ist standardmäßig das globale `fetch`, aufgelöst zum Sendezeitpunkt; `withHTTPHandle` liefert ein anderes. Unangetastetes Plattform-Fetch erhält `(url, init)`, ein ersetztes globales oder eigenes Handle erhält einen `Request`. Er lehnt ab — statt mit einer
 synthetischen Response aufzulösen —, wenn keine Response den Client erreicht hat oder das Lesen eines deklarierten Bodys fehlschlug.
 
 ## makeResponse()
@@ -54,7 +54,7 @@ function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
 
 Baue eine `HttpResponse` ohne Network-Call (Interceptors, Tests). Default-Status ist `0`. `ok` ist
 true für 2xx. Der zurückgegebene Wert geht durch dieselbe Media-Type-Prüfung und denselben deklarierten
-Struct wie eine Response von der Leitung; es gibt keinen vertrauten Short-Circuit.
+Struct wie eine Response von der Leitung; es gibt keinen Short-Circuit, der den Wert als vertrauenswürdig an der Prüfung vorbeiführt.
 
 ## Execute-Optionen
 
@@ -140,6 +140,8 @@ geparst; Bytes und Blobs sind roh und werden einmal geparst. Beim Caller landet 
 Der Upload-Fortschritt wird nur in Runtimes gemeldet, die Request-Bodys streamen können (Bun, Node, Deno); in Browsern werden
 `Blob`-/`File`-, `ArrayBuffer`- und `FormData`-Bodys unverändert gesendet und `onUploadProgress` wird nicht aufgerufen.
 
+In Server-Runtimes nutzt FormData seinen serialisierten Stream ohne den ganzen Body in ein Blob zu puffern und behält die tatsächliche Multipart-Boundary. Sein Total ist unbekannt, sofern kein gültiges explizites `Content-Length` es liefert. Explizite Content-Types überstehen die Upload-Konvertierung, außer dass FormData die Boundary seiner Serialisierung nutzen muss. `loaded` zählt Stream-Bytes, nicht Server-Bestätigungen. Downloads mit einem Nicht-identity-`Content-Encoding` melden `total: 0` und `lengthComputable: false`; ihre Stream-Bytes können bereits dekomprimiert sein.
+
 Siehe [HTTP-Guide](/de-DE/docs/http) und [Commands](/de-DE/docs/commands).
 
 ## RequestEndpoint
@@ -157,11 +159,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
 `GET` und `HEAD` können keinen Body zurückgeben. `path` und `headers` müssen flache Scalars sein; `query` darf nesten, und ein genestetes Object braucht zur Laufzeit `withQuerySerializer`.
+
+Welche Wire- und JSON-Werte `BodyValue` akzeptiert, steht bei [`HttpRequestShape`](/de-DE/api/core/httprequestshape-type).
 
 ## HttpCommand
 

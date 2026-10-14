@@ -9,6 +9,6 @@ description: 'struct issue의 message를 다시 쓰는 콜백이에요.'
 type ErrorMap = (issue: StructIssue) => string | undefined
 ```
 
-`struct.parse`의 `errorMap` 옵션으로 넘겨요. issue(`code`, `expected`, `message`, `path`, `received`)를 기록하기 전에 issue마다 호출돼요. 문자열을 반환하면 기본 message를 대체하고, `undefined`를 반환하면 그대로 둬요.
+`struct.parse`의 `errorMap` 옵션으로 넘겨요. issue(`code`, `expected`, `message`, `path`, `received`)를 기록하기 전에 issue마다 호출돼요. `''`를 포함한 어떤 문자열이든 기본 message를 대체하고, `undefined`만 그대로 둬요. 이 map은 이번 parse 호출에만 속하며, 다른 Core 사본이 만든 struct의 bigint/date 변환 실패도 처리해요. 기본 message는 받은 값을 생략해요. 사용자 텍스트는 그대로 쓰이므로 민감한 `received` 값을 넣지 마세요.
 
 [Struct](/ko-KR/api/struct)

@@ -16,8 +16,8 @@ function withXSRF(options?: {
 為 **HTTP** request 啟用 XSRF token 轉發。SSE 與 WebSocket request 不會帶上該 header。
 
 - `cookieName` 預設為 `XSRF-TOKEN`，`headerName` 預設為 `X-XSRF-TOKEN`。
-- 只有下列條件全部成立才會設定該 header：method 不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；request 尚未帶有該 header；client 有 endpoint；而且在瀏覽器中，request URL 與頁面同源。
-- 沒有 `tokenProvider` 時，token 從 `document.cookie` 讀取並做 URL decode。瀏覽器之外沒有 cookie，因此不會設定 header。
+- 只有下列條件全部成立才會設定該 header：method 不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；request 尚未帶有該 header；client 有 endpoint；而且只要 `location` 存在（Window 或 Worker），解析後的 request URL 就必須與 `location.origin` 同源。跨來源的 request 不會呼叫 provider。
+- 沒有 `tokenProvider` 時，只有 `document` 存在才會從 `document.cookie` 讀取 token 並做 URL decode。Worker 與伺服器需要 provider 來提供 token。
 - 有 `tokenProvider` 時，絕不會讀取 cookie。provider 會收到 request，它的結果就是 token。空字串、`null` 或 `undefined` 表示不設定 header。
 
 request 層級的行為見 [HTTP 指南](/zh-Hant-TW/docs/http)。

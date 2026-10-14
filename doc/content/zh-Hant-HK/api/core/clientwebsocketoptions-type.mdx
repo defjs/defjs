@@ -31,7 +31,9 @@ interface ClientWebSocketOptions {
 - **beforeConnect** — 喺每次 connect 同 reconnect attempt 之前執行。
 - **heartbeat** — 每隔 `intervalMs` 發送 `message()`。同時設定 `timeoutMs` 同 `isAck` 時，收唔到 acknowledgement 就會將 connection 標記為 unhealthy。`intervalMs` 同 `timeoutMs` 必須係正數，而且最大係 2147483647。
 - **protocols** — 傳俾 constructor 嘅 subprotocols。
-- **reconnect** — Opt-in。`attempts` 預設係 **3**；`0` 停用 retry，而省略 `attempts` 並唔代表無限。其他 default：`delayMs` 1000、`factor` 2、`jitter` 0（0-1 嘅 multiplicative factor）、`maxDelayMs` 30000。`shouldReconnect` 會收到 close 嘅 `code`、`reason` 同 `wasClean`，可以否決某次 retry。
+- **reconnect** — Opt-in。`attempts` 預設係 **3**；`0` 停用重試，省略 `attempts` 唔代表同一次斷線可以無限重試。其他預設值：`delayMs` 1000、`factor` 2、`jitter` 0（0-1 嘅乘數）、`maxDelayMs` 30000。`shouldReconnect` 會收到 close 嘅 `code`、`reason` 同 `wasClean`，可以否決某次重試。
+
+重試預算適用於每次斷線。成功 `open` 會重設預算、callback 嘅嘗試次數同退避指數；下一次斷線由第 1 次重試開始。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲，亦受 `2_147_483_647` ms 上限限制。驗證規則同溢位行為見 [`withWebSocketReconnect`](/zh-Hant-HK/api/core/withwebsocketreconnect)。
 
 用 `withWebSocketHandle`、`withWebSocketBeforeConnect`、`withWebSocketHeartbeat`、`withWebSocketProtocols` 同 `withWebSocketReconnect` 設定呢啲選項。`WebSocketExecuteOptions` 可以逐次 call override `beforeConnect`、`heartbeat`、`protocols` 同 `reconnect`。
 

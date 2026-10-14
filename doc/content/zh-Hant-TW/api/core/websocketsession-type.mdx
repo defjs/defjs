@@ -23,6 +23,7 @@ interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends Async
 - `state` 是邏輯上的 [`WebSocketState`](/zh-Hant-TW/api/core/websocketstate-type)；`connection` 是最新的 [`WebSocketConnectionInfo`](/zh-Hant-TW/api/core/websocketconnectioninfo-type)。`bufferedAmount` 是原生尚未送出的位元組數；沒有實體 socket 時為 `0`。
 - `receive` 產出已用 `incoming` struct 剖析好的入站 messages。它只允許一個 consumer：要求第二個 iterator 會丟出 `TypeError`。無法剖析的 frame 會報給 `onRuntimeError` listeners 並被略過。
 - `send(message)` 用 `outgoing` struct 驗證並編碼 message，然後送出 JSON 文字。`open` 時立即送出；`reconnecting` 時，若 `maxOutgoingQueueSize` 允許就排入 queue；session 不可寫入時，會丟出名為 `InvalidStateError` 的 `DOMException`。沒有宣告 `outgoing` struct、message 未通過 struct 驗證，或 queue 被停用或已滿時，同樣會丟出錯誤。
+- 編碼之後，JSON 無法忠實表示的值會在送出或進入 queue 之前丟出 `TypeError`。這包含非有限數值、函式、symbol、`Map`、`Set`、串流，以及沒有 JSON 表示的 class 實例，不論在根層或巢狀層。同一道檢查也保護 heartbeat message；heartbeat 序列化失敗會結束 session。struct 驗證可能先拒絕某個值。
 - `close(code?, reason?)` 要求關閉並停止 heartbeat。`code` 必須是 `1000` 或落在 `3000..4999`，`reason` 最多 123 個 UTF-8 位元組；無效的參數會在狀態改變之前就丟出錯誤。
 - `closed` 會 resolve 出邏輯終止的 [`WebSocketCloseInfo`](/zh-Hant-TW/api/core/websocketcloseinfo-type)。
 - `onStateChange` 與 `onRuntimeError` 會回傳取消訂閱的函式。
@@ -36,6 +37,6 @@ async function consume(session: WebSocketSession<unknown, never>): Promise<void>
 }
 ```
 
-Async disposer 會要求原生 close 並等待 Defjs 自有 teardown；若持續沒有 close event，則以 1 秒為界，並可能用名為 `TimeoutError` 的 `DOMException` reject。它無法證明實體 TCP 連線已經關閉。
+Async disposer 會要求原生 close 並等待 Defjs 自有 teardown；若持續沒有 close event，則以一秒為界，並可能用名為 `TimeoutError` 的 `DOMException` reject。它無法證明實體 TCP 連線已經關閉。
 
 [WebSocket](/zh-Hant-TW/api/web-socket)

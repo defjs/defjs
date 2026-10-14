@@ -23,11 +23,12 @@ interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends Async
 - `state` — логическое [`WebSocketState`](/ru-RU/api/core/websocketstate-type); `connection` — последний [`WebSocketConnectionInfo`](/ru-RU/api/core/websocketconnectioninfo-type). `bufferedAmount` — нативное число неотправленных байт или `0`, когда физического сокета нет.
 - `receive` отдаёт входящие сообщения, уже разобранные struct’ом `incoming`. Он для одного потребителя: запрос второго итератора бросает `TypeError`. Фрейм, который не удалось разобрать, сообщается слушателям `onRuntimeError` и пропускается.
 - `send(message)` валидирует и кодирует сообщение struct’ом `outgoing`, затем отправляет JSON-текст. В состоянии `open` отправка немедленная, в `reconnecting` сообщение ставится в очередь, если позволяет `maxOutgoingQueueSize`, а когда в сессию писать нельзя, бросается `DOMException` с именем `InvalidStateError`. Также бросает ошибку, если struct `outgoing` не объявлен, сообщение не проходит struct либо очередь отключена или заполнена.
+- После кодирования значение, которое JSON не может точно представить, приводит к `TypeError` до отправки или добавления в очередь. Это относится к неконечным числам, функциям, символам, `Map`, `Set`, потокам и экземплярам классов без JSON-представления, как в корне, так и во вложенных значениях. Та же проверка защищает heartbeat-сообщения; сбой сериализации heartbeat завершает сессию. Валидация struct может отвергнуть значение раньше.
 - `close(code?, reason?)` запрашивает закрытие и останавливает heartbeat. `code` должен быть `1000` или лежать в `3000..4999`, а `reason` — не длиннее 123 байт UTF-8; недопустимые аргументы бросают ошибку до смены состояния.
 - `closed` резолвится логическим терминальным [`WebSocketCloseInfo`](/ru-RU/api/core/websocketcloseinfo-type).
 - `onStateChange` и `onRuntimeError` возвращают функцию отписки.
 
-Для cleanup принадлежащего scope предпочитай `await using ownedSession = session`. Ручные `session.close()` и `await session.closed` остаются.
+Для освобождения ресурсов сессии в области видимости, которая ею владеет, предпочитай `await using ownedSession = session`. Ручные `session.close()` и `await session.closed` остаются.
 
 ```ts
 async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
@@ -36,6 +37,6 @@ async function consume(session: WebSocketSession<unknown, never>): Promise<void>
 }
 ```
 
-Асинхронный disposer запрашивает нативное закрытие и ждёт teardown, которым владеет Defjs, но отсутствующее событие close ограничивает одной секундой и может reject’нуться с `DOMException` с именем `TimeoutError`. Он не может доказать, что физическое TCP-соединение закрылось.
+Асинхронный метод освобождения ресурсов запрашивает нативное закрытие и ждёт завершения очистки, за которую отвечает Defjs. Если событие close не приходит, ожидание ограничено одной секундой, и метод может отклонить промис с `DOMException` с именем `TimeoutError`. Он не может доказать, что физическое TCP-соединение закрылось.
 
 [WebSocket](/ru-RU/api/web-socket)

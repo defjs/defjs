@@ -28,12 +28,13 @@ type SSEReconnect = {
 }
 ```
 
-- `attempts` est le budget de nouvelles tentatives après la première tentative. Il vaut `3` par défaut quand `reconnect` est défini, et `0` désactive les nouvelles tentatives. L’omettre ne veut pas dire illimité.
+- `attempts` est le budget de nouvelles tentatives de chaque coupure. Il vaut `3` par défaut quand `reconnect` est défini, et `0` désactive les nouvelles tentatives. Un handshake réussi réinitialise le budget, l’`attempt` du callback et l’exposant de backoff. L’omettre ne donne pas un nombre illimité de nouvelles tentatives au sein d’une même coupure. Des ouvertures réussies répétées, immédiatement suivies d’échecs de flux réessayables, peuvent continuer à se reconnecter avec le délai de base courant (sous réserve du jitter et des plafonds), car chaque ouverture réinitialise le budget ; utilise `shouldReconnect` pour les arrêter. Un EOF normal reste terminal.
 - Sans `shouldReconnect`, la connexion n’est rétablie que pour les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE`. Si ce callback est fourni, sa valeur de retour détermine la reconnexion pour toutes les méthodes, y compris `POST` ; le champ `method` de son contexte permet de distinguer les endpoints. Renvoie `false` pour arrêter les nouvelles tentatives après cet échec. Le callback s’exécute avant la vérification du nombre maximal de tentatives.
 - Une requête dont le corps est un `ReadableStream` ne fait jamais l’objet d’une reconnexion ; `shouldReconnect` n’est pas appelé dans ce cas.
-- `delayMs`, `factor`, `jitter` (0 à 1) et `maxDelayMs` façonnent le backoff. `factor` vaut `1` par défaut et `jitter` vaut `0`.
+- `delayMs`, `factor`, `jitter` (0 à 1) et `maxDelayMs` façonnent le backoff. `factor` vaut `1` par défaut et `jitter` vaut `0`. `maxDelayMs` plafonne le délai final après le jitter et l’arrondi. Sans plafond configuré, la limite de timer de la plateforme, `2_147_483_647` ms, s’applique quand même. Une base nulle reste nulle ; le dépassement d’un nombre valide sature aux plafonds.
 - `delayMs` n’est que le délai de base initial (`1000` par défaut). Un champ `retry:` du serveur (chiffres uniquement, en millisecondes) le remplace pour les tentatives suivantes.
-- Le dernier id d’événement est renvoyé en `Last-Event-ID` à la tentative suivante.
+- Le dernier id d’événement est renvoyé en octets UTF-8 dans `Last-Event-ID` à la tentative suivante. Un `id:` vide l’efface ; un identifiant qui contient NUL est ignoré.
+- Les options de reconnexion sont validées avant les intercepteurs ou Fetch : `attempts` doit être un entier sûr positif ou nul ; `delayMs` et un `maxDelayMs` explicite doivent être finis et positifs ou nuls ; `factor` doit être fini et strictement positif ; `jitter` doit être fini et compris entre 0 et 1. Les valeurs invalides renvoient `REQ_OPTIONS_INVALID` au moment de l’execute.
 
 Voir [SSE](/fr-FR/api/sse) pour le handle du flux.
 

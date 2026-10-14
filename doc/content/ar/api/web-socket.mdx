@@ -64,7 +64,7 @@ async function consume(session: WebSocketSession<unknown, never>): Promise<void>
 }
 ```
 
-`closed` يبلّغ عن الحالة النهائية المنطقية. المتخلّص غير المتزامن يطلب إغلاقًا أصليًا وينتظر teardown المملوك لـ Defjs، لكنه يحدّ حدث الإغلاق المفقود بثانية واحدة وقد يرفض بـ `DOMException` اسمه `TimeoutError`. ولا يستطيع إثبات أن اتصال TCP المادي أُغلق.
+`closed` يبلّغ عن الحالة النهائية المنطقية. يطلب المتخلّص غير المتزامن من المنصة إغلاق الاتصال وينتظر أعمال التنظيف التي تديرها Defjs، لكنه لا ينتظر حدث الإغلاق أكثر من ثانية واحدة إن لم يصل، وقد يرفض بـ `DOMException` اسمه `TimeoutError`. ولا يستطيع إثبات أن اتصال TCP المادي أُغلق.
 
 ### WebSocketState
 
@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` و`timeout` متنافيان: النوع يرفض الاثنين معًا، وتمريرهما معًا وقت التشغيل يفشل بعطل `REQ_OPTIONS_INVALID`. ويتحد `signal` مع أيٍّ منهما. `timeout` مهلة بدء للاتصال: لا تعيد إعادة الاتصال اللاحقة تسليحها، ولا يُطبَّق `withTimeout` على WebSocket.
 
-عند ضبط `reconnect`، الافتراضي لـ `attempts` هو 3؛ و`0` يعطّل. حذف `attempts` ليس بلا حد. انظر [العميل](/ar/api/client) للقيم الافتراضية.
+عند ضبط `reconnect`، تكون القيمة الافتراضية لـ `attempts` هي 3 لكل انقطاع؛ وتعطّل `0` إعادة المحاولة. يعيد `open` الناجح ضبط الميزانية وأُسّ التراجع، فتبدأ كل حالة انقطاع جديدة بإعادة المحاولة 1. لا يعني حذف `attempts` السماح بمحاولات غير محدودة أثناء انقطاع واحد. انظر [العميل](/ar/api/client) للقيم الافتراضية وقواعد التحقق.
 
 ## الرسائل
 
 `incoming` هو struct واحد. إطارات النص و`ArrayBuffer` والمصفوفة المنمّطة (typed array) و`Blob` تُقرأ كـ UTF-8، ثم `JSON.parse`، ثم تُفحص مقابل ذلك الـ struct. الإطار الذي يفشل تحليل JSON أو الـ struct يُبلَّغ إلى `session.onRuntimeError` ولا يُصفّ. لا يوجد خيار عميل للإطار غير الصالح.
 
-`outgoing` هو struct واحد. `session.send` يقبل `StructInput` لذلك الـ struct، ويرمّز الأسماء المستعارة، ثم `JSON.stringify`. عدة أنواع من الرسائل هي `struct.discriminatedUnion`.
+`outgoing` هو struct واحد. يقبل `session.send` قيمة `StructInput` لذلك الـ struct، ويرمّز الأسماء المستعارة، ثم يستدعي `JSON.stringify`. تؤدي القيم التي لا يستطيع JSON تمثيلها بأمانة بعد الترميز إلى رمي `TypeError` قبل إرسالها أو إدخالها في طابور إعادة الاتصال، بما في ذلك الأعداد غير المنتهية والدوال والرموز و`Map` و`Set` والتدفقات ونسخ الأصناف التي لا تملك تمثيلًا في JSON. تخضع القيم المتداخلة للفحص نفسه المستخدم لأجسام HTTP بصيغة JSON. ويستخدم نبض القلب هذا الفحص أيضًا؛ وينهي فشل تسلسل رسالة نبض القلب الجلسة. يمكن تمثيل عدة أنواع من الرسائل باستخدام `struct.discriminatedUnion`.
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

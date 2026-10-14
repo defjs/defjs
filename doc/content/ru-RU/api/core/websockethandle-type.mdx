@@ -24,6 +24,6 @@ type WebSocketHandle = Omit<
 
 DOM-`WebSocket` без свойств-обработчиков событий, `binaryType`, `dispatchEvent` и констант состояния. Поэтому кастомной реализации нужны `url`, `protocol`, `extensions`, `bufferedAmount`, `send`, `close`, `addEventListener`, `removeEventListener` и числовой `readyState`.
 
-Транспорт ставит `binaryType = 'arraybuffer'`, если такое свойство есть. Это тип инстанса, который создаёт [`WebSocketHandleConstructor`](/ru-RU/api/core/websockethandleconstructor-type).
+Транспорт ставит `binaryType = 'arraybuffer'`, если такое свойство есть, и игнорирует его отсутствие. Если setter бросает ошибку, транспорт пытается закрыть созданный handle, прежде чем завершить эту попытку с `NET_UNREACHABLE`; сокет не остаётся вне процедуры освобождения ресурсов. Это свойство служит оптимизацией, а декодер также принимает фреймы Blob. Это тип инстанса, который создаёт [`WebSocketHandleConstructor`](/ru-RU/api/core/websockethandleconstructor-type).
 
 [Клиент](/ru-RU/api/client)

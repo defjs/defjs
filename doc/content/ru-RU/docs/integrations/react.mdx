@@ -33,7 +33,7 @@ React в development может поставить и снять effect боль
 
 ## Владей query-работой
 
-Query-библиотека может владеть кешем, ретраями, подавлением устаревшего результата и отменой. Отдай ей signal, который она даёт. Для страниц-списков оберни `client.execute(...)` в TanStack Query (или похожее) — `@defjs/react` остаётся только DI и `useRequest` **не** везёт.
+Query-библиотека может владеть кешем, ретраями, подавлением устаревшего результата и отменой. Отдай ей signal, который она даёт. Для страниц-списков оберни `client.execute(...)` в TanStack Query (или похожее) — `@defjs/react` остаётся только DI и **не** предоставляет `useRequest`.
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 

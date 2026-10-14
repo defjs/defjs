@@ -13,4 +13,6 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 
 راجع [دليل الأخطاء](/ar/docs/errors).
 
+تحمل هذه القيمة الحارسة علامة غير قابلة للتعداد هي `Symbol.for('defjs.cause.timeout')`. يتعرّف [`isTimeoutCause`](/ar/api/core/istimeoutcause) عليها من أي نسخة من Core دون مقارنة هوية الكائن. لا يعتمد التصنيف على عمليات تنفيذ سابقة غير ذات صلة.
+
 [الأخطاء](/ar/api/errors)

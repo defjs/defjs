@@ -1,6 +1,6 @@
 ---
 title: '数据契约 / Struct'
-description: 给请求和响应建模，parse 未知值，编码线上 body。
+description: 给请求和响应建模，parse 未知值，编码用于传输的 body。
 ---
 
 # Struct
@@ -13,7 +13,7 @@ description: 给请求和响应建模，parse 未知值，编码线上 body。
   examples/struct/basic-setup.ts#example
 </include>
 
-Parse 结果只留声明过的字段。缺必填、原语不对、嵌套值坏了、tuple 长度不对、不允许的 `null` → `StructError`，没有半成品。Struct 不可变；`.optional()` 一类方法返回新 Struct。
+解析结果只留声明过的字段。缺少必填字段、基本类型不匹配、嵌套值坏了、tuple 长度不对、不允许的 `null` → `StructError`，没有半成品。Struct 不可变；`.optional()` 一类方法返回新 Struct。
 
 ## 必填、可选、null
 
@@ -56,31 +56,31 @@ Path、query、headers、body 是 builder 返回的字段，不是一种 request
 
 ## 别名
 
-`.alias(...)` 把逻辑名和线上名分开。`struct.parse(...)` 用逻辑 key。JSON 和扁平请求 codec 编码 alias；JSON 响应解码把线上 key 映回逻辑字段。
+`.alias(...)` 把逻辑名和传输字段名分开。`struct.parse(...)` 用逻辑 key。JSON 和扁平请求 codec 编码 alias；JSON 响应解码把传输字段名 映回逻辑字段。
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-| 边界                                       | 字段                      |
-| ------------------------------------------ | ------------------------- |
-| `struct.parse(User, ...)` 和 command input | 逻辑名 `displayName`      |
-| builder 返回的带类型对象                   | 线上 `display_name`       |
-| JSON / SSE / WebSocket 解码                | 线上 → 逻辑 `displayName` |
-| builder 里手写的匿名对象                   | 你写下的那个 key          |
+| 边界                                       | 字段                              |
+| ------------------------------------------ | --------------------------------- |
+| `struct.parse(User, ...)` 和 command input | 逻辑名 `displayName`              |
+| builder 返回的带类型对象                   | 传输字段 `display_name`           |
+| JSON / SSE / WebSocket 解码                | 传输字段 → 逻辑字段 `displayName` |
+| builder 里手写的匿名对象                   | 你写下的那个 key                  |
 
-builder 本身读取的是逻辑名（`input.user.displayName`）；只有 serializer 编码 builder 返回的带类型对象时，才会出现线上名。
+builder 本身读取的是逻辑名（`input.user.displayName`）；只有 serializer 编码 builder 返回的带类型对象时，才会出现传输字段名。
 
-Alias 对嵌套字段、数组、对象、联合、判别字段都有效。业务代码用逻辑名；外部名字在 struct 上写一次。展开带类型的对象会保住这套编码。同一个对象里既写逻辑字段又写它的线上 key，就是 `REQ_BUILD_FAILED`。你自己 `JSON.stringify` 一个值就离开了这条路：serializer 看到的是逻辑名。
+Alias 对嵌套字段、数组、对象、联合、判别字段都有效。业务代码用逻辑名；外部名字在 struct 上写一次。展开带类型的对象会保住这套编码。同一个对象里既写逻辑字段又写它的传输字段名，就是 `REQ_BUILD_FAILED`。你自己 `JSON.stringify` 一个值就离开了这条路：serializer 看到的是逻辑名。
 
-引导按每个节点决定，不只在根上。匿名父对象下面新写的对象保留你写下的 key。带类型的父对象下面，同一个对象改用该字段的 struct。
+编码依据在每个节点上分别选择，而不只在根节点选择。匿名父对象下面新写的对象保留你写下的 key。带类型的父对象下面，同一个对象改用该字段的 struct。
 
 ```ts
-body: { row: { id: '42' } }              // 根匿名：发出 id
-body: { ...input, row: { id: '42' } }    // 根带类型，row 字段声明了 alias：发出 wire_id
+body: { row: { id: '42' } }              // Anonymous root: emits id
+body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
 ```
 
-union 引导同时命中多个分支时，每个分支都编码再比较。线上结果一致就采用；有差异就是 `REQ_BUILD_FAILED`。
+联合类型的编码依据同时匹配多个分支时，每个分支都编码再比较。传输结果一致就采用；有差异就是 `REQ_BUILD_FAILED`。
 
 混合 intersection（包含非 object 部分）解析时，标签是各匹配部分已有标签的合取；未经解析、新写的混合 intersection 值按匿名对象处理。
 
@@ -92,7 +92,7 @@ union 引导同时命中多个分支时，每个分支都编码再比较。线�
   examples/struct/parse-failures.ts#example
 </include>
 
-`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。Issue 里可能有不可信输入——打日志或返回前先脱敏。`struct.parse(..., { errorMap })` 只改这一次调用的 issue 文案。
+`StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。默认消息只描述收到的类型，不包含具体值，例如 `Expected number at id, received string`。问题路径是结构性的，会保留 record 的键：`struct.record(...)` 可能产生 `Expected number at alice@example.com, received string`，因此键在默认消息、`prettify()` 和 `String(fault)` 中仍可能敏感。因此 `message` 和 `prettify()` 不包含收到的数据；`received` 仍保留原始值，记录日志或返回前需要脱敏。`struct.parse(..., { errorMap })` 只改写本次调用的消息，也包括来自另一个 Core 副本的 struct 中的 bigint/date 转换失败。返回的任何字符串（包括 `''`）都会替换默认消息；只有 `undefined` 会保留默认消息。自定义文本会原样使用，如果映射中加入了具体值，就可能泄露这些值。
 
 Struct 校验只看结构。没有公开的范围、格式、细化、鉴权或状态迁移规则。这些检查放在打 command 之前。
 
@@ -120,7 +120,7 @@ Struct 校验只看结构。没有公开的范围、格式、细化、鉴权或�
 
 从 `@defjs/core` import `struct`、`Infer`、`Struct`、`StructError` 和相关公开类型。解析器用 `struct.parse(...)`。别 import `createObjectStruct`、definition symbol、codec 内部，或 `packages/core/src`。
 
-门面不做的事：
+门面 API 的行为边界：
 
 - 对象/record 输出用 null prototype——别假设有 `Object.prototype` 方法。
 - 未知对象 key 会被丢掉。

@@ -5,7 +5,7 @@ description: 带类型的 HTTP、SSE、WebSocket 命令：显式 Client，错误
 
 # Defjs
 
-先定义端点，再打出 opaque command，最后 `execute`。HTTP、SSE、WebSocket 都是同一套路。
+先定义端点，再构建一个不透明命令，最后执行它。HTTP、SSE、WebSocket 都是同一套路。
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example

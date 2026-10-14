@@ -22,10 +22,10 @@ function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): C
 }
 ```
 
-- `attempts` 係第一次連線之後嘅重試額度。預設係 `3`，`0` 就停用 reconnect。唔寫 `attempts` 唔代表無限。
-- `delayMs` 預設係 `1000`，`factor` 預設係 `2`，`maxDelayMs` 預設係 `30000`，`jitter`（0 至 1）預設係 `0`。第 _n_ 次重試嘅延遲係 `delayMs * factor^(n-1)`，上限為 `maxDelayMs`。
+- `attempts` 係每次斷線嘅重試預算。預設係 `3`，`0` 就停用重連。成功 `open` 會重設預算同退避指數；下一次斷線由第 1 次重試開始。省略佢唔代表同一次斷線可以無限重試。成功 open 之後立刻被 server 再關閉嘅 socket，會按 base delay 持續重連（受 jitter 同上限約束），因為每次 open 都會重設預算；用 `shouldReconnect` 停低佢。
+- `delayMs` 預設係 `1000`，`factor` 預設係 `2`，`maxDelayMs` 預設係 `30000`，`jitter`（0 至 1）預設係 `0`。第 _n_ 次重試以 `delayMs * factor^(n-1)` 作起點，先限制喺 `maxDelayMs`，再套用 jitter 同四捨五入，之後最終延遲會再限制喺 `maxDelayMs` 同 `2_147_483_647` ms。Base 係零就會維持零；有效數值運算溢位時，會限制喺呢啲上限。
 - `shouldReconnect` 可以 return `false`，改為結束 session。冇佢嘅話，只要額度未用完，每次關閉都會重試。手動 `session.close()` 唔會 call 佢。
-- 超出範圍嘅值會令 execute 以 `REQ_OPTIONS_INVALID` 失敗。
+- 啟用重試時，`attempts` 必須係非負安全整數；`delayMs` 同 `maxDelayMs` 必須係有限非負數；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會喺連線之前令 execute 以 `REQ_OPTIONS_INVALID` 失敗。`attempts: 0` 會即時停用重試，並忽略其餘未使用嘅重連欄位。
 - Execute options 入面嘅 `reconnect` 會喺該次 call 取代呢個設定。
 
 [Client](/zh-Hant-HK/api/client)

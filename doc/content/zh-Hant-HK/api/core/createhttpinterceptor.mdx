@@ -14,4 +14,6 @@ type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
 
 回傳 `{ kind: 'http', fn }`。Call `next(req)`（可以傳修改過嘅 request），或者用 `makeResponse` short-circuit。`next` 只會執行排喺呢個 interceptor 之後註冊嘅 interceptors，然後去到 fetch handler。HTTP interceptors 唔會為 SSE 或 WebSocket command 執行。
 
+`next(req)` 產生嘅確定 URL 錯誤會 reject 返回嘅 promise，所以 `.then` / `.catch` 嘅恢復會執行；如果冇恢復，`client.execute` 仍然會報告 `REQ_BUILD_FAILED`。
+
 [Interceptors](/zh-Hant-HK/api/interceptors)

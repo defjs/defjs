@@ -17,6 +17,8 @@ class StructError extends Error {
 
 `name` هو `'StructError'`. و`message` هي رسالة المشكلة عند وجود مشكلة واحدة، و`N struct issues: <first message>` عند وجود عدة مشاكل، و`Struct parse failed` عند عدم وجود أي منها.
 
+رسائل المشاكل الافتراضية تذكر نوع المدخل المستلَم، ولا تذكر قيمته أبدًا؛ مثل `Expected number at id, received string`. وتستخدم `message` ودوال التنسيق ذلك النص. يبقى المدخل الخام في `StructIssue.received`؛ أما نص `errorMap` المخصص فيُستخدم كما هو حرفيًا وقد يُعيد إظهار قيم حساسة.
+
 - يتوقف `struct.parse` عند أول إخفاق، فتحمل `issues` هناك [`StructIssue`](/ar/api/core/structissue-type) واحدة.
 - يُرجع `format()` شجرة [`FormattedStructError`](/ar/api/core/formattedstructerror-type). لكل عقدة مصفوفة `_errors`، وتتبع المفاتيح المتداخلة `issue.path`.
 - يُرجع `flatten()` الكائن [`FlattenedStructError`](/ar/api/core/flattenedstructerror-type): الرسائل ذات path الفارغ تذهب إلى `formErrors`، وتُجمَّع البقية بحسب أول مقطع في path داخل `fieldErrors`.

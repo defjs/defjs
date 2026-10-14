@@ -24,4 +24,4 @@ interceptor 看到的最小 session 接口。它在结构上与 [`WebSocketSessi
 
 Wrapper 或短路 session 必须转发与其 `close` / `closed` lifecycle 相同的 `[Symbol.asyncDispose]()` teardown；返回无关的 resolved promise 并不够。要求这个成员对结构化实现而言是编译期 breaking change。只接收 Defjs 返回的 session 的代码无需新增运行时调用。
 
-[Interceptors](/zh-Hans/api/interceptors)
+[拦截器](/zh-Hans/api/interceptors)

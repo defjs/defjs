@@ -39,7 +39,7 @@ function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, op
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-نقل HTTP الافتراضي. يأخذ `fetchImpl` افتراضيًا `fetch` العام؛ ويوفّر `withHTTPHandle` تنفيذًا آخر. وهو يرفض — بدل أن يستقر باستجابة مُصطنعة — حين لا تصل أي استجابة إلى العميل أو يفشل قراءة جسم مصرَّح به.
+نقل HTTP الافتراضي. يأخذ `fetchImpl` افتراضيًا `fetch` العام الذي يُحلّ وقت الإرسال؛ ويوفّر `withHTTPHandle` تنفيذًا آخر. يستقبل Fetch الأصلي للمنصة الذي لم يُستبدَل الوسيطين `(url, init)`، بينما يستقبل البديل العام أو المعالج المخصص `Request`. وهو يرفض — بدل أن يستقر باستجابة مُصطنعة — حين لا تصل أي استجابة إلى العميل أو تفشل قراءة جسم مصرَّح به.
 
 ## makeResponse()
 
@@ -133,6 +133,8 @@ type HttpResponse<R> = {
 يُبلَّغ عن تقدّم الرفع فقط في بيئات التشغيل التي تدعم إرسال أجسام الطلبات كتدفق (Bun، Node، Deno)؛ وفي المتصفحات تُرسل أجسام
 `Blob` / `File` و`ArrayBuffer` و`FormData` دون تغيير ولا يُستدعى `onUploadProgress`.
 
+في بيئات تشغيل الخادم، تستخدم FormData تدفقها المُسلسَل دون تخزين الجسم كاملًا في Blob، وتحافظ على فاصل multipart الفعلي (boundary). يظل حجمها الكلي مجهولًا ما لم يحدده رأس `Content-Length` صالح ومُعيَّن صراحةً. تُحفَظ أنواع المحتوى المحددة صراحةً أثناء تحويل الرفع، باستثناء FormData التي يجب أن تستخدم الفاصل الناتج عن تسلسلها. تحسب `loaded` بايتات التدفق، لا إقرارات الخادم بالاستلام. وعندما تكون قيمة `Content-Encoding` للتنزيل غير `identity`، يُبلَّغ عن `total: 0` و`lengthComputable: false`؛ فقد تكون بايتات التدفق قد فُك ضغطها بالفعل.
+
 انظر [دليل HTTP](/ar/docs/http) و[الأوامر](/ar/docs/commands).
 
 ## RequestEndpoint
@@ -150,11 +152,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
-`GET` و`HEAD` لا يمكنهما إرجاع جسم. `path` و`headers` يجب أن يكونا قيمًا قياسية مسطّحة؛ و`query` قد يتداخل، والكائن المتداخل يحتاج `withQuerySerializer` وقت التشغيل.
+`GET` و`HEAD` لا يمكنهما إرجاع جسم. `path` و`headers` يجب أن يكونا قيمًا مفردة (scalar) غير متداخلة؛ و`query` قد يتداخل، والكائن المتداخل يحتاج `withQuerySerializer` وقت التشغيل.
+
+راجع [`HttpRequestShape`](/ar/api/core/httprequestshape-type) لمعرفة قيم النقل وJSON التي تقبلها `BodyValue`.
 
 ## HttpCommand
 

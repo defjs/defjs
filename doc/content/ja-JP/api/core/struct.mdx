@@ -30,7 +30,7 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 | [`struct.literal(value)`](/ja-JP/api/core/struct-literal)                                    | ちょうどそのリテラル                                                     |
 | [`struct.null()`](/ja-JP/api/core/struct-null)                                               | `null` のみ                                                              |
 | [`struct.any()`](/ja-JP/api/core/struct-any) / [`unknown()`](/ja-JP/api/core/struct-unknown) | `null` と `undefined` を除く任意の値                                     |
-| [`struct.array(item)`](/ja-JP/api/core/struct-array)                                         | 1 つの要素 struct の配列                                                 |
+| [`struct.array(item)`](/ja-JP/api/core/struct-array)                                         | すべての要素を同じ struct でパースする配列                               |
 | [`struct.tuple(items)`](/ja-JP/api/core/struct-tuple)                                        | 固定長の配列。`items` は struct の配列を 1 つ渡します                    |
 | [`struct.record(value)`](/ja-JP/api/core/struct-record)                                      | 文字列キーと 1 つの値 struct を持つプレーンオブジェクト                  |
 | [`struct.object(shape)`](/ja-JP/api/core/struct-object)                                      | 固定フィールドを持つプレーンオブジェクト。未知のキーは取り除かれます     |

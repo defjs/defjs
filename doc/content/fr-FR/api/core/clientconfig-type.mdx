@@ -26,6 +26,6 @@ interface ClientConfig {
 
 L’instantané résolu que `createClient` construit et que chaque helper d’options modifie. Les membres HTTP proviennent d’une base `HttpClientConfig` non exportée et sont montrés en ligne.
 
-Avant l’application de toute option, `endpoint` vaut `''`, `interceptors` est vide, et `http.handle` et `sse.handle` sont le `fetch` global. `webSocket.handle` vaut `globalThis.WebSocket`, et les autres réglages `webSocket` ne sont pas définis. `withXSRF` renseigne `xsrf.cookieName` avec `XSRF-TOKEN` et `xsrf.headerName` avec `X-XSRF-TOKEN` quand ils sont omis.
+Avant l’application de toute option, `endpoint` vaut `''`, `interceptors` est vide, et `http.handle` et `sse.handle` partagent un wrapper par défaut qui résout `globalThis.fetch` à chaque appel. Remplacer Fetch après l’import affecte les deux valeurs par défaut. Core peut être importé sans Fetch ; une exécution HTTP/SSE par défaut échoue avec `ENV_UNSUPPORTED` s’il manque encore. Les handles personnalisés n’exigent pas un Fetch global. `webSocket.handle` vaut `globalThis.WebSocket`, et les autres réglages `webSocket` ne sont pas définis. `withXSRF` renseigne `xsrf.cookieName` avec `XSRF-TOKEN` et `xsrf.headerName` avec `X-XSRF-TOKEN` quand ils sont omis.
 
 [Client](/fr-FR/api/client)

@@ -13,7 +13,7 @@ description: createClient、option ヘルパー、Client 型です。
 function createClient(...options: ClientOption[]): Client
 ```
 
-options は順に適用されます。インターセプターが auth やテナントを掴むなら、クライアントはリクエスト境界の中で作ってください。
+options は順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。
 
 - **options** — `withEndpoint` のような option ヘルパーです。
 - **戻り値** `execute` がトランスポートごとにオーバーロードされたクライアントです。
@@ -118,7 +118,7 @@ function withXSRF(options?: {
 
 HTTP リクエストに XSRF トークンのヘッダーを追加します。デフォルトは cookie `XSRF-TOKEN`、ヘッダー `X-XSRF-TOKEN` です。SSE と WebSocket のリクエストには影響しません。
 
-デフォルトの HTTP トランスポートは、次のすべてが成り立つときにヘッダーを追加します。メソッドが `GET`、`HEAD`、`OPTIONS`、`TRACE` のいずれでもないこと、リクエストにそのヘッダーがまだないこと、リクエストが same-origin であること（ブラウザ外では `baseEndpoint` を持つリクエストはすべて該当します）、空でないトークンが見つかることです。トークンは `tokenProvider` が指定されていればそこから、なければ cookie から取得します。cookie を読むのはブラウザ内だけです。
+デフォルトの HTTP トランスポートは、次のすべてが成り立つときにヘッダーを追加します。メソッドが `GET`、`HEAD`、`OPTIONS`、`TRACE` のいずれでもないこと、リクエストにそのヘッダーがまだないこと、リクエストが同一オリジンであること、空でないトークンが見つかることです。Worker 内も含め、`location` が存在するときは、解決済みリクエストのオリジンが `location.origin` と一致する必要があります。存在しなければ、`baseEndpoint` を持つリクエストを同一オリジンとみなします。クロスオリジンのリクエストでは `tokenProvider` は呼ばれません。トークンはプロバイダーが指定されていればそこから、なければ `document.cookie` から取得します。cookie を読むのは `document` が存在するときだけです。
 
 ### SSE の設定
 
@@ -182,7 +182,7 @@ type QuerySerializer = (query: { [key: string]: unknown }) => string
 type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 ```
 
-Defjs が Fetch 実装に求める呼び出しシグネチャです。`typeof fetch` ではないため、モックが `preconnect` のようなホスト固有の拡張を持つ必要はありません。
+Defjs が Fetch 実装に求める呼び出しシグネチャです。`typeof fetch` ではないため、モックが `preconnect` のようなホスト固有の拡張を持つ必要はありません。デフォルトの HTTP/SSE ハンドラーは、呼び出しごとに `globalThis.fetch` を解決します。HTTP が `(url, init)` を使うのは、差し替えられていないプラットフォームの Fetch だけで、差し替えたグローバルやカスタムハンドラーには `Request` を渡します。SSE は常に `Request` を渡します。Fetch がなくても Core の import は可能です。実行時にも Fetch がなければ、デフォルトの実行は `ENV_UNSUPPORTED` を報告しますが、カスタムハンドラーは利用できます。
 
 ### ClientSSEOptions
 
@@ -236,15 +236,19 @@ interface ClientWebSocketOptions {
 
 どちらのトランスポートでも再接続はオプトインです。`withSSEReconnect` / `withWebSocketReconnect` を使わなければリトライはありません。`reconnect` を指定すると、次のデフォルトが適用されます。
 
-| フィールド   | SSE      | WebSocket |
-| ------------ | -------- | --------- |
-| `attempts`   | `3`      | `3`       |
-| `delayMs`    | `1000`   | `1000`    |
-| `factor`     | `1`      | `2`       |
-| `jitter`     | `0`      | `0`       |
-| `maxDelayMs` | 上限なし | `30000`   |
+| フィールド   | SSE            | WebSocket      |
+| ------------ | -------------- | -------------- |
+| `attempts`   | 障害ごとに `3` | 障害ごとに `3` |
+| `delayMs`    | `1000`         | `1000`         |
+| `factor`     | `1`            | `2`            |
+| `jitter`     | `0`            | `0`            |
+| `maxDelayMs` | 上限なし       | `30000`        |
 
-SSE では `delayMs` は開始時の基準の待ち時間にすぎず、サーバーの `retry:` フィールドがあれば、以降の試行ではそれに置き換わります。`attempts: 0` はリトライを無効にします。`attempts` を省いても無制限にはなりません。`jitter` は 0–1 の範囲でなければならず、各待ち時間はその割合までの幅で前後にランダム化されます。`shouldReconnect` が `false` を返すとリトライを止めます。SSE のコールバックは `lastEventId`、リクエストの `method`、最新の `open` 情報も受け取り、非同期でも構いません。それがなければ、SSE が再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` のリクエストだけです。指定されていれば、すべてのメソッドについて、その戻り値で再接続するかどうかを決めます。WebSocket のコールバックは代わりに close の `code`、`reason`、`wasClean` を受け取ります。
+どちらのトランスポートでも、ハンドシェイクに成功すると、障害ごとのリトライ予算、コールバックの試行番号、バックオフの指数がリセットされます。`attempts: 0` はリトライを無効にします。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。`maxDelayMs` は、ジッターと丸め処理の後の最終的な待ち時間に上限を設けます。SSE に設定上の上限がない場合も含め、プラットフォームのタイマー上限である `2_147_483_647` ms も適用されます。基準値がゼロならゼロのままで、有効な数値からの計算でオーバーフローした場合は上限で飽和します。
+
+再接続オプションはトランスポートの呼び出し前に検証されます。`attempts` は非負の安全な整数、`delayMs` と明示的な `maxDelayMs` は有限の非負数、`factor` は有限の正数、`jitter` は有限で 0–1 の範囲でなければなりません。不正な値は `REQ_OPTIONS_INVALID` を返します。WebSocket の `attempts: 0` は即座にリトライを無効にし、使われない再接続フィールドを無視します。SSE はそれらも検証します。ジッターは上限適用済みの基準値を増減させ、その後に最終的な上限が適用されます。
+
+SSE では `delayMs` は開始時の基準の待ち時間にすぎず、数字だけのサーバーの `retry:` フィールドが、復旧後も含め、以降の試行でその値を置き換えます。`shouldReconnect` が `false` を返すとリトライを止めます。SSE のコールバックは `lastEventId`、リクエストの `method`、最新の `open` 情報も受け取り、非同期でも構いません。それがなければ、SSE が再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` のリクエストだけです。指定されていれば、すべてのメソッドについて、その戻り値で再接続するかどうかを決めます。最新のイベント ID は UTF-8 のバイト列として `Last-Event-ID` に送られます。空の ID は保存された ID を消去し、NUL を含む ID は無視されます。WebSocket のコールバックは代わりに close の `code`、`reason`、`wasClean` を受け取ります。
 
 SSE の `onInvalidEvent` は、一致する struct がないイベント（`default` もない場合を含む。`missing-struct`）や、データが struct の検証に失敗したイベント（`validation-failed`）を扱います。イベントは常に破棄されます。ハンドラーの戻り値は無視され、ハンドラーが投げたエラーでストリームが閉じることはありません。
 
@@ -277,7 +281,7 @@ interface ClientSSEConfig extends ClientSSEOptions {
 
 ### WebSocketHandle
 
-トランスポートが使う WebSocket インスタンス面です。`binaryType` を除いた `WebSocket` で、ready state の定数、`dispatchEvent`、`on*` ハンドラープロパティを備え、読み取り専用の `readyState: number` を持ちます。
+トランスポートが使う WebSocket インスタンスのインターフェースです。`WebSocket` から `binaryType`、ready state の定数、`dispatchEvent`、`on*` ハンドラープロパティを除き、`readyState: number` を読み取り専用にしたものです。
 
 ### WebSocketHandleConstructor
 

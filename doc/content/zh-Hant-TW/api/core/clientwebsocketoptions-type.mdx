@@ -33,6 +33,8 @@ interface ClientWebSocketOptions {
 - **protocols** — 傳給 constructor 的子協定。
 - **reconnect** — 需主動啟用。`attempts` 預設為 **3**；`0` 停用重試，省略 `attempts` 並不代表無限次。其他預設值：`delayMs` 為 1000，`factor` 為 2，`jitter` 為 0（0-1 的乘性因子），`maxDelayMs` 為 30000。`shouldReconnect` 會收到 close 的 `code`、`reason` 與 `wasClean`，並可否決一次重試。
 
+重試額度依每次中斷計算。成功的 `open` 會重設額度、callback 的 attempt，以及 backoff 指數；下一次中斷從重試 1 開始。`maxDelayMs` 會在 jitter 與捨入之後為最終延遲加上上限，同時也受 `2_147_483_647` ms 限制。驗證規則與溢位行為見 [`withWebSocketReconnect`](/zh-Hant-TW/api/core/withwebsocketreconnect)。
+
 用 `withWebSocketHandle`、`withWebSocketBeforeConnect`、`withWebSocketHeartbeat`、`withWebSocketProtocols` 與 `withWebSocketReconnect` 來設定。`WebSocketExecuteOptions` 可以針對單次呼叫覆寫 `beforeConnect`、`heartbeat`、`protocols` 與 `reconnect`。
 
 見 [Client 指南](/zh-Hant-TW/docs/client)。

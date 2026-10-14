@@ -18,7 +18,7 @@ interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIterable<T
 
 `open` 是启动时的快照（[`EventStreamOpenInfo`](/zh-Hans/api/core/eventstreamopeninfo-type)）；重连之后它可能变化，所以请重新读取 `stream.open`。流结束时，`closed` 会以 [`EventStreamCloseInfo`](/zh-Hans/api/core/eventstreamcloseinfo-type) resolve。
 
-推荐用 `await using stream = handle` 在所属作用域内清理。dispose 会停止 Defjs 的读取与重连工作，并等待它的 reader lock 被释放；但它不保证由运行时提供方控制、卡住的 `ReadableStream.cancel()` promise 一定会完成。仍然可以手动使用 `close()` / `closed`。
+推荐用 `await using stream = handle` 在所属作用域内清理。dispose 会停止 Defjs 的读取与重连工作，并等待它的 reader lock 被释放；但它不保证由流提供方控制、卡住的 `ReadableStream.cancel()` promise 一定会完成。仍然可以手动使用 `close()` / `closed`。
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
@@ -27,6 +27,6 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-`EventStreamHandle` 的结构化实现必须实现 `[Symbol.asyncDispose]()`，并返回同一条所属清理路径。这是对自定义 handle 的编译期要求；只接收 Defjs 返回的 handle 的代码，没有额外的运行时调用要求。
+`EventStreamHandle` 的结构化实现必须实现 `[Symbol.asyncDispose]()`，并复用同一套流程来清理其拥有的资源，返回该流程的结果。这是对自定义 handle 的编译期要求；只接收 Defjs 返回的 handle 的代码，没有额外的运行时调用要求。
 
 [SSE](/zh-Hans/api/sse)

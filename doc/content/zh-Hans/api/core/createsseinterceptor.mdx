@@ -14,6 +14,8 @@ type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStr
 
 返回 `{ kind: 'sse', fn }`。SSE interceptor 只对 SSE 命令运行，按注册顺序执行；`next(req)` 通过其余 interceptor 打开流。
 
+`next(req)` 产生的确定性 URL 错误会拒绝所返回的 promise，因此 `.then` / `.catch` 中的恢复逻辑会运行；如果没有恢复，`client.execute` 仍会报告 `REQ_BUILD_FAILED`。
+
 `EventStreamHandle` 继承 `AsyncDisposable`。按结构实现的短路返回值必须提供 `[Symbol.asyncDispose](): PromiseLike<void>`，并把它接到同一个关闭生命周期上。
 
 [Interceptors](/zh-Hans/api/interceptors)

@@ -9,6 +9,6 @@ description: 'دالة استدعاء تعيد كتابة رسالة مشكلة 
 type ErrorMap = (issue: StructIssue) => string | undefined
 ```
 
-تُمرَّر كخيار `errorMap` إلى `struct.parse`. تُستدعى لكل مشكلة (`code` و`expected` و`message` و`path` و`received`) قبل تسجيلها. أَعِد سلسلة لتستبدل الرسالة الافتراضية، أو `undefined` لإبقائها.
+تُمرَّر كخيار `errorMap` إلى `struct.parse`. تُستدعى لكل مشكلة (`code` و`expected` و`message` و`path` و`received`) قبل تسجيلها. تستبدل أي سلسلة، بما فيها `''`، الرسالة الافتراضية؛ و`undefined` وحدها تُبقيها. تخصّ دالة الربط استدعاء التحليل الحالي، وتعالج أيضًا حالات فشل تحويل bigint/date في struct أنشأته نسخة أخرى من Core. لا تتضمّن الرسائل الافتراضية القيم المستلمة؛ ويُستخدم النص المخصّص كما هو، لذا تجنّب تضمين قيم `received` الحساسة.
 
 [Struct](/ar/api/struct)

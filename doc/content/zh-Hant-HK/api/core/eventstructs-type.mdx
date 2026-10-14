@@ -13,7 +13,7 @@ type EventStructs = { [key: string]: AnyStruct }
 
 `string` event struct 會保留 raw `data` text。其他 kind 都係 JSON text：先 `JSON.parse`，再過 struct。所以 bare `struct.literal` 要 JSON text，唔係冇引號嘅 token。
 
-Reconnect 住喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0-1 multiplicative factor**，同 WebSocket 一樣。
+重連設定喺 client（`withSSEReconnect`）。SSE `jitter` 係 **0-1 multiplicative factor**，同 WebSocket 一樣。
 
 睇 [SSE guide](/zh-Hant-HK/docs/sse) 同 [Consume an SSE stream](/zh-Hant-HK/recipes/consume-sse)。
 

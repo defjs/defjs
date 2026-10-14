@@ -33,6 +33,8 @@ interface ClientWebSocketOptions {
 - **protocols** — Subprotocolos que se pasan al constructor.
 - **reconnect** — Opt-in. `attempts` vale **3** por defecto; `0` desactiva el reintento, y omitir `attempts` no significa ilimitado. Otros valores por defecto: `delayMs` 1000, `factor` 2, `jitter` 0 (un factor multiplicativo de 0 a 1), `maxDelayMs` 30000. `shouldReconnect` recibe el `code`, el `reason` y el `wasClean` del cierre y puede vetar un reintento.
 
+El presupuesto de reintentos se aplica por interrupción. Un `open` correcto reinicia el presupuesto, el attempt del callback y el exponente de backoff; la siguiente interrupción empieza en el reintento 1. `maxDelayMs` limita el retraso final tras el jitter y el redondeo, también acotado por `2_147_483_647` ms. Consulta [`withWebSocketReconnect`](/es-ES/api/core/withwebsocketreconnect) para las reglas de validación y el comportamiento ante desbordamiento.
+
 Configúralos con `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols` y `withWebSocketReconnect`. `WebSocketExecuteOptions` puede sobrescribir `beforeConnect`, `heartbeat`, `protocols` y `reconnect` por llamada.
 
 Mira la [guía de Cliente](/es-ES/docs/client).

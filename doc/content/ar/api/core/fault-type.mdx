@@ -11,7 +11,9 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `TErr` هو struct الـ `error` الذي أعلنته نقطة النهاية، أو `undefined` عندما لا تعلن أيًّا. و`Fault<TErr>` هو [`FaultOf`](/ar/api/core/faultof-type) مطبَّقًا على نوع الجسم المفكوك، ولذلك فهو اتحاد من ثلاث صيغ: [`DecodeFault`](/ar/api/core/decodefault-type) و[`HttpStatusFault<TErr>`](/ar/api/core/httpstatusfault-type) و[`PreflightFault`](/ar/api/core/preflightfault-type). افرز بحسب `fault.code` (باستخدام `switch`).
 
-كل صيغة هي `Error` أصلي باسم `DefjsFault`، فـ `String(fault)` يُنتج `DefjsFault: <message>` قابلًا للتسجيل مباشرة. و`code` وبيانات الصيغة الوصفية — `status` و`response` و`data` — خصائص ذاتية قابلة للتعداد. أما سلسلة `cause` الأصلية فغير قابلة للتعداد.
+كل صيغة هي `Error` أصلي باسم `DefjsFault`، فـ `String(fault)` يُنتج `DefjsFault: <message>`. و`code` وبيانات الصيغة الوصفية — `status` و`response` و`data` — خصائص ذاتية قابلة للتعداد. أما سلسلة `cause` الأصلية فغير قابلة للتعداد.
+
+تقول رسائل Struct الافتراضية `received <kind>`، ولا تعرض القيمة المستلمة نفسها. وعندما يكون سبب `RES_DECODE_FAILED` هو JSON `SyntaxError`، تكون الرسالة `Response body could not be decoded`. تحتفظ المسارات البنيوية بمفاتيح record، وقد تكون هذه المفاتيح حساسة. تظل قيم `StructIssue.received` الخام وأسباب فشل المحلِّل حساسة؛ وتُستخدم رسائل `errorMap` والإضافات المخصّصة كما هي، وتحتاج إلى مراجعة قبل تسجيلها.
 
 <include cwd>examples/api/fault.ts#example</include>
 

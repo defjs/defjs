@@ -55,7 +55,7 @@ interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposab
 }
 ```
 
-Третий слот кортежа — снимок `open` на момент старта; `stream.open` после reconnect следует за последним соединением. Для cleanup принадлежащего scope предпочитай `await using stream = handle`. Disposer останавливает чтение Defjs и работу reconnect и ждёт, пока отпустят reader lock; он не обещает, что promise `ReadableStream.cancel()`, застрявший под контролем провайдера, завершится. Ручные `close()` / `closed` остаются.
+Третий слот кортежа — снимок `open` на момент старта; `stream.open` после переподключения отражает последнее соединение. Для освобождения принадлежащих области видимости ресурсов предпочитай `await using stream = handle`. Асинхронное освобождение останавливает чтение Defjs и переподключения и ждёт освобождения блокировки reader; оно не гарантирует завершение зависшего Promise `ReadableStream.cancel()`, которым управляет провайдер. Ручные `close()` / `closed` остаются доступны.
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
@@ -64,7 +64,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-Структурные реализации `EventStreamHandle` теперь должны реализовать `[Symbol.asyncDispose]()` и вернуть тот же принадлежащий teardown path. Для кастомных handle это compile-time breaking change; код, который только получает handle от Defjs, нового runtime-вызова не требует.
+Структурные реализации `EventStreamHandle` теперь должны реализовать `[Symbol.asyncDispose]()` с тем же механизмом освобождения принадлежащих им ресурсов. Для пользовательских handle это несовместимое изменение на уровне типов; код, который только получает handle от Defjs, не требует нового вызова во время выполнения.
 
 ### EventStreamOpenInfo
 
@@ -97,6 +97,10 @@ type EventStructs = { [eventName: string]: AnyStruct }
 Ключ — имя SSE-события; сообщение без поля `event:` называется `message`. Если ни один ключ не подошёл, используется struct `default`. Event struct `string` оставляет сырой текст `data`. Любой другой kind — это JSON-текст: `JSON.parse`, потом struct. Голый `struct.literal` поэтому ждёт JSON-текст, а не незакавыченный токен. Тела handshake `error` следуют тому же правилу kind, что HTTP: `string` — текст, `blob` / `file` — blob, `arrayBuffer` — байты, всё остальное — JSON.
 
 Reconnect живёт на клиенте (`withSSEReconnect`). SSE `jitter` — **мультипликативный коэффициент 0–1**, как у WebSocket.
+
+Бюджет повторов и показатель степени для задержки сбрасываются после успешного установления соединения и действуют на каждый обрыв отдельно. Недопустимые числовые настройки возвращают `REQ_OPTIONS_INVALID` до открытия потока, а `maxDelayMs` ограничивает итоговую задержку после случайного отклонения. Правила проверки, значения по умолчанию и обработку `Last-Event-ID` в UTF-8 см. в [`withSSEReconnect`](/ru-RU/api/core/withssereconnect).
+
+Парсер следует правилам строк и полей WHATWG SSE и удаляет только один начальный UTF-8 BOM в начале каждого физического потока. U+FEFF в данных и значениях ID сохраняется; имя поля с BOM в начале, появившееся позже, игнорируется как неизвестное. Несколько строк данных соединяются через `\n`, пустая строка выдаёт событие с данными, а незавершённое событие в конце потока (EOF) отбрасывается.
 
 См. [гайд SSE](/ru-RU/docs/sse) и [Читать SSE-стрим](/ru-RU/recipes/consume-sse).
 

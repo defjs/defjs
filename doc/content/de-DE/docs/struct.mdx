@@ -92,7 +92,7 @@ Eine gemischte Intersection, die einen Nicht-Objekt-Teil enthält, bekommt beim 
   examples/struct/parse-failures.ts#example
 </include>
 
-Ein `StructIssue` hat `code`, `expected`, `message`, `path` und `received`. `code` ist `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` oder `missing_key`. Issues können untrusted Input halten — redigiere sie vor Logging oder Return. `struct.parse(..., { errorMap })` schreibt Issue-Messages nur für diesen Call um.
+Ein `StructIssue` hat `code`, `expected`, `message`, `path` und `received`. `code` ist `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` oder `missing_key`. Default-Messages nennen den empfangenen Kind, nie den Wert: `Expected number at id, received string`. Issue-Pfade sind strukturell und behalten Record-Keys bei: `struct.record(...)` kann `Expected number at alice@example.com, received string` erzeugen, daher können Keys in Default-Messages, `prettify()` und `String(fault)` weiterhin sensibel sein. `message` und `prettify()` lassen empfangene Payloads daher weg; `received` behält den Originalwert und muss vor Logging oder Return geschwärzt werden. `struct.parse(..., { errorMap })` schreibt Messages nur für diesen Call um, einschließlich bigint-/date-Konvertierungsfehlern in einem Struct aus einer anderen Core-Kopie. Jeder zurückgegebene String, auch `''`, ersetzt den Default; nur `undefined` behält ihn. Eigener Text wird wörtlich verwendet und kann Werte offenlegen, wenn die Map sie aufnimmt.
 
 Struct-Validierung ist nur strukturell. Keine öffentlichen Range-, Format-, Refinement-, Auth- oder State-Transition-Rules. Mach diese Checks, bevor du einen Command baust.
 

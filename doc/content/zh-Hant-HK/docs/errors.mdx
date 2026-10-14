@@ -35,6 +35,8 @@ description: 按一個封閉嘅 fault code 集合分流處理 404、timeout、�
 
 集合係故意封閉嘅：呢個正係 `switch` 可以窮盡嘅原因。Extension 要報自己嘅細節就走 `cause`，唔係加新 code。
 
+HTTP、SSE 同 WebSocket 都需要有效嘅絕對 client `endpoint`。URL 解析之後，path 必須留喺 base endpoint 嘅 origin 同目錄之內。絕對 URL、protocol-relative paths、C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?`、`#`，以及逃出目錄嘅路徑都會被拒絕。形似 scheme 同 protocol-relative 嘅形式，就算前面有空格都會被拒絕；路徑入面嘅普通空格允許，並會以 `%20` 送出。缺少、相對或無效嘅 endpoint，以及非法 path，都會喺 request construction 時產生 `REQ_BUILD_FAILED`，早於 interceptors 執行；short-circuit interceptor 亦唔可以繞過呢個檢查。Transport 執行之前，interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一套規則檢查；容許明確切換到另一個有效嘅絕對 base。呢啲確定嘅 URL faults 唔可以重試。
+
 ### 各形狀帶咩 field
 
 | Code          | `status` | `response`                                         | `data`                                |
@@ -67,12 +69,12 @@ SSE 同 WebSocket 嘅第三項係啟動快照，就算啟動失敗都可能有�
 | 非 2xx，冇寫 `error`                    | `HTTP_STATUS`，`data: undefined`                |
 | Media type 唔係嗰個 representation 要嘅 | `RES_MEDIA_TYPE_INVALID`，讀 body **之前**就報  |
 | Bytes 唔係嗰個 representation           | `RES_DECODE_FAILED`                             |
-| 值唔符合嗰個 struct                     | `RES_STRUCT_MISMATCH`                           |
+| 值唔符合嗰個 struct                     | `RES_STRUCT_MISMATCH`（只限 HTTP）              |
 | 你**冇**聲明嗰一邊嘅 body 讀唔出        | 完全忽略——睇下面                                |
 
 最後一行值得記住。如果你聲明咗 `output` 而冇聲明 `error`，咁一個 body 係壞 JSON 嘅 500，報出嚟就係 `HTTP_STATUS` 加 `status: 500`。你講過你唔關心 error body，呢個亦包括唔關心佢讀唔出呢件事。
 
-Struct 只會套用一次，而且喺 interceptor chain 之後。Interceptor 用 `makeResponse(...)` 造嘅 response，同線上嚟嘅走同一套 media type 檢查、representation 轉換同 Struct。內置嘅 Fetch transport 會喺將 response 交返俾 chain 之前，先讀取並 JSON parse 已聲明嘅 body；嗰度失敗，就會報成同一個 `RES_*` 或者 `NET_BODY_INCOMPLETE` fault。
+對 HTTP 嚟講，Struct 只會套用一次，而且喺 interceptor chain 之後。Interceptor 用 `makeResponse(...)` 造嘅 response，同線上嚟嘅走同一套 media type 檢查、representation 轉換同 Struct。內置 Fetch transport 會先將已聲明嘅 body 讀成 JSON、text、`Blob` 或 bytes，再交返俾 chain。只有 JSON representation 需要 JSON media type 同 `JSON.parse`；非 JSON text、blobs 同 bytes，只要符合聲明嘅 representation 就有效。讀取失敗適用於所有 representation；嗰度嘅讀取或解析失敗，會報成同一個 `RES_*` 或者 `NET_BODY_INCOMPLETE` fault。
 
 `HttpResponse.ok` 只表示 `200 <= status < 300`。Transport failure 係 fault，絕對唔係 response——唔存在代表佢嘅 status-0 response。
 
@@ -98,13 +100,13 @@ Struct 只會套用一次，而且喺 interceptor chain 之後。Interceptor 用
   examples/errors/narrow-by-status.ts#example
 </include>
 
-只要 API 支援，最後呢種寫法值得優先。`fault.status` 係 HTTP 層嘅數字，proxy、gateway 或者 CDN 都改得到；而 `data.status` 係由你 `error` struct 斷言過嘅 body 裡面解碼出嚟，拿得到佢就係後端真係產出過佢嘅證明。
+只要 API 支援，最後呢種寫法值得優先。`fault.status` 係 HTTP 層嘅數字，proxy、gateway 或者 CDN 都改得到；`data.status` 通過咗你聲明嘅 `error` struct 驗證。呢個只證明 body 嘅形狀，唔證明佢來自後端：proxy、gateway 或者 CDN 亦可以回傳符合形狀嘅 body。
 
 一個冇判別 field、因此窄化唔到嘅 union，係聲明本身嘅性質，唔係 library 嘅——library 交俾你嘅就係你聲明嘅 type。想窄化，就俾 struct 加一個判別 field。
 
 ## 啟動期同開啟之後
 
-SSE 喺 resolve handle 之前會驗 status、`text/event-stream` 同 body 存唔存在。非 2xx → `HTTP_STATUS`。Media type 唔對 → `RES_MEDIA_TYPE_INVALID`。冇 body → `RES_DECODE_FAILED`。開啟快照照樣可能落喺 tuple 第三項。
+SSE 喺 resolve handle 之前會驗證 status、`text/event-stream` 同 body 存唔存在。非 2xx → 冇聲明 `error` 或者佢嘅 body 解碼成功時係 `HTTP_STATUS`。已聲明嘅 handshake body 讀唔到、解析唔到，或者通唔過 Struct，都會產生 `RES_DECODE_FAILED`；Struct 失敗會以 `StructError` 作為 `cause`。Media type 唔對 → `RES_MEDIA_TYPE_INVALID`。成功 handshake 冇 body → `RES_DECODE_FAILED`。開啟快照照樣可能落喺 tuple 第三項。
 
 WebSocket 嘅啟動期覆蓋 handshake 加第一次物理 open。Constructor 失敗、open 之前就 close、timeout 或者取消，全部都會產出一個啟動 tuple。就算 socket 從來冇到過 `open`，connection 快照都可能存在。
 
@@ -124,7 +126,9 @@ Fault 係原生 `Error` instance，所以唔需要診斷 adapter。`String(fault
   examples/errors/log-fault.ts#example
 </include>
 
-Call `format()`、`flatten()` 或者 `prettify()` 之前，先將 `fault.cause` 窄化到 `StructError`。呢啲 helper 長喺 Struct 個 cause 上面，唔會被複製到 fault 上面。唔好叫 control flow 去 parse `message` 或者 `String(fault)`——contract 係 `code` 同一個審過嘅 `status`。
+Call `format()`、`flatten()` 或者 `prettify()` 之前，先用 `fault.cause instanceof StructError` 收窄 type。呢啲 helper 喺 Struct 嘅 cause 上面，唔會被複製到 fault 上面。唔好叫 control flow 去 parse `message` 或者 `String(fault)`——contract 係 `code` 同一個審過嘅 `status`。
+
+預設 Struct 訊息只會寫收到嘅種類，永遠唔會包含值：`Expected number at email, received string`。同一段訊息會出現喺 `prettify()` 同 `String(fault)`。當 `RES_DECODE_FAILED` 由 JSON `SyntaxError` 引起，fault 訊息會係 `Response body could not be decoded`；原始 parser error 仍然保留喺 `cause`。原始 `StructIssue.received` 值同 parser causes 仍然可能包含敏感資料，而自訂 `errorMap` 訊息會原樣使用，所以寫 log 前要檢查自訂文字。
 
 ## 參考
 
@@ -137,13 +141,13 @@ Call `format()`、`flatten()` 或者 `prettify()` 之前，先將 `fault.cause` 
 | 你自己嘅 code 拋咗     | `fault.code.startsWith('EXT_')`    | `code`、`cause`                        | Extension 掛上嚟嘅任何嘢    |
 | Stream／session 執行期 | `stream.closed` / `session.closed` | 終態 `kind` 同 `code`                  | 事件 payload、frame、cause  |
 
-將 `cause`、`data`、response headers 同 body、URL、Struct issue、輸入值同 stack 全部當敏感資訊。一個保守嘅 summary：
+將 `cause`、`data`、response headers 同 bodies、URLs、`StructIssue.received`、input 值、自訂訊息同 stacks 當成敏感資料。Issue path 係結構性嘅，會保留 record 嘅 key：`struct.record(...)` 可以產生 `Expected number at alice@example.com, received string`，所以 key 喺預設訊息、`prettify()` 同 `String(fault)` 入面仍然可能敏感。預設 Struct 訊息同 `prettify()` 唔會包含收到嘅值；但記錄完整 issue 或 JSON parser cause 仍然可能洩露佢哋。一個保守嘅 summary：
 
 <include cwd lang="typescript">
   examples/errors/summarize-fault.ts#example
 </include>
 
-`createNetworkFault`、`createPreflightFault`、`createDecodeFault`、`createHttpStatusFault` 同 `createUndecodedHttpStatusFault` 構造呢啲原生 Error 值。普通嘅 request 失敗照樣喺 tuple 裡面回傳佢哋；唔會因為佢哋繼承咗原生 Error 行為就被拋出。`ERR_ABORTED` 同 `ERR_TIMEOUT` 係 transport normalizer 認得出嘅共享 cause。
+`createNetworkFault`、`createPreflightFault`、`createDecodeFault`、`createHttpStatusFault` 同 `createUndecodedHttpStatusFault` 構造呢啲原生 Error 值。普通嘅 request 失敗照樣喺 tuple 裡面回傳佢哋；唔會因為佢哋繼承咗原生 Error 行為就被拋出。`ERR_ABORTED` 同 `ERR_TIMEOUT` 係 transport normalizer 認得出嘅共享 causes。佢哋帶有不可枚舉嘅 `Symbol.for('defjs.cause.aborted')` 同 `Symbol.for('defjs.cause.timeout')` brands，所以取消分類唔使比較 object identity，亦可以跨 Core 副本運作。[`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 同 [`isTimeoutCause`](/zh-Hant-HK/api/core/istimeoutcause) 提供呢啲檢查同支援嘅平台錯誤檢查；分類 fault 嘅 cause 時，請傳入底層嘅 `fault.cause`。OpenTelemetry 會跨副本抑制 caller 取消操作嘅 logs，同時繼續記錄 timeout。
 
 ## 相關配方
 

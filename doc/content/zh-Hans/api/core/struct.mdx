@@ -16,11 +16,11 @@ const User = struct.object({
 const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 ```
 
-`struct` 是一个装着 helper 的普通对象。优先用它，而不是逐个导入构造器。每个 helper 都有自己的页面。
+`struct` 是一个包含辅助函数的普通对象。优先用它，而不是逐个导入构造器。每个辅助函数都有自己的页面。
 
 ### 原语和容器
 
-| Helper                                                                                           | 作用                                          |
+| 辅助函数                                                                                         | 作用                                          |
 | ------------------------------------------------------------------------------------------------ | --------------------------------------------- |
 | [`struct.string()`](/zh-Hans/api/core/struct-string)                                             | 文本                                          |
 | [`struct.number()`](/zh-Hans/api/core/struct-number)                                             | 数字，拒绝 `NaN`                              |
@@ -39,9 +39,9 @@ const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 | [`struct.discriminatedUnion(tag, options)`](/zh-Hans/api/core/struct-discriminatedunion)         | 由 `tag` 字段的值选出的对象选项               |
 | [`struct.enum(values)`](/zh-Hans/api/core/struct-enum)                                           | 字符串数组，或 `{ Name: value }` 对象的各个值 |
 
-### Body codec 和二进制值
+### 请求体编解码器和二进制值
 
-| Helper                                                                                                                                                 | 作用                                                                       |
+| 辅助函数                                                                                                                                               | 作用                                                                       |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
 | [`struct.formData(shape)`](/zh-Hans/api/core/struct-formdata) / [`urlencoded(shape)`](/zh-Hans/api/core/struct-urlencoded)                             | 对象 struct 再加一个 codec 标签。这个标签只在该值是请求 body 根时生效      |
 | [`struct.arrayBuffer()`](/zh-Hans/api/core/struct-arraybuffer) / [`blob()`](/zh-Hans/api/core/struct-blob) / [`file()`](/zh-Hans/api/core/struct-file) | 二进制值。作为 body 根时按字节发送；作为 `output` / `error` 时选出那种表示 |

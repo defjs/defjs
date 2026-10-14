@@ -15,7 +15,7 @@ description: ClientProvider, useClient и props провайдера.
 function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
 ```
 
-Context provider. Передай client из `createClient`. Вложенный `ClientProvider` переопределяет client для своего поддерева; `useClient` читает ближайший. Если передать другой `client`, значение контекста для потомков изменится.
+Провайдер контекста. Передай client из `createClient`. Вложенный `ClientProvider` переопределяет client для своего поддерева; `useClient` читает ближайший. Если передать другой `client`, значение контекста для потомков изменится.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 

@@ -28,13 +28,15 @@ interface HttpRequest {
     headerName: string
     tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
   }
-  // plus an @internal bodyContentTypeSource field
+  // plus the @internal bodyContentTypeSource field
 }
 ```
 
 builder가 실행된 뒤의 요청으로, 핸들러, 인터셉터, `fetchHandler`가 사용해요.
 
 - `body`는 이미 wire 값이에요. JSON이면 **JSON 텍스트 문자열**이므로, HMAC이나 다이제스트는 원래 struct 입력이 아니라 이 문자열에 대해 서명하세요.
+- `bodyContentType`은 builder의 body에서 추론한 타입을 일반 필드로 보관하므로 `{ ...req }`로 복사해도 유지돼요. `body`가 builder의 값인 동안에만 적용돼요. 교체된 body는 다시 탐지하므로 `content-type` 헤더로 그 타입을 선언하세요. 바뀌지 않은 body에서는 명시 헤더가 없을 때 `null`이 라이브러리의 추론을 억제하지만, 네이티브 Fetch가 문자열 타입을 스스로 붙일 수 있어요. FormData는 실제 multipart boundary를 써요.
+- HTTP는 추론한 Content-Type을 `headers`에 쓰지 않으므로 인터셉터는 선언된 헤더만 봐요. builder, 클라이언트 기본값, 인터셉터, 원시 `fetchHandler` 요청 중 어디에서 설정했든 명시한 `content-type` 헤더가 항상 `bodyContentType`과 탐지보다 우선해요. `body: undefined`에는 라이브러리가 추론한 Content-Type이 없어요. 서명 시에는 `headers.get('content-type') ?? request.bodyContentType`을 읽으세요. 내부 필드를 설정하지 마세요.
 - `endpoint`는 path 매개변수를 채운 path이고, `baseEndpoint`는 클라이언트 endpoint예요.
 - 인터셉터는 `queryParams`를 `new URLSearchParams(queryString)`으로 봐요. builder가 `URLSearchParams`를 반환하면 그 인스턴스가 그대로 전달돼요.
 - `operation`은 텔레메트리와 진단용의 정적이고 카디널리티가 낮은 엔드포인트 식별자예요.

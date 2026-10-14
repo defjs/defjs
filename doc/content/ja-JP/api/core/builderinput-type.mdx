@@ -26,7 +26,7 @@ type BuilderInput<S> =
                   : Infer<S>
 ```
 
-`builder` が見る、パース済みのエンドポイント入力です。オブジェクトノードはそれを生んだ struct（内部の `Typed` ブランド）を運ぶので、エイリアス、`Date`、`bigint` のエンコードは値についてリクエストまで引き継がれます。record のエントリーと tuple の要素にも同じようにブランドが付きます。実行時には、パース済みの値がオブジェクトのときに限り、record のコンテナにもタグが付きます。array と tuple のコンテナには付かず、`null` と `undefined` にも決して付きません。nullish 修飾子は包んでいた struct を復元し、union のオプションは分配され、intersection のオプションは結合されます。それ以外の struct は `Infer<S>` にフォールバックします。
+`builder` が見る、パース済みのエンドポイント入力です。オブジェクトノードはそれを生んだ struct（内部の `Typed` ブランド）を運ぶので、エイリアス、`Date`、`bigint` のエンコード情報は、値とともにリクエストまで引き継がれます。record のエントリーと tuple の要素にも同じようにブランドが付きます。実行時には、パース済みの値がオブジェクトのときに限り、record のコンテナにもタグが付きます。array と tuple のコンテナには付かず、`null` と `undefined` にも決して付きません。nullish 修飾子は包んでいた struct を復元し、union のオプションは分配され、intersection のオプションは結合されます。それ以外の struct は `Infer<S>` にフォールバックします。
 
 `CarriedStruct`、`NullishBuilderInput`、`IntersectBuilderInputs`、`Typed` は内部ヘルパー型です。
 

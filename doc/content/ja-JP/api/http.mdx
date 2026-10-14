@@ -38,7 +38,7 @@ function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, op
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-デフォルトの HTTP トランスポートです。`fetchImpl` のデフォルトはグローバルの `fetch` で、別のものは `withHTTPHandle` で与えます。レスポンスがクライアントに届かなかったとき、または宣言されたボディの読み取りに失敗したときは、合成レスポンスで解決するのではなく reject します。
+デフォルトの HTTP トランスポートです。`fetchImpl` のデフォルトは送信時に解決されるグローバルの `fetch` で、別のものは `withHTTPHandle` で与えます。差し替えられていないプラットフォームの Fetch には `(url, init)` を、差し替えたグローバルやカスタムハンドラーには `Request` を渡します。レスポンスがクライアントに届かなかったとき、または宣言されたボディの読み取りに失敗したときは、合成レスポンスで解決するのではなく reject します。
 
 ## makeResponse()
 
@@ -124,6 +124,8 @@ type HttpResponse<R> = {
 
 `loaded`、`total`、`lengthComputable` です。コールバックは非同期でも構いません。`onDownloadProgress` または `onUploadProgress` が例外を投げると、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。キャンセルと `timeout` は引き続き `NET_ABORTED` / `NET_TIMEOUT` を報告します。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます（Bun、Node、Deno）。ブラウザーでは、`Blob` / `File`、`ArrayBuffer`、`FormData` のボディはそのまま送られ、`onUploadProgress` は呼び出されません。
 
+サーバーランタイムでは、FormData はボディ全体を Blob にバッファリングせず、シリアライズされたストリームを使い、実際の multipart boundary を保持します。有効な明示的 `Content-Length` がなければ総量は不明です。アップロード変換後も明示的な Content-Type は保持されますが、FormData はシリアライズ時の boundary を使う必要があります。`loaded` が数えるのはストリームのバイト数であり、サーバーの受信確認ではありません。`Content-Encoding` が identity 以外のダウンロードは `total: 0`、`lengthComputable: false` を報告します。そのストリームのバイト列はすでに展開されている場合があります。
+
 [HTTP ガイド](/ja-JP/docs/http) と [Commands](/ja-JP/docs/commands) を見てください。
 
 ## RequestEndpoint
@@ -132,7 +134,7 @@ type HttpResponse<R> = {
 
 ## BuilderInput
 
-`builder` が見る、パース済みのエンドポイント入力です。オブジェクトノードはそれを生んだ struct を運ぶので、エイリアス、`Date`、`bigint` のエンコードは値についてきます。
+`builder` が見る、パース済みのエンドポイント入力です。オブジェクトノードは、その値を生成した struct の情報を保持するため、値に対応するエイリアス、`Date`、`bigint` のエンコードが適用されます。
 
 ## HttpRequestShape
 
@@ -141,11 +143,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
 `GET` と `HEAD` はボディを返せません。`path` と `headers` はフラットなスカラーである必要があります。`query` は入れ子になれ、入れ子オブジェクトには実行時の `withQuerySerializer` が要ります。
+
+`BodyValue` が受け付けるワイヤ値と JSON 値については、[`HttpRequestShape`](/ja-JP/api/core/httprequestshape-type) を参照してください。
 
 ## HttpCommand
 

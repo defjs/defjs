@@ -20,7 +20,7 @@ interface WebSocketSessionLike extends AsyncDisposable {
 }
 ```
 
-インターセプターが見る、最小限のセッション面です。[`WebSocketSession`](/ja-JP/api/core/websocketsession-type) と構造的に互換ですが、メッセージの型は `unknown` です。
+インターセプターから見える最小限のセッションインターフェイスです。[`WebSocketSession`](/ja-JP/api/core/websocketsession-type) と構造的に互換ですが、メッセージの型は `unknown` です。
 
 wrapper やショートサーキットのセッションは、`close` / `closed` のライフサイクルと同じ `[Symbol.asyncDispose]()` の teardown を転送する必要があります。無関係な解決済み promise を返すのでは足りません。このメンバーを要求することは、構造的実装にとってはコンパイル時の破壊的変更です。Defjs が返すセッションだけを受け取るコードには、追加の実行時呼び出しは要りません。
 

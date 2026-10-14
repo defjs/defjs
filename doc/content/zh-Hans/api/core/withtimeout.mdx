@@ -11,7 +11,7 @@ function withTimeout(ms: number): ClientOption
 
 仅为 HTTP `execute` 设置默认超时，单位毫秒。SSE 和 WebSocket 忽略它。
 
-- **ms** 必须是不超过 `2_147_483_647` 的正 safe integer。其他值会在调用 `withTimeout` 时立即抛出 `RangeError`，而不是等到 client 执行的时候。
+- **ms** 必须是不超过 `2_147_483_647` 的正安全整数。其他值会在调用 `withTimeout` 时立即抛出 `RangeError`，而不是等到 client 执行的时候。
 - 计时器在 interceptor 链运行之前就开始。触发时，调用返回 `NET_TIMEOUT` fault。
 - execute 的 `{ timeout }` 在本次调用中替换这个默认值。
 - execute 的 `{ abort }` 与默认值组合：abort 得到 `NET_ABORTED`，计时器得到 `NET_TIMEOUT`。

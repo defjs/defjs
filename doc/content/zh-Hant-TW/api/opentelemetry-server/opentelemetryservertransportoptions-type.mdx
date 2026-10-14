@@ -20,7 +20,7 @@ interface OpenTelemetryServerTransportOptions<TResponse> {
 
 Span hooks 只有在傳入 `tracer` 時才會執行。`startSpanHook` 會在其所屬傳輸建立 span 前同步執行。它回傳的 attributes 會在內建 attributes 之後套用，因此應用程式可以覆寫 `url.full` 或其他初始值。它丟出錯誤時，Defjs 會用內建 attributes 建立 span、記錄 `defjs.otel.hook.error` 事件，並繼續請求。`requestHook` 在建立 span 之後、送出 request 之前執行；`responseHook` 在傳輸層結果回傳之後執行。兩者都可以回傳 promise，但都不會被 await：丟出錯誤或 rejection 會以同樣方式記錄，而且絕不會阻擋操作，也不會讓操作失敗。`responseHook` 的第三個引數是原始 request。
 
-預設 `url.full` 只會把 `request.endpoint` 相對於選填的 `request.baseEndpoint` 解析，不會附加獨立的 `request.queryString`。這條邊界不是 sanitization；套件沒有內建 redactor 或敏感 key 策略。請明確建構應用程式自有的 URL，並視需要自行遮罩：
+預設 `url.full` 只會把 `request.endpoint` 相對於選填的 `request.baseEndpoint` 解析，不會附加獨立的 `request.queryString`。這條邊界不是 redaction；套件沒有內建 redactor 或敏感 key 策略。請明確建構應用程式自有的 URL，並視需要自行遮罩：
 
 <include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
 

@@ -37,4 +37,4 @@ function injectClient(): Client
 const HTTP_CLIENT: InjectionKey<Client>
 ```
 
-Vue injection key. Бери `injectClient()`, а не `inject(HTTP_CLIENT)`. Поддерево: `provide(HTTP_CLIENT, childClient)`.
+Ключ внедрения зависимостей Vue. Бери `injectClient()`, а не `inject(HTTP_CLIENT)`. Переопредели клиент для поддерева через `provide(HTTP_CLIENT, childClient)`.
