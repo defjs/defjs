@@ -9,7 +9,6 @@
   <a href="https://npmjs.com/package/@defjs/core"><img src="https://img.shields.io/npm/dm/%40defjs%2Fcore?color=%23000&style=flat-square" alt="monthly downloads"></a>
   <a href="https://github.com/defjs/defjs/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/defjs/defjs/ci.yml?branch=main&color=%23000&style=flat-square" alt="build status"></a>
   <a href="https://github.com/defjs/defjs/blob/main/LICENSE"><img src="https://img.shields.io/github/license/defjs/defjs?color=%23000&style=flat-square" alt="license"></a>
-  <a href="https://codecov.io/gh/defjs/defjs"><img src="https://img.shields.io/codecov/c/gh/defjs/defjs?color=%23000&style=flat-square" alt="codecov"/></a>
 </p>
 <br/>
 
@@ -90,7 +89,7 @@ Repository commands are classified by scope. A command being exposed at the root
 | Workspace-local lifecycle      | Package `build`/`test`, documentation `build`/`typecheck`                                                     | Each workspace handles its own output, tests, or documentation type-checking configuration.                     |
 | Explicit, on-demand operations | Documentation `dev`/`preview`                                                                                 | Start the documentation development or preview server when needed.                                              |
 
-Formatting and linting are repository-wide gates. The root `typecheck` checks the library project and delegates to the documentation workspace for its separate configuration. CI uses the root `verify` gate to run every required stage once.
+Formatting and linting are repository-wide gates. The root `typecheck` checks the library project and delegates to the documentation workspace for its separate configuration. The Bun CI job uses the root `verify` gate. Separate CI jobs run Core's `core-server` and OpenTelemetry tests on Node 24, and smoke-test the built Core bundle's HTTP, SSE, WebSocket, and Struct APIs on Deno 2.
 
 `bun run typecheck` uses Bun's built-in checker. Documentation `typecheck` generates route types, checks the documentation project, and checks complete code examples. TypeScript remains installed for editor and declaration build tooling.
 
@@ -98,7 +97,7 @@ Formatting and linting are repository-wide gates. The root `typecheck` checks th
 
 Tests and builds are intentionally different. Their environments, configurations, and outputs belong to specific workspaces, so the root commands aggregate the relevant workspace lifecycle scripts.
 
-Documentation type checks cover the complete TS/TSX examples in `doc/examples`, which content pages embed with `<include>`; signature sketches and fragments stay plain code blocks. The documentation workspace tests execute the ETag and Bearer recipes and assert their actual status transitions. After rendering, its build checks local page links and anchors, including generated navigation and locale links. Every locale carries every page; there is no fallback to English.
+Documentation type checks cover the complete TS/TSX examples in `doc/examples`, which content pages embed with `<include>`; signature sketches and fragments stay plain code blocks. The documentation workspace tests execute the ETag, Bearer, and GraphQL recipes and assert their HTTP statuses and application outcomes. After rendering, its build checks local page links and anchors, including generated navigation and locale links. Every locale carries every page; there is no fallback to English.
 
 ### Test conventions
 
@@ -117,9 +116,9 @@ Run the **Release** workflow manually in GitHub Actions for the intended revisio
 - `core`, `opentelemetry-server`, `react`, or `vue` publishes the selected package to npm.
 - `docs` builds and deploys the documentation to GitHub Pages using the configured `SITE_URL`.
 
-Each selected package job runs `bun ci`, builds that package, and uses `npm publish` from its `dist` directory with the repository's `NPM_TOKEN` secret. Versions come from the committed package manifests; the workflow does not bump versions or require release tags.
+Each selected package job runs `bun ci`, typechecks that package's build configuration, builds it, and asserts that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and the files referenced by `exports` / `types` before using `npm publish` from its `dist` directory with the repository's `NPM_TOKEN` secret. Packages that depend on Core build Core first. This is a packed-file check, not a gate that installs tarballs into an external consumer and typechecks or runs it. Versions come from the committed package manifests; the workflow does not bump versions or require release tags.
 
-CI runs the full Bun verification gate on pull requests and `main`. The manual release workflow does not require a `main` commit or wait for CI; run `bun run verify` on the intended revision before starting it. A Core patch within the adapters' `^0.4.0` peer range, such as `0.4.0` to `0.4.3`, does not require another adapter release; publish an adapter only when its own artifact, implementation, public metadata, or peer range changes.
+CI runs the Bun verification gate, Node 24 tests, and Deno built-Core smoke test on pull requests and `main`. The manual release workflow does not require a `main` commit or wait for CI; run `bun run verify` on the intended revision before starting it. A Core patch within the adapters' `^0.4.0` peer range, such as `0.4.0` to `0.4.3`, does not require another adapter release; publish an adapter only when its own artifact, implementation, public metadata, or peer range changes.
 
 ### Dependency ownership
 

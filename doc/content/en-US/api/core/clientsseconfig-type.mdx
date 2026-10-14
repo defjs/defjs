@@ -11,6 +11,6 @@ interface ClientSSEConfig extends ClientSSEOptions {
 }
 ```
 
-The type of `ClientConfig.sse`. It is [`ClientSSEOptions`](/api/core/clientsseoptions-type) with `handle` always present; the default is the global `fetch`.
+The type of `ClientConfig.sse`. It is [`ClientSSEOptions`](/api/core/clientsseoptions-type) with `handle` always present; the default wrapper resolves the current global `fetch` on each attempt, rather than capturing it at import time.
 
 [Client](/api/client)

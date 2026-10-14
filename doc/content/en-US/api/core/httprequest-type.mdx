@@ -28,13 +28,15 @@ interface HttpRequest {
     headerName: string
     tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
   }
-  // plus an @internal bodyContentTypeSource field
+  // plus the @internal bodyContentTypeSource field
 }
 ```
 
 The request after the builder ran, as used by handlers, interceptors, and `fetchHandler`.
 
 - `body` is already the wire value. For JSON that is a **JSON text string**; sign HMAC or digests against that string, not the original struct input.
+- `bodyContentType` holds the inferred type of the builder's body as a plain field, so it survives `{ ...req }` copies. It applies only while `body` is the builder's value; a replacement body is detected again, so declare its type with a `content-type` header. For the unchanged body, `null` suppresses library inference when there is no explicit header, but native Fetch may add its own string type. FormData uses its actual multipart boundary instead.
+- HTTP never writes inferred Content-Type into `headers`; interceptors see only declared headers. An explicit `content-type` header always wins over `bodyContentType` and detection, whether set by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. `body: undefined` has no library-inferred Content-Type. Signers should read `headers.get('content-type') ?? request.bodyContentType`; do not configure internal fields.
 - `endpoint` is the path with path parameters filled in; `baseEndpoint` is the client endpoint.
 - Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through.
 - `operation` is a static, low-cardinality endpoint identity for telemetry and diagnostics.

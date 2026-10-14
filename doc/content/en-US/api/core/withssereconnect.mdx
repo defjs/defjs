@@ -28,12 +28,13 @@ type SSEReconnect = {
 }
 ```
 
-- `attempts` is the retry budget after the first attempt. It defaults to `3` when `reconnect` is set, and `0` disables retries. Omitting it is not unlimited.
+- `attempts` is the retry budget for each outage. It defaults to `3` when `reconnect` is set, and `0` disables retries. A successful handshake resets the budget, callback `attempt`, and backoff exponent. Omitting it does not give unlimited retries within one outage. Repeated successful opens followed immediately by retryable stream failures can keep reconnecting at the current base delay (subject to jitter and caps), because each open resets the budget; use `shouldReconnect` to stop them. Normal EOF remains terminal.
 - Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect. With it, its result decides for every method, `POST` included; `method` in the context tells endpoints apart. Return `false` to stop for this failure. It runs before the attempts limit is checked.
 - A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.
-- `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`.
+- `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.
 - `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.
-- The last event id is sent again as `Last-Event-ID` on the next attempt.
+- The last event id is sent again as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it; an ID containing NUL is ignored.
+- Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` and an explicit `maxDelayMs` must be finite and non-negative; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` at execute time.
 
 See [SSE](/api/sse) for the stream handle.
 

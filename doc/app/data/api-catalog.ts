@@ -8,12 +8,10 @@ export interface ApiEntry {
 }
 export const apiEntries: ApiEntry[] = catalog
 export function filterApiEntries(entries: readonly ApiEntry[], query: string, packageName: string, kind: string): ApiEntry[] {
-  const normalized = query.trim().toLocaleLowerCase()
+  const normalized = query.trim().toLowerCase()
   return entries.filter(
     (entry) =>
-      entry.name.toLocaleLowerCase().includes(normalized) &&
-      (!packageName || entry.package === packageName) &&
-      (!kind || entry.kind === kind),
+      entry.name.toLowerCase().includes(normalized) && (!packageName || entry.package === packageName) && (!kind || entry.kind === kind),
   )
 }
 export function validateApiEntries(entries: readonly ApiEntry[]): void {

@@ -14,7 +14,7 @@ const runViewer = defineRequest({
       .object({
         viewer: struct.object({ id: struct.string(), login: struct.string() }).null(),
       })
-      .optional(),
+      .nullish(),
     errors: struct.array(struct.object({ message: struct.string() })).optional(),
   }),
 })
@@ -30,19 +30,25 @@ async function loadViewer(client: Client) {
 }
 
 let calls = 0
+const responses = [
+  { data: { viewer: { id: 'v-1', login: 'ada' } } },
+  { errors: [{ message: 'viewer unavailable' }] },
+  { data: null, errors: [{ message: 'viewer unavailable' }] },
+]
 const handle: typeof fetch = async () => {
   calls += 1
-  const body = calls === 1 ? { data: { viewer: { id: 'v-1', login: 'ada' } } } : { errors: [{ message: 'viewer unavailable' }] }
-  return Response.json(body, { status: 200 })
+  return Response.json(responses[calls - 1], { status: 200 })
 }
 
 const client = createClient(withEndpoint('https://api.example.test'), withHTTPHandle(handle))
 const viewer = await loadViewer(client)
-let graphQlError = ''
-try {
-  await loadViewer(client)
-} catch (error) {
-  graphQlError = error instanceof Error ? error.message : String(error)
+const graphQlErrors: string[] = []
+for (let attempt = 0; attempt < 2; attempt += 1) {
+  try {
+    await loadViewer(client)
+  } catch (error) {
+    graphQlErrors.push(error instanceof Error ? error.message : String(error))
+  }
 }
-console.log(viewer?.login, graphQlError)
+console.log(viewer?.login, ...graphQlErrors)
 // #endregion

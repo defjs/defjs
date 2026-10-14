@@ -39,7 +39,9 @@ Treat the incoming `HttpRequest` as owned by the chain. Clone `Headers` before c
 
 Same pattern for SSE. Browser WebSocket can’t add arbitrary handshake headers — changing `request.headers` won’t authenticate a browser socket. Use protocol, URL/query policy, or a server-supported handshake instead.
 
-When replacing an HTTP body, replace `body` on the copied request. Fetch ignores stale content-type metadata when the body value changed. Don’t reuse a consumed `ReadableStream` body.
+HTTP never writes an inferred Content-Type into `request.headers`; interceptors see only declared headers. `request.bodyContentType` holds the inferred type of the builder's body as a plain field, so it survives `{ ...req }` copies. An explicit `content-type` header always wins over that field and detection, whether declared by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. Signers should read `headers.get('content-type') ?? request.bodyContentType`.
+
+When replacing an HTTP body, replace `body` on the copied request and declare its type with a `content-type` header. `bodyContentType` applies only while `body` is the builder's value; replacement bodies are detected again, so a replacement string is text unless the header declares otherwise. Setting `body: undefined` leaves no library-inferred Content-Type. For the unchanged builder body, `bodyContentType: null` suppresses library inference when there is no explicit header, though native Fetch may still add its own type for a string. FormData always uses its actual multipart boundary. Don’t reuse a consumed `ReadableStream` body.
 
 ## Short-circuit a request
 
@@ -93,6 +95,8 @@ Factories return tagged transport values:
 - `basicAuthSSEInterceptor(provider, options?)` — Basic credentials on SSE
 
 `HttpRequest` may include `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, and static `operation`. It’s a transport integration value — not the caller’s parsed input. `queryParams` is `new URLSearchParams(queryString)` after serialization. A configured query serializer is not called when the builder produced no query, and a builder `URLSearchParams` is used as-is. Keep command validation, output validation, and domain error mapping in their layers.
+
+URL validation starts during request building: a missing, relative, or invalid base endpoint or an illegal path fails with `REQ_BUILD_FAILED` before any interceptor or transport runs, including a short-circuiting interceptor. Before dispatch, the final `req.endpoint` is validated against the final `req.baseEndpoint`: the resolved URL must keep that base's origin and stay under its directory; C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes in the path are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. An interceptor may deliberately replace `baseEndpoint` with another valid absolute URL. HTTP, SSE, and WebSocket share the rule, and deterministic URL errors are never retried.
 
 SSE/WebSocket observers are lifecycle hooks, not control flow. Unsubscribe WebSocket listeners when the owner ends. Observer failures follow the transport contract; an interceptor itself can throw or reject.
 

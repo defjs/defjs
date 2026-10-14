@@ -1,6 +1,6 @@
 # 设计稿：`builder` 取代 `build`，删除 `struct.request`
 
-状态：已实施（工作区未提交；codex 第十五轮审计 Ready，`bun run verify` 通过）
+状态：2026-09-28 的历史设计记录；当前 API 契约以 [packages/core/design.md](packages/core/design.md) 为准。
 日期：2026-09-28（2026-09-29 修订：类型设计、query 编码、`protocols` 归属、alias 定位、body 分流规则与附录 A、4.3 逐层引导）
 范围：`@defjs/core` 的端点定义层（`defineRequest` / `defineEventStream` / `defineWebSocket`）与 `struct` 的请求相关部分。开发期设计，不保留兼容层。
 
@@ -91,19 +91,19 @@ createClient(
 
 按以下顺序分流，命中即止：
 
-| builder 返回的 `body`                                                       | 发送方式                                                                | 默认 content-type                              |
-| --------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---------------------------------------------- |
-| `undefined` / 不写                                                          | 不发送 body                                                             | —                                              |
-| 带 `urlencoded` / `formData` codec tag 的带类型对象（**仅限作为 body 根**） | 编成 `URLSearchParams` / `FormData`，key 用线上名，数组展开为同名多字段 | 表单类型 / 由平台生成 boundary                 |
-| `FormData`、`URLSearchParams`                                               | 原样                                                                    | 同上                                           |
-| `Blob` / `File`                                                             | 原样                                                                    | `blob.type`，为空时 `application/octet-stream` |
-| `BufferSource`（`ArrayBuffer`、`Uint8Array` 等 TypedArray、`DataView`）     | 原样                                                                    | `application/octet-stream`                     |
-| `ReadableStream`                                                            | 原样，流式发送（transport 已设置 `duplex: 'half'` 并探测运行时能力）    | `application/octet-stream`                     |
-| `string`                                                                    | 原样                                                                    | `text/plain;charset=UTF-8`                     |
-| 其他（对象、数组、number、boolean、`null`）                                 | 按第 4 节编码后 `JSON.stringify`                                        | `application/json`                             |
+| builder 返回的 `body`                                                       | 发送方式                                                                | 默认 content-type                                                  |
+| --------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `undefined` / 不写                                                          | 不发送 body                                                             | —                                                                  |
+| 带 `urlencoded` / `formData` codec tag 的带类型对象（**仅限作为 body 根**） | 编成 `URLSearchParams` / `FormData`，key 用线上名，数组展开为同名多字段 | 表单类型 / 由平台生成 boundary；`formData` 清掉已有 `Content-Type` |
+| `FormData`、`URLSearchParams`                                               | 原样                                                                    | 同上；`FormData` 清掉已有 `Content-Type`                           |
+| `Blob` / `File`                                                             | 原样                                                                    | `blob.type`，为空时 `application/octet-stream`                     |
+| `BufferSource`（`ArrayBuffer`、`Uint8Array` 等 TypedArray、`DataView`）     | 原样                                                                    | `application/octet-stream`                                         |
+| `ReadableStream`                                                            | 原样，流式发送（transport 已设置 `duplex: 'half'` 并探测运行时能力）    | `application/octet-stream`                                         |
+| `string`                                                                    | 原样                                                                    | `text/plain;charset=UTF-8`                                         |
+| 其他（对象、数组、number、boolean、`null`）                                 | 按第 4 节编码后 `JSON.stringify`                                        | `application/json`                                                 |
 
 - 默认 content-type 与现有 `resolveHttpBodyContentType`（`http/transport/body.ts`）一致；`BufferSource` 分支需由现有的 `ArrayBuffer` 判断扩展而来。
-- 覆盖 content-type：在 `headers` 中声明 `content-type`。
+- 覆盖 content-type：在 `headers` 中声明 `content-type`，但原生 `FormData` 和根上带 `formData` tag 的对象会清除它，让 runtime 生成 multipart boundary。
 - **codec tag 只在 body 根生效。** `body: { meta: input.form }` 按 JSON 发送，`form` 的字段作为普通 JSON 字段编码。
 - **字符串默认按原文发送。** 发送 JSON 字符串（如 `"abc"`）需自行 `JSON.stringify(s)` 并声明 `application/json`。
 - **`undefined` 与 `null` 语义分离。** `undefined` 字段被省略；`nullable` 字段传 `null` 时发送 `null`。body 本身为 `undefined` 表示无 body。
@@ -400,7 +400,7 @@ type HttpRequestShape<P, M> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 
 type WebSocketRequestShape<P> = {
@@ -412,7 +412,7 @@ type WebSocketRequestShape<P> = {
 ```
 
 - `query` 允许嵌套：定义与 client 无关，类型层无法得知是否配置了序列化器，"嵌套需序列化器"退回运行时。`path` / `headers` 保持编译期扁平检查。
-- `body` 取 `unknown`：TS 的 `interface` 没有隐式索引签名，精确的 `JsonValue` 会拒绝用户自己的 `interface User`；body 本就由运行时分类。
+- `body` 使用现行 `BodyValue`（见 `packages/core/src/internal/builder_types.ts`）：只接受支持的 wire 值或待编码的数据，运行时仍校验其可发送性。`interface` 值或 class 实例须先展开成 `{ ...value }`；不能直接把它们当作 body 传入。
 - method 为非字面量 `string` 时，GET/HEAD 检查自动放宽。
 
 ### 5.4 builder 何时可省略
@@ -548,7 +548,7 @@ HTTP 的 `output` / `error`、SSE event data、WebSocket 帧统一按 struct kin
 
 ### 9.2 `protocols` 进入 builder 返回值
 
-子协议是端点契约而非 input 的函数；HEAD 上已有 execute 选项 > client 配置 > 定义三个来源（`web_socket.ts:481`），加上 `beforeConnect`，再加 builder 即第五个入口。唯一的动态场景"token 塞进子协议"属于 `beforeConnect` / 拦截器。
+子协议来自 execute `protocols` > client `withWebSocketProtocols` > 定义 `protocols`。选中的列表在逻辑会话开始前复制，并在重连时复用；builder、`beforeConnect` 和拦截器都不能改变它。需要动态 token-in-subprotocol 时，先获取 token，再经该次 execute 的 `protocols` 传入。
 
 ### 9.3 删除 `input` struct、出站只用 TS 类型
 
@@ -573,7 +573,7 @@ query 嵌套格式变体众多，重做即重复造轮子；由 3.3 的序列化
 
 ## 11. 待定
 
-- **WebSocket 子协议来源收敛（建议，不影响 builder 设计）**：只保留定义层 `protocols`（静态）与 `beforeConnect`（动态），删除 client 级与 execute 级 `protocols`。理由：子协议按端点确定，不存在全 client 通用的默认子协议。
+- **WebSocket 子协议来源收敛（历史提案，未实施）**：当时考虑只保留定义层 `protocols` 与动态 `beforeConnect`，删除 client 级与 execute 级 `protocols`。现行规则仍是第 9.2 节的三个来源；`beforeConnect` 不能修改已复制的列表。
 
 ---
 

@@ -60,9 +60,11 @@ type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] exte
 
 `FaultOf` is `Fault` expressed by the decoded error-body type instead of the struct that produced it. `HttpAwaitResult` and the fault factories work in decoded values, so they use this form.
 
-Every variant is a native `Error` named `DefjsFault`, so `String(fault)` produces a directly
-loggable `DefjsFault: <message>`. `code` and the variant metadata — `status`, `response`, `data` —
+Every variant is a native `Error` named `DefjsFault`, so `String(fault)` produces
+`DefjsFault: <message>`. `code` and the variant metadata — `status`, `response`, `data` —
 are enumerable own properties. The native `cause` chain is non-enumerable.
+
+Default Struct messages say `received <kind>`, never the received value, for example `Expected number at email, received string`. A JSON `SyntaxError` behind `RES_DECODE_FAILED` gives the message `Response body could not be decoded`. Issue paths are structural and retain record keys: `struct.record(...)` can produce `Expected number at alice@example.com, received string`, so keys may still be sensitive in default messages, `prettify()`, and `String(fault)`. Raw `StructIssue.received` and parser causes remain sensitive; custom `errorMap` and extension messages are used verbatim and need review before logging.
 
 <include cwd>examples/api/fault.ts#example</include>
 
@@ -159,8 +161,7 @@ declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown,
 `createHttpStatusFault` takes a response that already carries the decoded body;
 `createUndecodedHttpStatusFault` takes metadata alone, for an endpoint that declared no `error`.
 
-`createNetworkFault` maps `ERR_ABORTED` and a `DOMException` named `AbortError` onto `NET_ABORTED`,
-`ERR_TIMEOUT` and an error named `TimeoutError` onto `NET_TIMEOUT`, and everything else to `NET_UNREACHABLE`. `createPreflightFault` takes the code directly; with no
+`createNetworkFault` uses [`isAbortCause`](/api/core/isabortcause) for `NET_ABORTED` and [`isTimeoutCause`](/api/core/istimeoutcause) for `NET_TIMEOUT`: these recognize branded sentinels from any Core copy, a `DOMException` named `AbortError`, and a `DOMException` or `Error` named `TimeoutError`, respectively. Everything else maps to `NET_UNREACHABLE`. `createPreflightFault` takes the code directly; with no
 `cause`, the code becomes the message.
 
 All factories return native `Error` instances with the structured fields above; they do not create
@@ -180,5 +181,16 @@ const ERR_TIMEOUT: Error // message: 'Request timed out'
 Shared `cause` / message values for abort and timeout. Throwing one from an HTTP interceptor
 resolves the call with `NET_ABORTED` or `NET_TIMEOUT`. SSE and WebSocket interceptors report any
 throw, these included, as `EXT_INTERCEPTOR_FAILED`.
+
+The sentinels carry non-enumerable `Symbol.for('defjs.cause.aborted')` and `Symbol.for('defjs.cause.timeout')` brands. Classification does not depend on the sentinel's object identity or unrelated earlier executions.
+
+## Cause checks
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/api/core/isabortcause) recognizes an abort-branded `Error` or a `DOMException` named `AbortError`. [`isTimeoutCause`](/api/core/istimeoutcause) recognizes a timeout-branded `Error` or a `DOMException` / `Error` named `TimeoutError`. Pass `fault.cause` to classify the underlying value; these functions do not unwrap a fault. They work with sentinels from another Core copy.
 
 See [Errors guide](/docs/errors).

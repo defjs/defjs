@@ -145,18 +145,20 @@ const client = createClient(
 
 按第一个命中的规则：
 
-| `body`                                       | 发出去的内容                                                 | 默认 Content-Type                            |
-| -------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------- |
-| 省略 / `undefined`                           | 无 body                                                      | 不新增                                       |
-| 根上带 `urlencoded` 或 `formData` tag 的对象 | `URLSearchParams` / `FormData`，键是 wire name，数组重复字段 | 表单类型 / 平台 boundary                     |
-| `FormData`、`URLSearchParams`                | 原样                                                         | 同上；`FormData` 会清掉已有 `Content-Type`   |
-| `Blob` / `File`                              | 原样                                                         | `blob.type`，否则 `application/octet-stream` |
-| `ArrayBuffer`、TypedArray、`DataView`        | 原样                                                         | `application/octet-stream`                   |
-| `ReadableStream`                             | 流式                                                         | `application/octet-stream`                   |
-| `string`                                     | 原文                                                         | `text/plain;charset=UTF-8`                   |
-| 对象、数组、number、boolean、`null`          | 编码后再 `JSON.stringify`                                    | `application/json`                           |
+| `body`                                       | 发出去的内容                                                 | 默认 Content-Type                                            |
+| -------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 省略 / `undefined`                           | 无 body                                                      | 不新增                                                       |
+| 根上带 `urlencoded` 或 `formData` tag 的对象 | `URLSearchParams` / `FormData`，键是 wire name，数组重复字段 | 表单类型 / 平台 boundary；`formData` 清掉已有 `Content-Type` |
+| `FormData`、`URLSearchParams`                | 原样                                                         | 同上；`FormData` 会清掉已有 `Content-Type`                   |
+| `Blob` / `File`                              | 原样                                                         | `blob.type`，否则 `application/octet-stream`                 |
+| `ArrayBuffer`、TypedArray、`DataView`        | 原样                                                         | `application/octet-stream`                                   |
+| `ReadableStream`                             | 流式                                                         | `application/octet-stream`                                   |
+| `string`                                     | 原文                                                         | `text/plain;charset=UTF-8`                                   |
+| 对象、数组、number、boolean、`null`          | 编码后再 `JSON.stringify`                                    | `application/json`                                           |
 
-builder 在 `headers` 里写的 `content-type` 覆盖检测结果。字符串是原文；要发 JSON 字符串得自己 `JSON.stringify` 并带上 `application/json`。自己做的 `JSON.stringify`、`qs`、protobuf 离开了 struct 编码，alias 不会套用。
+builder 在 `headers` 里写的 `content-type` 覆盖检测结果，但原生 `FormData` 和根上带 `formData` tag 的对象会清掉已有 `Content-Type`，让 runtime 生成 multipart boundary。字符串是原文；要发 JSON 字符串得自己 `JSON.stringify` 并带上 `application/json`。自己做的 `JSON.stringify`、`qs`、protobuf 离开了 struct 编码，alias 不会套用。
+
+HTTP 拦截器只看到显式类型头，自动类型在最终发送前应用。替换 body 时，显式 `bodyContentType` 优先于 header，显式 header 优先于检测；没有声明时重新检测，`body: undefined` 不新增自动头。`bodyContentType: null` 删除库的类型头，但原生 Fetch 仍可能给 string 补类型。服务端上传进度转流保留显式类型，FormData 使用实际序列化流及其 boundary，不先整体读成 Blob；没有有效显式 `Content-Length` 时总量未知。
 
 `GET` / `HEAD` 不能返回 body，这是类型错误。WebSocket 的 builder 不能返回 `headers` 或 `body`。
 
@@ -209,7 +211,7 @@ const watchUser = defineEventStream({
 const [error, stream, open] = await client.execute(watchUser({ id: 7 }))
 ```
 
-请求放置与 HTTP 相同，包含 body。事件 `data` 按 kind 解码：`string` 保持原文，其余先 `JSON.parse` 再交给 struct。裸字面量不是 JSON 文本。声明了 `error` 时，启动失败是 `Fault<TError>`；握手错误 body 同样按 kind。非 2xx 启动是 `HTTP_STATUS`。未声明或校验失败的事件不进队列；`withSSEOnInvalidEvent` 可以观察。重连要显式 `withSSEReconnect`。
+请求放置与 HTTP 相同，包含 body。事件 `data` 按 kind 解码：`string` 保持原文，其余先 `JSON.parse` 再交给 struct。裸字面量不是 JSON 文本。声明了 `error` 时，启动失败是 `Fault<TError>`；握手错误 body 同样按 kind。非 2xx 且该侧未声明或解码成功是 `HTTP_STATUS`；JSON 媒体类型不符是 `RES_MEDIA_TYPE_INVALID`；声明的握手 body 读取、解析或 Struct 校验失败是 `RES_DECODE_FAILED`，Struct 失败的 `cause` 是 `StructError`，不是 HTTP 的 `RES_STRUCT_MISMATCH`。未声明或校验失败的事件不进队列；`withSSEOnInvalidEvent` 可以观察。重连要显式 `withSSEReconnect`。
 
 ## WebSocket
 
@@ -234,7 +236,7 @@ const [error, session] = await client.execute(room({ roomId: '1' }))
 
 入站文本、`ArrayBuffer`、TypedArray、`Blob` 按 UTF-8 读取，再 `JSON.parse`，再交给 `incoming`。坏 JSON 和 struct 失败进 `session.onRuntimeError`，该帧不入队，会话继续。不是文本、字节或 Blob 的帧直接丢掉，不通知。没有 `withWebSocketOnInvalidEvent`。
 
-`session.send` 同步校验并序列化：struct 编码，然后 `JSON.stringify`。query 规则与 HTTP 相同，不再把复杂 query 单独 JSON 化。静态 `protocols` 写在定义上；`execute` 选项和 `withWebSocketProtocols` 仍可覆盖，优先级是执行选项、client、定义。token 放进 subprotocol 属于 `beforeConnect` 或 interceptor，不属于 builder。
+`session.send` 同步校验并序列化：struct 编码，然后 `JSON.stringify`。query 规则与 HTTP 相同，不再把复杂 query 单独 JSON 化。静态 `protocols` 写在定义上；`execute` 选项和 `withWebSocketProtocols` 仍可覆盖，优先级是执行选项、client、定义。选中的列表在逻辑会话开始前复制，并在重连时复用；builder、`beforeConnect` 和 interceptor 都不能改子协议。需要 token-in-subprotocol 时，先获取 token，再通过该次 `execute` 的 `protocols` 选项传入。
 
 ## interceptor
 

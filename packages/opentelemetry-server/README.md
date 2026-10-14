@@ -92,9 +92,11 @@ Defjs emits at most one diagnostic per request or logical connection, always `WA
 | SSE or WebSocket connection fails                                           | `defjs.client.sse.exception` or `defjs.client.websocket.exception` / `connect` |
 | SSE or WebSocket ends in error, including a rejected `closed`               | Same transport event / `connection`                                            |
 
-Successful responses, HTTP status responses (including 4xx/5xx whose declared `error` body decodes), normal closure, EOF, and caller cancellation produce no LogRecord. An execute timeout is a transport rejection and logs once. An abort whose reason is a `TimeoutError` (for example `AbortSignal.timeout()`) is classified as a timeout, not a cancellation, so it logs once like any timeout. Core reads a declared `output` (2xx) or `error` (other status) body inside the HTTP interceptor chain. When that read fails, the media type is not JSON, or the JSON does not parse, `next()` rejects with an internal `BodyFailure` and one HTTP record is emitted whatever the status. The command then returns `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID`, or `NET_BODY_INCOMPLETE`. A body that is not declared is never read and cannot log. Struct validation (`RES_STRUCT_MISMATCH`), an absent declared body such as a 204, and the later HTTP_STATUS conversion happen after the interceptor and do not log.
+Successful responses, HTTP status responses (including 4xx/5xx whose declared `error` body decodes), normal closure, EOF, and caller cancellation produce no LogRecord. An HTTP execute timeout logs once only when this interceptor observes its `next()` reject in the chain / transport. An abort whose reason is a `TimeoutError` (for example `AbortSignal.timeout()`) is classified as a timeout, not a cancellation, but the same observation boundary applies. Timeouts during input parsing, the builder, interceptor work after `await next()`, or declared-body conversion after the chain need outer command-level observation; they do not necessarily produce a transport LogRecord.
 
-An SSE non-2xx handshake is observed as a connection failure before Core converts it to a public HTTP_STATUS fault, so it always logs once, whatever its body. A WebSocket close frame from the server (any code, for example 1000 or 1011) resolves as a normal close and produces no LogRecord. An abrupt drop without a close frame (code 1006) depends on the runtime: where the platform WebSocket reports a socket `error` before `close` (Node.js), the session ends in error and logs one WARN with `websocket.close.code` `1006`; where it does not (Bun), the drop resolves as a normal close and nothing is logged. Otherwise only a session that ends in error, such as an incoming queue overflow or a heartbeat timeout, logs. Command input validation, individual messages, reconnect attempts, and hook failures do not produce extra Logs. The HTTP exception convention is currently Development; SSE/WS names are Defjs-specific.
+Core reads a declared `output` (2xx) or `error` (other status) body inside the HTTP interceptor chain. A read failure in any representation makes `next()` reject with an internal `BodyFailure`. Only JSON representation checks for a JSON media type and JSON-parses the body; a failure there also rejects with `BodyFailure`. These rejections emit one HTTP record whatever the status, and the command returns `NET_BODY_INCOMPLETE`, `RES_MEDIA_TYPE_INVALID`, or `RES_DECODE_FAILED`. Text, blob, and bytes representations accept normal non-JSON bodies without logging. A body that is not declared is never read and cannot log. HTTP Struct validation (`RES_STRUCT_MISMATCH`), an absent declared body such as a 204, and the later HTTP_STATUS conversion happen after the interceptor and do not log.
+
+An SSE non-2xx handshake is observed as a connection failure and logs once. If its declared `error` body decodes, Core returns `HTTP_STATUS`; if that body fails its Struct, Core returns `RES_DECODE_FAILED` with a `StructError` cause, not `RES_STRUCT_MISMATCH`. A WebSocket close frame from the server (any code, for example 1000 or 1011) resolves as a normal close and produces no LogRecord. An abrupt drop without a close frame (code 1006) depends on the runtime: where the platform WebSocket reports a socket `error` before `close` (Node.js), the session ends in error and logs one WARN with `websocket.close.code` `1006`; where it does not (Bun), the drop resolves as a normal close and nothing is logged. Otherwise only a session that ends in error, such as an incoming queue overflow or a heartbeat timeout, logs. Command input validation, individual messages, reconnect attempts, and hook failures do not produce extra Logs. The HTTP exception convention is currently Development; SSE/WS names are Defjs-specific.
 
 `exception.type` is the class name of what the interceptor observed, not a Defjs fault code. It can be an internal class (`BodyFailure` for an HTTP body, `EventStreamFatalError` for an SSE handshake, `DefjsFault` for a WebSocket startup failure) or a platform class such as `TypeError` for a network failure and `Error` for a timeout.
 
@@ -229,7 +231,7 @@ HTTP tracing uses stable OpenTelemetry HTTP client attribute and metric names. T
 - `http.request.method`
 - `url.full`
 - `server.address`
-- `server.port`
+- Optional `server.port` — only when the URL has an explicit non-default port
 - `http.response.status_code` only when a response status was received
 
 HTTP span status and `error.type` follow these rules:
@@ -262,15 +264,15 @@ Resolved paths can contain sensitive or high-cardinality identifiers. Keep opera
 
 When `meter` is provided, the following stable metrics are collected:
 
-| Metric                         | Unit | Attributes                                                                                                                                      |
-| ------------------------------ | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `http.client.request.duration` | `s`  | `http.request.method`, optional `defjs.operation`, `server.address`, `server.port`, optional `http.response.status_code`, optional `error.type` |
+| Metric                         | Unit | Attributes                                                                                                                                                                                    |
+| ------------------------------ | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `http.client.request.duration` | `s`  | `http.request.method`, optional `defjs.operation`, `server.address`, optional `server.port` (explicit non-default URL port only), optional `http.response.status_code`, optional `error.type` |
 
 The metric applies the same response-status and `error.type` classification as the HTTP span.
 
 ### Transport span boundary
 
-The HTTP span ends when the interceptor receives the Defjs `HttpResponse`. For a declared `output` or `error` body, the transport checks the JSON media type, then reads and parses the body, before it returns that response. A failure there (`RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, or `NET_BODY_INCOMPLETE`) rejects through the interceptor, so the span ends `ERROR` with `error.type` `BodyFailure` and no `http.response.status_code`, whatever the HTTP status. Struct validation (`RES_STRUCT_MISMATCH`), an absent declared body, and the conversion of a non-2xx response into `HTTP_STATUS` happen afterward and cannot update that transport span.
+The HTTP span ends when the interceptor receives the Defjs `HttpResponse`. For a declared `output` or `error` body, the transport reads the selected JSON, text, blob, or bytes representation before returning that response. Only JSON representation checks the JSON media type and JSON-parses the body. A read failure in any representation, or a JSON media-type / parse failure (`NET_BODY_INCOMPLETE`, `RES_MEDIA_TYPE_INVALID`, or `RES_DECODE_FAILED`), rejects through the interceptor, so the span ends `ERROR` with `error.type` `BodyFailure` and no `http.response.status_code`, whatever the HTTP status. HTTP Struct validation (`RES_STRUCT_MISMATCH`), an absent declared body, and the conversion of a non-2xx response into `HTTP_STATUS` happen afterward and cannot update that transport span.
 
 When telemetry must represent the final command outcome, create an application span around `client.execute(...)` and classify the returned tuple:
 
@@ -353,7 +355,7 @@ By default, **per-message spans are not created**, and **message payloads, messa
 
 ## What's Next
 
-- [OpenTelemetry guide](https://defjs.org/plugins/opentelemetry-server) — complete plugin boundaries and examples
-- [Client](https://defjs.org/core/client) — `createClient` and full transport configuration
-- [SSE](https://defjs.org/core/sse) — `defineEventStream` and streaming event consumption
-- [WebSocket](https://defjs.org/core/web-socket) — `defineWebSocket` and real-time communication
+- [OpenTelemetry guide](https://defjs.lyz.cloud/docs/integrations/opentelemetry-server) — complete plugin boundaries and examples
+- [Client](https://defjs.lyz.cloud/docs/client) — `createClient` and full transport configuration
+- [SSE](https://defjs.lyz.cloud/docs/sse) — `defineEventStream` and streaming event consumption
+- [WebSocket](https://defjs.lyz.cloud/docs/web-socket) — `defineWebSocket` and real-time communication

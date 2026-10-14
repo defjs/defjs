@@ -103,13 +103,13 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 
 `abort` and `timeout` are mutually exclusive: the type rejects both, and passing both at runtime fails with a `REQ_OPTIONS_INVALID` fault. `signal` combines with either. `timeout` is a startup deadline for the connection: a later reconnect does not re-arm it, and `withTimeout` does not apply to WebSocket.
 
-When `reconnect` is set, `attempts` defaults to 3; `0` disables. Omitting `attempts` is not unlimited. See [Client](/api/client) for the defaults.
+When `reconnect` is set, `attempts` defaults to 3 per outage; `0` disables. Successful `open` resets the budget and backoff exponent, so each new outage starts at retry 1. Omitting `attempts` does not give unlimited retries within one outage. See [Client](/api/client) for the defaults and validation rules.
 
 ## Messages
 
 `incoming` is one struct. Text, `ArrayBuffer`, typed-array, and `Blob` frames are read as UTF-8, JSON-parsed, then checked against that struct. A frame that fails JSON parse or the struct is reported to `session.onRuntimeError` and is not queued. There is no client invalid-frame option.
 
-`outgoing` is one struct. `session.send` accepts `StructInput` of that struct, encodes aliases, then `JSON.stringify`. Several message kinds are a `struct.discriminatedUnion`.
+`outgoing` is one struct. `session.send` accepts `StructInput` of that struct, encodes aliases, then `JSON.stringify`. Values JSON cannot faithfully represent after encoding throw `TypeError` before sending or entering the reconnect queue, including non-finite numbers, functions, symbols, `Map`, `Set`, streams, and class instances without a JSON representation. Nested values use the same guard as HTTP JSON bodies. Heartbeat uses that guard too; a heartbeat serialization failure ends the session. Several message kinds are a `struct.discriminatedUnion`.
 
 ```ts
 session.send({ type: 'message', text: 'Hello' })

@@ -19,4 +19,4 @@ See [SSE](/docs/sse) for details.
 hello from the server
 ```
 
-SSE does not retry network/read failures unless you enable `withSSEReconnect(...)`. With a reconnect object, `attempts` defaults to `3`; `attempts: 0` disables retry. Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests reconnect, and a `ReadableStream` request body never does.
+SSE does not retry network/read failures unless you enable `withSSEReconnect(...)`. With a reconnect object, `attempts` defaults to `3` per outage; a successful handshake resets the budget and backoff exponent. `attempts: 0` disables retry. Invalid numeric reconnect options fail before any request with `REQ_OPTIONS_INVALID`; see [validation rules](/api/core/withssereconnect). Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests reconnect, and a `ReadableStream` request body never does.

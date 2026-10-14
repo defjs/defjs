@@ -13,7 +13,8 @@ function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
 
 - Every field is **required** by default. A missing key fails with `missing_key`.
 - `.optional()` and `.nullish()` allow a missing key. An absent optional field stays absent in the output.
-- `.null()` / `.nullable()` allow `null`. `.alias(name)` reads and writes the field under a different wire key.
+- `.null()` / `.nullable()` allow `null`.
+- `.alias(name)` sets the field's wire key. `struct.parse` reads logical keys by default; `{ aliases: true }` and HTTP JSON decoding read wire keys, and HTTP JSON encoding writes them. Parsed output uses logical keys.
 - Keys that are not in `shape` are removed from the output. The output is a new object with a `null` prototype.
 - The input must be a plain object. Arrays, `Map`, and class instances fail with `invalid_type` (expected `object`).
 - Parsing stops at the first failing field, and `issue.path` holds its key.

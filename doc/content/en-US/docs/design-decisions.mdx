@@ -98,21 +98,23 @@ session.
 
 TypeScript inference describes what you expect; it can’t check a server response at runtime. Struct parsing is the second half of the contract. Defjs validates command input before request construction, checks the representation, then parses the struct for whichever side of `ok` applies.
 
-The Struct is applied **once, after the interceptor chain**. A response that an interceptor built with
+For HTTP, the Struct is applied **once, after the interceptor chain**. A response that an interceptor built with
 `makeResponse(...)` goes through the same media-type check, representation conversion, and Struct as
 one that came off the wire: where a response came from does not change how it is read, so there is
-no "trust the interceptor" path to reason about. The built-in Fetch transport already reads and
-JSON-parses a declared body (after its media-type check) before it hands the response back to the
-chain, so interceptors see that parsed `body`; a failure there surfaces as the same `RES_*` or
+no "trust the interceptor" path to reason about. The built-in Fetch transport reads a declared body
+as JSON, text, `Blob`, or bytes before handing it back to the chain. Only JSON representations require
+a JSON media type and `JSON.parse`; non-JSON text, blobs, and bytes are valid for their declared
+representation. Interceptors see that representation, not yet the Struct-decoded value. Read failures
+apply to every representation; read or parse failures there surface as the same `RES_*` or
 `NET_BODY_INCOMPLETE` fault.
 
-The order is: media type, then representation, then struct.
+The order is: media type (for JSON), then representation, then struct.
 
 | What did not hold                                               | Fault                                                         |
 | --------------------------------------------------------------- | ------------------------------------------------------------- |
 | The media type is not the one the declared representation needs | `RES_MEDIA_TYPE_INVALID` — reported _before_ the body is read |
 | The bytes are not that representation                           | `RES_DECODE_FAILED`                                           |
-| The value is not that struct                                    | `RES_STRUCT_MISMATCH`                                         |
+| The value is not that struct                                    | `RES_STRUCT_MISMATCH` (HTTP only)                             |
 | Non-2xx, and `error` decoded                                    | `HTTP_STATUS` with typed `data`                               |
 | Non-2xx, and `error` was not declared                           | `HTTP_STATUS` with `data: undefined`                          |
 
@@ -143,7 +145,7 @@ Body kind is decided from the value, first match:
 
 `undefined` fields are omitted. `null` on a nullable field is sent. A string is not JSON unless you stringify it and set `content-type`. Serializing yourself (`JSON.stringify`, qs, protobuf) leaves the struct encoder, so aliases do not apply. There is no public `struct.encode`.
 
-`GET` and `HEAD` cannot carry a body. WebSocket builders cannot return headers or a body. Static WebSocket subprotocols stay on the definition (`protocols`), not in the builder. Invalid WebSocket frames go to the session runtime-error listener. An SSE `error` struct types the startup fault, and its handshake body follows the same kind rule as an HTTP body: `string` is text, blobs and files are blobs, `arrayBuffer` is bytes, and everything else is JSON.
+`GET` and `HEAD` cannot carry a body. WebSocket builders cannot return headers or a body. Static WebSocket subprotocols stay on the definition (`protocols`), not in the builder. Invalid WebSocket frames go to the session runtime-error listener. An SSE `error` struct types the startup fault, and its handshake body follows the same kind rule as an HTTP body: `string` is text, blobs and files are blobs, `arrayBuffer` is bytes, and everything else is JSON. Representation selection is shared, but fault mapping is not: SSE handshake read, parse, or Struct failures are `RES_DECODE_FAILED`, with `StructError` as `cause` for a Struct failure; HTTP reports Struct failures as `RES_STRUCT_MISMATCH`.
 
 ## Observers and policy placement
 

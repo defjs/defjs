@@ -98,6 +98,10 @@ The key is the SSE event name; a message without an `event:` field is named `mes
 
 Reconnect lives on the client (`withSSEReconnect`). SSE `jitter` is a **0–1 multiplicative factor**, same as WebSocket.
 
+The retry budget and backoff exponent reset after a successful handshake; they apply per outage. Invalid numeric options return `REQ_OPTIONS_INVALID` before opening a stream, and `maxDelayMs` caps the final delay after jitter. See [`withSSEReconnect`](/api/core/withssereconnect) for validation rules, defaults, and UTF-8 `Last-Event-ID` handling.
+
+The parser follows WHATWG SSE line and field rules and removes only one leading UTF-8 BOM at the start of each physical stream. U+FEFF in data or ID values is preserved; a later BOM-prefixed field name is ignored as unknown. Multi-line data joins with `\n`, a blank line dispatches a data-bearing event, and an unfinished event at EOF is discarded.
+
 See [SSE guide](/docs/sse) and [Consume an SSE stream](/recipes/consume-sse).
 
 ## EventStreamDefinition

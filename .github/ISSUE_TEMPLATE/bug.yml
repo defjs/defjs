@@ -4,7 +4,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please ensure you have checked the [issues](https://github.com/defjs/defjs/issues) and [documentation](https://defjs.org) before asking any questions.
+        Please ensure you have checked the [issues](https://github.com/defjs/defjs/issues) and [documentation](https://defjs.lyz.cloud/docs/start) before asking any questions.
   - type: input
     id: version
     attributes:

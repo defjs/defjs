@@ -17,6 +17,8 @@ class StructError extends Error {
 
 `name` is `'StructError'`. `message` is the issue's message for a single issue, `N struct issues: <first message>` for several, and `Struct parse failed` for none.
 
+Default issue messages name the received kind, never its value, for example `Expected number at id, received string`. `message` and the formatters use that text. Raw input stays on `StructIssue.received`; custom `errorMap` text is used verbatim and can reintroduce sensitive values.
+
 - `struct.parse` stops at the first failure, so `issues` holds one [`StructIssue`](/api/core/structissue-type) there.
 - `format()` returns a [`FormattedStructError`](/api/core/formattedstructerror-type) tree. Each node has an `_errors` array, and nested keys follow `issue.path`.
 - `flatten()` returns a [`FlattenedStructError`](/api/core/flattenedstructerror-type): messages with an empty path go to `formErrors`, the others are grouped by the first path segment in `fieldErrors`.

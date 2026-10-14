@@ -27,7 +27,7 @@ type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
 - `signal` combines with either one; it is not an alias for `abort`.
 - `timeout` must be a positive safe integer no greater than `2_147_483_647`. It limits how long opening the session may take and is not applied again on reconnect.
 - `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for this call.
-- When `reconnect` is set, `attempts` defaults to `3`; `0` disables. Omitting `attempts` is not unlimited.
+- When `reconnect` is set, `attempts` defaults to `3` per outage; `0` disables. Successful `open` resets the budget and backoff exponent. Omitting `attempts` does not give unlimited retries within one outage. See [`withWebSocketReconnect`](/api/core/withwebsocketreconnect) for validation and final delay caps.
 
 See [`WebSocketHeartbeatConfig`](/api/core/websocketheartbeatconfig-type).
 

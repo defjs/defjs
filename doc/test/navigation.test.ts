@@ -62,7 +62,7 @@ test('actual eleven-language content trees preserve every unique URL and page re
         .map((p) => p.url)
         .sort(),
     )
-    expect(new Set(pages.map((p) => p.url)).size).toBe(205)
+    expect(new Set(pages.map((p) => p.url)).size).toBe(207)
     for (const page of pages) {
       expect(source.getPageByUrl(page.url, locale)?.path).toBe(`${locale}/${page.$ref}`)
       expect(findPath(tree.children, (node) => node === page)?.filter((node) => node.type === 'page').length).toBe(1)

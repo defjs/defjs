@@ -9,9 +9,11 @@ description: 'Client option that sets the base URL for relative request paths.'
 function withEndpoint(endpoint: string): ClientOption
 ```
 
-Sets the base URL prepended to relative request paths. The default is an empty string.
+Sets the valid absolute base URL prepended to relative request paths. The default is an empty string, so execution requires an explicit endpoint.
 
-- **endpoint** — absolute or relative base endpoint.
+- **endpoint** — valid absolute base endpoint. Its pathname is kept as a directory; its query and hash are discarded.
 - For WebSocket commands, an `http:` base becomes `ws:` and `https:` becomes `wss:`.
+
+A missing, relative, or invalid endpoint, or an illegal request path, fails with `REQ_BUILD_FAILED` during building, before any interceptor or transport runs, even when an interceptor would short-circuit. HTTP, SSE, and WebSocket share this rule. The resolved request must keep the base origin and stay under its directory; C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes in a path are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. An interceptor's final `req.endpoint` is checked against its final `req.baseEndpoint` with the same rule, but it may deliberately replace the base with another valid absolute URL. Deterministic URL errors are never retried.
 
 [Client](/api/client)

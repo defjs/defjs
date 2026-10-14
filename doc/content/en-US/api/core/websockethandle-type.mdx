@@ -24,6 +24,6 @@ type WebSocketHandle = Omit<
 
 The DOM `WebSocket` without its event-handler properties, `binaryType`, `dispatchEvent`, and the state constants. A custom implementation therefore needs `url`, `protocol`, `extensions`, `bufferedAmount`, `send`, `close`, `addEventListener`, `removeEventListener`, and a numeric `readyState`.
 
-The transport sets `binaryType = 'arraybuffer'` when the property exists. This is the instance type produced by a [`WebSocketHandleConstructor`](/api/core/websockethandleconstructor-type).
+The transport sets `binaryType = 'arraybuffer'` when the property exists and ignores its absence. If the setter throws, it requests best-effort closure of the constructed handle before failing that attempt with `NET_UNREACHABLE`; the socket is not left outside cleanup. This property is an optimization, and the decoder also accepts Blob frames. This is the instance type produced by a [`WebSocketHandleConstructor`](/api/core/websockethandleconstructor-type).
 
 [Client](/api/client)

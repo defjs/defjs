@@ -47,17 +47,16 @@ Struct 实例本身没有 `.parse()`、`validate`、`parseAsync` 或 `encode` �
 
 `struct` facade 当前提供以下构造器。这里按用途分组，不对应内部实现的全部 definition kind。
 
-| 用途        | 构造器                                     | 说明                                                                   |
-| ----------- | ------------------------------------------ | ---------------------------------------------------------------------- |
-| 基础值      | `string`、`number`、`boolean`、`null`      | 字符串、数字、布尔值和显式 `null`                                      |
-| 不透明值    | `any`、`unknown`                           | 接受不受 Struct 约束的值；`any` 的输出类型也不提供静态保证             |
-| 固定值      | `literal`、`enum`                          | 单个字面量或非空枚举；枚举支持字符串数组和含字符串/数字值的对象        |
-| 平台/转换值 | `date`、`bigint`                           | 输入可来自 wire 表示，输出分别是 `Date` 和 `bigint`                    |
-| 二进制值    | `blob`、`file`、`arrayBuffer`              | 浏览器平台值                                                           |
-| 复合值      | `object`、`array`、`tuple`、`record`       | 对象、列表、固定长度序列和任意 key 的记录                              |
-| 组合值      | `or`、`intersection`、`discriminatedUnion` | 普通 union、交集和按 discriminator 路由的 union                        |
-| 表单 codec  | `urlencoded`、`formData`                   | 仍是 object struct，只多一个 codec tag；tag 只在该值作为 body 根时生效 |
-| 二进制值    | `blob`、`file`、`arrayBuffer`              | 值 Struct。作为 body 根时按字节发送；作为入站声明时选择对应表示        |
+| 用途        | 构造器                                     | 说明                                                                      |
+| ----------- | ------------------------------------------ | ------------------------------------------------------------------------- |
+| 基础值      | `string`、`number`、`boolean`、`null`      | 字符串、数字、布尔值和显式 `null`                                         |
+| 不透明值    | `any`、`unknown`                           | 接受不受 Struct 约束的值；`any` 的输出类型也不提供静态保证                |
+| 固定值      | `literal`、`enum`                          | 单个字面量或非空枚举；枚举支持字符串数组和含字符串/数字值的对象           |
+| 平台/转换值 | `date`、`bigint`                           | 输入可来自 wire 表示，输出分别是 `Date` 和 `bigint`                       |
+| 复合值      | `object`、`array`、`tuple`、`record`       | 对象、列表、固定长度序列和任意 key 的记录                                 |
+| 组合值      | `or`、`intersection`、`discriminatedUnion` | 普通 union、交集和按 discriminator 路由的 union                           |
+| 表单 codec  | `urlencoded`、`formData`                   | 仍是 object struct，只多一个 codec tag；tag 只在该值作为 body 根时生效    |
+| 二进制值    | `blob`、`file`、`arrayBuffer`              | 浏览器平台值 Struct。作为 body 根时按字节发送；作为入站声明时选择对应表示 |
 
 普通 object、数组、number、boolean、`null` 作为 body 根时按 JSON 发送。`string` 作为 body 根或入站 `string` struct 时保持原文。`struct.urlencoded(shape)` 与 `struct.formData(shape)` 不是包装 kind。
 
@@ -357,7 +356,9 @@ if (error?.code === 'RES_STRUCT_MISMATCH') {
 }
 ```
 
-`StructError` 还提供 `issues`、`format()`、`flatten()` 和 `prettify()`。`struct.parse(s, v, { errorMap })` 只在这一次 parse 里改写 issue message。`received`、message 和完整 cause 可能包含输入或响应 payload，不应在没有脱敏策略时写入日志。
+`StructError` 还提供 `issues`、`format()`、`flatten()` 和 `prettify()`。默认 message 只描述 received 的类型，例如 `Expected number at email, received string`，不嵌入原值；默认 `prettify()` 和 `String(fault)` 也不包含 received 原值。原值保留在 `StructIssue.received`，仍需脱敏。`RES_DECODE_FAILED` 的 JSON `SyntaxError` fault message 固定为 `Response body is not valid JSON`，原 parser cause 可能含响应片段。
+
+`struct.parse(s, v, { errorMap })` 只在这一次 parse 里改写 issue message，也覆盖另一份 Core 创建的 bigint/date Struct 转换失败。返回任何字符串（包括 `''`）都替换默认消息，只有 `undefined` 保留默认。自定义文本原样进入 message，若自行加入原值仍可能泄露；不要直接记录完整 issue 或 parser cause。
 
 ### Struct 不提供 HTTP tuple
 
@@ -380,7 +381,7 @@ if (error?.code === 'RES_STRUCT_MISMATCH') {
 
 解码失败不留 body：`RES_*` fault 的 `response` 是 `HttpMeta`，类型上就没有 `body` 字段。出错细节在 `cause`（Struct 不匹配时是 `StructError`）。传输失败是 fault 而不是响应，所以不存在代表传输失败的 status-0 响应。
 
-HTTP 的详细结果和 response 可用性请看 [HTTP 文档](../../../../doc/core/http.md) 与 [错误文档](../../../../doc/core/errors.md)，不要把 endpoint tuple 语义反推成 Struct API。
+HTTP 的详细结果和 response 可用性请看 [HTTP 文档](../../../../doc/content/en-US/docs/http.mdx) 与 [错误文档](../../../../doc/content/en-US/docs/errors.mdx)，不要把 endpoint tuple 语义反推成 Struct API。
 
 ## 现有实践与源码索引
 
@@ -389,7 +390,7 @@ HTTP 的详细结果和 response 可用性请看 [HTTP 文档](../../../../doc/c
 - [`index.ts`](./index.ts) 与 [`facade.ts`](./facade.ts)：公共导出和 `struct` 构造器。
 - [`parse.ts`](./parse.ts) 与 [`introspection.ts`](./introspection.ts)：严格 Struct 解析和内部 adapter 实现。
 - [`errors.ts`](./errors.ts)：`StructError`、issue message 和错误视图。
-- [`doc/core/struct.md`](../../../../doc/core/struct.md)：面向使用者的 Struct 文档。
-- [`doc/core/commands.md`](../../../../doc/core/commands.md)：request input、默认构建和 transport 约束。
+- [`doc/content/en-US/docs/struct.mdx`](../../../../doc/content/en-US/docs/struct.mdx)：面向使用者的 Struct 文档。
+- [`doc/content/en-US/docs/commands.mdx`](../../../../doc/content/en-US/docs/commands.mdx)：request input、显式 builder 和 transport 约束。
 
 历史文档或研究材料中若出现 `tag.*`、`RuntimeStruct`、`TypeOf`、`InputOf` 或直接导入 `codec`/`introspection` 的示例，不代表当前 `@defjs/core` 公共 API；应以当前根入口导出、类型测试和上述源码为准。

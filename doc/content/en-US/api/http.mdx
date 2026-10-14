@@ -43,7 +43,7 @@ reported in its metadata. On failure the tuple's third slot is `undefined`; the 
 function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
 ```
 
-Default HTTP transport. `fetchImpl` defaults to the global `fetch`; `withHTTPHandle` supplies another. It rejects — rather than resolving
+Default HTTP transport. `fetchImpl` defaults to the global `fetch` resolved at send time; `withHTTPHandle` supplies another. Untouched platform Fetch receives `(url, init)`, while a replaced global or custom handle receives a `Request`. It rejects — rather than resolving
 with a synthetic response — when no response reached the client or reading a declared body failed.
 
 ## makeResponse()
@@ -140,6 +140,8 @@ and blobs are raw and are parsed once. `DecodedResponse` is what reaches the cal
 Upload progress is reported only where the runtime can stream request bodies (Bun, Node, Deno); in browsers, `Blob` / `File`,
 `ArrayBuffer`, and `FormData` bodies are sent unchanged and `onUploadProgress` is not called.
 
+In server runtimes, FormData uses its serialized stream without whole-body Blob buffering and preserves the actual multipart boundary. Its total is unknown unless a valid explicit `Content-Length` supplies it. Explicit content types survive upload conversion, except that FormData must use its serialization's boundary. `loaded` counts stream bytes, not server acknowledgements. Downloads with a non-identity `Content-Encoding` report `total: 0` and `lengthComputable: false`; their stream bytes may already be decompressed.
+
 See [HTTP guide](/docs/http) and [Commands](/docs/commands).
 
 ## RequestEndpoint
@@ -157,11 +159,13 @@ type HttpRequestShape<P extends string, M extends string> = {
   path?: PathValue<P>
   query?: URLSearchParams | QueryRecord
   headers?: HeadersInit | FlatRecord
-  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : unknown
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
 }
 ```
 
 `GET` and `HEAD` cannot return a body. `path` and `headers` must be flat scalars; `query` may nest, and a nested object needs `withQuerySerializer` at runtime.
+
+See [`HttpRequestShape`](/api/core/httprequestshape-type) for the wire and JSON values accepted by `BodyValue`.
 
 ## HttpCommand
 

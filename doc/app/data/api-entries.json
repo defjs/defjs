@@ -701,6 +701,20 @@
   },
   {
     "package": "@defjs/core",
+    "name": "isAbortCause",
+    "kind": "function",
+    "slug": "core/isabortcause",
+    "related": ["@defjs/core:ERR_ABORTED", "@defjs/core:isTimeoutCause"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "isTimeoutCause",
+    "kind": "function",
+    "slug": "core/istimeoutcause",
+    "related": ["@defjs/core:ERR_TIMEOUT", "@defjs/core:isAbortCause"]
+  },
+  {
+    "package": "@defjs/core",
     "name": "createHttpInterceptor",
     "kind": "function",
     "slug": "core/createhttpinterceptor",

@@ -10,7 +10,7 @@ function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promis
 ```
 
 - **httpRequest** — Normalized request (URL, headers, body, abort signal, progress hooks).
-- **fetchImpl** — A [`FetchHandle`](/api/core/fetchhandle-type); defaults to the global `fetch`. A custom handle receives a `Request`, and its body is read chunk by chunk.
+- **fetchImpl** — A [`FetchHandle`](/api/core/fetchhandle-type); defaults to the global `fetch` resolved at send time. Untouched platform Fetch receives `(url, init)`; a replaced global or custom handle receives a `Request`, and its response body is read chunk by chunk. An unobserved platform response uses a whole-body read; download progress uses chunks.
 
 Default HTTP transport. The client always uses it; `withHTTPHandle` only replaces the `fetchImpl` it calls. It rejects — rather than resolving
 with a synthetic response — when no response reached the client.
