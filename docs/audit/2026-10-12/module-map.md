@@ -1,0 +1,2964 @@
+# zen-kit 模块地图
+
+- 基线：分支 `feat/up`，提交 `6b0b0c1e`（2026-10-12）
+- 覆盖：全部 2863 个 git 跟踪文件，每个文件一行；未跟踪目录（`node_modules`、`.idea`、`.superpowers`、`.claude`）不在范围内
+- 来源：每个分区由 codex（gpt-6.1-sol）与 grok（grok-4.7）独立编写，再由复核者合并、更正
+- 多语言条目：译文文件的“作用”继承 en-US 对应页面；备注列出与 en-US 结构不一致的例外
+
+## 模块总览
+
+| 模块                                                  | 范围                                                                                                         | 文件数 |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------ |
+| `@defjs/core` · struct                                | 运行时数据契约：构造器与修饰符、fail-fast 解析、alias、JSON 编解码、issue 与错误格式化。                     | 39     |
+| `@defjs/core` · client + http                         | 客户端配置与 `with*` 选项、HTTP 定义与执行、Fetch 传输（body 序列化、上传/下载进度、XSRF、超时与取消）。     | 40     |
+| `@defjs/core` · sse                                   | SSE 定义与执行、事件流传输（握手、重连、`Last-Event-ID`）与 SSE 解析器。                                     | 13     |
+| `@defjs/core` · web_socket                            | WebSocket 定义、会话状态机、重连与退避、心跳、出入站编解码、URL 构建。                                       | 22     |
+| `@defjs/core` · interceptor / error / internal / 入口 | 拦截器链、错误模型（`Fault`/`FaultCode`）、内部工具（URL、abort、backoff、请求物化、传输来源标记）与包入口。 | 47     |
+| `@defjs/core` · 测试设施                              | 回归与 e2e 测试、Hono 测试服务器夹具、Vitest 聚合/服务端/浏览器/基准配置。                                   | 47     |
+| `@defjs/opentelemetry-server`                         | 出站 OpenTelemetry 拦截器：HTTP/SSE/WebSocket 的 trace、metrics、logs 与上下文传播。                         | 28     |
+| `@defjs/react` · `@defjs/vue`                         | 框架适配器：React `ClientProvider`/`useClient`，Vue `createClientPlugin`/`injectClient`。                    | 16     |
+| 文档站工程（`doc/`）                                  | Fumadocs + React Router 站点应用、构建/链接检查/预览脚本、单元测试与站点 e2e。                               | 59     |
+| 文档内容 · en-US 指南与示例                           | en-US 指南、recipes、首页，以及被文档引用并参与类型检查的 `doc/examples`。                                   | 123    |
+| 文档内容 · en-US API 参考                             | en-US API 参考页（模块总览与逐符号页面）。                                                                   | 184    |
+| 文档内容 · 多语言（中日韩）                           | `ja-JP`、`ko-KR`、`zh-Hans`、`zh-Hant-HK`、`zh-Hant-TW` 五个 locale，逐文件镜像 en-US。                      | 1070   |
+| 文档内容 · 多语言（其他）                             | `ar`、`de-DE`、`es-ES`、`fr-FR`、`ru-RU` 五个 locale，逐文件镜像 en-US。                                     | 1070   |
+| 运维与工程配置                                        | CI 与发布工作流、根配置、各包构建与发布清单、锁文件、跨包共享测试设施。                                      | 39     |
+| 项目文档                                              | README、设计文档、发布说明、性能与过程记录、许可证与行为准则。                                               | 66     |
+
+## `@defjs/core` · struct
+
+运行时数据契约：构造器与修饰符、fail-fast 解析、alias、JSON 编解码、issue 与错误格式化。（39 个文件，审计分区 `P01-core-struct`）
+
+- `packages/core/src/struct/README.md`：Struct 的中文叙事契约：构造器、修饰符矩阵、alias、交集合并、issue 与 HTTP 边界。备注：395 行；第 383、392、393 行四条 `doc/core/*.md` 链接失效，第 56/60 行"二进制值"重复（P01-core-struct-08）
+- `packages/core/src/struct/codec/common.ts`：按 alias 在出站编码时把逻辑 key 映射为 wire key，入站以 alias 模式调用 `parseStructValue`。备注：49 行；`encodeJson` / `decodeJson` 的实际实现
+- `packages/core/src/struct/codec/json.spec.ts`：验证 JSON alias、联合、交集、nullish 对象及原型键的编解码行为。备注：489 行；有实际输出与失败路径断言
+- `packages/core/src/struct/codec/json.ts`：`encodeJson` / `decodeJson` 薄入口，供 HTTP、SSE、WebSocket 使用。备注：10 行；分区外调用方为 `http/http.ts`、`sse/sse.ts`、`web_socket/codec.ts`
+- `packages/core/src/struct/constructors.browser.spec.ts`：浏览器下验证 File/Blob/ArrayBuffer 与基础转换构造器。备注：112 行；属 browser project，只读未运行；第 88 行同样锁定 Date 引用
+- `packages/core/src/struct/constructors.discriminated_union.spec.ts`：验证 discriminatedUnion 定义期 `TypeError` 与按判别值路由。备注：163 行；覆盖 nullable discriminator、重复值、getter
+- `packages/core/src/struct/constructors.primitives.spec.ts`：验证 bigint、date、intersection 等构造器的解析与编码。备注：314 行；第 60 行 `toBe(d)` 锁定 Date 输入与输出为同一引用
+- `packages/core/src/struct/constructors.ts`：各 kind 的 definition 工厂，含 bigint/date decode hook 与 intersection 展平。备注：471 行；交集展平丢内层 nullable（P01-core-struct-04），单成员原样返回（05），跨副本 hook 用本副本 `issue`（07）
+- `packages/core/src/struct/coverage.spec.ts`：直接调用内部 parse/encode/fields/match helper 覆盖防御分支。备注：496 行；构造内部元数据，但断言核对具体结果
+- `packages/core/src/struct/encode.spec.ts`：验证出站编码的类型转换、递归结构、联合选支与交集合并。备注：354 行
+- `packages/core/src/struct/encode.ts`：按 definition 递归编码出站值并合并交集 wire 值。备注：240 行；`any`/`unknown`/`number` 原样交出，无深度保护（P01-core-struct-03）
+- `packages/core/src/struct/errors.spec.ts`：验证 `StructError` 的 format/flatten/prettify 视图与 errorMap。备注：170 行；只覆盖 `() => undefined`，无空字符串用例
+- `packages/core/src/struct/errors.ts`：`StructError`、`issue()` 默认消息与单次调用的 errorMap 槽。备注：135 行；默认消息嵌入 `received`（02），`if (override)` 忽略空字符串（06）
+- `packages/core/src/struct/facade.spec.ts`：验证 facade 构造器连接、修饰符不变性与 shape 快照。备注：141 行；不是完整的 facade key 白名单
+- `packages/core/src/struct/facade.ts`：公开 `struct` 对象，含 `enum`/`or` 类型重载与 `parse`。备注：98 行；数字 enum 推导为 `string | Enum`（`EnumValue`）
+- `packages/core/src/struct/fields.ts`：解析并缓存对象字段，检测重复 wire key 并应用 alias。备注：74 行；重复 wire key 在首次解析字段时抛 `TypeError`
+- `packages/core/src/struct/guards.ts`：校验 Struct 自有 DEFINITION 品牌、已知 kind 与 flags 形状。备注：43 行
+- `packages/core/src/struct/guide.ts`：管理 endpoint 输入对象上的 `STRUCT` 编码指南及交集指南集合。备注：85 行；标记可枚举，spread 保留，`JSON.stringify` 跳过 symbol
+- `packages/core/src/struct/index.ts`：转发 `public_api` 的全部导出。备注：1 行
+- `packages/core/src/struct/introspection.ts`：`struct.parse` 的元组入口与抛错的 `parseStructValue` 内部 adapter。备注：71 行；元组入口不捕获 `RangeError`（P01-core-struct-03）
+- `packages/core/src/struct/match.ts`：编码期判断已解析值匹配哪些 Struct 以选择编码分支。备注：109 行；date/bigint 用 runtime guard
+- `packages/core/src/struct/parse.protocol.spec.ts`：验证 fail-fast、issue 形状、重入、静默候选及跨包副本解析。备注：828 行；跨副本用例未覆盖 errorMap（P01-core-struct-07）
+- `packages/core/src/struct/parse.security.spec.ts`：验证 `__proto__`/`constructor` 不污染原型、自有字段与判别值单次读取。备注：174 行
+- `packages/core/src/struct/parse.spec.ts`：验证修饰符矩阵、复合值、alias、必填与未知键剥离。备注：421 行；无 TypeScript 数字 enum 用例
+- `packages/core/src/struct/parse.ts`：严格、遇首个 issue 即停的递归解析器。备注：528 行；无深度/循环保护（P01-core-struct-03）
+- `packages/core/src/struct/performance.spec.ts`：以行为断言锁定性能优化必须保留的解析与编码语义。备注：200 行；无墙钟阈值
+- `packages/core/src/struct/public_api.spec.ts`：断言根入口不提供 `STRUCT` 运行时值。备注：7 行；不锁定完整导出清单
+- `packages/core/src/struct/public_api.ts`：声明 Struct 的公开值（`struct`、`StructError`）与类型导出。备注：17 行；`STRUCT` 仅类型导出
+- `packages/core/src/struct/public_api.type.test.ts`：断言 `STRUCT` 可作类型品牌且不能作为运行时值导入。备注：13 行；由类型检查执行
+- `packages/core/src/struct/runtime.spec.ts`：验证修饰符返回新实例、alias、字段缓存共享与重复 wire key 抛错。备注：193 行
+- `packages/core/src/struct/runtime.ts`：`makeStruct`：创建实例与 `alias`/`null`/`nullable`/`nullish`/`optional` 链式修饰符。备注：69 行；不修改接收者
+- `packages/core/src/struct/shape.spec.ts`：验证 getter 递归对象可解析且错误 path 带嵌套。备注：49 行；只有浅层递归 fixture
+- `packages/core/src/struct/shape.ts`：惰性解析并缓存对象 shape，允许 getter 延迟取字段。备注：34 行
+- `packages/core/src/struct/struct.bench.ts`：`bun run bench:struct` 的 Struct 热路径基准与 fixture 正确性断言。备注：539 行；未运行
+- `packages/core/src/struct/symbols.ts`：定义 `DEFINITION`、`OMIT`、`FAILED`、`STRUCT` 符号。备注：16 行；`FAILED` 为副本私有，其余用 `Symbol.for`
+- `packages/core/src/struct/types.public.type.test.ts`：验证公开 `Infer`/`StructInput`、parse 元组收窄与内部类型不可导入。备注：66 行
+- `packages/core/src/struct/types.runtime.type.test.ts`：验证基础、复合、修饰符类型推导及已移除 API 不可导入。备注：259 行；未覆盖单成员 optional intersection
+- `packages/core/src/struct/types.ts`：公开推导类型（`Struct`、`Infer`、`StructInput`、`StructIssue`）与内部 definition 类型。备注：492 行；`IntersectionInput/Output` 排除 undefined（P01-core-struct-05）；`custom` code 无生产者
+- `packages/core/src/struct/utils.ts`：交集合并、路径格式化、`describeValue`、失败槽与 null prototype 工具。备注：276 行；字符串 `received` 整段 `JSON.stringify`
+
+## `@defjs/core` · client + http
+
+客户端配置与 `with*` 选项、HTTP 定义与执行、Fetch 传输（body 序列化、上传/下载进度、XSRF、超时与取消）。（40 个文件，审计分区 `P02-core-http-client`）
+
+- `packages/core/src/client/client.spec.ts`：验证客户端选项按顺序覆盖、默认超时与 handle 替换在 HTTP 执行中生效。备注：164 行；注入 Fetch，不依赖测试服务器
+- `packages/core/src/client/client.ts`：定义 `Client` 与 `createClient`，按 `COMMAND_EXECUTE` 把 HTTP/SSE/WebSocket 命令分派给各自执行器。备注：93 行；持有可变 `ClientConfig`
+- `packages/core/src/client/client.type.test.ts`：用互赋值式 `Equal` 和 `@ts-expect-error` 锁定客户端选项、取消参数与已删除 API 的类型。备注：233 行；`Equal` 不能区分 `any`，返回元组的严格类型由 `http.type.test.ts` 锁定
+- `packages/core/src/client/command.ts`：声明命令种类符号、`COMMAND_EXECUTE` 与三类命令的类型守卫。备注：48 行；`Symbol.for` 共享品牌
+- `packages/core/src/client/config.ts`：定义客户端配置类型及 HTTP/SSE/WebSocket 默认值与 `createClientConfig`。备注：243 行；默认 fetch 在模块求值时 `bind`（发现 01）
+- `packages/core/src/client/execute.spec.ts`：验证 `client.execute` 按命令种类分派及未知命令的失败。备注：105 行；SSE/WebSocket 用例依赖测试服务器
+- `packages/core/src/client/index.ts`：再导出客户端 `public_api`。备注：1 行
+- `packages/core/src/client/option.ts`：实现全部 `with*` 客户端选项，按调用顺序改写 `ClientConfig`。备注：236 行；`withEndpoint`、`withTimeout` 的 JSDoc 有误（发现 07、10）
+- `packages/core/src/client/public_api.ts`：导出 `createClient`、`Client` 与全部客户端选项的公共入口。备注：32 行
+- `packages/core/src/http/builder.type.test.ts`：锁定 HTTP/SSE/WebSocket builder 返回形状的类型约束，含 GET/HEAD 禁止 body。备注：214 行；仅类型检查
+- `packages/core/src/http/http.browser.spec.ts`：在真实浏览器中验证 HTTP 元组、非 JSON 拒绝、下载进度、超时与基于 cookie 的 XSRF。备注：167 行；浏览器项目，本次只读
+- `packages/core/src/http/http.client.spec.ts`：验证客户端级 query serializer、拦截器之后使用客户端 handle 以及定义快照不受外部改动影响。备注：104 行；不依赖测试服务器
+- `packages/core/src/http/http.content_type.spec.ts`：验证声明 JSON 时在读取前检查响应媒体类型并取消未读正文。备注：117 行；覆盖 output/error 两侧与 string 例外
+- `packages/core/src/http/http.declaration_routing.spec.ts`：验证 output/error 声明矩阵、观察者失败与传输错误归因。备注：252 行；末尾用例名为 “nothing declared” 却声明了 `output`
+- `packages/core/src/http/http.error.spec.ts`：验证输入、构建、拦截器、取消、超时与响应解码等失败路径及其优先级。备注：1400 行；部分标题写 ABORTED/TIMEOUT，断言为 `NET_*`
+- `packages/core/src/http/http.response_type.spec.ts`：验证按 struct 种类选择 text/Blob/bytes/JSON 表示及短路响应的字符串根。备注：334 行；锁定 JSON 字符串根不再二次解析
+- `packages/core/src/http/http.spec.ts`：HTTP `execute` 主规格：请求构建、alias、成功/失败元组与真实服务器往返。备注：352 行
+- `packages/core/src/http/http.ts`：`defineRequest` 与 `executeHttpCommand`：取消快照、输入解析、builder、拦截器链、传输与单侧声明体解码。备注：546 行；管理 deadline、合成 signal 与清理
+- `packages/core/src/http/http.type.test.ts`：用 `expectTypeOf` 严格锁定 HTTP 定义、执行结果元组与取消选项的类型推导。备注：246 行；能拦截 `execute` 返回 `any` 的退化
+- `packages/core/src/http/http.upload_progress.browser.spec.ts`：验证浏览器中 Blob/FormData 原样上传不触发进度，以及原生流请求体的能力差异。备注：154 行；浏览器项目，本次只读
+- `packages/core/src/http/http.upload_progress.spec.ts`：验证服务端上传观察者的抛错、取消、超时与拦截器重发。备注：268 行；`skipIf(!streaming)` 在 Bun/Node 均未跳过
+- `packages/core/src/http/http.upload_progress.worker.browser.spec.ts`：验证 module/classic Worker 的全局形状及其中上传进度的浏览器策略。备注：103 行；断言 Worker 内无 `document`，本次只读
+- `packages/core/src/http/index.ts`：再导出 HTTP `public_api`。备注：1 行
+- `packages/core/src/http/public_api.ts`：导出 HTTP 定义、`fetchHandler`、`makeResponse`、请求/响应类型与 `createResolvedRequestUrl`。备注：6 行
+- `packages/core/src/http/request.spec.ts`：验证 `createHttpRequest` 的路径、query、headers、body 表示与 Content-Type 组装。备注：287 行；使用真实平台 Headers/FormData/Blob
+- `packages/core/src/http/request.ts`：在基础传输请求上补充响应表示、进度回调与 XSRF 配置，生成 `HttpRequest`。备注：51 行；委托 `internal/transport_request.ts`，Content-Type 在进入拦截器前已计算
+- `packages/core/src/http/transport/body.spec.ts`：验证 body 序列化、Content-Type 检测与 `bodyContentTypeSource` 优先级规则。备注：143 行；覆盖 FormData 清头
+- `packages/core/src/http/transport/body.ts`：序列化 HTTP body，并按 body 身份决定沿用、覆盖或删除 Content-Type。备注：88 行；拦截器换 body 的问题（发现 05）
+- `packages/core/src/http/transport/body_failure.spec.ts`：验证正文阶段失败标签的 code、元数据与来源区分。备注：128 行
+- `packages/core/src/http/transport/body_failure.ts`：定义传输读取正文或观察者失败时使用的带 code 错误标签及类型守卫。备注：44 行；取消不打此标签
+- `packages/core/src/http/transport/fetch.native.browser.spec.ts`：在浏览器项目中注册共享的原生 fetch 套件。备注：3 行；实现位于 `test/fetch-native-suite.ts`，本次只读
+- `packages/core/src/http/transport/fetch.native.spec.ts`：在服务端项目中注册共享的原生 fetch 套件。备注：3 行；套件锁定默认 handle 的加载期身份与快路
+- `packages/core/src/http/transport/fetch.response.spec.ts`：验证 `fetchHandler` 的响应读取、取消、下载进度、媒体类型与 URL 回填。备注：545 行
+- `packages/core/src/http/transport/fetch.spec.ts`：验证 XSRF 注入、原生 Request 构建、上传流包装与网络错误。备注：661 行；五个 Content-Length 用例只断言 `duplex`（发现 11）
+- `packages/core/src/http/transport/fetch.streaming.spec.ts`：验证流式请求体能力探测、上传转流与进度、观察者错误及流释放。备注：1006 行；FormData 进度用例不检查请求 Content-Type
+- `packages/core/src/http/transport/fetch.ts`：默认 HTTP 传输：XSRF、上传/下载进度、平台快路与自定义 handle 调用、声明体读取。备注：503 行；发现 02、03、04、08、09 的主位置
+- `packages/core/src/http/transport/fetch_init.ts`：探测运行时是否支持流式请求体并生成 HTTP/SSE 共用的 Fetch init。备注：91 行；能力结果缓存，定义 `ERR_STREAMING_REQUEST_UNSUPPORTED`
+- `packages/core/src/http/transport/utils.spec.ts`：验证字节解析、`getContentLength` 与 JSON 媒体类型判定。备注：197 行
+- `packages/core/src/http/transport/utils.ts`：读取 Content-Length/Content-Type 并判定 JSON 媒体类型。备注：41 行；字节工具转导出 `internal/bytes.ts`
+- `packages/core/src/http/xsrf.server.spec.ts`：用裸 `fetch` 验证测试服务器的 XSRF 发 token 与校验端点。备注：86 行；只测测试夹具，不覆盖 `withXSRF` 或同源判定
+
+## `@defjs/core` · sse
+
+SSE 定义与执行、事件流传输（握手、重连、`Last-Event-ID`）与 SSE 解析器。（13 个文件，审计分区 `P03a-core-sse`）
+
+- `packages/core/src/sse/index.ts`：SSE 模块入口桶文件，仅转出 `public_api`。备注：1 行；无逻辑
+- `packages/core/src/sse/public_api.ts`：SSE 公开导出边界：转出 `sse.ts` 全部导出，另只以类型形式导出句柄、打开信息、关闭信息与 `EventStreamFaultCode`。备注：2 行；低层 `fetchEventStream` / `FetchEventStreamOptions` 不在此桶中，测试直接从 transport 引用
+- `packages/core/src/sse/sse.browser.spec.ts`：真实浏览器中的 SSE 消费、非 2xx 错误元组、提前停止迭代、未声明事件跳过及 `ReadableStream` 请求体拒绝/不重连测试。备注：187 行；属 browser project，本次只读未执行
+- `packages/core/src/sse/sse.fault.spec.ts`：公开 `execute` 的启动故障（`HTTP_STATUS`、`RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`NET_UNREACHABLE`、`EXT_INTERCEPTOR_FAILED`）、运行期 `CAP_*` 故障及流式请求体不重连的回归测试。备注：393 行；core-server 项目执行
+- `packages/core/src/sse/sse.invalid_event.spec.ts`：未声明或校验失败事件被丢弃并交给 `withSSEOnInvalidEvent` 的顺序、隔离与取消测试。备注：207 行；覆盖同一 chunk 同步交付与异步观察器阻塞后续事件
+- `packages/core/src/sse/sse.spec.ts`：公开 `defineEventStream` / `execute` 主规格：构建、握手、事件解码、取消、拦截器所有权与重连方法策略。备注：2221 行；75 个 `test` 调用；混用全局 Hono 测试服务器与自定义 Fetch handle
+- `packages/core/src/sse/sse.ts`：定义 SSE 命令，协调输入解析、builder、拦截器链、启动 deadline、启动故障分类与逐事件 Struct 解码。备注：552 行；调用 `fetchEventStream`、`transport_request`、`abort`、Struct codec；`onopen`/`onclose`/`onerror` 不在公开路径上
+- `packages/core/src/sse/sse.type.test.ts`：SSE 事件联合（有/无 `default`）、数字事件名、错误元组及导出面的类型契约测试。备注：239 行；由根 `typecheck` 覆盖，不在 core-server Vitest include 中
+- `packages/core/src/sse/transport/event_stream.advanced.spec.ts`：低层 `fetchEventStream` 的钩子、重连策略、退避、队列、取消与异步释放测试，多数使用假 Fetch。备注：1805 行；83 个 `test` 调用；名为指数退避、maxDelayMs、jitter 的三例只断言 fetch 次数（见 P03a-core-sse-07）
+- `packages/core/src/sse/transport/event_stream.spec.ts`：低层 SSE 基本读流、手动关闭、握手拒绝及 `Last-Event-ID` 重连（ASCII、空 `id` 清除、多次重连）测试。备注：324 行；不覆盖非 ASCII 事件 ID
+- `packages/core/src/sse/transport/event_stream.ts`：执行物理 Fetch 尝试，校验握手，驱动解析与有界事件队列，管理重连、`Last-Event-ID`、`closed` 与异步释放。备注：718 行；依赖 `AsyncQueue`、`backoff`、parser、共享取消哨兵；模块级 `errorOpenInfoMap` 以错误对象为键
+- `packages/core/src/sse/transport/parser.spec.ts`：SSE 字节读取、行切分、字段识别、消息分派、缓冲上限及 reader 释放/取消测试。备注：862 行；49 个 `test` 调用；据 codex 变异探针，`releaseLock` 与上游取消的删除会被检出（复核者未重跑）
+- `packages/core/src/sse/transport/parser.ts`：读取字节流并按 CR/LF 分行，以字节匹配 `data`/`event`/`id`/`retry` 字段并执行缓冲上限。备注：292 行；改编自 Azure/fetch-event-source；含 NUL 的 `id` 被忽略，`retry` 仅接受数字并钳到 2_147_483_647
+
+## `@defjs/core` · web_socket
+
+WebSocket 定义、会话状态机、重连与退避、心跳、出入站编解码、URL 构建。（22 个文件，审计分区 `P03b-core-ws`）
+
+- `packages/core/src/web_socket/build.spec.ts`：锁定 WebSocket URL 构建：http/https 到 ws/wss 的 scheme 改写、base path 拼接、路径占位符与 query 规则。备注：138 行；覆盖 `build.ts`
+- `packages/core/src/web_socket/build.ts`：把 endpoint、path、query 收成 `HttpRequest`，再解析为最终 `ws:`/`wss:` URL。备注：38 行；复用 `internal/url.ts` 的 `fillUrl`、`resolveRequestUrl`、`resolveTransportQuery`
+- `packages/core/src/web_socket/codec.spec.ts`：锁定出站序列化、入站文本/字节/Blob 帧解码及 close 快照提取。备注：228 行；覆盖根值 `undefined` 的拒绝，不覆盖 `Infinity`/`Map` 等被 `JSON.stringify` 改写的值
+- `packages/core/src/web_socket/codec.ts`：出站值经 struct 校验与 alias 编码后 `JSON.stringify`，入站帧按 UTF-8 解码再按 struct 解析，并提取 close 快照。备注：49 行；`serializeOutgoingWebSocketMessage` 被 `send`、重连期排队和 heartbeat 共用；见 P03b-core-ws-01
+- `packages/core/src/web_socket/heartbeat.spec.ts`：用假计时器锁定心跳发送、ACK 清除、超时致命及计时器清理。备注：336 行；删除 `clearInterval` 的变异可被检测
+- `packages/core/src/web_socket/heartbeat.ts`：按间隔发送心跳、在 send 之后建立 ACK 超时，并校验 `intervalMs`/`timeoutMs`。备注：114 行；失败经 `onFatal` 终止会话、不进入重连；同步 ACK 见 P03b-core-ws-07
+- `packages/core/src/web_socket/index.ts`：WebSocket 子模块入口，转导出 `public_api.ts`。备注：1 行
+- `packages/core/src/web_socket/public_api.ts`：转导出 `web_socket.ts` 的公开类型与函数。备注：1 行；`codec.ts`、`build.ts` 不从此导出
+- `packages/core/src/web_socket/reconnect.spec.ts`：锁定重连选项的启动前校验、谓词归一化、`computeReconnectDelay` 与 `wait`。备注：224 行；无用例覆盖 jitter 与 `maxDelayMs` 同时生效；用例名 `returns 0 for attempt 0` 实际断言 1000
+- `packages/core/src/web_socket/reconnect.ts`：把重连选项校验并归一为有限次数、退避参数和布尔谓词。备注：78 行；非法值在 execute 前抛 `RangeError`（转为 `REQ_OPTIONS_INVALID`）；`attempts: 0` 归一为不重连
+- `packages/core/src/web_socket/web_socket.browser.spec.ts`：在真实浏览器验证消息收发、二进制帧、struct 失败上报、重连及 abort。备注：179 行；按约束只读未执行
+- `packages/core/src/web_socket/web_socket.fault.spec.ts`：锁定启动阶段各类失败的 fault code（abort/timeout、拦截器、拒绝连接、beforeConnect、缺构造器、非法输入与队列上限）。备注：147 行；大部分用注入 socket，拒绝连接用例走真实不可达地址
+- `packages/core/src/web_socket/web_socket.heartbeat.spec.ts`：用可控 socket 验证会话层自动发送心跳并识别 ACK。备注：59 行；使用 `test/regression/controllable_socket.ts`
+- `packages/core/src/web_socket/web_socket.lifecycle.spec.ts`：锁定 message 监听器增删同一引用、启动前关闭、启动后意外消息及 beforeConnect 与 query serializer。备注：123 行；监听器用例只做源码正则匹配，其余依赖 globalSetup 测试服务器
+- `packages/core/src/web_socket/web_socket.message.spec.ts`：验证判别联合入站解码、struct 失败上报、alias 出站编码、心跳 ACK 及 nullable 字段。备注：238 行；混合测试服务器与可控 socket
+- `packages/core/src/web_socket/web_socket.message.type.test.ts`：锁定 `send` 参数、`receive` 元素与 execute 级 heartbeat `message` 对 outgoing struct 的类型关系。备注：84 行；由根类型检查覆盖
+- `packages/core/src/web_socket/web_socket.reconnect.spec.ts`：对测试服务器验证重连后冲刷出站队列、谓词收到的 attempt 序号及手动关闭不进入谓词。备注：146 行；依赖 globalSetup 测试服务器
+- `packages/core/src/web_socket/web_socket.regression.browser.spec.ts`：在真实浏览器对照原生事件检查立即关闭与 10ms 关闭的结算，以及无 JSON 表示的出站根值被拒。备注：194 行；按约束只读未执行
+- `packages/core/src/web_socket/web_socket.server.spec.ts`：用 mock 物理 socket 覆盖状态机、关闭参数、重连谓词、退避溢出、队列、dispose 与资源清理。备注：3337 行；140 个用例；错误关闭计时器与 abort 监听清理未被锁定（见 P03b-core-ws-03）
+- `packages/core/src/web_socket/web_socket.spec.ts`：对 Hono 测试服务器的集成规格：握手、收发、心跳、重连排队、abort 与拦截器。备注：1151 行；混合真实测试服务器与可控 socket
+- `packages/core/src/web_socket/web_socket.ts`：`defineWebSocket` 与 `executeWebSocketCommand`：URL 与子协议快照、物理 attempt 状态机、消息泵、发送、关闭、重连与有界 dispose。备注：1416 行；`attempt` 全会话只增不减（P03b-core-ws-02）；`binaryType` 写入失败遗留 socket（P03b-core-ws-05）
+- `packages/core/src/web_socket/web_socket.type.test.ts`：锁定 endpoint 与命令类型、`maxIncomingQueueSize` 必填及已移除 API 的类型拒绝。备注：92 行；由根类型检查覆盖
+
+## `@defjs/core` · interceptor / error / internal / 入口
+
+拦截器链、错误模型（`Fault`/`FaultCode`）、内部工具（URL、abort、backoff、请求物化、传输来源标记）与包入口。（47 个文件，审计分区 `P04-core-infra`）
+
+- `packages/core/src/error/cause.ts`：定义取消/超时共享哨兵 `ERR_ABORTED`/`ERR_TIMEOUT`，并判断 cause 形状、提取消息。备注：32 行；哨兵在模块求值时创建
+- `packages/core/src/error/factory.spec.ts`：锁定各 fault 工厂的消息、`name`、可枚举字段、cause 链与网络分类。备注：207 行
+- `packages/core/src/error/factory.ts`：构造 HTTP 状态、解码、预检与网络四类 `DefjsFault`。备注：113 行；`createDecodeFault` 以 cause 的 message 作为 fault message（见 P04-core-infra-02）
+- `packages/core/src/error/index.ts`：转发 error 模块公开出口。备注：仅 `export * from './public_api'`
+- `packages/core/src/error/public_api.ts`：导出 fault 工厂、哨兵与 fault 类型。备注：2 行
+- `packages/core/src/error/types.ts`：定义封闭的 17 个 `FaultCode`、`FaultClass` 及三类 fault 判别联合。备注：124 行
+- `packages/core/src/error/types.type.test.ts`：用赋值、`@ts-expect-error` 与 `Equal` 锁定 fault 变体字段和类名推导。备注：149 行；`Equal` 接受 `any`（见 P04-core-infra-07）
+- `packages/core/src/index.ts`：`@defjs/core` 包入口。备注：仅 `export * from './public_api'`
+- `packages/core/src/interceptor/basic_auth.spec.ts`：锁定 Basic 头生成、不改原 Headers、自定义 encode 及缺少 `btoa` 时构造失败。备注：144 行；未覆盖非 Latin-1 凭据
+- `packages/core/src/interceptor/basic_auth.ts`：为 HTTP 与 SSE 每次请求注入 `Authorization: Basic …`。备注：57 行；默认编码器为 `btoa`，非 Latin-1 需自定义 `encode`（文档已说明）
+- `packages/core/src/interceptor/index.ts`：转发 interceptor 模块公开出口。备注：仅 `export * from './public_api'`
+- `packages/core/src/interceptor/interceptor.runtime.spec.ts`：锁定 SSE 拦截器链包裹返回流及 `createSSEInterceptor` 的 kind。备注：66 行
+- `packages/core/src/interceptor/interceptor.spec.ts`：锁定 HTTP 洋葱顺序、`makeResponse` 短路及替换 body 时的 content-type 处理。备注：188 行
+- `packages/core/src/interceptor/interceptor.transport.spec.ts`：锁定 `resolve*Interceptors` 按 kind 过滤并保持注册顺序。备注：91 行
+- `packages/core/src/interceptor/interceptor.ts`：定义三类拦截器类型与工厂，并用 `reduceRight` 组成洋葱链。备注：168 行；`makeChain` 不校验返回值，迟到 `next()` 由各执行器拒绝
+- `packages/core/src/interceptor/interceptor.type.test.ts`：用拒绝 `any` 的 `StrictEqual` 锁定拦截器签名、会话释放类型并禁止返回原生 `Response`。备注：139 行
+- `packages/core/src/interceptor/interceptor.websocket.spec.ts`：锁定 WebSocket 拦截器链包裹 session 及 `createWebSocketInterceptor` 的 kind。备注：69 行
+- `packages/core/src/interceptor/public_api.ts`：显式导出拦截器类型、工厂与 Basic 认证拦截器。备注：16 行；不导出 `makeChain`/`resolve*`
+- `packages/core/src/internal/abort.spec.ts`：锁定信号合并、监听器释放、超时参数校验与 `awaitWithSignal` 的取消行为。备注：222 行
+- `packages/core/src/internal/abort.ts`：合并取消信号、按信号 reason 选择取消/超时哨兵与 fault，并管理传输截止时间。备注：283 行；`resolveAbortedCause` 只返回两个共享哨兵
+- `packages/core/src/internal/async_queue.spec.ts`：锁定单消费者、容量限制、关闭/失败时唤醒等待者与清空缓冲。备注：157 行
+- `packages/core/src/internal/async_queue.ts`：有界单消费者异步队列，供 SSE/WebSocket 入站消息使用。备注：98 行；迭代器无 `return()`，SSE handle 层另行补充
+- `packages/core/src/internal/backoff.ts`：按次数、因子、抖动与上限计算重连延迟，并提供可取消的等待。备注：49 行
+- `packages/core/src/internal/builder_types.ts`：描述 builder 可返回的 path/query/headers/body 类型及路径占位符推导。备注：113 行；`PathParams` 从冒号匹配到下一个 `/`（见 P04-core-infra-04）
+- `packages/core/src/internal/bytes.ts`：把响应字节按表示解码为文本、JSON、Blob 或 ArrayBuffer。备注：50 行；共享非 fatal UTF-8 `TextDecoder`，与 Fetch `Response.json()/text()` 语义一致
+- `packages/core/src/internal/endpoint_command.ts`：按输入是否可选推导 endpoint 调用签名的纯类型辅助。备注：14 行；无运行时代码
+- `packages/core/src/internal/endpoint_input.spec.ts`：锁定无 struct 时原样返回输入及有 struct 时解析输入。备注：21 行
+- `packages/core/src/internal/endpoint_input.ts`：执行前用 struct 解析 endpoint 输入并为对象附加编码标签。备注：18 行
+- `packages/core/src/internal/fetch.ts`：以 `awaitWithSignal` 竞速 Fetch 调用，并在已取消后交出迟到的响应体。备注：25 行；`fetchWithSignal`
+- `packages/core/src/internal/http_request.ts`：定义传输层看到的 `HttpRequest`、响应表示类型与进度回调接口。备注：71 行
+- `packages/core/src/internal/http_request.type.test.ts`：用 `expectTypeOf` 锁定 `responseType`/`errorResponseType` 的类型与只读性。备注：13 行
+- `packages/core/src/internal/http_response.spec.ts`：锁定 `makeResponse` 默认值、复制请求头与 URL，以及失败消息不含 URL。备注：107 行
+- `packages/core/src/internal/http_response.ts`：定义 `HttpResponse`/`HttpMeta`/`DecodedResponse` 并实现 `makeResponse` 与 HTTP 失败消息。备注：97 行；未传 `headers` 时复制 `request.headers`（文档化行为）
+- `packages/core/src/internal/inbound_representation.ts`：按 struct 种类选择入站 body 的 json/text/blob/arraybuffer 表示。备注：26 行
+- `packages/core/src/internal/media_type.ts`：解析媒体类型 essence/前缀并识别 HTTP token 字符。备注：75 行
+- `packages/core/src/internal/media_type_parameters.ts`：判断媒体类型参数是否良构并返回解析结果。备注：22 行
+- `packages/core/src/internal/outbound_request.server.spec.ts`：锁定 Node `Readable` 请求体被拒绝、Web `ReadableStream` 原样发送。备注：80 行
+- `packages/core/src/internal/outbound_request.spec.ts`：锁定 builder 的路径、查询、头、JSON、表单、别名编码及三种传输的放置规则。备注：1431 行
+- `packages/core/src/internal/outbound_request.ts`：执行 builder 并按 struct 来源物化 path、query、headers 与 body。备注：818 行；`materializePath` 拒绝 `null` 与对象（含数组）
+- `packages/core/src/internal/query_serializer.spec.ts`：锁定自定义查询序列化器收到已编码对象、无 query 不调用及 `URLSearchParams` 旁路。备注：347 行；覆盖 HTTP/SSE/WebSocket
+- `packages/core/src/internal/request_values.ts`：定义请求构建值类型并判断、字符串化标量。备注：11 行
+- `packages/core/src/internal/transport_origin.ts`：用模块级 WeakSet 标记某个拒绝值来自传输边界而非拦截器。备注：32 行；被 `http.ts` 与 `sse.ts` 使用，标记跨请求永久保留（见 P04-core-infra-03）
+- `packages/core/src/internal/transport_request.ts`：把物化后的 builder 结果组装成 HTTP/SSE 基础传输请求。备注：68 行；调用 `fillUrl` 与 `appendRecordToHeaders`
+- `packages/core/src/internal/type_guards.ts`：提供 Blob、FormData、URLSearchParams、ReadableStream 的运行时守卫。备注：15 行
+- `packages/core/src/internal/url.spec.ts`：直接锁定 URL 解析、占位符编码、查询参数与请求头追加。备注：163 行；数组用例把截断锁为期望（见 P04-core-infra-06）
+- `packages/core/src/internal/url.ts`：填充路径占位符、生成查询串、追加请求头，并把 endpoint 解析成目录式 base URL。备注：227 行；`createResolvedRequestUrl` 为公开 API；绝对路径校验可被绕过（见 P04-core-infra-01）
+- `packages/core/src/public_api.ts`：汇总 client、error、http、interceptor、sse、struct、web_socket 的公开出口。备注：7 行；`export *` 使执行器函数进入包入口
+
+## `@defjs/core` · 测试设施
+
+回归与 e2e 测试、Hono 测试服务器夹具、Vitest 聚合/服务端/浏览器/基准配置。（47 个文件，审计分区 `P05-core-tests`）
+
+- `packages/core/test/body-routes.ts`：为全局 Hono 测试服务登记上传停滞、截断、挂起和原始 body 探测等 HTTP 夹具路由。备注：94 行；由 `setup.ts` 注册，`fetch-native-suite.ts` 等真实 socket 场景依赖
+- `packages/core/test/e2e-routes.ts`：登记 echo、入站表示、SSE/WebSocket 端到端路由，并在进程级数组里累积 `/e2e/miss/` 命中。备注：162 行；`missHits` 在同一 globalSetup 生命周期内从不清空（P05-core-tests-04）
+- `packages/core/test/fetch-native-suite.ts`：共享原生 fetch 套件：对比默认 `DEFAULT_FETCH` 与自定义 handle 的构造、读体、取消和断连行为。备注：669 行；被 `fetch.native.spec.ts` 与 `fetch.native.browser.spec.ts` 调用，后半段打真实回环服务
+- `packages/core/test/http.e2e.spec.ts`：通过真实 Hono 服务锁定 HTTP builder 编码、各类 body、入站表示以及“失败请求不到达服务器”。备注：819 行；自带一份 miss-log 读取器；两条 miss 断言用固定控制路径做精确相等（P05-core-tests-04）
+- `packages/core/test/make_fake_handler.spec.ts`：锁定 `makeFakeHandler` 的响应字段、假值透传以及缺少 `baseEndpoint` 时抛错。备注：79 行；默认 status 0 与 `makeResponse` 文档默认值一致
+- `packages/core/test/make_fake_handler.ts`：不经 `fetchHandler`、直接用 `makeResponse` 构造 `HttpResponse` 的测试 handler。备注：40 行；3 个 spec 使用，只用于观察请求或客户端契约，不证明 socket 行为
+- `packages/core/test/miss-log.ts`：读取 `/e2e/miss-log` 累积命中并按路径后缀过滤的浏览器测试 helper。备注：19 行；仅 `sse.browser.spec.ts`、`http.upload_progress.browser.spec.ts` 导入，调用方用 `Date.now()` 生成唯一路径
+- `packages/core/test/multipart-fixture.ts`：构造带文件的 `FormData` 并生成可比较的原始 multipart 字节期望。备注：32 行；刻意不依赖 `formData()`，避开 Bun 丢失文件 part Content-Type
+- `packages/core/test/regression/abort-listeners.spec.ts`：用 spy 比较 HTTP/SSE/WS 终结后调用方 signal 上 `abort` 监听器的添加与移除次数。备注：176 行；只比次数不比回调身份，移除错误函数也通过（P05-core-tests-01）
+- `packages/core/test/regression/builder-encoding.spec.ts`：builder 对抗性回归：tag 穿过展开、别名碰撞、`__proto__`、query serializer、非 JSON body 与取消。备注：1502 行；auditor 的 5 类生产变异均被抓住
+- `packages/core/test/regression/builder-tags.type.test.ts`：类型正例：record、tuple 与 nullish 链上的 tagged builder 必须通过类型检查。备注：26 行；无负例；由根 `bun check` 检查，Vitest 不执行
+- `packages/core/test/regression/builder-types.type.test.ts`：用 `expectTypeOf` 与 `@ts-expect-error` 锁定 builder 入参推导、请求分区、HTTP 方法和可序列化 body。备注：222 行；`toEqualTypeOf` 能拒绝 `any`
+- `packages/core/test/regression/controllable_socket.ts`：可手动触发 open/message/close 的 WebSocket 测试替身。备注：106 行；被 `web_socket.spec.ts`、`web_socket.heartbeat.spec.ts`、`web_socket.message.spec.ts`、`builder-encoding.spec.ts` 使用
+- `packages/core/test/regression/deadline-boundary.spec.ts`：用假 `Date.now` 锁定 1ms 截止时间在拦截器被调用前即可判为 `NET_TIMEOUT`。备注：16 行
+- `packages/core/test/regression/deadline.spec.ts`：锁定 HTTP/SSE/WS 启动截止时间在同步阶段过期、打开、失败和重连后的释放行为。备注：479 行；末条用真实 20/30/40ms 定时；Bun 上重复 20 次全部通过
+- `packages/core/test/regression/encoding-scale.spec.ts`：对 1 万与 10 万节点做 parse/encode 并断言结果正确。备注：31 行；30s 超时，耗时只打印不设门槛
+- `packages/core/test/regression/explicit-builder.spec.ts`：运行时锁定声明 input 却缺少 builder 时返回 `REQ_BUILD_FAILED` 且零次发送。备注：86 行；覆盖 HTTP、SSE、WS 与 optional 输入
+- `packages/core/test/regression/explicit-builder.type.test.ts`：用 `@ts-expect-error` 锁定声明 input 就必须写 builder 的类型约束。备注：20 行；去掉指令后报缺少 `builder`，错误原因正确
+- `packages/core/test/regression/firefox-app-data.spec.ts`：检查 `browserLaunchEnv` 不修改 `process.env`，且非 macOS 平台返回 `undefined`。备注：23 行；不断言目录创建，darwin 分支在 ubuntu CI 不执行
+- `packages/core/test/regression/hono-test-server.spec.ts`：锁定根 `test/hono-test-server.ts` 的 WebSocket 回显以及关闭后端口拒绝连接。备注：49 行；测试 P11 的 helper；关闭后连接探针与 `setup.ts` 同样会被抢占端口误判（P05-core-tests-05）
+- `packages/core/test/regression/interceptor-lifecycle.spec.ts`：锁定拦截器替换 signal 后调用方取消与启动截止时间仍然生效。备注：187 行；使用受控 Response、ReadableStream 与 WS 替身
+- `packages/core/test/regression/intersection-aliases.spec.ts`：锁定 intersection 在数组、record、tuple 与 HTTP 边界上保留双侧 wire 别名。备注：316 行；同时检查直接 codec 与公开 endpoint
+- `packages/core/test/regression/intersection-contract.spec.ts`：用 `equivalent()` 对照 `encodeOutbound` 与 `encodeJson`，检查 provenance、passthrough 与 wire 分组。备注：309 行；断言在 helper 内，oxlint `expect-expect` 告警为误报
+- `packages/core/test/regression/intersection-exotic.spec.ts`：锁定 any/unknown union、数组 passthrough 与日期冲突等特殊 intersection 组合。备注：99 行；断言同样经 `equivalent()` helper
+- `packages/core/test/regression/intersection-guides.spec.ts`：锁定 guide 集合、nullish 字段与 union 分歧时的出站编码。备注：284 行；允许 literal extras 但限制新增 `w_*` wire key
+- `packages/core/test/regression/intersection-property.spec.ts`：随机生成 intersection 组合，要求解析成功的样本上出站编码与 `encodeJson` 一致。备注：273 行；默认 1000 次中 952 通过、48 被拒；解析全拒绝的回归会被其他 107 项测试抓住
+- `packages/core/test/regression/intersection.spec.ts`：锁定 `struct.parse` 与出站编码对混合 intersection 的合并、冲突与标签传播。备注：384 行；覆盖 HTTP/SSE/WS codec
+- `packages/core/test/regression/nested-siblings.spec.ts`：锁定深层兄弟节点的 spread extras、子标签优先级与嵌套 wire key 碰撞。备注：141 行；经公开 HTTP endpoint 与自定义 handle 检查最终 Request
+- `packages/core/test/regression/proxy-bypass.spec.ts`：以 `bun --eval` 子进程验证 loopback 绕过代理且保留外部代理与原 NO_PROXY 值。备注：58 行；代理与目标是同一服务，能区分是否走代理
+- `packages/core/test/regression/response-boundaries.spec.ts`：锁定 raw/parsed JSON、空体、错误媒体类型与无 body SSE 错误的分类。备注：249 行；检查读锁释放与 observer 行为
+- `packages/core/test/regression/response-media-type.spec.ts`：用固定媒体类型表锁定 JSON 媒体类型在成功与错误两侧的预检查及定义快照。备注：100 行；条件 `expect` 的两个分支都会执行
+- `packages/core/test/regression/response-paths.spec.ts`：锁定根字符串、null、SSE 握手错误 body 解码失败与调用方取消的响应路径。备注：141 行；用高水位为零的挂起 stream 控制阶段
+- `packages/core/test/regression/transport-contract.spec.ts`：锁定 JSON null 与缺失 body 的区分、SSE 空体、预取消 signal、union guide 与维护响应。备注：300 行；条件 `expect` 跟随固定 mode/status 表
+- `packages/core/test/regression/undeclared-body.spec.ts`：用 `getReader` spy 锁定未声明一侧的响应 body 不被读取。备注：21 行；Bun 上 `arrayBuffer()` 读取不经 JS `getReader`，该文件单独抓不住，但同类回归由 `fetch.response.spec.ts` 等抓住
+- `packages/core/test/regression/union-equivalence.spec.ts`：锁定 union 分支等价时保留额外字段、分歧或别名碰撞时报错。备注：82 行；`encodeObjectNode` 第二处碰撞检查仅由此文件一条用例抓住
+- `packages/core/test/setup.ts`：聚合配置的 globalSetup：在临时端口启动 HTTP/SSE/WS 夹具服务并严格收尾。备注：714 行；含 Deno 分支、200ms WS 补丁与关闭后端口探针（P05-core-tests-05）
+- `packages/core/test/shared.ts`：导出包根、globalSetup 路径、运行时 spec 排除模式与 100% istanbul 覆盖率配置。备注：26 行；导入即执行根 `test/loopback-proxy-bypass.ts`
+- `packages/core/test/sse.e2e.spec.ts`：一条真实 SSE 端到端：builder 的 path/query/header/body 与事件解码。备注：72 行；`for await` 后整体断言，零事件会失败
+- `packages/core/test/streaming-support.ts`：临时替换全局 `Request`，把流式请求体能力探测缓存为不支持以覆盖该分支。备注：33 行；被 `sse.fault.spec.ts`、`event_stream.spec.ts`、`fetch.streaming.spec.ts` 使用，之后恢复原生构造器
+- `packages/core/test/upload-progress.worker.ts`：浏览器模块 Worker 夹具：发送 Blob/FormData 并回报字节数与 progress 次数。备注：98 行；仅被 `http.upload_progress.worker.browser.spec.ts` 使用
+- `packages/core/test/vite-xsrf-plugin.ts`：Vite 开发服务器中间件，把浏览器测试的 `/xsrf-*` 请求同源转发到进程内 Hono。备注：48 行；只在 `vitest.config.browser.ts` 装载
+- `packages/core/test/web_socket.e2e.spec.ts`：一条真实 WebSocket 端到端：builder 路径与 query、入站判别联合、出站 JSON 别名。备注：82 行；迭代器提前结束会失败，finally 关闭会话
+- `packages/core/test/xsrf-middleware.ts`：测试用 `/xsrf-token` 与 `/xsrf-validate` 路由，比对 cookie 与 header 中的 token。备注：35 行；不负责客户端 origin 判断
+- `packages/core/vitest.config.bench.ts`：struct benchmark 配置，只运行预构建的 `test-out/struct-bench/struct.bench.js`。备注：9 行；`bench:struct` 先构建；CI 不调用
+- `packages/core/vitest.config.browser.ts`：`core-browser` 项目：Playwright Chromium 与 Firefox 各自的 spec glob 及 XSRF 代理插件。备注：33 行；无自身 globalSetup，经 `inject` 使用聚合配置提供的服务地址
+- `packages/core/vitest.config.server.ts`：`core-server` 项目：以 threads pool 运行 `src` 与 `test` 下的非浏览器 spec。备注：12 行；c0024006 起有意不含 globalSetup，单独作为配置运行会缺 `testServerHost`
+- `packages/core/vitest.config.ts`：core 聚合配置：唯一一份 globalSetup、100% 覆盖率阈值以及 server/browser 两个项目。备注：22 行；`package.json` 的 `test` 与 CI 均走这里
+
+## `@defjs/opentelemetry-server`
+
+出站 OpenTelemetry 拦截器：HTTP/SSE/WebSocket 的 trace、metrics、logs 与上下文传播。（28 个文件，审计分区 `P06-otel-server`）
+
+- `packages/opentelemetry-server/e2e.spec.ts`：通过真实 Core 客户端、本地 Hono/WebSocket 测试服务器和真实 W3C propagator 验证传播形态与诊断日志边界。备注：534 行；tracer/logger 仍是 `createMockTracer` / `createMockLogger`，没有真实 SDK，看不到 span 结束后写入被丢弃或重入后的 parentSpanId
+- `packages/opentelemetry-server/src/index.ts`：包入口，转出 `public_api`。备注：1 行
+- `packages/opentelemetry-server/src/interceptor/http.spec.ts`：HTTP 拦截器单测：span 名称与属性、同步 hook 抛错隔离、Headers 复用、指标与日志抑制。备注：595 行；“should call responseHook before span ends” 不能检测 hook 与 `span.end()` 顺序倒置（见 P06-otel-server-04）
+- `packages/opentelemetry-server/src/interceptor/http.ts`：出站 HTTP CLIENT span：从请求头提取父上下文、注入同一 `Headers`、记录时长指标与异常日志，收到 `HttpResponse` 即结束 span。备注：81 行；`responseHook` 返回后同步 `span.end()`；原地写回调用方 `Headers`（见 P06-otel-server-01、P06-otel-server-02）
+- `packages/opentelemetry-server/src/interceptor/sse.spec.ts`：SSE 拦截器单测：连接事件、`activeStreams` 加减、各关闭种类、启动失败、hook 与日志。备注：648 行
+- `packages/opentelemetry-server/src/interceptor/sse.ts`：出站 SSE span：注入请求头，span 保持到 `stream.closed` 结算，并按关闭种类记事件、指标和日志。备注：133 行；与 HTTP 相同地把 traceparent 写回调用方 `Headers`（见 P06-otel-server-01）
+- `packages/opentelemetry-server/src/interceptor/web_socket.spec.ts`：WebSocket 拦截器单测：query 注入与自定义 queryString 顺序、关闭分类、连接指标平衡与日志。备注：816 行；mock propagator 自行 `params.set`，未覆盖 query 中已有 `traceparent`/`baggage` 的情况
+- `packages/opentelemetry-server/src/interceptor/web_socket.ts`：出站 WebSocket span：可选把上下文注入 query，span 保持到 `session.closed`，并记录连接指标与日志。备注：173 行；`appendInjectedQueryString` 只追加不替换同名键（见 P06-otel-server-03）
+- `packages/opentelemetry-server/src/option.spec.ts`：验证 `withOpenTelemetryServer` 的信号独立性、传输开关、默认传播与 `requireParentSpan`。备注：502 行
+- `packages/opentelemetry-server/src/option.ts`：声明公开选项类型，并把启用的 HTTP/SSE/WebSocket 拦截器推入 `config.interceptors`。备注：140 行；运行时值导入 `@opentelemetry/core` 的 `CompositePropagator` 与 W3C propagator；hook 在 ClientOption 执行时复制
+- `packages/opentelemetry-server/src/option.type.test.ts`：编译期锁定公开选项与 hook 签名，并拒绝旧的布尔开关和顶层 hook。备注：246 行；不在 Vitest `include` 中，由根 `bun check` 覆盖
+- `packages/opentelemetry-server/src/propagation/carrier.spec.ts`：验证 Headers carrier 与 query carrier 的读写及空值防护。备注：91 行；只在空 carrier 上断言，`append` 改为 `set` 后全套仍 288/288 通过
+- `packages/opentelemetry-server/src/propagation/carrier.ts`：提供 `Headers` 的 TextMap getter/setter 与 WebSocket query 参数 setter。备注：38 行；query setter 使用 `URLSearchParams.append`
+- `packages/opentelemetry-server/src/public_api.ts`：显式导出 `withOpenTelemetryServer` 与五个公开选项类型。备注：8 行
+- `packages/opentelemetry-server/src/telemetry/logs.spec.ts`：验证诊断 LogRecord 的事件名、属性、取消/`HTTP_STATUS` 抑制、超时保留与发送失败隔离。备注：169 行；删除 `HTTP_STATUS` 抑制会使该文件失败（两名审计员均已证实）
+- `packages/opentelemetry-server/src/telemetry/logs.ts`：按传输发出 WARN LogRecord，抑制调用方取消与 HTTP 状态故障，且不让日志失败影响业务结果。备注：59 行；取消识别依赖 `error === ERR_ABORTED` 对象身份（见 P06-otel-server-05）
+- `packages/opentelemetry-server/src/telemetry/metrics.spec.ts`：验证指标名称、单位、耗时换算及完整属性对象。备注：162 行
+- `packages/opentelemetry-server/src/telemetry/metrics.ts`：创建 HTTP histogram 与 SSE/WebSocket 的 histogram、up-down counter，并组装低基数属性。备注：124 行
+- `packages/opentelemetry-server/src/telemetry/trace.spec.ts`：验证 span 名称、内置属性、`startSpanHook` 合并、状态设置与 hook 同步失败。备注：346 行；使用 mock tracer
+- `packages/opentelemetry-server/src/telemetry/trace.ts`：创建三类 CLIENT span、设置状态与结束，并以不等待的方式运行 hook 和记录 hook 错误。备注：163 行；`runSpanHook` 把 rejection 记录排到 microtask，不检查 span 是否仍在记录
+- `packages/opentelemetry-server/src/telemetry/url.spec.ts`：验证 URL 拼接、base 路径保留、默认端口省略和非法 base 回退。备注：56 行
+- `packages/opentelemetry-server/src/telemetry/url.ts`：复用 Core `createResolvedRequestUrl` 生成 `url.full`、`server.address` 与显式 `server.port`。备注：28 行；`url.full` 不含 query，保留 userinfo（README 声明无内置脱敏）
+- `packages/opentelemetry-server/src/test-utils.spec.ts`：锁定 `makeHttpResponse` 缺省 body 与显式 JSON `null` 的区别。备注：9 行
+- `packages/opentelemetry-server/src/test-utils.ts`：为单测提供 mock tracer/propagator/logger/指标及可控的 SSE stream 与 WebSocket session。备注：327 行；不进构建、排除于覆盖率；span `end()` 后仍接受 `setAttribute`/`addEvent`，span id 固定
+- `packages/opentelemetry-server/test/setup.ts`：Vitest globalSetup：在临时端口启动并关闭 Hono HTTP/SSE/WebSocket 测试路由。备注：78 行；`/ws` 用 `c.req.query('traceparent')` 回显首个同名值
+- `packages/opentelemetry-server/test/shared.ts`：共享包根路径、globalSetup 路径与 100% 覆盖率配置，并加载 loopback 代理绕过。备注：20 行
+- `packages/opentelemetry-server/vitest.config.server.ts`：定义非浏览器 Vitest 项目 `opentelemetry-server`，把 `@defjs/core` 别名到 Core 源码并挂 globalSetup。备注：18 行
+- `packages/opentelemetry-server/vitest.config.ts`：聚合配置：只挂 server 项目并启用共享覆盖率设置。备注：11 行
+
+## `@defjs/react` · `@defjs/vue`
+
+框架适配器：React `ClientProvider`/`useClient`，Vue `createClientPlugin`/`injectClient`。（16 个文件，审计分区 `P07-react-vue`）
+
+- `packages/react/src/core.browser.spec.ts`：在浏览器中锁定 `ClientProvider` 的实例身份、嵌套 provider 就近覆盖，以及缺少 provider 时的错误文案。备注：56 行；身份用 `toBe`，错误用 `toThrow(完整文案)`；仅 `react-browser` 的 Chromium/Firefox 实例收集；`afterEach(cleanup)` 只卸载，不断言卸载后的请求行为
+- `packages/react/src/core.ts`：用 React Context 把应用传入的 `Client` 交给子树，`useClient()` 读不到时抛出适配器错误。备注：54 行；首行 `'use client'`（rolldown 会丢弃并警告，产物由 tsdown banner 补回唯一一条）；只用 `createContext`/`createElement`/`useContext`；不创建、缓存或释放 client
+- `packages/react/src/e2e.browser.spec.ts`：经共享测试服务器 `GET /api/users` 验证注入的 client 能完成真实请求，且嵌套 provider 各自使用自己的 client。备注：168 行；`inject('testServerHost')` 来自根目录 `test/browser-api-server-setup.ts`；用拦截器记录 `outer`/`inner` 作用域
+- `packages/react/src/index.ts`：React 包入口，再导出 `public_api`。备注：1 行；构建入口；自身无 directive
+- `packages/react/src/public_api.ts`：公开导出 `ClientProvider`、`useClient` 与 `ClientProviderProps` 类型。备注：2 行；值导出与类型导出分开，无运行时逻辑
+- `packages/react/test/shared.ts`：为包级 Vitest 提供 `packageRoot`、100% 覆盖率配置，并声明 `testServerHost` 注入类型。备注：26 行；副作用导入 `test/loopback-proxy-bypass.ts`；正文与 Vue 副本相同，但 `packageRoot` 依赖本文件位置
+- `packages/react/vitest.config.browser.ts`：定义 `react-browser` 项目：Playwright 无头 Chromium + Firefox，`@defjs/core` 指向源码。备注：41 行；`dedupe` 覆盖 `react`、`react-dom`、`react-dom/client`；`optimizeDeps.include` 预构建测试依赖；`globalSetup` 启动真实测试服务器
+- `packages/react/vitest.config.ts`：React 包级 Vitest 聚合入口，只挂载浏览器项目并套用覆盖率配置。备注：11 行；无注释；`package.json` 的 `test` 脚本使用此文件
+- `packages/vue/src/core.browser.spec.ts`：在浏览器中锁定插件注入的实例身份、多层共享、真实请求结果、`provide(HTTP_CLIENT)` 子树覆盖，以及缺少插件时的错误文案。备注：305 行；子树覆盖用 `setup()` 内的原生 `provide`；未覆盖“插件已安装但在注入上下文之外调用”的路径
+- `packages/vue/src/core.ts`：定义 `HTTP_CLIENT` 注入键、提供既有 `Client` 的 Vue 插件，以及读取它的 `injectClient()`。备注：50 行；`Symbol('HTTP_CLIENT')` 为模块级（非 `Symbol.for`）；`inject` 返回 `undefined` 时一律抛“未安装插件”文案；不创建或清理 client
+- `packages/vue/src/index.ts`：Vue 包入口，再导出 `public_api`。备注：1 行；构建入口
+- `packages/vue/src/public_api.ts`：公开导出 `HTTP_CLIENT`、`createClientPlugin` 与 `injectClient`。备注：1 行；无运行时逻辑；已不含移除的 `provideGlobalClient`
+- `packages/vue/test/core.spec.ts`：在浏览器项目中重复验证缺少插件的错误文案与插件提供的实例身份。备注：49 行；文件名不带 `.browser`，但被 `vue-browser` 两个实例的 include 显式收集；使用 `document`，不能在 Node 中运行；两条用例与 `src/core.browser.spec.ts` 的对应用例重复
+- `packages/vue/test/shared.ts`：为包级 Vitest 提供 `packageRoot`、100% 覆盖率配置，并声明 `testServerHost` 注入类型。备注：26 行；与 React 副本正文相同，`packageRoot` 按本文件位置计算
+- `packages/vue/vitest.config.browser.ts`：定义 `vue-browser` 项目：Playwright 无头 Chromium + Firefox，include 同时含 `src/**/*.browser.spec.ts` 与 `test/core.spec.ts`。备注：42 行；`define` 设置 `__VUE_OPTIONS_API__` 等编译期常量；无 `dedupe`/`optimizeDeps`；`@defjs/core` 指向源码
+- `packages/vue/vitest.config.ts`：Vue 包级 Vitest 聚合入口，只挂载浏览器项目并集中配置覆盖率。备注：19 行；注释“Chromium + Firefox”与浏览器配置的两个实例一致
+
+## 文档站工程（`doc/`）
+
+Fumadocs + React Router 站点应用、构建/链接检查/预览脚本、单元测试与站点 e2e。（59 个文件，审计分区 `P08-doc-site`）
+
+- `doc/app/app.css`：文档站的 Tailwind/Fumadocs 主题入口及分组导航、移动抽屉的布局覆盖。备注：被 `root.tsx` 引入；用逻辑方向属性支持 RTL
+- `doc/app/components/api-index.tsx`：API 索引页的客户端筛选表单，按名称、包与类别调用 `filterApiEntries` 并输出带语言前缀的链接。备注：水合后才过滤；见 P08-doc-site-03
+- `doc/app/components/api-reference.tsx`：按目录身份渲染单个 API 的种类、参数表与相关类型链接。备注：未知身份直接抛错；`api-reference.test.tsx` 覆盖
+- `doc/app/components/mdx.tsx`：为 MDX 页面注册 Fumadocs 默认组件及 Tabs、TypeTable、ApiIndex、ApiReference，并注入 locale。
+- `doc/app/components/navigation.tsx`：文档布局的分组侧栏、模态移动抽屉、上一页/下一页与相关阅读。备注：含 noscript 导航；`page.tsx` 使用其插槽
+- `doc/app/components/search.tsx`：用 `useStaticSearch` 读取当前语言的静态索引 `/api/search/<locale>.json` 并渲染搜索弹窗。备注：索引加载失败被依赖永久缓存，见 P08-doc-site-01
+- `doc/app/data/api-catalog.ts`：载入 168 条 API 目录、提供大小写不敏感筛选，并在导入时校验身份、slug 与 related 目标。备注：`toLocaleLowerCase()` 无区域参数，见 P08-doc-site-03
+- `doc/app/data/api-entries.json`：手写的 API 目录数据（包名、符号名、种类、slug、related）。备注：168 条；由 `exports.test.ts` 与源导出双向核对
+- `doc/app/data/api-parameters.ts`：以 `package:name` 为键的少量 API 参数表，供参考页与 LLM 文本使用。
+- `doc/app/lib/i18n.ts`：定义 11 种语言、默认 `en-US`、目录解析、隐藏默认语言前缀且无回退语言。备注：`fallbackLanguage: null`
+- `doc/app/lib/llms.ts`：把围栏外的站内 Markdown 链接改写为绝对 URL，并把索引链接指向 `/llms.mdx/.../content.md`。备注：`markdown.test.ts` 覆盖
+- `doc/app/lib/markdown.ts`：把处理后的 MDX 转成可读 Markdown（标题、参数表、组件元数据），供搜索索引与 llms 共用。备注：跟踪任意长度 fence
+- `doc/app/lib/navigation-copy.ts`：11 种语言的导航分组标题、分区与区域标签文案。备注：`groups` 5 项、`exampleGroups` 4 项，各语言长度一致
+- `doc/app/lib/navigation.ts`：按固定路径分组重排阅读树、按下标取分组文案，并计算阅读分区与相关页面。备注：校验页面 URL 不丢失、不重复
+- `doc/app/lib/routes.ts`：把内容文件映射为唯一 URL 并收集预渲染路径（含搜索、llms、404、sitemap、en-US `llms.mdx`）。备注：`assertUniqueRoutes`；`routes.test.ts` 覆盖
+- `doc/app/lib/site.ts`：导出构建期站点 origin 与 GitHub 仓库地址。备注：`SITE_URL` 缺省为 `http://localhost:3000`
+- `doc/app/lib/source.ts`：以 `defineDocs({ async: true })` 装载多语言内容源，并生成 en-US 的 llms 渲染器。备注：`page.load()` 由 fumadocs-mdx 记忆化
+- `doc/app/lib/ui-copy.ts`：11 种语言的站点界面文案与 Fumadocs `translations` 键。备注：600 行；键集合与 en-US 一致，翻译键与 fumadocs-ui 16.17.1 匹配
+- `doc/app/llms/full.ts`：`llms-full.txt` 资源路由，输出全部 en-US 页面的 Markdown。
+- `doc/app/llms/index.ts`：`llms.txt` 资源路由，输出链接指向逐页 Markdown 的 en-US 索引。备注：链接 origin 来自 `siteUrl`
+- `doc/app/llms/mdx.ts`：`llms.mdx/*` 资源路由，去掉末段 `content.md` 后返回对应 en-US 页面 Markdown。备注：预渲染路径均以 `content.md` 结尾
+- `doc/app/root.tsx`：按 URL 前缀设置 `html lang/dir`，挂载 RootProvider（i18n 与静态搜索）、脚本与错误边界。备注：`ar` 为 `rtl`；`body[data-hydrated]` 供 e2e 等待
+- `doc/app/routes.ts`：React Router 路由表：首页、sitemap、搜索、llms、404 与通配内容页。
+- `doc/app/routes/home.tsx`：首页直接复用内容页的 loader 与组件。备注：一行重导出
+- `doc/app/routes/not-found.tsx`：渲染本地化 404 与通用错误页及返回首页链接。
+- `doc/app/routes/page.tsx`：内容页 loader 与渲染：解析语言与 slug、标题（含 API 包名）、canonical、编辑链接与 TOC。备注：`use(page.load())` 依赖已缓存的 promise
+- `doc/app/routes/search.ts`：为每种语言预渲染一份静态搜索索引 JSON。备注：全页 `readableMarkdown` 作为内容，`headings: []`
+- `doc/app/routes/sitemap.ts`：用全部语言页面 URL 与 `siteUrl` 生成 sitemap.xml。备注：2255 个 `<loc>`
+- `doc/e2e/browser.test.ts`：在 about:blank 上验证 `captureBrowserErrors` 跨导航保留控制台错误详情（Chromium/Firefox）。备注：不打开文档站；未执行
+- `doc/e2e/browser.ts`：Playwright 预览夹具：`startPreview(..., 0)`、浏览器生命周期、错误收集与搜索结果选择辅助。备注：端口 0，可并行；未执行
+- `doc/e2e/grouped.test.ts`：验证分组导航、移动抽屉焦点陷阱/Escape 关闭与无 JS 阅读。备注：第 83 行用例只跑 Chromium；未执行
+- `doc/e2e/hierarchy.test.ts`：验证 API 符号嵌套在所属包目录下，以及分组与子项在 LTR/RTL 下的视觉层级。备注：含几何断言；未执行
+- `doc/e2e/navigation.test.ts`：验证当前阅读分区与起点可见、无 JS 导航、404 与移动端导航。备注：未执行
+- `doc/e2e/related.test.ts`：验证 HTTP 指南、示例与模块 API 之间的相关阅读链接落到真实页面且不截断。备注：未执行
+- `doc/e2e/search.test.ts`：验证水合后才响应搜索快捷键、只下载当前语言索引、等待目标页 loader。备注：未执行
+- `doc/e2e/site.test.ts`：整站冒烟：新鲜度、11 语言路由与 lang/dir、资源、llms origin、API 索引筛选与搜索。备注：第 74 行将 llms origin 与测试进程 `siteUrl` 比较；未执行
+- `doc/e2e/theme.test.ts`：验证浅色、深色、跟随系统主题切换及重载后保持。备注：未执行
+- `doc/package.json`：文档工作区私有包清单：构建、类型检查、测试、预览脚本与 catalog/workspace 依赖。备注：`license: ISC`、`main: index.js` 为模板残留；`@defjs/core` 为 `workspace:^`
+- `doc/public/logo.jpg`：导航标题与页面使用的站点标志。备注：46379 字节 JPEG（二进制）
+- `doc/react-router.config.ts`：关闭 SSR，以 `collectPrerenderPaths` 作为全站静态预渲染路径来源。
+- `doc/scripts/build-state.ts`：计算构建输入指纹并读写 `build-stamp.txt` 供 e2e 校验新鲜度。备注：只覆盖 `doc/` 内文件，不含根 catalog/lockfile 与 `SITE_URL`，见 P08-doc-site-04
+- `doc/scripts/build.ts`：编排 React Router 构建、复制 `404.html`、删除搜索 `.data`、检查链接并写戳记。
+- `doc/scripts/check-links.ts`：检查生成 HTML 中站内 href/src 指向页面或文件、`#fragment` 指向目标页 id。备注：目录存在即放行，见 P08-doc-site-02
+- `doc/scripts/check-site-url.ts`：发布前要求 `SITE_URL` 为无路径、查询、凭据的非本地 HTTPS origin。备注：release docs job 调用
+- `doc/scripts/preview.ts`：用 Bun 静态托管 `build/client`，供 e2e 与 `bun run preview` 使用。备注：CLI 默认端口 3000；路径边界见 P08-doc-site-06
+- `doc/test/api-catalog.test.ts`：锁定 API 筛选组合与目录身份、slug、related 校验。备注：大小写用例查询为 `CREATE`（不含 `I`）
+- `doc/test/api-reference.test.tsx`：锁定参数表必填性、目录身份键、各语言种类/地标/Fumadocs 文案。备注：react-dom/server 静态渲染
+- `doc/test/browser-lifecycle.test.ts`：用 mock 锁定预览浏览器夹具的关闭顺序与多错误传播。备注：不启动浏览器
+- `doc/test/build-state.test.ts`：锁定戳记缺失/过期、构建收尾（404.html、搜索 `.data`）及部分指纹输入。备注：不覆盖依赖版本与 `SITE_URL`
+- `doc/test/check-links.test.ts`：用小型 HTML 夹具锁定编码路径、资源、缺页、缺锚点与空产物。备注：无“目录存在但缺 index.html”负例
+- `doc/test/exports.test.ts`：用正则源扫描加运行时命名空间双向核对四个包的公开导出与 API 目录。备注：正则漏 `export type *` 等语法，见 P08-doc-site-05
+- `doc/test/markdown.test.ts`：锁定 LLM Markdown 导出、API 组件转换、标题与围栏代码保留。
+- `doc/test/navigation.test.ts`：锁定 11 种语言真实内容树的分组阅读顺序、标签与相关阅读目标。
+- `doc/test/opentelemetry-logging.test.ts`：执行 Winston 示例，锁定其与 Defjs 共用 provider 且日志阈值独立。备注：内存 exporter，无外部 collector
+- `doc/test/preview.test.ts`：锁定预览直接返回嵌套 HTML、未知路径返回 404 页。备注：端口 0
+- `doc/test/recipes.test.ts`：执行 `etag-revalidate` 与 `refresh-bearer-once` 示例并断言真实 304/401 后的业务数据。备注：仅这两个 recipe 运行
+- `doc/test/routes.test.ts`：锁定语言目录到 URL 的映射、重复 URL 失败及每种语言的搜索预渲染路径。
+- `doc/tsconfig.json`：文档应用、脚本、测试、e2e 与 otel 示例的类型检查配置。备注：继承 `../tsconfig.base.json`；`@defjs/*` 路径指向包源码
+- `doc/vite.config.ts`：接入 fumadocs-mdx、Tailwind 与 React Router 插件，并把 `SITE_URL` 内联进 `import.meta.env`。备注：`resolve.tsconfigPaths: true`
+
+## 文档内容 · en-US 指南与示例
+
+en-US 指南、recipes、首页，以及被文档引用并参与类型检查的 `doc/examples`。（123 个文件，审计分区 `P09a-doc-guides`）
+
+- `doc/content/en-US/docs/client.mdx`：英文客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：68 行
+- `doc/content/en-US/docs/commands.mdx`：英文命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：61 行；`:44` 占位符文法缺失见 P04-core-infra-04
+- `doc/content/en-US/docs/design-decisions.mdx`：英文设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：165 行；`:104-106` 把已声明 body 写成一律 JSON 解析（P09a-doc-guides-03）；`:111-115` 表对 SSE 握手 struct 失败不成立（P09a-doc-guides-02）
+- `doc/content/en-US/docs/errors.mdx`：英文错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：192 行；`:79-81` 表对 SSE 握手 struct 失败不成立（P09a-doc-guides-02）；`:90-92` 见 P09a-doc-guides-03；`:124-126` 来源证明措辞见 P09a-doc-guides-04；17 个 FaultCode 与源码一致
+- `doc/content/en-US/docs/http.mdx`：英文 HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：167 行；表示种类与读取顺序的权威描述（`:98-123`）；`:22` 占位符文法缺失见 P04-core-infra-04
+- `doc/content/en-US/docs/index.md`：英文指南目录页。备注：34 行
+- `doc/content/en-US/docs/integrations/meta.json`：英文文档导航元数据：定义目录标题或页面顺序。备注：3 行
+- `doc/content/en-US/docs/integrations/opentelemetry-server.mdx`：英文 OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：179 行；`:71`、`:164` 省略 JSON representation 前提，归 P09b-doc-api-04
+- `doc/content/en-US/docs/integrations/react.mdx`：英文 React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：73 行
+- `doc/content/en-US/docs/integrations/vue.mdx`：英文 Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：77 行
+- `doc/content/en-US/docs/interceptors.mdx`：英文拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：110 行
+- `doc/content/en-US/docs/meta.json`：英文文档导航元数据：定义目录标题或页面顺序。备注：5 行
+- `doc/content/en-US/docs/sse.mdx`：英文 SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：106 行；`:62` 见 P03a-core-sse-02；`:64` 见 P03a-core-sse-05；`:93` 见 P03a-core-sse-06；`:99` 仓库验证陈述过时（P09a-doc-guides-05）
+- `doc/content/en-US/docs/start.mdx`：英文入门指南：安装、定义 GET、离线执行及切换真实服务。备注：137 行
+- `doc/content/en-US/docs/struct.mdx`：英文 Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：136 行
+- `doc/content/en-US/docs/web-socket.mdx`：英文 WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：112 行；`:52` 预算生命周期见 P03b-core-ws-02
+- `doc/content/en-US/index.mdx`：英文首页：介绍包选择、结果元组与资源所有权。备注：56 行
+- `doc/content/en-US/meta.json`：英文文档导航元数据：定义目录标题或页面顺序。备注：3 行
+- `doc/content/en-US/recipes/cancel-http.mdx`：取消和超时的 HTTP 调用配方。备注：20 行
+- `doc/content/en-US/recipes/consume-sse.mdx`：消费一个 SSE 事件并释放流的配方。备注：22 行；`:22` 同 P03a-core-sse-02（未写预算按逻辑流累计）
+- `doc/content/en-US/recipes/etag-revalidate.mdx`：保留应用缓存并处理 ETag/304 的配方。备注：22 行
+- `doc/content/en-US/recipes/get-declared-404.mdx`：声明 200/404 body 并收窄 fault 的配方。备注：26 行
+- `doc/content/en-US/recipes/graphql-http-envelope.mdx`：在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：20 行；`:20` 的 errors[] 解包承诺对 data:null 不成立（P09a-doc-guides-01）
+- `doc/content/en-US/recipes/index.md`：英文配方目录页。备注：26 行
+- `doc/content/en-US/recipes/meta.json`：英文文档导航元数据：定义目录标题或页面顺序。备注：5 行
+- `doc/content/en-US/recipes/post-json.mdx`：提交 JSON 并解码 201 的配方。备注：20 行
+- `doc/content/en-US/recipes/publish-http-sdk.mdx`：导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：24 行
+- `doc/content/en-US/recipes/refresh-bearer-once.mdx`：在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：20 行
+- `doc/content/en-US/recipes/test-with-handle.mdx`：注入本地 Fetch handle 的 HTTP 测试配方。备注：20 行
+- `doc/content/en-US/recipes/websocket-session.mdx`：发送并接收一个 WebSocket envelope 的配方。备注：22 行
+- `doc/examples/.oxlintrc.json`：示例 lint 配置：允许用于教学而未引用的变量。备注：1 行
+- `doc/examples/api/client-defaults.ts`：演示默认 headers/timeout 及命令、execute 覆盖优先级。备注：21 行
+- `doc/examples/api/create-client-plugin.ts`：演示把已有客户端安装为 Vue 插件。备注：9 行
+- `doc/examples/api/create-client.ts`：演示 createClient 与 withEndpoint 的最小组合。备注：5 行
+- `doc/examples/api/define-event-stream.ts`：演示带 events 与必需 buffer/queue 限额的 SSE 定义。备注：10 行
+- `doc/examples/api/define-request.ts`：演示具有 input/output/error 与显式 builder 的 HTTP 定义。备注：12 行
+- `doc/examples/api/define-web-socket.ts`：演示 subprotocol、incoming/outgoing 与队列限额的 WS 定义。备注：11 行
+- `doc/examples/api/fault.ts`：演示 native Error fault 和 StructError cause 的日志读取。备注：10 行；`String(fault)` 同 P04-core-infra-02
+- `doc/examples/api/opentelemetry-server-transport-options.ts`：演示 HTTP startSpanHook 构建并删去指定 query 字段。备注：14 行
+- `doc/examples/api/with-opentelemetry-server.ts`：演示将 tracer/logger 传入 OTel 客户端选项。备注：10 行
+- `doc/examples/client/basic-setup.ts`：演示显式创建具有 endpoint 的客户端。备注：5 行
+- `doc/examples/client/compose-options.ts`：演示附加 HTTP 观测 interceptor 与 Fetch credentials。备注：13 行
+- `doc/examples/client/inject-test-transport.ts`：演示离线 Fetch fixture 与类型化 GET 结果。备注：16 行
+- `doc/examples/commands/basic-setup.ts`：演示无 input、无 output 的命令执行元组。备注：8 行
+- `doc/examples/commands/different-shapes.ts`：演示 path、aliased query 与静态 header 的不同放置。备注：22 行
+- `doc/examples/commands/where-values-go.ts`：演示把逻辑 User 值直接放入 JSON body。备注：17 行
+- `doc/examples/design-decisions/builder-encoder-alias.ts`：演示数组嵌套 alias、literal header 与可选 query 的 batch command。备注：31 行
+- `doc/examples/design-decisions/definitions.ts`：演示 endpoint 调用只创建不执行 opaque command。备注：14 行
+- `doc/examples/env.d.ts`：示例的环境类型 shim：声明 App、qs 与 tracer globals。备注：10 行；ambient 声明不提供 runtime 值
+- `doc/examples/errors/basic-setup.ts`：演示 HTTP_STATUS、NET_TIMEOUT、RES_STRUCT_MISMATCH 的分支。备注：24 行
+- `doc/examples/errors/log-fault.ts`：演示打印 fault 及 StructError 原因。备注：10 行；`String(fault)` 含原始响应值，见 P04-core-infra-02
+- `doc/examples/errors/narrow-by-kind.ts`：演示通过 body.kind 收窄声明错误联合。备注：21 行
+- `doc/examples/errors/narrow-by-status.ts`：演示通过 body.status 收窄声明错误联合。备注：14 行；配套正文 errors.mdx:124-126 见 P09a-doc-guides-04
+- `doc/examples/errors/narrow-union.ts`：演示通过字段存在性收窄非 discriminated 联合。备注：11 行
+- `doc/examples/errors/summarize-fault.ts`：演示只保留稳定 code/status 的诊断摘要。备注：10 行
+- `doc/examples/errors/triage.ts`：演示穷尽 17 个 FaultCode 的分类 switch。备注：35 行
+- `doc/examples/errors/tuple-shapes.ts`：演示三个 transport 的 startup 元组类型。备注：24 行
+- `doc/examples/home/get-health.ts`：首页示例：定义并执行 JSON health 请求。备注：13 行
+- `doc/examples/http/basic-setup.ts`：演示 GET 成功与声明 404 body 的处理。备注：20 行
+- `doc/examples/http/body.ts`：演示 urlencoded 登录与 FormData 文件上传 builder。备注：32 行
+- `doc/examples/http/cancel.ts`：演示 signal 与启动 timeout 组合后立即取消 HTTP。备注：14 行
+- `doc/examples/http/place-input.ts`：演示 path、headers、body 的 alias 编码与 PATCH 解码。备注：32 行
+- `doc/examples/http/query-serializer.ts`：演示将外部 qs 接到客户端 query serializer。备注：8 行
+- `doc/examples/http/resolve-url.ts`：演示 directory endpoint、单次 path 编码与 query 拼接。备注：18 行
+- `doc/examples/interceptors/add-request-headers.ts`：演示克隆 Headers 后添加动态 Bearer。备注：16 行
+- `doc/examples/interceptors/basic-setup.ts`：演示对 HTTP 耗时与状态的 interceptor 观测。备注：13 行
+- `doc/examples/interceptors/onion-order.ts`：演示两个 interceptor 的 before/after 顺序。备注：22 行
+- `doc/examples/interceptors/retry-safe-reads.ts`：演示受限 GET/HEAD/OPTIONS Retry-After 与 abort 等待。备注：56 行；外层重试下 span 父链问题见 P06-otel-server-01
+- `doc/examples/interceptors/short-circuit.ts`：演示带显式 JSON response headers 的 503 maintenance 短路。备注：20 行；`makeResponse` 显式给出 JSON headers，不传 request（H4 排除）
+- `doc/examples/interceptors/websocket-sessions.ts`：演示以 live getter 和 async disposer 委托包装 WS session。备注：36 行
+- `doc/examples/opentelemetry-logging/README.md`：Winston 可执行示例的运行、阈值、上下文与清理说明。备注：34 行
+- `doc/examples/opentelemetry-logging/winston.ts`：可执行 Winston/Defjs 双路径日志示例与可测试导出函数。备注：69 行；doc/test/opentelemetry-logging.test.ts 实际执行
+- `doc/examples/opentelemetry-server/active-span.ts`：演示在 execute 外围用应用 span 记录最终 fault。备注：25 行
+- `doc/examples/opentelemetry-server/basic-setup.ts`：演示把应用侧 tracer/meter/logger 传入 withOpenTelemetryServer，以及仅 meter、仅 logger 的独立启用。备注：22 行
+- `doc/examples/opentelemetry-server/logs-without-spans.ts`：演示 logger-only 本地失败与应用自有 provider shutdown。备注：24 行
+- `doc/examples/opentelemetry-server/operation-names.ts`：演示 HTTP/SSE/WS 的静态 operation 名称。备注：26 行
+- `doc/examples/opentelemetry-server/options-and-hooks.ts`：演示 transport-scoped hooks、URL 属性与开关。备注：33 行
+- `doc/examples/opentelemetry-server/pino-logger.ts`：演示 Node SDK 启动后再 require Pino 的 instrumentation 顺序。备注：30 行
+- `doc/examples/opentelemetry-server/websocket-query-propagation.ts`：演示显式启用 WS query propagation。备注：14 行
+- `doc/examples/opentelemetry-server/winston-logger.ts`：演示 Winston console 与 OTel transport 的不同阈值。备注：26 行
+- `doc/examples/react/basic-setup.tsx`：演示 useClient 与可取消、抑制 stale result 的 HTTP effect。备注：33 行
+- `doc/examples/react/client-provider.tsx`：演示以 Context 提供浏览器共享客户端。备注：11 行
+- `doc/examples/react/own-query-work.tsx`：演示向 query 库提供可取消的 execute 回调。备注：28 行
+- `doc/examples/react/own-realtime-work.tsx`：演示 WS effect 中预注册 cleanup、消费与晚到 session 清理。备注：60 行
+- `doc/examples/react/read-with-use-client.tsx`：演示按钮事件从最近 Context 执行 health 请求。备注：29 行
+- `doc/examples/recipes/cancel-http.ts`：可执行示例：取消和超时的 HTTP 调用配方。备注：25 行
+- `doc/examples/recipes/consume-sse.ts`：可执行示例：消费一个 SSE 事件并释放流的配方。备注：31 行
+- `doc/examples/recipes/etag-revalidate.ts`：可执行示例：保留应用缓存并处理 ETag/304 的配方。备注：57 行；由 doc/test/recipes.test.ts 执行
+- `doc/examples/recipes/get-declared-404.ts`：可执行示例：声明 200/404 body 并收窄 fault 的配方。备注：26 行
+- `doc/examples/recipes/graphql-http-envelope.ts`：可执行示例：在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：48 行；`data` 仅 `.optional()`，拒绝规范允许的 `data: null`（P09a-doc-guides-01）；自带 fixture 输出 `ada viewer unavailable`
+- `doc/examples/recipes/post-json.ts`：可执行示例：提交 JSON 并解码 201 的配方。备注：40 行
+- `doc/examples/recipes/publish-http-sdk/app.ts`：演示 SDK 调用者保留 endpoint execute 和错误元组。备注：12 行
+- `doc/examples/recipes/publish-http-sdk/users-sdk.ts`：演示导出 endpoint、Client 工厂及单用途 helper。备注：27 行
+- `doc/examples/recipes/refresh-bearer-once.ts`：可执行示例：在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：64 行；由 doc/test/recipes.test.ts 执行
+- `doc/examples/recipes/test-with-handle.ts`：可执行示例：注入本地 Fetch handle 的 HTTP 测试配方。备注：27 行
+- `doc/examples/recipes/websocket-session.ts`：可执行示例：发送并接收一个 WebSocket envelope 的配方。备注：30 行
+- `doc/examples/sse/basic-setup.ts`：演示 await using 所有权及 typed SSE 迭代。备注：23 行
+- `doc/examples/sse/close-and-dispose.ts`：演示结构兼容 EventStreamHandle 的 disposer 接口。备注：14 行
+- `doc/examples/sse/invalid-events.ts`：演示对被丢弃事件的 bounded observer。备注：15 行
+- `doc/examples/sse/open-and-inspect.ts`：演示 startup snapshot、live open 与手动 close/closed。备注：20 行
+- `doc/examples/sse/reconnect.ts`：演示显式 retry、backoff 与 Last-Event-ID 策略。备注：18 行
+- `doc/examples/sse/stream-result.ts`：演示 SSE startup 元组类型。备注：10 行
+- `doc/examples/start/define-request.ts`：演示入门 GET 的完整 input/output/error 定义。备注：24 行
+- `doc/examples/start/execute-locally.ts`：演示离线成功和 404 的完整入门程序。备注：48 行
+- `doc/examples/start/real-api.ts`：演示相同客户端接口下切换 fixture 与真实 endpoint。备注：19 行
+- `doc/examples/struct/aliases.ts`：演示默认 logical-key parse 不接受 wire alias。备注：14 行
+- `doc/examples/struct/any.ts`：枚举并演示公共 Struct facade 构造器。备注：32 行
+- `doc/examples/struct/basic-setup.ts`：演示 Infer、HTTP shape 与独立 Struct 解析。备注：26 行
+- `doc/examples/struct/parse-failures.ts`：演示首个 invalid_type issue、flatten、format 与 prettify。备注：14 行
+- `doc/examples/struct/request-placement.ts`：演示请求四个区域的显式 builder 与 logical 调用值。备注：30 行
+- `doc/examples/struct/required-optional-null.ts`：演示 required、optional、nullable、nullish 字段输出。备注：18 行
+- `doc/examples/tsconfig.json`：示例 TypeScript 配置：检查 TS/TSX 并放宽 unused 检查。备注：10 行；继承 doc/tsconfig.json → tsconfig.base.json（lib ESNext + skipLibCheck），不含 `.vue`，排除 opentelemetry-logging
+- `doc/examples/vue.d.ts`：Vue 模块 shim：所有 .vue import 统一视为 DefineComponent。备注：5 行；不检查 SFC 内容或目标存在性
+- `doc/examples/vue/basic-setup.vue`：演示带 defineProps 的 HTTP watcher 与重新运行取消。备注：39 行；抽取 script setup 后独立类型检查通过，未运行模板
+- `doc/examples/vue/exports.ts`：演示三个 Vue adapter runtime exports。备注：12 行
+- `doc/examples/vue/inject-and-override.vue`：演示 provide 覆盖子树内的客户端并由子组件读取。备注：21 行；抽取 script setup 后独立类型检查通过，未运行模板
+- `doc/examples/vue/main.ts`：演示 Vue app 安装插件与 mount 入口。备注：12 行；App.vue 为应用入口占位，仓库未提供该组件
+- `doc/examples/vue/realtime-scope.vue`：演示 SSE scope 清理、晚到 handle 与最近 100 条事件列表。备注：58 行；抽取 script setup 后独立类型检查通过，未运行模板
+- `doc/examples/web-socket/basic-setup.ts`：演示 await using、runtime observer 与一次收发。备注：29 行
+- `doc/examples/web-socket/closure-and-ownership.ts`：演示函数拥有 WS session 并以 await using 释放。备注：10 行
+- `doc/examples/web-socket/heartbeat.ts`：演示 outgoing ping、incoming pong 与 ack 策略。备注：24 行
+- `doc/examples/web-socket/reconnect.ts`：演示 opt-in backoff 与物理 close 策略。备注：27 行
+- `doc/examples/web-socket/state-snapshots.ts`：演示 WS startup 元组类型。备注：10 行
+
+## 文档内容 · en-US API 参考
+
+en-US API 参考页（模块总览与逐符号页面）。（184 个文件，审计分区 `P09b-doc-api`）
+
+- `doc/content/en-US/api/client.mdx`：客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：290 行；SSE/WebSocket 默认值表与源码一致；`attempts` 为整段流/会话累计预算未写明（P09b-doc-api-01）
+- `doc/content/en-US/api/core/anyfault-type.mdx`：AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：16 行；声明来源 packages/core/src/error/types.ts:124
+- `doc/content/en-US/api/core/anystruct-type.mdx`：AnyStruct：接受任意 struct 的宽约束。备注：15 行；声明来源 packages/core/src/struct/types.ts:148
+- `doc/content/en-US/api/core/basicauthhttpinterceptor.mdx`：为 HTTP 请求设置 Basic Authorization 的拦截器。备注：20 行；声明来源 packages/core/src/interceptor/basic_auth.ts:42
+- `doc/content/en-US/api/core/basicauthinterceptoroptions-type.mdx`：Basic 认证拦截器的可选编码器。备注：20 行；声明来源 packages/core/src/interceptor/basic_auth.ts:13
+- `doc/content/en-US/api/core/basicauthsseinterceptor.mdx`：为 SSE 请求设置 Basic Authorization 的拦截器。备注：20 行；声明来源 packages/core/src/interceptor/basic_auth.ts:54
+- `doc/content/en-US/api/core/builderinput-type.mdx`：builder 收到的、已按 input struct 解析过的端点入参类型。备注：33 行；声明来源 packages/core/src/internal/builder_types.ts:92
+- `doc/content/en-US/api/core/client-type.mdx`：createClient 返回的 Client，含按命令重载的 execute。备注：31 行；声明来源 packages/core/src/client/client.ts:23
+- `doc/content/en-US/api/core/clientconfig-type.mdx`：选项函数写完之后、execute 读取的已解析客户端配置。备注：31 行；声明来源 packages/core/src/client/config.ts:192
+- `doc/content/en-US/api/core/clientoption-type.mdx`：createClient 接受的选项函数类型。备注：14 行；声明来源 packages/core/src/client/option.ts:14
+- `doc/content/en-US/api/core/clientoptions-type.mdx`：与选项函数对应的输入形态客户端选项。备注：33 行；声明来源 packages/core/src/client/config.ts:157；createClient 不直接接收该对象
+- `doc/content/en-US/api/core/clientsseconfig-type.mdx`：已解析的 SSE 配置，fetch handle 必填。备注：16 行；声明来源 packages/core/src/client/config.ts:124
+- `doc/content/en-US/api/core/clientsseoptions-type.mdx`：SSE 的 fetch handle、非法事件钩子和重连策略。备注：42 行；声明来源 packages/core/src/client/config.ts:87；第 36 行 `attempts` 累计预算未写明（P09b-doc-api-01）
+- `doc/content/en-US/api/core/clientwebsocketoptions-type.mdx`：WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：40 行；声明来源 packages/core/src/client/config.ts:51；第 34 行 WS `attempts` 累计预算未写明，与 P03b-core-ws-02 同根
+- `doc/content/en-US/api/core/createclient.mdx`：用若干选项函数创建一个客户端。备注：19 行；声明来源 packages/core/src/client/client.ts:59；建议在请求边界内创建，语气是 Prefer
+- `doc/content/en-US/api/core/createdecodefault.mdx`：构造解码故障：响应已到达，但无法按声明读出。备注：17 行；声明来源 packages/core/src/error/factory.ts:59
+- `doc/content/en-US/api/core/createhttpinterceptor.mdx`：把函数包成带 kind 的 HTTP 拦截器。备注：17 行；声明来源 packages/core/src/interceptor/interceptor.ts:39
+- `doc/content/en-US/api/core/createhttpstatusfault.mdx`：构造已解码 error body 的 HTTP_STATUS 故障。备注：17 行；声明来源 packages/core/src/error/factory.ts:34
+- `doc/content/en-US/api/core/createnetworkfault.mdx`：按 cause 的形状选择 NET_* 代码并构造网络故障。备注：21 行；声明来源 packages/core/src/error/factory.ts:94
+- `doc/content/en-US/api/core/createpreflightfault.mdx`：构造可能发生在响应出现之前的预检故障。备注：17 行；声明来源 packages/core/src/error/factory.ts:75
+- `doc/content/en-US/api/core/createresolvedrequesturl.mdx`：把请求路径按 base endpoint 解析成 URL。备注：19 行；声明来源 packages/core/src/internal/url.ts:135
+- `doc/content/en-US/api/core/createsseinterceptor.mdx`：把函数包成带 kind 的 SSE 拦截器。备注：19 行；声明来源 packages/core/src/interceptor/interceptor.ts:71
+- `doc/content/en-US/api/core/createundecodedhttpstatusfault.mdx`：构造未读取 body 的 HTTP_STATUS 故障。备注：17 行；声明来源 packages/core/src/error/factory.ts:45
+- `doc/content/en-US/api/core/createwebsocketinterceptor.mdx`：把函数包成带 kind 的 WebSocket 拦截器。备注：19 行；声明来源 packages/core/src/interceptor/interceptor.ts:122
+- `doc/content/en-US/api/core/decodedresponse-type.mdx`：带已按声明 struct 解码的 body 的响应。备注：15 行；声明来源 packages/core/src/internal/http_response.ts:40
+- `doc/content/en-US/api/core/decodefault-type.mdx`：响应已到达但无法按声明读取时的故障。备注：22 行；声明来源 packages/core/src/error/types.ts:85
+- `doc/content/en-US/api/core/decodefaultcode-type.mdx`：只带响应元数据、不带 body 的解码故障代码。备注：14 行；声明来源 packages/core/src/error/types.ts:50
+- `doc/content/en-US/api/core/defineeventstream.mdx`：声明带类型的 SSE 端点。备注：32 行；声明来源 packages/core/src/sse/sse.ts:156
+- `doc/content/en-US/api/core/definerequest.mdx`：声明带类型的 HTTP 端点。备注：36 行；声明来源 packages/core/src/http/http.ts:159；示例占位符 `:id`；占位符文法未写见 P04-core-infra-04
+- `doc/content/en-US/api/core/definewebsocket.mdx`：声明带类型的 WebSocket 端点。备注：29 行；声明来源 packages/core/src/web_socket/web_socket.ts:188
+- `doc/content/en-US/api/core/err-aborted-type.mdx`：表示调用方取消的共享 Error 哨兵。备注：16 行；声明来源 packages/core/src/error/cause.ts:2；写明 SSE/WS 拦截器抛出它得 `EXT_INTERCEPTOR_FAILED`；进程级来源标记例外见 P04-core-infra-03
+- `doc/content/en-US/api/core/err-timeout-type.mdx`：表示超时的共享 Error 哨兵。备注：16 行；声明来源 packages/core/src/error/cause.ts:5；与 `ERR_ABORTED` 页同一套传输差异；例外见 P04-core-infra-03
+- `doc/content/en-US/api/core/errormap-type.mdx`：重写单次 struct 解析问题文案的回调。备注：14 行；声明来源 packages/core/src/struct/errors.ts:12；返回 `''` 不替换消息见 P01-core-struct-06
+- `doc/content/en-US/api/core/eventstreamcloseinfo-type.mdx`：SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：17 行；声明来源 packages/core/src/sse/transport/event_stream.ts:63
+- `doc/content/en-US/api/core/eventstreamcommand-type.mdx`：调用事件流端点后得到的可执行命令。备注：22 行；声明来源 packages/core/src/sse/sse.ts:110
+- `doc/content/en-US/api/core/eventstreamdata-type.mdx`：从 EventStructs 推出的已解析事件联合。备注：16 行；声明来源 packages/core/src/sse/sse.ts:75
+- `doc/content/en-US/api/core/eventstreamdefinition-type.mdx`：传给 defineEventStream 的端点契约。备注：28 行；声明来源 packages/core/src/sse/sse.ts:92
+- `doc/content/en-US/api/core/eventstreamendpoint-type.mdx`：defineEventStream 返回的可调用端点。备注：18 行；声明来源 packages/core/src/sse/sse.ts:123
+- `doc/content/en-US/api/core/eventstreamexecuteoptions-type.mdx`：打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：16 行；声明来源 packages/core/src/sse/sse.ts:120
+- `doc/content/en-US/api/core/eventstreamfaultcode-type.mdx`：SSE 流可以用来结束的故障代码子集。备注：24 行；声明来源 packages/core/src/sse/transport/event_stream.ts:41；与 dist 的 Extract 列表一致
+- `doc/content/en-US/api/core/eventstreamhandle-type.mdx`：已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：32 行；声明来源 packages/core/src/sse/transport/event_stream.ts:69
+- `doc/content/en-US/api/core/eventstreamopeninfo-type.mdx`：SSE 响应打开之后可用的元数据。备注：17 行；声明来源 packages/core/src/sse/transport/event_stream.ts:31
+- `doc/content/en-US/api/core/eventstreamrequestshape-type.mdx`：SSE builder 的返回形状，别名到 HttpRequestShape。备注：14 行；声明来源 packages/core/src/internal/builder_types.ts:66；符号页未重复模块页的 unknown body
+- `doc/content/en-US/api/core/eventstructs-type.mdx`：SSE 事件名到解码 struct 的映射。备注：20 行；声明来源 packages/core/src/sse/sse.ts:52
+- `doc/content/en-US/api/core/executeeventstreamcommand.mdx`：对着客户端配置打开一条 SSE 命令的底层入口。备注：24 行；声明来源 packages/core/src/sse/sse.ts:205
+- `doc/content/en-US/api/core/executehttpcommand.mdx`：对着客户端配置执行一条 HTTP 命令的底层入口。备注：26 行；声明来源 packages/core/src/http/http.ts:199；符号页签名与 dist 一致
+- `doc/content/en-US/api/core/executewebsocketcommand.mdx`：对着客户端配置打开一条 WebSocket 命令的底层入口。备注：26 行；声明来源 packages/core/src/web_socket/web_socket.ts:1107
+- `doc/content/en-US/api/core/fault-type.mdx`：client.execute 能返回的、按 code 区分的故障联合。备注：23 行；声明来源 packages/core/src/error/types.ts:116
+- `doc/content/en-US/api/core/faultclass-type.mdx`：从故障代码取出第一个下划线前的类别。备注：14 行；声明来源 packages/core/src/error/types.ts:47
+- `doc/content/en-US/api/core/faultcode-type.mdx`：Defjs 报告的封闭故障代码集合。备注：44 行；声明来源 packages/core/src/error/types.ts:23；17 个代码与 dist 一致
+- `doc/content/en-US/api/core/faultof-type.mdx`：按已解码 error body 类型表达的故障联合。备注：14 行；声明来源 packages/core/src/error/types.ts:109
+- `doc/content/en-US/api/core/fetchhandle-type.mdx`：HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：16 行；声明来源 packages/core/src/client/config.ts:22
+- `doc/content/en-US/api/core/fetchhandler.mdx`：用 fetch 发出 HTTP 请求的默认传输。备注：18 行；声明来源 packages/core/src/http/transport/fetch.ts:358
+- `doc/content/en-US/api/core/flattenedstructerror-type.mdx`：StructError.flatten() 返回的表单错误与字段错误。备注：17 行；声明来源 packages/core/src/struct/types.ts:69
+- `doc/content/en-US/api/core/formattedstructerror-type.mdx`：StructError.format() 返回的嵌套错误树。备注：17 行；声明来源 packages/core/src/struct/types.ts:61
+- `doc/content/en-US/api/core/httpawaitresult-type.mdx`：HTTP 调用的三元组：成功数据和响应，或故障。备注：17 行；声明来源 packages/core/src/http/http.ts:130
+- `doc/content/en-US/api/core/httpcommand-type.mdx`：调用请求端点后得到的可执行 HTTP 命令。备注：22 行；声明来源 packages/core/src/http/http.ts:61
+- `doc/content/en-US/api/core/httpexecuteoptions-type.mdx`：单次 HTTP 调用的进度回调和取消选项。备注：19 行；声明来源 packages/core/src/http/http.ts:75
+- `doc/content/en-US/api/core/httpinterceptor-type.mdx`：withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：17 行；声明来源 packages/core/src/interceptor/interceptor.ts:28
+- `doc/content/en-US/api/core/httpinterceptornext-type.mdx`：继续执行后续 HTTP 拦截器直到传输的 next。备注：14 行；声明来源 packages/core/src/interceptor/interceptor.ts:18
+- `doc/content/en-US/api/core/httpmeta-type.mdx`：响应到达客户端之后就有的元数据，不含 body。备注：21 行；声明来源 packages/core/src/internal/http_response.ts:26
+- `doc/content/en-US/api/core/httpprogressevent-type.mdx`：上传和下载回调收到的进度快照。备注：20 行；声明来源 packages/core/src/internal/http_request.ts:12
+- `doc/content/en-US/api/core/httpprogressfn-type.mdx`：上传和下载进度回调的函数类型。备注：16 行；声明来源 packages/core/src/internal/http_request.ts:27
+- `doc/content/en-US/api/core/httprequest-type.mdx`：传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：44 行；声明来源 packages/core/src/internal/http_request.ts:36；签名故意省略内部 bodyContentTypeSource
+- `doc/content/en-US/api/core/httprequestshape-type.mdx`：HTTP builder 可返回的 path、query、headers 和 body。备注：19 行；声明来源 packages/core/src/internal/builder_types.ts:52；签名与 `dist/index.d.ts` 一致（`BodyValue`）；模块页漂移见 P09b-doc-api-03
+- `doc/content/en-US/api/core/httpresponse-type.mdx`：传输产生、拦截器看到的线上 HTTP 响应形状。备注：24 行；声明来源 packages/core/src/internal/http_response.ts:10
+- `doc/content/en-US/api/core/httpresponsetype-type.mdx`：在 struct 校验之前读取 HTTP body 所用的表示。备注：14 行；声明来源 packages/core/src/internal/http_request.ts:6
+- `doc/content/en-US/api/core/httpstatusfault-type.mdx`：非 2xx 响应的故障，类型参数是声明的 error struct。备注：18 行；声明来源 packages/core/src/error/types.ts:76
+- `doc/content/en-US/api/core/httpstatusfaultof-type.mdx`：按已解码 body 类型表达的非 2xx 故障。备注：19 行；声明来源 packages/core/src/error/types.ts:63
+- `doc/content/en-US/api/core/infer-type.mdx`：从 struct 推出解析成功后的输出类型。备注：19 行；声明来源 packages/core/src/struct/types.ts:163
+- `doc/content/en-US/api/core/interceptor-type.mdx`：客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：14 行；声明来源 packages/core/src/interceptor/interceptor.ts:133
+- `doc/content/en-US/api/core/interceptorfn-type.mdx`：HTTP 拦截器函数的签名。备注：14 行；声明来源 packages/core/src/interceptor/interceptor.ts:23
+- `doc/content/en-US/api/core/makeresponse.mdx`：不发网络请求，直接造一个 HttpResponse。备注：16 行；声明来源 packages/core/src/internal/http_response.ts:61；默认 status 为 0
+- `doc/content/en-US/api/core/makeresponseoptions-type.mdx`：makeResponse 接受的字段。备注：21 行；声明来源 packages/core/src/internal/http_response.ts:45；写明省略 url/headers 时复制请求的
+- `doc/content/en-US/api/core/manualsocketclosereason-type.mdx`：session.close 记录的关闭码和原因。备注：18 行；声明来源 packages/core/src/web_socket/web_socket.ts:150
+- `doc/content/en-US/api/core/meta.json`：Core API 侧边栏分组标题。备注：3 行；Fumadocs 手写导航元数据；仅 title: Core
+- `doc/content/en-US/api/core/objectstruct-type.mdx`：struct.object 产生的对象 struct 类型。备注：23 行；声明来源 packages/core/src/struct/types.ts:270
+- `doc/content/en-US/api/core/parseresult-type.mdx`：struct.parse 的错误优先二元组。备注：14 行；声明来源 packages/core/src/struct/types.ts:14
+- `doc/content/en-US/api/core/preflightfault-type.mdx`：可能在响应出现之前就失败的故障。备注：20 行；声明来源 packages/core/src/error/types.ts:98
+- `doc/content/en-US/api/core/preflightfaultcode-type.mdx`：除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：14 行；声明来源 packages/core/src/error/types.ts:53
+- `doc/content/en-US/api/core/queryserializer-type.mdx`：把已编码的查询对象变成查询字符串的函数。备注：16 行；声明来源 packages/core/src/client/config.ts:14
+- `doc/content/en-US/api/core/requestdefinition-type.mdx`：传给 defineRequest 的端点契约。备注：24 行；声明来源 packages/core/src/http/http.ts:112
+- `doc/content/en-US/api/core/requestendpoint-type.mdx`：defineRequest 返回的可调用端点。备注：18 行；声明来源 packages/core/src/http/http.ts:80
+- `doc/content/en-US/api/core/requesterrordata-type.mdx`：从声明的 error struct 推出的错误 body 类型。备注：14 行；声明来源 packages/core/src/http/http.ts:96
+- `doc/content/en-US/api/core/requestsuccessdata-type.mdx`：从声明的 output struct 推出的成功 body 类型。备注：14 行；声明来源 packages/core/src/http/http.ts:93
+- `doc/content/en-US/api/core/socketawaitresult-type.mdx`：WebSocket execute 的三元组：会话，或故障。备注：20 行；声明来源 packages/core/src/web_socket/web_socket.ts:101
+- `doc/content/en-US/api/core/socketlifecycleoutcome-type.mdx`：单次连接尝试的结果，供重连逻辑使用。备注：26 行；声明来源 packages/core/src/web_socket/web_socket.ts:1131
+- `doc/content/en-US/api/core/ssehandler-type.mdx`：SSE 拦截器链末端、负责打开流的处理函数。备注：16 行；声明来源 packages/core/src/interceptor/interceptor.ts:50
+- `doc/content/en-US/api/core/sseinterceptor-type.mdx`：withInterceptors 接受的带 kind 的 SSE 拦截器。备注：17 行；声明来源 packages/core/src/interceptor/interceptor.ts:60
+- `doc/content/en-US/api/core/sseinterceptorfn-type.mdx`：SSE 拦截器函数的签名。备注：16 行；声明来源 packages/core/src/interceptor/interceptor.ts:55
+- `doc/content/en-US/api/core/streamawaitresult-type.mdx`：SSE execute 的三元组：流和 open，或故障。备注：20 行；声明来源 packages/core/src/sse/sse.ts:105
+- `doc/content/en-US/api/core/struct-any.mdx`：接受除 null 和 undefined 之外的任意值，类型为 any。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:66
+- `doc/content/en-US/api/core/struct-array.mdx`：用同一个元素 struct 解析数组。备注：18 行；声明来源 packages/core/src/struct/constructors.ts:127
+- `doc/content/en-US/api/core/struct-arraybuffer.mdx`：接受 ArrayBuffer；作为 body 根时按字节发送。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:464
+- `doc/content/en-US/api/core/struct-bigint.mdx`：接受 bigint 值。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:369
+- `doc/content/en-US/api/core/struct-blob.mdx`：接受 Blob；作为 body 根或入站表示时按二进制处理。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:360
+- `doc/content/en-US/api/core/struct-boolean.mdx`：接受布尔值。备注：14 行；声明来源 packages/core/src/struct/constructors.ts:47
+- `doc/content/en-US/api/core/struct-date.mdx`：接受 Date 值。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:389
+- `doc/content/en-US/api/core/struct-discriminatedunion.mdx`：按标签字段区分的对象联合。备注：32 行；声明来源 packages/core/src/struct/constructors.ts:297；写明 aliases: true 时从别名读标签
+- `doc/content/en-US/api/core/struct-enum.mdx`：接受字符串列表中的一项，或对象映射的值而不是键。备注：18 行；声明来源 packages/core/src/struct/facade.ts:35
+- `doc/content/en-US/api/core/struct-file.mdx`：接受 File；作为 body 根时按文件发送。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:455
+- `doc/content/en-US/api/core/struct-formdata.mdx`：对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：18 行；声明来源 packages/core/src/struct/constructors.ts:160
+- `doc/content/en-US/api/core/struct-intersection.mdx`：值必须同时满足若干 struct。备注：21 行；声明来源 packages/core/src/struct/constructors.ts:406
+- `doc/content/en-US/api/core/struct-literal.mdx`：只接受一个给定的字面量。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:87
+- `doc/content/en-US/api/core/struct-null.mdx`：只接受 null。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:55
+- `doc/content/en-US/api/core/struct-number.mdx`：接受除 NaN 以外的 number。备注：15 行；声明来源 packages/core/src/struct/constructors.ts:37
+- `doc/content/en-US/api/core/struct-object.mdx`：解析字段固定的普通对象。备注：24 行；声明来源 packages/core/src/struct/constructors.ts:139；第 16 行称 `.alias` 按 wire key 读取，与 `struct.parse` 默认读逻辑名不符（P09b-doc-api-02）
+- `doc/content/en-US/api/core/struct-or.mdx`：按顺序尝试若干 struct，第一个成功的获胜。备注：20 行；声明来源 packages/core/src/struct/facade.ts:45
+- `doc/content/en-US/api/core/struct-parse.mdx`：用 struct 解析未知值，返回错误优先的二元组。备注：30 行；声明来源 packages/core/src/struct/introspection.ts:44；默认读逻辑名写法正确；返回字符串替换消息的说法见 P01-core-struct-06
+- `doc/content/en-US/api/core/struct-record.mdx`：解析字符串键、值类型统一的对象。备注：19 行；声明来源 packages/core/src/struct/constructors.ts:170
+- `doc/content/en-US/api/core/struct-string.mdx`：接受字符串。备注：15 行；声明来源 packages/core/src/struct/constructors.ts:27
+- `doc/content/en-US/api/core/struct-symbol-type.mdx`：只作为类型导出的内部标记键，供出站编码器使用。备注：16 行；声明来源 packages/core/src/struct/symbols.ts:16
+- `doc/content/en-US/api/core/struct-tuple.mdx`：按位置用不同 struct 解析定长数组。备注：26 行；声明来源 packages/core/src/struct/constructors.ts:182
+- `doc/content/en-US/api/core/struct-type.mdx`：struct 本体：输入输出类型加上链式修饰方法。备注：17 行；声明来源 packages/core/src/struct/types.ts:118
+- `doc/content/en-US/api/core/struct-unknown.mdx`：接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：16 行；声明来源 packages/core/src/struct/constructors.ts:78
+- `doc/content/en-US/api/core/struct-urlencoded.mdx`：对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：18 行；声明来源 packages/core/src/struct/constructors.ts:156
+- `doc/content/en-US/api/core/struct.mdx`：struct 门面：构造函数和 struct.parse。备注：56 行；声明来源 packages/core/src/struct/facade.ts:74；总览正确写明默认读逻辑名
+- `doc/content/en-US/api/core/structerror-type.mdx`：解析失败时返回的错误，带 issues 和格式化方法。备注：27 行；声明来源 packages/core/src/struct/errors.ts:19
+- `doc/content/en-US/api/core/structinput-type.mdx`：抽出某个 struct 接受的输入类型。备注：23 行；声明来源 packages/core/src/struct/types.ts:155
+- `doc/content/en-US/api/core/structissue-type.mdx`：解析过程中产生的一条校验失败。备注：24 行；声明来源 packages/core/src/struct/types.ts:43
+- `doc/content/en-US/api/core/structlike-type.mdx`：每个 struct 都带的结构品牌。备注：22 行；声明来源 packages/core/src/struct/types.ts:28
+- `doc/content/en-US/api/core/structmethods-type.mdx`：每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：25 行；声明来源 packages/core/src/struct/types.ts:79；alias 的读写方向写对了
+- `doc/content/en-US/api/core/userequestconfig-type.mdx`：不含 signal 的 HTTP 进度和取消选项。备注：21 行；声明来源 packages/core/src/http/http.ts:52
+- `doc/content/en-US/api/core/usewebsocketconfig-type.mdx`：不含 signal 的 WebSocket 单次执行选项。备注：22 行；声明来源 packages/core/src/web_socket/web_socket.ts:113
+- `doc/content/en-US/api/core/websocketcloseinfo-type.mdx`：WebSocket 会话的逻辑终态。备注：22 行；声明来源 packages/core/src/web_socket/web_socket.ts:81
+- `doc/content/en-US/api/core/websocketcommand-type.mdx`：调用 WebSocket 端点后得到的可执行命令。备注：23 行；声明来源 packages/core/src/web_socket/web_socket.ts:122
+- `doc/content/en-US/api/core/websocketconnectioninfo-type.mdx`：当前物理连接的代际、url、协议和扩展。备注：23 行；声明来源 packages/core/src/web_socket/web_socket.ts:73
+- `doc/content/en-US/api/core/websocketdefinition-type.mdx`：传给 defineWebSocket 的端点契约。备注：36 行；声明来源 packages/core/src/web_socket/web_socket.ts:61；写出 maxOutgoingQueueSize 默认 0
+- `doc/content/en-US/api/core/websocketendpoint-type.mdx`：defineWebSocket 返回的可调用端点。备注：24 行；声明来源 packages/core/src/web_socket/web_socket.ts:132
+- `doc/content/en-US/api/core/websocketexecuteoptions-type.mdx`：单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：34 行；声明来源 packages/core/src/web_socket/web_socket.ts:117；第 30 行 WS `attempts` 累计预算未写明，与 P03b-core-ws-02 同根
+- `doc/content/en-US/api/core/websockethandle-type.mdx`：客户端传输使用的 WebSocket 实例表面。备注：29 行；声明来源 packages/core/src/client/config.ts:30
+- `doc/content/en-US/api/core/websockethandleconstructor-type.mdx`：withWebSocketHandle 接受的构造器类型。备注：18 行；声明来源 packages/core/src/client/config.ts:46
+- `doc/content/en-US/api/core/websockethandler-type.mdx`：WebSocket 拦截器链末端、负责打开会话的处理函数。备注：16 行；声明来源 packages/core/src/interceptor/interceptor.ts:101
+- `doc/content/en-US/api/core/websocketheartbeatconfig-type.mdx`：心跳间隔、消息、确认判断和超时。备注：25 行；声明来源 packages/core/src/web_socket/web_socket.ts:157
+- `doc/content/en-US/api/core/websocketincomingdata-type.mdx`：收到的 WebSocket 消息解码后的类型。备注：14 行；声明来源 packages/core/src/web_socket/web_socket.ts:45
+- `doc/content/en-US/api/core/websocketinterceptor-type.mdx`：withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：17 行；声明来源 packages/core/src/interceptor/interceptor.ts:111
+- `doc/content/en-US/api/core/websocketinterceptorfn-type.mdx`：WebSocket 拦截器函数的签名。备注：16 行；声明来源 packages/core/src/interceptor/interceptor.ts:106
+- `doc/content/en-US/api/core/websocketoutgoingdata-type.mdx`：session.send 接受的出站消息类型。备注：14 行；声明来源 packages/core/src/web_socket/web_socket.ts:48
+- `doc/content/en-US/api/core/websocketrequestshape-type.mdx`：WebSocket builder 只能返回 path 和 query。备注：23 行；声明来源 packages/core/src/internal/builder_types.ts:59；headers 与 body 为 never
+- `doc/content/en-US/api/core/websocketsession-type.mdx`：带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：41 行；声明来源 packages/core/src/web_socket/web_socket.ts:87；关闭码与 1 秒拆卸与源码一致
+- `doc/content/en-US/api/core/websocketsessionlike-type.mdx`：拦截器看到的、消息类型为 unknown 的会话表面。备注：27 行；声明来源 packages/core/src/interceptor/interceptor.ts:85
+- `doc/content/en-US/api/core/websocketstate-type.mdx`：受管 WebSocket 会话的生命周期状态字面量。备注：25 行；声明来源 packages/core/src/web_socket/web_socket.ts:42
+- `doc/content/en-US/api/core/withcredentials.mdx`：让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：16 行；声明来源 packages/core/src/client/option.ts:232
+- `doc/content/en-US/api/core/withendpoint.mdx`：设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：17 行；声明来源 packages/core/src/client/option.ts:22；第 14 行“relative base”见 P02-core-http-client-07
+- `doc/content/en-US/api/core/withheaders.mdx`：为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：18 行；声明来源 packages/core/src/client/option.ts:38
+- `doc/content/en-US/api/core/withhttphandle.mdx`：替换 HTTP 使用的 Fetch 实现。备注：17 行；声明来源 packages/core/src/client/option.ts:97
+- `doc/content/en-US/api/core/withinterceptors.mdx`：按注册顺序追加拦截器，不替换已有的。备注：17 行；声明来源 packages/core/src/client/option.ts:68
+- `doc/content/en-US/api/core/withqueryserializer.mdx`：替换查询对象如何变成查询字符串。备注：19 行；声明来源 packages/core/src/client/option.ts:84
+- `doc/content/en-US/api/core/withssehandle.mdx`：替换打开 SSE 所用的 Fetch 实现。备注：17 行；声明来源 packages/core/src/client/option.ts:110
+- `doc/content/en-US/api/core/withsseoninvalidevent.mdx`：观察没有 struct 或校验失败的 SSE 事件。备注：27 行；声明来源 packages/core/src/client/option.ts:190；抛错不关闭流，与源码一致
+- `doc/content/en-US/api/core/withssereconnect.mdx`：打开自动 SSE 重连并设置退避。备注：40 行；声明来源 packages/core/src/client/option.ts:202；第 31 行 `attempts` 累计预算未写明（P09b-doc-api-01）
+- `doc/content/en-US/api/core/withtimeout.mdx`：设置仅作用于 HTTP execute 的默认超时。备注：20 行；声明来源 packages/core/src/client/option.ts:55；API 页正确；源码 JSDoc 旧故障码见 P02-core-http-client-10
+- `doc/content/en-US/api/core/withwebsocketbeforeconnect.mdx`：在每次 WebSocket 连接尝试前运行钩子。备注：23 行；声明来源 packages/core/src/client/option.ts:134
+- `doc/content/en-US/api/core/withwebsockethandle.mdx`：替换 WebSocket 构造器。备注：17 行；声明来源 packages/core/src/client/option.ts:122
+- `doc/content/en-US/api/core/withwebsocketheartbeat.mdx`：打开 WebSocket 心跳。备注：29 行；声明来源 packages/core/src/client/option.ts:163
+- `doc/content/en-US/api/core/withwebsocketprotocols.mdx`：设置握手使用的子协议。备注：18 行；声明来源 packages/core/src/client/option.ts:151
+- `doc/content/en-US/api/core/withwebsocketreconnect.mdx`：打开自动 WebSocket 重连并给出退避公式。备注：31 行；声明来源 packages/core/src/client/option.ts:175；第 25 行预算范围见 P03b-core-ws-02；第 26 行 `maxDelayMs` 封顶表述见 P03b-core-ws-04
+- `doc/content/en-US/api/core/withxsrf.mdx`：为非安全方法的 HTTP 请求附上 XSRF 头。备注：25 行；声明来源 packages/core/src/client/option.ts:216；默认 cookie/header 与源码一致
+- `doc/content/en-US/api/errors.mdx`：故障变体、工厂和两个取消哨兵的模块页。备注：184 行；17 个 `FaultCode` 与 dist 一致；第 63 行 `String(fault)` 可直接记录的说法见 P04-core-infra-02
+- `doc/content/en-US/api/http.mdx`：HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：190 行；第 160 行 `HttpRequestShape.body` 写成 `unknown`，发布类型为 `BodyValue`（P09b-doc-api-03）
+- `doc/content/en-US/api/index.mdx`：API 参考入口，指向各包的手写查阅页。备注：36 行
+- `doc/content/en-US/api/interceptors.md`：HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：107 行
+- `doc/content/en-US/api/meta.json`：API 区导航根，pages 为 index 加自动子页。备注：5 行；Fumadocs 手写导航元数据
+- `doc/content/en-US/api/opentelemetry-server.mdx`：出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：103 行；第 99 行“非 JSON 媒体类型必告警”缺少 JSON representation 前提（P09b-doc-api-04）
+- `doc/content/en-US/api/opentelemetry-server/meta.json`：OpenTelemetry server API 侧边栏标题。备注：3 行；Fumadocs 手写导航元数据
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：20 行；声明来源 packages/opentelemetry-server/src/option.ts:22
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：28 行；声明来源 packages/opentelemetry-server/src/option.ts:38
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：20 行；声明来源 packages/opentelemetry-server/src/option.ts:23
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：27 行；声明来源 packages/opentelemetry-server/src/option.ts:11
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：22 行；声明来源 packages/opentelemetry-server/src/option.ts:24
+- `doc/content/en-US/api/opentelemetry-server/withopentelemetryserver.mdx`：安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：23 行；声明来源 packages/opentelemetry-server/src/option.ts:78
+- `doc/content/en-US/api/react.mdx`：React 适配模块页：ClientProvider 和 useClient。备注：42 行；入口声明 use client，与 dist banner 一致
+- `doc/content/en-US/api/react/clientprovider-type.mdx`：通过 context 把已有客户端提供给子树的 React 组件。备注：16 行；声明来源 packages/react/src/core.ts:31
+- `doc/content/en-US/api/react/clientproviderprops-type.mdx`：ClientProvider 的 props：必填 client 和可选 children。备注：18 行；声明来源 packages/react/src/core.ts:9
+- `doc/content/en-US/api/react/meta.json`：React API 侧边栏标题。备注：3 行；Fumadocs 手写导航元数据
+- `doc/content/en-US/api/react/useclient.mdx`：读取最近一层 ClientProvider 里的客户端的 hook。备注：17 行；声明来源 packages/react/src/core.ts:46
+- `doc/content/en-US/api/sse.mdx`：SSE 模块页：defineEventStream、执行选项和流句柄。备注：125 行
+- `doc/content/en-US/api/struct.md`：Struct 模块页：门面、Infer 和 StructError。备注：123 行；无 Standard Schema 声明
+- `doc/content/en-US/api/vue.mdx`：Vue 适配模块页：插件、注入键和 injectClient。备注：40 行
+- `doc/content/en-US/api/vue/createclientplugin.mdx`：创建把已有客户端 provide 给应用的 Vue 插件。备注：17 行；声明来源 packages/vue/src/core.ts:25
+- `doc/content/en-US/api/vue/http-client.mdx`：提供 Defjs 客户端所用的 Vue 注入键。备注：14 行；声明来源 packages/vue/src/core.ts:10
+- `doc/content/en-US/api/vue/injectclient.mdx`：读取 createClientPlugin 提供的客户端。备注：17 行；声明来源 packages/vue/src/core.ts:44
+- `doc/content/en-US/api/vue/meta.json`：Vue API 侧边栏标题。备注：3 行；Fumadocs 手写导航元数据
+- `doc/content/en-US/api/web-socket.mdx`：WebSocket 模块页：defineWebSocket、会话和执行选项。备注：162 行；第 106 行 WS `attempts` 累计预算未写明，与 P03b-core-ws-02 同根
+
+## 文档内容 · 多语言（中日韩）
+
+`ja-JP`、`ko-KR`、`zh-Hans`、`zh-Hant-HK`、`zh-Hant-TW` 五个 locale，逐文件镜像 en-US。（1070 个文件，审计分区 `P10a-i18n-cjk`）
+
+- `doc/content/ja-JP/api/client.mdx`：ja-JP 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/anyfault-type.mdx`：ja-JP 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/anystruct-type.mdx`：ja-JP 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/basicauthhttpinterceptor.mdx`：ja-JP 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/basicauthinterceptoroptions-type.mdx`：ja-JP 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/basicauthsseinterceptor.mdx`：ja-JP 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/builderinput-type.mdx`：ja-JP 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/client-type.mdx`：ja-JP 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/clientconfig-type.mdx`：ja-JP 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/clientoption-type.mdx`：ja-JP 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/clientoptions-type.mdx`：ja-JP 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/clientsseconfig-type.mdx`：ja-JP 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/clientsseoptions-type.mdx`：ja-JP 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/clientwebsocketoptions-type.mdx`：ja-JP 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createclient.mdx`：ja-JP 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createdecodefault.mdx`：ja-JP 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createhttpinterceptor.mdx`：ja-JP 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createhttpstatusfault.mdx`：ja-JP 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createnetworkfault.mdx`：ja-JP 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createpreflightfault.mdx`：ja-JP 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createresolvedrequesturl.mdx`：ja-JP 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createsseinterceptor.mdx`：ja-JP 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createundecodedhttpstatusfault.mdx`：ja-JP 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/createwebsocketinterceptor.mdx`：ja-JP 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/decodedresponse-type.mdx`：ja-JP 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/decodefault-type.mdx`：ja-JP 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/decodefaultcode-type.mdx`：ja-JP 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/defineeventstream.mdx`：ja-JP 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/definerequest.mdx`：ja-JP 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/definewebsocket.mdx`：ja-JP 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/err-aborted-type.mdx`：ja-JP 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/err-timeout-type.mdx`：ja-JP 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/errormap-type.mdx`：ja-JP 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamcloseinfo-type.mdx`：ja-JP 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamcommand-type.mdx`：ja-JP 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamdata-type.mdx`：ja-JP 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamdefinition-type.mdx`：ja-JP 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamendpoint-type.mdx`：ja-JP 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamexecuteoptions-type.mdx`：ja-JP 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamfaultcode-type.mdx`：ja-JP 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamhandle-type.mdx`：ja-JP 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamopeninfo-type.mdx`：ja-JP 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstreamrequestshape-type.mdx`：ja-JP 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/eventstructs-type.mdx`：ja-JP 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/executeeventstreamcommand.mdx`：ja-JP 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/executehttpcommand.mdx`：ja-JP 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/executewebsocketcommand.mdx`：ja-JP 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/fault-type.mdx`：ja-JP 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/faultclass-type.mdx`：ja-JP 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/faultcode-type.mdx`：ja-JP 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/faultof-type.mdx`：ja-JP 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/fetchhandle-type.mdx`：ja-JP 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/fetchhandler.mdx`：ja-JP 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/flattenedstructerror-type.mdx`：ja-JP 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/formattedstructerror-type.mdx`：ja-JP 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpawaitresult-type.mdx`：ja-JP 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpcommand-type.mdx`：ja-JP 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpexecuteoptions-type.mdx`：ja-JP 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpinterceptor-type.mdx`：ja-JP 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpinterceptornext-type.mdx`：ja-JP 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpmeta-type.mdx`：ja-JP 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpprogressevent-type.mdx`：ja-JP 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpprogressfn-type.mdx`：ja-JP 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httprequest-type.mdx`：ja-JP 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httprequestshape-type.mdx`：ja-JP 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpresponse-type.mdx`：ja-JP 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpresponsetype-type.mdx`：ja-JP 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpstatusfault-type.mdx`：ja-JP 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/httpstatusfaultof-type.mdx`：ja-JP 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/infer-type.mdx`：ja-JP 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/interceptor-type.mdx`：ja-JP 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/interceptorfn-type.mdx`：ja-JP 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/makeresponse.mdx`：ja-JP 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/makeresponseoptions-type.mdx`：ja-JP 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/manualsocketclosereason-type.mdx`：ja-JP 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/meta.json`：ja-JP 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/objectstruct-type.mdx`：ja-JP 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/parseresult-type.mdx`：ja-JP 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/preflightfault-type.mdx`：ja-JP 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/preflightfaultcode-type.mdx`：ja-JP 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/queryserializer-type.mdx`：ja-JP 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/requestdefinition-type.mdx`：ja-JP 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/requestendpoint-type.mdx`：ja-JP 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/requesterrordata-type.mdx`：ja-JP 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/requestsuccessdata-type.mdx`：ja-JP 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/socketawaitresult-type.mdx`：ja-JP 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/socketlifecycleoutcome-type.mdx`：ja-JP 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/ssehandler-type.mdx`：ja-JP 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/sseinterceptor-type.mdx`：ja-JP 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/sseinterceptorfn-type.mdx`：ja-JP 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/streamawaitresult-type.mdx`：ja-JP 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-any.mdx`：ja-JP 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-array.mdx`：ja-JP 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-arraybuffer.mdx`：ja-JP 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-bigint.mdx`：ja-JP 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-blob.mdx`：ja-JP 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-boolean.mdx`：ja-JP 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-date.mdx`：ja-JP 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-discriminatedunion.mdx`：ja-JP 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-enum.mdx`：ja-JP 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-file.mdx`：ja-JP 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-formdata.mdx`：ja-JP 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-intersection.mdx`：ja-JP 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-literal.mdx`：ja-JP 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-null.mdx`：ja-JP 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-number.mdx`：ja-JP 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-object.mdx`：ja-JP 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-or.mdx`：ja-JP 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-parse.mdx`：ja-JP 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-record.mdx`：ja-JP 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-string.mdx`：ja-JP 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-symbol-type.mdx`：ja-JP 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-tuple.mdx`：ja-JP 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-type.mdx`：ja-JP 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-unknown.mdx`：ja-JP 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct-urlencoded.mdx`：ja-JP 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/struct.mdx`：ja-JP 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/structerror-type.mdx`：ja-JP 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/structinput-type.mdx`：ja-JP 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/structissue-type.mdx`：ja-JP 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/structlike-type.mdx`：ja-JP 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/structmethods-type.mdx`：ja-JP 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/userequestconfig-type.mdx`：ja-JP 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/usewebsocketconfig-type.mdx`：ja-JP 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketcloseinfo-type.mdx`：ja-JP 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketcommand-type.mdx`：ja-JP 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketconnectioninfo-type.mdx`：ja-JP 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketdefinition-type.mdx`：ja-JP 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketendpoint-type.mdx`：ja-JP 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketexecuteoptions-type.mdx`：ja-JP 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websockethandle-type.mdx`：ja-JP 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websockethandleconstructor-type.mdx`：ja-JP 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websockethandler-type.mdx`：ja-JP 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketheartbeatconfig-type.mdx`：ja-JP 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketincomingdata-type.mdx`：ja-JP 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketinterceptor-type.mdx`：ja-JP 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketinterceptorfn-type.mdx`：ja-JP 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketoutgoingdata-type.mdx`：ja-JP 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketrequestshape-type.mdx`：ja-JP 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketsession-type.mdx`：ja-JP 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketsessionlike-type.mdx`：ja-JP 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/websocketstate-type.mdx`：ja-JP 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withcredentials.mdx`：ja-JP 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withendpoint.mdx`：ja-JP 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withheaders.mdx`：ja-JP 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withhttphandle.mdx`：ja-JP 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withinterceptors.mdx`：ja-JP 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withqueryserializer.mdx`：ja-JP 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withssehandle.mdx`：ja-JP 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withsseoninvalidevent.mdx`：ja-JP 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withssereconnect.mdx`：ja-JP 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withtimeout.mdx`：ja-JP 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withwebsocketbeforeconnect.mdx`：ja-JP 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withwebsockethandle.mdx`：ja-JP 译文。替换 WebSocket 构造器。备注：例外：第 14 行两个站内链接因定语前置而顺序对调，目标集合与锚文本一致，均指向正确页面
+- `doc/content/ja-JP/api/core/withwebsocketheartbeat.mdx`：ja-JP 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withwebsocketprotocols.mdx`：ja-JP 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withwebsocketreconnect.mdx`：ja-JP 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/core/withxsrf.mdx`：ja-JP 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/errors.mdx`：ja-JP 译文。故障变体、工厂和两个取消哨兵的模块页。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/http.mdx`：ja-JP 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/index.mdx`：ja-JP 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/interceptors.md`：ja-JP 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/meta.json`：ja-JP 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server.mdx`：ja-JP 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server/meta.json`：ja-JP 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：ja-JP 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：ja-JP 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：ja-JP 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：ja-JP 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：ja-JP 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/opentelemetry-server/withopentelemetryserver.mdx`：ja-JP 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/react.mdx`：ja-JP 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/react/clientprovider-type.mdx`：ja-JP 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/react/clientproviderprops-type.mdx`：ja-JP 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/react/meta.json`：ja-JP 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/react/useclient.mdx`：ja-JP 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/sse.mdx`：ja-JP 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/struct.md`：ja-JP 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/vue.mdx`：ja-JP 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/vue/createclientplugin.mdx`：ja-JP 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/vue/http-client.mdx`：ja-JP 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/vue/injectclient.mdx`：ja-JP 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/vue/meta.json`：ja-JP 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ja-JP/api/web-socket.mdx`：ja-JP 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/client.mdx`：ja-JP 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/commands.mdx`：ja-JP 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/design-decisions.mdx`：ja-JP 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/errors.mdx`：ja-JP 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/http.mdx`：ja-JP 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/index.md`：ja-JP 译文。指南目录页。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/integrations/meta.json`：ja-JP 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/integrations/opentelemetry-server.mdx`：ja-JP 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/integrations/react.mdx`：ja-JP 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/integrations/vue.mdx`：ja-JP 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/interceptors.mdx`：ja-JP 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/meta.json`：ja-JP 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/sse.mdx`：ja-JP 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/start.mdx`：ja-JP 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/struct.mdx`：ja-JP 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/ja-JP/docs/web-socket.mdx`：ja-JP 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：结构与 en-US 一致
+- `doc/content/ja-JP/index.mdx`：ja-JP 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/ja-JP/meta.json`：ja-JP 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/cancel-http.mdx`：ja-JP 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/consume-sse.mdx`：ja-JP 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/etag-revalidate.mdx`：ja-JP 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/get-declared-404.mdx`：ja-JP 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/graphql-http-envelope.mdx`：ja-JP 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/index.md`：ja-JP 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/meta.json`：ja-JP 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/post-json.mdx`：ja-JP 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/publish-http-sdk.mdx`：ja-JP 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/refresh-bearer-once.mdx`：ja-JP 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/test-with-handle.mdx`：ja-JP 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/ja-JP/recipes/websocket-session.mdx`：ja-JP 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/client.mdx`：ko-KR 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/anyfault-type.mdx`：ko-KR 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/anystruct-type.mdx`：ko-KR 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/basicauthhttpinterceptor.mdx`：ko-KR 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/basicauthinterceptoroptions-type.mdx`：ko-KR 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/basicauthsseinterceptor.mdx`：ko-KR 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/builderinput-type.mdx`：ko-KR 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/client-type.mdx`：ko-KR 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/clientconfig-type.mdx`：ko-KR 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/clientoption-type.mdx`：ko-KR 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/clientoptions-type.mdx`：ko-KR 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/clientsseconfig-type.mdx`：ko-KR 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/clientsseoptions-type.mdx`：ko-KR 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/clientwebsocketoptions-type.mdx`：ko-KR 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createclient.mdx`：ko-KR 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createdecodefault.mdx`：ko-KR 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createhttpinterceptor.mdx`：ko-KR 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createhttpstatusfault.mdx`：ko-KR 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createnetworkfault.mdx`：ko-KR 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createpreflightfault.mdx`：ko-KR 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createresolvedrequesturl.mdx`：ko-KR 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createsseinterceptor.mdx`：ko-KR 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createundecodedhttpstatusfault.mdx`：ko-KR 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/createwebsocketinterceptor.mdx`：ko-KR 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/decodedresponse-type.mdx`：ko-KR 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/decodefault-type.mdx`：ko-KR 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/decodefaultcode-type.mdx`：ko-KR 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/defineeventstream.mdx`：ko-KR 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/definerequest.mdx`：ko-KR 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/definewebsocket.mdx`：ko-KR 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/err-aborted-type.mdx`：ko-KR 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/err-timeout-type.mdx`：ko-KR 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/errormap-type.mdx`：ko-KR 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamcloseinfo-type.mdx`：ko-KR 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamcommand-type.mdx`：ko-KR 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamdata-type.mdx`：ko-KR 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamdefinition-type.mdx`：ko-KR 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamendpoint-type.mdx`：ko-KR 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamexecuteoptions-type.mdx`：ko-KR 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamfaultcode-type.mdx`：ko-KR 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamhandle-type.mdx`：ko-KR 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamopeninfo-type.mdx`：ko-KR 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstreamrequestshape-type.mdx`：ko-KR 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/eventstructs-type.mdx`：ko-KR 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/executeeventstreamcommand.mdx`：ko-KR 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/executehttpcommand.mdx`：ko-KR 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/executewebsocketcommand.mdx`：ko-KR 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/fault-type.mdx`：ko-KR 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/faultclass-type.mdx`：ko-KR 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/faultcode-type.mdx`：ko-KR 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/faultof-type.mdx`：ko-KR 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/fetchhandle-type.mdx`：ko-KR 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/fetchhandler.mdx`：ko-KR 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/flattenedstructerror-type.mdx`：ko-KR 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/formattedstructerror-type.mdx`：ko-KR 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpawaitresult-type.mdx`：ko-KR 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpcommand-type.mdx`：ko-KR 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpexecuteoptions-type.mdx`：ko-KR 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpinterceptor-type.mdx`：ko-KR 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpinterceptornext-type.mdx`：ko-KR 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpmeta-type.mdx`：ko-KR 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpprogressevent-type.mdx`：ko-KR 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpprogressfn-type.mdx`：ko-KR 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httprequest-type.mdx`：ko-KR 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httprequestshape-type.mdx`：ko-KR 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpresponse-type.mdx`：ko-KR 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpresponsetype-type.mdx`：ko-KR 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpstatusfault-type.mdx`：ko-KR 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/httpstatusfaultof-type.mdx`：ko-KR 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/infer-type.mdx`：ko-KR 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/interceptor-type.mdx`：ko-KR 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/interceptorfn-type.mdx`：ko-KR 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/makeresponse.mdx`：ko-KR 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/makeresponseoptions-type.mdx`：ko-KR 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/manualsocketclosereason-type.mdx`：ko-KR 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/meta.json`：ko-KR 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/objectstruct-type.mdx`：ko-KR 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/parseresult-type.mdx`：ko-KR 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/preflightfault-type.mdx`：ko-KR 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/preflightfaultcode-type.mdx`：ko-KR 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/queryserializer-type.mdx`：ko-KR 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/requestdefinition-type.mdx`：ko-KR 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/requestendpoint-type.mdx`：ko-KR 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/requesterrordata-type.mdx`：ko-KR 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/requestsuccessdata-type.mdx`：ko-KR 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/socketawaitresult-type.mdx`：ko-KR 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/socketlifecycleoutcome-type.mdx`：ko-KR 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/ssehandler-type.mdx`：ko-KR 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/sseinterceptor-type.mdx`：ko-KR 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/sseinterceptorfn-type.mdx`：ko-KR 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/streamawaitresult-type.mdx`：ko-KR 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-any.mdx`：ko-KR 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-array.mdx`：ko-KR 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-arraybuffer.mdx`：ko-KR 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-bigint.mdx`：ko-KR 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-blob.mdx`：ko-KR 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-boolean.mdx`：ko-KR 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-date.mdx`：ko-KR 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-discriminatedunion.mdx`：ko-KR 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-enum.mdx`：ko-KR 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-file.mdx`：ko-KR 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-formdata.mdx`：ko-KR 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-intersection.mdx`：ko-KR 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-literal.mdx`：ko-KR 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-null.mdx`：ko-KR 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-number.mdx`：ko-KR 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-object.mdx`：ko-KR 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-or.mdx`：ko-KR 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-parse.mdx`：ko-KR 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-record.mdx`：ko-KR 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-string.mdx`：ko-KR 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-symbol-type.mdx`：ko-KR 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-tuple.mdx`：ko-KR 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-type.mdx`：ko-KR 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-unknown.mdx`：ko-KR 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct-urlencoded.mdx`：ko-KR 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/struct.mdx`：ko-KR 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/structerror-type.mdx`：ko-KR 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/structinput-type.mdx`：ko-KR 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/structissue-type.mdx`：ko-KR 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/structlike-type.mdx`：ko-KR 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/structmethods-type.mdx`：ko-KR 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/userequestconfig-type.mdx`：ko-KR 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/usewebsocketconfig-type.mdx`：ko-KR 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketcloseinfo-type.mdx`：ko-KR 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketcommand-type.mdx`：ko-KR 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketconnectioninfo-type.mdx`：ko-KR 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketdefinition-type.mdx`：ko-KR 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketendpoint-type.mdx`：ko-KR 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketexecuteoptions-type.mdx`：ko-KR 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websockethandle-type.mdx`：ko-KR 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websockethandleconstructor-type.mdx`：ko-KR 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websockethandler-type.mdx`：ko-KR 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketheartbeatconfig-type.mdx`：ko-KR 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketincomingdata-type.mdx`：ko-KR 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketinterceptor-type.mdx`：ko-KR 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketinterceptorfn-type.mdx`：ko-KR 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketoutgoingdata-type.mdx`：ko-KR 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketrequestshape-type.mdx`：ko-KR 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketsession-type.mdx`：ko-KR 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketsessionlike-type.mdx`：ko-KR 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/websocketstate-type.mdx`：ko-KR 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withcredentials.mdx`：ko-KR 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withendpoint.mdx`：ko-KR 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withheaders.mdx`：ko-KR 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withhttphandle.mdx`：ko-KR 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withinterceptors.mdx`：ko-KR 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withqueryserializer.mdx`：ko-KR 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withssehandle.mdx`：ko-KR 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withsseoninvalidevent.mdx`：ko-KR 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withssereconnect.mdx`：ko-KR 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withtimeout.mdx`：ko-KR 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withwebsocketbeforeconnect.mdx`：ko-KR 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withwebsockethandle.mdx`：ko-KR 译文。替换 WebSocket 构造器。备注：例外：同上，链接顺序对调，目标正确
+- `doc/content/ko-KR/api/core/withwebsocketheartbeat.mdx`：ko-KR 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withwebsocketprotocols.mdx`：ko-KR 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withwebsocketreconnect.mdx`：ko-KR 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/core/withxsrf.mdx`：ko-KR 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/errors.mdx`：ko-KR 译文。故障变体、工厂和两个取消哨兵的模块页。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/http.mdx`：ko-KR 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/index.mdx`：ko-KR 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/interceptors.md`：ko-KR 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/meta.json`：ko-KR 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server.mdx`：ko-KR 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server/meta.json`：ko-KR 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：ko-KR 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：ko-KR 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：ko-KR 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：ko-KR 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：ko-KR 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/opentelemetry-server/withopentelemetryserver.mdx`：ko-KR 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/react.mdx`：ko-KR 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/react/clientprovider-type.mdx`：ko-KR 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/react/clientproviderprops-type.mdx`：ko-KR 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/react/meta.json`：ko-KR 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/react/useclient.mdx`：ko-KR 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/sse.mdx`：ko-KR 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/struct.md`：ko-KR 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/vue.mdx`：ko-KR 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/vue/createclientplugin.mdx`：ko-KR 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/vue/http-client.mdx`：ko-KR 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/vue/injectclient.mdx`：ko-KR 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/vue/meta.json`：ko-KR 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ko-KR/api/web-socket.mdx`：ko-KR 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/client.mdx`：ko-KR 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/commands.mdx`：ko-KR 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/design-decisions.mdx`：ko-KR 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/errors.mdx`：ko-KR 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/http.mdx`：ko-KR 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/index.md`：ko-KR 译文。指南目录页。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/integrations/meta.json`：ko-KR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/integrations/opentelemetry-server.mdx`：ko-KR 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/integrations/react.mdx`：ko-KR 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/integrations/vue.mdx`：ko-KR 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/interceptors.mdx`：ko-KR 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/meta.json`：ko-KR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/sse.mdx`：ko-KR 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/start.mdx`：ko-KR 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/struct.mdx`：ko-KR 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/ko-KR/docs/web-socket.mdx`：ko-KR 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：结构与 en-US 一致
+- `doc/content/ko-KR/index.mdx`：ko-KR 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/ko-KR/meta.json`：ko-KR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/cancel-http.mdx`：ko-KR 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/consume-sse.mdx`：ko-KR 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/etag-revalidate.mdx`：ko-KR 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/get-declared-404.mdx`：ko-KR 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/graphql-http-envelope.mdx`：ko-KR 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/index.md`：ko-KR 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/meta.json`：ko-KR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/post-json.mdx`：ko-KR 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/publish-http-sdk.mdx`：ko-KR 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/refresh-bearer-once.mdx`：ko-KR 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/test-with-handle.mdx`：ko-KR 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/ko-KR/recipes/websocket-session.mdx`：ko-KR 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/client.mdx`：zh-Hans 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/anyfault-type.mdx`：zh-Hans 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/anystruct-type.mdx`：zh-Hans 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/basicauthhttpinterceptor.mdx`：zh-Hans 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/basicauthinterceptoroptions-type.mdx`：zh-Hans 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/basicauthsseinterceptor.mdx`：zh-Hans 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/builderinput-type.mdx`：zh-Hans 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/client-type.mdx`：zh-Hans 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/clientconfig-type.mdx`：zh-Hans 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/clientoption-type.mdx`：zh-Hans 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/clientoptions-type.mdx`：zh-Hans 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/clientsseconfig-type.mdx`：zh-Hans 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/clientsseoptions-type.mdx`：zh-Hans 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/clientwebsocketoptions-type.mdx`：zh-Hans 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createclient.mdx`：zh-Hans 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createdecodefault.mdx`：zh-Hans 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createhttpinterceptor.mdx`：zh-Hans 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createhttpstatusfault.mdx`：zh-Hans 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createnetworkfault.mdx`：zh-Hans 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createpreflightfault.mdx`：zh-Hans 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createresolvedrequesturl.mdx`：zh-Hans 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createsseinterceptor.mdx`：zh-Hans 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createundecodedhttpstatusfault.mdx`：zh-Hans 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/createwebsocketinterceptor.mdx`：zh-Hans 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/decodedresponse-type.mdx`：zh-Hans 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/decodefault-type.mdx`：zh-Hans 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/decodefaultcode-type.mdx`：zh-Hans 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/defineeventstream.mdx`：zh-Hans 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/definerequest.mdx`：zh-Hans 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/definewebsocket.mdx`：zh-Hans 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/err-aborted-type.mdx`：zh-Hans 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/err-timeout-type.mdx`：zh-Hans 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/errormap-type.mdx`：zh-Hans 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamcloseinfo-type.mdx`：zh-Hans 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamcommand-type.mdx`：zh-Hans 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamdata-type.mdx`：zh-Hans 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamdefinition-type.mdx`：zh-Hans 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamendpoint-type.mdx`：zh-Hans 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamexecuteoptions-type.mdx`：zh-Hans 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamfaultcode-type.mdx`：zh-Hans 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamhandle-type.mdx`：zh-Hans 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamopeninfo-type.mdx`：zh-Hans 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstreamrequestshape-type.mdx`：zh-Hans 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/eventstructs-type.mdx`：zh-Hans 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/executeeventstreamcommand.mdx`：zh-Hans 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/executehttpcommand.mdx`：zh-Hans 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/executewebsocketcommand.mdx`：zh-Hans 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/fault-type.mdx`：zh-Hans 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/faultclass-type.mdx`：zh-Hans 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/faultcode-type.mdx`：zh-Hans 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/faultof-type.mdx`：zh-Hans 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/fetchhandle-type.mdx`：zh-Hans 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/fetchhandler.mdx`：zh-Hans 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/flattenedstructerror-type.mdx`：zh-Hans 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/formattedstructerror-type.mdx`：zh-Hans 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpawaitresult-type.mdx`：zh-Hans 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpcommand-type.mdx`：zh-Hans 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpexecuteoptions-type.mdx`：zh-Hans 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpinterceptor-type.mdx`：zh-Hans 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpinterceptornext-type.mdx`：zh-Hans 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpmeta-type.mdx`：zh-Hans 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpprogressevent-type.mdx`：zh-Hans 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpprogressfn-type.mdx`：zh-Hans 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httprequest-type.mdx`：zh-Hans 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httprequestshape-type.mdx`：zh-Hans 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpresponse-type.mdx`：zh-Hans 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpresponsetype-type.mdx`：zh-Hans 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpstatusfault-type.mdx`：zh-Hans 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/httpstatusfaultof-type.mdx`：zh-Hans 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/infer-type.mdx`：zh-Hans 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/interceptor-type.mdx`：zh-Hans 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/interceptorfn-type.mdx`：zh-Hans 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/makeresponse.mdx`：zh-Hans 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/makeresponseoptions-type.mdx`：zh-Hans 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/manualsocketclosereason-type.mdx`：zh-Hans 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/meta.json`：zh-Hans 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/objectstruct-type.mdx`：zh-Hans 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/parseresult-type.mdx`：zh-Hans 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/preflightfault-type.mdx`：zh-Hans 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/preflightfaultcode-type.mdx`：zh-Hans 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/queryserializer-type.mdx`：zh-Hans 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/requestdefinition-type.mdx`：zh-Hans 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/requestendpoint-type.mdx`：zh-Hans 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/requesterrordata-type.mdx`：zh-Hans 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/requestsuccessdata-type.mdx`：zh-Hans 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/socketawaitresult-type.mdx`：zh-Hans 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/socketlifecycleoutcome-type.mdx`：zh-Hans 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/ssehandler-type.mdx`：zh-Hans 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/sseinterceptor-type.mdx`：zh-Hans 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/sseinterceptorfn-type.mdx`：zh-Hans 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/streamawaitresult-type.mdx`：zh-Hans 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-any.mdx`：zh-Hans 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-array.mdx`：zh-Hans 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-arraybuffer.mdx`：zh-Hans 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-bigint.mdx`：zh-Hans 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-blob.mdx`：zh-Hans 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-boolean.mdx`：zh-Hans 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-date.mdx`：zh-Hans 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-discriminatedunion.mdx`：zh-Hans 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-enum.mdx`：zh-Hans 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-file.mdx`：zh-Hans 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-formdata.mdx`：zh-Hans 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-intersection.mdx`：zh-Hans 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-literal.mdx`：zh-Hans 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-null.mdx`：zh-Hans 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-number.mdx`：zh-Hans 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-object.mdx`：zh-Hans 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-or.mdx`：zh-Hans 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-parse.mdx`：zh-Hans 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-record.mdx`：zh-Hans 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-string.mdx`：zh-Hans 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-symbol-type.mdx`：zh-Hans 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-tuple.mdx`：zh-Hans 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-type.mdx`：zh-Hans 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-unknown.mdx`：zh-Hans 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct-urlencoded.mdx`：zh-Hans 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/struct.mdx`：zh-Hans 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/structerror-type.mdx`：zh-Hans 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/structinput-type.mdx`：zh-Hans 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/structissue-type.mdx`：zh-Hans 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/structlike-type.mdx`：zh-Hans 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/structmethods-type.mdx`：zh-Hans 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/userequestconfig-type.mdx`：zh-Hans 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/usewebsocketconfig-type.mdx`：zh-Hans 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketcloseinfo-type.mdx`：zh-Hans 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketcommand-type.mdx`：zh-Hans 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketconnectioninfo-type.mdx`：zh-Hans 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketdefinition-type.mdx`：zh-Hans 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketendpoint-type.mdx`：zh-Hans 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketexecuteoptions-type.mdx`：zh-Hans 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websockethandle-type.mdx`：zh-Hans 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websockethandleconstructor-type.mdx`：zh-Hans 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websockethandler-type.mdx`：zh-Hans 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketheartbeatconfig-type.mdx`：zh-Hans 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketincomingdata-type.mdx`：zh-Hans 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketinterceptor-type.mdx`：zh-Hans 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketinterceptorfn-type.mdx`：zh-Hans 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketoutgoingdata-type.mdx`：zh-Hans 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketrequestshape-type.mdx`：zh-Hans 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketsession-type.mdx`：zh-Hans 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketsessionlike-type.mdx`：zh-Hans 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/websocketstate-type.mdx`：zh-Hans 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withcredentials.mdx`：zh-Hans 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withendpoint.mdx`：zh-Hans 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withheaders.mdx`：zh-Hans 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withhttphandle.mdx`：zh-Hans 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withinterceptors.mdx`：zh-Hans 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withqueryserializer.mdx`：zh-Hans 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withssehandle.mdx`：zh-Hans 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withsseoninvalidevent.mdx`：zh-Hans 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withssereconnect.mdx`：zh-Hans 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withtimeout.mdx`：zh-Hans 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withwebsocketbeforeconnect.mdx`：zh-Hans 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withwebsockethandle.mdx`：zh-Hans 译文。替换 WebSocket 构造器。备注：例外：同上，链接顺序对调，目标正确
+- `doc/content/zh-Hans/api/core/withwebsocketheartbeat.mdx`：zh-Hans 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withwebsocketprotocols.mdx`：zh-Hans 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withwebsocketreconnect.mdx`：zh-Hans 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/core/withxsrf.mdx`：zh-Hans 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/errors.mdx`：zh-Hans 译文。故障变体、工厂和两个取消哨兵的模块页。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/http.mdx`：zh-Hans 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/index.mdx`：zh-Hans 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/interceptors.md`：zh-Hans 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/meta.json`：zh-Hans 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server.mdx`：zh-Hans 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server/meta.json`：zh-Hans 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：zh-Hans 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：zh-Hans 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：zh-Hans 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：zh-Hans 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：zh-Hans 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/opentelemetry-server/withopentelemetryserver.mdx`：zh-Hans 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/react.mdx`：zh-Hans 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/react/clientprovider-type.mdx`：zh-Hans 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/react/clientproviderprops-type.mdx`：zh-Hans 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/react/meta.json`：zh-Hans 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/react/useclient.mdx`：zh-Hans 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/sse.mdx`：zh-Hans 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/struct.md`：zh-Hans 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/vue.mdx`：zh-Hans 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/vue/createclientplugin.mdx`：zh-Hans 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/vue/http-client.mdx`：zh-Hans 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/vue/injectclient.mdx`：zh-Hans 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/vue/meta.json`：zh-Hans 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/api/web-socket.mdx`：zh-Hans 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/client.mdx`：zh-Hans 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/commands.mdx`：zh-Hans 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/design-decisions.mdx`：zh-Hans 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/errors.mdx`：zh-Hans 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/http.mdx`：zh-Hans 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：例外：一处行内 ```ts 围栏的两行 `//` 注释被翻译（"Anonymous root: emits id" / "Typed root, row field declares alias: emits wire_id"），代码本体字节相同，注释含义一致；不构成发现
+- `doc/content/zh-Hans/docs/index.md`：zh-Hans 译文。指南目录页。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/integrations/meta.json`：zh-Hans 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/integrations/opentelemetry-server.mdx`：zh-Hans 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：例外（语义）：第 71、169 行把 "an absent declared body (for example 204)" 译成"未声明 body 的情况"，见 P10a-i18n-cjk-01；结构与 en-US 相同
+- `doc/content/zh-Hans/docs/integrations/react.mdx`：zh-Hans 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/integrations/vue.mdx`：zh-Hans 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/interceptors.mdx`：zh-Hans 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/meta.json`：zh-Hans 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/sse.mdx`：zh-Hans 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/start.mdx`：zh-Hans 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/docs/struct.mdx`：zh-Hans 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：例外：与 `docs/http.mdx` 同一段示例，同样只有两行注释被翻译，含义一致；不构成发现
+- `doc/content/zh-Hans/docs/web-socket.mdx`：zh-Hans 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/index.mdx`：zh-Hans 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/meta.json`：zh-Hans 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/cancel-http.mdx`：zh-Hans 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/consume-sse.mdx`：zh-Hans 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/etag-revalidate.mdx`：zh-Hans 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/get-declared-404.mdx`：zh-Hans 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/graphql-http-envelope.mdx`：zh-Hans 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/index.md`：zh-Hans 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/meta.json`：zh-Hans 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/post-json.mdx`：zh-Hans 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/publish-http-sdk.mdx`：zh-Hans 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/refresh-bearer-once.mdx`：zh-Hans 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/test-with-handle.mdx`：zh-Hans 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hans/recipes/websocket-session.mdx`：zh-Hans 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/client.mdx`：zh-Hant-HK 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/anyfault-type.mdx`：zh-Hant-HK 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/anystruct-type.mdx`：zh-Hant-HK 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/basicauthhttpinterceptor.mdx`：zh-Hant-HK 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/basicauthinterceptoroptions-type.mdx`：zh-Hant-HK 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/basicauthsseinterceptor.mdx`：zh-Hant-HK 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/builderinput-type.mdx`：zh-Hant-HK 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/client-type.mdx`：zh-Hant-HK 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/clientconfig-type.mdx`：zh-Hant-HK 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/clientoption-type.mdx`：zh-Hant-HK 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/clientoptions-type.mdx`：zh-Hant-HK 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/clientsseconfig-type.mdx`：zh-Hant-HK 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/clientsseoptions-type.mdx`：zh-Hant-HK 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/clientwebsocketoptions-type.mdx`：zh-Hant-HK 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createclient.mdx`：zh-Hant-HK 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createdecodefault.mdx`：zh-Hant-HK 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createhttpinterceptor.mdx`：zh-Hant-HK 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createhttpstatusfault.mdx`：zh-Hant-HK 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createnetworkfault.mdx`：zh-Hant-HK 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createpreflightfault.mdx`：zh-Hant-HK 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createresolvedrequesturl.mdx`：zh-Hant-HK 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createsseinterceptor.mdx`：zh-Hant-HK 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createundecodedhttpstatusfault.mdx`：zh-Hant-HK 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/createwebsocketinterceptor.mdx`：zh-Hant-HK 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/decodedresponse-type.mdx`：zh-Hant-HK 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/decodefault-type.mdx`：zh-Hant-HK 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/decodefaultcode-type.mdx`：zh-Hant-HK 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/defineeventstream.mdx`：zh-Hant-HK 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/definerequest.mdx`：zh-Hant-HK 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/definewebsocket.mdx`：zh-Hant-HK 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/err-aborted-type.mdx`：zh-Hant-HK 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/err-timeout-type.mdx`：zh-Hant-HK 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/errormap-type.mdx`：zh-Hant-HK 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamcloseinfo-type.mdx`：zh-Hant-HK 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamcommand-type.mdx`：zh-Hant-HK 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamdata-type.mdx`：zh-Hant-HK 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamdefinition-type.mdx`：zh-Hant-HK 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamendpoint-type.mdx`：zh-Hant-HK 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamexecuteoptions-type.mdx`：zh-Hant-HK 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamfaultcode-type.mdx`：zh-Hant-HK 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamhandle-type.mdx`：zh-Hant-HK 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamopeninfo-type.mdx`：zh-Hant-HK 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstreamrequestshape-type.mdx`：zh-Hant-HK 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/eventstructs-type.mdx`：zh-Hant-HK 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/executeeventstreamcommand.mdx`：zh-Hant-HK 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/executehttpcommand.mdx`：zh-Hant-HK 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/executewebsocketcommand.mdx`：zh-Hant-HK 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/fault-type.mdx`：zh-Hant-HK 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/faultclass-type.mdx`：zh-Hant-HK 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/faultcode-type.mdx`：zh-Hant-HK 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/faultof-type.mdx`：zh-Hant-HK 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/fetchhandle-type.mdx`：zh-Hant-HK 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/fetchhandler.mdx`：zh-Hant-HK 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/flattenedstructerror-type.mdx`：zh-Hant-HK 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/formattedstructerror-type.mdx`：zh-Hant-HK 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpawaitresult-type.mdx`：zh-Hant-HK 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpcommand-type.mdx`：zh-Hant-HK 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpexecuteoptions-type.mdx`：zh-Hant-HK 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpinterceptor-type.mdx`：zh-Hant-HK 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpinterceptornext-type.mdx`：zh-Hant-HK 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpmeta-type.mdx`：zh-Hant-HK 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpprogressevent-type.mdx`：zh-Hant-HK 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpprogressfn-type.mdx`：zh-Hant-HK 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httprequest-type.mdx`：zh-Hant-HK 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httprequestshape-type.mdx`：zh-Hant-HK 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpresponse-type.mdx`：zh-Hant-HK 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpresponsetype-type.mdx`：zh-Hant-HK 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpstatusfault-type.mdx`：zh-Hant-HK 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/httpstatusfaultof-type.mdx`：zh-Hant-HK 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/infer-type.mdx`：zh-Hant-HK 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/interceptor-type.mdx`：zh-Hant-HK 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/interceptorfn-type.mdx`：zh-Hant-HK 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/makeresponse.mdx`：zh-Hant-HK 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/makeresponseoptions-type.mdx`：zh-Hant-HK 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/manualsocketclosereason-type.mdx`：zh-Hant-HK 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/meta.json`：zh-Hant-HK 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/objectstruct-type.mdx`：zh-Hant-HK 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/parseresult-type.mdx`：zh-Hant-HK 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/preflightfault-type.mdx`：zh-Hant-HK 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/preflightfaultcode-type.mdx`：zh-Hant-HK 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/queryserializer-type.mdx`：zh-Hant-HK 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/requestdefinition-type.mdx`：zh-Hant-HK 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/requestendpoint-type.mdx`：zh-Hant-HK 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/requesterrordata-type.mdx`：zh-Hant-HK 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/requestsuccessdata-type.mdx`：zh-Hant-HK 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/socketawaitresult-type.mdx`：zh-Hant-HK 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/socketlifecycleoutcome-type.mdx`：zh-Hant-HK 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/ssehandler-type.mdx`：zh-Hant-HK 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/sseinterceptor-type.mdx`：zh-Hant-HK 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/sseinterceptorfn-type.mdx`：zh-Hant-HK 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/streamawaitresult-type.mdx`：zh-Hant-HK 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-any.mdx`：zh-Hant-HK 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-array.mdx`：zh-Hant-HK 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-arraybuffer.mdx`：zh-Hant-HK 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-bigint.mdx`：zh-Hant-HK 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-blob.mdx`：zh-Hant-HK 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-boolean.mdx`：zh-Hant-HK 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-date.mdx`：zh-Hant-HK 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-discriminatedunion.mdx`：zh-Hant-HK 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-enum.mdx`：zh-Hant-HK 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-file.mdx`：zh-Hant-HK 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-formdata.mdx`：zh-Hant-HK 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-intersection.mdx`：zh-Hant-HK 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-literal.mdx`：zh-Hant-HK 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-null.mdx`：zh-Hant-HK 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-number.mdx`：zh-Hant-HK 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-object.mdx`：zh-Hant-HK 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-or.mdx`：zh-Hant-HK 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-parse.mdx`：zh-Hant-HK 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-record.mdx`：zh-Hant-HK 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-string.mdx`：zh-Hant-HK 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-symbol-type.mdx`：zh-Hant-HK 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-tuple.mdx`：zh-Hant-HK 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-type.mdx`：zh-Hant-HK 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-unknown.mdx`：zh-Hant-HK 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct-urlencoded.mdx`：zh-Hant-HK 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/struct.mdx`：zh-Hant-HK 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/structerror-type.mdx`：zh-Hant-HK 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/structinput-type.mdx`：zh-Hant-HK 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/structissue-type.mdx`：zh-Hant-HK 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/structlike-type.mdx`：zh-Hant-HK 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/structmethods-type.mdx`：zh-Hant-HK 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/userequestconfig-type.mdx`：zh-Hant-HK 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/usewebsocketconfig-type.mdx`：zh-Hant-HK 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketcloseinfo-type.mdx`：zh-Hant-HK 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketcommand-type.mdx`：zh-Hant-HK 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketconnectioninfo-type.mdx`：zh-Hant-HK 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketdefinition-type.mdx`：zh-Hant-HK 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketendpoint-type.mdx`：zh-Hant-HK 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketexecuteoptions-type.mdx`：zh-Hant-HK 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websockethandle-type.mdx`：zh-Hant-HK 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websockethandleconstructor-type.mdx`：zh-Hant-HK 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websockethandler-type.mdx`：zh-Hant-HK 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketheartbeatconfig-type.mdx`：zh-Hant-HK 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketincomingdata-type.mdx`：zh-Hant-HK 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketinterceptor-type.mdx`：zh-Hant-HK 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketinterceptorfn-type.mdx`：zh-Hant-HK 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketoutgoingdata-type.mdx`：zh-Hant-HK 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketrequestshape-type.mdx`：zh-Hant-HK 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketsession-type.mdx`：zh-Hant-HK 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketsessionlike-type.mdx`：zh-Hant-HK 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/websocketstate-type.mdx`：zh-Hant-HK 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withcredentials.mdx`：zh-Hant-HK 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withendpoint.mdx`：zh-Hant-HK 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withheaders.mdx`：zh-Hant-HK 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withhttphandle.mdx`：zh-Hant-HK 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withinterceptors.mdx`：zh-Hant-HK 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withqueryserializer.mdx`：zh-Hant-HK 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withssehandle.mdx`：zh-Hant-HK 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withsseoninvalidevent.mdx`：zh-Hant-HK 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withssereconnect.mdx`：zh-Hant-HK 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withtimeout.mdx`：zh-Hant-HK 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withwebsocketbeforeconnect.mdx`：zh-Hant-HK 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withwebsockethandle.mdx`：zh-Hant-HK 译文。替换 WebSocket 构造器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withwebsocketheartbeat.mdx`：zh-Hant-HK 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withwebsocketprotocols.mdx`：zh-Hant-HK 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withwebsocketreconnect.mdx`：zh-Hant-HK 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/core/withxsrf.mdx`：zh-Hant-HK 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/errors.mdx`：zh-Hant-HK 译文。故障变体、工厂和两个取消哨兵的模块页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/http.mdx`：zh-Hant-HK 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/index.mdx`：zh-Hant-HK 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/interceptors.md`：zh-Hant-HK 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/meta.json`：zh-Hant-HK 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server.mdx`：zh-Hant-HK 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/meta.json`：zh-Hant-HK 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：zh-Hant-HK 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：zh-Hant-HK 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：zh-Hant-HK 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：zh-Hant-HK 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：zh-Hant-HK 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/withopentelemetryserver.mdx`：zh-Hant-HK 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/react.mdx`：zh-Hant-HK 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/react/clientprovider-type.mdx`：zh-Hant-HK 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/react/clientproviderprops-type.mdx`：zh-Hant-HK 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/react/meta.json`：zh-Hant-HK 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/react/useclient.mdx`：zh-Hant-HK 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/sse.mdx`：zh-Hant-HK 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/struct.md`：zh-Hant-HK 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/vue.mdx`：zh-Hant-HK 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/vue/createclientplugin.mdx`：zh-Hant-HK 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/vue/http-client.mdx`：zh-Hant-HK 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/vue/injectclient.mdx`：zh-Hant-HK 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/vue/meta.json`：zh-Hant-HK 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/api/web-socket.mdx`：zh-Hant-HK 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/client.mdx`：zh-Hant-HK 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/commands.mdx`：zh-Hant-HK 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/design-decisions.mdx`：zh-Hant-HK 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/errors.mdx`：zh-Hant-HK 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/http.mdx`：zh-Hant-HK 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/index.md`：zh-Hant-HK 译文。指南目录页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/integrations/meta.json`：zh-Hant-HK 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/integrations/opentelemetry-server.mdx`：zh-Hant-HK 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：例外（语义）：第 71、169 行同样译成"冇聲明 body"，见 P10a-i18n-cjk-01；结构与 en-US 相同
+- `doc/content/zh-Hant-HK/docs/integrations/react.mdx`：zh-Hant-HK 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/integrations/vue.mdx`：zh-Hant-HK 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/interceptors.mdx`：zh-Hant-HK 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：例外（漏译）：第 83 行 "Factories return tagged transport values：" 整句未翻译，见 P10a-i18n-cjk-02；结构与 en-US 相同
+- `doc/content/zh-Hant-HK/docs/meta.json`：zh-Hant-HK 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/sse.mdx`：zh-Hant-HK 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/start.mdx`：zh-Hant-HK 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/struct.mdx`：zh-Hant-HK 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/docs/web-socket.mdx`：zh-Hant-HK 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/index.mdx`：zh-Hant-HK 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/meta.json`：zh-Hant-HK 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/cancel-http.mdx`：zh-Hant-HK 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/consume-sse.mdx`：zh-Hant-HK 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/etag-revalidate.mdx`：zh-Hant-HK 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/get-declared-404.mdx`：zh-Hant-HK 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/graphql-http-envelope.mdx`：zh-Hant-HK 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/index.md`：zh-Hant-HK 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/meta.json`：zh-Hant-HK 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/post-json.mdx`：zh-Hant-HK 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/publish-http-sdk.mdx`：zh-Hant-HK 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/refresh-bearer-once.mdx`：zh-Hant-HK 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/test-with-handle.mdx`：zh-Hant-HK 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-HK/recipes/websocket-session.mdx`：zh-Hant-HK 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/client.mdx`：zh-Hant-TW 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/anyfault-type.mdx`：zh-Hant-TW 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/anystruct-type.mdx`：zh-Hant-TW 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/basicauthhttpinterceptor.mdx`：zh-Hant-TW 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/basicauthinterceptoroptions-type.mdx`：zh-Hant-TW 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/basicauthsseinterceptor.mdx`：zh-Hant-TW 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/builderinput-type.mdx`：zh-Hant-TW 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/client-type.mdx`：zh-Hant-TW 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/clientconfig-type.mdx`：zh-Hant-TW 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/clientoption-type.mdx`：zh-Hant-TW 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/clientoptions-type.mdx`：zh-Hant-TW 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/clientsseconfig-type.mdx`：zh-Hant-TW 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/clientsseoptions-type.mdx`：zh-Hant-TW 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/clientwebsocketoptions-type.mdx`：zh-Hant-TW 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createclient.mdx`：zh-Hant-TW 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createdecodefault.mdx`：zh-Hant-TW 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createhttpinterceptor.mdx`：zh-Hant-TW 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createhttpstatusfault.mdx`：zh-Hant-TW 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createnetworkfault.mdx`：zh-Hant-TW 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createpreflightfault.mdx`：zh-Hant-TW 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createresolvedrequesturl.mdx`：zh-Hant-TW 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createsseinterceptor.mdx`：zh-Hant-TW 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createundecodedhttpstatusfault.mdx`：zh-Hant-TW 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/createwebsocketinterceptor.mdx`：zh-Hant-TW 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/decodedresponse-type.mdx`：zh-Hant-TW 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/decodefault-type.mdx`：zh-Hant-TW 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/decodefaultcode-type.mdx`：zh-Hant-TW 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/defineeventstream.mdx`：zh-Hant-TW 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/definerequest.mdx`：zh-Hant-TW 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/definewebsocket.mdx`：zh-Hant-TW 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/err-aborted-type.mdx`：zh-Hant-TW 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/err-timeout-type.mdx`：zh-Hant-TW 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/errormap-type.mdx`：zh-Hant-TW 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamcloseinfo-type.mdx`：zh-Hant-TW 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamcommand-type.mdx`：zh-Hant-TW 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamdata-type.mdx`：zh-Hant-TW 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamdefinition-type.mdx`：zh-Hant-TW 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamendpoint-type.mdx`：zh-Hant-TW 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamexecuteoptions-type.mdx`：zh-Hant-TW 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamfaultcode-type.mdx`：zh-Hant-TW 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamhandle-type.mdx`：zh-Hant-TW 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamopeninfo-type.mdx`：zh-Hant-TW 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstreamrequestshape-type.mdx`：zh-Hant-TW 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/eventstructs-type.mdx`：zh-Hant-TW 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/executeeventstreamcommand.mdx`：zh-Hant-TW 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/executehttpcommand.mdx`：zh-Hant-TW 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/executewebsocketcommand.mdx`：zh-Hant-TW 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/fault-type.mdx`：zh-Hant-TW 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/faultclass-type.mdx`：zh-Hant-TW 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/faultcode-type.mdx`：zh-Hant-TW 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/faultof-type.mdx`：zh-Hant-TW 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/fetchhandle-type.mdx`：zh-Hant-TW 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/fetchhandler.mdx`：zh-Hant-TW 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/flattenedstructerror-type.mdx`：zh-Hant-TW 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/formattedstructerror-type.mdx`：zh-Hant-TW 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpawaitresult-type.mdx`：zh-Hant-TW 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpcommand-type.mdx`：zh-Hant-TW 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpexecuteoptions-type.mdx`：zh-Hant-TW 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpinterceptor-type.mdx`：zh-Hant-TW 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpinterceptornext-type.mdx`：zh-Hant-TW 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpmeta-type.mdx`：zh-Hant-TW 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpprogressevent-type.mdx`：zh-Hant-TW 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpprogressfn-type.mdx`：zh-Hant-TW 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httprequest-type.mdx`：zh-Hant-TW 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httprequestshape-type.mdx`：zh-Hant-TW 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpresponse-type.mdx`：zh-Hant-TW 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpresponsetype-type.mdx`：zh-Hant-TW 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpstatusfault-type.mdx`：zh-Hant-TW 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/httpstatusfaultof-type.mdx`：zh-Hant-TW 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/infer-type.mdx`：zh-Hant-TW 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/interceptor-type.mdx`：zh-Hant-TW 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/interceptorfn-type.mdx`：zh-Hant-TW 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/makeresponse.mdx`：zh-Hant-TW 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/makeresponseoptions-type.mdx`：zh-Hant-TW 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/manualsocketclosereason-type.mdx`：zh-Hant-TW 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/meta.json`：zh-Hant-TW 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/objectstruct-type.mdx`：zh-Hant-TW 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/parseresult-type.mdx`：zh-Hant-TW 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/preflightfault-type.mdx`：zh-Hant-TW 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/preflightfaultcode-type.mdx`：zh-Hant-TW 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/queryserializer-type.mdx`：zh-Hant-TW 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/requestdefinition-type.mdx`：zh-Hant-TW 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/requestendpoint-type.mdx`：zh-Hant-TW 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/requesterrordata-type.mdx`：zh-Hant-TW 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/requestsuccessdata-type.mdx`：zh-Hant-TW 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/socketawaitresult-type.mdx`：zh-Hant-TW 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/socketlifecycleoutcome-type.mdx`：zh-Hant-TW 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/ssehandler-type.mdx`：zh-Hant-TW 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/sseinterceptor-type.mdx`：zh-Hant-TW 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/sseinterceptorfn-type.mdx`：zh-Hant-TW 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/streamawaitresult-type.mdx`：zh-Hant-TW 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-any.mdx`：zh-Hant-TW 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-array.mdx`：zh-Hant-TW 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-arraybuffer.mdx`：zh-Hant-TW 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-bigint.mdx`：zh-Hant-TW 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-blob.mdx`：zh-Hant-TW 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-boolean.mdx`：zh-Hant-TW 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-date.mdx`：zh-Hant-TW 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-discriminatedunion.mdx`：zh-Hant-TW 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-enum.mdx`：zh-Hant-TW 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-file.mdx`：zh-Hant-TW 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-formdata.mdx`：zh-Hant-TW 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-intersection.mdx`：zh-Hant-TW 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-literal.mdx`：zh-Hant-TW 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-null.mdx`：zh-Hant-TW 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-number.mdx`：zh-Hant-TW 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-object.mdx`：zh-Hant-TW 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-or.mdx`：zh-Hant-TW 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-parse.mdx`：zh-Hant-TW 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-record.mdx`：zh-Hant-TW 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-string.mdx`：zh-Hant-TW 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-symbol-type.mdx`：zh-Hant-TW 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-tuple.mdx`：zh-Hant-TW 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-type.mdx`：zh-Hant-TW 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-unknown.mdx`：zh-Hant-TW 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct-urlencoded.mdx`：zh-Hant-TW 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/struct.mdx`：zh-Hant-TW 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/structerror-type.mdx`：zh-Hant-TW 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/structinput-type.mdx`：zh-Hant-TW 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/structissue-type.mdx`：zh-Hant-TW 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/structlike-type.mdx`：zh-Hant-TW 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/structmethods-type.mdx`：zh-Hant-TW 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/userequestconfig-type.mdx`：zh-Hant-TW 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/usewebsocketconfig-type.mdx`：zh-Hant-TW 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketcloseinfo-type.mdx`：zh-Hant-TW 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketcommand-type.mdx`：zh-Hant-TW 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketconnectioninfo-type.mdx`：zh-Hant-TW 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketdefinition-type.mdx`：zh-Hant-TW 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketendpoint-type.mdx`：zh-Hant-TW 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketexecuteoptions-type.mdx`：zh-Hant-TW 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websockethandle-type.mdx`：zh-Hant-TW 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websockethandleconstructor-type.mdx`：zh-Hant-TW 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websockethandler-type.mdx`：zh-Hant-TW 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketheartbeatconfig-type.mdx`：zh-Hant-TW 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketincomingdata-type.mdx`：zh-Hant-TW 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketinterceptor-type.mdx`：zh-Hant-TW 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketinterceptorfn-type.mdx`：zh-Hant-TW 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketoutgoingdata-type.mdx`：zh-Hant-TW 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketrequestshape-type.mdx`：zh-Hant-TW 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketsession-type.mdx`：zh-Hant-TW 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketsessionlike-type.mdx`：zh-Hant-TW 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/websocketstate-type.mdx`：zh-Hant-TW 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withcredentials.mdx`：zh-Hant-TW 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withendpoint.mdx`：zh-Hant-TW 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withheaders.mdx`：zh-Hant-TW 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withhttphandle.mdx`：zh-Hant-TW 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withinterceptors.mdx`：zh-Hant-TW 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withqueryserializer.mdx`：zh-Hant-TW 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withssehandle.mdx`：zh-Hant-TW 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withsseoninvalidevent.mdx`：zh-Hant-TW 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withssereconnect.mdx`：zh-Hant-TW 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withtimeout.mdx`：zh-Hant-TW 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withwebsocketbeforeconnect.mdx`：zh-Hant-TW 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withwebsockethandle.mdx`：zh-Hant-TW 译文。替换 WebSocket 构造器。备注：例外：同上，链接顺序对调，目标正确（zh-Hant-HK 保持英文语序，无差异）
+- `doc/content/zh-Hant-TW/api/core/withwebsocketheartbeat.mdx`：zh-Hant-TW 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withwebsocketprotocols.mdx`：zh-Hant-TW 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withwebsocketreconnect.mdx`：zh-Hant-TW 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/core/withxsrf.mdx`：zh-Hant-TW 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/errors.mdx`：zh-Hant-TW 译文。故障变体、工厂和两个取消哨兵的模块页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/http.mdx`：zh-Hant-TW 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/index.mdx`：zh-Hant-TW 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/interceptors.md`：zh-Hant-TW 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/meta.json`：zh-Hant-TW 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server.mdx`：zh-Hant-TW 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/meta.json`：zh-Hant-TW 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：zh-Hant-TW 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：zh-Hant-TW 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：zh-Hant-TW 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：zh-Hant-TW 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：zh-Hant-TW 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/withopentelemetryserver.mdx`：zh-Hant-TW 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/react.mdx`：zh-Hant-TW 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/react/clientprovider-type.mdx`：zh-Hant-TW 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/react/clientproviderprops-type.mdx`：zh-Hant-TW 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/react/meta.json`：zh-Hant-TW 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/react/useclient.mdx`：zh-Hant-TW 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/sse.mdx`：zh-Hant-TW 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/struct.md`：zh-Hant-TW 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/vue.mdx`：zh-Hant-TW 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/vue/createclientplugin.mdx`：zh-Hant-TW 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/vue/http-client.mdx`：zh-Hant-TW 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/vue/injectclient.mdx`：zh-Hant-TW 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/vue/meta.json`：zh-Hant-TW 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/api/web-socket.mdx`：zh-Hant-TW 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/client.mdx`：zh-Hant-TW 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/commands.mdx`：zh-Hant-TW 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/design-decisions.mdx`：zh-Hant-TW 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/errors.mdx`：zh-Hant-TW 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/http.mdx`：zh-Hant-TW 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/index.md`：zh-Hant-TW 译文。指南目录页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/integrations/meta.json`：zh-Hant-TW 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/integrations/opentelemetry-server.mdx`：zh-Hant-TW 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/integrations/react.mdx`：zh-Hant-TW 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/integrations/vue.mdx`：zh-Hant-TW 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/interceptors.mdx`：zh-Hant-TW 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/meta.json`：zh-Hant-TW 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/sse.mdx`：zh-Hant-TW 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/start.mdx`：zh-Hant-TW 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/struct.mdx`：zh-Hant-TW 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/docs/web-socket.mdx`：zh-Hant-TW 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/index.mdx`：zh-Hant-TW 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/meta.json`：zh-Hant-TW 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/cancel-http.mdx`：zh-Hant-TW 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/consume-sse.mdx`：zh-Hant-TW 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/etag-revalidate.mdx`：zh-Hant-TW 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/get-declared-404.mdx`：zh-Hant-TW 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/graphql-http-envelope.mdx`：zh-Hant-TW 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/index.md`：zh-Hant-TW 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/meta.json`：zh-Hant-TW 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/post-json.mdx`：zh-Hant-TW 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/publish-http-sdk.mdx`：zh-Hant-TW 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/refresh-bearer-once.mdx`：zh-Hant-TW 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/test-with-handle.mdx`：zh-Hant-TW 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/zh-Hant-TW/recipes/websocket-session.mdx`：zh-Hant-TW 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+
+## 文档内容 · 多语言（其他）
+
+`ar`、`de-DE`、`es-ES`、`fr-FR`、`ru-RU` 五个 locale，逐文件镜像 en-US。（1070 个文件，审计分区 `P10b-i18n-other`）
+
+- `doc/content/ar/api/client.mdx`：ar 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：例外：行内代码多重集差异（缺 无；增 `builder`、`builder`、`HeadersInit`、`builder`），复核为加/去反引号或等义改写，标识符与取值未变；高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ar/api/core/anyfault-type.mdx`：ar 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/anystruct-type.mdx`：ar 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/basicauthhttpinterceptor.mdx`：ar 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/basicauthinterceptoroptions-type.mdx`：ar 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/basicauthsseinterceptor.mdx`：ar 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/builderinput-type.mdx`：ar 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/client-type.mdx`：ar 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/clientconfig-type.mdx`：ar 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/clientoption-type.mdx`：ar 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/clientoptions-type.mdx`：ar 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/clientsseconfig-type.mdx`：ar 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/clientsseoptions-type.mdx`：ar 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/clientwebsocketoptions-type.mdx`：ar 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createclient.mdx`：ar 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createdecodefault.mdx`：ar 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createhttpinterceptor.mdx`：ar 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createhttpstatusfault.mdx`：ar 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createnetworkfault.mdx`：ar 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createpreflightfault.mdx`：ar 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createresolvedrequesturl.mdx`：ar 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createsseinterceptor.mdx`：ar 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createundecodedhttpstatusfault.mdx`：ar 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/createwebsocketinterceptor.mdx`：ar 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/decodedresponse-type.mdx`：ar 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/decodefault-type.mdx`：ar 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/decodefaultcode-type.mdx`：ar 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/defineeventstream.mdx`：ar 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/definerequest.mdx`：ar 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/definewebsocket.mdx`：ar 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/err-aborted-type.mdx`：ar 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/err-timeout-type.mdx`：ar 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/errormap-type.mdx`：ar 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamcloseinfo-type.mdx`：ar 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamcommand-type.mdx`：ar 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamdata-type.mdx`：ar 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamdefinition-type.mdx`：ar 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamendpoint-type.mdx`：ar 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamexecuteoptions-type.mdx`：ar 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：例外：行内代码多重集差异（缺 无；增 `builder`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/api/core/eventstreamfaultcode-type.mdx`：ar 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamhandle-type.mdx`：ar 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstreamopeninfo-type.mdx`：ar 译文。SSE 响应打开之后可用的元数据。备注：例外：行内代码多重集差异（缺 无；增 `EventStreamOpenInfo`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/api/core/eventstreamrequestshape-type.mdx`：ar 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/eventstructs-type.mdx`：ar 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/executeeventstreamcommand.mdx`：ar 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/executehttpcommand.mdx`：ar 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：例外：行内代码多重集差异（缺 无；增 `output`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/api/core/executewebsocketcommand.mdx`：ar 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/fault-type.mdx`：ar 译文。client.execute 能返回的、按 code 区分的故障联合。备注：例外：行内代码多重集差异（缺 无；增 `switch`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/api/core/faultclass-type.mdx`：ar 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/faultcode-type.mdx`：ar 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/faultof-type.mdx`：ar 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/fetchhandle-type.mdx`：ar 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/fetchhandler.mdx`：ar 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/flattenedstructerror-type.mdx`：ar 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/formattedstructerror-type.mdx`：ar 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpawaitresult-type.mdx`：ar 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpcommand-type.mdx`：ar 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpexecuteoptions-type.mdx`：ar 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpinterceptor-type.mdx`：ar 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpinterceptornext-type.mdx`：ar 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpmeta-type.mdx`：ar 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpprogressevent-type.mdx`：ar 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpprogressfn-type.mdx`：ar 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httprequest-type.mdx`：ar 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httprequestshape-type.mdx`：ar 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpresponse-type.mdx`：ar 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpresponsetype-type.mdx`：ar 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpstatusfault-type.mdx`：ar 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/httpstatusfaultof-type.mdx`：ar 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/infer-type.mdx`：ar 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/interceptor-type.mdx`：ar 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/interceptorfn-type.mdx`：ar 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/makeresponse.mdx`：ar 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/makeresponseoptions-type.mdx`：ar 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/manualsocketclosereason-type.mdx`：ar 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/meta.json`：ar 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/objectstruct-type.mdx`：ar 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/parseresult-type.mdx`：ar 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/preflightfault-type.mdx`：ar 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/preflightfaultcode-type.mdx`：ar 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/queryserializer-type.mdx`：ar 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/requestdefinition-type.mdx`：ar 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/requestendpoint-type.mdx`：ar 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/requesterrordata-type.mdx`：ar 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/requestsuccessdata-type.mdx`：ar 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/socketawaitresult-type.mdx`：ar 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/socketlifecycleoutcome-type.mdx`：ar 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/ssehandler-type.mdx`：ar 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/sseinterceptor-type.mdx`：ar 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/sseinterceptorfn-type.mdx`：ar 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/streamawaitresult-type.mdx`：ar 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-any.mdx`：ar 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-array.mdx`：ar 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-arraybuffer.mdx`：ar 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-bigint.mdx`：ar 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-blob.mdx`：ar 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-boolean.mdx`：ar 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-date.mdx`：ar 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-discriminatedunion.mdx`：ar 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-enum.mdx`：ar 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-file.mdx`：ar 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-formdata.mdx`：ar 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-intersection.mdx`：ar 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-literal.mdx`：ar 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-null.mdx`：ar 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-number.mdx`：ar 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-object.mdx`：ar 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-or.mdx`：ar 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-parse.mdx`：ar 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-record.mdx`：ar 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-string.mdx`：ar 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-symbol-type.mdx`：ar 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-tuple.mdx`：ar 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-type.mdx`：ar 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-unknown.mdx`：ar 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct-urlencoded.mdx`：ar 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/struct.mdx`：ar 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/structerror-type.mdx`：ar 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/structinput-type.mdx`：ar 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/structissue-type.mdx`：ar 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/structlike-type.mdx`：ar 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/structmethods-type.mdx`：ar 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/userequestconfig-type.mdx`：ar 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/usewebsocketconfig-type.mdx`：ar 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketcloseinfo-type.mdx`：ar 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketcommand-type.mdx`：ar 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketconnectioninfo-type.mdx`：ar 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketdefinition-type.mdx`：ar 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketendpoint-type.mdx`：ar 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketexecuteoptions-type.mdx`：ar 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websockethandle-type.mdx`：ar 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websockethandleconstructor-type.mdx`：ar 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websockethandler-type.mdx`：ar 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketheartbeatconfig-type.mdx`：ar 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketincomingdata-type.mdx`：ar 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketinterceptor-type.mdx`：ar 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketinterceptorfn-type.mdx`：ar 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketoutgoingdata-type.mdx`：ar 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketrequestshape-type.mdx`：ar 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketsession-type.mdx`：ar 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketsessionlike-type.mdx`：ar 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/websocketstate-type.mdx`：ar 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withcredentials.mdx`：ar 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withendpoint.mdx`：ar 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withheaders.mdx`：ar 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：例外：行内代码多重集差异（缺 无；增 `builder`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/api/core/withhttphandle.mdx`：ar 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withinterceptors.mdx`：ar 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withqueryserializer.mdx`：ar 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withssehandle.mdx`：ar 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withsseoninvalidevent.mdx`：ar 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withssereconnect.mdx`：ar 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withtimeout.mdx`：ar 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withwebsocketbeforeconnect.mdx`：ar 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withwebsockethandle.mdx`：ar 译文。替换 WebSocket 构造器。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withwebsocketheartbeat.mdx`：ar 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withwebsocketprotocols.mdx`：ar 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withwebsocketreconnect.mdx`：ar 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/ar/api/core/withxsrf.mdx`：ar 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/ar/api/errors.mdx`：ar 译文。故障变体、工厂和两个取消哨兵的模块页。备注：例外：「DecodeFault」节加粗数 en 0 / 本地 1，仅强调差异，否定与条件文字保留
+- `doc/content/ar/api/http.mdx`：ar 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/ar/api/index.mdx`：ar 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/ar/api/interceptors.md`：ar 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/ar/api/meta.json`：ar 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/ar/api/opentelemetry-server.mdx`：ar 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：例外：frontmatter `title` 为包名 `@defjs/opentelemetry-server`，与 en-US 相同，按设计保留；标题保留英文 ['OpenTelemetry server']（协议/产品名）；表格单元保留英文 ['W3C Trace Context + Baggage']（规范/技术名）
+- `doc/content/ar/api/opentelemetry-server/meta.json`：ar 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：ar 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：ar 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：ar 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/ar/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：ar 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：ar 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/ar/api/opentelemetry-server/withopentelemetryserver.mdx`：ar 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/ar/api/react.mdx`：ar 译文。React 适配模块页：ClientProvider 和 useClient。备注：例外：frontmatter `title` 为包名 `@defjs/react`，与 en-US 相同，按设计保留
+- `doc/content/ar/api/react/clientprovider-type.mdx`：ar 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/ar/api/react/clientproviderprops-type.mdx`：ar 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/ar/api/react/meta.json`：ar 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ar/api/react/useclient.mdx`：ar 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/ar/api/sse.mdx`：ar 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：例外：行内代码多重集差异（缺 无；增 `builder`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/api/struct.md`：ar 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/ar/api/vue.mdx`：ar 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：例外：frontmatter `title` 为包名 `@defjs/vue`，与 en-US 相同，按设计保留
+- `doc/content/ar/api/vue/createclientplugin.mdx`：ar 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/ar/api/vue/http-client.mdx`：ar 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/ar/api/vue/injectclient.mdx`：ar 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/ar/api/vue/meta.json`：ar 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ar/api/web-socket.mdx`：ar 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：例外：行内代码多重集差异（缺 无；增 `JSON.parse`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/docs/client.mdx`：ar 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/ar/docs/commands.mdx`：ar 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：例外：行内代码多重集差异（缺 无；增 `output`、`error`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/docs/design-decisions.mdx`：ar 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：例外：行内代码多重集差异（缺 无；增 `nullable`），复核为加/去反引号或等义改写，标识符与取值未变；「1. What you declare is what you assert」节加粗数 en 0 / 本地 2，仅强调差异，否定与条件文字保留；「4. A failed decode has no body」节加粗数 en 0 / 本地 1，仅强调差异，否定与条件文字保留；「Runtime decoding」节加粗数 en 1 / 本地 2，仅强调差异，否定与条件文字保留
+- `doc/content/ar/docs/errors.mdx`：ar 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：例外：行内代码多重集差异（缺 `code`；增 无），复核为加/去反引号或等义改写，标识符与取值未变；正文少一个数字 `0`：en-US “status-0” 译为 بحالة صفر（状态零），含义相同
+- `doc/content/ar/docs/http.mdx`：ar 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：例外：行内代码多重集差异（缺 `throw`；增 `cause`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/docs/index.md`：ar 译文。指南目录页。备注：例外：首页链接 `/` 译为 `/ar`（站点规范的本地化首页路由，`localePrefix`），目标正确
+- `doc/content/ar/docs/integrations/meta.json`：ar 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ar/docs/integrations/opentelemetry-server.mdx`：ar 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：例外：frontmatter `title` 与 en-US 相同（产品名 OpenTelemetry），按设计保留；「Options and hooks」节加粗数 en 1 / 本地 0，仅强调差异，否定与条件文字保留
+- `doc/content/ar/docs/integrations/react.mdx`：ar 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：例外：frontmatter `title` 与 en-US 相同（产品名 React），按设计保留
+- `doc/content/ar/docs/integrations/vue.mdx`：ar 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：例外：frontmatter `title` 与 en-US 相同（产品名 Vue），按设计保留
+- `doc/content/ar/docs/interceptors.mdx`：ar 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：例外：正文少一个数字 `0`：en-US “status-0” 译为 بحالة صفر（状态零），含义相同
+- `doc/content/ar/docs/meta.json`：ar 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ar/docs/sse.mdx`：ar 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：例外：行内代码多重集差异（缺 无；增 `builder`、`headers`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/docs/start.mdx`：ar 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/ar/docs/struct.mdx`：ar 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/ar/docs/web-socket.mdx`：ar 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：例外：行内代码多重集差异（缺 无；增 `execute`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/index.mdx`：ar 译文。首页：介绍包选择、结果元组与资源所有权。备注：例外：frontmatter `title` 与 en-US 相同（产品名 Defjs），按设计保留
+- `doc/content/ar/meta.json`：ar 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/cancel-http.mdx`：ar 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/consume-sse.mdx`：ar 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/etag-revalidate.mdx`：ar 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/get-declared-404.mdx`：ar 译文。声明 200/404 body 并收窄 fault 的配方。备注：例外：行内代码多重集差异（缺 `error`；增 无），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ar/recipes/graphql-http-envelope.mdx`：ar 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/index.md`：ar 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/meta.json`：ar 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/post-json.mdx`：ar 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/publish-http-sdk.mdx`：ar 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/refresh-bearer-once.mdx`：ar 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/test-with-handle.mdx`：ar 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/ar/recipes/websocket-session.mdx`：ar 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/client.mdx`：de-DE 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/anyfault-type.mdx`：de-DE 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/anystruct-type.mdx`：de-DE 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/basicauthhttpinterceptor.mdx`：de-DE 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/basicauthinterceptoroptions-type.mdx`：de-DE 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/basicauthsseinterceptor.mdx`：de-DE 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/builderinput-type.mdx`：de-DE 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/client-type.mdx`：de-DE 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/clientconfig-type.mdx`：de-DE 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/clientoption-type.mdx`：de-DE 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/clientoptions-type.mdx`：de-DE 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/clientsseconfig-type.mdx`：de-DE 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/clientsseoptions-type.mdx`：de-DE 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/clientwebsocketoptions-type.mdx`：de-DE 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createclient.mdx`：de-DE 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createdecodefault.mdx`：de-DE 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createhttpinterceptor.mdx`：de-DE 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createhttpstatusfault.mdx`：de-DE 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createnetworkfault.mdx`：de-DE 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createpreflightfault.mdx`：de-DE 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createresolvedrequesturl.mdx`：de-DE 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createsseinterceptor.mdx`：de-DE 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createundecodedhttpstatusfault.mdx`：de-DE 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/createwebsocketinterceptor.mdx`：de-DE 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/decodedresponse-type.mdx`：de-DE 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/decodefault-type.mdx`：de-DE 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/decodefaultcode-type.mdx`：de-DE 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/defineeventstream.mdx`：de-DE 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/definerequest.mdx`：de-DE 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/definewebsocket.mdx`：de-DE 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/err-aborted-type.mdx`：de-DE 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/err-timeout-type.mdx`：de-DE 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/errormap-type.mdx`：de-DE 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamcloseinfo-type.mdx`：de-DE 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamcommand-type.mdx`：de-DE 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamdata-type.mdx`：de-DE 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamdefinition-type.mdx`：de-DE 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamendpoint-type.mdx`：de-DE 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamexecuteoptions-type.mdx`：de-DE 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamfaultcode-type.mdx`：de-DE 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamhandle-type.mdx`：de-DE 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamopeninfo-type.mdx`：de-DE 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstreamrequestshape-type.mdx`：de-DE 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/eventstructs-type.mdx`：de-DE 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/executeeventstreamcommand.mdx`：de-DE 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/executehttpcommand.mdx`：de-DE 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/executewebsocketcommand.mdx`：de-DE 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/fault-type.mdx`：de-DE 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/faultclass-type.mdx`：de-DE 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/faultcode-type.mdx`：de-DE 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/faultof-type.mdx`：de-DE 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/fetchhandle-type.mdx`：de-DE 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/fetchhandler.mdx`：de-DE 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/flattenedstructerror-type.mdx`：de-DE 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/formattedstructerror-type.mdx`：de-DE 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpawaitresult-type.mdx`：de-DE 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpcommand-type.mdx`：de-DE 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpexecuteoptions-type.mdx`：de-DE 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpinterceptor-type.mdx`：de-DE 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpinterceptornext-type.mdx`：de-DE 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpmeta-type.mdx`：de-DE 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpprogressevent-type.mdx`：de-DE 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpprogressfn-type.mdx`：de-DE 译文。上传和下载进度回调的函数类型。备注：例外：行内代码多重集差异（缺 无；增 `await`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/de-DE/api/core/httprequest-type.mdx`：de-DE 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httprequestshape-type.mdx`：de-DE 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpresponse-type.mdx`：de-DE 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpresponsetype-type.mdx`：de-DE 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpstatusfault-type.mdx`：de-DE 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/httpstatusfaultof-type.mdx`：de-DE 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/infer-type.mdx`：de-DE 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/interceptor-type.mdx`：de-DE 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/interceptorfn-type.mdx`：de-DE 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/makeresponse.mdx`：de-DE 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/makeresponseoptions-type.mdx`：de-DE 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/manualsocketclosereason-type.mdx`：de-DE 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/meta.json`：de-DE 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/objectstruct-type.mdx`：de-DE 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/parseresult-type.mdx`：de-DE 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/preflightfault-type.mdx`：de-DE 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/preflightfaultcode-type.mdx`：de-DE 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/queryserializer-type.mdx`：de-DE 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/requestdefinition-type.mdx`：de-DE 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/requestendpoint-type.mdx`：de-DE 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/requesterrordata-type.mdx`：de-DE 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/requestsuccessdata-type.mdx`：de-DE 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/socketawaitresult-type.mdx`：de-DE 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/socketlifecycleoutcome-type.mdx`：de-DE 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/ssehandler-type.mdx`：de-DE 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/sseinterceptor-type.mdx`：de-DE 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/sseinterceptorfn-type.mdx`：de-DE 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/streamawaitresult-type.mdx`：de-DE 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-any.mdx`：de-DE 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-array.mdx`：de-DE 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-arraybuffer.mdx`：de-DE 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-bigint.mdx`：de-DE 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-blob.mdx`：de-DE 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-boolean.mdx`：de-DE 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-date.mdx`：de-DE 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-discriminatedunion.mdx`：de-DE 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-enum.mdx`：de-DE 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-file.mdx`：de-DE 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-formdata.mdx`：de-DE 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-intersection.mdx`：de-DE 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-literal.mdx`：de-DE 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-null.mdx`：de-DE 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-number.mdx`：de-DE 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-object.mdx`：de-DE 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-or.mdx`：de-DE 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-parse.mdx`：de-DE 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-record.mdx`：de-DE 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-string.mdx`：de-DE 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-symbol-type.mdx`：de-DE 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-tuple.mdx`：de-DE 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-type.mdx`：de-DE 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-unknown.mdx`：de-DE 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct-urlencoded.mdx`：de-DE 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/struct.mdx`：de-DE 译文。struct 门面：构造函数和 struct.parse。备注：例外：行内代码多重集差异（缺 无；增 `bigint`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/de-DE/api/core/structerror-type.mdx`：de-DE 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/structinput-type.mdx`：de-DE 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/structissue-type.mdx`：de-DE 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/structlike-type.mdx`：de-DE 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/structmethods-type.mdx`：de-DE 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/userequestconfig-type.mdx`：de-DE 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/usewebsocketconfig-type.mdx`：de-DE 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketcloseinfo-type.mdx`：de-DE 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketcommand-type.mdx`：de-DE 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketconnectioninfo-type.mdx`：de-DE 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketdefinition-type.mdx`：de-DE 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketendpoint-type.mdx`：de-DE 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketexecuteoptions-type.mdx`：de-DE 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websockethandle-type.mdx`：de-DE 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websockethandleconstructor-type.mdx`：de-DE 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websockethandler-type.mdx`：de-DE 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketheartbeatconfig-type.mdx`：de-DE 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketincomingdata-type.mdx`：de-DE 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketinterceptor-type.mdx`：de-DE 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketinterceptorfn-type.mdx`：de-DE 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketoutgoingdata-type.mdx`：de-DE 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketrequestshape-type.mdx`：de-DE 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketsession-type.mdx`：de-DE 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketsessionlike-type.mdx`：de-DE 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/websocketstate-type.mdx`：de-DE 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withcredentials.mdx`：de-DE 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withendpoint.mdx`：de-DE 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withheaders.mdx`：de-DE 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withhttphandle.mdx`：de-DE 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withinterceptors.mdx`：de-DE 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withqueryserializer.mdx`：de-DE 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withssehandle.mdx`：de-DE 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withsseoninvalidevent.mdx`：de-DE 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withssereconnect.mdx`：de-DE 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withtimeout.mdx`：de-DE 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withwebsocketbeforeconnect.mdx`：de-DE 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withwebsockethandle.mdx`：de-DE 译文。替换 WebSocket 构造器。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withwebsocketheartbeat.mdx`：de-DE 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withwebsocketprotocols.mdx`：de-DE 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withwebsocketreconnect.mdx`：de-DE 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/core/withxsrf.mdx`：de-DE 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/errors.mdx`：de-DE 译文。故障变体、工厂和两个取消哨兵的模块页。备注：例外：「DecodeFault」节加粗数 en 0 / 本地 1，仅强调差异，否定与条件文字保留
+- `doc/content/de-DE/api/http.mdx`：de-DE 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/index.mdx`：de-DE 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/interceptors.md`：de-DE 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/meta.json`：de-DE 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server.mdx`：de-DE 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server/meta.json`：de-DE 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：de-DE 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：de-DE 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：de-DE 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：de-DE 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：de-DE 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/opentelemetry-server/withopentelemetryserver.mdx`：de-DE 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/react.mdx`：de-DE 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/react/clientprovider-type.mdx`：de-DE 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/react/clientproviderprops-type.mdx`：de-DE 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/react/meta.json`：de-DE 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/react/useclient.mdx`：de-DE 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/sse.mdx`：de-DE 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/struct.md`：de-DE 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/vue.mdx`：de-DE 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/vue/createclientplugin.mdx`：de-DE 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/vue/http-client.mdx`：de-DE 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/vue/injectclient.mdx`：de-DE 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/vue/meta.json`：de-DE 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/de-DE/api/web-socket.mdx`：de-DE 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/client.mdx`：de-DE 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/commands.mdx`：de-DE 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/design-decisions.mdx`：de-DE 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：例外：「1. What you declare is what you assert」节加粗数 en 0 / 本地 2，仅强调差异，否定与条件文字保留；「4. A failed decode has no body」节加粗数 en 0 / 本地 1，仅强调差异，否定与条件文字保留
+- `doc/content/de-DE/docs/errors.mdx`：de-DE 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/http.mdx`：de-DE 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/index.md`：de-DE 译文。指南目录页。备注：例外：首页链接 `/` 译为 `/de-DE`（站点规范的本地化首页路由，`localePrefix`），目标正确
+- `doc/content/de-DE/docs/integrations/meta.json`：de-DE 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/integrations/opentelemetry-server.mdx`：de-DE 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：例外：「Options and hooks」节加粗数 en 1 / 本地 0，仅强调差异，否定与条件文字保留
+- `doc/content/de-DE/docs/integrations/react.mdx`：de-DE 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/integrations/vue.mdx`：de-DE 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：例外：行内代码多重集差异（缺 无；增 `provide`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/de-DE/docs/interceptors.mdx`：de-DE 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/meta.json`：de-DE 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/sse.mdx`：de-DE 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/start.mdx`：de-DE 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/struct.mdx`：de-DE 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/de-DE/docs/web-socket.mdx`：de-DE 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：例外：行内代码多重集差异（缺 无；增 `execute`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/de-DE/index.mdx`：de-DE 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/de-DE/meta.json`：de-DE 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/cancel-http.mdx`：de-DE 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/consume-sse.mdx`：de-DE 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/etag-revalidate.mdx`：de-DE 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/get-declared-404.mdx`：de-DE 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/graphql-http-envelope.mdx`：de-DE 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/index.md`：de-DE 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/meta.json`：de-DE 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/post-json.mdx`：de-DE 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/publish-http-sdk.mdx`：de-DE 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/refresh-bearer-once.mdx`：de-DE 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/test-with-handle.mdx`：de-DE 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/de-DE/recipes/websocket-session.mdx`：de-DE 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/client.mdx`：es-ES 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/anyfault-type.mdx`：es-ES 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/anystruct-type.mdx`：es-ES 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/basicauthhttpinterceptor.mdx`：es-ES 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/basicauthinterceptoroptions-type.mdx`：es-ES 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/basicauthsseinterceptor.mdx`：es-ES 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/builderinput-type.mdx`：es-ES 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/client-type.mdx`：es-ES 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/clientconfig-type.mdx`：es-ES 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/clientoption-type.mdx`：es-ES 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/clientoptions-type.mdx`：es-ES 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/clientsseconfig-type.mdx`：es-ES 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/clientsseoptions-type.mdx`：es-ES 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/clientwebsocketoptions-type.mdx`：es-ES 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createclient.mdx`：es-ES 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createdecodefault.mdx`：es-ES 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createhttpinterceptor.mdx`：es-ES 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createhttpstatusfault.mdx`：es-ES 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createnetworkfault.mdx`：es-ES 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createpreflightfault.mdx`：es-ES 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createresolvedrequesturl.mdx`：es-ES 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createsseinterceptor.mdx`：es-ES 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createundecodedhttpstatusfault.mdx`：es-ES 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/createwebsocketinterceptor.mdx`：es-ES 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/decodedresponse-type.mdx`：es-ES 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/decodefault-type.mdx`：es-ES 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/decodefaultcode-type.mdx`：es-ES 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/defineeventstream.mdx`：es-ES 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/definerequest.mdx`：es-ES 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/definewebsocket.mdx`：es-ES 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/err-aborted-type.mdx`：es-ES 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/err-timeout-type.mdx`：es-ES 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/errormap-type.mdx`：es-ES 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamcloseinfo-type.mdx`：es-ES 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamcommand-type.mdx`：es-ES 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamdata-type.mdx`：es-ES 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamdefinition-type.mdx`：es-ES 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamendpoint-type.mdx`：es-ES 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamexecuteoptions-type.mdx`：es-ES 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamfaultcode-type.mdx`：es-ES 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamhandle-type.mdx`：es-ES 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamopeninfo-type.mdx`：es-ES 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstreamrequestshape-type.mdx`：es-ES 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/eventstructs-type.mdx`：es-ES 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/executeeventstreamcommand.mdx`：es-ES 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/executehttpcommand.mdx`：es-ES 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/executewebsocketcommand.mdx`：es-ES 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/fault-type.mdx`：es-ES 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/faultclass-type.mdx`：es-ES 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/faultcode-type.mdx`：es-ES 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/faultof-type.mdx`：es-ES 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/fetchhandle-type.mdx`：es-ES 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/fetchhandler.mdx`：es-ES 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/flattenedstructerror-type.mdx`：es-ES 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/formattedstructerror-type.mdx`：es-ES 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpawaitresult-type.mdx`：es-ES 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpcommand-type.mdx`：es-ES 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpexecuteoptions-type.mdx`：es-ES 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpinterceptor-type.mdx`：es-ES 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpinterceptornext-type.mdx`：es-ES 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpmeta-type.mdx`：es-ES 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpprogressevent-type.mdx`：es-ES 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpprogressfn-type.mdx`：es-ES 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httprequest-type.mdx`：es-ES 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httprequestshape-type.mdx`：es-ES 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpresponse-type.mdx`：es-ES 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpresponsetype-type.mdx`：es-ES 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpstatusfault-type.mdx`：es-ES 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/httpstatusfaultof-type.mdx`：es-ES 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/infer-type.mdx`：es-ES 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/interceptor-type.mdx`：es-ES 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/interceptorfn-type.mdx`：es-ES 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/makeresponse.mdx`：es-ES 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/makeresponseoptions-type.mdx`：es-ES 译文。makeResponse 接受的字段。备注：例外：行内代码多重集差异（缺 无；增 `request`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/es-ES/api/core/manualsocketclosereason-type.mdx`：es-ES 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/meta.json`：es-ES 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/objectstruct-type.mdx`：es-ES 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/parseresult-type.mdx`：es-ES 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/preflightfault-type.mdx`：es-ES 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/preflightfaultcode-type.mdx`：es-ES 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/queryserializer-type.mdx`：es-ES 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/requestdefinition-type.mdx`：es-ES 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/requestendpoint-type.mdx`：es-ES 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/requesterrordata-type.mdx`：es-ES 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/requestsuccessdata-type.mdx`：es-ES 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/socketawaitresult-type.mdx`：es-ES 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/socketlifecycleoutcome-type.mdx`：es-ES 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/ssehandler-type.mdx`：es-ES 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/sseinterceptor-type.mdx`：es-ES 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/sseinterceptorfn-type.mdx`：es-ES 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/streamawaitresult-type.mdx`：es-ES 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-any.mdx`：es-ES 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-array.mdx`：es-ES 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-arraybuffer.mdx`：es-ES 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-bigint.mdx`：es-ES 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-blob.mdx`：es-ES 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-boolean.mdx`：es-ES 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-date.mdx`：es-ES 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-discriminatedunion.mdx`：es-ES 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-enum.mdx`：es-ES 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-file.mdx`：es-ES 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-formdata.mdx`：es-ES 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-intersection.mdx`：es-ES 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-literal.mdx`：es-ES 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-null.mdx`：es-ES 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-number.mdx`：es-ES 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-object.mdx`：es-ES 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-or.mdx`：es-ES 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-parse.mdx`：es-ES 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-record.mdx`：es-ES 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-string.mdx`：es-ES 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-symbol-type.mdx`：es-ES 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-tuple.mdx`：es-ES 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-type.mdx`：es-ES 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-unknown.mdx`：es-ES 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct-urlencoded.mdx`：es-ES 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/struct.mdx`：es-ES 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/structerror-type.mdx`：es-ES 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/structinput-type.mdx`：es-ES 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/structissue-type.mdx`：es-ES 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/structlike-type.mdx`：es-ES 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/structmethods-type.mdx`：es-ES 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/userequestconfig-type.mdx`：es-ES 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/usewebsocketconfig-type.mdx`：es-ES 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketcloseinfo-type.mdx`：es-ES 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketcommand-type.mdx`：es-ES 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketconnectioninfo-type.mdx`：es-ES 译文。当前物理连接的代际、url、协议和扩展。备注：例外：行内代码多重集差异（缺 无；增 `open`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/es-ES/api/core/websocketdefinition-type.mdx`：es-ES 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketendpoint-type.mdx`：es-ES 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketexecuteoptions-type.mdx`：es-ES 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websockethandle-type.mdx`：es-ES 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websockethandleconstructor-type.mdx`：es-ES 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websockethandler-type.mdx`：es-ES 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketheartbeatconfig-type.mdx`：es-ES 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketincomingdata-type.mdx`：es-ES 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketinterceptor-type.mdx`：es-ES 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketinterceptorfn-type.mdx`：es-ES 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketoutgoingdata-type.mdx`：es-ES 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketrequestshape-type.mdx`：es-ES 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketsession-type.mdx`：es-ES 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketsessionlike-type.mdx`：es-ES 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/websocketstate-type.mdx`：es-ES 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withcredentials.mdx`：es-ES 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withendpoint.mdx`：es-ES 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withheaders.mdx`：es-ES 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withhttphandle.mdx`：es-ES 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withinterceptors.mdx`：es-ES 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withqueryserializer.mdx`：es-ES 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withssehandle.mdx`：es-ES 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withsseoninvalidevent.mdx`：es-ES 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withssereconnect.mdx`：es-ES 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withtimeout.mdx`：es-ES 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withwebsocketbeforeconnect.mdx`：es-ES 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withwebsockethandle.mdx`：es-ES 译文。替换 WebSocket 构造器。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withwebsocketheartbeat.mdx`：es-ES 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withwebsocketprotocols.mdx`：es-ES 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withwebsocketreconnect.mdx`：es-ES 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/core/withxsrf.mdx`：es-ES 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/errors.mdx`：es-ES 译文。故障变体、工厂和两个取消哨兵的模块页。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/http.mdx`：es-ES 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/index.mdx`：es-ES 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/interceptors.md`：es-ES 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/meta.json`：es-ES 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server.mdx`：es-ES 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server/meta.json`：es-ES 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：es-ES 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：es-ES 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：es-ES 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：es-ES 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：es-ES 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/opentelemetry-server/withopentelemetryserver.mdx`：es-ES 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/react.mdx`：es-ES 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/react/clientprovider-type.mdx`：es-ES 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/react/clientproviderprops-type.mdx`：es-ES 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/react/meta.json`：es-ES 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/react/useclient.mdx`：es-ES 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/sse.mdx`：es-ES 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/struct.md`：es-ES 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/vue.mdx`：es-ES 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/vue/createclientplugin.mdx`：es-ES 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/vue/http-client.mdx`：es-ES 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/vue/injectclient.mdx`：es-ES 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/vue/meta.json`：es-ES 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/es-ES/api/web-socket.mdx`：es-ES 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/client.mdx`：es-ES 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/commands.mdx`：es-ES 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/design-decisions.mdx`：es-ES 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/errors.mdx`：es-ES 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/http.mdx`：es-ES 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/index.md`：es-ES 译文。指南目录页。备注：例外：首页链接 `/` 译为 `/es-ES`（站点规范的本地化首页路由，`localePrefix`），目标正确
+- `doc/content/es-ES/docs/integrations/meta.json`：es-ES 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/integrations/opentelemetry-server.mdx`：es-ES 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：例外：行内代码多重集差异（缺 `provider.shutdown()`；增 `dispose`、`await provider.shutdown()`、`HTTP_STATUS`、`HTTP_STATUS`），复核为加/去反引号或等义改写，标识符与取值未变；「Options and hooks」节加粗数 en 1 / 本地 0，仅强调差异，否定与条件文字保留
+- `doc/content/es-ES/docs/integrations/react.mdx`：es-ES 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/integrations/vue.mdx`：es-ES 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：例外：行内代码多重集差异（缺 无；增 `dispose`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/es-ES/docs/interceptors.mdx`：es-ES 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/meta.json`：es-ES 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/sse.mdx`：es-ES 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/start.mdx`：es-ES 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/struct.mdx`：es-ES 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/es-ES/docs/web-socket.mdx`：es-ES 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：结构与 en-US 一致
+- `doc/content/es-ES/index.mdx`：es-ES 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/es-ES/meta.json`：es-ES 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/cancel-http.mdx`：es-ES 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/consume-sse.mdx`：es-ES 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/etag-revalidate.mdx`：es-ES 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/get-declared-404.mdx`：es-ES 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/graphql-http-envelope.mdx`：es-ES 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/index.md`：es-ES 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/meta.json`：es-ES 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/post-json.mdx`：es-ES 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/publish-http-sdk.mdx`：es-ES 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/refresh-bearer-once.mdx`：es-ES 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/test-with-handle.mdx`：es-ES 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/es-ES/recipes/websocket-session.mdx`：es-ES 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/client.mdx`：fr-FR 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/anyfault-type.mdx`：fr-FR 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/anystruct-type.mdx`：fr-FR 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/basicauthhttpinterceptor.mdx`：fr-FR 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/basicauthinterceptoroptions-type.mdx`：fr-FR 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/basicauthsseinterceptor.mdx`：fr-FR 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/builderinput-type.mdx`：fr-FR 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/client-type.mdx`：fr-FR 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/clientconfig-type.mdx`：fr-FR 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/clientoption-type.mdx`：fr-FR 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/clientoptions-type.mdx`：fr-FR 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/clientsseconfig-type.mdx`：fr-FR 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/clientsseoptions-type.mdx`：fr-FR 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/clientwebsocketoptions-type.mdx`：fr-FR 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createclient.mdx`：fr-FR 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createdecodefault.mdx`：fr-FR 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createhttpinterceptor.mdx`：fr-FR 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createhttpstatusfault.mdx`：fr-FR 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createnetworkfault.mdx`：fr-FR 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createpreflightfault.mdx`：fr-FR 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createresolvedrequesturl.mdx`：fr-FR 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createsseinterceptor.mdx`：fr-FR 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createundecodedhttpstatusfault.mdx`：fr-FR 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/createwebsocketinterceptor.mdx`：fr-FR 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/decodedresponse-type.mdx`：fr-FR 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/decodefault-type.mdx`：fr-FR 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/decodefaultcode-type.mdx`：fr-FR 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/defineeventstream.mdx`：fr-FR 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/definerequest.mdx`：fr-FR 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/definewebsocket.mdx`：fr-FR 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/err-aborted-type.mdx`：fr-FR 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/err-timeout-type.mdx`：fr-FR 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/errormap-type.mdx`：fr-FR 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamcloseinfo-type.mdx`：fr-FR 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：例外：行内代码多重集差异（缺 无；增 `Symbol.asyncDispose`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/api/core/eventstreamcommand-type.mdx`：fr-FR 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamdata-type.mdx`：fr-FR 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamdefinition-type.mdx`：fr-FR 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamendpoint-type.mdx`：fr-FR 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamexecuteoptions-type.mdx`：fr-FR 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamfaultcode-type.mdx`：fr-FR 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamhandle-type.mdx`：fr-FR 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：例外：行内代码多重集差异（缺 无；增 `Symbol.asyncDispose`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/api/core/eventstreamopeninfo-type.mdx`：fr-FR 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstreamrequestshape-type.mdx`：fr-FR 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/eventstructs-type.mdx`：fr-FR 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/executeeventstreamcommand.mdx`：fr-FR 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/executehttpcommand.mdx`：fr-FR 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/executewebsocketcommand.mdx`：fr-FR 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/fault-type.mdx`：fr-FR 译文。client.execute 能返回的、按 code 区分的故障联合。备注：例外：行内代码多重集差异（缺 无；增 `switch`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/api/core/faultclass-type.mdx`：fr-FR 译文。从故障代码取出第一个下划线前的类别。备注：例外：行内代码多重集差异（缺 无；增 `FaultCode`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/api/core/faultcode-type.mdx`：fr-FR 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/faultof-type.mdx`：fr-FR 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/fetchhandle-type.mdx`：fr-FR 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/fetchhandler.mdx`：fr-FR 译文。用 fetch 发出 HTTP 请求的默认传输。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/flattenedstructerror-type.mdx`：fr-FR 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/formattedstructerror-type.mdx`：fr-FR 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpawaitresult-type.mdx`：fr-FR 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpcommand-type.mdx`：fr-FR 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpexecuteoptions-type.mdx`：fr-FR 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpinterceptor-type.mdx`：fr-FR 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpinterceptornext-type.mdx`：fr-FR 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpmeta-type.mdx`：fr-FR 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpprogressevent-type.mdx`：fr-FR 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpprogressfn-type.mdx`：fr-FR 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httprequest-type.mdx`：fr-FR 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httprequestshape-type.mdx`：fr-FR 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpresponse-type.mdx`：fr-FR 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpresponsetype-type.mdx`：fr-FR 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpstatusfault-type.mdx`：fr-FR 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/httpstatusfaultof-type.mdx`：fr-FR 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/infer-type.mdx`：fr-FR 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/interceptor-type.mdx`：fr-FR 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/interceptorfn-type.mdx`：fr-FR 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/makeresponse.mdx`：fr-FR 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/makeresponseoptions-type.mdx`：fr-FR 译文。makeResponse 接受的字段。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/manualsocketclosereason-type.mdx`：fr-FR 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/meta.json`：fr-FR 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/objectstruct-type.mdx`：fr-FR 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/parseresult-type.mdx`：fr-FR 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/preflightfault-type.mdx`：fr-FR 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/preflightfaultcode-type.mdx`：fr-FR 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/queryserializer-type.mdx`：fr-FR 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/requestdefinition-type.mdx`：fr-FR 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/requestendpoint-type.mdx`：fr-FR 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/requesterrordata-type.mdx`：fr-FR 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/requestsuccessdata-type.mdx`：fr-FR 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/socketawaitresult-type.mdx`：fr-FR 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/socketlifecycleoutcome-type.mdx`：fr-FR 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/ssehandler-type.mdx`：fr-FR 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/sseinterceptor-type.mdx`：fr-FR 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/sseinterceptorfn-type.mdx`：fr-FR 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/streamawaitresult-type.mdx`：fr-FR 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-any.mdx`：fr-FR 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-array.mdx`：fr-FR 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-arraybuffer.mdx`：fr-FR 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-bigint.mdx`：fr-FR 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-blob.mdx`：fr-FR 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-boolean.mdx`：fr-FR 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-date.mdx`：fr-FR 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-discriminatedunion.mdx`：fr-FR 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-enum.mdx`：fr-FR 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-file.mdx`：fr-FR 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-formdata.mdx`：fr-FR 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-intersection.mdx`：fr-FR 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-literal.mdx`：fr-FR 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-null.mdx`：fr-FR 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-number.mdx`：fr-FR 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-object.mdx`：fr-FR 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-or.mdx`：fr-FR 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-parse.mdx`：fr-FR 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-record.mdx`：fr-FR 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-string.mdx`：fr-FR 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-symbol-type.mdx`：fr-FR 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-tuple.mdx`：fr-FR 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-type.mdx`：fr-FR 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-unknown.mdx`：fr-FR 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct-urlencoded.mdx`：fr-FR 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/struct.mdx`：fr-FR 译文。struct 门面：构造函数和 struct.parse。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/structerror-type.mdx`：fr-FR 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/structinput-type.mdx`：fr-FR 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/structissue-type.mdx`：fr-FR 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/structlike-type.mdx`：fr-FR 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/structmethods-type.mdx`：fr-FR 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/userequestconfig-type.mdx`：fr-FR 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/usewebsocketconfig-type.mdx`：fr-FR 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketcloseinfo-type.mdx`：fr-FR 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketcommand-type.mdx`：fr-FR 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketconnectioninfo-type.mdx`：fr-FR 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketdefinition-type.mdx`：fr-FR 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketendpoint-type.mdx`：fr-FR 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketexecuteoptions-type.mdx`：fr-FR 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websockethandle-type.mdx`：fr-FR 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websockethandleconstructor-type.mdx`：fr-FR 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websockethandler-type.mdx`：fr-FR 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketheartbeatconfig-type.mdx`：fr-FR 译文。心跳间隔、消息、确认判断和超时。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketincomingdata-type.mdx`：fr-FR 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketinterceptor-type.mdx`：fr-FR 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketinterceptorfn-type.mdx`：fr-FR 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketoutgoingdata-type.mdx`：fr-FR 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketrequestshape-type.mdx`：fr-FR 译文。WebSocket builder 只能返回 path 和 query。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketsession-type.mdx`：fr-FR 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：例外：行内代码多重集差异（缺 无；增 `[Symbol.asyncDispose]()`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/api/core/websocketsessionlike-type.mdx`：fr-FR 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/websocketstate-type.mdx`：fr-FR 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withcredentials.mdx`：fr-FR 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withendpoint.mdx`：fr-FR 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withheaders.mdx`：fr-FR 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withhttphandle.mdx`：fr-FR 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withinterceptors.mdx`：fr-FR 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withqueryserializer.mdx`：fr-FR 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withssehandle.mdx`：fr-FR 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withsseoninvalidevent.mdx`：fr-FR 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withssereconnect.mdx`：fr-FR 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withtimeout.mdx`：fr-FR 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withwebsocketbeforeconnect.mdx`：fr-FR 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withwebsockethandle.mdx`：fr-FR 译文。替换 WebSocket 构造器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withwebsocketheartbeat.mdx`：fr-FR 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withwebsocketprotocols.mdx`：fr-FR 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withwebsocketreconnect.mdx`：fr-FR 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/core/withxsrf.mdx`：fr-FR 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/errors.mdx`：fr-FR 译文。故障变体、工厂和两个取消哨兵的模块页。备注：例外：「DecodeFault」节加粗数 en 0 / 本地 1，仅强调差异，否定与条件文字保留
+- `doc/content/fr-FR/api/http.mdx`：fr-FR 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/index.mdx`：fr-FR 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/interceptors.md`：fr-FR 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/meta.json`：fr-FR 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server.mdx`：fr-FR 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server/meta.json`：fr-FR 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：fr-FR 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：fr-FR 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：fr-FR 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：fr-FR 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：fr-FR 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/opentelemetry-server/withopentelemetryserver.mdx`：fr-FR 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/react.mdx`：fr-FR 译文。React 适配模块页：ClientProvider 和 useClient。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/react/clientprovider-type.mdx`：fr-FR 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/react/clientproviderprops-type.mdx`：fr-FR 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/react/meta.json`：fr-FR 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/react/useclient.mdx`：fr-FR 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/sse.mdx`：fr-FR 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/struct.md`：fr-FR 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/vue.mdx`：fr-FR 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/vue/createclientplugin.mdx`：fr-FR 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/vue/http-client.mdx`：fr-FR 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/vue/injectclient.mdx`：fr-FR 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/vue/meta.json`：fr-FR 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/fr-FR/api/web-socket.mdx`：fr-FR 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：例外：行内代码多重集差异（缺 无；增 `[Symbol.asyncDispose]()`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/docs/client.mdx`：fr-FR 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/commands.mdx`：fr-FR 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：例外：行内代码多重集差异（缺 无；增 `output`、`error`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/docs/design-decisions.mdx`：fr-FR 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：例外：「1. What you declare is what you assert」节加粗数 en 0 / 本地 2，仅强调差异，否定与条件文字保留；「4. A failed decode has no body」节加粗数 en 0 / 本地 1，仅强调差异，否定与条件文字保留；「Runtime decoding」节加粗数 en 1 / 本地 2，仅强调差异，否定与条件文字保留
+- `doc/content/fr-FR/docs/errors.mdx`：fr-FR 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/http.mdx`：fr-FR 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：例外：行内代码多重集差异（缺 `throw`；增 无），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/docs/index.md`：fr-FR 译文。指南目录页。备注：例外：首页链接 `/` 译为 `/fr-FR`（站点规范的本地化首页路由，`localePrefix`），目标正确
+- `doc/content/fr-FR/docs/integrations/meta.json`：fr-FR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/integrations/opentelemetry-server.mdx`：fr-FR 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：例外：行内代码多重集差异（缺 `provider.shutdown()`；增 `await provider.shutdown()`），复核为加/去反引号或等义改写，标识符与取值未变；「Options and hooks」节加粗数 en 1 / 本地 0，仅强调差异，否定与条件文字保留
+- `doc/content/fr-FR/docs/integrations/react.mdx`：fr-FR 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/integrations/vue.mdx`：fr-FR 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/interceptors.mdx`：fr-FR 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/meta.json`：fr-FR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/sse.mdx`：fr-FR 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/start.mdx`：fr-FR 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/struct.mdx`：fr-FR 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/fr-FR/docs/web-socket.mdx`：fr-FR 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：结构与 en-US 一致
+- `doc/content/fr-FR/index.mdx`：fr-FR 译文。首页：介绍包选择、结果元组与资源所有权。备注：结构与 en-US 一致
+- `doc/content/fr-FR/meta.json`：fr-FR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/cancel-http.mdx`：fr-FR 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/consume-sse.mdx`：fr-FR 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/etag-revalidate.mdx`：fr-FR 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/get-declared-404.mdx`：fr-FR 译文。声明 200/404 body 并收窄 fault 的配方。备注：例外：行内代码多重集差异（缺 `error`；增 无），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/fr-FR/recipes/graphql-http-envelope.mdx`：fr-FR 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/index.md`：fr-FR 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/meta.json`：fr-FR 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/post-json.mdx`：fr-FR 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/publish-http-sdk.mdx`：fr-FR 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/refresh-bearer-once.mdx`：fr-FR 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/test-with-handle.mdx`：fr-FR 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/fr-FR/recipes/websocket-session.mdx`：fr-FR 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/client.mdx`：ru-RU 译文。客户端总览：createClient、各 with* 选项，以及 SSE / WebSocket 重连默认值表。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/anyfault-type.mdx`：ru-RU 译文。AnyFault：不关心具体 error struct 时使用的故障联合类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/anystruct-type.mdx`：ru-RU 译文。AnyStruct：接受任意 struct 的宽约束。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/basicauthhttpinterceptor.mdx`：ru-RU 译文。为 HTTP 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/basicauthinterceptoroptions-type.mdx`：ru-RU 译文。Basic 认证拦截器的可选编码器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/basicauthsseinterceptor.mdx`：ru-RU 译文。为 SSE 请求设置 Basic Authorization 的拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/builderinput-type.mdx`：ru-RU 译文。builder 收到的、已按 input struct 解析过的端点入参类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/client-type.mdx`：ru-RU 译文。createClient 返回的 Client，含按命令重载的 execute。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/clientconfig-type.mdx`：ru-RU 译文。选项函数写完之后、execute 读取的已解析客户端配置。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/clientoption-type.mdx`：ru-RU 译文。createClient 接受的选项函数类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/clientoptions-type.mdx`：ru-RU 译文。与选项函数对应的输入形态客户端选项。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/clientsseconfig-type.mdx`：ru-RU 译文。已解析的 SSE 配置，fetch handle 必填。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/clientsseoptions-type.mdx`：ru-RU 译文。SSE 的 fetch handle、非法事件钩子和重连策略。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/clientwebsocketoptions-type.mdx`：ru-RU 译文。WebSocket 构造器、beforeConnect、心跳、子协议和重连策略。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createclient.mdx`：ru-RU 译文。用若干选项函数创建一个客户端。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createdecodefault.mdx`：ru-RU 译文。构造解码故障：响应已到达，但无法按声明读出。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createhttpinterceptor.mdx`：ru-RU 译文。把函数包成带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createhttpstatusfault.mdx`：ru-RU 译文。构造已解码 error body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createnetworkfault.mdx`：ru-RU 译文。按 cause 的形状选择 NET_* 代码并构造网络故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createpreflightfault.mdx`：ru-RU 译文。构造可能发生在响应出现之前的预检故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createresolvedrequesturl.mdx`：ru-RU 译文。把请求路径按 base endpoint 解析成 URL。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createsseinterceptor.mdx`：ru-RU 译文。把函数包成带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createundecodedhttpstatusfault.mdx`：ru-RU 译文。构造未读取 body 的 HTTP_STATUS 故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/createwebsocketinterceptor.mdx`：ru-RU 译文。把函数包成带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/decodedresponse-type.mdx`：ru-RU 译文。带已按声明 struct 解码的 body 的响应。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/decodefault-type.mdx`：ru-RU 译文。响应已到达但无法按声明读取时的故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/decodefaultcode-type.mdx`：ru-RU 译文。只带响应元数据、不带 body 的解码故障代码。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/defineeventstream.mdx`：ru-RU 译文。声明带类型的 SSE 端点。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/definerequest.mdx`：ru-RU 译文。声明带类型的 HTTP 端点。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/definewebsocket.mdx`：ru-RU 译文。声明带类型的 WebSocket 端点。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/err-aborted-type.mdx`：ru-RU 译文。表示调用方取消的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/err-timeout-type.mdx`：ru-RU 译文。表示超时的共享 Error 哨兵。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/errormap-type.mdx`：ru-RU 译文。重写单次 struct 解析问题文案的回调。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamcloseinfo-type.mdx`：ru-RU 译文。SSE 结束方式：正常 EOF、中止，或带故障代码的错误。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamcommand-type.mdx`：ru-RU 译文。调用事件流端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamdata-type.mdx`：ru-RU 译文。从 EventStructs 推出的已解析事件联合。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamdefinition-type.mdx`：ru-RU 译文。传给 defineEventStream 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamendpoint-type.mdx`：ru-RU 译文。defineEventStream 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamexecuteoptions-type.mdx`：ru-RU 译文。打开 SSE 时的取消选项：abort 与 timeout 互斥，另可加 signal。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamfaultcode-type.mdx`：ru-RU 译文。SSE 流可以用来结束的故障代码子集。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamhandle-type.mdx`：ru-RU 译文。已打开的 SSE 流：迭代事件、读取 open、提前关闭。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamopeninfo-type.mdx`：ru-RU 译文。SSE 响应打开之后可用的元数据。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstreamrequestshape-type.mdx`：ru-RU 译文。SSE builder 的返回形状，别名到 HttpRequestShape。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/eventstructs-type.mdx`：ru-RU 译文。SSE 事件名到解码 struct 的映射。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/executeeventstreamcommand.mdx`：ru-RU 译文。对着客户端配置打开一条 SSE 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/executehttpcommand.mdx`：ru-RU 译文。对着客户端配置执行一条 HTTP 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/executewebsocketcommand.mdx`：ru-RU 译文。对着客户端配置打开一条 WebSocket 命令的底层入口。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/fault-type.mdx`：ru-RU 译文。client.execute 能返回的、按 code 区分的故障联合。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/faultclass-type.mdx`：ru-RU 译文。从故障代码取出第一个下划线前的类别。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/faultcode-type.mdx`：ru-RU 译文。Defjs 报告的封闭故障代码集合。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/faultof-type.mdx`：ru-RU 译文。按已解码 error body 类型表达的故障联合。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/fetchhandle-type.mdx`：ru-RU 译文。HTTP 或 SSE 使用的、兼容 Fetch 的函数类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/fetchhandler.mdx`：ru-RU 译文。用 fetch 发出 HTTP 请求的默认传输。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ru-RU/api/core/flattenedstructerror-type.mdx`：ru-RU 译文。StructError.flatten() 返回的表单错误与字段错误。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/formattedstructerror-type.mdx`：ru-RU 译文。StructError.format() 返回的嵌套错误树。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpawaitresult-type.mdx`：ru-RU 译文。HTTP 调用的三元组：成功数据和响应，或故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpcommand-type.mdx`：ru-RU 译文。调用请求端点后得到的可执行 HTTP 命令。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpexecuteoptions-type.mdx`：ru-RU 译文。单次 HTTP 调用的进度回调和取消选项。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpinterceptor-type.mdx`：ru-RU 译文。withInterceptors 接受的带 kind 的 HTTP 拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpinterceptornext-type.mdx`：ru-RU 译文。继续执行后续 HTTP 拦截器直到传输的 next。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpmeta-type.mdx`：ru-RU 译文。响应到达客户端之后就有的元数据，不含 body。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpprogressevent-type.mdx`：ru-RU 译文。上传和下载回调收到的进度快照。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpprogressfn-type.mdx`：ru-RU 译文。上传和下载进度回调的函数类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httprequest-type.mdx`：ru-RU 译文。传输和拦截器看到的、已经规范化的出站 HTTP 请求。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httprequestshape-type.mdx`：ru-RU 译文。HTTP builder 可返回的 path、query、headers 和 body。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpresponse-type.mdx`：ru-RU 译文。传输产生、拦截器看到的线上 HTTP 响应形状。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpresponsetype-type.mdx`：ru-RU 译文。在 struct 校验之前读取 HTTP body 所用的表示。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpstatusfault-type.mdx`：ru-RU 译文。非 2xx 响应的故障，类型参数是声明的 error struct。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/httpstatusfaultof-type.mdx`：ru-RU 译文。按已解码 body 类型表达的非 2xx 故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/infer-type.mdx`：ru-RU 译文。从 struct 推出解析成功后的输出类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/interceptor-type.mdx`：ru-RU 译文。客户端拦截器选项接受的三种带 kind 拦截器的联合。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/interceptorfn-type.mdx`：ru-RU 译文。HTTP 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/makeresponse.mdx`：ru-RU 译文。不发网络请求，直接造一个 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/makeresponseoptions-type.mdx`：ru-RU 译文。makeResponse 接受的字段。备注：例外：行内代码多重集差异（缺 无；增 `request`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ru-RU/api/core/manualsocketclosereason-type.mdx`：ru-RU 译文。session.close 记录的关闭码和原因。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/meta.json`：ru-RU 译文。Core API 侧边栏分组标题。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/objectstruct-type.mdx`：ru-RU 译文。struct.object 产生的对象 struct 类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/parseresult-type.mdx`：ru-RU 译文。struct.parse 的错误优先二元组。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/preflightfault-type.mdx`：ru-RU 译文。可能在响应出现之前就失败的故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/preflightfaultcode-type.mdx`：ru-RU 译文。除去 HTTP_STATUS 和解码代码之后的预检故障代码。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/queryserializer-type.mdx`：ru-RU 译文。把已编码的查询对象变成查询字符串的函数。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/requestdefinition-type.mdx`：ru-RU 译文。传给 defineRequest 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/requestendpoint-type.mdx`：ru-RU 译文。defineRequest 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/requesterrordata-type.mdx`：ru-RU 译文。从声明的 error struct 推出的错误 body 类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/requestsuccessdata-type.mdx`：ru-RU 译文。从声明的 output struct 推出的成功 body 类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/socketawaitresult-type.mdx`：ru-RU 译文。WebSocket execute 的三元组：会话，或故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/socketlifecycleoutcome-type.mdx`：ru-RU 译文。单次连接尝试的结果，供重连逻辑使用。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/ssehandler-type.mdx`：ru-RU 译文。SSE 拦截器链末端、负责打开流的处理函数。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/sseinterceptor-type.mdx`：ru-RU 译文。withInterceptors 接受的带 kind 的 SSE 拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/sseinterceptorfn-type.mdx`：ru-RU 译文。SSE 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/streamawaitresult-type.mdx`：ru-RU 译文。SSE execute 的三元组：流和 open，或故障。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-any.mdx`：ru-RU 译文。接受除 null 和 undefined 之外的任意值，类型为 any。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-array.mdx`：ru-RU 译文。用同一个元素 struct 解析数组。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-arraybuffer.mdx`：ru-RU 译文。接受 ArrayBuffer；作为 body 根时按字节发送。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-bigint.mdx`：ru-RU 译文。接受 bigint 值。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-blob.mdx`：ru-RU 译文。接受 Blob；作为 body 根或入站表示时按二进制处理。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-boolean.mdx`：ru-RU 译文。接受布尔值。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-date.mdx`：ru-RU 译文。接受 Date 值。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-discriminatedunion.mdx`：ru-RU 译文。按标签字段区分的对象联合。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-enum.mdx`：ru-RU 译文。接受字符串列表中的一项，或对象映射的值而不是键。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-file.mdx`：ru-RU 译文。接受 File；作为 body 根时按文件发送。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-formdata.mdx`：ru-RU 译文。对象 struct，仅在作为请求 body 根时按 FormData 编码。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-intersection.mdx`：ru-RU 译文。值必须同时满足若干 struct。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-literal.mdx`：ru-RU 译文。只接受一个给定的字面量。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-null.mdx`：ru-RU 译文。只接受 null。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-number.mdx`：ru-RU 译文。接受除 NaN 以外的 number。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-object.mdx`：ru-RU 译文。解析字段固定的普通对象。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-or.mdx`：ru-RU 译文。按顺序尝试若干 struct，第一个成功的获胜。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-parse.mdx`：ru-RU 译文。用 struct 解析未知值，返回错误优先的二元组。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-record.mdx`：ru-RU 译文。解析字符串键、值类型统一的对象。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-string.mdx`：ru-RU 译文。接受字符串。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-symbol-type.mdx`：ru-RU 译文。只作为类型导出的内部标记键，供出站编码器使用。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-tuple.mdx`：ru-RU 译文。按位置用不同 struct 解析定长数组。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-type.mdx`：ru-RU 译文。struct 本体：输入输出类型加上链式修饰方法。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-unknown.mdx`：ru-RU 译文。接受除 null 和 undefined 之外的任意值，类型为 unknown。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct-urlencoded.mdx`：ru-RU 译文。对象 struct，仅在作为请求 body 根时按 URL 编码表单发送。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/struct.mdx`：ru-RU 译文。struct 门面：构造函数和 struct.parse。备注：例外：行内代码多重集差异（缺 无；增 `bigint`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ru-RU/api/core/structerror-type.mdx`：ru-RU 译文。解析失败时返回的错误，带 issues 和格式化方法。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/structinput-type.mdx`：ru-RU 译文。抽出某个 struct 接受的输入类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/structissue-type.mdx`：ru-RU 译文。解析过程中产生的一条校验失败。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/structlike-type.mdx`：ru-RU 译文。每个 struct 都带的结构品牌。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/structmethods-type.mdx`：ru-RU 译文。每个 struct 都有的链式修饰：alias、null、nullish、optional。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/userequestconfig-type.mdx`：ru-RU 译文。不含 signal 的 HTTP 进度和取消选项。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/usewebsocketconfig-type.mdx`：ru-RU 译文。不含 signal 的 WebSocket 单次执行选项。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketcloseinfo-type.mdx`：ru-RU 译文。WebSocket 会话的逻辑终态。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketcommand-type.mdx`：ru-RU 译文。调用 WebSocket 端点后得到的可执行命令。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketconnectioninfo-type.mdx`：ru-RU 译文。当前物理连接的代际、url、协议和扩展。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketdefinition-type.mdx`：ru-RU 译文。传给 defineWebSocket 的端点契约。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketendpoint-type.mdx`：ru-RU 译文。defineWebSocket 返回的可调用端点。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketexecuteoptions-type.mdx`：ru-RU 译文。单次 WebSocket 执行的心跳、重连、协议和取消选项。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websockethandle-type.mdx`：ru-RU 译文。客户端传输使用的 WebSocket 实例表面。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websockethandleconstructor-type.mdx`：ru-RU 译文。withWebSocketHandle 接受的构造器类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websockethandler-type.mdx`：ru-RU 译文。WebSocket 拦截器链末端、负责打开会话的处理函数。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketheartbeatconfig-type.mdx`：ru-RU 译文。心跳间隔、消息、确认判断和超时。备注：例外：行内代码多重集差异（缺 无；增 `message`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ru-RU/api/core/websocketincomingdata-type.mdx`：ru-RU 译文。收到的 WebSocket 消息解码后的类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketinterceptor-type.mdx`：ru-RU 译文。withInterceptors 接受的带 kind 的 WebSocket 拦截器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketinterceptorfn-type.mdx`：ru-RU 译文。WebSocket 拦截器函数的签名。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketoutgoingdata-type.mdx`：ru-RU 译文。session.send 接受的出站消息类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketrequestshape-type.mdx`：ru-RU 译文。WebSocket builder 只能返回 path 和 query。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ru-RU/api/core/websocketsession-type.mdx`：ru-RU 译文。带类型的 WebSocket 会话：发送、接收、观察状态和关闭。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketsessionlike-type.mdx`：ru-RU 译文。拦截器看到的、消息类型为 unknown 的会话表面。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/websocketstate-type.mdx`：ru-RU 译文。受管 WebSocket 会话的生命周期状态字面量。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withcredentials.mdx`：ru-RU 译文。让 HTTP 和 SSE 的 Fetch 带上 credentials。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withendpoint.mdx`：ru-RU 译文。设置请求路径解析所用的 base URL（实际须为绝对 URL）及 WebSocket scheme 转换。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withheaders.mdx`：ru-RU 译文。为 HTTP 和 SSE 设置静态默认头，后写的同名标量覆盖。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withhttphandle.mdx`：ru-RU 译文。替换 HTTP 使用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withinterceptors.mdx`：ru-RU 译文。按注册顺序追加拦截器，不替换已有的。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withqueryserializer.mdx`：ru-RU 译文。替换查询对象如何变成查询字符串。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withssehandle.mdx`：ru-RU 译文。替换打开 SSE 所用的 Fetch 实现。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withsseoninvalidevent.mdx`：ru-RU 译文。观察没有 struct 或校验失败的 SSE 事件。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withssereconnect.mdx`：ru-RU 译文。打开自动 SSE 重连并设置退避。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withtimeout.mdx`：ru-RU 译文。设置仅作用于 HTTP execute 的默认超时。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withwebsocketbeforeconnect.mdx`：ru-RU 译文。在每次 WebSocket 连接尝试前运行钩子。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withwebsockethandle.mdx`：ru-RU 译文。替换 WebSocket 构造器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withwebsocketheartbeat.mdx`：ru-RU 译文。打开 WebSocket 心跳。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withwebsocketprotocols.mdx`：ru-RU 译文。设置握手使用的子协议。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withwebsocketreconnect.mdx`：ru-RU 译文。打开自动 WebSocket 重连并给出退避公式。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/core/withxsrf.mdx`：ru-RU 译文。为非安全方法的 HTTP 请求附上 XSRF 头。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/errors.mdx`：ru-RU 译文。故障变体、工厂和两个取消哨兵的模块页。备注：例外：「DecodeFault」节加粗数 en 0 / 本地 1，仅强调差异，否定与条件文字保留
+- `doc/content/ru-RU/api/http.mdx`：ru-RU 译文。HTTP 模块页：defineRequest、执行选项和请求响应类型。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/index.mdx`：ru-RU 译文。API 参考入口，指向各包的手写查阅页。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/interceptors.md`：ru-RU 译文。HTTP、SSE、WebSocket 拦截器构造函数的模块页。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/meta.json`：ru-RU 译文。API 区导航根，pages 为 index 加自动子页。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/opentelemetry-server.mdx`：ru-RU 译文。出站 OpenTelemetry 拦截器的选项、属性和日志诊断总览。备注：例外：frontmatter `title` 为包名 `@defjs/opentelemetry-server`，与 en-US 相同，按设计保留；表格单元保留英文 ['W3C Trace Context + Baggage']（规范/技术名）
+- `doc/content/ru-RU/api/opentelemetry-server/meta.json`：ru-RU 译文。OpenTelemetry server API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`：ru-RU 译文。HTTP 传输的 OpenTelemetry 选项，responseHook 收到 HttpResponse。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`：ru-RU 译文。withOpenTelemetryServer 的 tracer、meter、logger、propagator 和分传输选项。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`：ru-RU 译文。SSE 传输的 OpenTelemetry 选项，responseHook 收到流句柄。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`：ru-RU 译文。各传输共享的 enabled 和 span 钩子，按响应类型泛化。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`：ru-RU 译文。WebSocket 传输选项，在共享字段上增加 queryPropagation。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/opentelemetry-server/withopentelemetryserver.mdx`：ru-RU 译文。安装 HTTP、SSE、WebSocket 出站 OpenTelemetry 拦截器的客户端选项。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/react.mdx`：ru-RU 译文。React 适配模块页：ClientProvider 和 useClient。备注：例外：frontmatter `title` 为包名 `@defjs/react`，与 en-US 相同，按设计保留
+- `doc/content/ru-RU/api/react/clientprovider-type.mdx`：ru-RU 译文。通过 context 把已有客户端提供给子树的 React 组件。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/react/clientproviderprops-type.mdx`：ru-RU 译文。ClientProvider 的 props：必填 client 和可选 children。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/react/meta.json`：ru-RU 译文。React API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/react/useclient.mdx`：ru-RU 译文。读取最近一层 ClientProvider 里的客户端的 hook。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/sse.mdx`：ru-RU 译文。SSE 模块页：defineEventStream、执行选项和流句柄。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/struct.md`：ru-RU 译文。Struct 模块页：门面、Infer 和 StructError。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/vue.mdx`：ru-RU 译文。Vue 适配模块页：插件、注入键和 injectClient。备注：例外：frontmatter `title` 为包名 `@defjs/vue`，与 en-US 相同，按设计保留
+- `doc/content/ru-RU/api/vue/createclientplugin.mdx`：ru-RU 译文。创建把已有客户端 provide 给应用的 Vue 插件。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/vue/http-client.mdx`：ru-RU 译文。提供 Defjs 客户端所用的 Vue 注入键。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/vue/injectclient.mdx`：ru-RU 译文。读取 createClientPlugin 提供的客户端。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/vue/meta.json`：ru-RU 译文。Vue API 侧边栏标题。备注：结构与 en-US 一致
+- `doc/content/ru-RU/api/web-socket.mdx`：ru-RU 译文。WebSocket 模块页：defineWebSocket、会话和执行选项。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/client.mdx`：ru-RU 译文。客户端指南：配置组合、执行元组、测试 transport 与服务端作用域。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译；表格单元保留英文 ['HTTP XSRF cookie → header']（规范/技术名）
+- `doc/content/ru-RU/docs/commands.mdx`：ru-RU 译文。命令指南：定义 endpoint、显式 builder、请求值放置与解码声明。备注：例外：行内代码多重集差异（缺 无；增 `output`、`error`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ru-RU/docs/design-decisions.mdx`：ru-RU 译文。设计说明：声明断言、解码顺序、别名编码和资源所有权。备注：例外：高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ru-RU/docs/errors.mdx`：ru-RU 译文。错误指南：闭合 fault 集、元组、错误联合收窄与诊断边界。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/http.mdx`：ru-RU 译文。HTTP 指南：URL、builder、body、解码、取消、XSRF 与进度。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/index.md`：ru-RU 译文。指南目录页。备注：例外：首页链接 `/` 译为 `/ru-RU`（站点规范的本地化首页路由，`localePrefix`），目标正确
+- `doc/content/ru-RU/docs/integrations/meta.json`：ru-RU 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/integrations/opentelemetry-server.mdx`：ru-RU 译文。OTel 集成指南：outbound tracing、metrics、logs、hooks 与第三方 logger。备注：例外：frontmatter `title` 与 en-US 相同（产品名 OpenTelemetry），按设计保留；行内代码多重集差异（缺 `provider.shutdown()`；增 `await provider.shutdown()`），复核为加/去反引号或等义改写，标识符与取值未变；高 ASCII 比例段落（启发式），复核为本地语句含技术术语，非漏译
+- `doc/content/ru-RU/docs/integrations/react.mdx`：ru-RU 译文。React 集成指南：Context 注入、HTTP 与实时任务的 effect 所有权。备注：例外：frontmatter `title` 与 en-US 相同（产品名 React），按设计保留
+- `doc/content/ru-RU/docs/integrations/vue.mdx`：ru-RU 译文。Vue 集成指南：插件注入、watcher 取消、子树覆盖与 scope 清理。备注：例外：frontmatter `title` 与 en-US 相同（产品名 Vue），按设计保留
+- `doc/content/ru-RU/docs/interceptors.mdx`：ru-RU 译文。拦截器指南：onion 顺序、请求修改、短路、安全重试与 session 包装。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/meta.json`：ru-RU 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/sse.mdx`：ru-RU 译文。SSE 指南：握手、事件解码、重连预算、限额与有界释放。备注：例外：标题保留英文 ['Server-Sent Events']（协议/产品名）
+- `doc/content/ru-RU/docs/start.mdx`：ru-RU 译文。入门指南：安装、定义 GET、离线执行及切换真实服务。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/struct.mdx`：ru-RU 译文。Struct 指南：存在性、null、别名、错误和公共结构构造器。备注：结构与 en-US 一致
+- `doc/content/ru-RU/docs/web-socket.mdx`：ru-RU 译文。WebSocket 指南：帧、状态、队列、重连、心跳与所有权。备注：例外：行内代码多重集差异（缺 无；增 `jitter`、`execute`），复核为加/去反引号或等义改写，标识符与取值未变
+- `doc/content/ru-RU/index.mdx`：ru-RU 译文。首页：介绍包选择、结果元组与资源所有权。备注：例外：frontmatter `title` 与 en-US 相同（产品名 Defjs），按设计保留
+- `doc/content/ru-RU/meta.json`：ru-RU 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/cancel-http.mdx`：ru-RU 译文。取消和超时的 HTTP 调用配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/consume-sse.mdx`：ru-RU 译文。消费一个 SSE 事件并释放流的配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/etag-revalidate.mdx`：ru-RU 译文。保留应用缓存并处理 ETag/304 的配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/get-declared-404.mdx`：ru-RU 译文。声明 200/404 body 并收窄 fault 的配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/graphql-http-envelope.mdx`：ru-RU 译文。在 HTTP 200 上解包 GraphQL data/errors 的配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/index.md`：ru-RU 译文。配方目录页。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/meta.json`：ru-RU 译文。文档导航元数据：定义目录标题或页面顺序。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/post-json.mdx`：ru-RU 译文。提交 JSON 并解码 201 的配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/publish-http-sdk.mdx`：ru-RU 译文。导出 endpoint 与客户端工厂的 HTTP SDK 配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/refresh-bearer-once.mdx`：ru-RU 译文。在同一 onion 层 single-flight 刷新 Bearer 后重放一次的配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/test-with-handle.mdx`：ru-RU 译文。注入本地 Fetch handle 的 HTTP 测试配方。备注：结构与 en-US 一致
+- `doc/content/ru-RU/recipes/websocket-session.mdx`：ru-RU 译文。发送并接收一个 WebSocket envelope 的配方。备注：结构与 en-US 一致
+
+## 运维与工程配置
+
+CI 与发布工作流、根配置、各包构建与发布清单、锁文件、跨包共享测试设施。（39 个文件，审计分区 `P11-ops`）
+
+- `.editorconfig`：统一换行、缩进、编码、尾空白和 140 列行宽，`.ts` 使用单引号。备注：18 行；`max_line_length = 140` 与 `.oxfmtrc.json` 的 `printWidth` 一致
+- `.github/FUNDING.yml`：声明 GitHub Sponsors 资助账号。备注：仅 `github: defjs`；账号是否存在未核验
+- `.github/ISSUE_TEMPLATE/bug.yml`：缺陷报告表单，收集版本、复现步骤与预期行为。备注：56 行
+- `.github/ISSUE_TEMPLATE/config.yml`：关闭空白 issue 入口，强制使用模板。备注：仅 `blank_issues_enabled: false`
+- `.github/ISSUE_TEMPLATE/feature.yaml`：功能请求表单，收集需求描述、方案与备选方案。备注：24 行；三个 textarea 均必填
+- `.github/dependabot.yml`：配置 Bun 依赖每周更新与 GitHub Actions 每月更新。备注：Bun 生态单一 group `*`、`increase-if-necessary`、`open-pull-requests-limit: 10`
+- `.github/workflows/ci.yml`：在 ubuntu-latest 上安装依赖与 Playwright 浏览器后执行根 `verify`。备注：20 行；push 仅 main、PR 全分支；只覆盖 Bun 运行时；无覆盖率上传
+- `.github/workflows/release.yml`：手动勾选的 npm 发布（每包一个 job）与 GitHub Pages 文档部署。备注：129 行；包 job 只构建本包、无质量检查（P11-ops-03）；适配器 job 构建时不存在 core `dist`（P11-ops-02）；未启用 provenance（hardening，见 rejected）
+- `.gitignore`：忽略依赖、构建产物、覆盖率、IDE 与本地 env 文件。备注：54 行；忽略 `.env*.local` 但不忽略 `.env`，未发现已跟踪的 `.env`
+- `.oxfmtrc.json`：oxfmt 格式规则（140 列、无分号、单引号）与忽略目录。备注：忽略的 `field-study/**` 在 HEAD 不存在，无害
+- `bun.lock`：锁定全部 workspace 的依赖解析与完整性哈希。备注：1645 行，生成文件；`bun install --frozen-lockfile --dry-run` 退出 0；同时锁定 `@types/react-dom@19.3.0` 与 `doc/@types/react-dom@19.2.3`
+- `bunfig.toml`：使用 isolated 安装布局并让根目录 `bun run` 强制使用 Bun 运行时。备注：`[run] bun = true` 是 CI 只跑 Bun 的原因
+- `oxlint.config.ts`：根 oxlint 规则：namespace 导入、type import、禁止 any 与非空断言，并关闭部分 Vitest 规则。备注：34 行；关闭项有注释说明
+- `package.json`：根 workspace、Bun catalog、overrides、engines 与 build/test/typecheck/verify 脚本链。备注：70 行；`packageManager: bun@1.4.3`；无任何 pack 或 tarball 消费者检查
+- `packages/core/.gitignore`：忽略 core 的 coverage、dist、Vitest 临时文件、快照与截图目录。备注：6 行
+- `packages/core/package.json`：`@defjs/core@0.4.0` 源清单：ESM、`sideEffects: false`、从 `dist` 发布。备注：`publishConfig.directory: dist`；devDependencies 全部走 catalog
+- `packages/core/tsconfig.build.json`：core 声明构建配置：仅 `src`，清空 `types`，排除测试。备注：13 行；供 tsdown 读取
+- `packages/core/tsconfig.json`：core 开发与测试类型检查配置，继承根 base。备注：5 行；无自己的 `paths`
+- `packages/core/tsdown.config.ts`：构建 core 的 `index.js`/`index.d.ts` 与 `index.min.js`，并改写发布用 `dist/package.json`。备注：73 行；`copy` 只有 `LICENSE` 与 `README.md`，遗漏 `THIRD_PARTY_NOTICES.md`（P11-ops-01）；额外写入 `unpkg`/`jsdelivr`
+- `packages/opentelemetry-server/.gitignore`：忽略该包的 coverage、dist 与 node_modules。备注：3 行
+- `packages/opentelemetry-server/package.json`：`@defjs/opentelemetry-server@0.0.1` 源清单与 peer 契约。备注：依赖 `@opentelemetry/api-logs@^0.223.0`；peer 为 core `^0.4.0`、api `^1.0.0`、otel core `^2.0.0`
+- `packages/opentelemetry-server/tsconfig.build.json`：声明构建配置，把 `@defjs/core` 映射到 `../core/dist/index.d.ts`。备注：`types: []`；`paths` 覆盖父配置、无源码回退；独立构建时无法解析但产出声明未退化
+- `packages/opentelemetry-server/tsconfig.json`：开发类型检查配置，把 `@defjs/core` 映射到 `../core/src`。备注：根 `typecheck` 不加载 `tsconfig.build.json`
+- `packages/opentelemetry-server/tsdown.config.ts`：构建 OTel 包的 ESM 与 d.ts 并改写 dist 清单。备注：50 行；`neverBundle` 含 core 与 `@opentelemetry/*`；`writeDistPackageJson` 与另三份配置手工复制
+- `packages/react/package.json`：`@defjs/react@0.0.1` 源清单与 peer 契约。备注：peer 为 core `^0.4.0`、react `>=18.0.0`；`@types/react`/`@types/react-dom` 写死 `^19.3.0` 未走 catalog（P11-ops-05）
+- `packages/react/tsconfig.build.json`：声明构建配置，把 `@defjs/core` 映射到 `../core/dist/index.d.ts`。备注：发布 job 中该路径不存在，`ClientProvider` 推断返回类型退化为 `ProviderProps<any>`（P11-ops-02）
+- `packages/react/tsconfig.json`：开发类型检查配置，把 `@defjs/core` 映射到 `../core/src`。备注：结构与 vue/otel 的开发 tsconfig 相同
+- `packages/react/tsdown.config.ts`：构建 React 适配器（JS 加 `'use client'` banner）并改写 dist 清单。备注：53 行；`neverBundle` 含 react、react-dom、`@defjs/core`
+- `packages/vue/.gitignore`：忽略 vue 包的 dist 与 node_modules。备注：2 行
+- `packages/vue/package.json`：`@defjs/vue@0.0.1` 源清单与 peer 契约。备注：devDependency `vue` 精确 `3.5.43`；peer `vue >=3.0.0`、core `^0.4.0`
+- `packages/vue/tsconfig.build.json`：声明构建配置，把 `@defjs/core` 映射到 `../core/dist/index.d.ts`。备注：独立构建时无法解析，但公开函数有显式返回类型，产出声明未退化
+- `packages/vue/tsconfig.json`：开发类型检查配置，把 `@defjs/core` 映射到 `../core/src`。备注：10 行
+- `packages/vue/tsdown.config.ts`：构建 Vue 适配器的 ESM 与 d.ts 并改写 dist 清单。备注：50 行；`neverBundle` 含 vue 与 `@defjs/core`
+- `test/browser-api-server-setup.ts`：React/Vue 浏览器测试项目共享的 Hono globalSetup/teardown，提供 `testServerHost`。备注：46 行；CORS 回显 Origin（缺省 `*`）且 `credentials: true`
+- `test/firefox-app-data.ts`：在 macOS 上为 Firefox 准备临时应用数据目录并返回 env 副本。备注：43 行；不修改 `process.env`；已文档化的临时绕过
+- `test/hono-test-server.ts`：在 127.0.0.1 临时端口启动 Hono，关闭时先销毁连接再关闭服务。备注：64 行；`ERR_SERVER_NOT_RUNNING` 视为成功；server 已 `unref()`
+- `test/loopback-proxy-bypass.ts`：导入时把 loopback 主机合并去重写入 `NO_PROXY`/`no_proxy`。备注：5 行；有意的导入副作用
+- `tsconfig.base.json`：全仓共享的严格 TypeScript 选项（ESNext、DOM、`types: ["bun"]`）。备注：`skipLibCheck: true`；不验证文档宣称的 ES2022 lib 基线
+- `tsconfig.json`：根类型检查项目：包含全部 TS 文件并把四个包映射到源码。备注：14 行；排除 `doc`、`**/dist`；doc 另行检查
+
+## 项目文档
+
+README、设计文档、发布说明、性能与过程记录、许可证与行为准则。（66 个文件，审计分区 `P12-project-docs`）
+
+- `CODE_OF_CONDUCT.md`：Contributor Covenant 2.0 行为准则，规定举报渠道与分级处理流程。备注：128 行；第 62-63 行举报地址自首次提交起就是空的（只有 `.`），见 P12-project-docs-02
+- `DESIGN-builder.md`：`builder` 取代 `build`、删除 `struct.request` 的中文设计稿，含类型与 body 分流规则。备注：823 行；2026-10-10 两次随契约更新，此后未同步；状态行与 body `unknown` 已过期，见 P12-project-docs-05；不在 tarball，无现行文档链接
+- `LICENSE`：仓库根 MIT 许可证正文（Copyright 2026 MunMunMiao）。备注：21 行；四个包 `license: MIT`，经 tsdown `copy` 进入各 tarball
+- `README.md`：仓库入口：项目定位、快速开始、包列表、仓库任务、测试约定、发布流程与路线图。备注：178 行；第 12 行 Codecov 徽章数据停在 2025-03-14，见 P12-project-docs-06；Quick Start 与当前 API 一致
+- `docs/perf/2026-10-01/bench/analyze.py`：把 V8 CPU profile 按 bundle 标记归属到源模块并汇总的分析脚本。备注：历史性能记录；不审脚本质量
+- `docs/perf/2026-10-01/bench/bench.sh`：Node/Bun 的 run、pair、count、leak、profile 测量入口，把 `__CORE__` 改写为给定源码目录。备注：历史性能记录
+- `docs/perf/2026-10-01/bench/browser/page.mjs`：浏览器页面内的 A/B 计时与 heap 采样驱动。备注：历史性能记录
+- `docs/perf/2026-10-01/bench/browser/run.mjs`：用 Playwright 打包、起临时 HTTP 服务并协调浏览器配对与 heap 测量。备注：历史性能记录
+- `docs/perf/2026-10-01/bench/browser/workloads.mjs`：浏览器端 HTTP、signal 常驻、struct 常驻工作负载定义。备注：历史性能记录；经 `__CORE__` 占位导入
+- `docs/perf/2026-10-01/bench/count.mjs`：统计单次操作的 Promise、listener 与平台构造器次数。备注：历史性能记录
+- `docs/perf/2026-10-01/bench/leak.mjs`：复用 signal 时 HTTP/SSE 的常驻 heap 采样。备注：历史性能记录
+- `docs/perf/2026-10-01/bench/net-server.mjs`：net-* 工作负载使用的 loopback JSON 服务器。备注：历史性能记录
+- `docs/perf/2026-10-01/bench/pair.mjs`：Node/Bun 同进程交替运行两份构建的配对计时驱动。备注：历史性能记录；依赖生成的 `a.gen.mjs` / `b.gen.mjs`
+- `docs/perf/2026-10-01/bench/run.mjs`：单版本 7 样本计时与 Node heap 分配采样。备注：历史性能记录
+- `docs/perf/2026-10-01/bench/scenarios.mjs`：经 `client.execute` 的 HTTP、struct、SSE、WebSocket 与 net-* 场景模板。备注：历史性能记录；所用公开 API 在 HEAD 仍存在
+- `docs/perf/2026-10-01/hotspot-analysis.md`：2026-10-01 两轮 `@defjs/core` 热点分析、测量数字与复现步骤。备注：411 行；第 5 行声明 10 个 patch 已应用、第 1–8 节保留第一轮原文；无现行文档链接
+- `docs/perf/2026-10-01/patches/0001-fix-abort-stop-pinning-request-signals-to-a-caller-s.patch`：历史补丁：deadline 监听不再钉住调用方 signal，附回归测试。备注：已合入历史，对 HEAD `git apply --check` 失败属预期
+- `docs/perf/2026-10-01/patches/0002-perf-http-stop-re-racing-the-request-signal-on-every.patch`：历史补丁：HTTP 不再在每个请求上重复 race 请求 signal。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0003-perf-http-memoize-the-parsed-client-endpoint-base.patch`：历史补丁：缓存已解析的 client endpoint base URL。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0004-perf-encode-fast-path-for-a-node-guided-by-one-objec.patch`：历史补丁：单 object 引导节点的 encode 快路径及回归测试。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0005-perf-struct-tag-parse-created-nodes-with-a-plain-sto.patch`：历史补丁：parse 新建节点改用普通赋值打 tag。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0006-perf-sse-synchronous-per-event-path.patch`：历史补丁：SSE 每事件同步解析路径及 parser/reconnect 测试。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0007-perf-websocket-decode-text-and-byte-frames-synchrono.patch`：历史补丁：WebSocket 文本与字节帧同步解码。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0008-perf-client-commands-carry-their-executor-so-unused-.patch`：历史补丁：command 携带 executor，使未用传输层可被 tree-shake。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0009-perf-http-a-lone-deadline-signal-is-the-request-sign.patch`：历史补丁：只有 deadline 时直接把它作为请求 signal。备注：已合入历史
+- `docs/perf/2026-10-01/patches/0010-perf-struct-keep-struct-keyed-null-prototype-objects.patch`：历史补丁：保持 struct 键控 null-prototype 对象为 fast properties。备注：已合入历史
+- `docs/perf/2026-10-01/results/alloc.txt`：第一轮 Node 每操作分配测量结果。备注：历史测量原文
+- `docs/perf/2026-10-01/results/body-read-and-primitives.txt`：body 读取策略与平台原语微基准结果。备注：历史测量原文
+- `docs/perf/2026-10-01/results/bundle-size.txt`：第一轮 bundle 体积与模块贡献。备注：历史测量原文
+- `docs/perf/2026-10-01/results/leak.txt`：第一轮 Node/Bun signal 常驻内存数据。备注：历史测量原文
+- `docs/perf/2026-10-01/results/legend.txt`：结果文件的变更代号、patch 映射与机器/引擎环境图例。备注：历史测量原文
+- `docs/perf/2026-10-01/results/null-prototype-objects.txt`：V8/JSC 下 null-prototype 对象微基准与常驻 heap。备注：历史测量原文
+- `docs/perf/2026-10-01/results/pair-baseline-vs-all-patches.txt`：第一轮基线对全部 patch 的配对测量汇总。备注：历史测量原文
+- `docs/perf/2026-10-01/results/pair-per-change.txt`：逐个 patch 的配对测量汇总。备注：历史测量原文
+- `docs/perf/2026-10-01/results/primitives-per-op.txt`：第一轮每操作平台原语计数。备注：历史测量原文
+- `docs/perf/2026-10-01/results/profile-bun-get-small-baseline.md`：Bun `get-small` 基线 CPU profile 摘要。备注：历史测量原文
+- `docs/perf/2026-10-01/results/profile-node-get-small-all-patches.txt`：Node `get-small` 全部 patch 后的 CPU profile 摘要。备注：历史测量原文
+- `docs/perf/2026-10-01/results/profile-node-get-small-baseline.txt`：Node `get-small` 基线 CPU profile 摘要。备注：历史测量原文
+- `docs/perf/2026-10-01/results/round2/bundle-size.txt`：第二轮最终 bundle 体积。备注：历史测量原文
+- `docs/perf/2026-10-01/results/round2/leak-node-bun.txt`：第二轮 Node/Bun 常驻 heap 数据。备注：历史测量原文
+- `docs/perf/2026-10-01/results/round2/memory-chromium.txt`：第二轮 Chromium CDP heap 数据。备注：历史测量原文
+- `docs/perf/2026-10-01/results/round2/pair-browsers.txt`：第二轮 Chromium/Firefox/WebKit 配对测量。备注：历史测量原文
+- `docs/perf/2026-10-01/results/round2/pair-node-bun.txt`：第二轮 Node/Bun 配对测量。备注：历史测量原文
+- `docs/perf/2026-10-01/results/round2/pair-webkit-2359.txt`：第二轮 WebKit 2359 重测结果。备注：历史测量原文
+- `docs/perf/2026-10-01/results/round2/primitives-per-op.txt`：第二轮最终每操作平台原语计数。备注：历史测量原文
+- `docs/releases/0.4.0.md`：0.4.0 发布说明草稿：Core 破坏性变更、传输行为、适配器、OTel 与打包说明。备注：68 行；已删 API 确实不在公开面；第 66 行 packed-consumer 声明已过期（P11-ops-04）
+- `docs/superpowers/plans/2026-08-26-bun-release-workflow.md`：用 Bun 与按包 tag 发布替换 Changesets 的历史实施计划。备注：历史计划；现行发布以 `.github/workflows/release.yml` 为准
+- `docs/superpowers/plans/2026-08-29-defjs-error-otel-disposal.md`：错误模型、OTel `startSpanHook` 与 AsyncDisposable 的历史实施计划。备注：历史计划；使用旧 `vitest.config.server.ts` 命令
+- `docs/superpowers/plans/2026-10-10-fumadocs-migration.md`：文档站迁移到 Fumadocs 的实施任务与交接记录。备注：历史计划；迁移已落在 `doc/`
+- `docs/superpowers/plans/2026-10-10-starlight-migration.md`：已废弃的 Starlight 迁移计划。备注：历史计划；第 3 行标明不再执行
+- `docs/superpowers/plans/2026-10-11-grouped-navigation.md`：文档导航分组的实施计划。备注：历史计划
+- `docs/superpowers/plans/2026-10-11-opentelemetry-server-logger.md`：OTel 可选 Logger 信号的契约、任务与验收计划。备注：历史计划；与 HEAD 的 `logger?` 选项一致
+- `docs/superpowers/specs/2026-08-26-bun-release-workflow-design.md`：Bun 发布流程的历史设计规格。备注：历史规格；其中 packed-consumer 门禁已于 `77a75294` 删除，无现行文档链接
+- `docs/superpowers/specs/2026-10-10-fumadocs-migration-design.md`：Fumadocs 迁移设计规格与已知边界。备注：历史规格
+- `docs/superpowers/specs/2026-10-10-starlight-migration-design.md`：Starlight 迁移调研规格。备注：历史规格；第 3 行标明已被替代
+- `docs/superpowers/verification/2026-10-10-fumadocs-migration.md`：Fumadocs 迁移的当日验收记录。备注：过去时记录；引用未跟踪的 `.superpowers/` 日志
+- `docs/superpowers/verification/2026-10-11-firefox-search.md`：Firefox hydration/搜索等待条件修复的当日验收记录。备注：`doc/app/root.tsx` 的 `data-hydrated` 仍与记录相符
+- `docs/superpowers/verification/2026-10-11-grouped-navigation.md`：分组导航的当日验收记录（分项通过、完整 verify 未通过）。备注：过去时记录
+- `docs/superpowers/verification/2026-10-11-navigation-and-optional-tracer.md`：导航层级与 OTel 可选 tracer 的当日验收记录。备注：`tracer?: Tracer` 仍在 `packages/opentelemetry-server/src/option.ts:40`
+- `logo.jpg`：根 README 居中引用的项目标志图（800×800 JPEG）。备注：被 git 跟踪；无文字声明
+- `packages/core/README.md`：随 `@defjs/core` tarball 发布的包说明：安装、快速开始、边界、运行时说明与文档链接。备注：87 行；第 83-87 行站点链接不在路由表（P12-project-docs-01）；第 65、72-74 行验证声明过期（P11-ops-04）
+- `packages/core/THIRD_PARTY_NOTICES.md`：SSE 解析器改编自 Azure/fetch-event-source 的归属说明与 MIT 许可全文。备注：31 行；第 5 行源路径应为 `src/sse/transport/parser.ts`；不进 tarball（均归 P11-ops-01）
+- `packages/core/design.md`：Core 中文使用手册：client、Struct、请求放置、body、HTTP、SSE、WebSocket 与拦截器规则。备注：250 行；第 212 行（P09a-doc-guides-02 补充位置）、第 237 行（P03b-core-ws-06）有过期表述；不在 tarball
+- `packages/opentelemetry-server/README.md`：随 OTel 包发布的行为合同：tracing、metrics、Logs、hooks、传输 span 边界与示例。备注：359 行；第 95 行 timeout 日志（P12-project-docs-03）、第 230-232/267 行 `server.port`（P12-project-docs-04）、第 356-359 行站点链接（P12-project-docs-01）
+- `packages/react/README.md`：随 `@defjs/react` 发布的适配器说明：`ClientProvider`、`useClient` 与应用自管生命周期。备注：103 行；peer `@defjs/core ^0.4.0`、React ≥18；示例可类型检查
+- `packages/vue/README.md`：随 `@defjs/vue` 发布的适配器说明：client 插件、注入、watch 清理与 SSR 范围。备注：120 行；peer `@defjs/core ^0.4.0`、Vue ≥3；第 88-94 行 `provide()` 片段缺 setup 上下文（仅润色）
