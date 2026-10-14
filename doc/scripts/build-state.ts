@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+
 export async function buildFingerprint(root = new URL('../', import.meta.url).pathname): Promise<string> {
   const paths = await Array.fromAsync(new Bun.Glob('{app,content,examples,public}/**/*').scan({ cwd: root, onlyFiles: true }))
   paths.push(
@@ -9,6 +10,8 @@ export async function buildFingerprint(root = new URL('../', import.meta.url).pa
     'scripts/build.ts',
     'scripts/build-state.ts',
     'scripts/check-links.ts',
+    '../bun.lock',
+    '../package.json',
   )
   const hash = new Bun.CryptoHasher('sha256')
   for (const path of paths.sort()) {

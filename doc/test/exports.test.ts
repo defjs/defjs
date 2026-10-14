@@ -1,20 +1,29 @@
 import { expect, test } from 'bun:test'
-import { dirname, resolve } from 'node:path'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { apiEntries } from '../app/data/api-catalog'
 
 const packages = ['core', 'react', 'vue', 'opentelemetry-server']
 const entryOf = (pkg: string) => resolve(import.meta.dir, `../../packages/${pkg}/src/index.ts`)
 
+const understoodExport =
+  /^export\s+(?:type\s+)?\{[^}]*\}(?:\s+from\s+['"][^'"]+['"])?|^export\s+\*\s+from\s+['"][^'"]+['"]|^export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:type|interface|class|enum|function|const)\s+\w+/
+
 /**
  * Every name a module exports. Type-only exports have no runtime presence, so their names are read from the source
- * (`export { a }`, `export type { a } from`, `export type|interface|class|function|const a`, and `export *` followed
- * recursively). The caller checks the runtime namespace against this set, which catches syntax the scan misses for values.
+ * (`export { a }`, `export type { a } from`, `export type|interface|class|enum|function|const a`, and `export *` followed
+ * recursively). Any other `export` statement is rejected, so an unread form cannot pass the catalog check.
  */
 async function sourceExports(file: string, visited = new Set<string>()): Promise<Set<string>> {
   if (visited.has(file)) return new Set()
   visited.add(file)
   const text = (await Bun.file(file).text()).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, ''),
     names = new Set<string>()
+  for (const match of text.matchAll(/(?:^|[;\n])[ \t]*export\b/g)) {
+    const statement = text.slice((match.index ?? 0) + match[0].length - 'export'.length)
+    if (!understoodExport.test(statement)) throw new Error(`Unrecognized export in ${file}: ${statement.split('\n', 1)[0]}`)
+  }
   for (const match of text.matchAll(/export\s+(?:type\s+)?\{([^}]+)\}/g))
     for (const name of (match[1] ?? '').split(',')) {
       const clean = name
@@ -55,6 +64,21 @@ test.each(packages)('@defjs/%s catalog matches its public exports, in both direc
   expect([...catalog.keys()].filter((name) => !names.has(name))).toEqual([])
   const wrongKinds = [...catalog].filter(([name, kind]) => kind !== (name in runtime ? runtimeKind(runtime[name]) : 'type'))
   expect(wrongKinds).toEqual([])
+})
+
+test.each([
+  "export type * from './types'\n",
+  "export type * as ns from './types'\n",
+  'export declare namespace Hidden {\n  export type Member = string\n}\n',
+])('sourceExports rejects an unrecognized export: %s', async (source) => {
+  const directory = await mkdtemp(join(tmpdir(), 'defjs-exports-'))
+  try {
+    const file = join(directory, 'index.ts')
+    await Bun.write(file, source)
+    await expect(sourceExports(file)).rejects.toThrow('Unrecognized export')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
 })
 
 test('struct.* catalog entries are exactly the struct facade members', async () => {

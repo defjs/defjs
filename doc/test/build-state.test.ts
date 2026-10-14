@@ -36,8 +36,11 @@ test('static build finalization rejects changed inputs, supplies GitHub Pages 40
 })
 
 test('build fingerprint covers included examples, public assets and tsconfig', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'defjs-fingerprint-'))
+  const workspace = await mkdtemp(join(tmpdir(), 'defjs-fingerprint-'))
+  const root = join(workspace, 'doc')
   try {
+    await Bun.write(join(workspace, 'package.json'), '{}')
+    await Bun.write(join(workspace, 'bun.lock'), '{}')
     for (const file of [
       'app/a.ts',
       'content/a.mdx',
@@ -52,6 +55,7 @@ test('build fingerprint covers included examples, public assets and tsconfig', a
       'scripts/check-links.ts',
     ])
       await Bun.write(join(root, file), 'one')
+    await Bun.write(join(root, 'package.json'), '{}')
     let previous = await buildFingerprint(root)
     for (const file of ['examples/a.ts', 'public/a.txt', 'tsconfig.json']) {
       await Bun.write(join(root, file), `changed ${file}`)
@@ -60,6 +64,80 @@ test('build fingerprint covers included examples, public assets and tsconfig', a
       previous = next
     }
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await rm(workspace, { recursive: true, force: true })
+  }
+})
+
+test('build fingerprint changes when only a dependency version changes', async () => {
+  const workspace = await mkdtemp(join(tmpdir(), 'defjs-fingerprint-deps-'))
+  const root = join(workspace, 'doc')
+  const versions = {
+    uiCatalog: '16.17.1',
+    uiResolved: '16.17.1',
+    isbot: '5.2.2',
+    docTypes: '19.2.3',
+    otherTypes: '19.3.0',
+    honoCatalog: '4.0.0',
+    honoResolved: '4.0.0',
+    transitive: '1.0.0',
+  }
+  const writeVersions = async (next: typeof versions) => {
+    await Bun.write(
+      join(workspace, 'package.json'),
+      JSON.stringify({
+        workspaces: {
+          catalog: { 'fumadocs-ui': next.uiCatalog, '@types/react-dom': '19.2.3', hono: next.honoCatalog },
+        },
+      }),
+    )
+    await Bun.write(
+      join(workspace, 'bun.lock'),
+      JSON.stringify({
+        workspaces: { doc: { name: 'doc' } },
+        packages: {
+          'fumadocs-ui': [`fumadocs-ui@${next.uiResolved}`, ''],
+          isbot: [`isbot@${next.isbot}`, ''],
+          '@types/react-dom': [`@types/react-dom@${next.otherTypes}`, ''],
+          'doc/@types/react-dom': [`@types/react-dom@${next.docTypes}`, ''],
+          hono: [`hono@${next.honoResolved}`, ''],
+          transitive: [`transitive@${next.transitive}`, ''],
+        },
+      }),
+    )
+  }
+  try {
+    for (const file of [
+      'app/a.ts',
+      'content/a.mdx',
+      'examples/a.ts',
+      'public/a.txt',
+      'tsconfig.json',
+      'vite.config.ts',
+      'react-router.config.ts',
+      'scripts/build.ts',
+      'scripts/build-state.ts',
+      'scripts/check-links.ts',
+    ])
+      await Bun.write(join(root, file), 'one')
+    await Bun.write(
+      join(root, 'package.json'),
+      JSON.stringify({
+        name: 'doc',
+        dependencies: { isbot: '^5' },
+        devDependencies: { 'fumadocs-ui': 'catalog:', '@types/react-dom': 'catalog:', '@defjs/core': 'workspace:^' },
+      }),
+    )
+    await writeVersions(versions)
+    const current = await buildFingerprint(root)
+    await writeVersions({ ...versions, uiCatalog: '16.17.2' })
+    expect(await buildFingerprint(root)).not.toBe(current)
+    await writeVersions({ ...versions, isbot: '5.2.3' })
+    expect(await buildFingerprint(root)).not.toBe(current)
+    await writeVersions({ ...versions, docTypes: '19.2.4' })
+    expect(await buildFingerprint(root)).not.toBe(current)
+    await writeVersions({ ...versions, transitive: '1.0.1' })
+    expect(await buildFingerprint(root)).not.toBe(current)
+  } finally {
+    await rm(workspace, { recursive: true, force: true })
   }
 })

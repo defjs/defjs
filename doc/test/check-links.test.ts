@@ -18,3 +18,23 @@ test('static link validation handles encoded paths/resources and rejects missing
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test('a directory without index.html is not a page, with or without an anchor', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'defjs-links-dir-'))
+  try {
+    await Bun.write(join(directory, 'index.html'), '<a href="/api/core">core</a><a href="/api/core#anything">anchor</a>')
+    await Bun.write(join(directory, 'api/core/createclient/index.html'), '<h1 id="anything">title</h1>')
+    const error = await checkLinks(directory).then(
+      () => {
+        throw new Error('expected broken links')
+      },
+      (cause: unknown) => cause,
+    )
+    expect(error).toBeInstanceOf(Error)
+    const lines = error instanceof Error ? error.message.split('\n') : []
+    expect(lines).toContain('/: missing page /api/core')
+    expect(lines).toContain('/: missing page /api/core#anything')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+})

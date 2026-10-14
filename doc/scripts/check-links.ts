@@ -1,5 +1,14 @@
-import { existsSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
+
+function isRegularFile(path: string): boolean {
+  try {
+    return statSync(path).isFile()
+  } catch {
+    return false
+  }
+}
+
 export async function checkLinks(directory: string): Promise<void> {
   const root = resolve(directory)
   const pages = new Map<string, { ids: Set<string>; links: string[] }>()
@@ -39,8 +48,9 @@ export async function checkLinks(directory: string): Promise<void> {
       if (url.origin !== base.origin || !['http:', 'https:'].includes(url.protocol)) continue
       const path = resolve(root, '.' + decodeURIComponent(url.pathname))
       const target = [path, resolve(path, 'index.html')].find((candidate) => pages.has(candidate))
+      // A directory is a page only when index.html was emitted; every other non-file is missing.
       if (!target) {
-        if (!existsSync(path)) failures.add(`${base.pathname}: missing page ${href}`)
+        if (!isRegularFile(path)) failures.add(`${base.pathname}: missing page ${href}`)
         continue
       }
       if (url.hash && !pages.get(target)?.ids.has(decodeURIComponent(url.hash.slice(1))))
