@@ -113,7 +113,23 @@ describe('constructors.ts intersection', () => {
   test('intersection of one struct is the struct itself', () => {
     const named = struct.object({ name: struct.string() })
 
+    expect(struct.intersection(named)).toBe(named)
     expect(parse(struct.intersection(named), { name: 'x' })).toEqual([null, { name: 'x' }])
+  })
+
+  test('a variadic singleton keeps optional identity while multiple members require a value', () => {
+    const optional = struct.date().optional()
+    const members: [typeof optional, ...(typeof optional)[]] = [optional]
+    const single = struct.intersection(...members)
+    expect(single).toBe(optional)
+    expect(parse(single, undefined)).toEqual([null, undefined])
+    expect(parse(struct.object({ value: single }), {})).toEqual([null, {}])
+
+    members.push(optional)
+    const pair = struct.intersection(...members)
+    expect(pair).not.toBe(optional)
+    expect(parse(pair, undefined)[0]?.issues[0]?.code).toBe('invalid_type')
+    expect(parse(struct.object({ value: pair }), {})[0]?.issues[0]?.code).toBe('missing_key')
   })
 
   test('intersection merges two object structs field-wise', () => {
@@ -142,6 +158,45 @@ describe('constructors.ts intersection', () => {
       throw okErr
     }
     expect(okVal).toEqual({ active: true, age: 30, name: 'x' })
+  })
+
+  describe('a nullable object intersection nested in another intersection', () => {
+    const inner = () => struct.intersection(struct.object({ a: struct.string() }), struct.object({ b: struct.string() }))
+    const c = struct.object({ c: struct.string() })
+
+    test.each(['null', 'nullable', 'nullish'] as const)('.%s() keeps null acceptable to the outer intersection', (modifier) => {
+      const outer = struct.intersection(inner()[modifier](), c.null())
+
+      expect(parse(outer, null)).toEqual([null, null])
+      expect(encodeJson(outer, null)).toBeNull()
+      expect(parse(outer, { a: 'a', b: 'b', c: 'c' })).toEqual([null, { a: 'a', b: 'b', c: 'c' }])
+      expect(parse(outer, { a: 'a', b: 'b' })[0]?.issues[0]).toMatchObject({ code: 'missing_key', path: ['c'] })
+      expect(parse(outer, { a: 'a', b: 1, c: 'c' })[0]?.issues[0]).toMatchObject({ code: 'invalid_type', path: ['b'] })
+
+      const deeper = struct.intersection(outer, struct.object({ d: struct.string() }).null())
+      expect(parse(deeper, null)).toEqual([null, null])
+      expect(parse(deeper, { a: 'a', b: 'b', c: 'c', d: 'd' })).toEqual([null, { a: 'a', b: 'b', c: 'c', d: 'd' }])
+    })
+
+    test('does not make a non-nullable sibling accept null', () => {
+      const outer = struct.intersection(inner().null(), c)
+
+      expect(parse(outer, null)[0]?.issues[0]).toMatchObject({ code: 'invalid_type', received: null })
+      expect(parse(outer, { a: 'a', b: 'b', c: 'c' })).toEqual([null, { a: 'a', b: 'b', c: 'c' }])
+    })
+
+    test('still merges one logical key declared under different aliases', () => {
+      const aliased = struct.intersection(struct.object({ a: struct.string().alias('x') }), struct.object({ b: struct.string() }))
+      const outer = struct.intersection(aliased.null(), struct.object({ a: struct.string().alias('y') }).null())
+
+      expect(parse(outer, { a: 'v', b: 'w' })).toEqual([null, { a: 'v', b: 'w' }])
+      expect(parse(outer, { b: 'w', x: 'v', y: 'v' }, { aliases: true })).toEqual([null, { a: 'v', b: 'w' }])
+      expect(parse(outer, { b: 'w', x: 'L', y: 'R' }, { aliases: true })[0]?.issues[0]).toMatchObject({
+        code: 'invalid_intersection',
+        path: ['a'],
+      })
+      expect(encodeJson(outer, { a: 'v', b: 'w' })).toEqual({ b: 'w', x: 'v', y: 'v' })
+    })
   })
 
   test('intersection merges three object structs field-wise', () => {

@@ -12,7 +12,7 @@ type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpRe
 `OpenTelemetryServerOptions` の `http` に指定します。独自のフィールドは持たず、`enabled`、`startSpanHook`、`requestHook`、`responseHook` は `OpenTelemetryServerTransportOptions` から来ます。
 
 - `responseHook(span, res, req)` は、インターセプターを通って返ってきた `HttpResponse`（クライアントが宣言済みのボディをデコードする前のもの）と、元の `HttpRequest` を受け取ります。リクエストの同一性は `req.operation` から読んでください。エンドポイントや解決済みの URL から作り直さないでください。
-- HTTP の span は、`responseHook` が返った時点で終了します。フックは await されないので、span を変更できるのは同期的な部分だけです。status が 400 以上なら `ERROR` で終了し、`error.type` に status の文字列が入ります。100–399 では status は未設定のままです。
+- HTTP の span は、`responseHook` が返った時点で終了します。フックは await されないので、span を変更できるのは同期的な部分だけです。status が 400 以上なら `ERROR` で終了し、`error.type` に status の文字列が入ります。100–399 では status は未設定のままです。 終了後の非同期 hook の reject は `diag.error` で診断されます。受け取るには `@opentelemetry/api` の `diag.setLogger(...)` を設定してください。終了済みの span にイベントを追加することはできません。
 - インターセプターを通る reject（ネットワーク障害、キャンセル、タイムアウト、または宣言した `output` / `error` のボディを JSON として読めない場合）にはレスポンスの status がなく、`responseHook` は呼ばれません。span は `ERROR` で終了し、`error.type` には `TypeError`、`Error`、`BodyFailure` のような throw された class 名が入ります。呼び出し側によるキャンセルは、abort の理由を問わず `Error` です。
 
 HTTP の計装をスキップするには `{ enabled: false }` を渡します。span フックは `tracer` が渡された場合にのみ呼び出されます。

@@ -4,6 +4,21 @@ import { createApp, h, type App } from 'vue'
 import { createClientPlugin, injectClient } from '../src'
 
 describe('injectClient', () => {
+  it('describes both requirements outside an injection context even with the plugin installed', () => {
+    const app = createApp({})
+    app.use(createClientPlugin(createClient()))
+
+    expect(() => injectClient()).toThrow(/injection context.*app\.use\(createClientPlugin\(client\)\).*provide\(HTTP_CLIENT, client\)/)
+  })
+
+  it('returns the exact client inside a synchronous app.runWithContext callback', () => {
+    const client = createClient()
+    const app = createApp({})
+    app.use(createClientPlugin(client))
+
+    expect(app.runWithContext(injectClient)).toBe(client)
+  })
+
   it('throws when no client is provided', () => {
     const app = createApp({
       setup() {
@@ -14,7 +29,7 @@ describe('injectClient', () => {
     app.config.warnHandler = () => {}
 
     expect(() => app.mount(document.createElement('div'))).toThrow(
-      'No Defjs client provided. Did you forget to call app.use(createClientPlugin(client))?',
+      'No Defjs client available. Call injectClient() in a Vue injection context (such as synchronous setup() or app.runWithContext()) and provide a client with app.use(createClientPlugin(client)) or provide(HTTP_CLIENT, client).',
     )
   })
 })

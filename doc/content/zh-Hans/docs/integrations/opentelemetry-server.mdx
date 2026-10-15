@@ -33,7 +33,9 @@ SDK 初始化、providers、exporters、processors、context、采样、脱敏�
 
 ## Options 与 hooks
 
-仅在传入 `tracer` 时调用 span hooks。 Hooks 挨着它们改动的传输。同步 `startSpanHook(request)` 在创建 span 前运行并返回初始 `Attributes`；应用属性最后应用，因此可以覆盖内建值。`requestHook` 与 `responseHook` 接收已经创建的 span，可返回 `void` 或 promise。Hook 失败会记录 `defjs.otel.hook.error`，**不会**停掉 Client 操作；start hook 失败时退回内建初始属性。
+仅在传入 `tracer` 时调用 span hooks。 Hooks 挨着它们改动的传输。同步 `startSpanHook(request)` 在创建 span 前运行并返回初始 `Attributes`；应用属性最后应用，因此可以覆盖内建值。`requestHook` 与 `responseHook` 接收已经创建的 span，可返回 `void` 或 promise。Hook 失败**不会**停掉 Client 操作；start hook 失败时退回内建初始属性。
+
+`requestHook` 与 `responseHook` 都不会被 await。HTTP span 在 `responseHook` 的同步部分返回后立即结束，不会为异步 hook 延长生命周期。同步部分仍可修改 recording span；结束后不能补充事件。 当 `span.isRecording()` 为 true 时，hook 失败记录 `defjs.otel.hook.error` 与 `exception` 事件。span 不再 recording（已结束或未采样）时，失败通过 `diag.error` 交给 OpenTelemetry 诊断 logger。应用必须通过 `@opentelemetry/api` 的 `diag.setLogger(...)` 配置接收通道；默认不会自动输出。本包不初始化 SDK，该诊断也不是独立的 SDK `LogRecord`。该诊断包含 `hook.name`、`error.type`、`traceId`、`spanId`，不包含原始错误 message/stack 或请求数据。
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ Command 有稳定身份时，在 `defineRequest`、`defineEventStream` 或 `defi
 
 Span 名变成 `GET orders.read`、`SSE orders.watch`、`WebSocket orders.connect`。没有 `operation` 时回退是 method / `SSE` / `WebSocket`，并省略 `defjs.operation`。
 
-HTTP 和 SSE 把传播字段注入请求 headers。已有 `Headers` 实例会复用并改；否则新建 `Headers`。WebSocket query 传播是**可选开启**的（浏览器不能加任意握手 headers）：
+HTTP 和 SSE 把传播字段注入请求 headers。注入始终使用新的 `Headers` 副本，不改变调用方的 headers，因此外层重试仍使用同一个原始父 context。WebSocket query 传播是**可选开启**的（浏览器不能加任意握手 headers）：
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-开了 `queryPropagation`，propagator 字段会追加到连接 query。先审 URL 日志、代理可见性、访问日志、baggage、保留。传入 `tracer` 时，`requireParentSpan: true` 在没有活动 parent 时跳过 span 创建、传播、hooks、metrics 和日志，然后原样调 `next`。
+开了 `queryPropagation`，propagator 实际注入的字段会写到连接 query 的末尾，并替换同名参数；其他所有参数都保留原有的序列化形式。先审 URL 日志、代理可见性、访问日志、baggage、保留。传入 `tracer` 时，`requireParentSpan: true` 在没有活动 parent 时跳过 span 创建、传播、hooks、metrics 和日志，然后原样调 `next`。
 
 ## HTTP、SSE、WebSocket 语义
 

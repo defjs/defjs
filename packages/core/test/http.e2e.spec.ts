@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { beforeEach, describe, expect, inject, test } from 'vitest'
 import {
   StructError,
@@ -637,18 +638,22 @@ describe('request builder through the real server', () => {
   })
 
   test('returns REQ_BUILD_FAILED when the builder throws and does not reach the server', async () => {
+    // The miss log lives in the globalSetup process, so every execution needs paths no earlier run has used.
+    const runId = randomUUID()
+    const missPath = `/e2e/miss/build-failed-${runId}`
+    const controlPath = `/e2e/miss/build-failed-control-${runId}`
     const explode = defineRequest({
       builder: () => {
         throw new Error('builder exploded')
       },
       method: 'POST',
       output: EchoReport,
-      path: '/e2e/miss/build-failed',
+      path: missPath,
     })
 
     expect(() => explode()).not.toThrow()
     const [error, result, response] = await client.execute(explode())
-    await pingMiss('/e2e/miss/build-failed-control')
+    await pingMiss(controlPath)
 
     expect(error).toMatchObject({ code: 'REQ_BUILD_FAILED' })
     expect(result).toBeUndefined()
@@ -661,11 +666,14 @@ describe('request builder through the real server', () => {
       throw new Error('Expected the builder error as the fault cause')
     }
     expect(error.cause.message).toBe('builder exploded')
-    expect(await missHits('/e2e/miss/build-failed')).toEqual([])
-    expect(await missHits('/e2e/miss/build-failed-control')).toEqual(['GET /e2e/miss/build-failed-control'])
+    expect(await missHits(missPath)).toEqual([])
+    expect(await missHits(controlPath)).toEqual([`GET ${controlPath}`])
   })
 
   test('returns REQ_INPUT_INVALID for invalid input and does not reach the server', async () => {
+    const runId = randomUUID()
+    const missPath = `/e2e/miss/input-invalid-${runId}`
+    const controlPath = `/e2e/miss/input-invalid-control-${runId}`
     const create = defineRequest({
       builder: (input) => ({ body: { name: input.name } }),
       input: struct.object({
@@ -673,11 +681,11 @@ describe('request builder through the real server', () => {
       }),
       method: 'POST',
       output: EchoReport,
-      path: '/e2e/miss/input-invalid',
+      path: missPath,
     })
 
     const [error, result, response] = await client.execute(create({ name: 1 } as never))
-    await pingMiss('/e2e/miss/input-invalid-control')
+    await pingMiss(controlPath)
 
     expect(error).toMatchObject({ code: 'REQ_INPUT_INVALID' })
     expect(result).toBeUndefined()
@@ -686,8 +694,8 @@ describe('request builder through the real server', () => {
       throw new Error('Expected REQ_INPUT_INVALID')
     }
     expect(error.cause).toBeInstanceOf(StructError)
-    expect(await missHits('/e2e/miss/input-invalid')).toEqual([])
-    expect(await missHits('/e2e/miss/input-invalid-control')).toEqual(['GET /e2e/miss/input-invalid-control'])
+    expect(await missHits(missPath)).toEqual([])
+    expect(await missHits(controlPath)).toEqual([`GET ${controlPath}`])
   })
 })
 

@@ -18,7 +18,9 @@ interface OpenTelemetryServerTransportOptions<TResponse> {
 
 `enabled`의 기본값은 `true`이고, `enabled: false`일 때만 전송이 꺼져요. 예전의 boolean 스위치(`http: false`)와 최상위 훅은 TypeScript 타입에서만 거부돼요. 런타임 검사는 없어서, 런타임에는 `http: false`여도 전송이 켜진 채로 남고 최상위 훅은 조용히 무시돼요.
 
-span 훅은 `tracer`를 준 경우에만 실행돼요. `startSpanHook`은 자기 전송의 span을 만들기 전에 동기적으로 실행돼요. 이 훅이 설정한 attribute는 내장 attribute 뒤에 적용되므로, 애플리케이션이 `url.full`이나 다른 초기 값을 덮어쓸 수 있어요. 훅이 throw하면 Defjs는 내장 attribute로 span을 만들고, `defjs.otel.hook.error` 이벤트를 기록한 뒤 요청을 계속해요. `requestHook`은 span을 만든 뒤 요청을 보내기 전에 실행되고, `responseHook`은 전송 결과가 반환된 뒤에 실행돼요. 둘 다 promise를 돌려줄 수 있지만 await하지는 않아요. throw나 reject는 같은 방식으로 기록되며 작업을 막거나 실패시키지 않아요. `responseHook`은 원래의 요청을 세 번째 인자로 받아요.
+span 훅은 `tracer`를 준 경우에만 실행돼요. `startSpanHook`은 자기 전송의 span을 만들기 전에 동기적으로 실행돼요. 이 훅이 설정한 attribute는 내장 attribute 뒤에 적용되므로, 애플리케이션이 `url.full`이나 다른 초기 값을 덮어쓸 수 있어요. 훅이 throw하면 Defjs는 내장 attribute로 span을 만들고 요청을 계속해요. `requestHook`은 span을 만든 뒤 요청을 보내기 전에 실행되고, `responseHook`은 전송 결과가 반환된 뒤에 실행돼요. 둘 다 promise를 돌려줄 수 있지만 await하지는 않아요. throw나 reject는 작업을 막거나 실패시키지 않아요. `responseHook`은 원래의 요청을 세 번째 인자로 받아요.
+
+`span.isRecording()`이 true인 동안 훅 실패는 `defjs.otel.hook.error`와 `exception` 이벤트로 기록돼요. 기록하지 않는 span(종료됐거나 샘플링되지 않은 경우)의 실패는 `diag.error`를 통해 OpenTelemetry 진단 logger로 전달돼요. 이를 받으려면 애플리케이션에서 `@opentelemetry/api`의 `diag.setLogger(...)`를 설정해야 해요. 기본적으로 자동 출력되지 않아요. 패키지는 SDK를 초기화하지 않으며 이 진단은 별도의 SDK `LogRecord`가 아니에요.
 
 기본적으로 `url.full`은 `request.endpoint`만 선택적인 `request.baseEndpoint`에 대해 해석해요. 별도의 `request.queryString`은 덧붙이지 않아요. 이 경계는 redaction이 아니며, 패키지에는 내장 redactor나 민감 키 정책이 없어요. 애플리케이션이 소유하는 URL을 직접 만들고, 필요하면 redaction도 명시적으로 하세요.
 

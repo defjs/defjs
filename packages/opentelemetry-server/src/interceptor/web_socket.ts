@@ -66,11 +66,10 @@ export function createOpenTelemetryWebSocketInterceptor(
     let queryString = req.queryString
 
     if (queryPropagation) {
-      const originalParams = new URLSearchParams(queryParams)
-      const carrier = { params: new URLSearchParams(queryParams) }
+      const carrier = { params: new URLSearchParams() }
       propagator.inject(spanCtx, carrier, queryStringSetter)
-      queryParams = carrier.params
-      queryString = appendInjectedQueryString(queryString, originalParams, carrier.params)
+      queryString = replaceInjectedPairs(queryString ?? new URLSearchParams(queryParams).toString(), carrier.params)
+      queryParams = new URLSearchParams(queryString)
     }
 
     if (span) runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
@@ -152,22 +151,18 @@ export function createOpenTelemetryWebSocketInterceptor(
   })
 }
 
-function appendInjectedQueryString(queryString: string | undefined, originalParams: URLSearchParams, nextParams: URLSearchParams): string {
-  const injectedParams = new URLSearchParams()
-
-  nextParams.forEach((value, key) => {
-    if (originalParams.getAll(key).includes(value)) {
-      return
-    }
-    injectedParams.append(key, value)
-  })
-
-  const injectedQueryString = injectedParams.toString()
-  if (!injectedQueryString) {
-    return queryString ?? ''
-  }
-  if (!queryString) {
-    return injectedQueryString
-  }
-  return `${queryString}&${injectedQueryString}`
+/**
+ * Put the injected pairs last and drop earlier pairs of the same name, so a receiver reading the first value gets the injected one.
+ * Every other pair keeps the bytes it was serialized with.
+ */
+function replaceInjectedPairs(queryString: string, injected: URLSearchParams): string {
+  const added = injected.toString()
+  if (!added) return queryString
+  const prefixed = queryString.startsWith('?')
+  const query = prefixed ? queryString.slice(1) : queryString
+  // Only the whole query has a '?' prefix. In a pair it is part of the key; '&' prevents stripping it.
+  const kept = query ? query.split('&').filter((pair) => !injected.has(new URLSearchParams(`&${pair}`).keys().next().value ?? '')) : []
+  const combined = [...kept, added].join('&')
+  // A surviving literal '?' key may become first after filtering. Keep it separate from the query prefix.
+  return prefixed || combined.startsWith('?') ? `?${combined}` : combined
 }

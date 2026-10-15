@@ -110,11 +110,11 @@ SSE는 핸들을 resolve하기 전에 status, `text/event-stream`, body 존재 �
 
 WebSocket의 시작 시점은 핸드셰이크와 첫 물리 open까지예요. 생성자 실패, open 전 종료, 타임아웃, 취소는 모두 시작 튜플을 만들어요. 소켓이 `open`에 닿지 못했더라도 연결 스냅샷은 있을 수 있어요.
 
-| 전송      | 시작 이후                                                                                                                                                                |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SSE       | 치명적 오류에서 이터레이터가 reject. `stream.closed`는 `kind: 'error'`와 fault의 `code`로 resolve                                                                        |
-| WebSocket | 메시지／큐／하트비트 실패는 `onRuntimeError`. 종단 오류에서 `receive`가 실패. `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                |
-| HTTP      | execute가 반환한 프로미스는 튜플로 한 번만 확정돼요. 인터셉터나 진행률 콜백이 예외를 던지면 해당 튜플에 fault로 담겨요 (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+| 전송      | 시작 이후                                                                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | 치명적 오류에서 이터레이터가 reject. `stream.closed`는 `kind: 'error'`와 fault의 `code`로 resolve                                                                                                                                                  |
+| WebSocket | 메시지／큐／하트비트 실패는 `onRuntimeError`. 종단 오류에서 `receive`가 실패. `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                                          |
+| HTTP      | execute가 반환한 프로미스는 튜플로 한 번만 확정돼요. 인터셉터가 예외를 던지거나 `HttpResponse`가 아닌 결과를 반환하는 경우, 또는 진행률 콜백이 예외를 던지는 경우에는 해당 튜플에 fault로 담겨요 (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
 
 `NET_ABORTED` / `NET_TIMEOUT`은 호출자가 시작 시점에 본 것을 설명해요. 돌려받은 stream이나 session은 그래도 닫고 종단 promise를 await 하세요.
 

@@ -28,7 +28,7 @@ Les intercepteurs mixtes sont filtrés par transport à l’exécution ; l’ord
 ## Exécuter par transport
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]` (`open` est l’instantané de démarrage ; `stream.open` peut changer après reconnect)
+- SSE → `[error, stream, open]`. `open` est l’instantané du premier handshake réussi de la connexion du handle renvoyé pour les handles natifs Defjs ou les wrappers transmettant le même objet `open` live ; les handles custom ou wrappers qui redéfinissent `open` utilisent leur `open` public courant même après une reconnexion, tandis que `stream.open` reste live (voir [SSE](/fr-FR/docs/sse)).
 - WebSocket → `[error, session, connection]`
 
 L’execute WebSocket peut remplacer `beforeConnect`, `heartbeat`, `protocols` et `reconnect`. `timeout` doit être un entier sûr positif dans `1..2_147_483_647`.

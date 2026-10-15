@@ -28,7 +28,7 @@ description: أنشئ عميلًا صريحًا، ركّب الخيارات، ن
 ## نفّذ حسب وسيلة النقل
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]` (`open` لقطة البدء؛ `stream.open` يمكن أن يتغيّر بعد إعادة الاتصال)
+- SSE → `[error, stream, open]`. `open` هي لقطة أول مصافحة ناجحة للاتصال الخاص بالمقبض المُعاد للمقابض الأصلية من Defjs أو الأغلفة التي تمرّر كائن `open` الحي نفسه؛ أما المقابض المخصصة أو الأغلفة التي تستبدل `open` فتستخدم قيمة `open` العامة الحالية حتى بعد إعادة الاتصال، بينما تظل `stream.open` حية (انظر [SSE](/ar/docs/sse)).
 - WebSocket → `[error, session, connection]`
 
 تنفيذ WebSocket يمكن أن يتجاوز `beforeConnect` و`heartbeat` و`protocols` و`reconnect`. يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`.

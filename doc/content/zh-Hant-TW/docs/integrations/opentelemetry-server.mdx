@@ -33,7 +33,9 @@ SDK init、providers、exporters、processors、context、sampling、redaction�
 
 ## Options 與 hooks
 
-僅在傳入 `tracer` 時呼叫 span hooks。Hooks 放在它們會改動的傳輸旁邊。同步 `startSpanHook(request)` 會在建立 span 前執行並回傳初始 `Attributes`；應用程式 attributes 最後套用，因此可以覆寫內建值。`requestHook` 與 `responseHook` 收到已建立的 span，可以回傳 `void` 或 promise。Hook 失敗會記錄 `defjs.otel.hook.error`，且**不會**停掉 client 操作；start hook 失敗時會退回內建初始 attributes。
+僅在傳入 `tracer` 時呼叫 span hooks。Hooks 放在它們會改動的傳輸旁邊。同步 `startSpanHook(request)` 會在建立 span 前執行並回傳初始 `Attributes`；應用程式 attributes 最後套用，因此可以覆寫內建值。`requestHook` 與 `responseHook` 收到已建立的 span，可以回傳 `void` 或 promise。Hook 失敗**不會**停掉 client 操作；start hook 失敗時會退回內建初始 attributes。
+
+`requestHook` 與 `responseHook` 都不會被 await。HTTP span 在 `responseHook` 的同步部分回傳後立即結束，不會為非同步 hook 延長生命週期。同步部分仍可修改 recording span；結束後不能追加事件。 當 `span.isRecording()` 為 true 時，hook 失敗會記錄 `defjs.otel.hook.error` 與 `exception` 事件。span 不再 recording（已結束或未取樣）時，失敗會透過 `diag.error` 交給 OpenTelemetry 診斷 logger。應用程式必須設定 `@opentelemetry/api` 的 `diag.setLogger(...)` 才能接收；預設不會自動輸出。本套件不初始化 SDK，這類診斷也不是獨立的 SDK `LogRecord`。這類診斷包含 `hook.name`、`error.type`、`traceId`、`spanId`，不包含原始錯誤 message/stack 或請求資料。
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ Hook 簽名：
 
 Span names 會變成 `GET orders.read`、`SSE orders.watch`、`WebSocket orders.connect`。沒有 `operation` 時，fallback 是 method／`SSE`／`WebSocket`，並省略 `defjs.operation`。
 
-HTTP 與 SSE 把 propagated fields 注入 request headers。既有的 `Headers` 實例會被重用並 mutate；否則建立新的 `Headers`。WebSocket query propagation 是**選擇性開啟**（瀏覽器不能加任意 handshake headers）：
+HTTP 與 SSE 把 propagated fields 注入 request headers。注入一律使用新的 `Headers` 副本，不改變呼叫端的 headers，因此外層重試仍使用同一個原始父 context。WebSocket query propagation 是**選擇性開啟**（瀏覽器不能加任意 handshake headers）：
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-有 `queryPropagation` 時，propagator fields 會附加到連線 query string。先審 URL logging、proxy 可見性、access logs、baggage、retention。傳入 `tracer` 時，`requireParentSpan: true` 在沒有 active parent 時跳過 span 建立、propagation、hooks、metrics 與 logs，然後原樣呼叫 `next`。
+啟用 `queryPropagation` 時，propagator 實際注入的欄位會寫到連線 query string 的尾端，並取代同名參數；其他所有參數都保留原有的序列化形式。先審 URL logging、proxy 可見性、access logs、baggage、retention。傳入 `tracer` 時，`requireParentSpan: true` 在沒有 active parent 時跳過 span 建立、propagation、hooks、metrics 與 logs，然後原樣呼叫 `next`。
 
 ## HTTP、SSE、WebSocket 語意
 

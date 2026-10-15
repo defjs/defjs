@@ -28,7 +28,7 @@ description: Создай явный клиент, собери опции, вы
 ## Execute по транспорту
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]` (`open` — снимок старта; `stream.open` может меняться после reconnect)
+- SSE → `[error, stream, open]`. `open` — снимок первого успешного handshake соединения возвращённого handle для нативных handle Defjs или обёрток, передающих тот же живой объект `open`; пользовательские handle или обёртки, переопределяющие `open`, используют свой текущий публичный `open` даже после переподключения, а `stream.open` остаётся живым (см. [SSE](/ru-RU/docs/sse)).
 - WebSocket → `[error, session, connection]`
 
 WebSocket execute может переопределить `beforeConnect`, `heartbeat`, `protocols` и `reconnect`. `timeout` — положительное safe integer в `1..2_147_483_647`.

@@ -17,13 +17,16 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 - **value** est l’entrée inconnue.
 - **options.aliases** vaut `false` par défaut : les clés d’objet sont lues par leurs noms **logiques** (`displayName`). Avec `true`, elles sont lues par leurs noms wire (`display_name`), comme les codecs HTTP/JSON les lisent. La sortie utilise toujours les noms logiques.
 - **options.errorMap** est une [`ErrorMap`](/fr-FR/api/core/errormap-type) qui réécrit les messages d’issue pour cet appel seulement, y compris les échecs de conversion bigint/date d’un struct créé par une autre copie de Core. Toute chaîne, y compris `''`, remplace le message ; seul `undefined` conserve le message par défaut. Le texte personnalisé est utilisé tel quel.
-- **Renvoie** `[null, output]` ou `[StructError, undefined]`. Une entrée invalide ne lève jamais.
+- **Renvoie** `[null, output]` ou `[StructError, undefined]`. Les échecs de validation ne lèvent pas d’exception. Les exceptions provenant des getters et des callbacks `errorMap` fournis par l’appelant se propagent telles quelles.
 - Le parse est fail-fast : il s’arrête au premier échec, donc l’erreur contient une seule issue. Les clés d’objet inconnues sont retirées de la sortie, et l’entrée n’est pas modifiée.
+- Au plus **256 conteneurs imbriqués** (`object`, `array`, `record` ou `tuple`) sont visités le long d’un chemin, en comptant le conteneur racine comme le premier. Le conteneur suivant échoue avec `invalid_type` au chemin logique correspondant, avec `expected: 'value nested at most 256 levels deep'`. Dans une union, les candidats suivants peuvent encore réussir ; si aucun ne correspond, l’union signale `invalid_union`. Les cycles passant par les champs déclarés des conteneurs atteignent aussi cette limite ; les nœuds enfants partagés non cycliques sont autorisés. Les branches d’union et d’intersection n’ajoutent pas de niveau de conteneur, et les valeurs `any`/`unknown` restent opaques au lieu d’être parcourues.
 
 ```ts
 const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 if (error) return console.error(error.prettify())
 ```
+
+`any` et `unknown` ne parcourent pas leurs valeurs, mais une intersection peut fusionner récursivement deux valeurs distinctes d’objet ou de tableau renvoyées par ces feuilles. Cette fusion partage le même budget de 256 conteneurs avec le chemin logique qui l’englobe. Le dépasser produit `invalid_intersection` au chemin logique du conteneur rejeté. Les références identiques sont conservées sans parcours, y compris dans le cas d’une valeur cyclique partagée.
 
 Voir [`ParseResult`](/fr-FR/api/core/parseresult-type) et [`StructError`](/fr-FR/api/core/structerror-type).
 

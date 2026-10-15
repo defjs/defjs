@@ -151,11 +151,11 @@ WebSocket startup covers the handshake plus the first physical open. Constructor
 close, timeout, or cancel all produce a startup tuple. A connection snapshot may exist even when
 the socket never reached `open`.
 
-| Transport | After startup                                                                                                                                                         |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | The iterator rejects on a fatal error; `stream.closed` resolves with `kind: 'error'` and the fault `code`                                                             |
-| WebSocket | `onRuntimeError` for message/queue/heartbeat failures; `receive` fails on terminal errors; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                |
-| HTTP      | The execute promise settles once, with the tuple. A throwing interceptor or progress callback becomes a fault in it (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+| Transport | After startup                                                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | The iterator rejects on a fatal error; `stream.closed` resolves with `kind: 'error'` and the fault `code`                                                                                                                              |
+| WebSocket | `onRuntimeError` for message/queue/heartbeat failures; `receive` fails on terminal errors; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                 |
+| HTTP      | The execute promise settles once, with the tuple. A throwing interceptor, an interceptor result that is not an `HttpResponse`, or a throwing progress callback becomes a fault in it (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
 
 `NET_ABORTED` / `NET_TIMEOUT` describe what the caller saw at startup. You still close a returned
 stream or session and await its terminal promise.

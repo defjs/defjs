@@ -1,7 +1,7 @@
 import type { HttpRequest } from './http_request'
 import { resolveRequestUrl } from './url'
 
-const HTTP_RESPONSE: unique symbol = Symbol('HttpResponse')
+const HTTP_RESPONSE: unique symbol = Symbol.for('defjs.http.response')
 
 /**
  * Wire-shape HTTP response returned by transports and accepted by interceptors.
@@ -76,6 +76,14 @@ export function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<
     body,
     ok,
   }
+}
+
+/**
+ * Whether `value` is an `HttpResponse`: built by `makeResponse` or the transport, or derived from one by spreading.
+ * The brand is the runtime half of the type's nominal guard, so a native `Response` or a lookalike object fails.
+ */
+export function isHttpResponse(value: unknown): value is HttpResponse<unknown> {
+  return (value as Partial<HttpResponse<unknown>> | null | undefined)?.[HTTP_RESPONSE] === true
 }
 
 export function getHttpErrorMessage(response: { readonly status: number; readonly statusText: string; readonly url: string }): string {

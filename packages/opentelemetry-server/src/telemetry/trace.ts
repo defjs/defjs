@@ -1,7 +1,7 @@
 import type { HttpRequest } from '@defjs/core'
 import type { Attributes, Context } from '@opentelemetry/api'
 import type { Span, Tracer } from '@opentelemetry/api'
-import { SpanKind, SpanStatusCode } from '@opentelemetry/api'
+import { diag, SpanKind, SpanStatusCode } from '@opentelemetry/api'
 
 const spanStatusSet = new WeakMap<Span, boolean>()
 
@@ -116,6 +116,20 @@ export function runSpanHook(span: Span, hookName: string, hook: (() => Promise<v
 }
 
 function recordSpanHookError(span: Span, hookName: string, error: unknown): void {
+  if (!span.isRecording()) {
+    try {
+      const { traceId, spanId } = span.spanContext()
+      diag.error('@defjs/opentelemetry-server: span hook failed on a non-recording span', {
+        'hook.name': hookName,
+        'error.type': getErrorType(error),
+        traceId,
+        spanId,
+      })
+    } catch {
+      // Diagnostic reporting must not affect transport execution.
+    }
+    return
+  }
   try {
     span.addEvent('defjs.otel.hook.error', {
       'hook.name': hookName,

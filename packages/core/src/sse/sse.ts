@@ -307,6 +307,7 @@ async function runEventStreamCommand<
 
   type OwnedStream = {
     controller: AbortController
+    initialOpen?: EventStreamOpenInfo
     release?: () => void
     stream?: EventStreamHandle<unknown>
   }
@@ -367,6 +368,9 @@ async function runEventStreamCommand<
           fetch: clientConfig.sse.handle,
           failure,
           handshakeError: endpoint.error,
+          onopen(open) {
+            owned.initialOpen ??= open
+          },
           transformMessage(message, signal) {
             return transformStreamMessage(endpoint.events, message, clientConfig.sse.onInvalidEvent, signal)
           },
@@ -394,14 +398,32 @@ async function runEventStreamCommand<
     const stream = (await awaitWithSignal(() => sseChain(request, sseHandler), requestSignal)) as EventStreamHandle<
       EventStreamData<TEvents>
     >
+    const publicOpen = stream?.open
+    if (
+      typeof stream?.closed?.then !== 'function' ||
+      typeof stream.close !== 'function' ||
+      typeof stream[Symbol.asyncIterator] !== 'function' ||
+      typeof stream[Symbol.asyncDispose] !== 'function' ||
+      typeof publicOpen?.url !== 'string'
+    ) {
+      throw new TypeError('SSE interceptor must resolve an event stream handle')
+    }
     chainSettled = true
-    streamDelivered = true
-    void stream.closed.then(() => releaseAbortSignal(requestSignal))
+    const release = () => releaseAbortSignal(requestSignal)
+    void stream.closed.then(release, release)
 
-    const open = stream.open
+    let open: EventStreamOpenInfo | undefined
+    for (const owned of ownedStreams) {
+      if (owned.stream && (owned.stream === stream || (owned.stream.closed === stream.closed && publicOpen === owned.stream.open))) {
+        open = owned.initialOpen
+        break
+      }
+    }
+    open ??= publicOpen
 
     discardOwnedStreams(new Error('SSE interceptor discarded an opened stream'), stream)
-
+    // Only transfer listener ownership after every startup operation has succeeded.
+    streamDelivered = true
     return [null, stream, open]
   } catch (error) {
     chainSettled = true

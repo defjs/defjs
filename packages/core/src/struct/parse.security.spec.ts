@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'vitest'
 import { decodeJson, encodeJson } from './codec/json'
 import { StructError, struct } from './index'
+import type { StructLike } from './index'
 import { parseStructTuple as parse } from './introspection'
+import { selectUnionOptions } from './match'
 
 describe('parse.ts prototype pollution defense', () => {
   test('parseObjectValue strips __proto__ without polluting Object.prototype', () => {
@@ -170,5 +172,230 @@ describe('parse.ts prototype pollution defense', () => {
     }
     expect(decodeJson(WireEvent, wireInput)).toEqual({ payload: 'hello', type: 'message' })
     expect([queryReads, typeReads, kindReads]).toEqual([1, 1, 1])
+  })
+})
+
+describe('parse.ts nesting limit', () => {
+  const Node: StructLike = struct.object({
+    get child(): StructLike {
+      return Node
+    },
+  })
+  const Chain = struct.object({
+    get child(): StructLike {
+      return Chain.null()
+    },
+  })
+  const Tree = struct.object({
+    get next(): StructLike {
+      return struct.or(Tree, struct.null())
+    },
+  })
+
+  function nest(key: string, depth: number, leaf: unknown): unknown {
+    let value = leaf
+    for (let level = 0; level < depth; level += 1) {
+      value = { [key]: value }
+    }
+    return value
+  }
+
+  test('accepts a value 256 levels deep and rejects one level more', () => {
+    expect(parse(Chain, nest('child', 256, null))[0]).toBeNull()
+
+    const [error, output] = parse(Chain, nest('child', 257, null))
+    expect(output).toBeUndefined()
+    expect(error).toBeInstanceOf(StructError)
+    expect(error?.issues).toHaveLength(1)
+    expect(error?.issues[0]).toMatchObject({
+      code: 'invalid_type',
+      expected: 'value nested at most 256 levels deep',
+      path: Array.from({ length: 256 }, () => 'child'),
+      received: { child: null },
+    })
+  })
+
+  test('returns a StructError instead of overflowing the stack on a very deep document', () => {
+    const input = JSON.parse('{"child":'.repeat(100_000) + 'null' + '}'.repeat(100_000))
+    const [error, output] = struct.parse(Chain, input)
+    expect(error).toBeInstanceOf(StructError)
+    expect(error?.issues[0]?.path).toHaveLength(256)
+    expect(output).toBeUndefined()
+  })
+
+  test('returns a StructError for a cyclic document', () => {
+    const cycle: { [key: string]: unknown } = {}
+    cycle['child'] = cycle
+
+    const [error, output] = parse(Node, cycle)
+    expect(error).toBeInstanceOf(StructError)
+    expect(error?.issues[0]?.code).toBe('invalid_type')
+    expect(error?.issues[0]?.received).toBe(cycle)
+    expect(output).toBeUndefined()
+  })
+
+  test('counts every container level, not only objects', () => {
+    const List = struct.object({
+      get children(): StructLike {
+        return struct.array(List)
+      },
+    })
+    const levels = (depth: number) => {
+      let value: unknown = { children: [] }
+      for (let level = 1; level < depth; level += 1) {
+        value = { children: [value] }
+      }
+      return value
+    }
+
+    expect(parse(List, levels(128))[0]).toBeNull()
+    expect(parse(List, levels(129))[0]).toBeInstanceOf(StructError)
+  })
+
+  test.each(['array', 'record', 'tuple'] as const)('bounds nested %s containers, including empty ones', (kind) => {
+    let schema: StructLike = struct.number()
+    let input: unknown = 1
+    for (let level = 0; level < 256; level += 1) {
+      if (kind === 'record') {
+        schema = struct.record(schema)
+        input = { item: input }
+      } else {
+        schema = kind === 'array' ? struct.array(schema) : struct.tuple([schema])
+        input = [input]
+      }
+    }
+    expect(struct.parse(schema, input)[0]).toBeNull()
+    expect(selectUnionOptions([schema], input)).toHaveLength(1)
+    const outer = struct.object({ value: schema })
+    expect(selectUnionOptions([outer], { value: input })).toHaveLength(0)
+    const [error, output] = struct.parse(outer, { value: input })
+    expect(error?.issues[0]).toMatchObject({ code: 'invalid_type', expected: 'value nested at most 256 levels deep' })
+    expect(error?.issues[0]?.path).toHaveLength(256)
+    expect(output).toBeUndefined()
+
+    if (kind !== 'tuple') {
+      let nested: StructLike = kind === 'array' ? struct.array(struct.number()) : struct.record(struct.number())
+      let value: unknown = kind === 'record' ? {} : []
+      for (let level = 0; level < 256; level += 1) {
+        nested = struct.object({ value: nested })
+        value = { value }
+      }
+      expect(struct.parse(nested, value)[0]).toBeInstanceOf(StructError)
+    }
+  })
+
+  test('bounds object fast paths for intersections and discriminated unions', () => {
+    const Intersection = struct.intersection(
+      struct.object({
+        get child(): StructLike {
+          return Intersection.null()
+        },
+      }),
+      struct.object({ tag: struct.string().optional() }),
+    )
+    const Discriminated = struct.discriminatedUnion('kind', [
+      struct.object({
+        kind: struct.literal('node'),
+        get child(): StructLike {
+          return Discriminated.null()
+        },
+      }),
+    ])
+    let input: unknown = null
+    for (let level = 0; level < 257; level += 1) input = { child: input, kind: 'node' }
+    for (const schema of [Intersection, Discriminated]) {
+      const [error, output] = struct.parse(schema, input)
+      expect(error?.issues[0]?.path).toHaveLength(256)
+      expect(output).toBeUndefined()
+    }
+  })
+
+  test('decodeJson reports the logical path when aliased nesting exceeds the limit', () => {
+    const Aliased = struct.object({
+      get child(): StructLike {
+        return Aliased.null().alias('wire')
+      },
+    })
+    const input = nest('wire', 100_000, null)
+    expect(() => decodeJson(Aliased, input)).toThrow(StructError)
+    expect(() => decodeJson(Aliased, input)).toThrow(
+      expect.objectContaining({
+        issues: [expect.objectContaining({ path: Array.from({ length: 256 }, () => 'child') })],
+      }),
+    )
+  })
+
+  test('does not traverse passthrough values or confuse shared children with cycles', () => {
+    const cycle: { child?: unknown } = {}
+    cycle.child = cycle
+    expect(struct.parse(struct.any(), cycle)).toEqual([null, cycle])
+    expect(struct.parse(struct.unknown(), cycle)).toEqual([null, cycle])
+    const shared = nest('child', 255, null)
+    expect(struct.parse(struct.object({ left: Chain, right: Chain }), { left: shared, right: shared })[0]).toBeNull()
+  })
+
+  test('maps the depth failure without leaking path or failure state across reentrant parses', () => {
+    let calls = 0
+    const [error] = struct.parse(Chain, nest('child', 257, null), {
+      errorMap: (entry) => {
+        calls += 1
+        expect(entry.path).toHaveLength(256)
+        expect(struct.parse(Chain, { child: null })[0]).toBeNull()
+        return 'nesting rejected'
+      },
+    })
+    expect(error?.message).toBe('nesting rejected')
+    expect(calls).toBe(1)
+    expect(struct.parse(Chain, { child: null })[0]).toBeNull()
+  })
+
+  test('leaves caller RangeErrors from getters and error maps unchanged', () => {
+    const original = new RangeError('Maximum call stack size exceeded')
+    const Throwing = struct.object({
+      get child(): StructLike {
+        throw original
+      },
+    })
+    const input = {
+      get child(): unknown {
+        throw original
+      },
+    }
+    const operations = [
+      () => struct.parse(Throwing, {}),
+      () => struct.parse(Chain, input),
+      () => decodeJson(Chain, input),
+      () => encodeJson(Chain, input),
+      () =>
+        struct.parse(Chain, nest('child', 257, null), {
+          errorMap: () => {
+            throw original
+          },
+        }),
+    ]
+    for (const run of operations) {
+      let thrown: unknown
+      try {
+        run()
+      } catch (error) {
+        thrown = error
+      }
+      expect(thrown).toBe(original)
+    }
+    expect(struct.parse(Chain, { child: null })[0]).toBeNull()
+  })
+
+  test('a union candidate past the limit fails like any other candidate', () => {
+    const [error, output] = parse(Tree, nest('next', 100_000, null))
+    expect(error?.issues[0]?.code).toBe('invalid_union')
+    expect(output).toBeUndefined()
+
+    const Fallback = struct.object({
+      get next(): StructLike {
+        return struct.or(Fallback, struct.any())
+      },
+    })
+    const deep = nest('next', 100_000, null)
+    expect(parse(Fallback, deep)).toEqual([null, expect.objectContaining({ next: expect.anything() })])
   })
 })

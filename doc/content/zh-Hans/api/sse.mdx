@@ -55,7 +55,7 @@ interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposab
 }
 ```
 
-tuple 第三项是 `open` 的启动快照；重连之后，`stream.open` 跟随最新的连接。自有作用域优先用 `await using stream = handle` 清理。disposer 会停止 Defjs 的读取和重连任务，并等待 reader lock 释放；它不承诺由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手动 `close()` / `closed` 仍可使用。
+tuple 第三项是 `open` 的启动快照；重连之后，`stream.open` 跟随最新的连接。`startupOpen` 仅对返回的 Defjs 原生 handle 或透传同一 live `open` 对象的 wrapper 保证是所属连接首次成功握手的快照；自定义 handle 或显式覆盖 `open` 的 wrapper 则保留其当前公开 `open`，即使已发生重连也一样，因此共享 `closed` 不能绕过 URL 净化或响应头过滤，Defjs 也不从任意元数据变换反推首次握手。 自有作用域优先用 `await using stream = handle` 清理。disposer 会停止 Defjs 的读取和重连任务，并等待 reader lock 释放；它不承诺由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手动 `close()` / `closed` 仍可使用。
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {

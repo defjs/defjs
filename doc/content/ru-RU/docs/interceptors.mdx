@@ -63,7 +63,7 @@ HTTP никогда не записывает выведенный Content-Type 
 
 Брошенные ошибки interceptor/Fetch этот цикл не ретраит — провал транспорта reject’ит, а не производит status, по которому цикл мог бы совпасть. Ретрай `POST` / `PUT` / `PATCH` / `DELETE` нуждается в воспроизводимых байтах, поддержке сервера, контракте идемпотентности и проверенной политике status. Ретрай на тебе — Core не экспортирует `retryAfter()`.
 
-Interceptor, который бросает (или reject’ит) вне этого примера, возвращается вызывающему как `EXT_INTERCEPTOR_FAILED`, с брошенным значением на `cause` — см. [Ошибки](/ru-RU/docs/errors). В HTTP interceptor отмену выражают иначе: бросок `ERR_ABORTED` или `ERR_TIMEOUT` — вызов завершится с `NET_ABORTED` или `NET_TIMEOUT`. У interceptors SSE и WebSocket такого исключения нет: любой бросок они сообщают как `EXT_INTERCEPTOR_FAILED`.
+Interceptor, который бросает (или reject’ит) вне этого примера, возвращается вызывающему как `EXT_INTERCEPTOR_FAILED`, с брошенным значением на `cause` — см. [Ошибки](/ru-RU/docs/errors). То же происходит, если интерцептор завершается с результатом, не соответствующим его транспорту: `undefined` из-за забытого `return` или нативный `Response` там, где нужен `HttpResponse`. В HTTP interceptor отмену выражают иначе: бросок `ERR_ABORTED` или `ERR_TIMEOUT` — вызов завершится с `NET_ABORTED` или `NET_TIMEOUT`. У interceptors SSE и WebSocket такого исключения нет: любой бросок они сообщают как `EXT_INTERCEPTOR_FAILED`.
 
 `next(request)` может reject’нуть. Провал транспорта — это fault, не response со status 0, так что interceptor, который хочет его наблюдать, берёт `try` / `catch` вокруг `next`. Defjs всё равно атрибутирует верно: rejection, пришедший от транспорта, остаётся fault `NET_*`, а не вешается на твой interceptor.
 

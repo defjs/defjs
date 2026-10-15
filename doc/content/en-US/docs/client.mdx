@@ -28,7 +28,7 @@ Mixed interceptors are filtered by transport at execute time; relative order amo
 ## Execute by transport
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]` (`open` is the startup snapshot; `stream.open` can change after reconnect)
+- SSE → `[error, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live (see [SSE](/docs/sse)).
 - WebSocket → `[error, session, connection]`
 
 WebSocket execute can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect`. `timeout` must be a positive safe integer in `1..2_147_483_647`.

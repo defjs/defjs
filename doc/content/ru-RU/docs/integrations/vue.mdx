@@ -27,7 +27,11 @@ description: Поставь плагин, отдай клиент, запрос�
 
 ## Inject и override
 
-`injectClient()` читает ближайший провайдер `HTTP_CLIENT` и бросает, если его нет. Поддерево переопредели через Vue `provide(HTTP_CLIENT, childClient)`:
+`injectClient()` читает ближайший провайдер `HTTP_CLIENT`. Вызывай в действующем контексте внедрения Vue, например в синхронной части `setup()` или в синхронном callback `app.runWithContext()` (Vue 3.3+). Контекст, восстановленный компилятором после верхнеуровневого `await` в `<script setup>`, тоже подходит.
+
+Выбрасывается `Error`, если нет активного контекста внедрения или клиент не предоставлен. Предоставь клиент через `app.use(createClientPlugin(client))` или `provide(HTTP_CLIENT, client)` в компоненте-предке; одной установки плагина недостаточно для вызова вне контекста внедрения.
+
+Поддерево переопредели через Vue `provide(HTTP_CLIENT, childClient)`:
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 

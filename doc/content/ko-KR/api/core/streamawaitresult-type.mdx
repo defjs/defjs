@@ -13,7 +13,7 @@ type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined>
 
 SSE 명령에 대한 `client.execute`의 결과예요.
 
-- 성공하면 `[null, stream, open]`이에요. `open`은 스트림이 열릴 때 찍은 스냅샷이고, 재연결 뒤에는 `stream.open`이 바뀔 수 있어요.
+- 성공하면 `[null, stream, open]`이에요. `open`은 Defjs 네이티브 handle이나 동일한 live `open` 객체를 그대로 전달하는 래퍼일 때 반환된 handle의 연결에서 처음 성공한 핸드셰이크의 스냅샷이며, 커스텀 handle이나 `open`을 재정의하는 래퍼는 재연결 뒤에도 현재 공개한 `open`을 사용하고 `stream.open`은 live로 유지돼요([SSE](/ko-KR/docs/sse) 참고).
 - 실패하면 `[fault, undefined, open]`이에요. 응답이 도착한 뒤에 실패했다면 (예: 2xx가 아닌 handshake) `open`이 응답 스냅샷을 담고, 그렇지 않으면 `undefined`예요.
 - `TError`는 선언된 `error` struct예요. fault에 담기는 디코딩된 오류 body의 타입을 정해요.
 

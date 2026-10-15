@@ -28,7 +28,7 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 ## 依傳輸執行
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`（`open` 是啟動快照；`stream.open` 在重連後可能變）
+- SSE → `[error, stream, open]`. `open` 對於 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper，是回傳 handle 所屬連線首次成功握手的快照；自訂 handle 或覆寫 `open` 的 wrapper 則以其目前公開的 `open` 為準，即使已發生重連也一樣，`stream.open` 仍保持即時更新（見 [SSE](/zh-Hant-TW/docs/sse)）。
 - WebSocket → `[error, session, connection]`
 
 WebSocket execute 可覆寫 `beforeConnect`、`heartbeat`、`protocols`、`reconnect`。`timeout` 必須是 `1..2_147_483_647` 的正 safe integer。

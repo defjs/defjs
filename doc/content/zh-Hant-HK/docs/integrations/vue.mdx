@@ -27,7 +27,11 @@ Install `@defjs/core`、`@defjs/vue` 同 Vue 3.2+（adapter 淨係需要 `provid
 
 ## Inject 同 override
 
-`injectClient()` 讀最近嘅 `HTTP_CLIENT` provider；冇就 throw。用 Vue 嘅 `provide(HTTP_CLIENT, childClient)` override 一個 subtree：
+`injectClient()` 讀最近嘅 `HTTP_CLIENT` provider。喺有效嘅 Vue 注入上下文中呼叫，例如同步執行嘅 `setup()`，或者 `app.runWithContext()` 嘅同步 callback（需要 Vue 3.3+）。`<script setup>` 頂層 `await` 之後由編譯器恢復嘅上下文同樣有效。
+
+冇有效注入上下文，或者冇提供 client 時會 throw `Error`。用 `app.use(createClientPlugin(client))` 或祖先元件嘅 `provide(HTTP_CLIENT, client)` 提供 client；淨係安裝 plugin 並唔會令注入上下文外嘅呼叫生效。
+
+用 Vue 嘅 `provide(HTTP_CLIENT, childClient)` override 一個 subtree：
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 

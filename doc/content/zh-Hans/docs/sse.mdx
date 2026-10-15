@@ -33,7 +33,7 @@ description: 消费带类型的 SSE 流，关闭它，并等待表示终态的 c
 
 基础端点缺失、相对或无效，或者路径非法时，会在构建时、任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，即使 interceptor 本来会短路请求也一样。解析后的 URL 必须与基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 的最终 `req.endpoint` 也会相对于最终 `req.baseEndpoint` 按相同规则检查；允许有意把基础端点换成另一个有效的绝对 URL。确定性的 URL 错误不会重试。
 
-`startupOpen` 是本次执行的初始快照；新的 `execute` 绝不会复用上一次执行的快照，即使它在响应到达之前就失败也一样。`stream.open` 是实时的，后续物理打开会更新它。第一次响应重要时，留着 tuple 里的值。
+`startupOpen` 是本次执行的初始快照；新的 `execute` 绝不会复用上一次执行的快照，即使它在响应到达之前就失败也一样。`stream.open` 是实时的，后续物理打开会更新它。第一次响应重要时，留着 tuple 里的值。 `startupOpen` 仅对返回的 Defjs 原生 handle 或透传同一 live `open` 对象的 wrapper 保证是所属连接首次成功握手的快照；自定义 handle 或显式覆盖 `open` 的 wrapper 则保留其当前公开 `open`，即使已发生重连也一样，因此共享 `closed` 不能绕过 URL 净化或响应头过滤，Defjs 也不从任意元数据变换反推首次握手。
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example

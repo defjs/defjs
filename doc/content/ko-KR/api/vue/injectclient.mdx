@@ -9,9 +9,9 @@ description: 'createClientPlugin이 제공한 클라이언트를 돌려주는 Vu
 function injectClient(): Client
 ```
 
-가장 가까운 `HTTP_CLIENT` provider를 읽어요. `setup()`처럼 Vue의 `inject`를 쓸 수 있는 곳에서 호출하세요.
+가장 가까운 `HTTP_CLIENT` provider를 읽어요. 동기적으로 실행 중인 `setup()`이나 `app.runWithContext()`의 동기 콜백(Vue 3.3+)처럼 유효한 Vue 주입 컨텍스트에서 호출하세요. `<script setup>`의 최상위 `await` 이후 컴파일러가 복원한 컨텍스트도 유효해요.
 
 - **반환** 주입된 클라이언트예요.
-- **던짐** 클라이언트가 제공되지 않았을 때, 예를 들어 플러그인을 설치하지 않았을 때 `Error`를 던져요.
+- **던짐** 활성 주입 컨텍스트가 없거나 클라이언트가 제공되지 않으면 `Error`를 던져요. `app.use(createClientPlugin(client))` 또는 상위 컴포넌트의 `provide(HTTP_CLIENT, client)`로 클라이언트를 제공하세요. 플러그인 설치만으로 주입 컨텍스트 밖의 호출이 유효해지지는 않아요.
 
 [@defjs/vue](/ko-KR/api/vue)

@@ -13,7 +13,7 @@ type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined>
 
 `client.execute` 執行 SSE command 的結果。
 
-- 成功：`[null, stream, open]`。`open` 是串流開啟時的快照；`stream.open` 在重連後可能改變。
+- 成功：`[null, stream, open]`。`open` 對於 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper，是回傳 handle 所屬連線首次成功握手的快照；自訂 handle 或覆寫 `open` 的 wrapper 則以其目前公開的 `open` 為準，即使已發生重連也一樣，`stream.open` 仍保持即時更新（見 [SSE](/zh-Hant-TW/docs/sse)）。
 - 失敗：`[fault, undefined, open]`。失敗發生在回應抵達之後（例如握手回非 2xx）時，`open` 帶著回應快照，否則是 `undefined`。
 - `TError` 是宣告的 `error` struct，用來為 fault 上解碼後的 error body 定型。
 

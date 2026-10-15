@@ -41,6 +41,7 @@ export function startHeartbeat<TIncoming, TOutgoing extends AnyStruct | undefine
     stop() {
       clearInterval(interval)
       clearTimeout(ackTimer)
+      interval = undefined
       ackTimer = undefined
     },
   }
@@ -66,28 +67,24 @@ export function startHeartbeat<TIncoming, TOutgoing extends AnyStruct | undefine
       if (!isActive()) {
         return
       }
-      socket.send(serialized)
-      if (!isActive()) {
-        return
+      if (typeof config.timeoutMs === 'number' && config.timeoutMs > 0) {
+        ackTimer = setTimeout(() => {
+          fail(new Error('WebSocket heartbeat timeout'))
+        }, config.timeoutMs)
       }
+      socket.send(serialized)
     } catch (error) {
       fail(error)
-      return
-    }
-
-    if (typeof config.timeoutMs === 'number' && config.timeoutMs > 0) {
-      ackTimer = setTimeout(() => {
-        fail(new Error('WebSocket heartbeat timeout'))
-      }, config.timeoutMs)
     }
   }, config.intervalMs)
 
   function fail(error: unknown): void {
+    runtime.stop()
     /* istanbul ignore if -- @preserve defensive: a cleared platform timeout callback may already be queued when the runtime stops */
     if (!isActive()) {
       return
     }
-    stopHeartbeat(sessionController)
+    sessionController.heartbeat = undefined
     onFatal(error)
   }
 }

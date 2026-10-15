@@ -33,7 +33,7 @@ Request 形狀跟 HTTP 一樣：`builder` 回傳 `path`、`query`、`headers`、
 
 缺少、相對或無效的 base endpoint，或非法 path，會在建構期間、任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 也一樣。解析後的 URL 必須維持 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 最終的 `req.endpoint` 會按其最終的 `req.baseEndpoint`、用同一條規則檢查；刻意把 base 換成另一個有效的絕對 URL 是允許的。確定性的 URL 錯誤絕不會重試。
 
-`startupOpen` 是該次執行的初始快照；新的 `execute` 絕不會重用前一次執行的快照，即使它在回應抵達前就失敗也一樣。`stream.open` 是 live 的，之後的實體 opens 會變。第一個回應重要時，留住 tuple 那個值。
+`startupOpen` 是該次執行的初始快照；新的 `execute` 絕不會重用前一次執行的快照，即使它在回應抵達前就失敗也一樣。`stream.open` 是 live 的，之後的實體 opens 會變。第一個回應重要時，留住 tuple 那個值。 `startupOpen` 僅對回傳的 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper 保證是所屬連線首次成功握手的快照；自訂 handle 或明確覆寫 `open` 的 wrapper 則保留其目前公開的 `open`，即使已發生重連也一樣，因此共用 `closed` 不能繞過 URL 淨化或標頭過濾，Defjs 也不從任意中繼資料轉換反推首次握手。
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example

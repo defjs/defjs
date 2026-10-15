@@ -28,7 +28,7 @@ Gemischte Interceptors werden zur Execute-Zeit nach Transport gefiltert; relativ
 ## Nach Transport ausführen
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]` (`open` ist der Startup-Snapshot; `stream.open` kann nach Reconnect wechseln)
+- SSE → `[error, stream, open]`. `open` ist bei nativen Defjs-Handles oder Wrappern, die dasselbe Live-`open`-Objekt durchreichen, der Snapshot des ersten erfolgreichen Handshakes der Verbindung des zurückgegebenen Handles; eigene Handles oder Wrapper, die `open` überschreiben, verwenden auch nach einem Reconnect ihr aktuelles öffentliches `open`, während `stream.open` live bleibt (siehe [SSE](/de-DE/docs/sse)).
 - WebSocket → `[error, session, connection]`
 
 WebSocket-Execute kann `beforeConnect`, `heartbeat`, `protocols` und `reconnect` überschreiben. `timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein.

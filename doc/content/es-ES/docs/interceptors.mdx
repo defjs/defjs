@@ -64,7 +64,9 @@ Los reintentos cambian el comportamiento. Mantén la política estrecha — este
 Los errores lanzados de interceptor/Fetch no se reintentan en este bucle: un fallo de transporte rechaza en lugar de producir un estado con el que este bucle pudiera coincidir. Reintentar `POST` / `PUT` / `PATCH` / `DELETE` necesita bytes reproducibles, soporte del servidor, un contrato de idempotencia y una política de estado revisada. El reintento es tuyo: Core no exporta `retryAfter()`.
 
 Un interceptor que lanza (o rechaza) fuera de este ejemplo llega a quien llama como
-`EXT_INTERCEPTOR_FAILED`, con el valor lanzado en `cause` — mira [Errores](/es-ES/docs/errors). En un
+`EXT_INTERCEPTOR_FAILED`, con el valor lanzado en `cause` — mira [Errores](/es-ES/docs/errors). Lo mismo ocurre si se
+resuelve con algo distinto del resultado de su transporte: `undefined` por olvidar un `return`, o un
+`Response` nativo donde se espera un `HttpResponse`. En un
 interceptor HTTP, lanzar `ERR_ABORTED` o `ERR_TIMEOUT` es, en cambio, la forma de expresar la cancelación: la
 llamada se resuelve con `NET_ABORTED` o `NET_TIMEOUT`. Los interceptores SSE y WebSocket no tienen esa
 excepción; reportan cualquier throw como `EXT_INTERCEPTOR_FAILED`.

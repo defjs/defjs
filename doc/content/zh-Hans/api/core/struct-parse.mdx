@@ -17,13 +17,16 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 - **value** 是未知的输入。
 - **options.aliases** 默认为 `false`：对象 key 按**逻辑**名（`displayName`）读取。设为 `true` 时按传输名称（`display_name`）读取，和 HTTP/JSON codec 的读法一致。输出始终使用逻辑名。
 - **options.errorMap** 是一个 [`ErrorMap`](/zh-Hans/api/core/errormap-type)，只改写这一次调用的 issue 消息，包括由另一份 Core 创建的 struct 在 bigint/date 转换时产生的失败。任何字符串（包括 `''`）都会替换消息；只有 `undefined` 才保留默认消息。自定义文本会原样使用。
-- **返回** `[null, output]` 或 `[StructError, undefined]`。无效输入永远不会抛出。
+- **返回** `[null, output]` 或 `[StructError, undefined]`。校验失败不会抛出异常。调用方提供的 getter 和 `errorMap` 回调抛出的异常会原样传播。
 - 解析是 fail-fast 的：遇到第一个失败就停止，所以 error 只包含一个 issue。输出会剔除对象中的未知 key，输入不会被修改。
+- 沿一条路径最多访问 **256 层嵌套容器**（`object`、`array`、`record` 或 `tuple`），根容器计为第一层。下一个容器会在其逻辑路径处以 `invalid_type` 失败，附带 `expected: 'value nested at most 256 levels deep'`。在联合中，后续候选仍可能成功；如果没有候选匹配，联合会报 `invalid_union`。沿已声明的容器字段形成的循环也会达到此上限；允许共享非循环子节点。联合与交叉分支不会增加容器层数，`any`/`unknown` 的值则保持不透明，不会被遍历。
 
 ```ts
 const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 if (error) return console.error(error.prettify())
 ```
+
+`any` 和 `unknown` 不会遍历其值，但交叉操作可能会递归合并这些叶节点返回的两个不同对象或数组值。这次合并与其外层逻辑路径共用同一个 256 层容器预算。超出预算会在被拒绝容器的逻辑路径处产生 `invalid_intersection`。完全相同的引用会被保留而不遍历，即使共享的值含有循环也是如此。
 
 参见 [`ParseResult`](/zh-Hans/api/core/parseresult-type) 和 [`StructError`](/zh-Hans/api/core/structerror-type)。
 

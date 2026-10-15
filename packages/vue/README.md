@@ -103,7 +103,9 @@ Creates a Vue plugin that provides the supplied client instance.
 
 ### `injectClient(): Client`
 
-Returns the client from the nearest Vue provider. Throws if no client was provided.
+Returns the client from the nearest Vue provider. Call it in a valid Vue injection context, such as synchronous `setup()` or a synchronous `app.runWithContext()` callback (Vue 3.3+). Compiler-restored contexts after top-level `await` in `<script setup>` are also valid.
+
+Throws if there is no active injection context or no client was provided. Provide a client with `app.use(createClientPlugin(client))` or an ancestor's `provide(HTTP_CLIENT, client)`; installing the plugin alone does not make calls outside an injection context valid.
 
 ### `HTTP_CLIENT: InjectionKey<Client>`
 

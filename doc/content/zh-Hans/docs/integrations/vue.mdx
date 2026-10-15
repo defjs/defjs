@@ -27,7 +27,11 @@ description: 安装插件、提供 Client、获取用户，并在响应式变化
 
 ## Inject 与覆盖
 
-`injectClient()` 读最近的 `HTTP_CLIENT` provider，没有就抛。用 Vue 的 `provide(HTTP_CLIENT, childClient)` 覆盖子树：
+`injectClient()` 读最近的 `HTTP_CLIENT` provider。在有效的 Vue 注入上下文中调用，例如同步执行的 `setup()`，或 `app.runWithContext()` 的同步回调（需要 Vue 3.3+）。`<script setup>` 顶层 `await` 后由编译器恢复的上下文也有效。
+
+没有有效注入上下文，或没有提供 Client 时抛出 `Error`。通过 `app.use(createClientPlugin(client))` 或祖先组件的 `provide(HTTP_CLIENT, client)` 提供 Client；仅安装插件并不能让注入上下文外的调用生效。
+
+用 Vue 的 `provide(HTTP_CLIENT, childClient)` 覆盖子树：
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 

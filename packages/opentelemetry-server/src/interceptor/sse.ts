@@ -47,10 +47,11 @@ export function createOpenTelemetrySSEInterceptor(options: SSEInterceptorOptions
       }
     }
     const spanCtx = span ? trace.setSpan(parentCtx, span) : parentCtx
-    const headers = req.headers instanceof Headers ? req.headers : new Headers(req.headers)
-    propagator.inject(spanCtx, headers, headersSetter)
 
     if (span) runSpanHook(span, 'requestHook', () => requestHook?.(span, req))
+
+    const headers = new Headers(req.headers)
+    propagator.inject(spanCtx, headers, headersSetter)
 
     const connectStartMs = performance.now()
 

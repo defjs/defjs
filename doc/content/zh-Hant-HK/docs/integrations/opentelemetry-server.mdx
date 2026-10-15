@@ -33,7 +33,9 @@ Public API：`withOpenTelemetryServer` 再加 `OpenTelemetryServerOptions`、`Op
 
 ## Options 同 hooks
 
-Span hooks 淨係喺有傳入 `tracer` 時先會 run。Hooks 坐喺佢哋改嘅 transport 旁邊。同步 `startSpanHook(request)` 會喺 create span 之前 run，再 return initial `Attributes`；application attributes 最後 apply，所以可以 override built-in values。`requestHook` 同 `responseHook` 收到已經 create 嘅 span，可以 return `void` 或 promise。Hook failure 會 record `defjs.otel.hook.error`，而且 **唔會** 停 client operation；start hook fail 就 fallback 去 built-in initial attributes。
+Span hooks 淨係喺有傳入 `tracer` 時先會 run。Hooks 坐喺佢哋改嘅 transport 旁邊。同步 `startSpanHook(request)` 會喺 create span 之前 run，再 return initial `Attributes`；application attributes 最後 apply，所以可以 override built-in values。`requestHook` 同 `responseHook` 收到已經 create 嘅 span，可以 return `void` 或 promise。Hook failure **唔會** 停 client operation；start hook fail 就 fallback 去 built-in initial attributes。
+
+`requestHook` 同 `responseHook` 都唔會被 await。HTTP span 喺 `responseHook` 嘅同步部分 return 後即刻結束，唔會為 async hook 延長生命週期。同步部分仍然可以改 recording span；結束後唔可以補加 event。 當 `span.isRecording()` 係 true，hook failure 會記錄 `defjs.otel.hook.error` 同 `exception` event。span 唔再 recording（已結束或者未採樣）時，failure 會經 `diag.error` 交畀 OpenTelemetry diagnostic logger。Application 必須設定 `@opentelemetry/api` 嘅 `diag.setLogger(...)` 先接收到；預設唔會自動輸出。呢個 package 唔會初始化 SDK，呢類診斷亦唔係獨立嘅 SDK `LogRecord`。呢個診斷包含 `hook.name`、`error.type`、`traceId`、`spanId`，唔包含原始錯誤 message/stack 或 request 資料。
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ Empty transport object 會 enable 嗰個 transport。舊嘅 boolean transport sw
 
 Span names 會變成 `GET orders.read`、`SSE orders.watch`、`WebSocket orders.connect`。冇 `operation` 時，fallback 係 method / `SSE` / `WebSocket`，同埋省略 `defjs.operation`。
 
-HTTP 同 SSE 會將 propagated fields inject 入 request headers。Existing `Headers` instances 會 reuse 同 mutate；否則 create 新 `Headers`。WebSocket query propagation 係 **opt-in**（browsers 唔可以加 arbitrary handshake headers）：
+HTTP 同 SSE 會將 propagated fields inject 入 request headers。Injection 一律用新嘅 `Headers` 副本，唔會改 caller 嘅 headers，所以外層 retry 仍然用同一個原本嘅 parent context。WebSocket query propagation 係 **opt-in**（browsers 唔可以加 arbitrary handshake headers）：
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-有 `queryPropagation` 時，propagator fields 會 append 去 connection query string。先 review URL logging、proxy visibility、access logs、baggage 同 retention。有傳 `tracer` 時，`requireParentSpan: true` 喺冇 active parent 時會 skip span creation、propagation、hooks、metrics 同 logs，之後 unchanged call `next`。
+開啟 `queryPropagation` 時，propagator 實際注入嘅欄位會寫到連線 query string 嘅尾端，並取代同名參數；其他所有參數都會保留原有嘅序列化形式。先 review URL logging、proxy visibility、access logs、baggage 同 retention。有傳 `tracer` 時，`requireParentSpan: true` 喺冇 active parent 時會 skip span creation、propagation、hooks、metrics 同 logs，之後 unchanged call `next`。
 
 ## HTTP、SSE 同 WebSocket semantics
 

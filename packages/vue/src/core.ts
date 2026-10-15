@@ -33,8 +33,12 @@ export function createClientPlugin(client: Client): Plugin {
 /**
  * Inject the Defjs client provided by {@link createClientPlugin}.
  *
+ * Call in a Vue injection context: synchronous `setup()`, compiler-restored `<script setup>`
+ * after top-level `await`, or a synchronous `app.runWithContext()` callback (Vue 3.3+).
+ *
  * @returns The injected `Client` instance.
- * @throws If no client was provided (plugin not installed).
+ * @throws If called outside a Vue injection context or no client was provided via
+ * `app.use(createClientPlugin(client))` or `provide(HTTP_CLIENT, client)`.
  *
  * @example
  * ```ts
@@ -44,7 +48,9 @@ export function createClientPlugin(client: Client): Plugin {
 export function injectClient(): Client {
   const client = inject(HTTP_CLIENT)
   if (!client) {
-    throw new Error('No Defjs client provided. Did you forget to call app.use(createClientPlugin(client))?')
+    throw new Error(
+      'No Defjs client available. Call injectClient() in a Vue injection context (such as synchronous setup() or app.runWithContext()) and provide a client with app.use(createClientPlugin(client)) or provide(HTTP_CLIENT, client).',
+    )
   }
   return client
 }

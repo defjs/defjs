@@ -17,13 +17,16 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 - **value** is the unknown input.
 - **options.aliases** defaults to `false`: object keys are read by their **logical** names (`displayName`). With `true` they are read by their wire names (`display_name`), the way HTTP/JSON codecs read them. The output always uses logical names.
 - **options.errorMap** is an [`ErrorMap`](/api/core/errormap-type) that rewrites issue messages for this call only, including bigint/date conversion failures from a struct created by another Core copy. Any string, including `''`, replaces the message; only `undefined` keeps the default. Custom text is used verbatim.
-- **Returns** `[null, output]` or `[StructError, undefined]`. Invalid input never throws.
+- **Returns** `[null, output]` or `[StructError, undefined]`. Validation failures do not throw. Exceptions from caller-provided getters and `errorMap` callbacks propagate unchanged.
 - Parsing is fail-fast: it stops at the first failure, so the error holds one issue. Unknown object keys are stripped from the output, and the input is not modified.
+- At most **256 nested containers** (`object`, `array`, `record`, or `tuple`) are visited along a path, counting the root container as the first. The next container fails with `invalid_type` at its logical path, with `expected: 'value nested at most 256 levels deep'`. In a union, later candidates may still succeed; if none match, the union reports `invalid_union`. Cycles through declared container fields also reach this limit; shared non-cyclic children are allowed. Union and intersection branches do not add a container level, and `any`/`unknown` values remain opaque rather than being traversed.
 
 ```ts
 const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 if (error) return console.error(error.prettify())
 ```
+
+`any` and `unknown` do not traverse their values, but an intersection may recursively merge two distinct object or array values returned by those leaves. This merge shares the same 256-container budget with its enclosing logical path. Exceeding it produces `invalid_intersection` at the rejected container's logical path. Identical references are retained without traversal, including a shared cyclic value.
 
 See [`ParseResult`](/api/core/parseresult-type) and [`StructError`](/api/core/structerror-type).
 

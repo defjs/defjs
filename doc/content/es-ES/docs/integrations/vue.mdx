@@ -27,7 +27,11 @@ Crea el cliente, instala el plugin y luego carga con abort-on-change:
 
 ## Inyectar y sobrescribir
 
-`injectClient()` lee el provider `HTTP_CLIENT` más cercano y lanza cuando no hay ninguno. Sobrescribe un subárbol con el `provide(HTTP_CLIENT, childClient)` de Vue:
+`injectClient()` lee el provider `HTTP_CLIENT` más cercano. Llámalo en un contexto de inyección válido de Vue, como la ejecución síncrona de `setup()` o un callback síncrono de `app.runWithContext()` (Vue 3.3+). También son válidos los contextos que el compilador restaura después de un `await` de nivel superior en `<script setup>`.
+
+Se lanza un `Error` si no hay un contexto de inyección activo o no se proporcionó ningún cliente. Proporciona un cliente con `app.use(createClientPlugin(client))` o `provide(HTTP_CLIENT, client)` en un componente ancestro; instalar el plugin no basta para llamar fuera de un contexto de inyección.
+
+Sobrescribe un subárbol con el `provide(HTTP_CLIENT, childClient)` de Vue:
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 

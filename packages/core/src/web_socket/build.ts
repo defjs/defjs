@@ -1,13 +1,12 @@
 import type { QuerySerializer } from '../client/config'
 import type { HttpRequest } from '../internal/http_request'
-import type { RequestBuildValue } from '../internal/request_values'
 import { fillUrl, resolveRequestUrl, resolveTransportQuery } from '../internal/url'
 
 export function createWebSocketRequest(params: {
   abort: AbortSignal
   baseEndpoint: string
   operation?: string
-  params?: { [key: string]: RequestBuildValue }
+  params?: { [key: string]: string }
   path: string
   query?: URLSearchParams | { [key: string]: unknown }
   querySerializer?: QuerySerializer

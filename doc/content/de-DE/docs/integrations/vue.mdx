@@ -27,7 +27,11 @@ Erzeuge den Client, installiere das Plugin, dann fetche mit Abort-on-Change:
 
 ## Inject und Override
 
-`injectClient()` liest den nächsten `HTTP_CLIENT`-Provider und wirft, wenn keiner existiert. Überschreibe einen Subtree mit Vues `provide(HTTP_CLIENT, childClient)`:
+`injectClient()` liest den nächsten `HTTP_CLIENT`-Provider. Ruf es in einem gültigen Vue-Injektionskontext auf, etwa im synchronen Teil von `setup()` oder in einem synchronen Callback von `app.runWithContext()` (Vue 3.3+). Auch vom Compiler nach einem Top-Level-`await` in `<script setup>` wiederhergestellte Kontexte sind gültig.
+
+Ein `Error` wird ausgelöst, wenn kein Injektionskontext aktiv ist oder kein Client bereitgestellt wurde. Stelle einen Client mit `app.use(createClientPlugin(client))` oder `provide(HTTP_CLIENT, client)` in einer übergeordneten Komponente bereit; das installierte Plugin allein macht Aufrufe außerhalb eines Injektionskontexts nicht gültig.
+
+Überschreibe einen Subtree mit Vues `provide(HTTP_CLIENT, childClient)`:
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 

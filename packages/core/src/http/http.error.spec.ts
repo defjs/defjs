@@ -7,6 +7,7 @@ import type { HttpResponse } from '../internal/http_response'
 import { makeResponse } from '../internal/http_response'
 import { StructError, struct } from '../struct'
 import { createPrimitiveStruct } from '../struct/runtime'
+import { MALFORMED_INTERCEPTOR_RESULTS } from '../../test/malformed_interceptor_results'
 import { defineRequest } from './index'
 import type { HttpExecuteOptions } from './http'
 
@@ -1429,5 +1430,60 @@ describe('request http runtime errors', () => {
 
     expect(error).toMatchObject({ code: 'EXT_INTERCEPTOR_FAILED', message: 'interceptor boom' })
     expect(error).toBeInstanceOf(Error)
+  })
+
+  describe('when the interceptor chain does not resolve an HttpResponse', () => {
+    const notAnHttpResponse = [
+      ...MALFORMED_INTERCEPTOR_RESULTS,
+      ['an unbranded lookalike', () => ({ body: null, headers: new Headers(), ok: true, status: 200, statusText: '', url: '' })],
+    ] as const
+    const useUndeclared = defineRequest({ method: 'GET', path: '/malformed' })
+    const useDeclared = defineRequest({ method: 'GET', output: struct.null(), path: '/malformed' })
+
+    test.each(notAnHttpResponse)('should settle with EXT_INTERCEPTOR_FAILED for %s', async (_name, resolved) => {
+      const guardedClient = createClient(
+        withEndpoint('https://example.com'),
+        withInterceptors(createHttpInterceptor(async () => resolved() as never)),
+      )
+
+      for (const useRequest of [useUndeclared, useDeclared]) {
+        const [error, result, response] = await guardedClient.execute(useRequest())
+
+        expect(error).toMatchObject({ code: 'EXT_INTERCEPTOR_FAILED' })
+        expect(error?.cause).toBeInstanceOf(TypeError)
+        expect(result).toBeUndefined()
+        expect(response).toBeUndefined()
+      }
+    })
+
+    test('should release the timeout timer', async () => {
+      vi.useFakeTimers()
+      const guardedClient = createClient(
+        withEndpoint('https://example.com'),
+        withInterceptors(createHttpInterceptor(async () => new Response() as never)),
+      )
+
+      try {
+        const [error] = await guardedClient.execute(useUndeclared(), { timeout: 60_000 })
+
+        expect(error?.code).toBe('EXT_INTERCEPTOR_FAILED')
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    test('should accept a response derived from next() by spreading', async () => {
+      const guardedClient = createClient(
+        withEndpoint('https://example.com'),
+        withHTTPHandle(async () => new Response('null', { headers: { 'content-type': 'application/json' } })),
+        withInterceptors(createHttpInterceptor(async (request, next) => ({ ...(await next(request)), status: 201 }))),
+      )
+
+      const [error, , response] = await guardedClient.execute(useDeclared())
+
+      expect(error).toBeNull()
+      expect(response?.status).toBe(201)
+    })
   })
 })

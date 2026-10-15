@@ -2,7 +2,8 @@ import { describe, expect, test } from 'vitest'
 import { createClient, withEndpoint, withHTTPHandle, withInterceptors } from '../client'
 import { createHttpInterceptor } from '../interceptor'
 import { makeResponse } from '../internal/http_response'
-import { struct } from '../struct'
+import { StructError, struct } from '../struct'
+import type { StructLike } from '../struct'
 import { defineRequest } from './index'
 
 const JSON_HEADERS = { 'content-type': 'application/json' }
@@ -330,5 +331,22 @@ describe('inbound representation by struct kind', () => {
     const [error] = await client.execute(useRequest())
 
     expect(error?.code).toBe('RES_STRUCT_MISMATCH')
+  })
+
+  test('should classify a JSON body nested past the Struct depth limit as RES_STRUCT_MISMATCH', async () => {
+    const Chain = struct.object({
+      get child(): StructLike {
+        return Chain.null()
+      },
+    })
+    const depth = 100_000
+    const client = clientReturning('{"child":'.repeat(depth) + 'null' + '}'.repeat(depth), 200, JSON_HEADERS)
+    const useRequest = defineRequest({ method: 'GET', output: Chain, path: '/deep' })
+
+    const [error, data] = await client.execute(useRequest())
+
+    expect(error?.code).toBe('RES_STRUCT_MISMATCH')
+    expect(error?.cause).toBeInstanceOf(StructError)
+    expect(data).toBeUndefined()
   })
 })

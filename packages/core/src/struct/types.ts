@@ -180,17 +180,17 @@ export type ObjectShape = { [key: string]: any }
 
 export type ObjectInput<T extends ObjectShape> = Simplify<
   {
-    -readonly [K in keyof T as T[K] extends OptionalOutputStruct ? never : K]: T[K]['_struct']['input']
+    -readonly [K in keyof T as true extends T[K]['_struct']['optionalOut'] ? never : K]: T[K]['_struct']['input']
   } & {
-    -readonly [K in keyof T as T[K] extends OptionalOutputStruct ? K : never]?: Exclude<T[K]['_struct']['input'], undefined>
+    -readonly [K in keyof T as true extends T[K]['_struct']['optionalOut'] ? K : never]?: Exclude<T[K]['_struct']['input'], undefined>
   }
 >
 
 export type ObjectOutput<T extends ObjectShape> = Simplify<
   {
-    -readonly [K in keyof T as T[K] extends OptionalOutputStruct ? never : K]: FieldOutput<T[K]>
+    -readonly [K in keyof T as true extends T[K]['_struct']['optionalOut'] ? never : K]: FieldOutput<T[K]>
   } & {
-    -readonly [K in keyof T as T[K] extends OptionalOutputStruct ? K : never]?: FieldOutput<T[K]>
+    -readonly [K in keyof T as true extends T[K]['_struct']['optionalOut'] ? K : never]?: FieldOutput<T[K]>
   }
 >
 

@@ -8,30 +8,11 @@ export class RequestUrlError extends TypeError {}
 
 type UrlScalarValue = Exclude<RequestScalarValue, bigint>
 
-export function fillUrl(path: string, params?: { [key: string]: RequestBuildValue }): string {
+export function fillUrl(path: string, params?: { [key: string]: string }): string {
   const paramMap = new Map<string, string>()
   if (params) {
     for (const [key, value] of Object.entries(params)) {
-      if (typeof value === 'undefined') {
-        continue
-      }
-
-      if (Array.isArray(value)) {
-        const first = value[0]
-        if (typeof first !== 'undefined') {
-          if (!isUrlScalarValue(first)) {
-            throw new TypeError(`path value for "${key}" requires a scalar value`)
-          }
-          paramMap.set(key, encodePathSegment(key, serializeRequestScalarValue(first)))
-        }
-        continue
-      }
-
-      if (!isUrlScalarValue(value)) {
-        throw new TypeError(`path value for "${key}" requires a scalar value`)
-      }
-
-      paramMap.set(key, encodePathSegment(key, serializeRequestScalarValue(value)))
+      paramMap.set(key, encodePathSegment(key, value))
     }
   }
 

@@ -43,48 +43,12 @@ describe('url helpers', () => {
     expect(() => fillUrl('/users/:id', { id: '.' })).toThrow('path value for "id" must not be a dot segment')
     expect(() => fillUrl('/users/:id', { id: '..' })).toThrow('path value for "id" must not be a dot segment')
 
-    expect(
-      fillUrl('/user/:id/:name', {
-        id: [1, 2],
-        name: 'miao',
-      }),
-    ).toBe('/user/1/miao')
+    expect(fillUrl('/user/:id/:name', { id: '1', name: 'miao' })).toBe('/user/1/miao')
 
-    expect(() =>
-      fillUrl('/user/:id', {
-        id: undefined,
-      }),
-    ).toThrow('Missing path param: id')
-
-    expect(() =>
-      fillUrl('/user/:id', {
-        id: [],
-      }),
-    ).toThrow('Missing path param: id')
-
-    expect(() =>
-      fillUrl('/user/:id/:name', {
-        id: [1, 2],
-        name: undefined,
-      }),
-    ).toThrow('Missing path param: name')
-
-    expect(() =>
-      fillUrl('/user/:id', {
-        id: [],
-      }),
-    ).toThrow('Missing path param: id')
-
-    expect(() =>
-      fillUrl('/user/:id', {
-        id: { value: 1 },
-      }),
-    ).toThrow('path value for "id" requires a scalar value')
-    expect(() =>
-      fillUrl('/user/:id', {
-        id: [{ value: 1 }] as never,
-      }),
-    ).toThrow('path value for "id" requires a scalar value')
+    expect(() => fillUrl('/user/:id')).toThrow('Missing path param: id')
+    expect(() => fillUrl('/user/:id', {})).toThrow('Missing path param: id')
+    expect(() => fillUrl('/user/:id/:name', { id: '1' })).toThrow('Missing path param: name')
+    expect(() => fillUrl('/files/:constructor', {})).toThrow('Missing path param: constructor')
 
     expect(() =>
       createSearchParams({

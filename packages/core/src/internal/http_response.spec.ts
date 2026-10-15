@@ -1,7 +1,33 @@
-import { describe, expect, test } from 'vitest'
-import { getHttpErrorMessage, makeResponse } from './http_response'
+import { describe, expect, test, vi } from 'vitest'
+import { createClient, createHttpInterceptor, defineRequest, withEndpoint, withInterceptors } from '../index'
+import { getHttpErrorMessage, isHttpResponse, makeResponse } from './http_response'
 
 describe('Response', () => {
+  test('accepts an interceptor response built by another core module instance', async () => {
+    vi.resetModules()
+    const other = await import('../index')
+    expect(other.makeResponse).not.toBe(makeResponse)
+    const client = createClient(
+      withEndpoint('https://example.test'),
+      withInterceptors(createHttpInterceptor(async () => other.makeResponse({ status: 200 }))),
+    )
+    const request = defineRequest({ method: 'GET', path: '/cached' })
+    const [fault, , response] = await client.execute(request())
+
+    expect(fault).toBeNull()
+    expect(response?.status).toBe(200)
+  })
+
+  test('should recognize a made response and a spread copy of it, and nothing else', () => {
+    const made = makeResponse({ status: 200 })
+
+    expect(isHttpResponse(made)).toBe(true)
+    expect(isHttpResponse({ ...made, status: 201 })).toBe(true)
+    for (const value of [undefined, null, 'ok', 200, {}, new Response()]) {
+      expect(isHttpResponse(value)).toBe(false)
+    }
+  })
+
   test('should make response', () => {
     const res = makeResponse({
       status: 200,

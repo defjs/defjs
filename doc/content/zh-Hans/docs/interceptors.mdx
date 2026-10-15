@@ -64,7 +64,7 @@ Command 层仍按状态分派。调用方要类型化 `error.data` 时，用一�
 这个循环不会重试 interceptor/Fetch 抛出的错误——传输失败是 reject，根本不会产出一个能让这个循环去匹配的状态。重试 `POST` / `PUT` / `PATCH` / `DELETE` 需要可重放字节、服务端支持、幂等契约，以及审过的状态策略。重试归你管——Core 不导出 `retryAfter()`。
 
 在这个示例之外抛错（或 reject）的 interceptor，会以 `EXT_INTERCEPTOR_FAILED` 回到调用方，抛出的值挂在
-`cause` 上——见 [Errors](/zh-Hans/docs/errors)。在 HTTP interceptor 里，想表达取消就改成抛 `ERR_ABORTED` 或 `ERR_TIMEOUT`：调用会以 `NET_ABORTED` 或 `NET_TIMEOUT` resolve。SSE 和 WebSocket interceptor 没有这个例外，任何抛错都会报为 `EXT_INTERCEPTOR_FAILED`。
+`cause` 上——见 [Errors](/zh-Hans/docs/errors)。如果 interceptor 完成时返回的不是该传输预期的结果，也会报为 `EXT_INTERCEPTOR_FAILED`，例如漏写 `return` 导致的 `undefined`，或在应该返回 `HttpResponse` 时返回了原生 `Response`。在 HTTP interceptor 里，想表达取消就改成抛 `ERR_ABORTED` 或 `ERR_TIMEOUT`：调用会以 `NET_ABORTED` 或 `NET_TIMEOUT` resolve。SSE 和 WebSocket interceptor 没有这个例外，任何抛错都会报为 `EXT_INTERCEPTOR_FAILED`。
 
 `next(request)` 可能 reject。传输失败是 fault，不是 status 0 的响应，所以想观察它的 interceptor 要在
 `next` 外面套 `try` / `catch`。Defjs 的归因照样是对的：来自传输层的 reject 仍然是 `NET_*` fault，不会

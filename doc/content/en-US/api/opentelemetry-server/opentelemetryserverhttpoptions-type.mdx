@@ -12,7 +12,7 @@ type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpRe
 Set on `http` in `OpenTelemetryServerOptions`. It has no fields of its own: `enabled`, `startSpanHook`, `requestHook` and `responseHook` come from `OpenTelemetryServerTransportOptions`.
 
 - `responseHook(span, res, req)` receives the `HttpResponse` that came back through the interceptor, before the client decodes a declared body, together with the original `HttpRequest`. Read `req.operation` for the request identity; do not rebuild it from the endpoint or a resolved URL.
-- The HTTP span ends as soon as `responseHook` returns; the hook is not awaited, so only its synchronous part can still change the span. A status of 400 or above ends it `ERROR` with `error.type` set to the status string; 100–399 leaves its status unset.
+- The HTTP span ends as soon as `responseHook` returns; the hook is not awaited, so only its synchronous part can still change the span. A status of 400 or above ends it `ERROR` with `error.type` set to the status string; 100–399 leaves its status unset. An asynchronous hook rejection after end is reported through `diag.error`; configure `diag.setLogger(...)` from `@opentelemetry/api` to receive it. It cannot append events to an ended span.
 - A rejection through the interceptor (network failure, cancellation, timeout, or a declared `output` / `error` body that cannot be read as JSON) has no response status and does not call `responseHook`. The span ends `ERROR` with `error.type` set to the thrown class name, such as `TypeError`, `Error` or `BodyFailure`. Caller cancellation is `Error` whatever the abort reason.
 
 Pass `{ enabled: false }` to skip HTTP instrumentation. Span hooks run only when a `tracer` is supplied.

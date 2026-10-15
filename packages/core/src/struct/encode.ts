@@ -45,12 +45,12 @@ function getComparableEncodedValue(struct: RuntimeStruct, value: unknown, option
   return value
 }
 
-function writeMergedWire(output: { [key: string]: unknown }, key: string, encoded: unknown): void {
+function writeMergedWire(output: { [key: string]: unknown }, key: string, encoded: unknown, depth: number): void {
   if (!hasOwnKey(output, key)) {
     output[key] = encoded
     return
   }
-  const merged = mergeIntersectionValues(output[key], encoded)
+  const merged = mergeIntersectionValues(output[key], encoded, false, depth)
   if (!merged.ok) {
     throw intersectionEncodeError([key, ...merged.path])
   }
@@ -62,6 +62,7 @@ function writeObjectFieldsMerged(
   value: { [key: string]: unknown },
   options: EncodeOptions,
   output: { [key: string]: unknown },
+  depth: number,
 ): void {
   const definition = struct[DEFINITION] as ObjectDefinition
   if (options.encodeObject === mapAliasedObjectFields) {
@@ -73,7 +74,7 @@ function writeObjectFieldsMerged(
       if (typeof fieldValue === 'undefined') {
         continue
       }
-      writeMergedWire(output, field.wireKey, encodeValue(field.struct, fieldValue, options))
+      writeMergedWire(output, field.wireKey, encodeValue(field.struct, fieldValue, options, depth + 1), depth + 1)
     }
     return
   }
@@ -81,7 +82,7 @@ function writeObjectFieldsMerged(
   const shape = resolveObjectShape(struct, definition)
   for (const key in shape) {
     if (hasOwnKey(value, key)) {
-      writeMergedWire(output, key, encodeValue(shape[key] as RuntimeStruct, value[key], options))
+      writeMergedWire(output, key, encodeValue(shape[key] as RuntimeStruct, value[key], options, depth + 1), depth + 1)
     }
   }
 }
@@ -91,18 +92,19 @@ function encodeObjectFields(
   definition: ObjectDefinition,
   value: { [key: string]: unknown },
   options: EncodeOptions,
+  depth: number,
   output: { [key: string]: unknown } = nullObject(),
 ): { [key: string]: unknown } {
   const shape = resolveObjectShape(struct, definition)
   for (const key in shape) {
     if (hasOwnKey(value, key)) {
-      output[key] = encodeValue(shape[key] as RuntimeStruct, value[key], options)
+      output[key] = encodeValue(shape[key] as RuntimeStruct, value[key], options, depth + 1)
     }
   }
   return output
 }
 
-export function encodeValue(struct: RuntimeStruct, value: unknown, options: EncodeOptions = {}): unknown {
+export function encodeValue(struct: RuntimeStruct, value: unknown, options: EncodeOptions = {}, depth = 0): unknown {
   const definition = struct[DEFINITION]
   if (value === null && (definition.kind === 'null' || definition.flags.nullable)) {
     return null
@@ -130,12 +132,16 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
       return definition.encode ? definition.encode(value as never) : value
 
     case 'array':
-      return Array.isArray(value) ? value.map((item) => encodeValue(definition.item as unknown as RuntimeStruct, item, options)) : value
+      return Array.isArray(value)
+        ? value.map((item) => encodeValue(definition.item as unknown as RuntimeStruct, item, options, depth + 1))
+        : value
 
     case 'tuple':
       return Array.isArray(value)
         ? value.map((item, index) =>
-            index < definition.items.length ? encodeValue(definition.items[index] as unknown as RuntimeStruct, item, options) : item,
+            index < definition.items.length
+              ? encodeValue(definition.items[index] as unknown as RuntimeStruct, item, options, depth + 1)
+              : item,
           )
         : value
 
@@ -145,7 +151,7 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
       }
       const output: { [key: string]: unknown } = Object.create(null)
       for (const [key, entry] of Object.entries(value)) {
-        output[key] = encodeValue(definition.value as unknown as RuntimeStruct, entry, options)
+        output[key] = encodeValue(definition.value as unknown as RuntimeStruct, entry, options, depth + 1)
       }
       return output
     }
@@ -155,9 +161,9 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
         return value
       }
       if (options.encodeObject) {
-        return options.encodeObject(struct, value, (fieldStruct, fieldValue) => encodeValue(fieldStruct, fieldValue, options))
+        return options.encodeObject(struct, value, (fieldStruct, fieldValue) => encodeValue(fieldStruct, fieldValue, options, depth + 1))
       }
-      return encodeObjectFields(struct, definition, value, options)
+      return encodeObjectFields(struct, definition, value, options, depth)
     }
 
     case 'or': {
@@ -165,7 +171,7 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
         for (const option of definition.options) {
           const runtime = option as unknown as RuntimeStruct
           if (matchesRuntimeValue(runtime, value)) {
-            return encodeValue(runtime, value, options)
+            return encodeValue(runtime, value, options, depth)
           }
         }
         return value
@@ -178,10 +184,10 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
         return value
       }
 
-      const first = encodeValue(firstOption, value, options)
+      const first = encodeValue(firstOption, value, options, depth)
       for (let index = 1; index < matches.length; index += 1) {
         const option = matches[index] as RuntimeStruct
-        const encoded = encodeValue(option, value, options)
+        const encoded = encodeValue(option, value, options, depth)
         if (!sameEncodedShape(firstOption, first, option, encoded, options)) {
           throw new TypeError('ambiguous union encode: multiple union branches match with different wire output')
         }
@@ -193,7 +199,7 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
       if (isPlainObject(value)) {
         const matched = definition.map.get((value as { [key: string]: unknown })[definition.discriminator])
         if (matched) {
-          return encodeValue(matched as unknown as RuntimeStruct, value, options)
+          return encodeValue(matched as unknown as RuntimeStruct, value, options, depth)
         }
       }
       return value
@@ -212,7 +218,7 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
       }
       if (parts.length === 1) {
         const only = parts[0] as RuntimeStruct
-        return encodeValue(only, value, options)
+        return encodeValue(only, value, options, depth)
       }
 
       // Each member encodes on its own. One logical key can leave under every wire key it declares.
@@ -220,15 +226,15 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
       if (definition.objectSides && (!options.encodeObject || options.encodeObject === mapAliasedObjectFields) && isPlainObject(value)) {
         const output = nullObject()
         for (const runtime of parts) {
-          writeObjectFieldsMerged(runtime, value, options, output)
+          writeObjectFieldsMerged(runtime, value, options, output, depth)
         }
         return output
       }
 
-      let merged: unknown = encodeValue(parts[0] as RuntimeStruct, value, options)
+      let merged: unknown = encodeValue(parts[0] as RuntimeStruct, value, options, depth)
       for (let index = 1; index < parts.length; index += 1) {
-        const encoded = encodeValue(parts[index] as RuntimeStruct, value, options)
-        const result = mergeIntersectionValues(merged, encoded)
+        const encoded = encodeValue(parts[index] as RuntimeStruct, value, options, depth)
+        const result = mergeIntersectionValues(merged, encoded, false, depth)
         if (!result.ok) {
           throw intersectionEncodeError(result.path)
         }

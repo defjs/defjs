@@ -33,7 +33,9 @@ SDK init, провайдеры, exporter’ы, процессоры, context, sa
 
 ## Опции и hooks
 
-Hooks для span вызываются только при переданном `tracer`. Hooks сидят рядом с транспортом, который меняют. Синхронный `startSpanHook(request)` вызывается до создания span и возвращает начальные `Attributes`; атрибуты приложения применяются последними, так что могут перекрыть встроенные значения. `requestHook` и `responseHook` получают уже созданный span и могут вернуть `void` или promise. Провал hook записывает `defjs.otel.hook.error` и **не** останавливает операцию клиента; упавший start hook откатывается к встроенным начальным атрибутам.
+Hooks для span вызываются только при переданном `tracer`. Hooks сидят рядом с транспортом, который меняют. Синхронный `startSpanHook(request)` вызывается до создания span и возвращает начальные `Attributes`; атрибуты приложения применяются последними, так что могут перекрыть встроенные значения. `requestHook` и `responseHook` получают уже созданный span и могут вернуть `void` или promise. Ошибка hook **не** останавливает операцию клиента; упавший start hook откатывается к встроенным начальным атрибутам.
+
+`requestHook` и `responseHook` не ожидаются через await. HTTP span завершается при возврате синхронной части `responseHook`; асинхронный hook не продлевает его время жизни. Синхронная часть ещё может изменить записывающий span; после завершения добавить события нельзя. Пока `span.isRecording()` возвращает true, ошибки hooks записывают события `defjs.otel.hook.error` и `exception`. Если span не записывает данные (завершён или не выбран при сэмплировании), ошибки передаются диагностическому logger OpenTelemetry через `diag.error`. Для их получения приложение должно настроить `diag.setLogger(...)` из `@opentelemetry/api`; по умолчанию автоматического вывода нет. Пакет не инициализирует SDK, а эта диагностика не является отдельным SDK `LogRecord`. Эта диагностика содержит `hook.name`, `error.type`, `traceId` и `spanId`, но не исходное сообщение об ошибке, её стек или данные запроса.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ Hooks для span вызываются только при переданном 
 
 Имена span становятся `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`. Без `operation` fallback — method / `SSE` / `WebSocket`, а `defjs.operation` опускается.
 
-HTTP и SSE инжектят propagated-поля в заголовки запроса. Существующие экземпляры `Headers` переиспользуются и мутируются; иначе создаётся новый `Headers`. Query propagation WebSocket — **opt-in** (браузеры не могут добавить произвольные handshake-заголовки):
+HTTP и SSE инжектят propagated-поля в заголовки запроса. Для инъекции всегда используется новая копия `Headers`, не меняющая заголовки вызывающего кода, поэтому повторы внешнего interceptor сохраняют один и тот же исходный родительский контекст. Query propagation WebSocket — **opt-in** (браузеры не могут добавить произвольные handshake-заголовки):
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-С `queryPropagation` поля propagator дописываются к query-строке соединения. Сначала проверь логирование URL, видимость прокси, access logs, baggage и retention. При наличии `tracer` опция `requireParentSpan: true` пропускает создание span, propagation, hooks, metrics и logs, когда нет активного родителя, потом зовёт `next` без изменений.
+С `queryPropagation` поля, которые propagator фактически внедряет, записываются в конец query-строки соединения и заменяют все одноимённые параметры; все остальные параметры сохраняют свою сериализованную форму. Сначала проверь логирование URL, видимость прокси, access logs, baggage и retention. При наличии `tracer` опция `requireParentSpan: true` пропускает создание span, propagation, hooks, metrics и logs, когда нет активного родителя, потом зовёт `next` без изменений.
 
 ## Семантика HTTP, SSE и WebSocket
 

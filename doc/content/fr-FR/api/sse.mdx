@@ -55,7 +55,7 @@ interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposab
 }
 ```
 
-Le troisième slot du tuple est l’instantané de démarrage de `open` ; après un reconnect, `stream.open` suit la dernière connexion. Préfère `await using stream = handle` pour le nettoyage d’une portée possédée. Le dispose async arrête la lecture et le travail de reconnect Defjs et attend que son reader lock soit relâché ; il ne promet pas qu’une promesse `ReadableStream.cancel()` bloquée, contrôlée par le provider, se terminera. `close()` / `closed` manuels restent disponibles.
+Le troisième slot du tuple est l’instantané de démarrage de `open` ; après un reconnect, `stream.open` suit la dernière connexion. `startupOpen` n’est l’instantané du premier handshake réussi de la connexion du handle renvoyé que pour un handle natif Defjs ou un wrapper transmettant le même objet `open` live ; les handles custom et les wrappers qui redéfinissent `open` conservent leur `open` public courant même après une reconnexion, donc partager `closed` ne permet pas de contourner l’assainissement de l’URL ou le filtrage des en-têtes, et Defjs ne reconstruit pas les métadonnées du premier handshake à partir de transformations arbitraires. Préfère `await using stream = handle` pour le nettoyage d’une portée possédée. Le dispose async arrête la lecture et le travail de reconnect Defjs et attend que son reader lock soit relâché ; il ne promet pas qu’une promesse `ReadableStream.cancel()` bloquée, contrôlée par le provider, se terminera. `close()` / `closed` manuels restent disponibles.
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {

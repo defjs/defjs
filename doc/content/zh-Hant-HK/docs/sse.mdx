@@ -33,7 +33,7 @@ Response 一定要 successful，media type essence `text/event-stream`，同埋�
 
 缺少、相對或無效嘅 base endpoint，以及非法 path，都會喺 building 時以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit 嘅 interceptor。解析後嘅 URL 必須保持 base origin，並留喺佢嘅目錄之下；path 入面嘅C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?`、`#`，以及逃出目錄嘅路徑都會被拒絕。形似 scheme 同 protocol-relative 嘅形式，就算前面有空格都會被拒絕；路徑入面嘅普通空格允許，並會以 `%20` 送出。Interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一個規則檢查；容許刻意將 base 換成另一個有效嘅絕對 URL。確定嘅 URL 錯誤永遠唔會重試。
 
-`startupOpen` 係該次執行嘅起始快照；新嘅 `execute` 永遠唔會重用之前執行嘅快照，即使喺收到 response 之前就失敗都一樣。`stream.open` 係 live，之後嘅實體 open 會更新佢。第一次 response 重要時，要保留 tuple value。
+`startupOpen` 係該次執行嘅起始快照；新嘅 `execute` 永遠唔會重用之前執行嘅快照，即使喺收到 response 之前就失敗都一樣。`stream.open` 係 live，之後嘅實體 open 會更新佢。第一次 response 重要時，要保留 tuple value。 `startupOpen` 只喺返回嘅 Defjs 原生 handle 或透傳同一 live `open` 物件嘅 wrapper 上，先保證係所屬連線首次成功 handshake 嘅 snapshot；custom handle 或明確覆寫 `open` 嘅 wrapper 就算已經 reconnect，都保留自己目前公開嘅 `open`，所以共用 `closed` 唔可以繞過 URL 淨化或 headers 過濾，Defjs 亦唔會由任意 metadata 變換反推首次 handshake。
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example

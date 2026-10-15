@@ -1045,6 +1045,21 @@ async function runWebSocketCommand<
 
   try {
     const session = await awaitWithSignal(() => wsChain(wsRequest, wsHandler), chainSignal)
+    // Interceptors may return wrappers or synthetic sessions, but callers still need the complete session surface.
+    if (
+      typeof session?.closed?.then !== 'function' ||
+      typeof session.close !== 'function' ||
+      typeof session.send !== 'function' ||
+      typeof session.receive?.[Symbol.asyncIterator] !== 'function' ||
+      typeof session[Symbol.asyncDispose] !== 'function' ||
+      typeof session.onRuntimeError !== 'function' ||
+      typeof session.onStateChange !== 'function' ||
+      typeof session.connection?.generation !== 'number' ||
+      typeof session.bufferedAmount !== 'number' ||
+      typeof session.state !== 'string'
+    ) {
+      throw new TypeError('WebSocket interceptor must resolve a WebSocket session')
+    }
     chainSettled = true
     deadline.release()
     releaseAbortSignal(chainSignal)

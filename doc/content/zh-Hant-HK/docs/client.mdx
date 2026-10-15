@@ -28,7 +28,7 @@ Mixed interceptors 會喺 execute 時按 transport filter；選中嗰種嘅相�
 ## 按 transport execute
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`（`open` 係 startup snapshot；reconnect 之後 `stream.open` 可以變）
+- SSE → `[error, stream, open]`. `open` 對 Defjs 原生 handle 或透傳同一 live `open` 物件嘅 wrapper，係返回 handle 所屬連線首次成功 handshake 嘅 snapshot；custom handle 或覆寫 `open` 嘅 wrapper 就算已經 reconnect，都以自己目前公開嘅 `open` 為準，`stream.open` 仍然係 live（見 [SSE](/zh-Hant-HK/docs/sse)）。
 - WebSocket → `[error, session, connection]`
 
 WebSocket execute 可以 override `beforeConnect`、`heartbeat`、`protocols` 同 `reconnect`。`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。

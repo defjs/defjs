@@ -64,7 +64,7 @@ Command 層仍會依 status 分派。呼叫端需要型別化 `error.data` 時�
 這個迴圈不會重試被丟出的 interceptor／Fetch 錯誤——傳輸失敗是 reject，根本不會產生一個能讓這個迴圈去比對的 status。重試 `POST`／`PUT`／`PATCH`／`DELETE` 需要可重放的 bytes、伺服器支援、idempotency 契約，以及審過的 status 策略。重試歸你管——Core 不會匯出 `retryAfter()`。
 
 在這個範例之外丟出錯誤（或 reject）的 interceptor，會以 `EXT_INTERCEPTOR_FAILED` 回到呼叫方，丟出的值
-掛在 `cause` 上——見[錯誤](/zh-Hant-TW/docs/errors)。在 HTTP interceptor 裡，想表達取消就改成丟 `ERR_ABORTED` 或 `ERR_TIMEOUT`：呼叫會以
+掛在 `cause` 上——見[錯誤](/zh-Hant-TW/docs/errors)。若 interceptor 完成時回傳的不是該傳輸預期的結果，也會回報 `EXT_INTERCEPTOR_FAILED`，例如漏寫 `return` 導致的 `undefined`，或在應回傳 `HttpResponse` 時回傳了原生 `Response`。在 HTTP interceptor 裡，想表達取消就改成丟 `ERR_ABORTED` 或 `ERR_TIMEOUT`：呼叫會以
 `NET_ABORTED` 或 `NET_TIMEOUT` resolve。SSE 與 WebSocket 的 interceptor 沒有這個例外；丟出任何東西
 都以 `EXT_INTERCEPTOR_FAILED` 回報。
 

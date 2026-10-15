@@ -13,7 +13,7 @@ type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined>
 
 نتيجة `client.execute` لأمر SSE.
 
-- عند النجاح: `[null, stream, open]`. `open` هي اللقطة المأخوذة عند فتح التدفق؛ أما `stream.open` فقد تتغير بعد إعادة الاتصال.
+- عند النجاح: `[null, stream, open]`. `open` هي لقطة أول مصافحة ناجحة للاتصال الخاص بالمقبض المُعاد للمقابض الأصلية من Defjs أو الأغلفة التي تمرّر كائن `open` الحي نفسه؛ أما المقابض المخصصة أو الأغلفة التي تستبدل `open` فتستخدم قيمة `open` العامة الحالية حتى بعد إعادة الاتصال، بينما تظل `stream.open` حية (انظر [SSE](/ar/docs/sse)).
 - عند الفشل: `[fault, undefined, open]`. تحمل `open` لقطة الاستجابة عندما يقع الفشل بعد وصول استجابة، مثل مصافحة غير 2xx، وتكون `undefined` فيما عدا ذلك.
 - `TError` هو struct الـ `error` المعلَن. وهو يحدد نوع جسم الخطأ المفكوك على الـ fault.
 

@@ -28,7 +28,7 @@ description: 명시적인 클라이언트를 만들고, 옵션을 조합하고, 
 ## 전송별 실행
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]` (`open`은 시작 스냅샷이고, 재연결 뒤 `stream.open`은 바뀔 수 있어요)
+- SSE → `[error, stream, open]`. `open`은 Defjs 네이티브 handle이나 동일한 live `open` 객체를 그대로 전달하는 래퍼일 때 반환된 handle의 연결에서 처음 성공한 핸드셰이크의 스냅샷이며, 커스텀 handle이나 `open`을 재정의하는 래퍼는 재연결 뒤에도 현재 공개한 `open`을 사용하고 `stream.open`은 live로 유지돼요([SSE](/ko-KR/docs/sse) 참고).
 - WebSocket → `[error, session, connection]`
 
 WebSocket 실행은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 덮어쓸 수 있어요. `timeout`은 `1..2_147_483_647` 범위의 양의 안전 정수여야 해요.

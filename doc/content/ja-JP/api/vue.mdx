@@ -26,10 +26,10 @@ function createClientPlugin(client: Client): Plugin
 function injectClient(): Client
 ```
 
-一番近い `HTTP_CLIENT` provider を読みます。`setup()` のように `inject` が使える場所で呼んでください。
+一番近い `HTTP_CLIENT` provider を読みます。同期的な `setup()` の実行中や `app.runWithContext()` の同期コールバック内（Vue 3.3+）など、有効な Vue の注入コンテキストで呼び出してください。`<script setup>` のトップレベル `await` の後にコンパイラが復元したコンテキストも有効です。
 
 - **戻り値** 注入されたクライアントです。
-- **例外** クライアントが提供されていないとき（たとえばプラグインが入っていないとき）に `Error` を throw します。
+- **例外** 有効な注入コンテキストがない場合、またはクライアントが提供されていない場合に `Error` を throw します。`app.use(createClientPlugin(client))` または祖先コンポーネントの `provide(HTTP_CLIENT, client)` でクライアントを提供してください。プラグインをインストールしただけでは、注入コンテキスト外の呼び出しは有効になりません。
 
 ## HTTP_CLIENT
 

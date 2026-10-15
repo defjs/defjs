@@ -13,7 +13,7 @@ type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined>
 
 Le résultat de `client.execute` pour une commande SSE.
 
-- En cas de succès : `[null, stream, open]`. `open` est l’instantané pris à l’ouverture du flux ; `stream.open` peut changer après une reconnexion.
+- En cas de succès : `[null, stream, open]`. `open` est l’instantané du premier handshake réussi de la connexion du handle renvoyé pour les handles natifs Defjs ou les wrappers transmettant le même objet `open` live ; les handles custom ou wrappers qui redéfinissent `open` utilisent leur `open` public courant même après une reconnexion, tandis que `stream.open` reste live (voir [SSE](/fr-FR/docs/sse)).
 - En cas d’échec : `[fault, undefined, open]`. `open` porte l’instantané de la réponse quand l’échec est survenu après l’arrivée d’une réponse, par exemple un handshake non 2xx, et vaut `undefined` sinon.
 - `TError` est le struct `error` déclaré. Il type le corps d’erreur décodé sur le fault.
 

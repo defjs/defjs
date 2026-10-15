@@ -110,11 +110,11 @@ SSE 在 resolve handle 之前會驗證狀態、`text/event-stream` 以及 body �
 
 WebSocket 的啟動期覆蓋握手加第一次實體 open。建構器失敗、open 之前就關閉、逾時或取消，都會產出一個啟動 tuple。即使 socket 從沒到過 `open`，連線快照也可能存在。
 
-| 傳輸      | 啟動之後                                                                                                                                              |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | 致命錯誤時 iterator reject；`stream.closed` 以 `kind: 'error'` 和對應的 fault `code` resolve                                                          |
-| WebSocket | 訊息／佇列／心跳失敗走 `onRuntimeError`；終止性錯誤讓 `receive` 失敗；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                     |
-| HTTP      | 執行時的 Promise 只會確定結果一次，結果為 tuple。攔截器或進度回呼拋出的錯誤會成為 tuple 中的 fault（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
+| 傳輸      | 啟動之後                                                                                                                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | 致命錯誤時 iterator reject；`stream.closed` 以 `kind: 'error'` 和對應的 fault `code` resolve                                                                                                      |
+| WebSocket | 訊息／佇列／心跳失敗走 `onRuntimeError`；終止性錯誤讓 `receive` 失敗；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                 |
+| HTTP      | 執行時的 Promise 只會確定結果一次，結果為 tuple。攔截器拋出錯誤、回傳非 `HttpResponse` 的結果，或進度回呼拋出錯誤時，都會在 tuple 中回傳 fault（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
 
 `NET_ABORTED` / `NET_TIMEOUT` 描述的是呼叫方在啟動期看到了什麼。回傳給你的 stream 或 session，你照樣要關掉並 await 它的終態 promise。
 

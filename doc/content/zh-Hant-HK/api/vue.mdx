@@ -26,10 +26,10 @@ function createClientPlugin(client: Client): Plugin
 function injectClient(): Client
 ```
 
-讀取最近嘅 `HTTP_CLIENT` provider。要喺允許 `inject` 嘅地方 call，例如 `setup()`。
+讀取最近嘅 `HTTP_CLIENT` provider。喺有效嘅 Vue 注入上下文中呼叫，例如同步執行嘅 `setup()`，或者 `app.runWithContext()` 嘅同步 callback（需要 Vue 3.3+）。`<script setup>` 頂層 `await` 之後由編譯器恢復嘅上下文同樣有效。
 
 - **Returns** 注入嘅 client。
-- **Throws** 如果冇提供 client（例如冇安裝 plugin），會 throw `Error`。
+- **Throws** 冇有效注入上下文，或者冇提供 client 時會 throw `Error`。用 `app.use(createClientPlugin(client))` 或祖先元件嘅 `provide(HTTP_CLIENT, client)` 提供 client；淨係安裝 plugin 並唔會令注入上下文外嘅呼叫生效。
 
 ## HTTP_CLIENT
 

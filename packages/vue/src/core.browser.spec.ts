@@ -297,7 +297,9 @@ describe('vue browser runtime', () => {
     app.config.warnHandler = () => {}
 
     try {
-      expect(() => app.mount(root)).toThrow('No Defjs client provided. Did you forget to call app.use(createClientPlugin(client))?')
+      expect(() => app.mount(root)).toThrow(
+        'No Defjs client available. Call injectClient() in a Vue injection context (such as synchronous setup() or app.runWithContext()) and provide a client with app.use(createClientPlugin(client)) or provide(HTTP_CLIENT, client).',
+      )
     } finally {
       root.remove()
     }

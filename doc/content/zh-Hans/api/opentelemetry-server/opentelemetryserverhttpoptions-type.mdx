@@ -12,7 +12,7 @@ type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpRe
 设在 `OpenTelemetryServerOptions` 的 `http` 上。它自己没有字段：`enabled`、`startSpanHook`、`requestHook` 和 `responseHook` 都来自 `OpenTelemetryServerTransportOptions`。
 
 - `responseHook(span, res, req)` 收到的是经 interceptor 返回的 `HttpResponse`（此时 client 还没有解码已声明的 body），以及原始的 `HttpRequest`。请求的标识读 `req.operation`，不要从 endpoint 或解析后的 URL 重新拼出。
-- `responseHook` 一返回，HTTP span 就结束；该 hook 不会被 await，所以只有它的同步部分还能改动 span。状态码 400 及以上时，span 以 `ERROR` 结束，`error.type` 为状态码字符串；100–399 则不设置状态。
+- `responseHook` 一返回，HTTP span 就结束；该 hook 不会被 await，所以只有它的同步部分还能改动 span。状态码 400 及以上时，span 以 `ERROR` 结束，`error.type` 为状态码字符串；100–399 则不设置状态。 结束后的异步 hook rejection 通过 `diag.error` 保留诊断；应用需配置 `@opentelemetry/api` 的 `diag.setLogger(...)` 才能接收，不能向已结束的 span 追加事件。
 - 经 interceptor 的 reject（网络失败、取消、超时，或已声明的 `output` / `error` body 无法按 JSON 读取）没有响应状态，也不会调用 `responseHook`。span 以 `ERROR` 结束，`error.type` 为抛出的类名，例如 `TypeError`、`Error` 或 `BodyFailure`。调用方取消无论 abort 的 reason 是什么，都是 `Error`。
 
 传 `{ enabled: false }` 可跳过 HTTP 插桩。仅在传入 `tracer` 时运行 span hooks。

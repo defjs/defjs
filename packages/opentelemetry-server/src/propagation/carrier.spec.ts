@@ -70,6 +70,13 @@ describe('queryStringSetter', () => {
     expect(carrier.params.get('traceparent')).toBe('abc123')
   })
 
+  test('replaces an earlier value for the same key', () => {
+    const carrier = { params: new URLSearchParams() }
+    queryStringSetter.set(carrier, 'baggage', 'tenant=a')
+    queryStringSetter.set(carrier, 'baggage', 'tenant=b')
+    expect(carrier.params.getAll('baggage')).toEqual(['tenant=b'])
+  })
+
   test('skips when carrier is null', () => {
     // @ts-expect-error carrier must be QueryStringCarrier, but setter defends against null
     expect(() => queryStringSetter.set(null, 'traceparent', 'abc')).not.toThrow()

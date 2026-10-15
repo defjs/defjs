@@ -33,7 +33,9 @@ SDK 초기화, provider, exporter, processor, context, sampling, 마스킹, flus
 
 ## 옵션과 훅
 
-span 훅은 `tracer`를 전달했을 때만 호출돼요. 훅은 바꾸는 전송 옆에 있어요. 동기 `startSpanHook(request)`은 span 생성 전에 실행되어 초기 `Attributes`를 반환해요. 애플리케이션 속성이 마지막에 적용되므로 내장 값을 덮어쓸 수 있어요. `requestHook`과 `responseHook`은 이미 만들어진 span을 받고 `void`나 프로미스를 반환할 수 있어요. Hook 실패는 `defjs.otel.hook.error`를 기록하고 클라이언트 작업을 **멈추지 않아요**. Start hook 실패 시에는 내장 초기 속성을 사용해요.
+span 훅은 `tracer`를 전달했을 때만 호출돼요. 훅은 바꾸는 전송 옆에 있어요. 동기 `startSpanHook(request)`은 span 생성 전에 실행되어 초기 `Attributes`를 반환해요. 애플리케이션 속성이 마지막에 적용되므로 내장 값을 덮어쓸 수 있어요. `requestHook`과 `responseHook`은 이미 만들어진 span을 받고 `void`나 프로미스를 반환할 수 있어요. Hook 실패는 클라이언트 작업을 **멈추지 않아요**. Start hook 실패 시에는 내장 초기 속성을 사용해요.
+
+`requestHook`과 `responseHook`은 await하지 않아요. HTTP span은 `responseHook`의 동기 부분이 반환되면 끝나며 비동기 훅을 위해 수명을 늘리지 않아요. 동기 부분은 기록 중인 span을 바꿀 수 있지만 종료 후에는 이벤트를 추가할 수 없어요. `span.isRecording()`이 true인 동안 훅 실패는 `defjs.otel.hook.error`와 `exception` 이벤트로 기록돼요. 기록하지 않는 span(종료됐거나 샘플링되지 않은 경우)의 실패는 `diag.error`를 통해 OpenTelemetry 진단 logger로 전달돼요. 이를 받으려면 애플리케이션에서 `@opentelemetry/api`의 `diag.setLogger(...)`를 설정해야 해요. 기본적으로 자동 출력되지 않아요. 패키지는 SDK를 초기화하지 않으며 이 진단은 별도의 SDK `LogRecord`가 아니에요. 이 진단에는 `hook.name`, `error.type`, `traceId`, `spanId`가 포함되지만 원래 오류 메시지나 스택, 요청 데이터는 포함되지 않아요.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ span 훅은 `tracer`를 전달했을 때만 호출돼요. 훅은 바꾸는 전�
 
 span 이름은 `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`가 돼요. `operation`이 없으면 fallback은 method / `SSE` / `WebSocket`이고, `defjs.operation`은 생략돼요.
 
-HTTP와 SSE는 전파 필드를 요청 헤더에 주입해요. 기존 `Headers` 인스턴스는 재사용·변경되고, 아니면 새 `Headers`를 만들어요. WebSocket query 전파는 **opt-in**이에요 (브라우저는 임의 handshake 헤더를 추가할 수 없어요).
+HTTP와 SSE는 전파 필드를 요청 헤더에 주입해요. 주입에는 항상 새 `Headers` 복사본을 사용하고 호출자의 헤더는 바꾸지 않아요. 따라서 외부 인터셉터의 재시도도 동일한 원래 부모 context를 사용해요. WebSocket query 전파는 **opt-in**이에요 (브라우저는 임의 handshake 헤더를 추가할 수 없어요).
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-`queryPropagation`이면 propagator 필드가 연결 query 문자열에 붙어요. URL 로깅, 프록시 가시성, access log, baggage, 보존을 먼저 검토하세요. `tracer`가 있으면 `requireParentSpan: true`는 활성 부모가 없으면 span 생성, 전파, 훅, 메트릭, 로그를 건너뛰고 `next`를 그대로 호출해요.
+`queryPropagation`을 켜면 propagator가 실제로 주입한 필드를 연결 query 문자열 끝에 쓰고 같은 이름의 매개변수를 대체해요. 그 외 모든 매개변수는 직렬화된 형태를 그대로 유지해요. URL 로깅, 프록시 가시성, access log, baggage, 보존을 먼저 검토하세요. `tracer`가 있으면 `requireParentSpan: true`는 활성 부모가 없으면 span 생성, 전파, 훅, 메트릭, 로그를 건너뛰고 `next`를 그대로 호출해요.
 
 ## HTTP, SSE, WebSocket 의미
 

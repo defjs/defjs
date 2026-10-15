@@ -9,7 +9,7 @@ export { mapAliasedObjectFields } from '../fields'
 
 export const ALIAS_ENCODE_OPTIONS = { encodeObject: mapAliasedObjectFields }
 
-export function encodeObjectByAlias(struct: AnyStructLike, value: unknown, label = 'json'): unknown {
+export function encodeObjectByAlias(struct: AnyStructLike, value: unknown, label = 'json', depth = 0): unknown {
   const definition = (struct as RuntimeStruct)[DEFINITION]
   // `.nullable()` and `.optional()` keep kind `object`, so nullish has to win before the object assertion.
   if (value === null && definition.flags.nullable) {
@@ -20,13 +20,13 @@ export function encodeObjectByAlias(struct: AnyStructLike, value: unknown, label
   }
 
   if (!isObjectStruct(struct)) {
-    return encodeAliasedField(struct, value, label)
+    return encodeAliasedField(struct, value, label, depth)
   }
 
   assertPlainObject(value, `${label} encode expects object value`)
 
   return mapAliasedObjectFields(struct as unknown as RuntimeStruct, value, (fieldStruct, fieldValue) =>
-    encodeAliasedField(fieldStruct, fieldValue, label),
+    encodeAliasedField(fieldStruct, fieldValue, label, depth + 1),
   )
 }
 
@@ -40,10 +40,10 @@ export function assertPlainObject(value: unknown, message: string): asserts valu
   }
 }
 
-function encodeAliasedField(struct: AnyStructLike, value: unknown, label: string): unknown {
+function encodeAliasedField(struct: AnyStructLike, value: unknown, label: string, depth: number): unknown {
   if (isObjectStruct(struct)) {
-    return encodeObjectByAlias(struct, value, label)
+    return encodeObjectByAlias(struct, value, label, depth)
   }
 
-  return encodeValue(struct as unknown as RuntimeStruct, value, ALIAS_ENCODE_OPTIONS)
+  return encodeValue(struct as unknown as RuntimeStruct, value, ALIAS_ENCODE_OPTIONS, depth)
 }

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle, type AnyStruct } from '../../src'
+import { createClient, defineRequest, struct, withEndpoint, withHTTPHandle, type AnyStruct, type Struct } from '../../src'
 import { parseEndpointInput } from '../../src/internal/endpoint_input'
 import { encodeOutbound } from '../../src/internal/outbound_request'
 import { encodeJson } from '../../src/struct/codec/json'
@@ -162,7 +162,7 @@ test('optional nullish date and bigint leaves round-trip through both encoders',
 
 test('a recursive getter intersection stays lazy and preserves aliases', async () => {
   let reads = 0
-  const tree: ReturnType<typeof struct.intersection> = struct.intersection(
+  const tree: ReturnType<typeof struct.intersection<readonly [Struct, Struct]>> = struct.intersection(
     struct.object({
       name: struct.string().alias('wire_name'),
       get children(): ReturnType<typeof struct.array> {
@@ -298,7 +298,7 @@ test('an anonymous record child keeps the sibling object tag', async () => {
 })
 
 test('merging two untagged objects does not invent a parse tag', () => {
-  const merged = mergeIntersectionValues({ left: 1, shared: { n: 1 } }, { right: 2, shared: { extra: true, n: 1 } }, true)
+  const merged = mergeIntersectionValues({ left: 1, shared: { n: 1 } }, { right: 2, shared: { extra: true, n: 1 } }, true, 0)
   expect(merged.ok).toBe(true)
   if (!merged.ok) {
     return

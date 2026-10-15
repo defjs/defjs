@@ -22,7 +22,16 @@ import type {
   TupleDefinition,
   UnionDefinition,
 } from './types'
-import { expectedType, hasOwnKey, isIntersectionIdentity, isPlainObject, matchesEnum, mergeIntersectionValues, nullObject } from './utils'
+import {
+  expectedType,
+  hasOwnKey,
+  isIntersectionIdentity,
+  isPlainObject,
+  matchesEnum,
+  MAX_DEPTH,
+  mergeIntersectionValues,
+  nullObject,
+} from './utils'
 
 // Every parser below returns the parsed value itself, or FAILED after `failure()` parked the issue. A value that parses
 // costs no result object, and FAILED cannot be mistaken for one: it is private, so any other symbol is just a value.
@@ -31,6 +40,9 @@ import { expectedType, hasOwnKey, isIntersectionIdentity, isPlainObject, matches
 // copies the array when it reports an issue. A failure returns without popping, which leaves the array deeper than the
 // failing node; the one place that goes on after a failure, a union trying its next candidate, cuts it back first.
 // Failed union candidates are discarded, so they are parsed without reporting unless an errorMap wants to see them.
+// Only traversed containers consume depth. Unions and intersections stay at the same path; scalar and passthrough
+// leaves need no guard. Reject before descending into the next container, including an empty one.
+const MAX_DEPTH_EXPECTED = `value nested at most ${MAX_DEPTH} levels deep`
 
 export function parseValue(
   struct: RuntimeStruct,
@@ -148,6 +160,10 @@ function parseNode(
   }
 }
 
+function nestingExceeded(input: unknown, path: Path, reportIssues: boolean): unknown {
+  return reportIssues ? failure(issue([...path], 'invalid_type', MAX_DEPTH_EXPECTED, input)) : FAILED
+}
+
 function parsePrimitiveValue(
   definition: PrimitiveDefinition<PrimitiveKind, unknown, unknown>,
   input: unknown,
@@ -193,6 +209,9 @@ function parseArrayValue(
   if (!Array.isArray(input)) {
     return reportIssues ? failure(issue([...path], 'invalid_type', 'array', input)) : FAILED
   }
+  if (path.length >= MAX_DEPTH) {
+    return nestingExceeded(input, path, reportIssues)
+  }
 
   const item = definition.item as RuntimeStruct
   const output: unknown[] = []
@@ -223,6 +242,9 @@ function parseObjectValue(
   if (!isPlainObject(input)) {
     return reportIssues ? failure(issue([...path], 'invalid_type', 'object', input)) : FAILED
   }
+  if (path.length >= MAX_DEPTH) {
+    return nestingExceeded(input, path, reportIssues)
+  }
 
   const output: { [key: string]: unknown } = target ?? nullObject()
   const fields = resolveStructFields(struct, definition)
@@ -240,7 +262,7 @@ function parseObjectValue(
     if (value !== OMIT) {
       // A shared intersection target already has this logical key. Merge it; do not let the later side win.
       if (target !== undefined && hasOwnKey(output, field.key)) {
-        const merged = mergeIntersectionValues(output[field.key], value, tagObjects)
+        const merged = mergeIntersectionValues(output[field.key], value, tagObjects, path.length + 1)
         if (!merged.ok) {
           return reportIssues
             ? failure(issue([...path, field.key, ...merged.path], 'invalid_intersection', 'compatible intersection value', merged.received))
@@ -269,6 +291,9 @@ function parseRecordValue(
 ): unknown {
   if (!isPlainObject(input)) {
     return reportIssues ? failure(issue([...path], 'invalid_type', 'record', input)) : FAILED
+  }
+  if (path.length >= MAX_DEPTH) {
+    return nestingExceeded(input, path, reportIssues)
   }
 
   const item = definition.value as RuntimeStruct
@@ -301,6 +326,9 @@ function parseTupleValue(
 ): unknown {
   if (!Array.isArray(input) || input.length !== definition.items.length) {
     return reportIssues ? failure(issue([...path], 'invalid_type', `tuple of length ${definition.items.length}`, input)) : FAILED
+  }
+  if (path.length >= MAX_DEPTH) {
+    return nestingExceeded(input, path, reportIssues)
   }
 
   const output: unknown[] = []
@@ -443,7 +471,7 @@ function parseIntersectionValue(
 
   let merged = contributed[0]
   for (let index = 1; index < contributed.length; index += 1) {
-    const mergedValue = mergeIntersectionValues(merged, contributed[index], tagObjects)
+    const mergedValue = mergeIntersectionValues(merged, contributed[index], tagObjects, path.length)
     if (!mergedValue.ok) {
       return reportIssues
         ? failure(issue([...path, ...mergedValue.path], 'invalid_intersection', 'compatible intersection value', mergedValue.received))
@@ -453,12 +481,12 @@ function parseIntersectionValue(
   }
 
   if (tagObjects) {
-    rememberPassthroughBranches(definition, input, merged)
+    rememberPassthroughBranches(definition, input, merged, path.length)
   }
   return merged
 }
 
-function rememberPassthroughBranches(definition: IntersectionDefinition, input: unknown, merged: unknown): void {
+function rememberPassthroughBranches(definition: IntersectionDefinition, input: unknown, merged: unknown, depth: number): void {
   const guides: RuntimeStruct[] = []
   for (const option of definition.options) {
     const runtime = option as RuntimeStruct
@@ -466,7 +494,7 @@ function rememberPassthroughBranches(definition: IntersectionDefinition, input: 
     if (isIntersectionIdentity(runtime)) {
       continue
     }
-    const branch = passthroughBranch(runtime, input)
+    const branch = passthroughBranch(runtime, input, depth)
     if (branch) {
       guides.push(branch)
     }
@@ -499,10 +527,10 @@ function attachPassthroughGuides(value: { [key: string]: unknown }, guides: read
   defineStructTag(value, next)
 }
 
-function passthroughBranch(struct: RuntimeStruct, value: unknown): RuntimeStruct | undefined {
+function passthroughBranch(struct: RuntimeStruct, value: unknown, depth: number): RuntimeStruct | undefined {
   const definition = struct[DEFINITION]
   if (definition.kind === 'or') {
-    const selected = selectUnionOptions(definition.options, value)[0]
+    const selected = selectUnionOptions(definition.options, value, depth)[0]
     if (!selected) {
       return undefined
     }

@@ -6,7 +6,13 @@ description: '要求值同時滿足所有給定 struct 的 struct。'
 <ApiReference identity="@defjs/core:struct.intersection" />
 
 ```ts
-function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
 ```
 
 `struct.intersection` 是可變參數：每個 struct 各自作為一個引數傳入。
@@ -14,7 +20,9 @@ function intersection<const T extends readonly [StructLike, ...StructLike[]]>(..
 - 用每個 struct 解析輸入，並合併結果。
 - 所有 struct 都是物件 struct 時，輸出是一個含有全部欄位的物件。任何 struct 都沒有宣告的 key 會被移除。
 - 兩個 struct 對同一個 key 產生不相容的值時，以 `invalid_intersection` 失敗。
-- 只傳一個 struct 時原樣回傳。不傳任何 struct 會丟出 `TypeError`，傳入非 struct 的引數也一樣。
+- 只有每個 struct 都接受 `null` 時才接受 `null`，其中也包括標記了 `.null()` 的巢狀交集。
+- 只傳一個 struct 時原樣回傳，因此會保留自身型別，包括 `.optional()` 與 `.null()`。不傳任何 struct 會丟出 `TypeError`，傳入非 struct 的引數也一樣。
+- 展開可能只有一個成員的 tuple 時，會同時推導單成員與多成員兩種結果。因此，結果中的物件欄位可能是可選的。已知至少包含兩個成員的 tuple 仍會保留交集型別對必要欄位的要求。
 
 `IntersectionStruct<T>` 沒有匯出。它是 `Struct`，其輸入與輸出是各成員型別的交集。
 

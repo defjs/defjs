@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from 'vitest'
 import { createClient, withEndpoint, withInterceptors, withSSEHandle, withSSEReconnect } from '../client'
 import { ERR_STREAMING_REQUEST_UNSUPPORTED, __resetStreamingRequestBodySupportForTests } from '../http/transport/fetch_init'
+import { MALFORMED_INTERCEPTOR_RESULTS } from '../../test/malformed_interceptor_results'
 import { simulateUnsupportedStreaming } from '../../test/streaming-support'
 import type { Client } from '../client'
 import { createSSEInterceptor } from '../interceptor'
@@ -204,6 +205,24 @@ describe('sse startup faults', () => {
     expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
     expect(fault?.cause).toBe(cause)
   })
+})
+
+describe('sse interceptor results', () => {
+  test.each(MALFORMED_INTERCEPTOR_RESULTS)(
+    'should report %s as the interceptor result with EXT_INTERCEPTOR_FAILED',
+    async (_name, resolved) => {
+      const client = clientReturning(
+        async () => new Response(streamOf('data: hi\n\n'), { headers: SSE_HEADERS }),
+        withInterceptors(createSSEInterceptor(async () => resolved() as never)),
+      )
+
+      const [fault, stream] = await client.execute(useStream())
+
+      expect(stream).toBeUndefined()
+      expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
+      expect(fault?.cause).toBeInstanceOf(TypeError)
+    },
+  )
 })
 
 describe('sse runtime faults', () => {

@@ -6,7 +6,13 @@ description: 'Struct qui exige qu’une valeur satisfasse chacun des structs don
 <ApiReference identity="@defjs/core:struct.intersection" />
 
 ```ts
-function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
 ```
 
 `struct.intersection` est variadique : passe chaque struct comme argument séparé.
@@ -14,7 +20,9 @@ function intersection<const T extends readonly [StructLike, ...StructLike[]]>(..
 - Parse l’entrée avec chaque struct et fusionne les résultats.
 - Quand chaque struct est un struct objet, la sortie est un objet unique avec les champs de tous. Les clés qu’aucun ne déclare sont retirées.
 - Quand deux structs produisent des valeurs incompatibles pour la même clé, il échoue avec `invalid_intersection`.
-- Un struct unique est renvoyé tel quel. L’appeler sans struct lève `TypeError`, tout comme un argument qui n’est pas un struct.
+- N’accepte `null` que si tous les structs l’acceptent, y compris une intersection imbriquée marquée avec `.null()`.
+- Un struct unique est renvoyé tel quel et conserve donc son propre type, y compris `.optional()` et `.null()`. L’appeler sans struct lève `TypeError`, tout comme un argument qui n’est pas un struct.
+- L’utilisation de l’opérateur spread sur un tuple pouvant ne contenir qu’un seul membre fait inférer à la fois le résultat à un membre et celui à plusieurs membres. Les champs d’objet du résultat peuvent donc être optionnels. Un tuple dont on sait qu’il contient au moins deux membres conserve la sémantique des champs requis de l’intersection.
 
 `IntersectionStruct<T>` n’est pas exporté. C’est un `Struct` dont l’entrée et la sortie sont les intersections des types membres.
 

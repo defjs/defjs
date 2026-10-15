@@ -33,7 +33,9 @@ description: فعّل رصد عمليات نقل Defjs الصادرة باستخ
 
 ## الخيارات والخطافات
 
-لا تُستدعى خطافات span إلا عند تمرير `tracer`. الخطافات تجلس بجانب وسيلة النقل التي تغيّرها. يعمل `startSpanHook(request)` المتزامن قبل إنشاء span ويعيد `Attributes` أولية؛ تُطبّق سمات التطبيق أخيرًا ويمكنها تجاوز المدمجة. تستقبل `requestHook` و`responseHook` الـ span المنشأ بالفعل ويمكنهما إعادة `void` أو Promise. فشل أي hook يسجّل `defjs.otel.hook.error` ولا يوقف العملية؛ فشل start hook يرجع إلى السمات المدمجة.
+لا تُستدعى خطافات span إلا عند تمرير `tracer`. الخطافات تجلس بجانب وسيلة النقل التي تغيّرها. يعمل `startSpanHook(request)` المتزامن قبل إنشاء span ويعيد `Attributes` أولية؛ تُطبّق سمات التطبيق أخيرًا ويمكنها تجاوز المدمجة. تستقبل `requestHook` و`responseHook` الـ span المنشأ بالفعل ويمكنهما إعادة `void` أو Promise. فشل أي hook لا يوقف العملية؛ فشل start hook يرجع إلى السمات المدمجة.
+
+لا يُنتظر اكتمال `requestHook` أو `responseHook`. ينتهي span الخاص بـ HTTP عند عودة الجزء المتزامن من `responseHook`، ولا تُمدَّد مدته من أجل خطاف غير متزامن. يمكن للجزء المتزامن تعديل span ما دام يسجّل؛ ولا يمكن إضافة أحداث بعد انتهائه. عندما تكون `span.isRecording()` بقيمة true، تُسجَّل أخطاء الخطافات كحدثَي `defjs.otel.hook.error` و`exception`. إذا كان span لا يسجّل (انتهى أو لم يُختَر في أخذ العينات)، تُرسل الأخطاء إلى مسجّل تشخيص OpenTelemetry عبر `diag.error`. يجب على التطبيق إعداد `diag.setLogger(...)` من `@opentelemetry/api` لاستقبالها؛ لا يوجد إخراج تلقائي افتراضيًا. لا تهيّئ الحزمة SDK، وهذا التشخيص ليس `LogRecord` مستقلًا من SDK. يتضمن هذا التشخيص `hook.name` و`error.type` و`traceId` و`spanId`، ولا يتضمن رسالة الخطأ الأصلية أو تتبّع المكدس أو بيانات الطلب.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ description: فعّل رصد عمليات نقل Defjs الصادرة باستخ
 
 أسماء الـ span تصبح `GET orders.read` و`SSE orders.watch` و`WebSocket orders.connect`. بلا `operation`، الاحتياطي هو الطريقة / `SSE` / `WebSocket`، و`defjs.operation` يُحذف.
 
-HTTP وSSE يحقنان الحقول المنتشرة في رؤوس الطلب. مثيلات `Headers` الموجودة تُعاد استخدامها وتُعدَّل؛ وإلا يُنشأ `Headers` جديد. انتشار استعلام WebSocket **اختياري** (المتصفحات لا يمكنها إضافة رؤوس مصافحة عشوائية):
+HTTP وSSE يحقنان الحقول المنتشرة في رؤوس الطلب. يستخدم الحقن دائمًا نسخة جديدة من `Headers` دون تغيير رؤوس المستدعي، فتحتفظ محاولات الإعادة في المعترض الخارجي بالسياق الأب الأصلي نفسه. انتشار استعلام WebSocket **اختياري** (المتصفحات لا يمكنها إضافة رؤوس مصافحة عشوائية):
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-مع `queryPropagation`، حقول الناشر تُلحق بسلسلة استعلام الاتصال. راجع تسجيل URL ورؤية الوكيل وسجلات الوصول وbaggage والاحتفاظ أولاً. عند تمرير `tracer`، يتخطى `requireParentSpan: true` إنشاء الـ span والانتشار والخطافات والمقاييس والسجلات عندما لا يوجد والد نشط، ثم يستدعي `next` بلا تغيير.
+مع `queryPropagation`، تُكتب الحقول التي يحقنها الناشر فعليًا في نهاية سلسلة استعلام الاتصال، وتحلّ محل أي معاملات تحمل الأسماء نفسها؛ وتبقى جميع المعاملات الأخرى بصيغتها المتسلسلة دون تغيير. راجع تسجيل URL ورؤية الوكيل وسجلات الوصول وbaggage والاحتفاظ أولاً. عند تمرير `tracer`، يتخطى `requireParentSpan: true` إنشاء الـ span والانتشار والخطافات والمقاييس والسجلات عندما لا يوجد والد نشط، ثم يستدعي `next` بلا تغيير.
 
 ## دلالات HTTP وSSE وWebSocket
 

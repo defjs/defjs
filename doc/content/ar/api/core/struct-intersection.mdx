@@ -6,7 +6,13 @@ description: 'struct يتطلب مطابقة كل الـ structs ويدمج نت
 <ApiReference identity="@defjs/core:struct.intersection" />
 
 ```ts
-function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
 ```
 
 `struct.intersection` متغيّر عدد المعاملات: مرّر كل struct كمعامل مستقل.
@@ -14,7 +20,9 @@ function intersection<const T extends readonly [StructLike, ...StructLike[]]>(..
 - يحلّل المدخل بكل struct ويدمج النتائج.
 - عندما يكون كل struct هو struct كائن، تكون المخرجات كائنًا واحدًا بحقولها جميعًا. وتُزال المفاتيح التي لا يعلنها أي منها.
 - عندما ينتج اثنان من الـ structs قيمتين غير متوافقتين للمفتاح نفسه، يفشل بـ `invalid_intersection`.
-- يُرجَع struct واحد منفرد كما هو. واستدعاؤه بلا structs يرمي `TypeError`، وكذلك معامل ليس struct.
+- لا يقبل `null` إلا إذا قبله كل struct، بما في ذلك تقاطع متداخل معلَّم بـ `.null()`.
+- يُرجَع struct واحد منفرد كما هو، فيحتفظ بنوعه، بما في ذلك `.optional()` و`.null()`. واستدعاؤه بلا structs يرمي `TypeError`، وكذلك معامل ليس struct.
+- عند نشر tuple قد يحتوي على عضو واحد فقط، يُستنتَج كلٌّ من نتيجة العضو الواحد ونتيجة تعدد الأعضاء. لذلك قد تكون حقول الكائن الناتج اختيارية. أما tuple المعلوم أنه يحتوي على عضوين على الأقل، فيحافظ على دلالات الحقول المطلوبة في التقاطع.
 
 `IntersectionStruct<T>` غير مُصدَّر. وهو `Struct` مدخله ومخرجه هما تقاطع أنواع الأعضاء.
 

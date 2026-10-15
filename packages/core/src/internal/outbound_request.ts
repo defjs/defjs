@@ -559,7 +559,7 @@ function applyPassthrough(
   let merged: unknown = output
   for (const guide of passthroughs) {
     const passed = encodeGuided(value, guide, path)
-    const result = mergeIntersectionValues(merged, passed)
+    const result = mergeIntersectionValues(merged, passed, false, path.length)
     if (!result.ok) {
       throw intersectionEncodeError([...path, ...result.path])
     }
@@ -588,7 +588,7 @@ function addWireGroup(plans: Map<string, WireGroup[]>, order: string[], logical:
 function writeWireGroups(output: { [key: string]: unknown }, fieldValue: unknown, groups: readonly WireGroup[], path: Path): void {
   for (const group of groups) {
     const guide = group.passthrough ? group.structs[0] : guideTag(group.structs)
-    writeWire(output, group.wire, encodeGuided(fieldValue, guide, path))
+    writeWire(output, group.wire, encodeGuided(fieldValue, guide, path), path.length)
   }
 }
 
@@ -609,12 +609,12 @@ function declaredRecordKeys(value: { [key: string]: unknown }, order: readonly s
   return keys
 }
 
-function writeWire(output: { [key: string]: unknown }, wireKey: string, encoded: unknown): void {
+function writeWire(output: { [key: string]: unknown }, wireKey: string, encoded: unknown, depth: number): void {
   if (!Object.hasOwn(output, wireKey)) {
     output[wireKey] = encoded
     return
   }
-  const merged = mergeIntersectionValues(output[wireKey], encoded)
+  const merged = mergeIntersectionValues(output[wireKey], encoded, false, depth)
   if (!merged.ok) {
     throw intersectionEncodeError([wireKey, ...merged.path])
   }
@@ -661,7 +661,7 @@ function encodeArrayMembers(value: unknown[], members: readonly RuntimeStruct[],
     for (const guide of passthrough) {
       // Nullish and scalar items merge by value. Object.keys(null) and assignment onto a string both throw.
       const passed = encodeGuided(entry, guide, itemPath)
-      const merged = mergeIntersectionValues(encoded, passed)
+      const merged = mergeIntersectionValues(encoded, passed, false, itemPath.length)
       if (!merged.ok) {
         throw intersectionEncodeError([...itemPath, ...merged.path])
       }

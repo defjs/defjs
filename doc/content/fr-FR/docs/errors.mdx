@@ -110,11 +110,11 @@ SSE valide le statut, `text/event-stream` et la présence d’un corps avant de 
 
 Le démarrage WebSocket couvre le handshake plus la première ouverture physique. Un échec du constructeur, une fermeture avant l’ouverture, un timeout ou une annulation produisent tous un tuple de démarrage. Un instantané de connexion peut exister même si le socket n’a jamais atteint `open`.
 
-| Transport | Après le démarrage                                                                                                                                                                                                                 |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | L’itérateur est rejeté sur une erreur fatale ; `stream.closed` se résout avec `kind: 'error'` et le `code` du fault                                                                                                                |
-| WebSocket | `onRuntimeError` pour les échecs de message/file/heartbeat ; `receive` échoue sur les erreurs terminales ; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                             |
-| HTTP      | La promesse d’exécution se résout une seule fois, avec le tuple. Toute erreur levée par un intercepteur ou un callback de progression est représentée par un fault dans ce tuple (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+| Transport | Après le démarrage                                                                                                                                                                                                                                                                      |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | L’itérateur est rejeté sur une erreur fatale ; `stream.closed` se résout avec `kind: 'error'` et le `code` du fault                                                                                                                                                                     |
+| WebSocket | `onRuntimeError` pour les échecs de message/file/heartbeat ; `receive` échoue sur les erreurs terminales ; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                                                  |
+| HTTP      | La promesse d’exécution se résout une seule fois, avec le tuple. Si un intercepteur lève une erreur ou renvoie autre chose qu’un `HttpResponse`, ou si un callback de progression lève une erreur, un fault est renvoyé dans ce tuple (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
 
 `NET_ABORTED` / `NET_TIMEOUT` décrivent ce que l’appelant a vu au démarrage. Tu fermes quand même un stream ou une session renvoyés et tu await leur promesse terminale.
 

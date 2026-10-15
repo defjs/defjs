@@ -110,11 +110,11 @@ SSE validiert Status, `text/event-stream` und die Anwesenheit eines Bodys, bevor
 
 Der WebSocket-Startup umfasst den Handshake plus das erste physische Open. Constructor-Failure, Close vor dem Open, Timeout oder Abbruch erzeugen alle ein Startup-Tuple. Ein Connection-Snapshot kann existieren, auch wenn der Socket `open` nie erreicht hat.
 
-| Transport | Nach dem Startup                                                                                                                                                                                                         |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SSE       | Der Iterator wird bei einem fatalen Error abgelehnt; `stream.closed` löst mit `kind: 'error'` und dem Fault-`code` auf                                                                                                   |
-| WebSocket | `onRuntimeError` für Message-/Queue-/Heartbeat-Failures; `receive` schlägt bei terminalen Errors fehl; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                       |
-| HTTP      | Das Execute-Promise wird einmal mit dem Tupel abgeschlossen. Wirft ein Interceptor oder Fortschritts-Callback einen Fehler, enthält das Tupel den entsprechenden Fault (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+| Transport | Nach dem Startup                                                                                                                                                                                                                                                                                     |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | Der Iterator wird bei einem fatalen Error abgelehnt; `stream.closed` löst mit `kind: 'error'` und dem Fault-`code` auf                                                                                                                                                                               |
+| WebSocket | `onRuntimeError` für Message-/Queue-/Heartbeat-Failures; `receive` schlägt bei terminalen Errors fehl; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                                                                   |
+| HTTP      | Das Execute-Promise wird einmal mit dem Tupel abgeschlossen. Ein vom Interceptor geworfener Fehler, ein Interceptor-Ergebnis, das kein `HttpResponse` ist, oder ein vom Fortschritts-Callback geworfener Fehler wird darin als Fault zurückgegeben (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
 
 `NET_ABORTED` / `NET_TIMEOUT` beschreiben, was der Caller beim Startup gesehen hat. Du schließt einen zurückgegebenen Stream oder eine Session trotzdem und awaitest deren terminales Promise.
 

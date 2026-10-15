@@ -33,7 +33,9 @@ SDK の init、プロバイダ、exporter、プロセッサ、コンテキスト
 
 ## options とフック
 
-span フックは `tracer` が渡された場合にのみ呼び出されます。フックは変更する transport の隣に置きます。同期 `startSpanHook(request)` は span 作成前に実行されて初期 `Attributes` を返し、application 属性は最後に適用されるので built-in を上書きできます。`requestHook` と `responseHook` は作成済み span を受け、`void` または Promise を返せます。hook failure は `defjs.otel.hook.error` を記録しても操作を止めず、start hook failure は built-in 属性へフォールバックします。
+span フックは `tracer` が渡された場合にのみ呼び出されます。フックは変更する transport の隣に置きます。同期 `startSpanHook(request)` は span 作成前に実行されて初期 `Attributes` を返し、application 属性は最後に適用されるので built-in を上書きできます。`requestHook` と `responseHook` は作成済み span を受け、`void` または Promise を返せます。hook failure は操作を止めず、start hook failure は built-in 属性へフォールバックします。
+
+`requestHook` と `responseHook` は await されません。HTTP span は `responseHook` の同期部分が返ると終了し、非同期 hook のために寿命を延ばすことはありません。同期部分は記録中の span を変更できますが、終了後にイベントを追加することはできません。 `span.isRecording()` が true の間、hook failure は `defjs.otel.hook.error` と `exception` イベントとして記録されます。記録しない span（終了済みまたはサンプリング対象外）の場合、エラーは `diag.error` を通じて OpenTelemetry 診断 logger に送られます。受け取るには、アプリケーション側で `@opentelemetry/api` の `diag.setLogger(...)` を設定する必要があり、デフォルトでは自動出力されません。このパッケージは SDK を初期化せず、この診断も独立した SDK `LogRecord` ではありません。この診断には `hook.name`、`error.type`、`traceId`、`spanId` が含まれますが、元のエラーメッセージやスタックトレース、リクエストデータは含まれません。
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ span フックは `tracer` が渡された場合にのみ呼び出されます�
 
 span 名は `GET orders.read`、`SSE orders.watch`、`WebSocket orders.connect` になります。`operation` なしのフォールバックは method / `SSE` / `WebSocket` で、`defjs.operation` は省略されます。
 
-HTTP と SSE は伝播フィールドをリクエストヘッダーに注入します。既存の `Headers` インスタンスは再利用してミューテートし、なければ新しい `Headers` を作ります。WebSocket の query 伝播は**オプトイン**です（ブラウザーは任意のハンドシェイクヘッダーを足せません）。
+HTTP と SSE は伝播フィールドをリクエストヘッダーに注入します。注入には常に新しい `Headers` のコピーを使い、呼び出し側のヘッダーは変更しません。そのため、外側の interceptor による再試行も同じ元の親 context を使います。WebSocket の query 伝播は**オプトイン**です（ブラウザーは任意のハンドシェイクヘッダーを足せません）。
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-`queryPropagation` があると、propagator フィールドが接続 query 文字列に追記されます。先に URL ログ、プロキシ可視性、アクセスログ、baggage、保持を見直してください。`tracer` がある場合、`requireParentSpan: true` はアクティブな親がないとき、span 作成・伝播・フック・メトリクス・ログを飛ばし、`next` をそのまま呼びます。
+`queryPropagation` を有効にすると、propagator が実際に注入したフィールドが接続 query 文字列の末尾に書き込まれ、同名のパラメーターを置き換えます。それ以外のパラメーターはすべてシリアライズ済みの形式を保ちます。先に URL ログ、プロキシ可視性、アクセスログ、baggage、保持を見直してください。`tracer` がある場合、`requireParentSpan: true` はアクティブな親がないとき、span 作成・伝播・フック・メトリクス・ログを飛ばし、`next` をそのまま呼びます。
 
 ## HTTP、SSE、WebSocket の意味論
 

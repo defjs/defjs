@@ -64,7 +64,9 @@ Les retries changent le comportement. Garde la politique étroite — cet exempl
 Les erreurs d’intercepteur/Fetch levées ne sont pas relancées par cette boucle — un échec de transport est rejeté au lieu de produire un statut que cette boucle pourrait reconnaître. Relancer `POST` / `PUT` / `PATCH` / `DELETE` demande des octets rejouables, le support serveur, un contrat d’idempotence et une politique de statut revue. Le retry t’appartient : Core n’exporte pas `retryAfter()`.
 
 Un intercepteur qui lève une erreur (ou est rejeté) en dehors de cet exemple revient à l’appelant en
-`EXT_INTERCEPTOR_FAILED`, avec la valeur jetée sur `cause` — voir [Erreurs](/fr-FR/docs/errors). Dans un
+`EXT_INTERCEPTOR_FAILED`, avec la valeur jetée sur `cause` — voir [Erreurs](/fr-FR/docs/errors). Il en va de même s’il
+se résout avec autre chose que le résultat attendu par son transport : `undefined` à cause d’un
+`return` oublié, ou une `Response` native à la place d’un `HttpResponse`. Dans un
 intercepteur HTTP, lever `ERR_ABORTED` ou `ERR_TIMEOUT` est au contraire la façon d’exprimer une annulation : l’appel
 se résout avec `NET_ABORTED` ou `NET_TIMEOUT`. Les intercepteurs SSE et WebSocket n’ont pas cette exception ;
 ils rapportent toute erreur levée comme `EXT_INTERCEPTOR_FAILED`.

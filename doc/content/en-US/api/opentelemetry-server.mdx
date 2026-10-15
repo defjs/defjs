@@ -76,7 +76,9 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 
 `enabled` defaults to `true`; only `enabled: false` turns a transport off. The old boolean switch (`http: false`) and top-level hooks are rejected by the TypeScript types only. There is no runtime check, so at runtime `http: false` leaves the transport enabled and a top-level hook is silently ignored.
 
-Span hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own HTTP, SSE, or WebSocket transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes, records a `defjs.otel.hook.error` event, and continues the request; `requestHook` and `responseHook` run after span creation. Neither is awaited: a throw or rejection is recorded the same way and never blocks or fails the operation.
+Span hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own HTTP, SSE, or WebSocket transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes and continues the request; `requestHook` and `responseHook` run after span creation. Neither is awaited: a throw or rejection never blocks or fails the operation.
+
+While `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. For non-recording spans (ended or unsampled), failures go to the OpenTelemetry diagnostic logger through `diag.error`. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive them; there is no automatic output by default. The package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`.
 
 `responseHook` receives what the transport returned: the `HttpResponse` for HTTP, the stream handle for SSE once startup succeeded, and the session for WebSocket once it opened. Its third argument is the original request.
 

@@ -485,6 +485,39 @@ describe('e2e: opentelemetry-server with real test server', () => {
     expect(url.searchParams.get('traceparent')).toMatch(TRACE_PARENT_REGEX)
   })
 
+  test('WebSocket query propagation replaces a traceparent already in the query', async () => {
+    const { tracer, spans } = createMockTracer()
+    const wsHost = inject('testServerHost').replace(/^http:/, 'ws:')
+    const client = createClient(
+      withEndpoint(wsHost),
+      withOpenTelemetryServer({ tracer, propagator: createPropagator(), webSocket: { queryPropagation: true } }),
+    )
+    const useSocket = defineWebSocket({
+      builder: (input) => input,
+      maxIncomingQueueSize: 16,
+      incoming: struct.object({ type: struct.literal('traceparent'), value: struct.string() }),
+      input: struct.object({ query: struct.object({ traceparent: struct.string() }) }),
+      path: '/ws',
+    })
+    const staleTraceparent = '00-11111111111111111111111111111111-2222222222222222-01'
+
+    const [error, socket, connection] = await client.execute(useSocket({ query: { traceparent: staleTraceparent } }))
+
+    expect(error).toBeNull()
+    if (!socket) {
+      throw new Error('Expected socket')
+    }
+    const messages: Array<{ type: string; value: string }> = []
+    for await (const msg of socket.receive) {
+      messages.push(msg)
+    }
+    await socket.closed
+
+    const { traceId, spanId } = onlySpan(spans).spanContext()
+    expect(messages[0]?.value).toBe(`00-${traceId}-${spanId}-01`)
+    expect(new URL(connection?.url ?? '').searchParams.getAll('traceparent')).toEqual([`00-${traceId}-${spanId}-01`])
+  })
+
   test('WebSocket omitted query propagation leaves the URL unchanged', async () => {
     const { tracer, spans } = createMockTracer()
     const propagator = createPropagator()

@@ -32,7 +32,7 @@ export interface QueryStringCarrier {
 export const queryStringSetter: TextMapSetter<QueryStringCarrier> = {
   set(carrier, key, value) {
     if (carrier && key && value !== undefined) {
-      carrier.params.append(key, String(value))
+      carrier.params.set(key, String(value))
     }
   },
 }

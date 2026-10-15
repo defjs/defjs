@@ -1,24 +1,24 @@
 import { resolveObjectShape } from './shape'
 import { DEFINITION } from './symbols'
 import type { RuntimeStruct, StructDefinition, StructLike } from './types'
-import { hasOwnKey, isPlainObject, matchesEnum } from './utils'
+import { hasOwnKey, isPlainObject, matchesEnum, MAX_DEPTH } from './utils'
 
-export function matchesRuntimeValue(struct: RuntimeStruct, value: unknown): boolean {
-  return matchesDefinition(struct[DEFINITION], value, struct)
+export function matchesRuntimeValue(struct: RuntimeStruct, value: unknown, depth = 0): boolean {
+  return matchesDefinition(struct[DEFINITION], value, struct, depth)
 }
 
-export function selectUnionOptions(options: readonly StructLike<unknown, unknown, boolean>[], value: unknown): RuntimeStruct[] {
+export function selectUnionOptions(options: readonly StructLike<unknown, unknown, boolean>[], value: unknown, depth = 0): RuntimeStruct[] {
   const matches: RuntimeStruct[] = []
   for (const option of options) {
     const runtime = option as unknown as RuntimeStruct
-    if (matchesRuntimeValue(runtime, value)) {
+    if (matchesRuntimeValue(runtime, value, depth)) {
       matches.push(runtime)
     }
   }
   return matches
 }
 
-export function matchesDefinition(definition: StructDefinition, value: unknown, struct: RuntimeStruct): boolean {
+export function matchesDefinition(definition: StructDefinition, value: unknown, struct: RuntimeStruct, depth = 0): boolean {
   if (value === null) {
     if (definition.kind === 'null' || definition.flags.nullable) {
       return true
@@ -50,35 +50,41 @@ export function matchesDefinition(definition: StructDefinition, value: unknown, 
     case 'enum':
       return matchesEnum(definition, value)
     case 'array':
-      return Array.isArray(value) && value.every((item) => matchesRuntimeValue(definition.item as unknown as RuntimeStruct, item))
+      return (
+        depth < MAX_DEPTH &&
+        Array.isArray(value) &&
+        value.every((item) => matchesRuntimeValue(definition.item as unknown as RuntimeStruct, item, depth + 1))
+      )
     case 'tuple':
       return (
+        depth < MAX_DEPTH &&
         Array.isArray(value) &&
         value.length === definition.items.length &&
-        definition.items.every((item, index) => matchesRuntimeValue(item as unknown as RuntimeStruct, value[index]))
+        definition.items.every((item, index) => matchesRuntimeValue(item as unknown as RuntimeStruct, value[index], depth + 1))
       )
     case 'object':
-      return isPlainObject(value) && matchesObjectValue(struct, value)
+      return depth < MAX_DEPTH && isPlainObject(value) && matchesObjectValue(struct, value, depth)
     case 'record':
       return (
+        depth < MAX_DEPTH &&
         isPlainObject(value) &&
-        Object.keys(value).every((key) => matchesRuntimeValue(definition.value as unknown as RuntimeStruct, value[key]))
+        Object.keys(value).every((key) => matchesRuntimeValue(definition.value as unknown as RuntimeStruct, value[key], depth + 1))
       )
     case 'or':
-      return definition.options.some((option) => matchesRuntimeValue(option as unknown as RuntimeStruct, value))
+      return definition.options.some((option) => matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth))
     case 'discriminatedUnion': {
       if (!isPlainObject(value) || !hasOwnKey(value, definition.discriminator)) {
         return false
       }
       const target = definition.map.get(value[definition.discriminator]) as RuntimeStruct | undefined
-      return target ? matchesRuntimeValue(target, value) : false
+      return target ? matchesRuntimeValue(target, value, depth) : false
     }
     case 'intersection':
-      return definition.options.every((option) => matchesRuntimeValue(option as unknown as RuntimeStruct, value))
+      return definition.options.every((option) => matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth))
   }
 }
 
-function matchesObjectValue(struct: RuntimeStruct, value: { [key: string]: unknown }): boolean {
+function matchesObjectValue(struct: RuntimeStruct, value: { [key: string]: unknown }, depth: number): boolean {
   const definition = struct[DEFINITION]
   if (definition.kind !== 'object') {
     return true
@@ -96,7 +102,7 @@ function matchesObjectValue(struct: RuntimeStruct, value: { [key: string]: unkno
       continue
     }
 
-    if (!matchesRuntimeValue(field, value[key])) {
+    if (!matchesRuntimeValue(field, value[key], depth + 1)) {
       return false
     }
   }

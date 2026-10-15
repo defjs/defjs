@@ -18,7 +18,9 @@ interface OpenTelemetryServerTransportOptions<TResponse> {
 
 `enabled` の既定は `true` で、トランスポートをオフにするのは `enabled: false` だけです。古い真偽値のスイッチ（`http: false`）とトップレベルのフックは、TypeScript の型でのみ拒否されます。実行時のチェックはないため、実行時には `http: false` でもトランスポートは有効のままで、トップレベルのフックは黙って無視されます。
 
-span フックは `tracer` が渡された場合にのみ呼び出されます。`startSpanHook` は、自分のトランスポートについて、span 作成前に同期実行されます。その属性は組み込み属性のあとに適用されるので、アプリケーションは `url.full` や別の初期値を上書きできます。throw すると Defjs は組み込み属性で span を作り、`defjs.otel.hook.error` イベントを記録し、リクエストを続けます。`requestHook` は span 作成後、リクエスト送信前に実行され、`responseHook` はトランスポートの結果が返ったあとに実行されます。どちらも promise を返せますが await はされず、throw や reject は同じ方法で記録されるだけで、操作をブロックしたり失敗させたりしません。`responseHook` は第 3 引数として元のリクエストを受け取ります。
+span フックは `tracer` が渡された場合にのみ呼び出されます。`startSpanHook` は、自分のトランスポートについて、span 作成前に同期実行されます。その属性は組み込み属性のあとに適用されるので、アプリケーションは `url.full` や別の初期値を上書きできます。throw すると Defjs は組み込み属性で span を作り、リクエストを続けます。`requestHook` は span 作成後、リクエスト送信前に実行され、`responseHook` はトランスポートの結果が返ったあとに実行されます。どちらも promise を返せますが await はされず、throw や reject が操作をブロックしたり失敗させたりすることはありません。`responseHook` は第 3 引数として元のリクエストを受け取ります。
+
+`span.isRecording()` が true の間、hook failure は `defjs.otel.hook.error` と `exception` イベントとして記録されます。記録しない span（終了済みまたはサンプリング対象外）の場合、エラーは `diag.error` を通じて OpenTelemetry 診断 logger に送られます。受け取るには、アプリケーション側で `@opentelemetry/api` の `diag.setLogger(...)` を設定する必要があり、デフォルトでは自動出力されません。このパッケージは SDK を初期化せず、この診断も独立した SDK `LogRecord` ではありません。
 
 デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` は付けません。その境界は redaction ではなく、このパッケージに組み込みの redactor や機微キーの方針もありません。必要なら、アプリケーションが所有する URL を明示的に組み立て、必要に応じて redact してください。
 

@@ -64,8 +64,9 @@ Retries change behavior. Keep the policy narrow — this example retries replaya
 Thrown interceptor/Fetch errors aren’t retried by this loop — a transport failure rejects instead of producing a status this loop could match on. Retrying `POST` / `PUT` / `PATCH` / `DELETE` needs replayable bytes, server support, an idempotency contract, and a reviewed status policy. You own retry — Core does not export `retryAfter()`.
 
 An interceptor that throws (or rejects) outside this sample is returned to the caller as
-`EXT_INTERCEPTOR_FAILED`, with the thrown value on `cause` — see [Errors](/docs/errors). In an HTTP
-interceptor, throwing `ERR_ABORTED` or `ERR_TIMEOUT` is how you express cancellation instead: the call
+`EXT_INTERCEPTOR_FAILED`, with the thrown value on `cause` — see [Errors](/docs/errors). So is one
+that resolves anything but its transport's result: `undefined` from a forgotten `return`, or a native
+`Response` where an `HttpResponse` belongs. In an HTTP interceptor, throwing `ERR_ABORTED` or `ERR_TIMEOUT` is how you express cancellation instead: the call
 resolves with `NET_ABORTED` or `NET_TIMEOUT`. SSE and WebSocket interceptors have no such exception;
 they report any throw as `EXT_INTERCEPTOR_FAILED`.
 

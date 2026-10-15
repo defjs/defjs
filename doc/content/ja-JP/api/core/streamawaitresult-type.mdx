@@ -13,7 +13,7 @@ type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined>
 
 SSE コマンドに対する `client.execute` の結果です。
 
-- 成功時は `[null, stream, open]` です。`open` はストリームが開いた時点のスナップショットで、`stream.open` は再接続後に変わることがあります。
+- 成功時は `[null, stream, open]` です。`open` は Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合、返されたハンドルの接続の最初の成功したハンドシェイクのスナップショットであり、独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先され、`stream.open` はライブのままです（[SSE](/ja-JP/docs/sse) を参照）。
 - 失敗時は `[fault, undefined, open]` です。失敗がレスポンス到着後に起きた場合（たとえば 2xx 以外のハンドシェイク）、`open` はレスポンスのスナップショットを持ち、それ以外では `undefined` です。
 - `TError` は宣言した `error` struct で、fault 上のデコード済みエラーボディの型になります。
 

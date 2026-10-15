@@ -766,6 +766,56 @@ describe('web socket runtime environment edge cases', () => {
     await socket.closed
   })
 
+  test('F062 should keep an injected socket open when send synchronously delivers every heartbeat pong', async () => {
+    vi.useFakeTimers()
+    const isAck = vi.fn((message: { type: string }) => message.type === 'pong')
+    const InjectedWebSocket = createMockWebSocketClass({
+      autoOpen: false,
+      emitCloseEvent: false,
+      onSend() {
+        lastMockInstance?.triggerMessage('{"type":"pong"}')
+      },
+    })
+    vi.stubGlobal('WebSocket', undefined)
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.object({ type: struct.literal('pong') }),
+      outgoing: struct.object({ type: struct.literal('ping') }),
+      path: '/ws/test',
+    })
+    const client = createClient(withEndpoint('http://localhost'), withWebSocketHandle(InjectedWebSocket))
+    const executePromise = run(client, useSocket(), {
+      heartbeat: { intervalMs: 100, timeoutMs: 50, isAck, message: () => ({ type: 'ping' }) },
+    })
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined())
+    lastMockInstance?.triggerOpen()
+    const [error, socket] = await executePromise
+    if (!socket || !lastMockInstance) throw new Error('Expected open socket')
+    const nativeSocket = lastMockInstance
+    const runtimeErrors: unknown[] = []
+    socket.onRuntimeError((runtimeError) => runtimeErrors.push(runtimeError))
+
+    try {
+      expect(error).toBeNull()
+      await vi.advanceTimersByTimeAsync(450)
+
+      expect(runtimeErrors).toEqual([])
+      expect(socket.state).toBe('open')
+      expect(nativeSocket.readyState).toBe(InjectedWebSocket.OPEN)
+      expect(nativeSocket.send).toHaveBeenCalledTimes(4)
+      expect(nativeSocket.send).toHaveBeenLastCalledWith('{"type":"ping"}')
+      expect(isAck).toHaveBeenCalledTimes(4)
+      expect(isAck).toHaveBeenLastCalledWith({ type: 'pong' })
+      expect(nativeSocket.close).not.toHaveBeenCalled()
+      expect(vi.getTimerCount()).toBe(1)
+    } finally {
+      socket.close(1000, 'test complete')
+      nativeSocket.triggerClose({ code: 1000, reason: 'test complete', wasClean: true })
+      await socket.closed
+      expect(vi.getTimerCount()).toBe(0)
+    }
+  })
+
   test('should send the next heartbeat after a decoded pong acknowledges the open cycle', async () => {
     vi.useFakeTimers()
     vi.stubGlobal('WebSocket', createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }))

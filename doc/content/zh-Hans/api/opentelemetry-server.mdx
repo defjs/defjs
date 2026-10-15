@@ -76,7 +76,9 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 
 `enabled` 默认为 `true`；只有 `enabled: false` 才会关闭某个传输。旧的布尔开关（`http: false`）和顶层 hook 只会被 TypeScript 类型拒绝，没有运行时检查，所以运行时 `http: false` 仍保持该传输启用，顶层 hook 则被静默忽略。
 
-仅在传入 `tracer` 时调用 span hooks。`startSpanHook` 在对应 HTTP、SSE 或 WebSocket transport 创建 span 前同步运行。返回属性在内建属性之后应用，因此应用可以覆盖 `url.full` 或其他初始值。Hook 抛错时，Defjs 会用内建属性创建 span、记录 `defjs.otel.hook.error` 事件，并继续请求；`requestHook` 与 `responseHook` 在 span 创建之后运行。两者都不会被 await：抛错或 reject 会以同样方式记录，永远不会阻塞操作或使其失败。
+仅在传入 `tracer` 时调用 span hooks。`startSpanHook` 在对应 HTTP、SSE 或 WebSocket transport 创建 span 前同步运行。返回属性在内建属性之后应用，因此应用可以覆盖 `url.full` 或其他初始值。Hook 抛错时，Defjs 会用内建属性创建 span，并继续请求；`requestHook` 与 `responseHook` 在 span 创建之后运行。两者都不会被 await：抛错或 reject 不会阻塞操作或使其失败。
+
+当 `span.isRecording()` 为 true 时，hook 失败记录 `defjs.otel.hook.error` 与 `exception` 事件。span 不再 recording（已结束或未采样）时，失败通过 `diag.error` 交给 OpenTelemetry 诊断 logger。应用必须通过 `@opentelemetry/api` 的 `diag.setLogger(...)` 配置接收通道；默认不会自动输出。本包不初始化 SDK，该诊断也不是独立的 SDK `LogRecord`。
 
 `responseHook` 收到的是传输返回的内容：HTTP 为 `HttpResponse`，SSE 为启动成功后的 stream handle，WebSocket 为打开之后的 session。它的第三个参数是原始 request。
 

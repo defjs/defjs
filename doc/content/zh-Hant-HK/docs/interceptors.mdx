@@ -64,7 +64,7 @@ Retries 會改行為。Keep policy 窄 — 呢個例子為 statuses `429`、`502
 呢個 loop 唔會 retry interceptor/Fetch 拋出嘅 errors——transport failure 係 reject，根本唔會生出一個俾呢個 loop 去 match 嘅 status。Retry `POST` / `PUT` / `PATCH` / `DELETE` 要 replayable bytes、server support、idempotency contract，同 reviewed status policy。Retry 由你自己管——Core 唔會 export `retryAfter()`。
 
 喺呢個例子之外 throw（或者 reject）嘅 interceptor，會以 `EXT_INTERCEPTOR_FAILED` 返到 caller，拋出嘅值
-掛喺 `cause` 上面——睇 [Errors](/zh-Hant-HK/docs/errors)。喺 HTTP interceptor 入面，想表達取消就改為 throw `ERR_ABORTED` 或者 `ERR_TIMEOUT`：call 會以 `NET_ABORTED` 或者 `NET_TIMEOUT` resolve。SSE 同 WebSocket interceptor 冇呢個例外，任何 throw 都會報成 `EXT_INTERCEPTOR_FAILED`。
+掛喺 `cause` 上面——睇 [Errors](/zh-Hant-HK/docs/errors)。如果 interceptor 完成時回傳嘅唔係該傳輸預期嘅結果，亦一樣會報成 `EXT_INTERCEPTOR_FAILED`，例如漏咗 `return` 而得到 `undefined`，或者應該回傳 `HttpResponse` 時回傳咗原生 `Response`。喺 HTTP interceptor 入面，想表達取消就改為 throw `ERR_ABORTED` 或者 `ERR_TIMEOUT`：call 會以 `NET_ABORTED` 或者 `NET_TIMEOUT` resolve。SSE 同 WebSocket interceptor 冇呢個例外，任何 throw 都會報成 `EXT_INTERCEPTOR_FAILED`。
 
 `next(request)` 可能 reject。Transport failure 係 fault，唔係 status 0 嘅 response，所以想睇到佢嘅
 interceptor 要喺 `next` 外面包 `try` / `catch`。Defjs 嘅歸因照樣正確：由 transport 嚟嘅 reject 依然係

@@ -65,6 +65,8 @@ HTTP ボディを差し替えるときは、コピーしたリクエストの `b
 
 このサンプルの外で throw（または reject）したインターセプターは、`EXT_INTERCEPTOR_FAILED` として
 呼び出し側に返り、投げた値は `cause` に載ります — [エラー](/ja-JP/docs/errors) を参照してください。
+トランスポートが期待する結果以外で解決した場合も同様です。たとえば、`return` を忘れたための
+`undefined` や、`HttpResponse` の代わりに返したネイティブの `Response` が該当します。
 HTTP インターセプターでは、代わりに `ERR_ABORTED` か `ERR_TIMEOUT` を throw することでキャンセルを表します。呼び出しは `NET_ABORTED` か `NET_TIMEOUT` で解決します。SSE と WebSocket のインターセプターにはこの例外はなく、throw はすべて `EXT_INTERCEPTOR_FAILED` として報告されます。
 
 `next(request)` は reject しえます。トランスポート失敗は fault であって status 0 のレスポンスでは

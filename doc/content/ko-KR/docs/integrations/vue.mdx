@@ -27,7 +27,11 @@ description: 플러그인을 설치하고, 클라이언트를 제공하고, 사�
 
 ## inject와 덮어쓰기
 
-`injectClient()`는 가장 가까운 `HTTP_CLIENT` provider를 읽고, 없으면 throw해요. 하위 트리는 Vue의 `provide(HTTP_CLIENT, childClient)`로 덮어써요.
+`injectClient()`는 가장 가까운 `HTTP_CLIENT` provider를 읽어요. 동기적으로 실행 중인 `setup()`이나 `app.runWithContext()`의 동기 콜백(Vue 3.3+)처럼 유효한 Vue 주입 컨텍스트에서 호출하세요. `<script setup>`의 최상위 `await` 이후 컴파일러가 복원한 컨텍스트도 유효해요.
+
+활성 주입 컨텍스트가 없거나 클라이언트가 제공되지 않으면 `Error`를 던져요. `app.use(createClientPlugin(client))` 또는 상위 컴포넌트의 `provide(HTTP_CLIENT, client)`로 클라이언트를 제공하세요. 플러그인 설치만으로 주입 컨텍스트 밖의 호출이 유효해지지는 않아요.
+
+하위 트리는 Vue의 `provide(HTTP_CLIENT, childClient)`로 덮어써요.
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 

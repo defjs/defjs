@@ -55,7 +55,7 @@ interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposab
 }
 ```
 
-الخانة الثالثة في الـ tuple هي لقطة البدء لـ `open`؛ أما `stream.open` فيتبع أحدث اتصال بعد إعادة الاتصال. فضّل `await using stream = handle` لتنظيف النطاق المملوك. المتخلّص يوقف قراءة Defjs وعمل إعادة الاتصال وينتظر تحرير قفل القارئ؛ ولا يعد بأن وعد `ReadableStream.cancel()` العالق الذي يتحكم به المزوّد سينتهي. يبقى `close()` / `closed` اليدويان متاحين.
+الخانة الثالثة في الـ tuple هي لقطة البدء لـ `open`؛ أما `stream.open` فيتبع أحدث اتصال بعد إعادة الاتصال. `startupOpen` هي لقطة أول مصافحة ناجحة للاتصال الخاص بالمقبض المُعاد فقط إذا كان مقبضًا أصليًا من Defjs أو غلافًا يمرّر كائن `open` الحي نفسه؛ أما المقابض المخصصة والأغلفة التي تستبدل `open` فتحتفظ بقيمة `open` العامة الحالية حتى بعد إعادة الاتصال، لذلك لا تسمح مشاركة `closed` بتجاوز تنقية URL أو تصفية الرؤوس، ولا تعيد Defjs بناء بيانات المصافحة الأولى من تحويلات اعتباطية. فضّل `await using stream = handle` لتنظيف النطاق المملوك. المتخلّص يوقف قراءة Defjs وعمل إعادة الاتصال وينتظر تحرير قفل القارئ؛ ولا يعد بأن وعد `ReadableStream.cancel()` العالق الذي يتحكم به المزوّد سينتهي. يبقى `close()` / `closed` اليدويان متاحين.
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {

@@ -102,8 +102,8 @@
         "@defjs/core": "workspace:^",
         "@testing-library/dom": "^10.4.2",
         "@testing-library/react": "^16.3.3",
-        "@types/react": "^19.3.0",
-        "@types/react-dom": "^19.3.0",
+        "@types/react": "catalog:",
+        "@types/react-dom": "catalog:",
         "@vitest/browser-playwright": "catalog:",
         "@vitest/coverage-istanbul": "catalog:",
         "playwright": "catalog:",
@@ -150,7 +150,7 @@
     "@types/bun": "1.4.2",
     "@types/mdx": "2.0.13",
     "@types/react": "19.3.0",
-    "@types/react-dom": "19.2.3",
+    "@types/react-dom": "19.3.0",
     "@types/ws": "^8.18.2",
     "@vitest/browser": "^5.0.3",
     "@vitest/browser-playwright": "^5.0.3",
@@ -1555,8 +1555,6 @@
     "@vue/compiler-sfc/estree-walker": ["estree-walker@2.0.2", "", {}, "sha512-Rfkk/Mp/DL7JVje3u18FxFujQlTNR2q6QfMSMB7AvCBx91NGj/ba3kCfza0f6dVDbw7YlRf/nDrn7pQrCCyQ/w=="],
 
     "@vue/compiler-sfc/magic-string": ["magic-string@0.30.21", "", { "dependencies": { "@jridgewell/sourcemap-codec": "^1.5.5" } }, "sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ=="],
-
-    "doc/@types/react-dom": ["@types/react-dom@19.2.3", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ=="],
 
     "import-in-the-middle/es-module-lexer": ["es-module-lexer@3.0.3", "", {}, "sha512-yWGe1O/j+almnV4hOYrmZo8u58JdnmXEMneRQAYkWtqSiT86yoMIEKF4rpqEDj52tbYl3xceBD3DQIBwcsC9Pw=="],
 

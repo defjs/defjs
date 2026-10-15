@@ -28,7 +28,7 @@ options は左から右へ適用されます。setter は置換、`withIntercept
 ## トランスポート別に実行する
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`（`open` は起動時スナップショット。`stream.open` は再接続後に変わり得る）
+- SSE → `[error, stream, open]`. `open` は Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合、返されたハンドルの接続の最初の成功したハンドシェイクのスナップショットであり、独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先され、`stream.open` はライブのままです（[SSE](/ja-JP/docs/sse) を参照）。
 - WebSocket → `[error, session, connection]`
 
 WebSocket の execute は `beforeConnect`、`heartbeat`、`protocols`、`reconnect` を上書きできます。`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。

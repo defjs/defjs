@@ -110,11 +110,11 @@ SSE 喺 resolve handle 之前會驗證 status、`text/event-stream` 同 body 存
 
 WebSocket 嘅啟動期覆蓋 handshake 加第一次物理 open。Constructor 失敗、open 之前就 close、timeout 或者取消，全部都會產出一個啟動 tuple。就算 socket 從來冇到過 `open`，connection 快照都可能存在。
 
-| Transport | 啟動之後                                                                                                                                                                                  |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | 致命錯誤時 iterator reject；`stream.closed` 以 `kind: 'error'` 同對應嘅 fault `code` resolve                                                                                              |
-| WebSocket | 訊息／queue／heartbeat 失敗走 `onRuntimeError`；終止性錯誤令 `receive` 失敗；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                  |
-| HTTP      | Execute 嘅 promise 只 settle 一次，結果係 tuple。如果 interceptor 或者 progress callback 拋出錯誤，嗰個錯誤就會變成 tuple 入面嘅 fault（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
+| Transport | 啟動之後                                                                                                                                                                                                                   |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | 致命錯誤時 iterator reject；`stream.closed` 以 `kind: 'error'` 同對應嘅 fault `code` resolve                                                                                                                               |
+| WebSocket | 訊息／queue／heartbeat 失敗走 `onRuntimeError`；終止性錯誤令 `receive` 失敗；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                   |
+| HTTP      | Execute 嘅 promise 只 settle 一次，結果係 tuple。如果 interceptor 拋出錯誤、回傳嘅結果唔係 `HttpResponse`，或者 progress callback 拋出錯誤，就會喺 tuple 入面回傳 fault（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
 
 `NET_ABORTED` / `NET_TIMEOUT` 描述嘅係 caller 喺啟動期睇到咩。回俾你嘅 stream 或 session，你照樣要關掉並 await 佢嘅終態 promise。
 

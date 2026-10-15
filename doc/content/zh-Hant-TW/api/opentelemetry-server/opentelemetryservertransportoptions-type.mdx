@@ -18,7 +18,9 @@ interface OpenTelemetryServerTransportOptions<TResponse> {
 
 `enabled` 預設為 `true`；只有 `enabled: false` 才會關閉該傳輸。舊的布林開關（`http: false`）與頂層 hooks 只會被 TypeScript 型別拒絕，並沒有執行期檢查，所以執行時 `http: false` 會讓該傳輸維持啟用，頂層 hook 則會被靜默忽略。
 
-Span hooks 只有在傳入 `tracer` 時才會執行。`startSpanHook` 會在其所屬傳輸建立 span 前同步執行。它回傳的 attributes 會在內建 attributes 之後套用，因此應用程式可以覆寫 `url.full` 或其他初始值。它丟出錯誤時，Defjs 會用內建 attributes 建立 span、記錄 `defjs.otel.hook.error` 事件，並繼續請求。`requestHook` 在建立 span 之後、送出 request 之前執行；`responseHook` 在傳輸層結果回傳之後執行。兩者都可以回傳 promise，但都不會被 await：丟出錯誤或 rejection 會以同樣方式記錄，而且絕不會阻擋操作，也不會讓操作失敗。`responseHook` 的第三個引數是原始 request。
+Span hooks 只有在傳入 `tracer` 時才會執行。`startSpanHook` 會在其所屬傳輸建立 span 前同步執行。它回傳的 attributes 會在內建 attributes 之後套用，因此應用程式可以覆寫 `url.full` 或其他初始值。它丟出錯誤時，Defjs 會用內建 attributes 建立 span，並繼續請求。`requestHook` 在建立 span 之後、送出 request 之前執行；`responseHook` 在傳輸層結果回傳之後執行。兩者都可以回傳 promise，但都不會被 await：丟出錯誤或 rejection 不會阻擋操作，也不會讓操作失敗。`responseHook` 的第三個引數是原始 request。
+
+當 `span.isRecording()` 為 true 時，hook 失敗會記錄 `defjs.otel.hook.error` 與 `exception` 事件。span 不再 recording（已結束或未取樣）時，失敗會透過 `diag.error` 交給 OpenTelemetry 診斷 logger。應用程式必須設定 `@opentelemetry/api` 的 `diag.setLogger(...)` 才能接收；預設不會自動輸出。本套件不初始化 SDK，這類診斷也不是獨立的 SDK `LogRecord`。
 
 預設 `url.full` 只會把 `request.endpoint` 相對於選填的 `request.baseEndpoint` 解析，不會附加獨立的 `request.queryString`。這條邊界不是 redaction；套件沒有內建 redactor 或敏感 key 策略。請明確建構應用程式自有的 URL，並視需要自行遮罩：
 

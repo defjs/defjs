@@ -1,6 +1,7 @@
 import { createNetworkFault, ERR_ABORTED, ERR_TIMEOUT, type HttpRequest } from '@defjs/core'
 import type { Context, TextMapGetter, TextMapPropagator, TextMapSetter } from '@opentelemetry/api'
-import { context, diag, ROOT_CONTEXT, trace } from '@opentelemetry/api'
+import { context, diag, propagation, ROOT_CONTEXT, trace } from '@opentelemetry/api'
+import { CompositePropagator, W3CBaggagePropagator, W3CTraceContextPropagator } from '@opentelemetry/core'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
   activeSpans,
@@ -13,6 +14,7 @@ import {
   waitForSettledPromises,
 } from '../test-utils'
 import { createOpenTelemetryWebSocketInterceptor } from './web_socket'
+import { resolveTransportQuery, resolveRequestUrl } from '../../../core/src/internal/url'
 
 interface QueryCarrier {
   params: URLSearchParams
@@ -812,5 +814,98 @@ describe('createOpenTelemetryWebSocketInterceptor', () => {
 
     expect(mockPropagator.extract).toHaveBeenCalledWith(expect.anything(), expect.any(Headers), expect.anything())
     expect(next).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('WebSocket query propagation with W3C propagators', () => {
+  const propagator = new CompositePropagator({ propagators: [new W3CTraceContextPropagator(), new W3CBaggagePropagator()] })
+  const staleTraceparent = '00-11111111111111111111111111111111-2222222222222222-01'
+  const currentTraceparent = '00-aabbccddeeff00112233445566778899-aabbccddeeff0011-01'
+
+  afterEach(() => vi.restoreAllMocks())
+
+  // Mirrors core: both query forms present, queryString being the serialized form that reaches the socket URL.
+  function makeQueryRequest(queryString: string): HttpRequest {
+    return { ...makeWsRequest(new URLSearchParams(queryString)), queryString }
+  }
+
+  async function intercept(req: HttpRequest, baggage?: string): Promise<HttpRequest> {
+    const { tracer } = createMockTracer()
+    if (baggage) {
+      vi.spyOn(context, 'active').mockReturnValue(
+        propagation.setBaggage(ROOT_CONTEXT, propagation.createBaggage({ tenant: { value: baggage } })),
+      )
+    }
+    const next = vi.fn(async (_req: HttpRequest) => makeWsSession())
+    await createOpenTelemetryWebSocketInterceptor({ tracer, propagator, queryPropagation: true }).fn(req, next)
+    const sent = next.mock.calls[0]?.[0]
+    if (!sent) throw new Error('Expected next to be called')
+    return sent
+  }
+
+  const pairsOf = (params: URLSearchParams | undefined) => Array.from(params ?? [])
+
+  test('replaces same-name propagation parameters instead of appending after them', async () => {
+    const sent = await intercept(makeQueryRequest(`room=alpha&traceparent=${staleTraceparent}&baggage=tenant%3Dold`), 'new')
+
+    expect(sent.queryString).toBe(`room=alpha&traceparent=${currentTraceparent}&baggage=tenant%3Dnew`)
+    expect(pairsOf(sent.queryParams)).toEqual(pairsOf(new URLSearchParams(sent.queryString)))
+  })
+
+  test('drops every earlier pair of the same name', async () => {
+    const sent = await intercept(makeQueryRequest(`traceparent=first&room=alpha&traceparent=${staleTraceparent}`))
+
+    expect(sent.queryString).toBe(`room=alpha&traceparent=${currentTraceparent}`)
+    expect(sent.queryParams?.getAll('traceparent')).toEqual([currentTraceparent])
+  })
+
+  test('keeps the serialized form of every other parameter', async () => {
+    const sent = await intercept(makeQueryRequest(`space=hello%20world&traceparent=${staleTraceparent}&path=a%2Fb&tag=x&tag=y`))
+
+    expect(sent.queryString).toBe(`space=hello%20world&path=a%2Fb&tag=x&tag=y&traceparent=${currentTraceparent}`)
+    expect(pairsOf(sent.queryParams)).toEqual(pairsOf(new URLSearchParams(sent.queryString)))
+  })
+
+  test('matches percent-encoded names the way the receiver decodes them', async () => {
+    const sent = await intercept(makeQueryRequest(`room=alpha&trace%70arent=${staleTraceparent}`))
+
+    expect(sent.queryString).toBe(`room=alpha&traceparent=${currentTraceparent}`)
+  })
+
+  test.each([
+    ['room=alpha&?traceparent=application-data&traceparent=stale', 'room=alpha&?traceparent=application-data'],
+    ['traceparent=stale&?traceparent=application-data', '??traceparent=application-data'],
+    ['?traceparent=stale&?traceparent=application-data', '??traceparent=application-data'],
+    ['??traceparent=application-data&trace%70arent=stale', '??traceparent=application-data'],
+    [
+      'room=a+b&&%3Ftraceparent=application-data&traceparent=stale&tag=%2f&tag=two&',
+      'room=a+b&&%3Ftraceparent=application-data&tag=%2f&tag=two&',
+    ],
+    ['&&traceparent=stale&&flag&=empty&trace%70arent=duplicate&', '&&&flag&=empty&'],
+  ])('preserves querySerializer bytes and decoded key identity for %s', async (serialized, kept) => {
+    const query = resolveTransportQuery({ room: 'alpha' }, () => serialized)
+    const req = { ...makeWsRequest(), ...query }
+    const sent = await intercept(req)
+
+    expect(sent.queryString).toBe(`${kept}&traceparent=${currentTraceparent}`)
+    const before = new URLSearchParams(serialized)
+    const received = resolveRequestUrl(sent).searchParams
+    const unaffected = [...before].filter(([key]) => key !== 'traceparent')
+    expect([...received]).toEqual([...unaffected, ['traceparent', currentTraceparent]])
+    expect(pairsOf(sent.queryParams)).toEqual([...received])
+  })
+
+  test('keeps a propagation parameter the propagator has nothing to inject for', async () => {
+    const sent = await intercept(makeQueryRequest('baggage=tenant%3Dkept&room=alpha'))
+
+    expect(sent.queryString).toBe(`baggage=tenant%3Dkept&room=alpha&traceparent=${currentTraceparent}`)
+  })
+
+  test('derives the query string from queryParams when queryString is absent', async () => {
+    const req = { ...makeWsRequest(new URLSearchParams({ room: 'alpha', traceparent: staleTraceparent })), queryString: undefined }
+    const sent = await intercept(req)
+
+    expect(sent.queryString).toBe(`room=alpha&traceparent=${currentTraceparent}`)
+    expect(pairsOf(sent.queryParams)).toEqual(pairsOf(new URLSearchParams(sent.queryString)))
   })
 })

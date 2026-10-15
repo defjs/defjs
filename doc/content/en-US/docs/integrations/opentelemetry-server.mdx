@@ -33,7 +33,9 @@ Public API: `withOpenTelemetryServer` plus `OpenTelemetryServerOptions`, `OpenTe
 
 ## Options and hooks
 
-Span hooks run only when a `tracer` is supplied. Hooks sit next to the transport they change. The synchronous `startSpanHook(request)` runs before span creation and returns initial `Attributes`; application attributes are applied last, so they may override built-in values. `requestHook` and `responseHook` receive the already-created span and may return `void` or a promise. A hook failure records `defjs.otel.hook.error` and does **not** stop the client operation; a failed start hook falls back to the built-in initial attributes.
+Span hooks run only when a `tracer` is supplied. Hooks sit next to the transport they change. The synchronous `startSpanHook(request)` runs before span creation and returns initial `Attributes`; application attributes are applied last, so they may override built-in values. `requestHook` and `responseHook` receive the already-created span and may return `void` or a promise. A hook failure does **not** stop the client operation; a failed start hook falls back to the built-in initial attributes.
+
+`requestHook` and `responseHook` are not awaited. The HTTP span ends when the synchronous part of `responseHook` returns and is not extended for an asynchronous hook. The synchronous part can still modify a recording span; events cannot be appended after it ends. While `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. For non-recording spans (ended or unsampled), failures go to the OpenTelemetry diagnostic logger through `diag.error`. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive them; there is no automatic output by default. The package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`. This diagnostic includes `hook.name`, `error.type`, `traceId`, and `spanId`, but excludes the original error message or stack and request data.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ Set a static `operation` on `defineRequest`, `defineEventStream`, or `defineWebS
 
 Span names become `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`. Without `operation`, fallback is method / `SSE` / `WebSocket`, and `defjs.operation` is omitted.
 
-HTTP and SSE inject propagated fields into request headers. Existing `Headers` instances are reused and mutated; otherwise a new `Headers` is created. WebSocket query propagation is **opt-in** (browsers can’t add arbitrary handshake headers):
+HTTP and SSE inject propagated fields into request headers. Injection always uses a new `Headers` copy without changing the caller’s headers, so outer retries retain the same original parent context. WebSocket query propagation is **opt-in** (browsers can’t add arbitrary handshake headers):
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-With `queryPropagation`, propagator fields append to the connection query string. Review URL logging, proxy visibility, access logs, baggage, and retention first. With a `tracer`, `requireParentSpan: true` skips span creation, propagation, hooks, metrics, and logs when there’s no active parent, then calls `next` unchanged.
+With `queryPropagation`, the fields the propagator injects are written to the end of the connection query string and replace any parameter of the same name; all other parameters keep their serialized form. Review URL logging, proxy visibility, access logs, baggage, and retention first. With a `tracer`, `requireParentSpan: true` skips span creation, propagation, hooks, metrics, and logs when there’s no active parent, then calls `next` unchanged.
 
 ## HTTP, SSE, and WebSocket semantics
 

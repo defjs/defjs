@@ -17,13 +17,16 @@ function parse<S extends StructLike<unknown, unknown, boolean>>(
 - **value** es la entrada desconocida.
 - **options.aliases** vale `false` por defecto: las claves de objeto se leen por sus nombres **lógicos** (`displayName`). Con `true` se leen por sus nombres de cable (`display_name`), como las leen los códecs HTTP/JSON. La salida siempre usa nombres lógicos.
 - **options.errorMap** es un [`ErrorMap`](/es-ES/api/core/errormap-type) que reescribe los mensajes de issue solo en esta llamada, incluidos los fallos de conversión de bigint/date de un struct creado por otra copia de Core. Cualquier cadena, incluida `''`, reemplaza el mensaje; solo `undefined` conserva el valor por defecto. El texto personalizado se usa tal cual.
-- **Devuelve** `[null, output]` o `[StructError, undefined]`. Una entrada inválida nunca lanza.
+- **Devuelve** `[null, output]` o `[StructError, undefined]`. Los fallos de validación no lanzan excepciones. Las excepciones de los getters y los callbacks de `errorMap` proporcionados por quien llama se propagan sin cambios.
 - El parseo es fail-fast: se detiene en el primer fallo, así que el error contiene un único issue. Las claves de objeto desconocidas se descartan de la salida y la entrada no se modifica.
+- A lo largo de una ruta se visitan como máximo **256 contenedores anidados** (`object`, `array`, `record` o `tuple`), contando el contenedor raíz como el primero. El siguiente contenedor falla con `invalid_type` en su ruta lógica y con `expected: 'value nested at most 256 levels deep'`. En una unión, los candidatos posteriores aún pueden tener éxito; si ninguno coincide, la unión informa de `invalid_union`. Los ciclos a través de los campos declarados de los contenedores también alcanzan este límite; se permiten nodos hijos compartidos no cíclicos. Las ramas de unión e intersección no añaden un nivel de contenedor, y los valores `any`/`unknown` permanecen opacos en lugar de recorrerse.
 
 ```ts
 const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
 if (error) return console.error(error.prettify())
 ```
+
+`any` y `unknown` no recorren sus valores, pero una intersección puede fusionar recursivamente dos valores distintos de objeto o array devueltos por esas hojas. Esta fusión comparte el mismo límite de 256 contenedores con la ruta lógica que la engloba. Si se supera, se produce `invalid_intersection` en la ruta lógica del contenedor rechazado. Las referencias idénticas se conservan sin recorrerlas, incluso cuando se trata de un valor cíclico compartido.
 
 Consulta [`ParseResult`](/es-ES/api/core/parseresult-type) y [`StructError`](/es-ES/api/core/structerror-type).
 

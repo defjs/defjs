@@ -26,10 +26,10 @@ function createClientPlugin(client: Client): Plugin
 function injectClient(): Client
 ```
 
-Lit le provider `HTTP_CLIENT` le plus proche. Appelle-le là où `inject` est autorisé, par exemple dans `setup()`.
+Lit le provider `HTTP_CLIENT` le plus proche. Appelle-le dans un contexte d’injection Vue valide, comme la partie synchrone de `setup()` ou un callback synchrone de `app.runWithContext()` (Vue 3.3+). Les contextes restaurés par le compilateur après un `await` au premier niveau de `<script setup>` sont également valides.
 
 - **Renvoie** le client injecté.
-- **Lève** une `Error` si aucun client n’a été fourni, par exemple quand le plugin n’a pas été installé.
+- **Lève** une `Error` si aucun contexte d’injection n’est actif ou si aucun client n’a été fourni. Fournis un client avec `app.use(createClientPlugin(client))` ou `provide(HTTP_CLIENT, client)` dans un composant ancêtre ; installer le plugin ne suffit pas pour appeler hors d’un contexte d’injection.
 
 ## HTTP_CLIENT
 

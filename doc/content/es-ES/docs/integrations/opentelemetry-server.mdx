@@ -33,7 +33,9 @@ API pública: `withOpenTelemetryServer` más `OpenTelemetryServerOptions`, `Open
 
 ## Opciones y hooks
 
-Los hooks de span solo se llaman cuando se proporciona un `tracer`. Los hooks se sitúan junto al transporte que cambian. El `startSpanHook(request)` síncrono se ejecuta antes de crear el span y devuelve `Attributes` iniciales; los atributos de la aplicación se aplican al final y pueden sobrescribir los incorporados. `requestHook` y `responseHook` reciben el span ya creado y pueden devolver `void` o una Promise. Todo fallo registra `defjs.otel.hook.error` sin detener la operación; si falla el start hook se usan los atributos incorporados.
+Los hooks de span solo se llaman cuando se proporciona un `tracer`. Los hooks se sitúan junto al transporte que cambian. El `startSpanHook(request)` síncrono se ejecuta antes de crear el span y devuelve `Attributes` iniciales; los atributos de la aplicación se aplican al final y pueden sobrescribir los incorporados. `requestHook` y `responseHook` reciben el span ya creado y pueden devolver `void` o una Promise. Un fallo del hook no detiene la operación; si falla el start hook se usan los atributos incorporados.
+
+No se espera a `requestHook` ni a `responseHook`. El span HTTP termina cuando retorna la parte síncrona de `responseHook`; un hook asíncrono no prolonga su duración. La parte síncrona aún puede modificar un span que esté grabando; no se pueden añadir eventos después de que termine. Mientras `span.isRecording()` sea true, los fallos de hooks registran los eventos `defjs.otel.hook.error` y `exception`. Si el span no está grabando (ha terminado o no fue muestreado), los fallos se envían al logger de diagnóstico de OpenTelemetry mediante `diag.error`. La aplicación debe configurar `diag.setLogger(...)` de `@opentelemetry/api` para recibirlos; no hay salida automática por defecto. El paquete no inicializa el SDK y este diagnóstico no es un `LogRecord` independiente del SDK. Este diagnóstico incluye `hook.name`, `error.type`, `traceId` y `spanId`, pero no el mensaje ni la traza de pila del error original ni los datos de la solicitud.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ Pon un `operation` estático en `defineRequest`, `defineEventStream` o `defineWe
 
 Los nombres de span pasan a ser `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`. Sin `operation`, el fallback es method / `SSE` / `WebSocket`, y se omite `defjs.operation`.
 
-HTTP y SSE inyectan campos propagados en las cabeceras de la solicitud. Las instancias `Headers` existentes se reutilizan y mutan; si no, se crea un `Headers` nuevo. La propagación por query de WebSocket es **opt-in** (los navegadores no pueden añadir cabeceras arbitrarias de handshake):
+HTTP y SSE inyectan campos propagados en las cabeceras de la solicitud. La inyección siempre usa una nueva copia de `Headers` sin cambiar las cabeceras del llamador, por lo que los reintentos externos conservan el mismo contexto padre original. La propagación por query de WebSocket es **opt-in** (los navegadores no pueden añadir cabeceras arbitrarias de handshake):
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-Con `queryPropagation`, los campos del propagador se añaden al query string de la conexión. Revisa antes el logging de URL, la visibilidad del proxy, los access logs, el baggage y la retención. Con `tracer`, `requireParentSpan: true` salta la creación de span, la propagación, los hooks, las métricas y los logs cuando no hay padre activo, y luego llama a `next` sin cambios.
+Con `queryPropagation`, los campos que el propagador inyecta realmente se escriben al final del query string de la conexión y sustituyen cualquier parámetro con el mismo nombre; todos los demás parámetros conservan su forma serializada. Revisa antes el logging de URL, la visibilidad del proxy, los access logs, el baggage y la retención. Con `tracer`, `requireParentSpan: true` salta la creación de span, la propagación, los hooks, las métricas y los logs cuando no hay padre activo, y luego llama a `next` sin cambios.
 
 ## Semántica HTTP, SSE y WebSocket
 

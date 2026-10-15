@@ -13,7 +13,7 @@ interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTranspo
 
 设在 `OpenTelemetryServerOptions` 的 `webSocket` 上。`enabled`、`startSpanHook`、`requestHook` 和 `responseHook` 来自 `OpenTelemetryServerTransportOptions`；`responseHook(span, session, req)` 收到已打开的 `WebSocketSessionLike` 和原始的 `HttpRequest`。
 
-`queryPropagation` 默认 `false`：WebSocket 的 query string 保持不变，不会把 trace context 或 baggage 写进 URL。浏览器的 WebSocket 客户端通常不能设置 header，所以打开它会把传播的 context 追加到 query string。query string 可能被代理、访问日志和 APM 工具记录，baggage 的值也可能敏感。只有接受这种暴露之后才打开。
+`queryPropagation` 默认 `false`：WebSocket 的 query string 保持不变，不会把 trace context 或 baggage 写进 URL。浏览器的 WebSocket 客户端通常不能设置 header，所以打开它会把传播的 context 写到 query string 的末尾，并替换与这些传播字段同名的参数。query string 可能被代理、访问日志和 APM 工具记录，baggage 的值也可能敏感。只有接受这种暴露之后才打开。
 
 WebSocket 按连接级别追踪。span 保持打开，直到 `session.closed` 落定。它记录 `websocket.connected`，然后对正常关闭记录 `websocket.closed`，否则记录 `websocket.error`。服务器发来的 close frame，无论 code 是什么（包括 1011），都算正常关闭。没有 close frame 的突然断开（1006）只有在运行时不会于 `close` 之前报告 socket `error` 时（Bun）才算正常关闭；会先报告时（Node.js），session 以 error 结束并记一次日志。调用方中止已打开的 session 同样是 `websocket.error`：span 以 `ERROR` 结束，并且不发出日志。`error.type` 跟随 abort 的 reason：默认 `abort()` 为 `AbortError`，`Error` reason 取其 `Error.name`，字符串 reason 为 `string`。WebSocket 仍在连接时被中止，span 以 `ERROR` 结束，`error.type` 为 `DefjsFault`。不会创建逐消息的 span。
 

@@ -173,6 +173,8 @@ withOpenTelemetryServer({
 })
 ```
 
+Injected fields are written to the end of the query string and replace any parameter of the same name. All other parameters keep their serialized form, including a propagation parameter the propagator has nothing to inject for.
+
 Query strings can be recorded by proxies, browsers, APM tooling, access logs, and network debugging tools. They may also contain tokens or other high-cardinality user input. If your propagator includes `baggage`, baggage values can also be written into the URL and may contain sensitive data.
 
 With the safe default, trace context does not ride on the WebSocket URL. Use another reviewed correlation mechanism at the application layer, such as a protocol-reviewed first frame or a short-lived connection ticket, if your server still needs to link the connection to a trace.
@@ -218,7 +220,9 @@ With the safe default, trace context does not ride on the WebSocket URL. Use ano
 | `requestHook`      | `(span, req) => void \| Promise<void>`          | `undefined` | Customize WebSocket span before connection request                                                                                  |
 | `responseHook`     | `(span, session, req) => void \| Promise<void>` | `undefined` | Customize WebSocket span after session returned; `req` is the original `HttpRequest`                                                |
 
-> **Hook timing and failures**: Span hooks run only when a `tracer` is supplied. `startSpanHook(request)` is synchronous and runs before span creation. Its attributes are applied after built-in attributes. If it throws, Defjs creates the span with built-in attributes, records `defjs.otel.hook.error`, and the client request/stream/session continues normally. `requestHook` and `responseHook` run after creation and may return `void` or `Promise<void>`; their throws/rejections are recorded without blocking the operation.
+> **Hook timing and failures**: Span hooks run only when a `tracer` is supplied. `startSpanHook(request)` is synchronous and runs before span creation. Its attributes are applied after built-in attributes. If it throws, Defjs creates the span with built-in attributes and the client request/stream/session continues normally. `requestHook` and `responseHook` run after creation and may return `void` or `Promise<void>`; neither is awaited, and their throws/rejections do not block or fail the operation. While `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. For non-recording spans (ended or unsampled), failures go through `diag.error` with a fixed message and `hook.name`, `error.type`, `traceId`, and `spanId`; error messages, stacks, and request data are not included. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive these diagnostics; there is no automatic output by default. This package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`. This diagnostic includes `hook.name`, `error.type`, `traceId`, and `spanId`, but excludes the original error message or stack and request data.
+>
+> The HTTP span ends when the synchronous part of `responseHook` returns and is not extended for an asynchronous hook. The synchronous part can still modify a recording span; events cannot be appended after it ends. A later hook rejection uses the diagnostic logger described above.
 >
 > Each `responseHook` receives the original transport `HttpRequest` as its third argument. Read its explicit `operation`; do not reconstruct identity from its endpoint or a resolved URL.
 >

@@ -35,6 +35,7 @@ import type { EndpointInput, ParsedInput } from '../internal/endpoint_input'
 import { parseEndpointInput } from '../internal/endpoint_input'
 import type { HttpProgressFn } from '../internal/http_request'
 import type { DecodedResponse, HttpMeta, HttpResponse } from '../internal/http_response'
+import { isHttpResponse } from '../internal/http_response'
 import type { BuilderField, HttpRequestShape } from '../internal/builder_types'
 import type { OutboundBuilder } from '../internal/outbound_request'
 import type { AnyStruct, Infer } from '../struct'
@@ -380,7 +381,13 @@ export async function executeHttpCommand<
 
       const chainPromise = chain(request, handler)
       void chainPromise.catch(() => undefined)
-      response = await awaitWithSignal(() => chainPromise, requestSignal)
+      const settled = await awaitWithSignal(() => chainPromise, requestSignal)
+      // Interceptors are user code, and only an HttpResponse carries the `ok` fork the pipeline reads next.
+      // `response` stays unset on failure so the finally block still releases the deadline and the signal.
+      if (!isHttpResponse(settled)) {
+        throw new TypeError('HTTP interceptor must resolve an HttpResponse from next() or makeResponse()')
+      }
+      response = settled
     } catch (error) {
       const fromTransport = transportOrigin.has(error)
       const aborted = resolveAbortFault(requestSignal)

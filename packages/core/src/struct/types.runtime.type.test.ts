@@ -1,5 +1,5 @@
 import { expectTypeOf } from 'vitest'
-import type { Infer } from './index'
+import type { Infer, StructInput, StructLike } from './index'
 
 // @ts-expect-error TypeOf is intentionally not part of the public struct API.
 import type { TypeOf } from './index'
@@ -117,6 +117,90 @@ const singleIntersection = struct.intersection(struct.object({ id: struct.string
 type IntersectionCase = Expect<StrictEqual<Infer<typeof merged>, { id: string } & { name: string } & { active: boolean }>>
 type SingleIntersectionCase = Expect<StrictEqual<Infer<typeof singleIntersection>, { id: string }>>
 expectTypeOf<(typeof merged)['_struct']['input']>().toEqualTypeOf<{ id: string } & { name: string } & { active: boolean }>()
+
+// A single member is returned as it is, so its optional and null modifiers stay in the type. Two or more members never admit undefined.
+const optionalSingleIntersection = struct.intersection(struct.string().optional())
+const nullishSingleIntersection = struct.intersection(struct.string().nullish())
+const optionalSingleIntersectionField = struct.object({ v: optionalSingleIntersection })
+const optionalPairIntersection = struct.intersection(struct.string().optional(), struct.string().optional())
+
+type SingleOptionalIntersectionCase = Expect<StrictEqual<Infer<typeof optionalSingleIntersection>, string | undefined>>
+type SingleNullishIntersectionCase = Expect<StrictEqual<Infer<typeof nullishSingleIntersection>, string | null | undefined>>
+type SingleOptionalIntersectionFieldCase = Expect<StrictEqual<Infer<typeof optionalSingleIntersectionField>, { v?: string }>>
+type OptionalPairIntersectionCase = Expect<StrictEqual<Infer<typeof optionalPairIntersection>, string>>
+expectTypeOf<StructInput<typeof optionalSingleIntersection>>().toEqualTypeOf<string | undefined>()
+expectTypeOf<(typeof optionalSingleIntersection)['_struct']['optionalOut']>().toEqualTypeOf<true>()
+expectTypeOf<StructInput<typeof nullishSingleIntersection>>().toEqualTypeOf<string | null | undefined>()
+expectTypeOf<(typeof nullishSingleIntersection)['_struct']['optionalOut']>().toEqualTypeOf<true>()
+expectTypeOf<StructInput<typeof optionalPairIntersection>>().toEqualTypeOf<string>()
+expectTypeOf<(typeof optionalPairIntersection)['_struct']['optionalOut']>().toEqualTypeOf<undefined>()
+
+// A nonempty tuple may have just one member at runtime. Keep both the identity and multi-member results possible.
+const optionalDate = struct.date().optional()
+const nonemptyDates: [typeof optionalDate, ...(typeof optionalDate)[]] = [optionalDate]
+const variableIntersection = struct.intersection(...nonemptyDates)
+expectTypeOf<Infer<typeof variableIntersection>>().toEqualTypeOf<Date | undefined>()
+expectTypeOf<StructInput<typeof variableIntersection>>().toEqualTypeOf<Date | number | string | undefined>()
+expectTypeOf<(typeof variableIntersection)['_struct']['optionalOut']>().toEqualTypeOf<true | undefined>()
+
+const fixedSingle = struct.intersection(...([optionalDate] as const))
+expectTypeOf<typeof fixedSingle>().toEqualTypeOf<typeof optionalDate>()
+const nullishDate = struct.date().nullish()
+const nullishDates: readonly [typeof nullishDate, ...(typeof nullishDate)[]] = [nullishDate]
+const variableNullish = struct.intersection(...nullishDates)
+expectTypeOf<Infer<typeof variableNullish>>().toEqualTypeOf<Date | null | undefined>()
+expectTypeOf<StructInput<typeof variableNullish>>().toEqualTypeOf<Date | number | string | null | undefined>()
+expectTypeOf<(typeof variableNullish)['_struct']['optionalOut']>().toEqualTypeOf<true | undefined>()
+
+const requiredDate = struct.date()
+const requiredDates: readonly [typeof requiredDate, ...(typeof requiredDate)[]] = [requiredDate]
+const alwaysRequired = struct.intersection(...requiredDates)
+expectTypeOf<Infer<typeof alwaysRequired>>().toEqualTypeOf<Date>()
+expectTypeOf<StructInput<typeof alwaysRequired>>().toEqualTypeOf<Date | number | string>()
+expectTypeOf<(typeof alwaysRequired)['_struct']['optionalOut']>().toEqualTypeOf<undefined>()
+const requiredField = struct.object({ value: alwaysRequired })
+expectTypeOf<Infer<typeof requiredField>>().toEqualTypeOf<{ value: Date }>()
+expectTypeOf<StructInput<typeof requiredField>>().toEqualTypeOf<{ value: Date | number | string }>()
+
+const twoOrMoreDates: [typeof optionalDate, typeof optionalDate, ...(typeof optionalDate)[]] = [optionalDate, optionalDate]
+const requiredIntersection = struct.intersection(...twoOrMoreDates)
+expectTypeOf<Infer<typeof requiredIntersection>>().toEqualTypeOf<Date>()
+expectTypeOf<StructInput<typeof requiredIntersection>>().toEqualTypeOf<Date | number | string>()
+expectTypeOf<(typeof requiredIntersection)['_struct']['optionalOut']>().toEqualTypeOf<undefined>()
+
+function intersectGeneric<const T extends readonly [StructLike, ...StructLike[]]>(...items: T) {
+  return struct.intersection(...items)
+}
+const genericSingle = intersectGeneric(optionalDate)
+const genericPair = intersectGeneric(optionalDate, optionalDate)
+const genericVariable = intersectGeneric(...nonemptyDates)
+expectTypeOf<typeof genericSingle>().toEqualTypeOf<typeof optionalDate>()
+expectTypeOf<Infer<typeof genericPair>>().toEqualTypeOf<Date>()
+expectTypeOf<StructInput<typeof genericPair>>().toEqualTypeOf<Date | number | string>()
+expectTypeOf<(typeof genericPair)['_struct']['optionalOut']>().toEqualTypeOf<undefined>()
+expectTypeOf<Infer<typeof genericVariable>>().toEqualTypeOf<Date | undefined>()
+expectTypeOf<StructInput<typeof genericVariable>>().toEqualTypeOf<Date | number | string | undefined>()
+expectTypeOf<(typeof genericVariable)['_struct']['optionalOut']>().toEqualTypeOf<true | undefined>()
+
+function intersectTupleUnion(items: readonly [typeof optionalDate] | readonly [typeof optionalDate, typeof optionalDate]) {
+  return struct.intersection(...items)
+}
+expectTypeOf<Infer<ReturnType<typeof intersectTupleUnion>>>().toEqualTypeOf<Date | undefined>()
+expectTypeOf<StructInput<ReturnType<typeof intersectTupleUnion>>>().toEqualTypeOf<Date | number | string | undefined>()
+expectTypeOf<ReturnType<typeof intersectTupleUnion>['_struct']['optionalOut']>().toEqualTypeOf<true | undefined>()
+
+const variableFields = struct.object({ maybe: variableIntersection, required: struct.string() })
+expectTypeOf<Infer<typeof variableFields>>().toEqualTypeOf<{ maybe?: Date; required: string }>()
+expectTypeOf<StructInput<typeof variableFields>>().toEqualTypeOf<{ maybe?: Date | number | string; required: string }>()
+// @ts-expect-error possibly optional siblings must not make a definitely required field optional.
+const missingRequiredField: Infer<typeof variableFields> = {}
+void missingRequiredField
+
+function unionField(field: typeof optionalDate | ReturnType<typeof struct.date>) {
+  return struct.object({ maybe: field, required: struct.string() })
+}
+expectTypeOf<Infer<ReturnType<typeof unionField>>>().toEqualTypeOf<{ maybe?: Date; required: string }>()
+expectTypeOf<StructInput<ReturnType<typeof unionField>>>().toEqualTypeOf<{ maybe?: Date | number | string; required: string }>()
 
 const Event = struct.discriminatedUnion('type', [
   struct.object({ payload: struct.string(), type: struct.literal('message') }),
@@ -253,7 +337,11 @@ export type Cases =
   | FormDataBodyCase
   | IntersectionCase
   | MatrixCase
+  | OptionalPairIntersectionCase
   | ProfileCase
   | SingleIntersectionCase
+  | SingleNullishIntersectionCase
+  | SingleOptionalIntersectionCase
+  | SingleOptionalIntersectionFieldCase
   | UnionCase
   | UrlencodedBodyCase

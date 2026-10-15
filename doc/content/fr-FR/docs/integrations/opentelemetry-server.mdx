@@ -33,7 +33,9 @@ API publique : `withOpenTelemetryServer` plus `OpenTelemetryServerOptions`, `Ope
 
 ## Options et hooks
 
-Les hooks de span ne sont appelés que si un `tracer` est fourni. Les hooks se placent à côté du transport qu’ils modifient. Le `startSpanHook(request)` synchrone s’exécute avant la création du span et renvoie les `Attributes` initiaux ; les attributs applicatifs sont appliqués en dernier et peuvent remplacer les intégrés. `requestHook` et `responseHook` reçoivent le span déjà créé et peuvent renvoyer `void` ou une Promise. Tout échec enregistre `defjs.otel.hook.error` sans arrêter l’opération ; un start hook en échec retombe sur les attributs intégrés.
+Les hooks de span ne sont appelés que si un `tracer` est fourni. Les hooks se placent à côté du transport qu’ils modifient. Le `startSpanHook(request)` synchrone s’exécute avant la création du span et renvoie les `Attributes` initiaux ; les attributs applicatifs sont appliqués en dernier et peuvent remplacer les intégrés. `requestHook` et `responseHook` reçoivent le span déjà créé et peuvent renvoyer `void` ou une Promise. Un échec de hook n’arrête pas l’opération ; un start hook en échec retombe sur les attributs intégrés.
+
+Ni `requestHook` ni `responseHook` ne sont attendus. Le span HTTP se termine au retour de la partie synchrone de `responseHook` ; un hook asynchrone ne prolonge pas sa durée de vie. La partie synchrone peut encore modifier un span qui enregistre ; aucun événement ne peut être ajouté après sa fin. Tant que `span.isRecording()` vaut true, les échecs de hooks enregistrent les événements `defjs.otel.hook.error` et `exception`. Pour un span qui n’enregistre pas (terminé ou non échantillonné), les échecs sont transmis au logger de diagnostic OpenTelemetry via `diag.error`. L’application doit configurer `diag.setLogger(...)` depuis `@opentelemetry/api` pour les recevoir ; aucune sortie n’est automatique par défaut. Le paquet n’initialise pas le SDK et ce diagnostic n’est pas un `LogRecord` SDK distinct. Ce diagnostic contient `hook.name`, `error.type`, `traceId` et `spanId`, mais ni le message ni la pile de l’erreur d’origine, ni les données de la requête.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/options-and-hooks.ts#example
@@ -58,11 +60,11 @@ Pose un `operation` statique sur `defineRequest`, `defineEventStream` ou `define
 
 Les noms de span deviennent `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`. Sans `operation`, le fallback est method / `SSE` / `WebSocket`, et `defjs.operation` est omis.
 
-HTTP et SSE injectent les champs propagés dans les en-têtes de requête. Les instances `Headers` existantes sont réutilisées et mutées ; sinon une nouvelle `Headers` est créée. La propagation query WebSocket est **opt-in** (les navigateurs ne peuvent pas ajouter d’en-têtes de handshake arbitraires) :
+HTTP et SSE injectent les champs propagés dans les en-têtes de requête. L’injection utilise toujours une nouvelle copie de `Headers` sans modifier les en-têtes de l’appelant, afin que les tentatives de l’intercepteur externe conservent le même contexte parent d’origine. La propagation query WebSocket est **opt-in** (les navigateurs ne peuvent pas ajouter d’en-têtes de handshake arbitraires) :
 
 <include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
 
-Avec `queryPropagation`, les champs du propagator s’ajoutent à la query string de connexion. Passe d’abord en revue logging d’URL, visibilité proxy, access logs, baggage et rétention. Avec un `tracer`, `requireParentSpan: true` saute la création de span, la propagation, les hooks, les métriques et les logs quand il n’y a pas de parent actif, puis appelle `next` inchangé.
+Avec `queryPropagation`, les champs effectivement injectés par le propagator sont écrits à la fin de la query string de connexion et remplacent tout paramètre de même nom ; tous les autres paramètres conservent leur forme sérialisée. Passe d’abord en revue logging d’URL, visibilité proxy, access logs, baggage et rétention. Avec un `tracer`, `requireParentSpan: true` saute la création de span, la propagation, les hooks, les métriques et les logs quand il n’y a pas de parent actif, puis appelle `next` inchangé.
 
 ## Sémantique HTTP, SSE et WebSocket
 

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import { createClient, withEndpoint, withInterceptors, withWebSocketBeforeConnect, withWebSocketHandle } from '../client'
+import { MALFORMED_INTERCEPTOR_RESULTS } from '../../test/malformed_interceptor_results'
 import { createWebSocketInterceptor } from '../interceptor'
 import { struct } from '../struct'
 import { defineWebSocket } from './index'
@@ -84,6 +85,19 @@ describe('web socket startup faults', () => {
     expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
     expect(fault?.cause).toBe(cause)
   })
+
+  test.each(MALFORMED_INTERCEPTOR_RESULTS)(
+    'should report %s as the interceptor result with EXT_INTERCEPTOR_FAILED',
+    async (_name, resolved) => {
+      const client = unreachableClient(withInterceptors(createWebSocketInterceptor(async () => resolved() as never)))
+
+      const [fault, session] = await client.execute(useRoom())
+
+      expect(session).toBeUndefined()
+      expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
+      expect(fault?.cause).toBeInstanceOf(TypeError)
+    },
+  )
 
   test('should report a refused connection as a transport fault, not an interceptor fault', async () => {
     // The startup catch is the funnel for every failure, so it must not relabel this one.

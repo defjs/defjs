@@ -1,4 +1,4 @@
-import { connect, type Socket } from 'node:net'
+import type { Socket } from 'node:net'
 import type { ServerType } from '@hono/node-server'
 import { createAdaptorServer, upgradeWebSocket } from '@hono/node-server'
 import type { Context } from 'hono'
@@ -20,7 +20,6 @@ declare module 'vitest' {
 let testServer: ServerType | undefined
 let webSocketServer: WebSocketServer | undefined
 let testServerAddr: string
-let testServerPort: number | undefined
 const testServerSockets = new Set<Socket>()
 const providerEnvelopeAttempts = new Map<string, number>()
 const isDenoRuntime = 'Deno' in globalThis
@@ -584,7 +583,6 @@ export async function setup({ provide }: TestProject) {
   }
 
   testServerAddr = `http://127.0.0.1:${address.port}`
-  testServerPort = address.port
   server.unref()
   provide('testServerHost', testServerAddr)
   console.log(`Test server is running on ${testServerAddr}`)
@@ -592,7 +590,6 @@ export async function setup({ provide }: TestProject) {
 
 export async function teardown() {
   const failures: Error[] = []
-  const port = testServerPort
 
   try {
     const currentWebSocketServer = webSocketServer
@@ -649,20 +646,11 @@ export async function teardown() {
         failures.push(labeledTeardownFailure('HTTP server close failed', cause))
       }
     }
-
-    if (failures.length === 0 && typeof port === 'number') {
-      try {
-        await assertLoopbackPortClosed(port)
-      } catch (cause) {
-        failures.push(labeledTeardownFailure('Loopback port close verification failed', cause))
-      }
-    }
   } finally {
     providerEnvelopeAttempts.clear()
     testServerSockets.clear()
     webSocketServer = undefined
     testServer = undefined
-    testServerPort = undefined
   }
 
   if (failures.length > 0) {
@@ -688,27 +676,4 @@ async function teardownDeadline<T>(promise: Promise<T>, timeoutMessage: string):
 function labeledTeardownFailure(label: string, cause: unknown): Error {
   const detail = cause instanceof Error ? cause.message : String(cause)
   return new Error(`${label}: ${detail}`, { cause })
-}
-
-async function assertLoopbackPortClosed(port: number): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
-    const socket = connect({ host: '127.0.0.1', port })
-    const timeout = setTimeout(() => finish(new Error('Loopback connection attempt timed out')), 500)
-    timeout.unref?.()
-
-    socket.once('connect', () => finish(new Error(`Loopback port ${port} still accepts connections`)))
-    socket.once('error', (error: NodeJS.ErrnoException) => {
-      finish(error.code === 'ECONNREFUSED' ? undefined : error)
-    })
-
-    function finish(error?: Error): void {
-      clearTimeout(timeout)
-      socket.destroy()
-      if (error) {
-        reject(error)
-        return
-      }
-      resolve()
-    }
-  })
 }

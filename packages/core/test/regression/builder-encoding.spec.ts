@@ -451,6 +451,55 @@ describe('builder refactor adversarial audit', () => {
     socket.close()
     await socket.closed
   })
+
+  // materializePath is the only guard on these values: fillUrl only receives the strings it produces.
+  describe.each<[label: string, value: unknown, message: string]>([
+    ['an array', ['a', 'b'], 'path value for "id" must be a scalar'],
+    ['an empty array', [], 'path value for "id" must be a scalar'],
+    ['an object', { value: 1 }, 'path value for "id" must be a scalar'],
+    ['null', null, 'path value for "id" must not be null'],
+  ])('rejects %s as a builder path value', (_label, value, message) => {
+    test.each(['HTTP', 'SSE', 'WebSocket'] as const)('before the %s transport starts', async (transport) => {
+      let handleCalls = 0
+      const opened = createOpeningSocket()
+      const client = createClient(
+        withEndpoint('https://example.test'),
+        withHTTPHandle(async () => {
+          handleCalls += 1
+          return new Response(null, { status: 204 })
+        }),
+        withSSEHandle(async () => {
+          handleCalls += 1
+          return responseStream('event: message\ndata: ok\n\n')
+        }),
+        withWebSocketHandle(opened.Socket as unknown as typeof WebSocket),
+      )
+      const builder = (() => ({ path: { id: value } })) as never
+      const execute = {
+        HTTP: () => client.execute(defineRequest({ builder, method: 'GET', path: '/items/:id' })()),
+        SSE: () =>
+          client.execute(
+            defineEventStream({
+              builder,
+              events: { message: struct.string() },
+              maxBufferSize: 1024,
+              maxQueueSize: 4,
+              path: '/items/:id',
+            })(),
+          ),
+        WebSocket: () =>
+          client.execute(defineWebSocket({ builder, incoming: struct.unknown(), maxIncomingQueueSize: 1, path: '/items/:id' })()),
+      }[transport]
+
+      const [error, result] = await execute()
+
+      expect(error?.code).toBe('REQ_BUILD_FAILED')
+      expect(error?.message).toBe(message)
+      expect(result).toBeUndefined()
+      expect(handleCalls).toBe(0)
+      expect(opened.counters.sockets).toBe(0)
+    })
+  })
 })
 
 const Proto = struct.object({ value: struct.string().alias('__proto__') })

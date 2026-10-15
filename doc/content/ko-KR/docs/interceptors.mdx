@@ -64,7 +64,9 @@ HTTP body를 바꿀 때는 복사한 요청의 `body`를 교체하고 `content-t
 던져진 인터셉터/Fetch 오류는 이 루프에서 재시도하지 않아요. 전송 실패는 reject 되니까, 이 루프가 맞춰볼 status 자체가 나오지 않아요. `POST` / `PUT` / `PATCH` / `DELETE` 재시도에는 다시 보낼 수 있는 바이트, 서버 지원, 멱등성 계약, 검토된 status 정책이 필요해요. 재시도는 당신 몫이에요 — Core는 `retryAfter()`를 내보내지 않아요.
 
 이 예시 밖에서 throw(또는 reject)한 인터셉터는 `EXT_INTERCEPTOR_FAILED`로 호출한 쪽에 돌아가고,
-던진 값은 `cause`에 실려요 — [오류](/ko-KR/docs/errors)를 보세요. HTTP
+던진 값은 `cause`에 실려요 — [오류](/ko-KR/docs/errors)를 보세요. 전송 방식에서 기대하는 결과가 아닌 값으로
+resolve된 경우도 마찬가지예요. `return`을 빠뜨려 생긴 `undefined`나 `HttpResponse` 대신 반환한
+네이티브 `Response`가 그 예예요. HTTP
 인터셉터에서는 대신 `ERR_ABORTED`나 `ERR_TIMEOUT`을 throw하는 것이 취소를 표현하는 방법이에요. 호출은
 `NET_ABORTED` 또는 `NET_TIMEOUT`으로 resolve돼요. SSE와 WebSocket 인터셉터에는 이런 예외가 없어서,
 어떤 throw든 `EXT_INTERCEPTOR_FAILED`로 보고해요.

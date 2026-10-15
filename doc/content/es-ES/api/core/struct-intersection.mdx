@@ -6,7 +6,13 @@ description: 'Struct que exige que un valor cumpla todos los structs dados.'
 <ApiReference identity="@defjs/core:struct.intersection" />
 
 ```ts
-function intersection<const T extends readonly [StructLike, ...StructLike[]]>(...structs: T): IntersectionStruct<T>
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
 ```
 
 `struct.intersection` es variádico: pasa cada struct como un argumento propio.
@@ -14,7 +20,9 @@ function intersection<const T extends readonly [StructLike, ...StructLike[]]>(..
 - Parsea la entrada con cada struct y fusiona los resultados.
 - Cuando todos los structs son structs de objeto, la salida es un único objeto con los campos de todos ellos. Las claves que ninguno declara se eliminan.
 - Cuando dos structs producen valores incompatibles para la misma clave, falla con `invalid_intersection`.
-- Un único struct se devuelve sin cambios. Llamarlo sin structs lanza `TypeError`, igual que un argumento que no sea un struct.
+- Acepta `null` solo si todos los structs lo aceptan, incluida una intersección anidada marcada con `.null()`.
+- Un único struct se devuelve sin cambios, por lo que conserva su propio tipo, incluidos `.optional()` y `.null()`. Llamarlo sin structs lanza `TypeError`, igual que un argumento que no sea un struct.
+- Al expandir una tupla que puede contener un solo miembro, se infieren tanto el resultado de un único miembro como el de varios miembros. Por ello, los campos de objeto del resultado pueden ser opcionales. Una tupla de la que se sabe que contiene al menos dos miembros conserva la semántica de obligatoriedad de la intersección.
 
 `IntersectionStruct<T>` no se exporta. Es un `Struct` cuya entrada y salida son las intersecciones de los tipos de los miembros.
 

@@ -402,9 +402,19 @@ export function createDateStruct(): Struct<Date | number | string, Date> {
   }) as Struct<Date | number | string, Date>
 }
 
+/** A singleton keeps its identity; a nonempty variadic tuple must account for that possibility. */
 export function createIntersectionStruct<
   const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]],
->(...structs: T): IntersectionStruct<T> {
+>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
+export function createIntersectionStruct(
+  ...structs: [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]
+): StructLike<unknown, unknown, boolean> {
   if (structs.length === 0) {
     throw new TypeError('intersection requires at least one struct')
   }
@@ -414,26 +424,25 @@ export function createIntersectionStruct<
   }
 
   if (structs.length === 1) {
-    return castStruct<IntersectionStruct<T>>(structs[0] as unknown as RuntimeStruct)
+    return structs[0]
   }
 
   const objectSides = structs.every(isObjectIntersectionSide)
   const options = objectSides ? flattenObjectIntersectionSides(structs) : structs
 
-  return castStruct<IntersectionStruct<T>>(
-    makeStruct({
-      expected: structs.map((item) => expectedType((item as unknown as RuntimeStruct)[DEFINITION])).join(' & '),
-      flags: DEFAULT_FLAGS,
-      kind: 'intersection',
-      objectSides,
-      options: options as [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]],
-    }),
-  )
+  return makeStruct({
+    expected: structs.map((item) => expectedType((item as unknown as RuntimeStruct)[DEFINITION])).join(' & '),
+    flags: DEFAULT_FLAGS,
+    kind: 'intersection',
+    objectSides,
+    options: options as [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]],
+  })
 }
 
 function isObjectIntersectionSide(struct: StructLike<unknown, unknown, boolean>): boolean {
   const definition = (struct as unknown as RuntimeStruct)[DEFINITION]
-  return definition.kind === 'object' || (definition.kind === 'intersection' && definition.objectSides)
+  // A nullable intersection stays one member: flattening its sides would drop the null it accepts itself.
+  return definition.kind === 'object' || (definition.kind === 'intersection' && definition.objectSides && !definition.flags.nullable)
 }
 
 function flattenObjectIntersectionSides(

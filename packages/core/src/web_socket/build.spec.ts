@@ -6,7 +6,7 @@ import { createWebSocketRequest, createWebSocketUrlFromRequest } from './build'
 function createWebSocketUrl(
   baseEndpoint: string,
   path: string,
-  params: { [key: string]: RequestBuildValue } | undefined,
+  params: { [key: string]: string } | undefined,
   query: { [key: string]: RequestBuildValue } | undefined,
   querySerializer?: QuerySerializer,
 ): string {
@@ -29,7 +29,7 @@ describe('web socket build helpers', () => {
         'https://api.example.com/v1',
         '/chat/:roomId',
         {
-          roomId: 9,
+          roomId: '9',
         },
         {
           token: 'abc',
@@ -52,16 +52,9 @@ describe('web socket build helpers', () => {
     expect(createWebSocketUrl('wss://localhost', '/ws', undefined, undefined)).toBe('wss://localhost/ws')
   })
 
-  test('should reject undefined url params', () => {
-    expect(() => createWebSocketUrl('http://localhost', '/ws/:id', { id: undefined }, undefined)).toThrow('Missing path param: id')
-  })
-
-  test('should fill url params with array first element', () => {
-    expect(createWebSocketUrl('http://localhost', '/ws/:id', { id: ['a', 'b'] }, undefined)).toBe('ws://localhost/ws/a')
-  })
-
-  test('should fill url params with empty array', () => {
-    expect(() => createWebSocketUrl('http://localhost', '/ws/:id', { id: [] }, undefined)).toThrow('Missing path param: id')
+  test('should reject missing url params', () => {
+    expect(() => createWebSocketUrl('http://localhost', '/ws/:id', {}, undefined)).toThrow('Missing path param: id')
+    expect(() => createWebSocketUrl('http://localhost', '/ws/:id', undefined, undefined)).toThrow('Missing path param: id')
   })
 
   test('should serialize query params with undefined value', () => {

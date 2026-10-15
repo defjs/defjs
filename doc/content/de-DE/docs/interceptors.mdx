@@ -65,6 +65,8 @@ Geworfene Interceptor-/Fetch-Errors werden von diesem Loop nicht wiederholt — 
 
 Ein Interceptor, der außerhalb dieses Samples einen Fehler wirft (oder abgelehnt wird), kommt beim Caller als
 `EXT_INTERCEPTOR_FAILED` an, mit dem geworfenen Wert auf `cause` — siehe [Errors](/de-DE/docs/errors).
+Das gilt auch, wenn ein Interceptor etwas anderes als das Ergebnis seines Transports liefert:
+`undefined` durch ein vergessenes `return` oder eine native `Response` anstelle einer `HttpResponse`.
 In einem HTTP-Interceptor ist das Werfen von `ERR_ABORTED` oder `ERR_TIMEOUT` stattdessen die Art, wie du Cancellation ausdrückst:
 der Aufruf wird mit `NET_ABORTED` oder `NET_TIMEOUT` aufgelöst. SSE- und WebSocket-Interceptors kennen diese Ausnahme nicht;
 sie melden jeden geworfenen Fehler als `EXT_INTERCEPTOR_FAILED`.

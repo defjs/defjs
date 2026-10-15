@@ -2,6 +2,9 @@ import { combineGuides, readOwnGuide, tagOwnNode } from './guide'
 import { DEFINITION } from './symbols'
 import type { EnumDefinition, Path, RuntimeStruct, StructDefinition } from './types'
 
+// Bound data-driven recursion independently of the engine's stack size. Opaque any/unknown values are not traversed.
+export const MAX_DEPTH = 256
+
 export type IntersectionMerge = { ok: true; value: unknown } | { ok: false; path: Path; received: unknown }
 
 /**
@@ -13,9 +16,10 @@ export type IntersectionMerge = { ok: true; value: unknown } | { ok: false; path
  *
  * `tagNodes` folds each side's parse tag into the new object at this level. One-sided children are
  * copied with the tag their own parser already wrote, so a later walk is not required. Null and
- * undefined never enter this branch.
+ * undefined never enter this branch. `depth` is the caller's logical path length, not a fresh merge budget.
+ * Distinct containers consume a level even when they came from opaque leaves; identical references do not recurse.
  */
-export function mergeIntersectionValues(left: unknown, right: unknown, tagNodes = false): IntersectionMerge {
+export function mergeIntersectionValues(left: unknown, right: unknown, tagNodes: boolean, depth: number): IntersectionMerge {
   if (Object.is(left, right)) {
     return { ok: true, value: left }
   }
@@ -23,6 +27,9 @@ export function mergeIntersectionValues(left: unknown, right: unknown, tagNodes 
     return { ok: true, value: left }
   }
   if (isPlainObject(left) && isPlainObject(right)) {
+    if (depth >= MAX_DEPTH) {
+      return { ok: false, path: [], received: right }
+    }
     const output = nullObject()
     for (const key of Object.keys(left)) {
       output[key] = left[key]
@@ -32,7 +39,7 @@ export function mergeIntersectionValues(left: unknown, right: unknown, tagNodes 
         output[key] = right[key]
         continue
       }
-      const merged = mergeIntersectionValues(output[key], right[key], tagNodes)
+      const merged = mergeIntersectionValues(output[key], right[key], tagNodes, depth + 1)
       if (!merged.ok) {
         return { ok: false, path: [key, ...merged.path], received: merged.received }
       }
@@ -47,12 +54,12 @@ export function mergeIntersectionValues(left: unknown, right: unknown, tagNodes 
     return { ok: true, value: output }
   }
   if (Array.isArray(left) && Array.isArray(right)) {
-    if (left.length !== right.length) {
+    if (left.length !== right.length || depth >= MAX_DEPTH) {
       return { ok: false, path: [], received: right }
     }
     const output = new Array<unknown>(left.length)
     for (let index = 0; index < left.length; index += 1) {
-      const merged = mergeIntersectionValues(left[index], right[index], tagNodes)
+      const merged = mergeIntersectionValues(left[index], right[index], tagNodes, depth + 1)
       if (!merged.ok) {
         return { ok: false, path: [index, ...merged.path], received: merged.received }
       }

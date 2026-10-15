@@ -615,9 +615,9 @@ describe('createOpenTelemetrySSEInterceptor', () => {
     expect(activeSpans[0]?.attributes['url.full']).toBe('/events')
   })
 
-  test('should reuse existing Headers when req.headers is already Headers', async () => {
+  test.each([false, true])('should copy existing Headers without changing the caller with tracer=%s', async (tracing) => {
     const { tracer } = createMockTracer()
-    const interceptor = createOpenTelemetrySSEInterceptor({ tracer, propagator: mockPropagator })
+    const interceptor = createOpenTelemetrySSEInterceptor({ tracer: tracing ? tracer : undefined, propagator: mockPropagator })
 
     const existingHeaders = new Headers({ 'x-custom': 'value' })
     const req = { ...makeSSERequest(), headers: existingHeaders }
@@ -626,9 +626,11 @@ describe('createOpenTelemetrySSEInterceptor', () => {
     await interceptor.fn(req, next)
 
     const calls = vi.mocked(next).mock.calls
-    expect(calls[0]?.[0]?.headers).toBe(existingHeaders)
+    expect(calls[0]?.[0]?.headers).not.toBe(existingHeaders)
     expect(calls[0]?.[0]?.headers?.get('x-custom')).toBe('value')
     expect(calls[0]?.[0]?.headers?.get('traceparent')).toBe('mock-trace-id')
+    expect(req.headers).toBe(existingHeaders)
+    expect([...existingHeaders]).toEqual([['x-custom', 'value']])
   })
 
   test('should create Headers when req.headers is undefined', async () => {
