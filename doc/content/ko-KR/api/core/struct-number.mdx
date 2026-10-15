@@ -1,0 +1,15 @@
+---
+title: 'struct.number'
+description: 'NaN을 뺀 number 값을 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.number" />
+
+```ts
+function number(): Struct<number, number>
+```
+
+- `Infinity`를 포함한 `number` 값을 받아요. `NaN`과 number가 아닌 값은 `invalid_type`으로 실패해요.
+- 문자열은 변환하지 않아요.
+
+[Struct](/ko-KR/api/struct)

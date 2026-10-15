@@ -1,0 +1,14 @@
+---
+title: 'ClientOption'
+description: 'createClient が受け取る option ヘルパーの関数型です。'
+---
+
+<ApiReference identity="@defjs/core:ClientOption" />
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+`createClient` が組み立て中の [`ClientConfig`](/ja-JP/api/core/clientconfig-type) を書き換えます。すべての `with*` ヘルパーがこの型を返します。`createClient` は option を順に適用するため、同じ設定に対しては後の option が前の option を上書きします。ただし `withInterceptors` は追記します。
+
+[Client](/ja-JP/api/client)

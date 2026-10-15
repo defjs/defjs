@@ -1,0 +1,14 @@
+---
+title: 'ParseResult'
+description: 'Error-first кортеж, который возвращает struct.parse.'
+---
+
+<ApiReference identity="@defjs/core:ParseResult" />
+
+```ts
+type ParseResult<O> = [error: null, value: O] | [error: StructError, value: undefined]
+```
+
+При успехе error равен `null`, а `value` — распарсенный output `O`. При сбое error — это `StructError`, а `value` всегда `undefined`.
+
+[Struct](/ru-RU/api/struct)

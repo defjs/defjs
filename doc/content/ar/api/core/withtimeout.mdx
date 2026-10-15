@@ -1,0 +1,20 @@
+---
+title: 'withTimeout'
+description: 'خيار عميل يعيّن المهلة الافتراضية لاستدعاءات execute في HTTP.'
+---
+
+<ApiReference identity="@defjs/core:withTimeout" />
+
+```ts
+function withTimeout(ms: number): ClientOption
+```
+
+يعيّن المهلة الافتراضية، بالمللي ثانية، لـ `execute` في HTTP فقط. يتجاهلها SSE وWebSocket.
+
+- يجب أن تكون **ms** عددًا صحيحًا آمنًا موجبًا لا يتجاوز `2_147_483_647`. أي قيمة أخرى ترمي `RangeError` فورًا، عند استدعاء `withTimeout`، لا عند تنفيذ العميل.
+- يبدأ المؤقت قبل تشغيل سلسلة المعترضات. وعند انتهائه يُرجع الاستدعاء عطل `NET_TIMEOUT`.
+- `{ timeout }` في execute يستبدل هذه القيمة الافتراضية لذلك الاستدعاء.
+- `{ abort }` في execute يتحد مع القيمة الافتراضية: الإلغاء يعطي `NET_ABORTED`، والمؤقت يعطي `NET_TIMEOUT`.
+- تمرير `abort` و`timeout` معًا إلى استدعاء `execute` نفسه لا يزال مرفوضًا.
+
+[العميل](/ar/api/client)

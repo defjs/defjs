@@ -1,0 +1,21 @@
+---
+title: 'createNetworkFault'
+description: 'مصنع خطأ NET_*، ويُختار الرمز بحسب شكل السبب.'
+---
+
+<ApiReference identity="@defjs/core:createNetworkFault" />
+
+```ts
+function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **cause** — الإلغاء أو المهلة أو فشل النقل الأساسي.
+- **response** — بيانات وصفية، فقط حيث كانت لدى طبقة النقل بيانات تُبلَّغ بها. تُرفق بالخطأ عند تمريرها.
+- **يُرجع** `PreflightFault` يعتمد رمزه على `cause`:
+  - `NET_ABORTED` عندما يتعرّف [`isAbortCause`](/ar/api/core/isabortcause) على `Error` يحمل علامة الإلغاء (بما في ذلك `ERR_ABORTED` من نسخة أخرى من Core)، أو على `DOMException` باسم `AbortError`. الرسالة هي `Request was aborted`.
+  - `NET_TIMEOUT` عندما يتعرّف [`isTimeoutCause`](/ar/api/core/istimeoutcause) على `Error` يحمل علامة انتهاء المهلة (بما في ذلك `ERR_TIMEOUT` من نسخة أخرى من Core)، أو على `DOMException` / `Error` باسم `TimeoutError`. الرسالة هي رسالة السبب، أو `Request timed out` إذا كانت فارغة.
+  - `NET_UNREACHABLE` لأي شيء آخر، مع رسالة السبب.
+
+يُحتفظ بالسبب في `cause`.
+
+[الأخطاء](/ar/api/errors)

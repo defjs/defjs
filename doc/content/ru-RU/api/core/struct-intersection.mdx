@@ -1,0 +1,29 @@
+---
+title: 'struct.intersection'
+description: 'Struct, который требует, чтобы значение удовлетворяло каждому из заданных struct.'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
+```
+
+`struct.intersection` принимает переменное число аргументов: передавай каждый struct отдельным аргументом.
+
+- Разбирает input каждым struct и сливает результаты.
+- Когда каждый struct — object struct, output — один объект с полями всех. Ключи, которые не объявляет ни один из них, удаляются.
+- Если два struct выдают несовместимые значения для одного ключа, результат — `invalid_intersection`.
+- Принимает `null`, только если его принимает каждый struct, включая вложенное пересечение с `.null()`.
+- Единственный struct возвращается без изменений и сохраняет свой тип, включая `.optional()` и `.null()`. Вызов без struct бросает `TypeError`, как и аргумент, не являющийся struct.
+- При раскрытии кортежа, который может содержать только один элемент, выводятся типы результатов как для одного элемента, так и для нескольких. Поэтому поля объекта в результате могут быть необязательными. Кортеж, о котором известно, что он содержит как минимум два элемента, сохраняет семантику обязательных полей пересечения.
+
+`IntersectionStruct<T>` не экспортируется. Это `Struct`, чьи input и output — пересечения типов членов.
+
+[Struct](/ru-RU/api/struct)

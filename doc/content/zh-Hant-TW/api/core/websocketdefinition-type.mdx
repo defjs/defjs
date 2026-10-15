@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: '傳給 defineWebSocket 的契約物件。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming` 是用來剖析每個收到的 frame 的 struct。Frame 是 JSON 文字。
+- `outgoing` 是 `session.send` 用來驗證與編碼的 struct。沒有它，`send` 會丟出錯誤。
+- `maxIncomingQueueSize` 必填，且必須是正 safe integer。`maxOutgoingQueueSize` 必須是非負 safe integer；預設為 `0`，表示不會把 session 處於 `reconnecting` 時送出的 messages 排入 queue。
+- `protocols` 是靜態的預設 subprotocol 清單。execute 的 `protocols` option 與 [`withWebSocketProtocols`](/zh-Hant-TW/api/core/withwebsocketprotocols) 會覆寫它。
+- `operation` 是供 telemetry 使用的靜態、低基數名稱。
+- `input` 是 command input 的 struct。只要宣告了 `input`，就必須明確提供 `builder`，即使輸入已經是請求形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。Builder 只能回傳 `path` 與 `query`；見 [`WebSocketRequestShape`](/zh-Hant-TW/api/core/websocketrequestshape-type)。
+
+無效的 queue 上限會在 command 執行時以 `REQ_OPTIONS_INVALID` fault 回報。
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

@@ -1,0 +1,14 @@
+---
+title: 'RequestSuccessData'
+description: '엔드포인트에 선언된 output struct의 디코딩된 성공 body 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:RequestSuccessData" />
+
+```ts
+type RequestSuccessData<TOutput extends AnyStruct | undefined> = [TOutput] extends [undefined] ? undefined : Infer<TOutput>
+```
+
+선언된 `output` struct의 디코딩된 body 타입이고, 선언하지 않았다면 `undefined`예요.
+
+[HTTP](/ko-KR/api/http)

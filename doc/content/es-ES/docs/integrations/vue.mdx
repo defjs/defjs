@@ -1,0 +1,81 @@
+---
+title: 'Vue'
+description: Instala el plugin, proporciona un cliente, carga un usuario y aborta ante un cambio reactivo.
+---
+
+# Vue
+
+Conecta un cliente `@defjs/core` existente a Vue. Obtienes un plugin, una injection key y `injectClient()`. El paquete **no** crea clientes, no cachea resultados, no reintenta comandos ni cierra recursos de transporte en el unmount.
+
+## Configuración básica
+
+Instala `@defjs/core`, `@defjs/vue` y Vue 3.2+ (el adapter solo necesita `provide` / `inject`, pero los ejemplos usan `<script setup>` y `onScopeDispose`, que llegaron en la 3.2). ESM:
+
+`bun add @defjs/core @defjs/vue vue`
+
+Crea el cliente, instala el plugin y luego carga con abort-on-change:
+
+<include cwd lang="typescript">
+  examples/vue/main.ts#example
+</include>
+
+<include cwd>examples/vue/basic-setup.vue#example</include>
+
+`createClientPlugin(client)` proporciona exactamente el objeto que pasas. Sin clone, sin hook de liberación. Configura opciones core e interceptores cuando creas el cliente.
+
+`onCleanup` corre antes de que el watcher se reejecute y cuando se detiene. Regístralo antes de arrancar trabajo async. La tupla error-first se queda como data de la aplicación.
+
+## Inyectar y sobrescribir
+
+`injectClient()` lee el provider `HTTP_CLIENT` más cercano. Llámalo en un contexto de inyección válido de Vue, como la ejecución síncrona de `setup()` o un callback síncrono de `app.runWithContext()` (Vue 3.3+). También son válidos los contextos que el compilador restaura después de un `await` de nivel superior en `<script setup>`.
+
+Se lanza un `Error` si no hay un contexto de inyección activo o no se proporcionó ningún cliente. Proporciona un cliente con `app.use(createClientPlugin(client))` o `provide(HTTP_CLIENT, client)` en un componente ancestro; instalar el plugin no basta para llamar fuera de un contexto de inyección.
+
+Sobrescribe un subárbol con el `provide(HTTP_CLIENT, childClient)` de Vue:
+
+<include cwd>examples/vue/inject-and-override.vue#example</include>
+
+Gana el provider más cercano. Los descendientes obtienen `childClient`; los hermanos fuera del subárbol conservan el cliente a nivel de app.
+
+## Ser dueño del trabajo HTTP fuera de un watcher
+
+Para trabajo arrancado por un composable o componente fuera de un watcher, usa `AbortController` + `onScopeDispose`. Aborta el arranque y el trabajo activo; comprueba el signal antes de asignar estado reactivo. Un plugin o un ámbito de inyección no infiere quién es dueño de un comando. Para páginas de listas, envuelve `execute` con Vue Query (o similar): `@defjs/vue` se queda solo en DI y **no** incluye `useRequest`.
+
+Cuando un ámbito es dueño de un cliente, mantenlo independiente de la solicitud para reutilizarlo en todo el navegador. Si captura cabeceras, cookies, usuarios, tenants o credenciales, créalo en el límite de solicitud de la app/SSR relevante y proporciona esa instancia allí.
+
+## Limpiar el ámbito realtime
+
+Cierra un stream o sesión aunque el ámbito desaparezca a mitad del connect. Aborta el arranque, cierra un handle que llega tarde, consume el único iterador, espera la promesa terminal:
+
+<include cwd>examples/vue/realtime-scope.vue#example</include>
+
+Los errores fatales del stream y el desbordamiento de cola rechazan el iterador, así que el bucle lleva un `catch`; si no, ese rechazo queda sin manejar. El ejemplo conserva solo los últimos 100 mensajes y usa un id como key de las filas, porque payloads idénticos darían keys duplicadas. Detener el ámbito termina la iteración con normalidad en SSE; una sesión WebSocket abortada, en cambio, rechaza `receive` con `AbortError`, así que protege el `catch` del mismo modo.
+
+WebSocket: misma secuencia — aborta la prep, cierra una sesión tardía, consume `session.receive`, haz unsubscribe de `onStateChange` / `onRuntimeError`, cierra, await `session.closed`. Mantén la limpieza idempotente; la liberación y la finalización del iterador pueden coincidir.
+
+## Ámbito SSR
+
+`createClientPlugin(client)` proporciona una instancia a una app Vue. En el navegador, compártela cuando endpoint, interceptores y estado capturado sean seguros de compartir. Durante SSR, crea e instala un cliente separado por solicitud cuando cabeceras, cookies, usuarios, tenants o credenciales difieren.
+
+El unmount de la app, la eliminación del plugin y la liberación del ámbito del componente **no** abortan HTTP, no cierran SSE/WebSocket, no hacen unsubscribe de listeners ni liberan (`dispose`) el cliente core. El dueño que arranca el trabajo debe terminarlo.
+
+## Referencia
+
+Exports públicos de `@defjs/vue`:
+
+<include cwd lang="typescript">
+  examples/vue/exports.ts#example
+</include>
+
+- `HTTP_CLIENT` — `InjectionKey<Client>` para `provide` / `inject` nativos
+- `createClientPlugin(client)` — `Plugin` de Vue que proporciona ese cliente
+- `injectClient()` — `Client` más cercano, o lanza
+
+Crea clientes y opciones en `@defjs/core`. Ver [Cliente](/es-ES/docs/client), [Comandos](/es-ES/docs/commands), [Interceptores](/es-ES/docs/interceptors), [SSE](/es-ES/docs/sse) y [WebSocket](/es-ES/docs/web-socket).
+
+## Recetas relacionadas
+
+- [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
+- [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
+- [Consumir un stream SSE](/es-ES/recipes/consume-sse)
+- [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session)

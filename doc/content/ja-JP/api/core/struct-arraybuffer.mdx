@@ -1,0 +1,16 @@
+---
+title: 'struct.arrayBuffer'
+description: 'ArrayBuffer を受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.arrayBuffer" />
+
+```ts
+function arrayBuffer(): Struct<ArrayBuffer, ArrayBuffer>
+```
+
+- 受け付けるのは `ArrayBuffer` だけです。型付き配列などのビューは `invalid_type` で失敗します。
+- ボディのルートでは、`application/octet-stream` でバイト列として送られます。
+- `output` または `error` の struct にすると、レスポンスボディは `ArrayBuffer` として読み取られます。
+
+[Struct](/ja-JP/api/struct)

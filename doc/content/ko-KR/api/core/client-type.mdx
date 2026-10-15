@@ -1,0 +1,31 @@
+---
+title: 'Client'
+description: '오버로드된 execute 메서드를 가진, createClient가 반환하는 클라이언트 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:Client" />
+
+```ts
+type Client = {
+  readonly [CLIENT]: ClientConfig // internal symbol key
+
+  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
+    options?: EventStreamExecuteOptions,
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+
+  execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
+    command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+    options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+  ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+
+  execute<TInput extends AnyStruct | undefined, TOutput extends AnyStruct | undefined, TError extends AnyStruct | undefined>(
+    command: HttpCommand<TInput, TOutput, TError>,
+    options?: HttpExecuteOptions,
+  ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
+}
+```
+
+클라이언트는 해석된 [`ClientConfig`](/ko-KR/api/core/clientconfig-type)를 들고 HTTP, SSE, WebSocket 명령을 실행해요. 명령 타입이 오버로드를 고르죠. 실패는 던져지지 않고 결과 튜플의 fault로 반환돼요. promise가 reject되는 경우는 Defjs 명령이 아닌 값을 넘겼을 때뿐이에요 (`Error: Unsupported command`).
+
+[클라이언트](/ko-KR/api/client)

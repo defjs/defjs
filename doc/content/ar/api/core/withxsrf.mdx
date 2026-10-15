@@ -1,0 +1,25 @@
+---
+title: 'withXSRF'
+description: 'خيار عميل ينسخ رمز XSRF إلى رأس طلبات HTTP.'
+---
+
+<ApiReference identity="@defjs/core:withXSRF" />
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+يفعّل تمرير رمز XSRF لطلبات **HTTP**. طلبات SSE وWebSocket لا تحصل على الرأس.
+
+- القيمة الافتراضية لـ `cookieName` هي `XSRF-TOKEN` ولـ `headerName` هي `X-XSRF-TOKEN`.
+- لا يُعيَّن الرأس إلا عند تحقق كل ما يلي: الطريقة ليست `GET` ولا `HEAD` ولا `OPTIONS` ولا `TRACE`؛ ولا يحمل الطلب هذا الرأس أصلًا؛ ويملك العميل نقطة نهاية؛ ومتى كانت `location` موجودة (في Window أو Worker)، يكون لعنوان الطلب الناتج الأصل نفسه الذي تحدده `location.origin`. الطلب إلى أصل مختلف لا يستدعي المزوّد.
+- بدون `tokenProvider` يُقرأ الرمز من `document.cookie` ويُفك ترميز URL فقط عندما تكون `document` موجودة. تحتاج Workers والخوادم إلى مزوّد لتوفير الرمز.
+- مع `tokenProvider` لا تُقرأ الكوكي أبدًا. يستقبل المزوّد الطلب، ونتيجته هي الرمز. السلسلة الفارغة أو `null` أو `undefined` تعني عدم وجود رأس.
+
+انظر [دليل HTTP](/ar/docs/http) لسلوك مستوى الطلب.
+
+[العميل](/ar/api/client)

@@ -1,0 +1,17 @@
+---
+title: 'withInterceptors'
+description: 'Опция клиента, которая дописывает interceptor’ы в цепочку клиента.'
+---
+
+<ApiReference identity="@defjs/core:withInterceptors" />
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+Дописывает interceptor’ы в цепочку interceptor’ов клиента. Повторный вызов дописывает ещё; ранее добавленные он никогда не заменяет.
+
+- Первый зарегистрированный interceptor — самый внешний слой.
+- Interceptor’ы HTTP, SSE и WebSocket можно смешивать в одном вызове. В момент execute выполняются только interceptor’ы транспорта этой команды, в порядке регистрации.
+
+[Клиент](/ru-RU/api/client)

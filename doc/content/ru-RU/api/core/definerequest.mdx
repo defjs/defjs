@@ -1,0 +1,34 @@
+---
+title: 'defineRequest'
+description: 'Объявляет типизированный endpoint HTTP request.'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method`, `path`, необязательный struct `input`, необязательные struct’ы `output` и `error`, необязательный `operation`. Объявленный `input` всегда требует явного `builder`, даже если он уже совпадает с формой request’а. Опустить `builder` можно только в определениях без `input`.
+- **Возвращает** endpoint. Вызови его с input, чтобы получить `HttpCommand`.
+
+`ResponseDeclaration` и `BuilderField` — внутренние вспомогательные типы: `output` и `error` обязательны, только если соответствующий параметр типа — struct, а `builder` имеет вид `(input: BuilderInput<TInput>) => HttpRequestShape`, когда объявлен `input`.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` — один struct для тела 2xx; `error` — один struct для каждого тела не из диапазона 2xx. Ни один из них не привязан к статусу. Если опустить один из них, это тело не читается никогда — см. [Объявление — это утверждение](/ru-RU/docs/design-decisions#объявление--это-утверждение).
+
+[HTTP](/ru-RU/api/http)

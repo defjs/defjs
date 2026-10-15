@@ -1,0 +1,20 @@
+---
+title: 'StreamAwaitResult'
+description: 'Tupla que se devuelve al ejecutar un comando SSE.'
+---
+
+<ApiReference identity="@defjs/core:StreamAwaitResult" />
+
+```ts
+type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined> =
+  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
+  | [error: Fault<TError>, stream: undefined, open: EventStreamOpenInfo | undefined]
+```
+
+El resultado de `client.execute` para un comando SSE.
+
+- En caso de éxito: `[null, stream, open]`. `open` es el snapshot del primer handshake exitoso de la conexión del handle devuelto para handles nativos de Defjs o wrappers que transmiten el mismo objeto `open` en vivo; los handles propios o wrappers que sobrescriben `open` usan su `open` público actual incluso tras una reconexión, mientras `stream.open` sigue en vivo (véase [SSE](/es-ES/docs/sse)).
+- En caso de fallo: `[fault, undefined, open]`. `open` lleva el snapshot de la respuesta cuando el fallo ocurrió después de recibir una respuesta, por ejemplo un handshake no 2xx, y es `undefined` en los demás casos.
+- `TError` es el struct `error` declarado. Tipa el cuerpo de error decodificado en el fault.
+
+[SSE](/es-ES/api/sse)

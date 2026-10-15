@@ -1,0 +1,18 @@
+---
+title: 'isTimeoutCause'
+description: '识别不同 Core 副本中的超时，以及平台的超时错误。'
+---
+
+<ApiReference identity="@defjs/core:isTimeoutCause" />
+
+```ts
+function isTimeoutCause(cause: unknown): boolean
+```
+
+带有 `Symbol.for('defjs.cause.timeout')` 标记的 `Error`（包括其他 Core 副本中的 `ERR_TIMEOUT`），或名为 `TimeoutError` 的 `DOMException` / `Error`，都会返回 `true`。其他值返回 `false`。
+
+请传入底层的 `fault.cause`；此函数不会解包 fault。`createNetworkFault` 用此检查来选择 `NET_TIMEOUT`。即使中止信号也已触发，OpenTelemetry 仍会记录超时日志。
+
+见 [Errors 指南](/zh-Hans/docs/errors) 和 [`isAbortCause`](/zh-Hans/api/core/isabortcause)。
+
+[Errors](/zh-Hans/api/errors)

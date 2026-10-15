@@ -1,0 +1,44 @@
+---
+title: 'ClientSSEOptions'
+description: 'Réglages SSE facultatifs : handle fetch, hook d’événement invalide et politique de reconnect.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — Implémentation de Fetch qui ouvre le flux. La valeur par défaut résout `globalThis.fetch` à chaque tentative, y compris un remplacement installé après l’import. Chaque handle SSE reçoit un `Request`. L’absence du Fetch global fait échouer l’exécution par défaut avec `ENV_UNSUPPORTED` ; un handle personnalisé reste utilisable.
+- **onInvalidEvent** — Appelé quand un événement n’a aucun struct correspondant et aucun struct `default` (`'missing-struct'`), ou quand ses données échouent à la validation (`'validation-failed'`). L’événement est ignoré. Une erreur levée par le hook ne ferme pas le flux.
+- **reconnect** — Opt-in. Sans lui, le flux ne se reconnecte jamais. `attempts` vaut **3** par défaut et par coupure ; `attempts: 0` désactive le retry. Un handshake réussi réinitialise le budget, l’`attempt` du callback et l’exposant de backoff. `delayMs` est le premier délai de base, 1000 par défaut, et une valeur `retry:` envoyée par le serveur le remplace. `factor` vaut 1 par défaut. `jitter` est un facteur multiplicatif de 0 à 1 et vaut 0 par défaut. `maxDelayMs` plafonne le délai final après le jitter et l’arrondi ; sans plafond configuré, la limite de la plateforme, `2_147_483_647` ms, s’applique quand même. Une base nulle reste nulle ; le dépassement d’un nombre valide sature aux plafonds. Sans `shouldReconnect`, la connexion n’est rétablie que pour les requêtes `GET`, `HEAD`, `OPTIONS`, `PUT` et `DELETE` ; si ce callback est fourni, sa valeur de retour détermine la reconnexion pour toutes les méthodes et son contexte contient `method`. Une requête dont le corps est un `ReadableStream` ne fait jamais l’objet d’une reconnexion. La reconnexion envoie le dernier identifiant en octets UTF-8 dans `Last-Event-ID` ; un identifiant vide l’efface, et un identifiant qui contient NUL est ignoré.
+
+Les options de reconnexion sont validées avant les intercepteurs ou Fetch : `attempts` est un entier sûr positif ou nul ; `delayMs` et un `maxDelayMs` explicite sont finis et positifs ou nuls ; `factor` est fini et strictement positif ; `jitter` est fini et compris entre 0 et 1. Les valeurs invalides renvoient `REQ_OPTIONS_INVALID` au moment de l’execute.
+
+Définis-les avec `withSSEHandle`, `withSSEOnInvalidEvent` et `withSSEReconnect`. Omettre `withSSEReconnect` désactive le retry.
+
+Voir le [guide Client](/fr-FR/docs/client).
+
+[Client](/fr-FR/api/client)

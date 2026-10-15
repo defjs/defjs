@@ -1,0 +1,16 @@
+---
+title: 'struct.date'
+description: 'Date, 타임스탬프, 날짜 문자열을 받아 Date를 출력하는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.date" />
+
+```ts
+function date(): Struct<Date | number | string, Date>
+```
+
+- `Date`, 밀리초 타임스탬프, 문자열을 받아 `new Date(value)`로 변환해요.
+- 출력은 `Date`예요. 유효하지 않은 날짜가 되는 값은 `invalid_type`으로 실패해요.
+- 와이어용으로 인코딩하면 값은 ISO 8601 문자열(`toISOString()`)이 돼요.
+
+[Struct](/ko-KR/api/struct)

@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: '把 request path 依基底 endpoint 解析成 URL。'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — 一個有效的絕對 client endpoint。它的 query 與 hash 會被丟棄，並在 pathname 後補上結尾斜線，以保留基底路徑：`https://api.example.com/v1` 搭配 `/users` 得到 `https://api.example.com/v1/users`。
+- **path** — 相對的 endpoint path。開頭的單一斜線會被移除。解析之後，URL 必須維持基底的 origin，並留在其目錄之下。絕對或 protocol-relative 路徑、C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄逸出都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。
+- **queryString** — 不含開頭 `?` 的 query。非空時會原樣設為 URL 的 search。
+- **回傳** 解析後的 `URL`。
+
+基底 endpoint 或 path 無效時會丟出 `TypeError`。在 `client.execute` 期間，缺少、相對或無效的基底，或非法 path，會在任何 interceptor 或傳輸執行之前（包含會短路的 interceptor）變成 `REQ_BUILD_FAILED`，HTTP、SSE 與 WebSocket 都一樣。interceptor 最終的 `req.endpoint` 也會對照其最終的 `req.baseEndpoint` 驗證；刻意把基底換成另一個有效的絕對 URL 是允許的。確定性的 URL 錯誤絕不會重試。
+
+[HTTP](/zh-Hant-TW/api/http)

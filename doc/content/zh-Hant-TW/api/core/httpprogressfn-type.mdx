@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: '上傳與下載進度的 callback 型別。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+在 `HttpExecuteOptions` 中作為 `onDownloadProgress` 或 `onUploadProgress` 傳入。回呼可以採用非同步形式，系統會等它完成後才處理下一個資料區塊。無論下載或上傳，回呼拋出錯誤或回傳的 Promise 遭拒絕，都會讓該次呼叫以 `EXT_OBSERVER_FAILED` 失敗，拋出的值作為 `cause`。呼叫端取消與 `timeout` 仍具優先權，分別回報 `NET_ABORTED` 與 `NET_TIMEOUT`。上傳進度只在支援串流請求主體的執行環境中回報（Bun、Node、Deno）。在瀏覽器中，`Blob`／`File`、`ArrayBuffer` 或 `FormData` 主體會原樣送出，不會呼叫 `onUploadProgress`；`onDownloadProgress` 不受影響。
+
+見 [`HttpProgressEvent`](/zh-Hant-TW/api/core/httpprogressevent-type)、[HTTP 指南](/zh-Hant-TW/docs/http) 與 [Commands](/zh-Hant-TW/docs/commands)。
+
+在伺服器執行環境中，搭配 `onUploadProgress` 的 FormData 會直接讀取其序列化後的串流，保留它的 multipart boundary，且送出時不會附上函式庫產生的 `Content-Length`（在 HTTP/1.1 上以分塊方式傳輸），因此進度、逾時與取消都能運作，而不必緩衝整個主體。除非有效且明確的 `Content-Length` 提供總量，否則回報的總量為未知。若端點要求 `Content-Length`，例如某些預簽名上傳目標，請省略 `onUploadProgress`；平台 Fetch 就會以附帶長度的方式送出 FormData。非 identity 編碼的下載也會回報 `total: 0` 與 `lengthComputable: false`，因為 `loaded` 計算的是解碼後的串流位元組。取消會釋放被包裝的上傳串流。
+
+[HTTP](/zh-Hant-TW/api/http)

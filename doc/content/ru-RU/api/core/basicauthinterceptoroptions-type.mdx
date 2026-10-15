@@ -1,0 +1,20 @@
+---
+title: 'BasicAuthInterceptorOptions'
+description: 'Опции basic-auth interceptor’ов, включая собственный кодировщик учётных данных.'
+---
+
+<ApiReference identity="@defjs/core:BasicAuthInterceptorOptions" />
+
+```ts
+type BasicAuthInterceptorOptions = {
+  encode?: (credential: { username: string; password: string }) => string
+}
+```
+
+`encode` заменяет только кодировщик учётных данных. По умолчанию это ``btoa(`${username}:${password}`)``. Interceptor всегда добавляет к возвращённой строке префикс `Basic `, поэтому возвращай только часть с учётными данными: если вернуть `'Basic abc'`, получится заголовок `Basic Basic abc`.
+
+Принимается [`basicAuthHttpInterceptor`](/ru-RU/api/core/basicauthhttpinterceptor) и [`basicAuthSSEInterceptor`](/ru-RU/api/core/basicauthsseinterceptor).
+
+См. [гайд Interceptors](/ru-RU/docs/interceptors).
+
+[Interceptors](/ru-RU/api/interceptors)

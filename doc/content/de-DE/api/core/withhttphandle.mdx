@@ -1,0 +1,17 @@
+---
+title: 'withHTTPHandle'
+description: 'Client-Option, die die für HTTP-Requests genutzte Fetch-Funktion ersetzt.'
+---
+
+<ApiReference identity="@defjs/core:withHTTPHandle" />
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+Ersetzt die Fetch-kompatible Funktion für HTTP-Requests. Der Default ist das `fetch` der Plattform.
+
+- **fetchImpl** ist ein [`FetchHandle`](/de-DE/api/core/fetchhandle-type), die Call-Signatur `(input, init?) => Promise<Response>`. Es ist nicht `typeof fetch`, daher braucht ein Test-Double keine Host-Extras wie `fetch.preconnect`.
+- Es betrifft nur HTTP. SSE nutzt [`withSSEHandle`](/de-DE/api/core/withssehandle).
+
+[Client](/de-DE/api/client)

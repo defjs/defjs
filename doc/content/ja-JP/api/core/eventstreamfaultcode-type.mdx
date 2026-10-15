@@ -1,0 +1,24 @@
+---
+title: 'EventStreamFaultCode'
+description: 'SSE ストリームが終了時に持ちうる fault code です。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamFaultCode" />
+
+```ts
+type EventStreamFaultCode = Extract<
+  FaultCode,
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+>
+```
+
+共有の `FaultCode` 集合の部分集合です。`kind: 'error'` の `EventStreamCloseInfo` の `code` になります。
+
+[SSE](/ja-JP/api/sse)

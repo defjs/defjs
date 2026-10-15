@@ -1,0 +1,22 @@
+---
+title: 'OpenTelemetryServerWebSocketOptions'
+description: 'WebSocket 전송의 옵션으로, 공통 옵션에 queryPropagation을 더한 것이에요.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions" />
+
+```ts
+interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTransportOptions<WebSocketSessionLike> {
+  queryPropagation?: boolean
+}
+```
+
+`OpenTelemetryServerOptions`의 `webSocket`에 설정해요. `enabled`, `startSpanHook`, `requestHook`, `responseHook`은 `OpenTelemetryServerTransportOptions`에서 와요. `responseHook(span, session, req)`는 열린 `WebSocketSessionLike`와 원래의 `HttpRequest`를 받아요.
+
+`queryPropagation`의 기본값은 `false`예요. WebSocket query 문자열은 그대로 두고, trace context나 baggage를 URL에 쓰지 않아요. 브라우저 WebSocket 클라이언트는 보통 헤더를 설정할 수 없으므로, 이 옵션을 켜면 전파된 컨텍스트를 query 문자열 끝에 쓰고 해당 필드와 같은 이름의 매개변수를 대체해요. query 문자열은 프록시, 접근 로그, APM 도구에 기록될 수 있고 baggage 값은 민감할 수 있어요. 그 노출을 감수할 때만 켜세요.
+
+WebSocket은 연결 수준에서 추적해요. span은 `session.closed`가 settle될 때까지 열려 있어요. `websocket.connected`를 기록한 뒤 정상 close에는 `websocket.closed`, 그렇지 않으면 `websocket.error`를 기록해요. 서버가 보낸 close 프레임은 1011을 포함해 어떤 코드든 정상 close예요. close 프레임 없이 갑자기 끊기는 경우(1006)는 `close` 전에 소켓 `error`가 보고되지 않는 런타임(Bun)에서만 정상 close이고, 보고되는 런타임(Node.js)에서는 세션이 오류로 끝나고 로그가 한 번 남아요. 열린 session에 대한 호출자의 abort도 `websocket.error`예요. span은 `ERROR`로 끝나고 로그는 발생하지 않아요. `error.type`은 abort 이유를 따라요. 기본 `abort()`는 `AbortError`, `Error` 이유는 그 `Error.name`, 문자열 이유는 `string`이에요. WebSocket이 아직 연결 중일 때 abort하면 span은 `error.type`이 `DefjsFault`인 `ERROR`로 끝나요. 메시지별 span은 만들지 않아요.
+
+WebSocket instrumentation을 건너뛰려면 `{ enabled: false }`를 넘기세요. span 훅은 `tracer`를 준 경우에만 실행돼요.
+
+[@defjs/opentelemetry-server](/ko-KR/api/opentelemetry-server)

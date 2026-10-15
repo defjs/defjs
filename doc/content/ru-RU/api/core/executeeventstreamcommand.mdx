@@ -1,0 +1,24 @@
+---
+title: 'executeEventStreamCommand'
+description: 'Низкоуровневая точка входа, открывающая SSE-команду по конфигурации клиента.'
+---
+
+<ApiReference identity="@defjs/core:executeEventStreamCommand" />
+
+```ts
+function executeEventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand<TInput, TEvents, TError>,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+```
+
+Низкоуровневая точка входа для `client.execute`. В коде приложения предпочитай клиент.
+
+- **Возвращает** `[null, stream, open]` или `[fault, undefined, open | undefined]`. Fault имеет тип `Fault<TError>`: декодированное тело handshake лежит в `data`, если объявлен `error`, иначе fault — `Fault<undefined>`.
+
+[SSE](/ru-RU/api/sse)

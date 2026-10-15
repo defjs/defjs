@@ -1,0 +1,23 @@
+---
+title: 'ObjectStruct'
+description: 'Type de struct en forme d’objet produit par struct.object.'
+---
+
+<ApiReference identity="@defjs/core:ObjectStruct" />
+
+```ts
+interface ObjectStruct<T extends ObjectShape>
+  extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
+  readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
+}
+
+type ObjectShape = { [key: string]: any }
+```
+
+Produit par `struct.object(shape)`. Les champs sont requis par défaut ; un champ marqué `optional()` ou `nullish()` devient une clé optionnelle. Les clés inconnues sont retirées au parse. Les noms wire peuvent différer des clés TypeScript via `.alias()`. Un parse en échec renvoie `[StructError, undefined]`. `ObjectInput`, `ObjectOutput`, `ObjectStructTypes` et `PreservedStruct` sont des types helpers internes.
+
+[Struct](/fr-FR/api/struct)

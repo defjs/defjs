@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: 'Низкоуровневая точка входа, выполняющая HTTP-команду по конфигурации клиента.'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+Низкоуровневая точка входа, которую использует `client.execute`. Код приложения должен вызывать `client.execute(command, options)`. `HttpClientConfig` — HTTP-часть `ClientConfig`, поэтому `ClientConfig` принимается. `HttpExecuteAwaitResult` — внутренний кортеж результата.
+
+- **Возвращает** `[null, data, response]` или `[fault, undefined, undefined]`. `data` — декодированное тело `output`, либо `undefined`, если оно не объявлено. `response` — `DecodedResponse`, когда `output` объявлен, иначе `HttpMeta`. Fault имеет тип `Fault<TError>`.
+
+Статус не из диапазона 2xx даёт `HTTP_STATUS`, если struct `error` не объявлен (его `data` равен `undefined`) или если объявленное тело декодируется (его `data` — это тело). Если объявленное тело `error` прочитать не удаётся, fault становится decode fault’ом `RES_*`. При сбое третий слот кортежа равен `undefined`; метаданные ответа несёт fault. Если `options.timeout` опущен, используется значение `withTimeout` клиента.
+
+[HTTP](/ru-RU/api/http)

@@ -1,0 +1,16 @@
+---
+title: 'SSEHandler'
+description: 'Terminal handler that opens an SSE stream for a request.'
+---
+
+<ApiReference identity="@defjs/core:SSEHandler" />
+
+```ts
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+```
+
+The `next` function an SSE interceptor receives. `next(req)` goes inward only: through the interceptors registered after this one, then the transport that opens the stream. Calling it after the chain has settled rejects.
+
+`EventStreamHandle` extends `AsyncDisposable`. A short-circuit implementation that builds its own handle must provide `[Symbol.asyncDispose](): PromiseLike<void>` and connect it to the same close lifecycle.
+
+[Interceptors](/api/interceptors)

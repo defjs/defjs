@@ -1,0 +1,28 @@
+---
+title: 'EventStreamDefinition'
+description: '描述 SSE endpoint 的契约，供 defineEventStream 使用。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamDefinition" />
+
+```ts
+type EventStreamDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EventStreamDefinitionBase<TEvents> &
+  EventStreamErrorField<TError> & {
+    builder?: OutboundBuilder
+    input?: TInput
+  }
+```
+
+组合而成的成员如下：
+
+- `events`、`maxBufferSize` 和 `maxQueueSize`（两个上限都是必填的正安全整数），可选的 `method`、`operation`，以及必填的 `path`。
+- `error`，只有 `TError` 是 struct 时才需要。它解码握手失败（非 2xx 响应）的 body。kind 规则与 HTTP 相同：`string` 是文本，`blob` 和 `file` 是 blob，`arrayBuffer` 是字节，其余都是 JSON。
+- `input` 和 `builder`。请求形状与 HTTP 相同，包括 `body`；`GET` 和 `HEAD` 不能返回 body。声明了 `input` 就必须显式提供 `builder`，即使它已经与请求形状一致；只有没有 `input` 的 definition 才可以省略 `builder`。
+
+`EventStreamDefinitionBase` 和 `EventStreamErrorField` 是内部辅助类型。
+
+[SSE](/zh-Hans/api/sse)

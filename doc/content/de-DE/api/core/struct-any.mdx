@@ -1,0 +1,16 @@
+---
+title: 'struct.any'
+description: 'Struct, der jeden Wert außer null und undefined ohne Validierung akzeptiert.'
+---
+
+<ApiReference identity="@defjs/core:struct.any" />
+
+```ts
+function any(): Struct<NonNullable<unknown>, any>
+```
+
+- Akzeptiert jeden Wert außer `null` und `undefined` und gibt ihn unverändert zurück. Nichts darin wird validiert oder entfernt.
+- Verkette `.null()`, `.optional()` oder `.nullish()`, um `null` oder `undefined` zu akzeptieren.
+- Der Output-Type ist `any`. Bevorzuge [`struct.unknown()`](/de-DE/api/core/struct-unknown), wenn der Aufrufer den Wert eingrenzen soll.
+
+[Struct](/de-DE/api/struct)

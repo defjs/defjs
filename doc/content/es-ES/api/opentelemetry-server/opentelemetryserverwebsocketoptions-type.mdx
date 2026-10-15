@@ -1,0 +1,22 @@
+---
+title: 'OpenTelemetryServerWebSocketOptions'
+description: Opciones del transporte WebSocket — las opciones compartidas más queryPropagation.
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions" />
+
+```ts
+interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTransportOptions<WebSocketSessionLike> {
+  queryPropagation?: boolean
+}
+```
+
+Se define en `webSocket` de `OpenTelemetryServerOptions`. `enabled`, `startSpanHook`, `requestHook` y `responseHook` provienen de `OpenTelemetryServerTransportOptions`; `responseHook(span, session, req)` recibe el `WebSocketSessionLike` abierto y el `HttpRequest` original.
+
+`queryPropagation` vale `false` por defecto: la query string de WebSocket no se modifica y no se escribe ningún trace context ni baggage en la URL. Los clientes WebSocket de navegador normalmente no pueden establecer headers, así que al habilitarlo se escribe el contexto propagado al final de la query string, reemplazando cualquier parámetro con el mismo nombre. Las query strings pueden quedar registradas en proxies, logs de acceso y herramientas APM, y los valores de baggage pueden ser sensibles. Actívalo solo después de aceptar esa exposición.
+
+WebSocket se traza a nivel de conexión. El span permanece abierto hasta que `session.closed` se resuelve o se rechaza. Registra `websocket.connected` y luego `websocket.closed` para un cierre normal o `websocket.error`. Un frame de cierre del servidor cuenta como normal con cualquier código, incluido 1011. Una caída abrupta sin frame de cierre (1006) es normal solo donde el runtime no informa de ningún `error` de socket antes de `close` (Bun); donde sí lo hace (Node.js), la sesión termina en error y registra una vez. Un abort del llamador sobre una sesión abierta también es `websocket.error`: el span termina como `ERROR` y no se emite ningún log. `error.type` sigue al motivo del abort: `AbortError` para un `abort()` por defecto, el `Error.name` de un motivo `Error`, `string` para un motivo de tipo string. Un abort mientras el WebSocket aún se está conectando termina el span como `ERROR` con `error.type` `DefjsFault`. No se crean spans por mensaje.
+
+Pasa `{ enabled: false }` para omitir la instrumentación WebSocket. Los span hooks solo se ejecutan cuando se proporciona un `tracer`.
+
+[@defjs/opentelemetry-server](/es-ES/api/opentelemetry-server)

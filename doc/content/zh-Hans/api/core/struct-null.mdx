@@ -1,0 +1,16 @@
+---
+title: 'struct.null'
+description: '只接受 null 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.null" />
+
+```ts
+function null(): Struct<null, null>
+```
+
+只接受 `null`。其他所有值都以 `invalid_type` 失败。这包括位于根部或数组、tuple 中的 `undefined`；缺失的对象或 record 字段则报告 `missing_key`。
+
+这不是 `.null()` 修饰符。修饰符的作用是把 `null` 加进另一个 struct 所接受的值里。
+
+[Struct](/zh-Hans/api/struct)

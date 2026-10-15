@@ -1,0 +1,16 @@
+---
+title: 'EventStreamExecuteOptions'
+description: 'Opciones por llamada para abrir un stream SSE: abort o timeout, más un signal opcional.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamExecuteOptions" />
+
+```ts
+type EventStreamExecuteOptions = ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+La cancelación es `abort` **o** `timeout`, no ambos; pasar ambos hace que la llamada se resuelva con un fault `REQ_OPTIONS_INVALID`. `signal` se combina con cualquiera de los dos y no es un alias de `abort`. `timeout` debe ser un entero seguro positivo de hasta 2147483647.
+
+En SSE, `timeout` es un plazo de arranque. Cubre el parseo de la entrada, el builder, los interceptores y la apertura de la conexión, y deja de aplicarse cuando el stream está abierto. El valor por defecto `withTimeout` a nivel de cliente no se aplica a SSE.
+
+[SSE](/es-ES/api/sse)

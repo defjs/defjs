@@ -1,0 +1,25 @@
+---
+title: 'StructMethods'
+description: 'Цепочечные модификаторы, доступные у каждого struct.'
+---
+
+<ApiReference identity="@defjs/core:StructMethods" />
+
+```ts
+interface StructMethods<I, O, OO extends boolean> {
+  alias(name: string): this
+  null(): Struct<I | null, O | null, OO>
+  nullable(): Struct<I | null, O | null, OO>
+  nullish(): Struct<I | null | undefined, O | null | undefined, true>
+  optional(): Struct<I | undefined, O | undefined, true>
+}
+```
+
+Каждый метод возвращает новый struct и не меняет исходный.
+
+- `alias(name)` задаёт wire-имя поля объекта. `struct.parse` читает логические имена, если не передан `aliases: true`; JSON и плоские кодеки запроса пишут алиас. Не-строковый `name` бросает `TypeError`.
+- `null()` и `nullable()` одинаковы: они дополнительно принимают `null`.
+- `optional()` дополнительно принимает `undefined`. В объекте ключ может отсутствовать, а отсутствующее поле остаётся отсутствующим в output.
+- `nullish()` принимает и `null`, и `undefined`.
+
+[Struct](/ru-RU/api/struct)

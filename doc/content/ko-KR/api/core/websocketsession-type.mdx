@@ -1,0 +1,42 @@
+---
+title: 'WebSocketSession'
+description: '타입이 지정된 WebSocket session으로, 전송, 수신, 상태 관찰, 종료를 해요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSession" />
+
+```ts
+interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<TIncoming>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  send(message: TOutgoing): void
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+}
+```
+
+- `state`는 논리적인 [`WebSocketState`](/ko-KR/api/core/websocketstate-type)이고, `connection`은 최신 [`WebSocketConnectionInfo`](/ko-KR/api/core/websocketconnectioninfo-type)예요. `bufferedAmount`는 네이티브 소켓의 아직 보내지 않은 바이트 수이며, 물리 소켓이 없으면 `0`이에요.
+- `receive`는 `incoming` struct로 이미 파싱된 수신 메시지를 내보내요. 소비자는 하나뿐이라서 두 번째 iterator를 요청하면 `TypeError`가 throw돼요. 파싱할 수 없는 프레임은 `onRuntimeError` 리스너에 보고되고 건너뛰어요.
+- `send(message)`는 `outgoing` struct로 메시지를 검증하고 인코딩한 뒤 JSON 텍스트를 보내요. `open`이면 즉시 보내고, `reconnecting`이면 `maxOutgoingQueueSize`가 허용할 때 큐에 쌓아요. session이 쓸 수 없는 상태이면 이름이 `InvalidStateError`인 `DOMException`을 throw해요. `outgoing` struct를 선언하지 않았거나, 메시지가 struct 검증에 실패하거나, 큐가 꺼져 있거나 가득 찼을 때도 throw해요.
+- 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거나 큐에 넣기 전에 `TypeError`를 throw해요. 루트와 중첩 모두에서 유한하지 않은 수, 함수, symbol, `Map`, `Set`, 스트림, JSON 표현이 없는 클래스 인스턴스가 여기 포함돼요. 같은 가드가 heartbeat 메시지도 지켜요. heartbeat 직렬화 실패는 session을 끝내요. struct 검증이 그 값을 먼저 거부할 수도 있어요.
+- `close(code?, reason?)`는 종료를 요청하고 heartbeat를 멈춰요. `code`는 `1000`이거나 `3000..4999` 범위여야 하고, `reason`은 UTF-8로 최대 123바이트예요. 잘못된 인자는 상태가 바뀌기 전에 throw해요.
+- `closed`는 논리적인 최종 상태인 [`WebSocketCloseInfo`](/ko-KR/api/core/websocketcloseinfo-type)로 resolve돼요.
+- `onStateChange`와 `onRuntimeError`는 구독 해제 함수를 돌려줘요.
+
+소유한 범위를 정리할 때는 `await using ownedSession = session`을 선호해요. 수동 `session.close()`와 `await session.closed`도 그대로 쓸 수 있어요.
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+async disposer는 네이티브 close를 요청하고 Defjs가 소유한 teardown을 기다리지만, 없는 close 이벤트는 1초까지만 기다리며 이름이 `TimeoutError`인 `DOMException`으로 reject할 수 있어요. 물리 TCP 연결이 닫혔다는 증명까지는 못 해요.
+
+[WebSocket](/ko-KR/api/web-socket)

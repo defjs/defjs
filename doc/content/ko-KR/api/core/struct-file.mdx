@@ -1,0 +1,16 @@
+---
+title: 'struct.file'
+description: 'File을 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.file" />
+
+```ts
+function file(): Struct<File, File>
+```
+
+- `File`만 받아요. 일반 `Blob`은 `invalid_type`으로 실패해요.
+- [`struct.formData()`](/ko-KR/api/core/struct-formdata)의 필드나 원시 파일 body에 쓰세요.
+- `output`이나 `error` struct로 쓰면 응답 body를 blob으로 읽어요.
+
+[Struct](/ko-KR/api/struct)

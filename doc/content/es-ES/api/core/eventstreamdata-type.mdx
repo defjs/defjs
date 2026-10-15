@@ -1,0 +1,16 @@
+---
+title: 'EventStreamData'
+description: 'Unión de eventos SSE parseados, inferida a partir de un mapa EventStructs.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamData" />
+
+```ts
+type EventStreamData<TEvents extends EventStructs> = TEvents extends EventStructs
+  ? KnownEventUnion<TEvents> | DefaultEventUnion<TEvents>
+  : never
+```
+
+Por cada nombre de evento declarado salvo `default`, la unión tiene `{ event: <name>; data: Infer<TEvents[name]>; id?: string }`. Cuando se declara un struct `default`, añade `{ event: string; data: Infer<TEvents['default']>; id?: string }` para cada nombre de evento que no tiene un struct propio. `KnownEventUnion` y `DefaultEventUnion` son tipos auxiliares internos.
+
+[SSE](/es-ES/api/sse)

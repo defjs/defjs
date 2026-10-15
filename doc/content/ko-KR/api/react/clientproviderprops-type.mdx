@@ -1,0 +1,18 @@
+---
+title: 'ClientProviderProps'
+description: 'ClientProvider의 props로, 필수 client와 선택 children이에요.'
+---
+
+<ApiReference identity="@defjs/react:ClientProviderProps" />
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+- `client` — 필수예요. 애플리케이션이 소유하는 Defjs 클라이언트예요.
+- `children` — 선택이에요. `useClient`를 호출할 수 있는 React 트리예요.
+
+[@defjs/react](/ko-KR/api/react)

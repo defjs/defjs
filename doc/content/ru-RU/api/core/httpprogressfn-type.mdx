@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: 'Тип callback’а для прогресса выгрузки и загрузки.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+Передаётся как `onDownloadProgress` или `onUploadProgress` в `HttpExecuteOptions`. Колбэки могут быть асинхронными: перед обработкой следующего блока данных ожидается их завершение. Если колбэк выбрасывает исключение или возвращает отклонённый промис, вызов завершается с ошибкой `EXT_OBSERVER_FAILED`, а выброшенное значение передаётся в `cause`. Это относится как к загрузке, так и к выгрузке. Отмена со стороны вызывающего кода и `timeout` по-прежнему имеют приоритет и возвращают `NET_ABORTED` / `NET_TIMEOUT`. Прогресс выгрузки сообщается только в средах выполнения, поддерживающих потоковую отправку тела запроса (Bun, Node, Deno). В браузерах тело типа `Blob` / `File`, `ArrayBuffer` или `FormData` отправляется без изменений, и `onUploadProgress` не вызывается; на `onDownloadProgress` это не влияет.
+
+См. [`HttpProgressEvent`](/ru-RU/api/core/httpprogressevent-type), [гайд HTTP](/ru-RU/docs/http) и [Команды](/ru-RU/docs/commands).
+
+В серверных средах FormData с `onUploadProgress` читает сериализованный поток напрямую, сохраняет multipart boundary и отправляется без сгенерированного библиотекой `Content-Length` (chunked по HTTP/1.1), поэтому прогресс, тайм-аут и отмена работают без буферизации всего тела. Общий размер считается неизвестным, если он не задан корректным явным `Content-Length`. Для эндпоинта, которому нужен `Content-Length`, например некоторых целей предварительной подписи, опусти `onUploadProgress`; тогда платформенный Fetch отправит FormData с её длиной. Для загрузок с `Content-Encoding`, отличным от `identity`, также сообщаются `total: 0` и `lengthComputable: false`, поскольку `loaded` считает байты декодированного потока. При отмене обёрнутый поток выгрузки освобождается.
+
+[HTTP](/ru-RU/api/http)

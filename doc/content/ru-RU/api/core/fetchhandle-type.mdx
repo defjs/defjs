@@ -1,0 +1,16 @@
+---
+title: 'FetchHandle'
+description: 'Fetch-совместимый функциональный тип, используемый как HTTP- или SSE-handle.'
+---
+
+<ApiReference identity="@defjs/core:FetchHandle" />
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+Сигнатура вызова `(input, init?) => Promise<Response>`, которую вызывает Defjs. Это намеренно не `typeof fetch`, чтобы моку не требовались расширения хоста вроде `preconnect`. HTTP вызывает неизменённый платформенный Fetch как `(url, init)`; заменённый глобальный Fetch или пользовательский обработчик получает `Request`. Обработчик по умолчанию обращается к текущему глобальному Fetch при каждом вызове. SSE всегда передаёт `Request`, в том числе обработчику по умолчанию.
+
+Принимается в `withHTTPHandle`, `withSSEHandle` и `fetchHandler`.
+
+[Клиент](/ru-RU/api/client)

@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: '按 tag 欄位嘅值揀選其中一個 object struct 嘅 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- 每個 option 都必須係 object struct，而且其 `discriminator` 欄位必須係必填嘅 [`struct.literal()`](/zh-Hant-HK/api/core/struct-literal)。欄位缺失、欄位唔係 literal、欄位係 optional，或者 tag 值重複，都會喺建立 struct 嗰陣 throw `TypeError`。
+- Input 必須係 plain object。Tag 值決定揀邊個 option，再由該 option 解析成個 object。
+- 缺少 tag 會以 `missing_key` 失敗，未知 tag 會以 `invalid_union` 失敗。兩者都會報告 tag 欄位嘅 path。其他失敗來自被揀中嘅 option。
+- 用 `struct.parse(..., { aliases: true })` 嗰陣，tag 會從欄位嘅 alias 讀取。
+
+`RequiredDiscriminatorOptions` 同 `DiscriminatedUnionStruct` 冇 export。Type 檢查會拒絕 tag 欄位缺失或者可能係 `undefined` 嘅 option。
+
+[Struct](/zh-Hant-HK/api/struct)

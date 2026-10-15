@@ -1,0 +1,19 @@
+---
+title: 'createClient'
+description: '用 option helpers 建立 client。'
+---
+
+<ApiReference identity="@defjs/core:createClient" />
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+option 依序套用；對同一項設定，後面的 option 會覆蓋前面的，而 interceptors 則會累加。當 interceptors 會閉包 auth 或 tenant 時，優先在 request 邊界內建立 client。
+
+- **options** — `withEndpoint` 等 option helpers。
+- **回傳** 一個 client，其 `execute` 依傳輸方式多載。
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+[Client](/zh-Hant-TW/api/client)

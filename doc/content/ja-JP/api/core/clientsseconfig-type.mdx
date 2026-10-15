@@ -1,0 +1,16 @@
+---
+title: 'ClientSSEConfig'
+description: 'fetch ハンドルが必須の、解決済み SSE 設定です。'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEConfig" />
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+`ClientConfig.sse` の型です。[`ClientSSEOptions`](/ja-JP/api/core/clientsseoptions-type) に `handle` が必ず存在するようにしたもので、デフォルトのラッパーは、インポート時に固定せず、試行ごとにその時点のグローバルの `fetch` を解決します。
+
+[Client](/ja-JP/api/client)

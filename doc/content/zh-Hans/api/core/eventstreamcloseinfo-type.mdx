@@ -1,0 +1,17 @@
+---
+title: 'EventStreamCloseInfo'
+description: 'SSE 流如何结束：正常 EOF、中止，或带 fault code 的错误。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCloseInfo" />
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+`EventStreamHandle.closed` 的值。`eof` 表示响应正常结束。`aborted` 表示流被 `close()` 或资源释放操作关闭，或调用方的 signal 因非超时原因中止；`reason` 和 `cause` 带有传给 `close` 的值。流打开后，如果调用方的 signal 以 `TimeoutError` 或 `ERR_TIMEOUT` 为原因中止，迭代器会抛出 `ERR_TIMEOUT`，`closed` 为 `{ kind: 'error', code: 'NET_TIMEOUT', ... }`。显式调用 `close(timeoutError)` 仍会报告 `aborted`。`error` 带有 fault 的 `code`（见 `EventStreamFaultCode`），失败原因放在 `cause` 里。
+
+[SSE](/zh-Hans/api/sse)

@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: '传给上传和下载回调的进度快照。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+对应 `ProgressEvent` 的字段。`loaded` 统计从上传流或下载流中读取的字节数，而非服务端已确认接收的字节数。下载字节可能已经解压。只有 `Content-Length` 为正数，且 `Content-Encoding` 缺失或为 `identity` 时，才可计算下载总量；压缩下载会报告 `total: 0` 和 `lengthComputable: false`。流式 FormData 上传的总量也未知，除非显式设置的有效 `Content-Length` 提供了总量。其他长度未知的流同样使用 `0` / `false`。
+
+见 [`HttpProgressFn`](/zh-Hans/api/core/httpprogressfn-type)、[HTTP 指南](/zh-Hans/docs/http) 和 [Commands](/zh-Hans/docs/commands)。
+
+[HTTP](/zh-Hans/api/http)

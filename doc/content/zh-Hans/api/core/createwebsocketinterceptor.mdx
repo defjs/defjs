@@ -1,0 +1,19 @@
+---
+title: 'createWebSocketInterceptor'
+description: '把 interceptor 函数包装成带标签的 WebSocket interceptor。'
+---
+
+<ApiReference identity="@defjs/core:createWebSocketInterceptor" />
+
+```ts
+function createWebSocketInterceptor(fn: WebSocketInterceptorFn): WebSocketInterceptor
+
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+返回 `{ kind: 'web-socket', fn }`。WebSocket interceptor 只对 WebSocket 命令运行。
+
+`next` 和 interceptor 的返回值都是 [`WebSocketSessionLike`](/zh-Hans/api/core/websocketsessionlike-type)，即面向 interceptor 的 session。包装器或短路返回的 session 必须转发它的 `[Symbol.asyncDispose]()` 清理逻辑；成员列表和这条要求见该页。
+
+[Interceptors](/zh-Hans/api/interceptors)

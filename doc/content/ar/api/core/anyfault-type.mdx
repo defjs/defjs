@@ -1,0 +1,14 @@
+---
+title: 'AnyFault'
+description: 'اتحاد (union) لكل أشكال الخطأ، أيًّا كان نوع جسم الخطأ المفكوك.'
+---
+
+<ApiReference identity="@defjs/core:AnyFault" />
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+أيّ خطأ، بصرف النظر عن نوع جسم خطئه المفكوك. استخدمه للمعالِجات التي تُصنِّف الأخطاء دون أن يهمّها أي نقطة نهاية أنتجتها؛ وفضِّل `Fault<typeof yourErrorStruct>` حيث يهمّ نوع الجسم.
+
+[الأخطاء](/ar/api/errors)

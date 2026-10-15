@@ -1,0 +1,14 @@
+---
+title: 'makeResponse'
+description: 'يبني HttpResponse دون استدعاء شبكة.'
+---
+
+<ApiReference identity="@defjs/core:makeResponse" />
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+ابنِ `HttpResponse` دون استدعاء شبكة (للمعترضات والاختبارات). الحالة الافتراضية `0`، فمرّر `status` من فئة 2xx للحصول على نجاح. و`ok` صحيح لـ 2xx. والقيمة التي يُعيدها تمرّ بنفس فحص نوع الوسائط ونفس الـ struct المعلَن كأي استجابة قادمة من الشبكة؛ فلا يوجد مسار قصير قائم على الثقة. وإذا كان الجسم JSON فاضبط ترويسة `content-type` على JSON.
+
+[HTTP](/ar/api/http)

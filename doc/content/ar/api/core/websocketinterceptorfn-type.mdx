@@ -1,0 +1,16 @@
+---
+title: 'WebSocketInterceptorFn'
+description: 'صيغة الدالة لمعترض WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptorFn" />
+
+```ts
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+يجوز له فحص `req` أو استبداله، ثم استدعاء [`next`](/ar/api/core/websockethandler-type) لمتابعة السلسلة، أو إرجاع [`WebSocketSessionLike`](/ar/api/core/websocketsessionlike-type) خاصة به لاختصار المسار. غلّفه بـ `createWebSocketInterceptor(fn)` لتسجيله عبر `withInterceptors`.
+
+تعمل السلسلة مرة واحدة لكل `execute`. تحدث إعادات الاتصال داخل الجلسة التي يُرجعها ولا تعيد تشغيل السلسلة.
+
+[المعترضات](/ar/api/interceptors)

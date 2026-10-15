@@ -1,0 +1,42 @@
+---
+title: 'ClientWebSocketOptions'
+description: '선택적 WebSocket 설정으로, 생성자, beforeConnect 훅, heartbeat, protocols, 재연결 정책이 있어요.'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — WebSocket 생성자예요. 기본값은 `globalThis.WebSocket`이에요.
+- **beforeConnect** — 연결 시도와 재연결 시도 때마다 그 전에 실행돼요.
+- **heartbeat** — `intervalMs`마다 `message()`를 보내요. `timeoutMs`와 `isAck`를 함께 주면 확인 응답이 오지 않을 때 연결을 비정상으로 표시해요. `intervalMs`와 `timeoutMs`는 양수이고 2147483647 이하여야 해요.
+- **protocols** — 생성자에 넘기는 서브프로토콜이에요.
+- **reconnect** — 직접 켜야 해요. `attempts` 기본값은 **3**이고, `0`은 재시도를 끄며, `attempts`를 생략한다고 무제한이 되지는 않아요. 나머지 기본값은 `delayMs` 1000, `factor` 2, `jitter` 0 (0-1 곱셈 계수), `maxDelayMs` 30000이에요. `shouldReconnect`는 close의 `code`, `reason`, `wasClean`을 받아 재시도를 거부할 수 있어요.
+
+재시도 예산은 단절마다 적용돼요. `open`이 성공하면 예산, 콜백 attempt, 백오프 지수가 초기화되고, 다음 단절은 재시도 1부터 시작해요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한하며, `2_147_483_647` ms로도 묶여요. 검증 규칙과 오버플로 동작은 [`withWebSocketReconnect`](/ko-KR/api/core/withwebsocketreconnect)를 보세요.
+
+이 값들은 `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols`, `withWebSocketReconnect`로 설정해요. `WebSocketExecuteOptions`는 호출마다 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 덮어쓸 수 있어요.
+
+[클라이언트 가이드](/ko-KR/docs/client)를 보세요.
+
+[클라이언트](/ko-KR/api/client)

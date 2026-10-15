@@ -1,0 +1,17 @@
+---
+title: 'fetchHandler'
+description: 'fetch でリクエストを実行する、デフォルトの HTTP トランスポートです。'
+---
+
+<ApiReference identity="@defjs/core:fetchHandler" />
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+- **httpRequest** — 正規化されたリクエスト（URL、ヘッダー、ボディ、abort signal、progress フック）です。
+- **fetchImpl** — [`FetchHandle`](/ja-JP/api/core/fetchhandle-type) です。デフォルトは送信時に解決されるグローバルの `fetch` です。差し替えられていないプラットフォームの Fetch には `(url, init)` が渡されます。差し替えられたグローバルの Fetch または独自のハンドルには `Request` が渡され、そのレスポンスボディはチャンクごとに読まれます。進捗を観測しないプラットフォームのレスポンスはボディ全体を一括で読み、ダウンロード進捗を観測する場合はチャンクごとに読みます。
+
+デフォルトの HTTP トランスポートです。クライアントは常にこれを使い、`withHTTPHandle` が差し替えるのは、これが呼び出す `fetchImpl` だけです。レスポンスがクライアントに届かなかったときは、合成レスポンスで解決するのではなく reject します。
+
+[HTTP](/ja-JP/api/http)

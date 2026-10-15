@@ -1,0 +1,27 @@
+---
+title: 'WebSocketSessionLike'
+description: 'Interfaz de sesión WebSocket orientada a interceptores.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSessionLike" />
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: { extensions?: string; generation: number; protocol?: string; url?: string }
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+La superficie mínima de sesión que ven los interceptores. Es estructuralmente compatible con [`WebSocketSession`](/es-ES/api/core/websocketsession-type), pero los mensajes se tipan como `unknown`.
+
+Un wrapper o una sesión de cortocircuito debe reenviar el mismo teardown de `[Symbol.asyncDispose]()` que su ciclo de vida `close` / `closed`; devolver una promise resuelta ajena no basta. Exigir este miembro es un cambio breaking en tiempo de compilación para implementaciones estructurales. El código que solo acepta sesiones devueltas por Defjs no tiene un requisito adicional de llamada en runtime.
+
+[Interceptores](/es-ES/api/interceptors)

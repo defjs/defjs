@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'WebSocket 자동 재연결을 켜는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+소켓이 수동 `session.close()` 이외의 이유로 닫혔을 때의 자동 재연결을 설정해요. 재연결은 opt-in이에요. 이 옵션이 없으면 close로 session이 끝나요. `undefined`를 넘기면 이전 설정이 지워져요. 옵션 타입은 다음과 같아요.
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts`는 단절마다의 재시도 예산이에요. 기본값은 `3`이고 `0`은 재연결을 꺼요. `open`이 성공하면 예산과 백오프 지수가 초기화되고, 다음 단절은 재시도 1부터 시작해요. 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. 소켓이 열리는 데 성공한 직후 서버에 의해 다시 닫히면, 매번 열릴 때 예산이 초기화되므로 기준 지연(jitter와 상한 적용)으로 계속 재연결할 수 있어요. 이를 중단하려면 `shouldReconnect`를 쓰세요.
+- `delayMs`의 기본값은 `1000`, `factor`는 `2`, `maxDelayMs`는 `30000`, `jitter` (0에서 1)는 `0`이에요. *n*번째 재시도는 `delayMs * factor^(n-1)`에서 시작하고 `maxDelayMs`로 상한이 걸린 뒤, jitter와 반올림이 이어지고, 최종 지연은 다시 `maxDelayMs`와 `2_147_483_647` ms로 제한돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 그 상한에서 포화돼요.
+- `shouldReconnect`가 `false`를 돌려주면 대신 session을 끝내요. 이 옵션이 없으면 예산이 남아 있는 동안 모든 close를 재시도해요. 수동 `session.close()`에서는 호출되지 않아요.
+- 재시도가 켜져 있으면 `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`와 `maxDelayMs`는 유한하고 음이 아니어야 하며, `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 연결하기 전에 execute가 `REQ_OPTIONS_INVALID`로 실패하게 해요. `attempts: 0`은 재시도를 즉시 끄고, 쓰이지 않는 재연결 필드는 무시해요.
+- execute 옵션의 `reconnect`는 그 호출에 한해 이 옵션을 대체해요.
+
+[클라이언트](/ko-KR/api/client)

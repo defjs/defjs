@@ -1,0 +1,19 @@
+---
+title: 'DecodeFault'
+description: '已收到回應，但無法照宣告的方式讀取時的 fault。'
+---
+
+<ApiReference identity="@defjs/core:DecodeFault" />
+
+```ts
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+`code` 是 `RES_DECODE_FAILED`、`RES_MEDIA_TYPE_INVALID` 或 `RES_STRUCT_MISMATCH` 之一。已收到回應，但無法照宣告的方式讀取。`response` 只有 metadata：body 是解碼後的值，而失敗的正是解碼，所以沒有 `body` 欄位可以取用。出問題的細節在 `cause` 上：struct 不匹配時是 `StructError`，讀不出來的表示則是 parser 的失敗。
+
+[錯誤](/zh-Hant-TW/api/errors)

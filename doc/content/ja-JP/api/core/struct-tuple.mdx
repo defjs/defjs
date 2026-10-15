@@ -1,0 +1,26 @@
+---
+title: 'struct.tuple'
+description: '位置ごとに 1 つの struct を持つ、固定長配列をパースする struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.tuple" />
+
+```ts
+function tuple<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(
+  items: T,
+): TupleStruct<T>
+```
+
+`struct.tuple` が受け取るのは、個別の引数ではなく、struct の**配列 1 つ**です。
+
+```ts
+const Pair = struct.tuple([struct.string(), struct.number()])
+```
+
+- 各位置は、同じインデックスの struct でパースされます。入力は同じ長さの配列でなければならず、そうでない場合は `invalid_type`（expected は `tuple of length N`）で失敗します。
+- struct を個別の引数として `struct.tuple(a, b)` のように渡すと、`TypeError` を投げます。
+- 要素が struct でない場合は `TypeError` を投げます。
+
+`TupleStruct<T>` はエクスポートされません。入力と出力が、各要素型のタプルになる `Struct` です。
+
+[Struct](/ja-JP/api/struct)

@@ -1,0 +1,32 @@
+---
+title: 'defineEventStream'
+description: '타입이 있는 Server-Sent Events 엔드포인트를 선언해요.'
+---
+
+<ApiReference identity="@defjs/core:defineEventStream" />
+
+```ts
+function defineEventStream<
+  const P extends string,
+  const M extends string = 'GET',
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<EventStreamDefinitionBase<TEvents>, 'method' | 'path'> &
+    EventStreamErrorField<TError> & {
+      input?: TInput
+      method?: M
+      path: P
+    } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>,
+): EventStreamEndpoint<TInput, TEvents, TError>
+```
+
+- **definition** — `path`, `events` 맵, 그리고 필수인 `maxBufferSize`와 `maxQueueSize` 한도(양의 안전한 정수)예요. 선택 항목으로 `method`(기본 `'GET'`), `operation`, `input`, `error`가 있어요. `input`을 선언하면 입력이 이미 요청 모양과 같아도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+- **반환** 엔드포인트예요. 입력을 넣어 호출하면 `EventStreamCommand`가 나와요.
+
+`EventStreamDefinitionBase`, `EventStreamErrorField`, `BuilderField`는 내부 helper 타입이에요. `error`는 `TError`가 struct일 때만 필수이고, `builder`는 `input`을 선언했을 때 `(input: BuilderInput<TInput>) => EventStreamRequestShape`예요.
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+[SSE](/ko-KR/api/sse)

@@ -1,0 +1,31 @@
+---
+title: 'Client'
+description: 'Le type de client renvoyé par createClient, avec sa méthode execute surchargée.'
+---
+
+<ApiReference identity="@defjs/core:Client" />
+
+```ts
+type Client = {
+  readonly [CLIENT]: ClientConfig // internal symbol key
+
+  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
+    options?: EventStreamExecuteOptions,
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+
+  execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
+    command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+    options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+  ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+
+  execute<TInput extends AnyStruct | undefined, TOutput extends AnyStruct | undefined, TError extends AnyStruct | undefined>(
+    command: HttpCommand<TInput, TOutput, TError>,
+    options?: HttpExecuteOptions,
+  ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
+}
+```
+
+Un client détient le [`ClientConfig`](/fr-FR/api/core/clientconfig-type) résolu et exécute des commandes HTTP, SSE et WebSocket. Le type de la commande sélectionne la surcharge. Les échecs sont renvoyés sous forme de faults dans le tuple de résultat plutôt que levés ; la promesse n’est rejetée que pour une valeur qui n’est pas une commande Defjs (`Error: Unsupported command`).
+
+[Client](/fr-FR/api/client)

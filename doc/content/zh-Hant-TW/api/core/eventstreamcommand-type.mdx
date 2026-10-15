@@ -1,0 +1,22 @@
+---
+title: 'EventStreamCommand'
+description: 'event-stream 端點產生的、不透明的可執行 SSE command。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCommand" />
+
+```ts
+interface EventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly endpoint: EventStreamDefinition<TInput, TEvents, TError> & { readonly method: string }
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+帶 input 呼叫 `EventStreamEndpoint` 得到。把它當作不透明值，直接傳給 `client.execute`。
+
+[SSE](/zh-Hant-TW/api/sse)

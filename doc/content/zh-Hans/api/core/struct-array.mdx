@@ -1,0 +1,18 @@
+---
+title: 'struct.array'
+description: '用同一个元素 struct 解析数组的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.array" />
+
+```ts
+function array<S extends StructLike<unknown, unknown, boolean>>(item: S): ArrayStruct<S>
+```
+
+- 用 `item` 解析每个元素，输出一个新数组。非数组以 `invalid_type`（期望 `array`）失败。
+- 解析在第一个失败的元素处停止，`issue.path` 保存它的下标。
+- `item` 不是 struct 时抛出 `TypeError`。
+
+`ArrayStruct<S>` 没有导出。它是 `Struct<StructInput<S>[], Infer<S>[]>`。
+
+[Struct](/zh-Hans/api/struct)

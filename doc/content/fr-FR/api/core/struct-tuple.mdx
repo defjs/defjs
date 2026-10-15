@@ -1,0 +1,26 @@
+---
+title: 'struct.tuple'
+description: 'Struct qui parse un tableau de longueur fixe avec un struct par position.'
+---
+
+<ApiReference identity="@defjs/core:struct.tuple" />
+
+```ts
+function tuple<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(
+  items: T,
+): TupleStruct<T>
+```
+
+`struct.tuple` prend **un seul tableau** de structs, pas des arguments séparés :
+
+```ts
+const Pair = struct.tuple([struct.string(), struct.number()])
+```
+
+- Chaque position est parsée avec le struct du même index. L’entrée doit être un tableau de longueur exactement identique, sinon elle échoue avec `invalid_type` (attendu `tuple of length N`).
+- Passer les structs en arguments séparés, `struct.tuple(a, b)`, lève un `TypeError`.
+- Lève `TypeError` quand un élément n’est pas un struct.
+
+`TupleStruct<T>` n’est pas exporté. C’est un `Struct` dont l’entrée et la sortie sont des tuples des types d’éléments.
+
+[Struct](/fr-FR/api/struct)

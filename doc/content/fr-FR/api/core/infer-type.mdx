@@ -1,0 +1,19 @@
+---
+title: 'Infer'
+description: 'Infère le type de sortie parsée d’un struct.'
+---
+
+<ApiReference identity="@defjs/core:Infer" />
+
+```ts
+type Infer<T> = T extends { readonly _struct: { readonly output: unknown } } ? T['_struct']['output'] : never
+```
+
+Le type que produit un parse réussi. Utilise `Infer<typeof User>` pour la valeur décodée d’un struct, et `StructInput` pour le type d’entrée accepté.
+
+```ts
+const User = struct.object({ id: struct.number(), name: struct.string() })
+type User = Infer<typeof User> // { id: number; name: string }
+```
+
+[Struct](/fr-FR/api/struct)

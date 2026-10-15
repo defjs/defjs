@@ -1,0 +1,18 @@
+---
+title: 'WebSocketHandleConstructor'
+description: 'withWebSocketHandle 接受的建構函式型別。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandleConstructor" />
+
+```ts
+type WebSocketHandleConstructor = {
+  readonly OPEN: number
+} & (new (...args: never[]) => WebSocketHandle)
+```
+
+能建立 [`WebSocketHandle`](/zh-Hant-TW/api/core/websockethandle-type)，並提供數值型 `OPEN` ready-state 常數的 class 或函式。傳輸層會拿 `readyState` 和 `OPEN` 比較。
+
+它以 `new WebSocketImpl(url)` 呼叫；設定了 subprotocols 時，則以 `new WebSocketImpl(url, protocols)` 呼叫。預設是 `globalThis.WebSocket`。要換成別的，請用 [`withWebSocketHandle`](/zh-Hant-TW/api/core/withwebsockethandle)。
+
+[Client](/zh-Hant-TW/api/client)

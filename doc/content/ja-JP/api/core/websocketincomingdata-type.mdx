@@ -1,0 +1,14 @@
+---
+title: 'WebSocketIncomingData'
+description: '受信した WebSocket メッセージのデコード後の型です。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketIncomingData" />
+
+```ts
+type WebSocketIncomingData<TIncoming extends AnyStruct> = Infer<TIncoming>
+```
+
+`session.receive` が返す各メッセージの型で、エンドポイントの `incoming` struct の [`Infer`](/ja-JP/api/core/infer-type) 出力です。エイリアスされたフィールドは論理名を使います。
+
+[WebSocket](/ja-JP/api/web-socket)

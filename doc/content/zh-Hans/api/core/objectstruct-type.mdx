@@ -1,0 +1,23 @@
+---
+title: 'ObjectStruct'
+description: '`struct.object` 产出的对象形状 struct 类型。'
+---
+
+<ApiReference identity="@defjs/core:ObjectStruct" />
+
+```ts
+interface ObjectStruct<T extends ObjectShape>
+  extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
+  readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
+}
+
+type ObjectShape = { [key: string]: any }
+```
+
+由 `struct.object(shape)` 产出。字段默认必填；标了 `optional()` 或 `nullish()` 的字段成为可选 key。解析时未知 key 会被剔除。传输名称可以通过 `.alias()` 与 TypeScript 的 key 不同。解析失败返回 `[StructError, undefined]`。`ObjectInput`、`ObjectOutput`、`ObjectStructTypes` 和 `PreservedStruct` 是内部辅助类型。
+
+[Struct](/zh-Hans/api/struct)

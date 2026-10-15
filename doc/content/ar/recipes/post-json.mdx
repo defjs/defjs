@@ -1,0 +1,20 @@
+---
+title: 'إرسال JSON'
+description: أرسل جسم JSON محدَّد النوع وفكّ 201 معلَنًا.
+---
+
+# POST JSON
+
+سلّم الجسم المحدَّد النوع إلى الـ builder. أسماء الحقول المنطقية تبقى في TypeScript؛ وأسماء الحقول بصيغة النقل المعلَنة كأسماء مستعارة على الـ struct تصبح مفاتيح JSON. جسم الكائن هو `application/json`.
+
+انظر [الأوامر](/ar/docs/commands) و[HTTP](/ar/docs/http) للتفاصيل.
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com` عنوان توضيحي. مع خادم يجيب بالحالة `201` والجسم `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`، تطبع الشيفرة:
+
+```txt
+Created Ada → 201
+```

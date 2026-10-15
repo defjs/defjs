@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'Defjs 所报告的全部失败 code 组成的封闭集合。'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+一个封闭集合。第一个 `_` 之前那段就是类别；没有单独的 `kind` 字段。
+
+| 类别   | 含义                                                |
+| ------ | --------------------------------------------------- |
+| `HTTP` | 对端返回了非 2xx 状态。                             |
+| `REQ`  | 请求根本没有发出：input、execute options 或 build。 |
+| `NET`  | 没有可用的响应：取消、超时、连接、body 被截断。     |
+| `RES`  | 响应已到达，但无法按声明读取。                      |
+| `EXT`  | 你挂到流水线上的代码抛出了错误。                    |
+| `CAP`  | 超出了声明的 buffer 或 queue 上限。                 |
+| `ENV`  | 宿主运行时缺少所需的能力。                          |
+
+集合保持封闭，`switch (fault.code)` 才能穷尽——扩展通过 `cause` 报告自己的细节，而不是新增 code。
+
+[Errors](/zh-Hans/api/errors)

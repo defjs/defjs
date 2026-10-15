@@ -1,0 +1,19 @@
+---
+title: 'createClient'
+description: 'option 헬퍼로 클라이언트를 만들어요.'
+---
+
+<ApiReference identity="@defjs/core:createClient" />
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+option은 순서대로 적용돼요. 같은 설정에 대해서는 나중 option이 앞의 것을 덮어쓰고, interceptor는 누적돼요. interceptor가 인증이나 테넌트를 클로저로 잡을 때는 요청 경계 안에서 클라이언트를 만드는 편이 좋아요.
+
+- **options** — `withEndpoint` 같은 option 헬퍼예요.
+- **반환** 전송마다 `execute`가 오버로드된 클라이언트예요.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+[클라이언트](/ko-KR/api/client)

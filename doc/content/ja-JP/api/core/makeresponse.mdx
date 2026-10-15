@@ -1,0 +1,14 @@
+---
+title: 'makeResponse'
+description: 'ネットワーク呼び出しなしで HttpResponse を作ります。'
+---
+
+<ApiReference identity="@defjs/core:makeResponse" />
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+ネットワークなしで `HttpResponse` を作ります（インターセプター、テスト）。デフォルトの status は `0` なので、成功を表すには 2xx の `status` を渡します。`ok` は 2xx のとき true です。返る値は、回線から来たレスポンスと同じメディアタイプ確認と同じ宣言 struct を通ります。信頼による短絡経路はありません。JSON ボディの場合は、JSON の `content-type` ヘッダーを設定します。
+
+[HTTP](/ja-JP/api/http)

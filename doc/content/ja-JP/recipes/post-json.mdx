@@ -1,0 +1,20 @@
+---
+title: 'JSON の送信'
+description: 型付きの JSON ボディを送り、宣言済みの 201 をデコードします。
+---
+
+# POST JSON
+
+型付きのボディをビルダーに渡します。論理フィールド名は TypeScript 側に残り、struct 上のワイヤエイリアスが JSON のキーになります。オブジェクトのボディは `application/json` です。
+
+詳細は [Commands](/ja-JP/docs/commands) と [HTTP](/ja-JP/docs/http) を見てください。
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com` はプレースホルダーです。`201` と `{ "id": 1, "name": "Ada", "email": "ada@example.com" }` を返すサーバーに対して、このスニペットは次のように出力します。
+
+```txt
+Created Ada → 201
+```

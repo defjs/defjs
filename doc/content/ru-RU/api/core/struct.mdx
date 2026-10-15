@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: 'Объект-фасад с конструкторами struct и struct.parse.'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct` — обычный объект с хелперами. Предпочитай его импорту конструкторов по отдельности. У каждого хелпера своя страница.
+
+### Примитивы и контейнеры
+
+| Хелпер                                                                                       | Роль                                                              |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`struct.string()`](/ru-RU/api/core/struct-string)                                           | Текст                                                             |
+| [`struct.number()`](/ru-RU/api/core/struct-number)                                           | Число, `NaN` отвергается                                          |
+| [`struct.boolean()`](/ru-RU/api/core/struct-boolean)                                         | Булево значение                                                   |
+| [`struct.bigint()`](/ru-RU/api/core/struct-bigint)                                           | `bigint` или строка, которая разбирается как `bigint`             |
+| [`struct.date()`](/ru-RU/api/core/struct-date)                                               | `Date` из `Date`, timestamp или строки                            |
+| [`struct.literal(value)`](/ru-RU/api/core/struct-literal)                                    | Точный literal                                                    |
+| [`struct.null()`](/ru-RU/api/core/struct-null)                                               | Только `null`                                                     |
+| [`struct.any()`](/ru-RU/api/core/struct-any) / [`unknown()`](/ru-RU/api/core/struct-unknown) | Любое значение, кроме `null` и `undefined`                        |
+| [`struct.array(item)`](/ru-RU/api/core/struct-array)                                         | Массив, все элементы которого разбираются одним struct            |
+| [`struct.tuple(items)`](/ru-RU/api/core/struct-tuple)                                        | Массив фиксированной длины; `items` — один массив struct’ов       |
+| [`struct.record(value)`](/ru-RU/api/core/struct-record)                                      | Plain object со строковыми ключами и одним struct значения        |
+| [`struct.object(shape)`](/ru-RU/api/core/struct-object)                                      | Plain object с фиксированными полями; неизвестные ключи удаляются |
+| [`struct.or(...options)`](/ru-RU/api/core/struct-or)                                         | Первая подходящая ветка                                           |
+| [`struct.intersection(...structs)`](/ru-RU/api/core/struct-intersection)                     | Должен подойти каждый struct; результаты-объекты сливаются        |
+| [`struct.discriminatedUnion(tag, options)`](/ru-RU/api/core/struct-discriminatedunion)       | Ветка-объект выбирается по значению поля `tag`                    |
+| [`struct.enum(values)`](/ru-RU/api/core/struct-enum)                                         | Массив строк или значения объекта `{ Name: value }`               |
+
+### Кодеки тела и бинарные значения
+
+| Хелпер                                                                                                                                           | Роль                                                                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| [`struct.formData(shape)`](/ru-RU/api/core/struct-formdata) / [`urlencoded(shape)`](/ru-RU/api/core/struct-urlencoded)                           | Object struct плюс тег кодека. Тег применяется, только когда это значение — корень тела запроса                  |
+| [`struct.arrayBuffer()`](/ru-RU/api/core/struct-arraybuffer) / [`blob()`](/ru-RU/api/core/struct-blob) / [`file()`](/ru-RU/api/core/struct-file) | Бинарные значения. Как корень тела уходят байтами; как `output` / `error` выбирают соответствующее представление |
+| [`struct.string()`](/ru-RU/api/core/struct-string)                                                                                               | Текст. Как корень тела или входящий struct `string` байты остаются текстом                                       |
+
+### Parse и модификаторы
+
+[`struct.parse(struct, value, options?)`](/ru-RU/api/core/struct-parse) разбирает unknown-значение и возвращает `[null, value]` или `[StructError, undefined]`.
+
+У каждого struct есть цепочечные модификаторы `.optional()`, `.null()` / `.nullable()`, `.nullish()` и `.alias(name)`. См. [`StructMethods`](/ru-RU/api/core/structmethods-type).
+
+[Struct](/ru-RU/api/struct)

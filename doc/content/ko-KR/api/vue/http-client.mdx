@@ -1,0 +1,14 @@
+---
+title: 'HTTP_CLIENT'
+description: 'Defjs 클라이언트가 제공되는 Vue injection key예요.'
+---
+
+<ApiReference identity="@defjs/vue:HTTP_CLIENT" />
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+`createClientPlugin`이 클라이언트를 제공할 때 쓰는 key예요. 제공된 것이 없으면 `undefined`를 돌려주는 `inject(HTTP_CLIENT)`보다 `injectClient()`를 쓰세요. 하위 트리는 `provide(HTTP_CLIENT, childClient)`로 덮어써요.
+
+[@defjs/vue](/ko-KR/api/vue)

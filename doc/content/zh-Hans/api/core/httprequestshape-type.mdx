@@ -1,0 +1,19 @@
+---
+title: 'HttpRequestShape'
+description: 'HTTP builder 返回的请求形状：path、query、headers 与 body。'
+---
+
+<ApiReference identity="@defjs/core:HttpRequestShape" />
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+  headers?: HeadersInit | FlatRecord
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+`P` 是端点路径，`M` 是请求方法。对于 `GET` 和 `HEAD`，构建器不能返回请求体。`BodyValue` 可以是 Fetch 原样发送的传输值（`string`、`Blob`、`ArrayBuffer`、类型化数组或 `DataView`、`FormData`、`URLSearchParams`、`ReadableStream<Uint8Array>`），也可以是 JSON 数据（`number`、`boolean`、`bigint`、`Date`、`null`、数组，或键为字符串的对象类型）；使用 `interface` 类型的值或类实例时，需要通过 `{ ...value }` 展开。`path` 和 `headers` 必须是扁平的标量；`query` 可以嵌套，嵌套对象在运行时需要 `withQuerySerializer`。`FlatRecord`、`QueryRecord`、`PathValue` 和 `BodyValue` 是内部辅助类型。
+
+[HTTP](/zh-Hans/api/http)

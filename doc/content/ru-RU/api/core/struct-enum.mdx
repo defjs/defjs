@@ -1,0 +1,18 @@
+---
+title: 'struct.enum'
+description: 'Struct, который принимает одно значение из списка строк или из значений объекта.'
+---
+
+<ApiReference identity="@defjs/core:struct.enum" />
+
+```ts
+function enum<const T extends readonly [string, ...string[]]>(value: T): Struct<T[number], T[number]>
+function enum<const T extends { [key: string]: number | string }>(value: T): Struct<T[keyof T], T[keyof T]>
+```
+
+- С непустым массивом строк допустимые значения — элементы массива.
+- С объектом допустимые значения — строковые и числовые **значения** объекта, а не его ключи. `{ A: 'a', B: 2 }` принимает `'a'` и `2`.
+- Числовой объект TypeScript `enum` принимает и имена своих членов, потому что обратное отображение входит в его значения.
+- Значение вне набора даёт `invalid_enum`. Объект без строковых и числовых значений бросает `TypeError` при создании struct.
+
+[Struct](/ru-RU/api/struct)

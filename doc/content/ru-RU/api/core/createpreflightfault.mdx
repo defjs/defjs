@@ -1,0 +1,17 @@
+---
+title: 'createPreflightFault'
+description: 'Фабрика fault, который мог произойти ещё до появления какого-либо ответа.'
+---
+
+<ApiReference identity="@defjs/core:createPreflightFault" />
+
+```ts
+function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **code** — конкретный сбой.
+- **cause** — исходное значение, если оно есть. Его message становится message fault’а; без `cause` message равен коду.
+- **response** — метаданные; только если транспорт уже имел что сообщить.
+- **Возвращает** нативный `Error` с именем `DefjsFault` и полем `code`, а также `response`, если он был передан.
+
+[Ошибки](/ru-RU/api/errors)

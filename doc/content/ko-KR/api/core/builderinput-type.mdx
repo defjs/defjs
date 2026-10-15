@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: '요청 builder가 받는, 파싱된 엔드포인트 입력 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+`builder`가 보는, 파싱된 엔드포인트 입력이에요. 객체 노드는 자신을 만든 struct(내부 `Typed` 브랜드)를 지니므로 alias, `Date`, `bigint` 인코딩이 그 값을 따라 요청까지 가요. record 항목과 tuple 항목도 같은 방식으로 브랜드가 붙어요. 런타임에는 파싱된 값이 객체일 때 record 컨테이너에도 태그가 붙고, 배열과 tuple 컨테이너에는 붙지 않으며, `null`과 `undefined`에는 절대 붙지 않아요. nullish 수정자는 감싼 struct를 복원하고, 유니온 옵션은 분배되며, 인터섹션 옵션은 합쳐져요. 그 밖의 struct는 `Infer<S>`로 떨어져요.
+
+`CarriedStruct`, `NullishBuilderInput`, `IntersectBuilderInputs`, `Typed`는 내부 helper 타입이에요.
+
+[HTTP](/ko-KR/api/http)

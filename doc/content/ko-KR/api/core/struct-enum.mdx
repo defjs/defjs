@@ -1,0 +1,18 @@
+---
+title: 'struct.enum'
+description: '문자열 목록 또는 객체의 값 중 하나를 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.enum" />
+
+```ts
+function enum<const T extends readonly [string, ...string[]]>(value: T): Struct<T[number], T[number]>
+function enum<const T extends { [key: string]: number | string }>(value: T): Struct<T[keyof T], T[keyof T]>
+```
+
+- 비어 있지 않은 문자열 배열을 주면, 받는 값은 배열의 항목이에요.
+- 객체를 주면, 받는 값은 객체의 키가 아니라 문자열과 number **값**이에요. `{ A: 'a', B: 2 }`는 `'a'`와 `2`를 받아요.
+- TypeScript 숫자 `enum` 객체는 멤버 이름도 받아요. 역방향 매핑이 값에 포함되기 때문이에요.
+- 집합에 없는 값은 `invalid_enum`으로 실패해요. 문자열이나 number 값이 하나도 없는 객체는 struct를 만들 때 `TypeError`를 던져요.
+
+[Struct](/ko-KR/api/struct)

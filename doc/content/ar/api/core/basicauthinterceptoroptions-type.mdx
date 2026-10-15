@@ -1,0 +1,20 @@
+---
+title: 'BasicAuthInterceptorOptions'
+description: 'خيارات معترضات المصادقة الأساسية (basic auth)، بما فيها مُرمِّز بيانات اعتماد مخصّص.'
+---
+
+<ApiReference identity="@defjs/core:BasicAuthInterceptorOptions" />
+
+```ts
+type BasicAuthInterceptorOptions = {
+  encode?: (credential: { username: string; password: string }) => string
+}
+```
+
+يستبدل `encode` مُرمِّز بيانات الاعتماد وحده. الافتراضي هو ``btoa(`${username}:${password}`)``. يضيف المعترض دائمًا البادئة `Basic ` إلى السلسلة المُعادة، لذا أَعِد جزء بيانات الاعتماد وحده: إعادة `'Basic abc'` تنتج الرأس `Basic Basic abc`.
+
+يقبله كلٌّ من [`basicAuthHttpInterceptor`](/ar/api/core/basicauthhttpinterceptor) و[`basicAuthSSEInterceptor`](/ar/api/core/basicauthsseinterceptor).
+
+انظر [دليل المعترضات](/ar/docs/interceptors).
+
+[المعترضات](/ar/api/interceptors)

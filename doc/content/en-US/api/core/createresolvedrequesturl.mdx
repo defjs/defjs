@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: 'Resolves a request path against a base endpoint into a URL.'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — A valid absolute client endpoint. Its query and hash are dropped, and a trailing slash is added to its pathname so that the base path is kept: `https://api.example.com/v1` with `/users` gives `https://api.example.com/v1/users`.
+- **path** — A relative endpoint path. A single leading slash is removed. After resolution, the URL must keep the base origin and stay under its directory. Absolute or protocol-relative paths, C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`.
+- **queryString** — Query without a leading `?`. When non-empty it is set as the URL's search verbatim.
+- **Returns** the resolved `URL`.
+
+Throws `TypeError` when the base endpoint or path is invalid. During `client.execute`, a missing, relative, or invalid base or an illegal path becomes `REQ_BUILD_FAILED` before any interceptor or transport runs, including a short-circuiting interceptor, for HTTP, SSE, and WebSocket alike. An interceptor's final `req.endpoint` is also validated against its final `req.baseEndpoint`; deliberately replacing the base with another valid absolute URL is allowed. Deterministic URL errors are never retried.
+
+[HTTP](/api/http)

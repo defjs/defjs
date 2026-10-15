@@ -1,0 +1,26 @@
+---
+title: 'WebSocketHeartbeatConfig'
+description: 'Heartbeat ping 與 acknowledgement 的設定。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHeartbeatConfig" />
+
+```ts
+interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
+  intervalMs: number
+  isAck?: (message: TIncoming) => boolean
+  message?: () => TOutgoing
+  timeoutMs?: number
+}
+```
+
+- `intervalMs` 是 heartbeat messages 之間的間隔。
+- `message()` 負責建立 payload，並透過 `outgoing` struct 送出。省略它或它回傳 `undefined` 時，不會送出任何東西。
+- struct 編碼之後，非 JSON 值會透過與 `session.send` 相同的 serializer，以 `TypeError` 失敗；這次 heartbeat 失敗會結束邏輯 session，而且不會重新連線。
+- `isAck(message)` 會收到每則解碼後的入站 message。回傳 `true` 時，該 message 會被視為 acknowledgement，不會交給 `receive`。
+- `timeoutMs` 是送出 heartbeat 之後，等待 acknowledgement 的時間。等不到就讓 session 失敗。
+- `intervalMs` 與 `timeoutMs` 必須為正、有限，且不大於 `2_147_483_647`。
+
+用 [`withWebSocketHeartbeat`](/zh-Hant-TW/api/core/withwebsocketheartbeat) 或 execute 的 `heartbeat` option 來設定。
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

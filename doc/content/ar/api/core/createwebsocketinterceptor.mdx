@@ -1,0 +1,19 @@
+---
+title: 'createWebSocketInterceptor'
+description: 'يغلّف دالة معترض كمعترض WebSocket موسوم.'
+---
+
+<ApiReference identity="@defjs/core:createWebSocketInterceptor" />
+
+```ts
+function createWebSocketInterceptor(fn: WebSocketInterceptorFn): WebSocketInterceptor
+
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+يُرجع `{ kind: 'web-socket', fn }`. معترضات WebSocket تعمل لأوامر WebSocket فقط.
+
+تُرجع كلٌّ من `next` والمعترض [`WebSocketSessionLike`](/ar/api/core/websocketsessionlike-type)، وهي الجلسة المواجهة للمعترض. يجب أن يمرّر الغلاف أو جلسة الاختصار مسار التخلّص الخاص بـ `[Symbol.asyncDispose]()`؛ وتسرد تلك الصفحة الأعضاء وهذا المتطلب.
+
+[المعترضات](/ar/api/interceptors)

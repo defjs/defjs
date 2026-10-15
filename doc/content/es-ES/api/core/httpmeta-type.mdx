@@ -1,0 +1,20 @@
+---
+title: 'HttpMeta'
+description: 'Metadatos de la respuesta, disponibles siempre que una respuesta llegó al cliente.'
+---
+
+<ApiReference identity="@defjs/core:HttpMeta" />
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+Metadatos de la respuesta, disponibles siempre que una respuesta llegó al cliente. **No** llevan `body`: un cuerpo solo existe cuando un struct declarado lo decodificó.
+
+[HTTP](/es-ES/api/http)

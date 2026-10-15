@@ -1,0 +1,42 @@
+---
+title: 'ClientWebSocketOptions'
+description: 'Необязательные настройки WebSocket: конструктор, hook beforeConnect, heartbeat, протоколы и политика переподключения.'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — конструктор WebSocket; по умолчанию `globalThis.WebSocket`.
+- **beforeConnect** — выполняется перед каждой попыткой подключения и переподключения.
+- **heartbeat** — отправляет `message()` каждые `intervalMs`. Если заданы `timeoutMs` и `isAck`, отсутствие подтверждения помечает соединение как неисправное. `intervalMs` и `timeoutMs` должны быть положительными и не больше 2147483647.
+- **protocols** — подпротоколы, передаваемые конструктору.
+- **reconnect** — включается явно. `attempts` по умолчанию равен **3**; `0` отключает повторы, а пропуск `attempts` не означает «без лимита». Остальные значения по умолчанию: `delayMs` 1000, `factor` 2, `jitter` 0 (мультипликативный коэффициент 0–1), `maxDelayMs` 30000. `shouldReconnect` получает close `code`, `reason` и `wasClean` и может запретить повтор.
+
+Бюджет повторов действует отдельно для каждого периода недоступности соединения. Успешный `open` сбрасывает бюджет, номер попытки в колбэке и показатель степени при расчёте задержки; после следующего разрыва повторы начинаются с попытки 1. `maxDelayMs` ограничивает итоговую задержку после применения jitter и округления; также действует предел `2_147_483_647` мс. Правила проверки параметров и поведение при переполнении см. в [`withWebSocketReconnect`](/ru-RU/api/core/withwebsocketreconnect).
+
+Задавай их через `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols` и `withWebSocketReconnect`. `WebSocketExecuteOptions` может переопределить `beforeConnect`, `heartbeat`, `protocols` и `reconnect` для отдельного вызова.
+
+См. [гайд Client](/ru-RU/docs/client).
+
+[Клиент](/ru-RU/api/client)

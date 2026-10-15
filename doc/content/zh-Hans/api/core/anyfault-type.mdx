@@ -1,0 +1,14 @@
+---
+title: 'AnyFault'
+description: '任何 fault 变体的联合类型，不论其解码后的错误 body 是什么类型。'
+---
+
+<ApiReference identity="@defjs/core:AnyFault" />
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+任何 fault，不论它解码后的错误 body 是什么类型。写那种只做分类、不在乎是哪个端点产出的 handler 时用它；body 类型要紧的地方优先用 `Fault<typeof yourErrorStruct>`。
+
+[Errors](/zh-Hans/api/errors)

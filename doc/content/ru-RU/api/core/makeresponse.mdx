@@ -1,0 +1,14 @@
+---
+title: 'makeResponse'
+description: 'Собирает HttpResponse без сетевого вызова.'
+---
+
+<ApiReference identity="@defjs/core:makeResponse" />
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+Собери `HttpResponse` без сетевого вызова (interceptors, тесты). Status по умолчанию — `0`, поэтому для успеха передай `status` из диапазона 2xx. `ok` истинен для 2xx. Возвращённое значение проходит ту же проверку media type и тот же объявленный struct, что и ответ с провода; доверенного short-circuit нет. Для JSON-тела задай заголовок `content-type` с JSON.
+
+[HTTP](/ru-RU/api/http)

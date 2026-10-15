@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: Vue プラグイン、injection key、injectClient です。
+---
+
+# Vue
+
+既存の `@defjs/core` クライアントを Vue アプリに渡します。このパッケージはクライアントを作らず、キャッシュせず、破棄しません。Vue 3 以降が必要です。
+
+[Vue ガイド](/ja-JP/docs/integrations/vue) を見てください。
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — `createClient` で作ったクライアントインスタンスです。
+- **戻り値** `app.use(...)` 用の Vue プラグインです。インストールすると `app.provide(HTTP_CLIENT, client)` が呼ばれます。
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+一番近い `HTTP_CLIENT` provider を読みます。同期的な `setup()` の実行中や `app.runWithContext()` の同期コールバック内（Vue 3.3+）など、有効な Vue の注入コンテキストで呼び出してください。`<script setup>` のトップレベル `await` の後にコンパイラが復元したコンテキストも有効です。
+
+- **戻り値** 注入されたクライアントです。
+- **例外** 有効な注入コンテキストがない場合、またはクライアントが提供されていない場合に `Error` を throw します。`app.use(createClientPlugin(client))` または祖先コンポーネントの `provide(HTTP_CLIENT, client)` でクライアントを提供してください。プラグインをインストールしただけでは、注入コンテキスト外の呼び出しは有効になりません。
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+Vue の injection key です。`inject(HTTP_CLIENT)` より `injectClient()` を使ってください。サブツリーの上書きは `provide(HTTP_CLIENT, childClient)` です。

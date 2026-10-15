@@ -1,0 +1,24 @@
+---
+title: 'executeEventStreamCommand'
+description: '클라이언트 설정을 바탕으로 SSE 명령을 여는 저수준 진입점이에요.'
+---
+
+<ApiReference identity="@defjs/core:executeEventStreamCommand" />
+
+```ts
+function executeEventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand<TInput, TEvents, TError>,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+```
+
+`client.execute`의 저수준 진입점이에요. 애플리케이션 코드에서는 클라이언트를 쓰세요.
+
+- **반환** `[null, stream, open]` 또는 `[fault, undefined, open | undefined]`예요. fault는 `Fault<TError>`예요. `error`를 선언했다면 디코딩된 handshake body가 `data`에 담기고, 그렇지 않으면 `Fault<undefined>`예요.
+
+[SSE](/ko-KR/api/sse)

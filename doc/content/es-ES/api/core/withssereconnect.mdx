@@ -1,0 +1,41 @@
+---
+title: 'withSSEReconnect'
+description: 'Opción de cliente que habilita la reconexión automática de SSE.'
+---
+
+<ApiReference identity="@defjs/core:withSSEReconnect" />
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+```
+
+Configura la reconexión automática cuando falla un stream SSE. La reconexión es opt-in: sin esta opción, un stream fallido no se reintenta. Pasar `undefined` borra un ajuste anterior.
+
+```ts
+type SSEReconnect = {
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: {
+    attempt: number
+    cause?: unknown
+    lastEventId: string
+    method: string
+    open?: { response: { status: number; statusText: string; url: string }; url: string }
+  }) => boolean | Promise<boolean>
+}
+```
+
+- `attempts` es el presupuesto de reintentos de cada interrupción. Vale `3` por defecto cuando se define `reconnect`, y `0` desactiva los reintentos. Un handshake correcto reinicia el presupuesto, el `attempt` del callback y el exponente de backoff. Omitirlo no da reintentos ilimitados dentro de una misma interrupción. Las aperturas correctas repetidas seguidas inmediatamente de fallos de stream reintentables pueden seguir reconectándose con el retraso base actual (sujeto al jitter y los topes), porque cada apertura reinicia el presupuesto; usa `shouldReconnect` para detenerlas. El EOF normal sigue siendo terminal.
+- Sin `shouldReconnect`, solo se reconectan las solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`. Si se proporciona, su resultado determina si se reconecta para cada método, incluido `POST`; el campo `method` del contexto permite distinguir los endpoints. Devuelve `false` para detener los reintentos ante este fallo. El callback se ejecuta antes de comprobar el límite de intentos.
+- Una solicitud con un cuerpo `ReadableStream` nunca se reconecta y no se llama a `shouldReconnect` para esa solicitud.
+- `delayMs`, `factor`, `jitter` (de 0 a 1) y `maxDelayMs` dan forma al backoff. `factor` vale `1` por defecto y `jitter`, `0`. `maxDelayMs` limita el retraso final tras el jitter y el redondeo. Sin tope configurado, sigue aplicando el límite del temporizador de la plataforma, `2_147_483_647` ms. Una base cero sigue siendo cero; el desbordamiento de números válidos se satura en los topes.
+- `delayMs` es solo el retraso base inicial (`1000` por defecto). Un campo `retry:` del servidor (solo dígitos, en milisegundos) lo reemplaza en los intentos posteriores.
+- El último id de evento se vuelve a enviar como bytes UTF-8 en `Last-Event-ID` en el siguiente intento. Un `id:` vacío lo borra; un ID que contiene NUL se ignora.
+- Las opciones de reconexión se validan antes de los interceptores o de Fetch: `attempts` debe ser un entero seguro no negativo; `delayMs` y un `maxDelayMs` explícito deben ser finitos y no negativos; `factor` debe ser finito y positivo; `jitter` debe ser finito y estar entre 0 y 1. Los valores no válidos devuelven `REQ_OPTIONS_INVALID` en el momento de execute.
+
+Consulta [SSE](/es-ES/api/sse) para el handle del stream.
+
+[Cliente](/es-ES/api/client)

@@ -1,0 +1,18 @@
+---
+title: 'struct.urlencoded'
+description: 'Object struct that is encoded as an URL-encoded form when it is the request body.'
+---
+
+<ApiReference identity="@defjs/core:struct.urlencoded" />
+
+```ts
+function urlencoded<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+Parses like [`struct.object()`](/api/core/struct-object), and carries a `urlencoded` codec tag.
+
+- The tag applies only when this struct's value is the request body root. The body is then sent as `URLSearchParams` with `application/x-www-form-urlencoded;charset=UTF-8`.
+- Arrays repeat the field name and `undefined` fields are skipped. A nested object or a `Blob` fails the request with `REQ_BUILD_FAILED`.
+- `struct.parse` ignores the tag. It does not accept a `URLSearchParams` instance, only a plain object.
+
+[Struct](/api/struct)

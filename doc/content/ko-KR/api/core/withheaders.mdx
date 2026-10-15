@@ -1,0 +1,18 @@
+---
+title: 'withHeaders'
+description: 'HTTP와 SSE 요청에 정적 기본 헤더를 설정하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withHeaders" />
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+이 클라이언트가 만드는 HTTP와 SSE 요청에 정적 기본 헤더를 설정해요. WebSocket 연결은 이 헤더를 쓰지 않아요.
+
+- `HeadersInit`은 옵션이 적용될 때 `Headers` 객체로 복사돼요. 나중에 호출하면 이전 헤더를 병합하지 않고 대체해요.
+- request builder가 돌려준 헤더는 값이 스칼라이거나 `Headers` 인스턴스이면 같은 이름의 기본 헤더를 대체해요. 배열 값(배열을 담은 record 항목이나 튜플 배열 형태의 `HeadersInit`)은 기본 헤더에 덧붙여요.
+- 갱신된 Bearer 토큰이나 HMAC 서명처럼 요청마다 달라지거나 계산해야 하는 자격 증명은 최종 body나 새 값이 필요하므로 [interceptor](/ko-KR/api/interceptors)에 두세요.
+
+[클라이언트](/ko-KR/api/client)

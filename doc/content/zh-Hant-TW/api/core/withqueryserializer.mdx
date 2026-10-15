@@ -1,0 +1,19 @@
+---
+title: 'withQuerySerializer'
+description: '替換 query 物件如何變成 query string 的 client option。'
+---
+
+<ApiReference identity="@defjs/core:withQuerySerializer" />
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+替換 HTTP、SSE 與 WebSocket 的 query 編碼。
+
+- `serializer(query)` 收到的是**已編碼的 wire 物件**：已套用 aliases、`Date` 為 ISO 字串、`bigint` 為字串。巢狀物件與陣列維持原樣。
+- 它必須回傳不含開頭 `?` 的 query string。這個字串會原樣使用。
+- Request 沒有 query 時不會呼叫它。Builder 回傳 `URLSearchParams` 時會跳過它。
+- 沒有這個 option 時，query 使用 `URLSearchParams`：陣列會重複該 key，巢狀物件則會失敗。
+
+[Client](/zh-Hant-TW/api/client)

@@ -1,0 +1,28 @@
+---
+title: 'OpenTelemetryServerOptions'
+description: 'Опции withOpenTelemetryServer — tracer, meter, logger, propagator и настройки по транспортам.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerOptions" />
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+- `tracer` — необязателен. Без него нет локальных spans и span hooks.
+- `meter` — необязателен. Без него пакетные metrics не пишутся.
+- `logger` — необязателен. `Logger` из `@opentelemetry/api-logs`, а не Logger Winston/Pino. Без него диагностические LogRecord не отправляются. Defjs не получает глобальный logger и не владеет его provider.
+- `propagator` — по умолчанию W3C Trace Context + Baggage.
+- `requireParentSpan` — по умолчанию `false`. При наличии `tracer` значение `true` пропускает всю инструментацию, включая логи, если нет активного родительского span. Без `tracer` оно не блокирует ни метрики, ни логи.
+- `http`, `sse`, `webSocket` — опции по транспортам. Каждая по умолчанию `{}`; транспорт отключается только через `{ enabled: false }`.
+
+[@defjs/opentelemetry-server](/ru-RU/api/opentelemetry-server)

@@ -1,0 +1,34 @@
+---
+title: 'defineRequest'
+description: '타입이 있는 HTTP 요청 엔드포인트를 선언해요.'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method`, `path`, 선택 사항인 `input` struct, 선택 사항인 `output`과 `error` struct, 선택 사항인 `operation`이에요. `input`을 선언하면 입력이 이미 요청 모양과 같아도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+- **반환** 엔드포인트예요. 입력을 넣어 호출하면 `HttpCommand`가 나와요.
+
+`ResponseDeclaration`과 `BuilderField`는 내부 helper 타입이에요. `output`과 `error`는 해당 타입 매개변수가 struct일 때만 필수이고, `builder`는 `input`을 선언했을 때 `(input: BuilderInput<TInput>) => HttpRequestShape`예요.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output`은 2xx body를 위한 struct 하나이고, `error`는 모든 non-2xx body를 위한 struct 하나예요. 둘 다 status로 키를 나누지 않아요. 하나를 빼면 그 body는 읽히지 않아요. [선언은 단언이에요](/ko-KR/docs/design-decisions#선언은-단언이에요)를 보세요.
+
+[HTTP](/ko-KR/api/http)

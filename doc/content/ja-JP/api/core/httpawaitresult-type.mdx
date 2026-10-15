@@ -1,0 +1,16 @@
+---
+title: 'HttpAwaitResult'
+description: 'HTTP 呼び出しの await 結果タプルです。data と response、または fault を持ちます。'
+---
+
+<ApiReference identity="@defjs/core:HttpAwaitResult" />
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+`TData` と `TErrorData` はデコード済みのボディ型です。成功時、第 3 要素が `body` を持つのは `output` を宣言していたときだけです。失敗時は `undefined` です — 存在したレスポンスのメタデータはすでに fault が持っています。
+
+[HTTP](/ja-JP/api/http)

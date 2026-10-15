@@ -1,0 +1,22 @@
+---
+title: 'StructLike'
+description: 'Marque structurelle portée par chaque struct.'
+---
+
+<ApiReference identity="@defjs/core:StructLike" />
+
+```ts
+interface StructLike<I = unknown, O = unknown, OO extends boolean = boolean> {
+  readonly _struct: {
+    input: I
+    optionalOut: OO extends true ? true : undefined
+    output: O
+  }
+}
+```
+
+Tout ce qui a un payload de type `_struct`. [`StructInput`](/fr-FR/api/core/structinput-type) et [`Infer`](/fr-FR/api/core/infer-type) y lisent `input` et `output`, et les structs objet utilisent `optionalOut` pour décider quels champs de sortie peuvent être absents.
+
+`_struct` n’existe que dans le système de types. Les structs n’ont pas de propriété `_struct` au runtime, et un objet simple ayant ce type n’est pas un struct valide.
+
+[Struct](/fr-FR/api/struct)

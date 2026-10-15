@@ -1,0 +1,16 @@
+---
+title: 'struct.null'
+description: 'struct يقبل null فقط.'
+---
+
+<ApiReference identity="@defjs/core:struct.null" />
+
+```ts
+function null(): Struct<null, null>
+```
+
+يقبل `null` فقط. وكل قيمة أخرى تفشل بـ `invalid_type`. ويشمل ذلك `undefined` في الجذر أو داخل مصفوفة أو tuple؛ أما حقل الكائن أو السجل المفقود فيُبلَّغ عنه بـ `missing_key` بدلًا من ذلك.
+
+هذا ليس المعدِّل `.null()`. فالمعدِّل يضيف `null` إلى القيم التي يقبلها struct آخر.
+
+[Struct](/ar/api/struct)

@@ -1,0 +1,20 @@
+---
+title: 'StreamAwaitResult'
+description: '執行 SSE command 嗰陣回傳嘅 tuple。'
+---
+
+<ApiReference identity="@defjs/core:StreamAwaitResult" />
+
+```ts
+type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined> =
+  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
+  | [error: Fault<TError>, stream: undefined, open: EventStreamOpenInfo | undefined]
+```
+
+`client.execute` 執行 SSE command 嘅結果。
+
+- 成功：`[null, stream, open]`。`open` 對 Defjs 原生 handle 或透傳同一 live `open` 物件嘅 wrapper，係返回 handle 所屬連線首次成功 handshake 嘅 snapshot；custom handle 或覆寫 `open` 嘅 wrapper 就算已經 reconnect，都以自己目前公開嘅 `open` 為準，`stream.open` 仍然係 live（見 [SSE](/zh-Hant-HK/docs/sse)）。
+- 失敗：`[fault, undefined, open]`。如果失敗發生喺 response 到達之後（例如 handshake 係非 2xx），`open` 就帶 response snapshot，否則係 `undefined`。
+- `TError` 係聲明嘅 `error` struct，用嚟為 fault 上解碼後嘅 error body 提供 type。
+
+[SSE](/zh-Hant-HK/api/sse)

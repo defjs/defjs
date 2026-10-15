@@ -1,0 +1,18 @@
+---
+title: 'ERR_TIMEOUT'
+description: 'Общий sentinel Error, помечающий request как превысивший таймаут.'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+Общее значение `cause` и message для таймаутов. `createNetworkFault` отображает его, как и любую ошибку с именем `TimeoutError`, на `NET_TIMEOUT`. Если HTTP interceptor бросает его, вызов завершается fault’ом `NET_TIMEOUT`. SSE и WebSocket interceptor’ы, которые его бросают, сообщаются как `EXT_INTERCEPTOR_FAILED`.
+
+См. [гайд Errors](/ru-RU/docs/errors).
+
+Этот sentinel несёт неперечислимую метку `Symbol.for('defjs.cause.timeout')`. [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) распознаёт его из любой копии Core без сравнения идентичности объектов. Классификация не зависит от предыдущих несвязанных вызовов.
+
+[Ошибки](/ru-RU/api/errors)

@@ -1,0 +1,36 @@
+---
+title: API Reference
+description: Handwritten lookup for workspace packages — functions, options, and types you import.
+---
+
+# API Reference
+
+<ApiIndex />
+
+This is the lookup for workspace packages. Signatures are the contract; guides and recipes explain when to use them.
+
+## Packages
+
+| Package                                                    | What you look up                                                  |
+| ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                  |
+
+## @defjs/core
+
+| Page                              | What you look up                                                 |
+| --------------------------------- | ---------------------------------------------------------------- |
+| [Client](/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/api/errors)             | `Fault` variants and factories                                   |
+| [Interceptors](/api/interceptors) | HTTP / SSE / WebSocket interceptor helpers                       |
+| [SSE](/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## Related
+
+- [Getting Started](/docs/start)
+- [GET with a declared 404](/recipes/get-declared-404)

@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'خيار عميل يفعّل إعادة اتصال WebSocket التلقائية.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+يضبط إعادة الاتصال التلقائية عندما يُغلق المقبس لأي سبب غير `session.close()` اليدوي. إعادة الاتصال اختيارية: بدون هذا الخيار ينهي الإغلاقُ الجلسةَ. تمرير `undefined` يمسح إعدادًا سابقًا. نوع الخيار:
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` هو ميزانية إعادة المحاولة لكل انقطاع. قيمته الافتراضية `3`، و`0` يعطّل إعادة الاتصال. تعيد حالة `open` الناجحة ضبط الميزانية وأسّ التراجع؛ ويبدأ الانقطاع التالي من إعادة المحاولة 1. حذفه لا يتيح محاولات غير محدودة خلال الانقطاع الواحد. المقبس الذي يُفتح بنجاح ثم يغلقه الخادم فورًا مرة أخرى قد يواصل إعادة الاتصال بتأخير الأساس (مع مراعاة jitter والحدود)، لأن كل فتح يعيد ضبط الميزانية؛ أوقفه بـ `shouldReconnect`.
+- القيمة الافتراضية لـ `delayMs` هي `1000`، ولـ `factor` هي `2`، ولـ `maxDelayMs` هي `30000`، ولـ `jitter` (من 0 إلى 1) هي `0`. تبدأ إعادة المحاولة _n_ بتأخير `delayMs * factor^(n-1)`، بحد أقصى `maxDelayMs`؛ ثم يُطبَّق `jitter` والتقريب، وبعدهما يُحدّ التأخير النهائي مجددًا بـ `maxDelayMs` و`2_147_483_647` مللي ثانية. يبقى التأخير الأساسي الصفري صفرًا؛ وإذا تجاوز الحساب سعة الأرقام مع مدخلات عددية صالحة، تستقر النتيجة عند تلك الحدود القصوى.
+- يمكن أن يُرجع `shouldReconnect` القيمة `false` لإنهاء الجلسة بدلًا من ذلك. بدونه تُعاد المحاولة عند كل إغلاق ما دامت الميزانية قائمة. ولا يُستدعى عند `session.close()` اليدوي.
+- عند تفعيل إعادة المحاولة، يجب أن يكون `attempts` عددًا صحيحًا آمنًا غير سالب؛ وأن يكون `delayMs` و`maxDelayMs` منتهيين وغير سالبين؛ وأن يكون `factor` منتهيًا وموجبًا؛ وأن يكون `jitter` منتهيًا وضمن 0–1. تُفشل القيم غير الصالحة execute بـ `REQ_OPTIONS_INVALID` قبل الاتصال. يعطّل `attempts: 0` إعادة المحاولة فورًا ويتجاهل حقول إعادة الاتصال غير المستخدمة.
+- `reconnect` في خيارات execute يستبدل هذا الخيار لذلك الاستدعاء.
+
+[العميل](/ar/api/client)

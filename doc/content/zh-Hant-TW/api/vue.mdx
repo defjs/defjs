@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: Vue plugin、injection key，以及 injectClient。
+---
+
+# Vue
+
+把既有的 `@defjs/core` client 提供給 Vue app。這個套件不會建立、快取或 dispose client。需要 Vue 3 或更新版本。
+
+見 [Vue 指南](/zh-Hant-TW/docs/integrations/vue)。
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — `createClient` 給的實例。
+- **回傳** 給 `app.use(...)` 用的 Vue plugin。安裝它會呼叫 `app.provide(HTTP_CLIENT, client)`。
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+讀最近的 `HTTP_CLIENT` provider。在有效的 Vue 注入上下文中呼叫，例如同步執行的 `setup()`，或 `app.runWithContext()` 的同步回呼（需要 Vue 3.3+）。`<script setup>` 頂層 `await` 後由編譯器還原的上下文也有效。
+
+- **回傳** 注入的 client。
+- **拋出** 沒有有效注入上下文，或沒有提供 client 時會拋出 `Error`。透過 `app.use(createClientPlugin(client))` 或祖先元件的 `provide(HTTP_CLIENT, client)` 提供 client；僅安裝 plugin 並不能讓注入上下文外的呼叫生效。
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+Vue injection key。優先用 `injectClient()`，別直接 `inject(HTTP_CLIENT)`。子樹覆蓋：`provide(HTTP_CLIENT, childClient)`。

@@ -1,0 +1,68 @@
+---
+title: '客戶端設定 / Client'
+description: 建立明確嘅 client，組合選項，執行命令，再自行負責清理。
+---
+
+# 客戶端
+
+`Client` 持有 endpoint + transport config，再派發 HTTP、SSE 同 WebSocket commands。佢唔會快取、自動重試，亦唔會替你管理已開啟嘅 streams。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)` 會為每種 command kind return overloads。
+
+## 組合 options
+
+Options 由左到右套用。Setters 會 replace；`withInterceptors(...items)` 會 append。
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+Mixed interceptors 會喺 execute 時按 transport filter；選中嗰種嘅相對次序會保留。
+
+## 按 transport execute
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`. `open` 對 Defjs 原生 handle 或透傳同一 live `open` 物件嘅 wrapper，係返回 handle 所屬連線首次成功 handshake 嘅 snapshot；custom handle 或覆寫 `open` 嘅 wrapper 就算已經 reconnect，都以自己目前公開嘅 `open` 為準，`stream.open` 仍然係 live（見 [SSE](/zh-Hant-HK/docs/sse)）。
+- WebSocket → `[error, session, connection]`
+
+WebSocket execute 可以 override `beforeConnect`、`heartbeat`、`protocols` 同 `reconnect`。`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。
+
+Cleanup 係你 own：abort HTTP，close SSE + `await stream.closed`，close WebSocket + `await session.closed`。
+
+## Inject 一個 test transport
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## Server vs browser 嘅 scope
+
+喺 server 上面，當 options 或者 interceptor closures capture auth、cookies、users 或者 tenants 時，喺 request boundary 入面 create client。Client identity 本身唔係 security boundary。
+
+## 參考
+
+| Helper                                                                                                        | 效果                                                            |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | 所有 transports 嘅 absolute base endpoint                       |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE 嘅 static default headers；command headers 會 override |
+| `withTimeout(ms)`                                                                                             | 只係 default HTTP `execute` timeout（SSE/WS 會 ignore）         |
+| `withHTTPHandle(fetch)`                                                                                       | 換走 HTTP 嘅 Fetch                                              |
+| `withSSEHandle(fetch)`                                                                                        | 換走 SSE 嘅 Fetch                                               |
+| `withWebSocketHandle(WebSocket)`                                                                              | 換走 WebSocket constructor                                      |
+| `withInterceptors(...items)`                                                                                  | 追加混合種類嘅 interceptors                                     |
+| `withQuerySerializer(fn)`                                                                                     | 將已經套咗 alias 嘅 query object encode 成 query string         |
+| `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP/SSE 用 Fetch `credentials: 'include'`          |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                       |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE knobs                                                       |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket knobs                                                 |
+
+## 相關配方
+
+- [用 local Fetch handle 做 test](/zh-Hant-HK/recipes/test-with-handle)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)

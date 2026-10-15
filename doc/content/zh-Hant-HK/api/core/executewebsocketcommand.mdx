@@ -1,0 +1,26 @@
+---
+title: 'executeWebSocketCommand'
+description: '針對 client config 開啟 WebSocket command 嘅 low-level entry。'
+---
+
+<ApiReference identity="@defjs/core:executeWebSocketCommand" />
+
+```ts
+function executeWebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+  options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+```
+
+`client.execute` 嘅 low-level entry。Application code 優先用 client。
+
+- **Returns** `[null, session, connection]` 或 `[fault, undefined, connection | undefined]`，其中 fault 係 `Fault<undefined>`。
+
+WebSocket execute options 可以 override client 嘅 `beforeConnect`、`heartbeat`、`protocols` 同 `reconnect`。
+
+[WebSocket](/zh-Hant-HK/api/web-socket)

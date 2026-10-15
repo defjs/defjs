@@ -1,0 +1,16 @@
+---
+title: 'makeResponse'
+description: 'Construye un HttpResponse sin llamada de red.'
+---
+
+<ApiReference identity="@defjs/core:makeResponse" />
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+Construye un `HttpResponse` sin llamada de red (interceptores, tests). El estado por defecto es `0`, así que pasa un `status` 2xx para un éxito. `ok` es
+true en 2xx. El valor que devuelve pasa por la misma comprobación de media type y el mismo
+struct declarado que una respuesta del cable; no hay ningún atajo de confianza. Para un cuerpo JSON, define un header `content-type` JSON.
+
+[HTTP](/es-ES/api/http)

@@ -1,0 +1,105 @@
+---
+title: '@defjs/opentelemetry-server'
+description: withOpenTelemetryServer と、トランスポートごとの options です。
+---
+
+# OpenTelemetry server
+
+アウトバウンドの HTTP / SSE / WebSocket 計装を、コアのインターセプターとして足します。このパッケージは OpenTelemetry SDK を初期化せず、インバウンドのサーバー計装でもありません。
+
+[OpenTelemetry server ガイド](/ja-JP/docs/integrations/opentelemetry-server) を見てください。
+
+## withOpenTelemetryServer()
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+有効なトランスポートごとにインターセプターを、HTTP、SSE、WebSocket の順に 1 本ずつ足します。`createClient` の時点で適用してください。`options` は必須です。伝播だけでインターセプターを入れたいときは `{}` を渡します。
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+`tracer`、`meter`、`logger` はいずれも任意です。`propagator` を省略すると W3C Trace Context + Baggage が使われます。
+
+`tracer` を省略するとローカル span を作成せず、`trace.getTracer(...)`、`startSpanHook`、`requestHook`、`responseHook` も呼びません。渡した `meter` と `logger` は独立して動作します。抽出した親 context は引き続き伝播し、WebSocket の `queryPropagation` は既定で `false` です。tracer がある場合、`requireParentSpan: true` はアクティブな親 span がなければログを含む全計装をスキップします。tracer がなければメトリクスもログも妨げません。
+
+HTTP、SSE、WebSocket は既定でオンです。トランスポートに `{ enabled: false }` を渡すとスキップします。
+
+## OpenTelemetryServerOptions
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+| フィールド          | 既定値                      | 効果                                                                                                       |
+| ------------------- | --------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `tracer`            | なし                        | 省略するとローカル span も span フックもありません。                                                       |
+| `meter`             | なし                        | 省略するとこのパッケージのメトリクスは記録されません。                                                     |
+| `logger`            | なし                        | `@opentelemetry/api-logs` の `Logger` です。省略すると診断の LogRecord は出力されません。                  |
+| `propagator`        | W3C Trace Context + Baggage | 親 context を抽出し、送信側の context を注入します。                                                       |
+| `requireParentSpan` | `false`                     | `tracer` があるとき、アクティブな親 span がなければ計装をスキップします。`tracer` がなければ無視されます。 |
+| `http`              | `{}`                        | HTTP トランスポートの options です。                                                                       |
+| `sse`               | `{}`                        | SSE トランスポートの options です。                                                                        |
+| `webSocket`         | `{}`                        | WebSocket トランスポートの options です。                                                                  |
+
+## OpenTelemetryServerTransportOptions
+
+### OpenTelemetryServerHttpOptions
+
+### OpenTelemetryServerSSEOptions
+
+### OpenTelemetryServerWebSocketOptions
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<EventStreamHandle<unknown>>
+interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTransportOptions<WebSocketSessionLike> {
+  queryPropagation?: boolean
+}
+```
+
+`enabled` の既定は `true` で、トランスポートをオフにするのは `enabled: false` だけです。古い真偽値のスイッチ（`http: false`）とトップレベルのフックは、TypeScript の型でのみ拒否されます。実行時のチェックはないため、実行時には `http: false` でもトランスポートは有効のままで、トップレベルのフックは黙って無視されます。
+
+span フックは `tracer` が渡された場合にのみ呼び出されます。`startSpanHook` は、自分の HTTP、SSE、または WebSocket トランスポートについて、span 作成前に同期実行されます。その属性は組み込み属性のあとに適用されるので、アプリケーションは `url.full` や別の初期値を上書きできます。throw すると Defjs は組み込み属性で span を作り、リクエストを続けます。`requestHook` と `responseHook` は span 作成後に実行されます。どちらも await されず、throw や reject が操作をブロックしたり失敗させたりすることはありません。
+
+`span.isRecording()` が true の間、hook failure は `defjs.otel.hook.error` と `exception` イベントとして記録されます。記録しない span（終了済みまたはサンプリング対象外）の場合、エラーは `diag.error` を通じて OpenTelemetry 診断 logger に送られます。受け取るには、アプリケーション側で `@opentelemetry/api` の `diag.setLogger(...)` を設定する必要があり、デフォルトでは自動出力されません。このパッケージは SDK を初期化せず、この診断も独立した SDK `LogRecord` ではありません。
+
+`responseHook` は、トランスポートが返したものを受け取ります。HTTP では `HttpResponse`、SSE では開始に成功したあとのストリームハンドル、WebSocket では開いたあとのセッションです。第 3 引数は元のリクエストです。
+
+デフォルトでは、`url.full` は任意の `request.baseEndpoint` に対して `request.endpoint` を解決するだけで、独立した `request.queryString` は付けません。その境界は redaction ではなく、このパッケージに組み込みの redactor や機微キーの方針もありません。必要なら、アプリケーションが所有する URL を明示的に組み立て、必要に応じて redact してください。
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+`queryPropagation` の既定は `false` です。WebSocket URL に trace context を載せてよいと受け入れたあとでのみ、オンにしてください。
+
+## Logger 診断
+
+トップレベルの `logger?: Logger` は `@opentelemetry/api-logs` のインターフェイスを受け取り、Winston/Pino Logger は受け取りません。省略も単独での使用も可能です。Defjs はグローバル logger を取得せず、provider も所有しません。リクエストまたは論理的な接続ごとに、`WARN` の LogRecord（severity number 13）を最大 1 件だけ出力します。メッセージは固定で、属性は `server.address` と `server.port`（わかる場合）、`defjs.phase`、`exception.type`、HTTP ではさらに `http.request.method`、SSE ストリームがエラーで終わる場合は `defjs.sse.fault.code`、WebSocket の close 情報に数値の code がある場合は `websocket.close.code` です。
+
+| 結果                                                                      | イベント                                                          | `defjs.phase` |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |
+| HTTP の `next()` が reject（キャンセルと公開される `HTTP_STATUS` は除く） | `http.client.request.exception`                                   | `request`     |
+| SSE または WebSocket の接続に失敗                                         | `defjs.client.sse.exception` / `defjs.client.websocket.exception` | `connect`     |
+| SSE または WebSocket がエラーで終了（reject された `closed` を含む）      | 同じトランスポートのイベント                                      | `connection`  |
+
+通常の status のレスポンス（宣言した `error` ボディがデコードできる 4xx/5xx を含む）、成功、正常終了、EOF、呼び出し側によるキャンセルでは LogRecord を出力しません。HTTP execute のタイムアウトが 1 回ログに出るのは、タイムアウトによる reject が OTel インターセプターの `next()` / トランスポート境界に届いた場合だけです（理由が `TimeoutError` の abort、たとえば `AbortSignal.timeout()` は、キャンセルではなくタイムアウトとして扱われます）。入力のパース、ビルド、`next()` の後のアプリケーションインターセプターの処理、チェーン後のボディ変換で、外側の実行だけが期限切れを観測した場合、LogRecord は出力されません。外側のコマンド境界で `client.execute(...)` を観測してください。HTTP ハンドラー境界内で宣言した `output` / `error` のボディ読み取りが失敗すると、どの表現でもログに出ます。メディアタイプと `JSON.parse` の失敗がログに出るのは JSON 表現だけで、HTTP status は問いません。JSON 以外のテキスト、blob、バイト列は、メディアタイプが JSON でないというだけでは失敗になりません。宣言していないボディは読まれないので、ログに出ることはありません。struct の検証、204 のような宣言したボディの欠如、そのあとの `HTTP_STATUS` への変換はインターセプターの後に起きるので、ログに出ません。2xx 以外の SSE ハンドシェイクは常に 1 回ログに出ます。サーバーからの WebSocket の close フレームは、code にかかわらずログに出ません。close フレームのない突然の切断（1006）はランタイムによって異なります。プラットフォームの WebSocket が `close` の前に `error` を発火する場合（Node.js）はセッションがエラーで終わり、1 回ログに出ます。発火しない場合（Bun）は通常の close として扱われ、何もログされません。
+
+`exception.type` は、インターセプターが観測したものの class 名であり、Defjs の fault code ではありません。たとえば `BodyFailure`（HTTP ボディ）、`EventStreamFatalError`（SSE ハンドシェイク）、`DefjsFault`（WebSocket の開始）、`TypeError`（ネットワーク障害）、`Error`（タイムアウト）です。フィルター、exporter、flush、shutdown はアプリケーションが管理します。
+
+ログの完全な例とサードパーティ連携の例は [OpenTelemetry ガイド](/ja-JP/docs/integrations/opentelemetry-server#ログとサードパーティ-logger) を参照してください。

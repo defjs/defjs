@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: 'リクエストパスをベースエンドポイントに対して解決し、URL にします。'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — 有効な絶対 URL のクライアントエンドポイントです。そのクエリとハッシュは破棄され、ベースパスを保つために pathname の末尾にスラッシュが追加されます。`https://api.example.com/v1` と `/users` からは `https://api.example.com/v1/users` になります。
+- **path** — 相対のエンドポイントパスです。先頭のスラッシュは 1 つだけ取り除かれます。解決後の URL はベースと同じオリジンを保ち、そのディレクトリ配下に留まる必要があります。絶対パス、プロトコル相対パス、C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への脱出は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。
+- **queryString** — 先頭の `?` を含まないクエリです。空でなければ、そのまま URL の search に設定されます。
+- **戻り値** 解決された `URL` です。
+
+ベースエンドポイントまたはパスが不正な場合は `TypeError` を throw します。`client.execute` では、ベースが未指定、相対、または不正な場合も、パスが許可されない場合も、HTTP、SSE、WebSocket のいずれでも、インターセプターやトランスポートの実行前に `REQ_BUILD_FAILED` となります。ショートサーキットするインターセプターもこの検証より後に実行されます。インターセプターによる変更後の最終的な `req.endpoint` も、最終的な `req.baseEndpoint` に対して検証されます。ベースを意図的に別の有効な絶対 URL に置き換えることは許可されます。設定から確定する URL エラーではリトライされません。
+
+[HTTP](/ja-JP/api/http)

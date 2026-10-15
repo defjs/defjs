@@ -1,0 +1,32 @@
+---
+title: 'defineEventStream'
+description: 'يعلن نقطة نهاية Server-Sent Events محدَّدة النوع.'
+---
+
+<ApiReference identity="@defjs/core:defineEventStream" />
+
+```ts
+function defineEventStream<
+  const P extends string,
+  const M extends string = 'GET',
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<EventStreamDefinitionBase<TEvents>, 'method' | 'path'> &
+    EventStreamErrorField<TError> & {
+      input?: TInput
+      method?: M
+      path: P
+    } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>,
+): EventStreamEndpoint<TInput, TEvents, TError>
+```
+
+- **definition** — `path`، وخريطة `events`، والحدّان الإلزاميان `maxBufferSize` و`maxQueueSize` (أعداد صحيحة آمنة موجبة). واختياريًا `method` (الافتراضي `'GET'`) و`operation` و`input` و`error`. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+- **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `EventStreamCommand`.
+
+`EventStreamDefinitionBase` و`EventStreamErrorField` و`BuilderField` أنواع مساعدة داخلية: فـ `error` إلزامي فقط عندما يكون `TError` هو struct، و`builder` هو `(input: BuilderInput<TInput>) => EventStreamRequestShape` عند التصريح بـ `input`.
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+[SSE](/ar/api/sse)

@@ -1,0 +1,18 @@
+---
+title: 'isTimeoutCause'
+description: 'Core 사본과 플랫폼 타임아웃 오류에 걸쳐 타임아웃을 알아봐요.'
+---
+
+<ApiReference identity="@defjs/core:isTimeoutCause" />
+
+```ts
+function isTimeoutCause(cause: unknown): boolean
+```
+
+`Symbol.for('defjs.cause.timeout')` 브랜드를 가진 `Error`(다른 Core 사본의 `ERR_TIMEOUT` 포함)이거나, 이름이 `TimeoutError`인 `DOMException` / `Error`이면 `true`를 반환해요. 그 밖은 `false`예요.
+
+밑바탕의 `fault.cause`를 넘기세요. 이 함수는 fault를 풀지 않아요. `createNetworkFault`는 이 검사로 `NET_TIMEOUT`을 선택해요. OpenTelemetry는 abort signal이 함께 설정되어 있어도 타임아웃은 계속 로그해요.
+
+[오류 가이드](/ko-KR/docs/errors)와 [`isAbortCause`](/ko-KR/api/core/isabortcause)를 보세요.
+
+[오류](/ko-KR/api/errors)

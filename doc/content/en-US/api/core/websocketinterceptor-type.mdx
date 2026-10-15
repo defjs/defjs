@@ -1,0 +1,17 @@
+---
+title: 'WebSocketInterceptor'
+description: 'Tagged WebSocket interceptor accepted by withInterceptors.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptor" />
+
+```ts
+interface WebSocketInterceptor {
+  kind: 'web-socket'
+  fn: WebSocketInterceptorFn
+}
+```
+
+Created by `createWebSocketInterceptor(fn)`. The `kind` tag lets `withInterceptors` accept HTTP, SSE, and WebSocket interceptors in one list; only `kind: 'web-socket'` interceptors run for WebSocket commands.
+
+[Interceptors](/api/interceptors)

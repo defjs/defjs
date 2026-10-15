@@ -1,0 +1,44 @@
+---
+title: 'ClientSSEOptions'
+description: '可选的 SSE 设置：fetch handle、无效事件 hook 与重连策略。'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — 打开流的 Fetch 实现。默认实现在每次尝试时获取 `globalThis.fetch`，导入后安装的替代实现也会生效。所有 SSE handle 收到的都是 `Request`。缺少全局 Fetch 时，默认执行返回 `ENV_UNSUPPORTED`；自定义 handle 仍可使用。
+- **onInvalidEvent** — 事件没有匹配的 struct 且没有 `default` struct（`'missing-struct'`），或事件数据校验失败（`'validation-failed'`）时调用。该事件会被跳过。hook 抛出的错误不会关闭流。
+- **reconnect** — 需主动开启。不设置则流永远不会重连。每次断线的 `attempts` 默认为 **3**；`attempts: 0` 表示禁用重试。握手成功后会重置重试预算、回调的 `attempt` 和退避指数。`delayMs` 是初始基础延迟，默认 1000，服务器发来的 `retry:` 值会取代它。`factor` 默认为 1。`jitter` 是 0–1 的乘性因子，默认为 0。`maxDelayMs` 限制应用抖动并取整后的最终延迟；未配置上限时，仍受平台的 `2_147_483_647` ms 限制。基础延迟为零时始终保持为零；合法数值计算发生溢出时，延迟会取上限值。未提供 `shouldReconnect` 时，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求会重连；提供后，所有请求方法是否重连都由回调的返回结果决定，回调上下文中包含 `method`。请求体为 `ReadableStream` 的请求不会重连。重连时在 `Last-Event-ID` header 中以 UTF-8 字节发送最新 ID；空 ID 会清除它，包含 NUL 的 ID 会被忽略。
+
+重连选项在拦截器或 Fetch 运行之前校验：`attempts` 必须是非负的安全整数；`delayMs` 和显式设置的 `maxDelayMs` 必须是有限的非负数；`factor` 必须是有限的正数；`jitter` 必须是有限数，且处于 0–1 范围内。无效值会在执行时返回 `REQ_OPTIONS_INVALID`。
+
+用 `withSSEHandle`、`withSSEOnInvalidEvent` 和 `withSSEReconnect` 设置这些选项。不使用 `withSSEReconnect` 就不会重试。
+
+见 [Client 指南](/zh-Hans/docs/client)。
+
+[Client](/zh-Hans/api/client)

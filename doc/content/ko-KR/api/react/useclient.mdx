@@ -1,0 +1,17 @@
+---
+title: 'useClient'
+description: '가장 가까운 ClientProvider의 클라이언트를 돌려주는 React 훅이에요.'
+---
+
+<ApiReference identity="@defjs/react:useClient" />
+
+```ts
+function useClient(): Client
+```
+
+가장 가까운 `ClientProvider`에서 클라이언트를 읽어요.
+
+- **반환** 제공된 클라이언트예요.
+- **던짐** `ClientProvider` 밖에서 호출하면 `Error`를 던져요.
+
+[@defjs/react](/ko-KR/api/react)

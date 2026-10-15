@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: '업로드와 다운로드 진행 상황을 받는 콜백 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+`HttpExecuteOptions`의 `onDownloadProgress` 또는 `onUploadProgress`로 넘겨요. 콜백은 비동기 함수일 수 있어요. 다음 청크를 처리하기 전에 콜백이 완료되기를 기다려요. 콜백이 예외를 던지거나 반환한 프로미스가 거부되면 다운로드와 업로드 모두 호출이 `EXT_OBSERVER_FAILED`로 실패하고, 던진 값이 `cause`가 돼요. 호출자의 취소와 `timeout`이 여전히 우선하며, 각각 `NET_ABORTED`와 `NET_TIMEOUT`으로 보고돼요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요(Bun, Node, Deno). 브라우저에서는 `Blob` / `File`, `ArrayBuffer` 또는 `FormData` body가 그대로 보내지고 `onUploadProgress`는 호출되지 않으며, `onDownloadProgress`는 영향을 받지 않아요.
+
+[`HttpProgressEvent`](/ko-KR/api/core/httpprogressevent-type), [HTTP 가이드](/ko-KR/docs/http), [명령](/ko-KR/docs/commands)을 보세요.
+
+서버 런타임에서 `onUploadProgress`를 쓰는 FormData는 직렬화된 스트림을 직접 읽고 multipart boundary를 유지하며, 라이브러리가 생성한 `Content-Length` 없이 전송돼요(HTTP/1.1에서는 청크 전송). 따라서 body 전체를 버퍼링하지 않고도 진행률, 타임아웃, 취소가 동작해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없다고 보고해요. 일부 사전 서명된 업로드 대상처럼 `Content-Length`가 필요한 엔드포인트에서는 `onUploadProgress`를 생략하세요. 그러면 플랫폼 Fetch가 FormData를 길이와 함께 전송해요. identity가 아닌 인코딩의 다운로드도 `loaded`가 디코드된 스트림 바이트를 세기 때문에 `total: 0`과 `lengthComputable: false`를 보고해요. 취소하면 감싼 업로드 스트림이 해제돼요.
+
+[HTTP](/ko-KR/api/http)

@@ -1,0 +1,42 @@
+---
+title: 'ClientWebSocketOptions'
+description: 'Réglages WebSocket facultatifs : constructeur, hook beforeConnect, heartbeat, protocoles et politique de reconnect.'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — Constructeur WebSocket ; `globalThis.WebSocket` par défaut.
+- **beforeConnect** — S’exécute avant chaque tentative de connexion et de reconnect.
+- **heartbeat** — Envoie `message()` à chaque intervalle de `intervalMs` ms. Avec `timeoutMs` et `isAck`, un accusé de réception manquant marque la connexion comme défaillante. `intervalMs` et `timeoutMs` doivent être strictement positifs et au plus 2147483647.
+- **protocols** — Sous-protocoles passés au constructeur.
+- **reconnect** — Opt-in. `attempts` vaut **3** par défaut ; `0` désactive le retry, et omettre `attempts` ne signifie pas illimité. Autres valeurs par défaut : `delayMs` 1000, `factor` 2, `jitter` 0 (un facteur multiplicatif de 0 à 1), `maxDelayMs` 30000. `shouldReconnect` reçoit le `code`, le `reason` et le `wasClean` de la fermeture et peut opposer son veto à un retry.
+
+Le budget de nouvelles tentatives s’applique par coupure. Un `open` réussi réinitialise le budget, la tentative du callback et l’exposant de backoff ; la coupure suivante repart au retry 1. `maxDelayMs` plafonne le délai final après le jitter et l’arrondi, borné aussi par `2_147_483_647` ms. Voir [`withWebSocketReconnect`](/fr-FR/api/core/withwebsocketreconnect) pour les règles de validation et le comportement en cas de dépassement.
+
+Définis-les avec `withWebSocketHandle`, `withWebSocketBeforeConnect`, `withWebSocketHeartbeat`, `withWebSocketProtocols` et `withWebSocketReconnect`. `WebSocketExecuteOptions` peut surcharger `beforeConnect`, `heartbeat`, `protocols` et `reconnect` appel par appel.
+
+Voir le [guide Client](/fr-FR/docs/client).
+
+[Client](/fr-FR/api/client)

@@ -1,0 +1,17 @@
+---
+title: 'SSEInterceptor'
+description: 'Interceptor SSE etiquetado aceptado por withInterceptors.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptor" />
+
+```ts
+interface SSEInterceptor {
+  kind: 'sse'
+  fn: SSEInterceptorFn
+}
+```
+
+Lo crea `createSSEInterceptor(fn)`. La etiqueta `kind` permite que `withInterceptors` acepte interceptores HTTP, SSE y WebSocket en una sola lista; para los comandos SSE solo se ejecutan los interceptores con `kind: 'sse'`.
+
+[Interceptores](/es-ES/api/interceptors)

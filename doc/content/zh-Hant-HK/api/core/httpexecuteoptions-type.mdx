@@ -1,0 +1,19 @@
+---
+title: 'HttpExecuteOptions'
+description: 'HTTP request 嘅逐次 call options：progress callbacks、abort 或 timeout，仲有 signal。'
+---
+
+<ApiReference identity="@defjs/core:HttpExecuteOptions" />
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+Cancellation 係 `abort` **或者** `timeout`，唔可以兩個一齊。`signal` 可以同其中一個一齊用，**唔係** `abort` 嘅 alias。合法形狀：`{ timeout }`、`{ abort }`、`{ signal, timeout }`、`{ signal, abort }`。`{ abort, timeout }` 唔合法，call 會以 `REQ_OPTIONS_INVALID` fault resolve。`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。
+
+省略 `timeout` 時，會套用 client 嘅 `withTimeout` default；`abort` 會同嗰個 default 結合。
+
+[HTTP](/zh-Hant-HK/api/http)

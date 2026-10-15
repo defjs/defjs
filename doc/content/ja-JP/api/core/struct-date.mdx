@@ -1,0 +1,16 @@
+---
+title: 'struct.date'
+description: 'Date、タイムスタンプ、日付文字列を受け付け、Date を出力する struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.date" />
+
+```ts
+function date(): Struct<Date | number | string, Date>
+```
+
+- `Date`、ミリ秒のタイムスタンプ、または文字列を受け付け、`new Date(value)` で変換します。
+- 出力は `Date` です。無効な日付になる値は `invalid_type` で失敗します。
+- ワイヤ向けにエンコードするときは、ISO 8601 文字列（`toISOString()`）になります。
+
+[Struct](/ja-JP/api/struct)

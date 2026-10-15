@@ -1,0 +1,18 @@
+---
+title: 'PreflightFault'
+description: '可能在任何回應存在之前就發生的失敗所對應的 Fault。'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+所有可能在回應存在之前就失敗的情況：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。只有傳輸層當時確實有 metadata 可報時才帶 `response`，例如下載中途被截斷的 body。
+
+[錯誤](/zh-Hant-TW/api/errors)

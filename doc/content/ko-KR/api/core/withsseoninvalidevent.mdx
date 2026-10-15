@@ -1,0 +1,27 @@
+---
+title: 'withSSEOnInvalidEvent'
+description: 'struct가 없거나 검증에 실패한 SSE 이벤트를 관찰하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withSSEOnInvalidEvent" />
+
+```ts
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+일치하는 이벤트 struct가 없거나 검증에 실패한 SSE 이벤트에 대한 콜백을 등록해요. 콜백은 다음을 받아요.
+
+```ts
+{
+  reason: 'missing-struct' | 'validation-failed'
+  message: { id: string; event: string; data: string }
+  cause?: unknown
+  signal: AbortSignal
+}
+```
+
+- 잘못된 이벤트는 **항상 버려져요**. 스트림에 전달되지 않고, 콜백은 관찰만 해요.
+- 반환값은 무시돼요. 콜백이 던진 오류는 삼켜지며 스트림을 닫지 않아요. 단, `signal`이 이미 abort된 경우는 예외예요.
+- `validation-failed`일 때는 `cause`가 설정돼요. 핸들러가 없으면 잘못된 이벤트는 조용히 버려져요.
+
+[클라이언트](/ko-KR/api/client)

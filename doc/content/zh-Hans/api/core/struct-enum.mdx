@@ -1,0 +1,18 @@
+---
+title: 'struct.enum'
+description: '接受字符串列表中的某个值，或对象各个值之一的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.enum" />
+
+```ts
+function enum<const T extends readonly [string, ...string[]]>(value: T): Struct<T[number], T[number]>
+function enum<const T extends { [key: string]: number | string }>(value: T): Struct<T[keyof T], T[keyof T]>
+```
+
+- 传入非空字符串数组时，可接受的值就是数组中的各项。
+- 传入对象时，可接受的值是对象的字符串和数字**值**，不是它的 key。`{ A: 'a', B: 2 }` 接受 `'a'` 和 `2`。
+- TypeScript 的数字 `enum` 对象也接受它的成员名，因为反向映射本身就是它的值的一部分。
+- 集合之外的值以 `invalid_enum` 失败。没有任何字符串或数字值的对象，会在创建 struct 时抛出 `TypeError`。
+
+[Struct](/zh-Hans/api/struct)

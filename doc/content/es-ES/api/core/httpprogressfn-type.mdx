@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: 'Tipo del callback de progreso de subida y descarga.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+Se pasa como `onDownloadProgress` o `onUploadProgress` en `HttpExecuteOptions`. Los callbacks pueden ser asíncronos y se espera a que terminen antes de procesar el siguiente bloque de datos. Si un callback lanza una excepción o devuelve una promesa que se rechaza, la llamada falla con `EXT_OBSERVER_FAILED` y el valor lanzado como `cause`, tanto en descargas como en subidas. La cancelación por parte de quien llama y `timeout` siguen teniendo prioridad y se notifican como `NET_ABORTED` / `NET_TIMEOUT`. Solo se informa del progreso de subida en los entornos de ejecución que permiten enviar cuerpos de solicitud como flujos (Bun, Node, Deno). En los navegadores, un cuerpo de tipo `Blob` / `File`, `ArrayBuffer` o `FormData` se envía sin cambios y no se llama a `onUploadProgress`; `onDownloadProgress` no se ve afectado.
+
+Mira [`HttpProgressEvent`](/es-ES/api/core/httpprogressevent-type), la [guía de HTTP](/es-ES/docs/http) y [Comandos](/es-ES/docs/commands).
+
+En los entornos de ejecución del servidor, FormData con `onUploadProgress` lee su stream serializado directamente, conserva su boundary multipart y se envía sin un `Content-Length` generado por la librería (con transferencia chunked en HTTP/1.1), de modo que el progreso, el timeout y la cancelación funcionan sin almacenar todo el cuerpo en un búfer. Informa un total desconocido salvo que lo aporte un `Content-Length` explícito válido. Para un endpoint que exige `Content-Length`, como algunos destinos de subida con URL prefirmada, omite `onUploadProgress`; el Fetch de la plataforma envía entonces FormData con su longitud. Las descargas con una codificación distinta de identity también informan `total: 0` y `lengthComputable: false`, porque `loaded` cuenta los bytes decodificados del stream. La cancelación libera el stream de subida envuelto.
+
+[HTTP](/es-ES/api/http)

@@ -1,0 +1,17 @@
+---
+title: 'withWebSocketHandle'
+description: 'خيار عميل يستبدل مُنشئ WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHandle" />
+
+```ts
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+يستبدل مُنشئ WebSocket المستخدم لاتصالات المقبس. الافتراضي هو `globalThis.WebSocket`.
+
+- **WebSocketImpl** هو [`WebSocketHandleConstructor`](/ar/api/core/websockethandleconstructor-type) يُرجع [`WebSocketHandle`](/ar/api/core/websockethandle-type).
+- إن لم يتوافر مُنشئ، يفشل تنفيذ أمر WebSocket بعطل `ENV_UNSUPPORTED`.
+
+[العميل](/ar/api/client)

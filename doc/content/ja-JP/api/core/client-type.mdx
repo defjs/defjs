@@ -1,0 +1,31 @@
+---
+title: 'Client'
+description: 'createClient が返すクライアント型です。オーバーロードされた execute メソッドを持ちます。'
+---
+
+<ApiReference identity="@defjs/core:Client" />
+
+```ts
+type Client = {
+  readonly [CLIENT]: ClientConfig // internal symbol key
+
+  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
+    options?: EventStreamExecuteOptions,
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+
+  execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
+    command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+    options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+  ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+
+  execute<TInput extends AnyStruct | undefined, TOutput extends AnyStruct | undefined, TError extends AnyStruct | undefined>(
+    command: HttpCommand<TInput, TOutput, TError>,
+    options?: HttpExecuteOptions,
+  ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
+}
+```
+
+クライアントは解決済みの [`ClientConfig`](/ja-JP/api/core/clientconfig-type) を保持し、HTTP、SSE、WebSocket のコマンドを実行します。どのオーバーロードが使われるかは、コマンドの型で決まります。失敗は throw されず、結果のタプル内の fault として返ります。promise が reject されるのは、Defjs のコマンドではない値を渡したとき（`Error: Unsupported command`）だけです。
+
+[Client](/ja-JP/api/client)

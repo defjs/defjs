@@ -1,0 +1,23 @@
+---
+title: 'WebSocketRequestShape'
+description: 'Forme de requête qu’un builder WebSocket peut renvoyer.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketRequestShape" />
+
+```ts
+type WebSocketRequestShape<P extends string> = {
+  body?: never
+  headers?: never
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+Ce que le `builder` d’une [`WebSocketDefinition`](/fr-FR/api/core/websocketdefinition-type) peut renvoyer, où `P` est le path de l’endpoint.
+
+- `path` fournit les segments `:name` de `P` : une valeur scalaire par nom. Il vaut `never` quand le path n’en a aucun.
+- `query` est un `URLSearchParams` ou un record de scalaires, de tableaux et de records imbriqués.
+- `headers` et `body` valent `never`. Un handshake WebSocket n’en reçoit ni l’un ni l’autre du builder ; mets les credentials dans `beforeConnect` ou dans un intercepteur.
+
+[WebSocket](/fr-FR/api/web-socket)

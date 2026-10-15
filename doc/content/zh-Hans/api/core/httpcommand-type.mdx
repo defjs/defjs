@@ -1,0 +1,22 @@
+---
+title: 'HttpCommand'
+description: 'request endpoint 产生的、不透明的可执行 HTTP 命令。'
+---
+
+<ApiReference identity="@defjs/core:HttpCommand" />
+
+```ts
+interface HttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly definition: RequestDefinition<TInput, TOutput, TError>
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+带上 input 调用 `RequestEndpoint` 得到。把它当作不透明对象，传给 `client.execute` 即可。
+
+[HTTP](/zh-Hans/api/http)

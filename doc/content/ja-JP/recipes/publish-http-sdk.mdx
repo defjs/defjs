@@ -1,0 +1,24 @@
+---
+title: 'HTTP SDK のパッケージ化'
+description: エンドポイントと createClient を export し、status の絞り込みは呼び出し側に残します。
+---
+
+# execute を隠さずに HTTP SDK を公開する
+
+`client.execute` を飲み込むメソッド SDK は、宣言済みの `404` を型の無い throw や、共有の「API エラー」に潰しがちです。契約はエンドポイントと明示的なクライアントのままにしてください。status の分岐は呼び出し側が所有したままです。
+
+詳細は [Commands](/ja-JP/docs/commands)、[Client](/ja-JP/docs/client)、[設計上の判断](/ja-JP/docs/design-decisions) を見てください。
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+`export` するのはエンドポイントとクライアントファクトリです。ヘルパーはレビュー済みの 1 経路で `execute` を呼んでも構いませんが、気にするすべての status についてタプルを置き換えないでください。

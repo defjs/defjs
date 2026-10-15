@@ -1,0 +1,23 @@
+---
+title: 'WebSocketConnectionInfo'
+description: 'Métadonnées de la connexion WebSocket courante.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketConnectionInfo" />
+
+```ts
+interface WebSocketConnectionInfo {
+  extensions?: string
+  generation: number
+  protocol?: string
+  url?: string
+}
+```
+
+- `url` est l’URL que le socket rapporte.
+- `protocol` est le sous-protocole négocié et `extensions` les extensions négociées. Les deux valent `undefined` quand le socket rapporte une chaîne vide.
+- `generation` compte les sockets physiques qui ont atteint `open` : `1` après la première ouverture, puis un de plus après chaque reconnect. Un instantané pris avant toute ouverture vaut `0`.
+
+`session.connection` contient toujours le dernier instantané. Le `connection` du résultat d’execute reste la première connexion réussie.
+
+[WebSocket](/fr-FR/api/web-socket)

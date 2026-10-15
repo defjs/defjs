@@ -1,0 +1,19 @@
+---
+title: 'Infer'
+description: 'struct のパース後の出力型を推論します。'
+---
+
+<ApiReference identity="@defjs/core:Infer" />
+
+```ts
+type Infer<T> = T extends { readonly _struct: { readonly output: unknown } } ? T['_struct']['output'] : never
+```
+
+パースが成功したときに得られる型です。struct のデコード後の値には `Infer<typeof User>` を、受け付ける入力型には `StructInput` を使います。
+
+```ts
+const User = struct.object({ id: struct.number(), name: struct.string() })
+type User = Infer<typeof User> // { id: number; name: string }
+```
+
+[Struct](/ja-JP/api/struct)

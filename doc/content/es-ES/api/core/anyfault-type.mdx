@@ -1,0 +1,14 @@
+---
+title: 'AnyFault'
+description: 'Unión de todas las variantes de fault, sea cual sea el tipo del cuerpo de error decodificado.'
+---
+
+<ApiReference identity="@defjs/core:AnyFault" />
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+Cualquier fault, sin importar el tipo de su cuerpo de error decodificado. Úsalo en handlers que clasifican faults sin importar qué endpoint los produjo; prefiere `Fault<typeof yourErrorStruct>` cuando el tipo del cuerpo importa.
+
+[Errores](/es-ES/api/errors)

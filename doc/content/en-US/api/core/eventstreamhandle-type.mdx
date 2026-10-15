@@ -1,0 +1,32 @@
+---
+title: 'EventStreamHandle'
+description: 'Open SSE stream: iterate events, read open metadata, and close early.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamHandle" />
+
+```ts
+interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+`EventStreamMessage` is the raw `{ id: string; event: string; data: string }` message. Handles returned by `client.execute` carry parsed [`EventStreamData`](/api/core/eventstreamdata-type).
+
+`open` is the startup snapshot ([`EventStreamOpenInfo`](/api/core/eventstreamopeninfo-type)); after a reconnect it can change, so read `stream.open` again. `closed` resolves with an [`EventStreamCloseInfo`](/api/core/eventstreamcloseinfo-type) when the stream ends.
+
+Prefer `await using stream = handle` for owned scope cleanup. The disposer stops Defjs reading and reconnect work and waits for its reader lock to be released; it does not promise that a provider-controlled, stuck `ReadableStream.cancel()` promise will finish. Manual `close()` / `closed` remains available.
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+Structural implementations of `EventStreamHandle` must implement `[Symbol.asyncDispose]()` and return the same owned teardown path. This is a compile-time requirement for custom handles; code that only receives handles returned by Defjs has no additional runtime call requirement.
+
+[SSE](/api/sse)

@@ -1,0 +1,18 @@
+---
+title: 'WebSocketHandleConstructor'
+description: 'withWebSocketHandle 接受的构造函数类型。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandleConstructor" />
+
+```ts
+type WebSocketHandleConstructor = {
+  readonly OPEN: number
+} & (new (...args: never[]) => WebSocketHandle)
+```
+
+构造出 [`WebSocketHandle`](/zh-Hans/api/core/websockethandle-type) 并暴露数值型 `OPEN` ready-state 常量的 class 或函数。传输层会拿 `readyState` 与 `OPEN` 比较。
+
+调用方式是 `new WebSocketImpl(url)`；设置了子协议时是 `new WebSocketImpl(url, protocols)`。默认是 `globalThis.WebSocket`。用 [`withWebSocketHandle`](/zh-Hans/api/core/withwebsockethandle) 传入别的实现。
+
+[Client](/zh-Hans/api/client)

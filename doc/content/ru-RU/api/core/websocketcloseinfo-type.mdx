@@ -1,0 +1,22 @@
+---
+title: 'WebSocketCloseInfo'
+description: 'Логический итог сессии WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCloseInfo" />
+
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
+То, чем резолвится `session.closed`, когда сессия завершилась окончательно.
+
+- `closed`: сессия завершилась штатно, включая ручной `session.close()`.
+- `aborted`: сессия отменена; `cause` — причина abort.
+- `error`: сессия завершилась ошибкой; `cause` обязателен.
+- `code`, `reason` и `wasClean` берутся из нативного события close, если оно наблюдалось. Ручной `session.close(code, reason)` заполняет `code` и `reason`, когда в событии close их нет.
+
+[WebSocket](/ru-RU/api/web-socket)

@@ -1,0 +1,22 @@
+---
+title: 'Consume SSE events'
+description: Open a typed event stream, iterate once, then close and await closed.
+---
+
+# Consume an SSE stream
+
+One async iterator per stream. Put `close` + `await stream.closed` in `finally` so early exits don’t leak the Fetch attempt.
+
+See [SSE](/docs/sse) for details.
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com` is a placeholder. With a server whose first event is `message` with the data `{ "text": "hello from the server" }`, the snippet prints:
+
+```txt
+hello from the server
+```
+
+SSE does not retry network/read failures unless you enable `withSSEReconnect(...)`. With a reconnect object, `attempts` defaults to `3` per outage; a successful handshake resets the budget and backoff exponent. `attempts: 0` disables retry. Invalid numeric reconnect options fail before any request with `REQ_OPTIONS_INVALID`; see [validation rules](/api/core/withssereconnect). Without `shouldReconnect`, only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` requests reconnect, and a `ReadableStream` request body never does.

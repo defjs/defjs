@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerSSEOptions'
+description: 'Optionen für den SSE-Transport — die gemeinsamen Optionen mit dem Stream-Handle im responseHook.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions" />
+
+```ts
+type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<EventStreamHandle<unknown>>
+```
+
+Wird auf `sse` in `OpenTelemetryServerOptions` gesetzt. Es hat keine eigenen Felder: `enabled`, `startSpanHook`, `requestHook` und `responseHook` kommen von `OpenTelemetryServerTransportOptions`.
+
+- `responseHook(span, stream, req)` läuft, sobald der Stream geöffnet ist, bevor der Span `sse.connected` aufzeichnet. `stream` ist das `EventStreamHandle`, das der Transport zurückgegeben hat; `req` ist der ursprüngliche `HttpRequest`.
+- SSE wird auf Verbindungsebene getraced. Nach dem Start bleibt der Span offen, bis `stream.closed` abgeschlossen ist, und zeichnet `sse.connected` auf, dann eines von `sse.closed` (Server-EOF), `sse.aborted` (`stream.close()` oder ein Abbruch des offenen Streams durch den Caller; der Span endet trotzdem ohne Fehler) oder `sse.error`. Spans pro Event werden nicht erzeugt.
+- Ein Handshake mit Non-2xx-Status wird als Verbindungsfehler beobachtet: Der Span endet mit `ERROR`, und mit einem `logger` wird unabhängig vom Response-Body ein `WARN` ausgegeben.
+
+Übergib `{ enabled: false }`, um die SSE-Instrumentierung zu überspringen. Span-Hooks werden nur mit einem übergebenen `tracer` aufgerufen.
+
+[@defjs/opentelemetry-server](/de-DE/api/opentelemetry-server)

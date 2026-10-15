@@ -1,0 +1,16 @@
+---
+title: 'struct.literal'
+description: '只接受某一个 boolean、null、number 或 string 值的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.literal" />
+
+```ts
+function literal<const T extends boolean | null | number | string>(value: T): Struct<T, T>
+```
+
+- 只接受 `value`。比较使用 `Object.is`，其他值都以 `invalid_literal` 失败。
+- `value` 必须是 `boolean`、`null`、`number` 或 `string`。
+- 用于 [`struct.discriminatedUnion()`](/zh-Hans/api/core/struct-discriminatedunion) 的标签字段。
+
+[Struct](/zh-Hans/api/struct)

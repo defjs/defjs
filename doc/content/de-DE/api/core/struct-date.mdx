@@ -1,0 +1,16 @@
+---
+title: 'struct.date'
+description: 'Struct, der ein Date, einen Timestamp oder einen Datums-String akzeptiert und ein Date ausgibt.'
+---
+
+<ApiReference identity="@defjs/core:struct.date" />
+
+```ts
+function date(): Struct<Date | number | string, Date>
+```
+
+- Akzeptiert ein `Date`, einen Millisekunden-Timestamp oder einen String und konvertiert ihn mit `new Date(value)`.
+- Der Output ist ein `Date`. Ein Wert, der ein ungültiges Datum ergibt, schlägt mit `invalid_type` fehl.
+- Für die Wire kodiert, wird der Wert zu einem ISO-8601-String (`toISOString()`).
+
+[Struct](/de-DE/api/struct)

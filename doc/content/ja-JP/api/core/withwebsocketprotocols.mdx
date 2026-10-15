@@ -1,0 +1,18 @@
+---
+title: 'withWebSocketProtocols'
+description: 'ハンドシェイクで使う WebSocket のサブプロトコルを設定するクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketProtocols" />
+
+```ts
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+```
+
+RFC 6455 に従い、ハンドシェイクで提示するサブプロトコルを設定します。WebSocket コンストラクタの第 2 引数として渡され、リストが空でないときに限ります。
+
+サーバーが特定のサブプロトコル（たとえば `['json']` や `['v1']`）を要求する場合にだけ意味があります。
+
+優先順位は高い順に、execute の `protocols` option、このクライアント option、エンドポイント定義の `protocols` です。
+
+[Client](/ja-JP/api/client)

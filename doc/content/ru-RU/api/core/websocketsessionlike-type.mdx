@@ -1,0 +1,27 @@
+---
+title: 'WebSocketSessionLike'
+description: 'Интерфейс сессии WebSocket для interceptor’ов.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSessionLike" />
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: { extensions?: string; generation: number; protocol?: string; url?: string }
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+Минимальная поверхность сессии, которую видят interceptor’ы. Структурно она совместима с [`WebSocketSession`](/ru-RU/api/core/websocketsession-type), но сообщения типизированы как `unknown`.
+
+Сессия-обёртка или сессия для short-circuit обязана пробрасывать тот же teardown `[Symbol.asyncDispose]()` в рамках своего lifecycle `close` / `closed`; вернуть посторонний уже resolved promise недостаточно. Требование этого члена — breaking change на этапе компиляции для структурных реализаций. Код, который принимает только сессии, возвращённые Defjs, дополнительных требований к вызовам в рантайме не имеет.
+
+[Interceptors](/ru-RU/api/interceptors)

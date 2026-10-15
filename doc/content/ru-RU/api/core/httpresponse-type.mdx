@@ -1,0 +1,22 @@
+---
+title: 'HttpResponse'
+description: 'HTTP-ответ в «проводной» форме, который создают транспорты и видят interceptor’ы.'
+---
+
+<ApiReference identity="@defjs/core:HttpResponse" />
+
+```ts
+type HttpResponse<R> = {
+  readonly [HTTP_RESPONSE]: true // internal brand; build values with makeResponse
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+«Проводная» форма, которую создают транспорты и видят interceptor’ы: `body` — это текст или уже распарсенный JSON, а не декодированное значение. `body` равен `undefined`, если тела не было; JSON `null` остаётся `null`. Для JSON-представления строковое значение означает, что корневой элемент JSON — строка; это значение повторно не парсится; байты и blob’ы «сырые» и парсятся один раз. `ok` истинно для 2xx. Сбой транспорта — это fault, а не ответ. До вызывающего доходит `DecodedResponse`.
+
+[HTTP](/ru-RU/api/http)

@@ -1,0 +1,23 @@
+---
+title: 'WebSocketRequestShape'
+description: 'WebSocket builder 可以返回的请求形状。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketRequestShape" />
+
+```ts
+type WebSocketRequestShape<P extends string> = {
+  body?: never
+  headers?: never
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+[`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type) 的 `builder` 可以返回的内容，其中 `P` 是 endpoint 的路径。
+
+- `path` 提供 `P` 里的 `:name` 片段：每个名字对应一个标量值。路径里没有这样的片段时，它是 `never`。
+- `query` 是 `URLSearchParams`，或由标量、数组和嵌套 record 组成的 record。
+- `headers` 和 `body` 是 `never`。WebSocket 握手不从 builder 取这两者；凭据请放进 `beforeConnect` 或 interceptor。
+
+[WebSocket](/zh-Hans/api/web-socket)

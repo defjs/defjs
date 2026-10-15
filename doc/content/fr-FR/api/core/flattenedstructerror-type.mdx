@@ -1,0 +1,17 @@
+---
+title: 'FlattenedStructError'
+description: 'Sacs d’erreurs de formulaire et de champ à plat renvoyés par StructError.flatten.'
+---
+
+<ApiReference identity="@defjs/core:FlattenedStructError" />
+
+```ts
+interface FlattenedStructError {
+  formErrors: string[]
+  fieldErrors: { [key: string]: string[] }
+}
+```
+
+Le résultat de `StructError.flatten()`. `formErrors` contient les messages des problèmes dont le chemin est vide (problèmes au niveau racine). `fieldErrors` contient les messages indexés par le premier segment du chemin, de sorte que les problèmes imbriqués sont regroupés sous leur champ de premier niveau.
+
+[Struct](/fr-FR/api/struct)

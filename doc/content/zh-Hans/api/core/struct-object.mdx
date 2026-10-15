@@ -1,0 +1,25 @@
+---
+title: 'struct.object'
+description: '解析字段固定的普通对象的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+`shape` 把字段名映射到 struct。
+
+- 每个字段默认**必填**。缺少 key 以 `missing_key` 失败。
+- `.optional()` 和 `.nullish()` 允许缺少 key。缺失的可选字段在输出中依然缺失。
+- `.null()` / `.nullable()` 允许 `null`。
+- `.alias(name)` 设置字段的传输键名（wire key）。`struct.parse` 默认读取逻辑键名；`{ aliases: true }` 和 HTTP JSON 解码读取传输键名，HTTP JSON 编码则写出传输键名。解析后的输出使用逻辑键名。
+- 不在 `shape` 里的 key 会从输出中移除。输出是一个原型为 `null` 的新对象。
+- 输入必须是普通对象。数组、`Map` 和类实例以 `invalid_type`（期望 `object`）失败。
+- 解析在第一个失败的字段处停止，`issue.path` 保存它的 key。
+- `shape` 不是普通对象时抛出 `TypeError`。
+
+`ObjectShape` 是 `{ [key: string]: any }`；每个值都必须是 struct。
+
+[Struct](/zh-Hans/api/struct)

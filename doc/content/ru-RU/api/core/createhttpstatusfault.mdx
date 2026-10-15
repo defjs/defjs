@@ -1,0 +1,17 @@
+---
+title: 'createHttpStatusFault'
+description: 'Фабрика fault HTTP_STATUS, тело ошибки которого было декодировано.'
+---
+
+<ApiReference identity="@defjs/core:createHttpStatusFault" />
+
+```ts
+function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+```
+
+- **response** — ответ не из диапазона 2xx, несущий тело, декодированное по объявленному struct `error`.
+- **Возвращает** нативный `Error` с именем `DefjsFault`, у которого `code: 'HTTP_STATUS'`, `data` равен `response.body`, `status` скопирован из ответа, а `response` передан как есть. Message — `Http failure response: <status>`, а при наличии statusText дополняется ` - <statusText>`.
+
+Если тело не декодировалось, используй [`createUndecodedHttpStatusFault`](/ru-RU/api/core/createundecodedhttpstatusfault).
+
+[Ошибки](/ru-RU/api/errors)

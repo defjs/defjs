@@ -1,0 +1,20 @@
+---
+title: 'Local HTTP tests'
+description: Swap Fetch for one client with withHTTPHandle and keep the command unchanged.
+---
+
+# Test with a local Fetch handle
+
+`withHTTPHandle(...)` replaces Fetch for that client only. You still get URL building, interceptors, status dispatch, and Struct decoding — without DNS, TLS, or a real server.
+
+See [Client](/docs/client) for details.
+
+<include cwd meta="get-user.test.ts">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+```txt
+Ada 200
+```
+
+Use the same `getUser` command against a real `withEndpoint(...)` client in production — only the handle changes.

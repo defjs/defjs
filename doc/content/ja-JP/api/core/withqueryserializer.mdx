@@ -1,0 +1,19 @@
+---
+title: 'withQuerySerializer'
+description: 'query オブジェクトを query 文字列にする方法を差し替えるクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withQuerySerializer" />
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+HTTP、SSE、WebSocket の query エンコードを差し替えます。
+
+- `serializer(query)` は**エンコード済みのワイヤオブジェクト**を受け取ります。エイリアス適用済み、`Date` は ISO 文字列、`bigint` は文字列です。入れ子のオブジェクトと配列はそのままです。
+- 先頭の `?` なしの query 文字列を返す必要があります。その文字列がそのまま使われます。
+- リクエストに query が無いときは呼ばれません。`URLSearchParams` を返すビルダーはこれを飛ばします。
+- この option がなければ、query は `URLSearchParams` で処理されます。配列はキーを繰り返し、入れ子のオブジェクトは失敗します。
+
+[Client](/ja-JP/api/client)

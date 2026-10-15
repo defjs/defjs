@@ -1,0 +1,19 @@
+---
+title: 'withQuerySerializer'
+description: 'query 객체를 query 문자열로 바꾸는 방식을 교체하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withQuerySerializer" />
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+HTTP, SSE, WebSocket의 query 인코딩을 바꿔요.
+
+- `serializer(query)`는 **인코딩된 와이어 객체**를 받아요. alias가 적용되고, `Date`는 ISO 문자열, `bigint`는 문자열이에요. 중첩 객체와 배열은 그대로 유지돼요.
+- 앞에 `?`가 없는 query 문자열을 돌려줘야 해요. 그 문자열이 그대로 쓰여요.
+- 요청에 query가 없으면 호출되지 않아요. `URLSearchParams`를 돌려주는 builder는 이를 건너뛰어요.
+- 이 옵션이 없으면 query는 `URLSearchParams`를 써요. 배열은 키를 반복하고, 중첩 객체는 실패해요.
+
+[클라이언트](/ko-KR/api/client)

@@ -1,0 +1,16 @@
+---
+title: 'ClientProvider'
+description: クライアントを context 経由でサブツリーに渡す React コンポーネントです。
+---
+
+<ApiReference identity="@defjs/react:ClientProvider" />
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+`createClient` で作った既存のクライアントを `client` として渡すと、子孫は `useClient` でそれを読みます。このコンポーネントはクライアントを作らず、キャッシュせず、破棄しません。入れ子の `ClientProvider` は自分のサブツリーのクライアントを上書きし、`client` prop が変わると子孫から見える context の値が変わります。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+[@defjs/react](/ja-JP/api/react)

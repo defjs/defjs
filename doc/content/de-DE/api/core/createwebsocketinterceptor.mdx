@@ -1,0 +1,19 @@
+---
+title: 'createWebSocketInterceptor'
+description: 'Verpackt eine Interceptor-Funktion als getaggten WebSocket-Interceptor.'
+---
+
+<ApiReference identity="@defjs/core:createWebSocketInterceptor" />
+
+```ts
+function createWebSocketInterceptor(fn: WebSocketInterceptorFn): WebSocketInterceptor
+
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+Gibt `{ kind: 'web-socket', fn }` zurück. WebSocket-Interceptors laufen nur für WebSocket-Commands.
+
+`next` und der Interceptor geben eine [`WebSocketSessionLike`](/de-DE/api/core/websocketsessionlike-type) zurück, die Session aus Interceptor-Sicht. Eine Wrapper- oder Short-Circuit-Session muss ihr `[Symbol.asyncDispose]()`-Teardown weiterreichen; die verlinkte Seite listet die Member und die Anforderung auf.
+
+[Interceptors](/de-DE/api/interceptors)

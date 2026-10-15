@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: 'Upload 同 download progress 嘅 callback type。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+喺 `HttpExecuteOptions` 入面作為 `onDownloadProgress` 或 `onUploadProgress` 傳入。Callbacks 可以係 async，而且會喺處理下一個 chunk 之前被 await。如果 callback 拋出錯誤或者 reject，call 就會以 `EXT_OBSERVER_FAILED` 失敗，拋出嘅值會成為 `cause`，download 同 upload 都一樣。Caller 取消操作同 `timeout` 仍然優先，分別會報 `NET_ABORTED` 同 `NET_TIMEOUT`。只有 runtime 支援以 stream 方式送出 request body，先會回報 upload progress（Bun、Node、Deno）。喺 browser，`Blob` / `File`、`ArrayBuffer` 或者 `FormData` body 會原樣送出，而且唔會 call `onUploadProgress`；`onDownloadProgress` 唔受影響。
+
+睇 [`HttpProgressEvent`](/zh-Hant-HK/api/core/httpprogressevent-type)、[HTTP guide](/zh-Hant-HK/docs/http) 同 [Commands](/zh-Hant-HK/docs/commands)。
+
+喺 server runtime，帶 `onUploadProgress` 嘅 FormData 會直接讀取序列化後嘅 stream，保留 multipart boundary，而且送出時唔會帶 library 產生嘅 `Content-Length`（HTTP/1.1 上係 chunked），所以 progress、timeout 同 abort 都可以運作，唔使緩衝成個 body。除非明確設定有效嘅 `Content-Length`，否則 total 係未知。如果 endpoint 要求 `Content-Length`，例如某些預簽名上傳目標，就省略 `onUploadProgress`；嗰陣平台 Fetch 會帶住 FormData 嘅長度送出。使用非 identity encoding 嘅 download 亦會回報 `total: 0` 同 `lengthComputable: false`，因為 `loaded` 計算嘅係解碼後 stream 嘅 bytes。取消操作會釋放被包裝嘅 upload stream。
+
+[HTTP](/zh-Hant-HK/api/http)

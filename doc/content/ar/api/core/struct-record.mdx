@@ -1,0 +1,19 @@
+---
+title: 'struct.record'
+description: 'struct يحلّل كائنًا عاديًا بمفاتيح نصية وstruct واحد للقيم.'
+---
+
+<ApiReference identity="@defjs/core:struct.record" />
+
+```ts
+function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
+```
+
+- يحلّل كل مفتاح مملوك للكائن العادي نفسه (own) بـ `value`. وأي شيء آخر يفشل بـ `invalid_type` (المتوقع `record`).
+- يتوقف التحليل عند أول قيمة فاشلة، ويحمل `issue.path` مفتاحها.
+- المخرجات كائن جديد بـ prototype يساوي `null`.
+- يرمي `TypeError` عندما لا تكون `value` struct.
+
+`RecordStruct<S>` غير مُصدَّر. وهو `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`، حيث `Output` هو `Infer<S>` دون `undefined`. وعندما يكون `S` struct اختياريًا، فإن القيمة التي تساوي `undefined` تُسقِط مفتاحها من المخرجات.
+
+[Struct](/ar/api/struct)

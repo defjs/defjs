@@ -1,0 +1,14 @@
+---
+title: 'struct.boolean'
+description: '接受布尔值的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.boolean" />
+
+```ts
+function boolean(): Struct<boolean, boolean>
+```
+
+只接受 `true` 和 `false`。其他值，包括 `'true'` 和 `1`，都以 `invalid_type` 失败。
+
+[Struct](/zh-Hans/api/struct)

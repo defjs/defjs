@@ -1,0 +1,19 @@
+---
+title: 'withQuerySerializer'
+description: 'Client-Option, die ersetzt, wie Query-Objekte zu Query-Strings werden.'
+---
+
+<ApiReference identity="@defjs/core:withQuerySerializer" />
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+Ersetzt das Query-Encoding für HTTP, SSE und WebSocket.
+
+- `serializer(query)` bekommt das **encodierte Wire-Objekt**: Aliasse angewandt, `Date` als ISO-String, `bigint` als String. Verschachtelte Objekte und Arrays bleiben, wie sie sind.
+- Er muss den Query-String ohne führendes `?` zurückgeben. Der String wird unverändert verwendet.
+- Ohne Query wird er nicht aufgerufen. Ein Builder, der `URLSearchParams` zurückgibt, überspringt ihn.
+- Ohne diese Option nutzen Queries `URLSearchParams`: Arrays wiederholen den Key, und ein verschachteltes Objekt scheitert.
+
+[Client](/de-DE/api/client)

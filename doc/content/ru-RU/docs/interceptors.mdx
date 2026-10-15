@@ -1,0 +1,107 @@
+---
+title: 'Перехватчики'
+description: Сложи политику HTTP, SSE и WebSocket на границе транспорта в порядке луковицы.
+---
+
+# Перехватчики
+
+Добавь auth-заголовки, short-circuit окна обслуживания или ретрай безопасных чтений — не трогая валидацию команды. У каждого транспорта своя цепочка. На входе `HttpRequest`; возвращаешь результат этого транспорта (`HttpResponse`, handle event-stream или сессию WebSocket). Валидация input бежит до цепочки; диспатч по status и декодированные результаты — после.
+
+## Базовая настройка
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## Порядок луковицы
+
+`withInterceptors(...items)` принимает смешанные interceptors. Клиент фильтрует по `kind` выбранного транспорта и сохраняет относительный порядок регистрации. Каждый interceptor может бежать до и после `next`:
+
+| Фабрика                      | Запрос        | Результат `next`                      |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+Несколько вызовов `withInterceptors(...)` дописывают. Клади широкое наблюдение снаружи более узкой мутации/ретрая, когда внешний слой должен увидеть итоговый результат.
+
+## Клонируй и добавь request headers
+
+Считай входящий `HttpRequest` принадлежащим цепочке. Клонируй `Headers`, прежде чем менять; в `next` передай новый request:
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+Тот же паттерн для SSE. Браузерный WebSocket не может добавить произвольные handshake-заголовки — смена `request.headers` браузерный сокет не аутентифицирует. Используй protocol, политику URL/query или handshake, который поддерживает сервер.
+
+HTTP никогда не записывает выведенный Content-Type в `request.headers`; интерцепторы видят только объявленные заголовки. `request.bodyContentType` хранит выведенный тип тела билдера как обычное поле, поэтому он сохраняется при копировании `{ ...req }`. Явный заголовок `content-type` всегда важнее этого поля и автоматического определения, объявлен ли он билдером, значениями клиента по умолчанию, интерцептором или сырым запросом `fetchHandler`. Подписывающей стороне следует читать `headers.get('content-type') ?? request.bodyContentType`.
+
+При замене тела HTTP замени `body` в копии запроса и объяви его тип заголовком `content-type`. `bodyContentType` действует, только пока `body` остаётся значением билдера; тип заменённого тела определяется заново, поэтому заменяющая строка — текст, если заголовок не объявляет иное. При `body: undefined` выведенного библиотекой Content-Type не остаётся. Для неизменённого тела билдера `bodyContentType: null` подавляет вывод библиотеки, если явного заголовка нет, хотя нативный Fetch всё ещё может добавить свой тип для строки. FormData всегда использует фактический multipart-разделитель. Не используй повторно уже прочитанное тело `ReadableStream`.
+
+## Short-circuit запроса
+
+`next` можно пропустить, но вернуть надо ожидаемый тип результата. Для HTTP `makeResponse(...)` собирает совместимую обёртку:
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+Слой команды всё равно диспатчит по status. Объяви один struct `error` для стороны не-2xx, когда вызывающим нужен типизированный `error.data`. Он также по-прежнему проверяет объявленную сторону: JSON-`output` или `error` требует заголовок `content-type` JSON у синтетического ответа, а `body` должен быть уже разобранным значением — так, как его отдал бы транспорт (`request.responseType` и `request.errorResponseType` называют представление). Short-circuit SSE или WebSocket нуждается в полном совместимом handle/session (promise закрытия, живой state, владение и `[Symbol.asyncDispose]`). Частичные объекты — не валидная политика. Структурные реализации `EventStreamHandle` и `WebSocketSessionLike` теперь нуждаются в этом стандартном disposer на этапе компиляции; потребители, которые только получают handle Defjs, нового runtime-вызова не требуют.
+
+## Ретрай безопасных reads
+
+Ретраи меняют поведение. Держи политику узкой — этот пример ретраит воспроизводимые `GET` / `HEAD` / `OPTIONS` для статусов `429`, `502`, `503`, `504`, ограничивает `Retry-After` 30 с и останавливается после двух ретраев или на abort:
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+Брошенные ошибки interceptor/Fetch этот цикл не ретраит — провал транспорта reject’ит, а не производит status, по которому цикл мог бы совпасть. Ретрай `POST` / `PUT` / `PATCH` / `DELETE` нуждается в воспроизводимых байтах, поддержке сервера, контракте идемпотентности и проверенной политике status. Ретрай на тебе — Core не экспортирует `retryAfter()`.
+
+Interceptor, который бросает (или reject’ит) вне этого примера, возвращается вызывающему как `EXT_INTERCEPTOR_FAILED`, с брошенным значением на `cause` — см. [Ошибки](/ru-RU/docs/errors). То же происходит, если интерцептор завершается с результатом, не соответствующим его транспорту: `undefined` из-за забытого `return` или нативный `Response` там, где нужен `HttpResponse`. В HTTP interceptor отмену выражают иначе: бросок `ERR_ABORTED` или `ERR_TIMEOUT` — вызов завершится с `NET_ABORTED` или `NET_TIMEOUT`. У interceptors SSE и WebSocket такого исключения нет: любой бросок они сообщают как `EXT_INTERCEPTOR_FAILED`.
+
+`next(request)` может reject’нуть. Провал транспорта — это fault, не response со status 0, так что interceptor, который хочет его наблюдать, берёт `try` / `catch` вокруг `next`. Defjs всё равно атрибутирует верно: rejection, пришедший от транспорта, остаётся fault `NET_*`, а не вешается на твой interceptor.
+
+## Оберни WebSocket-сессии
+
+WebSocket interceptor может позвать `next` не больше одного раза. Если оборачиваешь сессию, делегируй живые геттеры и члены lifecycle явно:
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+Spread сессии снимает `state` / `connection` / `bufferedAmount` один раз. Сохраняй `closed`, `receive`, `close`, точную делегацию `[Symbol.asyncDispose]()` и cleanup listener’ов, если ты нарочно не меняешь владение. Обёртка должна вернуть promise teardown внутренней сессии, а не посторонний resolved promise. Если цепочка создала сессию, которую не отдали, Core завершает её (settle) и закрывает; если успешный interceptor вернул другую сессию, Core выбрасывает созданную.
+
+## Справка
+
+Фабрики возвращают тегированные значения транспорта:
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — Basic credentials на HTTP
+- `basicAuthSSEInterceptor(provider, options?)` — Basic credentials на SSE
+
+`HttpRequest` может включать `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` и статический `operation`. Это значение интеграции транспорта, не распарсенный input вызывающего. `queryParams` — это `new URLSearchParams(queryString)` после сериализации. Настроенный query serializer не зовут, когда builder не произвёл query, а builder’овский `URLSearchParams` берётся как есть. Валидацию команды, валидацию output и маппинг доменных ошибок держи в своих слоях.
+
+Проверка URL начинается при сборке запроса: отсутствующий, относительный или некорректный базовый эндпоинт либо недопустимый путь дают `REQ_BUILD_FAILED` до запуска интерцепторов или транспорта, в том числе интерцептора, возвращающего результат без отправки запроса. Перед отправкой итоговый `req.endpoint` проверяется относительно итогового `req.baseEndpoint`: разрешённый URL должен сохранять origin этой базы и оставаться в её каталоге; управляющие символы C0 (включая табуляцию, CR и LF), обратные слеши, `?`, `#` и выход за пределы каталога запрещены. Похожие на схему и протокольно-относительные формы отклоняются даже с ведущими пробелами; обычный пробел внутри пути разрешён и отправляется как `%20`. Интерцептор может явно заменить `baseEndpoint` другим корректным абсолютным URL. HTTP, SSE и WebSocket используют одно правило, а детерминированные ошибки URL никогда не приводят к повторной попытке.
+
+Observers SSE/WebSocket — хуки lifecycle, не control flow. Отписывай listener’ы WebSocket, когда владелец заканчивает. Провалы observer следуют контракту транспорта; сам interceptor может бросить или reject’нуть.
+
+Логируй проверенный allowlist: статический `operation`, method, status, длительность, стабильный код ошибки. По умолчанию не логируй резолвнутые URL, query-строки, auth-заголовки, тела, сырые cause, SSE event ID или payload WebSocket.
+
+Basic credentials — это base64, не шифрование. Используй TLS, на сервере держи провайдеры credentials в scope запроса, никогда не логируй сгенерированный заголовок. Encoder по умолчанию — `globalThis.btoa`; передай `BasicAuthInterceptorOptions.encode`, когда у рантайма нет `btoa` или нужен проверенный encoder.
+
+Interceptor может проводить политику транспорта. Это не валидация input, не авторизация и не владение ресурсом. Код, который стартует долгоживущую работу, всё ещё использует `await using` или вручную закрывает и ждёт терминальный promise. Обычный HTTP остаётся в scope запроса и управляется его timeout / `AbortSignal`; `Client` не `AsyncDisposable`.
+
+## Связанные рецепты
+
+- [Обнови Bearer-токен один раз на 401](/ru-RU/recipes/refresh-bearer-once)
+- [Опубликуй HTTP SDK, не пряча execute](/ru-RU/recipes/publish-http-sdk)
+- [Тест с локальным Fetch handle](/ru-RU/recipes/test-with-handle)
+- [Отменить HTTP-вызов](/ru-RU/recipes/cancel-http)

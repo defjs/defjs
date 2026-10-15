@@ -1,0 +1,17 @@
+---
+title: 'SSEInterceptor'
+description: '`withInterceptors` 接受的带标签 SSE interceptor。'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptor" />
+
+```ts
+interface SSEInterceptor {
+  kind: 'sse'
+  fn: SSEInterceptorFn
+}
+```
+
+由 `createSSEInterceptor(fn)` 创建。`kind` 标签让 `withInterceptors` 能在同一个列表里接受 HTTP、SSE 和 WebSocket interceptor；SSE 命令只会运行 `kind: 'sse'` 的 interceptor。
+
+[拦截器](/zh-Hans/api/interceptors)

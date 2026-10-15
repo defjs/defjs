@@ -1,0 +1,20 @@
+---
+title: 'اختبارات HTTP المحلية'
+description: استبدل Fetch لعميل واحد بـ withHTTPHandle واترك الأمر كما هو.
+---
+
+# الاختبار بـ Fetch محلي
+
+`withHTTPHandle(...)` يستبدل Fetch لذلك العميل فقط. ما زلت تحصل على بناء URL والمعترضات وتوزيع الحالة وفك Struct — بلا DNS أو TLS أو خادم حقيقي.
+
+انظر [العميل](/ar/docs/client) للتفاصيل.
+
+<include cwd meta="get-user.test.ts">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+```txt
+Ada 200
+```
+
+استخدم نفس أمر `getUser` ضد عميل `withEndpoint(...)` حقيقي في الإنتاج — المعالج وحده يتغيّر.

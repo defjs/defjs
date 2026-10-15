@@ -1,0 +1,178 @@
+---
+title: HTTP
+description: defineRequest, 실행 options, HTTP request/response 타입이에요.
+---
+
+# HTTP
+
+타입이 있는 요청을 선언하고, 입력으로 명령을 만든 뒤 실행해요.
+
+## defineRequest()
+
+```ts
+function defineRequest(definition: RequestDefinition): RequestEndpoint
+```
+
+- **definition** — `method`, `path`, 선택 `input` struct, 선택 `output`과 `error` struct, 선택 `operation`이에요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+- **반환** 엔드포인트예요. 입력을 넣어 호출하면 `HttpCommand`가 나와요.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output`은 2xx body를 위한 struct 하나이고, `error`는 모든 non-2xx body를 위한 struct 하나예요. 둘 다 status로 키를 나누지 않아요. 하나를 빼면 그 body는 읽히지 않아요 — [선언은 단언이에요](/ko-KR/docs/design-decisions#선언은-단언이에요)를 보세요.
+
+## executeHttpCommand()
+
+```ts
+function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, options?: HttpExecuteOptions): Promise<HttpAwaitResult>
+```
+
+`client.execute`가 쓰는 저수준 진입점이에요. 애플리케이션 코드는 `client.execute(command, options)`를 호출해야 해요.
+
+- **반환** `[null, data, response]` 또는 `[fault, undefined, undefined]`예요.
+
+2xx가 아닌 status는 `error` struct를 선언하지 않았거나 선언한 `error` body가 디코딩되면 `HTTP_STATUS`예요. `data`는 선언됐을 때 디코딩된 `error` body이고, 아니면 `undefined`예요. 선언한 `error` body를 읽을 수 없거나(미디어 타입 불일치, 잘못된 JSON) struct와 맞지 않으면 fault는 대신 `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH` 중 하나이고, 응답 status는 그 메타데이터에 그대로 담겨요. 실패하면 튜플의 세 번째 자리는 `undefined`이고, fault가 응답 메타데이터를 가져요.
+
+## fetchHandler()
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+기본 HTTP 전송이에요. `fetchImpl`의 기본값은 보내는 시점에 해석되는 전역 `fetch`이고, `withHTTPHandle`로 다른 것을 줄 수 있어요. 손대지 않은 플랫폼 Fetch는 `(url, init)`을 받고, 교체된 전역이나 사용자 지정 handle은 `Request`를 받아요. 응답이 클라이언트에 닿지 않았거나 선언된 body를 읽는 데 실패하면 synthetic 응답으로 resolve하지 않고 reject해요.
+
+## makeResponse()
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+네트워크 호출 없이 `HttpResponse`를 만들어요 (interceptor, 테스트). 기본 status는 `0`이에요. `ok`는 2xx일 때 true예요. 반환값은 와이어에서 온 응답과 같은 미디어 타입 검사와 같은 선언된 struct를 거쳐요. 신뢰하는 short-circuit은 없어요.
+
+## 실행 options
+
+## HttpExecuteOptions
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+취소는 `abort` **또는** `timeout`이지, 둘 다가 아니에요. 타입이 둘 다 주는 것을 막고, 런타임에 둘 다 넘기면 `REQ_OPTIONS_INVALID`로 실패해요. `signal`은 어느 쪽과도 조합돼요. `abort`의 별칭이 **아니에요**. 유효한 모양: `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`. `{ abort, timeout }`은 유효하지 않아요. `timeout`은 `1..2_147_483_647` 범위의 양의 안전 정수여야 해요. 호출에서 `timeout`을 생략하면 클라이언트의 `withTimeout` 기본값이 적용돼요 (HTTP 전용). `abort`와 `signal`은 그 기본값과 합쳐져요.
+
+## 타입
+
+### RequestDefinition
+
+`method`, `path`, 선택 `input`, `output`, `error`, `operation`, `builder`예요. `responseType`은 없어요. struct kind가 선언된 body를 어떻게 읽을지 골라요. `input`을 선언하면 입력이 이미 요청 모양이어도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+
+### HttpAwaitResult
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+성공하면 세 번째 자리는 `output`을 선언했을 때만 `body`를 가져요. 실패하면 `undefined`예요 — fault가 이미 있던 응답 메타데이터를 들고 있어요.
+
+### HttpRequest
+
+정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `timeout`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. interceptor가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. interceptor가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. builder가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 엔드포인트의 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
+
+### HttpMeta
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+응답이 클라이언트에 닿을 때마다 있는 응답 메타데이터예요. **`body`는 없어요**. body는 선언된 struct가 하나를 디코딩한 뒤에만 존재해요.
+
+### DecodedResponse
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+선언된 struct에 대해 body가 디코딩된 응답이에요. 이 타입을 들고 있다는 것은 디코딩이 일어났다는 증거라서, 디코딩 실패는 `HttpMeta`만 보고해요.
+
+### HttpResponse
+
+```ts
+type HttpResponse<R> = {
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+`body`는 응답에 body가 없으면 없고(`undefined`), JSON `null`은 `null` 그대로예요. 이 타입에는 brand가 붙어 있으므로 객체 리터럴 대신 `makeResponse`로 만드세요. 전송이 만들고 interceptor가 보는 와이어 모양이에요. `body`는 텍스트이거나 이미 파싱된 JSON이지, 디코딩된 값이 아니에요. JSON 표현에서 문자열은 JSON 문자열 루트라서 다시 파싱하지 않아요. bytes와 blob은 원시 값이라 한 번만 파싱해요. 호출자에게 닿는 것은 `DecodedResponse`예요.
+
+### HttpProgressEvent
+
+### HttpProgressFn
+
+`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소와 `timeout`은 여전히 `NET_ABORTED` / `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요(Bun, Node, Deno). 브라우저에서는 `Blob` / `File`, `ArrayBuffer`, `FormData` body가 그대로 보내지고 `onUploadProgress`는 호출되지 않아요.
+
+서버 런타임에서 FormData는 본문 전체를 Blob으로 버퍼링하지 않고 직렬화된 스트림을 쓰며, 실제 multipart boundary를 유지해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 명시 content type은 업로드 변환 뒤에도 남지만, FormData는 그 직렬화의 boundary를 써야 해요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
+
+[HTTP 가이드](/ko-KR/docs/http)와 [명령](/ko-KR/docs/commands)을 보세요.
+
+## RequestEndpoint
+
+`defineRequest`가 돌려줘요. 입력을 넣어 호출하면 `HttpCommand`가 나와요.
+
+## BuilderInput
+
+`builder`가 보는, 파싱된 엔드포인트 입력이에요. 객체 노드는 자신을 만든 struct를 지니므로 alias, `Date`, `bigint` 인코딩이 그 값을 따라가요.
+
+## HttpRequestShape
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+  headers?: HeadersInit | FlatRecord
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+}
+```
+
+`GET`과 `HEAD`는 body를 돌려줄 수 없어요. `path`와 `headers`는 평평한 스칼라여야 하고, `query`는 중첩될 수 있어요. 중첩 객체는 런타임에 `withQuerySerializer`가 필요해요.
+
+`BodyValue`가 받는 와이어 값과 JSON 값은 [`HttpRequestShape`](/ko-KR/api/core/httprequestshape-type)를 보세요.
+
+## HttpCommand
+
+요청 builder가 만든 opaque 명령이에요. `client.execute`에 넘기세요.
+
+## UseRequestConfig
+
+진행률과 취소 필드예요. `HttpExecuteOptions`는 `signal`을 더해요.
+
+## RequestSuccessData
+
+선언된 `output` struct에서 추론한 성공 body예요. 선언이 없으면 `undefined`예요.
+
+## RequestErrorData
+
+선언된 `error` struct에서 추론한 오류 body예요. 선언이 없으면 `undefined`예요.
+
+## HttpResponseType
+
+`'arraybuffer' | 'blob' | 'json' | 'text'`
+
+선언된 struct kind에서 골라요 (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, 그 밖은 `json`). `defineRequest`의 필드가 아니에요.
+
+## MakeResponseOptions
+
+`makeResponse`의 필드예요. `status`, `statusText`, `url`, `headers`, `body`, `request`.

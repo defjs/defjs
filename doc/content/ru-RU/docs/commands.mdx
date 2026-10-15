@@ -1,0 +1,59 @@
+---
+title: 'Определение и выполнение / Command'
+description: Опиши эндпоинты, собери непрозрачные команды, разложи input и выведи результаты транспорта.
+---
+
+# Команды
+
+Одно определение → эндпоинт → непрозрачная команда → `client.execute`. Один pipeline для HTTP, SSE и WebSocket.
+
+## Базовая настройка
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## Выбери определение
+
+| Определение              | Контракт                                                                        | Успешное значение                      |
+| ------------------------ | ------------------------------------------------------------------------------- | -------------------------------------- |
+| `defineRequest(...)`     | Method, относительный path, опциональный input, опциональные `output` / `error` | Декодированные данные + response       |
+| `defineEventStream(...)` | Path, лимиты buffer/queue, карта имя события → Struct                           | `EventStreamHandle` + снимок open      |
+| `defineWebSocket(...)`   | Path, один incoming struct, опциональный outgoing struct, лимит очереди         | `WebSocketSession` + снимок connection |
+
+Нет `input` → эндпоинт не принимает аргумент, а `builder` может быть `() => request`. С `input` → передай значение struct. Опциональное поле можно опустить; обязательное — нельзя.
+
+Держи команды непрозрачными. Не копайся в tags или symbols.
+
+## Куда ложатся значения
+
+Struct решает, как значение кодируется. `builder` решает, куда оно ложится. `builder` — синхронная чистая функция от **распарсенного** input. Она выполняется при вызове execute. Throw становится `REQ_BUILD_FAILED` в кортеже — сам вызов эндпоинта не бросает.
+
+При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
+
+Проводи типизированное значение насквозь. Алиас, `Date` → ISO и `bigint` → string применяются везде, где используется этот struct: раскладка запроса, декодирование ответа, события SSE и кадры WebSocket.
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+Тело — JSON `{"display_name":"…","email":"…"}`. Ключ, написанный руками, — запасной выход: `body: { name: input.user.displayName }` шлёт `name`, потому что родительский объект анонимный и алиас не применяется.
+
+## Когда формы расходятся
+
+`builder` — для placeholder’ов path, литералов и веток. Он получает настоящее значение, так что работают `if`, `??`, шаблоны и `switch`.
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.query` шлёт `page_size`. `headers: { 'x-api-version': '2' }` — литерал. Auth и tracing всё ещё живут в interceptors: они видят нативный request после того, как отработал builder.
+
+## Формы `output` и `error`
+
+`output` — один Struct для тела 2xx; `error` — один Struct для всего остального. `ok` — единственная развилка, и декодирует всегда одна сторона. Пропустить сторону значит, что это тело не прочитают: fault несёт status, а `data` остаётся `undefined`.
+
+## Связанные рецепты
+
+- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)
+- [POST JSON](/ru-RU/recipes/post-json)

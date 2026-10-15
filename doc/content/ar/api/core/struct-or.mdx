@@ -1,0 +1,20 @@
+---
+title: 'struct.or'
+description: 'struct يقبل قيمة تطابق أحد عدة structs.'
+---
+
+<ApiReference identity="@defjs/core:struct.or" />
+
+```ts
+function or<const T extends readonly [StructLike, ...StructLike[]]>(...options: T): UnionStruct<T>
+```
+
+`struct.or` متغيّر عدد المعاملات: مرّر كل خيار كمعامل مستقل.
+
+- يجرّب الخيارات بالترتيب ويُرجع نتيجة أول خيار ينجح تحليله.
+- إن لم يطابق أي خيار، يفشل بمشكلة `invalid_union` واحدة عند path الاتحاد نفسه. ولا يُبلَّغ عن مشاكل الخيارات منفردةً.
+- يرمي `TypeError` عندما لا يكون خيار ما struct.
+
+`UnionStruct<T>` غير مُصدَّر. وهو `Struct` مدخله ومخرجه هما اتحاد أنواع الخيارات، دون `undefined`. وللكائنات الموسومة فضّل [`struct.discriminatedUnion()`](/ar/api/core/struct-discriminatedunion)، الذي يبلّغ عن مشكلة الخيار المختار.
+
+[Struct](/ar/api/struct)

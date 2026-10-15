@@ -1,0 +1,17 @@
+---
+title: 'withSSEHandle'
+description: 'خيار عميل يستبدل دالة Fetch المستخدمة لفتح تدفقات SSE.'
+---
+
+<ApiReference identity="@defjs/core:withSSEHandle" />
+
+```ts
+function withSSEHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+يستبدل الدالة المتوافقة مع Fetch المستخدمة لفتح تدفقات أحداث SSE. الافتراضي هو `fetch` الخاص بالمنصة.
+
+- **fetchImpl** هو [`FetchHandle`](/ar/api/core/fetchhandle-type).
+- يؤثر في SSE فقط. يستخدم HTTP الخيار [`withHTTPHandle`](/ar/api/core/withhttphandle).
+
+[العميل](/ar/api/client)

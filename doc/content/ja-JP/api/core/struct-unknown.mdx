@@ -1,0 +1,16 @@
+---
+title: 'struct.unknown'
+description: 'null と undefined を除く任意の値を受け付ける、unknown 型の struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.unknown" />
+
+```ts
+function unknown(): Struct<NonNullable<unknown>, unknown>
+```
+
+- `null` と `undefined` を除くすべての値を受け付け、そのまま返します。内部の値は検証も除去もされません。
+- `null` や `undefined` を受け付けるには、`.null()`、`.optional()`、`.nullish()` をチェーンします。
+- 出力型は `unknown` なので、呼び出し側は使う前に絞り込む必要があります。
+
+[Struct](/ja-JP/api/struct)

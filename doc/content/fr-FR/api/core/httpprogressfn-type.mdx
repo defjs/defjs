@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: 'Type de callback pour la progression de l’envoi et du téléchargement.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+Passé comme `onDownloadProgress` ou `onUploadProgress` dans `HttpExecuteOptions`. Les callbacks peuvent être asynchrones ; on attend la fin de leur exécution avant de traiter le bloc de données suivant. Un callback qui lève une erreur ou renvoie une promesse rejetée fait échouer l’appel avec `EXT_OBSERVER_FAILED` ; la valeur à l’origine de l’échec est conservée dans `cause`. Cela vaut pour les téléchargements comme pour les envois. L’annulation par l’appelant et `timeout` restent prioritaires et signalent `NET_ABORTED` / `NET_TIMEOUT`. La progression de l’envoi n’est signalée que dans les environnements d’exécution capables de transmettre les corps de requête en flux (Bun, Node, Deno). Dans les navigateurs, un corps `Blob` / `File`, `ArrayBuffer` ou `FormData` est envoyé inchangé et `onUploadProgress` n’est pas appelé ; `onDownloadProgress` n’est pas affecté.
+
+Voir [`HttpProgressEvent`](/fr-FR/api/core/httpprogressevent-type), le [guide HTTP](/fr-FR/docs/http) et [Commandes](/fr-FR/docs/commands).
+
+Dans les environnements d’exécution serveur, FormData avec `onUploadProgress` lit directement son flux sérialisé, conserve sa boundary multipart et est envoyé sans `Content-Length` généré par la bibliothèque (avec transfert chunked en HTTP/1.1), ce qui permet à la progression, au timeout et à l’annulation de fonctionner sans mettre tout le corps en tampon. Le total est inconnu, sauf si un `Content-Length` explicite valide le fournit. Pour un endpoint qui exige `Content-Length`, comme certaines destinations d’envoi avec URL présignée, omets `onUploadProgress` ; le Fetch de la plateforme envoie alors FormData avec sa longueur. Les téléchargements encodés autrement qu’en identity signalent aussi `total: 0` et `lengthComputable: false`, car `loaded` compte les octets du flux décodé. L’annulation libère le flux d’envoi enveloppé.
+
+[HTTP](/fr-FR/api/http)

@@ -1,0 +1,16 @@
+---
+title: 'struct.null'
+description: 'null だけを受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.null" />
+
+```ts
+function null(): Struct<null, null>
+```
+
+受け付けるのは `null` だけです。それ以外の値はすべて `invalid_type` で失敗します。`undefined` もルートや配列・タプル内では `invalid_type` ですが、オブジェクトや record のフィールドが欠けている場合は、代わりに `missing_key` が報告されます。
+
+これは `.null()` 修飾メソッドではありません。修飾メソッドは、ほかの struct が受け付ける値に `null` を加えます。
+
+[Struct](/ja-JP/api/struct)

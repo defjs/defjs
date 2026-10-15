@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: 'Core のコピーをまたぐ呼び出し側のキャンセルと、プラットフォームの中断エラーを認識します。'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+`Symbol.for('defjs.cause.aborted')` ブランドを持つ `Error`（別の Core コピーの `ERR_ABORTED` を含む）、または名前が `AbortError` の `DOMException` に対して `true` を返します。同じ名前でも、ブランドを持たない通常の `Error` は一致しません。それ以外の値には `false` を返します。
+
+原因そのものである `fault.cause` を渡してください。この関数は fault をアンラップしません。`createNetworkFault` は、この判定を使って `NET_ABORTED` を選びます。OpenTelemetry は、タイムアウトのログを保持しつつ、呼び出し側のキャンセルのログを抑制するために使います。
+
+[Errors ガイド](/ja-JP/docs/errors) と [`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) を参照してください。
+
+[Errors](/ja-JP/api/errors)

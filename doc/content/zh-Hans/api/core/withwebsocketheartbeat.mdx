@@ -1,0 +1,30 @@
+---
+title: 'withWebSocketHeartbeat'
+description: '启用 WebSocket 心跳消息的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHeartbeat" />
+
+```ts
+function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): ClientOption
+```
+
+启用心跳消息，并可选地检测确认。传入 `undefined` 会清除之前的设置。option 的类型是：
+
+```ts
+{
+  intervalMs: number
+  isAck?: (message: unknown) => boolean
+  message?: <T = unknown>() => T | unknown
+  timeoutMs?: number
+}
+```
+
+- 每隔 `intervalMs` 调用一次 `message()`，其结果通过 endpoint 的 `outgoing` struct 发送。省略 `message` 或它返回 `undefined` 时，不发送任何消息。
+- 设了 `timeoutMs` 时，每次心跳之后都期待一个确认。`isAck` 收到解码后的入站消息；返回 `true` 时清除计时器，且该消息**不会**交给 `receive`。
+- 如果在 `timeoutMs` 内没有收到确认，或心跳无法发送，session 就会失败。这不会触发重连。
+- 心跳使用与 `session.send` 相同的 JSON 检查：struct 编码后 JSON 无法表示的值会导致 `TypeError`，并结束逻辑 session。
+- `intervalMs` 和 `timeoutMs` 必须为正的有限数，且不超过 `2_147_483_647`；否则 execute 以 `REQ_OPTIONS_INVALID` 失败。
+- execute options 里的 `heartbeat` 在本次调用中替换这一个。
+
+[Client](/zh-Hans/api/client)

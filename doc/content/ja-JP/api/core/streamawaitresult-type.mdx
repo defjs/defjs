@@ -1,0 +1,20 @@
+---
+title: 'StreamAwaitResult'
+description: 'SSE コマンドを実行したときに返るタプルです。'
+---
+
+<ApiReference identity="@defjs/core:StreamAwaitResult" />
+
+```ts
+type StreamAwaitResult<TEvent, TError extends AnyStruct | undefined = undefined> =
+  | [error: null, stream: EventStreamHandle<TEvent>, open: EventStreamOpenInfo]
+  | [error: Fault<TError>, stream: undefined, open: EventStreamOpenInfo | undefined]
+```
+
+SSE コマンドに対する `client.execute` の結果です。
+
+- 成功時は `[null, stream, open]` です。`open` は Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合、返されたハンドルの接続の最初の成功したハンドシェイクのスナップショットであり、独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先され、`stream.open` はライブのままです（[SSE](/ja-JP/docs/sse) を参照）。
+- 失敗時は `[fault, undefined, open]` です。失敗がレスポンス到着後に起きた場合（たとえば 2xx 以外のハンドシェイク）、`open` はレスポンスのスナップショットを持ち、それ以外では `undefined` です。
+- `TError` は宣言した `error` struct で、fault 上のデコード済みエラーボディの型になります。
+
+[SSE](/ja-JP/api/sse)

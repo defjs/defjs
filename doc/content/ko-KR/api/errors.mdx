@@ -1,0 +1,176 @@
+---
+title: 오류
+description: Fault의 변형들과 팩토리 헬퍼예요.
+---
+
+# 오류
+
+Execute는 판별 가능한 `Fault`를 튜플 첫 자리에 돌려줘요. 선언된 실패에 예외를 던지지는 않아요.
+
+## FaultCode
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+닫힌 집합 하나예요. 첫 `_` 앞부분이 분류이고, 따로 `kind` 필드는 없어요. 집합을 닫아 두는 건 `switch (fault.code)`를 완전하게 유지하기 위해서이고, 확장은 자기 세부를 새 code가 아니라 `cause`로 알려요.
+
+## FaultClass
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+`FaultClass<FaultCode>`는 `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`예요.
+
+## Fault
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = DecodeFault | HttpStatusFault<TErr> | PreflightFault
+```
+
+`fault.code`로 switch 하세요.
+
+### FaultOf
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`FaultOf`는 `Fault`를 그것을 만든 struct 대신 디코딩된 오류 body 타입으로 표현한 것이에요. `HttpAwaitResult`와 fault 팩토리는 디코딩된 값으로 동작하므로 이 형태를 써요.
+
+모든 변형은 `DefjsFault`라는 이름의 네이티브 `Error`라서, `String(fault)`가 `DefjsFault: <message>`를 줘요. `code`와 각 변형의 메타데이터 — `status`, `response`, `data` — 는 열거 가능한 자체 속성이에요. 네이티브 `cause` 체인은 열거되지 않아요.
+
+기본 Struct message는 받은 값이 아니라 `received <kind>`라고 말해요. 예를 들면 `Expected number at email, received string`이에요. `RES_DECODE_FAILED` 뒤에 JSON `SyntaxError`가 있으면 fault message는 `Response body could not be decoded`예요. issue path는 구조를 나타내며 record 키를 유지해요. `struct.record(...)`는 `Expected number at alice@example.com, received string`을 만들 수 있으므로, 기본 message, `prettify()`, `String(fault)`에도 민감한 키가 남을 수 있어요. 원본 `StructIssue.received`와 파서 cause는 민감하게 남아요. 사용자 `errorMap`과 extension message는 그대로 쓰이므로 로깅 전에 검토가 필요해요.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+`format()`, `flatten()`, `prettify()`는 `fault.cause`를 `StructError`로 좁힌 뒤에만 부르세요. 이 helper들은 fault로 복사되지 않아요.
+
+### HttpStatusFault
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+2xx가 아닌 모든 status예요. 엔드포인트가 `error`를 선언했고 body가 디코딩됐다면 `data`가 그 body이고 `response`도 그걸 지녀요. `error`를 생략했다면 body는 읽히지 않으니 `data`는 `undefined`이고 `response`는 메타데이터만 남아요.
+
+### DecodeFault
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+응답은 도착했지만 선언한 대로 읽을 수 없었어요. `response`는 메타데이터뿐이에요. body란 디코딩된 값이고 바로 그 디코딩이 실패한 거니까, 손 뻗을 `body` 필드가 없어요. 문제의 세부는 `cause`에 있어요 — struct 불일치면 `StructError`, 표현을 읽을 수 없으면 파서의 실패예요.
+
+### PreflightFault
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+응답이 존재하기 전에 실패할 수 있었던 모든 것이에요. `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response`는 전송이 보고할 메타데이터를 이미 갖고 있던 경우에만 있어요. 예를 들어 다운로드 중간에 잘린 body 같은 경우요.
+
+### AnyFault
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+디코딩된 오류 body 타입과 무관한 모든 fault예요. 어느 엔드포인트가 냈는지 신경 쓰지 않고 fault를 분류하는 핸들러에 쓰세요. body 타입이 중요한 곳에서는 `Fault<typeof yourErrorStruct>`를 고르세요.
+
+## 팩토리
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+```ts
+declare function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+
+declare function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+
+declare function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+
+declare function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+
+declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+`createHttpStatusFault`는 디코딩된 body를 이미 지닌 응답을 받아요. `createUndecodedHttpStatusFault`는 메타데이터만 받고, `error`를 선언하지 않은 엔드포인트용이에요.
+
+`createNetworkFault`는 `NET_ABORTED`에 [`isAbortCause`](/ko-KR/api/core/isabortcause)를, `NET_TIMEOUT`에 [`isTimeoutCause`](/ko-KR/api/core/istimeoutcause)를 써요. 각각 어느 Core 사본의 브랜드 센티넬이든, 이름이 `AbortError`인 `DOMException`이든, 이름이 `TimeoutError`인 `DOMException` 또는 `Error`든 알아봐요. 나머지는 `NET_UNREACHABLE`로 매핑해요. `createPreflightFault`는 code를 바로 받고, `cause`를 주지 않으면 code가 그대로 message가 돼요.
+
+모든 팩토리는 위의 구조화된 필드를 갖춘 네이티브 `Error` 인스턴스를 돌려줘요. 평범한 객체 오류를 만들지 않으니 `String(fault)`에 어댑터가 필요 없어요.
+
+## 센티넬
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+abort와 timeout이 공유하는 `cause` / message 값이에요. HTTP interceptor에서 둘 중 하나를 throw하면 호출은 `NET_ABORTED` 또는 `NET_TIMEOUT`으로 resolve돼요. SSE와 WebSocket interceptor는 이 값을 포함해 던져진 것을 모두 `EXT_INTERCEPTOR_FAILED`로 보고해요.
+
+센티넬은 열거되지 않는 `Symbol.for('defjs.cause.aborted')`와 `Symbol.for('defjs.cause.timeout')` 브랜드를 가져요. 분류는 센티넬의 객체 동일성이나 관련 없는 이전 실행에 의존하지 않아요.
+
+## cause 검사
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/ko-KR/api/core/isabortcause)는 abort 브랜드를 가진 `Error` 또는 이름이 `AbortError`인 `DOMException`을 알아봐요. [`isTimeoutCause`](/ko-KR/api/core/istimeoutcause)는 timeout 브랜드를 가진 `Error` 또는 이름이 `TimeoutError`인 `DOMException` / `Error`를 알아봐요. 밑바탕 값을 분류하려면 `fault.cause`를 넘기세요. 이 함수들은 fault를 풀지 않아요. 다른 Core 사본의 센티넬과도 동작해요.
+
+[오류 가이드](/ko-KR/docs/errors)를 보세요.

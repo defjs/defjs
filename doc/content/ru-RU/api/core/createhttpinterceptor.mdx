@@ -1,0 +1,19 @@
+---
+title: 'createHttpInterceptor'
+description: 'Оборачивает функцию-interceptor в размеченный HTTP interceptor.'
+---
+
+<ApiReference identity="@defjs/core:createHttpInterceptor" />
+
+```ts
+function createHttpInterceptor(fn: InterceptorFn): HttpInterceptor
+
+type InterceptorFn = (req: HttpRequest, next: HttpInterceptorNext) => Promise<HttpResponse<unknown>>
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+Возвращает `{ kind: 'http', fn }`. Вызови `next(req)` (при желании с изменённым request’ом) или прерви цепочку через `makeResponse`. `next` запускает только interceptor’ы, зарегистрированные после этого, а затем fetch handler. HTTP interceptor’ы не выполняются для команд SSE и WebSocket.
+
+Детерминированная ошибка URL из `next(req)` отклоняет возвращённый promise, поэтому срабатывает восстановление в `.then` / `.catch`; если его не восстановили, `client.execute` по-прежнему сообщает `REQ_BUILD_FAILED`.
+
+[Interceptors](/ru-RU/api/interceptors)

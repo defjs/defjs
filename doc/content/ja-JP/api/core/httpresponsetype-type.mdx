@@ -1,0 +1,14 @@
+---
+title: 'HttpResponseType'
+description: 'struct による検証の前に HTTP ボディを読むための表現です。'
+---
+
+<ApiReference identity="@defjs/core:HttpResponseType" />
+
+```ts
+type HttpResponseType = 'arraybuffer' | 'blob' | 'json' | 'text'
+```
+
+宣言した struct の kind から選ばれます（`string` → `text`、`blob` / `file` → `blob`、`arrayBuffer` → `arraybuffer`、それ以外 → `json`）。`defineRequest` のフィールドではありません。`HttpRequest` では `responseType` と `errorResponseType` として現れます。
+
+[HTTP](/ja-JP/api/http)

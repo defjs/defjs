@@ -1,0 +1,25 @@
+---
+title: 'struct.object'
+description: '解析具有固定欄位集合之純物件的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+`shape` 把欄位名稱對應到 struct。
+
+- 每個欄位預設都是**必填**。缺少 key 以 `missing_key` 失敗。
+- `.optional()` 與 `.nullish()` 允許缺少 key。缺少的選填欄位在輸出中仍是缺少的。
+- `.null()` / `.nullable()` 允許 `null`。
+- `.alias(name)` 設定該欄位的 wire key。`struct.parse` 預設讀取邏輯 key；`{ aliases: true }` 與 HTTP JSON 解碼會讀取 wire key，HTTP JSON 編碼則會寫出它們。解析後的輸出使用邏輯 key。
+- 不在 `shape` 裡的 key 會從輸出移除。輸出是原型為 `null` 的新物件。
+- 輸入必須是純物件。陣列、`Map` 與 class 實例以 `invalid_type`（expected `object`）失敗。
+- 解析在第一個失敗的欄位就停止，`issue.path` 帶有它的 key。
+- `shape` 不是純物件時丟出 `TypeError`。
+
+`ObjectShape` 是 `{ [key: string]: any }`；每個 value 都必須是 struct。
+
+[Struct](/zh-Hant-TW/api/struct)

@@ -1,0 +1,18 @@
+---
+title: 'withHeaders'
+description: '为 HTTP 和 SSE 请求设置静态默认 header 的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withHeaders" />
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+为该 client 构建的 HTTP 和 SSE 请求设置静态默认 header。WebSocket 连接不使用它们。
+
+- `HeadersInit` 在 option 生效时被复制进一个 `Headers` 对象。后一次调用会替换之前的 header，而不是合并。
+- request builder 返回的 header，当值是标量或 `Headers` 实例时，会替换同名的默认值。数组值（值为数组的 record 条目，或 tuple 数组形式的 `HeadersInit`）则追加到默认值上。
+- 逐请求或计算出来的凭据，例如刷新后的 Bearer token 或 HMAC 签名，应放进 [interceptor](/zh-Hans/api/interceptors)，因为它们需要最终的 body 或新鲜的值。
+
+[Client](/zh-Hans/api/client)

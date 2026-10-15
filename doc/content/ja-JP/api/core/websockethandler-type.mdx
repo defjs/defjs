@@ -1,0 +1,16 @@
+---
+title: 'WebSocketHandler'
+description: 'リクエストに対して WebSocket セッションを開く、終端のハンドラーです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandler" />
+
+```ts
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+```
+
+WebSocket インターセプターが受け取る `next` 関数です。`next(req)` は内側にしか進みません。このインターセプターより後に登録されたインターセプターを通り、セッションを開くトランスポートへ進みます。execute ごとに 1 回だけ呼べます。2 回目の呼び出しや、チェーンが確定したあとの呼び出しは reject されます。
+
+結果は [`WebSocketSessionLike`](/ja-JP/api/core/websocketsessionlike-type) に解決されます。
+
+[Interceptors](/ja-JP/api/interceptors)

@@ -1,0 +1,16 @@
+---
+title: 'EventStreamExecuteOptions'
+description: '開啟 SSE 串流的單次呼叫選項：abort 或 timeout，加上選填的 signal。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamExecuteOptions" />
+
+```ts
+type EventStreamExecuteOptions = ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+取消是 `abort` **或** `timeout`，不能兩者並用；兩者都傳會讓該次呼叫以 `REQ_OPTIONS_INVALID` fault resolve。`signal` 可與任一個搭配，它不是 `abort` 的別名。`timeout` 必須是不超過 2147483647 的正安全整數。
+
+對 SSE 而言，`timeout` 是啟動期限。它涵蓋 input 剖析、builder、interceptors 與開啟連線，串流一旦開啟就不再適用。client 層級的 `withTimeout` 預設值不適用於 SSE。
+
+[SSE](/zh-Hant-TW/api/sse)

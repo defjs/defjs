@@ -1,0 +1,14 @@
+---
+title: 'ParseResult'
+description: 'struct.parse が返す、エラーを先頭に置くタプルです。'
+---
+
+<ApiReference identity="@defjs/core:ParseResult" />
+
+```ts
+type ParseResult<O> = [error: null, value: O] | [error: StructError, value: undefined]
+```
+
+成功時は error が `null` で、`value` はパース後の出力 `O` です。失敗時は error が `StructError` で、`value` は常に `undefined` です。
+
+[Struct](/ja-JP/api/struct)

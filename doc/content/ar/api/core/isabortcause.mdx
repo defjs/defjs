@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: 'يتعرّف على إلغاء المستدعي عبر نسخ Core وعلى أخطاء الإلغاء الخاصة بالمنصة.'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+يُرجع `true` إذا كان السبب `Error` يحمل العلامة `Symbol.for('defjs.cause.aborted')`، بما في ذلك `ERR_ABORTED` من نسخة أخرى من Core، أو `DOMException` باسم `AbortError`. لا يطابق `Error` عاديًا غير موسوم بهذه العلامة حتى لو حمل الاسم نفسه. ويُرجع `false` للقيم الأخرى.
+
+مرّر السبب الأصلي `fault.cause`؛ فهذه الدالة لا تستخرج السبب تلقائيًا من كائنات الخطأ. يستخدم `createNetworkFault` هذا الفحص لاختيار `NET_ABORTED`. ويستخدمه OpenTelemetry لمنع تسجيل إلغاء المستدعي مع الإبقاء على سجلات انتهاء المهلة.
+
+راجع [دليل الأخطاء](/ar/docs/errors) و[`isTimeoutCause`](/ar/api/core/istimeoutcause).
+
+[الأخطاء](/ar/api/errors)

@@ -1,0 +1,14 @@
+---
+title: 'DecodeFaultCode'
+description: '帶 response metadata 但冇 body 嘅 fault 嘅 codes。'
+---
+
+<ApiReference identity="@defjs/core:DecodeFaultCode" />
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+```
+
+`DecodeFault` 嘅 `code` 值。`PreflightFaultCode` 係除咗 `HTTP_STATUS` 之外嘅所有其他 `FaultCode`。
+
+[Errors](/zh-Hant-HK/api/errors)

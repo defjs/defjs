@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: 'Callback type for upload and download progress.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+Passed as `onDownloadProgress` or `onUploadProgress` in `HttpExecuteOptions`. Callbacks may be async and are awaited before the next chunk is processed. A callback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`, with the thrown value as `cause`, for downloads and uploads alike. Caller cancellation and `timeout` still take precedence and report `NET_ABORTED` / `NET_TIMEOUT`. Upload progress is reported only where the runtime can stream request bodies (Bun, Node, Deno). In browsers, a `Blob` / `File`, `ArrayBuffer`, or `FormData` body is sent unchanged and `onUploadProgress` is not called; `onDownloadProgress` is unaffected.
+
+See [`HttpProgressEvent`](/api/core/httpprogressevent-type), [HTTP guide](/docs/http) and [Commands](/docs/commands).
+
+On server runtimes, FormData with `onUploadProgress` reads its serialized stream directly, keeps its multipart boundary, and is sent without a library-generated `Content-Length` (chunked over HTTP/1.1), so progress, timeout, and abort work without buffering the whole body. It reports an unknown total unless a valid explicit `Content-Length` supplies it. For an endpoint that requires `Content-Length`, such as some presigned upload targets, omit `onUploadProgress`; platform Fetch then sends FormData with its length. Non-identity encoded downloads also report `total: 0` and `lengthComputable: false`, since `loaded` counts decoded stream bytes. Cancellation releases the wrapped upload stream.
+
+[HTTP](/api/http)

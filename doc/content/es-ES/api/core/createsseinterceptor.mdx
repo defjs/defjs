@@ -1,0 +1,21 @@
+---
+title: 'createSSEInterceptor'
+description: 'Envuelve una función de interceptor como un interceptor SSE etiquetado.'
+---
+
+<ApiReference identity="@defjs/core:createSSEInterceptor" />
+
+```ts
+function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor
+
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+Devuelve `{ kind: 'sse', fn }`. Los interceptores SSE se ejecutan solo para comandos SSE, en orden de registro; `next(req)` abre el stream a través de los interceptores restantes.
+
+Un error de URL determinista de `next(req)` rechaza la promesa devuelta, por lo que se ejecuta la recuperación de `.then` / `.catch`; si no se recupera del error, `client.execute` sigue notificando `REQ_BUILD_FAILED`.
+
+`EventStreamHandle` extiende `AsyncDisposable`. Una implementación estructural que cortocircuite debe proporcionar `[Symbol.asyncDispose](): PromiseLike<void>` y conectarlo al mismo ciclo de vida de cierre.
+
+[Interceptores](/es-ES/api/interceptors)

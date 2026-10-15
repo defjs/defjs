@@ -1,0 +1,29 @@
+---
+title: 'struct.intersection'
+description: '要求值同时满足所有给定 struct 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
+```
+
+`struct.intersection` 是可变参数：每个 struct 作为单独的参数传入。
+
+- 用每个 struct 解析输入，并合并结果。
+- 当所有 struct 都是对象 struct 时，输出是一个包含它们全部字段的对象。任何成员都没有声明的 key 会被移除。
+- 当两个 struct 对同一个 key 产出不兼容的值时，以 `invalid_intersection` 失败。
+- 只有每个 struct 都接受 `null` 时才接受 `null`，其中也包括标记了 `.null()` 的嵌套交叉。
+- 只传一个 struct 时原样返回它，因此会保留自身类型，包括 `.optional()` 和 `.null()`。不传任何 struct 会抛出 `TypeError`，传入非 struct 参数也一样。
+- 展开可能只有一个成员的元组时，会同时推导单成员和多成员两种结果。因此，结果中的对象字段可能是可选的。已知至少包含两个成员的元组仍保留交叉类型对必需字段的要求。
+
+`IntersectionStruct<T>` 没有导出。它是一个 `Struct`，其输入和输出是各成员类型的交叉类型。
+
+[Struct](/zh-Hans/api/struct)

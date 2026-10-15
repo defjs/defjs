@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: 'كائن العقد الممرَّر إلى defineWebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming` هو الـ struct الذي يُحلَّل به كل إطار مستلَم. الإطارات نص JSON.
+- `outgoing` هو الـ struct الذي يستخدمه `session.send` للتحقق من الرسالة وترميزها. بدونه يرمي `send`.
+- `maxIncomingQueueSize` مطلوب ويجب أن يكون عددًا صحيحًا آمنًا موجبًا. أما `maxOutgoingQueueSize` فيجب أن يكون عددًا صحيحًا آمنًا غير سالب؛ وقيمته الافتراضية `0`، وهي تعطّل وضع الرسائل المرسَلة أثناء حالة `reconnecting` في الطابور.
+- `protocols` هي قائمة البروتوكولات الفرعية الافتراضية الثابتة. يتجاوزها خيار execute `protocols` و[`withWebSocketProtocols`](/ar/api/core/withwebsocketprotocols).
+- `operation` اسم ثابت منخفض التعددية (low-cardinality) للقياس عن بُعد (telemetry).
+- `input` هو الـ struct لمدخل الأمر. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`. قد يُرجع الـ builder `path` و`query` فقط؛ انظر [`WebSocketRequestShape`](/ar/api/core/websocketrequestshape-type).
+
+تُبلَّغ حدود الطابور غير الصالحة عند تنفيذ الأمر، بعطل `REQ_OPTIONS_INVALID`.
+
+[WebSocket](/ar/api/web-socket)

@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: '带有 struct 构造器和 struct.parse 的门面对象。'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct` 是一个包含辅助函数的普通对象。优先用它，而不是逐个导入构造器。每个辅助函数都有自己的页面。
+
+### 原语和容器
+
+| 辅助函数                                                                                         | 作用                                          |
+| ------------------------------------------------------------------------------------------------ | --------------------------------------------- |
+| [`struct.string()`](/zh-Hans/api/core/struct-string)                                             | 文本                                          |
+| [`struct.number()`](/zh-Hans/api/core/struct-number)                                             | 数字，拒绝 `NaN`                              |
+| [`struct.boolean()`](/zh-Hans/api/core/struct-boolean)                                           | 布尔值                                        |
+| [`struct.bigint()`](/zh-Hans/api/core/struct-bigint)                                             | `bigint`，或能解析为 `bigint` 的字符串        |
+| [`struct.date()`](/zh-Hans/api/core/struct-date)                                                 | `Date`，可由 `Date`、时间戳或字符串得到       |
+| [`struct.literal(value)`](/zh-Hans/api/core/struct-literal)                                      | 精确字面量                                    |
+| [`struct.null()`](/zh-Hans/api/core/struct-null)                                                 | 只有 `null`                                   |
+| [`struct.any()`](/zh-Hans/api/core/struct-any) / [`unknown()`](/zh-Hans/api/core/struct-unknown) | 除 `null` 和 `undefined` 之外的任意值         |
+| [`struct.array(item)`](/zh-Hans/api/core/struct-array)                                           | 由同一个元素 struct 解析的数组                |
+| [`struct.tuple(items)`](/zh-Hans/api/core/struct-tuple)                                          | 定长数组；`items` 是 struct 的一个数组        |
+| [`struct.record(value)`](/zh-Hans/api/core/struct-record)                                        | key 为字符串、值用同一个 struct 的普通对象    |
+| [`struct.object(shape)`](/zh-Hans/api/core/struct-object)                                        | 字段固定的普通对象；未知 key 会被剔除         |
+| [`struct.or(...options)`](/zh-Hans/api/core/struct-or)                                           | 第一个匹配的选项                              |
+| [`struct.intersection(...structs)`](/zh-Hans/api/core/struct-intersection)                       | 必须匹配每个 struct；对象结果会被合并         |
+| [`struct.discriminatedUnion(tag, options)`](/zh-Hans/api/core/struct-discriminatedunion)         | 由 `tag` 字段的值选出的对象选项               |
+| [`struct.enum(values)`](/zh-Hans/api/core/struct-enum)                                           | 字符串数组，或 `{ Name: value }` 对象的各个值 |
+
+### 请求体编解码器和二进制值
+
+| 辅助函数                                                                                                                                               | 作用                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
+| [`struct.formData(shape)`](/zh-Hans/api/core/struct-formdata) / [`urlencoded(shape)`](/zh-Hans/api/core/struct-urlencoded)                             | 对象 struct 再加一个 codec 标签。这个标签只在该值是请求 body 根时生效      |
+| [`struct.arrayBuffer()`](/zh-Hans/api/core/struct-arraybuffer) / [`blob()`](/zh-Hans/api/core/struct-blob) / [`file()`](/zh-Hans/api/core/struct-file) | 二进制值。作为 body 根时按字节发送；作为 `output` / `error` 时选出那种表示 |
+| [`struct.string()`](/zh-Hans/api/core/struct-string)                                                                                                   | 文本。作为 body 根，或作为入站 `string` struct 时，字节保持文本            |
+
+### 解析和修饰方法
+
+[`struct.parse(struct, value, options?)`](/zh-Hans/api/core/struct-parse) 解析未知值，返回 `[null, value]` 或 `[StructError, undefined]`。
+
+每个 struct 都有可链式调用的修饰方法 `.optional()`、`.null()` / `.nullable()`、`.nullish()` 和 `.alias(name)`。参见 [`StructMethods`](/zh-Hans/api/core/structmethods-type)。
+
+[Struct](/zh-Hans/api/struct)

@@ -1,0 +1,19 @@
+---
+title: 'HttpStatusFaultOf'
+description: 'Fault не из диапазона 2xx, выраженный через тип его декодированного тела.'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFaultOf" />
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+```
+
+`HttpStatusFault`, выраженный через тип декодированного тела, а не через struct, который его произвёл. Фабрики работают с декодированными значениями, поэтому используют эту форму; типы endpoint’ов используют `HttpStatusFault` и позволяют `Infer` связать оба. Когда `TData` равен `undefined`, тело не читалось, а `response` — одни метаданные.
+
+[Ошибки](/ru-RU/api/errors)

@@ -1,0 +1,26 @@
+---
+title: 'SocketLifecycleOutcome'
+description: '再接続ロジックが使う、WebSocket の 1 回の接続試行の結果です。'
+---
+
+<ApiReference identity="@defjs/core:SocketLifecycleOutcome" />
+
+```ts
+type SocketLifecycleOutcome = {
+  closeInfo: WebSocketCloseSnapshot
+  connection?: WebSocketConnectionInfo
+  cause?: unknown
+  opened: boolean
+}
+```
+
+**1 回の接続試行**の結果であり、セッションの最終結果ではありません。再接続ロジックは、これを使って再試行するかどうかを判断します。
+
+- `closeInfo` はその試行の close の詳細で、`{ cause?, code?, reason?, wasClean? }` です。
+- `connection` は、その試行で得られた場合の接続スナップショットです。
+- `cause` は、その試行を終わらせたエラーです（ある場合）。
+- `opened` は、終了する前にソケットが `open` に到達したかどうかを示します。
+
+`shouldReconnect` オプションはこのオブジェクトを受け取りません。ここから取り出した `attempt`、`cause`、`code`、`reason`、`wasClean` を受け取ります。セッションの最終結果は [`WebSocketCloseInfo`](/ja-JP/api/core/websocketcloseinfo-type) です。
+
+[WebSocket](/ja-JP/api/web-socket)

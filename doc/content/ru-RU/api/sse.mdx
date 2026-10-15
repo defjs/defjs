@@ -1,0 +1,129 @@
+---
+title: SSE
+description: defineEventStream, опции execute и stream handle.
+---
+
+# SSE
+
+Объяви event stream, выполни, итерируй события, потом закрой.
+
+## defineEventStream()
+
+```ts
+function defineEventStream(definition: EventStreamDefinition): EventStreamEndpoint
+```
+
+- **definition** — `path`, карта `events` и обязательные лимиты `maxBufferSize` и `maxQueueSize` (положительные целые); необязательные `method` (по умолчанию `'GET'`), `operation`, `input` и `error`. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
+- **Возвращает** эндпоинт. Вызови с input — получишь `EventStreamCommand`.
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+## executeEventStreamCommand()
+
+```ts
+function executeEventStreamCommand(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult>
+```
+
+Низкоуровневый вход для `client.execute`. В прикладном коде бери клиент.
+
+- **Возвращает** `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, fault — это `Fault` этого struct; иначе `Fault<undefined>`.
+
+## Опции execute
+
+## EventStreamExecuteOptions
+
+```ts
+type EventStreamExecuteOptions = ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & {
+  signal?: AbortSignal
+}
+```
+
+Те же правила отмены, что у HTTP: `abort` или `timeout`, не оба (тип отвергает оба сразу, а если передать оба в рантайме, вызов завершится с `REQ_OPTIONS_INVALID`); `signal` сочетается с любым из них. `timeout` — дедлайн запуска: он охватывает разбор input, builder, interceptors и handshake и не обрывает уже открытый поток. `withTimeout` к SSE не применяется.
+
+## EventStreamHandle
+
+```ts
+interface EventStreamHandle<TEvent> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+Третий слот кортежа — снимок `open` на момент старта; `stream.open` после переподключения отражает последнее соединение. `startupOpen` — снимок первого успешного handshake соединения возвращённого handle только для нативного handle Defjs или обёртки, передающей тот же живой объект `open`; пользовательские handle и обёртки, переопределяющие `open`, сохраняют свой текущий публичный `open` даже после переподключения, поэтому общий `closed` не позволяет обойти очистку URL или фильтрацию заголовков, а Defjs не восстанавливает метаданные первого handshake из произвольных преобразований. Для освобождения принадлежащих области видимости ресурсов предпочитай `await using stream = handle`. Асинхронное освобождение останавливает чтение Defjs и переподключения и ждёт освобождения блокировки reader; оно не гарантирует завершение зависшего Promise `ReadableStream.cancel()`, которым управляет провайдер. Ручные `close()` / `closed` остаются доступны.
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+Структурные реализации `EventStreamHandle` теперь должны реализовать `[Symbol.asyncDispose]()` с тем же механизмом освобождения принадлежащих им ресурсов. Для пользовательских handle это несовместимое изменение на уровне типов; код, который только получает handle от Defjs, не требует нового вызова во время выполнения.
+
+### EventStreamOpenInfo
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+### EventStreamCloseInfo
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+`EventStreamFaultCode`: `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+
+## Карта событий
+
+## EventStructs
+
+```ts
+type EventStructs = { [eventName: string]: AnyStruct }
+```
+
+Ключ — имя SSE-события; сообщение без поля `event:` называется `message`. Если ни один ключ не подошёл, используется struct `default`. Event struct `string` оставляет сырой текст `data`. Любой другой kind — это JSON-текст: `JSON.parse`, потом struct. Голый `struct.literal` поэтому ждёт JSON-текст, а не незакавыченный токен. Тела handshake `error` следуют тому же правилу kind, что HTTP: `string` — текст, `blob` / `file` — blob, `arrayBuffer` — байты, всё остальное — JSON.
+
+Reconnect живёт на клиенте (`withSSEReconnect`). SSE `jitter` — **мультипликативный коэффициент 0–1**, как у WebSocket.
+
+Бюджет повторов и показатель степени для задержки сбрасываются после успешного установления соединения и действуют на каждый обрыв отдельно. Недопустимые числовые настройки возвращают `REQ_OPTIONS_INVALID` до открытия потока, а `maxDelayMs` ограничивает итоговую задержку после случайного отклонения. Правила проверки, значения по умолчанию и обработку `Last-Event-ID` в UTF-8 см. в [`withSSEReconnect`](/ru-RU/api/core/withssereconnect).
+
+Парсер следует правилам строк и полей WHATWG SSE и удаляет только один начальный UTF-8 BOM в начале каждого физического потока. U+FEFF в данных и значениях ID сохраняется; имя поля с BOM в начале, появившееся позже, игнорируется как неизвестное. Несколько строк данных соединяются через `\n`, пустая строка выдаёт событие с данными, а незавершённое событие в конце потока (EOF) отбрасывается.
+
+См. [гайд SSE](/ru-RU/docs/sse) и [Читать SSE-стрим](/ru-RU/recipes/consume-sse).
+
+## EventStreamDefinition
+
+`path`, `events`, обязательные `maxBufferSize` и `maxQueueSize`, необязательные `method` / `operation` / `input` / `error`. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут вернуть тело. При объявленном `input` всегда нужен явный `builder`, даже если входные данные уже имеют форму запроса. Опустить `builder` можно только в определениях без `input`.
+
+## EventStreamEndpoint
+
+То, что возвращает `defineEventStream`. Вызови с input — получишь `EventStreamCommand`.
+
+## EventStreamRequestShape
+
+Те же поля, что у `HttpRequestShape`, для method и path стрима.
+
+## EventStreamCommand
+
+Непрозрачная SSE-команда. Отдай в `client.execute`.
+
+## StreamAwaitResult
+
+`[null, stream, open]` или `[error, undefined, open?]`.
+
+## EventStreamData
+
+Распарсенный payload события, выведенный из карты `EventStructs`.

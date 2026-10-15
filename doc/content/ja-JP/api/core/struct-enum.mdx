@@ -1,0 +1,18 @@
+---
+title: 'struct.enum'
+description: '文字列のリスト、またはオブジェクトの値のうち 1 つを受け付ける struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.enum" />
+
+```ts
+function enum<const T extends readonly [string, ...string[]]>(value: T): Struct<T[number], T[number]>
+function enum<const T extends { [key: string]: number | string }>(value: T): Struct<T[keyof T], T[keyof T]>
+```
+
+- 空でない文字列の配列を渡すと、受け付ける値は配列の要素です。
+- オブジェクトを渡すと、受け付ける値はオブジェクトのキーではなく、文字列と数値の**値**です。`{ A: 'a', B: 2 }` は `'a'` と `2` を受け付けます。
+- TypeScript の数値 `enum` オブジェクトは、逆引きマッピングが値に含まれるため、メンバー名も受け付けます。
+- 集合に含まれない値は `invalid_enum` で失敗します。文字列値も数値もないオブジェクトを渡すと、struct の作成時に `TypeError` を投げます。
+
+[Struct](/ja-JP/api/struct)

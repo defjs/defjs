@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'Árbol anidado de errores que devuelve StructError.format.'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+El resultado de `StructError.format()`. Los mensajes hoja viven bajo `_errors`; las claves anidadas reflejan el path que falla. Un segmento de path llamado literalmente `_errors` se almacena como `\_errors`.
+
+[Struct](/es-ES/api/struct)

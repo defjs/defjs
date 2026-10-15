@@ -1,0 +1,14 @@
+---
+title: 'FaultOf'
+description: '디코딩된 오류 body 타입으로 표현한 fault 유니온이에요.'
+---
+
+<ApiReference identity="@defjs/core:FaultOf" />
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+```
+
+`TData`는 디코딩된 `error` body이고, 오류 struct를 선언하지 않았다면 `undefined`예요. `Fault<TErr>`는 `Infer<TErr>`에 `FaultOf`를 적용한 것이고, `HttpAwaitResult`는 `FaultOf<TErrorData>`를 써요. struct가 아니라 디코딩된 타입을 넘기세요. `FaultOf<Infer<typeof errorStruct>>`로 쓰거나 `Fault<typeof errorStruct>`를 쓰세요.
+
+[오류](/ko-KR/api/errors)

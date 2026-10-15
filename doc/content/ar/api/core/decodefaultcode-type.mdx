@@ -1,0 +1,14 @@
+---
+title: 'DecodeFaultCode'
+description: 'رموز خطأ يحمل بيانات وصفية للاستجابة لكن بلا جسم.'
+---
+
+<ApiReference identity="@defjs/core:DecodeFaultCode" />
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+```
+
+قيم `code` الخاصة بـ `DecodeFault`. أما `PreflightFaultCode` فهو كل `FaultCode` الأخرى عدا `HTTP_STATUS`.
+
+[الأخطاء](/ar/api/errors)

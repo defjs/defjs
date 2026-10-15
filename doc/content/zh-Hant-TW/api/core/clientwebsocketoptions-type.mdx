@@ -1,0 +1,42 @@
+---
+title: 'ClientWebSocketOptions'
+description: '選填的 WebSocket 設定：constructor、beforeConnect hook、heartbeat、protocols，以及重連策略。'
+---
+
+<ApiReference identity="@defjs/core:ClientWebSocketOptions" />
+
+```ts
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+- **handle** — WebSocket constructor；預設為 `globalThis.WebSocket`。
+- **beforeConnect** — 在每次連線與重連嘗試之前執行。
+- **heartbeat** — 每隔 `intervalMs` 送出 `message()`。搭配 `timeoutMs` 與 `isAck` 時，缺少確認回覆會把連線標記為不健康。`intervalMs` 與 `timeoutMs` 必須為正數，且不超過 2147483647。
+- **protocols** — 傳給 constructor 的子協定。
+- **reconnect** — 需主動啟用。`attempts` 預設為 **3**；`0` 停用重試，省略 `attempts` 並不代表無限次。其他預設值：`delayMs` 為 1000，`factor` 為 2，`jitter` 為 0（0-1 的乘性因子），`maxDelayMs` 為 30000。`shouldReconnect` 會收到 close 的 `code`、`reason` 與 `wasClean`，並可否決一次重試。
+
+重試額度依每次中斷計算。成功的 `open` 會重設額度、callback 的 attempt，以及 backoff 指數；下一次中斷從重試 1 開始。`maxDelayMs` 會在 jitter 與捨入之後為最終延遲加上上限，同時也受 `2_147_483_647` ms 限制。驗證規則與溢位行為見 [`withWebSocketReconnect`](/zh-Hant-TW/api/core/withwebsocketreconnect)。
+
+用 `withWebSocketHandle`、`withWebSocketBeforeConnect`、`withWebSocketHeartbeat`、`withWebSocketProtocols` 與 `withWebSocketReconnect` 來設定。`WebSocketExecuteOptions` 可以針對單次呼叫覆寫 `beforeConnect`、`heartbeat`、`protocols` 與 `reconnect`。
+
+見 [Client 指南](/zh-Hant-TW/docs/client)。
+
+[Client](/zh-Hant-TW/api/client)

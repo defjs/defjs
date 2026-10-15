@@ -1,0 +1,59 @@
+---
+title: 'التعريف والتنفيذ / Command'
+description: عرّف نقاط النهاية، ابنِ أوامر معتمة، عيّن المدخلات، واستنتج نتائج النقل.
+---
+
+# الأوامر
+
+تعريف واحد ← نقطة نهاية ← أمر معتم ← `client.execute`. نفس المسار لـ HTTP وSSE وWebSocket.
+
+## الإعداد الأساسي
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## اختر تعريفًا
+
+| التعريف                  | العقد                                                          | القيمة عند النجاح                    |
+| ------------------------ | -------------------------------------------------------------- | ------------------------------------ |
+| `defineRequest(...)`     | الطريقة، مسار نسبي، مدخل اختياري، `output` / `error` اختياريان | بيانات مفكوكة + استجابة              |
+| `defineEventStream(...)` | المسار، حدود المخزن/الطابور، خريطة اسم حدث ← Struct            | `EventStreamHandle` + لقطة open      |
+| `defineWebSocket(...)`   | المسار، struct وارد واحد، struct صادر اختياري، حد الطابور      | `WebSocketSession` + لقطة connection |
+
+بلا `input` ← نقطة النهاية لا تأخذ وسيطًا، ويجوز أن يكون `builder` هو `() => request`. مع `input` ← مرّر قيمة الـ struct. الحقل الاختياري يجوز حذفه؛ والحقل المطلوب لا يجوز.
+
+أبقِ الأوامر معتمة. لا تحفر في العلامات أو الرموز.
+
+## أين تذهب القيم
+
+الـ struct يقرر كيف تُرمَّز القيمة. والـ `builder` يقرر أين تذهب. `builder` دالة نقية متزامنة للمدخل **المحلَّل**. يعمل وقت التنفيذ. الرمي يصبح `REQ_BUILD_FAILED` على الـ tuple — واستدعاء نقطة النهاية نفسه لا يرمي.
+
+عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+
+سلّم القيمة المحدَّدة النوع. ثم ينطبق alias، و`Date` → ISO، و`bigint` ← سلسلة في كل موضع يُستخدم فيه ذلك الـ struct: وضع الطلب، وفك الاستجابة، وأحداث SSE، وإطارات WebSocket.
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+الجسم هو JSON `{"display_name":"…","email":"…"}`. المفتاح المكتوب يدويًا هو المخرج: `body: { name: input.user.displayName }` يرسل `name`، لأن الكائن الأب مجهول ولا ينطبق الـ alias.
+
+## عندما تختلف الأشكال
+
+استخدم `builder` لعناصر المسار النائبة والحرفيّات والتفرعات. يستقبل القيمة الحقيقية، فتعمل `if` و`??` والقوالب و`switch`.
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.query` يرسل `page_size`. `headers: { 'x-api-version': '2' }` حرفي. المصادقة والتتبّع ما زالا ينتميان إلى المعترضات: فهي ترى الطلب الأصلي بعد أن يعمل الـ builder.
+
+## أشكال `output` و`error`
+
+`output` هو Struct واحد لجسم 2xx؛ و`error` هو Struct واحد لكل ما عداه. و`ok` هو نقطة التفرّع الوحيدة، ولا يُفكّ إلا طرف واحد. وحذف أحد الطرفين يعني أن ذلك الجسم لا يُقرأ أبدًا: الخطأ يحمل الحالة، و`data` يبقى `undefined`.
+
+## وصفات ذات صلة
+
+- [GET مع 404 معلَن](/ar/recipes/get-declared-404)
+- [POST JSON](/ar/recipes/post-json)

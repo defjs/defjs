@@ -1,0 +1,29 @@
+---
+title: 'OpenTelemetryServerTransportOptions'
+description: Options shared by every transport — enabled and the span hooks, generic over the response type.
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions" />
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+```
+
+`TResponse` is what `responseHook` receives: `HttpResponse<unknown>` for HTTP, `EventStreamHandle<unknown>` for SSE, `WebSocketSessionLike` for WebSocket. See [OpenTelemetryServerHttpOptions](/api/opentelemetry-server/opentelemetryserverhttpoptions-type), [OpenTelemetryServerSSEOptions](/api/opentelemetry-server/opentelemetryserversseoptions-type) and [OpenTelemetryServerWebSocketOptions](/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type).
+
+`enabled` defaults to `true`; only `enabled: false` turns the transport off. The old boolean switch (`http: false`) and top-level hooks are rejected by the TypeScript types only. There is no runtime check, so at runtime `http: false` leaves the transport enabled and a top-level hook is silently ignored.
+
+Span hooks run only when a `tracer` is supplied. `startSpanHook` runs synchronously before span creation for its own transport. Its attributes are applied after built-in attributes, so the application may override `url.full` or another initial value. If it throws, Defjs creates the span with built-in attributes and continues the request. `requestHook` runs after span creation and before the request is sent; `responseHook` runs after the transport result is returned. Both may return a promise, but neither is awaited: a throw or rejection never blocks or fails the operation. `responseHook` receives the original request as its third argument.
+
+While `span.isRecording()` is true, hook failures record `defjs.otel.hook.error` and `exception` events. For non-recording spans (ended or unsampled), failures go to the OpenTelemetry diagnostic logger through `diag.error`. Applications must configure `diag.setLogger(...)` from `@opentelemetry/api` to receive them; there is no automatic output by default. The package does not initialize the SDK, and this diagnostic is not a separate SDK `LogRecord`.
+
+By default, `url.full` resolves only `request.endpoint` against optional `request.baseEndpoint`; an independent `request.queryString` is not appended. That boundary is not redaction, and the package has no built-in redactor or sensitive-key policy. Construct and, if needed, redact an application-owned URL explicitly:
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+[@defjs/opentelemetry-server](/api/opentelemetry-server)

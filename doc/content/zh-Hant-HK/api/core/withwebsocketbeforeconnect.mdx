@@ -1,0 +1,23 @@
+---
+title: 'withWebSocketBeforeConnect'
+description: 'Client option：喺每次 WebSocket 連線嘗試之前運行 hook。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketBeforeConnect" />
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+```
+
+喺首次 WebSocket 連線之前，以及每次 reconnect 之前運行 hook。Hook 嘅 type 係：
+
+```ts
+(context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+```
+
+- 首次連線嘅 `attempt` 係 `0`，每次 reconnect 加一。
+- 將 `signal` 傳入 token 刷新同其他 async 工作，咁取消 session 就可以停止佢哋。
+- Hook throw 嘅話，該次嘗試會以 `EXT_HOOK_FAILED` fault 失敗。
+- Execute options 入面嘅 `beforeConnect` 會喺該次 call 取代呢個設定。
+
+[Client](/zh-Hant-HK/api/client)

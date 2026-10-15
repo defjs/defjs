@@ -1,0 +1,38 @@
+{
+  "name": "@defjs/vue",
+  "version": "0.0.1",
+  "bugs": {
+    "url": "https://github.com/defjs/defjs/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/defjs/defjs.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "publishConfig": {
+    "directory": "dist",
+    "linkDirectory": false
+  },
+  "scripts": {
+    "build": "tsdown --config-loader native --config tsdown.config.ts",
+    "test": "vitest run --config vitest.config.ts --coverage"
+  },
+  "devDependencies": {
+    "@defjs/core": "workspace:^",
+    "@vitest/browser-playwright": "catalog:",
+    "@vitest/coverage-istanbul": "catalog:",
+    "playwright": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "vue": "3.5.43"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.4.0",
+    "vue": ">=3.0.0"
+  }
+}

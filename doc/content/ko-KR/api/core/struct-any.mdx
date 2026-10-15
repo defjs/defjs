@@ -1,0 +1,16 @@
+---
+title: 'struct.any'
+description: '`null`과 `undefined`를 뺀 모든 값을 검증 없이 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.any" />
+
+```ts
+function any(): Struct<NonNullable<unknown>, any>
+```
+
+- `null`과 `undefined`를 뺀 모든 값을 받아 그대로 돌려줘요. 안쪽은 검증하지도 제거하지도 않아요.
+- `null`이나 `undefined`도 받으려면 `.null()`, `.optional()`, `.nullish()`를 이어 붙이세요.
+- 출력 타입은 `any`예요. 호출하는 쪽이 값을 좁혀야 한다면 [`struct.unknown()`](/ko-KR/api/core/struct-unknown)을 권해요.
+
+[Struct](/ko-KR/api/struct)

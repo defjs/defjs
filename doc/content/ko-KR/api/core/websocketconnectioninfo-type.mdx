@@ -1,0 +1,23 @@
+---
+title: 'WebSocketConnectionInfo'
+description: '현재 WebSocket 연결의 메타데이터예요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketConnectionInfo" />
+
+```ts
+interface WebSocketConnectionInfo {
+  extensions?: string
+  generation: number
+  protocol?: string
+  url?: string
+}
+```
+
+- `url`은 소켓이 보고하는 URL이에요.
+- `protocol`은 협상된 서브프로토콜이고 `extensions`는 협상된 확장이에요. 소켓이 빈 문자열을 보고하면 둘 다 `undefined`예요.
+- `generation`은 `open`에 도달한 물리 소켓의 수를 세요. 처음 열린 뒤에는 `1`이고, 재연결할 때마다 하나씩 늘어요. 한 번도 열리기 전에 만든 스냅샷은 `0`이에요.
+
+`session.connection`에는 항상 최신 스냅샷이 들어 있어요. execute 결과의 `connection`은 처음 성공한 스냅샷 그대로예요.
+
+[WebSocket](/ko-KR/api/web-socket)

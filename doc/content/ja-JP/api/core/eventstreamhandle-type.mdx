@@ -1,0 +1,32 @@
+---
+title: 'EventStreamHandle'
+description: '開いている SSE ストリームです。イベントを反復し、open のメタデータを読み、途中で閉じられます。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamHandle" />
+
+```ts
+interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+`EventStreamMessage` は生の `{ id: string; event: string; data: string }` メッセージです。`client.execute` が返すハンドルは、パース済みの [`EventStreamData`](/ja-JP/api/core/eventstreamdata-type) を運びます。
+
+`open` は起動時のスナップショット（[`EventStreamOpenInfo`](/ja-JP/api/core/eventstreamopeninfo-type)）です。再接続のあとは変わり得るので、`stream.open` をもう一度読んでください。`closed` は、ストリームが終了すると [`EventStreamCloseInfo`](/ja-JP/api/core/eventstreamcloseinfo-type) で解決されます。
+
+所有するスコープのクリーンアップには `await using stream = handle` を選んでください。disposer は Defjs の読み取りと再接続の処理を止め、reader lock が解放されるのを待ちます。provider が制御する、止まった `ReadableStream.cancel()` の promise が終わることは約束しません。手動の `close()` / `closed` も引き続き使えます。
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+`EventStreamHandle` の構造的実装は `[Symbol.asyncDispose]()` を実装し、同じ所有 teardown 経路を返す必要があります。これは独自ハンドルに対するコンパイル時の要件です。Defjs が返すハンドルを受け取るだけのコードには、追加の実行時呼び出しは要りません。
+
+[SSE](/ja-JP/api/sse)

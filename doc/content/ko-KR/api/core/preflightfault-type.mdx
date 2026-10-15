@@ -1,0 +1,18 @@
+---
+title: 'PreflightFault'
+description: '응답이 존재하기 전에 일어났을 수 있는 실패를 나타내는 fault예요.'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+응답이 존재하기 전에 실패했을 수 있는 모든 경우예요. `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response`는 전송이 보고할 메타데이터를 이미 갖고 있던 경우에만 있어요. 예를 들어 다운로드 중간에 잘린 body 같은 경우요.
+
+[오류](/ko-KR/api/errors)

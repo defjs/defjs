@@ -1,0 +1,19 @@
+---
+title: 'createWebSocketInterceptor'
+description: 'インターセプター関数をタグ付き WebSocket インターセプターとして包みます。'
+---
+
+<ApiReference identity="@defjs/core:createWebSocketInterceptor" />
+
+```ts
+function createWebSocketInterceptor(fn: WebSocketInterceptorFn): WebSocketInterceptor
+
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+`{ kind: 'web-socket', fn }` を返します。WebSocket インターセプターは WebSocket コマンドでのみ実行されます。
+
+`next` とインターセプターの戻り値は、インターセプターから見たセッションである [`WebSocketSessionLike`](/ja-JP/api/core/websocketsessionlike-type) です。wrapper やショートサーキットのセッションは、その `[Symbol.asyncDispose]()` の teardown を転送する必要があります。メンバーと要件はそのページに載っています。
+
+[Interceptors](/ja-JP/api/interceptors)

@@ -1,0 +1,114 @@
+---
+title: 'インターセプター'
+description: HTTP・SSE・WebSocket の方針を、トランスポート境界でオニオン順に重ねます。
+---
+
+# Interceptors
+
+認証ヘッダーの追加、メンテナンス中のリクエストのショートサーキット、安全な読み取りのリトライ — コマンド検証には触れずに。トランスポートごとにチェーンがあります。入ってくるのは `HttpRequest`。返すのはそのトランスポートの結果（`HttpResponse`、イベントストリームハンドル、または WebSocket セッション）です。入力検証はチェーンの前、status 振り分けとデコード済み結果は後です。
+
+## 基本セットアップ
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## オニオン順
+
+`withInterceptors(...items)` は混在インターセプターを受け付けます。クライアントは選ばれたトランスポートの `kind` でフィルタし、登録の相対順を保ちます。各インターセプターは `next` の前後で動けます。
+
+| ファクトリ                   | リクエスト    | `next` からの結果                     |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+`withInterceptors(...)` を複数回呼ぶと追記されます。外側が最終結果を見る必要があるなら、広い観測を狭いミューテーション/リトライの外側に置いてください。
+
+## クローンしてリクエストヘッダーを足す
+
+入ってくる `HttpRequest` はチェーンの所有物として扱います。変更する前に `Headers` をクローンし、新しいリクエストを `next` に渡します。
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+SSE も同じパターンです。ブラウザー WebSocket は任意のハンドシェイクヘッダーを足せません — `request.headers` を変えてもブラウザーソケットは認証されません。プロトコル、URL/query 方針、サーバーが対応するハンドシェイクを使ってください。
+
+HTTP は推論した Content-Type を `request.headers` に書き込みません。インターセプターが見るのは宣言されたヘッダーだけです。`request.bodyContentType` は、ビルダーのボディから推論した型をプレーンなフィールドとして保持するので、`{ ...req }` のコピー後も残ります。明示的な `content-type` ヘッダーは、ビルダー、クライアントのデフォルト、インターセプター、生の `fetchHandler` リクエストのどれが宣言しても、常にそのフィールドと自動検出より優先されます。署名側は `headers.get('content-type') ?? request.bodyContentType` を読んでください。
+
+HTTP ボディを差し替えるときは、コピーしたリクエストの `body` を差し替え、型は `content-type` ヘッダーで宣言します。`bodyContentType` が効くのは `body` がビルダーの値のままのあいだだけです。差し替えたボディは再検出されるので、ヘッダーが別の型を宣言しない限り、差し替えた文字列はテキストです。`body: undefined` にすると、ライブラリが推論した Content-Type は残りません。変更していないビルダーのボディでは、明示的なヘッダーが無いとき `bodyContentType: null` がライブラリの推論を抑止しますが、文字列ではネイティブ Fetch が独自の型を付けることがあります。FormData は常に実際の multipart boundary を使います。消費済みの `ReadableStream` ボディを再利用しないでください。
+
+## リクエストをショートサーキットする
+
+`next` を飛ばせますが、期待される結果型は返す必要があります。HTTP では `makeResponse(...)` が互換ラッパーを作ります。
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+コマンド層はそれでも status で振り分けます。呼び出し側が型付き `error.data` を要する場合は、非 2xx 側を一つの `error` struct で宣言してください。宣言された側の確認も行われます。JSON の `output` や `error` には、合成レスポンスに JSON の `content-type` ヘッダーが要り、`body` はトランスポートが渡すのと同じく、すでにパース済みの値であるべきです（どの表現かは `request.responseType` と `request.errorResponseType` が示します）。SSE や WebSocket のショートサーキットには、互換な完全なハンドル/セッション（閉鎖 promise、ライブ状態、所有権、`[Symbol.asyncDispose]`）が要ります。部分オブジェクトは有効な方針ではありません。構造的な `EventStreamHandle` と `WebSocketSessionLike` の実装には、今やコンパイル時にその標準 disposer が要ります。Defjs のハンドルを受け取るだけの利用者には、新しい実行時呼び出しは要りません。
+
+## 安全な読み取りをリトライする
+
+リトライは振る舞いを変えます。方針は狭く保ってください — この例は再送可能な `GET` / `HEAD` / `OPTIONS` を status `429`、`502`、`503`、`504` でリトライし、`Retry-After` を 30s で上限し、2 回のリトライ後または abort で止めます。
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+投げられたインターセプター/Fetch エラーは、このループではリトライしません。トランスポート失敗は reject するので、このループが照合できる status がそもそも出てきません。`POST` / `PUT` / `PATCH` / `DELETE` のリトライには、再送可能なバイト、サーバー側の対応、冪等性の契約、レビュー済み status 方針が要ります。リトライはあなたの責任です — Core は `retryAfter()` を公開しません。
+
+このサンプルの外で throw（または reject）したインターセプターは、`EXT_INTERCEPTOR_FAILED` として
+呼び出し側に返り、投げた値は `cause` に載ります — [エラー](/ja-JP/docs/errors) を参照してください。
+トランスポートが期待する結果以外で解決した場合も同様です。たとえば、`return` を忘れたための
+`undefined` や、`HttpResponse` の代わりに返したネイティブの `Response` が該当します。
+HTTP インターセプターでは、代わりに `ERR_ABORTED` か `ERR_TIMEOUT` を throw することでキャンセルを表します。呼び出しは `NET_ABORTED` か `NET_TIMEOUT` で解決します。SSE と WebSocket のインターセプターにはこの例外はなく、throw はすべて `EXT_INTERCEPTOR_FAILED` として報告されます。
+
+`next(request)` は reject しえます。トランスポート失敗は fault であって status 0 のレスポンスでは
+ないので、観測したいインターセプターは `next` を `try` / `catch` で囲みます。それでも Defjs の帰属は
+正しいままです。トランスポート由来の reject は `NET_*` fault のままで、あなたのインターセプターの
+せいにはなりません。
+
+## WebSocket セッションを包む
+
+WebSocket インターセプターは `next` を高々一度しか呼べません。セッションを包むなら、ライブ getter とライフサイクルメンバーを明示的に委譲します。
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+セッションを spread すると、`state` / `connection` / `bufferedAmount` は一度スナップショットされます。所有権を意図的に変えない限り、`closed`、`receive`、`close`、正確な `[Symbol.asyncDispose]()` の委譲、リスナー cleanup を保ってください。wrapper は内側セッションの teardown promise を返さなければならず、無関係な解決済み promise では足りません。チェーンが作ったセッションが渡されなかったとき、Core はそれを settle して閉じます。成功したインターセプターが別のセッションを返したとき、Core は作られた方を捨てます。
+
+## リファレンス
+
+ファクトリはタグ付きトランスポート値を返します。
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — HTTP の Basic 資格情報
+- `basicAuthSSEInterceptor(provider, options?)` — SSE の Basic 資格情報
+
+`HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。`queryParams` はシリアライズ後の `new URLSearchParams(queryString)` です。ビルダーが query を作らなかったとき、設定済みの query シリアライザは呼ばれません。ビルダーの `URLSearchParams` はそのまま使われます。コマンド検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
+
+URL の検証はリクエストの組み立て中に始まります。ベースエンドポイントの欠落、相対 URL、無効な URL、不正な path は、ショートサーキットするものも含め、インターセプターやトランスポートが実行される前に `REQ_BUILD_FAILED` になります。ディスパッチ前には、最終的な `req.endpoint` が最終的な `req.baseEndpoint` に対して検証されます。解決後の URL はそのベースのオリジンを保ち、ディレクトリ内に収まる必要があります。path 内の C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への移動は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。インターセプターが意図的に `baseEndpoint` を別の有効な絶対 URL に差し替えることは許可されます。HTTP、SSE、WebSocket で共通の規則で、決定的な URL エラーは決してリトライされません。
+
+SSE/WebSocket のオブザーバーはライフサイクルフックであり、制御フローではありません。所有者が終わるとき WebSocket リスナーを購読解除してください。オブザーバーの失敗はトランスポート契約に従います。インターセプター自体は throw や reject できます。
+
+ログはレビュー済みの許可リストにします。静的 `operation`、method、status、所要時間、安定したエラーコード。解決済み URL、query 文字列、認証ヘッダー、ボディ、生の cause、SSE イベント ID、WebSocket ペイロードはデフォルトでログしないでください。
+
+Basic 資格情報は base64 であり、暗号化ではありません。TLS を使い、サーバーでは資格情報プロバイダをリクエストスコープに保ち、生成ヘッダーをログしないでください。デフォルトエンコーダは `globalThis.btoa` です。ランタイムに `btoa` がない、またはレビュー済みエンコーダが要るときは `BasicAuthInterceptorOptions.encode` を渡してください。
+
+インターセプターはトランスポート方針を強制できます。入力検証でも認可でも、リソース所有でもありません。長期の SSE/WebSocket 作業を始めたコードは、引き続き `await using` を使うか、手動でキャンセル、close、終端 promise の await をします。通常の HTTP は request-scoped で timeout / `AbortSignal` により管理され、`Client` は `AsyncDisposable` ではありません。
+
+## 関連レシピ
+
+- [401 で Bearer トークンを一度だけ更新する](/ja-JP/recipes/refresh-bearer-once)
+- [execute を隠さずに HTTP SDK を公開する](/ja-JP/recipes/publish-http-sdk)
+- [ローカル Fetch ハンドルでテストする](/ja-JP/recipes/test-with-handle)
+- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)

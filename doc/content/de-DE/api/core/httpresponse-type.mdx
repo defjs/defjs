@@ -1,0 +1,22 @@
+---
+title: 'HttpResponse'
+description: 'HTTP-Response in Wire-Shape, die Transporte erzeugen und Interceptors sehen.'
+---
+
+<ApiReference identity="@defjs/core:HttpResponse" />
+
+```ts
+type HttpResponse<R> = {
+  readonly [HTTP_RESPONSE]: true // internal brand; build values with makeResponse
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+Die Wire-Shape, die Transporte erzeugen und Interceptors sehen: `body` ist Text oder bereits geparstes JSON, kein dekodierter Wert. `body` ist `undefined`, wenn kein Body vorhanden war; ein JSON-`null` bleibt `null`. Bei einer JSON-Representation ist ein String eine JSON-String-Wurzel und wird nicht erneut geparst; Bytes und Blobs sind roh und werden einmal geparst. `ok` ist für 2xx wahr. Ein Transportfehler ist ein Fault, nie eine Response. `DecodedResponse` ist das, was beim Aufrufer ankommt.
+
+[HTTP](/de-DE/api/http)

@@ -1,0 +1,23 @@
+---
+title: 'withOpenTelemetryServer'
+description: 'خيار عميل يثبّت معترضات OpenTelemetry الصادرة لـ HTTP وSSE وWebSocket.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:withOpenTelemetryServer" />
+
+```ts
+function withOpenTelemetryServer(options: OpenTelemetryServerOptions): ClientOption
+```
+
+يُلحق معترضًا واحدًا لكل وسيلة نقل مفعّلة، بالترتيب HTTP ثم SSE ثم WebSocket. طبّقه عند `createClient`. لا يهيئ OpenTelemetry SDK ولا يحصل على مقابض tracer أو meter أو logger عامة: مرّر ما يملكه تطبيقك.
+
+- **options** — مطلوب. `tracer` و`meter` و`logger` و`propagator` و`requireParentSpan`، وخيارات وسائل النقل `http` / `sse` / `webSocket`. مرّر `{}` لتثبيت المعترضات مع الانتشار فقط.
+- **يعيد** `ClientOption` لـ `createClient(...)`.
+
+<include cwd>examples/api/with-opentelemetry-server.ts#example</include>
+
+كل من `tracer` و`meter` و`logger` اختياري ويعمل دون الآخرين. بدون `tracer` لا ينشئ المحوّل spans محلية، ولا يستدعي `trace.getTracer(...)` أبدًا، ويتخطى `startSpanHook` و`requestHook` و`responseHook`. يستمر الانتشار في تمرير السياق الأب المستخرج.
+
+HTTP وSSE وWebSocket مفعّلة افتراضيًا. مرّر `{ enabled: false }` على وسيلة نقل لتخطيها.
+
+[@defjs/opentelemetry-server](/ar/api/opentelemetry-server)

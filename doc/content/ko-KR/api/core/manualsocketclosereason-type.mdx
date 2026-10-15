@@ -1,0 +1,18 @@
+---
+title: 'ManualSocketCloseReason'
+description: 'session.close로 세션을 닫을 때 기록되는 close code와 reason이에요.'
+---
+
+<ApiReference identity="@defjs/core:ManualSocketCloseReason" />
+
+```ts
+type ManualSocketCloseReason = {
+  code?: number
+  kind: 'manual-web-socket-close'
+  reason?: string
+}
+```
+
+`session.close(code?, reason?)`에 넘긴 `code`와 `reason`을 기록해요. 상대의 close 이벤트에 값이 없으면, 최종 `{ kind: 'closed' }` close 정보의 `code`와 `reason`을 이 값으로 채워요. `close`는 `code`가 1000도 아니고 3000~4999도 아닐 때, 또는 `reason`이 123 UTF-8 바이트를 넘을 때 `DOMException`을 던져요.
+
+[WebSocket](/ko-KR/api/web-socket)

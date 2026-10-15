@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: 'Reconoce la cancelación del llamador entre copias de Core y los errores de aborto de la plataforma.'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+Devuelve `true` para un `Error` que lleva la marca `Symbol.for('defjs.cause.aborted')`, incluido `ERR_ABORTED` de otra copia de Core, o un `DOMException` llamado `AbortError`. Un `Error` ordinario sin esa marca y con ese nombre no coincide. El resto de valores devuelve `false`.
+
+Pasa el `fault.cause` subyacente; esta función no desenvuelve faults. `createNetworkFault` usa esta comprobación para elegir `NET_ABORTED`. OpenTelemetry la usa para suprimir los logs de cancelación del llamador y conservar los de timeout.
+
+Mira la [guía de Errores](/es-ES/docs/errors) y [`isTimeoutCause`](/es-ES/api/core/istimeoutcause).
+
+[Errores](/es-ES/api/errors)

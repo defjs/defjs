@@ -1,0 +1,20 @@
+---
+title: 'struct.or'
+description: '接受符合數個 struct 其中之一的值的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.or" />
+
+```ts
+function or<const T extends readonly [StructLike, ...StructLike[]]>(...options: T): UnionStruct<T>
+```
+
+`struct.or` 是可變參數：每個 option 各自作為一個引數傳入。
+
+- 依序嘗試各 option，回傳第一個 parse 成功者的結果。
+- 沒有任何一個符合時，在聯集自己的 path 上以單一 `invalid_union` issue 失敗。各 option 自己的 issues 不會回報。
+- option 不是 struct 時丟出 `TypeError`。
+
+`UnionStruct<T>` 沒有匯出。它是 `Struct`，其輸入與輸出是各 option 型別的聯集，不含 `undefined`。若是 tagged 物件，請優先用 [`struct.discriminatedUnion()`](/zh-Hant-TW/api/core/struct-discriminatedunion)，它會回報被選中 option 的 issue。
+
+[Struct](/zh-Hant-TW/api/struct)

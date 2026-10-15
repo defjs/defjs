@@ -1,0 +1,18 @@
+---
+title: 'PreflightFault'
+description: 'Fault für einen Fehler, der aufgetreten sein kann, bevor überhaupt eine Response existierte.'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+Alles, was fehlschlagen konnte, bevor eine Response existierte: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` ist nur dort vorhanden, wo der Transport schon Metadaten zu melden hatte — etwa bei einem Body, der mitten im Download abbrach.
+
+[Fehler](/de-DE/api/errors)

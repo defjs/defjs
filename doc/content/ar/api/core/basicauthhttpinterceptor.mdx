@@ -1,0 +1,20 @@
+---
+title: 'basicAuthHttpInterceptor'
+description: 'معترض HTTP يضبط رأس Authorization من النوع Basic انطلاقًا من بيانات الاعتماد.'
+---
+
+<ApiReference identity="@defjs/core:basicAuthHttpInterceptor" />
+
+```ts
+function basicAuthHttpInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): HttpInterceptor
+```
+
+- **fn** — تُستدعى لكل طلب لإنتاج بيانات الاعتماد.
+- **options** — [`BasicAuthInterceptorOptions`](/ar/api/core/basicauthinterceptoroptions-type) اختياري مع `encode` مخصّص.
+- **يُرجع** `HttpInterceptor` يضبط `Authorization: Basic <encoded>` على نسخة من رؤوس الطلب، ويستبدل أي رأس `Authorization` موجود.
+
+المُرمِّز الافتراضي هو ``btoa(`${username}:${password}`)``، لذا يجب أن تكون بيانات الاعتماد بترميز Latin-1. وبدون `encode` يرمي استدعاء `basicAuthHttpInterceptor` الخطأ `Error: BasicAuthInterceptor is not supported in this environment` إذا لم تكن `btoa` متاحة في بيئة التشغيل. استخدم [`basicAuthSSEInterceptor`](/ar/api/core/basicauthsseinterceptor) لأوامر SSE.
+
+انظر [دليل المعترضات](/ar/docs/interceptors).
+
+[المعترضات](/ar/api/interceptors)

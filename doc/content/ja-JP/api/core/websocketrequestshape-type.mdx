@@ -1,0 +1,23 @@
+---
+title: 'WebSocketRequestShape'
+description: 'WebSocket のビルダーが返せるリクエストの形です。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketRequestShape" />
+
+```ts
+type WebSocketRequestShape<P extends string> = {
+  body?: never
+  headers?: never
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+[`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) の `builder` が返せるものです。`P` はエンドポイントの path です。
+
+- `path` は `P` の `:name` セグメントを与えます。名前ごとにスカラー値 1 つです。path に名前がなければ `never` です。
+- `query` は `URLSearchParams`、またはスカラー、配列、入れ子のレコードからなるレコードです。
+- `headers` と `body` は `never` です。WebSocket のハンドシェイクは、ビルダーからどちらも受け取りません。認証情報は `beforeConnect` かインターセプターに置いてください。
+
+[WebSocket](/ja-JP/api/web-socket)

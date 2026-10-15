@@ -1,0 +1,14 @@
+---
+title: 'RequestSuccessData'
+description: 'エンドポイントで宣言した output struct がデコードする成功ボディの型です。'
+---
+
+<ApiReference identity="@defjs/core:RequestSuccessData" />
+
+```ts
+type RequestSuccessData<TOutput extends AnyStruct | undefined> = [TOutput] extends [undefined] ? undefined : Infer<TOutput>
+```
+
+宣言された `output` struct でデコードされるボディの型です。宣言がなければ `undefined` です。
+
+[HTTP](/ja-JP/api/http)

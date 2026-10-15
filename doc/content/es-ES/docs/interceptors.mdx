@@ -1,0 +1,116 @@
+---
+title: 'Interceptores'
+description: Capas de política HTTP, SSE y WebSocket en el límite de transporte en orden cebolla.
+---
+
+# Interceptores
+
+Añade cabeceras de auth, cortocircuita ventanas de mantenimiento o reintenta lecturas seguras — sin tocar la validación del comando. Cada transporte tiene su propia cadena. Recibes un `HttpRequest`; devuelves el resultado de ese transporte (`HttpResponse`, handle de event-stream o sesión WebSocket). La validación de entrada corre antes de la cadena; el despacho por estado y los resultados decodificados, después.
+
+## Configuración básica
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## Orden cebolla
+
+`withInterceptors(...items)` acepta interceptores mixtos. El cliente filtra por `kind` para el transporte seleccionado y conserva el orden relativo de registro. Cada interceptor puede ejecutarse antes y después de `next`:
+
+| Factory                      | Solicitud     | Resultado de `next`                   |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+Varias llamadas a `withInterceptors(...)` añaden. Pon la observación amplia fuera de la mutación/retry más estrecha cuando la capa exterior deba ver el resultado final.
+
+## Clonar y añadir cabeceras de solicitud
+
+Trata el `HttpRequest` entrante como propiedad de la cadena. Clona `Headers` antes de cambiarlas; pasa una solicitud nueva a `next`:
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+El mismo patrón para SSE. El WebSocket del navegador no puede añadir cabeceras arbitrarias de handshake — cambiar `request.headers` no autenticará un socket del navegador. Usa protocolo, política de URL/query o un handshake soportado por el servidor.
+
+HTTP nunca escribe un Content-Type inferido en `request.headers`; los interceptores ven solo los headers declarados. `request.bodyContentType` conserva el tipo inferido del cuerpo del builder como un campo ordinario, por lo que se mantiene en las copias `{ ...req }`. Un header `content-type` explícito siempre tiene prioridad sobre ese campo y la detección, tanto si lo declara el builder, los valores por defecto del cliente, un interceptor o una solicitud directa a `fetchHandler`. El código que firma solicitudes debe leer `headers.get('content-type') ?? request.bodyContentType`.
+
+Al reemplazar un cuerpo HTTP, reemplaza `body` en la solicitud copiada y declara su tipo con un header `content-type`. `bodyContentType` solo se aplica mientras `body` sea el valor del builder; los cuerpos de reemplazo se detectan de nuevo, así que un string de reemplazo es texto salvo que el header declare otro tipo. Poner `body: undefined` no deja ningún Content-Type inferido por la librería. Para el cuerpo del builder sin cambios, `bodyContentType: null` suprime la inferencia de la librería cuando no hay un header explícito, aunque el Fetch nativo aún puede añadir su propio tipo para un string. FormData siempre usa su boundary multipart real. No reutilices un cuerpo `ReadableStream` consumido.
+
+## Cortocircuitar una solicitud
+
+Puedes saltarte `next`, pero debes devolver el tipo de resultado esperado. Para HTTP, `makeResponse(...)` construye un wrapper compatible:
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+La capa de comando sigue despachando por estado. Declara un único struct `error` para el lado no-2xx cuando los llamadores necesiten `error.data` tipado. También sigue comprobando el lado declarado: un `output` o `error` JSON necesita una cabecera `content-type` JSON en la respuesta sintética, y `body` ya debería ser el valor parseado, tal como lo entregaría el transporte (`request.responseType` y `request.errorResponseType` indican la representación). Cortocircuitar SSE o WebSocket necesita un handle/sesión compatible completo (promesas de cierre, estado en vivo, ownership y `[Symbol.asyncDispose]`). Los objetos parciales no son política válida. Las implementaciones estructurales de `EventStreamHandle` y `WebSocketSessionLike` ahora necesitan ese disposer estándar en tiempo de compilación; quien solo recibe handles de Defjs no tiene un requisito nuevo de llamada en runtime.
+
+## Reintentar lecturas seguras
+
+Los reintentos cambian el comportamiento. Mantén la política estrecha — este ejemplo reintenta `GET` / `HEAD` / `OPTIONS` reproducibles para estados `429`, `502`, `503`, `504`, limita `Retry-After` a 30s y para tras dos reintentos o en abort:
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+Los errores lanzados de interceptor/Fetch no se reintentan en este bucle: un fallo de transporte rechaza en lugar de producir un estado con el que este bucle pudiera coincidir. Reintentar `POST` / `PUT` / `PATCH` / `DELETE` necesita bytes reproducibles, soporte del servidor, un contrato de idempotencia y una política de estado revisada. El reintento es tuyo: Core no exporta `retryAfter()`.
+
+Un interceptor que lanza (o rechaza) fuera de este ejemplo llega a quien llama como
+`EXT_INTERCEPTOR_FAILED`, con el valor lanzado en `cause` — mira [Errores](/es-ES/docs/errors). Lo mismo ocurre si se
+resuelve con algo distinto del resultado de su transporte: `undefined` por olvidar un `return`, o un
+`Response` nativo donde se espera un `HttpResponse`. En un
+interceptor HTTP, lanzar `ERR_ABORTED` o `ERR_TIMEOUT` es, en cambio, la forma de expresar la cancelación: la
+llamada se resuelve con `NET_ABORTED` o `NET_TIMEOUT`. Los interceptores SSE y WebSocket no tienen esa
+excepción; reportan cualquier throw como `EXT_INTERCEPTOR_FAILED`.
+
+`next(request)` puede rechazar. Un fallo de transporte es un fault, no una respuesta con estado 0,
+así que un interceptor que quiera observarlo pone `try` / `catch` alrededor de `next`. Defjs sigue
+atribuyéndolo bien: un rechazo que vino del transporte sigue siendo un fault `NET_*` y no se le echa
+la culpa a tu interceptor.
+
+## Envolver sesiones WebSocket
+
+Un interceptor WebSocket puede llamar a `next` como máximo una vez. Si envuelves la sesión, delega getters en vivo y miembros del ciclo de vida de forma explícita:
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+Expandir una sesión congela `state` / `connection` / `bufferedAmount` una vez. Conserva `closed`, `receive`, `close`, la delegación exacta de `[Symbol.asyncDispose]()` y la limpieza de listeners salvo que cambies deliberadamente el ownership. Un wrapper debe devolver la promise de teardown de la sesión interna, no una promise resuelta ajena. Si una cadena crea una sesión que no se entrega, Core la asienta y la cierra; si un interceptor con éxito devuelve otra sesión, Core descarta la creada.
+
+## Referencia
+
+Las factories devuelven valores de transporte etiquetados:
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — credenciales Basic en HTTP
+- `basicAuthSSEInterceptor(provider, options?)` — credenciales Basic en SSE
+
+`HttpRequest` puede incluir `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` y `operation` estático. Es un valor de integración de transporte — no la entrada parseada del llamador. `queryParams` es `new URLSearchParams(queryString)` después de la serialización. Un serializador de query configurado no se llama cuando el builder no produjo query, y un `URLSearchParams` del builder se usa tal cual. Mantén la validación del comando, la validación de salida y el mapeo de errores de dominio en sus capas.
+
+La validación de URL empieza durante la construcción de la solicitud: un endpoint base ausente, relativo o no válido, o un path ilegal, falla con `REQ_BUILD_FAILED` antes de que se ejecute cualquier interceptor o transporte, incluido un interceptor que cortocircuita. Antes del despacho, el `req.endpoint` final se valida contra el `req.baseEndpoint` final: la URL resuelta debe conservar el origen de esa base y permanecer bajo su directorio; se rechazan los caracteres de control C0 (incluidos tab, CR y LF), las barras invertidas, `?`, `#` y los escapes de directorio en el path. Las formas similares a un esquema y las relativas al protocolo se rechazan incluso con espacios iniciales; se permite un espacio ordinario en el interior y se envía como `%20`. Un interceptor puede sustituir deliberadamente `baseEndpoint` por otra URL absoluta válida. HTTP, SSE y WebSocket comparten la regla, y los errores de URL deterministas nunca se reintentan.
+
+Los observadores SSE/WebSocket son hooks de ciclo de vida, no control de flujo. Haz unsubscribe de los listeners WebSocket cuando termine el dueño. Los fallos del observador siguen el contrato del transporte; un interceptor en sí puede lanzar o rechazar.
+
+Registra un allowlist revisado: `operation` estático, método, estado, duración, código de error estable. No registres por defecto URL resueltas, query strings, cabeceras de auth, cuerpos, causes en bruto, IDs de eventos SSE ni payloads WebSocket.
+
+Las credenciales Basic son base64, no cifrado. Usa TLS, mantén los providers de credenciales acotados a la solicitud en un servidor, nunca registres la cabecera generada. El encoder por defecto es `globalThis.btoa`; pasa `BasicAuthInterceptorOptions.encode` cuando el runtime no tenga `btoa` o necesite un encoder revisado.
+
+Un interceptor puede imponer política de transporte. No es validación de entrada, autorización ni ownership de recursos. El código que arranca trabajo de larga duración sigue usando `await using` o cierra y espera manualmente la promesa terminal. HTTP ordinario sigue siendo request-scoped y se gestiona con su timeout / `AbortSignal`; `Client` no es `AsyncDisposable`.
+
+## Recetas relacionadas
+
+- [Refrescar un token Bearer una vez ante un 401](/es-ES/recipes/refresh-bearer-once)
+- [Publicar un SDK HTTP sin ocultar execute](/es-ES/recipes/publish-http-sdk)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)
+- [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)

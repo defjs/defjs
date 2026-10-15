@@ -1,0 +1,16 @@
+---
+title: 'QuerySerializer'
+description: 'エンコード済みのクエリオブジェクトをクエリ文字列にシリアライズする関数です。'
+---
+
+<ApiReference identity="@defjs/core:QuerySerializer" />
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+`query` はワイヤ形式のオブジェクトです。エイリアスは適用済みで、`Date` はすでに ISO 文字列、`bigint` はすでに文字列になっています。ネストしたオブジェクトや配列はそのまま保たれます。先頭の `?` を付けずにクエリ文字列を返してください。返した文字列はそのまま使われ、`URLSearchParams` は通りません。インターセプターは `queryParams` を `new URLSearchParams(queryString)` として受け取ります。
+
+`withQuerySerializer` で設定します。設定しない場合、クエリは `URLSearchParams` を使います。配列はキーを繰り返し、ネストしたオブジェクトは失敗します。ビルダーが `URLSearchParams` を返す場合、シリアライザーは使われません。
+
+[Client](/ja-JP/api/client)

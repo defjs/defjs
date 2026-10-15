@@ -1,0 +1,19 @@
+---
+title: 'createWebSocketInterceptor'
+description: 'Оборачивает функцию-interceptor в размеченный WebSocket interceptor.'
+---
+
+<ApiReference identity="@defjs/core:createWebSocketInterceptor" />
+
+```ts
+function createWebSocketInterceptor(fn: WebSocketInterceptorFn): WebSocketInterceptor
+
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+type WebSocketInterceptorFn = (req: HttpRequest, next: WebSocketHandler) => Promise<WebSocketSessionLike>
+```
+
+Возвращает `{ kind: 'web-socket', fn }`. WebSocket interceptor’ы выполняются только для WebSocket-команд.
+
+`next` и interceptor возвращают [`WebSocketSessionLike`](/ru-RU/api/core/websocketsessionlike-type) — сессию в том виде, в каком её видит interceptor. Обёртка или short-circuit-сессия должна пробрасывать свой teardown `[Symbol.asyncDispose]()`; члены и это требование перечислены на указанной странице.
+
+[Interceptors](/ru-RU/api/interceptors)

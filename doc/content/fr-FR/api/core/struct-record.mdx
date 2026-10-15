@@ -1,0 +1,19 @@
+---
+title: 'struct.record'
+description: 'Struct qui parse un objet à clés string avec un seul struct de valeur.'
+---
+
+<ApiReference identity="@defjs/core:struct.record" />
+
+```ts
+function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
+```
+
+- Parse chaque clé propre d’un objet simple avec `value`. Toute autre valeur échoue avec `invalid_type` (attendu `record`).
+- Le parse s’arrête à la première valeur en échec, et `issue.path` contient sa clé.
+- La sortie est un nouvel objet à prototype `null`.
+- Lève `TypeError` quand `value` n’est pas un struct.
+
+`RecordStruct<S>` n’est pas exporté. C’est un `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, où `Output` est `Infer<S>` sans `undefined`. Quand `S` est un struct optionnel, une valeur `undefined` omet sa clé de la sortie.
+
+[Struct](/fr-FR/api/struct)

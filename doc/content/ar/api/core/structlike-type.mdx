@@ -1,0 +1,22 @@
+---
+title: 'StructLike'
+description: 'العلامة البنيوية التي يحملها كل struct.'
+---
+
+<ApiReference identity="@defjs/core:StructLike" />
+
+```ts
+interface StructLike<I = unknown, O = unknown, OO extends boolean = boolean> {
+  readonly _struct: {
+    input: I
+    optionalOut: OO extends true ? true : undefined
+    output: O
+  }
+}
+```
+
+أي شيء له حمولة نوع `_struct`. يقرأ [`StructInput`](/ar/api/core/structinput-type) و[`Infer`](/ar/api/core/infer-type) منها `input` و`output`، وتستخدم structs الكائنات `optionalOut` لتقرر أي حقول المخرجات قد تغيب.
+
+`_struct` موجود في نظام الأنواع فقط. فالـ structs لا تملك الخاصية `_struct` وقت التشغيل، والكائن العادي الذي له ذلك النوع ليس struct صالحًا.
+
+[Struct](/ar/api/struct)

@@ -1,0 +1,20 @@
+---
+title: 'EventStructs'
+description: '从 SSE 事件名到解码其数据的 struct 的映射。'
+---
+
+<ApiReference identity="@defjs/core:EventStructs" />
+
+```ts
+type EventStructs = { [key: string]: AnyStruct }
+```
+
+没有 `event:` 字段的事件名为 `message`。事件名没有自己的条目时使用 `default` struct；两者都没有，该事件会被跳过，并调用 `onInvalidEvent`。要声明事件名 `__proto__`，请使用计算属性键创建自有属性。
+
+`string` 事件 struct 保留原始的 `data` 文本。其他 kind 都是 JSON 文本：先 `JSON.parse`，再交给 struct。因此单独的 `struct.literal` 需要的是 JSON 文本，而不是不带引号的 token。
+
+重连在 client 上配置（`withSSEReconnect`）。SSE 的 `jitter` 是 **0-1 的乘性因子**，与 WebSocket 相同。
+
+见 [SSE 指南](/zh-Hans/docs/sse)和[消费 SSE 流](/zh-Hans/recipes/consume-sse)。
+
+[SSE](/zh-Hans/api/sse)

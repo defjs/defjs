@@ -1,0 +1,21 @@
+---
+title: 'createSSEInterceptor'
+description: 'インターセプター関数をタグ付き SSE インターセプターとして包みます。'
+---
+
+<ApiReference identity="@defjs/core:createSSEInterceptor" />
+
+```ts
+function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor
+
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+`{ kind: 'sse', fn }` を返します。SSE インターセプターは SSE コマンドでのみ、登録順に実行されます。`next(req)` は、残りのインターセプターを通してストリームを開きます。
+
+`next(req)` の決定的な URL エラーは、返された Promise を reject します。そのため `.then` / `.catch` による復旧が実行されます。復旧しなければ、`client.execute` は引き続き `REQ_BUILD_FAILED` を報告します。
+
+`EventStreamHandle` は `AsyncDisposable` を拡張します。構造的なショートサーキット実装は `[Symbol.asyncDispose](): PromiseLike<void>` を提供し、同じ close ライフサイクルへ繋ぐ必要があります。
+
+[Interceptors](/ja-JP/api/interceptors)

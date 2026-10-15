@@ -1,0 +1,17 @@
+---
+title: 'EventStreamCloseInfo'
+description: 'Comment un flux SSE s’est terminé : EOF normal, abandon, ou erreur avec un code de fault.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCloseInfo" />
+
+```ts
+type EventStreamCloseInfo =
+  | { kind: 'eof'; reason?: string; cause?: unknown }
+  | { kind: 'aborted'; reason?: string; cause?: unknown }
+  | { kind: 'error'; code: EventStreamFaultCode; reason?: string; cause?: unknown }
+```
+
+La valeur de `EventStreamHandle.closed`. `eof` signifie que la réponse s’est terminée normalement. `aborted` signifie que le flux a été fermé par `close()` ou par la libération, ou que le signal de l’appelant a été abandonné pour une raison qui n’est pas un timeout ; `reason` et `cause` portent la valeur passée à `close`. Si le signal de l’appelant est abandonné après l’ouverture avec une `TimeoutError` ou `ERR_TIMEOUT`, l’itérateur lève `ERR_TIMEOUT` et `closed` vaut `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Un `close(timeoutError)` explicite signale quand même `aborted`. `error` porte le `code` du fault (voir `EventStreamFaultCode`) et l’échec comme `cause`.
+
+[SSE](/fr-FR/api/sse)

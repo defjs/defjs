@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: Vue-Plugin, Injection-Key und injectClient.
+---
+
+# Vue
+
+Stelle einen bestehenden `@defjs/core`-Client einer Vue-App bereit. Dieses Paket erzeugt den Client nicht, legt ihn nicht im Cache ab und gibt ihn nicht frei. Vue 3 oder neuer ist erforderlich.
+
+Siehe den [Vue-Guide](/de-DE/docs/integrations/vue).
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — Instanz von `createClient`.
+- **Returns** ein Vue-Plugin für `app.use(...)`. Die Installation ruft `app.provide(HTTP_CLIENT, client)` auf.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+Liest den nächsten `HTTP_CLIENT`-Provider. Ruf es in einem gültigen Vue-Injektionskontext auf, etwa im synchronen Teil von `setup()` oder in einem synchronen Callback von `app.runWithContext()` (Vue 3.3+). Auch vom Compiler nach einem Top-Level-`await` in `<script setup>` wiederhergestellte Kontexte sind gültig.
+
+- **Returns** den injizierten Client.
+- **Throws** einen `Error`, wenn kein Injektionskontext aktiv ist oder kein Client bereitgestellt wurde. Stelle einen Client mit `app.use(createClientPlugin(client))` oder `provide(HTTP_CLIENT, client)` in einer übergeordneten Komponente bereit; das installierte Plugin allein macht Aufrufe außerhalb eines Injektionskontexts nicht gültig.
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+Vue-Injection-Key. Nimm lieber `injectClient()` statt `inject(HTTP_CLIENT)`. Überschreibe einen Subtree mit `provide(HTTP_CLIENT, childClient)`.

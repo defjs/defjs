@@ -1,0 +1,24 @@
+---
+title: 'StructIssue'
+description: 'إخفاق تحقق واحد ينتج أثناء تحليل struct.'
+---
+
+<ApiReference identity="@defjs/core:StructIssue" />
+
+```ts
+interface StructIssue {
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  expected: string
+  message: string
+  path: Array<number | string>
+  received: unknown
+}
+```
+
+- `code` هو الفئة المقروءة آليًا. ينتج المحلِّل `invalid_type` و`invalid_literal` و`invalid_enum` و`invalid_union` و`invalid_intersection` و`missing_key`؛ أما `custom` فهو جزء من النوع، لكن الـ structs المدمجة لا تنتجه أبدًا.
+- `expected` يصف النوع أو القيمة المتوقعة.
+- `message` هي النص النهائي، بعد إعادة كتابة اختيارية عبر [`ErrorMap`](/ar/api/core/errormap-type).
+- `path` يمتد من جذر التحليل إلى موضع الفشل: أسماء الحقول وفهارس المصفوفات. ويكون فارغًا عند فشل على مستوى الجذر.
+- `received` هي القيمة التي فشلت عند `path`.
+
+[Struct](/ar/api/struct)

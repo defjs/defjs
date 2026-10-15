@@ -1,0 +1,17 @@
+---
+title: 'withWebSocketHandle'
+description: 'WebSocket コンストラクタを差し替えるクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHandle" />
+
+```ts
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+ソケット接続に使う WebSocket コンストラクタを差し替えます。デフォルトは `globalThis.WebSocket` です。
+
+- **WebSocketImpl** は、[`WebSocketHandle`](/ja-JP/api/core/websockethandle-type) を返す [`WebSocketHandleConstructor`](/ja-JP/api/core/websockethandleconstructor-type) です。
+- 使えるコンストラクタがないときは、WebSocket コマンドの実行が `ENV_UNSUPPORTED` の fault で失敗します。
+
+[Client](/ja-JP/api/client)

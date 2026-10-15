@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: '针对 client 配置运行 HTTP 命令的底层入口。'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+`client.execute` 使用的底层入口。应用代码应当调用 `client.execute(command, options)`。`HttpClientConfig` 是 `ClientConfig` 的 HTTP 部分，所以可以直接传入 `ClientConfig`。`HttpExecuteAwaitResult` 是内部的结果 tuple。
+
+- **返回** `[null, data, response]` 或 `[fault, undefined, undefined]`。`data` 是解码后的 `output` body，未声明时为 `undefined`。声明了 `output` 时，`response` 是 `DecodedResponse`，否则是 `HttpMeta`。fault 是 `Fault<TError>`。
+
+非 2xx 状态在没有声明 `error` struct 时是 `HTTP_STATUS`（其 `data` 为 `undefined`），声明的 body 能解码时同样是 `HTTP_STATUS`（其 `data` 就是该 body）。声明的 `error` body 无法读取时，fault 则是 `RES_*` decode fault。失败时，tuple 的第三个位置是 `undefined`；响应元数据在 fault 上。省略 `options.timeout` 时，回退到 client 的 `withTimeout` 默认值。
+
+[HTTP](/zh-Hans/api/http)

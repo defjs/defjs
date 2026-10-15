@@ -1,0 +1,18 @@
+---
+title: 'ERR_ABORTED'
+description: '標記 request 已被 abort 嘅共用 Error sentinel。'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+Caller 取消時共用嘅 `cause` 同 message 值。`createNetworkFault` 會將佢，仲有名為 `AbortError` 嘅 `DOMException`，映射去 `NET_ABORTED`。HTTP interceptor throw 呢個 sentinel，call 會以 `NET_ABORTED` fault resolve。SSE 同 WebSocket interceptors throw 佢嘅話，就會被報告為 `EXT_INTERCEPTOR_FAILED`。
+
+睇 [錯誤指南](/zh-Hant-HK/docs/errors)。
+
+呢個 sentinel 帶有不可枚舉嘅 `Symbol.for('defjs.cause.aborted')` brand。[`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 唔使比較 object identity，就可以識別任何 Core 副本嘅 sentinel。分類唔受之前無關嘅執行影響。
+
+[Errors](/zh-Hant-HK/api/errors)

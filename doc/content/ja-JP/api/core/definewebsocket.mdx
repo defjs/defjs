@@ -1,0 +1,29 @@
+---
+title: 'defineWebSocket'
+description: '型付きの WebSocket エンドポイントを宣言します。'
+---
+
+<ApiReference identity="@defjs/core:defineWebSocket" />
+
+```ts
+function defineWebSocket<
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, 'path'> & {
+    input?: TInput
+    path: P
+  } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,
+): WebSocketEndpoint<TInput, TIncoming, TOutgoing>
+```
+
+- **definition** — `path`、`incoming` struct 1 つ、そして必須の `maxIncomingQueueSize`（正の安全な整数）です。任意で `outgoing` と `input` struct、静的な `protocols`、`maxOutgoingQueueSize`（0 以上の安全な整数）、`operation` を指定できます。`input` を宣言した場合は、入力がすでにリクエストの形と一致していても、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
+- **戻り値** エンドポイントです。入力を渡して呼ぶと `WebSocketCommand` になります。
+
+WebSocket の `builder` が返せるのは `path` と `query` だけで、`headers` と `body` は拒否されます。`WebSocketDefinitionBase` と `BuilderField` は内部ヘルパー型です。
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+[WebSocket](/ja-JP/api/web-socket)

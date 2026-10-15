@@ -1,0 +1,24 @@
+---
+title: '封装 HTTP SDK'
+description: 导出 endpoint 和 createClient；状态收窄留在调用点。
+---
+
+# 发布 HTTP SDK，别藏起 execute
+
+把 `client.execute` 吞掉的方法式 SDK，通常会把声明过的 `404` 收成无类型的 throw，或一个共享的「API error」。契约保持为 endpoint 加显式 client；调用方仍拥有状态分支。
+
+见 [Commands](/zh-Hans/docs/commands)、[Client](/zh-Hans/docs/client) 和[设计决策](/zh-Hans/docs/design-decisions)。
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+导出 endpoint 和一个 client 工厂。Helper 可以为一条审过的路径调用 `execute`，但不要替你关心的每个状态替换掉 tuple。

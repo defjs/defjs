@@ -1,0 +1,23 @@
+---
+title: 'WebSocketConnectionInfo'
+description: '現在の WebSocket 接続のメタデータです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketConnectionInfo" />
+
+```ts
+interface WebSocketConnectionInfo {
+  extensions?: string
+  generation: number
+  protocol?: string
+  url?: string
+}
+```
+
+- `url` はソケットが報告する URL です。
+- `protocol` はネゴシエートされたサブプロトコル、`extensions` はネゴシエートされた拡張です。ソケットが空文字列を報告したときは、どちらも `undefined` です。
+- `generation` は `open` に達した物理ソケットの数です。最初の open の後は `1` で、再接続のたびに 1 ずつ増えます。どのソケットもまだ open に達していない時点のスナップショットは `0` です。
+
+`session.connection` は常に最新のスナップショットを持ちます。execute の結果に含まれる `connection` は、最初に成功したもののままです。
+
+[WebSocket](/ja-JP/api/web-socket)

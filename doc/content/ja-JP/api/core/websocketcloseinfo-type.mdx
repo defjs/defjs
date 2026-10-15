@@ -1,0 +1,22 @@
+---
+title: 'WebSocketCloseInfo'
+description: 'WebSocket セッションの論理的な終端結果です。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCloseInfo" />
+
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
+セッションが完全に終了したときに `session.closed` が解決される値です。
+
+- `closed`: セッションが正常に終了しました。手動の `session.close()` も含みます。
+- `aborted`: セッションがキャンセルされました。`cause` は abort の理由です。
+- `error`: セッションが失敗しました。`cause` は必須です。
+- `code`、`reason`、`wasClean` は、観測されたネイティブの close イベントから来ます。手動の `session.close(code, reason)` は、close イベントにない場合に `code` と `reason` を埋めます。
+
+[WebSocket](/ja-JP/api/web-socket)

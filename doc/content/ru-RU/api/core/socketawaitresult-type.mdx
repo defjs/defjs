@@ -1,0 +1,20 @@
+---
+title: 'SocketAwaitResult'
+description: 'Кортеж, который возвращается при выполнении WebSocket-команды.'
+---
+
+<ApiReference identity="@defjs/core:SocketAwaitResult" />
+
+```ts
+type SocketAwaitResult<TIncoming, TOutgoing = never> =
+  | [error: null, socket: WebSocketSession<TIncoming, TOutgoing>, connection: WebSocketConnectionInfo]
+  | [error: Fault<undefined>, socket: undefined, connection: WebSocketConnectionInfo | undefined]
+```
+
+Результат `client.execute` для WebSocket-команды.
+
+- При успехе: `[null, session, connection]`. `connection` — снимок первого успешного соединения; `session.connection` сдвигается вперёд при reconnect.
+- При сбое: `[fault, undefined, connection]`. `connection` может быть `undefined`, например когда конструктор упал до открытия сокета.
+- Сюда приходят только сбои запуска. После того как session возвращена, последующие ошибки идут через `onRuntimeError`, `receive` и `closed`.
+
+[WebSocket](/ru-RU/api/web-socket)

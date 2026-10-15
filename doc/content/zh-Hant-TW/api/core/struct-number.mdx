@@ -1,0 +1,15 @@
+---
+title: 'struct.number'
+description: '接受 NaN 以外的數字的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.number" />
+
+```ts
+function number(): Struct<number, number>
+```
+
+- 接受 `number` 值，包括 `Infinity`。`NaN` 與非數字以 `invalid_type` 失敗。
+- 字串不會被強制轉型。
+
+[Struct](/zh-Hant-TW/api/struct)

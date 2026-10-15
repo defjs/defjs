@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: 'Struct qui choisit un struct objet selon la valeur d’un champ tag.'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- Chaque option doit être un struct objet dont le champ `discriminator` est un [`struct.literal()`](/fr-FR/api/core/struct-literal) requis. Un champ manquant, un champ qui n’est pas un literal, un champ optionnel ou une valeur de tag en double lève `TypeError` à la création du struct.
+- L’entrée doit être un objet simple. La valeur du tag choisit l’option, et cette option parse l’objet entier.
+- Un tag manquant échoue avec `missing_key`, et un tag inconnu échoue avec `invalid_union`. Les deux rapportent le path du champ tag. Les autres échecs viennent de l’option sélectionnée.
+- Avec `struct.parse(..., { aliases: true })`, le tag est lu depuis l’alias du champ.
+
+`RequiredDiscriminatorOptions` et `DiscriminatedUnionStruct` ne sont pas exportés. Le contrôle de types rejette une option dont le champ tag est absent ou peut être `undefined`.
+
+[Struct](/fr-FR/api/struct)

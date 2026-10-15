@@ -1,0 +1,22 @@
+---
+title: 'OpenTelemetryServerWebSocketOptions'
+description: WebSocket トランスポートの options — 共通 options に queryPropagation を加えたものです。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerWebSocketOptions" />
+
+```ts
+interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServerTransportOptions<WebSocketSessionLike> {
+  queryPropagation?: boolean
+}
+```
+
+`OpenTelemetryServerOptions` の `webSocket` に指定します。`enabled`、`startSpanHook`、`requestHook`、`responseHook` は `OpenTelemetryServerTransportOptions` から来ます。`responseHook(span, session, req)` は、開いた `WebSocketSessionLike` と元の `HttpRequest` を受け取ります。
+
+`queryPropagation` の既定は `false` で、WebSocket の query 文字列は変更されず、URL に trace context や baggage は書き込まれません。ブラウザーの WebSocket クライアントは通常ヘッダーを設定できないため、オンにすると伝播される context が query 文字列の末尾に書き込まれ、そのフィールドと同名のパラメーターが置き換えられます。query 文字列はプロキシ、アクセスログ、APM ツールに記録されることがあり、baggage の値が機微な場合もあります。その露出を受け入れたあとでのみ、オンにしてください。
+
+WebSocket は接続レベルで追跡されます。span は `session.closed` が確定するまで開いたままです。`websocket.connected` を記録したあと、通常の close なら `websocket.closed`、エラーなら `websocket.error` を記録します。サーバーからの close フレームは、1011 を含むどの code でも通常の close です。close フレームのない突然の切断（1006）が通常の close になるのは、`close` の前にソケットの `error` が報告されないランタイム（Bun）に限られます。報告されるランタイム（Node.js）では、セッションはエラーで終わり、1 件ログされます。開いているセッションに対する呼び出し側の abort も `websocket.error` で、span は `ERROR` で終了し、ログは出力されません。`error.type` は abort の理由に従います。デフォルトの `abort()` なら `AbortError`、`Error` の理由ならその `Error.name`、文字列の理由なら `string` です。WebSocket がまだ接続中の abort では、span は `error.type` が `DefjsFault` の `ERROR` で終了します。メッセージごとの span は作られません。
+
+WebSocket の計装をスキップするには `{ enabled: false }` を渡します。span フックは `tracer` が渡された場合にのみ呼び出されます。
+
+[@defjs/opentelemetry-server](/ja-JP/api/opentelemetry-server)

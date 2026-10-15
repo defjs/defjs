@@ -1,0 +1,36 @@
+---
+title: مرجع API
+description: مرجع مكتوب يدويًا لحزم مساحة العمل — الدوال والخيارات والأنواع التي تستوردها.
+---
+
+# مرجع API
+
+<ApiIndex />
+
+هذا مرجع البحث لحزم مساحة العمل. التوقيعات هي العقد؛ الأدلّة والوصفات تشرح متى تستخدمها.
+
+## الحزم
+
+| الحزمة                                                        | ما تبحث عنه                                                       |
+| ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/ar/api/client)                               | `createClient` و`defineRequest` و`struct` وHTTP / SSE / WebSocket |
+| [`@defjs/vue`](/ar/api/vue)                                   | `createClientPlugin` و`injectClient` و`HTTP_CLIENT`               |
+| [`@defjs/react`](/ar/api/react)                               | `ClientProvider` و`useClient`                                     |
+| [`@defjs/opentelemetry-server`](/ar/api/opentelemetry-server) | `withOpenTelemetryServer` وخيارات كل وسيلة نقل                    |
+
+## @defjs/core
+
+| الصفحة                               | ما تبحث عنه                                                     |
+| ------------------------------------ | --------------------------------------------------------------- |
+| [Client](/ar/api/client)             | `createClient` وخيارات `with*` و`Client`                        |
+| [HTTP](/ar/api/http)                 | `defineRequest` وخيارات التنفيذ و`HttpRequest` / `HttpResponse` |
+| [Struct](/ar/api/struct)             | `struct.*` و`Infer` و`StructError`                              |
+| [Errors](/ar/api/errors)             | تنويعات `Fault` ومصانعها                                        |
+| [Interceptors](/ar/api/interceptors) | مساعدات interceptor لـ HTTP / SSE / WebSocket                   |
+| [SSE](/ar/api/sse)                   | `defineEventStream` ومقبض التدفق                                |
+| [WebSocket](/ar/api/web-socket)      | `defineWebSocket` والجلسة                                       |
+
+## ذات صلة
+
+- [البدء](/ar/docs/start)
+- [GET مع 404 معلَن](/ar/recipes/get-declared-404)

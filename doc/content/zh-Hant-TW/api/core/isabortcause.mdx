@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: '辨認跨 Core 複本的呼叫端取消，以及平台的 abort 錯誤。'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+帶有 `Symbol.for('defjs.cause.aborted')` brand 的 `Error` 會回傳 `true`，包含來自另一份 Core 複本的 `ERR_ABORTED`，或名為 `AbortError` 的 `DOMException`。一般沒有 brand、卻使用該名稱的 `Error` 不會相符。其他值回傳 `false`。
+
+請傳入底層的 `fault.cause`；這個函式不會自行解開 fault。`createNetworkFault` 用這項檢查來選定 `NET_ABORTED`。OpenTelemetry 用它抑制呼叫端取消的 log，同時保留逾時 log。
+
+見 [錯誤指南](/zh-Hant-TW/docs/errors) 與 [`isTimeoutCause`](/zh-Hant-TW/api/core/istimeoutcause)。
+
+[錯誤](/zh-Hant-TW/api/errors)

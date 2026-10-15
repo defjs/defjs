@@ -1,0 +1,17 @@
+---
+title: 'withHTTPHandle'
+description: '替换 HTTP 请求所用 Fetch 函数的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withHTTPHandle" />
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+替换 HTTP 请求所用的、兼容 Fetch 的函数。默认是平台的 `fetch`。
+
+- **fetchImpl** 是 [`FetchHandle`](/zh-Hans/api/core/fetchhandle-type)，即 `(input, init?) => Promise<Response>` 这个调用签名。它不是 `typeof fetch`，所以测试替身不需要提供 `fetch.preconnect` 之类的宿主额外成员。
+- 它只影响 HTTP。SSE 使用 [`withSSEHandle`](/zh-Hans/api/core/withssehandle)。
+
+[Client](/zh-Hans/api/client)

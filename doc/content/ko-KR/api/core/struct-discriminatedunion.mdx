@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: 'tag 필드의 값으로 객체 struct 하나를 고르는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- 모든 옵션은 `discriminator` 필드가 필수 [`struct.literal()`](/ko-KR/api/core/struct-literal)인 객체 struct여야 해요. 필드가 없거나, literal이 아니거나, 선택 필드이거나, tag 값이 중복되면 struct를 만들 때 `TypeError`를 던져요.
+- 입력은 plain 객체여야 해요. tag 값이 옵션을 고르고, 그 옵션이 객체 전체를 파싱해요.
+- tag가 없으면 `missing_key`로, 알 수 없는 tag면 `invalid_union`으로 실패해요. 둘 다 tag 필드의 path를 보고해요. 그 밖의 실패는 선택된 옵션에서 나와요.
+- `struct.parse(..., { aliases: true })`에서는 tag를 필드의 alias로 읽어요.
+
+`RequiredDiscriminatorOptions`와 `DiscriminatedUnionStruct`는 export되지 않아요. 타입 검사는 tag 필드가 없거나 `undefined`일 수 있는 옵션을 거부해요.
+
+[Struct](/ko-KR/api/struct)

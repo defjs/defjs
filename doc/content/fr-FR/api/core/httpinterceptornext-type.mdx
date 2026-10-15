@@ -1,0 +1,14 @@
+---
+title: 'HttpInterceptorNext'
+description: 'Continuation qui exécute le reste de la chaîne d’intercepteurs HTTP.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptorNext" />
+
+```ts
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`next(req)` ne va que vers l’**intérieur** : les intercepteurs enregistrés après celui-ci, puis le fetch handler. Ce n’est pas un nouvel envoi de `client.execute` depuis l’extérieur. Rappelle `next` pour un rejeu sûr, par exemple un seul rafraîchissement après un 401, depuis le même intercepteur ; les couches extérieures ne s’exécutent pas une seconde fois. Une fois la chaîne terminée, appeler `next` rejette avec `HTTP interceptor next() cannot be called after the chain has settled`.
+
+[Intercepteurs](/fr-FR/api/interceptors)

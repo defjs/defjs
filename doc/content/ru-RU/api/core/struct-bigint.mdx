@@ -1,0 +1,16 @@
+---
+title: 'struct.bigint'
+description: 'Struct, который принимает bigint или строку с bigint и выдаёт bigint.'
+---
+
+<ApiReference identity="@defjs/core:struct.bigint" />
+
+```ts
+function bigint(): Struct<bigint | string, bigint>
+```
+
+- Принимает `bigint` или строку, которую умеет разобрать `BigInt()`. `number` отвергается.
+- Output всегда `bigint`; строка, которую нельзя разобрать, даёт `invalid_type`.
+- При кодировании для wire значение становится десятичной строкой.
+
+[Struct](/ru-RU/api/struct)

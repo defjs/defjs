@@ -1,0 +1,18 @@
+---
+title: 'EventStreamEndpoint'
+description: 'نقطة نهاية قابلة للاستدعاء يعيدها defineEventStream.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamEndpoint" />
+
+```ts
+type EventStreamEndpoint<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, EventStreamCommand<TInput, TEvents, TError>>
+```
+
+يعيده `defineEventStream`. استدعِه لتحصل على `EventStreamCommand`: بلا وسائط عندما لا تصرّح نقطة النهاية بـ `input`، وبوسيط اختياري عندما يقبل struct المدخل `undefined`، وإلا فبقيمة مدخل الـ struct.
+
+[SSE](/ar/api/sse)

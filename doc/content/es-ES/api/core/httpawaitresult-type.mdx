@@ -1,0 +1,16 @@
+---
+title: 'HttpAwaitResult'
+description: 'Tupla de resultado de una llamada HTTP: datos y respuesta, o un fault.'
+---
+
+<ApiReference identity="@defjs/core:HttpAwaitResult" />
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+`TData` y `TErrorData` son tipos de cuerpo decodificado. En caso de éxito, la tercera posición lleva `body` solo cuando se declaró `output`. En caso de fallo es `undefined`: el fault ya contiene los metadatos de la respuesta que existieran.
+
+[HTTP](/es-ES/api/http)

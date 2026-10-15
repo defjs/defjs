@@ -1,0 +1,30 @@
+---
+title: 'withWebSocketHeartbeat'
+description: 'WebSocket heartbeat 메시지를 켜는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHeartbeat" />
+
+```ts
+function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): ClientOption
+```
+
+응답 확인 감지를 선택적으로 덧붙인 heartbeat 메시지를 켜요. `undefined`를 넘기면 이전 설정이 지워져요. 옵션 타입은 다음과 같아요.
+
+```ts
+{
+  intervalMs: number
+  isAck?: (message: unknown) => boolean
+  message?: <T = unknown>() => T | unknown
+  timeoutMs?: number
+}
+```
+
+- `intervalMs`마다 `message()`가 호출되고, 그 결과는 endpoint의 `outgoing` struct를 거쳐 전송돼요. `message`를 생략하거나 `undefined`를 돌려주면 메시지를 보내지 않아요.
+- `timeoutMs`가 있으면 heartbeat마다 응답 확인을 기대해요. `isAck`는 디코딩된 수신 메시지를 받고, `true`를 돌려주면 타이머가 해제되며 그 메시지는 `receive`로 전달되지 **않아요**.
+- `timeoutMs` 안에 ack가 오지 않거나 heartbeat를 보낼 수 없으면 session이 실패해요. 이때 재연결은 일어나지 않아요.
+- heartbeat는 `session.send`와 같은 JSON 가드를 써요. struct 인코딩 뒤에 JSON이 표현할 수 없는 값은 `TypeError`를 일으키고 논리 session을 끝내요.
+- `intervalMs`와 `timeoutMs`는 양수이고 유한하며 `2_147_483_647` 이하여야 해요. 그렇지 않으면 execute가 `REQ_OPTIONS_INVALID`로 실패해요.
+- execute 옵션의 `heartbeat`는 그 호출에 한해 이 옵션을 대체해요.
+
+[클라이언트](/ko-KR/api/client)

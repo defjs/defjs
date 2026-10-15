@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: إضافة Vue ومفتاح الحقن وinjectClient.
+---
+
+# Vue
+
+وفّر عميل `@defjs/core` موجودًا لتطبيق Vue. هذه الحزمة لا تنشئ العميل ولا تخزّنه ولا تتخلّص منه. يلزم Vue 3 أو أحدث.
+
+انظر [دليل Vue](/ar/docs/integrations/vue).
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — نسخة من `createClient`.
+- **يعيد** إضافة Vue لـ `app.use(...)`. يستدعي تثبيتها `app.provide(HTTP_CLIENT, client)`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+يقرأ أقرب موفر `HTTP_CLIENT`. استدعِه داخل سياق حقن صالح في Vue، مثل التنفيذ المتزامن لـ `setup()` أو رد نداء متزامن لـ `app.runWithContext()` (يتطلب Vue 3.3+). يصح أيضًا السياق الذي يعيده المترجم بعد `await` على المستوى الأعلى في `<script setup>`.
+
+- **يعيد** العميل المحقون.
+- **يرمي** `Error` عند غياب سياق حقن نشط أو عند عدم توفير عميل. وفّر العميل عبر `app.use(createClientPlugin(client))` أو `provide(HTTP_CLIENT, client)` في مكوّن سلف؛ تثبيت الإضافة وحده لا يجعل الاستدعاء خارج سياق الحقن صالحًا.
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+مفتاح حقن Vue. فضّل `injectClient()` على `inject(HTTP_CLIENT)`. استبدل العميل لشجرة فرعية باستخدام `provide(HTTP_CLIENT, childClient)`.

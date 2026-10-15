@@ -1,0 +1,16 @@
+---
+title: 'struct.any'
+description: '不做校验、接受除 null 和 undefined 之外任意值的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.any" />
+
+```ts
+function any(): Struct<NonNullable<unknown>, any>
+```
+
+- 接受除 `null` 和 `undefined` 之外的所有值，并原样返回。内部不做校验，也不剔除任何内容。
+- 链式调用 `.null()`、`.optional()` 或 `.nullish()` 以接受 `null` 或 `undefined`。
+- 输出类型是 `any`。调用方需要自行收窄时，优先用 [`struct.unknown()`](/zh-Hans/api/core/struct-unknown)。
+
+[Struct](/zh-Hans/api/struct)

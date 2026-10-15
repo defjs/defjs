@@ -1,0 +1,18 @@
+---
+title: 'struct.array'
+description: 'item struct 하나로 배열을 파싱하는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.array" />
+
+```ts
+function array<S extends StructLike<unknown, unknown, boolean>>(item: S): ArrayStruct<S>
+```
+
+- 모든 요소를 `item`으로 파싱해 새 배열을 출력해요. 배열이 아니면 `invalid_type`(expected `array`)으로 실패해요.
+- 파싱은 처음 실패한 요소에서 멈추고, `issue.path`에 그 인덱스가 들어 있어요.
+- `item`이 struct가 아니면 `TypeError`를 던져요.
+
+`ArrayStruct<S>`는 export되지 않아요. `Struct<StructInput<S>[], Infer<S>[]>`예요.
+
+[Struct](/ko-KR/api/struct)

@@ -1,0 +1,36 @@
+---
+title: API-Referenz
+description: Handgeschriebene Lookup-Seiten für Workspace-Pakete — Functions, Options und Types, die du importierst.
+---
+
+# API-Referenz
+
+<ApiIndex />
+
+Hier schlägst du Workspace-Pakete nach. Signatures sind der Vertrag; Guides und Rezepte erklären, wann du sie nutzt.
+
+## Pakete
+
+| Paket                                                            | Was du nachschlägst                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/de-DE/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/de-DE/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/de-DE/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/de-DE/api/opentelemetry-server) | `withOpenTelemetryServer`, Options pro Transport                  |
+
+## @defjs/core
+
+| Seite                                   | Was du nachschlägst                                              |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/de-DE/api/client)             | `createClient`, `with*`-Options, `Client`                        |
+| [HTTP](/de-DE/api/http)                 | `defineRequest`, Execute-Options, `HttpRequest` / `HttpResponse` |
+| [Struct](/de-DE/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/de-DE/api/errors)             | `Fault`-Varianten und Factory-Funktionen                         |
+| [Interceptors](/de-DE/api/interceptors) | HTTP-/SSE-/WebSocket-Interceptor-Helfer                          |
+| [SSE](/de-DE/api/sse)                   | `defineEventStream`, Stream-Handle                               |
+| [WebSocket](/de-DE/api/web-socket)      | `defineWebSocket`, Session                                       |
+
+## Verwandtes
+
+- [Erste Schritte](/de-DE/docs/start)
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)

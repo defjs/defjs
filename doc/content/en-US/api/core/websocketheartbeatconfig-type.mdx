@@ -1,0 +1,26 @@
+---
+title: 'WebSocketHeartbeatConfig'
+description: 'Heartbeat ping and acknowledgement settings.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHeartbeatConfig" />
+
+```ts
+interface WebSocketHeartbeatConfig<TIncoming = unknown, TOutgoing = unknown> {
+  intervalMs: number
+  isAck?: (message: TIncoming) => boolean
+  message?: () => TOutgoing
+  timeoutMs?: number
+}
+```
+
+- `intervalMs` is the delay between heartbeat messages.
+- `message()` builds the payload. It is sent through the `outgoing` struct. Nothing is sent when it is omitted or returns `undefined`.
+- After struct encoding, non-JSON values fail with `TypeError` through the same serializer as `session.send`; that heartbeat failure ends the logical session without reconnecting.
+- `isAck(message)` receives each decoded incoming message. When it returns `true`, the message is treated as the acknowledgement and is not delivered to `receive`.
+- `timeoutMs` is how long to wait for an acknowledgement after a heartbeat. Missing it fails the session.
+- `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`.
+
+Set it with [`withWebSocketHeartbeat`](/api/core/withwebsocketheartbeat) or the `heartbeat` execute option.
+
+[WebSocket](/api/web-socket)

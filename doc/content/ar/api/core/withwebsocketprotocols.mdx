@@ -1,0 +1,18 @@
+---
+title: 'withWebSocketProtocols'
+description: 'خيار عميل يعيّن البروتوكولات الفرعية لمصافحة WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketProtocols" />
+
+```ts
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+```
+
+يعيّن البروتوكولات الفرعية المعروضة أثناء المصافحة، وفق RFC 6455. تُمرَّر وسيطًا ثانيًا إلى مُنشئ WebSocket، وفقط عندما لا تكون القائمة فارغة.
+
+لا تهمّ إلا عندما يشترط الخادم بروتوكولًا فرعيًا محددًا، مثل `['json']` أو `['v1']`.
+
+الأسبقية، من الأعلى: خيار execute `protocols`، ثم خيار العميل هذا، ثم `protocols` في تعريف نقطة النهاية.
+
+[العميل](/ar/api/client)

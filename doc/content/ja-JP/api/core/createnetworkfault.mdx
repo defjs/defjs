@@ -1,0 +1,21 @@
+---
+title: 'createNetworkFault'
+description: 'NET_* fault のファクトリーです。code は cause の形から選ばれます。'
+---
+
+<ApiReference identity="@defjs/core:createNetworkFault" />
+
+```ts
+function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **cause** — 根本にあるキャンセル、タイムアウト、またはトランスポートの失敗です。
+- **response** — トランスポートが報告できるメタデータを既に持っていた場合にだけ渡します。指定すると fault に付与されます。
+- **戻り値** `cause` によって code が決まる `PreflightFault` です。
+  - [`isAbortCause`](/ja-JP/api/core/isabortcause) が、中断を示すブランド付きの `Error`（別の Core コピーの `ERR_ABORTED` を含む）、または名前が `AbortError` の `DOMException` を認識した場合は `NET_ABORTED` です。メッセージは `Request was aborted` です。
+  - [`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) が、タイムアウトを示すブランド付きの `Error`（別の Core コピーの `ERR_TIMEOUT` を含む）、または名前が `TimeoutError` の `DOMException` / `Error` を認識した場合は `NET_TIMEOUT` です。メッセージは cause のメッセージで、空の場合は `Request timed out` です。
+  - それ以外はすべて `NET_UNREACHABLE` で、cause のメッセージを使います。
+
+cause は `cause` として保持されます。
+
+[Errors](/ja-JP/api/errors)

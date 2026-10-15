@@ -1,0 +1,19 @@
+---
+title: 'struct.record'
+description: 'Struct, der ein Objekt mit String-Keys und einem Value-Struct parst.'
+---
+
+<ApiReference identity="@defjs/core:struct.record" />
+
+```ts
+function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
+```
+
+- Parst jeden eigenen Key eines einfachen Objekts mit `value`. Alles andere schlägt mit `invalid_type` fehl (erwartet `record`).
+- Das Parsen stoppt beim ersten fehlerhaften Wert, und `issue.path` enthält dessen Key.
+- Der Output ist ein neues Objekt mit `null`-Prototype.
+- Wirft `TypeError`, wenn `value` kein Struct ist.
+
+`RecordStruct<S>` wird nicht exportiert. Es ist ein `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`, wobei `Output` `Infer<S>` ohne `undefined` ist. Ist `S` ein optionales Struct, lässt ein Wert, der `undefined` ist, seinen Key im Output weg.
+
+[Struct](/de-DE/api/struct)

@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerSSEOptions'
+description: SSE トランスポートの options — 共通 options に、responseHook がストリームハンドルを受け取る形を加えたものです。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions" />
+
+```ts
+type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<EventStreamHandle<unknown>>
+```
+
+`OpenTelemetryServerOptions` の `sse` に指定します。独自のフィールドは持たず、`enabled`、`startSpanHook`、`requestHook`、`responseHook` は `OpenTelemetryServerTransportOptions` から来ます。
+
+- `responseHook(span, stream, req)` は、ストリームが開いたあと、span が `sse.connected` を記録する前に実行されます。`stream` はトランスポートが返した `EventStreamHandle`、`req` は元の `HttpRequest` です。
+- SSE は接続レベルで追跡されます。開始後、span は `stream.closed` が確定するまで開いたままで、`sse.connected` を記録したあと、`sse.closed`（サーバーの EOF）、`sse.aborted`（`stream.close()` または、開いているストリームに対する呼び出し側の abort。span はエラーなしで終了します）、`sse.error` のいずれかを記録します。イベントごとの span は作られません。
+- 2xx 以外のハンドシェイクは接続失敗として観測されます。span は `ERROR` で終了し、`logger` があれば、レスポンスボディにかかわらず `WARN` が 1 件出力されます。
+
+SSE の計装をスキップするには `{ enabled: false }` を渡します。span フックは `tracer` が渡された場合にのみ呼び出されます。
+
+[@defjs/opentelemetry-server](/ja-JP/api/opentelemetry-server)

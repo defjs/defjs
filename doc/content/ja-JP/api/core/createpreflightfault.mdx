@@ -1,0 +1,17 @@
+---
+title: 'createPreflightFault'
+description: 'レスポンスが存在する前に起きた可能性のある fault のファクトリーです。'
+---
+
+<ApiReference identity="@defjs/core:createPreflightFault" />
+
+```ts
+function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **code** — 具体的な失敗です。
+- **cause** — 根本にある値があれば渡します。そのメッセージが fault のメッセージになります。`cause` がなければ、code がメッセージになります。
+- **response** — トランスポートが報告できるメタデータを既に持っていた場合にだけ渡します。
+- **戻り値** `DefjsFault` という名前のネイティブ `Error` で、`code` を持ち、`response` が渡された場合はそれも持ちます。
+
+[Errors](/ja-JP/api/errors)

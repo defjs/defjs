@@ -1,0 +1,17 @@
+---
+title: 'Struct'
+description: 'Тип struct: типы input и output плюс методы-модификаторы.'
+---
+
+<ApiReference identity="@defjs/core:Struct" />
+
+```ts
+type Struct<Input = unknown, Output = Input, OptionalOut extends boolean = false> = StructMethods<Input, Output, OptionalOut> &
+  StructLike<Input, Output, OptionalOut>
+```
+
+Разбираемая форма. `Input` — то, что она принимает ([`StructInput`](/ru-RU/api/core/structinput-type)), `Output` — то, что возвращает успешный parse ([`Infer`](/ru-RU/api/core/infer-type)), а `OptionalOut` помечает поле, которое может отсутствовать в object output.
+
+Создавай struct’ы через фасад [`struct`](/ru-RU/api/core/struct). Каждый модификатор из [`StructMethods`](/ru-RU/api/core/structmethods-type) возвращает новый struct и не меняет исходный.
+
+[Struct](/ru-RU/api/struct)

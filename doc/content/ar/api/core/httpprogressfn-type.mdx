@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: 'نوع دالة الاستدعاء لتقدم الرفع والتنزيل.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+يُمرَّر بوصفه `onDownloadProgress` أو `onUploadProgress` في `HttpExecuteOptions`. ردود النداء يمكن أن تكون غير متزامنة ويُنتظر إتمامها قبل معالجة القطعة التالية. ردّ النداء الذي يرمي استثناءً أو يُرجع وعدًا مرفوضًا يُفشل الاستدعاء بالرمز `EXT_OBSERVER_FAILED`، مع القيمة المرمية في `cause`، للتنزيل والرفع على السواء. وتبقى الأولوية للإلغاء من جانب المستدعي ولـ `timeout`، ويُبلَّغ عنهما بالرمزين `NET_ABORTED` / `NET_TIMEOUT` على الترتيب. يُبلَّغ عن تقدّم الرفع فقط في بيئات التشغيل التي تدعم إرسال أجسام الطلبات كتدفق (Bun، Node، Deno). في المتصفحات، يُرسل جسم `Blob` / `File` أو `ArrayBuffer` أو `FormData` دون تغيير ولا يُستدعى `onUploadProgress`؛ ولا يتأثر `onDownloadProgress`.
+
+انظر [`HttpProgressEvent`](/ar/api/core/httpprogressevent-type) و[دليل HTTP](/ar/docs/http) و[الأوامر](/ar/docs/commands).
+
+في بيئات تشغيل الخادم، تقرأ FormData مع `onUploadProgress` تدفقها المتسلسل مباشرةً، وتحافظ على فاصل multipart الخاص بها، وتُرسَل دون `Content-Length` تولّده المكتبة (مجزّأة عبر HTTP/1.1)، فيعمل التقدّم والمهلة والإلغاء دون تخزين الجسم كاملًا. ويُبلّغ عن إجمالي مجهول ما لم يحدّده رأس `Content-Length` صريح صالح. ولنقطة نهاية تتطلب `Content-Length`، مثل بعض وجهات الرفع الموقَّعة مسبقًا، احذف `onUploadProgress`؛ عندئذٍ يرسل Fetch الخاص بالمنصة FormData مع طولها. وتُبلّغ التنزيلات ذات ترميز غير `identity` أيضًا عن `total: 0` و`lengthComputable: false`، لأن `loaded` يحسب بايتات التدفق بعد فك الترميز. يحرّر الإلغاء تدفق الرفع المغلّف.
+
+[HTTP](/ar/api/http)

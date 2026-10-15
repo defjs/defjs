@@ -1,0 +1,16 @@
+---
+title: 'HttpStatusFault'
+description: '非 2xx response 嘅 fault，以聲明嘅 error struct 做 type。'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFault" />
+
+```ts
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+`TErr` 係 endpoint 聲明嘅 `error` struct，冇聲明就係 `undefined`。任何非 2xx status。Endpoint 聲明過 `error` 而 body 又解碼成功嘅時候，`data` 就係嗰個 body，`response` 亦帶住佢。冇寫 `error` 嘅時候 body 根本唔會被讀，於是 `data` 係 `undefined`，`response` 只有 metadata。Member 形狀見 [`HttpStatusFaultOf`](/zh-Hant-HK/api/core/httpstatusfaultof-type)。
+
+[Errors](/zh-Hant-HK/api/errors)

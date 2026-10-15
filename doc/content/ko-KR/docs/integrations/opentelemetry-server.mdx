@@ -1,0 +1,181 @@
+---
+title: 'OpenTelemetry'
+description: 선택적인 Tracer, Meter, Logger 인스턴스로 아웃바운드 Defjs 계측을 켜요.
+---
+
+# OpenTelemetry server
+
+클라이언트를 만들 때 아웃바운드 계측을 켜요. `@defjs/opentelemetry-server`는 HTTP, SSE, WebSocket 인터셉터를 추가해요. **인바운드** 서버 계측이 아니며, OpenTelemetry SDK를 초기화하지도 **않아요**.
+
+## 기본 사용법
+
+SDK는 다른 곳에서 초기화해요. API 객체를 넘겨요.
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
+
+`tracer`는 선택이에요. `meter`는 선택이에요 — 패키지 메트릭을 끄려면 생략하세요. `propagator`가 없으면 어댑터가 W3C Trace Context + W3C Baggage 복합 propagator를 만들어요. 전역 SDK 설정을 읽거나 초기화하지는 않아요.
+
+`tracer`를 생략하면 어댑터는 로컬 span을 만들지 않고, `trace.getTracer(...)`를 호출하지 않으며, `startSpanHook`, `requestHook`, `responseHook`도 건너뛰어요. 넘긴 `meter`와 `logger`는 독립적으로 동작해요. 전파는 추출된 부모 context를 계속 전달하고, WebSocket `queryPropagation`은 기본값이 여전히 `false`예요. tracer가 있으면 `requireParentSpan: true`는 활성 부모가 없을 때 로그를 포함한 모든 계측을 건너뛰어요. tracer가 없으면 메트릭도 로그도 막지 않아요.
+
+`withOpenTelemetryServer(options)`는 core `ClientOption`을 돌려줘요. `createClient` 시점에 적용해 활성 전송마다 인터셉터를 하나 추가하세요. HTTP, SSE, WebSocket은 기본 활성이에요. `{ enabled: false }`로 한 전송을 끌 수 있어요.
+
+어댑터는 요청이 전송 레이어에서 실패해도 전송 텔레메트리를 만들 수 있어요. 내보내지는지는 SDK와 exporter에 달려 있어요.
+
+## 범위
+
+SDK 초기화, provider, exporter, processor, context, sampling, 마스킹, flush, shutdown은 호출하는 쪽이 소유해요. 이 패키지는 넘긴 선택적 `Tracer`, 선택 `Meter`, 선택 `Logger`, 선택 `TextMapPropagator`를 소비해요. 내장 redactor나 민감 key 정책은 제공하지 않아요.
+
+캐시, 재시도, 메시지별 span, 애플리케이션 명령 결과 정책은 없어요. 선택한 SDK와 bridge가 지원하는 서버 런타임을 쓰세요. 여기서 실행 가능한 Winston 예제는 Bun을 써요. peer는 `@defjs/core`, `@opentelemetry/api` 1.x, `@opentelemetry/core` 2.x예요. `@opentelemetry/api-logs`는 일반 패키지 의존성이고, SDK와 bridge는 애플리케이션이 직접 설치해요.
+
+공개 API: `withOpenTelemetryServer`와 `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
+
+## 옵션과 훅
+
+span 훅은 `tracer`를 전달했을 때만 호출돼요. 훅은 바꾸는 전송 옆에 있어요. 동기 `startSpanHook(request)`은 span 생성 전에 실행되어 초기 `Attributes`를 반환해요. 애플리케이션 속성이 마지막에 적용되므로 내장 값을 덮어쓸 수 있어요. `requestHook`과 `responseHook`은 이미 만들어진 span을 받고 `void`나 프로미스를 반환할 수 있어요. Hook 실패는 클라이언트 작업을 **멈추지 않아요**. Start hook 실패 시에는 내장 초기 속성을 사용해요.
+
+`requestHook`과 `responseHook`은 await하지 않아요. HTTP span은 `responseHook`의 동기 부분이 반환되면 끝나며 비동기 훅을 위해 수명을 늘리지 않아요. 동기 부분은 기록 중인 span을 바꿀 수 있지만 종료 후에는 이벤트를 추가할 수 없어요. `span.isRecording()`이 true인 동안 훅 실패는 `defjs.otel.hook.error`와 `exception` 이벤트로 기록돼요. 기록하지 않는 span(종료됐거나 샘플링되지 않은 경우)의 실패는 `diag.error`를 통해 OpenTelemetry 진단 logger로 전달돼요. 이를 받으려면 애플리케이션에서 `@opentelemetry/api`의 `diag.setLogger(...)`를 설정해야 해요. 기본적으로 자동 출력되지 않아요. 패키지는 SDK를 초기화하지 않으며 이 진단은 별도의 SDK `LogRecord`가 아니에요. 이 진단에는 `hook.name`, `error.type`, `traceId`, `spanId`가 포함되지만 원래 오류 메시지나 스택, 요청 데이터는 포함되지 않아요.
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/options-and-hooks.ts#example
+</include>
+
+훅 시그니처:
+
+- 세 전송 모두: `startSpanHook(request): Attributes` (동기, span 생성 전)
+- HTTP: `requestHook(span, request)`와 `responseHook(span, response, request)`
+- SSE: `requestHook(span, request)`와 `responseHook(span, stream, request)`
+- WebSocket: `requestHook(span, request)`와 `responseHook(span, session, request)`
+
+빈 전송 객체는 그 전송을 켜요. 예전 boolean 전송 스위치(`http: false`)와 예전 최상위 훅은 TypeScript 타입에서만 거부돼요. 런타임 검사는 없어요. 런타임에서 `http: false`는 전송을 켜진 채로 두고, 최상위 훅은 조용히 무시돼요. 전송 옵션 객체(`{ enabled: false }`)와 전송 범위 훅을 쓰세요.
+
+## operation 정체성과 전파
+
+명령에 안정적인 정체성이 있으면 `defineRequest`, `defineEventStream`, `defineWebSocket`에 정적 `operation`을 설정하세요. 어댑터는 span 이름과 `defjs.operation`에 써요. 해석된 path, identifier, 테넌트, query 문자열에서 정체성을 끌어내지 않아요.
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/operation-names.ts#example
+</include>
+
+span 이름은 `GET orders.read`, `SSE orders.watch`, `WebSocket orders.connect`가 돼요. `operation`이 없으면 fallback은 method / `SSE` / `WebSocket`이고, `defjs.operation`은 생략돼요.
+
+HTTP와 SSE는 전파 필드를 요청 헤더에 주입해요. 주입에는 항상 새 `Headers` 복사본을 사용하고 호출자의 헤더는 바꾸지 않아요. 따라서 외부 인터셉터의 재시도도 동일한 원래 부모 context를 사용해요. WebSocket query 전파는 **opt-in**이에요 (브라우저는 임의 handshake 헤더를 추가할 수 없어요).
+
+<include cwd>examples/opentelemetry-server/websocket-query-propagation.ts#example</include>
+
+`queryPropagation`을 켜면 propagator가 실제로 주입한 필드를 연결 query 문자열 끝에 쓰고 같은 이름의 매개변수를 대체해요. 그 외 모든 매개변수는 직렬화된 형태를 그대로 유지해요. URL 로깅, 프록시 가시성, access log, baggage, 보존을 먼저 검토하세요. `tracer`가 있으면 `requireParentSpan: true`는 활성 부모가 없으면 span 생성, 전파, 훅, 메트릭, 로그를 건너뛰고 `next`를 그대로 호출해요.
+
+## HTTP, SSE, WebSocket 의미
+
+어댑터는 명령 해석의 모든 단계가 아니라 전송 수명을 측정해요.
+
+- **HTTP** — span은 HTTP 인터셉터에서 시작해 Defjs `HttpResponse`를 받는 시점에 끝나요. 선언된 `output`/`error` body는 그 응답이 반환되기 **전에**, interceptor 체인 안에서 JSON, 텍스트, `Blob`, 바이트로 읽혀요. JSON 미디어 타입 확인과 `JSON.parse`는 JSON 표현에만 적용되고, JSON이 아닌 텍스트, blob, 바이트는 유효해요. 어떤 표현이든 읽기 실패, 또는 JSON 미디어 타입/파싱 실패(`RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `NET_BODY_INCOMPLETE`)는 interceptor를 통해 reject돼요. span은 `error.type`이 `BodyFailure`이고 `http.response.status_code`가 없는 `ERROR`로 끝나고, 메트릭은 `BodyFailure`를 기록하고, WARN이 한 번 로그돼요. Struct 검증(`RES_STRUCT_MISMATCH`), 선언은 됐지만 본문이 없는 경우(예: 204), `HTTP_STATUS` 변환은 그 뒤에 일어나므로, 나중에 생긴 fault는 이미 끝난 span을 고칠 수 없어요. HTTP execute 타임아웃은 타임아웃 reject이 OTel interceptor의 `next()` / 전송 경계에 닿을 때만 로그돼요. 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 interceptor 작업, 체인 뒤 body 변환 중에 바깥 실행만 데드라인을 보면 LogRecord는 나오지 않아요. 바깥 명령 결과를 관찰하세요. span이 체인 안에서 살기 때문에, 전송 계층의 reject는 OTel 관례대로 예외 클래스로 기록되고, 실행이 나중에 배정하는 fault 코드로 기록되지 않아요.
+- **SSE** — span은 `stream.closed`가 settle할 때까지 열려 있어요. `sse.connected`, 그다음 `sse.closed` / `sse.aborted` / `sse.error`를 기록해요. `sse.aborted`는 `stream.close()`와 타임아웃이 아닌 호출자의 열린 스트림 abort를 덮고, span은 `OK`로 끝나요. 타임아웃 모양의 호출자 abort(`TimeoutError` 또는 `ERR_TIMEOUT`)는 대신 `stream.closed`를 `kind: 'error'`와 `code: 'NET_TIMEOUT'`으로 settle하고, span은 `sse.error`와 함께 `ERROR`로 끝나요. 재연결을 포함한 논리 스트림 하나 → span 하나. 이벤트별 span은 없어요.
+- **WebSocket** — span은 `session.closed`가 settle할 때까지 열려 있어요. 이벤트: `websocket.connected`, `websocket.closed`, `websocket.error`. 재연결하는 물리 소켓도 논리 세션의 일부예요. 호출자가 열린 세션을 abort하면 span은 `websocket.error`와 함께 `ERROR`로 끝나고 로그는 없어요. `error.type`은 abort 이유를 따라요(기본 `abort()`는 `AbortError`, `Error` 이유는 그 `Error.name`, 문자열 이유는 `string`). 서버가 보낸 close 프레임은 코드와 관계없이 `websocket.closed`와 함께 `OK`로 끝나요. close 프레임 없이 갑자기 끊기는 경우(1006)는 런타임에 따라 달라요. `close` 전에 소켓 `error`가 발생하지 않는 Bun에서는 `OK`로 끝나고, 발생하는 Node.js에서는 `ERROR`로 끝나며 로그가 한 번 남아요. 메시지별 span은 없어요.
+
+전송만이 아니라 최종 명령 결과가 필요하면 `client.execute(...)`를 애플리케이션 span으로 감싸세요.
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/active-span.ts#example
+</include>
+
+바깥 span은 호출하는 쪽 거예요. 플러그인은 여전히 저수준 전송 span을 보고해요 — 질문이 달라요.
+
+## 참고
+
+`meter`를 넘기면:
+
+| 지표                                         | 의미                                     |
+| -------------------------------------------- | ---------------------------------------- |
+| `http.client.request.duration`               | HTTP 요청 기간 (초)                      |
+| `defjs.client.sse.connect.duration`          | SSE 핸들이 반환될 때까지의 시간          |
+| `defjs.client.sse.connection.duration`       | 핸들 반환 → 종료 close                   |
+| `defjs.client.sse.active_streams`            | `closed`가 대기 중인 논리 SSE 핸들       |
+| `defjs.client.websocket.connect.duration`    | WebSocket 세션이 반환될 때까지의 시간    |
+| `defjs.client.websocket.connection.duration` | 세션 반환 → 종료 close                   |
+| `defjs.client.websocket.active_connections`  | `closed`가 대기 중인 논리 WebSocket 세션 |
+
+활성 SSE/WebSocket 계측은 물리 소켓이나 개별 HTTP 시도가 아니라 논리 리소스(재연결 공백 포함)를 세요.
+
+HTTP span은 메서드, 해석된 `url.full`, 가능하면 서버 주소/포트, 받은 응답 status를 기록해요. 기본 `url.full`은 `request.endpoint`를 선택적 `request.baseEndpoint`에 대해 resolve하며, 독립된 `request.queryString`은 붙이지 않아요. 이건 구성 경계이지 sanitization이 아니에요. 완전하거나 마스킹된 애플리케이션 소유 URL이 필요하면 `startSpanHook`으로 구성하세요. status `400+` → span status `ERROR`, status 문자열을 `error.type`으로. status `100..399`는 span status를 비워 둬요. reject(네트워크 실패, 취소, 타임아웃, 선언된 body 실패)는 응답 status가 없어요. span은 던져진 오류의 클래스 이름을 `error.type`으로 가진 `ERROR`로 끝나요. 일반적인 네트워크 실패는 `TypeError`, 취소(abort 이유와 관계없이)와 타임아웃은 `Error`, 선언된 body 실패는 `BodyFailure`예요. core가 체인 뒤에 배정하는 `NET_*`나 `RES_*` fault 코드는 절대 담기지 않아요. 취소도 `ERROR` span이에요. 다만 로그만 생기지 않아요. 메트릭은 안정적인 차원만 써요. 메서드, 정적 operation, 서버 주소/포트, 응답 status, 저카디널리티 오류 타입이요.
+
+SSE/WebSocket 연결 메트릭은 연결 시간, 논리 연결 기간, 활성 리소스 수, `defjs.result`, operation, 서버 주소/포트, 저카디널리티 실패 타입을 기록해요. 기본적으로 요청/응답 body, 메시지 페이로드, 큐 길이, 메시지별 span은 없어요.
+
+`url.full`과 `recordException(...)`은 민감할 수 있어요. Defjs가 대신 마스킹하지 않아요. Operation 이름과 훅 속성은 허용 목록으로 유지하고, `startSpanHook`이나 SDK processor/exporter에서 마스킹하세요. 개인정보, 카디널리티, 보존, 마스킹을 검토하지 않고 원본 URL, query 문자열, 헤더, baggage, 페이로드를 커스텀 텔레메트리에 복사하지 마세요.
+
+WebSocket query 전파는 브라우저, 프록시, access log, 텔레메트리에 trace context와 baggage를 노출할 수 있어요. 자격 증명 채널이 아니에요. `withCredentials(true)`는 HTTP/SSE용 Fetch credentials이지 — WebSocket 인증이 아니에요.
+
+어댑터는 SDK를 초기화/종료하지 않고, core 클라이언트나 전송 핸들을 dispose하지도 않아요. 텔레메트리를 flush하고 HTTP/SSE/WebSocket 작업을 닫는 건 호출하는 쪽이에요. [인터셉터](/ko-KR/docs/interceptors), [SSE](/ko-KR/docs/sse), [WebSocket](/ko-KR/docs/web-socket)을 보세요.
+
+## 로그와 서드파티 로거
+
+`logger?: Logger`는 `@opentelemetry/api-logs`의 네이티브 인터페이스를 받아요. `tracer`, `meter`와 독립적이에요. 생략하면 Defjs LogRecord가 꺼지고, `logger`만 넘기면 로컬 span 없이 진단이 켜져요. Defjs는 전역 logger를 가져오지 않아요. Logs API는 패키지 의존성이고, SDK, exporter, 로깅 bridge는 애플리케이션 몫이에요.
+
+### span 없는 로그
+
+이 완전한 예제는 애플리케이션이 소유한 Logs SDK를 만들고 로컬 전송을 일부러 실패시켜요. Collector도 외부 요청도 필요 없어요.
+
+<include cwd>examples/opentelemetry-server/logs-without-spans.ts#example</include>
+
+내보내진 진단은 severity `WARN` (13), 이벤트 이름 `http.client.request.exception`, 고정된 메시지, 예외 타입을 가져요. flush와 shutdown은 애플리케이션이 소유해요. Defjs는 provider를 절대 shutdown하지 않아요. 실제 애플리케이션은 시작할 때 exporter를 한 번 구성하고, 요청과 스트림이 끝난 뒤에 shutdown해요.
+
+### Winston: 비즈니스 로깅 API 유지하기
+
+비즈니스 코드는 계속 `appLogger.info()`나 `appLogger.error()`를 호출해요. 공식 transport가 이 레코드를 OTel Logs로 변환하고, Defjs는 같은 provider에서 별도의 네이티브 Logger를 받아요. 첫 로그 호출 전에 provider를 등록하세요. transport는 전역 Logger를 지연해서 가져오므로 생성 순서는 상관없지만, 등록 전에 로그된 레코드는 버려져요.
+
+<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
+
+이 스니펫은 시작 시점의 연결을 보여 줘요. 애플리케이션이 끝나기 전에 진행 중인 작업을 마치고, Winston 쓰기를 기다리고, logger를 닫고, `provider.shutdown()`을 await 하세요. [실행 가능한 Winston 예제](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging)에는 완전한 정리 과정과 로컬에서 실패하는 요청이 들어 있어요. 저장소 체크아웃에서 `bun run --cwd doc example:otel-logging`을 실행하세요.
+
+예제는 Trace SDK 없이 상관관계를 보여 주려고 시연용 부모 context를 써요. 그 고정 ID는 프로덕션 요청 ID가 아니에요. 프로덕션 context manager는 실제 활성 요청 context를 전달해야 해요. Defjs는 비동기 스트림 종료를 포함해, 저장해 둔 아웃바운드 context를 각 진단에 명시적으로 붙여요. 비즈니스 로그는 자기 활성 context에 남아요. Defjs와 trace ID를 공유하면서 span ID는 다를 수 있어요.
+
+명시적인 Winston OTel transport와 Winston 자동 로그 전송 중 하나만 쓰세요. 둘 다 켜면 LogRecord가 중복 전송돼요. 콘솔 출력과 OTel 출력은 별개의 목적지예요. 같은 콘솔 레코드를 다시 수집해서 중복 인제스트가 생기지 않게 하세요.
+
+### Pino: Node.js 계측
+
+Node.js 애플리케이션에서는 Pino를 로드하기 전에 SDK와 계측을 초기화하세요. 이 예제는 `sdk.start()` 뒤에 CommonJS로 Pino를 로드해서 계측이 모듈 로딩을 관찰할 수 있게 해요. 맨 위에서 Pino를 import하면 그 순서가 깨져요. 이건 Node 참고 예제이지, Bun 자동 계측이 검증됐다는 주장이 아니에요.
+
+<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
+
+`PinoInstrumentation`은 로그 전송과 로그 상관관계를 기본으로 켜요. 전송은 레코드를 애플리케이션의 Logs SDK로 변환하고, 상관관계는 유효한 span context가 활성일 때 trace 필드를 더해요. 둘은 별개의 기능이에요. 대안인 `pino-opentelemetry-transport`는 워커에서 provider를 만들고, 메인 스레드 provider와는 독립이에요. [공식 Pino 가이드](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino)를 보세요.
+
+### Severity와 필터링
+
+OTel은 원래 레이블을 `severityText`에 보존하고 `severityNumber`로 매핑해요. 아래는 Pino 기본값과 Winston의 기본 npm 레벨을 써요.
+
+| OTel severity / 기준 값 | Pino 메서드 / 값 | Winston 레벨   |
+| ----------------------- | ---------------- | -------------- |
+| TRACE / 1               | trace / 10       | silly          |
+| DEBUG / 5               | debug / 20       | debug          |
+| INFO / 9                | info / 30        | info           |
+| WARN / 13               | warn / 40        | warn           |
+| ERROR / 17              | error / 50       | error          |
+| FATAL / 21              | fatal / 60       | 기본 대응 없음 |
+
+OTel은 severity 그룹마다 숫자 네 개를 예약해요. Winston `http`는 7, `verbose`는 6에 매핑돼요. 커스텀 레벨은 매핑을 확인하세요. 라이브러리의 숫자 값은 OTel severity 숫자가 아니고, 알 수 없는 Winston 레이블은 severity가 지정되지 않을 수 있어요. TRACE 로그 레벨은 Tracer API와 무관해요.
+
+Severity는 이벤트를 설명하고, 임계값은 목적지가 그 이벤트를 받을지 정해요. Winston 예제에서 콘솔은 DEBUG 이상을 받고 OTel transport는 INFO 이상을 받아요. 명시적인 transport 레벨은 Winston 기본 logger 레벨을 덮어써요. 어느 설정도 Defjs의 직접 OTel Logger는 제어하지 않아요. 두 경로에 하나의 정책을 적용하고 싶다면 processor나 Collector 필터를 쓰세요. 하류 필터는 상류에서 이미 버려진 레코드를 되살릴 수 없어요.
+
+### Defjs 진단 계약
+
+| 관찰된 결과                                                                                                                                       | Defjs LogRecord                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| HTTP OTel `next()` reject (네트워크 실패, 관찰된 타임아웃, 선언된 body 실패). 취소와 공개 HTTP_STATUS fault는 제외                                | WARN 한 번, `http.client.request.exception`, phase `request`                                      |
+| 일반 HTTP 응답. 선언된 `error` body가 디코딩되는 (또는 body를 선언하지 않은) 4xx/5xx나 status 0 포함                                              | 없음. 기존 span/metric 동작은 그대로                                                              |
+| 선언된 `output`/`error` body 읽기 실패(어떤 표현이든), 또는 그 JSON 표현의 미디어 타입이 JSON이 아니거나 JSON 파싱에 실패함 (HTTP status 무관)    | WARN 한 번, `http.client.request.exception`, phase `request`, `exception.type` `BodyFailure`      |
+| SSE 또는 WebSocket 연결 실패                                                                                                                      | WARN 한 번, `defjs.client.sse.exception` 또는 `defjs.client.websocket.exception`, phase `connect` |
+| SSE 또는 WebSocket 종단 오류 또는 reject된 `closed`. 런타임이 소켓 `error`를 먼저 발생시키는 경우(Node.js)의 WebSocket 갑작스러운 끊김(1006) 포함 | 같은 전송 이벤트 이름으로 WARN 한 번, phase `connection`                                          |
+| 성공, 메시지, EOF, 정상 종료, 서버가 보낸 WebSocket close 프레임 (1011 포함 모든 코드), 또는 능동적 취소                                          | 없음                                                                                              |
+
+HTTP 예외 이벤트는 현재 Development로 표시된 시맨틱 컨벤션을 따라요. SSE/WS 이벤트 이름은 Defjs 고유예요. non-2xx로 거부된 SSE 핸드셰이크는 여기서 연결 실패로 관찰되고, 이후의 공개 HTTP_STATUS 변환은 이 interceptor 밖이에요. 선언된 body 읽기는 모든 표현에 대해 HTTP 핸들러 경계 안에 있고, JSON 미디어 타입 확인과 `JSON.parse`는 JSON 표현에만 적용돼요. 선언된 표현의 읽기 실패, 또는 선언된 JSON `output`(2xx)이나 `error`(그 밖의 status)에서 JSON이 깨졌거나 미디어 타입이 틀린 응답은 HTTP status와 관계없이 WARN을 한 번 내요. JSON이 아닌 텍스트, blob, 바이트는 미디어 타입이 JSON이 아니라는 이유만으로 실패하지 않아요. 선언하지 않은 body는 읽지 않으므로 로그할 수 없어요. Struct 검증(`RES_STRUCT_MISMATCH`), 204처럼 선언은 됐지만 본문이 없는 경우, `HTTP_STATUS` 변환은 interceptor 뒤에 일어나고 로그하지 않아요. HTTP execute 타임아웃은 타임아웃 reject이 OTel interceptor의 `next()` / 전송 경계에 닿을 때만 로그돼요. 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 interceptor 작업, 체인 뒤 body 변환 중에 바깥 실행만 데드라인을 보면 LogRecord는 나오지 않아요. 바깥 명령 경계에서 `client.execute(...)`를 관찰하세요. `exception.type`은 Defjs fault 코드가 아니라 interceptor가 관찰한 대상의 클래스 이름이에요. `BodyFailure`(HTTP body), `EventStreamFatalError`(SSE 핸드셰이크), `DefjsFault`(WebSocket 시작), 또는 `TypeError`(네트워크 실패)나 `Error`(타임아웃) 같은 플랫폼 클래스예요. 이유가 `TimeoutError`인 abort(예: `AbortSignal.timeout()`)는 취소가 아니라 타임아웃으로 취급되고, 그 reject이 이 경계에 닿을 때 로그해요. SSE의 non-2xx 핸드셰이크는 body와 관계없이 항상 한 번 로그해요. 서버가 보낸 WebSocket close 프레임은 코드(1011 포함)와 관계없이 절대 로그하지 않아요. close 프레임 없이 갑자기 끊기는 경우(1006)는 런타임에 따라 달라요. 플랫폼 WebSocket이 `close` 전에 `error`를 발생시키는 경우(Node.js)에는 세션이 오류로 끝나고 `websocket.close.code` `1006`과 함께 한 번 로그해요. 발생시키지 않는 경우(Bun)에는 정상 close이므로 아무것도 로그하지 않아요. 그 밖에는 오류로 끝난 세션(큐 오버플로, heartbeat 타임아웃)만 로그해요. Defjs는 모든 명령 검증/디코딩 fault, 모든 재연결 시도, 훅 실패를 독립 Logs로 기록하지 않아요.
+
+이 통합을 통해 각 요청이나 논리 연결은 종단 진단을 최대 한 번 내보내요. 새로운 바깥 재시도는 새 lifecycle이에요. 애플리케이션 로그와 다른 계측은 이 보장 밖이에요. 애플리케이션의 Logs 파이프라인이 거르지 않는 한, 로그는 span 기록/샘플링과 독립이에요. tracer를 넘긴 경우 `requireParentSpan: true`는 활성 부모가 없을 때 로그를 포함한 기존의 전체 우회를 유지해요. tracer가 없으면 로그도 메트릭도 막지 않아요.
+
+진단에는 고정된 body, 예외 타입, phase, 정적 operation, 가능한 서버 주소/포트, 프로토콜 필드(HTTP 메서드, SSE fault 코드, WebSocket close 코드)가 담겨요. 원본 URL, query, 헤더, body, baggage, close 이유, 오류 메시지/스택, 훅 속성은 자동으로 복사하지 않아요. operation 이름과 커스텀 예외 이름은 민감하지 않게 유지하세요. 기존 span 데이터에는 고유한 마스킹 요건이 있어요. LogRecord를 만들거나 내보내는 데 실패해도 비즈니스 결과를 대체하지 않아요. OTel 진단 logger는 고정된 실패 메시지만 받아요.
+
+## 관련 레시피
+
+- [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)
+- [SSE 스트림 소비하기](/ko-KR/recipes/consume-sse)
+- [WebSocket 세션 열기](/ko-KR/recipes/websocket-session)

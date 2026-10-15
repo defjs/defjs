@@ -1,0 +1,294 @@
+---
+title: 클라이언트
+description: 'createClient, option 헬퍼, Client 타입이에요.'
+---
+
+# 클라이언트
+
+클라이언트를 만들고, 옵션을 왼쪽에서 오른쪽으로 조합한 뒤 HTTP / SSE / WebSocket 명령을 `execute` 해요.
+
+## createClient()
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+옵션은 순서대로 적용돼요. interceptor가 인증이나 테넌트를 클로저로 잡을 때는 요청 경계 안에서 클라이언트를 만드는 편이 좋아요.
+
+- **options** — `withEndpoint` 같은 option 헬퍼예요.
+- **반환** 전송마다 `execute`가 오버로드된 클라이언트예요.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## option 헬퍼
+
+모든 헬퍼는 `ClientOption`을 돌려줘요. 같은 설정에 대한 나중 호출은 이전 호출을 대체해요. 단, 추가하는 `withInterceptors`는 예외예요.
+
+### withEndpoint()
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+상대 path 앞에 붙는 base URL을 설정해요.
+
+### withInterceptors()
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+등록 순서대로 interceptor를 추가해요. 섞인 kind는 실행 시점에 전송별로 걸러져요.
+
+### withQuerySerializer()
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+HTTP, SSE, WebSocket의 query 인코딩을 바꿔요. `serializer(query)`는 **인코딩된 와이어 객체**(alias가 적용되고, `Date`는 ISO, `bigint`는 문자열)를 받고, 앞에 `?`가 없는 query 문자열을 돌려줘야 해요. 요청에 query가 없으면 호출되지 않아요. `URLSearchParams`를 돌려주는 builder는 이걸 건너뛰어요.
+
+### withHeaders()
+
+```ts
+function withHeaders(headers: HeadersInit): ClientOption
+```
+
+HTTP와 SSE 요청에 정적 기본 헤더를 설정해요. WebSocket 요청은 이 헤더를 쓰지 않아요. init은 옵션이 적용될 때 복사되므로, 이후 객체를 바꿔도 클라이언트에는 반영되지 않아요. `withHeaders`를 다시 호출하면 첫 번째를 대체하고 병합하지 않아요.
+
+요청 하나에 대한 우선순위는 다음과 같아요.
+
+1. 기본 헤더가 시작 헤더 집합이에요.
+2. 요청 builder가 돌려준 `headers`는 값이 스칼라이거나 `Headers` 인스턴스이면 같은 이름의 기본 헤더를 대체해요. 배열 값(`{ 'x-a': ['one', 'two'] }` 같은 record 항목이나 튜플 배열 형태의 `HeadersInit`)은 대체하지 않고 기본 헤더에 덧붙여요.
+3. interceptor는 병합된 헤더를 받고 바꿀 수 있어요.
+4. 기본 HTTP 전송에서는 XSRF 헤더가 마지막에, 여전히 없을 때만 추가돼요 (`withXSRF`를 보세요).
+
+요청마다 달라지는 값은 interceptor를 쓰세요. 갱신된 Bearer 토큰이나 직렬화된 body에 대한 HMAC 같은 값이 그래요.
+
+### withTimeout()
+
+```ts
+function withTimeout(ms: number): ClientOption
+```
+
+**HTTP** `execute`에만 적용되는 기본 타임아웃을 밀리초 단위로 설정해요. SSE와 WebSocket은 이를 무시하고, 그쪽 execute의 `timeout`은 호출마다 따로 적용되는 시작 데드라인이에요. `ms`는 `2_147_483_647` 이하의 양의 안전 정수여야 하며, 그렇지 않으면 `withTimeout`을 호출할 때 `RangeError`를 던져요. `withTimeout`을 다시 호출하면 첫 번째를 대체해요.
+
+데드라인은 입력 파싱, builder, interceptor, 전송, 선언된 body 읽기를 모두 포함해요. 호출마다의 execute 옵션과 이렇게 합쳐져요.
+
+| execute 옵션                  | 효과                                                                                           |
+| ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| 없음                          | 클라이언트 기본값이 적용돼요. 만료되면 `NET_TIMEOUT`이에요.                                    |
+| `{ timeout }`                 | 이 호출에 한해 클라이언트 기본값을 대체해요.                                                   |
+| `{ abort }` 또는 `{ signal }` | 기본값과 합쳐져요. 호출자의 signal은 `NET_ABORTED`, 타이머는 `NET_TIMEOUT`이에요.              |
+| `{ abort, timeout }`          | 여전히 유효하지 않아요. `REQ_OPTIONS_INVALID`예요. 클라이언트 기본값은 충돌로 취급되지 않아요. |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+function withSSEHandle(fetchImpl: FetchHandle): ClientOption
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+Fetch(HTTP/SSE)나 WebSocket 생성자를 바꿔요.
+
+### withCredentials()
+
+```ts
+function withCredentials(value: boolean): ClientOption
+```
+
+`true`이면 HTTP와 SSE에서 Fetch가 `credentials: 'include'`를 써요. 기본값은 꺼짐이에요. WebSocket 연결에는 영향이 없어요.
+
+### withXSRF()
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+HTTP 요청에 XSRF 토큰 헤더를 추가해요. 기본값: 쿠키 `XSRF-TOKEN`, 헤더 `X-XSRF-TOKEN`이에요. SSE와 WebSocket 요청에는 영향이 없어요.
+
+기본 HTTP 전송은 다음이 모두 성립할 때 헤더를 추가해요. 메서드가 `GET`, `HEAD`, `OPTIONS`, `TRACE`가 아니고, 요청에 이미 그 헤더가 없고, 요청이 같은 origin이고, 비어 있지 않은 토큰을 찾았을 때예요. `location`이 있으면 Worker를 포함해 해석된 요청 origin이 `location.origin`과 같아야 해요. 없으면 `baseEndpoint`가 있는 요청을 같은 origin으로 봐요. 교차 출처 요청은 `tokenProvider`를 호출하지 않아요. 토큰은 provider가 있으면 거기서, 없으면 `document`가 있을 때만 읽는 `document.cookie`에서 가져와요.
+
+### SSE 설정
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+```ts
+function withSSEReconnect(options: ClientSSEOptions['reconnect']): ClientOption
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+### WebSocket 설정
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): ClientOption
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+## 타입
+
+### Client
+
+```ts
+type Client = {
+  execute(command: EventStreamCommand, options?: EventStreamExecuteOptions): Promise<StreamAwaitResult>
+  execute(command: WebSocketCommand, options?: WebSocketExecuteOptions): Promise<SocketAwaitResult>
+  execute(command: HttpCommand, options?: HttpExecuteOptions): Promise<HttpAwaitResult>
+}
+```
+
+타입 매개변수는 여기서 생략했어요. 각 오버로드는 명령에서 결과를 추론해요.
+
+### ClientOption
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+`createClient`가 만드는 `ClientConfig`를 변경해요. 맞는 `with*` 헬퍼가 없을 때 직접 작성하세요.
+
+### QuerySerializer
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+### FetchHandle
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`가 아니므로 목(mock)에 `preconnect` 같은 호스트 전용 멤버가 필요 없어요. 기본 HTTP/SSE handle은 호출마다 `globalThis.fetch`를 해석해요. HTTP는 손대지 않은 플랫폼 Fetch에만 `(url, init)`을 쓰고, 교체된 전역과 사용자 지정 handle은 `Request`를 받아요. SSE는 항상 `Request`를 넘겨요. Fetch 없이 Core를 import하는 것은 유효해요. Fetch가 여전히 없으면 기본 실행은 `ENV_UNSUPPORTED`를 보고하고, 사용자 지정 handle은 그대로 쓸 수 있어요.
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+
+interface ClientWebSocketOptions {
+  handle?: WebSocketHandleConstructor
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: {
+    intervalMs: number
+    isAck?: (message: unknown) => boolean
+    message?: <T = unknown>() => T | unknown
+    timeoutMs?: number
+  }
+  protocols?: readonly string[]
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+  }
+}
+```
+
+재연결은 두 전송 모두 opt-in이에요. `withSSEReconnect` / `withWebSocketReconnect`가 없으면 재시도하지 않아요. `reconnect`를 설정하면 다음 기본값이 적용돼요.
+
+| 필드         | SSE          | WebSocket    |
+| ------------ | ------------ | ------------ |
+| `attempts`   | 단절마다 `3` | 단절마다 `3` |
+| `delayMs`    | `1000`       | `1000`       |
+| `factor`     | `1`          | `2`          |
+| `jitter`     | `0`          | `0`          |
+| `maxDelayMs` | 상한 없음    | `30000`      |
+
+두 전송 모두, 핸드셰이크가 성공하면 단절마다의 재시도 예산, 콜백 attempt, 백오프 지수가 초기화돼요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. SSE에 설정한 상한이 없어도 플랫폼 타이머 한계인 `2_147_483_647` ms가 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요.
+
+재연결 옵션은 전송 전에 검증돼요. `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`와 명시한 `maxDelayMs`는 유한하고 음이 아니어야 하며, `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. WebSocket `attempts: 0`은 재시도를 즉시 끄고 쓰이지 않는 재연결 필드를 무시해요. SSE는 그 필드도 여전히 검증해요. jitter는 상한이 걸린 기준을 양쪽으로 늘리거나 줄인 뒤 최종 상한을 적용해요.
+
+SSE에서 `delayMs`는 시작 기준 지연일 뿐이고, 숫자만 있는 서버 `retry:` 필드가 있으면 복구 이후를 포함해 이후 시도에서 그 값으로 바뀌어요. `shouldReconnect`가 `false`를 돌려주면 재시도를 멈춰요. SSE 콜백은 `lastEventId`, 요청 `method`, 최신 `open` 정보도 받으며 비동기 함수일 수 있어요. 이 콜백이 없으면 SSE는 `GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE` 요청만 재연결해요. 있으면 그 결과가 모든 메서드의 재연결 여부를 결정해요. 최신 이벤트 ID는 UTF-8 바이트로 `Last-Event-ID`에 보내요. 빈 ID는 이를 지우고, NUL이 들어 있는 ID는 무시해요. WebSocket 콜백은 대신 close `code`, `reason`, `wasClean`을 받아요.
+
+SSE `onInvalidEvent`는 일치하는 struct가 없는 이벤트(`default`도 없는 경우 포함, `missing-struct`)나 데이터가 struct 검증에 실패한 이벤트(`validation-failed`)를 처리해요. 이벤트는 항상 버려지고, 핸들러의 반환값은 무시되며, 핸들러가 던진 오류는 스트림을 닫지 않아요.
+
+WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 `execute` 호출마다 넘길 수도 있어요. execute 값은 그 호출에 한해 클라이언트 값을 대체해요. `heartbeat.message`는 ping을 하나씩 만들고, 생략하거나 `undefined`를 돌려주면 아무것도 보내지 않아요.
+
+### ClientOptions
+
+```ts
+interface ClientOptions extends HttpClientOptions {
+  sse?: ClientSSEOptions
+  webSocket?: ClientWebSocketOptions
+}
+```
+
+클라이언트를 입력 모양으로 설명한 것이에요. `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `timeout`, `xsrf`, `withCredentials`, `sse`, `webSocket`이 있어요. `createClient`는 이걸 받지 않고 option 헬퍼를 받아요.
+
+### ClientConfig
+
+option 헬퍼가 변경하고 `execute`가 읽는, 해석된 스냅샷이에요. 기본값을 적용한 `ClientOptions`이며 `http.handle`, `interceptors`, `sse`(`ClientSSEConfig`), `webSocket`이 항상 있어요.
+
+### ClientSSEConfig
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+`ClientConfig.sse`에 있는, 해석된 SSE config예요. 필수 `handle`이 있는 `ClientSSEOptions`예요.
+
+### WebSocketHandle
+
+전송이 쓰는 WebSocket 인스턴스 면이에요. `binaryType`, ready-state 상수, `dispatchEvent`, `on*` 핸들러 프로퍼티를 뺀 `WebSocket`이고, 읽기 전용 `readyState: number`가 있어요.
+
+### WebSocketHandleConstructor
+
+```ts
+type WebSocketHandleConstructor = { readonly OPEN: number } & (new (...args: never[]) => WebSocketHandle)
+```
+
+`withWebSocketHandle`에 넘기는 생성자예요. `OPEN` ready-state 상수를 노출해야 해요.
+
+[클라이언트 가이드](/ko-KR/docs/client)를 보세요.

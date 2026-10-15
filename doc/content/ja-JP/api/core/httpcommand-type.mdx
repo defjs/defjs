@@ -1,0 +1,22 @@
+---
+title: 'HttpCommand'
+description: 'リクエストエンドポイントから作られる、実行可能で不透明な HTTP コマンドです。'
+---
+
+<ApiReference identity="@defjs/core:HttpCommand" />
+
+```ts
+interface HttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly definition: RequestDefinition<TInput, TOutput, TError>
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+入力を渡して `RequestEndpoint` を呼ぶと作られます。不透明な値として扱い、`client.execute` に渡してください。
+
+[HTTP](/ja-JP/api/http)

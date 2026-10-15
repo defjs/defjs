@@ -1,0 +1,16 @@
+---
+title: 'EventStreamData'
+description: 'EventStructs 맵에서 추론한, 파싱된 SSE 이벤트의 유니온이에요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamData" />
+
+```ts
+type EventStreamData<TEvents extends EventStructs> = TEvents extends EventStructs
+  ? KnownEventUnion<TEvents> | DefaultEventUnion<TEvents>
+  : never
+```
+
+`default`를 뺀 선언된 이벤트 이름마다 유니온에 `{ event: <name>; data: Infer<TEvents[name]>; id?: string }`가 들어가요. `default` struct를 선언했다면, 자체 struct가 없는 모든 이벤트 이름에 대해 `{ event: string; data: Infer<TEvents['default']>; id?: string }`가 추가돼요. `KnownEventUnion`과 `DefaultEventUnion`은 내부 helper 타입이에요.
+
+[SSE](/ko-KR/api/sse)

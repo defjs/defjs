@@ -1,0 +1,15 @@
+---
+title: 'struct.string'
+description: 'Struct, der string-Werte akzeptiert.'
+---
+
+<ApiReference identity="@defjs/core:struct.string" />
+
+```ts
+function string(): Struct<string, string>
+```
+
+- Akzeptiert nur `string`-Werte; alles andere schlägt mit `invalid_type` fehl.
+- Als Body-Root oder als inbound `output`-/`error`-Struct bleiben die Bytes Text, statt als JSON geparst zu werden.
+
+[Struct](/de-DE/api/struct)

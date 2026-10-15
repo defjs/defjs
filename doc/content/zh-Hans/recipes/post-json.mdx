@@ -1,0 +1,20 @@
+---
+title: '发送 JSON'
+description: 把带类型的 JSON body 交给 builder，并解码声明过的 201。
+---
+
+# POST JSON
+
+把带类型的 body 交给 builder。逻辑字段名留在 TypeScript；struct 上的传输字段别名会变成 JSON key。对象 body 是 `application/json`。
+
+细节见 [Commands](/zh-Hans/docs/commands) 和 [HTTP](/zh-Hans/docs/http)。
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com` 是占位地址。假设服务器返回 `201` 和 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`，这段代码会输出：
+
+```txt
+Created Ada → 201
+```

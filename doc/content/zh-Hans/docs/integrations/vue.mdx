@@ -1,0 +1,81 @@
+---
+title: 'Vue'
+description: 安装插件、提供 Client、获取用户，并在响应式变化时取消请求。
+---
+
+# Vue
+
+把已有的 `@defjs/core` Client 接到 Vue。你拿到 plugin、injection key 和 `injectClient()`。这个包**不会**创建 Client、缓存结果、重试 command，也不会在卸载时关传输资源。
+
+## 基本用法
+
+装 `@defjs/core`、`@defjs/vue`，以及 Vue 3.2+（适配器只需要 `provide` / `inject`，但示例用了 `<script setup>` 和 `onScopeDispose`，它们是 3.2 才有的）。ESM：
+
+`bun add @defjs/core @defjs/vue vue`
+
+创建 Client，安装插件，然后获取用户，并在相关值变化时取消请求：
+
+<include cwd lang="typescript">
+  examples/vue/main.ts#example
+</include>
+
+<include cwd>examples/vue/basic-setup.vue#example</include>
+
+`createClientPlugin(client)` 提供的就是你传进去的那个对象。不 clone，也没有释放钩子。Core options 和 interceptor 在创建 Client 时配好。
+
+`onCleanup` 在 watcher 重跑前和停掉时执行。先注册它，再开始异步工作。错误优先 tuple 仍是应用数据。
+
+## Inject 与覆盖
+
+`injectClient()` 读最近的 `HTTP_CLIENT` provider。在有效的 Vue 注入上下文中调用，例如同步执行的 `setup()`，或 `app.runWithContext()` 的同步回调（需要 Vue 3.3+）。`<script setup>` 顶层 `await` 后由编译器恢复的上下文也有效。
+
+没有有效注入上下文，或没有提供 Client 时抛出 `Error`。通过 `app.use(createClientPlugin(client))` 或祖先组件的 `provide(HTTP_CLIENT, client)` 提供 Client；仅安装插件并不能让注入上下文外的调用生效。
+
+用 Vue 的 `provide(HTTP_CLIENT, childClient)` 覆盖子树：
+
+<include cwd>examples/vue/inject-and-override.vue#example</include>
+
+最近的 provider 赢。后代拿到 `childClient`；子树外的兄弟仍用应用级 Client。
+
+## Watcher 外自己管 HTTP
+
+对于 composable 或组件在 watcher 外启动的工作，用 `AbortController` + `onScopeDispose`。Abort 启动中和进行中的工作；写响应式状态前先看 signal。Plugin 或 injection 作用域不会推断谁拥有 command。列表页就用 Vue Query（或类似的库）包住 `execute`——`@defjs/vue` 只做依赖注入（DI），**不**提供 `useRequest`。
+
+作用域拥有 Client 时，浏览器级复用要保持请求无关。若捕获了 headers、cookie、用户、租户或凭证，就在对应应用/SSR 请求边界创建，并在那里 provide。
+
+## 清掉 realtime 作用域
+
+哪怕作用域在连接中途消失，也要关流或 session。Abort 启动、关晚到的 handle、消费唯一 iterator、await 终止 promise：
+
+<include cwd>examples/vue/realtime-scope.vue#example</include>
+
+流的致命错误和队列溢出会让 iterator reject，所以循环里要有 `catch`，否则这个 rejection 无人处理。示例只保留最近 100 条消息，并用 id 给行做 key，因为内容相同的 payload 会产生重复 key。停掉 scope 时，SSE 的迭代正常结束；被 abort 的 WebSocket session 则会让 `receive` 以 `AbortError` reject，所以要用同样的方式保护 `catch`。
+
+WebSocket：同一套——abort 准备、关晚到的 session、消费 `session.receive`、退订 `onStateChange` / `onRuntimeError`、close、await `session.closed`。清理保持幂等；释放和 iterator 结束可能撞上。
+
+## SSR 作用域
+
+`createClientPlugin(client)` 给一个 Vue app provide 一个实例。浏览器里，endpoint、interceptor、捕获的状态可共享时再共享。SSR 时若 headers、cookie、用户、租户、凭证不同，每个请求创建并安装单独 Client。
+
+App 卸载、插件移除、组件作用域释放**不会** abort HTTP、关 SSE/WebSocket、退订监听，也不会释放 core Client。启动工作的所有者必须收尾。
+
+## 参考
+
+`@defjs/vue` 的公开导出：
+
+<include cwd lang="typescript">
+  examples/vue/exports.ts#example
+</include>
+
+- `HTTP_CLIENT` — 给原生 `provide` / `inject` 用的 `InjectionKey<Client>`
+- `createClientPlugin(client)` — 提供该 Client 的 Vue `Plugin`
+- `injectClient()` — 最近的 `Client`，没有就抛
+
+Client 和 options 在 `@defjs/core` 里创建。见 [Client](/zh-Hans/docs/client)、[Commands](/zh-Hans/docs/commands)、[Interceptors](/zh-Hans/docs/interceptors)、[SSE](/zh-Hans/docs/sse)、[WebSocket](/zh-Hans/docs/web-socket)。
+
+## 相关操作示例
+
+- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)
+- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)

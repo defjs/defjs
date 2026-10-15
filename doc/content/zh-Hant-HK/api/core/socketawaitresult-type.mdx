@@ -1,0 +1,20 @@
+---
+title: 'SocketAwaitResult'
+description: '執行 WebSocket command 嗰陣回傳嘅 tuple。'
+---
+
+<ApiReference identity="@defjs/core:SocketAwaitResult" />
+
+```ts
+type SocketAwaitResult<TIncoming, TOutgoing = never> =
+  | [error: null, socket: WebSocketSession<TIncoming, TOutgoing>, connection: WebSocketConnectionInfo]
+  | [error: Fault<undefined>, socket: undefined, connection: WebSocketConnectionInfo | undefined]
+```
+
+`client.execute` 執行 WebSocket command 嘅結果。
+
+- 成功：`[null, session, connection]`。`connection` 係第一次成功連線嘅 snapshot；重連之後 `session.connection` 會向前更新。
+- 失敗：`[fault, undefined, connection]`。`connection` 可以係 `undefined`，例如 socket 未開之前 constructor 已經失敗。
+- 只有啟動階段嘅失敗會喺呢度出現。session 一旦回傳，之後嘅錯誤就會經 `onRuntimeError`、`receive` 同 `closed` 浮現。
+
+[WebSocket](/zh-Hant-HK/api/web-socket)

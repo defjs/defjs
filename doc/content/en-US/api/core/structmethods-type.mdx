@@ -1,0 +1,25 @@
+---
+title: 'StructMethods'
+description: 'Chainable modifiers available on every struct.'
+---
+
+<ApiReference identity="@defjs/core:StructMethods" />
+
+```ts
+interface StructMethods<I, O, OO extends boolean> {
+  alias(name: string): this
+  null(): Struct<I | null, O | null, OO>
+  nullable(): Struct<I | null, O | null, OO>
+  nullish(): Struct<I | null | undefined, O | null | undefined, true>
+  optional(): Struct<I | undefined, O | undefined, true>
+}
+```
+
+Each method returns a new struct and leaves the original unchanged.
+
+- `alias(name)` sets the wire name of an object field. `struct.parse` reads logical names unless `aliases: true` is passed; JSON and flat request codecs write the alias. A non-string `name` throws `TypeError`.
+- `null()` and `nullable()` are the same: they also accept `null`.
+- `optional()` also accepts `undefined`. In an object, the key may be missing, and an absent field stays absent in the output.
+- `nullish()` accepts both `null` and `undefined`.
+
+[Struct](/api/struct)

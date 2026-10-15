@@ -1,0 +1,34 @@
+---
+title: 'WebSocketExecuteOptions'
+description: 'خيارات كل استدعاء لتنفيذ أمر WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketExecuteOptions" />
+
+```ts
+type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = UseWebSocketConfig<TIncoming, TOutgoing> & {
+  signal?: AbortSignal
+}
+```
+
+[`UseWebSocketConfig`](/ar/api/core/usewebsocketconfig-type) مع `signal`. بعد التوسيع:
+
+```ts
+type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>
+  protocols?: readonly string[]
+  reconnect?: ClientWebSocketOptions['reconnect']
+  signal?: AbortSignal
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+- `abort` و`timeout` متنافيان. يرفض النوع الاثنين معًا، وتمريرهما معًا وقت التشغيل يفشل بعطل `REQ_OPTIONS_INVALID`.
+- يتحد `signal` مع أيٍّ منهما؛ وهو ليس اسمًا بديلًا لـ `abort`.
+- يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا لا يتجاوز `2_147_483_647`. وهو يحدّ المدة التي قد يستغرقها فتح الجلسة، ولا يُطبَّق مرة أخرى عند إعادة الاتصال.
+- تتجاوز `beforeConnect` و`heartbeat` و`protocols` و`reconnect` الخيارات على مستوى العميل لهذا الاستدعاء.
+- عند ضبط `reconnect`، القيمة الافتراضية لـ `attempts` هي `3` لكل انقطاع؛ و`0` يعطّل إعادة الاتصال. تعيد حالة `open` الناجحة ضبط ميزانية المحاولات وأسّ التراجع. حذف `attempts` لا يتيح محاولات غير محدودة خلال الانقطاع الواحد. انظر [`withWebSocketReconnect`](/ar/api/core/withwebsocketreconnect) للتحقق من القيم والحدود القصوى للتأخير النهائي.
+
+انظر [`WebSocketHeartbeatConfig`](/ar/api/core/websocketheartbeatconfig-type).
+
+[WebSocket](/ar/api/web-socket)

@@ -1,0 +1,56 @@
+---
+title: Defjs
+description: أوامر HTTP وSSE وWebSocket محدَّدة الأنواع مع عميل صريح ونتائج تضع الخطأ أولاً.
+---
+
+# Defjs
+
+عرّف نقطة نهاية، وابنِ أمرًا معتمًا، ثم نفّذه. نفس الشكل لـ HTTP وSSE وWebSocket.
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Defjs لا تخزّن النتائج، ولا تعيد المحاولة نيابةً عنك، ولا تغلق التدفقات إن نسيت. أنت تملك الإلغاء والتنظيف.
+
+## اختر وسيلة النقل
+
+| ما تحتاجه                    | ابدأ من                          | النتيجة عند النجاح                       |
+| ---------------------------- | -------------------------------- | ---------------------------------------- |
+| طلب + استجابة حسب الحالة     | [HTTP](/ar/docs/http)            | بيانات مفكوكة + `HttpResponse`           |
+| تغذية أحداث خادم طويلة العمر | [SSE](/ar/docs/sse)              | تدفق واحد + لقطة `open` عند البدء        |
+| جلسة ثنائية الاتجاه          | [WebSocket](/ar/docs/web-socket) | جلسة واحدة + لقطة `connection` عند البدء |
+
+جديد هنا؟ نفّذ [البدء](/ar/docs/start)، ثم خذ [وصفة](/ar/recipes/get-declared-404). تريد «لماذا»؟ اقرأ [قرارات التصميم](/ar/docs/design-decisions) بعد أن تشغّل شيئًا.
+
+## اختر الحزمة
+
+| الحزمة                        | متى                                                                                                  |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | `createClient` (HTTP + SSE + WebSocket)                                                              |
+| `@defjs/react`                | `ClientProvider` / `useClient` — انظر [React](/ar/docs/integrations/react)                           |
+| `@defjs/vue`                  | إضافة + `injectClient` — انظر [Vue](/ar/docs/integrations/vue)                                       |
+| `@defjs/opentelemetry-server` | spans ومقاييس وسجلات صادرة — انظر [OpenTelemetry Server](/ar/docs/integrations/opentelemetry-server) |
+
+## أشكال النتيجة
+
+وسائل النقل الثلاث تُرجع tuple من ثلاثة عناصر يضع الخطأ أولاً. المواضع متطابقة؛ المعاني ليست كذلك:
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+عند الفشل يكون العنصر الثاني `undefined`. وفي HTTP يكون العنصر الثالث `undefined` أيضًا لأن الـ fault يحمل بيانات الاستجابة الوصفية. أما في SSE وWebSocket فالعنصر الثالث هو لقطة البدء إن التُقطت قبل الفشل. انظر [الأخطاء](/ar/docs/errors).
+
+## الملكية بجملة واحدة
+
+أجهض HTTP عندما يصبح قديماً. أغلق SSE و`await stream.closed`. أغلق WebSocket و`await session.closed`. على الخادم، أنشئ العميل داخل حدود الطلب عندما تلتقط الخيارات ملفات تعريف الارتباط أو المصادقة أو بيانات المستأجر. احجب عناوين URL والرؤوس والأجسام قبل تسجيلها.
+
+## وصفات ذات صلة
+
+- [GET مع 404 معلَن](/ar/recipes/get-declared-404)
+- [POST JSON](/ar/recipes/post-json)
+- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)
+- [استهلاك تدفق SSE](/ar/recipes/consume-sse)
+- [فتح جلسة WebSocket](/ar/recipes/websocket-session)
+- [الاختبار بـ Fetch محلي](/ar/recipes/test-with-handle)

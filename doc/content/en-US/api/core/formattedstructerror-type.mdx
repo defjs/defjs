@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'Nested error tree returned by StructError.format.'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+The result of `StructError.format()`. Leaf messages live under `_errors`; nested keys mirror the failing path. A path segment literally named `_errors` is stored as `\_errors`.
+
+[Struct](/api/struct)

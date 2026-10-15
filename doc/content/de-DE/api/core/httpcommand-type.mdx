@@ -1,0 +1,22 @@
+---
+title: 'HttpCommand'
+description: 'Opaker ausführbarer HTTP-Command, den ein Request-Endpoint erzeugt.'
+---
+
+<ApiReference identity="@defjs/core:HttpCommand" />
+
+```ts
+interface HttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly definition: RequestDefinition<TInput, TOutput, TError>
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+Entsteht, wenn du einen `RequestEndpoint` mit Input aufrufst. Behandle ihn als opak und übergib ihn an `client.execute`.
+
+[HTTP](/de-DE/api/http)

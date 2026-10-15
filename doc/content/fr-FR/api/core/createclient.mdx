@@ -1,0 +1,19 @@
+---
+title: 'createClient'
+description: 'Crée un client à partir de helpers d’options.'
+---
+
+<ApiReference identity="@defjs/core:createClient" />
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+Les options s’appliquent dans l’ordre ; une option ultérieure écrase une option antérieure pour le même réglage, et les intercepteurs s’accumulent. Préfère créer le client dans la frontière de la requête quand les intercepteurs capturent auth ou tenants.
+
+- **options** — Helpers d’options comme `withEndpoint`.
+- **Renvoie** un client dont `execute` est surchargé par transport.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+[Client](/fr-FR/api/client)

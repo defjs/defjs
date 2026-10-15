@@ -1,0 +1,16 @@
+---
+title: 'STRUCT'
+description: '只作為 type export：outbound encoder 使用嘅內部 tag key。'
+---
+
+<ApiReference identity="@defjs/core:STRUCT" />
+
+```ts
+declare const STRUCT: unique symbol
+```
+
+`STRUCT` 只作為 **type** export（`export type { STRUCT }`）。`@defjs/core` 冇 runtime `STRUCT` export，所以 `import { STRUCT } from '@defjs/core'` 編譯唔過，亦攞唔到任何值。
+
+佢指向一個 enumerable tag，用嚟標記解析 endpoint input 時產出嘅 objects，令 outbound encoder 知道呢啲 objects 係由邊個 struct 產出。`struct.parse` 同 response 解碼都唔會設定佢。呢個 symbol 屬於內部實作；應用程式碼唔應該依賴佢。
+
+[Struct](/zh-Hant-HK/api/struct)

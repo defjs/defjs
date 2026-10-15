@@ -1,0 +1,22 @@
+---
+title: 'EventStreamCommand'
+description: '이벤트 스트림 엔드포인트가 만드는, 내부를 가린 실행 가능한 SSE 명령이에요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCommand" />
+
+```ts
+interface EventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly endpoint: EventStreamDefinition<TInput, TEvents, TError> & { readonly method: string }
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+`EventStreamEndpoint`에 입력을 넣어 호출하면 만들어져요. 내부를 들여다보지 말고 그대로 `client.execute`에 넘기세요.
+
+[SSE](/ko-KR/api/sse)

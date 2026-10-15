@@ -1,0 +1,22 @@
+---
+title: 'Fault'
+description: 'Unión de todos los fallos que client.execute puede devolver, discriminada por code.'
+---
+
+<ApiReference identity="@defjs/core:Fault" />
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`TErr` es el struct `error` declarado por el endpoint, o `undefined` cuando no declara ninguno. `Fault<TErr>` es [`FaultOf`](/es-ES/api/core/faultof-type) aplicado al tipo del cuerpo decodificado, así que es la unión de tres variantes: [`DecodeFault`](/es-ES/api/core/decodefault-type), [`HttpStatusFault<TErr>`](/es-ES/api/core/httpstatusfault-type) y [`PreflightFault`](/es-ES/api/core/preflightfault-type). Haz switch sobre `fault.code`.
+
+Cada variante es un `Error` nativo llamado `DefjsFault`, así que `String(fault)` produce `DefjsFault: <message>`. `code` y los metadatos de la variante (`status`, `response`, `data`) son propiedades propias enumerables. La cadena nativa de `cause` no es enumerable.
+
+Los mensajes por defecto de Struct dicen `received <kind>`, nunca el valor recibido. Un `SyntaxError` de JSON detrás de `RES_DECODE_FAILED` da el mensaje `Response body could not be decoded`. Los paths estructurales conservan las claves de los registros, que pueden ser sensibles. Los `StructIssue.received` crudos y las causas del parser siguen siendo sensibles; los mensajes personalizados de `errorMap` y de las extensiones se usan tal cual y hay que revisarlos antes de registrarlos.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+Llama a `format()`, `flatten()` o `prettify()` solo después de acotar `fault.cause` a `StructError`; esos helpers no se copian al fault.
+
+[Errores](/es-ES/api/errors)

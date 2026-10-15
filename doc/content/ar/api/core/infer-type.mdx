@@ -1,0 +1,19 @@
+---
+title: 'Infer'
+description: 'يستنتج نوع المخرجات المحلَّلة لـ struct.'
+---
+
+<ApiReference identity="@defjs/core:Infer" />
+
+```ts
+type Infer<T> = T extends { readonly _struct: { readonly output: unknown } } ? T['_struct']['output'] : never
+```
+
+النوع الذي ينتجه التحليل الناجح. استخدم `Infer<typeof User>` للقيمة المفكوكة لـ struct، و`StructInput` لنوع المدخل المقبول.
+
+```ts
+const User = struct.object({ id: struct.number(), name: struct.string() })
+type User = Infer<typeof User> // { id: number; name: string }
+```
+
+[Struct](/ar/api/struct)

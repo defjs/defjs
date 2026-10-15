@@ -1,0 +1,30 @@
+---
+title: 'withWebSocketHeartbeat'
+description: 'Client option：啟用 WebSocket heartbeat 訊息。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHeartbeat" />
+
+```ts
+function withWebSocketHeartbeat(options: ClientWebSocketOptions['heartbeat']): ClientOption
+```
+
+啟用 heartbeat 訊息，並可選擇偵測 acknowledgement。傳入 `undefined` 會清除之前嘅設定。Option 嘅 type 係：
+
+```ts
+{
+  intervalMs: number
+  isAck?: (message: unknown) => boolean
+  message?: <T = unknown>() => T | unknown
+  timeoutMs?: number
+}
+```
+
+- 每隔 `intervalMs` 會 call `message()`，並將結果經 endpoint 嘅 `outgoing` struct 傳送。省略 `message` 或者佢 return `undefined` 嘅話，就唔會傳送訊息。
+- 設咗 `timeoutMs` 嘅話，每次 heartbeat 之後都預期有 acknowledgement。`isAck` 會收到已解碼嘅 incoming 訊息；return `true` 時，timer 會被清除，而該訊息**唔會**交畀 `receive`。
+- 如果 `timeoutMs` 內冇收到 ack，或者 heartbeat 傳送唔到，session 就會失敗。呢種情況唔會觸發 reconnect。
+- Heartbeat 用同 `session.send` 一樣嘅 JSON 檢查：struct 編碼之後，如果 JSON 無法表示某個值，就會產生 `TypeError` 並結束邏輯 session。
+- `intervalMs` 同 `timeoutMs` 必須係正數、有限，而且最大係 `2_147_483_647`；否則 execute 會以 `REQ_OPTIONS_INVALID` 失敗。
+- Execute options 入面嘅 `heartbeat` 會喺該次 call 取代呢個設定。
+
+[Client](/zh-Hant-HK/api/client)

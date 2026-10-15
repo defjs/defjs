@@ -1,0 +1,18 @@
+---
+title: 'struct.array'
+description: 'Struct that parses an array with one item struct.'
+---
+
+<ApiReference identity="@defjs/core:struct.array" />
+
+```ts
+function array<S extends StructLike<unknown, unknown, boolean>>(item: S): ArrayStruct<S>
+```
+
+- Parses every element with `item` and outputs a new array. A non-array fails with `invalid_type` (expected `array`).
+- Parsing stops at the first failing element, and `issue.path` holds its index.
+- Throws `TypeError` when `item` is not a struct.
+
+`ArrayStruct<S>` is not exported. It is a `Struct<StructInput<S>[], Infer<S>[]>`.
+
+[Struct](/api/struct)

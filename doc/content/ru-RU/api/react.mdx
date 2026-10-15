@@ -1,0 +1,42 @@
+---
+title: '@defjs/react'
+description: ClientProvider, useClient и props провайдера.
+---
+
+# React
+
+Отдай существующий `@defjs/core` client React-дереву. Этот пакет не создаёт, не кэширует и не dispose’ит client. Его entry помечен `'use client'`, поэтому импортируй пакет из клиентских компонентов. Нужен React 18 или новее.
+
+См. [гайд React](/ru-RU/docs/integrations/react).
+
+## ClientProvider
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+Провайдер контекста. Передай client из `createClient`. Вложенный `ClientProvider` переопределяет client для своего поддерева; `useClient` читает ближайший. Если передать другой `client`, значение контекста для потомков изменится.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+```ts
+function useClient(): Client
+```
+
+Читает ближайший `ClientProvider`.
+
+- **Возвращает** отданный client.
+- **Бросает** `Error` вне `ClientProvider`.
+
+## ClientProviderProps
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+`client` обязателен и принадлежит приложению. `children` — дерево, которое может вызывать `useClient`.

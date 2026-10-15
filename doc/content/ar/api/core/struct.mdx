@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: 'كائن واجهة يضم منشئات struct و struct.parse.'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct` كائن عادي من المساعدات. فضّله على استيراد المنشئات فرادى. ولكل مساعد صفحته الخاصة.
+
+### البدائيات والحاويات
+
+| المساعد                                                                                | الدور                                                     |
+| -------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| [`struct.string()`](/ar/api/core/struct-string)                                        | نص                                                        |
+| [`struct.number()`](/ar/api/core/struct-number)                                        | رقم، و`NaN` مرفوض                                         |
+| [`struct.boolean()`](/ar/api/core/struct-boolean)                                      | قيمة منطقية                                               |
+| [`struct.bigint()`](/ar/api/core/struct-bigint)                                        | `bigint`، أو سلسلة تُحلَّل إلى واحد                       |
+| [`struct.date()`](/ar/api/core/struct-date)                                            | `Date`، من `Date` أو طابع زمني أو سلسلة                   |
+| [`struct.literal(value)`](/ar/api/core/struct-literal)                                 | قيمة حرفية مطابقة تمامًا                                  |
+| [`struct.null()`](/ar/api/core/struct-null)                                            | `null` فقط                                                |
+| [`struct.any()`](/ar/api/core/struct-any) / [`unknown()`](/ar/api/core/struct-unknown) | أي قيمة عدا `null` و`undefined`                           |
+| [`struct.array(item)`](/ar/api/core/struct-array)                                      | مصفوفة بـ struct واحد للعناصر                             |
+| [`struct.tuple(items)`](/ar/api/core/struct-tuple)                                     | مصفوفة ذات طول ثابت؛ و`items` مصفوفة واحدة من الـ structs |
+| [`struct.record(value)`](/ar/api/core/struct-record)                                   | كائن عادي بمفاتيح نصية وstruct واحد للقيم                 |
+| [`struct.object(shape)`](/ar/api/core/struct-object)                                   | كائن عادي بحقول ثابتة؛ والمفاتيح المجهولة تُزال           |
+| [`struct.or(...options)`](/ar/api/core/struct-or)                                      | أول خيار مطابق                                            |
+| [`struct.intersection(...structs)`](/ar/api/core/struct-intersection)                  | يجب أن يطابق كل struct؛ وتُدمج نتائج الكائنات             |
+| [`struct.discriminatedUnion(tag, options)`](/ar/api/core/struct-discriminatedunion)    | خيار كائن يُختار بقيمة حقل `tag`                          |
+| [`struct.enum(values)`](/ar/api/core/struct-enum)                                      | مصفوفة سلاسل، أو قيم كائن `{ Name: value }`               |
+
+### ترميزات الجسم والقيم الثنائية
+
+| المساعد                                                                                                                                 | الدور                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| [`struct.formData(shape)`](/ar/api/core/struct-formdata) / [`urlencoded(shape)`](/ar/api/core/struct-urlencoded)                        | struct كائن مع وسم ترميز. الوسم ينطبق فقط عندما تكون تلك القيمة جذر جسم الطلب |
+| [`struct.arrayBuffer()`](/ar/api/core/struct-arraybuffer) / [`blob()`](/ar/api/core/struct-blob) / [`file()`](/ar/api/core/struct-file) | قيم ثنائية. كجذر جسم تُرسَل بايتات؛ وكـ `output` / `error` تختار ذلك التمثيل  |
+| [`struct.string()`](/ar/api/core/struct-string)                                                                                         | نص. كجذر جسم أو struct `string` وارد، تبقى البايتات نصًا                      |
+
+### التحليل والمعدِّلات
+
+[`struct.parse(struct, value, options?)`](/ar/api/core/struct-parse) يحلّل قيمة مجهولة ويُرجع `[null, value]` أو `[StructError, undefined]`.
+
+لكل struct المعدِّلات المتسلسلة (chainable) `.optional()` و`.null()` / `.nullable()` و`.nullish()` و`.alias(name)`. انظر [`StructMethods`](/ar/api/core/structmethods-type).
+
+[Struct](/ar/api/struct)

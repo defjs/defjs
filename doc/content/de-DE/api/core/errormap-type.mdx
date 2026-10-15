@@ -1,0 +1,14 @@
+---
+title: 'ErrorMap'
+description: 'Callback, der die Message eines Struct-Issues umschreibt.'
+---
+
+<ApiReference identity="@defjs/core:ErrorMap" />
+
+```ts
+type ErrorMap = (issue: StructIssue) => string | undefined
+```
+
+Wird als Option `errorMap` an `struct.parse` übergeben. Er wird für jedes Issue (`code`, `expected`, `message`, `path`, `received`) aufgerufen, bevor das Issue aufgezeichnet wird. Jeder String, auch `''`, ersetzt den Default; nur `undefined` behält ihn. Die Map gehört zu diesem Parse-Aufruf und behandelt auch bigint-/date-Konvertierungsfehler eines Structs, das eine andere Core-Kopie erzeugt hat. Default-Messages lassen empfangene Werte weg; eigener Text wird wörtlich verwendet, nimm also keine sensiblen `received`-Werte auf.
+
+[Struct](/de-DE/api/struct)

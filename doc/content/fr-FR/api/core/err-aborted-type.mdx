@@ -1,0 +1,18 @@
+---
+title: 'ERR_ABORTED'
+description: 'Sentinelle Error partagée qui marque une requête comme annulée.'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+Valeur partagée de `cause` et de message pour l’annulation par l’appelant. `createNetworkFault` l’associe, ainsi qu’une `DOMException` nommée `AbortError`, à `NET_ABORTED`. Un intercepteur HTTP qui la lève fait résoudre l’appel avec un fault `NET_ABORTED`. Les intercepteurs SSE et WebSocket qui la lèvent sont signalés comme `EXT_INTERCEPTOR_FAILED`.
+
+Voir le [guide Gestion des erreurs](/fr-FR/docs/errors).
+
+La sentinelle porte une marque non énumérable `Symbol.for('defjs.cause.aborted')`. [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît cette sentinelle depuis n’importe quelle copie de Core, sans comparer l’identité d’objet. La classification est indépendante des exécutions antérieures sans rapport.
+
+[Erreurs](/fr-FR/api/errors)

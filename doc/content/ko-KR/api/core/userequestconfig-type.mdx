@@ -1,0 +1,21 @@
+---
+title: 'UseRequestConfig'
+description: '진행률 콜백과 취소를 위한 HTTP execute 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:UseRequestConfig" />
+
+```ts
+type UseRequestConfig = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+[`HttpExecuteOptions`](/ko-KR/api/core/httpexecuteoptions-type)에서 HTTP에만 해당하는 부분이에요. 그 타입은 여기에 `signal`을 더해요.
+
+- `onDownloadProgress`와 `onUploadProgress`는 [`HttpProgressFn`](/ko-KR/api/core/httpprogressfn-type) 콜백이에요. 콜백은 `loaded`, `total`, `lengthComputable`이 담긴 [`HttpProgressEvent`](/ko-KR/api/core/httpprogressevent-type)를 받아요.
+- 취소는 `abort` 또는 `timeout` 중 하나만 쓸 수 있고, 둘을 함께 쓸 수는 없어요. 타입이 둘 다 주는 것을 막고, 런타임에 둘 다 넘기면 `REQ_OPTIONS_INVALID` fault로 실패해요.
+- `timeout`은 `2_147_483_647` 이하의 양의 안전 정수여야 해요. 이 호출에 한해 [`withTimeout`](/ko-KR/api/core/withtimeout)로 설정한 기본값을 대체해요. `abort`는 그 기본값과 합쳐져요.
+
+[HTTP](/ko-KR/api/http)

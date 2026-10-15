@@ -1,0 +1,162 @@
+---
+title: WebSocket
+description: defineWebSocket、session，同 execute options。
+---
+
+# WebSocket
+
+聲明一個 socket，執行佢，傳送／接收 typed messages，之後關閉。
+
+## defineWebSocket()
+
+```ts
+function defineWebSocket(definition: WebSocketDefinition): WebSocketEndpoint
+```
+
+- **definition** — `path`、一個 `incoming` struct，以及必填、為正整數嘅 `maxIncomingQueueSize`；可選 `outgoing` 同 `input` structs、`operation`、static `protocols`，以及非負嘅 `maxOutgoingQueueSize`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
+- **Returns** 一個 endpoint。用 input call 佢，就會得到 `WebSocketCommand`。
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+## executeWebSocketCommand()
+
+```ts
+function executeWebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+  options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+```
+
+`client.execute` 嘅 low-level entry。Application code 優先用 client。
+
+- **Returns** `[null, session, connection]` 或者 `[error, undefined, connection?]`。
+
+WebSocket execute 可以逐次 call override `beforeConnect`、`heartbeat`、`protocols` 同 `reconnect`；每個都會取代 client 嘅值。Protocol 優先次序係 execute，然後 `withWebSocketProtocols`，最後係 definition 嘅 `protocols`。
+
+## WebSocketSession
+
+```ts
+interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<TIncoming>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  send(message: TOutgoing): void
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+}
+```
+
+自己 own 嘅 scope 優先用 `await using ownedSession = session` cleanup。Manual `session.close()` 同 `await session.closed` 仍然用得。
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+`closed` report 嘅係 logical terminal state。Async disposer 會 request native close，再等 Defjs-owned teardown；但如果一直收唔到 close event，就會 bound 喺一秒，亦可能用名為 `TimeoutError` 嘅 `DOMException` reject。佢證明唔到 physical TCP connection 已經 close。
+
+### WebSocketState
+
+`'idle' | 'connecting' | 'open' | 'closing' | 'closed' | 'reconnecting' | 'aborted' | 'error'`
+
+### WebSocketConnectionInfo
+
+`generation`（reconnect 就會 increment），以及一旦知道就有嘅 `url`、`protocol` 同 `extensions`。
+
+### WebSocketCloseInfo
+
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
+Socket 完咗之後嘅 close snapshot（code、reason、clean flag、optional cause）。Manual close 可以帶 `ManualSocketCloseReason`。
+
+## 執行 options
+
+## WebSocketExecuteOptions
+
+```ts
+type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
+  signal?: AbortSignal
+  beforeConnect?: (context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+  protocols?: readonly string[]
+  heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>
+  reconnect?: ClientWebSocketOptions['reconnect']
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+`WebSocketHeartbeatConfig`：`intervalMs`，可選 `message`、`isAck`、`timeoutMs`。
+
+`abort` 同 `timeout` 互斥：type 會拒絕兩者並存，runtime 時兩者都傳會以 `REQ_OPTIONS_INVALID` fault 失敗。`signal` 可以同其中一個合併使用。`timeout` 係連線嘅啟動 deadline：之後嘅 reconnect 唔會重新計時，而且 `withTimeout` 唔適用於 WebSocket。
+
+設定 `reconnect` 時，`attempts` 預設係每次斷線 3 次；`0` 就停用。成功 `open` 會重設預算同退避指數，所以每次新嘅斷線都由第 1 次重試開始。省略 `attempts` 唔代表同一次斷線可以無限重試。預設值同驗證規則請見 [Client](/zh-Hant-HK/api/client)。
+
+## 訊息
+
+`incoming` 係一個 struct。Text、`ArrayBuffer`、typed-array 同 `Blob` frames 會當 UTF-8 讀、`JSON.parse`，再對住個 struct 檢查。JSON parse 或者 struct 失敗嘅 frame 會報去 `session.onRuntimeError`，而且唔會入 queue。冇 client invalid-frame option。
+
+`outgoing` 係一個 struct。`session.send` 接受嗰個 struct 嘅 `StructInput`，encode aliases，然後 `JSON.stringify`。編碼之後，如果 JSON 無法忠實表示某個值，會喺傳送或者加入重連 queue 之前 throw `TypeError`，包括非有限數、functions、symbols、`Map`、`Set`、streams，同冇 JSON 表示方式嘅 class instances。巢狀值會用同 HTTP JSON bodies 一樣嘅檢查。Heartbeat 亦會用呢個檢查；heartbeat 序列化失敗會結束 session。幾種 message kinds 就用 `struct.discriminatedUnion`。
+
+```ts
+session.send({ type: 'message', text: 'Hello' })
+```
+
+睇 [WebSocket guide](/zh-Hant-HK/docs/web-socket) 同 [Open a WebSocket session](/zh-Hant-HK/recipes/websocket-session)。
+
+## WebSocketDefinition
+
+`path`、`incoming`、必填嘅 `maxIncomingQueueSize`，可選 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。Builder 只可以 return `path` 同 `query`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
+
+## WebSocketEndpoint
+
+`defineWebSocket` 嘅回傳。用 input call 一次就攞到 `WebSocketCommand`。
+
+## WebSocketRequestShape
+
+只有 `path` 同 `query`。`headers` 同 `body` 係 `never`。
+
+## WebSocketCommand
+
+Opaque WebSocket command。交畀 `client.execute`。
+
+## UseWebSocketConfig
+
+Heartbeat、reconnect、`beforeConnect`、protocols，再加 cancellation。`WebSocketExecuteOptions` 再加 `signal`。
+
+## SocketAwaitResult
+
+`[null, session, connection]` 或者 `[error, undefined, connection?]`。
+
+## ManualSocketCloseReason
+
+用 `session.close()` 閂嗰陣記低嘅 reason。
+
+## WebSocketHeartbeatConfig
+
+`intervalMs`，可選 `message`、`isAck`、`timeoutMs`。
+
+## WebSocketIncomingData
+
+解碼之後嘅 incoming frame：`incoming` struct 嘅 `Infer`。
+
+## WebSocketOutgoingData
+
+`session.send` 接受嘅 value：`outgoing` struct 嘅 `StructInput`；冇聲明就係 `never`。
+
+## SocketLifecycleOutcome
+
+一次連線嘗試嘅結果（`closeInfo`、`connection`、`cause`、`opened`），供 reconnect 邏輯使用。佢唔係 session 嘅最終結果；最終結果請見 `WebSocketCloseInfo`。

@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: 'Широкое ограничение struct, принимающее любой struct.'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+Широкое ограничение, которое используется в generic’ах endpoint’ов и клиента, например в `defineRequest`, `Fault` и `HttpCommand`. Когда нужен точный вывод типов input и output, предпочитай конкретный `Struct<...>`.
+
+[Struct](/ru-RU/api/struct)

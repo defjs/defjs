@@ -1,0 +1,20 @@
+---
+title: '取消与超时'
+description: 用 abort 或 timeout 打断 execute，读 NET_ABORTED / NET_TIMEOUT。
+---
+
+# 取消一次 HTTP
+
+传 `signal`，再配 `abort` 或 `timeout` 其一——别同时传 `abort` 和 `timeout`。`timeout` 必须是 `1..2_147_483_647` 的正 safe integer。
+
+细节见 [HTTP](/zh-Hans/docs/http#取消工作)。
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+取消只说明调用方观察到了什么。它不能证明服务端写入已经回滚——mutation 重试还是要有幂等契约。

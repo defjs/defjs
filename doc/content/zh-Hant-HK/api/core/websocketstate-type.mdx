@@ -1,0 +1,25 @@
+---
+title: 'WebSocketState'
+description: '受管理 WebSocket session 嘅生命週期 state。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketState" />
+
+```ts
+type WebSocketState = 'aborted' | 'closed' | 'closing' | 'connecting' | 'error' | 'idle' | 'open' | 'reconnecting'
+```
+
+| State          | 意思                                            |
+| -------------- | ----------------------------------------------- |
+| `idle`         | 第一次嘗試連線之前                              |
+| `connecting`   | 準備並開啟第一個連線                            |
+| `open`         | 實體 socket 已經開啟                            |
+| `reconnecting` | 關閉之後，正在準備或者等待替代 socket           |
+| `closing`      | 已經用 `session.close()` 或者 disposal 請求關閉 |
+| `closed`       | 終結：session 冇出錯亦冇被取消就結束            |
+| `aborted`      | 終結：session 經 `abort` 或者 `signal` 被取消   |
+| `error`        | 終結：session 失敗，包括啟動失敗或者 `timeout`  |
+
+可以用 `session.state` 同 `session.onStateChange` 觀察。
+
+[WebSocket](/zh-Hant-HK/api/web-socket)

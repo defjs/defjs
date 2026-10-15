@@ -1,0 +1,22 @@
+---
+title: 'WebSocketCloseInfo'
+description: 'WebSocket session 在逻辑上的终态结果。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketCloseInfo" />
+
+```ts
+type WebSocketCloseInfo =
+  | { kind: 'closed'; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'aborted'; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }
+  | { kind: 'error'; cause: unknown; code?: number; reason?: string; wasClean?: boolean }
+```
+
+session 彻底结束后，`session.closed` resolve 出来的值。
+
+- `closed`：session 正常结束，包括手动调用 `session.close()`。
+- `aborted`：session 被取消；`cause` 是取消原因。
+- `error`：session 失败；`cause` 必填。
+- 观察到原生 close 事件时，`code`、`reason` 和 `wasClean` 取自该事件。close 事件没有提供 `code` 和 `reason` 时，手动 `session.close(code, reason)` 传入的值会补上。
+
+[WebSocket](/zh-Hans/api/web-socket)

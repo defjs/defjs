@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: '업로드와 다운로드 콜백에 넘기는 진행 스냅샷이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+`ProgressEvent` 필드를 그대로 따라요. `loaded`는 서버가 확인한 바이트가 아니라, 업로드 또는 다운로드 스트림에서 읽은 바이트를 세요. 다운로드 바이트는 이미 압축이 풀려 있을 수 있어요. 다운로드 total은 양수 `Content-Length`가 있고 `Content-Encoding`이 없거나 `identity`일 때만 계산할 수 있어요. 압축된 다운로드는 `total: 0`과 `lengthComputable: false`를 보고해요. 스트리밍 FormData 업로드도 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 길이를 모르는 다른 스트림도 같은 `0` / `false` 필드를 써요.
+
+[`HttpProgressFn`](/ko-KR/api/core/httpprogressfn-type), [HTTP 가이드](/ko-KR/docs/http), [명령](/ko-KR/docs/commands)을 보세요.
+
+[HTTP](/ko-KR/api/http)

@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'Tipo de la entrada parseada del endpoint que recibe un builder de solicitud.'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+La entrada parseada del endpoint tal como la ve `builder`. Los nodos de objeto llevan el struct que los produjo (la marca interna `Typed`), así que la codificación de alias, `Date` y `bigint` acompaña al valor hasta la solicitud. Las entradas de un record y los elementos de una tupla se marcan igual. En runtime, un contenedor record también se marca cuando el valor parseado es un objeto; los contenedores array y tupla no, y `null` y `undefined` nunca se marcan. Los modificadores nullish recuperan el struct que envolvieron, las opciones de una unión se distribuyen y las opciones de una intersección se combinan. Cualquier otro struct recurre a `Infer<S>`.
+
+`CarriedStruct`, `NullishBuilderInput`, `IntersectBuilderInputs` y `Typed` son tipos auxiliares internos.
+
+[HTTP](/es-ES/api/http)

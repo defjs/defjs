@@ -1,0 +1,16 @@
+---
+title: 'struct.arrayBuffer'
+description: 'Struct, который принимает ArrayBuffer.'
+---
+
+<ApiReference identity="@defjs/core:struct.arrayBuffer" />
+
+```ts
+function arrayBuffer(): Struct<ArrayBuffer, ArrayBuffer>
+```
+
+- Принимает только `ArrayBuffer`. Типизированные массивы и другие view дают `invalid_type`.
+- Как корень тела уходит байтами с `application/octet-stream`.
+- Как struct `output` или `error` заставляет читать тело ответа как `ArrayBuffer`.
+
+[Struct](/ru-RU/api/struct)

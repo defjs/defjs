@@ -1,0 +1,24 @@
+---
+title: 'RequestDefinition'
+description: 'HTTP エンドポイントのコントラクトです。メソッド、パス、入力、およびボディをデコードする struct を定めます。'
+---
+
+<ApiReference identity="@defjs/core:RequestDefinition" />
+
+```ts
+type RequestDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = ResponseDeclaration<TOutput, TError> & {
+  builder?: OutboundBuilder
+  input?: TInput
+  method: string
+  operation?: string
+  path: string
+}
+```
+
+`output` は 2xx レスポンスのボディを、`error` はそれ以外のレスポンスのボディを宣言します。実行されるのはどちらか一方だけで、片方を省略すると、そのボディは読まれません。`ResponseDeclaration` は内部のヘルパー型で、対応する型パラメーターが struct の場合にのみ `output` と `error` が必須になります。`responseType` はありません。宣言したボディの読み方は struct の kind が選びます。`input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。
+
+[HTTP](/ja-JP/api/http)

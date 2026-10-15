@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: '提取 fault code 的类别前缀。'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+fault code 的类别是它第一个 `_` 之前的那段。`C` 是 `FaultCode` 或它们的联合。`FaultClass<FaultCode>` 是 `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`。
+
+[Errors](/zh-Hans/api/errors)

@@ -1,0 +1,19 @@
+---
+title: 'DecodeFault'
+description: 'خطأ لاستجابة وصلت لكن تعذّرت قراءتها كما أُعلن.'
+---
+
+<ApiReference identity="@defjs/core:DecodeFault" />
+
+```ts
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+`code` هو أحد `RES_DECODE_FAILED` أو `RES_MEDIA_TYPE_INVALID` أو `RES_STRUCT_MISMATCH`. وصلت استجابة لكن تعذّرت قراءتها كما أُعلن. و`response` بيانات وصفية فقط: فالجسم هو القيمة المفكوكة، والفكّ نفسه هو ما فشل، فلا حقل `body` يمكن الوصول إليه. والتفصيل المسبِّب يوجد في `cause` — `StructError` عند عدم مطابقة struct، وفشل المحلِّل عند تمثيل غير مقروء.
+
+[الأخطاء](/ar/api/errors)

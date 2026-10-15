@@ -1,0 +1,44 @@
+---
+title: 'ClientSSEOptions'
+description: '任意の SSE 設定です。fetch ハンドル、不正イベントのフック、再接続ポリシーを含みます。'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — ストリームを開く Fetch 実装です。デフォルトは試行ごとに `globalThis.fetch` を解決するため、インポート後の差し替えも反映されます。すべての SSE ハンドルには `Request` が渡されます。グローバルの Fetch がなければデフォルトの実行は `ENV_UNSUPPORTED` で失敗しますが、独自のハンドルは引き続き使えます。
+- **onInvalidEvent** — イベントに対応する struct も `default` struct もない場合（`'missing-struct'`）、またはデータの検証に失敗した場合（`'validation-failed'`）に呼ばれます。そのイベントはスキップされます。フックが throw したエラーでストリームが閉じることはありません。
+- **reconnect** — オプトインです。指定しなければ、ストリームは再接続しません。`attempts` のデフォルトは接続断ごとに **3** で、`attempts: 0` はリトライを無効にします。ハンドシェイクが成功すると、リトライの残り回数、コールバックの `attempt`、バックオフの指数がリセットされます。`delayMs` は最初の基準待ち時間で、デフォルトは 1000 です。サーバーが送る `retry:` の値があれば、それで置き換えられます。`factor` のデフォルトは 1 です。`jitter` は 0〜1 の乗法因子で、デフォルトは 0 です。`maxDelayMs` は jitter と丸めを適用した後の最終的な待ち時間の上限です。上限を設定しなくても、プラットフォームの上限 `2_147_483_647` ms が適用されます。基準待ち時間が 0 なら、そのまま 0 です。有効な数値の計算がオーバーフローした場合は、上限値に留まります。`shouldReconnect` がなければ、再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` だけです。指定されていれば、すべてのメソッドについて、その戻り値で再接続するかどうかを決めます。コンテキストには `method` が含まれます。`ReadableStream` をボディに持つリクエストは再接続しません。再接続では、最新の ID を UTF-8 のバイト列として `Last-Event-ID` で送ります。空の ID は保持中の ID を消去し、NUL を含む ID は無視されます。
+
+再接続オプションは、インターセプターや Fetch の実行前に検証されます。`attempts` は 0 以上の安全な整数、`delayMs` と明示的な `maxDelayMs` は有限かつ 0 以上、`factor` は有限かつ正の値、`jitter` は有限かつ 0〜1 の範囲である必要があります。不正な値は実行時に `REQ_OPTIONS_INVALID` を返します。
+
+これらは `withSSEHandle`、`withSSEOnInvalidEvent`、`withSSEReconnect` で設定します。`withSSEReconnect` を使わなければ、リトライは無効です。
+
+[Client ガイド](/ja-JP/docs/client) を参照してください。
+
+[Client](/ja-JP/api/client)

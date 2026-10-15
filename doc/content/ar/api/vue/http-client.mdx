@@ -1,0 +1,14 @@
+---
+title: 'HTTP_CLIENT'
+description: 'مفتاح الحقن في Vue الذي يُوفَّر عميل Defjs تحته.'
+---
+
+<ApiReference identity="@defjs/vue:HTTP_CLIENT" />
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+المفتاح الذي توفّر `createClientPlugin` العميل تحته. فضّل `injectClient()` على `inject(HTTP_CLIENT)` الذي يُرجع `undefined` عندما لا يُوفَّر شيء. لتجاوز شجرة فرعية: `provide(HTTP_CLIENT, childClient)`.
+
+[@defjs/vue](/ar/api/vue)

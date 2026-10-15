@@ -1,0 +1,23 @@
+---
+title: 'WebSocketRequestShape'
+description: 'WebSocket builder가 돌려줄 수 있는 요청 모양이에요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketRequestShape" />
+
+```ts
+type WebSocketRequestShape<P extends string> = {
+  body?: never
+  headers?: never
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+[`WebSocketDefinition`](/ko-KR/api/core/websocketdefinition-type)의 `builder`가 돌려줄 수 있는 값이에요. `P`는 endpoint path예요.
+
+- `path`는 `P`의 `:name` 세그먼트를 채워요. 이름마다 스칼라 값 하나예요. path에 세그먼트가 없으면 `never`예요.
+- `query`는 `URLSearchParams`이거나, 스칼라, 배열, 중첩 레코드로 이루어진 레코드예요.
+- `headers`와 `body`는 `never`예요. WebSocket 핸드셰이크는 builder에서 둘 다 받지 않아요. 자격 증명은 `beforeConnect`나 interceptor에 두세요.
+
+[WebSocket](/ko-KR/api/web-socket)

@@ -1,0 +1,26 @@
+---
+title: 'struct.tuple'
+description: '按位置各用一个 struct 解析定长数组的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.tuple" />
+
+```ts
+function tuple<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(
+  items: T,
+): TupleStruct<T>
+```
+
+`struct.tuple` 接收 struct 的**一个数组**，不是分开的多个参数：
+
+```ts
+const Pair = struct.tuple([struct.string(), struct.number()])
+```
+
+- 每个位置用同一下标的 struct 解析。输入必须是长度完全相同的数组，否则以 `invalid_type`（期望 `tuple of length N`）失败。
+- 把 struct 作为分开的参数传入，即 `struct.tuple(a, b)`，会抛出 `TypeError`。
+- 某一项不是 struct 时抛出 `TypeError`。
+
+`TupleStruct<T>` 没有导出。它是一个 `Struct`，其输入和输出是各项类型组成的 tuple。
+
+[Struct](/zh-Hans/api/struct)

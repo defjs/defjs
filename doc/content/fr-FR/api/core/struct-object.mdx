@@ -1,0 +1,25 @@
+---
+title: 'struct.object'
+description: 'Struct qui parse un objet simple avec un ensemble fixe de champs.'
+---
+
+<ApiReference identity="@defjs/core:struct.object" />
+
+```ts
+function object<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+`shape` associe des noms de champs à des structs.
+
+- Chaque champ est **requis** par défaut. Une clé manquante échoue avec `missing_key`.
+- `.optional()` et `.nullish()` autorisent une clé manquante. Un champ optionnel absent reste absent dans la sortie.
+- `.null()` / `.nullable()` autorisent `null`.
+- `.alias(name)` définit la clé wire du champ. `struct.parse` lit les clés logiques par défaut ; `{ aliases: true }` et le décodage JSON HTTP lisent les clés wire, et l’encodage JSON HTTP les écrit. La sortie parsée utilise les clés logiques.
+- Les clés absentes de `shape` sont retirées de la sortie. La sortie est un nouvel objet à prototype `null`.
+- L’entrée doit être un objet simple. Les tableaux, `Map` et instances de classe échouent avec `invalid_type` (attendu `object`).
+- Le parse s’arrête au premier champ en échec, et `issue.path` contient sa clé.
+- Lève `TypeError` quand `shape` n’est pas un objet simple.
+
+`ObjectShape` est `{ [key: string]: any }` ; chaque valeur doit être un struct.
+
+[Struct](/fr-FR/api/struct)

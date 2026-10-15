@@ -1,0 +1,22 @@
+---
+title: 'HttpCommand'
+description: 'أمر HTTP معتم قابل للتنفيذ تنتجه نقطة نهاية طلب.'
+---
+
+<ApiReference identity="@defjs/core:HttpCommand" />
+
+```ts
+interface HttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly definition: RequestDefinition<TInput, TOutput, TError>
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+يُنشأ باستدعاء `RequestEndpoint` بالمدخل. تعامَل معه كأمر معتم ومرّره إلى `client.execute`.
+
+[HTTP](/ar/api/http)

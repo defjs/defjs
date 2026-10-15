@@ -1,0 +1,14 @@
+---
+title: 'FaultOf'
+description: 'اتحاد الأخطاء معبَّرًا عنه بنوع جسم الخطأ المفكوك.'
+---
+
+<ApiReference identity="@defjs/core:FaultOf" />
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+```
+
+`TData` هو جسم `error` المفكوك، أو `undefined` عندما لم يُعلَن struct للخطأ. و`Fault<TErr>` هو `FaultOf` مطبَّقًا على `Infer<TErr>`، و`HttpAwaitResult` يستخدم `FaultOf<TErrorData>`. مرّر نوعًا مفكوكًا لا struct: اكتب `FaultOf<Infer<typeof errorStruct>>`، أو استخدم `Fault<typeof errorStruct>`.
+
+[الأخطاء](/ar/api/errors)

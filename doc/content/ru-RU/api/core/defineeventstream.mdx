@@ -1,0 +1,32 @@
+---
+title: 'defineEventStream'
+description: 'Объявляет типизированный endpoint Server-Sent Events.'
+---
+
+<ApiReference identity="@defjs/core:defineEventStream" />
+
+```ts
+function defineEventStream<
+  const P extends string,
+  const M extends string = 'GET',
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<EventStreamDefinitionBase<TEvents>, 'method' | 'path'> &
+    EventStreamErrorField<TError> & {
+      input?: TInput
+      method?: M
+      path: P
+    } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>,
+): EventStreamEndpoint<TInput, TEvents, TError>
+```
+
+- **definition** — `path`, карта `events` и обязательные лимиты `maxBufferSize` и `maxQueueSize` (положительные безопасные целые числа). Необязательные `method` (по умолчанию `'GET'`), `operation`, `input` и `error`. Объявленный `input` всегда требует явного `builder`, даже если он уже совпадает с формой request’а. Опустить `builder` можно только в определениях без `input`.
+- **Возвращает** endpoint. Вызови его с input, чтобы получить `EventStreamCommand`.
+
+`EventStreamDefinitionBase`, `EventStreamErrorField` и `BuilderField` — внутренние вспомогательные типы: `error` обязателен, только если `TError` — struct, а `builder` имеет вид `(input: BuilderInput<TInput>) => EventStreamRequestShape`, когда объявлен `input`.
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+[SSE](/ru-RU/api/sse)

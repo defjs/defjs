@@ -1,0 +1,17 @@
+---
+title: 'withInterceptors'
+description: '클라이언트 체인에 interceptor를 추가하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withInterceptors" />
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+클라이언트 interceptor 체인에 interceptor를 추가해요. 다시 호출하면 더 추가될 뿐 이전 것을 대체하지 않아요.
+
+- 처음 등록한 interceptor가 가장 바깥 계층이에요.
+- HTTP, SSE, WebSocket interceptor를 한 번의 호출에 섞어 쓸 수 있어요. execute 시점에는 명령의 전송에 해당하는 interceptor만 등록 순서대로 실행돼요.
+
+[클라이언트](/ko-KR/api/client)

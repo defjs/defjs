@@ -1,0 +1,18 @@
+---
+title: 'isAbortCause'
+description: 'Распознаёт отмену вызывающей стороной независимо от копии Core, а также платформенные ошибки отмены.'
+---
+
+<ApiReference identity="@defjs/core:isAbortCause" />
+
+```ts
+function isAbortCause(cause: unknown): boolean
+```
+
+Возвращает `true` для `Error` с меткой `Symbol.for('defjs.cause.aborted')`, включая `ERR_ABORTED` из другой копии Core, или для `DOMException` с именем `AbortError`. Обычный `Error` с таким именем, но без метки, не распознаётся. Для остальных значений возвращает `false`.
+
+Передавай исходный `fault.cause`; эта функция не извлекает причину из fault’а. `createNetworkFault` использует эту проверку для выбора `NET_ABORTED`. OpenTelemetry использует её, чтобы не записывать отмену вызывающей стороной в лог, сохраняя записи о таймаутах.
+
+См. [гайд Errors](/ru-RU/docs/errors) и [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause).
+
+[Ошибки](/ru-RU/api/errors)

@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerHttpOptions'
+description: 'خيارات وسيلة نقل HTTP — الخيارات المشتركة مع HttpResponse في responseHook.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions" />
+
+```ts
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+```
+
+تُضبط على `http` في `OpenTelemetryServerOptions`. ليس لها حقول خاصة بها: تأتي `enabled` و`startSpanHook` و`requestHook` و`responseHook` من `OpenTelemetryServerTransportOptions`.
+
+- يستقبل `responseHook(span, res, req)` الـ `HttpResponse` الذي عاد عبر المعترض، قبل أن يفك العميل جسمًا مصرَّحًا به، مع `HttpRequest` الأصلي. اقرأ `req.operation` لهوية الطلب؛ ولا تعيد بناءها من نقطة النهاية أو من URL محلول.
+- ينتهي span الـ HTTP بمجرد عودة `responseHook`؛ ولا يُنتظر الخطاف، فلا يمكن إلا لجزئه المتزامن أن يغيّر الـ span. الحالة 400 أو أعلى تنهيه بحالة `ERROR` مع ضبط `error.type` على سلسلة الحالة؛ و100–399 تترك حالته غير معيَّنة. يُبلَّغ عن رفض الخطاف غير المتزامن بعد الانتهاء عبر `diag.error`؛ يجب إعداد `diag.setLogger(...)` من `@opentelemetry/api` لاستقباله. لا يمكنه إضافة أحداث إلى span انتهى بالفعل.
+- الرفض عبر المعترض (فشل الشبكة، أو الإلغاء، أو المهلة، أو جسم `output` / `error` مصرَّح به لا يمكن قراءته كـ JSON) ليس له حالة استجابة ولا يستدعي `responseHook`. ينتهي الـ span بحالة `ERROR` مع ضبط `error.type` على اسم الصنف المرمي، مثل `TypeError` أو `Error` أو `BodyFailure`. وإلغاء المستدعي هو `Error` أيًّا كان سبب الإلغاء.
+
+مرّر `{ enabled: false }` لتخطي رصد HTTP. لا تعمل خطافات span إلا عند تمرير `tracer`.
+
+[@defjs/opentelemetry-server](/ar/api/opentelemetry-server)

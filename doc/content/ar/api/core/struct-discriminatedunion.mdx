@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: 'struct يختار struct كائن واحدًا بحسب قيمة حقل الوسم.'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- يجب أن يكون كل خيار struct كائن حقل `discriminator` فيه [`struct.literal()`](/ar/api/core/struct-literal) مطلوبًا. وأي حقل مفقود، أو حقل ليس literal، أو حقل اختياري، أو قيمة وسم مكررة يرمي `TypeError` عند إنشاء الـ struct.
+- يجب أن يكون المدخل كائنًا عاديًا. تختار قيمة الوسم الخيار، ويحلّل ذلك الخيار الكائن كله.
+- الوسم المفقود يفشل بـ `missing_key`، والوسم المجهول يفشل بـ `invalid_union`. وكلاهما يبلّغ عن path حقل الوسم. أما الإخفاقات الأخرى فتأتي من الخيار المختار.
+- مع `struct.parse(..., { aliases: true })` يُقرأ الوسم من alias الحقل.
+
+`RequiredDiscriminatorOptions` و`DiscriminatedUnionStruct` غير مُصدَّرين. ويرفض فحص الأنواع أي خيار حقل الوسم فيه مفقود أو قد يكون `undefined`.
+
+[Struct](/ar/api/struct)

@@ -1,0 +1,24 @@
+---
+title: 'Empaquetar un SDK HTTP'
+description: Exporta endpoints y createClient; deja el estrechamiento de estado en el call site.
+---
+
+# Publicar un SDK HTTP sin ocultar execute
+
+Un SDK de métodos que se traga `client.execute` suele colapsar un `404` declarado en un throw sin tipo o en un «error de API» compartido. Mantén el contrato como endpoints más un cliente explícito; quien llama sigue siendo dueño de la ramificación por estado.
+
+Ver [Comandos](/es-ES/docs/commands), [Cliente](/es-ES/docs/client) y [Decisiones de diseño](/es-ES/docs/design-decisions).
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+Exporta endpoints y una factory de cliente. Los helpers pueden llamar a `execute` para un camino revisado, pero no sustituyen la tupla para cada estado que te importe.

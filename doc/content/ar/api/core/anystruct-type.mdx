@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: 'قيد struct واسع يقبل أي struct.'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+قيد واسع تستخدمه المعاملات العامة (generics) الخاصة بنقاط النهاية والعميل مثل `defineRequest` و`Fault` و`HttpCommand`. فضِّل `Struct<...>` محدّدًا عندما تحتاج استنتاجًا دقيقًا للمدخل والمخرج.
+
+[Struct](/ar/api/struct)

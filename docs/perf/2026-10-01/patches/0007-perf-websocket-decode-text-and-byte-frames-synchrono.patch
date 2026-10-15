@@ -1,0 +1,89 @@
+From bc39db82f1517f962c53b6baae187a5a57b1fcc8 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:22:07 +0800
+Subject: [PATCH 07/10] perf(websocket): decode text and byte frames
+ synchronously
+
+---
+ packages/core/src/web_socket/codec.ts      | 27 +++++++++++++---------
+ packages/core/src/web_socket/web_socket.ts |  7 ++++--
+ 2 files changed, 21 insertions(+), 13 deletions(-)
+
+diff --git a/packages/core/src/web_socket/codec.ts b/packages/core/src/web_socket/codec.ts
+index d90179b..b1cd07d 100644
+--- a/packages/core/src/web_socket/codec.ts
++++ b/packages/core/src/web_socket/codec.ts
+@@ -16,29 +16,34 @@ export function serializeOutgoingWebSocketMessage(outgoing: AnyStruct | undefine
+ }
+ 
+ export async function transformWebSocketMessage(incoming: AnyStruct, raw: unknown): Promise<unknown> {
+-  const text = await readWebSocketText(raw)
+-  if (typeof text === 'undefined') {
+-    return undefined
++  return await decodeWebSocketMessage(incoming, raw)
++}
++
++/** Synchronous for text and bytes. Only a Blob frame has to be read first. */
++export function decodeWebSocketMessage(incoming: AnyStruct, raw: unknown): unknown {
++  if (typeof Blob !== 'undefined' && raw instanceof Blob) {
++    return raw.arrayBuffer().then((bytes) => decodeWebSocketText(incoming, textDecoder.decode(bytes)))
+   }
++  return decodeWebSocketText(incoming, readWebSocketText(raw))
++}
+ 
+-  return decodeJson(incoming, JSON.parse(text))
++const textDecoder = new TextDecoder()
++
++function decodeWebSocketText(incoming: AnyStruct, text: string | undefined): unknown {
++  return text === undefined ? undefined : decodeJson(incoming, JSON.parse(text))
+ }
+ 
+-async function readWebSocketText(raw: unknown): Promise<string | undefined> {
++function readWebSocketText(raw: unknown): string | undefined {
+   if (typeof raw === 'string') {
+     return raw
+   }
+ 
+   if (raw instanceof ArrayBuffer) {
+-    return new TextDecoder().decode(raw)
++    return textDecoder.decode(raw)
+   }
+ 
+   if (ArrayBuffer.isView(raw)) {
+-    return new TextDecoder().decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))
+-  }
+-
+-  if (typeof Blob !== 'undefined' && raw instanceof Blob) {
+-    return new TextDecoder().decode(await raw.arrayBuffer())
++    return textDecoder.decode(new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength))
+   }
+ 
+   return undefined
+diff --git a/packages/core/src/web_socket/web_socket.ts b/packages/core/src/web_socket/web_socket.ts
+index 8c6f6c5..556b119 100644
+--- a/packages/core/src/web_socket/web_socket.ts
++++ b/packages/core/src/web_socket/web_socket.ts
+@@ -30,7 +30,7 @@ import type { MaterializedRequest, OutboundBuilder } from '../internal/outbound_
+ import { materializeOutboundRequest, runOutboundBuilder } from '../internal/outbound_request'
+ import type { AnyStruct, Infer, StructInput } from '../struct'
+ import { createWebSocketRequest, createWebSocketUrlFromRequest } from './build'
+-import { extractCloseInfo, serializeOutgoingWebSocketMessage, transformWebSocketMessage } from './codec'
++import { decodeWebSocketMessage, extractCloseInfo, serializeOutgoingWebSocketMessage } from './codec'
+ import type { WebSocketCloseSnapshot } from './codec'
+ import type { HeartbeatRuntime } from './heartbeat'
+ import { startHeartbeat, stopHeartbeat, validateHeartbeatConfig } from './heartbeat'
+@@ -733,7 +733,10 @@ async function runWebSocketCommand<
+             }
+             let transformed: WebSocketIncomingData<TIncoming> | undefined
+             try {
+-              transformed = (await awaitWithSignal(() => transformWebSocketMessage(endpoint.incoming, event.data), messageSignal)) as
++              messageSignal.throwIfAborted()
++              // Text and byte frames decode synchronously. Only a Blob read waits, so only it races the signal.
++              const decoded = decodeWebSocketMessage(endpoint.incoming, event.data)
++              transformed = (decoded instanceof Promise ? await awaitWithSignal(() => decoded, messageSignal) : decoded) as
+                 | WebSocketIncomingData<TIncoming>
+                 | undefined
+             } catch (error) {
+-- 
+2.55.0
+

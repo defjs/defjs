@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'client 傳輸層使用的 WebSocket 實例面。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+DOM 的 `WebSocket`，但去掉事件 handler 屬性、`binaryType`、`dispatchEvent` 與狀態常數。因此自訂實作需要 `url`、`protocol`、`extensions`、`bufferedAmount`、`send`、`close`、`addEventListener`、`removeEventListener`，以及數值型的 `readyState`。
+
+傳輸層在該屬性存在時會設定 `binaryType = 'arraybuffer'`，沒有該屬性則忽略。若 setter 丟出例外，它會在以 `NET_UNREACHABLE` 讓該次嘗試失敗之前，要求 best-effort 關閉已建構的 handle；socket 不會被留在清理之外。這個屬性是最佳化，decoder 也接受 Blob frame。這是 [`WebSocketHandleConstructor`](/zh-Hant-TW/api/core/websockethandleconstructor-type) 產生的實例型別。
+
+[Client](/zh-Hant-TW/api/client)

@@ -1,0 +1,22 @@
+---
+title: 'EventStreamCommand'
+description: 'Comando SSE ejecutable y opaco producido por un endpoint de event-stream.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCommand" />
+
+```ts
+interface EventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly endpoint: EventStreamDefinition<TInput, TEvents, TError> & { readonly method: string }
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+Se crea al llamar a un `EventStreamEndpoint` con una entrada. Trátalo como opaco y pásalo a `client.execute`.
+
+[SSE](/es-ES/api/sse)

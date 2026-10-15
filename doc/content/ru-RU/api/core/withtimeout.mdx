@@ -1,0 +1,20 @@
+---
+title: 'withTimeout'
+description: 'Опция клиента, которая задаёт таймаут по умолчанию для вызовов HTTP execute.'
+---
+
+<ApiReference identity="@defjs/core:withTimeout" />
+
+```ts
+function withTimeout(ms: number): ClientOption
+```
+
+Задаёт таймаут по умолчанию в миллисекундах только для HTTP `execute`. SSE и WebSocket его игнорируют.
+
+- **ms** должен быть положительным safe integer не больше `2_147_483_647`. Всё остальное бросает `RangeError` сразу, в момент вызова `withTimeout`, а не когда клиент выполняет запрос.
+- Таймер стартует до запуска цепочки interceptor’ов. Когда он срабатывает, вызов возвращает fault `NET_TIMEOUT`.
+- Execute `{ timeout }` заменяет это значение по умолчанию для данного вызова.
+- Execute `{ abort }` сочетается со значением по умолчанию: abort даёт `NET_ABORTED`, таймер — `NET_TIMEOUT`.
+- Передача `abort` и `timeout` в один и тот же вызов `execute` по-прежнему отвергается.
+
+[Клиент](/ru-RU/api/client)

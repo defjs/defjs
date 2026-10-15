@@ -1,0 +1,19 @@
+---
+title: 'HttpStatusFaultOf'
+description: 'Fault non 2xx exprimé par le type de son corps décodé.'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFaultOf" />
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+```
+
+`HttpStatusFault` exprimé par le type de son corps décodé plutôt que par le struct qui l’a produit. Les fabriques travaillent sur des valeurs décodées, elles utilisent donc cette forme ; les types d’endpoint utilisent `HttpStatusFault` et laissent `Infer` faire le pont entre les deux. Quand `TData` est `undefined`, le corps n’a jamais été lu et `response` ne contient que des métadonnées.
+
+[Erreurs](/fr-FR/api/errors)

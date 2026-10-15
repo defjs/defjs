@@ -1,0 +1,21 @@
+---
+title: 'UseRequestConfig'
+description: 'HTTP-Execute-Options für Progress-Callbacks und Cancellation.'
+---
+
+<ApiReference identity="@defjs/core:UseRequestConfig" />
+
+```ts
+type UseRequestConfig = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+Der HTTP-spezifische Teil von [`HttpExecuteOptions`](/de-DE/api/core/httpexecuteoptions-type), das `signal` ergänzt.
+
+- `onDownloadProgress` und `onUploadProgress` sind [`HttpProgressFn`](/de-DE/api/core/httpprogressfn-type)-Callbacks. Sie bekommen ein [`HttpProgressEvent`](/de-DE/api/core/httpprogressevent-type) mit `loaded`, `total` und `lengthComputable`.
+- Cancellation ist entweder `abort` oder `timeout`, nie beides. Der Typ lehnt beides ab, und beides zur Laufzeit zu übergeben scheitert mit einem `REQ_OPTIONS_INVALID`-Fault.
+- `timeout` muss eine positive Safe Integer sein, nicht größer als `2_147_483_647`. Er ersetzt für diesen Aufruf den mit [`withTimeout`](/de-DE/api/core/withtimeout) gesetzten Default. `abort` kombiniert sich stattdessen mit diesem Default.
+
+[HTTP](/de-DE/api/http)

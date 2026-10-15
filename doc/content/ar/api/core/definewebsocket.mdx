@@ -1,0 +1,29 @@
+---
+title: 'defineWebSocket'
+description: 'يعلن نقطة نهاية WebSocket محدَّدة النوع.'
+---
+
+<ApiReference identity="@defjs/core:defineWebSocket" />
+
+```ts
+function defineWebSocket<
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, 'path'> & {
+    input?: TInput
+    path: P
+  } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,
+): WebSocketEndpoint<TInput, TIncoming, TOutgoing>
+```
+
+- **definition** — `path`، وstruct `incoming` واحد، و`maxIncomingQueueSize` الإلزامي (عدد صحيح آمن موجب). واختياريًا structs `outgoing` و`input`، و`protocols` ثابتة، و`maxOutgoingQueueSize` (عدد صحيح آمن غير سالب)، و`operation`. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+- **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `WebSocketCommand`.
+
+لا يجوز لـ `builder` الخاص بـ WebSocket أن يُرجع غير `path` و`query`؛ أما `headers` و`body` فيُرفضان. `WebSocketDefinitionBase` و`BuilderField` نوعان مساعدان داخليان.
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+[WebSocket](/ar/api/web-socket)

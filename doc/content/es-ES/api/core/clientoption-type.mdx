@@ -1,0 +1,14 @@
+---
+title: 'ClientOption'
+description: 'Tipo de función de los helpers de opción aceptados por createClient.'
+---
+
+<ApiReference identity="@defjs/core:ClientOption" />
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+Muta el [`ClientConfig`](/es-ES/api/core/clientconfig-type) que `createClient` está construyendo. Todos los helpers `with*` devuelven uno. `createClient` aplica las opciones en orden, así que una opción posterior sobrescribe a una anterior para el mismo ajuste, excepto `withInterceptors`, que añade al final.
+
+[Cliente](/es-ES/api/client)

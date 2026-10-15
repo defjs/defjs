@@ -1,0 +1,19 @@
+---
+title: 'createClient'
+description: 'ينشئ عميلًا من مساعدات الخيارات.'
+---
+
+<ApiReference identity="@defjs/core:createClient" />
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+الخيارات تُطبَّق بالترتيب؛ والخيار اللاحق يستبدل السابق لنفس الإعداد، أما المعترضات فتتراكم. فضّل إنشاء العميل داخل حدود الطلب عندما تحتفظ المعترضات ببيانات المصادقة أو المستأجرين ضمن إغلاقاتها (closures).
+
+- **options** — مساعدات خيارات مثل `withEndpoint`.
+- **يُرجع** عميلًا تكون لدالة `execute` فيه صيغ استدعاء متعددة حسب وسيلة النقل.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+[العميل](/ar/api/client)

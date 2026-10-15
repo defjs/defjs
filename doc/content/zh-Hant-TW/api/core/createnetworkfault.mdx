@@ -1,0 +1,21 @@
+---
+title: 'createNetworkFault'
+description: 'NET_* fault 的工廠，code 依 cause 的形狀選定。'
+---
+
+<ApiReference identity="@defjs/core:createNetworkFault" />
+
+```ts
+function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **cause** — 底層的取消、逾時或傳輸失敗。
+- **response** — metadata，只有傳輸層當時已經有可回報的內容時才有。有給時會附加到 fault 上。
+- **回傳** 一個 `PreflightFault`，其 code 取決於 `cause`：
+  - `NET_ABORTED`：當 [`isAbortCause`](/zh-Hant-TW/api/core/isabortcause) 辨認出帶有 abort brand 的 `Error`（包含來自另一份 Core 副本的 `ERR_ABORTED`），或名為 `AbortError` 的 `DOMException`。message 為 `Request was aborted`。
+  - `NET_TIMEOUT`：當 [`isTimeoutCause`](/zh-Hant-TW/api/core/istimeoutcause) 辨認出帶有 timeout brand 的 `Error`（包含來自另一份 Core 副本的 `ERR_TIMEOUT`），或名為 `TimeoutError` 的 `DOMException` / `Error`。message 為 cause 的 message；為空時為 `Request timed out`。
+  - 其他一切對應 `NET_UNREACHABLE`，message 為 cause 的 message。
+
+cause 會保留為 `cause`。
+
+[錯誤](/zh-Hant-TW/api/errors)

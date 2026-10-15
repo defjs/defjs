@@ -1,0 +1,20 @@
+---
+title: 'basicAuthHttpInterceptor'
+description: '資格情報から Basic の Authorization ヘッダーを設定する HTTP インターセプターです。'
+---
+
+<ApiReference identity="@defjs/core:basicAuthHttpInterceptor" />
+
+```ts
+function basicAuthHttpInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): HttpInterceptor
+```
+
+- **fn** — リクエストごとに呼ばれ、資格情報を返します。
+- **options** — 任意の [`BasicAuthInterceptorOptions`](/ja-JP/api/core/basicauthinterceptoroptions-type) で、独自の `encode` を指定できます。
+- **戻り値** リクエストヘッダーのコピーに `Authorization: Basic <encoded>` を設定する `HttpInterceptor` です。既存の `Authorization` ヘッダーは置き換えられます。
+
+デフォルトのエンコーダーは ``btoa(`${username}:${password}`)`` なので、資格情報は Latin-1 である必要があります。`encode` を指定せず、ランタイムに `btoa` がない場合、`basicAuthHttpInterceptor` を呼ぶと `Error: BasicAuthInterceptor is not supported in this environment` を throw します。SSE コマンドには [`basicAuthSSEInterceptor`](/ja-JP/api/core/basicauthsseinterceptor) を使ってください。
+
+[Interceptors ガイド](/ja-JP/docs/interceptors) を参照してください。
+
+[Interceptors](/ja-JP/api/interceptors)

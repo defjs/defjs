@@ -1,0 +1,32 @@
+---
+title: 'EventStreamHandle'
+description: '已開啟的 SSE 串流：迭代事件、讀取 open metadata，並可提前關閉。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamHandle" />
+
+```ts
+interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+`EventStreamMessage` 是原始的 `{ id: string; event: string; data: string }` 訊息。`client.execute` 回傳的 handle 帶的是已剖析的 [`EventStreamData`](/zh-Hant-TW/api/core/eventstreamdata-type)。
+
+`open` 是啟動快照（[`EventStreamOpenInfo`](/zh-Hant-TW/api/core/eventstreamopeninfo-type)）；重連之後它可能改變，所以請重新讀取 `stream.open`。串流結束時，`closed` 會以 [`EventStreamCloseInfo`](/zh-Hant-TW/api/core/eventstreamcloseinfo-type) resolve。
+
+要在自己擁有的 scope 裡做清理，優先用 `await using stream = handle`。disposer 會停止 Defjs 的讀取與重連工作，並等待它的 reader lock 被釋放；它不保證由 provider 控制、卡住的 `ReadableStream.cancel()` promise 一定會完成。手動的 `close()` / `closed` 仍然可用。
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+`EventStreamHandle` 的結構式實作必須實作 `[Symbol.asyncDispose]()`，並回傳同一條擁有的拆除路徑。這對自訂 handle 是編譯期要求；只接收 Defjs 回傳之 handle 的程式碼，則沒有額外的執行階段呼叫要求。
+
+[SSE](/zh-Hant-TW/api/sse)

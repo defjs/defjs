@@ -1,0 +1,68 @@
+---
+title: 'Configuration du client / Client'
+description: Crée un client explicite, compose les options, exécute des commandes et possède le nettoyage.
+---
+
+# Client
+
+Un `Client` détient la config d’endpoint + transport et dispatche les commandes HTTP, SSE et WebSocket. Il ne met pas en cache, ne relance pas automatiquement et ne gère pas les flux ouverts à ta place.
+
+## Mise en place
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)` renvoie des overloads pour chaque kind de commande.
+
+## Composer les options
+
+Les options s’appliquent de gauche à droite. Les setters remplacent ; `withInterceptors(...items)` ajoute.
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+Les intercepteurs mixtes sont filtrés par transport à l’exécution ; l’ordre relatif parmi le kind sélectionné reste.
+
+## Exécuter par transport
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`. `open` est l’instantané du premier handshake réussi de la connexion du handle renvoyé pour les handles natifs Defjs ou les wrappers transmettant le même objet `open` live ; les handles custom ou wrappers qui redéfinissent `open` utilisent leur `open` public courant même après une reconnexion, tandis que `stream.open` reste live (voir [SSE](/fr-FR/docs/sse)).
+- WebSocket → `[error, session, connection]`
+
+L’execute WebSocket peut remplacer `beforeConnect`, `heartbeat`, `protocols` et `reconnect`. `timeout` doit être un entier sûr positif dans `1..2_147_483_647`.
+
+Tu possèdes le nettoyage : abandonne HTTP, ferme SSE + `await stream.closed`, ferme WebSocket + `await session.closed`.
+
+## Injecter un transport de test
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## Portée serveur vs navigateur
+
+Sur un serveur, crée le client dans la frontière de la requête quand les options ou closures d’intercepteur capturent auth, cookies, utilisateurs ou tenants. L’identité du client n’est pas une frontière de sécurité à elle seule.
+
+## Référence
+
+| Helper                                                                                                        | Effet                                                                             |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Endpoint de base absolu pour tous les transports                                  |
+| `withHeaders(HeadersInit)`                                                                                    | En-têtes par défaut statiques pour HTTP/SSE ; les en-têtes de commande overrident |
+| `withTimeout(ms)`                                                                                             | Timeout `execute` HTTP par défaut seulement (SSE/WS l’ignorent)                   |
+| `withHTTPHandle(fetch)`                                                                                       | Remplace Fetch pour HTTP                                                          |
+| `withSSEHandle(fetch)`                                                                                        | Remplace Fetch pour SSE                                                           |
+| `withWebSocketHandle(WebSocket)`                                                                              | Remplace le constructeur WebSocket                                                |
+| `withInterceptors(...items)`                                                                                  | Ajoute des intercepteurs mixtes en fin de chaîne                                  |
+| `withQuerySerializer(fn)`                                                                                     | Encode un objet de query déjà aliasé en query string                              |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` pour HTTP/SSE quand true                           |
+| `withXSRF(options?)`                                                                                          | Cookie XSRF HTTP → en-tête                                                        |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Réglages SSE                                                                      |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Réglages WebSocket                                                                |
+
+## Recettes liées
+
+- [Tester avec un handle Fetch local](/fr-FR/recipes/test-with-handle)
+- [Annuler un appel HTTP](/fr-FR/recipes/cancel-http)

@@ -1,0 +1,18 @@
+== base
+ping-no-decl
+  promises=40.0  new AbortController=3  addEventListener(abort)=5  new URLSearchParams=1  new Headers=2  AbortSignal.any=1  throwIfAborted=6  Promise.race=2  new URL=3  new Request=1  removeEventListener(abort)=4
+get-small
+  promises=81.0  new AbortController=3  addEventListener(abort)=8  Object.create=4  Object.defineProperty=1  new URLSearchParams=1  new Headers=2  AbortSignal.any=1  throwIfAborted=15  Promise.race=5  new URL=3  new Request=1  removeEventListener(abort)=7
+get-small-timeout
+  promises=81.0  new AbortController=4  AbortSignal.any=2  addEventListener(abort)=8  Object.create=4  Object.defineProperty=1  new URLSearchParams=1  new Headers=2  throwIfAborted=15  Promise.race=5  new URL=3  new Request=1  removeEventListener(abort)=7
+post-json
+  promises=82.0  new AbortController=3  addEventListener(abort)=8  Object.create=5  Object.defineProperty=2  new URLSearchParams=1  new Headers=2  AbortSignal.any=1  throwIfAborted=15  Promise.race=5  new URL=3  new Request=1  removeEventListener(abort)=7
+== final
+ping-no-decl
+  promises=40.0  new AbortController=3  new URLSearchParams=1  new Headers=2  addEventListener(abort)=4  throwIfAborted=6  Promise.race=2  new URL=2  new Request=1  removeEventListener(abort)=4
+get-small
+  promises=51.0  new AbortController=3  Object.create=1  new URLSearchParams=1  new Headers=2  addEventListener(abort)=5  throwIfAborted=11  Promise.race=2  new URL=2  new Request=1  removeEventListener(abort)=5
+get-small-timeout
+  promises=51.0  new AbortController=4  addEventListener(abort)=6  Object.create=1  new URLSearchParams=1  new Headers=2  throwIfAborted=11  Promise.race=2  new URL=2  new Request=1  removeEventListener(abort)=6
+post-json
+  promises=52.0  new AbortController=3  new URLSearchParams=1  new Headers=2  addEventListener(abort)=5  throwIfAborted=11  Promise.race=2  new URL=2  new Request=1  removeEventListener(abort)=5

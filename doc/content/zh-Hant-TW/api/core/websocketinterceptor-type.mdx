@@ -1,0 +1,17 @@
+---
+title: 'WebSocketInterceptor'
+description: 'withInterceptors 接受的、帶 kind 標記的 WebSocket interceptor。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptor" />
+
+```ts
+interface WebSocketInterceptor {
+  kind: 'web-socket'
+  fn: WebSocketInterceptorFn
+}
+```
+
+由 `createWebSocketInterceptor(fn)` 建立。`kind` 標記讓 `withInterceptors` 能在同一份清單中接受 HTTP、SSE 與 WebSocket interceptors；WebSocket commands 只會執行 `kind: 'web-socket'` 的 interceptors。
+
+[Interceptors](/zh-Hant-TW/api/interceptors)

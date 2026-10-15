@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: 'struct のコンストラクターと struct.parse をまとめたファサードオブジェクトです。'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct` はヘルパーをまとめた単純なオブジェクトです。コンストラクターを個別にインポートするより、こちらを使ってください。各ヘルパーには個別のページがあります。
+
+### プリミティブとコンテナ
+
+| ヘルパー                                                                                     | 役割                                                                     |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [`struct.string()`](/ja-JP/api/core/struct-string)                                           | テキスト                                                                 |
+| [`struct.number()`](/ja-JP/api/core/struct-number)                                           | 数値。`NaN` は拒否されます                                               |
+| [`struct.boolean()`](/ja-JP/api/core/struct-boolean)                                         | 真偽値                                                                   |
+| [`struct.bigint()`](/ja-JP/api/core/struct-bigint)                                           | `bigint`、または `bigint` としてパースできる文字列                       |
+| [`struct.date()`](/ja-JP/api/core/struct-date)                                               | `Date`。`Date`、タイムスタンプ、文字列から変換します                     |
+| [`struct.literal(value)`](/ja-JP/api/core/struct-literal)                                    | ちょうどそのリテラル                                                     |
+| [`struct.null()`](/ja-JP/api/core/struct-null)                                               | `null` のみ                                                              |
+| [`struct.any()`](/ja-JP/api/core/struct-any) / [`unknown()`](/ja-JP/api/core/struct-unknown) | `null` と `undefined` を除く任意の値                                     |
+| [`struct.array(item)`](/ja-JP/api/core/struct-array)                                         | すべての要素を同じ struct でパースする配列                               |
+| [`struct.tuple(items)`](/ja-JP/api/core/struct-tuple)                                        | 固定長の配列。`items` は struct の配列を 1 つ渡します                    |
+| [`struct.record(value)`](/ja-JP/api/core/struct-record)                                      | 文字列キーと 1 つの値 struct を持つプレーンオブジェクト                  |
+| [`struct.object(shape)`](/ja-JP/api/core/struct-object)                                      | 固定フィールドを持つプレーンオブジェクト。未知のキーは取り除かれます     |
+| [`struct.or(...options)`](/ja-JP/api/core/struct-or)                                         | 最初に一致したオプション                                                 |
+| [`struct.intersection(...structs)`](/ja-JP/api/core/struct-intersection)                     | すべての struct に一致する必要があり、オブジェクトの結果はマージされます |
+| [`struct.discriminatedUnion(tag, options)`](/ja-JP/api/core/struct-discriminatedunion)       | `tag` フィールドの値で選ばれるオブジェクトのオプション                   |
+| [`struct.enum(values)`](/ja-JP/api/core/struct-enum)                                         | 文字列の配列、または `{ Name: value }` オブジェクトの値                  |
+
+### ボディコーデックとバイナリ値
+
+| ヘルパー                                                                                                                                         | 役割                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| [`struct.formData(shape)`](/ja-JP/api/core/struct-formdata) / [`urlencoded(shape)`](/ja-JP/api/core/struct-urlencoded)                           | コーデックタグ付きのオブジェクト struct。タグが適用されるのは、その値がリクエストボディのルートであるときだけ |
+| [`struct.arrayBuffer()`](/ja-JP/api/core/struct-arraybuffer) / [`blob()`](/ja-JP/api/core/struct-blob) / [`file()`](/ja-JP/api/core/struct-file) | バイナリ値。ボディのルートではバイト列として送られ、`output` / `error` ではその表現を選ぶ                     |
+| [`struct.string()`](/ja-JP/api/core/struct-string)                                                                                               | テキスト。ボディのルート、または受信側の `string` struct では、バイト列はテキストのまま                       |
+
+### パースと修飾メソッド
+
+[`struct.parse(struct, value, options?)`](/ja-JP/api/core/struct-parse) は未知の値をパースし、`[null, value]` または `[StructError, undefined]` を返します。
+
+すべての struct は、チェーン可能な修飾メソッド `.optional()`、`.null()` / `.nullable()`、`.nullish()`、`.alias(name)` を持ちます。[`StructMethods`](/ja-JP/api/core/structmethods-type) を参照してください。
+
+[Struct](/ja-JP/api/struct)

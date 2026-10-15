@@ -1,0 +1,22 @@
+---
+title: 'StructLike'
+description: '每個 struct 都帶有的結構性 brand。'
+---
+
+<ApiReference identity="@defjs/core:StructLike" />
+
+```ts
+interface StructLike<I = unknown, O = unknown, OO extends boolean = boolean> {
+  readonly _struct: {
+    input: I
+    optionalOut: OO extends true ? true : undefined
+    output: O
+  }
+}
+```
+
+任何帶有 `_struct` 型別 payload 的東西。[`StructInput`](/zh-Hant-TW/api/core/structinput-type) 與 [`Infer`](/zh-Hant-TW/api/core/infer-type) 從中讀取 `input` 與 `output`，物件 struct 則用 `optionalOut` 決定哪些輸出欄位可以缺少。
+
+`_struct` 只存在於型別系統。Struct 在執行期沒有 `_struct` 屬性，帶有該型別的純物件並不是有效的 struct。
+
+[Struct](/zh-Hant-TW/api/struct)

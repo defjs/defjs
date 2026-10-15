@@ -1,0 +1,33 @@
+---
+title: 'BuilderInput'
+description: 'نوع مدخل نقطة النهاية المحلَّل الذي يستقبله باني الطلب (request builder).'
+---
+
+<ApiReference identity="@defjs/core:BuilderInput" />
+
+```ts
+type BuilderInput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishBuilderInput<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? BuilderInput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? BuilderInput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectBuilderInputs<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: BuilderInput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? { [K in keyof Items]: Items[K] extends StructLike<unknown, unknown, boolean> ? BuilderInput<Items[K]> : Items[K] }
+              : S extends ArrayStruct<infer Item>
+                ? BuilderInput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? { [K in keyof Shape]: BuilderInput<Shape[K]> } & Typed
+                  : Infer<S>
+```
+
+مدخل نقطة النهاية المحلَّل كما يراه `builder`. عُقد الكائنات تحمل الـ struct الذي أنتجها (العلامة الداخلية `Typed`)، فيتبع ترميز alias و`Date` و`bigint` القيمة إلى الطلب. وتُوسَم مدخلات record وعناصر tuple بالطريقة نفسها. وفي وقت التشغيل يُوسَم حاوي record أيضًا عندما تكون القيمة المحلَّلة كائنًا؛ أما حاويات array وtuple فلا تُوسَم، ولا يُوسَم `null` ولا `undefined` أبدًا. المُعدِّلات nullish تستعيد الـ struct الذي غلّفته، وخيارات union تُوزَّع، وخيارات intersection تُدمَج. وأي struct آخر يرجع إلى `Infer<S>`.
+
+`CarriedStruct` و`NullishBuilderInput` و`IntersectBuilderInputs` و`Typed` أنواع مساعدة داخلية.
+
+[HTTP](/ar/api/http)

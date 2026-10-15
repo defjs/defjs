@@ -1,0 +1,23 @@
+---
+title: 'ObjectStruct'
+description: 'struct.object가 만드는 객체 형태의 struct 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:ObjectStruct" />
+
+```ts
+interface ObjectStruct<T extends ObjectShape>
+  extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
+  readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
+}
+
+type ObjectShape = { [key: string]: any }
+```
+
+`struct.object(shape)`가 만들어요. 필드는 기본적으로 필수이고, `optional()` 또는 `nullish()`로 표시한 필드는 선택 키가 돼요. 알 수 없는 키는 파싱할 때 제거돼요. 와이어 이름은 `.alias()`로 TypeScript 키와 다르게 둘 수 있어요. 파싱에 실패하면 `[StructError, undefined]`를 돌려줘요. `ObjectInput`, `ObjectOutput`, `ObjectStructTypes`, `PreservedStruct`는 내부 헬퍼 타입이에요.
+
+[Struct](/ko-KR/api/struct)

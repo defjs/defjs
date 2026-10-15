@@ -1,0 +1,20 @@
+---
+title: 'الإلغاء والمهلة'
+description: أجهض أو حدّد مهلة لتنفيذ execute واقرأ NET_ABORTED / NET_TIMEOUT.
+---
+
+# إلغاء استدعاء HTTP
+
+مرّر `signal` مع إما `abort` أو `timeout` — لا تجمع `abort` و`timeout`. يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`.
+
+انظر [HTTP](/ar/docs/http#ألغِ-العمل) للتفاصيل.
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+الإلغاء يخبرك بما رآه المستدعي. لا يثبت أن كتابة على الخادم تراجعت — أبقِ إعادة محاولات عمليات الكتابة خلف عقد idempotency.

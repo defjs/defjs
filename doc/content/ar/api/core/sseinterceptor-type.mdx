@@ -1,0 +1,17 @@
+---
+title: 'SSEInterceptor'
+description: 'معترض SSE موسوم يقبله withInterceptors.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptor" />
+
+```ts
+interface SSEInterceptor {
+  kind: 'sse'
+  fn: SSEInterceptorFn
+}
+```
+
+يُنشأ بـ `createSSEInterceptor(fn)`. الوسم `kind` يتيح لـ `withInterceptors` قبول معترضات HTTP وSSE وWebSocket في قائمة واحدة؛ ولا يعمل لأوامر SSE إلا المعترضات ذات `kind: 'sse'`.
+
+[المعترضات](/ar/api/interceptors)

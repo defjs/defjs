@@ -24,6 +24,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
+bun-debug.log*
 
 # local env files
 .env.local
@@ -37,6 +38,7 @@ yarn-error.log*
 # output
 dist
 test-out
+doc/.react-router/
 
 # IDEA
 .idea
@@ -46,3 +48,7 @@ test-out
 /playwright/.cache/
 
 junit.xml
+.omo/
+
+.superpowers
+.claude

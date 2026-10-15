@@ -1,0 +1,18 @@
+---
+title: 'EventStreamEndpoint'
+description: 'defineEventStream이 반환하는, 호출 가능한 엔드포인트예요.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamEndpoint" />
+
+```ts
+type EventStreamEndpoint<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, EventStreamCommand<TInput, TEvents, TError>>
+```
+
+`defineEventStream`이 반환해요. 호출하면 `EventStreamCommand`를 얻어요. 엔드포인트가 `input`을 선언하지 않았다면 인자 없이, input struct가 `undefined`를 받는다면 선택 인자로, 그 밖에는 struct의 입력 값을 넣어 호출해요.
+
+[SSE](/ko-KR/api/sse)

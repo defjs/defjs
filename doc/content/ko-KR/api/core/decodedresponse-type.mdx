@@ -1,0 +1,14 @@
+---
+title: 'DecodedResponse'
+description: '응답 메타데이터에, 선언한 struct로 디코딩된 body를 더한 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:DecodedResponse" />
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+선언한 struct로 body가 디코딩된 응답이에요. 이 타입을 들고 있다는 것은 디코딩이 일어났다는 증거예요. 그래서 디코딩 실패는 `HttpMeta`만 보고해요.
+
+[HTTP](/ko-KR/api/http)

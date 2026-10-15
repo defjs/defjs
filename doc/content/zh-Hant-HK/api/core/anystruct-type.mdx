@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: '接受任何 struct 嘅寬鬆 struct constraint。'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+Endpoint 同 client generics（例如 `defineRequest`、`Fault` 同 `HttpCommand`）用嘅寬鬆 constraint。需要精確嘅 input 同 output 推斷時，優先用具體嘅 `Struct<...>`。
+
+[Struct](/zh-Hant-HK/api/struct)

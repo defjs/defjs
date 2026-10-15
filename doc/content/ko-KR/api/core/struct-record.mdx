@@ -1,0 +1,19 @@
+---
+title: 'struct.record'
+description: '문자열 키와 value struct 하나로 객체를 파싱하는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.record" />
+
+```ts
+function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
+```
+
+- plain 객체의 모든 own 키를 `value`로 파싱해요. 그 외는 `invalid_type`(expected `record`)으로 실패해요.
+- 파싱은 처음 실패한 값에서 멈추고, `issue.path`에 그 키가 들어 있어요.
+- 출력은 `null` 프로토타입을 가진 새 객체예요.
+- `value`가 struct가 아니면 `TypeError`를 던져요.
+
+`RecordStruct<S>`는 export되지 않아요. `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`이고, `Output`은 `undefined`를 뺀 `Infer<S>`예요. `S`가 optional struct이면 값이 `undefined`인 키는 출력에서 빠져요.
+
+[Struct](/ko-KR/api/struct)

@@ -1,0 +1,17 @@
+## node --expose-gc, young generation 512 MiB (no GC inside the window). KiB allocated per operation.
+base	error-404-declared	42.07 KiB/op
+final	error-404-declared	31.07 KiB/op
+base	get-list-1000	1207.44 KiB/op
+final	get-list-1000	857.52 KiB/op
+base	get-small	42.21 KiB/op
+final	get-small	30.89 KiB/op
+base	get-small-timeout	44.25 KiB/op
+final	get-small-timeout	31.53 KiB/op
+base	ping-no-decl	23.64 KiB/op
+final	ping-no-decl	20.94 KiB/op
+base	post-json	60.29 KiB/op
+final	post-json	39.74 KiB/op
+base	post-order-50	534.10 KiB/op
+final	post-order-50	241.22 KiB/op
+base	struct-decode-1000	974.86 KiB/op
+final	struct-decode-1000	638.84 KiB/op

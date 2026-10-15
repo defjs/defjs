@@ -1,0 +1,31 @@
+---
+title: 'Client'
+description: 'Тип клиента, который возвращает createClient, с перегруженным методом execute.'
+---
+
+<ApiReference identity="@defjs/core:Client" />
+
+```ts
+type Client = {
+  readonly [CLIENT]: ClientConfig // internal symbol key
+
+  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
+    options?: EventStreamExecuteOptions,
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+
+  execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
+    command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+    options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+  ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+
+  execute<TInput extends AnyStruct | undefined, TOutput extends AnyStruct | undefined, TError extends AnyStruct | undefined>(
+    command: HttpCommand<TInput, TOutput, TError>,
+    options?: HttpExecuteOptions,
+  ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
+}
+```
+
+Клиент хранит готовый [`ClientConfig`](/ru-RU/api/core/clientconfig-type) и выполняет команды HTTP, SSE и WebSocket. Перегрузку выбирает тип команды. Сбои возвращаются как fault’ы в кортеже результата, а не выбрасываются; promise отклоняется только для значения, которое не является командой Defjs (`Error: Unsupported command`).
+
+[Клиент](/ru-RU/api/client)

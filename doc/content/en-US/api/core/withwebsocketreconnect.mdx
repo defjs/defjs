@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'Client option that enables automatic WebSocket reconnection.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+Configures automatic reconnection when the socket closes for any reason other than a manual `session.close()`. Reconnection is opt-in: without this option a close ends the session. Passing `undefined` clears an earlier setting. The option type is:
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` is the retry budget for each outage. It defaults to `3`, and `0` disables reconnection. Successful `open` resets the budget and backoff exponent; the next outage starts at retry 1. Omitting it does not give unlimited retries within one outage. A socket that successfully opens and is immediately closed again by the server can keep reconnecting at the base delay (subject to jitter and caps), because every open resets the budget; use `shouldReconnect` to stop it.
+- `delayMs` defaults to `1000`, `factor` to `2`, `maxDelayMs` to `30000`, and `jitter` (0 to 1) to `0`. Retry _n_ starts with `delayMs * factor^(n-1)`, capped at `maxDelayMs`; jitter and rounding follow, then the final delay is capped again at `maxDelayMs` and `2_147_483_647` ms. A zero base stays zero; valid-number overflow saturates at those caps.
+- `shouldReconnect` can return `false` to end the session instead. Without it every close is retried while the budget lasts. It is not called for a manual `session.close()`.
+- With retry enabled, `attempts` must be a non-negative safe integer; `delayMs` and `maxDelayMs` must be finite and non-negative; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values make execute fail with `REQ_OPTIONS_INVALID` before connecting. `attempts: 0` disables retry immediately and ignores the unused reconnect fields.
+- A `reconnect` in the execute options replaces this one for that call.
+
+[Client](/api/client)

@@ -1,0 +1,17 @@
+---
+title: 'withHTTPHandle'
+description: 'Опция клиента, которая заменяет функцию Fetch для HTTP-запросов.'
+---
+
+<ApiReference identity="@defjs/core:withHTTPHandle" />
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+Заменяет Fetch-совместимую функцию, которой выполняются HTTP-запросы. По умолчанию — платформенный `fetch`.
+
+- **fetchImpl** — [`FetchHandle`](/ru-RU/api/core/fetchhandle-type), сигнатура вызова `(input, init?) => Promise<Response>`. Это не `typeof fetch`, поэтому тестовому двойнику не нужны хостовые добавки вроде `fetch.preconnect`.
+- Влияет только на HTTP. SSE использует [`withSSEHandle`](/ru-RU/api/core/withssehandle).
+
+[Клиент](/ru-RU/api/client)

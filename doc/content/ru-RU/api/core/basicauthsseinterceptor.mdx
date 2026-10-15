@@ -1,0 +1,20 @@
+---
+title: 'basicAuthSSEInterceptor'
+description: 'SSE interceptor, который задаёт заголовок Basic Authorization по учётным данным.'
+---
+
+<ApiReference identity="@defjs/core:basicAuthSSEInterceptor" />
+
+```ts
+function basicAuthSSEInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): SSEInterceptor
+```
+
+- **fn** — вызывается на каждый request и возвращает учётные данные.
+- **options** — необязательные [`BasicAuthInterceptorOptions`](/ru-RU/api/core/basicauthinterceptoroptions-type) с собственным `encode`.
+- **Возвращает** `SSEInterceptor`, который задаёт `Authorization: Basic <encoded>` на копии заголовков request’а и заменяет любой существующий заголовок `Authorization`.
+
+Кодирование и требование к `btoa` те же, что у [`basicAuthHttpInterceptor`](/ru-RU/api/core/basicauthhttpinterceptor), включая синхронное исключение при отсутствии `btoa`.
+
+См. [гайд Interceptors](/ru-RU/docs/interceptors).
+
+[Interceptors](/ru-RU/api/interceptors)

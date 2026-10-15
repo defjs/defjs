@@ -1,0 +1,28 @@
+---
+title: 'OpenTelemetryServerOptions'
+description: withOpenTelemetryServer 的 options——tracer、meter、logger、propagator 以及各传输的设置。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerOptions" />
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+- `tracer` — 可选。不传就没有本地 span，也没有 span hook。
+- `meter` — 可选。不传就不记录这个包的 metrics。
+- `logger` — 可选。来自 `@opentelemetry/api-logs` 的 `Logger`，不是 Winston/Pino Logger。不传就不发出诊断 LogRecord。Defjs 不自动获取全局 logger，也不管理它的 provider。
+- `propagator` — 默认为 W3C Trace Context + Baggage。
+- `requireParentSpan` — 默认 `false`。有 `tracer` 时，`true` 会在没有活跃父 span 时跳过全部插桩，包括日志。没有 `tracer` 时，它既不阻止指标，也不阻止日志。
+- `http`、`sse`、`webSocket` — 各传输的 options。默认都是 `{}`；只有 `{ enabled: false }` 才会关闭某个传输。
+
+[@defjs/opentelemetry-server](/zh-Hans/api/opentelemetry-server)

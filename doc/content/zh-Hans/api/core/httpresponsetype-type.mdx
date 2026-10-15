@@ -1,0 +1,14 @@
+---
+title: 'HttpResponseType'
+description: 'struct 校验之前读取 HTTP body 所用的表示形式。'
+---
+
+<ApiReference identity="@defjs/core:HttpResponseType" />
+
+```ts
+type HttpResponseType = 'arraybuffer' | 'blob' | 'json' | 'text'
+```
+
+根据声明的 struct kind 选取（`string` → `text`，`blob` / `file` → `blob`，`arrayBuffer` → `arraybuffer`，其余都是 `json`）。它不是 `defineRequest` 的字段，而是以 `responseType` 和 `errorResponseType` 的形式出现在 `HttpRequest` 上。
+
+[HTTP](/zh-Hans/api/http)

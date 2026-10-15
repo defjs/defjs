@@ -1,0 +1,31 @@
+---
+title: 'Client'
+description: 'نوع العميل الذي يعيده createClient، مع صيغ الاستدعاء المتعددة لدالة execute.'
+---
+
+<ApiReference identity="@defjs/core:Client" />
+
+```ts
+type Client = {
+  readonly [CLIENT]: ClientConfig // internal symbol key
+
+  execute<TInput extends AnyStruct | undefined, TEvents extends EventStructs, TError extends AnyStruct | undefined = undefined>(
+    command: EventStreamCommand<TInput, TEvents, TError>,
+    options?: EventStreamExecuteOptions,
+  ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+
+  execute<TInput extends AnyStruct | undefined, TIncoming extends AnyStruct, TOutgoing extends AnyStruct | undefined>(
+    command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+    options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+  ): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+
+  execute<TInput extends AnyStruct | undefined, TOutput extends AnyStruct | undefined, TError extends AnyStruct | undefined>(
+    command: HttpCommand<TInput, TOutput, TError>,
+    options?: HttpExecuteOptions,
+  ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
+}
+```
+
+يحمل العميل [`ClientConfig`](/ar/api/core/clientconfig-type) المحلولة وينفّذ أوامر HTTP وSSE وWebSocket. نوع الأمر هو الذي يختار صيغة الاستدعاء. تُعاد حالات الفشل أخطاءً في tuple النتيجة ولا تُرمى؛ ولا يُرفض الوعد إلا لقيمة ليست أمر Defjs (`Error: Unsupported command`).
+
+[العميل](/ar/api/client)

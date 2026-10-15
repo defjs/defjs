@@ -1,0 +1,14 @@
+---
+title: 'HttpInterceptorNext'
+description: 'Continuation that runs the rest of the HTTP interceptor chain.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptorNext" />
+
+```ts
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`next(req)` only goes **inward**: the interceptors registered after this one, then the fetch handler. It is not a re-dispatch of `client.execute` from the outside. Call `next` again for a safe replay, for example one 401 refresh, from the same interceptor; outer layers do not run a second time. Once the chain has settled, calling `next` rejects with `HTTP interceptor next() cannot be called after the chain has settled`.
+
+[Interceptors](/api/interceptors)

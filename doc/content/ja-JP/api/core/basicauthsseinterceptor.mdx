@@ -1,0 +1,20 @@
+---
+title: 'basicAuthSSEInterceptor'
+description: '資格情報から Basic の Authorization ヘッダーを設定する SSE インターセプターです。'
+---
+
+<ApiReference identity="@defjs/core:basicAuthSSEInterceptor" />
+
+```ts
+function basicAuthSSEInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): SSEInterceptor
+```
+
+- **fn** — リクエストごとに呼ばれ、資格情報を返します。
+- **options** — 任意の [`BasicAuthInterceptorOptions`](/ja-JP/api/core/basicauthinterceptoroptions-type) で、独自の `encode` を指定できます。
+- **戻り値** リクエストヘッダーのコピーに `Authorization: Basic <encoded>` を設定する `SSEInterceptor` です。既存の `Authorization` ヘッダーは置き換えられます。
+
+エンコードと `btoa` の要件は [`basicAuthHttpInterceptor`](/ja-JP/api/core/basicauthhttpinterceptor) と同じで、`btoa` がない場合に同期的に throw する点も同じです。
+
+[Interceptors ガイド](/ja-JP/docs/interceptors) を参照してください。
+
+[Interceptors](/ja-JP/api/interceptors)

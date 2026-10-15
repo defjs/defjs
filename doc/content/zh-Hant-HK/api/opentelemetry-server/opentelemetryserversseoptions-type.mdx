@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerSSEOptions'
+description: SSE transport 嘅 options，即係共用 options，而 responseHook 收到 stream handle。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerSSEOptions" />
+
+```ts
+type OpenTelemetryServerSSEOptions = OpenTelemetryServerTransportOptions<EventStreamHandle<unknown>>
+```
+
+設定喺 `OpenTelemetryServerOptions` 嘅 `sse`。佢自己冇欄位：`enabled`、`startSpanHook`、`requestHook` 同 `responseHook` 都來自 `OpenTelemetryServerTransportOptions`。
+
+- `responseHook(span, stream, req)` 會喺 stream 開啟之後、span 記錄 `sse.connected` 之前運行。`stream` 係 transport 返回嘅 `EventStreamHandle`；`req` 係原本嘅 `HttpRequest`。
+- SSE 以連線層級追蹤。啟動之後，span 會一直開住，直到 `stream.closed` settle，並記錄 `sse.connected`，然後係 `sse.closed`（server EOF）、`sse.aborted`（`stream.close()` 或者 caller abort 已開啟嘅 stream；span 仍然冇 error 咁結束）或者 `sse.error` 其中一個。唔會建立 per-event span。
+- 非 2xx 嘅 handshake 會當作連線失敗：span 以 `ERROR` 結束，有 `logger` 嘅話，無論 response body 係乜都會發出一個 `WARN`。
+
+傳 `{ enabled: false }` 就會略過 SSE instrumentation。Span hooks 只會喺有傳入 `tracer` 時運行。
+
+[@defjs/opentelemetry-server](/zh-Hant-HK/api/opentelemetry-server)

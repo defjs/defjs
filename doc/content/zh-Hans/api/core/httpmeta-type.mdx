@@ -1,0 +1,20 @@
+---
+title: 'HttpMeta'
+description: '只要响应到达了 client 就可用的响应元数据。'
+---
+
+<ApiReference identity="@defjs/core:HttpMeta" />
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+响应元数据，只要有响应到达 client 就可用。它**不**带 `body`：只有声明的 struct 解码出 body 之后，body 才存在。
+
+[HTTP](/zh-Hans/api/http)

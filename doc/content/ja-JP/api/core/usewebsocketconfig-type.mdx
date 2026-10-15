@@ -1,0 +1,22 @@
+---
+title: 'UseWebSocketConfig'
+description: 'signal を除いた WebSocket の execute options です。'
+---
+
+<ApiReference identity="@defjs/core:UseWebSocketConfig" />
+
+```ts
+type UseWebSocketConfig<TIncoming = unknown, TOutgoing = unknown> = {
+  beforeConnect?: ClientWebSocketOptions['beforeConnect']
+  heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>
+  protocols?: readonly string[]
+  reconnect?: ClientWebSocketOptions['reconnect']
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+[`WebSocketExecuteOptions`](/ja-JP/api/core/websocketexecuteoptions-type) の WebSocket 固有の部分です。`WebSocketExecuteOptions` はこれに `signal` を足します。
+
+- `beforeConnect`、`heartbeat`、`protocols`、`reconnect` は、その 1 回の呼び出しに限ってクライアントレベルの options を上書きします。
+- キャンセルは `abort` か `timeout` の一方だけで、両方は使えません。型は両方の指定を拒否し、実行時に両方を渡すと `REQ_OPTIONS_INVALID` の fault で失敗します。
+
+[WebSocket](/ja-JP/api/web-socket)

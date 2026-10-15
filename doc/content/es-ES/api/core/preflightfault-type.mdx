@@ -1,0 +1,20 @@
+---
+title: 'PreflightFault'
+description: 'Fault de un fallo que pudo ocurrir antes de que existiera una respuesta.'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+Todo lo que pudo fallar antes de que existiera una respuesta: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`,
+`ENV_UNSUPPORTED`. `response` está presente solo donde el transporte ya tenía metadatos que reportar,
+como un cuerpo que se truncó a mitad de la descarga.
+
+[Errores](/es-ES/api/errors)

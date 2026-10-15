@@ -1,0 +1,24 @@
+---
+title: 'RequestDefinition'
+description: 'HTTP endpoint 的契约：method、path、input，以及解码各个 body 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:RequestDefinition" />
+
+```ts
+type RequestDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = ResponseDeclaration<TOutput, TError> & {
+  builder?: OutboundBuilder
+  input?: TInput
+  method: string
+  operation?: string
+  path: string
+}
+```
+
+`output` 声明 2xx 响应的 body，`error` 声明其他响应的 body。两者每次只会运行一个，省略其中一个就意味着对应的 body 永远不会被读取。`ResponseDeclaration` 是内部辅助类型：只有当对应的类型参数是 struct 时，`output` 和 `error` 才是必填。没有 `responseType`：由 struct 的种类决定如何读取已声明的 body。声明了 `input` 就必须显式提供 `builder`，即使它已经与请求形状一致。只有不带 `input` 的定义才可以省略 `builder`。
+
+[HTTP](/zh-Hans/api/http)

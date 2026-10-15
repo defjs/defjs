@@ -1,0 +1,46 @@
+---
+title: 'HttpRequest'
+description: 'Normalisierter ausgehender HTTP-Request, den Transporte und Interceptors sehen.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequest" />
+
+```ts
+interface HttpRequest {
+  abort?: AbortSignal
+  baseEndpoint?: string
+  body?: Blob | ArrayBuffer | FormData | URLSearchParams | ReadableStream<Uint8Array> | object | string | number | boolean | null
+  bodyContentType?: string | null
+  downloadProgress?: HttpProgressFn
+  endpoint: string
+  headers?: Headers
+  method: string
+  operation?: string
+  queryParams?: URLSearchParams
+  queryString?: string
+  readonly responseType?: HttpResponseType
+  readonly errorResponseType?: HttpResponseType
+  timeout?: number
+  uploadProgress?: HttpProgressFn
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  // plus the @internal bodyContentTypeSource field
+}
+```
+
+Der Request, nachdem der Builder gelaufen ist, wie ihn Handler, Interceptors und `fetchHandler` nutzen.
+
+- `body` ist bereits der Wire-Wert. Bei JSON ist das ein **JSON-Text-String**; signiere HMAC oder Digests gegen diesen String, nicht gegen den ursprünglichen Struct-Input.
+- `bodyContentType` enthält den abgeleiteten Typ des Builder-Bodys als gewöhnliches Feld und bleibt deshalb bei `{ ...req }`-Kopien erhalten. Es gilt nur, solange `body` der Wert des Builders ist; ein Ersatz-Body wird erneut erkannt, daher deklarierst du seinen Typ mit einem `content-type`-Header. Beim unveränderten Body unterdrückt `null` die Typableitung der Library, wenn kein expliziter Header vorhanden ist; natives Fetch kann aber einen eigenen String-Typ setzen. FormData nutzt stattdessen seine tatsächliche Multipart-Boundary.
+- HTTP schreibt nie einen abgeleiteten Content-Type in `headers`; Interceptors sehen nur deklarierte Header. Ein expliziter `content-type`-Header hat immer Vorrang vor `bodyContentType` und der Erkennung, egal ob er vom Builder, von Client-Defaults, einem Interceptor oder einem rohen `fetchHandler`-Request gesetzt wurde. `body: undefined` hat keinen von der Library abgeleiteten Content-Type. Signierer sollten `headers.get('content-type') ?? request.bodyContentType` lesen; konfiguriere keine internen Felder.
+- `endpoint` ist der Pfad mit eingesetzten Pfadparametern; `baseEndpoint` ist der Client-Endpoint.
+- Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`. Gibt ein Builder `URLSearchParams` zurück, wird diese Instanz durchgereicht.
+- `operation` ist eine statische Endpoint-Identität mit niedriger Kardinalität für Telemetrie und Diagnose.
+- `downloadProgress` und `uploadProgress` sind die Hooks `onDownloadProgress` und `onUploadProgress` aus `HttpExecuteOptions`.
+- `responseType` und `errorResponseType` sind readonly: Sie werden aus den Struct-Kinds von `output` und `error` des Endpoints abgeleitet und dürfen nicht geändert werden. Jedes wird nur gesetzt, wenn sein Struct deklariert ist. Ein Interceptor, der per Short-Circuit mit `makeResponse` antwortet, liest sie, um zum Transport zu passen.
+
+[HTTP](/de-DE/api/http)

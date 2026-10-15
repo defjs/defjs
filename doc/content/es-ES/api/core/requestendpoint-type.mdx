@@ -1,0 +1,18 @@
+---
+title: 'RequestEndpoint'
+description: 'Endpoint invocable devuelto por defineRequest.'
+---
+
+<ApiReference identity="@defjs/core:RequestEndpoint" />
+
+```ts
+type RequestEndpoint<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, HttpCommand<TInput, TOutput, TError>>
+```
+
+Lo devuelve `defineRequest`. Llámalo para obtener un `HttpCommand`: sin argumentos cuando el endpoint no declara `input`, con un argumento opcional cuando el struct de input acepta `undefined` y, en los demás casos, con el valor de entrada del struct.
+
+[HTTP](/es-ES/api/http)

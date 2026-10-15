@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: 'Objet façade avec les constructeurs de struct et struct.parse.'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct` est un objet simple de helpers. Préfère-le à l’import individuel des constructeurs. Chaque helper a sa propre page.
+
+### Primitives et conteneurs
+
+| Helper                                                                                       | Rôle                                                                 |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [`struct.string()`](/fr-FR/api/core/struct-string)                                           | Texte                                                                |
+| [`struct.number()`](/fr-FR/api/core/struct-number)                                           | Nombre, `NaN` rejeté                                                 |
+| [`struct.boolean()`](/fr-FR/api/core/struct-boolean)                                         | Booléen                                                              |
+| [`struct.bigint()`](/fr-FR/api/core/struct-bigint)                                           | `bigint`, ou une string qui se parse comme tel                       |
+| [`struct.date()`](/fr-FR/api/core/struct-date)                                               | `Date`, depuis une `Date`, un timestamp ou une string                |
+| [`struct.literal(value)`](/fr-FR/api/core/struct-literal)                                    | Littéral exact                                                       |
+| [`struct.null()`](/fr-FR/api/core/struct-null)                                               | Uniquement `null`                                                    |
+| [`struct.any()`](/fr-FR/api/core/struct-any) / [`unknown()`](/fr-FR/api/core/struct-unknown) | Toute valeur sauf `null` et `undefined`                              |
+| [`struct.array(item)`](/fr-FR/api/core/struct-array)                                         | Tableau d’un seul struct d’élément                                   |
+| [`struct.tuple(items)`](/fr-FR/api/core/struct-tuple)                                        | Tableau de longueur fixe ; `items` est un seul tableau de structs    |
+| [`struct.record(value)`](/fr-FR/api/core/struct-record)                                      | Objet simple à clés string et un seul struct de valeur               |
+| [`struct.object(shape)`](/fr-FR/api/core/struct-object)                                      | Objet simple à champs fixes ; les clés inconnues sont retirées       |
+| [`struct.or(...options)`](/fr-FR/api/core/struct-or)                                         | Première option qui correspond                                       |
+| [`struct.intersection(...structs)`](/fr-FR/api/core/struct-intersection)                     | Chaque struct doit correspondre ; les résultats objet sont fusionnés |
+| [`struct.discriminatedUnion(tag, options)`](/fr-FR/api/core/struct-discriminatedunion)       | Option objet choisie par la valeur du champ `tag`                    |
+| [`struct.enum(values)`](/fr-FR/api/core/struct-enum)                                         | Tableau de strings, ou valeurs d’un objet `{ Name: value }`          |
+
+### Codecs de corps et valeurs binaires
+
+| Helper                                                                                                                                           | Rôle                                                                                                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| [`struct.formData(shape)`](/fr-FR/api/core/struct-formdata) / [`urlencoded(shape)`](/fr-FR/api/core/struct-urlencoded)                           | Struct objet plus un tag de codec. Le tag ne s’applique que quand cette valeur est la racine du corps de requête              |
+| [`struct.arrayBuffer()`](/fr-FR/api/core/struct-arraybuffer) / [`blob()`](/fr-FR/api/core/struct-blob) / [`file()`](/fr-FR/api/core/struct-file) | Valeurs binaires. En racine de corps elles partent en octets ; en `output` / `error` elles sélectionnent cette représentation |
+| [`struct.string()`](/fr-FR/api/core/struct-string)                                                                                               | Texte. En racine de corps ou en struct `string` entrant, les octets restent du texte                                          |
+
+### Parse et modificateurs
+
+[`struct.parse(struct, value, options?)`](/fr-FR/api/core/struct-parse) parse une valeur inconnue et renvoie `[null, value]` ou `[StructError, undefined]`.
+
+Chaque struct a les modificateurs chaînables `.optional()`, `.null()` / `.nullable()`, `.nullish()` et `.alias(name)`. Voir [`StructMethods`](/fr-FR/api/core/structmethods-type).
+
+[Struct](/fr-FR/api/struct)

@@ -1,0 +1,17 @@
+---
+title: 'WebSocketInterceptor'
+description: 'معترض WebSocket موسوم يقبله withInterceptors.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketInterceptor" />
+
+```ts
+interface WebSocketInterceptor {
+  kind: 'web-socket'
+  fn: WebSocketInterceptorFn
+}
+```
+
+يُنشأ بـ `createWebSocketInterceptor(fn)`. يتيح الوسم `kind` لـ `withInterceptors` قبول معترضات HTTP وSSE وWebSocket في قائمة واحدة؛ ولا يعمل لأوامر WebSocket إلا معترضات `kind: 'web-socket'`.
+
+[المعترضات](/ar/api/interceptors)

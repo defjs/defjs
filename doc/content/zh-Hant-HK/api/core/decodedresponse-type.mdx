@@ -1,0 +1,14 @@
+---
+title: 'DecodedResponse'
+description: 'Response metadata，加上按聲明 struct 解碼成功嘅 body。'
+---
+
+<ApiReference identity="@defjs/core:DecodedResponse" />
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+Body 已按聲明 struct 解碼成功嘅 response。持有呢個 type，就證明解碼已經發生，所以 decode failure 只會報告 `HttpMeta`。
+
+[HTTP](/zh-Hant-HK/api/http)

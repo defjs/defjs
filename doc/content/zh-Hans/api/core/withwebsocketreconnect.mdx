@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: '启用 WebSocket 自动重连的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+配置 socket 因手动 `session.close()` 以外的任何原因关闭时的自动重连。重连是可选开启的：没有这个 option，一次关闭就会结束 session。传入 `undefined` 会清除之前的设置。option 的类型是：
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` 是每次连接中断的重试预算。默认为 `3`，`0` 表示禁用重连。成功 `open` 后会重置预算和退避指数；下次中断从第 1 次重试开始。省略它并不表示单次中断期间可以无限重试。成功打开后立刻被服务端再次关闭的 socket，会按基础延迟持续重连（受 jitter 和上限约束），因为每次打开都会重置预算；用 `shouldReconnect` 停止它。
+- `delayMs` 默认为 `1000`，`factor` 默认为 `2`，`maxDelayMs` 默认为 `30000`，`jitter`（0 到 1）默认为 `0`。第 _n_ 次重试先以 `delayMs * factor^(n-1)` 计算基础延迟，并限制在 `maxDelayMs` 以内；随后应用抖动和取整，再把最终延迟限制在 `maxDelayMs` 和 `2_147_483_647` 毫秒以内。基础延迟为零时始终为零；有效数字在计算中溢出时会被限制在这些上限。
+- `shouldReconnect` 可以返回 `false`，改为结束 session。没有它时，只要预算还在，每次关闭都会重试。手动 `session.close()` 不会调用它。
+- 启用重试时，`attempts` 必须是非负安全整数；`delayMs` 和 `maxDelayMs` 必须是非负有限数；`factor` 必须是正的有限数；`jitter` 必须是 0–1 范围内的有限数。无效值会让 execute 在连接前以 `REQ_OPTIONS_INVALID` 失败。`attempts: 0` 会立即禁用重试，并忽略不再使用的重连字段。
+- execute options 里的 `reconnect` 在本次调用中替换这一个。
+
+[Client](/zh-Hans/api/client)

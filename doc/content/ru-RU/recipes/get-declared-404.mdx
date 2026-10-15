@@ -1,0 +1,22 @@
+---
+title: 'Обработка объявленной 404'
+description: Выполни один GET и ветвись по типизированному 200 vs объявленному 404.
+---
+
+# GET с объявленным 404
+
+Объяви тела успешного ответа и ответа 404. Ветвись по `error.code` и `error.status` — для объявленного ответа 404 получишь типизированный `error.data`.
+
+Подробности — в [HTTP](/ru-RU/docs/http) и [Ошибки](/ru-RU/docs/errors).
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` — placeholder. Если сервер на `GET /users/7` отвечает `200` и `{ "id": 7, "name": "Ada" }`, сниппет выведет:
+
+```txt
+Loaded Ada from 200
+```
+
+Non-2xx статус — это `HTTP_STATUS`. Объявленный `error` даёт его телу тип; без `error` `error.data` остаётся `undefined`, а тело не читают. Если тело объявленного `error` прочитать не удалось (не тот media type, невалидный JSON, не та форма), результатом станет fault `RES_*`. Один Struct `error` покрывает все non-2xx статусы, поэтому при разных формах используй `struct.or(...)` или размеченное объединение.

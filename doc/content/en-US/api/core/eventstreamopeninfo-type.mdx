@@ -1,0 +1,17 @@
+---
+title: 'EventStreamOpenInfo'
+description: 'Metadata available once an SSE response has opened.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamOpenInfo" />
+
+```ts
+interface EventStreamOpenInfo {
+  response: HttpResponse<unknown>
+  url: string
+}
+```
+
+`response` is the handshake response and `url` is the resolved request URL. It is the third element of a successful `client.execute` result and the value of `EventStreamHandle.open`.
+
+[SSE](/api/sse)

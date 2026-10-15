@@ -1,0 +1,18 @@
+---
+title: 'isTimeoutCause'
+description: 'Core のコピーをまたぐタイムアウトと、プラットフォームのタイムアウトエラーを認識します。'
+---
+
+<ApiReference identity="@defjs/core:isTimeoutCause" />
+
+```ts
+function isTimeoutCause(cause: unknown): boolean
+```
+
+`Symbol.for('defjs.cause.timeout')` ブランドを持つ `Error`（別の Core コピーの `ERR_TIMEOUT` を含む）、または名前が `TimeoutError` の `DOMException` / `Error` に対して `true` を返します。それ以外の値には `false` を返します。
+
+原因そのものである `fault.cause` を渡してください。この関数は fault をアンラップしません。`createNetworkFault` は、この判定を使って `NET_TIMEOUT` を選びます。OpenTelemetry は、中断シグナルもセットされている場合でも、タイムアウトのログを記録し続けます。
+
+[Errors ガイド](/ja-JP/docs/errors) と [`isAbortCause`](/ja-JP/api/core/isabortcause) を参照してください。
+
+[Errors](/ja-JP/api/errors)

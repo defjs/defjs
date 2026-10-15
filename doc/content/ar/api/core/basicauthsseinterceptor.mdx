@@ -1,0 +1,20 @@
+---
+title: 'basicAuthSSEInterceptor'
+description: 'معترض SSE يضبط رأس Authorization من النوع Basic انطلاقًا من بيانات الاعتماد.'
+---
+
+<ApiReference identity="@defjs/core:basicAuthSSEInterceptor" />
+
+```ts
+function basicAuthSSEInterceptor(fn: () => { username: string; password: string }, options?: BasicAuthInterceptorOptions): SSEInterceptor
+```
+
+- **fn** — تُستدعى لكل طلب لإنتاج بيانات الاعتماد.
+- **options** — [`BasicAuthInterceptorOptions`](/ar/api/core/basicauthinterceptoroptions-type) اختياري مع `encode` مخصّص.
+- **يُرجع** `SSEInterceptor` يضبط `Authorization: Basic <encoded>` على نسخة من رؤوس الطلب، ويستبدل أي رأس `Authorization` موجود.
+
+الترميز ومتطلب `btoa` هما نفسهما في [`basicAuthHttpInterceptor`](/ar/api/core/basicauthhttpinterceptor)، بما في ذلك الرمي المتزامن عند غياب `btoa`.
+
+انظر [دليل المعترضات](/ar/docs/interceptors).
+
+[المعترضات](/ar/api/interceptors)

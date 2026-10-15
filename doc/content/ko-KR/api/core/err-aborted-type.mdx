@@ -1,0 +1,18 @@
+---
+title: 'ERR_ABORTED'
+description: '요청이 중단되었음을 나타내는 공유 Error 센티넬이에요.'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+호출자의 취소를 나타내는 공유 `cause`이자 message 값이에요. `createNetworkFault`는 이것과, 이름이 `AbortError`인 `DOMException`을 `NET_ABORTED`로 매핑해요. HTTP 인터셉터가 이것을 던지면 호출은 `NET_ABORTED` fault로 resolve돼요. SSE와 WebSocket 인터셉터가 던지면 `EXT_INTERCEPTOR_FAILED`로 보고돼요.
+
+[오류 가이드](/ko-KR/docs/errors)를 보세요.
+
+센티넬은 열거되지 않는 `Symbol.for('defjs.cause.aborted')` 브랜드를 가져요. [`isAbortCause`](/ko-KR/api/core/isabortcause)는 객체 동일성을 비교하지 않고 어느 Core 사본의 이 센티넬이든 알아봐요. 분류는 관련 없는 이전 실행과 무관해요.
+
+[오류](/ko-KR/api/errors)

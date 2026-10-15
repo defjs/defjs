@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'لقطة تقدم تُمرَّر إلى ردود نداء الرفع والتنزيل.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+تعكس حقول `ProgressEvent`. يحسب `loaded` البايتات المقروءة من تدفق الرفع أو التنزيل، لا البايتات التي أقرّ الخادم باستلامها. قد تكون بايتات التنزيل مفكوكة الضغط بالفعل. لا يمكن حساب إجمالي التنزيل إلا مع `Content-Length` موجب وغياب `Content-Encoding` أو كون قيمته `identity`؛ وتُبلّغ التنزيلات المضغوطة عن `total: 0` و`lengthComputable: false`. ويكون إجمالي رفع FormData المتدفق مجهولًا أيضًا، ما لم يحدّده رأس `Content-Length` صريح صالح. وتستخدم التدفقات الأخرى مجهولة الطول قيمتي `0` / `false` نفسيهما.
+
+انظر [`HttpProgressFn`](/ar/api/core/httpprogressfn-type) و[دليل HTTP](/ar/docs/http) و[الأوامر](/ar/docs/commands).
+
+[HTTP](/ar/api/http)

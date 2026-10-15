@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'Instantané de progression passé aux callbacks d’envoi et de téléchargement.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+Reprend les champs de `ProgressEvent`. `loaded` compte les octets lus depuis le flux d’envoi ou de téléchargement, pas les octets acquittés par le serveur. Les octets de téléchargement peuvent déjà être décompressés. Un total de téléchargement n’est calculable qu’avec un `Content-Length` positif et un `Content-Encoding` absent ou `identity` ; les téléchargements compressés signalent `total: 0` et `lengthComputable: false`. Un envoi FormData en flux a aussi un total inconnu, sauf si un `Content-Length` explicite valide le fournit. Les autres flux de longueur inconnue utilisent les mêmes champs `0` / `false`.
+
+Voir [`HttpProgressFn`](/fr-FR/api/core/httpprogressfn-type), le [guide HTTP](/fr-FR/docs/http) et [Commandes](/fr-FR/docs/commands).
+
+[HTTP](/fr-FR/api/http)

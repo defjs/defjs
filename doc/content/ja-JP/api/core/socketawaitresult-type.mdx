@@ -1,0 +1,20 @@
+---
+title: 'SocketAwaitResult'
+description: 'WebSocket コマンドを実行したときに返るタプルです。'
+---
+
+<ApiReference identity="@defjs/core:SocketAwaitResult" />
+
+```ts
+type SocketAwaitResult<TIncoming, TOutgoing = never> =
+  | [error: null, socket: WebSocketSession<TIncoming, TOutgoing>, connection: WebSocketConnectionInfo]
+  | [error: Fault<undefined>, socket: undefined, connection: WebSocketConnectionInfo | undefined]
+```
+
+WebSocket コマンドに対する `client.execute` の結果です。
+
+- 成功時は `[null, session, connection]` です。`connection` は最初に成功した接続のスナップショットで、`session.connection` は再接続のたびに更新されます。
+- 失敗時は `[fault, undefined, connection]` です。`connection` は `undefined` になることがあります。たとえばソケットが開く前にコンストラクターが失敗した場合です。
+- ここに届くのは起動時の失敗だけです。セッションが返されたあとのエラーは `onRuntimeError`、`receive`、`closed` を通じて通知されます。
+
+[WebSocket](/ja-JP/api/web-socket)

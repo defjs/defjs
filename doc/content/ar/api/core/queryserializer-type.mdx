@@ -1,0 +1,16 @@
+---
+title: 'QuerySerializer'
+description: 'دالة تحوّل كائن استعلام مرمَّزًا إلى سلسلة استعلام.'
+---
+
+<ApiReference identity="@defjs/core:QuerySerializer" />
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+`query` هو الكائن بصيغة النقل: الأسماء المستعارة مُطبَّقة بالفعل، وقيم `Date` صارت سلاسل ISO، وقيم `bigint` صارت سلاسل. الكائنات المتداخلة والمصفوفات تبقى كما هي. أرجِع سلسلة الاستعلام دون `?` بادئة؛ فهي تُستخدم كما هي ولا تمرّ عبر `URLSearchParams`. وترى المعترضات `queryParams` على هيئة `new URLSearchParams(queryString)`.
+
+اضبطها بـ `withQuerySerializer`. وبدونها تستخدم الاستعلامات `URLSearchParams`: المصفوفات تكرّر المفاتيح، والكائن المتداخل يفشل. والـ builder الذي يُرجع `URLSearchParams` يتخطى المُسلسِل.
+
+[العميل](/ar/api/client)

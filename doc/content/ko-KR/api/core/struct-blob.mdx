@@ -1,0 +1,16 @@
+---
+title: 'struct.blob'
+description: 'Blob을 받는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.blob" />
+
+```ts
+function blob(): Struct<Blob, Blob>
+```
+
+- `Blob`을 받아요 (`File`도 `Blob`이에요). 그 외는 `invalid_type`으로 실패해요.
+- body 루트로 쓰면 blob 자체의 type으로, 없으면 `application/octet-stream`으로 그대로 보내요.
+- `output`이나 `error` struct로 쓰면 응답 body를 `Blob`으로 읽어요.
+
+[Struct](/ko-KR/api/struct)

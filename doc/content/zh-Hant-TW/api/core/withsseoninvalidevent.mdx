@@ -1,0 +1,27 @@
+---
+title: 'withSSEOnInvalidEvent'
+description: '觀察沒有 struct 或未通過驗證的 SSE 事件的 client option。'
+---
+
+<ApiReference identity="@defjs/core:withSSEOnInvalidEvent" />
+
+```ts
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+為沒有對應事件 struct 或未通過驗證的 SSE 事件註冊 callback。callback 收到：
+
+```ts
+{
+  reason: 'missing-struct' | 'validation-failed'
+  message: { id: string; event: string; data: string }
+  cause?: unknown
+  signal: AbortSignal
+}
+```
+
+- 無效事件**一律會被丟棄**，絕不會交給 stream。callback 只負責觀察它。
+- 回傳值會被忽略。callback 丟出的錯誤會被吞掉，不會關閉 stream，除非 `signal` 已經 abort。
+- `validation-failed` 時會帶有 `cause`。沒有 handler 時，無效事件會被靜默丟棄。
+
+[Client](/zh-Hant-TW/api/client)

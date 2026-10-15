@@ -1,0 +1,17 @@
+---
+title: 'createDecodeFault'
+description: 'デコード fault のファクトリーです。レスポンスは届いたものの、宣言どおりには読めなかったことを表します。'
+---
+
+<ApiReference identity="@defjs/core:createDecodeFault" />
+
+```ts
+function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+```
+
+- **code** — 失敗した読み取りの段階です。`RES_DECODE_FAILED`、`RES_MEDIA_TYPE_INVALID`、`RES_STRUCT_MISMATCH` のいずれかです。
+- **cause** — 根本にあるパーサーまたは struct の失敗で、`cause` として保持されます。通常はそのメッセージが fault のメッセージになります（`Error` でない場合は `String(cause)`）。`RES_DECODE_FAILED` で、名前が `SyntaxError` の `Error` が原因の場合、メッセージは `Response body could not be decoded` となり、パーサーが出力した断片は `String(fault)` に含まれません。デフォルトの Struct メッセージに含まれるのは受け取った値の種類であり、値そのものではありません。生の値とパーサーのテキストは cause に残ります。
+- **response** — 読み取れなかったレスポンスのメタデータです。`status` はここからコピーされます。
+- **戻り値** `DefjsFault` という名前のネイティブ `Error` で、`body` はありません。
+
+[Errors](/ja-JP/api/errors)

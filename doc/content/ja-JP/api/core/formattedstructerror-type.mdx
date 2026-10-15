@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'StructError.format が返す、入れ子のエラーツリーです。'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+`StructError.format()` の結果です。末端のメッセージは `_errors` に入り、入れ子のキーは失敗した path をそのまま反映します。名前がちょうど `_errors` の path セグメントは `\_errors` として格納されます。
+
+[Struct](/ja-JP/api/struct)

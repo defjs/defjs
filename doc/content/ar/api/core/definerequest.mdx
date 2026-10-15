@@ -1,0 +1,35 @@
+---
+title: 'defineRequest'
+description: 'يعلن نقطة نهاية طلب HTTP محدَّدة النوع.'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method` و`path`، وstruct `input` اختياري، وstructs `output` و`error` اختيارية، و`operation` اختياري. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح، حتى لو كان المدخل يطابق شكل الطلب أصلًا. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+- **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `HttpCommand`.
+
+`ResponseDeclaration` و`BuilderField` نوعان مساعدان داخليان: فـ `output` و`error` إلزاميان فقط عندما تكون معاملة النوع المقابلة struct، و`builder` هو `(input: BuilderInput<TInput>) => HttpRequestShape` عند التصريح بـ `input`.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` هو struct واحد لجسم 2xx؛ و`error` هو struct واحد لكل جسم غير-2xx. ولا يُفهرَس أيٌّ منهما بالحالة. وحذف أحدهما يعني أن ذلك الجسم لا يُقرأ أبدًا — راجع
+[الإعلان هو تأكيد](/ar/docs/design-decisions#الإعلان-هو-تأكيد).
+
+[HTTP](/ar/api/http)

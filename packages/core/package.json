@@ -1,24 +1,45 @@
 {
   "name": "@defjs/core",
-  "version": "0.3.3",
-  "type": "module",
-  "module": "src/index.ts",
-  "typings": "src/index.ts",
-  "license": "MIT",
-  "publishConfig": {
-    "directory": "dist"
+  "version": "0.4.0",
+  "bugs": {
+    "url": "https://github.com/defjs/defjs/issues"
   },
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/defjs/defjs.git"
   },
-  "bugs": {
-    "url": "https://github.com/defjs/defjs/issues"
+  "type": "module",
+  "sideEffects": false,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "directory": "dist",
+    "linkDirectory": false
   },
   "scripts": {
-    "build": "bun scripts/build.ts",
-    "lint": "biome check",
-    "lint:fix": "biome check --write",
-    "pub": "cd dist && bun publish"
+    "bench:struct": "bun build src/struct/struct.bench.ts --target=node --external=vitest --outdir=test-out/struct-bench && vitest bench --config vitest.config.bench.ts --maxWorkers=1 --no-file-parallelism",
+    "build": "tsdown --config-loader native --config tsdown.config.ts",
+    "test": "vitest run --config vitest.config.ts --coverage"
+  },
+  "devDependencies": {
+    "@hono/node-server": "catalog:",
+    "@types/ws": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "@vitest/coverage-istanbul": "catalog:",
+    "hono": "catalog:",
+    "playwright": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:",
+    "ws": "catalog:"
   }
 }

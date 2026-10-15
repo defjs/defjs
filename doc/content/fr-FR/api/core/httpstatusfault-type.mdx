@@ -1,0 +1,16 @@
+---
+title: 'HttpStatusFault'
+description: 'Fault pour une réponse non 2xx, typé par le struct error déclaré.'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFault" />
+
+```ts
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+`TErr` est le struct `error` déclaré de l’endpoint, ou `undefined` quand il n’en déclare aucun. Tout statut non 2xx. Quand l’endpoint a déclaré `error` et que le corps a été décodé, `data` est ce corps et `response` le porte. Quand `error` a été omis, le corps n’est jamais lu, ce qui laisse `data` à `undefined` et `response` aux seules métadonnées. Voir [`HttpStatusFaultOf`](/fr-FR/api/core/httpstatusfaultof-type) pour la forme des membres.
+
+[Erreurs](/fr-FR/api/errors)

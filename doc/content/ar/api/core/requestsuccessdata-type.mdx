@@ -1,0 +1,14 @@
+---
+title: 'RequestSuccessData'
+description: 'نوع جسم النجاح المفكوك لـ struct المخرجات المعلَن في نقطة النهاية.'
+---
+
+<ApiReference identity="@defjs/core:RequestSuccessData" />
+
+```ts
+type RequestSuccessData<TOutput extends AnyStruct | undefined> = [TOutput] extends [undefined] ? undefined : Infer<TOutput>
+```
+
+نوع الجسم المفكوك لـ struct الـ `output` المعلَن، أو `undefined` إن لم يُعلَن واحد.
+
+[HTTP](/ar/api/http)

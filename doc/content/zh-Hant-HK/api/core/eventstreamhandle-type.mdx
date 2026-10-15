@@ -1,0 +1,32 @@
+---
+title: 'EventStreamHandle'
+description: '已開啟嘅 SSE stream：迭代 events、讀取 open metadata，仲有提早關閉。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamHandle" />
+
+```ts
+interface EventStreamHandle<TEvent = EventStreamMessage> extends AsyncIterable<TEvent>, AsyncDisposable {
+  readonly open: EventStreamOpenInfo
+  readonly closed: Promise<EventStreamCloseInfo>
+  close(reason?: unknown): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+}
+```
+
+`EventStreamMessage` 係 raw 嘅 `{ id: string; event: string; data: string }` message。`client.execute` 回傳嘅 handle 帶住 parse 咗嘅 [`EventStreamData`](/zh-Hant-HK/api/core/eventstreamdata-type)。
+
+`open` 係 startup snapshot（[`EventStreamOpenInfo`](/zh-Hant-HK/api/core/eventstreamopeninfo-type)）；reconnect 之後佢可以變，所以要再讀 `stream.open`。Stream 結束時，`closed` 會以 [`EventStreamCloseInfo`](/zh-Hant-HK/api/core/eventstreamcloseinfo-type) resolve。
+
+如果由自己負責管理 stream 嘅 scope，優先用 `await using stream = handle` 做 cleanup。Disposer 會停低 Defjs 嘅 read 同 reconnect work，再等 reader lock release；但唔保證由 provider 控制兼卡死咗嘅 `ReadableStream.cancel()` promise 一定完成。Manual `close()` / `closed` 仍然用得。
+
+```ts
+async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
+  await using stream = handle
+  for await (const event of stream) console.log(event)
+}
+```
+
+自己 structural implement `EventStreamHandle` 嘅 code，必須 implement `[Symbol.asyncDispose]()`，並 return 同一條 owned teardown path。對 custom handle 嚟講係 compile-time 要求；淨係接收 Defjs 回傳嘅 handle 嘅 code，唔使加新 runtime call。
+
+[SSE](/zh-Hant-HK/api/sse)

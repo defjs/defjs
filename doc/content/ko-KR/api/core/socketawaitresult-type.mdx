@@ -1,0 +1,20 @@
+---
+title: 'SocketAwaitResult'
+description: 'WebSocket 명령을 실행했을 때 돌려주는 튜플이에요.'
+---
+
+<ApiReference identity="@defjs/core:SocketAwaitResult" />
+
+```ts
+type SocketAwaitResult<TIncoming, TOutgoing = never> =
+  | [error: null, socket: WebSocketSession<TIncoming, TOutgoing>, connection: WebSocketConnectionInfo]
+  | [error: Fault<undefined>, socket: undefined, connection: WebSocketConnectionInfo | undefined]
+```
+
+WebSocket 명령에 대한 `client.execute`의 결과예요.
+
+- 성공하면 `[null, session, connection]`이에요. `connection`은 처음 성공한 연결의 스냅샷이고, 재연결하면 `session.connection`이 새 값으로 넘어가요.
+- 실패하면 `[fault, undefined, connection]`이에요. `connection`은 `undefined`일 수 있어요. 예를 들어 소켓이 열리기 전에 생성자가 실패한 경우예요.
+- 여기에는 시작 실패만 와요. 세션이 반환된 뒤의 오류는 `onRuntimeError`, `receive`, `closed`로 나타나요.
+
+[WebSocket](/ko-KR/api/web-socket)

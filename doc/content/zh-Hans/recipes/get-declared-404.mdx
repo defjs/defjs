@@ -1,0 +1,22 @@
+---
+title: '处理声明的 404'
+description: 执行一次 GET，按类型化的 200 和声明过的 404 分支。
+---
+
+# 声明了 404 的 GET
+
+成功和 404 body 都声明好。按 `error.code` 和 `error.status` 分支——声明过的 miss 会给你类型化的 `error.data`。
+
+细节见 [HTTP](/zh-Hans/docs/http) 和[错误](/zh-Hans/docs/errors)。
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` 是占位地址。假设服务器对 `GET /users/7` 返回 `200` 和 `{ "id": 7, "name": "Ada" }`，这段代码会输出：
+
+```txt
+Loaded Ada from 200
+```
+
+非 2xx 状态是 `HTTP_STATUS`。声明 `error` 会给它的 body 一个类型；省略 `error` 则 `error.data` 是 `undefined`，body 也不会被读。如果声明的 `error` body 读不出来（媒体类型不对、JSON 无效、形状不符），结果会是 `RES_*` fault。一个 `error` Struct 覆盖所有非 2xx 状态，所以形状不同时用 `struct.or(...)` 或判别联合。

@@ -1,0 +1,20 @@
+== node base
+http { signal }	20000: +22792 KiB	60000: +66535 KiB
+http { signal, timeout }	20000: +36108 KiB	60000: +107630 KiB
+http { timeout }	20000: +28857 KiB	60000: +97264 KiB
+sse { signal }	5000: +5617 KiB	15000: +16957 KiB
+== node final
+http { signal }	20000: +1220 KiB	60000: +2269 KiB
+http { signal, timeout }	20000: +518 KiB	60000: +4106 KiB
+http { timeout }	20000: +-1428 KiB	60000: +-1409 KiB
+sse { signal }	5000: +212 KiB	15000: +-3513 KiB
+== bun base
+http { signal }	20000: +3585 KiB	60000: +10467 KiB
+http { signal, timeout }	20000: +6889 KiB	60000: +20649 KiB
+http { timeout }	20000: +6885 KiB	60000: +20623 KiB
+sse { signal }	5000: +950 KiB	15000: +2653 KiB
+== bun final
+http { signal }	20000: +131 KiB	60000: +138 KiB
+http { signal, timeout }	20000: +13 KiB	60000: +24 KiB
+http { timeout }	20000: +10 KiB	60000: +-1 KiB
+sse { signal }	5000: +82 KiB	15000: +105 KiB

@@ -1,0 +1,24 @@
+---
+title: 'WebSocketEndpoint'
+description: 'Callable devuelto por defineWebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketEndpoint" />
+
+```ts
+type WebSocketEndpoint<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
+```
+
+Lo devuelve [`defineWebSocket`](/es-ES/api/core/definewebsocket). Al llamarlo se crea un [`WebSocketCommand`](/es-ES/api/core/websocketcommand-type) que pasas a `client.execute`. La firma de la llamada depende de `input`:
+
+- Sin `input` declarado: `() => WebSocketCommand`.
+- `input` acepta `undefined`: `(input?: StructInput<TInput>) => WebSocketCommand`.
+- En otro caso: `(input: StructInput<TInput>) => WebSocketCommand`.
+
+Llamar al endpoint no conecta. El input se parsea cuando se ejecuta el comando.
+
+[WebSocket](/es-ES/api/web-socket)

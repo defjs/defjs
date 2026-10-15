@@ -1,0 +1,26 @@
+---
+title: 'executeWebSocketCommand'
+description: 'مدخل منخفض المستوى يفتح أمر WebSocket مقابل تهيئة عميل.'
+---
+
+<ApiReference identity="@defjs/core:executeWebSocketCommand" />
+
+```ts
+function executeWebSocketCommand<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
+  options?: WebSocketExecuteOptions<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>,
+): Promise<SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>>>
+```
+
+مدخل منخفض المستوى لـ `client.execute`. فضّل العميل في شيفرة التطبيق.
+
+- **يُرجع** `[null, session, connection]` أو `[fault, undefined, connection | undefined]`، حيث الخطأ هو `Fault<undefined>`.
+
+يمكن لخيارات تنفيذ WebSocket تجاوز `beforeConnect` و`heartbeat` و`protocols` و`reconnect` الخاصة بالعميل.
+
+[WebSocket](/ar/api/web-socket)

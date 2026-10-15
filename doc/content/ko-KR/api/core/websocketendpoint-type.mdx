@@ -1,0 +1,24 @@
+---
+title: 'WebSocketEndpoint'
+description: 'defineWebSocket이 돌려주는 호출 가능한 값이에요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketEndpoint" />
+
+```ts
+type WebSocketEndpoint<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
+```
+
+[`defineWebSocket`](/ko-KR/api/core/definewebsocket)이 돌려줘요. 호출하면 [`WebSocketCommand`](/ko-KR/api/core/websocketcommand-type)가 만들어지고, 이를 `client.execute`에 넘겨요. 호출 시그니처는 `input`에 따라 달라져요.
+
+- `input`을 선언하지 않은 경우: `() => WebSocketCommand`.
+- `input`이 `undefined`를 받는 경우: `(input?: StructInput<TInput>) => WebSocketCommand`.
+- 그 밖의 경우: `(input: StructInput<TInput>) => WebSocketCommand`.
+
+endpoint를 호출해도 연결되지 않아요. 입력은 명령이 실행될 때 파싱돼요.
+
+[WebSocket](/ko-KR/api/web-socket)

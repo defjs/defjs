@@ -1,0 +1,14 @@
+---
+title: 'ClientOption'
+description: 'createClient 所接受的 option helper 的函数类型。'
+---
+
+<ApiReference identity="@defjs/core:ClientOption" />
+
+```ts
+type ClientOption = (config: ClientConfig) => void
+```
+
+修改 `createClient` 正在构建的 [`ClientConfig`](/zh-Hans/api/core/clientconfig-type)。每个 `with*` helper 返回的都是它。`createClient` 按顺序应用各个 option，所以同一设置上后面的 option 会覆盖前面的，`withInterceptors` 例外，它是追加。
+
+[Client](/zh-Hans/api/client)

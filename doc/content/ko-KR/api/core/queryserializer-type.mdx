@@ -1,0 +1,16 @@
+---
+title: 'QuerySerializer'
+description: '인코딩된 query 객체를 query 문자열로 직렬화하는 함수예요.'
+---
+
+<ApiReference identity="@defjs/core:QuerySerializer" />
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+`query`는 와이어 객체예요. alias는 이미 적용됐고, `Date` 값은 이미 ISO 문자열이며, `bigint` 값은 이미 문자열이에요. 중첩 객체와 배열은 그대로 유지돼요. 앞의 `?` 없이 query 문자열을 반환하세요. 그 값을 그대로 쓰며 `URLSearchParams`를 거치지 않아요. 인터셉터는 `queryParams`를 `new URLSearchParams(queryString)`으로 봐요.
+
+`withQuerySerializer`로 설정해요. 설정하지 않으면 query는 `URLSearchParams`를 써요. 배열은 키를 반복하고 중첩 객체는 실패해요. `URLSearchParams`를 반환하는 builder는 serializer를 건너뛰어요.
+
+[클라이언트](/ko-KR/api/client)

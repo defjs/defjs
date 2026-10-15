@@ -1,0 +1,19 @@
+---
+title: 'withEndpoint'
+description: 'Opción de cliente que fija la URL base para los paths de solicitud relativos.'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+Fija la URL base absoluta y válida que se antepone a los paths de solicitud relativos. Por defecto es una cadena vacía, así que la ejecución exige un endpoint explícito.
+
+- **endpoint** — endpoint base absoluto y válido. Su pathname se conserva como directorio; su query y su hash se descartan.
+- Para comandos WebSocket, una base `http:` pasa a `ws:` y `https:` pasa a `wss:`.
+
+Un endpoint ausente, relativo o no válido, o un path de solicitud ilegal, falla con `REQ_BUILD_FAILED` durante la construcción, antes de que se ejecute cualquier interceptor o transporte, incluso cuando un interceptor cortocircuitaría. HTTP, SSE y WebSocket comparten esta regla. La solicitud resuelta debe conservar el origen base y permanecer bajo su directorio; se rechazan los caracteres de control C0 (incluidos tab, CR y LF), las barras invertidas, `?`, `#` y los escapes de directorio en un path. Las formas similares a un esquema y las relativas al protocolo se rechazan incluso con espacios iniciales; se permite un espacio ordinario en el interior y se envía como `%20`. El `req.endpoint` final de un interceptor se comprueba contra su `req.baseEndpoint` final con la misma regla, pero puede sustituir deliberadamente el base por otra URL absoluta válida. Los errores de URL deterministas nunca se reintentan.
+
+[Cliente](/es-ES/api/client)

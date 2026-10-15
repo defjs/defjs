@@ -1,0 +1,16 @@
+---
+title: 'struct.unknown'
+description: '接受 null 與 undefined 以外的任何值，且型別為 unknown 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.unknown" />
+
+```ts
+function unknown(): Struct<NonNullable<unknown>, unknown>
+```
+
+- 接受 `null` 與 `undefined` 以外的所有值，並原樣回傳。裡面的內容不會被驗證或移除。
+- 串接 `.null()`、`.optional()` 或 `.nullish()` 可接受 `null` 或 `undefined`。
+- 輸出型別是 `unknown`，所以呼叫端使用前必須先縮小型別。
+
+[Struct](/zh-Hant-TW/api/struct)

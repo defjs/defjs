@@ -1,0 +1,17 @@
+---
+title: 'Struct'
+description: 'struct type：input 同 output types，加上 modifier methods。'
+---
+
+<ApiReference identity="@defjs/core:Struct" />
+
+```ts
+type Struct<Input = unknown, Output = Input, OptionalOut extends boolean = false> = StructMethods<Input, Output, OptionalOut> &
+  StructLike<Input, Output, OptionalOut>
+```
+
+一個可解析嘅形狀。`Input` 係佢接受嘅 type（[`StructInput`](/zh-Hant-HK/api/core/structinput-type)），`Output` 係解析成功後回傳嘅 type（[`Infer`](/zh-Hant-HK/api/core/infer-type)），`OptionalOut` 標記一個可能喺 object 輸出入面缺席嘅欄位。
+
+用 [`struct`](/zh-Hant-HK/api/core/struct) facade 建立 structs。[`StructMethods`](/zh-Hant-HK/api/core/structmethods-type) 入面每個 modifier 都會回傳新 struct，原本嗰個保持不變。
+
+[Struct](/zh-Hant-HK/api/struct)

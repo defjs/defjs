@@ -1,0 +1,44 @@
+---
+title: 'ClientSSEOptions'
+description: 'إعدادات SSE الاختيارية: مقبض fetch، وخطّاف الأحداث غير الصالحة، وسياسة إعادة الاتصال.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — تنفيذ Fetch الذي يفتح التدفق. يستخدم المقبض الافتراضي `globalThis.fetch` الحالية عند كل محاولة، بما في ذلك البدائل المثبّتة بعد الاستيراد. يستقبل كل مقبض SSE كائن `Request`. عند غياب Fetch العامة يفشل التنفيذ الافتراضي بـ `ENV_UNSUPPORTED`؛ ويظل المقبض المخصّص قابلًا للاستخدام.
+- **onInvalidEvent** — تُستدعى عندما لا يكون للحدث struct مطابق ولا struct `default` (`'missing-struct'`)، أو عندما يفشل التحقق من بياناته (`'validation-failed'`). يُتخطّى الحدث. والخطأ الذي يرميه الخطّاف لا يغلق التدفق.
+- **reconnect** — يتطلّب تفعيلًا صريحًا. بدونه لا يعيد التدفق الاتصال أبدًا. الافتراضي لـ `attempts` هو **3** لكل انقطاع؛ و`attempts: 0` يعطّل إعادة المحاولة. تعيد المصافحة الناجحة ضبط ميزانية المحاولات وقيمة `attempt` الممرّرة إلى دالة الاستدعاء وأُسّ التراجع. `delayMs` هو التأخير الأساسي الأول، وافتراضيه 1000، وتستبدله قيمة `retry:` التي يرسلها الخادم. افتراضي `factor` هو 1. و`jitter` عامل ضربي بين 0 و1، وافتراضيه 0. يحدّ `maxDelayMs` التأخير النهائي بعد تطبيق `jitter` والتقريب؛ وحتى دون حدّ مضبوط، يظل حدّ المنصة البالغ `2_147_483_647` مللي ثانية نافذًا. يظل التأخير الأساسي الصفري صفرًا؛ وإذا أدّت أعداد صالحة إلى تجاوز السعة العددية، تُحصر النتيجة عند الحدود القصوى. وفي غياب `shouldReconnect`، تقتصر إعادة الاتصال على طلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`؛ وعند توفيره، تحدّد نتيجته قرار إعادة الاتصال لكل طريقة، ويتضمّن سياقه `method`. لا يعيد أي طلب جسمه `ReadableStream` الاتصال. ترسل إعادة الاتصال أحدث معرّف على هيئة بايتات UTF-8 في `Last-Event-ID`؛ والمعرّف الفارغ يمسح الرأس، ويُتجاهل أي معرّف يحتوي على NUL.
+
+يُتحقَّق من خيارات إعادة الاتصال قبل المعترضات أو Fetch: يجب أن يكون `attempts` عددًا صحيحًا آمنًا غير سالب؛ وأن يكون `delayMs` و`maxDelayMs`، إذا حُدّد صراحةً، عددين محدودين غير سالبين؛ وأن يكون `factor` محدودًا وموجبًا؛ وأن يكون `jitter` محدودًا وبين 0 و1. تُعيد القيم غير الصالحة `REQ_OPTIONS_INVALID` عند التنفيذ.
+
+اضبطها بـ `withSSEHandle` و`withSSEOnInvalidEvent` و`withSSEReconnect`. حذف `withSSEReconnect` يعطّل إعادة المحاولة.
+
+انظر [دليل العميل](/ar/docs/client).
+
+[العميل](/ar/api/client)

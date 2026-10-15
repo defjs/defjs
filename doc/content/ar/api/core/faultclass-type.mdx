@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: 'يستخرج بادئة الصنف من رمز الخطأ.'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+صنف رمز الخطأ هو المقطع الذي يسبق أول `_` فيه. و`C` هو `FaultCode` أو اتحاد منها. و`FaultClass<FaultCode>` هو `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+[الأخطاء](/ar/api/errors)

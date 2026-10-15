@@ -1,0 +1,44 @@
+---
+title: 'ClientSSEOptions'
+description: 'Необязательные настройки SSE: fetch handle, hook для некорректных событий и политика переподключения.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — реализация Fetch, которая открывает поток. Обработчик по умолчанию обращается к `globalThis.fetch` при каждой попытке, включая замены, установленные после импорта. Каждый SSE-обработчик получает `Request`. Если глобальный Fetch отсутствует, выполнение с обработчиком по умолчанию завершается с `ENV_UNSUPPORTED`; пользовательский обработчик остаётся доступным.
+- **onInvalidEvent** — вызывается, когда у события нет подходящего struct и нет struct `default` (`'missing-struct'`) или его данные не проходят валидацию (`'validation-failed'`). Событие пропускается. Ошибка, брошенная hook’ом, не закрывает поток.
+- **reconnect** — включается явно. Без него поток никогда не переподключается. `attempts` по умолчанию равен **3** на каждый период недоступности соединения; `attempts: 0` отключает повторы. Успешный handshake сбрасывает бюджет повторов, значение `attempt` в колбэке и показатель степени при расчёте задержки. `delayMs` — первая базовая задержка, по умолчанию 1000, и присланное сервером значение `retry:` её заменяет. `factor` по умолчанию равен 1. `jitter` — мультипликативный коэффициент 0–1, по умолчанию 0. `maxDelayMs` ограничивает итоговую задержку после применения jitter и округления; если явный предел не задан, всё равно действует платформенный предел `2_147_483_647` мс. Нулевая базовая задержка остаётся нулевой; переполнение при допустимых числовых параметрах ограничивается этими пределами. Без `shouldReconnect` переподключение выполняется только для запросов `GET`, `HEAD`, `OPTIONS`, `PUT` и `DELETE`; если колбэк задан, его результат определяет, переподключаться ли для каждого метода, а его контекст содержит `method`. Для запросов с телом `ReadableStream` переподключение никогда не выполняется. При переподключении последний ID передаётся как байты UTF-8 в `Last-Event-ID`; пустой ID очищает сохранённое значение, а ID с NUL игнорируется.
+
+Опции переподключения проверяются до запуска interceptor’ов или Fetch: `attempts` должен быть неотрицательным безопасным целым числом; `delayMs` и явно заданный `maxDelayMs` — конечными неотрицательными числами; `factor` — конечным положительным числом; `jitter` — конечным числом в диапазоне 0–1. Недопустимые значения приводят к `REQ_OPTIONS_INVALID` при выполнении команды.
+
+Задавай их через `withSSEHandle`, `withSSEOnInvalidEvent` и `withSSEReconnect`. Если не вызывать `withSSEReconnect`, повторы отключены.
+
+См. [гайд Client](/ru-RU/docs/client).
+
+[Клиент](/ru-RU/api/client)

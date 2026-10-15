@@ -1,0 +1,27 @@
+---
+title: 'WebSocketSessionLike'
+description: 'interceptor 看到的 WebSocket session 介面。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSessionLike" />
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: { extensions?: string; generation: number; protocol?: string; url?: string }
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+interceptors 看到的最小 session 介面。它在結構上與 [`WebSocketSession`](/zh-Hant-TW/api/core/websocketsession-type) 相容，但 messages 的型別是 `unknown`。
+
+Wrapper 或短接 session 必須轉發與其 `close` / `closed` lifecycle 相同的 `[Symbol.asyncDispose]()` teardown；回傳無關的 resolved promise 並不足夠。要求這個成員，對結構化實作而言是編譯期 breaking change。只接收 Defjs session 的程式碼不必新增執行期呼叫。
+
+[Interceptors](/zh-Hant-TW/api/interceptors)

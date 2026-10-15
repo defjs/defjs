@@ -1,0 +1,18 @@
+---
+title: 'PreflightFault'
+description: 'الخطأ الذي قد يحدث قبل وجود أي استجابة.'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+كل ما كان يمكن أن يفشل قبل وجود استجابة: `REQ_*` و`NET_*` و`EXT_*` و`CAP_*` و`ENV_UNSUPPORTED`. ولا يكون `response` موجودًا إلا حيث كانت لدى طبقة النقل بيانات وصفية تُبلِّغ عنها أصلًا، كجسم انقطع في منتصف التنزيل.
+
+[الأخطاء](/ar/api/errors)

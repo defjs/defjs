@@ -1,0 +1,19 @@
+---
+title: 'HttpExecuteOptions'
+description: 'HTTP 요청의 호출별 옵션이에요. progress 콜백, abort 또는 timeout, signal이 있어요.'
+---
+
+<ApiReference identity="@defjs/core:HttpExecuteOptions" />
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+취소는 `abort` **또는** `timeout` 중 하나이고 둘 다는 안 돼요. `signal`은 둘 중 어느 쪽과도 함께 쓸 수 있고, `abort`의 별칭이 **아니에요**. 유효한 모양은 `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`예요. `{ abort, timeout }`은 유효하지 않아서 호출이 `REQ_OPTIONS_INVALID` fault로 resolve돼요. `timeout`은 `1..2_147_483_647` 범위의 양의 안전한 정수여야 해요.
+
+`timeout`을 생략하면 클라이언트의 `withTimeout` 기본값이 적용돼요. `abort`는 그 기본값과 함께 쓰여요.
+
+[HTTP](/ko-KR/api/http)

@@ -1,0 +1,19 @@
+---
+title: 'DecodeFault'
+description: 'Fault для ответа, который пришёл, но не может быть прочитан так, как объявлено.'
+---
+
+<ApiReference identity="@defjs/core:DecodeFault" />
+
+```ts
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+`code` — один из `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID` или `RES_STRUCT_MISMATCH`. Ответ пришёл, но не может быть прочитан так, как объявлено. `response` содержит только метаданные: тело — это декодированное значение, а сбой случился именно при декодировании, так что поля `body` здесь нет. Подробности сбоя лежат в `cause` — это `StructError` при несоответствии struct или ошибка парсера, если представление не читается.
+
+[Ошибки](/ru-RU/api/errors)

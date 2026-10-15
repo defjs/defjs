@@ -1,0 +1,24 @@
+---
+title: 'WebSocketEndpoint'
+description: 'Вызываемое значение, которое возвращает defineWebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketEndpoint" />
+
+```ts
+type WebSocketEndpoint<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
+```
+
+Возвращается [`defineWebSocket`](/ru-RU/api/core/definewebsocket). Его вызов создаёт [`WebSocketCommand`](/ru-RU/api/core/websocketcommand-type), который передают в `client.execute`. Сигнатура вызова зависит от `input`:
+
+- `input` не объявлен: `() => WebSocketCommand`.
+- `input` принимает `undefined`: `(input?: StructInput<TInput>) => WebSocketCommand`.
+- Иначе: `(input: StructInput<TInput>) => WebSocketCommand`.
+
+Вызов эндпоинта не подключается. Input разбирается, когда команда выполняется.
+
+[WebSocket](/ru-RU/api/web-socket)

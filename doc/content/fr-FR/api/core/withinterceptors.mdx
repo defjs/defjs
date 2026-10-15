@@ -1,0 +1,17 @@
+---
+title: 'withInterceptors'
+description: 'Option de client qui ajoute des intercepteurs à la chaîne du client.'
+---
+
+<ApiReference identity="@defjs/core:withInterceptors" />
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+Ajoute des intercepteurs à la chaîne d’intercepteurs du client. L’appeler de nouveau en ajoute d’autres ; elle ne remplace jamais les précédents.
+
+- Le premier intercepteur enregistré est la couche la plus externe.
+- Des intercepteurs HTTP, SSE et WebSocket peuvent être mélangés dans un même appel. À l’exécution, seuls ceux du transport de la commande s’exécutent, dans leur ordre d’enregistrement.
+
+[Client](/fr-FR/api/client)

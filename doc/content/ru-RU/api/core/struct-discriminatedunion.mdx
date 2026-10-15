@@ -1,0 +1,32 @@
+---
+title: 'struct.discriminatedUnion'
+description: 'Struct, который выбирает один object struct по значению поля-тега.'
+---
+
+<ApiReference identity="@defjs/core:struct.discriminatedUnion" />
+
+```ts
+function discriminatedUnion<
+  const TDiscriminator extends string,
+  const TOptions extends readonly [ObjectStruct<ObjectShape>, ...ObjectStruct<ObjectShape>[]],
+>(
+  discriminator: TDiscriminator,
+  options: TOptions & RequiredDiscriminatorOptions<TDiscriminator, TOptions>,
+): DiscriminatedUnionStruct<TOptions>
+```
+
+```ts
+const Event = struct.discriminatedUnion('kind', [
+  struct.object({ kind: struct.literal('created'), id: struct.number() }),
+  struct.object({ kind: struct.literal('deleted'), id: struct.number() }),
+])
+```
+
+- Каждая ветка должна быть object struct, у которого поле `discriminator` — обязательный [`struct.literal()`](/ru-RU/api/core/struct-literal). Отсутствующее поле, не-literal поле, необязательное поле или повторяющееся значение тега бросает `TypeError` при создании struct.
+- Input должен быть plain object. Значение тега выбирает ветку, и эта ветка разбирает весь объект.
+- Отсутствующий тег даёт `missing_key`, неизвестный тег — `invalid_union`. Оба сообщают path поля-тега. Остальные сбои приходят из выбранной ветки.
+- При `struct.parse(..., { aliases: true })` тег читается по алиасу поля.
+
+`RequiredDiscriminatorOptions` и `DiscriminatedUnionStruct` не экспортируются. Проверка типов отвергает ветку, у которой поле-тег отсутствует или может быть `undefined`.
+
+[Struct](/ru-RU/api/struct)

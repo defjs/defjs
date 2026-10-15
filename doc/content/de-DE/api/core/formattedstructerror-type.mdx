@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'Verschachtelter Error-Baum, den StructError.format zurückgibt.'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+Das Ergebnis von `StructError.format()`. Blatt-Messages liegen unter `_errors`; verschachtelte Keys spiegeln den fehlgeschlagenen Pfad. Ein Pfadsegment, das buchstäblich `_errors` heißt, wird als `\_errors` gespeichert.
+
+[Struct](/de-DE/api/struct)

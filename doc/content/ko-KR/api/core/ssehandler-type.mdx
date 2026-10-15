@@ -1,0 +1,16 @@
+---
+title: 'SSEHandler'
+description: '요청에 대해 SSE 스트림을 여는 종단 핸들러예요.'
+---
+
+<ApiReference identity="@defjs/core:SSEHandler" />
+
+```ts
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+```
+
+SSE 인터셉터가 받는 `next` 함수예요. `next(req)`는 안쪽으로만 가요. 이 인터셉터 뒤에 등록된 인터셉터들을 지나 스트림을 여는 전송까지 가요. 체인이 이미 끝난 뒤에 호출하면 reject돼요.
+
+`EventStreamHandle`은 `AsyncDisposable`을 확장해요. 자체 핸들을 만드는 short-circuit 구현은 `[Symbol.asyncDispose](): PromiseLike<void>`를 제공하고 같은 close lifecycle에 연결해야 해요.
+
+[인터셉터](/ko-KR/api/interceptors)

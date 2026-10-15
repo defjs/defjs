@@ -1,0 +1,16 @@
+---
+title: 'struct.bigint'
+description: 'bigint 또는 bigint 문자열을 받아 bigint를 출력하는 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.bigint" />
+
+```ts
+function bigint(): Struct<bigint | string, bigint>
+```
+
+- `bigint`나 `BigInt()`가 파싱할 수 있는 문자열을 받아요. `number`는 거부해요.
+- 출력은 항상 `bigint`예요. 파싱할 수 없는 문자열은 `invalid_type`으로 실패해요.
+- 와이어용으로 인코딩하면 값은 십진수 문자열이 돼요.
+
+[Struct](/ko-KR/api/struct)

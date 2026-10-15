@@ -1,0 +1,20 @@
+---
+title: 'طلبات GraphQL'
+description: أبقِ GraphQL كـ HTTP 200 مع فك الغلاف في التطبيق؛ ولا توفّر Core بروتوكول GraphQL.
+---
+
+# فك غلاف GraphQL عبر HTTP
+
+لا تنفّذ Defjs سياسة `errorPolicy` لـ GraphQL. مثّل النقل بطلب HTTP POST يضع الـ builder فيه مستند الاستعلام والمتغيرات. صرّح بـ `data` في الغلاف باستخدام `.nullish()` حتى تصل حالتا غياب `data` و`data: null` إلى الدالة المساعدة، ثم عالج `errors[]` قبل فحص `data`.
+
+انظر [قرارات التصميم](/ar/docs/design-decisions).
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable viewer unavailable
+```
+
+نجاح HTTP يعني فقط أن الغلاف وصل. تبقى أخطاء التطبيق في `errors[]` حتى ترمي دالة فك الغلاف استثناءً أو تُرجع نتيجة، بما في ذلك الاستجابة التي تحتوي على `data: null`. يتعامل المثال مع غياب `data` ومع `data: null` المصحوبة بـ `errors[]` بوصفهما أخطاء تطبيق، لا حالات عدم مطابقة Struct.

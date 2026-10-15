@@ -1,0 +1,14 @@
+---
+title: 'EventStreamRequestShape'
+description: 'Forme de requête que renvoie un builder SSE, identique à la forme HTTP.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamRequestShape" />
+
+```ts
+type EventStreamRequestShape<P extends string, M extends string> = HttpRequestShape<P, M>
+```
+
+Les mêmes champs que [`HttpRequestShape`](/fr-FR/api/core/httprequestshape-type) pour la méthode `M` et le chemin `P` du flux.
+
+[SSE](/fr-FR/api/sse)

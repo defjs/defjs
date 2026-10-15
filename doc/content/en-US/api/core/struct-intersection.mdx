@@ -1,0 +1,29 @@
+---
+title: 'struct.intersection'
+description: 'Struct that requires a value to satisfy every given struct.'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
+```
+
+`struct.intersection` is variadic: pass each struct as its own argument.
+
+- Parses the input with every struct and merges the results.
+- When every struct is an object struct, the output is one object with the fields of all of them. Keys that none of them declares are removed.
+- When two structs produce incompatible values for the same key, it fails with `invalid_intersection`.
+- Accepts `null` only when every struct accepts it, including a nested intersection marked `.null()`.
+- A single struct is returned unchanged, so it keeps its own type, including `.optional()` and `.null()`. Calling it with no structs throws `TypeError`, and so does a non-struct argument.
+- Spreading a tuple that may contain only one member infers both the singleton and multi-member results. Its object fields may therefore be optional. A tuple known to contain at least two members keeps the required intersection semantics.
+
+`IntersectionStruct<T>` is not exported. It is a `Struct` whose input and output are the intersections of the member types.
+
+[Struct](/api/struct)

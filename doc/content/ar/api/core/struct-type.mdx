@@ -1,0 +1,17 @@
+---
+title: 'Struct'
+description: 'نوع struct: أنواع المدخل والمخرج مع الأساليب المعدِّلة.'
+---
+
+<ApiReference identity="@defjs/core:Struct" />
+
+```ts
+type Struct<Input = unknown, Output = Input, OptionalOut extends boolean = false> = StructMethods<Input, Output, OptionalOut> &
+  StructLike<Input, Output, OptionalOut>
+```
+
+شكل قابل للتحليل. `Input` هو ما يقبله ([`StructInput`](/ar/api/core/structinput-type))، و`Output` هو ما يُرجعه التحليل الناجح ([`Infer`](/ar/api/core/infer-type))، و`OptionalOut` يعلّم حقلًا قد يغيب عن مخرجات الكائن.
+
+ابنِ الـ structs بواجهة [`struct`](/ar/api/core/struct). كل معدِّل في [`StructMethods`](/ar/api/core/structmethods-type) يُرجع struct جديدًا ويترك الأصلي دون تغيير.
+
+[Struct](/ar/api/struct)

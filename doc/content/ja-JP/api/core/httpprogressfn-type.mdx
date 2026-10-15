@@ -1,0 +1,18 @@
+---
+title: 'HttpProgressFn'
+description: 'アップロードとダウンロードの進捗コールバックの型です。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressFn" />
+
+```ts
+type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void
+```
+
+`HttpExecuteOptions` の `onDownloadProgress` または `onUploadProgress` として渡します。コールバックは非同期でもかまいません。次のチャンクを処理する前に、その完了を待ちます。コールバックが例外を投げるか、返したプロミスが拒否されると、ダウンロードでもアップロードでも、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。呼び出し側のキャンセルと `timeout` は引き続き優先され、それぞれ `NET_ABORTED` と `NET_TIMEOUT` になります。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます（Bun、Node、Deno）。ブラウザーでは、`Blob` / `File`、`ArrayBuffer`、または `FormData` のボディはそのまま送られ、`onUploadProgress` は呼び出されません。`onDownloadProgress` は影響を受けません。
+
+[`HttpProgressEvent`](/ja-JP/api/core/httpprogressevent-type)、[HTTP ガイド](/ja-JP/docs/http)、[Commands](/ja-JP/docs/commands) を参照してください。
+
+サーバーランタイムでは、`onUploadProgress` 付きの FormData はシリアライズされたストリームを直接読み取り、multipart の boundary を保ち、ライブラリが生成した `Content-Length` なしで送られます（HTTP/1.1 では chunked）。そのため、ボディ全体をバッファせずに進捗、タイムアウト、中止が働きます。有効な明示的 `Content-Length` が総量を示していなければ、総量は不明と報告されます。一部の事前署名アップロード先のように `Content-Length` を要求するエンドポイントでは、`onUploadProgress` を省いてください。その場合、プラットフォームの Fetch が FormData を長さ付きで送ります。`loaded` はデコード済みストリームのバイト数を数えるため、identity 以外のエンコーディングを使うダウンロードでも `total: 0` と `lengthComputable: false` が報告されます。キャンセルすると、ラップしたアップロードストリームを解放します。
+
+[HTTP](/ja-JP/api/http)

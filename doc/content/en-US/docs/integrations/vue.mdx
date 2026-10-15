@@ -1,0 +1,81 @@
+---
+title: 'Vue'
+description: Install the plugin, provide a client, fetch a user, and abort on reactive change.
+---
+
+# Vue
+
+Wire an existing `@defjs/core` client into Vue. You get a plugin, an injection key, and `injectClient()`. The package does **not** create clients, cache results, retry commands, or close transport resources on unmount.
+
+## Basic Setup
+
+Install `@defjs/core`, `@defjs/vue`, and Vue 3.2+ (the adapter only needs `provide` / `inject`, but the examples use `<script setup>` and `onScopeDispose`, which arrived in 3.2). ESM:
+
+`bun add @defjs/core @defjs/vue vue`
+
+Create the client, install the plugin, then fetch with abort-on-change:
+
+<include cwd lang="typescript">
+  examples/vue/main.ts#example
+</include>
+
+<include cwd>examples/vue/basic-setup.vue#example</include>
+
+`createClientPlugin(client)` provides the exact object you pass. No clone, no disposal hook. Configure core options and interceptors when you create the client.
+
+`onCleanup` runs before the watcher re-runs and when it stops. Register it before starting async work. The error-first tuple stays application data.
+
+## Inject and override
+
+`injectClient()` reads the nearest `HTTP_CLIENT` provider. Call it in a valid Vue injection context, such as synchronous `setup()` or a synchronous `app.runWithContext()` callback (Vue 3.3+). Compiler-restored contexts after top-level `await` in `<script setup>` are also valid.
+
+An `Error` is thrown if there is no active injection context or no client was provided. Provide a client with `app.use(createClientPlugin(client))` or an ancestor’s `provide(HTTP_CLIENT, client)`; installing the plugin alone does not make calls outside an injection context valid.
+
+Override a subtree with Vue’s `provide(HTTP_CLIENT, childClient)`:
+
+<include cwd>examples/vue/inject-and-override.vue#example</include>
+
+Nearest provider wins. Descendants get `childClient`; siblings outside the subtree keep the app-level client.
+
+## Own HTTP work outside a watcher
+
+For work started by a composable or component outside a watcher, use `AbortController` + `onScopeDispose`. Abort startup and active work; check the signal before assigning reactive state. A plugin or injection scope does not infer who owns a command. For list pages, wrap `execute` with Vue Query (or similar) — `@defjs/vue` stays DI only and does **not** ship `useRequest`.
+
+When a scope owns a client, keep it request-independent for browser-wide reuse. If it captures headers, cookies, users, tenants, or credentials, create it in the relevant app/SSR request boundary and provide that instance there.
+
+## Clean up realtime scope
+
+Close a stream or session even when the scope disappears mid-connect. Abort startup, close a late-arriving handle, consume the single iterator, await the terminal promise:
+
+<include cwd>examples/vue/realtime-scope.vue#example</include>
+
+Fatal stream errors and queue overflow reject the iterator, so the loop has a `catch`; otherwise that rejection is unhandled. The example keeps only the last 100 messages and keys rows by an id, because identical payloads would give duplicate keys. Stopping the scope ends iteration normally for SSE; an aborted WebSocket session instead rejects `receive` with `AbortError`, so guard the `catch` the same way.
+
+WebSocket: same sequence — abort prep, close a late session, consume `session.receive`, unsubscribe `onStateChange` / `onRuntimeError`, close, await `session.closed`. Keep cleanup idempotent; disposal and iterator completion can meet.
+
+## SSR scope
+
+`createClientPlugin(client)` provides one instance to one Vue app. In the browser, share it when endpoint, interceptors, and captured state are safe to share. During SSR, create and install a separate client per request when headers, cookies, users, tenants, or credentials differ.
+
+App unmount, plugin removal, and component scope disposal do **not** abort HTTP, close SSE/WebSocket, unsubscribe listeners, or dispose the core client. The owner that starts the work must finish it.
+
+## Reference
+
+Public exports from `@defjs/vue`:
+
+<include cwd lang="typescript">
+  examples/vue/exports.ts#example
+</include>
+
+- `HTTP_CLIENT` — `InjectionKey<Client>` for native `provide` / `inject`
+- `createClientPlugin(client)` — Vue `Plugin` that provides that client
+- `injectClient()` — nearest `Client`, or throws
+
+Create clients and options in `@defjs/core`. See [Client](/docs/client), [Commands](/docs/commands), [Interceptors](/docs/interceptors), [SSE](/docs/sse), and [WebSocket](/docs/web-socket).
+
+## Related recipes
+
+- [GET with a declared 404](/recipes/get-declared-404)
+- [Cancel an HTTP call](/recipes/cancel-http)
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Open a WebSocket session](/recipes/websocket-session)

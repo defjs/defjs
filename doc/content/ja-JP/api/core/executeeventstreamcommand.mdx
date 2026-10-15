@@ -1,0 +1,24 @@
+---
+title: 'executeEventStreamCommand'
+description: 'クライアント設定に対して SSE コマンドを開く、低レベルの入口です。'
+---
+
+<ApiReference identity="@defjs/core:executeEventStreamCommand" />
+
+```ts
+function executeEventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand<TInput, TEvents, TError>,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+```
+
+`client.execute` の低レベルの入口です。アプリケーションコードではクライアントを使ってください。
+
+- **戻り値** `[null, stream, open]` または `[fault, undefined, open | undefined]` です。fault は `Fault<TError>` です。`error` を宣言していれば、デコードされたハンドシェイクのボディが `data` に入り、宣言していなければ `Fault<undefined>` です。
+
+[SSE](/ja-JP/api/sse)

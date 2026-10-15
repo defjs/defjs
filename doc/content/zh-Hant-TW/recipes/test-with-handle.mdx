@@ -1,0 +1,20 @@
+---
+title: '本地 HTTP 測試'
+description: 用 withHTTPHandle 替換單一 client 的 Fetch，command 維持不變。
+---
+
+# 用本機 Fetch handle 測試
+
+`withHTTPHandle(...)` 只替換該 client 的 Fetch。你仍會拿到 URL 建立、interceptors、狀態碼分派與 Struct 解碼 — 不需要 DNS、TLS 或真實伺服器。
+
+細節見 [Client](/zh-Hant-TW/docs/client)。
+
+<include cwd meta="get-user.test.ts">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+```txt
+Ada 200
+```
+
+正式環境用真實的 `withEndpoint(...)` client 跑同一個 `getUser` command — 變的只有 handle。

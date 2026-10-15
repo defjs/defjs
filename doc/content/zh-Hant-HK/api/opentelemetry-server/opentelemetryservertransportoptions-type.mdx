@@ -1,0 +1,29 @@
+---
+title: 'OpenTelemetryServerTransportOptions'
+description: 每個 transport 共用嘅 options，即係 enabled 同 span hooks，對 response type 泛型化。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerTransportOptions" />
+
+```ts
+interface OpenTelemetryServerTransportOptions<TResponse> {
+  enabled?: boolean
+  startSpanHook?: (request: HttpRequest) => Attributes
+  requestHook?: (span: Span, req: HttpRequest) => Promise<void> | void
+  responseHook?: (span: Span, res: TResponse, req: HttpRequest) => Promise<void> | void
+}
+```
+
+`TResponse` 係 `responseHook` 收到嘅內容：HTTP 係 `HttpResponse<unknown>`，SSE 係 `EventStreamHandle<unknown>`，WebSocket 係 `WebSocketSessionLike`。參閱 [OpenTelemetryServerHttpOptions](/zh-Hant-HK/api/opentelemetry-server/opentelemetryserverhttpoptions-type)、[OpenTelemetryServerSSEOptions](/zh-Hant-HK/api/opentelemetry-server/opentelemetryserversseoptions-type) 同 [OpenTelemetryServerWebSocketOptions](/zh-Hant-HK/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type)。
+
+`enabled` 預設係 `true`；只有 `enabled: false` 先會關閉該 transport。舊嘅 boolean 開關（`http: false`）同頂層 hooks 只會被 TypeScript types 拒絕，runtime 並冇檢查，所以 runtime 時 `http: false` 會令 transport 保持啟用，頂層 hook 亦會被靜靜咁忽略。
+
+Span hooks 只會喺有傳入 `tracer` 時運行。`startSpanHook` 會喺所屬 transport 建立 span 之前同步運行。佢 return 嘅 attributes 會喺 built-in attributes 之後套用，所以 application 可以覆蓋 `url.full` 或者其他初始值。如果佢 throw，Defjs 會用 built-in attributes 建立 span，然後繼續處理 request。`requestHook` 會喺 span 建立之後、request 送出之前運行；`responseHook` 會喺 transport 結果返回之後運行。兩者都可以 return promise，但都唔會被 await：throw 或者 rejection 唔會阻擋或者令操作失敗。`responseHook` 嘅第三個參數係原本嘅 request。
+
+當 `span.isRecording()` 係 true，hook failure 會記錄 `defjs.otel.hook.error` 同 `exception` event。span 唔再 recording（已結束或者未採樣）時，failure 會經 `diag.error` 交畀 OpenTelemetry diagnostic logger。Application 必須設定 `@opentelemetry/api` 嘅 `diag.setLogger(...)` 先接收到；預設唔會自動輸出。呢個 package 唔會初始化 SDK，呢類診斷亦唔係獨立嘅 SDK `LogRecord`。
+
+預設情況下，`url.full` 只會將 `request.endpoint` 對可選嘅 `request.baseEndpoint` 解析；獨立嘅 `request.queryString` 唔會附加上去。呢條界線並唔係 redaction，而且 package 冇內建 redactor 或者 sensitive-key policy。請明確建立 application 自己擁有嘅 URL，有需要時再自行 redact：
+
+<include cwd>examples/api/opentelemetry-server-transport-options.ts#example</include>
+
+[@defjs/opentelemetry-server](/zh-Hant-HK/api/opentelemetry-server)

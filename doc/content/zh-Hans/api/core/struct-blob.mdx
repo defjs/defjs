@@ -1,0 +1,16 @@
+---
+title: 'struct.blob'
+description: '接受 Blob 的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.blob" />
+
+```ts
+function blob(): Struct<Blob, Blob>
+```
+
+- 接受 `Blob`（`File` 也是 `Blob`）。其他值以 `invalid_type` 失败。
+- 作为 body 根时原样发送，使用 blob 自带的 type，没有则用 `application/octet-stream`。
+- 作为 `output` 或 `error` struct 时，响应 body 会按 `Blob` 读取。
+
+[Struct](/zh-Hans/api/struct)

@@ -1,0 +1,33 @@
+---
+title: 'ClientOptions'
+description: 'خيارات العميل على شكل المدخل، وتعكس ما تضبطه مساعدات الخيارات.'
+---
+
+<ApiReference identity="@defjs/core:ClientOptions" />
+
+```ts
+interface ClientOptions extends HttpClientOptions {
+  sse?: ClientSSEOptions
+  webSocket?: ClientWebSocketOptions
+}
+
+// Non-exported base, shown inline.
+interface HttpClientOptions {
+  endpoint: string
+  headers?: Headers
+  http?: { handle?: FetchHandle }
+  interceptors?: Interceptor[]
+  querySerializer?: QuerySerializer
+  timeout?: number
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName?: string
+    headerName?: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+}
+```
+
+الشكل الموجَّه للمستخدم للإعدادات قبل تطبيق القيم الافتراضية. لا يقبل `createClient` هذا الكائن؛ اضبط العميل بمساعدات الخيارات مثل `withEndpoint` و`withTimeout`. و[`ClientConfig`](/ar/api/core/clientconfig-type) هي المقابل المحلول.
+
+[العميل](/ar/api/client)

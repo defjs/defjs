@@ -1,0 +1,56 @@
+---
+title: Defjs
+description: 型別化的 HTTP、SSE、WebSocket 指令，搭配明確的 client 與 error-first 結果。
+---
+
+# Defjs
+
+定義 endpoint、建立不透明的 command，再執行它。HTTP、SSE、WebSocket 都是同一套形狀。
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Defjs 不會幫你快取結果、自動重試，也不會在你忘記時關掉串流。取消與清理由你負責。
+
+## 選傳輸方式
+
+| 你要的                    | 從這裡開始                               | 成功時的結果                              |
+| ------------------------- | ---------------------------------------- | ----------------------------------------- |
+| 請求 + 依狀態碼區分的回應 | [HTTP](/zh-Hant-TW/docs/http)            | 解碼後的資料 + `HttpResponse`             |
+| 長生命週期的伺服器事件流  | [SSE](/zh-Hant-TW/docs/sse)              | 一個串流 + 啟動時的 `open` 快照           |
+| 雙向工作階段              | [WebSocket](/zh-Hant-TW/docs/web-socket) | 一個 session + 啟動時的 `connection` 快照 |
+
+第一次用？先走[開始使用](/zh-Hant-TW/docs/start)，再挑一個[操作範例](/zh-Hant-TW/recipes/get-declared-404)。想知道「為什麼這樣設計」？跑過範例後再看[設計決策](/zh-Hant-TW/docs/design-decisions)。
+
+## 選套件
+
+| 套件                          | 何時用                                                                                                      |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）                                                                    |
+| `@defjs/react`                | `ClientProvider` / `useClient` — 見 [React](/zh-Hant-TW/docs/integrations/react)                            |
+| `@defjs/vue`                  | Plugin + `injectClient` — 見 [Vue](/zh-Hant-TW/docs/integrations/vue)                                       |
+| `@defjs/opentelemetry-server` | 出站 spans、metrics 與 logs — 見 [OpenTelemetry Server](/zh-Hant-TW/docs/integrations/opentelemetry-server) |
+
+## 結果形狀
+
+三種傳輸都回傳 error-first 的三項 tuple。位置對齊，意義不一樣：
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+失敗時第二項是 `undefined`。HTTP 的第三項也是 `undefined`，因為 fault 已經帶著回應 metadata。SSE 與 WebSocket 的第三項，則是失敗之前若已捕捉到啟動快照，就是那份快照。詳見[錯誤](/zh-Hant-TW/docs/errors)。
+
+## 擁有權一句話講完
+
+HTTP 過期就 abort。SSE 要 close 並 `await stream.closed`。WebSocket 要 close 並 `await session.closed`。在伺服器上，若 options 會捕捉 cookies、auth 或 tenant 資料，請在請求邊界內建立 client。記錄前先遮罩 URL、headers、bodies。
+
+## 相關操作範例
+
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [POST JSON](/zh-Hant-TW/recipes/post-json)
+- [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)
+- [用本機 Fetch handle 測試](/zh-Hant-TW/recipes/test-with-handle)

@@ -1,0 +1,14 @@
+---
+title: 'ErrorMap'
+description: 'Callback that rewrites the message of a struct issue.'
+---
+
+<ApiReference identity="@defjs/core:ErrorMap" />
+
+```ts
+type ErrorMap = (issue: StructIssue) => string | undefined
+```
+
+Passed as the `errorMap` option of `struct.parse`. It is called for each issue (`code`, `expected`, `message`, `path`, `received`) before the issue is recorded. Any string, including `''`, replaces the default; only `undefined` keeps it. The map belongs to this parse call and also handles bigint/date conversion failures from a struct created by another Core copy. Default messages omit received values; custom text is used verbatim, so avoid including sensitive `received` values.
+
+[Struct](/api/struct)

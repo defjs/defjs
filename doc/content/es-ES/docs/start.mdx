@@ -1,0 +1,137 @@
+---
+title: 'Inicio rápido'
+description: Define GET /users/:id, ejecútalo contra un handle Fetch local y luego apúntalo a una API real.
+---
+
+# Primeros pasos: una solicitud HTTP
+
+Vas a definir `GET /users/:id`, ejecutarlo con un cliente explícito y decodificar tanto el `200` como el `404` declarado. El handler local mantiene la primera ejecución offline; el comando no cambia cuando cambias a un servicio real.
+
+## Paso 1 — Instalar
+
+`@defjs/core` es ESM y funciona en Node.js, Bun o Deno. Node.js 22.18+ (o 24+) ejecuta el `.ts` directamente mediante type stripping; las versiones 22.x anteriores necesitan `--experimental-strip-types`. Mantén `"type": "module"` en package.json. En el navegador sigues necesitando tu bundler y Fetch.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno add npm:@defjs/core
+```
+
+</Tab>
+</Tabs>
+## Paso 2 — Definir la solicitud
+
+Crea `src/get-user.ts`. El struct de input es el valor de quien llama. `builder` coloca ese valor en la solicitud. Aquí todo el input es el objeto de path, así que los campos escalares sin alias rellenan `:id`.
+
+<include cwd meta="get-user.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` es el cuerpo 2xx. `error` es cualquier otro estado. Un struct cada uno. Usa `struct.or(...)` o una unión discriminada cuando esos cuerpos difieran.
+
+`defineRequest(...)` devuelve un endpoint. Llamar a `getUser(...)` construye el comando opaco que pasarás a `client.execute(...)`. El `builder` de arriba es la función que coloca el input; no es el endpoint.
+
+## Paso 3 — Ejecutarlo en local
+
+Conecta un handle Fetch local al cliente para poder ejecutar sin red. Defjs sigue validando la entrada, construyendo el `Request`, despachando por estado y parseando el cuerpo.
+
+<include cwd meta="get-user.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+Ejecútalo:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun src/get-user.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno run src/get-user.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+Prueba un usuario que falta — cambia el id del path a `8` y vuelve a ejecutar:
+
+```txt
+User not found
+```
+
+En éxito: `error` es `null`, `user` es la salida Struct del `200`, `response` es un `HttpResponse`. En un `404` declarado: `error.code` es `'HTTP_STATUS'`, `error.status` es `404` y `error.data` está tipado como `NotFound`. El segundo elemento de la tupla es `undefined` en fallo.
+
+## Paso 4 — Apuntar a una API real
+
+Quita `withHTTPHandle(...)` y pon la URL base real cuando el servicio implemente `GET /v1/users/:id` con esos cuerpos.
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+Mismo comando. Cliente distinto.
+
+## Cuando el resultado cambia
+
+- Entrada mala → `REQ_INPUT_INVALID`; opciones de cancel conflictivas → `REQ_OPTIONS_INVALID`; un
+  `builder` que falla → `REQ_BUILD_FAILED`
+- Un estado no-2xx → `HTTP_STATUS`, con `error.data` tipado cuando se declaró `error` y su cuerpo decodifica
+- Un cuerpo JSON declarado con otro media type → `RES_MEDIA_TYPE_INVALID`, avisado antes de leer el cuerpo
+- Un cuerpo declarado (`output` para 2xx, `error` en el resto) que no decodifica → `RES_DECODE_FAILED` o `RES_STRUCT_MISMATCH`, sea cual sea el estado
+- Fallo de Fetch / cancel / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` debe ser un entero seguro positivo en `1..2_147_483_647`. Formas de cancel válidas: `{ timeout }`, `{ abort }`, o `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` juntos es inválido. La cancelación te dice lo que vio el llamador — no si una escritura en el servidor se confirmó.
+
+## Siguientes recetas
+
+- [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
+- [POST JSON](/es-ES/recipes/post-json)
+- [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
+- [Consumir un stream SSE](/es-ES/recipes/consume-sse)
+- [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)

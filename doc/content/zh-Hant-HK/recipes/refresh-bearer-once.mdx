@@ -1,0 +1,20 @@
+---
+title: '401 後更新令牌'
+description: 喺同一個 interceptor 入面 attach Authorization 同 replay 一次；next() 只向內走。
+---
+
+# 401 時 refresh Bearer token 一次
+
+`next()` 係**呢條** onion 嘅其餘部分——唔係由外面 `axios(config)` 再 dispatch。將 attach、single-flight refresh 同一次 replay 放喺**同一個** HTTP interceptor，外層先唔會 run 兩次。
+
+睇 [Interceptors](/zh-Hant-HK/docs/interceptors)。
+
+<include cwd meta="refresh-bearer.ts">
+  examples/recipes/refresh-bearer-once.ts#example
+</include>
+
+```txt
+null 42
+```
+
+再 call `next` 只會重新進入**呢層入面**嘅 interceptors（同 Fetch handler）。佢唔會再 run 外層嘅 timing/auth wrappers——所以 401 嘅佈局要放喺同一個 interceptor，唔係第二次 `execute`。

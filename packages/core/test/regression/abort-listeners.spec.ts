@@ -1,0 +1,301 @@
+import { expect, test, vi } from 'vitest'
+import {
+  createClient,
+  createSSEInterceptor,
+  createWebSocketInterceptor,
+  defineEventStream,
+  defineRequest,
+  defineWebSocket,
+  struct,
+  withEndpoint,
+  withHTTPHandle,
+  withInterceptors,
+  withSSEHandle,
+  withSSEReconnect,
+  withWebSocketHandle,
+} from '../../src'
+import type { EventStreamHandle, WebSocketSessionLike } from '../../src'
+import { MALFORMED_INTERCEPTOR_RESULTS } from '../malformed_interceptor_results'
+
+function watch(signal: AbortSignal) {
+  const add = vi.spyOn(signal, 'addEventListener')
+  const remove = vi.spyOn(signal, 'removeEventListener')
+  return {
+    expectReleased() {
+      const added = add.mock.calls.filter(([type]) => type === 'abort')
+      expect(remove.mock.calls.filter(([type]) => type === 'abort')).toHaveLength(added.length)
+      for (const [type, listener] of added) {
+        expect(remove).toHaveBeenCalledWith(type, listener)
+      }
+      add.mockRestore()
+      remove.mockRestore()
+    },
+  }
+}
+
+const httpEndpoint = defineRequest({ method: 'GET', output: struct.null(), path: '/' })
+const sseEndpoint = defineEventStream({ events: { message: struct.string() }, maxBufferSize: 1024, maxQueueSize: 4, path: '/' })
+const socketEndpoint = defineWebSocket({ incoming: struct.unknown(), maxIncomingQueueSize: 4, path: '/' })
+
+test.each(['success', 'fault', 'abort', 'timeout'] as const)('HTTP releases caller abort listeners after %s', async (mode) => {
+  let release: () => void = () => undefined
+  const client = createClient(
+    withEndpoint('https://example.test'),
+    withHTTPHandle(async () => {
+      if (mode === 'success') return new Response('null', { headers: { 'content-type': 'application/json' } })
+      if (mode === 'fault') return new Response(null, { status: 500 })
+      return new Promise<Response>((resolve) => {
+        release = () => resolve(new Response('null', { headers: { 'content-type': 'application/json' } }))
+      })
+    }),
+  )
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const pending = client.execute(httpEndpoint(), { signal: caller.signal, ...(mode === 'timeout' ? { timeout: 1 } : {}) })
+  if (mode === 'abort') caller.abort('stop')
+  const [fault] = await pending
+  release()
+  expect(fault?.code ?? null).toBe(
+    mode === 'success' ? null : mode === 'fault' ? 'HTTP_STATUS' : mode === 'abort' ? 'NET_ABORTED' : 'NET_TIMEOUT',
+  )
+  signal.expectReleased()
+})
+
+test('SSE releases caller abort listeners after a reconnecting stream closes', async () => {
+  let attempt = 0
+  const client = createClient(
+    withEndpoint('https://example.test'),
+    withSSEReconnect({ attempts: 1, delayMs: 0 }),
+    withSSEHandle(async () => {
+      attempt += 1
+      if (attempt === 1) {
+        let sent = false
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            pull(controller) {
+              if (!sent) {
+                sent = true
+                controller.enqueue(new TextEncoder().encode('id: 1\ndata: first\n\n'))
+              } else {
+                controller.error(new Error('connection lost'))
+              }
+            },
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        )
+      }
+      return new Response('data: second\n\n', { headers: { 'content-type': 'text/event-stream' } })
+    }),
+  )
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const [fault, stream] = await client.execute(sseEndpoint(), { signal: caller.signal })
+  expect(fault).toBeNull()
+  if (!stream) throw new Error('Expected an SSE stream')
+  const values: string[] = []
+  for await (const event of stream) values.push(event.data)
+  await stream.closed
+  expect(values).toEqual(['first', 'second'])
+  signal.expectReleased()
+})
+
+test.each(['fault', 'abort', 'timeout'] as const)('SSE releases caller abort listeners after %s', async (mode) => {
+  let release: () => void = () => undefined
+  const client = createClient(
+    withEndpoint('https://example.test'),
+    withSSEHandle(async () => {
+      if (mode === 'fault') return new Response(null, { status: 500 })
+      return new Promise<Response>((resolve) => {
+        release = () => resolve(new Response('data: hi\n\n', { headers: { 'content-type': 'text/event-stream' } }))
+      })
+    }),
+  )
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const pending = client.execute(sseEndpoint(), { signal: caller.signal, ...(mode === 'timeout' ? { timeout: 1 } : {}) })
+  if (mode === 'abort') caller.abort('stop')
+  const [fault] = await pending
+  release()
+  expect(fault).toBeTruthy()
+  signal.expectReleased()
+})
+
+test.each(MALFORMED_INTERCEPTOR_RESULTS)('SSE releases caller listeners after an interceptor resolves %s', async (_name, resolved) => {
+  const client = createClient(withEndpoint('https://example.test'), withInterceptors(createSSEInterceptor(async () => resolved() as never)))
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const [fault, stream] = await client.execute(sseEndpoint(), { signal: caller.signal })
+  expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
+  expect(stream).toBeUndefined()
+  signal.expectReleased()
+})
+
+test('SSE closes an opened stream and releases caller listeners when the interceptor drops the result', async () => {
+  let opened: EventStreamHandle<unknown> | undefined
+  const client = createClient(
+    withEndpoint('https://example.test'),
+    withSSEHandle(async () => new Response(new ReadableStream(), { headers: { 'content-type': 'text/event-stream' } })),
+    withInterceptors(
+      createSSEInterceptor(async (request, next) => {
+        opened = await next(request)
+        return undefined as never
+      }),
+    ),
+  )
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const [fault, stream] = await client.execute(sseEndpoint(), { signal: caller.signal })
+  expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
+  expect(stream).toBeUndefined()
+  expect(opened).toBeDefined()
+  await expect(opened?.closed).resolves.toMatchObject({ kind: 'aborted' })
+  signal.expectReleased()
+})
+
+test.each(['closed', 'close', 'open', Symbol.asyncIterator, Symbol.asyncDispose])(
+  'SSE rejects a wrapper missing %s and releases the opened stream',
+  async (key) => {
+    let opened: EventStreamHandle<unknown> | undefined
+    const caller = new AbortController()
+    const signal = watch(caller.signal)
+    const client = createClient(
+      withEndpoint('https://example.test'),
+      withSSEHandle(async () => new Response(new ReadableStream(), { headers: { 'content-type': 'text/event-stream' } })),
+      withInterceptors(
+        createSSEInterceptor(async (request, next) => {
+          opened = await next(request)
+          return { ...opened, [key]: undefined } as never
+        }),
+      ),
+    )
+    try {
+      const [fault, stream] = await client.execute(sseEndpoint(), { signal: caller.signal })
+      expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
+      expect(stream).toBeUndefined()
+      await expect(opened?.closed).resolves.toMatchObject({ kind: 'aborted' })
+      signal.expectReleased()
+    } finally {
+      opened?.close()
+    }
+  },
+)
+
+class TestSocket extends EventTarget {
+  static readonly OPEN = 1
+  static readonly CONNECTING = 0
+  static readonly CLOSED = 3
+  readonly url: string
+  readyState = TestSocket.CONNECTING
+  bufferedAmount = 0
+  binaryType = 'arraybuffer'
+  extensions = ''
+  protocol = ''
+
+  constructor(url: string | URL) {
+    super()
+    this.url = String(url)
+    queueMicrotask(() => {
+      if (this.readyState !== TestSocket.CONNECTING) return
+      this.readyState = TestSocket.OPEN
+      this.dispatchEvent(new Event('open'))
+    })
+  }
+
+  send(): void {}
+
+  close(): void {
+    if (this.readyState === TestSocket.CLOSED) return
+    this.readyState = TestSocket.CLOSED
+    this.dispatchEvent(new Event('close'))
+  }
+}
+
+test('WebSocket closes an opened session and releases caller listeners when the interceptor drops the result', async () => {
+  let opened: WebSocketSessionLike | undefined
+  const client = createClient(
+    withEndpoint('https://example.test'),
+    withWebSocketHandle(TestSocket),
+    withInterceptors(
+      createWebSocketInterceptor(async (request, next) => {
+        opened = await next(request)
+        return undefined as never
+      }),
+    ),
+  )
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const [fault, session] = await client.execute(socketEndpoint(), { signal: caller.signal })
+  expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
+  expect(session).toBeUndefined()
+  expect(opened).toBeDefined()
+  await expect(opened?.closed).resolves.toMatchObject({ kind: 'aborted' })
+  signal.expectReleased()
+})
+
+test.each([
+  'closed',
+  'close',
+  'send',
+  'receive',
+  'onRuntimeError',
+  'onStateChange',
+  'connection',
+  'bufferedAmount',
+  'state',
+  Symbol.asyncDispose,
+])('WebSocket rejects a wrapper missing %s and releases the opened session', async (key) => {
+  let opened: WebSocketSessionLike | undefined
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const client = createClient(
+    withEndpoint('https://example.test'),
+    withWebSocketHandle(TestSocket),
+    withInterceptors(
+      createWebSocketInterceptor(async (request, next) => {
+        opened = await next(request)
+        return { ...opened, [key]: undefined } as never
+      }),
+    ),
+  )
+  try {
+    const [fault, session] = await client.execute(socketEndpoint(), { signal: caller.signal })
+    expect(fault?.code).toBe('EXT_INTERCEPTOR_FAILED')
+    expect(session).toBeUndefined()
+    await expect(opened?.closed).resolves.toMatchObject({ kind: 'aborted' })
+    signal.expectReleased()
+  } finally {
+    opened?.close()
+  }
+})
+
+class FailingSocket extends TestSocket {
+  constructor(url: string | URL) {
+    super(url)
+    throw new Error('socket failed')
+  }
+}
+
+class HangingSocket extends TestSocket {
+  constructor(url: string | URL) {
+    super(url)
+    this.readyState = 99
+  }
+}
+
+test.each(['success', 'fault', 'abort', 'timeout'] as const)('WebSocket releases caller abort listeners after %s', async (mode) => {
+  const Socket = mode === 'success' ? TestSocket : mode === 'fault' ? FailingSocket : HangingSocket
+  const client = createClient(withEndpoint('https://example.test'), withWebSocketHandle(Socket))
+  const caller = new AbortController()
+  const signal = watch(caller.signal)
+  const pending = client.execute(socketEndpoint(), { signal: caller.signal, ...(mode === 'timeout' ? { timeout: 1 } : {}) })
+  if (mode === 'abort') caller.abort('stop')
+  const [fault, session] = await pending
+  if (mode === 'success') {
+    if (!session) throw new Error('Expected a WebSocket session')
+    session.close()
+    await session.closed
+  }
+  if (mode === 'success') expect(fault).toBeNull()
+  else expect(fault).toBeTruthy()
+  signal.expectReleased()
+})

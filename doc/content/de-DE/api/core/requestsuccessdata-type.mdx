@@ -1,0 +1,14 @@
+---
+title: 'RequestSuccessData'
+description: 'Dekodierter Success-Body-Type des deklarierten output-Structs eines Endpoints.'
+---
+
+<ApiReference identity="@defjs/core:RequestSuccessData" />
+
+```ts
+type RequestSuccessData<TOutput extends AnyStruct | undefined> = [TOutput] extends [undefined] ? undefined : Infer<TOutput>
+```
+
+Der Type des dekodierten Bodys für den deklarierten `output`-Struct, oder `undefined`, wenn keiner deklariert ist.
+
+[HTTP](/de-DE/api/http)

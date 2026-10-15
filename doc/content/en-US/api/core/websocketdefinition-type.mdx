@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: 'Contract object passed to defineWebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming` is the struct every received frame is parsed with. Frames are JSON text.
+- `outgoing` is the struct `session.send` validates and encodes with. Without it, `send` throws.
+- `maxIncomingQueueSize` is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
+- `protocols` is the static default subprotocol list. The `protocols` execute option and [`withWebSocketProtocols`](/api/core/withwebsocketprotocols) override it.
+- `operation` is a static, low-cardinality name for telemetry.
+- `input` is the struct for the command input. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see [`WebSocketRequestShape`](/api/core/websocketrequestshape-type).
+
+Invalid queue limits are reported when the command executes, as a `REQ_OPTIONS_INVALID` fault.
+
+[WebSocket](/api/web-socket)

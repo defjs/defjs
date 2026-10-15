@@ -1,0 +1,29 @@
+---
+title: 'defineWebSocket'
+description: '타입이 있는 WebSocket 엔드포인트를 선언해요.'
+---
+
+<ApiReference identity="@defjs/core:defineWebSocket" />
+
+```ts
+function defineWebSocket<
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, 'path'> & {
+    input?: TInput
+    path: P
+  } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,
+): WebSocketEndpoint<TInput, TIncoming, TOutgoing>
+```
+
+- **definition** — `path`, `incoming` struct 하나, 그리고 필수인 `maxIncomingQueueSize`(양의 안전한 정수)예요. 선택 항목으로 `outgoing`과 `input` struct, 정적 `protocols`, `maxOutgoingQueueSize`(음이 아닌 안전한 정수), `operation`이 있어요. `input`을 선언하면 입력이 이미 요청 모양과 같아도 명시적인 `builder`가 반드시 필요해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+- **반환** 엔드포인트예요. 입력을 넣어 호출하면 `WebSocketCommand`가 나와요.
+
+WebSocket `builder`는 `path`와 `query`만 반환할 수 있어요. `headers`와 `body`는 거부돼요. `WebSocketDefinitionBase`와 `BuilderField`는 내부 helper 타입이에요.
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+[WebSocket](/ko-KR/api/web-socket)

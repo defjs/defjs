@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: 'defineWebSocket に渡す契約オブジェクトです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming` は、受信したすべてのフレームをパースする struct です。フレームは JSON テキストです。
+- `outgoing` は、`session.send` が検証とエンコードに使う struct です。ないと `send` は throw します。
+- `maxIncomingQueueSize` は必須で、正の安全な整数でなければなりません。`maxOutgoingQueueSize` は 0 以上の安全な整数で、デフォルトは `0` です。`0` のとき、セッションが `reconnecting` の間に送ったメッセージはキューに入りません。
+- `protocols` は静的なデフォルトのサブプロトコル一覧です。execute の `protocols` option と [`withWebSocketProtocols`](/ja-JP/api/core/withwebsocketprotocols) がこれを上書きします。
+- `operation` は、テレメトリー用の静的で低カーディナリティの名前です。
+- `input` はコマンド入力の struct です。`input` を宣言した定義では、入力がすでにリクエストの形でも、明示的な `builder` が必須です。`builder` を省略できるのは `input` がない定義だけです。ビルダーが返せるのは `path` と `query` だけです。[`WebSocketRequestShape`](/ja-JP/api/core/websocketrequestshape-type) を見てください。
+
+不正なキュー上限は、コマンドの実行時に `REQ_OPTIONS_INVALID` の fault として報告されます。
+
+[WebSocket](/ja-JP/api/web-socket)

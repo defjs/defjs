@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'Progress snapshot passed to upload and download callbacks.'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+Mirrors the `ProgressEvent` fields. `loaded` counts bytes read from the upload or download stream, not bytes acknowledged by the server. Download bytes may already be decompressed. A download total is computable only with a positive `Content-Length` and an absent or `identity` `Content-Encoding`; compressed downloads report `total: 0` and `lengthComputable: false`. A streamed FormData upload also has an unknown total unless a valid explicit `Content-Length` supplies it. Other unknown-length streams use the same `0` / `false` fields.
+
+See [`HttpProgressFn`](/api/core/httpprogressfn-type), [HTTP guide](/docs/http) and [Commands](/docs/commands).
+
+[HTTP](/api/http)

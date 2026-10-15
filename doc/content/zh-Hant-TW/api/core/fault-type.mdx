@@ -1,0 +1,22 @@
+---
+title: 'Fault'
+description: 'client.execute 可能回傳的所有失敗的聯集，以 code 判別。'
+---
+
+<ApiReference identity="@defjs/core:Fault" />
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`TErr` 是端點宣告的 `error` struct；沒有宣告時為 `undefined`。`Fault<TErr>` 是把 [`FaultOf`](/zh-Hant-TW/api/core/faultof-type) 套用到解碼後的 body 型別上，所以它是三種變體的聯集：[`DecodeFault`](/zh-Hant-TW/api/core/decodefault-type)、[`HttpStatusFault<TErr>`](/zh-Hant-TW/api/core/httpstatusfault-type) 與 [`PreflightFault`](/zh-Hant-TW/api/core/preflightfault-type)。請依 `fault.code` 做 switch。
+
+每種變體都是名為 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 會產生 `DefjsFault: <message>`。`code` 與各變體的 metadata（`status`、`response`、`data`）都是可列舉的 own property。原生的 `cause` 鏈則不可列舉。
+
+預設的 Struct message 會說 `received <kind>`，絕不是收到的值。`RES_DECODE_FAILED` 背後若是 JSON `SyntaxError`，fault 的 message 為 `Response body could not be decoded`。結構路徑會保留 record 的 key，因此可能含有敏感資訊。原始的 `StructIssue.received` 與 parser cause 仍然敏感；自訂 `errorMap` 與 extension message 會原樣使用，寫入 log 前需要審視。
+
+<include cwd>examples/api/fault.ts#example</include>
+
+必須先把 `fault.cause` 收窄成 `StructError`，才能呼叫 `format()`、`flatten()` 或 `prettify()`；這些 helper 不會被複製到 fault 上。
+
+[錯誤](/zh-Hant-TW/api/errors)

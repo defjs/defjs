@@ -1,0 +1,137 @@
+---
+title: 'البدء السريع'
+description: عرّف GET /users/:id، شغّله ضد معالج Fetch محلي، ثم وجّهه إلى API حقيقي.
+---
+
+# البدء: طلب HTTP واحد
+
+ستعرّف `GET /users/:id`، وتنفّذه عبر عميل صريح، وتفكك `200` و`404` المعلَن معًا. المعالج المحلي يبقي أول تشغيل دون شبكة؛ الأمر يبقى كما هو عندما تستبدل بخدمة حقيقية.
+
+## الخطوة 1 — التثبيت
+
+`@defjs/core` هو ESM ويعمل على Node.js أو Bun أو Deno. يشغّل Node.js 22.18+ (أو 24+) ملف `.ts` مباشرة عبر type stripping؛ أما إصدارات 22.x الأقدم فتحتاج `--experimental-strip-types`. ضع `"type": "module"` في package.json. في المتصفح ما زلت تحتاج المُجمّع وFetch.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno add npm:@defjs/core
+```
+
+</Tab>
+</Tabs>
+## الخطوة 2 — عرّف الطلب
+
+أنشئ `src/get-user.ts`. struct المدخل هو قيمة المستدعي. `builder` يضع تلك القيمة على الطلب. هنا المدخل كله هو كائن المسار، فالحقول ذات القيم المفردة (scalar) بلا alias تملأ `:id`.
+
+<include cwd meta="get-user.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` هو جسم 2xx. `error` هو كل حالة أخرى. struct واحد لكل منهما. استخدم `struct.or(...)` أو اتحادًا مميّزًا عندما تختلف تلك الأجسام.
+
+`defineRequest(...)` يُرجع نقطة نهاية. استدعاء `getUser(...)` يبني الأمر المعتم الذي ستمرّره إلى `client.execute(...)`. الـ `builder` أعلاه هو الدالة التي تضع المدخل؛ وليس نقطة النهاية.
+
+## الخطوة 3 — نفّذه محليًا
+
+اربط معالج Fetch محليًا للعميل لتشغّل بلا شبكة. Defjs ما زالت تتحقق من المدخل، وتبني `Request`، وتوزّع حسب الحالة، وتحلّل الجسم.
+
+<include cwd meta="get-user.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+شغّله:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn", "deno"]}>
+<Tab value="bun">
+```sh
+bun src/get-user.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/get-user.ts
+```
+
+</Tab>
+<Tab value="deno">
+```sh
+deno run src/get-user.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+جرّب مستخدمًا مفقودًا — غيّر معرّف المسار إلى `8` وشغّل مجددًا:
+
+```txt
+User not found
+```
+
+عند النجاح: `error` هو `null`، و`user` هو مخرج Struct لـ `200`، و`response` هو `HttpResponse`. عند `404` معلَن: `error.code` هو `'HTTP_STATUS'`، و`error.status` هو `404`، و`error.data` محدَّد النوع كـ `NotFound`. العنصر الثاني في الـ tuple هو `undefined` عند الفشل.
+
+## الخطوة 4 — وجّه إلى API حقيقي
+
+احذف `withHTTPHandle(...)` وضع عنوان الأساس الحقيقي عندما تنفّذ الخدمة `GET /v1/users/:id` بتلك الأجسام.
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+نفس الأمر. عميل مختلف.
+
+## عندما تختلف النتيجة
+
+- مدخل سيئ ← `REQ_INPUT_INVALID`؛ خيارات إلغاء متعارضة ← `REQ_OPTIONS_INVALID`؛ فشل
+  `builder` → `REQ_BUILD_FAILED`
+- حالة غير-2xx → `HTTP_STATUS`، مع `error.data` محدَّد النوع عند إعلان `error` وفكّ جسمه
+- جسم JSON معلَن بنوع وسائط آخر ← `RES_MEDIA_TYPE_INVALID`، يُبلَّغ قبل قراءة الجسم
+- جسم معلَن (`output` لـ 2xx، و`error` فيما عداها) لا يُفكّ ← `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH`، أيًّا كانت الحالة
+- فشل Fetch / إلغاء / مهلة ← `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`. أشكال الإلغاء الصالحة: `{ timeout }`، `{ abort }`، أو `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` معًا غير صالح. الإلغاء يخبرك بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
+
+## الوصفات التالية
+
+- [GET مع 404 معلَن](/ar/recipes/get-declared-404)
+- [POST JSON](/ar/recipes/post-json)
+- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)
+- [استهلاك تدفق SSE](/ar/recipes/consume-sse)
+- [فتح جلسة WebSocket](/ar/recipes/websocket-session)
+- [الاختبار بـ Fetch محلي](/ar/recipes/test-with-handle)

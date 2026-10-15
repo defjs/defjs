@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: 'Extracts the class prefix from a fault code.'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+The class of a fault code is the segment before its first `_`. `C` is a `FaultCode` or a union of them. `FaultClass<FaultCode>` is `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+[Errors](/api/errors)

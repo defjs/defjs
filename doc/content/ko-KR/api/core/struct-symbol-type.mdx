@@ -1,0 +1,16 @@
+---
+title: 'STRUCT'
+description: '타입 전용 export예요. 아웃바운드 인코더가 쓰는 내부 tag 키예요.'
+---
+
+<ApiReference identity="@defjs/core:STRUCT" />
+
+```ts
+declare const STRUCT: unique symbol
+```
+
+`STRUCT`는 **타입**으로만 export돼요 (`export type { STRUCT }`). `@defjs/core`에는 런타임 `STRUCT` export가 없어서 `import { STRUCT } from '@defjs/core'`는 컴파일에 실패하고 값도 주지 않아요.
+
+엔드포인트 입력을 파싱하는 동안 만든 객체에 붙는 열거 가능한 태그의 이름이에요. 아웃바운드 인코더는 이 태그로 어떤 struct가 그 객체를 만들었는지 알아요. `struct.parse`와 응답 디코딩은 이 태그를 설정하지 않아요. 이 심볼은 내부용이므로 애플리케이션 코드가 의존하면 안 돼요.
+
+[Struct](/ko-KR/api/struct)

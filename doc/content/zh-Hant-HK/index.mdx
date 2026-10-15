@@ -1,0 +1,56 @@
+---
+title: Defjs
+description: Typed HTTP、SSE 同 WebSocket commands，配明確 client 同 error-first results。
+---
+
+# Defjs
+
+定義一個 endpoint，建立一個 opaque command，然後執行。HTTP、SSE 同 WebSocket 都係同一套形狀。
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Defjs 唔會幫你 cache results、自動 retry，亦唔會喺你忘記時幫你 close streams。Cancellation 同 cleanup 係你自己嘅責任。
+
+## 揀傳輸方式
+
+| 你需要                            | 由呢度開始                               | 成功時嘅 result                              |
+| --------------------------------- | ---------------------------------------- | -------------------------------------------- |
+| Request + 按 status 分嘅 response | [HTTP](/zh-Hant-HK/docs/http)            | Decoded data + `HttpResponse`                |
+| 長駐嘅 server event feed          | [SSE](/zh-Hant-HK/docs/sse)              | 一條 stream + startup `open` snapshot        |
+| Bidirectional session             | [WebSocket](/zh-Hant-HK/docs/web-socket) | 一個 session + startup `connection` snapshot |
+
+第一次嚟？先睇 [Getting Started](/zh-Hant-HK/docs/start)，再拎一篇 [recipe](/zh-Hant-HK/recipes/get-declared-404)。想知「點解」？run 完先再睇 [Design Decisions](/zh-Hant-HK/docs/design-decisions)。
+
+## 揀 package
+
+| Package                       | 幾時用                                                                                                          |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）                                                                        |
+| `@defjs/react`                | `ClientProvider` / `useClient` — 睇 [React](/zh-Hant-HK/docs/integrations/react)                                |
+| `@defjs/vue`                  | Plugin + `injectClient` — 睇 [Vue](/zh-Hant-HK/docs/integrations/vue)                                           |
+| `@defjs/opentelemetry-server` | Outbound spans、metrics 同 logs — 睇 [OpenTelemetry Server](/zh-Hant-HK/docs/integrations/opentelemetry-server) |
+
+## Result 形狀
+
+三種傳輸都 return error-first 三項 tuple。位置一樣；意思唔一樣：
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+失敗時第二項係 `undefined`。HTTP 嘅第三項亦係 `undefined`，因為 fault 已經帶住 response metadata。SSE 同 WebSocket 嘅第三項，係失敗之前已經 capture 到嘅 startup snapshot（如果有）。詳情睇 [Errors](/zh-Hant-HK/docs/errors)。
+
+## Ownership 一句講晒
+
+HTTP stale 就 abort。SSE close 完之後 `await stream.closed`。WebSocket close 完之後 `await session.closed`。喺 server 上面，如果 options 會 capture cookies、auth 或 tenant data，就喺 request boundary 入面 create client。Log 之前先 redact URLs、headers 同 bodies。
+
+## 相關配方
+
+- [GET 配 declared 404](/zh-Hant-HK/recipes/get-declared-404)
+- [POST JSON](/zh-Hant-HK/recipes/post-json)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)
+- [Consume 一條 SSE stream](/zh-Hant-HK/recipes/consume-sse)
+- [開一個 WebSocket session](/zh-Hant-HK/recipes/websocket-session)
+- [用 local Fetch handle 做 test](/zh-Hant-HK/recipes/test-with-handle)

@@ -1,0 +1,22 @@
+---
+title: 'UseWebSocketConfig'
+description: '不含 signal 的 WebSocket execute options。'
+---
+
+<ApiReference identity="@defjs/core:UseWebSocketConfig" />
+
+```ts
+type UseWebSocketConfig<TIncoming = unknown, TOutgoing = unknown> = {
+  beforeConnect?: ClientWebSocketOptions['beforeConnect']
+  heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>
+  protocols?: readonly string[]
+  reconnect?: ClientWebSocketOptions['reconnect']
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+[`WebSocketExecuteOptions`](/zh-Hans/api/core/websocketexecuteoptions-type) 中 WebSocket 专属、不含 `signal` 的部分。
+
+- `beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 在单次调用中覆盖 client 级别的 options。
+- 取消是 `abort` 或 `timeout` 二选一，不能同时使用。类型层面会拒绝同时传两者，运行时同时传入则以 `REQ_OPTIONS_INVALID` fault 失败。
+
+[WebSocket](/zh-Hans/api/web-socket)

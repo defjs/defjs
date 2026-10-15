@@ -1,0 +1,29 @@
+---
+title: 'defineWebSocket'
+description: '宣告一個有型別的 WebSocket 端點。'
+---
+
+<ApiReference identity="@defjs/core:defineWebSocket" />
+
+```ts
+function defineWebSocket<
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, 'path'> & {
+    input?: TInput
+    path: P
+  } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,
+): WebSocketEndpoint<TInput, TIncoming, TOutgoing>
+```
+
+- **definition** — `path`、一個 `incoming` struct，以及必填的 `maxIncomingQueueSize`（正的安全整數）。選填 `outgoing` 與 `input` struct、靜態 `protocols`、`maxOutgoingQueueSize`（非負的安全整數）與 `operation`。只要宣告了 `input`，就必須明確提供 `builder`，即使它已經符合 request 形狀也一樣。只有沒有 `input` 的定義可以省略 `builder`。
+- **回傳** 一個 endpoint。帶 input 呼叫它，就得到 `WebSocketCommand`。
+
+WebSocket 的 `builder` 只能回傳 `path` 與 `query`；`headers` 與 `body` 會被拒絕。`WebSocketDefinitionBase` 與 `BuilderField` 是內部輔助型別。
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+[WebSocket](/zh-Hant-TW/api/web-socket)

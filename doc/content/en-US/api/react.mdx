@@ -1,0 +1,42 @@
+---
+title: '@defjs/react'
+description: ClientProvider, useClient, and provider props.
+---
+
+# React
+
+Provide an existing `@defjs/core` client to a React tree. This package does not create, cache, or dispose the client. Its entry is marked `'use client'`, so import it from client components. React 18 or later is required.
+
+See the [React guide](/docs/integrations/react).
+
+## ClientProvider
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+Context provider. Pass a client from `createClient`. A nested `ClientProvider` overrides the client for its subtree; `useClient` reads the nearest one. Passing a different `client` changes the context value for descendants.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+```ts
+function useClient(): Client
+```
+
+Reads the nearest `ClientProvider`.
+
+- **Returns** the provided client.
+- **Throws** an `Error` if called outside a `ClientProvider`.
+
+## ClientProviderProps
+
+```ts
+interface ClientProviderProps {
+  client: Client
+  children?: ReactNode
+}
+```
+
+`client` is required and owned by the application. `children` is the tree that can call `useClient`.

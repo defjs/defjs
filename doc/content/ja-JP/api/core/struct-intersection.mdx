@@ -1,0 +1,29 @@
+---
+title: 'struct.intersection'
+description: '値が、与えられたすべての struct を満たすことを要求する struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
+```
+
+`struct.intersection` は可変長引数です。各 struct を個別の引数として渡します。
+
+- 入力をすべての struct でパースし、結果をマージします。
+- すべてがオブジェクト struct の場合、出力はそれらすべてのフィールドを持つ 1 つのオブジェクトになります。どれも宣言していないキーは取り除かれます。
+- 2 つの struct が同じキーに対して互換性のない値を生成した場合は、`invalid_intersection` で失敗します。
+- `.null()` を指定したネストした交差も含め、すべての struct が `null` を受け入れる場合にのみ、`null` を受け入れます。
+- struct が 1 つだけの場合は、そのまま返されるため、`.optional()` や `.null()` を含め、元の型が保たれます。struct を渡さずに呼ぶと `TypeError` を投げ、struct でない引数でも同様です。
+- メンバーが 1 つだけの可能性があるタプルをスプレッドすると、単一メンバーと複数メンバーの両方の結果が推論されます。そのため、結果のオブジェクトフィールドが省略可能になる場合があります。少なくとも 2 つのメンバーを含むと分かっているタプルでは、交差型の必須フィールドの扱いが保たれます。
+
+`IntersectionStruct<T>` はエクスポートされません。入力と出力が、各メンバー型の交差になる `Struct` です。
+
+[Struct](/ja-JP/api/struct)

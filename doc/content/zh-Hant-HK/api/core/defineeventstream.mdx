@@ -1,0 +1,32 @@
+---
+title: 'defineEventStream'
+description: '聲明 typed 嘅 Server-Sent Events endpoint。'
+---
+
+<ApiReference identity="@defjs/core:defineEventStream" />
+
+```ts
+function defineEventStream<
+  const P extends string,
+  const M extends string = 'GET',
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<EventStreamDefinitionBase<TEvents>, 'method' | 'path'> &
+    EventStreamErrorField<TError> & {
+      input?: TInput
+      method?: M
+      path: P
+    } & BuilderField<NoInfer<TInput>, EventStreamRequestShape<NoInfer<P>, NoInfer<M>>>,
+): EventStreamEndpoint<TInput, TEvents, TError>
+```
+
+- **definition** — `path`、`events` map，仲有必填嘅 `maxBufferSize` 同 `maxQueueSize` 上限（正 safe integer）。可選 `method`（default `'GET'`）、`operation`、`input` 同 `error`。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
+- **Returns** 一個 endpoint。用 input call 佢，就會得到 `EventStreamCommand`。
+
+`EventStreamDefinitionBase`、`EventStreamErrorField` 同 `BuilderField` 係內部 helper types：只有 `TError` 係 struct 時 `error` 先必填，而聲明咗 `input` 時，`builder` 係 `(input: BuilderInput<TInput>) => EventStreamRequestShape`。
+
+<include cwd>examples/api/define-event-stream.ts#example</include>
+
+[SSE](/zh-Hant-HK/api/sse)

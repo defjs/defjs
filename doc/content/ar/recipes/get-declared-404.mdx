@@ -1,0 +1,22 @@
+---
+title: 'معالجة 404 المعلنة'
+description: نفّذ GET واحدًا وفرّع على 200 محدَّد النوع مقابل 404 معلَن.
+---
+
+# GET مع 404 معلَن
+
+أعلن أجسام النجاح و404 معًا. فرّع على `error.code` و`error.status` — تحصل على `error.data` محدَّد النوع لحالة عدم العثور المعلَنة.
+
+انظر [HTTP](/ar/docs/http) و[الأخطاء](/ar/docs/errors) للتفاصيل.
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` عنوان توضيحي. مع خادم يجيب عن `GET /users/7` بالحالة `200` والجسم `{ "id": 7, "name": "Ada" }`، تطبع الشيفرة:
+
+```txt
+Loaded Ada from 200
+```
+
+حالة غير-2xx هي `HTTP_STATUS`. وإعلان `error` يمنح جسمه نوعًا؛ وحذفه يترك `error.data` بقيمة `undefined` والجسم غير مقروء. وإذا تعذّرت قراءة جسم `error` المعلَن (نوع وسائط خاطئ، أو JSON غير صالح، أو شكل خاطئ) فالنتيجة هي fault من فئة `RES_*` بدلًا من ذلك. و`error` واحد يغطي كل الحالات غير-2xx، فاستخدم `struct.or(...)` أو اتحادًا مُميَّزًا عندما تختلف الأشكال.

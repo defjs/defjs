@@ -1,0 +1,21 @@
+---
+title: 'createSSEInterceptor'
+description: 'يغلّف دالة معترض كمعترض SSE موسوم.'
+---
+
+<ApiReference identity="@defjs/core:createSSEInterceptor" />
+
+```ts
+function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor
+
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+يُرجع `{ kind: 'sse', fn }`. معترضات SSE تعمل لأوامر SSE فقط، بترتيب التسجيل؛ و`next(req)` يفتح التدفق عبر المعترضات المتبقية.
+
+خطأ URL الحتمي الآتي من `next(req)` يرفض الـ promise المُعاد، فيعمل التعافي عبر `.then` / `.catch`؛ وإذا لم يُسترجع، يظل `client.execute` يبلّغ عن `REQ_BUILD_FAILED`.
+
+`EventStreamHandle` يمتد `AsyncDisposable`. أي تنفيذ هيكلي للاختصار يجب أن يوفّر `[Symbol.asyncDispose](): PromiseLike<void>` ويربطه بدورة حياة الإغلاق نفسها.
+
+[المعترضات](/ar/api/interceptors)

@@ -1,0 +1,18 @@
+---
+title: 'EventStreamEndpoint'
+description: 'defineEventStream が返す、呼び出し可能なエンドポイントです。'
+---
+
+<ApiReference identity="@defjs/core:EventStreamEndpoint" />
+
+```ts
+type EventStreamEndpoint<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, EventStreamCommand<TInput, TEvents, TError>>
+```
+
+`defineEventStream` の戻り値です。呼ぶと `EventStreamCommand` が得られます。エンドポイントが `input` を宣言していなければ引数なし、input struct が `undefined` を受け付ける場合は省略可能な引数、それ以外は struct の入力値を渡します。
+
+[SSE](/ja-JP/api/sse)

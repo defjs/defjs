@@ -1,0 +1,23 @@
+---
+title: 'WebSocketConnectionInfo'
+description: 'Метаданные текущего соединения WebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketConnectionInfo" />
+
+```ts
+interface WebSocketConnectionInfo {
+  extensions?: string
+  generation: number
+  protocol?: string
+  url?: string
+}
+```
+
+- `url` — URL, который сообщает сокет.
+- `protocol` — согласованный subprotocol, `extensions` — согласованные расширения. Оба `undefined`, если сокет сообщает пустую строку.
+- `generation` считает физические сокеты, дошедшие до `open`: `1` после первого открытия, плюс один после каждого reconnect. У снимка, сделанного до любого открытия, она равна `0`.
+
+`session.connection` всегда хранит последний снимок. `connection` в результате execute остаётся первым успешным.
+
+[WebSocket](/ru-RU/api/web-socket)

@@ -1,0 +1,29 @@
+---
+title: 'StructError'
+description: 'struct 파싱이 실패했을 때 돌려주는 오류예요. issue와 포매터를 담아요.'
+---
+
+<ApiReference identity="@defjs/core:StructError" />
+
+```ts
+class StructError extends Error {
+  readonly issues: StructIssue[]
+  constructor(issues: StructIssue[])
+  format(): FormattedStructError
+  flatten(): FlattenedStructError
+  prettify(): string
+}
+```
+
+`name`은 `'StructError'`예요. `message`는 issue가 하나면 그 issue의 메시지, 여러 개면 `N struct issues: <first message>`, 하나도 없으면 `Struct parse failed`예요.
+
+기본 issue message는 받은 값이 아니라 받은 종류를 말해요. 예를 들면 `Expected number at id, received string`이에요. `message`와 포매터가 그 텍스트를 써요. 원본 입력은 `StructIssue.received`에 남아요. 사용자 `errorMap` 텍스트는 그대로 쓰이며 민감한 값을 다시 넣을 수 있어요.
+
+- `struct.parse`는 처음 실패에서 멈추므로 거기서는 `issues`에 [`StructIssue`](/ko-KR/api/core/structissue-type) 하나가 들어 있어요.
+- `format()`은 [`FormattedStructError`](/ko-KR/api/core/formattedstructerror-type) 트리를 돌려줘요. 각 노드에 `_errors` 배열이 있고, 중첩 키는 `issue.path`를 따라가요.
+- `flatten()`은 [`FlattenedStructError`](/ko-KR/api/core/flattenedstructerror-type)를 돌려줘요. path가 빈 메시지는 `formErrors`로 가고, 나머지는 path의 첫 세그먼트별로 `fieldErrors`에 묶여요.
+- `prettify()`는 issue마다 `× path: message` 한 줄을 돌려줘요. 빈 path는 `<root>`로 표시돼요.
+
+[Struct 가이드](/ko-KR/docs/struct)를 보세요.
+
+[Struct](/ko-KR/api/struct)

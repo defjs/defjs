@@ -1,0 +1,29 @@
+---
+title: 'struct.intersection'
+description: 'Struct, der verlangt, dass ein Wert jeden der angegebenen Structs erfüllt.'
+---
+
+<ApiReference identity="@defjs/core:struct.intersection" />
+
+```ts
+function intersection<const T extends readonly [StructLike, ...StructLike[]]>(
+  ...structs: T
+): T extends readonly [unknown]
+  ? T[0]
+  : T extends readonly [unknown, unknown, ...unknown[]]
+    ? IntersectionStruct<T>
+    : T[0] | IntersectionStruct<T>
+```
+
+`struct.intersection` ist variadisch: Übergib jeden Struct als eigenes Argument.
+
+- Parst den Input mit jedem Struct und führt die Ergebnisse zusammen.
+- Sind alle Structs Object-Structs, ist der Output ein Objekt mit den Fields aller Structs. Keys, die keiner von ihnen deklariert, werden entfernt.
+- Liefern zwei Structs für denselben Key inkompatible Werte, schlägt es mit `invalid_intersection` fehl.
+- Akzeptiert `null` nur, wenn jeder Struct es akzeptiert, einschließlich einer mit `.null()` markierten verschachtelten Intersection.
+- Ein einzelner Struct wird unverändert zurückgegeben und behält daher seinen eigenen Typ, einschließlich `.optional()` und `.null()`. Der Aufruf ohne Structs wirft `TypeError`, ebenso ein Argument, das kein Struct ist.
+- Beim Spread eines Tupels, das möglicherweise nur einen Member enthält, werden sowohl das Ergebnis für einen einzelnen Member als auch das für mehrere Member inferiert. Die Objektfelder des Ergebnisses können deshalb optional sein. Bei einem Tupel, das bekanntermaßen mindestens zwei Member enthält, gelten weiterhin die Regeln der Intersection für erforderliche Felder.
+
+`IntersectionStruct<T>` wird nicht exportiert. Es ist ein `Struct`, dessen Input und Output die Schnittmengen der Member-Types sind.
+
+[Struct](/de-DE/api/struct)

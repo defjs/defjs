@@ -1,0 +1,43 @@
+---
+title: 'FaultCode'
+description: 'Die geschlossene Menge aller Failure-Codes, die Defjs meldet.'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+Eine geschlossene Menge. Das Segment vor dem ersten `_` ist die Klasse; ein separates `kind`-Feld gibt es nicht.
+
+| Klasse | Bedeutung                                                                   |
+| ------ | --------------------------------------------------------------------------- |
+| `HTTP` | Die Gegenseite antwortete mit einem Non-2xx-Status.                         |
+| `REQ`  | Der Request ging nie raus: Input, Execute-Options oder Build.               |
+| `NET`  | Keine brauchbare Response: Abbruch, Timeout, Connect, abgeschnittener Body. |
+| `RES`  | Eine Response kam an, ließ sich aber nicht wie deklariert lesen.            |
+| `EXT`  | Code, den du an die Pipeline gehängt hast, hat geworfen.                    |
+| `CAP`  | Ein deklariertes Buffer- oder Queue-Limit wurde überschritten.              |
+| `ENV`  | Der Host-Runtime fehlt eine benötigte Fähigkeit.                            |
+
+Die Menge bleibt geschlossen, damit `switch (fault.code)` exhaustiv ist — Extensions melden ihr eigenes Detail über `cause`, nicht über einen neuen Code.
+
+[Fehler](/de-DE/api/errors)

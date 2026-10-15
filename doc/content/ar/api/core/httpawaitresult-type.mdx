@@ -1,0 +1,17 @@
+---
+title: 'HttpAwaitResult'
+description: 'tuple نتيجة الانتظار لاستدعاء HTTP: البيانات والاستجابة، أو خطأ.'
+---
+
+<ApiReference identity="@defjs/core:HttpAwaitResult" />
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+`TData` و`TErrorData` نوعان لجسمين مفكوكين. عند النجاح لا يحمل العنصر الثالث `body` إلا إذا كان `output` معلَنًا. وعند الفشل يكون
+`undefined` — فالخطأ يحمل أصلًا ما وُجد من بيانات الاستجابة الوصفية.
+
+[HTTP](/ar/api/http)

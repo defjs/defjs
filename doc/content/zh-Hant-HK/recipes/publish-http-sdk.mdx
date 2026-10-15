@@ -1,0 +1,24 @@
+---
+title: '封裝 HTTP SDK'
+description: Export endpoints 同 createClient；status narrowing 留喺 call site。
+---
+
+# Publish 一個唔隱藏 execute 嘅 HTTP SDK
+
+一個吞咗 `client.execute` 嘅 method SDK，通常會將 declared `404` 塌成 untyped throw，或者共用嘅「API error」。Contract 保持係 endpoints 加一個明確 client；callers 仍然 own status branching。
+
+睇 [Commands](/zh-Hant-HK/docs/commands)、[Client](/zh-Hant-HK/docs/client) 同 [Design Decisions](/zh-Hant-HK/docs/design-decisions)。
+
+<include cwd meta='title="users-sdk.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada null Ada
+```
+
+Export endpoints 同一個 client factory。Helpers 可以為一條 reviewed path call `execute`，但唔好為每個你在意嘅 status 取代 tuple。

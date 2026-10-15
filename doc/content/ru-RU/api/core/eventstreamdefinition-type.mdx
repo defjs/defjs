@@ -1,0 +1,28 @@
+---
+title: 'EventStreamDefinition'
+description: 'Контракт, описывающий SSE-endpoint для defineEventStream.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamDefinition" />
+
+```ts
+type EventStreamDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EventStreamDefinitionBase<TEvents> &
+  EventStreamErrorField<TError> & {
+    builder?: OutboundBuilder
+    input?: TInput
+  }
+```
+
+Составные члены:
+
+- `events`, `maxBufferSize` и `maxQueueSize` (оба лимита — обязательные положительные безопасные целые числа), необязательные `method` и `operation`, а также обязательный `path`.
+- `error`, обязателен только когда `TError` — struct. Он декодирует тело неудавшегося handshake (ответа не из диапазона 2xx). Правило определения вида то же, что и для HTTP: `string` — текст, `blob` и `file` — blob’ы, `arrayBuffer` — байты, всё остальное — JSON.
+- `input` и `builder`. Форма request’а совпадает с HTTP, включая `body`; `GET` и `HEAD` не могут вернуть body. Объявленный `input` всегда требует явного `builder`, даже если он уже совпадает с формой request’а. Опустить `builder` можно только в определениях без `input`.
+
+`EventStreamDefinitionBase` и `EventStreamErrorField` — внутренние вспомогательные типы.
+
+[SSE](/ru-RU/api/sse)

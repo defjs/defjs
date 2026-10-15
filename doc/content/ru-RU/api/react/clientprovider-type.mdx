@@ -1,0 +1,16 @@
+---
+title: 'ClientProvider'
+description: 'React-компонент, который через контекст отдаёт клиент Defjs своему поддереву.'
+---
+
+<ApiReference identity="@defjs/react:ClientProvider" />
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+Передай существующий клиент из `createClient` как `client`; потомки читают его через `useClient`. Компонент не создаёт, не кэширует и не dispose’ит клиент. Вложенный `ClientProvider` переопределяет клиент для своего поддерева, а другой prop `client` меняет значение контекста для потомков.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+[@defjs/react](/ru-RU/api/react)

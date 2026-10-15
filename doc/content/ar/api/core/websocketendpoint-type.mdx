@@ -1,0 +1,24 @@
+---
+title: 'WebSocketEndpoint'
+description: 'دالة قابلة للاستدعاء تُرجعها defineWebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketEndpoint" />
+
+```ts
+type WebSocketEndpoint<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
+```
+
+تُرجعها [`defineWebSocket`](/ar/api/core/definewebsocket). استدعاؤها ينشئ [`WebSocketCommand`](/ar/api/core/websocketcommand-type) تمرّره إلى `client.execute`. يعتمد توقيع الاستدعاء على `input`:
+
+- لا `input` معلَن: `() => WebSocketCommand`.
+- `input` يقبل `undefined`: `(input?: StructInput<TInput>) => WebSocketCommand`.
+- وإلا: `(input: StructInput<TInput>) => WebSocketCommand`.
+
+استدعاء نقطة النهاية لا يتصل. يُحلَّل المدخل عند تنفيذ الأمر.
+
+[WebSocket](/ar/api/web-socket)

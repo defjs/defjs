@@ -1,0 +1,18 @@
+---
+title: 'RequestEndpoint'
+description: '`defineRequest` 返回的可调用 endpoint。'
+---
+
+<ApiReference identity="@defjs/core:RequestEndpoint" />
+
+```ts
+type RequestEndpoint<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = EndpointCallable<TInput, HttpCommand<TInput, TOutput, TError>>
+```
+
+由 `defineRequest` 返回。调用它得到一个 `HttpCommand`：endpoint 没有声明 `input` 时不带参数；input struct 接受 `undefined` 时参数可选；其余情况传入该 struct 的输入值。
+
+[HTTP](/zh-Hans/api/http)

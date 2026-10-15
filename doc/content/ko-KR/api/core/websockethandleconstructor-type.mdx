@@ -1,0 +1,18 @@
+---
+title: 'WebSocketHandleConstructor'
+description: 'withWebSocketHandle이 받는 생성자 타입이에요.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandleConstructor" />
+
+```ts
+type WebSocketHandleConstructor = {
+  readonly OPEN: number
+} & (new (...args: never[]) => WebSocketHandle)
+```
+
+[`WebSocketHandle`](/ko-KR/api/core/websockethandle-type)을 만들고 숫자형 `OPEN` readyState 상수를 노출하는 클래스나 함수예요. 전송은 `readyState`를 `OPEN`과 비교해요.
+
+`new WebSocketImpl(url)`로 호출되고, 서브프로토콜이 설정돼 있으면 `new WebSocketImpl(url, protocols)`로 호출돼요. 기본값은 `globalThis.WebSocket`이에요. 다른 구현은 [`withWebSocketHandle`](/ko-KR/api/core/withwebsockethandle)로 넘기세요.
+
+[클라이언트](/ko-KR/api/client)

@@ -1,0 +1,16 @@
+---
+title: 'struct.bigint'
+description: '接受 bigint 或者 bigint 字串並輸出 bigint 嘅 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.bigint" />
+
+```ts
+function bigint(): Struct<bigint | string, bigint>
+```
+
+- 接受 `bigint`，或者 `BigInt()` 解析得到嘅字串。`number` 會被拒絕。
+- 輸出一定係 `bigint`；解析唔到嘅字串會以 `invalid_type` 失敗。
+- 編碼上線嗰陣，個值會變成十進位字串。
+
+[Struct](/zh-Hant-HK/api/struct)

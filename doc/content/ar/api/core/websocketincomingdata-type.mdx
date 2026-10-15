@@ -1,0 +1,14 @@
+---
+title: 'WebSocketIncomingData'
+description: 'النوع المفكوك لرسالة WebSocket المستلَمة.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketIncomingData" />
+
+```ts
+type WebSocketIncomingData<TIncoming extends AnyStruct> = Infer<TIncoming>
+```
+
+نوع كل رسالة يُنتجها `session.receive`: ناتج [`Infer`](/ar/api/core/infer-type) لـ struct الـ `incoming` الخاص بنقطة النهاية. الحقول ذات الأسماء المستعارة تستخدم أسماءها المنطقية.
+
+[WebSocket](/ar/api/web-socket)

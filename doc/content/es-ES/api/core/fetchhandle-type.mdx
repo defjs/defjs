@@ -1,0 +1,16 @@
+---
+title: 'FetchHandle'
+description: 'Tipo de función compatible con fetch que se usa como handle HTTP o SSE.'
+---
+
+<ApiReference identity="@defjs/core:FetchHandle" />
+
+```ts
+type FetchHandle = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+```
+
+La firma de llamada `(input, init?) => Promise<Response>` que invoca Defjs. Deliberadamente no es `typeof fetch`, así que un mock no necesita extras del host como `preconnect`. HTTP llama al Fetch de la plataforma sin sustituir como `(url, init)`; un Fetch global reemplazado o un handle personalizado recibe un `Request`. El valor por defecto resuelve el global en cada llamada. SSE siempre pasa un `Request`, también a su handle por defecto.
+
+Lo aceptan `withHTTPHandle`, `withSSEHandle` y `fetchHandler`.
+
+[Cliente](/es-ES/api/client)

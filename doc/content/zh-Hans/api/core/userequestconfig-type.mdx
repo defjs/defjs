@@ -1,0 +1,21 @@
+---
+title: 'UseRequestConfig'
+description: '用于进度回调和取消的 HTTP execute options。'
+---
+
+<ApiReference identity="@defjs/core:UseRequestConfig" />
+
+```ts
+type UseRequestConfig = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+[`HttpExecuteOptions`](/zh-Hans/api/core/httpexecuteoptions-type) 中 HTTP 专属、不含 `signal` 的部分。
+
+- `onDownloadProgress` 和 `onUploadProgress` 是 [`HttpProgressFn`](/zh-Hans/api/core/httpprogressfn-type) 回调。它们收到带有 `loaded`、`total` 和 `lengthComputable` 的 [`HttpProgressEvent`](/zh-Hans/api/core/httpprogressevent-type)。
+- 取消是 `abort` 或 `timeout` 二选一，不能同时使用。类型层面会拒绝同时传两者，运行时同时传入则以 `REQ_OPTIONS_INVALID` fault 失败。
+- `timeout` 必须是不超过 `2_147_483_647` 的正安全整数。本次调用中它会替换 [`withTimeout`](/zh-Hans/api/core/withtimeout) 设置的默认值；`abort` 则与该默认值组合。
+
+[HTTP](/zh-Hans/api/http)

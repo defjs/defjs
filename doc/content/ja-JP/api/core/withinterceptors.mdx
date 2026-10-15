@@ -1,0 +1,17 @@
+---
+title: 'withInterceptors'
+description: 'クライアントのチェーンにインターセプターを追記するクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withInterceptors" />
+
+```ts
+function withInterceptors(...interceptors: Interceptor[]): ClientOption
+```
+
+クライアントのインターセプターチェーンにインターセプターを追記します。もう一度呼ぶとさらに追記され、先のものを置き換えることはありません。
+
+- 最初に登録したインターセプターが一番外側の層になります。
+- HTTP、SSE、WebSocket のインターセプターは、1 回の呼び出しに混在させられます。execute 時には、コマンドのトランスポートに対応するインターセプターだけが、登録順に実行されます。
+
+[Client](/ja-JP/api/client)

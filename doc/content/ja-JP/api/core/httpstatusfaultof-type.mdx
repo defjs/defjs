@@ -1,0 +1,19 @@
+---
+title: 'HttpStatusFaultOf'
+description: '2xx 以外の fault を、デコード済みボディの型で表したものです。'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFaultOf" />
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+```
+
+`HttpStatusFault` を、それを生んだ struct ではなくデコード済みボディの型で表したものです。ファクトリーはデコード済みの値で動くのでこの形を使い、エンドポイント型は `HttpStatusFault` を使って `Infer` で両者を橋渡しします。`TData` が `undefined` のときは、ボディは読まれておらず、`response` はメタデータだけです。
+
+[Errors](/ja-JP/api/errors)

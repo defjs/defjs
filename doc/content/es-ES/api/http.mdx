@@ -1,0 +1,194 @@
+---
+title: HTTP
+description: defineRequest, opciones de execute y tipos de solicitud/respuesta HTTP.
+---
+
+# HTTP
+
+Declara una solicitud tipada, construye un comando a partir del input y ejecútalo.
+
+## defineRequest()
+
+```ts
+function defineRequest(definition: RequestDefinition): RequestEndpoint
+```
+
+- **definition** — `method`, `path`, struct `input` opcional, structs `output` y `error` opcionales, `operation` opcional. Declarar `input` siempre exige un `builder` explícito, aunque la entrada ya tenga la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
+- **Devuelve** un endpoint. Llámalo con el input para obtener un `HttpCommand`.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` es un struct para el cuerpo 2xx; `error` es un struct para todo cuerpo no-2xx. Ninguno se
+indexa por estado. Omitir uno significa que ese cuerpo nunca se lee — mira
+[Declarar es afirmar](/es-ES/docs/design-decisions#declarar-es-afirmar).
+
+## executeHttpCommand()
+
+```ts
+function executeHttpCommand(clientConfig: ClientConfig, command: HttpCommand, options?: HttpExecuteOptions): Promise<HttpAwaitResult>
+```
+
+Entrada de bajo nivel que usa `client.execute`. El código de la aplicación debe llamar a `client.execute(command, options)`.
+
+- **Devuelve** `[null, data, response]` o `[fault, undefined, undefined]`.
+
+Un estado no-2xx es `HTTP_STATUS` cuando no se declara ningún struct `error` o cuando el cuerpo `error` declarado se decodifica. Su `data` es el cuerpo
+`error` decodificado cuando se declaró uno, y `undefined` en caso contrario. Cuando un cuerpo `error` declarado no se puede leer (tipo de medio incorrecto, JSON no válido) o
+no coincide con su struct, el fault es `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED` o `RES_STRUCT_MISMATCH` en su lugar, y el estado de la respuesta sigue figurando
+en sus metadatos. Al fallar, el tercer hueco de la tupla es `undefined`; el fault lleva los metadatos de la respuesta.
+
+## fetchHandler()
+
+```ts
+function fetchHandler(httpRequest: HttpRequest, fetchImpl?: FetchHandle): Promise<HttpResponse<unknown>>
+```
+
+Transporte HTTP por defecto. `fetchImpl` es por defecto el `fetch` global resuelto en el momento del envío; `withHTTPHandle` proporciona otro. El Fetch de la plataforma sin sustituir recibe `(url, init)`, mientras que un global reemplazado o un handle personalizado recibe un `Request`. Rechaza — en lugar de resolver
+con una respuesta sintética — cuando ninguna respuesta llegó al cliente o falló la lectura de un cuerpo declarado.
+
+## makeResponse()
+
+```ts
+function makeResponse<R>(options?: MakeResponseOptions<R>): HttpResponse<R>
+```
+
+Construye un `HttpResponse` sin llamada de red (interceptores, tests). El estado por defecto es `0`. `ok` es
+true en 2xx. El valor que devuelve pasa por la misma comprobación de media type y el mismo
+struct declarado que una respuesta del cable; no hay ningún atajo de confianza.
+
+## Opciones de execute
+
+## HttpExecuteOptions
+
+```ts
+type HttpExecuteOptions = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }) & { signal?: AbortSignal }
+```
+
+La cancelación es `abort` **o** `timeout`, no ambos: el tipo rechaza los dos y pasarlos en runtime falla con `REQ_OPTIONS_INVALID`. `signal` se combina con cualquiera; **no** es un alias de `abort`. Formas válidas: `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`. `{ abort, timeout }` es inválido. `timeout` debe ser un entero seguro positivo en `1..2_147_483_647`. Cuando una llamada omite `timeout`, se aplica el valor por defecto de `withTimeout` del cliente (solo HTTP); `abort` y `signal` se combinan con ese valor por defecto.
+
+## Tipos
+
+### RequestDefinition
+
+`method`, `path`, `input` opcional, `output`, `error`, `operation` y `builder`. No hay `responseType`: el kind del struct elige cómo se lee un cuerpo declarado. Declarar `input` siempre exige un `builder` explícito, aunque la entrada ya tenga la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
+
+### HttpAwaitResult
+
+```ts
+type HttpAwaitResult<TData = undefined, TErrorData = undefined> =
+  | [error: null, result: TData, response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>]
+  | [error: FaultOf<TErrorData>, result: undefined, response: undefined]
+```
+
+Al tener éxito, el tercer hueco lleva `body` solo si se declaró `output`. Al fallar es
+`undefined`: el fault ya guarda los metadatos de respuesta que existieran.
+
+### HttpRequest
+
+Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `timeout`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` y `queryParams`. Cuando los interceptores la ven, `body` ya es el valor de cable — para JSON, un string de texto JSON — así que firma HMAC y digests sobre ese valor, no sobre el input del struct. Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa misma instancia. `responseType` y `errorResponseType` son readonly: se derivan de los kinds de struct `output` y `error` del endpoint y no deben cambiarse.
+
+### HttpMeta
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+Metadatos de la respuesta, disponibles siempre que una respuesta llegó al cliente. **No** llevan `body`: un cuerpo
+solo existe una vez que un struct declarado decodificó uno.
+
+### DecodedResponse
+
+```ts
+type DecodedResponse<TBody> = HttpMeta & { readonly body: TBody }
+```
+
+Una respuesta cuyo cuerpo se decodificó contra el struct declarado. Tener este tipo en la mano es la prueba de que
+la decodificación ocurrió, y por eso un fallo de decodificación reporta solo `HttpMeta`.
+
+### HttpResponse
+
+```ts
+type HttpResponse<R> = {
+  readonly url: string
+  readonly status: number
+  readonly statusText: string
+  readonly headers: Headers
+  readonly body: R | null | undefined
+  readonly ok: boolean
+}
+```
+
+`body` está ausente (`undefined`) cuando la respuesta no tenía ninguno; un `null` JSON sigue siendo `null`. El tipo lleva una marca (branded), así que construye uno con `makeResponse` en lugar de un objeto literal. Es la forma de cable que producen los transportes y ven los interceptores: `body` es texto o JSON ya
+parseado, no un valor decodificado. En una representación JSON, un string es una raíz string JSON y no
+se vuelve a parsear; los bytes y los blobs son crudos y se parsean una vez. Lo que llega a quien llama es `DecodedResponse`.
+
+### HttpProgressEvent
+
+### HttpProgressFn
+
+`loaded`, `total`, `lengthComputable`. Los callbacks pueden ser asíncronos. Si `onDownloadProgress` o `onUploadProgress` lanza una excepción, la llamada falla con
+`EXT_OBSERVER_FAILED` y el valor lanzado como `cause`; la cancelación y `timeout` siguen notificándose como `NET_ABORTED` / `NET_TIMEOUT`.
+Solo se informa del progreso de subida en los entornos de ejecución que permiten enviar cuerpos de solicitud como flujos (Bun, Node, Deno); en los
+navegadores, los cuerpos de tipo `Blob` / `File`, `ArrayBuffer` y `FormData` se envían sin cambios y no se llama a `onUploadProgress`.
+
+En los runtimes de servidor, FormData usa su stream serializado sin almacenar el cuerpo entero en un Blob y conserva el boundary multipart real. Su total es desconocido salvo que lo aporte un `Content-Length` explícito válido. Los content types explícitos sobreviven a la conversión de la subida, salvo que FormData deba usar el boundary de su serialización. `loaded` cuenta bytes del stream, no confirmaciones del servidor. Las descargas con un `Content-Encoding` distinto de identity informan `total: 0` y `lengthComputable: false`; sus bytes de stream pueden estar ya descomprimidos.
+
+Mira la [guía de HTTP](/es-ES/docs/http) y [Comandos](/es-ES/docs/commands).
+
+## RequestEndpoint
+
+Lo devuelve `defineRequest`. Llámalo con input y sale un `HttpCommand`.
+
+## BuilderInput
+
+Input del endpoint ya parseado que ve `builder`. Los nodos objeto llevan el struct que los produjo, así que el alias y la codificación de `Date` y `bigint` siguen al valor.
+
+## HttpRequestShape
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+  headers?: HeadersInit | FlatRecord
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+}
+```
+
+`GET` y `HEAD` no pueden devolver un body. `path` y `headers` deben ser escalares planos; `query` puede anidar, y un objeto anidado necesita `withQuerySerializer` en runtime.
+
+Consulta [`HttpRequestShape`](/es-ES/api/core/httprequestshape-type) para los valores de cable y JSON que acepta `BodyValue`.
+
+## HttpCommand
+
+Command opaco de un request builder. Pásaselo a `client.execute`.
+
+## UseRequestConfig
+
+Campos de progreso y cancelación. `HttpExecuteOptions` añade `signal`.
+
+## RequestSuccessData
+
+Cuerpo de éxito inferido del struct `output` declarado, o `undefined` si no hay ninguno.
+
+## RequestErrorData
+
+Cuerpo de error inferido del struct `error` declarado, o `undefined` si no hay ninguno.
+
+## HttpResponseType
+
+`'arraybuffer' | 'blob' | 'json' | 'text'`
+
+Se elige a partir del kind del struct declarado (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, todo lo demás → `json`). No es un campo de `defineRequest`.
+
+## MakeResponseOptions
+
+Campos para `makeResponse`: `status`, `statusText`, `url`, `headers`, `body`, `request`.

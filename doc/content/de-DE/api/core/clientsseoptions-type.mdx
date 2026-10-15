@@ -1,0 +1,44 @@
+---
+title: 'ClientSSEOptions'
+description: 'Optionale SSE-Einstellungen: Fetch-Handle, Hook für ungültige Events und Reconnect-Policy.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEOptions" />
+
+```ts
+interface ClientSSEOptions {
+  handle?: FetchHandle
+  onInvalidEvent?: (context: {
+    reason: 'missing-struct' | 'validation-failed'
+    message: { id: string; event: string; data: string }
+    cause?: unknown
+    signal: AbortSignal
+  }) => unknown
+  reconnect?: {
+    attempts?: number
+    delayMs?: number
+    factor?: number
+    jitter?: number
+    maxDelayMs?: number
+    shouldReconnect?: (context: {
+      attempt: number
+      cause?: unknown
+      lastEventId: string
+      method: string
+      open?: { response: { status: number; statusText: string; url: string }; url: string }
+    }) => boolean | Promise<boolean>
+  }
+}
+```
+
+- **handle** — Fetch-Implementierung, die den Stream öffnet. Der Default löst `globalThis.fetch` bei jedem Versuch auf, auch wenn die Ersetzung erst nach dem Import installiert wurde. Jedes SSE-Handle erhält einen `Request`. Fehlt das globale Fetch, schlägt die Default-Ausführung mit `ENV_UNSUPPORTED` fehl; ein eigenes Handle bleibt nutzbar.
+- **onInvalidEvent** — Wird aufgerufen, wenn ein Event kein passendes Struct und kein `default`-Struct hat (`'missing-struct'`) oder seine Daten die Validierung nicht bestehen (`'validation-failed'`). Das Event wird übersprungen. Ein Error, den der Hook wirft, schließt den Stream nicht.
+- **reconnect** — Opt-in. Ohne ihn verbindet sich der Stream nie neu. `attempts` hat den Default **3** je Ausfall; `attempts: 0` schaltet Retry aus. Ein erfolgreicher Handshake setzt das Budget, den Callback-`attempt` und den Backoff-Exponenten zurück. `delayMs` ist die erste Basiswartezeit, standardmäßig 1000, und ein vom Server gesendeter `retry:`-Wert ersetzt sie. `factor` ist standardmäßig 1. `jitter` ist ein multiplikativer Faktor von 0–1 und standardmäßig 0. `maxDelayMs` deckelt die endgültige Wartezeit nach Jitter und Rundung; ohne konfiguriertes Cap gilt weiterhin das Plattformlimit von `2_147_483_647` ms. Eine Basis von null bleibt null; ein Überlauf gültiger Zahlen sättigt an den Caps. Ohne `shouldReconnect` wird die Verbindung nur für Requests mit `GET`, `HEAD`, `OPTIONS`, `PUT` und `DELETE` erneut hergestellt; ist der Callback vorhanden, entscheidet sein Rückgabewert bei jeder Methode über den Reconnect, und sein Kontext enthält `method`. Bei einem Request mit einem `ReadableStream`-Body wird die Verbindung nie erneut hergestellt. Der Reconnect sendet die letzte ID als UTF-8-Bytes im Header `Last-Event-ID`; eine leere ID löscht ihn, und eine ID mit NUL wird ignoriert.
+
+Reconnect-Optionen werden vor Interceptors und Fetch geprüft: `attempts` ist eine nicht negative sichere Ganzzahl; `delayMs` und ein explizites `maxDelayMs` sind endlich und nicht negativ; `factor` ist endlich und positiv; `jitter` ist endlich und liegt in 0–1. Ungültige Werte liefern zur Execute-Zeit `REQ_OPTIONS_INVALID`.
+
+Setze diese mit `withSSEHandle`, `withSSEOnInvalidEvent` und `withSSEReconnect`. Lässt du `withSSEReconnect` weg, ist Retry ausgeschaltet.
+
+Siehe [Client-Guide](/de-DE/docs/client).
+
+[Client](/de-DE/api/client)

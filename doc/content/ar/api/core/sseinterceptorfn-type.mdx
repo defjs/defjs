@@ -1,0 +1,16 @@
+---
+title: 'SSEInterceptorFn'
+description: 'صيغة الدالة لمعترض SSE.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptorFn" />
+
+```ts
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+يجوز لها فحص `req` أو استبداله، ثم استدعاء [`next`](/ar/api/core/ssehandler-type) لمتابعة السلسلة، أو إرجاع `EventStreamHandle` خاص بها لاختصار المسار. غلّفها بـ `createSSEInterceptor(fn)` لتسجيلها عبر `withInterceptors`.
+
+المقبض الذي يختصر المسار يجب أن يوفّر `[Symbol.asyncDispose](): PromiseLike<void>` وأن يربطه بدورة الإغلاق نفسها.
+
+[المعترضات](/ar/api/interceptors)

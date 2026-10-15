@@ -1,0 +1,24 @@
+---
+title: 'StructIssue'
+description: '解析 struct 时产生的一条校验失败。'
+---
+
+<ApiReference identity="@defjs/core:StructIssue" />
+
+```ts
+interface StructIssue {
+  code: 'custom' | 'invalid_enum' | 'invalid_intersection' | 'invalid_literal' | 'invalid_type' | 'invalid_union' | 'missing_key'
+  expected: string
+  message: string
+  path: Array<number | string>
+  received: unknown
+}
+```
+
+- `code` 是机器可读的类别。解析器会产生 `invalid_type`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 和 `missing_key`；`custom` 是类型的一部分，但内置 struct 从不产生它。
+- `expected` 描述期望的类型或值。
+- `message` 是最终文本，经过可选的 [`ErrorMap`](/zh-Hans/api/core/errormap-type) 改写之后的结果。
+- `path` 从解析根一直到失败位置：字段名和数组下标。根级别的失败时为空。
+- `received` 是在 `path` 处失败的值。
+
+[Struct](/zh-Hans/api/struct)

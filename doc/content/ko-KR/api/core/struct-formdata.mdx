@@ -1,0 +1,18 @@
+---
+title: 'struct.formData'
+description: '요청 body일 때 multipart FormData로 인코딩되는 객체 struct예요.'
+---
+
+<ApiReference identity="@defjs/core:struct.formData" />
+
+```ts
+function formData<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+[`struct.object()`](/ko-KR/api/core/struct-object)처럼 파싱하고, `formData` 코덱 태그를 지녀요.
+
+- 태그는 이 struct의 값이 요청 body 루트일 때만 적용돼요. 그러면 body는 플랫폼의 multipart 경계를 쓰는 `FormData`로 보내요.
+- 배열은 필드 이름을 반복하고, `undefined` 필드는 건너뛰며, `Blob` / `File` 값은 파일로 덧붙여요. 중첩 객체는 요청을 `REQ_BUILD_FAILED`로 실패시켜요.
+- `struct.parse`는 태그를 무시해요. `FormData` 인스턴스는 받지 않고 plain 객체만 받아요.
+
+[Struct](/ko-KR/api/struct)

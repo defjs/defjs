@@ -1,0 +1,156 @@
+---
+title: 'HTTP 請求'
+description: 定義一個 request，執行佢，按 status 分支，再用 signal 或者 timeout 取消。
+---
+
+# HTTP
+
+Define → execute → 按 tuple 分支 → screen 離開就 cancel。呢個就係成個 HTTP loop。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/http/basic-setup.ts#example
+</include>
+
+## 解出 URL
+
+`withEndpoint(...)` 需要有效嘅絕對 URL。Endpoint pathname 當目錄留住；query 同 hash 會喺 command resolution 之前丟棄。缺少、相對或無效嘅 base endpoint，都會喺 request building 時以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit request 嘅 interceptor。HTTP、SSE 同 WebSocket 共用呢個規則。
+
+<include cwd>examples/http/resolve-url.ts#example</include>
+
+Path placeholders 係 raw scalars，encode 剛好一次。Empty values 同 `.` / `..` 會被 reject。一個 placeholder 入面嘅 slashes、`?`、`#`、`%`、spaces 同 Unicode 仍然係一個 encoded segment — 唔好 pre-encode。
+
+Placeholder 名由 `:` 開始，直到下一個 `/` 或 path 結尾：`/files/:name.json` 嘅參數名係 `name.json`，唔係 `name`。Static segment 唔支援字面上嘅冒號。
+
+Definition paths 唔可以係形似 scheme 或 protocol-relative（包括前面有空格嘅寫法），亦唔可以包含 C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?` 或 `#`。路徑入面嘅普通空格允許，並會以 `%20` 送出。解析之後，URL 必須保持 base origin，並留喺佢嘅目錄之下；`../users` 呢類 path 唔可以逃出目錄。非法 paths 會喺 building 時以 `REQ_BUILD_FAILED` 失敗，早於 transport 執行。Interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一個規則檢查；interceptor 可以刻意將 base 換成另一個有效嘅絕對 URL。確定嘅 URL 錯誤永遠唔會重試。
+
+預設 query encoder 接受 scalars 同 scalar arrays（arrays 會重複 key）。巢狀 object 會以 `REQ_BUILD_FAILED` 失敗，除非 client 有 `withQuerySerializer(...)`。`path`、`query` 或者 `headers` 入面嘅 `null` 都係同一種失敗。`undefined` 會被省略。
+
+## 擺放 input
+
+Struct encode 個 value。Builder 擺放佢。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
+
+<include cwd lang="typescript">
+  examples/http/place-input.ts#example
+</include>
+
+嗰個 body 係 `{"display_name":"Ada"}`，content type 係 `application/json`。Header 嘅 wire name 係 `x-request-id`。Callers 同 parsed results 保留 `displayName`。
+
+Prefer 交 typed value，唔好自己拼 wire keys。Alias 喺 field 上面 declare 一次，兩個方向都生效：`output` / `error` / events / incoming frames 會將 `display_name` decode 成 `displayName`，而 `body: input.order` 會 rewrite 成棵 tree。同一個 `User` struct 可以係 create body，亦可以係 get output。手寫 key 係例外：parent object 係 anonymous，所以 alias 唔會 run。
+
+| Builder expression                              | 線上點樣                                          |
+| ----------------------------------------------- | ------------------------------------------------- |
+| `body: input.profile`                           | Typed object：alias 同 `Date` / `bigint` encoding |
+| `body: { profile: input.profile }`              | 外層 keys 係 literal，內層 object 仍然 typed      |
+| `body: { ...input.profile, role: 'admin' }`     | Spread 保留 struct；額外嗰個 key 係 literal       |
+| `body: { name: input.profile.displayName }`     | Anonymous parent：alias 唔會套用                  |
+| `query: input.query` / `headers: input.headers` | Typed flat objects：alias 變成 wire key           |
+
+Spread 一個 typed object 同時又 set 佢嘅 wire key（`display_name` 同 `displayName` 一齊）就係 `REQ_BUILD_FAILED`。`path` 或者 `headers` 入面嘅 nested object 都係同一種失敗。
+
+引導喺每個節點決定，唔只喺 root。Anonymous parent 下面新寫嘅 object 保留你寫落嘅 key。Typed parent 下面，同一個 object 改用嗰個 field 嘅 struct。
+
+```ts
+body: { row: { id: '42' } }              // Anonymous root: emits id
+body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
+```
+
+union 引導同時 match 多過一個 branch 嘅時候，每個 branch 都 encode 再比較。Wire 結果一樣就採用；有分別就係 `REQ_BUILD_FAILED`。
+
+混合 intersection（包含非 object 部分）解析嗰陣，標籤係各匹配部分已有標籤嘅合取；未經解析、新寫嘅混合 intersection 值就當匿名 object 處理。
+
+### Query
+
+Nested query shape（`a[b]`、`a.b`、comma lists）係 backend convention，所以個 hook 住喺 client：
+
+<include cwd>examples/http/query-serializer.ts#example</include>
+
+呢度嘅 `query` 係已經 encode 嘅 wire object。Aliases 已經套用，所以 `qs` 呢類 serializer 唔會掉佢哋。Return 嘅 string 就係 query string。Defjs 唔 depend on `qs`。
+
+冇 serializer 嘅時候，arrays 會重複 keys，nested object 就係 `REQ_BUILD_FAILED`。Builder return `URLSearchParams` 就原樣用嗰個 value，並 skip serializer。冇 query 嘅時候唔會 call serializer。之後 interceptors 見到嘅 `queryParams` 係 `new URLSearchParams(queryString)`。
+
+### Body
+
+第一個 match 贏：
+
+| `body` value                                             | 送出點樣                                                            | Default content type                                     |
+| -------------------------------------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------- |
+| omitted / `undefined`                                    | 冇 body                                                             | —                                                        |
+| root 有 `urlencoded` 或 `formData` codec 嘅 typed object | `URLSearchParams` / `FormData`；keys 係 wire names；arrays 重複 key | form type / platform boundary                            |
+| `FormData`、`URLSearchParams`                            | 原樣                                                                | 一樣；Defjs 會清 `FormData` 上面 stale 嘅 `Content-Type` |
+| `Blob` / `File`                                          | 原樣                                                                | `blob.type`，或者 `application/octet-stream`             |
+| `ArrayBuffer`、`TypedArray`、`DataView`                  | 原樣                                                                | `application/octet-stream`                               |
+| `ReadableStream`                                         | streamed（runtime 允許時用 `duplex: 'half'`）                       | `application/octet-stream`                               |
+| `string`                                                 | 原樣                                                                | `text/plain;charset=UTF-8`                               |
+| 普通物件、陣列、數字、布林值、`null`、`Date`、`bigint`   | 編碼之後再 `JSON.stringify`                                         | `application/json`                                       |
+
+HTTP 將 builder body 推斷出嚟嘅類型放喺普通 field `request.bodyContentType`，`{ ...req }` 複本仍然保留；佢永遠唔會將呢個推斷寫入 `request.headers`。明確嘅 `content-type` header 永遠優先，無論由 builder、client defaults、interceptor，定係原始 `fetchHandler` request 設定，包括 upload progress 將 body 轉成 stream 嘅情況。`bodyContentType` 只喺 `body` 仍然係 builder 嘅值時生效；替換後嘅 body 會重新偵測，所以 interceptor 要用 `content-type` header 聲明佢嘅類型。`body: undefined` 唔會送出 library 推斷嘅 Content-Type。FormData 係例外：佢嘅 content type 必須用實際序列化嘅 boundary。Codec tag 只喺 body root 生效：`body: { meta: input.form }` 係 JSON，form fields 就係普通 JSON fields。String 係 raw text；`"abc"` 呢類 JSON string 要 `JSON.stringify` 再加 `application/json`。`undefined` fields 會被省略；`nullable` field 送 `null` 就係 JSON `null`。
+
+JSON 每一層都必須係 JSON 資料：普通物件、陣列、字串、有限數值、布林值同 `null`，以及 `toJSON()` 會回傳呢啲值嘅物件，例如 `Date` 或 `URL`。除此之外嘅值，無論喺 root 定係巢狀位置，都會喺送出任何資料之前以 `REQ_BUILD_FAILED` 失敗，而唔會變成 `{}`、`null` 或者根本冇 body 送出：`Map` 或 `Set`、冇 `toJSON` 嘅類別實例、函數、`NaN`、Node 嘅 `Readable`，或者可迭代物件或者非同步可迭代物件，包括有 `Symbol.iterator` 或者 `Symbol.asyncIterator` method 嘅 object literal。錯誤訊息會指出出問題嘅 field。作為 `query` 或者 `headers` 傳入嘅可迭代物件會以同樣方式失敗，而唔會被丟掉；header pairs 要以陣列傳入。Stream 要以 Web `ReadableStream` 形式送出：`ReadableStream.from(iterable)` 或 `Readable.toWeb(readable)`。`body` type 會喺 compile time 拒絕其中大多數；`interface` 嘅值或者類別實例要用 `{ ...value }` 展開。
+
+`GET` 同 `HEAD` 唔可以 return body——呢個係 type error。WebSocket builders 唔可以 return `headers` 或者 `body`。
+
+<include cwd lang="typescript">
+  examples/http/body.ts#example
+</include>
+
+你自己 run 嘅 `JSON.stringify`、`qs` 或者 protobuf 見到嘅係 logical names。嗰條路 alias 唔會套用。冇 public `struct.encode`。
+
+Builder 可以按真實 input 分支，每個 case return 唔同 body（JSON records、一個 `File`，或者 `URLSearchParams`）。Native `Headers` 亦會 pass through，唔會再 encode。
+
+## body 點讀
+
+`output` 係 2xx body 嘅單一 Struct；`error` 係其餘一切嘅單一 Struct。Struct kind 揀 representation：`string` 係 raw text，`blob` / `file` 係 blobs，`arrayBuffer` 係 bytes，其他 kind 都係 JSON。兩邊都冇聲明，body 就根本唔會被讀。
+
+次序：
+
+1. `ok` 揀邊：2xx 走 `output`，其餘走 `error`。絕對唔會兩邊都走。
+2. 嗰一邊冇聲明 → body 根本唔會被讀。2xx 成功而 `data === undefined`；非 2xx 係 `HTTP_STATUS` 而 `data === undefined`。你冇聲明嗰一邊嘅 body 解唔出會被完全忽略，連「佢解唔出」呢件事都忽略。
+3. Media type 喺讀 body **之前**就查。唔對就係 `RES_MEDIA_TYPE_INVALID`，唔會 parse 亦唔會解碼。
+4. 讀 representation。失敗係 `RES_DECODE_FAILED`。Transport 嚟嘅 JSON 只 parse 一次：呢個值上面嘅字串係 JSON 字串根，唔會再 parse；bytes 同 blob 仍然係原始資料，只會 parse 一次。
+5. Struct 解析個值。失敗係 `RES_STRUCT_MISMATCH`。
+6. 2xx → 結果加一個有 type 嘅 `response.body`；非 2xx → `HTTP_STATUS` 上面有 type 嘅 `data`。
+
+內置嘅 Fetch transport 對已聲明嘅一邊，會喺 response 仍然喺 interceptor chain 入面嗰陣做第 3 同第 4 步，所以 interceptor 收到嘅 response，其 `body` 已經係 parse 好嘅 JSON、text、`Blob` 或者 bytes；呢啲步驟失敗，仍然會報成同一個 `RES_*` fault，body stream 中斷嗰陣就報 `NET_BODY_INCOMPLETE`。第 5 步喺 chain 之後只行一次。所以 interceptor 用 `makeResponse(...)` 造嘅 response，會經過同線上嚟嘅一樣嘅 media type 檢查、representation 轉換同 Struct。對於 JSON 表示，字串 body 係 JSON 字串根。
+
+成功嘅 response 係 `DecodedResponse<T>`：`url`、`status`、`statusText`、`headers`、`ok`，再加一個有 type 嘅 `body`。冇解碼到任何嘢嘅時候你拿到 `HttpMeta`——一樣嘅 fields，只係冇 `body`。`ok` 只表示 `200 <= status < 300`。兩者都唔係原生 `Response`。Transport failure 係 fault，所以唔存在代表佢嘅 status-0 response。
+
+## 取消工作 [#cancel-the-work]
+
+Execution options 收 `signal`，再加 `abort` 或者 `timeout`。**`abort` 同 `timeout` 互斥。** `signal` 可以同其中一個一齊用。
+
+<include cwd>examples/http/cancel.ts#example</include>
+
+`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。冇傳 `timeout` 嘅 call 會用 client 嘅 `withTimeout` 預設值。Recognized cancel → `NET_ABORTED`；execution timeout → `NET_TIMEOUT`；interceptor `throw` → `EXT_INTERCEPTOR_FAILED`，但 `ERR_ABORTED` / `ERR_TIMEOUT` 例外，會分別得出 `NET_ABORTED` / `NET_TIMEOUT`；其他 Fetch failures → `NET_UNREACHABLE`。Server 接受咗 write 之後再 cancel，**唔**證明 write 已經 rollback。
+
+## Credentials 同 XSRF
+
+`withCredentials(true)` 為 HTTP 同 SSE set Fetch `credentials: 'include'`。佢唔會 create `Authorization`，亦唔會 configure WebSocket auth。`false` 會留 credentials unspecified。
+
+`withXSRF(...)` 只限 HTTP。預設值：`cookieName: 'XSRF-TOKEN'`，`headerName: 'X-XSRF-TOKEN'`。Header 只會為 non-safe methods 注入，而且只喺 caller 未設定時先加。只要有 `location`（包括 Worker），解析後嘅 request URL 就必須同 `location.origin` 同源；跨 origin request 唔會 call `tokenProvider`。Cookie 查找另外需要 `document`。會跳過 `GET`、`HEAD`、`OPTIONS`、`TRACE`。喺 Worker 或 server，如果需要注入，請傳同步、屬於該 request scope 嘅 `tokenProvider`。
+
+唔好將 credentials、XSRF tokens 同 query strings 寫入日常 logs。唔好用 query params 當一般 credential channel。
+
+## Progress 同 Fetch boundary
+
+`onDownloadProgress` 會喺讀已聲明嘅 response body 時執行。`loaded` 計算由 response stream 讀取嘅 bytes，Fetch 可能已經將佢哋解壓。只有 `Content-Length` 係正數，而且冇 `Content-Encoding` 或者佢係 `identity`，`lengthComputable` 先係 true。其他 encoding（包括 gzip 同 br）會回報 `total: 0` 同 `lengthComputable: false`，避免將解碼後 bytes 同壓縮嘅 wire length 比較。嗰一邊冇 struct → body 唔會被讀 → 冇 body-read progress。
+
+`onUploadProgress` 會喺 Fetch 讀 `ReadableStream<Uint8Array>` body 嗰陣回報進度，唔係 server 確認收到資料嗰陣。只有 runtime 支援以 stream 方式送出 request body，先會回報 upload progress：喺 Bun、Node 同 Deno，Defjs 亦會將 `Blob` / `File`、`ArrayBuffer` 同 `FormData` body 轉成 stream，所以呢啲都會回報進度。喺 server runtime，帶 `onUploadProgress` 嘅 FormData 會直接用序列化後嘅 stream，保留 multipart boundary，而且送出時唔會帶 library 產生嘅 `Content-Length`（HTTP/1.1 上係 chunked），所以 progress、timeout 同 abort 都可以運作，唔使緩衝成個 body。除非明確設定有效嘅 `Content-Length`，否則 total 係未知。如果 endpoint 要求 `Content-Length`，例如某些預簽名上傳目標，就省略 `onUploadProgress`；嗰陣平台 Fetch 會帶住 FormData 嘅長度送出。取消操作會釋放被包裝嘅 stream。Browsers（包括 Workers）唔包括喺內，因為 Chromium 只支援喺 HTTP/2 或更新版本上以 stream 方式送出 request body，而 Firefox 完全唔支援；喺呢啲環境，body 會原樣送出，而且唔會呼叫 `onUploadProgress`。JSON、text、`URLSearchParams` 同 typed-array body 係成份一次過送出，唔會有 event。冇已知長度嘅 stream，`total` 係 `0`（即 `lengthComputable` 係 `false`）。如果 runtime 唔支援以 stream 方式送出 request body（例如 Firefox），用 `ReadableStream` 做 body 嘅 request 就會喺送出任何資料之前以 `ENV_UNSUPPORTED` 失敗；cause message 係 `ERR_STREAMING_REQUEST_UNSUPPORTED`。喺 Chromium，`ReadableStream` body 需要 HTTP/2 或更新版本；用 HTTP/1.1 嘅話，呢次 call 會以 `NET_UNREACHABLE` 失敗。`onDownloadProgress` 喺每個 runtime 嘅行為都一樣。
+
+如果 progress callback 拋出錯誤或者 reject，call 就會以 `EXT_OBSERVER_FAILED` 失敗，拋出嘅值會成為 `cause`，download 同 upload 都一樣。Caller 取消操作同 `timeout` 仍然會報 `NET_ABORTED` / `NET_TIMEOUT`。
+
+`fetchHandler(httpRequest, fetchImpl?)` 係更低層嘅 Fetch boundary：解析 URL、call Fetch、讀取 representation，再回傳 `HttpResponse`。預設 HTTP 同 SSE handles 每次 call 都會解析 `globalThis.fetch`，所以 import 之後安裝嘅替代實作亦會用到。HTTP 只有喺平台原生 Fetch 未被取代時先用 `(url, init)`；被取代嘅 global Fetch 或自訂 handle 都會收到原生 `Request`。冇 Fetch 亦可以 import Core；如果執行時仍然冇 Fetch，預設 HTTP/SSE 執行會以 `ENV_UNSUPPORTED` 失敗，自訂 handles 就仍然可用。呢條邊界 **唔會**驗證 command input、派發 `output`，或者執行 interceptors。對注入 transport 嘅測試有用，唔係 `client.execute` 嘅替代品。
+
+## 重送限制
+
+Defjs **唔會** auto-retry HTTP。Retry 一次 read 仍然要有 reviewed timeout/network/duplicate policy。Retry 一次 mutation 要 replayable bytes、server support、綁住 auth scope + request bytes 嘅 idempotency key，同 receiver duplicate policy。
+
+Client/command/Fetch boundary 唔知 failed write 有冇 commit。將 replay decisions 留喺 app 或者 reviewed interceptor。Interceptors 可以 short-circuit 或者 replace low-level request；最終 status 同 body 仍然要滿足 command 嘅 contract。
+
+## 相關配方
+
+- [GET 配 declared 404](/zh-Hant-HK/recipes/get-declared-404)
+- [POST JSON](/zh-Hant-HK/recipes/post-json)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)
+- [用 local Fetch handle 做 test](/zh-Hant-HK/recipes/test-with-handle)

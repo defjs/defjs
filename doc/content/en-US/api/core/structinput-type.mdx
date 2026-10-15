@@ -1,0 +1,23 @@
+---
+title: 'StructInput'
+description: 'Type helper that extracts the accepted input type of a struct.'
+---
+
+<ApiReference identity="@defjs/core:StructInput" />
+
+```ts
+type StructInput<T> = T extends { readonly _struct: { readonly input: unknown } } ? T['_struct']['input'] : never
+```
+
+The type a struct accepts, as opposed to [`Infer`](/api/core/infer-type), which is what a successful parse returns. `T` is a struct, or any [`StructLike`](/api/core/structlike-type). Anything else gives `never`.
+
+The two differ when a struct converts its input:
+
+```ts
+const Created = struct.date()
+
+type In = StructInput<typeof Created> // Date | number | string
+type Out = Infer<typeof Created> // Date
+```
+
+[Struct](/api/struct)

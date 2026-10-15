@@ -1,0 +1,19 @@
+---
+title: 'withEndpoint'
+description: 'Client option：為相對 request paths 設定 base URL。'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+設定加喺相對 request paths 前面、有效嘅絕對 base URL。預設係空字串，所以執行時需要明確提供 endpoint。
+
+- **endpoint** — 有效嘅絕對 base endpoint。Pathname 會保留為目錄；query 同 hash 會被丟棄。
+- 對 WebSocket commands 而言，`http:` base 會變成 `ws:`，`https:` 會變成 `wss:`。
+
+缺少、相對或無效嘅 endpoint，以及非法 request path，都會喺 building 時以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit 嘅 interceptor。HTTP、SSE 同 WebSocket 共用呢個規則。解析後嘅 request 必須保持 base origin，並留喺佢嘅目錄之下；path 入面嘅C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?`、`#`，以及逃出目錄嘅路徑都會被拒絕。形似 scheme 同 protocol-relative 嘅形式，就算前面有空格都會被拒絕；路徑入面嘅普通空格允許，並會以 `%20` 送出。Interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一個規則檢查，但容許刻意將 base 換成另一個有效嘅絕對 URL。確定嘅 URL 錯誤永遠唔會重試。
+
+[Client](/zh-Hant-HK/api/client)

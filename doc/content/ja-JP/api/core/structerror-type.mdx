@@ -1,0 +1,29 @@
+---
+title: 'StructError'
+description: 'struct のパース失敗時に返るエラーです。issue とフォーマッターを持ちます。'
+---
+
+<ApiReference identity="@defjs/core:StructError" />
+
+```ts
+class StructError extends Error {
+  readonly issues: StructIssue[]
+  constructor(issues: StructIssue[])
+  format(): FormattedStructError
+  flatten(): FlattenedStructError
+  prettify(): string
+}
+```
+
+`name` は `'StructError'` です。`message` は、issue が 1 つならその issue のメッセージ、複数なら `N struct issues: <最初のメッセージ>`、0 件なら `Struct parse failed` です。
+
+デフォルトの issue メッセージは受け取った値の種類を示し、値そのものは含みません。たとえば `Expected number at id, received string` です。`message` とフォーマッターはこのテキストを使います。生の入力は `StructIssue.received` に残ります。カスタムの `errorMap` テキストはそのまま使われるため、機密性のある値が再び含まれる可能性があります。
+
+- `struct.parse` は最初の失敗で止まるため、そこでの `issues` は [`StructIssue`](/ja-JP/api/core/structissue-type) を 1 つだけ持ちます。
+- `format()` は [`FormattedStructError`](/ja-JP/api/core/formattedstructerror-type) のツリーを返します。各ノードは `_errors` 配列を持ち、ネストしたキーは `issue.path` に従います。
+- `flatten()` は [`FlattenedStructError`](/ja-JP/api/core/flattenedstructerror-type) を返します。パスが空のメッセージは `formErrors` に、それ以外はパスの最初の要素ごとにまとめて `fieldErrors` に入ります。
+- `prettify()` は issue ごとに `× path: message` の 1 行を返します。空のパスは `<root>` と表示されます。
+
+[Struct ガイド](/ja-JP/docs/struct) を見てください。
+
+[Struct](/ja-JP/api/struct)

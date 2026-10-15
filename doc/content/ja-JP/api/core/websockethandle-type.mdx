@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'クライアントのトランスポートが使う WebSocket インスタンスのインターフェイスです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+イベントハンドラープロパティ、`binaryType`、`dispatchEvent`、状態の定数を除いた、DOM の `WebSocket` です。そのため独自実装には、`url`、`protocol`、`extensions`、`bufferedAmount`、`send`、`close`、`addEventListener`、`removeEventListener`、数値の `readyState` が必要です。
+
+トランスポートは、プロパティが存在すれば `binaryType = 'arraybuffer'` を設定し、存在しない場合はそのまま処理を続けます。セッターが例外を投げた場合は、作成済みハンドルのクローズを可能な限り試みてから、その試行を `NET_UNREACHABLE` で失敗させます。ソケットがクリーンアップの対象から漏れることはありません。このプロパティは最適化のためのもので、デコーダーは Blob フレームも受け付けます。これは [`WebSocketHandleConstructor`](/ja-JP/api/core/websockethandleconstructor-type) が作るインスタンスの型です。
+
+[Client](/ja-JP/api/client)

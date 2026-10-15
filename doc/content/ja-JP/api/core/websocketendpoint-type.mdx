@@ -1,0 +1,24 @@
+---
+title: 'WebSocketEndpoint'
+description: 'defineWebSocket が返す呼び出し可能なものです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketEndpoint" />
+
+```ts
+type WebSocketEndpoint<
+  TInput extends AnyStruct | undefined,
+  TIncoming extends AnyStruct,
+  TOutgoing extends AnyStruct | undefined,
+> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>
+```
+
+[`defineWebSocket`](/ja-JP/api/core/definewebsocket) が返します。呼ぶと、`client.execute` に渡す [`WebSocketCommand`](/ja-JP/api/core/websocketcommand-type) が作られます。呼び出しシグネチャは `input` によって変わります。
+
+- `input` を宣言していない: `() => WebSocketCommand`。
+- `input` が `undefined` を受け付ける: `(input?: StructInput<TInput>) => WebSocketCommand`。
+- それ以外: `(input: StructInput<TInput>) => WebSocketCommand`。
+
+エンドポイントを呼んでも接続はしません。入力はコマンドの実行時にパースされます。
+
+[WebSocket](/ja-JP/api/web-socket)

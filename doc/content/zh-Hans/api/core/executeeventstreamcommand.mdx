@@ -1,0 +1,24 @@
+---
+title: 'executeEventStreamCommand'
+description: '针对 client 配置打开 SSE 命令的底层入口。'
+---
+
+<ApiReference identity="@defjs/core:executeEventStreamCommand" />
+
+```ts
+function executeEventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  clientConfig: ClientConfig,
+  command: EventStreamCommand<TInput, TEvents, TError>,
+  options?: EventStreamExecuteOptions,
+): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>>
+```
+
+`client.execute` 的底层入口。应用代码中请优先使用 client。
+
+- **返回** `[null, stream, open]` 或 `[fault, undefined, open | undefined]`。fault 是 `Fault<TError>`：声明了 `error` 时，解码后的握手 body 在 `data` 上，否则是 `Fault<undefined>`。
+
+[SSE](/zh-Hans/api/sse)

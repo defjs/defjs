@@ -1,0 +1,172 @@
+---
+title: 'HTTP-Anfragen'
+description: Request definieren, ausführen, nach Status branchen und mit signal oder timeout abbrechen.
+---
+
+# HTTP
+
+Definieren → ausführen → auf dem Tupel branchen → abbrechen, wenn der Screen weg ist. Das ist die ganze HTTP-Schleife.
+
+## Grundeinrichtung
+
+<include cwd lang="typescript">
+  examples/http/basic-setup.ts#example
+</include>
+
+## URL auflösen
+
+`withEndpoint(...)` braucht eine gültige absolute URL. Endpoint-Pathname bleibt als Directory; Query und Hash werden vor der Command-Resolution verworfen. Ein fehlender, relativer oder ungültiger Basis-Endpoint scheitert mit `REQ_BUILD_FAILED` während des Request-Baus, bevor ein Interceptor oder Transport läuft, auch wenn ein Interceptor den Request kurzschließen würde. HTTP, SSE und WebSocket teilen diese Regel.
+
+<include cwd>examples/http/resolve-url.ts#example</include>
+
+Path-Placeholder sind Raw-Scalars, genau einmal kodiert. Leere Werte und `.` / `..` werden abgelehnt. Slashes, `?`, `#`, `%`, Spaces und Unicode in einem Placeholder bleiben ein kodiertes Segment — kodiere nicht vorab.
+
+Ein Placeholder-Name beginnt bei `:` und läuft bis zum nächsten `/` oder zum Ende des Pfads: `/files/:name.json` benennt den Parameter `name.json`, nicht `name`. Ein literaler Doppelpunkt in einem statischen Segment wird nicht unterstützt.
+
+Definitionspfade dürfen nicht schemaähnlich oder protokollrelativ sein (auch nicht mit führenden Leerzeichen) und keine C0-Steuerzeichen (einschließlich Tab, CR und LF), keine Backslashes, kein `?` und kein `#` enthalten. Ein normales Leerzeichen im Pfadinneren ist erlaubt und wird als `%20` gesendet. Nach der Auflösung muss die URL den Basis-Origin behalten und unter dessen Verzeichnis bleiben; ein Pfad wie `../users` kann dieses Verzeichnis nicht verlassen. Unzulässige Pfade scheitern mit `REQ_BUILD_FAILED` während des Bauens, vor dem Transport. Das endgültige `req.endpoint` eines Interceptors wird mit derselben Regel gegen sein endgültiges `req.baseEndpoint` geprüft; ein Interceptor darf die Basis absichtlich durch eine andere gültige absolute URL ersetzen. Deterministische URL-Fehler werden nie erneut versucht.
+
+Der Default-Query-Encoder akzeptiert Scalars und Arrays von Scalars (Arrays wiederholen den Key). Ein genestetes Object scheitert mit `REQ_BUILD_FAILED`, außer der Client hat `withQuerySerializer(...)`. `null` in `path`, `query` oder `headers` scheitert genauso. `undefined` wird weggelassen.
+
+## Input platzieren
+
+Der Struct encodet den Wert. Der Builder platziert ihn. Ein deklarierter `input` erfordert immer einen expliziten `builder`, auch wenn der Input bereits die Request-Shape hat. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+
+<include cwd lang="typescript">
+  examples/http/place-input.ts#example
+</include>
+
+Dieser Body ist `{"display_name":"Ada"}` mit `application/json`. Der Header-Wire-Name ist `x-request-id`. Caller und geparste Results behalten `displayName`.
+
+Reich lieber den typisierten Wert durch, statt Wire-Keys auszuschreiben. Alias wird einmal auf dem Field deklariert und gilt in beide Richtungen: `output` / `error` / Events / Incoming-Frames dekodieren `display_name` zu `displayName`, und `body: input.order` schreibt den ganzen Baum um. Derselbe `User`-Struct kann Create-Body und Get-Output sein. Ein selbst geschriebener Key ist die Ausnahme: das Parent-Object ist anonym, also läuft der Alias nicht.
+
+| Builder-Ausdruck                                | Auf der Leitung                                           |
+| ----------------------------------------------- | --------------------------------------------------------- |
+| `body: input.profile`                           | Typisiertes Object: Alias und `Date`- / `bigint`-Encoding |
+| `body: { profile: input.profile }`              | Äußere Keys literal, inneres Object bleibt typisiert      |
+| `body: { ...input.profile, role: 'admin' }`     | Spread behält den Struct; der Extra-Key ist literal       |
+| `body: { name: input.profile.displayName }`     | Anonymes Parent: Alias gilt nicht                         |
+| `query: input.query` / `headers: input.headers` | Typisierte flache Objects: Alias wird der Wire-Key        |
+
+Ein typisiertes Object per Spread zu übernehmen und gleichzeitig seinen Wire-Key zu setzen (`display_name` neben `displayName`) ist `REQ_BUILD_FAILED`. Ein genestetes Object in `path` oder `headers` scheitert genauso.
+
+Der Guide wird an jedem Knoten gewählt, nicht nur an der Wurzel. Ein neues Object unter einem anonymen Parent behält die Keys, die du geschrieben hast. Dasselbe Object unter einem typisierten Parent nutzt den Struct dieses Fields.
+
+```ts
+body: { row: { id: '42' } }              // Anonymous root: emits id
+body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
+```
+
+Trifft ein Union-Guide mehr als einen Branch, wird jeder Branch kodiert und verglichen. Identische Wire-Ausgabe bleibt; ein Unterschied ist `REQ_BUILD_FAILED`.
+
+Eine gemischte Intersection, die einen Nicht-Objekt-Teil enthält, bekommt beim Parsen als Tag die Konjunktion der Tags der passenden Teile; ein neu geschriebener Mixed-Intersection-Wert, der nicht geparst wurde, bleibt ein anonymes Object.
+
+### Query
+
+Genestete Query-Shape (`a[b]`, `a.b`, Komma-Listen) ist eine Backend-Konvention, deshalb hängt der Hook am Client:
+
+<include cwd>examples/http/query-serializer.ts#example</include>
+
+`query` hier ist das encodierte Wire-Object. Aliasse sind schon angewandt, ein Serializer wie `qs` droppt sie also nicht. Der Return-String ist der Query-String. Defjs hängt nicht von `qs` ab.
+
+Ohne Serializer wiederholen Arrays Keys, und ein genestetes Object ist `REQ_BUILD_FAILED`. `URLSearchParams` aus dem Builder wird so genutzt und überspringt den Serializer. Ohne Query wird der Serializer nicht aufgerufen. Interceptors sehen danach `queryParams` als `new URLSearchParams(queryString)`.
+
+### Body
+
+Der erste Match gewinnt:
+
+| `body`-Wert                                                                   | Gesendet als                                                                  | Default Content-Type                                                    |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| weggelassen / `undefined`                                                     | kein Body                                                                     | —                                                                       |
+| typisiertes Object, dessen Root einen `urlencoded`- oder `formData`-Codec hat | `URLSearchParams` / `FormData`; Keys sind Wire-Namen; Arrays wiederholen Keys | Form-Type / Platform-Boundary                                           |
+| `FormData`, `URLSearchParams`                                                 | as-is                                                                         | dasselbe; Defjs entfernt einen veralteten `Content-Type` von `FormData` |
+| `Blob` / `File`                                                               | as-is                                                                         | `blob.type`, oder `application/octet-stream`                            |
+| `ArrayBuffer`, `TypedArray`, `DataView`                                       | as-is                                                                         | `application/octet-stream`                                              |
+| `ReadableStream`                                                              | gestreamt (`duplex: 'half'`, wenn die Runtime es erlaubt)                     | `application/octet-stream`                                              |
+| `string`                                                                      | as-is                                                                         | `text/plain;charset=UTF-8`                                              |
+| einfaches Objekt, Array, Zahl, boolescher Wert, `null`, `Date`, `bigint`      | encodet, dann `JSON.stringify`                                                | `application/json`                                                      |
+
+HTTP speichert den abgeleiteten Typ des Builder-Bodys im gewöhnlichen Feld `request.bodyContentType`, das bei `{ ...req }`-Kopien erhalten bleibt; diese Typableitung wird nie in `request.headers` geschrieben. Ein expliziter `content-type`-Header hat immer Vorrang, egal ob er vom Builder, von Client-Defaults, einem Interceptor oder einem rohen `fetchHandler`-Request gesetzt wurde, auch wenn Upload-Progress den Body in einen Stream konvertiert. `bodyContentType` gilt nur, solange `body` der Wert des Builders ist; ein Ersatz-Body wird erneut erkannt, daher deklariert ein Interceptor seinen Typ mit einem `content-type`-Header. `body: undefined` sendet keinen von der Library abgeleiteten Content-Type. FormData ist die Ausnahme: Sein Content-Type muss die Boundary der tatsächlichen Serialisierung nutzen. Der Codec-Tag gilt nur am Body-Root: `body: { meta: input.form }` ist JSON, und die Form-Fields sind gewöhnliche JSON-Fields. Ein String ist Raw-Text; ein JSON-String wie `"abc"` braucht `JSON.stringify` plus `application/json`. `undefined`-Fields werden weggelassen; ein als `null` gesendetes `nullable`-Field ist JSON `null`.
+
+JSON darf auf jeder Verschachtelungsebene nur JSON-Daten enthalten: einfache Objekte, Arrays, Strings, endliche Zahlen, boolesche Werte und `null` sowie Werte, deren `toJSON()` solche Daten zurückgibt, etwa `Date` oder `URL`. Alle anderen Werte führen sowohl an der Wurzel als auch in verschachtelten Strukturen zu `REQ_BUILD_FAILED`, bevor etwas gesendet wird, statt als `{}`, `null` oder ganz ohne Body gesendet zu werden: eine `Map` oder ein `Set`, eine Klasseninstanz ohne `toJSON`, eine Funktion, `NaN`, ein Node-`Readable` oder ein Iterable oder asynchrones Iterable, einschließlich eines Object-Literals mit einer Methode `Symbol.iterator` oder `Symbol.asyncIterator`. Die Fehlermeldung nennt das betroffene Feld. Ein als `query` oder `headers` übergebenes Iterable-Objekt schlägt auf dieselbe Weise fehl, statt verworfen zu werden; übergib Header-Paare als Array. Sende einen Stream als Web-`ReadableStream`: `ReadableStream.from(iterable)` oder `Readable.toWeb(readable)`. Der `body`-Typ lehnt die meisten dieser Werte bereits beim Kompilieren ab; für einen durch ein `interface` typisierten Wert oder eine Klasseninstanz ist `{ ...value }` erforderlich.
+
+`GET` und `HEAD` können keinen Body zurückgeben — das ist ein Type-Error. WebSocket-Builder können weder `headers` noch `body` zurückgeben.
+
+<include cwd lang="typescript">
+  examples/http/body.ts#example
+</include>
+
+`JSON.stringify`, `qs` oder Protobuf, das du selbst laufen lässt, sieht logische Namen. Auf diesem Pfad gilt Alias nicht. Es gibt kein öffentliches `struct.encode`.
+
+Ein Builder darf auf dem echten Input branchen und je Fall einen anderen Body zurückgeben (JSON-Records, ein `File` oder `URLSearchParams`). Native `Headers` werden ebenfalls durchgereicht und nicht neu encodet.
+
+## Wie ein Body gelesen wird
+
+`output` ist ein Struct für den 2xx-Body; `error` ist ein Struct für alles andere. Der Struct-Kind
+wählt die Representation: `string` ist Raw-Text, `blob` / `file` sind Blobs, `arrayBuffer` sind Bytes,
+und jeder andere Kind ist JSON. Ist keine Seite deklariert, wird der Body nie gelesen.
+
+Reihenfolge der Schritte:
+
+1. `ok` wählt die Seite: `output` für 2xx, `error` für alles andere. Nie beide.
+2. Für diese Seite nichts deklariert → der Body wird nie gelesen. 2xx gelingt mit `data === undefined`;
+   Non-2xx ist `HTTP_STATUS` mit `data === undefined`. Ein unlesbarer Body auf einer Seite, die du nicht
+   deklariert hast, wird ignoriert — samt der Tatsache, dass er nicht lesbar war.
+3. Der Media-Type wird geprüft, **bevor** der Body gelesen wird. Eine Abweichung ist `RES_MEDIA_TYPE_INVALID` und
+   es wird nichts geparst oder dekodiert.
+4. Die Representation wird gelesen. Ein Fehlschlag ist `RES_DECODE_FAILED`. JSON vom Transport wird einmal
+   geparst: ein String auf diesem Wert ist eine JSON-String-Wurzel und wird nicht noch einmal geparst; Bytes
+   und Blobs sind roh und werden einmal geparst.
+5. Der Struct parst den Wert. Ein Fehlschlag ist `RES_STRUCT_MISMATCH`.
+6. 2xx → Result und ein typisiertes `response.body`; Non-2xx → typisiertes `data` auf `HTTP_STATUS`.
+
+Der eingebaute Fetch-Transport führt die Schritte 3 und 4 für eine deklarierte Seite aus, solange die Response
+noch in der Interceptor-Chain ist; Interceptors erhalten also eine Response, deren `body` bereits das geparste
+JSON, der Text, der `Blob` oder die Bytes ist. Ein Fehler in diesen Schritten erscheint weiterhin als derselbe
+`RES_*`-Fault, oder als `NET_BODY_INCOMPLETE`, wenn der Body-Stream abbricht. Schritt 5 läuft einmal, nach der
+Chain. Eine Response, die ein Interceptor mit `makeResponse(...)` gebaut hat, durchläuft daher dieselbe
+Media-Type-Prüfung, Representation-Konvertierung und denselben Struct wie eine von der Leitung. Bei einer
+JSON-Representation ist ein String-Body eine JSON-String-Wurzel.
+
+Eine erfolgreiche Response ist ein `DecodedResponse<T>`: `url`, `status`, `statusText`, `headers`, `ok` und
+ein typisiertes `body`. Wo nichts dekodiert wurde, bekommst du `HttpMeta` — dieselben Felder ohne `body`. `ok`
+bedeutet nur `200 <= status < 300`. Keines von beiden ist eine native `Response`. Ein Transport-Failure ist ein Fault, also
+gibt es keine Status-0-Response, die dafür einsteht.
+
+## Arbeit abbrechen
+
+Execution-Options nehmen `signal` plus entweder `abort` oder `timeout`. **`abort` und `timeout` schließen sich gegenseitig aus.** `signal` kann mit jedem der beiden kombiniert werden.
+
+<include cwd>examples/http/cancel.ts#example</include>
+
+`timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein. Ein Aufruf ohne `timeout` bekommt den `withTimeout`-Default des Clients. Erkannter Abbruch → `NET_ABORTED`; Execution-Timeout → `NET_TIMEOUT`; Interceptor-`throw` → `EXT_INTERCEPTOR_FAILED`, außer `ERR_ABORTED` / `ERR_TIMEOUT`, die `NET_ABORTED` / `NET_TIMEOUT` ergeben; andere Fetch-Failures → `NET_UNREACHABLE`. Ein Abbruch nach akzeptiertem Server-Write beweist **nicht**, dass der Write zurückgerollt wurde.
+
+## Credentials und XSRF
+
+`withCredentials(true)` setzt Fetch `credentials: 'include'` für HTTP und SSE. Es erzeugt kein `Authorization` und konfiguriert keine WebSocket-Auth. `false` lässt Credentials unspecified.
+
+`withXSRF(...)` ist HTTP-only. Defaults: `cookieName: 'XSRF-TOKEN'`, `headerName: 'X-XSRF-TOKEN'`. Der Header wird nur für Non-Safe Methods injiziert und nur, wenn der Caller ihn nicht schon gesetzt hat. Existiert `location`, auch in einem Worker, muss die aufgelöste Request-URL `location.origin` entsprechen; ein Cross-Origin-Request ruft `tokenProvider` nicht auf. Der Cookie-Lookup braucht separat `document`. Überspringt `GET`, `HEAD`, `OPTIONS`, `TRACE`. In einem Worker oder auf dem Server übergib einen synchronen request-scoped `tokenProvider`, wenn du Injection brauchst.
+
+Halte Credentials, XSRF-Tokens und Query Strings aus Routine-Logs. Nutze Query-Params nicht als allgemeinen Credential-Kanal.
+
+## Progress und die Fetch-Grenze
+
+`onDownloadProgress` läuft, während ein deklarierter Response-Body gelesen wird. `loaded` zählt Bytes, die aus dem Response-Stream gelesen wurden; Fetch kann sie bereits dekomprimiert haben. `lengthComputable` ist nur bei positivem `Content-Length` und fehlendem oder `identity`-`Content-Encoding` true. Andere Encodings, einschließlich gzip und br, melden `total: 0` und `lengthComputable: false`, damit dekodierte Bytes nie mit einer komprimierten Wire-Länge verglichen werden. Kein Struct für diese Seite → der Body wird nicht gelesen → kein Body-Read-Progress.
+
+`onUploadProgress` meldet den Fortschritt eines `ReadableStream<Uint8Array>`-Bodys, während Fetch ihn liest, nicht wenn der Server ihn bestätigt. Der Upload-Fortschritt wird nur in Runtimes gemeldet, die Request-Bodys streamen können: In Bun, Node und Deno konvertiert Defjs auch `Blob`-/`File`-, `ArrayBuffer`- und `FormData`-Bodys in einen Stream, sodass auch für sie der Fortschritt gemeldet wird. In Server-Runtimes nutzt FormData mit `onUploadProgress` den serialisierten Stream direkt, behält seine Multipart-Boundary und wird ohne ein von der Library erzeugtes `Content-Length` gesendet (über HTTP/1.1 per Chunked-Übertragung). So funktionieren Progress, Timeout und Abbruch, ohne den gesamten Body zu puffern. Sein Total ist unbekannt, sofern kein gültiges explizites `Content-Length` es liefert. Bei einem Endpoint, der `Content-Length` verlangt, etwa manchen vorsignierten Upload-Zielen, lasse `onUploadProgress` weg; das Fetch der Plattform sendet FormData dann mit seiner Länge. Ein Abbruch gibt den umhüllten Stream frei. Browser, einschließlich Workers, sind davon ausgenommen, weil Chromium Request-Bodys nur über HTTP/2 oder höher streamen kann und Firefox das Streaming von Request-Bodys gar nicht unterstützt; dort werden diese Bodys unverändert gesendet und `onUploadProgress` wird nicht aufgerufen. JSON-, Text-, `URLSearchParams`- und Typed-Array-Bodys werden als Ganzes gesendet und erzeugen keine Events. Bei einem Stream ohne bekannte Länge ist `total` gleich `0` (und damit `lengthComputable` gleich `false`). Ein Request mit einem `ReadableStream`-Body scheitert in einer Runtime ohne Unterstützung für das Streaming von Requests, etwa Firefox, mit `ENV_UNSUPPORTED`, bevor etwas gesendet wird; die Meldung der zugrunde liegenden Fehlerursache lautet `ERR_STREAMING_REQUEST_UNSUPPORTED`. In Chromium erfordert ein `ReadableStream`-Body HTTP/2 oder höher; über HTTP/1.1 scheitert der Aufruf mit `NET_UNREACHABLE`. `onDownloadProgress` verhält sich in jeder Runtime gleich.
+
+Wirft ein Fortschritts-Callback einen Fehler oder wird das von ihm zurückgegebene Promise abgelehnt, scheitert der Aufruf mit `EXT_OBSERVER_FAILED`; der geworfene Wert wird als `cause` gespeichert. Das gilt für Downloads und Uploads gleichermaßen. Ein Abbruch durch den Aufrufer und `timeout` führen weiterhin zu `NET_ABORTED` / `NET_TIMEOUT`.
+
+`fetchHandler(httpRequest, fetchImpl?)` ist die niedrigere Fetch-Grenze: löst die URL auf, ruft Fetch, liest die Representation und gibt `HttpResponse` zurück. Die Default-Handles für HTTP und SSE lösen `globalThis.fetch` bei jedem Aufruf auf, daher wird eine nach dem Import installierte Ersetzung verwendet. HTTP nutzt `(url, init)` nur für unangetastetes Plattform-Fetch; ein ersetztes globales oder eigenes Handle erhält einen nativen `Request`. Core ohne Fetch zu importieren ist gültig; eine Default-Ausführung von HTTP/SSE scheitert mit `ENV_UNSUPPORTED`, wenn Fetch dann noch fehlt, während eigene Handles nutzbar bleiben. Diese Grenze validiert **nicht** Command-Input, dispatcht kein `output` und führt keine Interceptors aus. Nützlich für injizierte Transport-Tests — kein Ersatz für `client.execute`.
+
+## Replay-Limits
+
+Defjs wiederholt HTTP **nicht** automatisch. Einen Read zu wiederholen braucht trotzdem eine geprüfte Timeout-/Network-/Duplicate-Policy. Eine Mutation zu wiederholen braucht wiederholbare Bytes, Server-Support, einen Idempotency-Key gebunden an Auth-Scope + Request-Bytes und eine Receiver-Duplicate-Policy.
+
+Eine Client-/Command-/Fetch-Grenze kann nicht wissen, ob ein fehlgeschlagener Write auf dem Server übernommen wurde. Halte Replay-Entscheidungen in der App oder einem geprüften Interceptor. Interceptors können den Low-Level-Request kurzschließen oder ersetzen; finaler Status und Body müssen trotzdem den Command-Vertrag erfüllen.
+
+## Verwandte Rezepte
+
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)
+- [POST JSON](/de-DE/recipes/post-json)
+- [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)
+- [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)

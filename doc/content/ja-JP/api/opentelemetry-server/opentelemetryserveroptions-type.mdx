@@ -1,0 +1,28 @@
+---
+title: 'OpenTelemetryServerOptions'
+description: withOpenTelemetryServer の options — tracer、meter、logger、propagator、トランスポートごとの設定です。
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerOptions" />
+
+```ts
+interface OpenTelemetryServerOptions {
+  tracer?: Tracer
+  meter?: Meter
+  logger?: Logger
+  propagator?: TextMapPropagator
+  requireParentSpan?: boolean
+  http?: OpenTelemetryServerHttpOptions
+  sse?: OpenTelemetryServerSSEOptions
+  webSocket?: OpenTelemetryServerWebSocketOptions
+}
+```
+
+- `tracer` — 任意です。省略するとローカル span も span フックもありません。
+- `meter` — 任意です。省略するとこのパッケージのメトリクスは記録されません。
+- `logger` — 任意です。`@opentelemetry/api-logs` の `Logger` であり、Winston/Pino Logger ではありません。省略すると診断の LogRecord は出力されません。Defjs はグローバル logger を取得せず、provider も所有しません。
+- `propagator` — 既定は W3C Trace Context + Baggage です。
+- `requireParentSpan` — 既定は `false` です。`tracer` があるとき、`true` にするとアクティブな親 span がなければログを含む全計装をスキップします。`tracer` がなければメトリクスもログも妨げません。
+- `http`、`sse`、`webSocket` — トランスポートごとの options です。既定はそれぞれ `{}` で、トランスポートが無効になるのは `{ enabled: false }` のときだけです。
+
+[@defjs/opentelemetry-server](/ja-JP/api/opentelemetry-server)

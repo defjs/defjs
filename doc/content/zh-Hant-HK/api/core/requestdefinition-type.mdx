@@ -1,0 +1,24 @@
+---
+title: 'RequestDefinition'
+description: 'HTTP endpoint 嘅契約：method、path、input，同解碼 body 用嘅 structs。'
+---
+
+<ApiReference identity="@defjs/core:RequestDefinition" />
+
+```ts
+type RequestDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+> = ResponseDeclaration<TOutput, TError> & {
+  builder?: OutboundBuilder
+  input?: TInput
+  method: string
+  operation?: string
+  path: string
+}
+```
+
+`output` 聲明 2xx response 嘅 body，`error` 聲明其他所有 response 嘅 body。兩者只會跑其中一個；省略邊個，邊個 body 就永遠唔會被讀取。`ResponseDeclaration` 係內部 helper type：只有對應嘅 type parameter 係 struct 嗰陣，`output` 同 `error` 先至必填。冇 `responseType`：由 struct kind 決定已聲明嘅 body 點讀。只要聲明咗 `input`，就必須明確提供 `builder`，即使 input 已經係 request shape 都一樣。只有冇 `input` 嘅定義先可以省略 `builder`。
+
+[HTTP](/zh-Hant-HK/api/http)

@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'StructError.format이 반환하는 중첩 오류 트리예요.'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+`StructError.format()`의 결과예요. 말단 message는 `_errors` 아래에 있고, 중첩된 키는 실패한 path를 그대로 따라가요. 이름이 문자 그대로 `_errors`인 path 구간은 `\_errors`로 저장돼요.
+
+[Struct](/ko-KR/api/struct)

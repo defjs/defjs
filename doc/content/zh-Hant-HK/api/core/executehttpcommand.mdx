@@ -1,0 +1,26 @@
+---
+title: 'executeHttpCommand'
+description: '針對 client config 執行 HTTP command 嘅 low-level entry。'
+---
+
+<ApiReference identity="@defjs/core:executeHttpCommand" />
+
+```ts
+function executeHttpCommand<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: HttpClientConfig,
+  command: HttpCommand<TInput, TOutput, TError>,
+  options?: HttpExecuteOptions,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>>
+```
+
+`client.execute` 用嘅 low-level entry。Application code 應該 call `client.execute(command, options)`。`HttpClientConfig` 係 `ClientConfig` 嘅 HTTP 部分，所以可以直接傳 `ClientConfig`。`HttpExecuteAwaitResult` 係內部 result tuple。
+
+- **Returns** `[null, data, response]` 或 `[fault, undefined, undefined]`。`data` 係解碼後嘅 `output` body，冇聲明 `output` 時係 `undefined`。聲明咗 `output` 時 `response` 係 `DecodedResponse`，否則係 `HttpMeta`。Fault 係 `Fault<TError>`。
+
+非 2xx status 係 `HTTP_STATUS`：冇聲明 `error` struct 時 `data` 係 `undefined`，聲明咗而 body 解碼成功時 `data` 就係嗰個 body。如果聲明咗嘅 `error` body 讀唔到，fault 就會改為 `RES_*` decode fault。失敗時 tuple 第三項係 `undefined`；response metadata 由 fault 帶住。`options.timeout` 省略時 fall back 去 client 嘅 `withTimeout` default。
+
+[HTTP](/zh-Hant-HK/api/http)

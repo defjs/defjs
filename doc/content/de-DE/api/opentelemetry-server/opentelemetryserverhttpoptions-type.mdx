@@ -1,0 +1,20 @@
+---
+title: 'OpenTelemetryServerHttpOptions'
+description: 'Optionen für den HTTP-Transport — die gemeinsamen Optionen mit einer HttpResponse im responseHook.'
+---
+
+<ApiReference identity="@defjs/opentelemetry-server:OpenTelemetryServerHttpOptions" />
+
+```ts
+type OpenTelemetryServerHttpOptions = OpenTelemetryServerTransportOptions<HttpResponse<unknown>>
+```
+
+Wird auf `http` in `OpenTelemetryServerOptions` gesetzt. Es hat keine eigenen Felder: `enabled`, `startSpanHook`, `requestHook` und `responseHook` kommen von `OpenTelemetryServerTransportOptions`.
+
+- `responseHook(span, res, req)` bekommt die `HttpResponse`, die durch den Interceptor zurückkam, bevor der Client einen deklarierten Body dekodiert, zusammen mit dem ursprünglichen `HttpRequest`. Lies `req.operation` für die Request-Identität; baue sie nicht aus dem Endpoint oder einer aufgelösten URL nach.
+- Der HTTP-Span endet, sobald `responseHook` zurückkehrt; auf den Hook wird nicht gewartet, nur sein synchroner Teil kann den Span also noch ändern. Ein Status ab 400 beendet ihn mit `ERROR` und setzt `error.type` auf den Status-String; 100–399 lässt seinen Status ungesetzt. Eine asynchrone Hook-Ablehnung nach dem Ende wird über `diag.error` gemeldet; dafür muss die Anwendung `diag.setLogger(...)` aus `@opentelemetry/api` konfigurieren. Dem beendeten Span können keine Events mehr hinzugefügt werden.
+- Ein Reject durch den Interceptor (Netzwerkfehler, Abbruch, Timeout oder ein deklarierter `output`-/`error`-Body, der sich nicht als JSON lesen lässt) hat keinen Response-Status und ruft `responseHook` nicht auf. Der Span endet mit `ERROR`, und `error.type` ist der Klassenname des geworfenen Werts, etwa `TypeError`, `Error` oder `BodyFailure`. Ein Abbruch durch den Caller ist `Error`, egal mit welchem Abort-Grund.
+
+Übergib `{ enabled: false }`, um die HTTP-Instrumentierung zu überspringen. Span-Hooks werden nur mit einem übergebenen `tracer` aufgerufen.
+
+[@defjs/opentelemetry-server](/de-DE/api/opentelemetry-server)

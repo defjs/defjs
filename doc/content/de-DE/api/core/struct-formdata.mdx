@@ -1,0 +1,18 @@
+---
+title: 'struct.formData'
+description: 'Object-Struct, der als Multipart-FormData kodiert wird, wenn er der Request-Body ist.'
+---
+
+<ApiReference identity="@defjs/core:struct.formData" />
+
+```ts
+function formData<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+Parst wie [`struct.object()`](/de-DE/api/core/struct-object) und trägt einen `formData`-Codec-Tag.
+
+- Der Tag gilt nur, wenn der Wert dieses Structs die Request-Body-Root ist. Der Body wird dann als `FormData` mit einer plattformeigenen Multipart-Boundary gesendet.
+- Arrays wiederholen den Field-Namen, `undefined`-Fields werden übersprungen, und `Blob`-/`File`-Werte werden als Dateien angehängt. Ein verschachteltes Objekt lässt den Request mit `REQ_BUILD_FAILED` fehlschlagen.
+- `struct.parse` ignoriert den Tag. Es akzeptiert keine `FormData`-Instanz, nur ein einfaches Objekt.
+
+[Struct](/de-DE/api/struct)

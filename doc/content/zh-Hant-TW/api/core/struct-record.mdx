@@ -1,0 +1,19 @@
+---
+title: 'struct.record'
+description: '用單一 value struct 解析字串 key 物件的 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.record" />
+
+```ts
+function record<S extends StructLike<unknown, unknown, boolean>>(value: S): RecordStruct<S>
+```
+
+- 用 `value` 解析純物件的每個自有 key。其他值以 `invalid_type`（expected `record`）失敗。
+- 解析在第一個失敗的 value 就停止，`issue.path` 帶有它的 key。
+- 輸出是原型為 `null` 的新物件。
+- `value` 不是 struct 時丟出 `TypeError`。
+
+`RecordStruct<S>` 沒有匯出。它是 `Struct<{ [key: string]: StructInput<S> }, { [key: string]: Output }>`，其中 `Output` 是不含 `undefined` 的 `Infer<S>`。`S` 為 optional struct 時，值為 `undefined` 的 key 會從輸出中省略。
+
+[Struct](/zh-Hant-TW/api/struct)

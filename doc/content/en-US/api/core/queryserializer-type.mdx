@@ -1,0 +1,16 @@
+---
+title: 'QuerySerializer'
+description: 'Function that serializes an encoded query object into a query string.'
+---
+
+<ApiReference identity="@defjs/core:QuerySerializer" />
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+`query` is the wire object: aliases already applied, `Date` values already ISO strings, `bigint` values already strings. Nested objects and arrays are preserved. Return the query string without a leading `?`; it is used verbatim and is not passed through `URLSearchParams`. Interceptors see `queryParams` as `new URLSearchParams(queryString)`.
+
+Set it with `withQuerySerializer`. Without one, queries use `URLSearchParams`: arrays repeat keys and a nested object fails. A builder that returns `URLSearchParams` skips the serializer.
+
+[Client](/api/client)

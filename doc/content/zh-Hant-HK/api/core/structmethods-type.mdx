@@ -1,0 +1,25 @@
+---
+title: 'StructMethods'
+description: '每個 struct 都有嘅可串連 modifiers。'
+---
+
+<ApiReference identity="@defjs/core:StructMethods" />
+
+```ts
+interface StructMethods<I, O, OO extends boolean> {
+  alias(name: string): this
+  null(): Struct<I | null, O | null, OO>
+  nullable(): Struct<I | null, O | null, OO>
+  nullish(): Struct<I | null | undefined, O | null | undefined, true>
+  optional(): Struct<I | undefined, O | undefined, true>
+}
+```
+
+每個 method 都回傳新 struct，原本嗰個保持不變。
+
+- `alias(name)` 設定 object 欄位嘅線上名稱。除非傳入 `aliases: true`，否則 `struct.parse` 讀邏輯名稱；JSON 同 flat request codecs 則寫 alias。`name` 唔係字串會 throw `TypeError`。
+- `null()` 同 `nullable()` 完全一樣：都會額外接受 `null`。
+- `optional()` 額外接受 `undefined`。喺 object 入面，key 可以缺失，缺席嘅欄位喺輸出入面保持缺席。
+- `nullish()` 同時接受 `null` 同 `undefined`。
+
+[Struct](/zh-Hant-HK/api/struct)

@@ -1,0 +1,22 @@
+---
+title: 'EventStreamCommand'
+description: 'Opaker ausführbarer SSE-Command, den ein Event-Stream-Endpoint erzeugt.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamCommand" />
+
+```ts
+interface EventStreamCommand<
+  TInput extends AnyStruct | undefined,
+  TEvents extends EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> {
+  readonly endpoint: EventStreamDefinition<TInput, TEvents, TError> & { readonly method: string }
+  readonly input: EndpointInput<TInput> | undefined
+  // plus internal symbol-keyed members that identify and run the command
+}
+```
+
+Entsteht, wenn du einen `EventStreamEndpoint` mit Input aufrufst. Behandle ihn als opak und übergib ihn an `client.execute`.
+
+[SSE](/de-DE/api/sse)

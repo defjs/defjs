@@ -1,0 +1,18 @@
+---
+title: 'ERR_ABORTED'
+description: '標示 request 已被中止的共用 Error 哨兵。'
+---
+
+<ApiReference identity="@defjs/core:ERR_ABORTED" />
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+```
+
+呼叫方取消時共用的 `cause` 與 message 值。`createNetworkFault` 會把它，以及名為 `AbortError` 的 `DOMException`，對應到 `NET_ABORTED`。HTTP interceptor 拋出它時，該次呼叫會以 `NET_ABORTED` fault resolve。SSE 與 WebSocket interceptors 拋出它時，則回報為 `EXT_INTERCEPTOR_FAILED`。
+
+見 [Errors 指南](/zh-Hant-TW/docs/errors)。
+
+這個哨兵帶有不可列舉的 `Symbol.for('defjs.cause.aborted')` brand。[`isAbortCause`](/zh-Hant-TW/api/core/isabortcause) 不必比較物件同一性，就能辨認來自任何 Core 副本的這個哨兵。分類獨立於無關的先前執行。
+
+[錯誤](/zh-Hant-TW/api/errors)

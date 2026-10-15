@@ -1,0 +1,176 @@
+---
+title: 错误
+description: Fault 的各个变体与工厂辅助函数。
+---
+
+# 错误
+
+Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的失败不抛异常。
+
+## FaultCode
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+一个封闭集合。第一个 `_` 之前那段就是类别；没有单独的 `kind` 字段。集合保持封闭，`switch (fault.code)` 才能穷尽——扩展报自己的细节走 `cause`，不是加新 code。
+
+## FaultClass
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+`FaultClass<FaultCode>` 是 `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`。
+
+## Fault
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = DecodeFault | HttpStatusFault<TErr> | PreflightFault
+```
+
+对 `fault.code` 做 switch。
+
+### FaultOf
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`FaultOf` 就是 `Fault`，只是用解码后的错误 body 类型来表达，而不是用产出它的 struct。`HttpAwaitResult` 和各 fault 工厂处理的是解码后的值，所以用这种形式。
+
+每个变体都是名为 `DefjsFault` 的原生 `Error`，所以 `String(fault)` 给出 `DefjsFault: <message>`。`code` 和各变体元数据——`status`、`response`、`data`——都是可枚举的自有属性。原生 `cause` 链不可枚举。
+
+默认 Struct 消息使用 `received <kind>`，不包含接收到的值本身，例如 `Expected number at email, received string`。`RES_DECODE_FAILED` 的底层原因若是 JSON `SyntaxError`，消息为 `Response body could not be decoded`。问题路径是结构性的，会保留 record 的键：`struct.record(...)` 可能产生 `Expected number at alice@example.com, received string`，因此键在默认消息、`prettify()` 和 `String(fault)` 中仍可能敏感。原始 `StructIssue.received` 和解析器 cause 仍是敏感信息；自定义 `errorMap` 和扩展消息会原样使用，写日志前需要审查。
+
+<include cwd>examples/api/fault.ts#example</include>
+
+只有把 `fault.cause` 窄化到 `StructError` 之后，才能调 `format()`、`flatten()` 或 `prettify()`；这些 helper 不会被复制到 fault 上。
+
+### HttpStatusFault
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+任何非 2xx 状态。端点声明过 `error` 且 body 解码成功时，`data` 就是那个 body，`response` 也带着它。省略了 `error` 时 body 根本不会被读，于是 `data` 是 `undefined`，`response` 只有元数据。
+
+### DecodeFault
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+响应到了，但没法按声明读出来。`response` 只有元数据：body 就是解码后的值，而解码本身失败了，所以没有 `body` 字段可取。出错细节在 `cause` 上——struct 不匹配时是 `StructError`，表示形式读不出来时是解析器的失败。
+
+### PreflightFault
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+所有可能在响应存在之前就失败的情况：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。只有传输层当时确实有元数据可报时才带 `response`，比如下载中途被截断的 body。
+
+### AnyFault
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+任何 fault，不论它解码后的错误 body 是什么类型。写那种只做分类、不在乎是哪个端点产出的 handler 时用它；body 类型要紧的地方优先用 `Fault<typeof yourErrorStruct>`。
+
+## 工厂
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+```ts
+declare function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+
+declare function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+
+declare function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+
+declare function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+
+declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+`createHttpStatusFault` 收一个已经带着解码后 body 的响应；`createUndecodedHttpStatusFault` 只收元数据，给那些没声明 `error` 的端点用。
+
+`createNetworkFault` 使用 [`isAbortCause`](/zh-Hans/api/core/isabortcause) 判断 `NET_ABORTED`，使用 [`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 判断 `NET_TIMEOUT`：它们分别识别来自任意 Core 副本的带标记哨兵、名为 `AbortError` 的 `DOMException`，以及名为 `TimeoutError` 的 `DOMException` 或 `Error`。其他情况一律映射到 `NET_UNREACHABLE`。`createPreflightFault` 直接接收 code；不给 `cause` 时，code 就成为 message。
+
+所有工厂都返回带上述结构化字段的原生 `Error` 实例；它们不造普通对象错误，`String(fault)` 也不需要适配器。
+
+## 哨兵
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+abort 和 timeout 共享的 `cause` / message 值。从 HTTP interceptor 里抛一个出来，调用会以 `NET_ABORTED` 或 `NET_TIMEOUT` 结束。SSE 和 WebSocket 的 interceptor 则把任何抛出（包括这两个）都报告为 `EXT_INTERCEPTOR_FAILED`。
+
+这些哨兵带有不可枚举的 `Symbol.for('defjs.cause.aborted')` 和 `Symbol.for('defjs.cause.timeout')` 标记。分类不依赖哨兵的对象身份，也不受之前无关执行的影响。
+
+## Cause 检查
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/zh-Hans/api/core/isabortcause) 识别带中止标记的 `Error` 或名为 `AbortError` 的 `DOMException`。[`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 识别带超时标记的 `Error`，或名为 `TimeoutError` 的 `DOMException` / `Error`。传入 `fault.cause` 来分类底层值；这些函数不会解包 fault，也能识别另一份 Core 的哨兵。
+
+见 [错误指南](/zh-Hans/docs/errors)。

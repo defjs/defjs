@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: 'Extrae el prefijo de clase de un código de fault.'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+La clase de un código de fault es el segmento anterior a su primer `_`. `C` es un `FaultCode` o una unión de ellos. `FaultClass<FaultCode>` es `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+[Errores](/es-ES/api/errors)

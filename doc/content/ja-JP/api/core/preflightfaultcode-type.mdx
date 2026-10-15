@@ -1,0 +1,14 @@
+---
+title: 'PreflightFaultCode'
+description: 'レスポンスに到達しなかった可能性のある Fault のコードです。'
+---
+
+<ApiReference identity="@defjs/core:PreflightFaultCode" />
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+```
+
+`HTTP_STATUS` とデコード系コードを除くすべての `FaultCode` です。`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`ENV_UNSUPPORTED`、`EXT_HOOK_FAILED`、`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`、`NET_ABORTED`、`NET_BODY_INCOMPLETE`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`REQ_BUILD_FAILED`、`REQ_INPUT_INVALID`、`REQ_OPTIONS_INVALID` が含まれます。これらは `PreflightFault` の `code` の値です。
+
+[Errors](/ja-JP/api/errors)

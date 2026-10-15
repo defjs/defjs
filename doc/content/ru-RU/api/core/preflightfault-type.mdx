@@ -1,0 +1,18 @@
+---
+title: 'PreflightFault'
+description: 'Fault для сбоя, который мог произойти до появления какого-либо response.'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+Всё, что могло провалиться до того, как response вообще появился: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` присутствует только там, где у транспорта уже были метаданные для сообщения — например, тело, обрезанное посреди загрузки.
+
+[Ошибки](/ru-RU/api/errors)

@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: '把请求 path 按基础 endpoint 解析成 URL。'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — client 的有效绝对 endpoint。它的 query 和 hash 会被丢弃，并在 pathname 末尾补上斜杠，以保留基础路径：`https://api.example.com/v1` 加 `/users` 得到 `https://api.example.com/v1/users`。
+- **path** — 相对的 endpoint path。开头的单个斜杠会被去掉。解析后的 URL 必须与基础 URL 同源，并位于其目录之下。绝对路径、协议相对路径、C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 以及逃逸出基础目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。
+- **queryString** — 不带前导 `?` 的 query。非空时原样设为 URL 的 search。
+- **返回** 解析后的 `URL`。
+
+基础 endpoint 或 path 无效时抛出 `TypeError`。执行 `client.execute` 时，如果基础 URL 缺失、为相对地址或无效，或 path 不合法，会在任何拦截器或传输运行之前返回 `REQ_BUILD_FAILED`；即使拦截器会短路，也遵守这一规则。HTTP、SSE 和 WebSocket 的行为一致。拦截器最终的 `req.endpoint` 还会基于其最终的 `req.baseEndpoint` 再次校验；允许主动将基础 URL 替换为另一个有效绝对 URL。确定性的 URL 错误不会重试。
+
+[HTTP](/zh-Hans/api/http)

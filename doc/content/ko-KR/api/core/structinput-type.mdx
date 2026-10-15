@@ -1,0 +1,23 @@
+---
+title: 'StructInput'
+description: 'struct가 받아들이는 입력 타입을 꺼내는 타입 헬퍼예요.'
+---
+
+<ApiReference identity="@defjs/core:StructInput" />
+
+```ts
+type StructInput<T> = T extends { readonly _struct: { readonly input: unknown } } ? T['_struct']['input'] : never
+```
+
+struct가 받아들이는 타입이에요. 파싱이 성공했을 때 돌려주는 타입인 [`Infer`](/ko-KR/api/core/infer-type)와 달라요. `T`는 struct이거나 아무 [`StructLike`](/ko-KR/api/core/structlike-type)예요. 그 외에는 `never`가 돼요.
+
+struct가 입력을 변환하면 둘이 달라져요.
+
+```ts
+const Created = struct.date()
+
+type In = StructInput<typeof Created> // Date | number | string
+type Out = Infer<typeof Created> // Date
+```
+
+[Struct](/ko-KR/api/struct)

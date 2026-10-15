@@ -1,0 +1,16 @@
+---
+title: 'QuerySerializer'
+description: '把编码后的 query 对象序列化为查询字符串的函数。'
+---
+
+<ApiReference identity="@defjs/core:QuerySerializer" />
+
+```ts
+type QuerySerializer = (query: { [key: string]: unknown }) => string
+```
+
+`query` 是传输对象：alias 已应用，`Date` 值已是 ISO 字符串，`bigint` 值已是字符串。嵌套对象和数组原样保留。返回不带前导 `?` 的查询字符串；它会被原样使用，不会再经过 `URLSearchParams`。Interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
+
+用 `withQuerySerializer` 设置。没有设置时，query 使用 `URLSearchParams`：数组会重复 key，嵌套对象会失败。返回 `URLSearchParams` 的 builder 会跳过 serializer。
+
+[Client](/zh-Hans/api/client)

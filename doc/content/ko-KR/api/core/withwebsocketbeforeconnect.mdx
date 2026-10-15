@@ -1,0 +1,23 @@
+---
+title: 'withWebSocketBeforeConnect'
+description: 'WebSocket 연결을 시도하기 전마다 훅을 실행하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketBeforeConnect" />
+
+```ts
+function withWebSocketBeforeConnect(beforeConnect: ClientWebSocketOptions['beforeConnect']): ClientOption
+```
+
+처음 WebSocket 연결을 하기 전과 재연결할 때마다 훅을 실행해요. 훅의 타입은 다음과 같아요.
+
+```ts
+(context: { attempt: number; signal: AbortSignal }) => void | Promise<void>
+```
+
+- `attempt`는 첫 연결에서 `0`이고, 재연결할 때마다 하나씩 늘어요.
+- 토큰 갱신 같은 비동기 작업에는 `signal`을 넘겨서, session을 취소하면 그 작업도 멈추게 하세요.
+- 훅이 throw하면 해당 시도는 `EXT_HOOK_FAILED` fault로 실패해요.
+- execute 옵션의 `beforeConnect`는 그 호출에 한해 이 옵션을 대체해요.
+
+[클라이언트](/ko-KR/api/client)

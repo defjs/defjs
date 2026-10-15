@@ -1,0 +1,14 @@
+---
+title: 'DecodeFaultCode'
+description: '응답 메타데이터는 지니지만 body는 없는 fault의 code들이에요.'
+---
+
+<ApiReference identity="@defjs/core:DecodeFaultCode" />
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+```
+
+`DecodeFault`의 `code` 값들이에요. `PreflightFaultCode`는 그 밖의 `FaultCode`에서 `HTTP_STATUS`를 뺀 것이에요.
+
+[오류](/ko-KR/api/errors)

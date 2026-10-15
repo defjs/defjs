@@ -1,0 +1,19 @@
+---
+title: 'createResolvedRequestUrl'
+description: 'Löst einen Request-Pfad gegen einen Basis-Endpoint zu einer URL auf.'
+---
+
+<ApiReference identity="@defjs/core:createResolvedRequestUrl" />
+
+```ts
+function createResolvedRequestUrl(baseEndpoint: string, path: string, queryString?: string): URL
+```
+
+- **baseEndpoint** — Ein gültiger absoluter Client-Endpoint. Query und Hash werden verworfen, und an seinen Pathname wird ein abschließender Slash angehängt, damit der Basispfad erhalten bleibt: `https://api.example.com/v1` mit `/users` ergibt `https://api.example.com/v1/users`.
+- **path** — Ein relativer Endpoint-Pfad. Ein einzelner führender Slash wird entfernt. Nach der Auflösung muss die URL den Basis-Origin behalten und unter dessen Verzeichnis bleiben. Absolute oder protokollrelative Pfade, C0-Steuerzeichen (einschließlich Tab, CR und LF), Backslashes, `?`, `#` und Verzeichnis-Escapes werden abgelehnt. Schemaähnliche und protokollrelative Formen werden auch mit führenden Leerzeichen abgelehnt; ein normales Leerzeichen im Pfadinneren ist erlaubt und wird als `%20` gesendet.
+- **queryString** — Query ohne führendes `?`. Ist sie nicht leer, wird sie unverändert als Search der URL gesetzt.
+- **Returns** die aufgelöste `URL`.
+
+Wirft `TypeError`, wenn der Basis-Endpoint oder der Pfad ungültig ist. Während `client.execute` wird ein fehlender, relativer oder ungültiger Basiswert oder ein unzulässiger Pfad zu `REQ_BUILD_FAILED`, bevor ein Interceptor oder Transport läuft, auch ein kurzschließender Interceptor, und das gilt gleichermaßen für HTTP, SSE und WebSocket. Das endgültige `req.endpoint` eines Interceptors wird ebenfalls gegen sein endgültiges `req.baseEndpoint` geprüft; die Basis absichtlich durch eine andere gültige absolute URL zu ersetzen ist erlaubt. Deterministische URL-Fehler werden nie erneut versucht.
+
+[HTTP](/de-DE/api/http)

@@ -1,0 +1,24 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_struct.json",
+  "ignorePatterns": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/coverage/**",
+    "**/test-out/**",
+    "**/build/**",
+    "**/.next/**",
+    "**/out/**",
+    "**/.claude/**",
+    "**/playwright-report/**",
+    "**/blob-report/**",
+    "**/test-results/**",
+    "field-study/**",
+    "**/.superpowers/**",
+    "**/.react-router/**"
+  ],
+  "printWidth": 140,
+  "semi": false,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "useTabs": false
+}

@@ -1,0 +1,16 @@
+---
+title: 'SSEInterceptorFn'
+description: 'SSE 인터셉터의 함수 형태예요.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptorFn" />
+
+```ts
+type SSEInterceptorFn = (req: HttpRequest, next: SSEHandler) => Promise<EventStreamHandle<unknown>>
+```
+
+`req`를 살펴보거나 바꾼 뒤 [`next`](/ko-KR/api/core/ssehandler-type)를 호출해 체인을 이어가거나, 자체 `EventStreamHandle`을 반환해 short-circuit할 수 있어요. `withInterceptors`로 등록하려면 `createSSEInterceptor(fn)`으로 감싸세요.
+
+short-circuit 핸들은 `[Symbol.asyncDispose](): PromiseLike<void>`를 제공하고 같은 close lifecycle에 연결해야 해요.
+
+[인터셉터](/ko-KR/api/interceptors)

@@ -1,0 +1,20 @@
+---
+title: 'HttpProgressEvent'
+description: 'アップロードとダウンロードのコールバックに渡される、進捗のスナップショットです。'
+---
+
+<ApiReference identity="@defjs/core:HttpProgressEvent" />
+
+```ts
+interface HttpProgressEvent {
+  readonly lengthComputable: boolean
+  readonly loaded: number
+  readonly total: number
+}
+```
+
+`ProgressEvent` のフィールドをそのまま反映します。`loaded` はアップロードまたはダウンロードのストリームから読み取ったバイト数であり、サーバーが受領を確認したバイト数ではありません。ダウンロードのバイト列は、すでに展開されている場合があります。ダウンロードの総量を計算できるのは、正の `Content-Length` があり、`Content-Encoding` がないか `identity` の場合だけです。圧縮されたダウンロードでは `total: 0` と `lengthComputable: false` が報告されます。ストリーミングされる FormData アップロードも、有効な明示的 `Content-Length` が総量を示していなければ、総量は不明です。長さが不明なその他のストリームも、同じ `0` / `false` を使います。
+
+[`HttpProgressFn`](/ja-JP/api/core/httpprogressfn-type)、[HTTP ガイド](/ja-JP/docs/http)、[Commands](/ja-JP/docs/commands) を参照してください。
+
+[HTTP](/ja-JP/api/http)

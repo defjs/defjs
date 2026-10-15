@@ -1,0 +1,16 @@
+---
+title: 'SSEHandler'
+description: 'المعالج الطرفي الذي يفتح تدفق SSE لطلب ما.'
+---
+
+<ApiReference identity="@defjs/core:SSEHandler" />
+
+```ts
+type SSEHandler = (req: HttpRequest) => Promise<EventStreamHandle<unknown>>
+```
+
+الدالة `next` التي يتلقاها معترض SSE. يتجه `next(req)` إلى الداخل فقط: عبر المعترضات المسجَّلة بعد هذا المعترض، ثم وسيلة النقل التي تفتح التدفق. واستدعاؤه بعد أن تستقر السلسلة يُرفض.
+
+يمتد `EventStreamHandle` من `AsyncDisposable`. والتنفيذ الذي يختصر المسار ويبني مقبضه الخاص يجب أن يوفّر `[Symbol.asyncDispose](): PromiseLike<void>` وأن يربطه بدورة الإغلاق نفسها.
+
+[المعترضات](/ar/api/interceptors)

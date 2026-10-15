@@ -1,0 +1,18 @@
+---
+title: 'struct.urlencoded'
+description: 'struct كائن يُرمَّز كنموذج URL-encoded عندما يكون جسم الطلب.'
+---
+
+<ApiReference identity="@defjs/core:struct.urlencoded" />
+
+```ts
+function urlencoded<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+يحلّل مثل [`struct.object()`](/ar/api/core/struct-object)، ويحمل وسم ترميز `urlencoded`.
+
+- لا ينطبق الوسم إلا عندما تكون قيمة هذا الـ struct هي جذر جسم الطلب. عندها يُرسَل الجسم كـ `URLSearchParams` بنوع `application/x-www-form-urlencoded;charset=UTF-8`.
+- المصفوفات تكرّر اسم الحقل، والحقول `undefined` تُتخطى. والكائن المتداخل أو `Blob` يُفشل الطلب بـ `REQ_BUILD_FAILED`.
+- `struct.parse` يتجاهل الوسم. ولا يقبل نسخة `URLSearchParams`، بل كائنًا عاديًا فقط.
+
+[Struct](/ar/api/struct)

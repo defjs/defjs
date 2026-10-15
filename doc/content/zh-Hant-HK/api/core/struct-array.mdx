@@ -1,0 +1,18 @@
+---
+title: 'struct.array'
+description: '用單一 item struct 解析 array 嘅 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.array" />
+
+```ts
+function array<S extends StructLike<unknown, unknown, boolean>>(item: S): ArrayStruct<S>
+```
+
+- 用 `item` 解析每個元素，並輸出新 array。唔係 array 會以 `invalid_type`（預期 `array`）失敗。
+- 解析喺第一個失敗嘅元素停低，`issue.path` 載有佢嘅 index。
+- 如果 `item` 唔係 struct，會 throw `TypeError`。
+
+`ArrayStruct<S>` 冇 export。佢係 `Struct<StructInput<S>[], Infer<S>[]>`。
+
+[Struct](/zh-Hant-HK/api/struct)

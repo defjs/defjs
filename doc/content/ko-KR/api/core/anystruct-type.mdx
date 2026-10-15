@@ -1,0 +1,14 @@
+---
+title: 'AnyStruct'
+description: '어떤 struct든 받아들이는 넓은 struct 제약이에요.'
+---
+
+<ApiReference identity="@defjs/core:AnyStruct" />
+
+```ts
+type AnyStruct = Struct<any, any, boolean>
+```
+
+`defineRequest`, `Fault`, `HttpCommand` 같은 엔드포인트와 클라이언트 제네릭에서 쓰는 넓은 제약이에요. 입력과 출력을 정밀하게 추론해야 하면 구체적인 `Struct<...>`를 쓰세요.
+
+[Struct](/ko-KR/api/struct)

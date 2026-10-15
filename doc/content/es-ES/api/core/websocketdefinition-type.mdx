@@ -1,0 +1,36 @@
+---
+title: 'WebSocketDefinition'
+description: 'Objeto de contrato que se pasa a defineWebSocket.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketDefinition" />
+
+```ts
+type WebSocketDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+> = {
+  incoming: TIncoming
+  maxIncomingQueueSize: number
+  maxOutgoingQueueSize?: number
+  operation?: string
+  outgoing?: TOutgoing
+  path: string
+  protocols?: readonly string[]
+} & {
+  builder?: OutboundBuilder
+  input?: TInput
+}
+```
+
+- `incoming` es el struct con el que se parsea cada frame recibido. Los frames son texto JSON.
+- `outgoing` es el struct con el que `session.send` valida y codifica. Sin él, `send` lanza.
+- `maxIncomingQueueSize` es obligatorio y debe ser un entero seguro positivo. `maxOutgoingQueueSize` debe ser un entero seguro no negativo; por defecto es `0`, lo que deshabilita el encolado de los mensajes enviados mientras la sesión está en `reconnecting`.
+- `protocols` es la lista estática de subprotocolos por defecto. La opción de execute `protocols` y [`withWebSocketProtocols`](/es-ES/api/core/withwebsocketprotocols) la sustituyen.
+- `operation` es un nombre estático y de baja cardinalidad para la telemetría.
+- `input` es el struct del input del comando. Un `input` declarado siempre exige un `builder` explícito, incluso cuando ya coincide con la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`. El builder solo puede devolver `path` y `query`; consulta [`WebSocketRequestShape`](/es-ES/api/core/websocketrequestshape-type).
+
+Los límites de cola inválidos se notifican cuando se ejecuta el comando, como un fault `REQ_OPTIONS_INVALID`.
+
+[WebSocket](/es-ES/api/web-socket)

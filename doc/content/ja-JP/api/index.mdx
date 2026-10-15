@@ -1,0 +1,36 @@
+---
+title: API リファレンス
+description: ワークスペースパッケージの手書き参照 — import する関数、options、型です。
+---
+
+# API リファレンス
+
+<ApiIndex />
+
+ワークスペースパッケージの参照です。シグネチャが契約で、いつ使うかはガイドとレシピが説明します。
+
+## パッケージ
+
+| パッケージ                                                       | ここで探すもの                                                    |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/ja-JP/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/ja-JP/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/ja-JP/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/ja-JP/api/opentelemetry-server) | `withOpenTelemetryServer`, トランスポートごとの options           |
+
+## @defjs/core
+
+| ページ                                  | ここで探すもの                                                   |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/ja-JP/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/ja-JP/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/ja-JP/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/ja-JP/api/errors)             | `Fault` の種類とファクトリ                                       |
+| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket の interceptor ヘルパー                   |
+| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## 関連
+
+- [はじめよう](/ja-JP/docs/start)
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)

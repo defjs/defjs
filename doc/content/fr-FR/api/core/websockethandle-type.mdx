@@ -1,0 +1,29 @@
+---
+title: 'WebSocketHandle'
+description: 'Surface d’instance WebSocket utilisée par le transport du client.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandle" />
+
+```ts
+type WebSocketHandle = Omit<
+  WebSocket,
+  | 'binaryType'
+  | 'CLOSED'
+  | 'CLOSING'
+  | 'CONNECTING'
+  | 'dispatchEvent'
+  | 'onclose'
+  | 'onerror'
+  | 'onmessage'
+  | 'onopen'
+  | 'OPEN'
+  | 'readyState'
+> & { readonly readyState: number }
+```
+
+Le `WebSocket` du DOM sans ses propriétés de gestionnaires d’événements, `binaryType`, `dispatchEvent` et les constantes d’état. Une implémentation personnalisée a donc besoin de `url`, `protocol`, `extensions`, `bufferedAmount`, `send`, `close`, `addEventListener`, `removeEventListener` et d’un `readyState` numérique.
+
+Le transport pose `binaryType = 'arraybuffer'` quand la propriété existe et ignore son absence. Si le setter lève, il demande une fermeture au mieux du handle construit avant de faire échouer cette tentative avec `NET_UNREACHABLE` ; le socket n’est pas laissé hors du nettoyage. Cette propriété est une optimisation, et le décodeur accepte aussi les frames Blob. C’est le type d’instance produit par un [`WebSocketHandleConstructor`](/fr-FR/api/core/websockethandleconstructor-type).
+
+[Client](/fr-FR/api/client)

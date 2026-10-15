@@ -1,0 +1,25 @@
+---
+title: 'withXSRF'
+description: 'HTTP リクエストで XSRF トークンをリクエストヘッダーにコピーするクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withXSRF" />
+
+```ts
+function withXSRF(options?: {
+  cookieName?: string
+  headerName?: string
+  tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+}): ClientOption
+```
+
+**HTTP** リクエストで XSRF トークンの転送を有効にします。SSE と WebSocket のリクエストにはヘッダーが付きません。
+
+- `cookieName` のデフォルトは `XSRF-TOKEN`、`headerName` は `X-XSRF-TOKEN` です。
+- ヘッダーが設定されるのは、次のすべてが成り立つときだけです。メソッドが `GET`、`HEAD`、`OPTIONS`、`TRACE` のいずれでもないこと、リクエストにそのヘッダーがまだないこと、クライアントにエンドポイントがあること、そして `location` が存在する場合（Window または Worker）は、解決後のリクエスト URL が `location.origin` と同じオリジンであることです。クロスオリジンのリクエストではプロバイダーを呼びません。
+- `tokenProvider` がなければ、`document` が存在するときだけ `document.cookie` からトークンを読み取り、URL デコードします。Worker やサーバーでは、トークンを提供するプロバイダーが必要です。
+- `tokenProvider` があれば、cookie は読まれません。プロバイダーがリクエストを受け取り、その結果がトークンになります。空文字列、`null`、`undefined` はヘッダーなしを意味します。
+
+リクエストレベルの挙動は [HTTP ガイド](/ja-JP/docs/http) を見てください。
+
+[Client](/ja-JP/api/client)

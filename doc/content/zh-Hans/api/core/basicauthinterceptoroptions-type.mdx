@@ -1,0 +1,20 @@
+---
+title: 'BasicAuthInterceptorOptions'
+description: 'basic-auth interceptor 的选项，包括自定义凭据编码器。'
+---
+
+<ApiReference identity="@defjs/core:BasicAuthInterceptorOptions" />
+
+```ts
+type BasicAuthInterceptorOptions = {
+  encode?: (credential: { username: string; password: string }) => string
+}
+```
+
+`encode` 只替换凭据编码器，默认是 ``btoa(`${username}:${password}`)``。interceptor 总会在返回的字符串前加上 `Basic `，所以只需返回凭据部分：返回 `'Basic abc'` 会得到 header `Basic Basic abc`。
+
+由 [`basicAuthHttpInterceptor`](/zh-Hans/api/core/basicauthhttpinterceptor) 与 [`basicAuthSSEInterceptor`](/zh-Hans/api/core/basicauthsseinterceptor) 接受。
+
+见 [Interceptors 指南](/zh-Hans/docs/interceptors)。
+
+[Interceptors](/zh-Hans/api/interceptors)

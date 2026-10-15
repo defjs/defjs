@@ -1,0 +1,22 @@
+---
+title: '消费 SSE 事件流'
+description: 打开类型化事件流，迭代一次，再 close 并 await closed。
+---
+
+# 消费 SSE 流
+
+一条流只配一个 async iterator。把 `close` + `await stream.closed` 放进 `finally`，避免提前退出时泄漏这次 Fetch 尝试的资源。
+
+细节见 [SSE](/zh-Hans/docs/sse)。
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com` 是占位地址。假设服务器的第一个事件是 `message`，数据为 `{ "text": "hello from the server" }`，这段代码会输出：
+
+```txt
+hello from the server
+```
+
+SSE 默认不重试网络或读取失败；必须用 `withSSEReconnect(...)` 显式启用。提供 reconnect 配置后，每次连接中断的 `attempts` 默认是 `3`；握手成功会重置重连预算和退避指数。`attempts: 0` 禁用重试。重连选项中的无效数值会在发出任何请求前以 `REQ_OPTIONS_INVALID` 失败；参见[校验规则](/zh-Hans/api/core/withssereconnect)。未提供 `shouldReconnect` 时，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求会重连；请求体为 `ReadableStream` 的请求不会重连。

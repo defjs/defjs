@@ -1,0 +1,17 @@
+---
+title: 'withHTTPHandle'
+description: 'HTTP リクエストに使う Fetch 関数を差し替えるクライアント option です。'
+---
+
+<ApiReference identity="@defjs/core:withHTTPHandle" />
+
+```ts
+function withHTTPHandle(fetchImpl: FetchHandle): ClientOption
+```
+
+HTTP リクエストに使う、Fetch 互換の関数を差し替えます。デフォルトはプラットフォームの `fetch` です。
+
+- **fetchImpl** は [`FetchHandle`](/ja-JP/api/core/fetchhandle-type)、つまり `(input, init?) => Promise<Response>` という呼び出しシグネチャです。`typeof fetch` ではないため、テスト用のダブルが `fetch.preconnect` のようなホスト固有の拡張を持つ必要はありません。
+- 影響するのは HTTP だけです。SSE は [`withSSEHandle`](/ja-JP/api/core/withssehandle) を使います。
+
+[Client](/ja-JP/api/client)

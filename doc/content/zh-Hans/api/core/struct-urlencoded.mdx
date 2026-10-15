@@ -1,0 +1,18 @@
+---
+title: 'struct.urlencoded'
+description: '作为请求 body 时编码为 URL-encoded 表单的对象 struct。'
+---
+
+<ApiReference identity="@defjs/core:struct.urlencoded" />
+
+```ts
+function urlencoded<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+解析行为与 [`struct.object()`](/zh-Hans/api/core/struct-object) 相同，并带有 `urlencoded` codec 标签。
+
+- 这个标签只在该 struct 的值是请求 body 根时生效。此时 body 以 `URLSearchParams` 发送，`Content-Type` 为 `application/x-www-form-urlencoded;charset=UTF-8`。
+- 数组会重复字段名，`undefined` 字段被跳过。嵌套对象或 `Blob` 会让请求以 `REQ_BUILD_FAILED` 失败。
+- `struct.parse` 忽略这个标签。它不接受 `URLSearchParams` 实例，只接受普通对象。
+
+[Struct](/zh-Hans/api/struct)

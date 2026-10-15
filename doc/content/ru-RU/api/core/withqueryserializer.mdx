@@ -1,0 +1,19 @@
+---
+title: 'withQuerySerializer'
+description: 'Опция клиента, которая заменяет способ превращения query-объектов в query-строки.'
+---
+
+<ApiReference identity="@defjs/core:withQuerySerializer" />
+
+```ts
+function withQuerySerializer(serializer: QuerySerializer): ClientOption
+```
+
+Заменяет кодирование query для HTTP, SSE и WebSocket.
+
+- `serializer(query)` получает **уже закодированный wire-объект**: алиасы применены, `Date` — ISO-строка, `bigint` — строка. Вложенные объекты и массивы остаются как есть.
+- Он должен вернуть query-строку без ведущего `?`. Строка используется как есть.
+- Его не зовут, когда у запроса нет query. Builder, который возвращает `URLSearchParams`, его пропускает.
+- Без этой опции query кодируется через `URLSearchParams`: массивы повторяют ключ, а вложенный объект приводит к ошибке.
+
+[Клиент](/ru-RU/api/client)

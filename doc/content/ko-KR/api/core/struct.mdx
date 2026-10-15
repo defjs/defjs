@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: 'struct 생성자들과 struct.parse를 담은 퍼사드 객체예요.'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct`는 헬퍼로 이루어진 plain 객체예요. 생성자를 하나씩 import하기보다 이걸 쓰세요. 각 헬퍼에는 자기 페이지가 있어요.
+
+### 원시값과 컨테이너
+
+| Helper                                                                                       | 역할                                                    |
+| -------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [`struct.string()`](/ko-KR/api/core/struct-string)                                           | 텍스트                                                  |
+| [`struct.number()`](/ko-KR/api/core/struct-number)                                           | 숫자. `NaN`은 거부해요                                  |
+| [`struct.boolean()`](/ko-KR/api/core/struct-boolean)                                         | 불리언                                                  |
+| [`struct.bigint()`](/ko-KR/api/core/struct-bigint)                                           | `bigint`, 또는 그것으로 파싱되는 문자열                 |
+| [`struct.date()`](/ko-KR/api/core/struct-date)                                               | `Date`. `Date`, 타임스탬프, 문자열에서 만들어요         |
+| [`struct.literal(value)`](/ko-KR/api/core/struct-literal)                                    | 정확한 리터럴                                           |
+| [`struct.null()`](/ko-KR/api/core/struct-null)                                               | `null`만                                                |
+| [`struct.any()`](/ko-KR/api/core/struct-any) / [`unknown()`](/ko-KR/api/core/struct-unknown) | `null`과 `undefined`를 뺀 모든 값                       |
+| [`struct.array(item)`](/ko-KR/api/core/struct-array)                                         | item struct 하나로 이루어진 배열                        |
+| [`struct.tuple(items)`](/ko-KR/api/core/struct-tuple)                                        | 고정 길이 배열. `items`는 struct 배열 하나예요          |
+| [`struct.record(value)`](/ko-KR/api/core/struct-record)                                      | 문자열 키와 value struct 하나를 가진 plain 객체         |
+| [`struct.object(shape)`](/ko-KR/api/core/struct-object)                                      | 고정된 필드를 가진 plain 객체. 알 수 없는 키는 제거돼요 |
+| [`struct.or(...options)`](/ko-KR/api/core/struct-or)                                         | 처음 일치하는 옵션                                      |
+| [`struct.intersection(...structs)`](/ko-KR/api/core/struct-intersection)                     | 모든 struct가 일치해야 해요. 객체 결과는 병합돼요       |
+| [`struct.discriminatedUnion(tag, options)`](/ko-KR/api/core/struct-discriminatedunion)       | `tag` 필드의 값으로 고른 객체 옵션                      |
+| [`struct.enum(values)`](/ko-KR/api/core/struct-enum)                                         | 문자열 배열, 또는 `{ Name: value }` 객체의 값           |
+
+### body 코덱과 바이너리 값
+
+| Helper                                                                                                                                           | 역할                                                                                  |
+| ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`struct.formData(shape)`](/ko-KR/api/core/struct-formdata) / [`urlencoded(shape)`](/ko-KR/api/core/struct-urlencoded)                           | 객체 struct에 코덱 태그를 더해요. 태그는 그 값이 요청 body 루트일 때만 적용돼요       |
+| [`struct.arrayBuffer()`](/ko-KR/api/core/struct-arraybuffer) / [`blob()`](/ko-KR/api/core/struct-blob) / [`file()`](/ko-KR/api/core/struct-file) | 바이너리 값이에요. body 루트면 바이트로 보내고, `output` / `error`면 그 표현을 골라요 |
+| [`struct.string()`](/ko-KR/api/core/struct-string)                                                                                               | 텍스트예요. body 루트이거나 들어오는 `string` struct이면 바이트는 텍스트로 남아요     |
+
+### 파싱과 수정자
+
+[`struct.parse(struct, value, options?)`](/ko-KR/api/core/struct-parse)는 unknown 값을 파싱해 `[null, value]` 또는 `[StructError, undefined]`를 돌려줘요.
+
+모든 struct에는 체인으로 쓸 수 있는 수정자 `.optional()`, `.null()` / `.nullable()`, `.nullish()`, `.alias(name)`이 있어요. [`StructMethods`](/ko-KR/api/core/structmethods-type)를 보세요.
+
+[Struct](/ko-KR/api/struct)

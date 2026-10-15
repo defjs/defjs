@@ -1,0 +1,27 @@
+---
+title: 'withSSEOnInvalidEvent'
+description: 'Opción de cliente que observa los eventos SSE sin struct o que fallan la validación.'
+---
+
+<ApiReference identity="@defjs/core:withSSEOnInvalidEvent" />
+
+```ts
+function withSSEOnInvalidEvent(handler: ClientSSEOptions['onInvalidEvent']): ClientOption
+```
+
+Registra un callback para los eventos SSE que no tienen un struct de evento correspondiente o que fallan la validación. El callback recibe:
+
+```ts
+{
+  reason: 'missing-struct' | 'validation-failed'
+  message: { id: string; event: string; data: string }
+  cause?: unknown
+  signal: AbortSignal
+}
+```
+
+- El evento inválido **siempre se descarta**; nunca se entrega al stream. El callback solo lo observa.
+- Se ignora el valor de retorno. Un error que lance el callback se traga y no cierra el stream, salvo que `signal` ya se haya abortado.
+- `cause` se define para `validation-failed`. Sin handler, el evento inválido se descarta en silencio.
+
+[Cliente](/es-ES/api/client)

@@ -1,0 +1,16 @@
+---
+title: 'struct.null'
+description: 'Struct, der nur null akzeptiert.'
+---
+
+<ApiReference identity="@defjs/core:struct.null" />
+
+```ts
+function null(): Struct<null, null>
+```
+
+Akzeptiert nur `null`. Jeder andere Wert schlägt mit `invalid_type` fehl. Das gilt auch für `undefined` an der Wurzel oder in einem Array oder Tupel; ein fehlendes Feld in einem Objekt oder Record meldet stattdessen `missing_key`.
+
+Das ist nicht der Modifier `.null()`. Der Modifier fügt `null` zu den Werten hinzu, die ein anderer Struct akzeptiert.
+
+[Struct](/de-DE/api/struct)

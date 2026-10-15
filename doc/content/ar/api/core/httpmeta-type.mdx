@@ -1,0 +1,21 @@
+---
+title: 'HttpMeta'
+description: 'بيانات وصفية للاستجابة متاحة كلما وصلت استجابة إلى العميل.'
+---
+
+<ApiReference identity="@defjs/core:HttpMeta" />
+
+```ts
+type HttpMeta = {
+  readonly headers: Headers
+  readonly ok: boolean
+  readonly status: number
+  readonly statusText: string
+  readonly url: string
+}
+```
+
+بيانات وصفية للاستجابة، متاحة كلما وصلت استجابة إلى العميل. وهي **لا** تحمل `body`: فالجسم
+لا يوجد إلا بعد أن يفكّه struct معلَن.
+
+[HTTP](/ar/api/http)

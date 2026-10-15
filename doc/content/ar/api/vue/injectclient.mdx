@@ -1,0 +1,17 @@
+---
+title: 'injectClient'
+description: 'دالة Vue composable تُرجع العميل الذي وفّرته createClientPlugin.'
+---
+
+<ApiReference identity="@defjs/vue:injectClient" />
+
+```ts
+function injectClient(): Client
+```
+
+يقرأ أقرب موفر `HTTP_CLIENT`. استدعِه داخل سياق حقن صالح في Vue، مثل التنفيذ المتزامن لـ `setup()` أو رد نداء متزامن لـ `app.runWithContext()` (يتطلب Vue 3.3+). يصح أيضًا السياق الذي يعيده المترجم بعد `await` على المستوى الأعلى في `<script setup>`.
+
+- **يعيد** العميل المحقون.
+- **يرمي** `Error` عند غياب سياق حقن نشط أو عند عدم توفير عميل. وفّر العميل عبر `app.use(createClientPlugin(client))` أو `provide(HTTP_CLIENT, client)` في مكوّن سلف؛ تثبيت الإضافة وحده لا يجعل الاستدعاء خارج سياق الحقن صالحًا.
+
+[@defjs/vue](/ar/api/vue)

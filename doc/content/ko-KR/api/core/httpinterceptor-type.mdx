@@ -1,0 +1,17 @@
+---
+title: 'HttpInterceptor'
+description: '클라이언트 interceptor 옵션이 받는, 태그가 붙은 HTTP 인터셉터예요.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptor" />
+
+```ts
+interface HttpInterceptor {
+  kind: 'http'
+  fn: InterceptorFn
+}
+```
+
+`createHttpInterceptor`가 만들어요. `kind`는 `withInterceptors`가 HTTP, SSE, WebSocket 인터셉터를 한 목록으로 받을 수 있게 해 주는 판별자예요.
+
+[인터셉터](/ko-KR/api/interceptors)

@@ -1,0 +1,14 @@
+---
+title: 'FaultOf'
+description: 'デコード済みエラーボディの型で表した fault のユニオン型です。'
+---
+
+<ApiReference identity="@defjs/core:FaultOf" />
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+```
+
+`TData` はデコードされた `error` ボディで、error struct が宣言されていなければ `undefined` です。`Fault<TErr>` は `Infer<TErr>` に `FaultOf` を適用したものであり、`HttpAwaitResult` は `FaultOf<TErrorData>` を使います。struct ではなくデコード後の型を渡してください。`FaultOf<Infer<typeof errorStruct>>` と書くか、`Fault<typeof errorStruct>` を使います。
+
+[Errors](/ja-JP/api/errors)

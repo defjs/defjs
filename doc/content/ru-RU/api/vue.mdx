@@ -1,0 +1,40 @@
+---
+title: '@defjs/vue'
+description: Плагин Vue, injection key и injectClient.
+---
+
+# Vue
+
+Отдай существующий `@defjs/core` client Vue-приложению. Этот пакет не создаёт, не кэширует и не dispose’ит client. Нужен Vue 3 или новее.
+
+См. [гайд Vue](/ru-RU/docs/integrations/vue).
+
+## createClientPlugin()
+
+```ts
+function createClientPlugin(client: Client): Plugin
+```
+
+- **client** — Экземпляр из `createClient`.
+- **Возвращает** Vue-плагин для `app.use(...)`. Установка вызывает `app.provide(HTTP_CLIENT, client)`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+```ts
+function injectClient(): Client
+```
+
+Читает ближайший `HTTP_CLIENT` provider. Вызывай в действующем контексте внедрения Vue, например в синхронной части `setup()` или в синхронном callback `app.runWithContext()` (Vue 3.3+). Контекст, восстановленный компилятором после верхнеуровневого `await` в `<script setup>`, тоже подходит.
+
+- **Возвращает** внедрённый client.
+- **Бросает** `Error`, если нет активного контекста внедрения или клиент не предоставлен. Предоставь клиент через `app.use(createClientPlugin(client))` или `provide(HTTP_CLIENT, client)` в компоненте-предке; одной установки плагина недостаточно для вызова вне контекста внедрения.
+
+## HTTP_CLIENT
+
+```ts
+const HTTP_CLIENT: InjectionKey<Client>
+```
+
+Ключ внедрения зависимостей Vue. Бери `injectClient()`, а не `inject(HTTP_CLIENT)`. Переопредели клиент для поддерева через `provide(HTTP_CLIENT, childClient)`.

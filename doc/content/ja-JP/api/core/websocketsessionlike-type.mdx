@@ -1,0 +1,27 @@
+---
+title: 'WebSocketSessionLike'
+description: 'インターセプターから見える WebSocket セッションのインターフェイスです。'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSessionLike" />
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: { extensions?: string; generation: number; protocol?: string; url?: string }
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+インターセプターから見える最小限のセッションインターフェイスです。[`WebSocketSession`](/ja-JP/api/core/websocketsession-type) と構造的に互換ですが、メッセージの型は `unknown` です。
+
+wrapper やショートサーキットのセッションは、`close` / `closed` のライフサイクルと同じ `[Symbol.asyncDispose]()` の teardown を転送する必要があります。無関係な解決済み promise を返すのでは足りません。このメンバーを要求することは、構造的実装にとってはコンパイル時の破壊的変更です。Defjs が返すセッションだけを受け取るコードには、追加の実行時呼び出しは要りません。
+
+[Interceptors](/ja-JP/api/interceptors)

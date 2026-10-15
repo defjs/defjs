@@ -1,0 +1,27 @@
+---
+title: 'WebSocketSessionLike'
+description: 'واجهة جلسة WebSocket التي يراها المعترض.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSessionLike" />
+
+```ts
+interface WebSocketSessionLike extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: { extensions?: string; generation: number; protocol?: string; url?: string }
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<unknown>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+  send(message: unknown): void
+}
+```
+
+سطح الجلسة الأدنى الذي يراه المعترضون. وهو متوافق بنيويًا مع [`WebSocketSession`](/ar/api/core/websocketsession-type)، لكن الرسائل فيه من نوع `unknown`.
+
+يجب أن يمرّر الغلاف أو جلسة الاختصار نفس teardown الخاص بـ `[Symbol.asyncDispose]()` كما في دورة حياة `close` / `closed`؛ وإرجاع وعد محلول غير مرتبط لا يكفي. اشتراط هذا العضو تغيير كاسر وقت الترجمة للتطبيقات البنيوية. الكود الذي يقبل فقط جلسات تعيدها Defjs ليس عليه أي متطلب استدعاء إضافي وقت التشغيل.
+
+[المعترضات](/ar/api/interceptors)

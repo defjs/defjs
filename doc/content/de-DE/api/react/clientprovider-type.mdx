@@ -1,0 +1,16 @@
+---
+title: 'ClientProvider'
+description: 'React-Komponente, die ihrem Subtree einen Defjs-Client per Context bereitstellt.'
+---
+
+<ApiReference identity="@defjs/react:ClientProvider" />
+
+```ts
+function ClientProvider(props: ClientProviderProps): FunctionComponentElement<ProviderProps<Client | null>>
+```
+
+Übergib als `client` einen bestehenden Client von `createClient`; Nachfahren lesen ihn mit `useClient`. Die Komponente erzeugt den Client nicht, legt ihn nicht im Cache ab und gibt ihn nicht frei. Ein verschachtelter `ClientProvider` überschreibt den Client für seinen eigenen Subtree, und eine andere `client`-Prop ändert den Context-Wert für Nachfahren.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+[@defjs/react](/de-DE/api/react)

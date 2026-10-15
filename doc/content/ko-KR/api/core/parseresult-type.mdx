@@ -1,0 +1,14 @@
+---
+title: 'ParseResult'
+description: 'struct.parse가 돌려주는 error-first 튜플이에요.'
+---
+
+<ApiReference identity="@defjs/core:ParseResult" />
+
+```ts
+type ParseResult<O> = [error: null, value: O] | [error: StructError, value: undefined]
+```
+
+성공하면 error는 `null`이고 `value`는 파싱된 출력 `O`예요. 실패하면 error는 `StructError`이고 `value`는 항상 `undefined`예요.
+
+[Struct](/ko-KR/api/struct)

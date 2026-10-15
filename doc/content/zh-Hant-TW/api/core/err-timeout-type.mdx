@@ -1,0 +1,18 @@
+---
+title: 'ERR_TIMEOUT'
+description: '標示 request 已逾時的共用 Error 哨兵。'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+逾時時共用的 `cause` 與 message 值。`createNetworkFault` 會把它，以及任何名為 `TimeoutError` 的 error，對應到 `NET_TIMEOUT`。HTTP interceptor 拋出它時，該次呼叫會以 `NET_TIMEOUT` fault resolve。SSE 與 WebSocket interceptors 拋出它時，則回報為 `EXT_INTERCEPTOR_FAILED`。
+
+見 [Errors 指南](/zh-Hant-TW/docs/errors)。
+
+這個哨兵帶有不可列舉的 `Symbol.for('defjs.cause.timeout')` brand。[`isTimeoutCause`](/zh-Hant-TW/api/core/istimeoutcause) 不必比較物件同一性，就能辨認來自任何 Core 副本的這個哨兵。分類獨立於無關的先前執行。
+
+[錯誤](/zh-Hant-TW/api/errors)

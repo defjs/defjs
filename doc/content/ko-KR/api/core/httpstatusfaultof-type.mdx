@@ -1,0 +1,19 @@
+---
+title: 'HttpStatusFaultOf'
+description: '디코딩된 body 타입으로 표현한 non-2xx fault예요.'
+---
+
+<ApiReference identity="@defjs/core:HttpStatusFaultOf" />
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+```
+
+`HttpStatusFault`를 그것을 만든 struct 대신 디코딩된 body 타입으로 표현한 것이에요. 팩토리는 디코딩된 값으로 일하므로 이 형태를 쓰고, 엔드포인트 타입은 `HttpStatusFault`를 쓰며 `Infer`가 둘을 이어요. `TData`가 `undefined`이면 body는 읽히지 않았고 `response`는 메타데이터뿐이에요.
+
+[오류](/ko-KR/api/errors)

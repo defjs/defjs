@@ -1,0 +1,14 @@
+---
+title: 'HttpInterceptorNext'
+description: 'HTTP 인터셉터 체인의 나머지를 실행하는 continuation이에요.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptorNext" />
+
+```ts
+type HttpInterceptorNext = (req: HttpRequest) => Promise<HttpResponse<unknown>>
+```
+
+`next(req)`는 **안쪽**으로만 가요. 이 인터셉터 뒤에 등록된 인터셉터들, 그다음 fetch 핸들러예요. 바깥에서 `client.execute`를 다시 dispatch하는 것이 아니에요. 안전하게 다시 보내려면 (예를 들어 401 갱신을 한 번 하려면) 같은 인터셉터에서 `next`를 다시 호출하세요. 바깥 레이어는 두 번째로 실행되지 않아요. 체인이 이미 마무리된 뒤에 `next`를 호출하면 `HTTP interceptor next() cannot be called after the chain has settled`로 reject돼요.
+
+[인터셉터](/ko-KR/api/interceptors)

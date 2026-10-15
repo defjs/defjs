@@ -1,0 +1,16 @@
+---
+title: 'STRUCT'
+description: '仅类型导出：出站编码器使用的内部标签 key。'
+---
+
+<ApiReference identity="@defjs/core:STRUCT" />
+
+```ts
+declare const STRUCT: unique symbol
+```
+
+`STRUCT` 只作为**类型**导出（`export type { STRUCT }`）。`@defjs/core` 没有运行时的 `STRUCT` 导出，所以 `import { STRUCT } from '@defjs/core'` 无法通过编译，也拿不到任何值。
+
+它命名的是一个可枚举标签，用来标记解析 endpoint 输入时产出的对象，让出站编码器知道是哪个 struct 产出了它们。`struct.parse` 和响应解码不会设置它。这个 symbol 是内部实现，应用代码不应依赖它。
+
+[Struct](/zh-Hans/api/struct)

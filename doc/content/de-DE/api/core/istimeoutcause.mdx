@@ -1,0 +1,18 @@
+---
+title: 'isTimeoutCause'
+description: 'Erkennt Timeouts über Core-Kopien hinweg und Plattform-Timeout-Fehler.'
+---
+
+<ApiReference identity="@defjs/core:isTimeoutCause" />
+
+```ts
+function isTimeoutCause(cause: unknown): boolean
+```
+
+Liefert `true` für einen `Error`, der das Brand `Symbol.for('defjs.cause.timeout')` trägt, einschließlich `ERR_TIMEOUT` aus einer anderen Core-Kopie, oder für eine `DOMException` / einen `Error` namens `TimeoutError`. Andere Werte liefern `false`.
+
+Übergib die zugrunde liegende `fault.cause`; diese Funktion packt Faults nicht aus. `createNetworkFault` nutzt diese Prüfung, um `NET_TIMEOUT` zu wählen. OpenTelemetry loggt Timeouts weiterhin, auch wenn das Abort-Signal zusätzlich gesetzt ist.
+
+Siehe [Errors-Guide](/de-DE/docs/errors) und [`isAbortCause`](/de-DE/api/core/isabortcause).
+
+[Fehler](/de-DE/api/errors)

@@ -1,0 +1,29 @@
+---
+title: 'defineWebSocket'
+description: 'Declares a typed WebSocket endpoint.'
+---
+
+<ApiReference identity="@defjs/core:defineWebSocket" />
+
+```ts
+function defineWebSocket<
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TIncoming extends AnyStruct = AnyStruct,
+  TOutgoing extends AnyStruct | undefined = undefined,
+>(
+  definition: Omit<WebSocketDefinitionBase<TIncoming, TOutgoing>, 'path'> & {
+    input?: TInput
+    path: P
+  } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,
+): WebSocketEndpoint<TInput, TIncoming, TOutgoing>
+```
+
+- **definition** — `path`, one `incoming` struct, and the required `maxIncomingQueueSize` (a positive safe integer). Optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize` (a non-negative safe integer), and `operation`. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
+- **Returns** an endpoint. Call it with input to get a `WebSocketCommand`.
+
+A WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+[WebSocket](/api/web-socket)

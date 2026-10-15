@@ -1,0 +1,17 @@
+---
+title: 'HttpInterceptor'
+description: 'Размеченный HTTP interceptor, принимаемый опциями interceptor’ов клиента.'
+---
+
+<ApiReference identity="@defjs/core:HttpInterceptor" />
+
+```ts
+interface HttpInterceptor {
+  kind: 'http'
+  fn: InterceptorFn
+}
+```
+
+Создаётся через `createHttpInterceptor`. `kind` — дискриминант, благодаря которому `withInterceptors` принимает HTTP-, SSE- и WebSocket-interceptor’ы в одном списке.
+
+[Interceptors](/ru-RU/api/interceptors)

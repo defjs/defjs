@@ -1,0 +1,16 @@
+---
+title: 'ClientSSEConfig'
+description: 'fetch handle이 필수인, 해석된 SSE 설정이에요.'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEConfig" />
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+`ClientConfig.sse`의 타입이에요. [`ClientSSEOptions`](/ko-KR/api/core/clientsseoptions-type)에 `handle`이 항상 있는 형태이고, 기본 래퍼는 import 시점에 붙잡지 않고 시도마다 현재 전역 `fetch`를 해석해요.
+
+[클라이언트](/ko-KR/api/client)

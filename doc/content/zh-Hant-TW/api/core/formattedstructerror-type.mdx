@@ -1,0 +1,17 @@
+---
+title: 'FormattedStructError'
+description: 'StructError.format 回傳的巢狀錯誤樹。'
+---
+
+<ApiReference identity="@defjs/core:FormattedStructError" />
+
+```ts
+interface FormattedStructError {
+  _errors: string[]
+  [key: string]: FormattedStructError | string[]
+}
+```
+
+`StructError.format()` 的結果。葉節點的 message 放在 `_errors` 之下；巢狀的 key 對應失敗的 path。字面上就叫 `_errors` 的 path 片段，會存成 `\_errors`。
+
+[Struct](/zh-Hant-TW/api/struct)

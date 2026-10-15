@@ -1,0 +1,19 @@
+---
+title: 'withEndpoint'
+description: '상대 요청 path에 붙는 base URL을 설정하는 클라이언트 옵션이에요.'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+상대 요청 path 앞에 붙는 유효한 절대 base URL을 설정해요. 기본값은 빈 문자열이므로, 실행하려면 endpoint를 명시해야 해요.
+
+- **endpoint** — 유효한 절대 base endpoint예요. pathname은 디렉터리로 유지되고, query와 hash는 버려져요.
+- WebSocket 명령에서는 `http:` base가 `ws:`로, `https:`가 `wss:`로 바뀌어요.
+
+없거나 상대적이거나 잘못된 endpoint, 또는 불법 요청 path는 빌드 중에 `REQ_BUILD_FAILED`로 실패해요. 인터셉터나 전송이 돌기 전이고, 인터셉터가 단축하더라도 마찬가지예요. HTTP, SSE, WebSocket이 이 규칙을 공유해요. 해석된 요청은 base origin을 유지하고 그 디렉터리 안에 머물러야 해요. path의 C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`, 디렉터리 탈출은 거부돼요. 앞에 공백이 있어도 스킴 형태와 프로토콜 상대 형식은 거부돼요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. 인터셉터의 최종 `req.endpoint`는 최종 `req.baseEndpoint`에 같은 규칙으로 검사되지만, base를 다른 유효한 절대 URL로 일부러 바꿀 수는 있어요. 결정적인 URL 오류는 재시도하지 않아요.
+
+[클라이언트](/ko-KR/api/client)

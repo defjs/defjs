@@ -1,0 +1,20 @@
+---
+title: 'GraphQL requests'
+description: Keep GraphQL as HTTP 200 + application unwrap; Core does not ship a GraphQL protocol.
+---
+
+# Unwrap a GraphQL HTTP envelope
+
+Defjs does not implement GraphQL `errorPolicy`. Model the wire as an HTTP POST whose builder places the query document and variables. Declare envelope `data` as `.nullish()` so both missing `data` and `data: null` reach your helper, then unwrap `errors[]` before checking `data`.
+
+See [Design Decisions](/docs/design-decisions).
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable viewer unavailable
+```
+
+HTTP success only means the envelope arrived. Application errors stay in `errors[]` until your unwrap throws or returns, including a response with `data: null`. The example handles both missing `data` and `data: null` with `errors[]` as application errors, not Struct mismatches.

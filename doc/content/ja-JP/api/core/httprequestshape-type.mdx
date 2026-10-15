@@ -1,0 +1,19 @@
+---
+title: 'HttpRequestShape'
+description: 'HTTP ビルダーが返すリクエストの形です。path、query、headers、body を含みます。'
+---
+
+<ApiReference identity="@defjs/core:HttpRequestShape" />
+
+```ts
+type HttpRequestShape<P extends string, M extends string> = {
+  body?: Uppercase<M> extends 'GET' | 'HEAD' ? never : BodyValue
+  headers?: HeadersInit | FlatRecord
+  path?: PathValue<P>
+  query?: URLSearchParams | QueryRecord
+}
+```
+
+`P` はエンドポイントの path、`M` はその method です。`GET` と `HEAD` はボディを返せません。`BodyValue` は、Fetch がそのまま送るワイヤ値（`string`、`Blob`、`ArrayBuffer`、型付き配列または `DataView`、`FormData`、`URLSearchParams`、`ReadableStream<Uint8Array>`）か、JSON データ（`number`、`boolean`、`bigint`、`Date`、`null`、配列、または文字列キーを持つオブジェクト型）です。`interface` の値やクラスインスタンスには `{ ...value }` が必要です。`path` と `headers` はフラットなスカラーである必要があります。`query` は入れ子にできますが、入れ子のオブジェクトには実行時に `withQuerySerializer` が必要です。`FlatRecord`、`QueryRecord`、`PathValue`、`BodyValue` は内部ヘルパー型です。
+
+[HTTP](/ja-JP/api/http)

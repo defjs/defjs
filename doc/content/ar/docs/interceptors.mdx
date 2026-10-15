@@ -1,0 +1,107 @@
+---
+title: 'المعترضات'
+description: طبّق سياسة HTTP وSSE وWebSocket عند حد النقل بترتيب البصلة.
+---
+
+# المعترضات
+
+أضف رؤوس مصادقة، أو اختصر المسار خلال نوافذ الصيانة، أو أعد محاولة القراءات الآمنة — دون لمس تحقق الأمر. لكل وسيلة نقل سلسلتها. تحصل على `HttpRequest`؛ تُرجع نتيجة تلك الوسيلة (`HttpResponse` أو معالج تدفق أحداث أو جلسة WebSocket). تحقق المدخل يعمل قبل السلسلة؛ توزيع الحالة والنتائج المفكوكة بعدها.
+
+## الإعداد الأساسي
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## ترتيب البصلة
+
+`withInterceptors(...items)` يقبل معترضات مختلطة. العميل يصفّي حسب `kind` لوسيلة النقل المختارة ويحافظ على ترتيب التسجيل النسبي. كل معترض قد يعمل قبل `next` وبعده:
+
+| المصنع                       | الطلب         | النتيجة من `next`                     |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+استدعاءات `withInterceptors(...)` المتعددة تُلحق. ضع المراقبة الواسعة خارج طبقات تعديل الطلب/إعادة المحاولة الأضيق عندما يجب أن ترى الطبقة الخارجية النتيجة النهائية.
+
+## استنسخ وأضف رؤوس الطلب
+
+عامل `HttpRequest` الوارد كمملوك للسلسلة. استنسخ `Headers` قبل تغييرها؛ مرّر طلبًا جديدًا إلى `next`:
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+نفس النمط لـ SSE. WebSocket في المتصفح لا يمكنه إضافة رؤوس مصافحة عشوائية — تغيير `request.headers` لن يصادق مقبس متصفح. استخدم بروتوكولًا أو سياسة URL/استعلام أو مصافحة يدعمها الخادم بدلًا من ذلك.
+
+لا يكتب HTTP أبدًا Content-Type المستنتج في `request.headers`؛ وترى المعترضات الرؤوس المُعلنة فقط. يحمل `request.bodyContentType` النوع المستنتج لجسم المنشئ كحقل عادي، فيبقى بعد نسخ `{ ...req }`. يتقدّم رأس `content-type` الصريح دائمًا على ذلك الحقل وعلى الاكتشاف، سواء أعلنه المنشئ أو قيم العميل الافتراضية أو معترض أو طلب `fetchHandler` خام. وعلى الموقّعين قراءة `headers.get('content-type') ?? request.bodyContentType`.
+
+عند استبدال جسم HTTP، استبدل `body` على الطلب المنسوخ وأعلن نوعه برأس `content-type`. لا ينطبق `bodyContentType` إلا ما دام `body` قيمة المنشئ؛ وتُكتشف الأجسام البديلة من جديد، فتكون السلسلة البديلة نصًا ما لم يعلن الرأس غير ذلك. تعيين `body: undefined` لا يترك Content-Type تستنتجه المكتبة. ولجسم المنشئ غير المتغير، تكبت `bodyContentType: null` استنتاج المكتبة عند غياب رأس صريح، مع أن Fetch الأصلي قد يضيف نوعه الخاص للسلسلة. تستخدم FormData دائمًا فاصل multipart الفعلي. لا تعِد استخدام جسم `ReadableStream` مستهلك.
+
+## اختصار مسار الطلب
+
+يمكنك تخطي `next`، لكن يجب أن تُرجع نوع النتيجة المتوقع. لـ HTTP، `makeResponse(...)` يبني غلافًا متوافقًا:
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+طبقة الأمر ما زالت توزّع حسب الحالة. أعلن struct `error` واحدًا لجانب غير 2xx عندما يحتاج المستدعون `error.data` محدَّد النوع. وهي تفحص الطرف المعلَن أيضًا: فـ `output` أو `error` من نوع JSON يحتاج رأس `content-type` من نوع JSON على الاستجابة الاصطناعية، ويجب أن يكون `body` هو القيمة المحلَّلة أصلًا كما كان النقل سيسلّمها (`request.responseType` و`request.errorResponseType` يسمّيان التمثيل). اختصار المسار في SSE أو WebSocket يحتاج مقبضًا/جلسة متوافقين كاملين (وعود الإغلاق، وحالة حية، وملكية، و`[Symbol.asyncDispose]`). الكائنات الجزئية ليست سياسة صالحة. تطبيقات `EventStreamHandle` و`WebSocketSessionLike` الهيكلية تحتاج الآن ذلك المتخلّص القياسي وقت الترجمة؛ والمستهلكون الذين يستقبلون فقط مقابض Defjs بلا متطلب استدعاء وقت تشغيل جديد.
+
+## أعد محاولة القراءات الآمنة
+
+إعادة المحاولة تغيّر السلوك. أبقِ السياسة ضيقة — هذا المثال يعيد محاولة `GET` / `HEAD` / `OPTIONS` القابلة لإعادة الإرسال للحالات `429` و`502` و`503` و`504`، ويحد `Retry-After` عند 30 ثانية، ويتوقف بعد محاولتين أو عند الإلغاء:
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+لا تعيد هذه الحلقة محاولة أخطاء المعترض/Fetch المرمية — فشل النقل يرفض الوعد بدلًا من أن ينتج حالة تستطيع هذه الحلقة مطابقتها. إعادة محاولة `POST` / `PUT` / `PATCH` / `DELETE` تحتاج بايتات قابلة لإعادة الإرسال، ودعم الخادم، وعقد idempotency، وسياسة حالة مراجعة. إعادة المحاولة مسؤوليتك — النواة لا تصدّر `retryAfter()`.
+
+المعترض الذي يرمي (أو يرفض) خارج هذا المثال يعود إلى المستدعي بصفة `EXT_INTERCEPTOR_FAILED`، والقيمة المرمية على `cause` — راجع [الأخطاء](/ar/docs/errors). وينطبق ذلك أيضًا إذا اكتمل المعترض بقيمة غير النتيجة المتوقعة لوسيلة نقله: `undefined` بسبب نسيان `return`، أو استجابة `Response` أصلية حيث يجب إرجاع `HttpResponse`. وفي معترض HTTP، رمي `ERR_ABORTED` أو `ERR_TIMEOUT` هو الطريقة التي تعبّر بها عن الإلغاء بدلًا من ذلك: يُستكمل الاستدعاء بـ `NET_ABORTED` أو `NET_TIMEOUT`. أما معترضات SSE وWebSocket فليس فيها هذا الاستثناء؛ إذ تبلّغ عن أي رمي بصفة `EXT_INTERCEPTOR_FAILED`.
+
+`next(request)` قد يرفض. فشل النقل خطأ (fault) وليس استجابة بحالة صفر، لذا المعترض الذي يريد ملاحظته يستخدم `try` / `catch` حول `next`. ومع ذلك يبقى إسناد Defjs صحيحًا: الرفض القادم من النقل يظل خطأ `NET_*` ولا يُحمَّل على معترضك.
+
+## غلّف جلسات WebSocket
+
+معترض WebSocket قد يستدعي `next` مرة واحدة على الأكثر. إذا غلّفت الجلسة، فوّض getters الحية وأعضاء دورة الحياة صراحة:
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+نشر جلسة يلتقط `state` / `connection` / `bufferedAmount` مرة. احفظ `closed` و`receive` و`close` وتفويض `[Symbol.asyncDispose]()` نفسه وتنظيف المستمعين ما لم تغيّر الملكية عمدًا. يجب أن يُرجع الغلاف وعد teardown الخاص بالجلسة الداخلية، لا وعدًا محلولًا غير مرتبط. إن أنشأت سلسلة جلسة لا تُسلَّم، تُنهي Core حالتها وتغلقها؛ وإن أرجع معترض ناجح جلسة مختلفة، تتجاهل Core الجلسة التي أُنشئت.
+
+## المرجع
+
+المصانع تُرجع قيم نقل موسومة:
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — بيانات اعتماد Basic على HTTP
+- `basicAuthSSEInterceptor(provider, options?)` — بيانات اعتماد Basic على SSE
+
+`HttpRequest` قد يتضمن `endpoint` و`baseEndpoint` و`method` و`headers` و`body` و`queryParams` و`queryString` و`abort` و`timeout` و`operation` ثابتًا. قيمة تكامل نقل — وليست مدخل المستدعي المحلَّل. `queryParams` هو `new URLSearchParams(queryString)` بعد التسلسل. مُسلسِل الاستعلام المضبوط لا يُستدعى عندما لا ينتج الـ builder استعلامًا، و`URLSearchParams` من الـ builder يُستخدم كما هو. أبقِ تحقق الأمر وتحقق المخرج وتعيين أخطاء المجال في طبقاتها.
+
+يبدأ التحقق من URL أثناء بناء الطلب: إذا كانت نقطة النهاية الأساسية غائبة أو نسبية أو غير صالحة، أو كان المسار غير قانوني، يفشل البناء بـ `REQ_BUILD_FAILED` قبل تشغيل أي معترض أو وسيلة نقل، حتى لو كان المعترض سيُنهي السلسلة مبكرًا. يجب أن يحتفظ URL المحلول بأصل نقطة النهاية الأساسية ويبقى ضمن مجلدها؛ وتُرفض محارف التحكم C0 (بما فيها tab وCR وLF) والشرطات المائلة العكسية و`?` و`#` والخروج من المجلد في المسار. تُرفض الأشكال الشبيهة بـ scheme والنسبية إلى البروتوكول حتى مع مسافات بادئة؛ ويُسمح بمسافة عادية داخل المسار وتُرسَل كـ `%20`. قبل الإرسال، يُفحص `req.endpoint` النهائي للمعترض مقابل `req.baseEndpoint` النهائي بالقاعدة نفسها؛ ويمكن للمعترض استبدال `baseEndpoint` عمدًا بعنوان URL مطلق صالح آخر. لا تُعاد محاولة أخطاء URL الحتمية أبدًا. تشترك HTTP وSSE وWebSocket في هذه القاعدة.
+
+مراقبو SSE/WebSocket خطافات دورة حياة، وليست تدفق تحكم. ألغِ اشتراك مستمعي WebSocket عندما ينتهي المالك. أعطال المراقب تتبع عقد النقل؛ المعترض نفسه يمكن أن يرمي أو يرفض.
+
+سجّل قائمة مسموح مراجعة: `operation` ثابت، الطريقة، الحالة، المدة، رمز خطأ مستقر. لا تسجّل عناوين URL المحلولة أو سلاسل الاستعلام أو رؤوس المصادقة أو الأجسام أو الأسباب الخام أو معرّفات أحداث SSE أو حمولات WebSocket افتراضيًا.
+
+بيانات اعتماد Basic هي base64، وليست مشفّرة. استخدم TLS، أبقِ مزوّدي بيانات الاعتماد محدودين بالطلب على الخادم، لا تسجّل الرأس المُولَّد أبدًا. المرمّز الافتراضي هو `globalThis.btoa`؛ مرّر `BasicAuthInterceptorOptions.encode` عندما يفتقر وقت التشغيل إلى `btoa` أو تحتاج مرمّزًا مراجعًا.
+
+المعترض يمكنه فرض سياسة النقل. ليس تحقق مدخل، ولا تفويضًا، ولا ملكية مورد. الكود الذي يبدأ العمل طويل العمر لـ SSE/WebSocket ما زال يستخدم `await using` أو يلغي ويغلق وينتظر الوعد النهائي يدويًا. HTTP العادي محدود بالطلب ويُدار بمهلته / `AbortSignal`؛ `Client` ليس `AsyncDisposable`.
+
+## وصفات ذات صلة
+
+- [حدّث رمز Bearer مرة واحدة عند 401](/ar/recipes/refresh-bearer-once)
+- [انشر SDK لـ HTTP دون إخفاء execute](/ar/recipes/publish-http-sdk)
+- [الاختبار بـ Fetch محلي](/ar/recipes/test-with-handle)
+- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)

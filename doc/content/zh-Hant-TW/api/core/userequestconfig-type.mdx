@@ -1,0 +1,21 @@
+---
+title: 'UseRequestConfig'
+description: '進度回呼與取消用的 HTTP execute options。'
+---
+
+<ApiReference identity="@defjs/core:UseRequestConfig" />
+
+```ts
+type UseRequestConfig = {
+  onDownloadProgress?: HttpProgressFn
+  onUploadProgress?: HttpProgressFn
+} & ({ abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number })
+```
+
+[`HttpExecuteOptions`](/zh-Hant-TW/api/core/httpexecuteoptions-type) 中 HTTP 專屬、不含 `signal` 的部分。
+
+- `onDownloadProgress` 與 `onUploadProgress` 是 [`HttpProgressFn`](/zh-Hant-TW/api/core/httpprogressfn-type) callbacks。它們收到的 [`HttpProgressEvent`](/zh-Hant-TW/api/core/httpprogressevent-type) 帶有 `loaded`、`total` 與 `lengthComputable`。
+- 取消用 `abort` 或 `timeout`，不能兩個一起。型別會拒絕兩者並存，執行時同時傳入則以 `REQ_OPTIONS_INVALID` fault 失敗。
+- `timeout` 必須是不大於 `2_147_483_647` 的正 safe integer。它會在該次呼叫取代 [`withTimeout`](/zh-Hant-TW/api/core/withtimeout) 設定的預設值；`abort` 則是與該預設值組合。
+
+[HTTP](/zh-Hant-TW/api/http)

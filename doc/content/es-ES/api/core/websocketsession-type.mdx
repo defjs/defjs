@@ -1,0 +1,42 @@
+---
+title: 'WebSocketSession'
+description: 'Sesión WebSocket tipada: enviar, recibir, observar el estado y cerrar.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketSession" />
+
+```ts
+interface WebSocketSession<TIncoming = unknown, TOutgoing = never> extends AsyncDisposable {
+  readonly bufferedAmount: number
+  readonly connection: WebSocketConnectionInfo
+  readonly closed: Promise<WebSocketCloseInfo>
+  readonly receive: AsyncIterable<TIncoming>
+  readonly state: WebSocketState
+  close(code?: number, reason?: string): void
+  [Symbol.asyncDispose](): PromiseLike<void>
+  send(message: TOutgoing): void
+  onRuntimeError(listener: (error: unknown) => void): () => void
+  onStateChange(listener: (state: WebSocketState) => void): () => void
+}
+```
+
+- `state` es el [`WebSocketState`](/es-ES/api/core/websocketstate-type) lógico; `connection` es el último [`WebSocketConnectionInfo`](/es-ES/api/core/websocketconnectioninfo-type). `bufferedAmount` es el conteo nativo de bytes sin enviar, o `0` si no hay socket físico.
+- `receive` entrega los mensajes entrantes ya parseados con el struct `incoming`. Es de un solo consumidor: pedir un segundo iterador lanza un `TypeError`. Un frame que no se puede parsear se notifica a los listeners de `onRuntimeError` y se omite.
+- `send(message)` valida y codifica el mensaje con el struct `outgoing` y luego envía texto JSON. Envía de inmediato mientras está `open`, encola durante `reconnecting` cuando `maxOutgoingQueueSize` lo permite y lanza una `DOMException` llamada `InvalidStateError` cuando la sesión no es escribible. También lanza cuando no se declaró un struct `outgoing`, el mensaje no pasa el struct, o la cola está deshabilitada o llena.
+- Tras la codificación, un valor que JSON no puede representar con fidelidad lanza `TypeError` antes de enviarlo o de meterlo en la cola. Esto incluye números no finitos, funciones, símbolos, `Map`, `Set`, streams e instancias de clase sin representación JSON, en la raíz o anidados. La misma guarda protege los mensajes de heartbeat; un fallo de serialización del heartbeat termina la sesión. La validación del struct puede rechazar un valor antes.
+- `close(code?, reason?)` solicita el cierre y detiene el heartbeat. `code` debe ser `1000` o estar en `3000..4999`, y `reason` ocupar como máximo 123 bytes UTF-8; los argumentos inválidos lanzan antes de que cambie el estado.
+- `closed` se resuelve con el [`WebSocketCloseInfo`](/es-ES/api/core/websocketcloseinfo-type) terminal lógico.
+- `onStateChange` y `onRuntimeError` devuelven una función para cancelar la suscripción.
+
+Prefiere `await using ownedSession = session` para el cleanup del ámbito que posees. `session.close()` manual y `await session.closed` siguen disponibles.
+
+```ts
+async function consume(session: WebSocketSession<unknown, never>): Promise<void> {
+  await using ownedSession = session
+  for await (const message of ownedSession.receive) console.log(message)
+}
+```
+
+El disposer async pide el close nativo y espera el teardown que posee Defjs, pero acota un evento close ausente a un segundo y puede rechazar con una `DOMException` llamada `TimeoutError`. No puede demostrar que la conexión TCP física se cerró.
+
+[WebSocket](/es-ES/api/web-socket)

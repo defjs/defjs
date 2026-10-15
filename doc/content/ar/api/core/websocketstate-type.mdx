@@ -1,0 +1,25 @@
+---
+title: 'WebSocketState'
+description: 'حالة دورة حياة جلسة WebSocket المُدارة.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketState" />
+
+```ts
+type WebSocketState = 'aborted' | 'closed' | 'closing' | 'connecting' | 'error' | 'idle' | 'open' | 'reconnecting'
+```
+
+| الحالة         | المعنى                                                 |
+| -------------- | ------------------------------------------------------ |
+| `idle`         | قبل أول محاولة اتصال                                   |
+| `connecting`   | تحضير الاتصال الأول وفتحه                              |
+| `open`         | المقبس المادي مفتوح                                    |
+| `reconnecting` | تحضير مقبس بديل أو انتظاره بعد إغلاق                   |
+| `closing`      | طُلب الإغلاق بـ `session.close()` أو بالتخلّص          |
+| `closed`       | نهائية: انتهت الجلسة دون خطأ أو إلغاء                  |
+| `aborted`      | نهائية: أُلغيت الجلسة عبر `abort` أو `signal`          |
+| `error`        | نهائية: فشلت الجلسة، بما في ذلك فشل البدء أو `timeout` |
+
+راقبها بـ `session.state` و`session.onStateChange`.
+
+[WebSocket](/ar/api/web-socket)

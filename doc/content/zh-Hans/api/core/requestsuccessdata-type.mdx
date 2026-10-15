@@ -1,0 +1,14 @@
+---
+title: 'RequestSuccessData'
+description: 'endpoint 所声明的 output struct 解码后的成功 body 类型。'
+---
+
+<ApiReference identity="@defjs/core:RequestSuccessData" />
+
+```ts
+type RequestSuccessData<TOutput extends AnyStruct | undefined> = [TOutput] extends [undefined] ? undefined : Infer<TOutput>
+```
+
+所声明 `output` struct 解码后的 body 类型；没有声明时为 `undefined`。
+
+[HTTP](/zh-Hans/api/http)

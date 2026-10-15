@@ -1,0 +1,20 @@
+---
+title: 'PreflightFault'
+description: '喺 response 出現之前可能已經發生嘅失敗所對應嘅 Fault。'
+---
+
+<ApiReference identity="@defjs/core:PreflightFault" />
+
+```ts
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+所有可能喺 response 存在之前就失敗嘅情況：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、
+`ENV_UNSUPPORTED`。只有 transport 當時真係有 metadata 可以報嘅時候先會帶 `response`，
+例如下載中途截斷咗嘅 body。
+
+[Errors](/zh-Hant-HK/api/errors)

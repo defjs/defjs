@@ -1,0 +1,21 @@
+---
+title: 'createNetworkFault'
+description: 'Factory de un fault NET_*, con el código elegido según la forma de la causa.'
+---
+
+<ApiReference identity="@defjs/core:createNetworkFault" />
+
+```ts
+function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+```
+
+- **cause** — La cancelación, el timeout o el fallo de transporte subyacente.
+- **response** — Metadatos, solo cuando el transporte ya tenía alguno que informar. Se adjunta al fault cuando se da.
+- **Devuelve** un `PreflightFault` cuyo código depende de `cause`:
+  - `NET_ABORTED` cuando [`isAbortCause`](/es-ES/api/core/isabortcause) reconoce un `Error` con marca de aborto (incluido `ERR_ABORTED` de otra copia de Core) o un `DOMException` llamado `AbortError`. El mensaje es `Request was aborted`.
+  - `NET_TIMEOUT` cuando [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) reconoce un `Error` con marca de timeout (incluido `ERR_TIMEOUT` de otra copia de Core) o un `DOMException` / `Error` llamado `TimeoutError`. El mensaje es el de la causa, o `Request timed out` cuando está vacío.
+  - `NET_UNREACHABLE` para cualquier otra cosa, con el mensaje de la causa.
+
+La causa se conserva como `cause`.
+
+[Errores](/es-ES/api/errors)

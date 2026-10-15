@@ -1,0 +1,18 @@
+---
+title: 'struct.urlencoded'
+description: 'リクエストボディのとき、URL エンコードされたフォームとしてエンコードされるオブジェクト struct です。'
+---
+
+<ApiReference identity="@defjs/core:struct.urlencoded" />
+
+```ts
+function urlencoded<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+[`struct.object()`](/ja-JP/api/core/struct-object) と同じようにパースし、`urlencoded` コーデックタグを持ちます。
+
+- タグが適用されるのは、この struct の値がリクエストボディのルートであるときだけです。その場合、ボディは `application/x-www-form-urlencoded;charset=UTF-8` の `URLSearchParams` として送られます。
+- 配列はフィールド名を繰り返し、`undefined` のフィールドはスキップされます。ネストしたオブジェクトや `Blob` があると、リクエストは `REQ_BUILD_FAILED` で失敗します。
+- `struct.parse` はこのタグを無視します。`URLSearchParams` インスタンスは受け付けず、プレーンオブジェクトだけを受け付けます。
+
+[Struct](/ja-JP/api/struct)

@@ -1,0 +1,16 @@
+---
+title: 'struct.bigint'
+description: 'struct يقبل bigint أو سلسلة bigint ويُخرج bigint.'
+---
+
+<ApiReference identity="@defjs/core:struct.bigint" />
+
+```ts
+function bigint(): Struct<bigint | string, bigint>
+```
+
+- يقبل `bigint`، أو سلسلة يستطيع `BigInt()` تحليلها. أما `number` فيُرفض.
+- المخرجات دائمًا `bigint`؛ والسلسلة غير القابلة للتحليل تفشل بـ `invalid_type`.
+- عند الترميز للنقل تصبح القيمة سلسلة عشرية.
+
+[Struct](/ar/api/struct)

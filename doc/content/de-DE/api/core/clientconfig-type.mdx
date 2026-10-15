@@ -1,0 +1,31 @@
+---
+title: 'ClientConfig'
+description: 'Aufgelöste Client-Konfiguration, nachdem die Option-Helper angewendet wurden.'
+---
+
+<ApiReference identity="@defjs/core:ClientConfig" />
+
+```ts
+interface ClientConfig {
+  endpoint: string
+  headers?: Headers
+  http: { handle: FetchHandle }
+  interceptors: Interceptor[]
+  querySerializer?: QuerySerializer
+  timeout?: number
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  sse: ClientSSEConfig
+  webSocket: ClientWebSocketOptions
+}
+```
+
+Der aufgelöste Snapshot, den `createClient` baut und den jeder Option-Helper mutiert. Die HTTP-Member stammen aus einer nicht exportierten Basis `HttpClientConfig` und sind inline dargestellt.
+
+Bevor eine Option greift, ist `endpoint` `''`, `interceptors` leer, und `http.handle` sowie `sse.handle` teilen sich einen Default-Wrapper, der `globalThis.fetch` bei jedem Aufruf auflöst. Ein nach dem Import ersetztes Fetch wirkt auf beide Defaults. Core lässt sich ohne Fetch importieren; eine Default-Ausführung von HTTP/SSE schlägt mit `ENV_UNSUPPORTED` fehl, wenn Fetch dann noch fehlt. Eigene Handles brauchen kein globales Fetch. `webSocket.handle` ist `globalThis.WebSocket`; die übrigen `webSocket`-Einstellungen sind ungesetzt. `withXSRF` füllt `xsrf.cookieName` mit `XSRF-TOKEN` und `xsrf.headerName` mit `X-XSRF-TOKEN`, wenn sie fehlen.
+
+[Client](/de-DE/api/client)

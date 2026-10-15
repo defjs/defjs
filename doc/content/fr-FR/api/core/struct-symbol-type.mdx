@@ -1,0 +1,16 @@
+---
+title: 'STRUCT'
+description: 'Export de type uniquement : la clé de tag interne utilisée par l’encodeur sortant.'
+---
+
+<ApiReference identity="@defjs/core:STRUCT" />
+
+```ts
+declare const STRUCT: unique symbol
+```
+
+`STRUCT` est exporté comme **type** uniquement (`export type { STRUCT }`). `@defjs/core` n’a pas d’export runtime `STRUCT`, donc `import { STRUCT } from '@defjs/core'` ne compile pas et ne donne aucune valeur.
+
+Il nomme le tag énumérable qui marque les objets produits pendant le parse de l’entrée d’un endpoint, afin que l’encodeur sortant sache quel struct les a produits. `struct.parse` et le décodage de réponse ne le posent pas. Le symbole est interne ; le code applicatif ne doit pas en dépendre.
+
+[Struct](/fr-FR/api/struct)

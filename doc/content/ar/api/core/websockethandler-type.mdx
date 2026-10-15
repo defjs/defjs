@@ -1,0 +1,16 @@
+---
+title: 'WebSocketHandler'
+description: 'معالج نهائي يفتح جلسة WebSocket لطلب.'
+---
+
+<ApiReference identity="@defjs/core:WebSocketHandler" />
+
+```ts
+type WebSocketHandler = (req: HttpRequest) => Promise<WebSocketSessionLike>
+```
+
+دالة `next` التي يستقبلها معترض WebSocket. يتجه `next(req)` إلى الداخل فقط: عبر المعترضات المسجَّلة بعد هذا المعترض، ثم وسيلة النقل التي تفتح الجلسة. يمكن استدعاؤه مرة واحدة لكل execute؛ والاستدعاء الثاني، أو الاستدعاء بعد استقرار السلسلة، يُرفض.
+
+يستقر بـ [`WebSocketSessionLike`](/ar/api/core/websocketsessionlike-type).
+
+[المعترضات](/ar/api/interceptors)

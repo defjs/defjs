@@ -1,0 +1,16 @@
+---
+title: 'ClientSSEConfig'
+description: '已解析的 SSE 配置，其中 fetch handle 必定存在。'
+---
+
+<ApiReference identity="@defjs/core:ClientSSEConfig" />
+
+```ts
+interface ClientSSEConfig extends ClientSSEOptions {
+  handle: FetchHandle
+}
+```
+
+`ClientConfig.sse` 的类型。它就是 [`ClientSSEOptions`](/zh-Hans/api/core/clientsseoptions-type)，只是 `handle` 一定存在；默认包装函数在每次尝试时获取当前的全局 `fetch`，而非在导入时捕获它。
+
+[Client](/zh-Hans/api/client)

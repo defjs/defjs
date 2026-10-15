@@ -1,0 +1,28 @@
+---
+title: 'EventStreamDefinition'
+description: 'Contrato que describe un endpoint SSE para defineEventStream.'
+---
+
+<ApiReference identity="@defjs/core:EventStreamDefinition" />
+
+```ts
+type EventStreamDefinition<
+  TInput extends AnyStruct | undefined = undefined,
+  TEvents extends EventStructs = EventStructs,
+  TError extends AnyStruct | undefined = undefined,
+> = EventStreamDefinitionBase<TEvents> &
+  EventStreamErrorField<TError> & {
+    builder?: OutboundBuilder
+    input?: TInput
+  }
+```
+
+Los miembros que lo componen son:
+
+- `events`, `maxBufferSize` y `maxQueueSize` (ambos límites son enteros seguros positivos obligatorios), `method`, `operation` opcionales y un `path` obligatorio.
+- `error`, obligatorio solo cuando `TError` es un struct. Decodifica el cuerpo de un handshake fallido (una respuesta no 2xx). La regla de tipos es la misma que en HTTP: `string` es texto, `blob` y `file` son blobs, `arrayBuffer` son bytes y todo lo demás es JSON.
+- `input` y `builder`. La forma de la solicitud coincide con la de HTTP, incluido `body`; `GET` y `HEAD` no pueden devolver un body. Un `input` declarado siempre requiere un `builder` explícito, aunque ya coincida con la forma de la solicitud. Solo las definiciones sin `input` pueden omitir `builder`.
+
+`EventStreamDefinitionBase` y `EventStreamErrorField` son tipos auxiliares internos.
+
+[SSE](/es-ES/api/sse)

@@ -1,0 +1,56 @@
+---
+title: Defjs
+description: 明示的なクライアントとエラーファーストな結果で、型付きの HTTP・SSE・WebSocket コマンドを扱います。
+---
+
+# Defjs
+
+エンドポイントを定義し、不透明なコマンドを組み立てて実行します。HTTP、SSE、WebSocket で同じ形です。
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Defjs は結果をキャッシュしたり、代わりにリトライしたり、忘れられたストリームを閉じたりしません。キャンセルとクリーンアップは呼び出し側の責任です。
+
+## トランスポートを選ぶ
+
+| やりたいこと                         | ここから                            | 成功時の結果                                              |
+| ------------------------------------ | ----------------------------------- | --------------------------------------------------------- |
+| リクエストと status ごとのレスポンス | [HTTP](/ja-JP/docs/http)            | デコード済みデータ + `HttpResponse`                       |
+| 長寿命のサーバーイベントフィード     | [SSE](/ja-JP/docs/sse)              | 1 つのストリーム + 起動時の `open` スナップショット       |
+| 双方向セッション                     | [WebSocket](/ja-JP/docs/web-socket) | 1 つのセッション + 起動時の `connection` スナップショット |
+
+初めてなら [はじめに](/ja-JP/docs/start) をやってから、[レシピ](/ja-JP/recipes/get-declared-404) を拾ってみてください。「なぜ？」が気になるときは、何か動かしたあとに [設計上の判断](/ja-JP/docs/design-decisions) を読むとよいです。
+
+## パッケージを選ぶ
+
+| パッケージ                    | いつ                                                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | `createClient`（HTTP + SSE + WebSocket）                                                                                |
+| `@defjs/react`                | `ClientProvider` / `useClient` — [React](/ja-JP/docs/integrations/react) を参照                                         |
+| `@defjs/vue`                  | プラグイン + `injectClient` — [Vue](/ja-JP/docs/integrations/vue) を参照                                                |
+| `@defjs/opentelemetry-server` | アウトバウンドのスパン・メトリクス・ログ — [OpenTelemetry Server](/ja-JP/docs/integrations/opentelemetry-server) を参照 |
+
+## 結果の形
+
+3 つのトランスポートとも、エラーファーストの 3 要素タプルを返します。位置は揃っていますが、意味は違います。
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+失敗したとき、2 番目は `undefined` です。HTTP では、フォールトがレスポンスのメタデータを持つため 3 番目も `undefined` です。SSE と WebSocket では、失敗より前にスナップショットが取れていれば、3 番目は起動時のスナップショットです。[Errors](/ja-JP/docs/errors) を見てください。
+
+## 所有権をひと息で
+
+古くなった HTTP は abort します。SSE は close して `await stream.closed`。WebSocket も close して `await session.closed`。サーバーでは、options が cookie・認証・テナントデータを掴むなら、クライアントをリクエスト境界の中で作ります。ログに出す前に URL・ヘッダー・ボディを redact してください。
+
+## 関連レシピ
+
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [POST JSON](/ja-JP/recipes/post-json)
+- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
+- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
+- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)
+- [ローカル Fetch ハンドルでテストする](/ja-JP/recipes/test-with-handle)

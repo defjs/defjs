@@ -1,0 +1,17 @@
+---
+title: 'SSEInterceptor'
+description: 'SSE interceptor с тегом, который принимает withInterceptors.'
+---
+
+<ApiReference identity="@defjs/core:SSEInterceptor" />
+
+```ts
+interface SSEInterceptor {
+  kind: 'sse'
+  fn: SSEInterceptorFn
+}
+```
+
+Создаётся через `createSSEInterceptor(fn)`. Тег `kind` позволяет `withInterceptors` принимать interceptor’ы HTTP, SSE и WebSocket в одном списке; для SSE-команд работают только interceptor’ы с `kind: 'sse'`.
+
+[Interceptors](/ru-RU/api/interceptors)

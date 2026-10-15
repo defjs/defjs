@@ -1,0 +1,44 @@
+---
+title: 'FaultCode'
+description: 'The closed set of every failure code Defjs reports.'
+---
+
+<ApiReference identity="@defjs/core:FaultCode" />
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+One closed set. The segment before the first `_` is the class; there is no separate `kind` field.
+
+| Class  | Meaning                                                       |
+| ------ | ------------------------------------------------------------- |
+| `HTTP` | The peer answered with a non-2xx status.                      |
+| `REQ`  | The request never left: input, execute options, or build.     |
+| `NET`  | No usable response: cancel, timeout, connect, truncated body. |
+| `RES`  | A response arrived but could not be read as declared.         |
+| `EXT`  | Code you attached to the pipeline threw.                      |
+| `CAP`  | A declared buffer or queue limit was exceeded.                |
+| `ENV`  | The host runtime lacks a required capability.                 |
+
+The set stays closed so that `switch (fault.code)` is exhaustive — extensions report their own
+detail through `cause`, not through a new code.
+
+[Errors](/api/errors)

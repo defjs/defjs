@@ -1,0 +1,36 @@
+---
+title: API 查閱
+description: 手寫的工作區套件查表 — 你會 import 的函式、options 與型別。
+---
+
+# API 查閱
+
+<ApiIndex />
+
+這是工作區套件的查表頁。簽章就是契約；指南跟 recipes 講何時該用。
+
+## 套件
+
+| 套件                                                                  | 你要查的                                                          |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/zh-Hant-TW/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/zh-Hant-TW/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/zh-Hant-TW/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/zh-Hant-TW/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                  |
+
+## @defjs/core
+
+| 頁面                                         | 你要查的                                                         |
+| -------------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/zh-Hant-TW/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/zh-Hant-TW/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/zh-Hant-TW/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/zh-Hant-TW/api/errors)             | `Fault` 各個變體與工廠函式                                       |
+| [Interceptors](/zh-Hant-TW/api/interceptors) | HTTP／SSE／WebSocket 的 interceptor helpers                      |
+| [SSE](/zh-Hant-TW/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/zh-Hant-TW/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## 相關
+
+- [開始使用](/zh-Hant-TW/docs/start)
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)

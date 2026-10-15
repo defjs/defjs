@@ -1,0 +1,31 @@
+---
+title: 'withWebSocketReconnect'
+description: 'Client-Option, die automatischen WebSocket-Reconnect aktiviert.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketReconnect" />
+
+```ts
+function withWebSocketReconnect(options: ClientWebSocketOptions['reconnect']): ClientOption
+```
+
+Konfiguriert den automatischen Reconnect, wenn der Socket aus irgendeinem anderen Grund als einem manuellen `session.close()` schließt. Reconnect ist Opt-in: Ohne diese Option beendet ein Close die Session. `undefined` zu übergeben löscht eine frühere Einstellung. Der Options-Typ ist:
+
+```ts
+{
+  attempts?: number
+  delayMs?: number
+  factor?: number
+  jitter?: number
+  maxDelayMs?: number
+  shouldReconnect?: (context: { attempt: number; cause?: unknown; code?: number; reason?: string; wasClean?: boolean }) => boolean
+}
+```
+
+- `attempts` ist das Retry-Budget je Ausfall. Der Default ist `3`, und `0` schaltet den Reconnect aus. Ein erfolgreiches `open` setzt Budget und Backoff-Exponenten zurück; der nächste Ausfall beginnt bei Retry 1. Es wegzulassen ergibt innerhalb eines Ausfalls keine unbegrenzten Retries. Ein Socket, der sich erfolgreich öffnet und sofort wieder vom Server geschlossen wird, kann sich fortlaufend mit der Basisverzögerung neu verbinden (unter Berücksichtigung von Jitter und Caps), weil jedes Open das Budget zurücksetzt; nutze `shouldReconnect`, um dies zu stoppen.
+- `delayMs` ist standardmäßig `1000`, `factor` `2`, `maxDelayMs` `30000` und `jitter` (0 bis 1) `0`. Retry _n_ beginnt mit `delayMs * factor^(n-1)`, begrenzt auf `maxDelayMs`; danach folgen Jitter und Rundung, dann wird die endgültige Wartezeit erneut auf `maxDelayMs` und `2_147_483_647` ms gedeckelt. Eine Basis von null bleibt null; ein Überlauf gültiger Zahlen sättigt an diesen Caps.
+- `shouldReconnect` kann `false` zurückgeben, um die Session stattdessen zu beenden. Ohne es wird jedes Close wiederholt, solange das Budget reicht. Bei einem manuellen `session.close()` wird es nicht aufgerufen.
+- Ist Retry aktiv, muss `attempts` eine nicht negative sichere Ganzzahl sein; `delayMs` und `maxDelayMs` müssen endlich und nicht negativ sein; `factor` muss endlich und positiv sein; `jitter` muss endlich sein und in 0–1 liegen. Ungültige Werte lassen Execute mit `REQ_OPTIONS_INVALID` scheitern, bevor verbunden wird. `attempts: 0` schaltet Retry sofort aus und ignoriert die ungenutzten Reconnect-Felder.
+- Ein `reconnect` in den Execute-Options ersetzt dieses für den Aufruf.
+
+[Client](/de-DE/api/client)

@@ -1,0 +1,176 @@
+---
+title: Errors
+description: Fault のバリアントとファクトリー helper。
+---
+
+# Errors
+
+Execute は判別可能な `Fault` をタプルの第一要素に返します。宣言済みの失敗で例外を throw することはありません。
+
+## FaultCode
+
+```ts
+type FaultCode =
+  | 'CAP_BUFFER_EXCEEDED'
+  | 'CAP_QUEUE_OVERFLOW'
+  | 'ENV_UNSUPPORTED'
+  | 'EXT_HOOK_FAILED'
+  | 'EXT_INTERCEPTOR_FAILED'
+  | 'EXT_OBSERVER_FAILED'
+  | 'HTTP_STATUS'
+  | 'NET_ABORTED'
+  | 'NET_BODY_INCOMPLETE'
+  | 'NET_TIMEOUT'
+  | 'NET_UNREACHABLE'
+  | 'REQ_BUILD_FAILED'
+  | 'REQ_INPUT_INVALID'
+  | 'REQ_OPTIONS_INVALID'
+  | 'RES_DECODE_FAILED'
+  | 'RES_MEDIA_TYPE_INVALID'
+  | 'RES_STRUCT_MISMATCH'
+```
+
+閉じた集合ひとつです。最初の `_` より前の部分が類別で、独立した `kind` field はありません。集合を閉じたままにするのは `switch (fault.code)` を網羅的に保つためで、拡張は自分の詳細を新しい code ではなく `cause` で報告します。
+
+## FaultClass
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+`FaultClass<FaultCode>` は `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'` です。
+
+## Fault
+
+```ts
+type Fault<TErr extends AnyStruct | undefined = undefined> = DecodeFault | HttpStatusFault<TErr> | PreflightFault
+```
+
+`fault.code` で switch してください。
+
+### FaultOf
+
+```ts
+type FaultOf<TData = undefined> = DecodeFault | HttpStatusFaultOf<TData> | PreflightFault
+type Fault<TErr extends AnyStruct | undefined = undefined> = FaultOf<[TErr] extends [undefined] ? undefined : Infer<TErr>>
+```
+
+`FaultOf` は、`Fault` を、それを生んだ struct ではなくデコード済みのエラーボディの型で表したものです。`HttpAwaitResult` とファクトリーはデコード済みの値で動くので、この形を使います。
+
+どのバリアントも `DefjsFault` という名前のネイティブ `Error` なので、`String(fault)` は `DefjsFault: <message>` を返します。`code` と各バリアントのメタデータ — `status`、`response`、`data` — は列挙可能な自前プロパティです。ネイティブの `cause` チェーンは列挙されません。
+
+デフォルトの Struct メッセージは、たとえば `Expected number at email, received string` のように `received <kind>` と表示し、受け取った値自体は含めません。`RES_DECODE_FAILED` の原因が JSON の `SyntaxError` なら、メッセージは `Response body could not be decoded` になります。issue の path は構造的で、record のキーを保持します。`struct.record(...)` は `Expected number at alice@example.com, received string` を生成し得るため、キーはデフォルトメッセージ、`prettify()`、`String(fault)` の中でも機微情報になり得ます。生の `StructIssue.received` とパーサーの原因は引き続き機密情報として扱ってください。カスタムの `errorMap` や拡張のメッセージはそのまま使われるため、ログに出す前に確認が必要です。
+
+<include cwd>examples/api/fault.ts#example</include>
+
+`format()`、`flatten()`、`prettify()` は `fault.cause` を `StructError` に絞り込んだあとでのみ呼んでください。これらの helper は fault にコピーされません。
+
+### HttpStatusFault
+
+```ts
+type HttpStatusFaultOf<TData> = Error & {
+  code: 'HTTP_STATUS'
+  data: TData
+  response: [TData] extends [undefined] ? HttpMeta : DecodedResponse<TData>
+  status: number
+}
+
+type HttpStatusFault<TErr extends AnyStruct | undefined = undefined> = HttpStatusFaultOf<
+  [TErr] extends [undefined] ? undefined : Infer<TErr>
+>
+```
+
+2xx 以外のあらゆる status です。エンドポイントが `error` を宣言していてボディがデコードできたなら、`data` はそのボディで、`response` もそれを持ちます。`error` を省いた場合ボディは読まれないので、`data` は `undefined`、`response` はメタデータだけになります。
+
+### DecodeFault
+
+```ts
+type DecodeFaultCode = 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID' | 'RES_STRUCT_MISMATCH'
+
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+レスポンスは届いたものの、宣言どおりには読めませんでした。`response` はメタデータだけです。ボディ**とは**デコード済みの値であり、そのデコードが失敗したのですから、手を伸ばす `body` field は存在しません。問題の詳細は `cause` にあります — struct 不一致なら `StructError`、表現が読めないならパーサーの失敗です。
+
+### PreflightFault
+
+```ts
+type PreflightFaultCode = Exclude<FaultCode, DecodeFaultCode | 'HTTP_STATUS'>
+
+type PreflightFault = Error & {
+  cause?: unknown
+  code: PreflightFaultCode
+  response?: HttpMeta
+}
+```
+
+レスポンスが存在する前に失敗しえたものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。`response` が付くのは、トランスポートが報告できるメタデータを既に持っていた場合だけ — たとえばダウンロード途中で切れたボディなどです。
+
+### AnyFault
+
+```ts
+type AnyFault = DecodeFault | HttpStatusFaultOf<undefined> | HttpStatusFaultOf<unknown> | PreflightFault
+```
+
+デコード済みエラーボディの型を問わない、あらゆる fault です。どのエンドポイントが出したかを気にせず fault を分類するハンドラーに使ってください。ボディの型が重要な場所では `Fault<typeof yourErrorStruct>` を選びます。
+
+## ファクトリー
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+```ts
+declare function createHttpStatusFault<TData>(response: DecodedResponse<TData>): HttpStatusFaultOf<TData>
+
+declare function createUndecodedHttpStatusFault(response: HttpMeta): HttpStatusFaultOf<undefined>
+
+declare function createDecodeFault(code: DecodeFaultCode, cause: unknown, response: HttpMeta): DecodeFault
+
+declare function createNetworkFault(cause: unknown, response?: HttpMeta): PreflightFault
+
+declare function createPreflightFault(code: PreflightFaultCode, cause?: unknown, response?: HttpMeta): PreflightFault
+```
+
+`createHttpStatusFault` はデコード済みのボディを既に持つレスポンスを受け取ります。`createUndecodedHttpStatusFault` はメタデータだけを受け取り、`error` を宣言していないエンドポイント向けです。
+
+`createNetworkFault` は、`NET_ABORTED` の判定に [`isAbortCause`](/ja-JP/api/core/isabortcause)、`NET_TIMEOUT` の判定に [`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) を使います。これらは、どの Core のコピーから来たものでも、対応するブランドを持つセンチネルを認識します。それぞれ、`AbortError` という名前の `DOMException`、`TimeoutError` という名前の `DOMException` または `Error` も認識します。それ以外はすべて `NET_UNREACHABLE` になります。`createPreflightFault` は code を直接受け取り、`cause` を渡さなければ code がそのまま message になります。
+
+どのファクトリーも、上記の構造化 field を備えたネイティブ `Error` インスタンスを返します。素のオブジェクトエラーは作らないので、`String(fault)` にアダプターは不要です。
+
+## センチネル
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+```ts
+const ERR_ABORTED: Error // message: 'Request was aborted'
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+abort と timeout で共有される `cause` / message の値です。HTTP インターセプターからどちらかを throw すると、呼び出しは `NET_ABORTED` または `NET_TIMEOUT` で解決します。SSE と WebSocket のインターセプターは、これらを含むあらゆる throw を `EXT_INTERCEPTOR_FAILED` として報告します。
+
+センチネルには、列挙されない `Symbol.for('defjs.cause.aborted')` と `Symbol.for('defjs.cause.timeout')` のブランドが付いています。分類は、センチネルのオブジェクト同一性や、無関係な過去の実行には依存しません。
+
+## 原因の判定
+
+```ts
+function isAbortCause(cause: unknown): boolean
+function isTimeoutCause(cause: unknown): boolean
+```
+
+[`isAbortCause`](/ja-JP/api/core/isabortcause) は、中止のブランドを持つ `Error` または `AbortError` という名前の `DOMException` を認識します。[`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) は、タイムアウトのブランドを持つ `Error` または `TimeoutError` という名前の `DOMException` / `Error` を認識します。原因となった値を分類するには `fault.cause` を渡してください。これらの関数は fault の中身を取り出しません。別の Core のコピーから来たセンチネルでも使えます。
+
+[Errors ガイド](/ja-JP/docs/errors) を参照してください。

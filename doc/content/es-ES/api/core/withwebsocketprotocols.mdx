@@ -1,0 +1,18 @@
+---
+title: 'withWebSocketProtocols'
+description: 'Opción de cliente que fija los subprotocolos WebSocket del handshake.'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketProtocols" />
+
+```ts
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+```
+
+Fija los subprotocolos que se ofrecen durante el handshake, según RFC 6455. Se pasan como segundo argumento al constructor de WebSocket, y solo cuando la lista no está vacía.
+
+Importan solo cuando el servidor exige un subprotocolo concreto, por ejemplo `['json']` o `['v1']`.
+
+Precedencia, de mayor a menor: la opción de execute `protocols`, esta opción de cliente y, por último, `protocols` en la definición del endpoint.
+
+[Cliente](/es-ES/api/client)

@@ -1,0 +1,14 @@
+---
+title: 'FaultClass'
+description: 'Извлекает префикс-класс из кода fault’а.'
+---
+
+<ApiReference identity="@defjs/core:FaultClass" />
+
+```ts
+type FaultClass<C extends string> = C extends `${infer TClass}_${string}` ? TClass : never
+```
+
+Класс кода fault’а — сегмент до первого `_`. `C` — это `FaultCode` или их объединение. `FaultClass<FaultCode>` равен `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+[Ошибки](/ru-RU/api/errors)

@@ -1,0 +1,18 @@
+---
+title: 'withWebSocketProtocols'
+description: '为握手设置 WebSocket 子协议的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketProtocols" />
+
+```ts
+function withWebSocketProtocols(protocols: readonly string[]): ClientOption
+```
+
+按 RFC 6455 设置握手期间提供的子协议。它们作为第二个参数传给 WebSocket 构造函数，且只在列表非空时才传。
+
+只有当服务器要求特定子协议时它才有意义，例如 `['json']` 或 `['v1']`。
+
+优先级从高到低：execute 的 `protocols` 选项、这个 client option，然后是 endpoint 定义上的 `protocols`。
+
+[Client](/zh-Hans/api/client)

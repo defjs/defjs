@@ -1,0 +1,18 @@
+---
+title: 'ERR_TIMEOUT'
+description: 'Shared Error sentinel that marks a request as timed out.'
+---
+
+<ApiReference identity="@defjs/core:ERR_TIMEOUT" />
+
+```ts
+const ERR_TIMEOUT: Error // message: 'Request timed out'
+```
+
+Shared `cause` and message value for timeouts. `createNetworkFault` maps it, and any error named `TimeoutError`, to `NET_TIMEOUT`. An HTTP interceptor that throws it makes the call resolve with a `NET_TIMEOUT` fault. SSE and WebSocket interceptors that throw it are reported as `EXT_INTERCEPTOR_FAILED`.
+
+See [Errors guide](/docs/errors).
+
+The sentinel carries a non-enumerable `Symbol.for('defjs.cause.timeout')` brand. [`isTimeoutCause`](/api/core/istimeoutcause) recognizes this sentinel from any Core copy without comparing object identity. Classification is independent of unrelated earlier executions.
+
+[Errors](/api/errors)

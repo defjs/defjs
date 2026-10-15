@@ -1,0 +1,19 @@
+---
+title: 'withEndpoint'
+description: '为相对请求路径设置 base URL 的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withEndpoint" />
+
+```ts
+function withEndpoint(endpoint: string): ClientOption
+```
+
+设置拼在相对请求路径前面的有效绝对 base URL。默认是空字符串，因此执行时必须显式提供 endpoint。
+
+- **endpoint** — 有效的绝对 base endpoint。它的 pathname 作为目录保留；query 和 hash 会被丢弃。
+- 对 WebSocket command，`http:` 的 base 会变成 `ws:`，`https:` 会变成 `wss:`。
+
+缺失、相对或无效的 endpoint，以及非法的请求路径，都会在构建阶段以 `REQ_BUILD_FAILED` 失败；此时任何 interceptor 或传输层都尚未运行，即使 interceptor 原本会短路也是如此。HTTP、SSE 和 WebSocket 遵循同一规则。解析后的请求必须保持 base 的源，且位于其目录之下；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 和越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 最终的 `req.endpoint` 也会按同一规则相对于最终的 `req.baseEndpoint` 检查，但允许有意把 base 替换成另一个有效的绝对 URL。确定性的 URL 错误永远不会重试。
+
+[Client](/zh-Hans/api/client)

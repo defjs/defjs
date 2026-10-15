@@ -1,0 +1,56 @@
+---
+title: Defjs
+description: Typed HTTP, SSE, and WebSocket commands with an explicit client and error-first results.
+---
+
+# Defjs
+
+Define an endpoint, build an opaque command, and execute it. Same shape for HTTP, SSE, and WebSocket.
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Defjs does not cache results, retry for you, or close streams when you forget. You own cancellation and cleanup.
+
+## Pick a transport
+
+| You need                           | Start with                    | Successful result                           |
+| ---------------------------------- | ----------------------------- | ------------------------------------------- |
+| Request + status-specific response | [HTTP](/docs/http)            | Decoded data + `HttpResponse`               |
+| Long-lived server event feed       | [SSE](/docs/sse)              | One stream + startup `open` snapshot        |
+| Bidirectional session              | [WebSocket](/docs/web-socket) | One session + startup `connection` snapshot |
+
+New here? Do [Getting Started](/docs/start), then grab a [recipe](/recipes/get-declared-404). Want the “why”? Read [Design Decisions](/docs/design-decisions) after you’ve run something.
+
+## Pick a package
+
+| Package                       | When                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `@defjs/core`                 | `createClient` (HTTP + SSE + WebSocket)                                                                |
+| `@defjs/react`                | `ClientProvider` / `useClient` — see [React](/docs/integrations/react)                                 |
+| `@defjs/vue`                  | Plugin + `injectClient` — see [Vue](/docs/integrations/vue)                                            |
+| `@defjs/opentelemetry-server` | Outbound spans, metrics and logs — see [OpenTelemetry Server](/docs/integrations/opentelemetry-server) |
+
+## Result shapes
+
+All three transports return an error-first three-item tuple. Positions match; meanings don’t:
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+On failure the second item is `undefined`. For HTTP the third item is `undefined` too, because the fault carries the response metadata. For SSE and WebSocket the third item is the startup snapshot when one was captured before the failure. See [Errors](/docs/errors).
+
+## Ownership in one breath
+
+Abort HTTP when it’s stale. Close SSE and `await stream.closed`. Close WebSocket and `await session.closed`. On a server, create the client inside the request boundary when options capture cookies, auth, or tenant data. Redact URLs, headers, and bodies before you log them.
+
+## Related recipes
+
+- [GET with a declared 404](/recipes/get-declared-404)
+- [POST JSON](/recipes/post-json)
+- [Cancel an HTTP call](/recipes/cancel-http)
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Open a WebSocket session](/recipes/websocket-session)
+- [Test with a local Fetch handle](/recipes/test-with-handle)

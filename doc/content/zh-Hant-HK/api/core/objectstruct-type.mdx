@@ -1,0 +1,23 @@
+---
+title: 'ObjectStruct'
+description: '`struct.object` 產出嘅 object 形狀 struct type。'
+---
+
+<ApiReference identity="@defjs/core:ObjectStruct" />
+
+```ts
+interface ObjectStruct<T extends ObjectShape>
+  extends StructMethods<ObjectInput<T>, ObjectOutput<T>, false>, StructLike<ObjectInput<T>, ObjectOutput<T>, false> {
+  readonly _struct: ObjectStructTypes<T>
+  null(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullable(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null, ObjectOutput<T> | null, false>
+  nullish(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | null | undefined, ObjectOutput<T> | null | undefined, true>
+  optional(): PreservedStruct<ObjectStruct<T>, ObjectInput<T> | undefined, ObjectOutput<T> | undefined, true>
+}
+
+type ObjectShape = { [key: string]: any }
+```
+
+由 `struct.object(shape)` 產出。欄位預設必填；標記咗 `optional()` 或者 `nullish()` 嘅欄位會變成 optional key。解析時會剔走未知 keys。線上名稱可以透過 `.alias()` 同 TypeScript keys 唔同。解析失敗會回 `[StructError, undefined]`。`ObjectInput`、`ObjectOutput`、`ObjectStructTypes` 同 `PreservedStruct` 係內部 helper types。
+
+[Struct](/zh-Hant-HK/api/struct)

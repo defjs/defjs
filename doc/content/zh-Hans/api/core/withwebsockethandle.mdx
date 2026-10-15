@@ -1,0 +1,17 @@
+---
+title: 'withWebSocketHandle'
+description: '替换 WebSocket 构造函数的 Client option。'
+---
+
+<ApiReference identity="@defjs/core:withWebSocketHandle" />
+
+```ts
+function withWebSocketHandle(WebSocketImpl: WebSocketHandleConstructor): ClientOption
+```
+
+替换建立 socket 连接所用的 WebSocket 构造函数。默认是 `globalThis.WebSocket`。
+
+- **WebSocketImpl** 是返回 [`WebSocketHandle`](/zh-Hans/api/core/websockethandle-type) 的 [`WebSocketHandleConstructor`](/zh-Hans/api/core/websockethandleconstructor-type)。
+- 没有可用的构造函数时，执行 WebSocket command 会以 `ENV_UNSUPPORTED` fault 失败。
+
+[Client](/zh-Hans/api/client)

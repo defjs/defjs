@@ -1,0 +1,46 @@
+---
+title: 'HttpRequest'
+description: 'Requête HTTP sortante normalisée, vue par les transports et les intercepteurs.'
+---
+
+<ApiReference identity="@defjs/core:HttpRequest" />
+
+```ts
+interface HttpRequest {
+  abort?: AbortSignal
+  baseEndpoint?: string
+  body?: Blob | ArrayBuffer | FormData | URLSearchParams | ReadableStream<Uint8Array> | object | string | number | boolean | null
+  bodyContentType?: string | null
+  downloadProgress?: HttpProgressFn
+  endpoint: string
+  headers?: Headers
+  method: string
+  operation?: string
+  queryParams?: URLSearchParams
+  queryString?: string
+  readonly responseType?: HttpResponseType
+  readonly errorResponseType?: HttpResponseType
+  timeout?: number
+  uploadProgress?: HttpProgressFn
+  withCredentials?: boolean
+  xsrf?: {
+    cookieName: string
+    headerName: string
+    tokenProvider?: (context: { request: HttpRequest }) => string | null | undefined
+  }
+  // plus the @internal bodyContentTypeSource field
+}
+```
+
+La requête après l’exécution du builder, telle qu’utilisée par les handlers, les intercepteurs et `fetchHandler`.
+
+- `body` est déjà la valeur wire. Pour du JSON, c’est une **chaîne de texte JSON** ; signe tes HMAC ou digests sur cette chaîne, pas sur l’entrée struct d’origine.
+- `bodyContentType` conserve le type inféré du corps du builder dans un champ ordinaire, qui est donc préservé dans les copies `{ ...req }`. Il ne s’applique que tant que `body` est la valeur du builder ; un corps de remplacement est détecté à nouveau, donc déclare son type avec un header `content-type`. Pour le corps inchangé, `null` supprime l’inférence de la bibliothèque en l’absence de header explicite, mais le Fetch natif peut ajouter son propre type chaîne. FormData utilise sa boundary multipart réelle.
+- HTTP n’écrit jamais le Content-Type inféré dans `headers` ; les intercepteurs ne voient que les headers déclarés. Un header `content-type` explicite a toujours priorité sur `bodyContentType` et la détection, qu’il soit défini par le builder, les valeurs par défaut du client, un intercepteur ou une requête directe à `fetchHandler`. `body: undefined` n’a pas de Content-Type inféré par la bibliothèque. Le code qui signe les requêtes doit lire `headers.get('content-type') ?? request.bodyContentType` ; ne configure pas les champs internes.
+- `endpoint` est le chemin avec les paramètres de chemin renseignés ; `baseEndpoint` est l’endpoint du client.
+- Les intercepteurs voient `queryParams` comme `new URLSearchParams(queryString)`. Un builder qui renvoie `URLSearchParams` fait passer cette instance telle quelle.
+- `operation` est une identité d’endpoint statique, à faible cardinalité, pour la télémétrie et le diagnostic.
+- `downloadProgress` et `uploadProgress` sont les hooks `onDownloadProgress` et `onUploadProgress` de `HttpExecuteOptions`.
+- `responseType` et `errorResponseType` sont readonly : ils sont dérivés des kinds de struct `output` et `error` de l’endpoint et ne doivent pas être modifiés. Chacun n’est défini que si son struct est déclaré. Un intercepteur qui court-circuite avec `makeResponse` les lit pour s’aligner sur le transport.
+
+[HTTP](/fr-FR/api/http)

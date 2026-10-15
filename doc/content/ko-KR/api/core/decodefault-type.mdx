@@ -1,0 +1,19 @@
+---
+title: 'DecodeFault'
+description: '응답은 도착했지만 선언한 대로 읽을 수 없었을 때의 fault예요.'
+---
+
+<ApiReference identity="@defjs/core:DecodeFault" />
+
+```ts
+type DecodeFault = Error & {
+  cause: unknown
+  code: DecodeFaultCode
+  response: HttpMeta
+  status: number
+}
+```
+
+`code`는 `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID`, `RES_STRUCT_MISMATCH` 중 하나예요. 응답은 도착했지만 선언한 대로 읽을 수 없었어요. `response`는 메타데이터뿐이에요. body는 디코딩된 값인데 바로 그 디코딩이 실패한 것이니, 손 뻗을 `body` 필드가 없어요. 문제의 세부는 `cause`에 있어요. struct 불일치면 `StructError`이고, 표현을 읽을 수 없으면 파서의 실패예요.
+
+[오류](/ko-KR/api/errors)

@@ -1,0 +1,19 @@
+---
+title: 'createClient'
+description: 'Создаёт клиент из хелперов опций.'
+---
+
+<ApiReference identity="@defjs/core:createClient" />
+
+```ts
+function createClient(...options: ClientOption[]): Client
+```
+
+Опции применяются по порядку; более поздняя опция перезаписывает более раннюю для той же настройки, а interceptor’ы накапливаются. Клиент лучше создавать в пределах обработки отдельного запроса, если interceptor’ы замыкают данные аутентификации или контекст арендатора.
+
+- **options** — хелперы опций вроде `withEndpoint`.
+- **Возвращает** клиент, у которого `execute` перегружен под каждый транспорт.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+[Клиент](/ru-RU/api/client)

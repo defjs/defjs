@@ -1,0 +1,18 @@
+---
+title: 'struct.urlencoded'
+description: 'Object struct, который кодируется как URL-encoded форма, когда он является телом запроса.'
+---
+
+<ApiReference identity="@defjs/core:struct.urlencoded" />
+
+```ts
+function urlencoded<T extends ObjectShape>(shape: T): ObjectStruct<T>
+```
+
+Разбирает как [`struct.object()`](/ru-RU/api/core/struct-object) и несёт тег кодека `urlencoded`.
+
+- Тег применяется, только когда значение этого struct — корень тела запроса. Тогда тело уходит как `URLSearchParams` с `application/x-www-form-urlencoded;charset=UTF-8`.
+- Массивы повторяют имя поля, а поля со значением `undefined` пропускаются. Вложенный объект или `Blob` приводит к сбою запроса с `REQ_BUILD_FAILED`.
+- `struct.parse` игнорирует тег. Он не принимает экземпляр `URLSearchParams`, только plain object.
+
+[Struct](/ru-RU/api/struct)

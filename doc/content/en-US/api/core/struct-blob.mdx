@@ -1,0 +1,16 @@
+---
+title: 'struct.blob'
+description: 'Struct that accepts a Blob.'
+---
+
+<ApiReference identity="@defjs/core:struct.blob" />
+
+```ts
+function blob(): Struct<Blob, Blob>
+```
+
+- Accepts a `Blob` (a `File` is a `Blob`). Anything else fails with `invalid_type`.
+- As a body root it is sent as is, with the blob's own type or `application/octet-stream`.
+- As an `output` or `error` struct it makes the response body be read as a `Blob`.
+
+[Struct](/api/struct)

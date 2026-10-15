@@ -1,0 +1,26 @@
+---
+title: 'struct.tuple'
+description: 'struct يحلّل مصفوفة ذات طول ثابت بـ struct لكل موضع.'
+---
+
+<ApiReference identity="@defjs/core:struct.tuple" />
+
+```ts
+function tuple<const T extends readonly [StructLike<unknown, unknown, boolean>, ...StructLike<unknown, unknown, boolean>[]]>(
+  items: T,
+): TupleStruct<T>
+```
+
+يأخذ `struct.tuple` **مصفوفة واحدة** من الـ structs، لا معاملات منفصلة:
+
+```ts
+const Pair = struct.tuple([struct.string(), struct.number()])
+```
+
+- يُحلَّل كل موضع بالـ struct ذي الفهرس نفسه. ويجب أن يكون المدخل مصفوفة بالطول نفسه تمامًا، وإلا فشل بـ `invalid_type` (المتوقع `tuple of length N`).
+- تمرير الـ structs كمعاملات منفصلة، `struct.tuple(a, b)`، يرمي `TypeError`.
+- يرمي `TypeError` عندما لا يكون عنصر ما struct.
+
+`TupleStruct<T>` غير مُصدَّر. وهو `Struct` مدخله ومخرجه هما tuples من أنواع العناصر.
+
+[Struct](/ar/api/struct)

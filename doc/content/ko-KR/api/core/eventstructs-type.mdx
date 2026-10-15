@@ -1,0 +1,20 @@
+---
+title: 'EventStructs'
+description: 'SSE 이벤트 이름을 그 data를 디코딩하는 struct에 연결하는 맵이에요.'
+---
+
+<ApiReference identity="@defjs/core:EventStructs" />
+
+```ts
+type EventStructs = { [key: string]: AnyStruct }
+```
+
+`event:` 필드가 없는 이벤트의 이름은 `message`예요. 자기 항목이 없는 이름의 이벤트는 `default` struct를 써요. 둘 다 없으면 그 이벤트는 건너뛰고 `onInvalidEvent`를 호출해요. 이벤트 이름 `__proto__`는 computed own key로 선언하세요.
+
+`string` 이벤트 struct는 원시 `data` 텍스트를 그대로 둬요. 나머지 종류는 모두 JSON 텍스트라서 `JSON.parse`를 거친 뒤 struct로 가요. 그래서 맨 `struct.literal`에는 따옴표 없는 토큰이 아니라 JSON 텍스트가 필요해요.
+
+재연결은 클라이언트 쪽(`withSSEReconnect`)에 있어요. SSE `jitter`는 WebSocket과 같은 **0-1 곱셈 계수**예요.
+
+[SSE 가이드](/ko-KR/docs/sse)와 [SSE 스트림 소비하기](/ko-KR/recipes/consume-sse)를 보세요.
+
+[SSE](/ko-KR/api/sse)

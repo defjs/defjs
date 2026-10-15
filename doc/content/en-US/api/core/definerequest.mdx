@@ -1,0 +1,36 @@
+---
+title: 'defineRequest'
+description: 'Declares a typed HTTP request endpoint.'
+---
+
+<ApiReference identity="@defjs/core:defineRequest" />
+
+```ts
+function defineRequest<
+  const M extends string,
+  const P extends string,
+  TInput extends AnyStruct | undefined = undefined,
+  TOutput extends AnyStruct | undefined = undefined,
+  TError extends AnyStruct | undefined = undefined,
+>(
+  definition: ResponseDeclaration<TOutput, TError> & {
+    input?: TInput
+    method: M
+    operation?: string
+    path: P
+  } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
+): RequestEndpoint<TInput, TOutput, TError>
+```
+
+- **definition** — `method`, `path`, optional `input` struct, optional `output` and `error` structs, optional `operation`. A declared `input` always requires an explicit `builder`, even when it already matches the request shape. Only definitions without `input` may omit `builder`.
+- **Returns** an endpoint. Call it with input to get an `HttpCommand`.
+
+`ResponseDeclaration` and `BuilderField` are internal helper types: `output` and `error` are required only when the matching type parameter is a struct, and `builder` is `(input: BuilderInput<TInput>) => HttpRequestShape` when `input` is declared.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` is one struct for the 2xx body; `error` is one struct for every non-2xx body. Neither is
+keyed by status. Omitting one means that body is never read — see
+[Declaration is an assertion](/docs/design-decisions#declaration-is-an-assertion).
+
+[HTTP](/api/http)

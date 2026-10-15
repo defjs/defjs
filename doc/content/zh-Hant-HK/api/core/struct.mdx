@@ -1,0 +1,56 @@
+---
+title: 'struct'
+description: '載有 struct constructors 同 struct.parse 嘅 facade object。'
+---
+
+<ApiReference identity="@defjs/core:struct" />
+
+```ts
+import { struct } from '@defjs/core'
+
+const User = struct.object({
+  id: struct.number(),
+  displayName: struct.string().alias('display_name'),
+})
+
+const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+```
+
+`struct` 係一個載有 helpers 嘅 plain object。優先用佢，唔好逐個 import constructors。每個 helper 都有自己一頁。
+
+### Primitives 同 containers
+
+| Helper                                                                                                 | 角色                                                |
+| ------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| [`struct.string()`](/zh-Hant-HK/api/core/struct-string)                                                | 文字                                                |
+| [`struct.number()`](/zh-Hant-HK/api/core/struct-number)                                                | 數字，拒絕 `NaN`                                    |
+| [`struct.boolean()`](/zh-Hant-HK/api/core/struct-boolean)                                              | Boolean                                             |
+| [`struct.bigint()`](/zh-Hant-HK/api/core/struct-bigint)                                                | `bigint`，或者解析得到 `bigint` 嘅字串              |
+| [`struct.date()`](/zh-Hant-HK/api/core/struct-date)                                                    | `Date`，來源可以係 `Date`、timestamp 或者字串       |
+| [`struct.literal(value)`](/zh-Hant-HK/api/core/struct-literal)                                         | 精確 literal                                        |
+| [`struct.null()`](/zh-Hant-HK/api/core/struct-null)                                                    | 只接受 `null`                                       |
+| [`struct.any()`](/zh-Hant-HK/api/core/struct-any) / [`unknown()`](/zh-Hant-HK/api/core/struct-unknown) | `null` 同 `undefined` 以外任何值                    |
+| [`struct.array(item)`](/zh-Hant-HK/api/core/struct-array)                                              | 單一 item struct 嘅 array                           |
+| [`struct.tuple(items)`](/zh-Hant-HK/api/core/struct-tuple)                                             | 定長 array；`items` 係 structs 嘅單一 array         |
+| [`struct.record(value)`](/zh-Hant-HK/api/core/struct-record)                                           | 字串 key 加單一 value struct 嘅 plain object        |
+| [`struct.object(shape)`](/zh-Hant-HK/api/core/struct-object)                                           | 帶固定欄位嘅 plain object；未知 keys 會被剔走       |
+| [`struct.or(...options)`](/zh-Hant-HK/api/core/struct-or)                                              | 第一個符合嘅 option                                 |
+| [`struct.intersection(...structs)`](/zh-Hant-HK/api/core/struct-intersection)                          | 每個 struct 都必須符合；object 結果會合併           |
+| [`struct.discriminatedUnion(tag, options)`](/zh-Hant-HK/api/core/struct-discriminatedunion)            | 按 `tag` 欄位嘅值揀選嘅 object option               |
+| [`struct.enum(values)`](/zh-Hant-HK/api/core/struct-enum)                                              | 字串 array，或者 `{ Name: value }` object 嘅 values |
+
+### Body codecs 同 binary values
+
+| Helper                                                                                                                                                          | 角色                                                                                             |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [`struct.formData(shape)`](/zh-Hant-HK/api/core/struct-formdata) / [`urlencoded(shape)`](/zh-Hant-HK/api/core/struct-urlencoded)                                | Object struct 再加一個 codec tag。個 tag 只會喺個 value 係 request body root 嘅時候先生效        |
+| [`struct.arrayBuffer()`](/zh-Hant-HK/api/core/struct-arraybuffer) / [`blob()`](/zh-Hant-HK/api/core/struct-blob) / [`file()`](/zh-Hant-HK/api/core/struct-file) | Binary values。作為 body root 會當 bytes 送出；作為 `output` / `error` 就會揀嗰種 representation |
+| [`struct.string()`](/zh-Hant-HK/api/core/struct-string)                                                                                                         | Text。作為 body root 或者 inbound `string` struct，bytes 會保持係 text                           |
+
+### 解析同 modifiers
+
+[`struct.parse(struct, value, options?)`](/zh-Hant-HK/api/core/struct-parse) 解析未知值，並回傳 `[null, value]` 或者 `[StructError, undefined]`。
+
+每個 struct 都有可串連嘅 modifiers：`.optional()`、`.null()` / `.nullable()`、`.nullish()` 同 `.alias(name)`。詳見 [`StructMethods`](/zh-Hant-HK/api/core/structmethods-type)。
+
+[Struct](/zh-Hant-HK/api/struct)
