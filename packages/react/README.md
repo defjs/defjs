@@ -1,12 +1,8 @@
 # @defjs/react
 
-Thin React plugin for `@defjs/core`. It provides an existing Defjs client through React Context.
+Thin React plugin for `@defjs/core`: it provides an application-owned client through React Context. It adds no query layer, cache, Suspense integration, or state management, and never creates, replaces, or disposes a client.
 
-Keep reusable SDK definitions in their own package or module. A React application configures the client, provides it to components, and executes those definitions through `useClient()`. The SDK does not need a React dependency or a component-owned client.
-
-This plugin is optional: import a fixed application-owned client, pass a `Client` explicitly, use Context for tree-level defaults and overrides, or choose your own organization. SDK definitions do not require this plugin. Share an instance only when its captured configuration and state are safe to share; request-specific identity or credentials belong to the appropriate request boundary.
-
-Supports React 18+.
+Keeping SDK definitions in their own package means the SDK needs no React dependency. Requires React 18 or later; the published entry is marked `'use client'`.
 
 ## Install
 
@@ -14,20 +10,12 @@ Supports React 18+.
 bun add @defjs/core @defjs/react react
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.4.0` range. Its tarball retains this `README.md` and the repository `LICENSE`; repository-wide guides and examples remain outside the package.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.4.0` range.
 
-## What this package does
-
-`ClientProvider` exposes the exact `Client` instance supplied by the application. `useClient()` reads the nearest provided instance.
-
-Client creation and configuration stay in `@defjs/core`. The plugin does not create, cache, replace, dispose, abort, or close anything on behalf of the application, and it does not add a query layer, Suspense integration, GraphQL client, or application state management.
-
-## Quick Start
-
-Define the SDK's requests in a shared module, or import them from your published SDK:
+## Quick start
 
 ```tsx
-// api.ts
+// api.ts — reusable definition
 import { defineRequest, struct } from "@defjs/core";
 
 export const getUser = defineRequest({
@@ -38,8 +26,6 @@ export const getUser = defineRequest({
   output: struct.object({ id: struct.number(), name: struct.string() }),
 });
 ```
-
-Create and own the client at the application boundary, then provide it:
 
 ```tsx
 // app.tsx
@@ -58,7 +44,7 @@ export function App() {
 }
 ```
 
-Read the client inside descendants and own request cleanup where the work starts. Best practice: name the command, pass that name to `execute`, and return before reading the user when `error` is set. Abort still belongs to the effect:
+Read the client with `useClient()` and own request cleanup where the work starts:
 
 ```tsx
 import { useEffect, useState } from "react";
@@ -91,31 +77,26 @@ export function UserProfile({ id }: { id: number }) {
 }
 ```
 
-Nested providers follow normal React Context rules: descendants receive the nearest provider's exact client. Supplying a different `client` prop changes the provided value; the plugin does not invent a remount or caching policy.
-
 ## API
 
-### `<ClientProvider client: Client>`
+### `<ClientProvider client={client}>`
 
-Provides the supplied client to descendant components. `children` is optional.
+Provides the exact supplied `Client` to descendants. Nested providers follow normal React Context rules.
 
-### `useClient(): Client`
+### `useClient(overrideClient?): Client`
 
-```ts
-function useClient(overrideClient?: Client): Client;
-```
-
-Returns the exact `overrideClient` when supplied; omitted or `undefined` reads the nearest `ClientProvider`. Throws an `Error` only when neither source supplies a client. Zero-argument calls remain valid.
-
-Always call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.
+Returns `overrideClient` when supplied, otherwise the nearest provided client. Throws only when neither source supplies one. Call it at the top level of a component or Hook — never as `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context.
 
 ## Notes
 
-- The published entry is marked with `'use client'`, so React Server Component consumers treat this plugin as a client boundary.
-- Create request-specific clients at the application boundary for SSR data that contains credentials, cookies, or tenant state.
-- The owner that creates a client also owns all requests, SSE streams, and WebSocket sessions started through it. Provider unmount does not clean them up automatically.
-- Import `createClient`, `withEndpoint`, `withInterceptors`, and all other client options from `@defjs/core`.
+- Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
+- The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. Provider unmount does not clean them up.
+- Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.
+
+## Documentation
+
+- [React API](https://defjs.lyz.cloud/api/react) · [React guide](https://defjs.lyz.cloud/docs/integrations/react)
 
 ## License
 
-MIT License.
+MIT.

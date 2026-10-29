@@ -19,10 +19,10 @@ Crea un directorio de paquete `users-sdk` y guarda esta definición en `src/user
 
 ## 2. Definir la entrada del paquete y su compilación
 
-Exporta la API pública desde `src/index.ts`. El sufijo `.js` corresponde a la salida ESM de TypeScript con `NodeNext`; el archivo fuente sigue siendo `users.ts`.
+Exporta la API pública desde `src/index.ts`:
 
 ```ts title="src/index.ts"
-export { getUser } from "./users.js";
+export { getUser } from "./users";
 ```
 
 Crea este `package.json` en el directorio del paquete. Sustituye `@company` por tu scope de npm antes de publicar. `@defjs/core` es una dependencia peer para que el SDK y la aplicación compartan una versión compatible del entorno de ejecución. Las dependencias de desarrollo permiten compilar y comprobar tipos en local.
@@ -41,13 +41,14 @@ Crea este `package.json` en el directorio del paquete. Sustituye `@company` por 
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
     "@defjs/core": "^0.4.0"
   },
   "devDependencies": {
     "@defjs/core": "^0.4.0",
+    "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
@@ -59,13 +60,11 @@ Crea este `package.json` en el directorio del paquete. Sustituye `@company` por 
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
     "strict": true,
-    "declaration": true,
-    "rootDir": "src",
-    "outDir": "dist"
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }
@@ -75,16 +74,18 @@ Los tipos DOM cubren las API Web públicas de Defjs y `ESNext.Disposable` añade
 
 ## 3. Compilar y comprobar el paquete
 
+`tsdown` agrupa el punto de entrada en `dist/index.js` y genera `dist/index.d.ts`.
+
 Desde el directorio `users-sdk`, ejecuta:
 
 ```sh
-npm install
-npm run build
-npm pack --dry-run
-npm pack
+bun install
+bun run build
+bun pm pack --dry-run
+bun pm pack
 ```
 
-Comprueba que la vista previa incluya `dist/index.js`, `dist/index.d.ts`, `dist/users.js` y `dist/users.d.ts`. Con el nombre del ejemplo, el último comando genera `company-users-sdk-0.1.0.tgz`. Así puedes probar los archivos realmente empaquetados desde otra aplicación. Una [prueba con Fetch local](/es-ES/recipes/test-with-handle) debe cubrir los contratos de éxito y error antes de publicar.
+Comprueba que la vista previa incluya `dist/index.js` y `dist/index.d.ts`. Con el nombre del ejemplo, el último comando genera `company-users-sdk-0.1.0.tgz`. Así puedes probar los archivos realmente empaquetados desde otra aplicación. Una [prueba con Fetch local](/es-ES/recipes/test-with-handle) debe cubrir los contratos de éxito y error antes de publicar.
 
 Prueba también el mismo endpoint exportado con dos clientes que usen distintas direcciones de servicio y credenciales. En el proyecto consumidor separado, comprueba los tipos y la ejecución del archivo. Cubre la cancelación y el cierre de recursos en las API de streaming. Documenta en el README del SDK la API del servicio, las versiones compatibles de Core y la autenticación esperada.
 
@@ -93,7 +94,7 @@ Prueba también el mismo endpoint exportado con dos clientes que usen distintas 
 Instala el archivo y una versión compatible de Defjs en una aplicación ESM separada. Ajusta la ruta relativa a tus directorios:
 
 ```sh
-npm install ../users-sdk/company-users-sdk-0.1.0.tgz @defjs/core@^0.4.0
+bun add ../users-sdk/company-users-sdk-0.1.0.tgz @defjs/core@^0.4.0
 ```
 
 La aplicación importa el punto de entrada del paquete:
@@ -112,17 +113,17 @@ El siguiente ejemplo ejecutable de la documentación usa la importación relativ
 Ada
 ```
 
-Guarda la aplicación como `app.ts` y ejecuta `bun app.ts`, o `node app.ts` con una versión de Node.js descrita en el [inicio rápido](/es-ES/docs/start). El handler local permite probar sin un servicio en ejecución. Para la API real, la aplicación elimina `withHTTPHandle(...)` y configura URL base, autenticación e interceptores en su cliente. Sigue gestionando las tuplas de resultado y la cancelación.
+Guarda la aplicación como `app.ts` y ejecuta `bun app.ts`. El handler local permite probar sin un servicio en ejecución. Para la API real, la aplicación elimina `withHTTPHandle(...)` y configura URL base, autenticación e interceptores en su cliente. Sigue gestionando las tuplas de resultado y la cancelación.
 
 ## 5. Publicar en npm
 
 Tras comprobar scope, nombre, versión y archivo, y con una cuenta npm autorizada para publicar en ese scope, ejecuta desde el paquete:
 
 ```sh
-npm publish --access public
+bun publish --access public
 ```
 
-Después, las aplicaciones pueden instalarlo con `npm install @company/users-sdk @defjs/core@^0.4.0`. Versiona los cambios de entradas, salidas, errores y colocación en la solicitud como cambios del contrato del SDK. Los endpoints de Defjs siguen ejecutándose mediante un cliente Defjs; exportar el paquete no altera ese contrato.
+Después, las aplicaciones pueden instalarlo con `bun add @company/users-sdk @defjs/core@^0.4.0`. Versiona los cambios de entradas, salidas, errores y colocación en la solicitud como cambios del contrato del SDK. Los endpoints de Defjs siguen ejecutándose mediante un cliente Defjs; exportar el paquete no altera ese contrato.
 
 Las factorías de clientes y los métodos auxiliares son complementos opcionales. Pueden ofrecer valores predeterminados del servicio o comportamiento de dominio, admitir la configuración del consumidor y conservar los endpoints exportados directamente. Documenta las conversiones de errores y las reglas de ciclo de vida que introduzcan. Un SDK reutilizable no requiere una factoría.
 

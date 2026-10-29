@@ -15,32 +15,10 @@ Eine Definition bleibt vom Client unabhängig. Ihr Aufruf erzeugt nur einen Comm
 
 `@defjs/core` ist ESM und läuft auf Node.js oder Bun. Node.js 22.18+ (oder 24+) führt die `.ts`-Datei direkt per Type Stripping aus; ältere 22.x-Releases brauchen `--experimental-strip-types`. Behalte `"type": "module"` in der package.json. Im Browser brauchst du weiterhin Bundler und Fetch.
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## Schritt 2 — Request definieren
 
 Lege als SDK-Autor `src/define-request.ts` an und exportiere `getUser`. Der Input-Struct beschreibt die Eingabe des Aufrufers. `builder` bildet sie auf den Request ab. Hier ist die ganze Eingabe das Path-Objekt; skalare Felder ohne Alias füllen `:id`. Base-URL und Authentifizierung konfiguriert später die Anwendung.
@@ -63,35 +41,14 @@ Lege daneben `src/execute-locally.ts` an. Die Anwendung importiert `getUser`, er
 
 So startest du:
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 Probier einen fehlenden User — ändere die Path-id auf `8` und lauf nochmal:
 
 ```txt

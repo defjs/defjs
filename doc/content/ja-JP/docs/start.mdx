@@ -15,32 +15,10 @@ description: SDK の API 定義を export し、別ファイルでアプリケ�
 
 `@defjs/core` は ESM で、Node.js、Bun で動きます。Node.js 22.18+（または 24+）は type stripping により `.ts` をそのまま実行します。それより古い 22.x では `--experimental-strip-types` が要ります。package.json に `"type": "module"` を書いてください。ブラウザーでもバンドラーと Fetch は要ります。
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## Step 2 — SDK の定義を export する [#step-2--リクエストを定義する]
 
 `src/define-request.ts` を作ります。SDK はここで `getUser` を export します。入力 Struct は呼び出し側が渡す値を宣言し、`builder` はその値の配置先を決めます。ここでは入力全体を path オブジェクトとして渡すため、エイリアスのないスカラーフィールドが `:id` を埋めます。定義には環境固有の URL や認証情報を含めません。
@@ -63,35 +41,14 @@ yarn add @defjs/core
 
 実行します。
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 いないユーザーも試してみましょう — path の id を `8` にしてもう一度実行します。
 
 ```txt

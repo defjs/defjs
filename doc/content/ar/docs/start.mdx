@@ -15,32 +15,10 @@ description: صدّر تعريف API من SDK، واضبط Client في ملف ا
 
 `@defjs/core` هو ESM ويعمل على Node.js أو Bun. يشغّل Node.js 22.18+ (أو 24+) ملف `.ts` مباشرة عبر type stripping؛ أما إصدارات 22.x الأقدم فتحتاج `--experimental-strip-types`. ضع `"type": "module"` في package.json. في المتصفح ما زلت تحتاج المُجمّع وFetch.
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## الخطوة 2 — صدّر تعريف SDK [#الخطوة-2--عرّف-الطلب]
 
 أنشئ `src/define-request.ts` ليصدّر SDK الدالة `getUser`. يعلن Struct المدخل القيمة التي يمرّرها المستدعي، ويحدّد `builder` موضعها في الطلب. هنا يُمرَّر المدخل كاملًا بوصفه كائن المسار، فتملأ الحقول ذات القيم المفردة بلا alias الموضع `:id`. أبقِ عناوين الخدمة وبيانات الاعتماد الخاصة بالبيئة خارج التعريف.
@@ -63,35 +41,14 @@ yarn add @defjs/core
 
 شغّله:
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 جرّب مستخدمًا مفقودًا — غيّر معرّف المسار إلى `8` وشغّل مجددًا:
 
 ```txt

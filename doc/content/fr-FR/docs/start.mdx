@@ -15,32 +15,10 @@ Une définition reste indépendante du client. L’appeler crée seulement une c
 
 `@defjs/core` est ESM et tourne sur Node.js ou Bun. Node.js 22.18+ (ou 24+) exécute le `.ts` directement grâce au type stripping ; les versions 22.x plus anciennes demandent `--experimental-strip-types`. Garde `"type": "module"` dans package.json. Dans un navigateur, tu as toujours besoin de ton bundler et de Fetch.
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## Étape 2 — Définir la requête
 
 Côté SDK, crée `src/define-request.ts` et exporte `getUser`. Le Struct d’entrée décrit la valeur fournie par l’appelant. `builder` place cette valeur dans la requête. Ici, toute l’entrée est l’objet de chemin : les champs scalaires sans alias remplissent `:id`. L’application configurera l’URL de base et l’authentification.
@@ -63,35 +41,14 @@ Crée `src/execute-locally.ts` à côté. L’application importe `getUser`, cr�
 
 Lance-le :
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 Essaie un utilisateur manquant — change l’id de path en `8` et relance :
 
 ```txt

@@ -18,10 +18,10 @@ description: صدّر تعريفات API وتصريحات الأنواع في ح
 صدّرها من `src/index.ts`:
 
 ```ts
-export { getUser } from "./users.js";
+export { getUser } from "./users";
 ```
 
-الامتداد `.js` هو المسار داخل حزمة ESM المترجَمة. يحلّه TypeScript إلى `users.ts` وقت البناء. مع نمو SDK، أضف وحدات للعمليات وأعد تصدير نقاط نهايتها من المدخل نفسه.
+مع نمو SDK، أضف وحدات للعمليات وأعد تصدير نقاط نهايتها من المدخل نفسه.
 
 ## 2. جهّز JavaScript وتصريحات الأنواع للتوزيع
 
@@ -41,13 +41,14 @@ export { getUser } from "./users.js";
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
     "@defjs/core": "^0.4.0"
   },
   "devDependencies": {
     "@defjs/core": "^0.4.0",
+    "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
@@ -61,13 +62,11 @@ export { getUser } from "./users.js";
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
     "strict": true,
-    "declaration": true,
-    "rootDir": "src",
-    "outDir": "dist"
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }
@@ -75,16 +74,18 @@ export { getUser } from "./users.js";
 
 توفّر قيم `lib` تصريحات الأنواع، ولا تضيف polyfills وقت التشغيل. ما زال التطبيق يحتاج إلى Web APIs التي تستخدمها وسائل النقل المختارة.
 
+`tsdown` يجمّع المدخل في `dist/index.js` ويولّد `dist/index.d.ts`.
+
 ابنِ الحزمة وافحص محتوياتها:
 
 ```sh
-npm install
-npm run build
-npm pack --dry-run
-npm pack
+bun install
+bun run build
+bun pm pack --dry-run
+bun pm pack
 ```
 
-تأكّد من أن الأرشيف يحتوي على `dist/index.js` و`dist/index.d.ts` ووحدات العمليات التي يشيران إليها. ثبّت الأرشيف في تطبيق مستقل وتحقّق من الأنواع والتنفيذ معًا قبل النشر. وثّق في README الخاص بـ SDK واجهات الخدمة وإصدارات Core المتوافقة والمصادقة المطلوبة وأي إعدادات افتراضية اختيارية.
+تأكّد من أن الأرشيف يحتوي على `dist/index.js` و`dist/index.d.ts`. ثبّت الأرشيف في تطبيق مستقل وتحقّق من الأنواع والتنفيذ معًا قبل النشر. وثّق في README الخاص بـ SDK واجهات الخدمة وإصدارات Core المتوافقة والمصادقة المطلوبة وأي إعدادات افتراضية اختيارية.
 
 ## 3. نفّذ من التطبيق المستهلك
 
@@ -101,7 +102,7 @@ Ada
 عند استخدام الحزمة، ثبّتها مع إصدار متوافق من Core:
 
 ```sh
-npm install @company/users-sdk @defjs/core@^0.4.0
+bun add @company/users-sdk @defjs/core@^0.4.0
 ```
 
 استبدل الاستيراد النسبي في المثال بما يلي:
@@ -119,7 +120,7 @@ import { getUser } from "@company/users-sdk";
 بعد اجتياز الفحوص، انشر من مجلد SDK باستخدام حساب npm الخاص بك:
 
 ```sh
-npm publish --access public
+bun publish --access public
 ```
 
 ينشر هذا الأمر حزمة عامة. اتبع سجل الحزم وسياسة الوصول الخاصة بمؤسستك إذا كان SDK خاصًا. لا يولّد Defjs الحزمة أو ينشرها نيابةً عنك.

@@ -21,7 +21,7 @@ For complete guides, examples, and the API reference, visit **[defjs.lyz.cloud](
 ## Quick start
 
 ```bash
-npm install @defjs/core
+bun add @defjs/core
 ```
 
 Best practice: keep the definition independent of the client. Calling it creates a command; name that command, execute the name, and return from the function when the error-first tuple is set.

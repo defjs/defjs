@@ -15,32 +15,10 @@ description: 先匯出 GET /users/:id 定義，再由應用程式建立 Client�
 
 `@defjs/core` 是 ESM，可在 Node.js 或 Bun 上執行。Node.js 22.18+（或 24+）透過 type stripping 直接執行 `.ts` 檔；更舊的 22.x 版本需要 `--experimental-strip-types`。package.json 要保留 `"type": "module"`。瀏覽器環境仍要有 bundler 與 Fetch。
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## Step 2 — 定義請求
 
 建立 `src/define-request.ts`，匯出 SDK 的 `getUser` 端點。Input Struct 描述呼叫端提供的值，`builder` 決定值在請求中的位置。這裡整個 input 就是 path 物件，沒有 alias 的純量欄位會填入 `:id`。定義檔案不建立 Client，也不發出請求。
@@ -63,35 +41,14 @@ yarn add @defjs/core
 
 執行：
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 試一個不存在的使用者 — 把 path id 改成 `8` 再跑一次：
 
 ```txt

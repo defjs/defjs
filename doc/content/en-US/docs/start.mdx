@@ -15,32 +15,10 @@ A definition stays independent of the client. Calling it only creates a command.
 
 `@defjs/core` is ESM and runs on Node.js or Bun. Node.js 22.18+ (or 24+) runs the `.ts` file directly through type stripping; older 22.x releases need `--experimental-strip-types`. Keep `"type": "module"` in package.json. In a browser you still need your bundler and Fetch.
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## Step 2 — Define the request
 
 Create `src/define-request.ts`. This is the SDK author's module: it exports `getUser` without creating a client. The input struct is the caller's value. `builder` places that value on the request. Here the whole input is the path object, so alias-free scalar fields fill `:id`.
@@ -63,35 +41,14 @@ Create `src/execute-locally.ts` beside the definition. This is the consuming app
 
 Run it:
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 Try a missing user — change the path id to `8` and run again:
 
 ```txt

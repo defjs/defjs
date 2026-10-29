@@ -15,32 +15,10 @@ description: SDK의 API 정의를 export하고, 다른 파일에서 앱의 Clien
 
 `@defjs/core`는 ESM이고 Node.js, Bun에서 돌아요. Node.js 22.18+ (또는 24+)는 type stripping으로 `.ts` 파일을 그대로 실행하고, 그보다 낮은 22.x는 `--experimental-strip-types`가 필요해요. package.json에 `"type": "module"`을 두세요. 브라우저에서는 여전히 번들러와 Fetch가 필요해요.
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## Step 2 — SDK 정의 export하기 [#step-2--요청-정의하기]
 
 `src/define-request.ts`를 만듭니다. SDK는 여기서 `getUser`를 export합니다. 입력 Struct는 호출자가 전달할 값을 선언하고, `builder`는 요청에서 그 값을 배치할 위치를 정합니다. 여기서는 입력 전체를 path 객체로 전달하므로 alias가 없는 스칼라 필드가 `:id`를 채웁니다. 정의에는 환경별 URL이나 인증 정보를 넣지 않습니다.
@@ -63,35 +41,14 @@ yarn add @defjs/core
 
 실행해요:
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 없는 사용자를 시험해 보려면 path id를 `8`로 바꾸고 다시 실행해요:
 
 ```txt

@@ -18,10 +18,10 @@ SDK 把团队提供的 API 打包交付。使用 Defjs 时，SDK 导出端点定
 从 `src/index.ts` 导出端点：
 
 ```ts
-export { getUser } from "./users.js";
+export { getUser } from "./users";
 ```
 
-`.js` 是编译后 ESM 包中的路径，TypeScript 构建时会将它解析为 `users.ts`。SDK 增长时，可以增加操作模块并从入口重新导出端点。项目结构如下：
+SDK 增长时，可以增加操作模块并从入口重新导出端点。项目结构如下：
 
 ```txt
 users-sdk/
@@ -50,13 +50,14 @@ users-sdk/
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
     "@defjs/core": "^0.4.0"
   },
   "devDependencies": {
     "@defjs/core": "^0.4.0",
+    "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
@@ -70,13 +71,11 @@ Core 是与应用共享的外部运行时依赖。`peerDependencies` 声明 SDK 
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
     "strict": true,
-    "declaration": true,
-    "rootDir": "src",
-    "outDir": "dist"
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }
@@ -84,16 +83,18 @@ Core 是与应用共享的外部运行时依赖。`peerDependencies` 声明 SDK 
 
 这些 lib 提供类型声明，不提供运行时 polyfill。应用仍需具备所选传输使用的 Web API。
 
+`tsdown` 把入口打包成 `dist/index.js`，并生成 `dist/index.d.ts`。
+
 构建并检查包：
 
 ```sh
-npm install
-npm run build
-npm pack --dry-run
-npm pack
+bun install
+bun run build
+bun pm pack --dry-run
+bun pm pack
 ```
 
-确认 tarball 包含 `dist/index.js`、`dist/index.d.ts` 及它们引用的操作模块。先在独立应用中安装这个 tarball，验证类型和执行行为，再发布。SDK 的 README 应说明服务 API、兼容的 Core 版本、所需鉴权及可选默认配置。
+确认 tarball 包含 `dist/index.js`、`dist/index.d.ts`。先在独立应用中安装这个 tarball，验证类型和执行行为，再发布。SDK 的 README 应说明服务 API、兼容的 Core 版本、所需鉴权及可选默认配置。
 
 ## 3. 在消费方应用中执行
 
@@ -110,7 +111,7 @@ Ada
 使用发布后的 SDK 时，同时安装兼容的 Core：
 
 ```sh
-npm install @company/users-sdk @defjs/core@^0.4.0
+bun add @company/users-sdk @defjs/core@^0.4.0
 ```
 
 把示例中的相对导入替换为 npm 包导入：
@@ -128,7 +129,7 @@ import { getUser } from "@company/users-sdk";
 检查通过后，在 SDK 目录中使用你的 npm 账号发布：
 
 ```sh
-npm publish --access public
+bun publish --access public
 ```
 
 这条命令会发布公开包。私有 SDK 请遵循组织的 registry 与访问策略。Defjs 不会代你生成或发布这个包。

@@ -15,32 +15,10 @@ description: Экспортируй эндпоинт SDK, выполни его 
 
 `@defjs/core` — ESM и работает на Node.js или Bun. Node.js 22.18+ (или 24+) запускает `.ts` напрямую через type stripping; более ранним релизам 22.x нужен `--experimental-strip-types`. Оставь в package.json `"type": "module"`. В браузере по-прежнему нужны бандлер и Fetch.
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun add @defjs/core
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-npm install @defjs/core
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-pnpm add @defjs/core
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-yarn add @defjs/core
-```
-
-</Tab>
-</Tabs>
 ## Шаг 2 — Опиши запрос
 
 На стороне SDK создай `src/define-request.ts` и экспортируй `getUser`. Входной Struct описывает данные вызывающей стороны. `builder` размещает их в запросе. Здесь весь input — объект пути: скалярные поля без алиасов заполняют `:id`. Базовый URL и аутентификацию позже настроит приложение.
@@ -63,35 +41,14 @@ yarn add @defjs/core
 
 Запусти:
 
-<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
-<Tab value="bun">
 ```sh
 bun src/execute-locally.ts
 ```
 
-</Tab>
-<Tab value="npm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="pnpm">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-<Tab value="yarn">
-```sh
-node src/execute-locally.ts
-```
-
-</Tab>
-</Tabs>
 ```txt
 Loaded Ada from 200
 ```
+
 Попробуй отсутствующего пользователя — смени path id на `8` и запусти снова:
 
 ```txt

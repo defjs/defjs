@@ -18,10 +18,10 @@ Create `src/users.ts` in your SDK project. Keep paths, input mapping, responses,
 Expose it from `src/index.ts`:
 
 ```ts
-export { getUser } from "./users.js";
+export { getUser } from "./users";
 ```
 
-The `.js` extension is the path in the compiled ESM package. TypeScript resolves it to `users.ts` while building. Add other operation modules and re-export their endpoints as your SDK grows.
+Add other operation modules and re-export their endpoints as your SDK grows.
 
 ## 2. Package JavaScript and declarations
 
@@ -52,13 +52,14 @@ Use this `package.json`, replacing the example name with a package scope you own
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
     "@defjs/core": "^0.4.0"
   },
   "devDependencies": {
     "@defjs/core": "^0.4.0",
+    "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
@@ -72,13 +73,11 @@ Add `tsconfig.json`:
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
     "strict": true,
-    "declaration": true,
-    "rootDir": "src",
-    "outDir": "dist"
+    "noEmit": true
   },
   "include": ["src/**/*.ts"]
 }
@@ -86,16 +85,18 @@ Add `tsconfig.json`:
 
 These library declarations provide types, not runtime polyfills. The application still needs the Web APIs used by its chosen transports.
 
+`tsdown` bundles the entry into `dist/index.js` and emits `dist/index.d.ts`.
+
 Build and inspect the package:
 
 ```sh
-npm install
-npm run build
-npm pack --dry-run
-npm pack
+bun install
+bun run build
+bun pm pack --dry-run
+bun pm pack
 ```
 
-Check that the tarball contains `dist/index.js`, `dist/index.d.ts`, and the operation modules they reference. Install that tarball into a separate application and verify both its types and execution before publishing. The SDK's README should document the service API, compatible Core versions, expected authentication, and any optional defaults.
+Check that the tarball contains `dist/index.js` and `dist/index.d.ts`. Install that tarball into a separate application and verify both its types and execution before publishing. The SDK's README should document the service API, compatible Core versions, expected authentication, and any optional defaults.
 
 ## 3. Execute from the consuming application
 
@@ -112,7 +113,7 @@ Ada
 For the packaged SDK, install it together with a compatible Core release:
 
 ```sh
-npm install @company/users-sdk @defjs/core@^0.4.0
+bun add @company/users-sdk @defjs/core@^0.4.0
 ```
 
 Replace the example's relative import with:
@@ -130,7 +131,7 @@ Use [client-local tests](/recipes/test-with-handle) to exercise the exported def
 When the package has passed your checks, publish from the SDK directory with your npm account:
 
 ```sh
-npm publish --access public
+bun publish --access public
 ```
 
 This command publishes a public package. Use your organization's registry and access policy for a private SDK. Defjs does not generate or publish the package for you.
