@@ -17,7 +17,16 @@ const User = struct.object({
   displayName: struct.string().alias("display_name"),
 });
 
-const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readUser() {
+  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+  if (error) {
+    console.error(error.message);
+    return;
+  }
+  console.log(user.displayName);
+}
+
+readUser();
 ```
 
 ### 原语和容器

@@ -5,10 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
 import { createStringifier } from "fumadocs-core/mdx-plugins/stringifier";
-import { readableMarkdown } from "./markdown";
 import {
   apiReferenceFile,
-  expandApiSignatureTags,
   handCopiedGeneratedNames,
   readSignatureCatalog,
   remarkApiSignatures,
@@ -201,26 +199,23 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
   ).toThrow("API signature name in unknown file must be a string");
 });
 
-test("authored tags expand outside fences and unknown components never reach readable markdown", () => {
-  const markdown = [
-    '<ApiSignature name="withEndpoint" />',
-    "",
-    "```ts",
-    '<ApiSignature name="Missing" />',
-    "```",
-    "",
-  ].join("\n");
-  const expanded = expandApiSignatureTags(markdown, catalog, "http.mdx");
-  expect(expanded).toContain(
-    "```ts\nfunction withEndpoint(endpoint: string): ClientOption;\n```",
-  );
-  expect(expanded).toContain('<ApiSignature name="Missing" />');
-  expect(readableMarkdown(expanded, "en-US")).toContain(
-    "function withEndpoint",
-  );
-  expect(() =>
-    expandApiSignatureTags("<ApiSignature />", catalog, "http.mdx"),
-  ).toThrow("Missing API signature name in http.mdx");
+test("a code fence keeps an unknown signature tag literal", () => {
+  const root = {
+    type: "root",
+    children: [
+      {
+        type: "code",
+        lang: "ts",
+        value: '<ApiSignature name="Missing" />',
+      },
+    ],
+  };
+  replaceApiSignatures(root, { path: "http.mdx" }, catalog);
+  expect(root.children[0]).toEqual({
+    type: "code",
+    lang: "ts",
+    value: '<ApiSignature name="Missing" />',
+  });
 });
 
 test("the documentation catalog loads from disk and renders a real signature", () => {
@@ -311,20 +306,4 @@ test("fences keep example code and reject a hand-copied generated entry", () => 
     }
   }
   if (hits.length > 0) throw new Error(hits.join("\n"));
-});
-
-test("overview pages expand every signature tag before readable markdown", () => {
-  const root = fileURLToPath(new URL("../../content", import.meta.url));
-  const loaded = readSignatureCatalog(apiReferenceFile());
-  for (const locale of readdirSync(root)) {
-    const dir = join(root, locale, "api");
-    for (const file of readdirSync(dir)) {
-      if (!file.endsWith(".md") && !file.endsWith(".mdx")) continue;
-      const path = `${locale}/api/${file}`;
-      const source = readFileSync(join(dir, file), "utf8");
-      const expanded = expandApiSignatureTags(source, loaded, path);
-      expect(expanded).not.toContain("<ApiSignature");
-      expect(readableMarkdown(expanded, locale)).not.toContain("<ApiSignature");
-    }
-  }
 });

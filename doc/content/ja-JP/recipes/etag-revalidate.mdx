@@ -17,4 +17,6 @@ description: 304 は HTTP status の fault として扱い、キャッシュの 
 Flask
 ```
 
+304 の分岐のあとの `throw error` は、この読み取り関数の境界です。関数は引き続き `Promise<Product>` を返します。304 以外の fault は、その境界から Defjs のタプルとしては返りません。
+
 Core の中で `304` を偽の `200` に書き換えないでください。キャッシュの所有は、`execute` の周りのアプリケーションコードに残します。

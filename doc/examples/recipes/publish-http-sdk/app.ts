@@ -14,8 +14,15 @@ const client = createClient(
   withEndpoint("https://api.example.test"),
   withHTTPHandle(handle),
 );
-const [error, user] = await client.execute(getUser({ id: 7 }));
+async function main() {
+  const command = getUser({ id: 7 });
+  const [error, user] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(user.name);
+}
 
-if (error) console.error(error.code);
-else console.log(user.name);
+void main();
 // #endregion

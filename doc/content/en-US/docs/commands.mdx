@@ -15,6 +15,10 @@ Export named endpoints such as `getUser`, `watchUsers`, or `openRoom`, and share
 
 Definitions can live in a local module or an [npm SDK package](/recipes/publish-http-sdk). Optional client factories and convenience methods can build on those exports; they should make their error and lifecycle behavior explicit. A factory is not required to publish an SDK.
 
+## Best practice
+
+A definition stays independent of the client. Calling it only creates a command. Give that command a name, then pass the name to `client.execute` on the client the application owns. The application also owns the service address and credentials. Inspect the error-first tuple first. When `error` is present, report `error.code` and return from the function before reading the success value.
+
 ## Basic Setup
 
 <include cwd lang="typescript">

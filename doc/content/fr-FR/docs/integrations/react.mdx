@@ -43,6 +43,8 @@ Une lib de query peut posséder cache, retries, suppression de résultats périm
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+`throw error` ici est le canal de rejet de la fonction de query, pas l’appel Defjs par défaut. Le tuple est inspecté d’abord ; seul cet adaptateur rejette, pour que la lib de query enregistre l’échec.
+
 N’enveloppe pas la même commande dans un second effet — deux propriétaires rendent l’annulation et la gestion des résultats périmés ambiguës.
 
 ## Posséder le travail realtime

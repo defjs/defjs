@@ -45,7 +45,7 @@ const client = createClient(
 
 ### Metrics without local spans
 
-Omit `tracer` to record metrics without local spans. The plugin never calls `trace.getTracer(...)` and does not invoke `startSpanHook`, `requestHook`, or `responseHook` in this mode. Initialize your application's OpenTelemetry SDK with a `MeterProvider` separately, then pass its meter:
+Omit `tracer` to record metrics without local spans. The plugin never calls `trace.getTracer(...)` and does not invoke `startSpanHook`, `requestHook`, or `responseHook` in this mode. Initialize your application's OpenTelemetry SDK with a `MeterProvider` separately, then pass its meter. Best practice: name the command and return from the function when the error-first tuple is set:
 
 ```typescript
 import { createClient, defineRequest, withEndpoint } from "@defjs/core";
@@ -64,8 +64,16 @@ const client = createClient(
   withOpenTelemetryServer({ meter }),
 );
 
-const [error] = await client.execute(readOrders());
-if (error) console.error(error.code);
+async function main() {
+  const command = readOrders();
+  const [error] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+}
+
+void main();
 ```
 
 Context propagation still forwards the extracted parent context without a local span; WebSocket `queryPropagation` still defaults to `false`. With a `tracer`, `requireParentSpan: true` bypasses spans, propagation, hooks, metrics, and logs when no active parent exists. Without a `tracer`, it blocks neither metrics nor logs.

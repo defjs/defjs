@@ -7,6 +7,10 @@ description: 先导出 GET /users/:id 定义，再由应用创建 Client，在�
 
 这次先以 SDK 作者的身份定义并导出 `GET /users/:id`，再以应用开发者的身份导入它、创建 Client 并执行。两个文件分别承担契约与调用，`200` 和声明的 `404` 都保留类型。本地 handle 让第一次执行可以离线完成；连接真实服务时继续使用同一个定义。
 
+## 最佳实践
+
+定义与 client 彼此独立。调用定义只会创建 command。先给这个 command 起名，再把这个名字交给应用自己的 client 去 `client.execute`。服务地址和凭证也归应用所有。先检查 error-first 元组。`error` 有值时，报告 `error.code`，从函数返回，然后再读取成功值。
+
 ## 第 1 步 — 安装
 
 `@defjs/core` 是 ESM，可运行在 Node.js 或 Bun 上。Node.js 22.18+（或 24+）通过类型擦除直接运行 `.ts`；更早的 22.x 需要 `--experimental-strip-types`。package.json 里保留 `"type": "module"`。浏览器里照样需要 bundler 和 Fetch。

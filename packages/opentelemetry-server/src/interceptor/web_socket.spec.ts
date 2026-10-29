@@ -39,19 +39,13 @@ import {
   resolveRequestUrl,
 } from "../../../core/src/internal/url";
 
-interface QueryCarrier {
-  params: URLSearchParams;
-}
-
 function createMockWsPropagator(): TextMapPropagator {
   return {
     inject: vi.fn(
-      (_ctx: Context, carrier: unknown, _setter?: TextMapSetter<unknown>) => {
-        if (isQueryCarrier(carrier)) {
-          carrier.params.set("traceparent", "mock-trace-id");
-          carrier.params.set("tracestate", "vendor=value");
-          carrier.params.set("baggage", "tenant=acme");
-        }
+      (_ctx: Context, carrier: unknown, setter: TextMapSetter<unknown>) => {
+        setter.set(carrier, "traceparent", "mock-trace-id");
+        setter.set(carrier, "tracestate", "vendor=value");
+        setter.set(carrier, "baggage", "tenant=acme");
       },
     ),
     extract: vi.fn(
@@ -60,14 +54,6 @@ function createMockWsPropagator(): TextMapPropagator {
     ),
     fields: vi.fn(() => ["traceparent", "tracestate", "baggage"]),
   };
-}
-
-function isQueryCarrier(value: unknown): value is QueryCarrier {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    Reflect.get(value, "params") instanceof URLSearchParams
-  );
 }
 
 let mockPropagator: ReturnType<typeof createMockWsPropagator>;

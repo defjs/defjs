@@ -44,6 +44,10 @@ Read the reference that matches your change before editing:
 
 Authentication, tracing, and cross-request header changes belong in an interceptor. `builder` only places the current input. Low-cardinality identity belongs in the definition's `operation`.
 
+## Example best practice
+
+Examples, READMEs, and guides follow the minimal example in `doc/examples/http/basic-setup.ts`. LLM resources use Fumadocs output directly; keep guidance in the documentation source, without handwritten preambles, duplicated examples, or post-generation Markdown rewriting. A definition does not capture a client. Calling it creates a command; bind that command to a name and pass the name to `client.execute`. `input` declares the value and a synchronous pure `builder` places it. The application owns the endpoint, credentials, and client. Read the error-first tuple and return from the surrounding function before using a success value. Complete scripts wrap that call in a function so the return stays legal in ESM, and leave definitions and exports outside it. Several operations use names such as `firstCommand` and `retryCommand`. Ordinary Defjs faults stay on the tuple; exception-based adapters must be explicitly identified as integration-specific policies, not the default calling style. Preserve cancellation, retries, ETag handling, SSE/WebSocket runtime errors, and close or dispose ownership. Do not rewrite historical design, audit, or performance records to match current example style.
+
 ## Repository map
 
 ### `@defjs/core`
@@ -80,7 +84,7 @@ Documentation unit specs (`*.spec.ts`) sit beside the source in `app/`, `scripts
 
   | Pattern             | Runs in                                | Use for                       |
   | ------------------- | -------------------------------------- | ----------------------------- |
-  | `*.spec.ts`         | Vitest `core-server` (and Node 24 job) | server / Bun behavior         |
+  | `*.spec.ts`         | Vitest `core-server` (and Node 26 job) | server / Bun behavior         |
   | `*.browser.spec.ts` | Chromium and Firefox                   | shared browser behavior       |
   | `*.server.spec.ts`  | server only                            | Node-specific server behavior |
   | `*.chrome.spec.ts`  | Chromium only                          | engine-specific behavior      |
@@ -157,9 +161,9 @@ bun run --cwd doc typecheck
 
 `bun run typecheck` at the root already includes the documentation type check.
 
-### Node 24
+### Node 26
 
-CI runs a second job on Node 24 because Vitest's binary is `#!/usr/bin/env node`. `bun run` from the repository root follows `bunfig.toml` `[run] bun = true` and stays on Bun (Bun reads `bunfig.toml` only from the current directory), so the Node job invokes `bunx --no-install vitest` directly. Reproduce it with:
+CI runs a second job on Node 26 because Vitest's binary is `#!/usr/bin/env node`. `bun run` from the repository root follows `bunfig.toml` `[run] bun = true` and stays on Bun (Bun reads `bunfig.toml` only from the current directory), so the Node job invokes `bunx --no-install vitest` directly. Reproduce it with:
 
 ```bash
 cd packages/core && bunx --no-install vitest run --config vitest.config.ts --project core-server --coverage.enabled=false
@@ -186,6 +190,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 - Assert the bytes that were sent, not a runtime's re-parse of them. Bun's multipart parser drops a file part's `Content-Type`, so multipart tests compare the raw body (`packages/core/test/multipart-fixture.ts` and the `/e2e/echo-raw` route).
 - Browser projects share a fixed Vitest port. Run one browser test process at a time. Firefox Vitest instances pass `browserLaunchEnv()` from `test/firefox-app-data.ts` so Firefox starts on macOS 27; the Chromium Vitest provider does not. The documentation E2E project is Chromium only.
 - The root `test:unit` runs `bun test ./test` after the workspaces; that is where `test/assert-pack.test.ts` lives.
+- A test observes behavior, or an independent public contract or generated artifact. Do not read an implementation file, a function's source text, or the layout of its dependencies as a stand-in for that observation. Text a transformer is specified to accept, and a check that authored documents meet a content rule, are contracts about that text; they are not covered by this prohibition.
 
 ## Documentation site rules
 

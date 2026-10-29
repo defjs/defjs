@@ -29,6 +29,10 @@ SDK 作者匯出具型別的端點定義；應用程式匯入這些定義，建�
 
 定義不綁定特定應用程式的 Client，但仍屬於 Defjs 的執行階段契約：它包含 Struct、builder 與具體傳輸語意，並不是任何請求函式庫都能執行的 JSON 描述。
 
+## 最佳實踐
+
+定義與 client 彼此獨立。呼叫定義只會建立 command。先為這個 command 命名，再把這個名字交給應用程式自己的 client 去 `client.execute`。服務位址與憑證也由應用程式持有。先檢查 error-first tuple。`error` 有值時，報告 `error.code`，從函式返回，然後再讀取成功值。
+
 從[快速開始](/zh-Hant-TW/docs/start)體驗定義與呼叫，再了解[定義與執行](/zh-Hant-TW/docs/commands)、[建置並發佈 SDK](/zh-Hant-TW/recipes/publish-http-sdk)與[應用程式的 Client 設定](/zh-Hant-TW/docs/client)。[設計決策](/zh-Hant-TW/docs/design-decisions)說明這些邊界如何協助 SDK 設計。
 
 ## 選傳輸方式

@@ -7,6 +7,10 @@ description: 先匯出 GET /users/:id 定義，再由應用程式建立 Client�
 
 這次先以 SDK 作者的身份定義並匯出 `GET /users/:id`，再以應用程式開發者的身份匯入它、建立 Client 並執行。兩個檔案分別負責契約與呼叫，`200` 及已聲明的 `404` 都保留類型。本地 handle 讓第一次執行可以離線完成；連接真實服務時繼續使用同一個定義。
 
+## 最佳實踐
+
+Definition 同 client 係分開嘅。Call definition 只會建立 command。先畀呢個 command 一個名，再將個名交畀應用程式自己嘅 client 去 `client.execute`。服務地址同 credentials 都歸應用程式所有。先檢查 error-first tuple。`error` 有值時，報告 `error.code`，喺 function 入面 return，然後先讀成功值。
+
 ## Step 1 — 安裝
 
 `@defjs/core` 係 ESM，可以喺 Node.js 或 Bun 上面行。Node.js 22.18+（或 24+）透過 type stripping 直接 run `.ts`；舊啲嘅 22.x 要加 `--experimental-strip-types`。package.json 要保持 `"type": "module"`。Browser 仍然要你自己嘅 bundler 同 Fetch。

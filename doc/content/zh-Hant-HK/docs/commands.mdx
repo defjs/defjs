@@ -11,6 +11,10 @@ SDK 作者用 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 匯出
 
 端點完成後，可以直接作為套件的公開匯出，見[建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)。
 
+## 最佳實踐
+
+Definition 同 client 係分開嘅。Call definition 只會建立 command。先畀呢個 command 一個名，再將個名交畀應用程式自己嘅 client 去 `client.execute`。服務地址同 credentials 都歸應用程式所有。先檢查 error-first tuple。`error` 有值時，報告 `error.code`，喺 function 入面 return，然後先讀成功值。
+
 ## 基本用法
 
 <include cwd lang="typescript">

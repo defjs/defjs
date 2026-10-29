@@ -77,8 +77,20 @@ export function encodeStructValue(
  * - At most **256 nested containers** (`object`, `array`, `record`, or `tuple`) are visited along a path, counting the root container as the first. The next container fails with `invalid_type` at its logical path, with `expected: 'value nested at most 256 levels deep'`. In a union, later candidates may still succeed; if none match, the union reports `invalid_union`. Cycles through declared container fields also reach this limit; shared non-cyclic children are allowed. Union and intersection branches do not add a container level, and `any`/`unknown` values remain opaque rather than being traversed.
  *
  * ```ts
- * const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
- * if (error) return console.error(error.prettify());
+ * import { struct } from "@defjs/core";
+ *
+ * const User = struct.object({ id: struct.number(), displayName: struct.string() });
+ *
+ * function readUser() {
+ *   const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+ *   if (error) {
+ *     console.error(error.prettify());
+ *     return;
+ *   }
+ *   console.log(user.displayName);
+ * }
+ *
+ * readUser();
  * ```
  *
  * `any` and `unknown` do not traverse their values, but an intersection may recursively merge two distinct object or array values returned by those leaves. This merge shares the same 256-container budget with its enclosing logical path. Exceeding it produces `invalid_intersection` at the rejected container's logical path. Identical references are retained without traversal, including a shared cyclic value.

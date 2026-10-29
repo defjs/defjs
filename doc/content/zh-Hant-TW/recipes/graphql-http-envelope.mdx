@@ -18,3 +18,5 @@ ada viewer unavailable viewer unavailable
 ```
 
 HTTP 成功只表示 envelope 到了。應用程式錯誤留在 `errors[]`，直到你的拆封函式 throw 或回傳，包括 `data: null` 的回應。這個例子把缺少的 `data` 與 `data: null` 且帶著 `errors[]` 的情況，都當成應用程式錯誤，而不是 Struct 不匹配。
+
+`if (error) throw error` 把 Defjs fault 轉成這個輔助函式的例外。HTTP 200 上的 GraphQL 失敗仍是 `errors[]` 裡的應用程式錯誤，另外拋出。

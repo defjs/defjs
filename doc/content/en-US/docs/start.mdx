@@ -7,6 +7,10 @@ description: Export your first SDK operation, execute it from a separate applica
 
 You’ll write two files: an SDK module that exports `GET /users/:id`, and an application that imports it and owns the client. The local Fetch handle keeps the first run offline. The same API definition will then work with a client pointed at your service.
 
+## Best practice
+
+A definition stays independent of the client. Calling it only creates a command. Give that command a name, then pass the name to `client.execute` on the client the application owns. The application also owns the service address and credentials. Inspect the error-first tuple first. When `error` is present, report `error.code` and return from the function before reading the success value.
+
 ## Step 1 — Install
 
 `@defjs/core` is ESM and runs on Node.js or Bun. Node.js 22.18+ (or 24+) runs the `.ts` file directly through type stripping; older 22.x releases need `--experimental-strip-types`. Keep `"type": "module"` in package.json. In a browser you still need your bundler and Fetch.

@@ -14,7 +14,7 @@ description: Authorization 첨부와 한 번의 재전송을 interceptor 하나�
 </include>
 
 ```txt
-null 42
+42
 ```
 
 `next`를 다시 호출하면 이 층 **안쪽**의 interceptor(그리고 Fetch 핸들러)만 다시 들어가요. 바깥의 타이밍/인증 wrapper는 다시 돌지 않아요. 그래서 401 배치는 두 번째 `execute`가 아니라 interceptor 하나에 있어야 해요.

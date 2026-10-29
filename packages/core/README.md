@@ -38,18 +38,23 @@ import { createClient, withEndpoint } from "@defjs/core";
 import { getUser } from "./users-sdk.ts";
 
 const client = createClient(withEndpoint("https://api.example.com"));
-const [error, user] = await client.execute(getUser({ id: 1 }));
 
-if (error) {
-  console.error(String(error), error.code);
-} else {
+async function main() {
+  const command = getUser({ id: 1 });
+  const [error, user] = await client.execute(command);
+  if (error) {
+    console.error(String(error), error.code);
+    return;
+  }
   console.log(user.id, user.name);
 }
+
+void main();
 ```
 
 `output` is one Struct for the 2xx body; `error` is one Struct for everything else. `ok` is the only fork, and only one side ever decodes. Omit a side and that body is never read.
 
-`getUser({ id: 1 })` creates a command without sending it. `client.execute(...)` validates, builds, and sends the request using that client's configuration. When the definitions are published, import `getUser` from your SDK package instead of the local file. See [Build and publish an SDK](https://defjs.lyz.cloud/recipes/publish-http-sdk) for package exports, declarations, and compatible Core dependencies.
+Best practice: `getUser({ id: 1 })` only creates a command. Give it a name, then pass that name to `client.execute`. The call validates, builds, and sends the request using the application's client. When `error` is set, return before reading the success value. When the definitions are published, import `getUser` from your SDK package instead of the local file. See [Build and publish an SDK](https://defjs.lyz.cloud/recipes/publish-http-sdk) for package exports, declarations, and compatible Core dependencies.
 
 ## Core Boundaries
 
@@ -84,7 +89,7 @@ Server-side FormData upload progress reads the serialized stream directly withou
 
 The supported minimum compiler/lib contract uses `target: 'ES2022'` with `lib: ['ES2022', 'ESNext.Disposable', 'DOM', 'DOM.Iterable']`. TypeScript 7 is the current repository tooling baseline; older compiler versions are not promised. The repository currently uses `ESNext` and does not automatically verify this minimum consumer lib set. These entries supply types only — not runtime Web API polyfills.
 
-CI runs the Bun `verify` gate and Core's `core-server` and OpenTelemetry tests on Node 24. Package release jobs typecheck their build configurations and assert required files with `npm pack --dry-run`; they do not install tarballs into an external consumer for declaration or runtime verification.
+CI runs the Bun `verify` gate and Core's `core-server` and OpenTelemetry tests on Node 26. Package release jobs typecheck their build configurations and assert required files with `npm pack --dry-run`; they do not install tarballs into an external consumer for declaration or runtime verification.
 
 **SSE reconnect behavior change:** without `withSSEReconnect(...)`, SSE no longer retries network/stream-read failures. Pass `withSSEReconnect({ attempts: 3 })` (or another reviewed budget per outage) to retry those failures. SSE and WebSocket both reset the retry budget and backoff exponent after a successful handshake. `delayMs` must be finite and non-negative; `maxDelayMs` accepts a non-negative finite number or positive `Infinity`, which removes only the configured cap. The final delay after jitter and rounding is still bounded by `2_147_483_647` ms; zero bases stay zero and valid-number overflow saturates. Invalid numeric reconnect options fail before transport with `REQ_OPTIONS_INVALID`; WebSocket `attempts: 0` disables subsequent retries but still validates all explicitly supplied reconnect fields before the initial connection, as SSE does. SSE sends `Last-Event-ID` as UTF-8 bytes and strips only the physical stream's leading BOM, preserving U+FEFF in field values.
 

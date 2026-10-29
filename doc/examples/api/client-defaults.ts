@@ -24,5 +24,15 @@ const search = defineRequest({
 });
 
 // The execute timeout replaces the 5 s client default for this call only.
-await client.execute(search({ q: "defjs" }), { timeout: 30_000 });
+async function main() {
+  const command = search({ q: "defjs" });
+  const [error, text] = await client.execute(command, { timeout: 30_000 });
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(text);
+}
+
+void main();
 // #endregion

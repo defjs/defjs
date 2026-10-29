@@ -14,7 +14,7 @@ See [Interceptors](/docs/interceptors).
 </include>
 
 ```txt
-null 42
+42
 ```
 
 Calling `next` again only re-enters interceptors **inside** this layer (and the Fetch handler). It does not re-run outer timing/auth wrappers — that is why 401 layout belongs in one interceptor, not a second `execute`.

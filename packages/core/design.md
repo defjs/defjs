@@ -179,7 +179,6 @@ HTTP interceptors see only explicit type headers; automatic types are applied ju
 ```ts
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
-const client = createClient(withEndpoint("https://api.example.com"));
 const getUser = defineRequest({
   method: "GET",
   path: "/users/:id",
@@ -192,9 +191,21 @@ const getUser = defineRequest({
   error: struct.object({ message: struct.string() }),
 });
 
-const [error, data, response] = await client.execute(getUser({ id: 7 }), {
-  timeout: 10_000,
-});
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+  const command = getUser({ id: 7 });
+  const [error, data, response] = await client.execute(command, {
+    timeout: 10_000,
+  });
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(data.displayName, response.status);
+}
+
+void main();
 ```
 
 `output` is one struct for 2xx; `error` is one struct for the other statuses. `ok` is the only branch, and only one side is decoded. The representation is decided by kind: `string` is original text, `blob` / `file` is a Blob, `arrayBuffer` is bytes, and everything else is JSON. There is no `responseType`.
@@ -213,7 +224,6 @@ import {
   withEndpoint,
 } from "@defjs/core";
 
-const client = createClient(withEndpoint("https://api.example.com"));
 const watchUser = defineEventStream({
   method: "GET",
   path: "/users/:id/events",
@@ -227,7 +237,23 @@ const watchUser = defineEventStream({
   },
 });
 
-const [error, stream, open] = await client.execute(watchUser({ id: 7 }));
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+  const command = watchUser({ id: 7 });
+  const [error, stream, open] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(open.response.status);
+  await using ownedStream = stream;
+  for await (const event of ownedStream) {
+    if (event.event === "message") console.log(event.data.text);
+  }
+}
+
+void main();
 ```
 
 Request placement is the same as HTTP, including the body. Event `data` is decoded by kind: `string` stays original text, and everything else is `JSON.parse`d first and then handed to the struct. A bare literal is not JSON text. When `error` is declared, a startup failure is `Fault<TError>`; a handshake error body is likewise decoded by kind. A non-2xx whose side is undeclared or decodes successfully is `HTTP_STATUS`; a JSON media type that does not match is `RES_MEDIA_TYPE_INVALID`; a declared handshake body that fails to be read, parsed, or Struct-validated is `RES_DECODE_FAILED`, and the `cause` of a Struct failure is `StructError`, not HTTP's `RES_STRUCT_MISMATCH`. Events that are undeclared or fail validation do not enter the queue; `withSSEOnInvalidEvent` can observe them. Reconnection requires an explicit `withSSEReconnect`.
@@ -244,7 +270,6 @@ import {
   withEndpoint,
 } from "@defjs/core";
 
-const client = createClient(withEndpoint("https://chat.example.com"));
 const room = defineWebSocket({
   path: "/chat/:roomId",
   maxIncomingQueueSize: 100,
@@ -261,7 +286,20 @@ const room = defineWebSocket({
   }),
 });
 
-const [error, session] = await client.execute(room({ roomId: "1" }));
+const client = createClient(withEndpoint("https://chat.example.com"));
+
+async function main() {
+  const command = room({ roomId: "1" });
+  const [error, session] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  await using ownedSession = session;
+  ownedSession.send({ type: "send", text: "Hello" });
+}
+
+void main();
 ```
 
 Inbound text, `ArrayBuffer`, TypedArray, and `Blob` are read as UTF-8, then `JSON.parse`d, then handed to `incoming`. Bad JSON and struct failures go to `session.onRuntimeError`; that frame is not enqueued, and the session continues. Frames that are not text, bytes, or a Blob are dropped directly, with no notification. There is no `withWebSocketOnInvalidEvent`.

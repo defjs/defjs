@@ -12,13 +12,19 @@ const getUser = defineRequest({
   error: struct.object({ message: struct.string() }),
 });
 
-const [error, user, response] = await client.execute(getUser({ id: 7 }));
-
-if (error?.code === "HTTP_STATUS" && error.status === 404) {
-  console.log(error.data.message);
-} else if (error) {
-  console.error(error.code);
-} else {
+async function main() {
+  const command = getUser({ id: 7 });
+  const [error, user, response] = await client.execute(command);
+  if (error?.code === "HTTP_STATUS" && error.status === 404) {
+    console.log(error.data.message);
+    return;
+  }
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log(`Loaded ${user.name} from ${response.status}`);
 }
+
+void main();
 // #endregion

@@ -43,6 +43,8 @@ React 앱은 SDK에서 API 정의를 import하고 자신이 구성한 Defjs Clie
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+여기의 `throw error`는 쿼리 함수의 reject 경로이며, Defjs의 기본 호출 방식이 아니에요. 튜플을 먼저 확인하고, 이 어댑터만 reject해서 쿼리 라이브러리가 실패를 기록하게 해요.
+
 같은 명령을 두 번째 effect로 감싸지 마세요 — 소유자가 둘이면 취소와 낡은 결과 처리가 모호해져요.
 
 ## 실시간 작업 소유하기

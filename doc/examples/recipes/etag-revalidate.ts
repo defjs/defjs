@@ -35,13 +35,13 @@ function createReader(client: ReturnType<typeof createClient>) {
 
   return async (sku: string): Promise<Product> => {
     const cached = cache.get(sku);
-    const [error, product, response] = await client.execute(
-      readProduct({ sku, etag: cached?.etag }),
-    );
+    const command = readProduct({ sku, etag: cached?.etag });
+    const [error, product, response] = await client.execute(command);
 
     if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
       return cached.product;
     }
+    // This reader returns Product, so a non-304 fault leaves here by throwing.
     if (error) throw error;
 
     const etag = response.headers.get("etag");

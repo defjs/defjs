@@ -17,4 +17,6 @@ description: 把 304 当成 HTTP 状态 fault；缓存 Map 放在 execute 外面
 Flask
 ```
 
+304 分支之后的 `throw error` 是这个读取函数的边界。函数仍然返回 `Promise<Product>`；非 304 的 fault 不会从这个边界以 Defjs 元组返回。
+
 别在 Core 里把 `304` 改写成假的 `200`。缓存所有权留在 `execute` 周围的应用代码里。

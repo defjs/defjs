@@ -8,11 +8,18 @@ const Profile = struct.object({
   note: struct.string().nullish(),
 });
 
-const [error, profile] = struct.parse(Profile, {
-  name: "Ada",
-  biography: null,
-  note: undefined,
-});
-if (error) throw error;
-console.log(profile.name, profile.nickname, profile.biography, profile.note);
+function showProfile() {
+  const [error, profile] = struct.parse(Profile, {
+    name: "Ada",
+    biography: null,
+    note: undefined,
+  });
+  if (error) {
+    console.error(error.message);
+    return;
+  }
+  console.log(profile.name, profile.nickname, profile.biography, profile.note);
+}
+
+showProfile();
 // #endregion

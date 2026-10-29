@@ -33,6 +33,10 @@ The application imports it and owns execution:
 
 Calling `getHealth()` creates a command. The network request starts at `client.execute(...)`. When you publish the definition, consumers import it from your SDK package instead of the local file.
 
+## Best practice
+
+A definition stays independent of the client. Calling it only creates a command. Give that command a name, then pass the name to `client.execute` on the client the application owns. The application also owns the service address and credentials. Inspect the error-first tuple first. When `error` is present, report `error.code` and return from the function before reading the success value.
+
 ## Build your SDK
 
 1. [Define and run your first operation](/docs/start) in separate SDK and application files.

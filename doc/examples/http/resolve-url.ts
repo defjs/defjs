@@ -16,6 +16,15 @@ const getUser = defineRequest({
 });
 
 const command = getUser({ id: "a/b", fields: "name" });
-void client.execute(command);
 // → https://api.example.com/v1/users/a%2Fb?fields=name
+
+async function main() {
+  const [error] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+}
+
+void main();
 // #endregion

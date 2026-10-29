@@ -42,10 +42,18 @@ const getUser = defineRequest({
 });
 
 const client = createClient(withEndpoint("https://api.example.com"));
-const [error, user] = await client.execute(getUser({ id: 1 }));
-if (error) throw error;
 
-console.log(user.id, user.displayName);
+async function main() {
+  const command = getUser({ id: 1 });
+  const [error, user] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(user.id, user.displayName);
+}
+
+void main();
 ```
 
 `Infer<typeof User>` is the parsed output type. `alias('display_name')` only changes the field name in the external protocol; it does not rename the TypeScript property `displayName` to `display_name`.
@@ -211,19 +219,6 @@ const UserBody = struct.object({
   displayName: struct.string().alias("display_name"),
 });
 
-const [logicalError, logicalUser] = struct.parse(UserBody, {
-  id: 1,
-  displayName: "Ada",
-});
-if (logicalError) throw logicalError;
-
-const [wireKeyError] = struct.parse(UserBody, {
-  user_id: 1,
-  display_name: "Ada",
-});
-if (!wireKeyError) throw new Error("struct.parse must read logical keys");
-
-let requestWireBody: unknown;
 const echoUser = defineRequest({
   method: "POST",
   path: "/users",
@@ -231,18 +226,45 @@ const echoUser = defineRequest({
   builder: (input) => ({ body: input.user }),
   output: UserBody,
 });
-const client = createClient(
-  withEndpoint("https://example.test"),
-  withHTTPHandle(async (input, init) => {
-    requestWireBody = await new Request(input, init).json();
-    return Response.json({ user_id: 1, display_name: "Ada" });
-  }),
-);
 
-const [requestError, responseUser] = await client.execute(
-  echoUser({ user: { id: 1, displayName: "Ada" } }),
-);
-if (requestError) throw requestError;
+async function main() {
+  const [logicalError, logicalUser] = struct.parse(UserBody, {
+    id: 1,
+    displayName: "Ada",
+  });
+  if (logicalError) {
+    console.error(logicalError.message);
+    return;
+  }
+
+  const [wireKeyError] = struct.parse(UserBody, {
+    user_id: 1,
+    display_name: "Ada",
+  });
+  if (!wireKeyError) throw new Error("struct.parse must read logical keys");
+
+  let requestWireBody: unknown;
+  const client = createClient(
+    withEndpoint("https://example.test"),
+    withHTTPHandle(async (input, init) => {
+      requestWireBody = await new Request(input, init).json();
+      return Response.json({ user_id: 1, display_name: "Ada" });
+    }),
+  );
+  const command = echoUser({ user: { id: 1, displayName: "Ada" } });
+  const [requestError, responseUser] = await client.execute(command);
+  if (requestError) {
+    console.error(requestError.code);
+    return;
+  }
+  console.log(
+    logicalUser.displayName,
+    responseUser.displayName,
+    requestWireBody,
+  );
+}
+
+void main();
 ```
 
 `logicalUser` and `responseUser` use `{ id, displayName }`; `wireKeyError` points at the missing logical `id`; `requestWireBody` is `{ user_id, display_name }`. The public `struct.parse` reads logical values unless `{ aliases: true }` is passed. Transport JSON encode/decode applies wire aliases on the wire.

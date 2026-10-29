@@ -43,6 +43,7 @@ interface MockWebSocketInstance {
   triggerError: () => void;
   triggerMessage: (data: unknown) => void;
   listenerCount: (type?: string) => number;
+  listenerRefs: (type?: string) => ReadonlyArray<(event: unknown) => void>;
 }
 
 function createMockWebSocketClass(
@@ -92,6 +93,7 @@ function createMockWebSocketClass(
     triggerError: MockWebSocketInstance["triggerError"];
     triggerMessage: MockWebSocketInstance["triggerMessage"];
     listenerCount: MockWebSocketInstance["listenerCount"];
+    listenerRefs: MockWebSocketInstance["listenerRefs"];
 
     private listeners: { [key: string]: Array<(event: unknown) => void> };
 
@@ -170,6 +172,13 @@ function createMockWebSocketClass(
               (count, listeners) => count + listeners.length,
               0,
             );
+      this.listenerRefs = (type?: string) => {
+        const groups =
+          typeof type === "string"
+            ? [this.listeners[type] ?? []]
+            : Object.values(this.listeners);
+        return groups.flat();
+      };
 
       // Type boundary: capture the constructed mock instance so tests can trigger events on it.
       // oxlint-disable-next-line typescript/no-this-alias
@@ -196,6 +205,102 @@ function createDeferred<T>() {
     resolveValue = resolve;
   });
   return { promise, resolve: resolveValue };
+}
+
+type AbortListener = (event: Event) => void;
+
+/**
+ * Records abort callbacks by function identity.
+ * A merged session signal also carries forwarding listeners, so a generation is the set captured
+ * while that attempt is open — not "whatever count happens to remain".
+ */
+function instrumentAbortListeners(signal: AbortSignal): {
+  listeners(): readonly AbortListener[];
+  assertReleased(generation: readonly AbortListener[]): void;
+} {
+  const live = new Set<AbortListener>();
+  const removed = new Set<AbortListener>();
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  signal.addEventListener = ((
+    ...args: Parameters<AbortSignal["addEventListener"]>
+  ) => {
+    const [type, listener] = args;
+    if (type === "abort" && typeof listener === "function") {
+      live.add(listener);
+    }
+    add(...args);
+  }) as AbortSignal["addEventListener"];
+  signal.removeEventListener = ((
+    ...args: Parameters<AbortSignal["removeEventListener"]>
+  ) => {
+    const [type, listener] = args;
+    if (type === "abort" && typeof listener === "function") {
+      live.delete(listener);
+      removed.add(listener);
+    }
+    remove(...args);
+  }) as AbortSignal["removeEventListener"];
+  return {
+    listeners: () => [...live],
+    assertReleased(generation) {
+      expect(generation.length).toBeGreaterThan(0);
+      for (const listener of generation) {
+        expect(live.has(listener)).toBe(false);
+        expect(removed.has(listener)).toBe(true);
+      }
+      for (const listener of live) {
+        expect(generation).not.toContain(listener);
+      }
+    },
+  };
+}
+
+function soleListener(
+  socket: MockWebSocketInstance,
+  type: string,
+): (event: unknown) => void {
+  const listeners = socket.listenerRefs(type);
+  expect(listeners).toHaveLength(1);
+  const listener = listeners[0];
+  if (!listener) {
+    throw new Error(`Expected one ${type} listener`);
+  }
+  return listener;
+}
+
+function expectListenerReleased(
+  socket: MockWebSocketInstance,
+  type: string,
+  listener: (event: unknown) => void,
+): void {
+  expect(socket.listenerRefs(type)).not.toContain(listener);
+  expect(socket.listenerCount(type)).toBe(0);
+}
+
+function clientObservingAbortListeners(): {
+  client: Client;
+  observed: {
+    current: ReturnType<typeof instrumentAbortListeners> | undefined;
+  };
+} {
+  const observed: {
+    current: ReturnType<typeof instrumentAbortListeners> | undefined;
+  } = { current: undefined };
+  const client = createClient(
+    withEndpoint("http://localhost"),
+    withInterceptors(
+      createWebSocketInterceptor((request, next) => {
+        const signal = request.abort;
+        if (!signal) {
+          throw new Error("Expected session signal");
+        }
+        observed.current = instrumentAbortListeners(signal);
+        return next(request);
+      }),
+    ),
+  );
+  return { client, observed };
 }
 
 function encodeMessage(value: unknown): ArrayBuffer {
@@ -1698,48 +1803,125 @@ describe("web socket runtime environment edge cases", () => {
     await socket.closed;
   });
 
-  test("should drop the previous attempt abort listener after each reconnect", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
-    const handleAbortListeners = new Set<EventListener>();
-    const client = createClient(
-      withEndpoint("http://localhost"),
-      withInterceptors(
-        createWebSocketInterceptor((request, next) => {
-          const signal = request.abort;
-          if (!signal) {
-            throw new Error("Expected session signal");
-          }
-          const add = signal.addEventListener.bind(signal);
-          const remove = signal.removeEventListener.bind(signal);
-          signal.addEventListener = ((
-            ...args: Parameters<AbortSignal["addEventListener"]>
-          ) => {
-            const [type, listener] = args;
-            if (
-              type === "abort" &&
-              typeof listener === "function" &&
-              listener.toString().includes("finishFromSignal")
-            ) {
-              handleAbortListeners.add(listener);
-            }
-            add(...args);
-          }) as AbortSignal["addEventListener"];
-          signal.removeEventListener = ((
-            ...args: Parameters<AbortSignal["removeEventListener"]>
-          ) => {
-            const [, listener] = args;
-            if (typeof listener === "function") {
-              handleAbortListeners.delete(listener);
-            }
-            remove(...args);
-          }) as AbortSignal["removeEventListener"];
-          return next(request);
-        }),
-      ),
+  test("releases the same message listener reference on reconnect, failure, close, and dispose", async () => {
+    vi.stubGlobal(
+      "WebSocket",
+      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
     );
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
+      maxIncomingQueueSize: 4,
+      incoming: struct.object({
+        n: struct.number(),
+        type: struct.literal("tick"),
+      }),
+      path: "/ws/test",
+    });
+    const executePromise = run(
+      createClient(withEndpoint("http://localhost")),
+      useSocket(),
+      { reconnect: { attempts: 2, delayMs: 0 } },
+    );
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [error, socket] = await executePromise;
+    expect(error).toBeNull();
+    if (!socket || !lastMockInstance) {
+      throw new Error("Expected socket");
+    }
+    const iterator = socket.receive[Symbol.asyncIterator]();
+    const opened = [lastMockInstance];
+    const messageListeners = [soleListener(lastMockInstance, "message")];
+    lastMockInstance.triggerMessage(JSON.stringify({ n: 1, type: "tick" }));
+    await expect(iterator.next()).resolves.toEqual({
+      done: false,
+      value: { n: 1, type: "tick" },
+    });
+    expect(socket.state).toBe("open");
+    expect(socket.connection.generation).toBe(1);
+
+    const retire = async (
+      index: number,
+      how: "reconnect" | "failure",
+    ): Promise<void> => {
+      const nativeSocket = opened[index];
+      const listener = messageListeners[index];
+      if (!nativeSocket || !listener) {
+        throw new Error("Expected the generation being retired");
+      }
+      if (how === "failure") {
+        nativeSocket.triggerError();
+        expect(nativeSocket.listenerRefs("message")).toContain(listener);
+      }
+      nativeSocket.triggerClose({
+        code: how === "failure" ? 1006 : 1012,
+        reason: how,
+        wasClean: how !== "failure",
+      });
+      expectListenerReleased(nativeSocket, "message", listener);
+      nativeSocket.triggerMessage(JSON.stringify({ n: 99, type: "tick" }));
+      await vi.waitFor(() => expect(mockInstances).toHaveLength(index + 2));
+      const replacement = mockInstances[index + 1];
+      if (!replacement) throw new Error("Expected replacement socket");
+      replacement.triggerOpen();
+      await vi.waitFor(() =>
+        expect(socket.connection.generation).toBe(index + 2),
+      );
+      const replacementListener = soleListener(replacement, "message");
+      expect(replacementListener).not.toBe(listener);
+      opened.push(replacement);
+      messageListeners.push(replacementListener);
+      replacement.triggerMessage(
+        JSON.stringify({ n: index + 2, type: "tick" }),
+      );
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: { n: index + 2, type: "tick" },
+      });
+    };
+
+    await retire(0, "reconnect");
+    await retire(1, "failure");
+
+    const current = opened[2];
+    const currentListener = messageListeners[2];
+    if (!current || !currentListener) {
+      throw new Error("Expected the open generation");
+    }
+    expect(socket.state).toBe("open");
+    expect(socket.connection.generation).toBe(3);
+    socket.close(1000, "done");
+    current.triggerClose({ code: 1000, reason: "done", wasClean: true });
+    await expect(socket.closed).resolves.toMatchObject({
+      code: 1000,
+      kind: "closed",
+      reason: "done",
+    });
+    expect(socket.state).toBe("closed");
+    expect(socket.connection.generation).toBe(3);
+    expectListenerReleased(current, "message", currentListener);
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+
+    await expect(
+      Promise.resolve(socket[Symbol.asyncDispose]()),
+    ).resolves.toBeUndefined();
+    expect(socket.state).toBe("closed");
+    for (const nativeSocket of opened) {
+      expect(nativeSocket.listenerCount("message")).toBe(0);
+    }
+  });
+
+  test("releases each reconnect generation's abort listeners before the next generation listens", async () => {
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const { client, observed } = clientObservingAbortListeners();
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 4,
+      incoming: struct.object({
+        n: struct.number(),
+        type: struct.literal("tick"),
+      }),
       path: "/ws/test",
     });
     const executePromise = run(client, useSocket(), {
@@ -1747,35 +1929,146 @@ describe("web socket runtime environment edge cases", () => {
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket) {
+    const [error, socket] = await executePromise;
+    expect(error).toBeNull();
+    const abortListeners = observed.current;
+    if (!socket || !abortListeners) {
       throw new Error("Expected socket");
     }
+    const iterator = socket.receive[Symbol.asyncIterator]();
+    let generation = abortListeners.listeners();
+    expect(generation.length).toBeGreaterThan(0);
+    expect(socket.state).toBe("open");
+    expect(socket.connection.generation).toBe(1);
 
     for (let drop = 0; drop < 3; drop += 1) {
+      const previous = generation;
       mockInstances[drop]?.triggerClose({
         code: 1012,
         reason: "drop",
         wasClean: true,
       });
       await vi.waitFor(() => expect(mockInstances).toHaveLength(drop + 2));
-      mockInstances[drop + 1]?.triggerOpen();
+      abortListeners.assertReleased(previous);
+      const replacement = mockInstances[drop + 1];
+      if (!replacement) throw new Error("Expected replacement socket");
+      replacement.triggerOpen();
       await vi.waitFor(() =>
         expect(socket.connection.generation).toBe(drop + 2),
       );
+      expect(socket.state).toBe("open");
+      generation = abortListeners.listeners();
+      expect(generation.length).toBeGreaterThan(0);
+      abortListeners.assertReleased(previous);
+      replacement.triggerMessage(JSON.stringify({ n: drop + 2, type: "tick" }));
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: { n: drop + 2, type: "tick" },
+      });
     }
 
     expect(mockInstances).toHaveLength(4);
-    expect(socket.state).toBe("open");
-    expect(handleAbortListeners.size).toBe(1);
-
+    expect(socket.connection.generation).toBe(4);
     socket.close(1000, "done");
     lastMockInstance?.triggerClose({
       code: 1000,
       reason: "done",
       wasClean: true,
     });
-    await socket.closed;
+    await expect(socket.closed).resolves.toMatchObject({
+      code: 1000,
+      kind: "closed",
+      reason: "done",
+    });
+    expect(socket.state).toBe("closed");
+    expect(socket.connection.generation).toBe(4);
+    abortListeners.assertReleased(generation);
+    await expect(iterator.next()).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+  });
+
+  test("releases the open generation's abort listeners when the caller cancels", async () => {
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const controller = new AbortController();
+    const { client, observed } = clientObservingAbortListeners();
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+    const executePromise = run(client, useSocket(), {
+      reconnect: { attempts: 1, delayMs: 0 },
+      signal: controller.signal,
+    });
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [error, socket] = await executePromise;
+    expect(error).toBeNull();
+    const abortListeners = observed.current;
+    if (!socket || !lastMockInstance || !abortListeners) {
+      throw new Error("Expected socket");
+    }
+    lastMockInstance.triggerClose({
+      code: 1012,
+      reason: "drop",
+      wasClean: true,
+    });
+    await vi.waitFor(() => expect(mockInstances).toHaveLength(2));
+    mockInstances[1]?.triggerOpen();
+    await vi.waitFor(() => expect(socket.connection.generation).toBe(2));
+    expect(socket.state).toBe("open");
+    const generation = abortListeners.listeners();
+    expect(generation.length).toBeGreaterThan(0);
+
+    controller.abort(ERR_ABORTED);
+    await expect(socket.closed).resolves.toMatchObject({ kind: "aborted" });
+    expect(socket.state).toBe("aborted");
+    expect(socket.connection.generation).toBe(2);
+    abortListeners.assertReleased(generation);
+  });
+
+  test("releases the open generation's abort listeners when the session is disposed", async () => {
+    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
+    const { client, observed } = clientObservingAbortListeners();
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+    const executePromise = run(client, useSocket(), {
+      reconnect: { attempts: 1, delayMs: 0 },
+    });
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await executePromise;
+    const abortListeners = observed.current;
+    if (!socket || !lastMockInstance || !abortListeners) {
+      throw new Error("Expected socket");
+    }
+    lastMockInstance.triggerClose({
+      code: 1012,
+      reason: "drop",
+      wasClean: true,
+    });
+    await vi.waitFor(() => expect(mockInstances).toHaveLength(2));
+    mockInstances[1]?.triggerOpen();
+    await vi.waitFor(() => expect(socket.connection.generation).toBe(2));
+    const generation = abortListeners.listeners();
+    expect(socket.state).toBe("open");
+    expect(generation.length).toBeGreaterThan(0);
+
+    await expect(
+      Promise.resolve(socket[Symbol.asyncDispose]()),
+    ).resolves.toBeUndefined();
+    await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
+    expect(socket.state).toBe("closed");
+    expect(socket.connection.generation).toBe(2);
+    abortListeners.assertReleased(generation);
+    for (const nativeSocket of mockInstances) {
+      expect(nativeSocket.listenerCount()).toBe(0);
+    }
   });
 
   test("should reconnect after more recovered outages than the attempt budget", async () => {

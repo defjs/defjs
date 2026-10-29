@@ -17,4 +17,6 @@ description: 將 304 當 HTTP status fault；cache Map 留喺 execute 外面。
 Flask
 ```
 
+304 分支之後嘅 `throw error` 係呢個讀取 function 嘅邊界。Function 仍然 return `Promise<Product>`；非 304 嘅 fault 唔會喺呢個邊界以 Defjs tuple 返回。
+
 唔好喺 Core 入面將 `304` 改寫成假 `200`。Cache ownership 留喺 application code，包住 `execute`。

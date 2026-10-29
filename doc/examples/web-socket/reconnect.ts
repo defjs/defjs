@@ -28,9 +28,16 @@ const room = defineWebSocket({
     ok: struct.boolean(),
   }),
 });
-const [error, session] = await client.execute(room());
-if (!error) {
+async function main() {
+  const command = room();
+  const [error, session] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log(session.state);
   session.close(1000, "done");
 }
+
+void main();
 // #endregion

@@ -18,3 +18,5 @@ ada viewer unavailable viewer unavailable
 ```
 
 HTTP の成功は、エンベロープが届いたことだけを意味します。`data: null` のレスポンスも含め、アプリケーションのエラーは、unwrap が throw するか返すまで `errors[]` に残ります。この例では、`errors[]` があれば、`data` が欠落している場合も `data: null` の場合も、Struct の不一致ではなくアプリケーションのエラーとして扱います。
+
+`if (error) throw error` は Defjs の fault をこのヘルパーの例外に合わせます。HTTP 200 の GraphQL 失敗は `errors[]` のアプリケーションエラーのままで、別に throw します。

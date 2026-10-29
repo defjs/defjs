@@ -17,4 +17,6 @@ description: 304는 HTTP status fault로 두고, 캐시 Map은 execute 밖에 �
 Flask
 ```
 
+304 분기 뒤의 `throw error`는 이 읽기 함수의 경계예요. 함수는 계속 `Promise<Product>`를 반환하고, 304가 아닌 fault는 그 경계에서 Defjs 튜플로 반환되지 않아요.
+
 Core 안에서 `304`를 가짜 `200`으로 다시 쓰지 마세요. 캐시 소유권은 `execute` 주변의 애플리케이션 코드에 남아요.

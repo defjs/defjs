@@ -11,6 +11,10 @@ Définition → endpoint exporté → commande pour un appel → `client.execute
 
 Les fabriques de clients et méthodes pratiques sont des ajouts facultatifs. Elles peuvent fournir des valeurs par défaut ou un comportement métier tout en acceptant la configuration de l’appelant et en conservant les exports directs d’endpoints. Documente les transformations d’erreurs et les règles de cycle de vie qu’elles introduisent. Aucune fabrique n’est nécessaire pour créer un SDK réutilisable.
 
+## Bonne pratique
+
+Une définition reste indépendante du client. L’appeler crée seulement une commande. Donne-lui un nom, puis passe ce nom à `client.execute` sur le client que l’application possède. L’application possède aussi l’adresse du service et les identifiants. Inspecte d’abord le tuple error-first. Quand `error` est présent, signale `error.code` et sors de la fonction avant de lire la valeur de succès.
+
 ## Mise en place
 
 <include cwd lang="typescript">

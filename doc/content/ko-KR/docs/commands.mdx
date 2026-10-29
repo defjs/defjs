@@ -11,6 +11,10 @@ SDK 작성자는 API 계약을 정의하고 엔드포인트 함수를 export합�
 
 아래의 짧은 예제는 두 역할을 한 파일에 보여 줍니다. SDK로 배포할 때는 정의를 export하고, Client 구성과 실행은 사용하는 앱에 둡니다.
 
+## 모범 사례
+
+정의는 client와 독립입니다. 정의를 호출하면 command만 만들어집니다. 그 command에 이름을 붙인 다음, 애플리케이션이 소유한 client의 `client.execute`에 넘깁니다. 서비스 주소와 자격 증명도 애플리케이션의 것입니다. error-first 튜플을 먼저 확인합니다. `error`가 있으면 `error.code`를 보고하고, 성공 값을 읽기 전에 함수에서 return 합니다.
+
 ## 기본 사용법
 
 <include cwd lang="typescript">

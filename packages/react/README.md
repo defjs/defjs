@@ -58,7 +58,7 @@ export function App() {
 }
 ```
 
-Read the client inside descendants and own request cleanup where the work starts:
+Read the client inside descendants and own request cleanup where the work starts. Best practice: name the command, pass that name to `execute`, and return before reading the user when `error` is set. Abort still belongs to the effect:
 
 ```tsx
 import { useEffect, useState } from "react";
@@ -72,10 +72,16 @@ export function UserProfile({ id }: { id: number }) {
   useEffect(() => {
     const abort = new AbortController();
 
+    const command = getUser({ id });
     void client
-      .execute(getUser({ id }), { signal: abort.signal })
+      .execute(command, { signal: abort.signal })
       .then(([error, user]) => {
-        if (!abort.signal.aborted) setName(error ? error.message : user.name);
+        if (abort.signal.aborted) return;
+        if (error) {
+          setName(error.message);
+          return;
+        }
+        setName(user.name);
       });
 
     return () => abort.abort();

@@ -14,7 +14,7 @@ Voir [Intercepteurs](/fr-FR/docs/interceptors).
 </include>
 
 ```txt
-null 42
+42
 ```
 
 Rappeler `next` ne ré-entre que dans les intercepteurs **à l’intérieur** de cette couche (et le handler Fetch). Il ne relance pas les wrappers externes de timing/auth — c’est pourquoi le layout 401 appartient à un seul intercepteur, pas à un second `execute`.

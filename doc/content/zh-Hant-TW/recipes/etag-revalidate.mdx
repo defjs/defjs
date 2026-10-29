@@ -17,4 +17,6 @@ description: 把 304 當成 HTTP status fault；快取 Map 留在 execute 外面
 Flask
 ```
 
+304 分支之後的 `throw error` 是這個讀取函式的邊界。函式仍然回傳 `Promise<Product>`；非 304 的 fault 不會從這個邊界以 Defjs tuple 回傳。
+
 不要在 Core 裡把 `304` 改寫成假的 `200`。快取的擁有權留在 `execute` 周圍的應用程式碼。

@@ -18,24 +18,32 @@ const provider = new LoggerProvider({
   ],
 });
 
-try {
-  const client = createClient(
-    withEndpoint("https://api.example.test"),
-    withHTTPHandle(() => {
-      throw new Error("Demonstration transport failure");
-    }),
-    withOpenTelemetryServer({
-      logger: provider.getLogger("@defjs/opentelemetry-server"),
-    }),
-  );
-  const readOrders = defineRequest({
-    method: "GET",
-    path: "/orders",
-    operation: "orders.read",
-  });
-  const [error] = await client.execute(readOrders());
-  if (error) console.error(error.code);
-} finally {
-  await provider.shutdown();
+async function main() {
+  try {
+    const client = createClient(
+      withEndpoint("https://api.example.test"),
+      withHTTPHandle(() => {
+        throw new Error("Demonstration transport failure");
+      }),
+      withOpenTelemetryServer({
+        logger: provider.getLogger("@defjs/opentelemetry-server"),
+      }),
+    );
+    const readOrders = defineRequest({
+      method: "GET",
+      path: "/orders",
+      operation: "orders.read",
+    });
+    const command = readOrders();
+    const [error] = await client.execute(command);
+    if (error) {
+      console.error(error.code);
+      return;
+    }
+  } finally {
+    await provider.shutdown();
+  }
 }
+
+void main();
 // #endregion
