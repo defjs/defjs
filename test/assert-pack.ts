@@ -8,6 +8,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { posix, resolve } from "node:path";
+import { parsePackedFiles } from "./pack-output";
 
 const ENTRY_FIELDS = [
   "exports",
@@ -75,14 +76,7 @@ try {
     ["pack", "--dry-run", "--json", "--silent"],
     { cwd: publishDir, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
   );
-  const start = stdout.indexOf("[");
-  const end = stdout.lastIndexOf("]");
-  const parsed = JSON.parse(stdout.slice(start, end + 1)) as {
-    files: { path: string }[];
-  }[];
-  packed = new Set(
-    parsed[0]?.files.map((file) => file.path.replace(/^package\//, "")) ?? [],
-  );
+  packed = parsePackedFiles(stdout);
 } catch (error) {
   fail(
     `assert-pack: npm pack --dry-run failed in ${publishDir}\n${String(error)}`,
