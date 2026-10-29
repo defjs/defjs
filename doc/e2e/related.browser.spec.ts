@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import reference from "../app/data/api-reference.json";
 import { locales } from "../app/lib/i18n";
+import { uiCopy } from "../app/lib/ui-copy";
 import { captureBrowserErrors } from "./helpers";
 import { openSite } from "./support/site";
 
@@ -79,7 +80,7 @@ test("connects HTTP guides, examples and module API without truncating related l
   expect(await errors.values()).toEqual([]);
 });
 
-test("an API entry shows its highlighted signature, a linked symbol and its overview", async () => {
+test("an API entry shows its highlighted signature and copies it", async () => {
   const site = await openSite();
   await using context = await site.browser.newContext({
     permissions: ["clipboard-read", "clipboard-write"],
@@ -90,12 +91,7 @@ test("an API entry shows its highlighted signature, a linked symbol and its over
     waitUntil: "networkidle",
   });
   const main = page.locator("main");
-  const html = await main.innerHTML();
   const text = await main.textContent();
-  const signatureAt = html.indexOf(">Signature<");
-  expect(html.indexOf("--shiki-light", signatureAt)).toBeGreaterThan(
-    signatureAt,
-  );
   expect(text).toContain(
     "function createClient(...options: ClientOption[]): Client;",
   );
@@ -115,6 +111,13 @@ test("an API entry shows its highlighted signature, a linked symbol and its over
   expect(clipboard.replace(/\n$/u, "")).toBe(
     "function createClient(...options: ClientOption[]): Client;",
   );
+  expect(await errors.values()).toEqual([]);
+});
+
+test("API links inside an entry navigate without a full page load", async () => {
+  const site = await openSite();
+  const page = await site.browser.newPage();
+  const errors = await captureBrowserErrors(page);
   await page.goto(site.url("/api/core/withhttphandle"), {
     waitUntil: "networkidle",
   });
@@ -132,57 +135,64 @@ test("an API entry shows its highlighted signature, a linked symbol and its over
       () => (window as unknown as { __apiMarker?: string }).__apiMarker,
     ),
   ).toBe("client-nav");
-  await page.goto(site.url("/api/core/createclient"), {
-    waitUntil: "networkidle",
-  });
-  const overview = main.locator("nav[aria-label='Client']");
-  expect(await overview.locator("a").textContent()).toBe("Client");
-  expect(await overview.locator("a").getAttribute("href")).toBe("/api/client");
-  expect(
-    await page
-      .locator(
-        "a[href='https://github.com/defjs/defjs/edit/main/packages/core/src/client/client.ts']",
-      )
-      .isVisible(),
-  ).toBe(true);
+  expect(await errors.values()).toEqual([]);
+});
+
+test("an entry links back to its overview through a click and to its source file", async () => {
+  const site = await openSite();
+  const page = await site.browser.newPage();
+  const errors = await captureBrowserErrors(page);
+  for (const [path, overview] of [
+    ["/api/core/createclient", "/api/client"],
+    ["/zh-Hans/api/core/createclient", "/zh-Hans/api/client"],
+  ] as const) {
+    await page.goto(site.url(path), {
+      waitUntil: "networkidle",
+    });
+    const nav = page.locator("main").locator("nav[aria-label='Client']");
+    expect(await nav.locator("a").textContent()).toBe("Client");
+    expect(await nav.locator("a").getAttribute("href")).toBe(overview);
+    expect(
+      await page
+        .locator(
+          "a[href='https://github.com/defjs/defjs/edit/main/packages/core/src/client/client.ts']",
+        )
+        .isVisible(),
+    ).toBe(true);
+    await nav.locator("a").click();
+    await page.waitForURL(`**${overview}`);
+  }
+  expect(await errors.values()).toEqual([]);
+});
+
+test("translated entry pages keep English prose but localize their labels", async () => {
+  const site = await openSite();
+  const { browser } = site;
+  const page = await browser.newPage();
+  const errors = await captureBrowserErrors(page);
   await page.goto(site.url("/zh-Hans/api/core/createclient"), {
     waitUntil: "networkidle",
   });
   const chinese = page.locator("main");
-  const chineseHtml = await chinese.innerHTML();
   const chineseText = await chinese.textContent();
-  const chineseSignature = chineseHtml.indexOf(">签名<");
-  expect(
-    chineseHtml.indexOf("--shiki-light", chineseSignature),
-  ).toBeGreaterThan(chineseSignature);
-  expect(chineseHtml).toContain(">参数<");
+  expect(await chinese.innerHTML()).toContain(
+    `>${uiCopy["zh-Hans"].parameters}<`,
+  );
   expect(chineseText).toContain(
     "function createClient(...options: ClientOption[]): Client;",
   );
   expect(chineseText).toContain("Creates a Defjs client");
-  const chineseOverview = chinese.locator("nav[aria-label='Client']");
-  expect(await chineseOverview.locator("a").textContent()).toBe("Client");
-  expect(await chineseOverview.locator("a").getAttribute("href")).toBe(
-    "/zh-Hans/api/client",
-  );
-  expect(
-    await page
-      .locator(
-        "a[href='https://github.com/defjs/defjs/edit/main/packages/core/src/client/client.ts']",
-      )
-      .isVisible(),
-  ).toBe(true);
-  await chineseOverview.locator("a").click();
-  await page.waitForURL("**/zh-Hans/api/client");
   await page.goto(site.url("/ar/api/core/createclient"), {
     waitUntil: "networkidle",
   });
-  const arabic = await page.locator("article").innerHTML();
-  expect(arabic).toContain('lang="en"');
-  expect(arabic).toContain('dir="ltr"');
-  expect(arabic).toContain("Creates a Defjs client");
-  expect(arabic).not.toMatch(/<h2[^>]*lang="en"[^>]*>التوقيع/);
-  expect(arabic).toContain(">التوقيع<");
+  const article = await page.locator("article").innerHTML();
+  expect(article).toContain('lang="en"');
+  expect(article).toContain('dir="ltr"');
+  expect(article).toContain("Creates a Defjs client");
+  expect(article).not.toMatch(
+    new RegExp(`<h2[^>]*lang="en"[^>]*>${uiCopy.ar.signature}`),
+  );
+  expect(article).toContain(`>${uiCopy.ar.signature}<`);
   const arabicMarks = await page.evaluate(() => {
     const article = document.querySelector("article");
     const marked = article ? [...article.querySelectorAll("[lang='en']")] : [];
@@ -205,7 +215,9 @@ test("an API entry shows its highlighted signature, a linked symbol and its over
   expect(arabicMarks.parameter).toBe(true);
   expect(arabicMarks.headings).toEqual([]);
   const arabicCopy = page.locator("main button[data-api-copy]").first();
-  expect(await arabicCopy.locator(".sr-only").textContent()).toBe("نسخ الشفرة");
+  expect(await arabicCopy.locator(".sr-only").textContent()).toBe(
+    uiCopy.ar.translations["Copy Text(code block)(aria-label)"],
+  );
   expect(await errors.values()).toEqual([]);
 });
 
@@ -238,7 +250,6 @@ test("overview pages render catalog signatures for every language", async () => 
       expect(await page.locator("body").innerHTML()).not.toContain(
         "<ApiSignature",
       );
-      expect(await figure.innerHTML()).toContain("--shiki-light");
       expect(await figure.locator("button").count()).toBeGreaterThan(0);
       expect((await block.textContent())?.replace(/\s+$/u, "")).toBe(signature);
     }

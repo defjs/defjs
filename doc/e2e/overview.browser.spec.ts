@@ -56,7 +56,7 @@ function expectGroupedArticles(
   }
 }
 
-test("grouped overview articles stay visible, clickable, and exported as Markdown", async () => {
+test("grouped overview articles stay visible and clickable in every language", async () => {
   const site = await openSite();
   await using context = await site.browser.newContext({
     javaScriptEnabled: false,
@@ -87,7 +87,11 @@ test("grouped overview articles stay visible, clickable, and exported as Markdow
       expect(await page.locator("main h1").first().isVisible()).toBe(true);
     }
   }
+});
 
+test("grouped overview articles export as Markdown", async () => {
+  const site = await openSite();
+  const page = await site.browser.newPage();
   for (const [area, paths, groups] of [
     ["docs", guideArticles, 5],
     ["recipes", recipeArticles, 4],

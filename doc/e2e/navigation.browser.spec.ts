@@ -4,8 +4,7 @@ import { openSite } from "./support/site";
 
 test("makes the current reading area and starting point visible", async () => {
   const site = await openSite();
-  const { browser } = site;
-  const page = await browser.newPage({
+  const page = await site.browser.newPage({
     viewport: { width: 835, height: 1204 },
   });
   const errors = await captureBrowserErrors(page);
@@ -60,6 +59,20 @@ test("makes the current reading area and starting point visible", async () => {
   await sidebar
     .locator('a[href="/zh-Hans/docs/start"][data-active="true"]')
     .waitFor();
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the sidebar follows the active reading area", async () => {
+  const site = await openSite();
+  const page = await site.browser.newPage({
+    viewport: { width: 835, height: 1204 },
+  });
+  const errors = await captureBrowserErrors(page);
+  await page.goto(site.url("/zh-Hans"), {
+    waitUntil: "networkidle",
+  });
+  await waitForHydration(page);
+  const sidebar = page.locator("#nd-sidebar");
   await page.getByRole("link", { name: "操作示例", exact: true }).click();
   await page.waitForURL("**/zh-Hans/recipes");
   await sidebar.getByRole("heading", { name: "认证", exact: true }).waitFor();
@@ -85,46 +98,54 @@ test("makes the current reading area and starting point visible", async () => {
       .getByRole("link", { name: "API 参考", exact: true })
       .getAttribute("class"),
   ).toContain("border-fd-primary");
-  {
-    await using noJS = await browser.newContext({
-      javaScriptEnabled: false,
-      viewport: { width: 835, height: 1204 },
-    });
-    const reading = await noJS.newPage();
-    await reading.goto(site.url("/zh-Hans"));
-    expect(
-      await reading
-        .locator("#nd-sidebar")
-        .getByRole("link", { name: "快速开始", exact: true })
-        .isVisible(),
-    ).toBe(true);
-    expect(
-      await reading
-        .locator("main")
-        .getByRole("heading", { level: 1 })
-        .first()
-        .evaluate((element) => {
-          const box = element.getBoundingClientRect();
-          const hit = document.elementFromPoint(
-            box.left + box.width / 2,
-            box.top + box.height / 2,
-          );
-          return box.top < 400 && hit !== null && element.contains(hit);
-        }),
-    ).toBe(true);
-    await reading.getByRole("link", { name: "操作示例", exact: true }).click();
-    await reading.waitForURL("**/zh-Hans/recipes");
-    expect(
-      await reading
-        .locator("#nd-sidebar")
-        .getByRole("link", { name: "取消与超时", exact: true })
-        .isVisible(),
-    ).toBe(true);
-  }
-  const missing = await page.request.get(site.url("/missing-path"));
-  expect(await missing.status()).toBe(404);
-  expect(await missing.text()).toContain("<title>Page Not Found</title>");
-  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the home page keeps its reading areas without JavaScript", async () => {
+  const site = await openSite();
+  const { browser } = site;
+  await using noJS = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: { width: 835, height: 1204 },
+  });
+  const reading = await noJS.newPage();
+  await reading.goto(site.url("/zh-Hans"));
+  expect(
+    await reading
+      .locator("#nd-sidebar")
+      .getByRole("link", { name: "快速开始", exact: true })
+      .isVisible(),
+  ).toBe(true);
+  expect(
+    await reading
+      .locator("main")
+      .getByRole("heading", { level: 1 })
+      .first()
+      .evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2,
+        );
+        return box.top < 400 && hit !== null && element.contains(hit);
+      }),
+  ).toBe(true);
+  await reading.getByRole("link", { name: "操作示例", exact: true }).click();
+  await reading.waitForURL("**/zh-Hans/recipes");
+  expect(
+    await reading
+      .locator("#nd-sidebar")
+      .getByRole("link", { name: "取消与超时", exact: true })
+      .isVisible(),
+  ).toBe(true);
+});
+
+test("the mobile drawer lists the active reading area", async () => {
+  const site = await openSite();
+  const page = await site.browser.newPage({
+    viewport: { width: 390, height: 844 },
+  });
+  const errors = await captureBrowserErrors(page);
   await page.goto(site.url("/zh-Hans"), {
     waitUntil: "networkidle",
   });

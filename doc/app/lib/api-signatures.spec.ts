@@ -103,7 +103,6 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     type: "code",
     value: "const ERR_ABORTED: Error;",
   });
-  replaceApiSignatures({ type: "text" }, {}, catalog);
   const source = '<ApiSignature name="withEndpoint" />\n';
   const authored = {
     path: "page.mdx",
@@ -151,11 +150,6 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     value: "function withEndpoint(endpoint: string): ClientOption;",
   });
   expect(markdownRoot.children[1]).toMatchObject({ value: "<div>keep</div>" });
-  replaceApiSignatures(
-    { type: "root", children: [{ type: "html", value: "" }] },
-    { path: "interceptors.md" },
-    catalog,
-  );
   expect(() =>
     replaceApiSignatures(
       {
@@ -261,9 +255,6 @@ test("catalog lookup follows the documentation workspace or the repository root"
     expect(readSignatureCatalog(fromDoc).get("FromDoc")).toEqual([
       "type FromDoc = 2;",
     ]);
-    expect(readSignatureCatalog(fromDoc).get("FromDoc")).toEqual([
-      "type FromDoc = 2;",
-    ]);
     writeFileSync(fromDoc, "{}");
     expect(() => readSignatureCatalog(fromDoc)).toThrow(
       "API reference is not a list",
@@ -290,15 +281,17 @@ test("fences keep example code and reject a hand-copied generated entry", () => 
   ]);
   const root = fileURLToPath(new URL("../../content", import.meta.url));
   const hits: string[] = [];
+  const generatedNames = new Set(
+    readSignatureCatalog(apiReferenceFile()).keys(),
+  );
   for (const locale of readdirSync(root)) {
     const dir = join(root, locale, "api");
     for (const file of readdirSync(dir)) {
       if (!file.endsWith(".md") && !file.endsWith(".mdx")) continue;
       const path = join(dir, file);
-      const catalog = readSignatureCatalog(apiReferenceFile());
       for (const hit of handCopiedGeneratedNames(
         readFileSync(path, "utf8"),
-        new Set(catalog.keys()),
+        generatedNames,
       ))
         hits.push(
           `hand-copied signature of a generated entry: ${locale}/api/${file} ${hit.name}`,

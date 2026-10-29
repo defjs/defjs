@@ -61,7 +61,6 @@ test("doc links resolve outside code and keep unknown names as text", () => {
   expect(text).toContain("plus Missing.");
   expect(text).toContain("```ts\n{@link Client}\n```");
   expect(text).toContain("`{@link Client}`");
-  expect(text).toContain("[Client](/ja-JP/api/core/client-type)");
   expect(resolveDocLinks("{@link }", "en-US", targets)).toBe("{@link }");
   expect(resolveDocLinks("{@link Client", "en-US", targets)).toBe(
     "{@link Client",

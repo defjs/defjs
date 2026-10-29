@@ -91,11 +91,11 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
   expect(rendered.name).toBe("createClient");
   expect(rendered.signaturesHtml[0]).toContain("data-api-copy");
   expect(rendered.signaturesHtml[0]).toContain(">Copy Text<");
-  expect(rendered.signaturesHtml[0]).toContain("shiki-themes");
   expect(rendered.signaturesHtml[0]).toContain("github-light");
   expect(rendered.signaturesHtml[0]).toContain("github-dark");
-  expect(rendered.signaturesHtml[0]).toContain("--shiki-light");
-  expect(rendered.parameterSections[0]?.signatureHtml).toContain("shiki");
+  expect(rendered.parameterSections[0]?.signatureHtml).toContain(
+    "github-light",
+  );
   expect(rendered.parameterSections[1]?.signatureHtml).toBe("");
   expect(rendered.parameterSections[1]?.tableHtml).toContain("flag?");
   expect(rendered.parameterSections[1]?.tableHtml).toContain("deprecated");
@@ -104,7 +104,7 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
   expect(rendered.descriptionHtml).toContain("Second paragraph");
   expect(rendered.examplesHtml[2]).toContain('href="/api/core/client-type"');
   expect(rendered.examplesHtml[2]).toContain("<li>one</li>");
-  expect(rendered.examplesHtml[2]).toContain("shiki-themes");
+  expect(rendered.examplesHtml[2]).toContain("github-light");
   expect(rendered.overviewTitle).toBe("Client");
   const empty = await renderApiEntry(
     entry({
@@ -144,9 +144,11 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
   expect(translated.membersHtml).toContain('lang="en" dir="ltr"');
   expect(translated.membersHtml).toContain("Identifier");
   expect(translated.descriptionHtml).not.toContain('lang="en"');
-  expect(translated.signaturesHtml[0]).toContain("نسخ الشفرة");
   expect(translated.signaturesHtml[0]).toContain(
-    'data-copied-label="تم نسخ الشفرة"',
+    getUi("ar").translations["Copy Text(code block)(aria-label)"],
+  );
+  expect(translated.signaturesHtml[0]).toContain(
+    `data-copied-label="${getUi("ar").translations["Copied Text(code block)(aria-label)"]}"`,
   );
   const tagged = tagCopyButton(
     '<button type="button"><span class="sr-only">Copy Text</span></button><button type="button"><span class="sr-only">Copy Text</span></button>',

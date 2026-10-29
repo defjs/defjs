@@ -2,10 +2,9 @@ import { expect, test } from "vitest";
 import { captureBrowserErrors, waitForHydration } from "./helpers";
 import { openSite } from "./support/site";
 
-test("exposes grouped navigation and modal mobile keyboard behavior", async () => {
+test("exposes grouped navigation and the current reading area", async () => {
   const site = await openSite();
-  const { browser } = site;
-  const page = await browser.newPage({
+  const page = await site.browser.newPage({
     viewport: { width: 835, height: 1204 },
   });
   const errors = await captureBrowserErrors(page);
@@ -62,8 +61,18 @@ test("exposes grouped navigation and modal mobile keyboard behavior", async () =
   expect(
     await navigation.locator('[aria-current="page"]').getAttribute("href"),
   ).toBe("/zh-Hans/docs/http");
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload({ waitUntil: "networkidle" });
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the mobile drawer traps focus and navigates reading areas", async () => {
+  const site = await openSite();
+  const page = await site.browser.newPage({
+    viewport: { width: 390, height: 844 },
+  });
+  const errors = await captureBrowserErrors(page);
+  await page.goto(site.url("/zh-Hans/docs/http"), {
+    waitUntil: "networkidle",
+  });
   await waitForHydration(page);
   const trigger = page.getByRole("button", {
     name: "打开侧栏",
@@ -120,34 +129,34 @@ test("exposes grouped navigation and modal mobile keyboard behavior", async () =
   expect(
     await trigger.evaluate((node) => node === document.activeElement),
   ).toBe(true);
+  expect(await errors.values()).toEqual([]);
+});
 
-  {
-    await using noJS = await browser.newContext({
-      javaScriptEnabled: false,
-      viewport: { width: 390, height: 844 },
-    });
-    const reading = await noJS.newPage();
-    await reading.goto(site.url("/zh-Hans/docs/http"));
-    await reading
-      .getByText("章节导航", { exact: true })
-      .filter({ visible: true })
-      .first()
-      .click();
-    const directory = reading
-      .getByRole("navigation", { name: "章节导航", exact: true })
-      .filter({ visible: true });
-    expect(
-      await directory
-        .getByRole("link", { name: "快速开始", exact: true })
-        .isVisible(),
-    ).toBe(true);
+test("the mobile directory works without JavaScript", async () => {
+  const site = await openSite();
+  const { browser } = site;
+  await using noJS = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: { width: 390, height: 844 },
+  });
+  const reading = await noJS.newPage();
+  await reading.goto(site.url("/zh-Hans/docs/http"));
+  await reading
+    .getByText("章节导航", { exact: true })
+    .filter({ visible: true })
+    .first()
+    .click();
+  const directory = reading
+    .getByRole("navigation", { name: "章节导航", exact: true })
+    .filter({ visible: true });
+  expect(
     await directory
       .getByRole("link", { name: "快速开始", exact: true })
-      .click();
-    await reading.waitForURL("**/zh-Hans/docs/start");
-    expect(await reading.locator("main h1").isVisible()).toBe(true);
-  }
-  expect(await errors.values()).toEqual([]);
+      .isVisible(),
+  ).toBe(true);
+  await directory.getByRole("link", { name: "快速开始", exact: true }).click();
+  await reading.waitForURL("**/zh-Hans/docs/start");
+  expect(await reading.locator("main h1").isVisible()).toBe(true);
 });
 
 test("mobile drawer initially focuses its controls and closes with Escape", async () => {

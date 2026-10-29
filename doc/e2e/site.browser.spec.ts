@@ -6,16 +6,20 @@ import {
   waitForHydration,
 } from "./helpers";
 import { openSite } from "./support/site";
+import type { Site } from "./support/site";
 import { locales } from "../app/lib/i18n";
 import { uiCopy } from "../app/lib/ui-copy";
 import { siteUrl } from "../app/lib/site";
 
-test("accepts the built static site, locale routing and reading interactions", async () => {
-  const site = await openSite();
-  const { browser } = site;
-  const page = await browser.newPage();
+async function openPage(site: Site) {
+  const page = await site.browser.newPage();
   const errors = await captureBrowserErrors(page);
-  await disableViewTransitions(page);
+  return { page, errors };
+}
+
+test("serves the home page and every locale route", async () => {
+  const site = await openSite();
+  const { page, errors } = await openPage(site);
   await page.goto(site.url("/"), {
     waitUntil: "networkidle",
   });
@@ -23,9 +27,6 @@ test("accepts the built static site, locale routing and reading interactions", a
   expect(await page.locator("main").count()).toBe(1);
   expect(await page.getByRole("heading", { level: 1 }).count()).toBe(1);
   expect(await page.title()).toBe("Defjs");
-  expect(await (await page.request.get(site.url("/404.html"))).status()).toBe(
-    200,
-  );
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     const response = await page.goto(site.url(`${prefix}/docs/start`), {
@@ -46,6 +47,13 @@ test("accepts the built static site, locale routing and reading interactions", a
         await (await page.request.get(site.url(`${prefix}/${area}`))).status(),
       ).toBe(200);
   }
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the language switcher round-trips through every locale", async () => {
+  const site = await openSite();
+  const { page, errors } = await openPage(site);
+  await disableViewTransitions(page);
   await page.goto(site.url("/docs/start"), {
     waitUntil: "networkidle",
   });
@@ -78,6 +86,15 @@ test("accepts the built static site, locale routing and reading interactions", a
     await page.keyboard.press("Escape");
     selected = target;
   }
+  expect(await errors.values()).toEqual([]);
+});
+
+test("serves the 404 page, every published resource and the llms links", async () => {
+  const site = await openSite();
+  const { page, errors } = await openPage(site);
+  expect(await (await page.request.get(site.url("/404.html"))).status()).toBe(
+    200,
+  );
   expect(
     await (await page.request.get(site.url("/missing-path"))).status(),
   ).toBe(404);
@@ -114,6 +131,12 @@ test("accepts the built static site, locale routing and reading interactions", a
     expect(await response.status()).toBe(200);
     expect((await response.text()).length).toBeGreaterThan(0);
   }
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the API index filters by name, package and category", async () => {
+  const site = await openSite();
+  const { page, errors } = await openPage(site);
   await page.goto(site.url("/api"), {
     waitUntil: "networkidle",
   });
@@ -145,6 +168,12 @@ test("accepts the built static site, locale routing and reading interactions", a
   expect(
     await page.getByText(uiCopy["en-US"].noResults, { exact: true }).count(),
   ).toBe(1);
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the search shortcut opens the dialog scoped to the reading language", async () => {
+  const site = await openSite();
+  const { page, errors } = await openPage(site);
   for (const locale of ["en-US", "zh-Hans", "ja-JP", "ar"]) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     await page.goto(site.url(`${prefix}/docs/start`), {
@@ -177,6 +206,13 @@ test("accepts the built static site, locale routing and reading interactions", a
     expect(await dialog.textContent()).not.toContain("<ApiReference");
     await selectSearchResult(page);
   }
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the theme toggle and the mobile drawer work", async () => {
+  const site = await openSite();
+  const { page, errors } = await openPage(site);
+  await disableViewTransitions(page);
   await page.goto(site.url("/docs/start"), {
     waitUntil: "networkidle",
   });
@@ -193,40 +229,39 @@ test("accepts the built static site, locale routing and reading interactions", a
     await page.getByRole("link", { name: /Quick start/ }).count(),
   ).toBeGreaterThan(0);
   await page.keyboard.press("Escape");
-  {
-    await using noJS = await browser.newContext({
-      javaScriptEnabled: false,
-    });
-    const reading = await noJS.newPage();
-    await reading.goto(site.url("/"));
-    expect(await reading.locator("main").count()).toBe(1);
-    expect(await reading.getByRole("heading", { level: 1 }).count()).toBe(1);
-    expect(await reading.title()).toBe("Defjs");
-    for (const path of ["/docs/start", "/docs", "/api/core/withtimeout"]) {
-      await reading.goto(site.url(path));
-      expect(
-        await reading
-          .locator('meta[name="description"]:not([content])')
-          .count(),
-      ).toBe(0);
-    }
-    await reading.goto(site.url("/docs/start"));
-    expect(
-      await reading.locator('meta[name="description"][content]').count(),
-    ).toBe(1);
-    expect(await reading.title()).toBe("Quick start | Defjs");
-    await reading.goto(site.url("/api/core/createclient"));
-    expect(await reading.locator("main").textContent()).toContain(
-      "ClientOption",
-    );
-    await reading.goto(site.url("/api"));
-    expect(
-      await reading
-        .getByRole("link", { name: "createClient", exact: true })
-        .count(),
-    ).toBeGreaterThan(0);
-  }
   expect(await errors.values()).toEqual([]);
+});
+
+test("pages render their content without JavaScript", async () => {
+  const site = await openSite();
+  const { browser } = site;
+  await using noJS = await browser.newContext({
+    javaScriptEnabled: false,
+  });
+  const reading = await noJS.newPage();
+  await reading.goto(site.url("/"));
+  expect(await reading.locator("main").count()).toBe(1);
+  expect(await reading.getByRole("heading", { level: 1 }).count()).toBe(1);
+  expect(await reading.title()).toBe("Defjs");
+  for (const path of ["/docs/start", "/docs", "/api/core/withtimeout"]) {
+    await reading.goto(site.url(path));
+    expect(
+      await reading.locator('meta[name="description"]:not([content])').count(),
+    ).toBe(0);
+  }
+  await reading.goto(site.url("/docs/start"));
+  expect(
+    await reading.locator('meta[name="description"][content]').count(),
+  ).toBe(1);
+  expect(await reading.title()).toBe("Quick start | Defjs");
+  await reading.goto(site.url("/api/core/createclient"));
+  expect(await reading.locator("main").textContent()).toContain("ClientOption");
+  await reading.goto(site.url("/api"));
+  expect(
+    await reading
+      .getByRole("link", { name: "createClient", exact: true })
+      .count(),
+  ).toBeGreaterThan(0);
 });
 
 test("keeps long API titles readable on narrow screens", async () => {

@@ -4,6 +4,9 @@ import { expect, test } from "vitest";
 import { captureBrowserErrors, waitForHydration } from "./helpers";
 import { openSite } from "./support/site";
 
+/** Minimum horizontal offset that makes a nested item read as a child of its group. */
+const INDENT = 12;
+
 async function textBox(element: Remote<Locator>) {
   return element.evaluate((node) => {
     const range = document.createRange();
@@ -27,7 +30,7 @@ test("keeps API symbols nested beneath their native package folder", async () =>
     sidebar.getByRole("button", { name: "Core", exact: true }),
   );
   const symbol = await textBox(sidebar.locator('a[aria-current="page"]'));
-  expect(symbol.left - folder.left).toBeGreaterThanOrEqual(12);
+  expect(symbol.left - folder.left).toBeGreaterThanOrEqual(INDENT);
 });
 
 test("distinguishes navigation groups from their children in both reading directions", async () => {
@@ -51,7 +54,7 @@ test("distinguishes navigation groups from their children in both reading direct
     const child = await textBox(overview);
     expect(
       rtl ? group.right - child.right : child.left - group.left,
-    ).toBeGreaterThanOrEqual(12);
+    ).toBeGreaterThanOrEqual(INDENT);
     const headingWeight = await heading.evaluate((node) =>
       Number(getComputedStyle(node).fontWeight),
     );
@@ -83,7 +86,14 @@ test("distinguishes navigation groups from their children in both reading direct
       await sidebar.evaluate((node) => node.scrollWidth <= node.clientWidth),
     ).toBe(true);
   }
-  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await errors.values()).toEqual([]);
+});
+
+test("the mobile drawer indents navigation groups", async () => {
+  const site = await openSite();
+  const page = await site.browser.newPage({
+    viewport: { width: 390, height: 844 },
+  });
   await page.goto(site.url("/zh-Hans"), {
     waitUntil: "networkidle",
   });
@@ -100,36 +110,36 @@ test("distinguishes navigation groups from their children in both reading direct
   const child = await textBox(
     drawer.getByRole("link", { name: "快速开始", exact: true }),
   );
-  expect(child.left - group.left).toBeGreaterThanOrEqual(12);
+  expect(child.left - group.left).toBeGreaterThanOrEqual(INDENT);
   await drawer.getByRole("link", { name: "快速开始", exact: true }).click();
   await page.waitForURL("**/zh-Hans/docs/start");
   await drawer.waitFor({ state: "hidden" });
-  {
-    await using noJS = await browser.newContext({
-      javaScriptEnabled: false,
-      viewport: { width: 390, height: 844 },
-    });
-    const reading = await noJS.newPage();
-    await reading.goto(site.url("/zh-Hans/docs/start"));
-    await reading
-      .getByText("章节导航", { exact: true })
-      .filter({ visible: true })
-      .first()
-      .click();
-    const directory = reading
-      .getByRole("navigation", { name: "章节导航", exact: true })
-      .filter({ visible: true });
-    const heading = await textBox(
-      directory.getByRole("heading", { level: 2 }).first(),
-    );
-    const start = await textBox(
-      directory.getByRole("link", { name: "快速开始", exact: true }),
-    );
-    expect(start.left - heading.left).toBeGreaterThanOrEqual(12);
-    await directory
-      .getByRole("link", { name: "HTTP 请求", exact: true })
-      .click();
-    await reading.waitForURL("**/zh-Hans/docs/http");
-  }
-  expect(await errors.values()).toEqual([]);
+});
+
+test("the mobile directory indents navigation groups without JavaScript", async () => {
+  const site = await openSite();
+  const { browser } = site;
+  await using noJS = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: { width: 390, height: 844 },
+  });
+  const reading = await noJS.newPage();
+  await reading.goto(site.url("/zh-Hans/docs/start"));
+  await reading
+    .getByText("章节导航", { exact: true })
+    .filter({ visible: true })
+    .first()
+    .click();
+  const directory = reading
+    .getByRole("navigation", { name: "章节导航", exact: true })
+    .filter({ visible: true });
+  const heading = await textBox(
+    directory.getByRole("heading", { level: 2 }).first(),
+  );
+  const start = await textBox(
+    directory.getByRole("link", { name: "快速开始", exact: true }),
+  );
+  expect(start.left - heading.left).toBeGreaterThanOrEqual(INDENT);
+  await directory.getByRole("link", { name: "HTTP 请求", exact: true }).click();
+  await reading.waitForURL("**/zh-Hans/docs/http");
 });
