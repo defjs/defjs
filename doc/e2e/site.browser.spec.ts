@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
   captureBrowserErrors,
+  disableViewTransitions,
   selectSearchResult,
   waitForHydration,
 } from "./helpers";
@@ -14,6 +15,7 @@ test("accepts the built static site, locale routing and reading interactions", a
   const { browser } = site;
   const page = await browser.newPage();
   const errors = await captureBrowserErrors(page);
+  await disableViewTransitions(page);
   await page.goto(site.url("/"), {
     waitUntil: "networkidle",
   });

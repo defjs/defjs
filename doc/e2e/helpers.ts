@@ -47,6 +47,21 @@ export async function waitForHydration(page: Remote<Page>): Promise<void> {
   await page.locator('body[data-hydrated="true"]').waitFor();
 }
 
+/**
+ * The theme switch wraps its DOM update in `document.startViewTransition`; on a slow runner
+ * Chromium aborts an update that misses its deadline and logs the abort as a console error.
+ * Theme tests assert the resolved theme, not the animation, so run them without transitions.
+ */
+export async function disableViewTransitions(
+  page: Remote<Page>,
+): Promise<void> {
+  await page.addInitScript(() => {
+    Object.defineProperty(document, "startViewTransition", {
+      value: undefined,
+    });
+  });
+}
+
 export async function selectSearchResult(page: Remote<Page>): Promise<void> {
   const dialog = page.getByRole("dialog");
   const id = await dialog

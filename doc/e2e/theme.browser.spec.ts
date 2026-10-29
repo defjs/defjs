@@ -1,5 +1,9 @@
 import { expect, test } from "vitest";
-import { captureBrowserErrors, waitForHydration } from "./helpers";
+import {
+  captureBrowserErrors,
+  disableViewTransitions,
+  waitForHydration,
+} from "./helpers";
 import { openSite } from "./support/site";
 
 test("theme switch selects light, dark and device appearance", async () => {
@@ -10,6 +14,7 @@ test("theme switch selects light, dark and device appearance", async () => {
     viewport: { width: 835, height: 1204 },
   });
   const errors = await captureBrowserErrors(page);
+  await disableViewTransitions(page);
   const open = async () => {
     await page.goto(site.url("/zh-Hans/docs/integrations/react"), {
       waitUntil: "networkidle",
