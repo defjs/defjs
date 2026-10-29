@@ -34,8 +34,17 @@ jobs:
   core:
     if: ${{ inputs.core }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          package-manager-cache: false
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
       - run: bun ci
       # tsdown emits declarations with --noCheck, so this is the typecheck.
@@ -47,18 +56,22 @@ jobs:
       - name: Assert packed files
         run: bun test/assert-pack.ts packages/core/dist
       - working-directory: packages/core/dist
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
-        run: |
-          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
-          npm publish --access public
+        run: npm publish --access public
 
   opentelemetry-server:
     if: ${{ inputs.opentelemetry-server }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          package-manager-cache: false
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
@@ -73,18 +86,22 @@ jobs:
       - name: Assert packed files
         run: bun test/assert-pack.ts packages/opentelemetry-server/dist
       - working-directory: packages/opentelemetry-server/dist
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
-        run: |
-          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
-          npm publish --access public
+        run: npm publish --access public
 
   react:
     if: ${{ inputs.react }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          package-manager-cache: false
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
@@ -99,18 +116,22 @@ jobs:
       - name: Assert packed files
         run: bun test/assert-pack.ts packages/react/dist
       - working-directory: packages/react/dist
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
-        run: |
-          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
-          npm publish --access public
+        run: npm publish --access public
 
   vue:
     if: ${{ inputs.vue }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          package-manager-cache: false
+      - name: Install npm with trusted publishing support
+        run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
       - run: bun ci
       # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
@@ -125,12 +146,7 @@ jobs:
       - name: Assert packed files
         run: bun test/assert-pack.ts packages/vue/dist
       - working-directory: packages/vue/dist
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
-        run: |
-          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
-          npm publish --access public
+        run: npm publish --access public
 
   docs:
     if: ${{ inputs.docs }}
