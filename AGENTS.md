@@ -206,7 +206,8 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 
 ## Release and packaging
 
-- The **Release** workflow is manual and pick-what-you-want. Versions come from the committed package manifests; nothing bumps them and no changesets or tags are required.
+- The **Release** workflow is manual and pick-what-you-want. Versions come from the committed package manifests; nothing bumps them and no changesets are involved.
+- Every published package gets its own tag on the revision it was published from: the package name without its `@defjs/` scope, `@`, then the version — `core@0.4.0`, `react@0.0.1`, `vue@0.0.1`, `opentelemetry-server@0.0.1`. One tag per package, not one per release, because the packages version independently. Tags are lightweight and pushed with explicit refs (`git push origin refs/tags/core@0.4.0`). The workflow neither reads nor creates them, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
 - Each package builds with `tsdown`, publishes from `dist`, and uses `publishConfig.directory`. The build writes `dist/package.json`, copies `LICENSE` and the package `README.md`. The `build` scripts call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
 - The root `overrides` pins `rolldown-plugin-dts` to a 0.29 beta because 0.28 reads `ts.sys`, which TypeScript 7.1 does not expose. Drop the override once `tsdown` depends on a `rolldown-plugin-dts` release that supports TypeScript 7.1.
 - `bun test/assert-pack.ts <publish-dir>` must pass before publishing: it checks that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and every file referenced by the entry fields.
