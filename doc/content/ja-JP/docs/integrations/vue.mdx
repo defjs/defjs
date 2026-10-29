@@ -1,0 +1,89 @@
+---
+title: "Vue"
+description: SDK の API 定義を Vue で使い、アプリケーションの Client を提供して結果とキャンセルを管理します。
+---
+
+# Vue
+
+Vue アプリケーションは SDK から API 定義を import し、自身で構成した Defjs Client を provide します。SDK の定義は Vue に依存せず、コンポーネントやデータ層が実行結果とキャンセルを管理します。
+
+これらのプラグインは、既存の `Client` の提供と取得を補助する任意の仕組みです。アプリ所有の固定クライアントを直接 import する、再利用するロジックに明示的な Client を渡す、ツリーの既定値やサブツリーの上書きにフレームワークの注入を使う、独自の構成を選ぶ、どれも有効です。SDK の定義にプラグインは必須ではありません。
+
+既存の `@defjs/core` クライアントを Vue に繋ぎます。得られるのはプラグイン、injection key、`injectClient()` です。このパッケージはクライアントを**作らず**、結果をキャッシュせず、コマンドをリトライせず、unmount でトランスポートリソースも閉じません。
+
+## 基本セットアップ
+
+`@defjs/core`、`@defjs/vue`、Vue 3.2+ を入れます（プラグインに必要なのは `provide` / `inject` だけですが、例では `<script setup>` と `onScopeDispose` を使い、これらは 3.2 で導入されました）。ESM です。
+
+`bun add @defjs/core @defjs/vue vue`
+
+クライアントを作り、プラグインを入れ、変更時 abort で取得します。
+
+<include cwd lang="typescript">
+  examples/vue/main.ts#example
+</include>
+
+<include cwd>examples/vue/basic-setup.vue#example</include>
+
+`createClientPlugin(client)` は渡したオブジェクトそのものを提供します。クローンも破棄フックもありません。core の options とインターセプターは、クライアントを作るときに設定してください。
+
+`onCleanup` は watcher の再実行前と停止時に走ります。非同期作業を始める前に登録してください。エラーファーストのタプルはアプリケーションデータのままです。
+
+## 注入と上書き
+
+`injectClient(key)` はそのキーの最も近い provider を読み、省略または `undefined` なら `HTTP_CLIENT` を使います。同期的な `setup()` や `app.runWithContext()`（Vue 3.3+）など、有効な Vue の注入コンテキストで呼んでください。後者は同期的なアプリレベルのコンテキストのみで、サブツリーの上書きを引き継がず、通常の `await` もまたぎません。`<script setup>` のトップレベル `await` 後にコンパイラが復元したコンテキストは引き続き有効です。
+
+カスタムの `InjectionKey<Client>` は `app.provide(key, client)` または祖先の `provide(key, client)` で設定します。提供側と取得側で同じ `Symbol` オブジェクトを共有してください。説明が同じでも別のキーです。`createClientPlugin(client)` は引き続きクライアントだけを受け取り、`HTTP_CLIENT` のみを提供します。
+
+有効な注入コンテキストがない場合や、選択したキーのクライアントがない場合に `Error` を throw します。カスタムキーが見つからなくても `HTTP_CLIENT` にはフォールバックしません。プラグインのインストールだけでは注入コンテキストはできません。
+
+クライアント取得だけを包むアプリ関数では `explicitClient ?? injectClient()` を使えます。注入コンテキストが必要なのはフォールバック側だけです。同じコンポーザブル内のほかのライフサイクル API には、それぞれのコンテキスト要件が残ります。非同期作業の前に有効なコンテキストでクライアントを取得し、そのオブジェクトを再利用してください。
+
+サブツリーは Vue の `provide(HTTP_CLIENT, childClient)` で上書きできます。
+
+<include cwd>examples/vue/inject-and-override.vue#example</include>
+
+最も近いプロバイダが勝ちます。子孫は `childClient` を受け取り、サブツリー外の兄弟はアプリレベルのクライアントのままです。 provide するコンポーネント自身は、引き続き祖先から読み取ります。
+
+## watcher の外で HTTP 作業を所有する
+
+composable やコンポーネントが watcher の外で始めた作業には、`AbortController` + `onScopeDispose` を使います。起動と進行中の作業を abort し、リアクティブ状態を代入する前に signal を確認してください。プラグインや注入スコープは、誰がコマンドを所有するかを推論しません。一覧ページでは `execute` を Vue Query（または類似のもの）で包んでください — `@defjs/vue` は DI だけのままで、`useRequest` は**出しません**。
+
+スコープがクライアントを所有するとき、ブラウザー全体で再利用するならリクエスト非依存に保ってください。ヘッダー・cookie・ユーザー・テナント・資格情報を掴むなら、関連するアプリ/SSR のリクエスト境界で作り、そこで provide してください。
+
+## リアルタイムスコープを片付ける
+
+スコープが接続途中で消えても、ストリームやセッションは閉じます。起動を abort し、遅く届いたハンドルを閉じ、単一イテレータを消費し、終端 promise を await します。
+
+<include cwd>examples/vue/realtime-scope.vue#example</include>
+
+致命的なストリームエラーとキューのオーバーフローはイテレータを reject するので、ループには `catch` があります。無いと、その reject は未処理になります。例では直近 100 件のメッセージだけを保持し、同一のペイロードだとキーが重複するため、行を id でキー付けしています。スコープを止めると、SSE ではイテレーションが通常どおり終了します。一方、abort された WebSocket セッションは `receive` を `AbortError` で reject するので、同じように `catch` で判別してください。
+
+WebSocket も同じ順序です — 準備を abort、遅いセッションを close、`session.receive` を消費、`onStateChange` / `onRuntimeError` を購読解除、close、`session.closed` を await。クリーンアップは冪等に保ってください。破棄とイテレータ完了は同時に起き得ます。
+
+## SSR スコープ
+
+`createClientPlugin(client)` は 1 つの Vue アプリに 1 インスタンスを提供します。ブラウザーでは、エンドポイント・インターセプター・掴んだ状態を共有してよいとき共有します。SSR 中は、ヘッダー・cookie・ユーザー・テナント・資格情報が違うとき、リクエストごとに別のクライアントを作って入れます。
+
+アプリ unmount、プラグイン削除、コンポーネントスコープ破棄は、HTTP を abort せず、SSE/WebSocket を閉じず、リスナーを購読解除せず、core クライアントも破棄しません。作業を始めた所有者が終わらせる必要があります。
+
+## リファレンス
+
+`@defjs/vue` からの公開エクスポート:
+
+<include cwd lang="typescript">
+  examples/vue/exports.ts#example
+</include>
+
+- `HTTP_CLIENT` — ネイティブ `provide` / `inject` 用の `InjectionKey<Client>`
+- `createClientPlugin(client)` — そのクライアントを provide する Vue `Plugin`
+- `injectClient` — 選択したキー（既定は `HTTP_CLIENT`）の最も近いクライアント、なければ throw
+
+クライアントと options は `@defjs/core` で作ります。[Client](/ja-JP/docs/client)、[Commands](/ja-JP/docs/commands)、[Interceptors](/ja-JP/docs/interceptors)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) を見てください。
+
+## 関連レシピ
+
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
+- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
+- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)

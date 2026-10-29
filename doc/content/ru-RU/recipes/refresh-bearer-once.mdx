@@ -1,0 +1,20 @@
+---
+title: "Обновление токена после 401"
+description: Повесь Authorization и один replay внутри одного interceptor; next() идёт только внутрь.
+---
+
+# Обнови Bearer-токен один раз на 401
+
+`next()` — оставшаяся часть **этой** цепочки перехватчиков, а не повторная отправка `axios(config)` снаружи. Помести добавление заголовка, обновление токена с объединением одновременных запросов (single-flight) и один повтор в **один** HTTP interceptor, чтобы внешние слои не выполнялись дважды.
+
+См. [Interceptors](/ru-RU/docs/interceptors).
+
+<include cwd meta="refresh-bearer.ts">
+  examples/recipes/refresh-bearer-once.ts#example
+</include>
+
+```txt
+null 42
+```
+
+Повторный вызов `next` выполняет заново только interceptors **внутри** этого слоя (и обработчик Fetch). Внешние обёртки измерения времени и аутентификации повторно не выполняются — поэтому обработка 401 должна находиться в одном interceptor, а не во втором вызове `execute`.

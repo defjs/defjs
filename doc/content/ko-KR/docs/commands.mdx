@@ -1,0 +1,63 @@
+---
+title: "정의와 실행 / Command"
+description: SDK의 API 정의와 builder를 작성하고, 사용하는 앱에서 타입이 있는 명령을 실행합니다.
+---
+
+# 명령
+
+SDK 작성자는 API 계약을 정의하고 엔드포인트 함수를 export합니다. 사용하는 앱은 그 함수를 호출해 opaque 명령을 만든 뒤 자신이 구성한 `client.execute(...)`에 전달합니다.
+
+정의 → 엔드포인트 함수 → 명령 → Defjs Client 실행이라는 흐름은 HTTP, SSE, WebSocket에 공통입니다. 정의를 만들거나 엔드포인트 함수를 호출하는 것만으로 통신이 시작되지는 않습니다. 입력 검증과 `builder` 실행은 execute 시점에 이루어집니다.
+
+아래의 짧은 예제는 두 역할을 한 파일에 보여 줍니다. SDK로 배포할 때는 정의를 export하고, Client 구성과 실행은 사용하는 앱에 둡니다.
+
+## 기본 사용법
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## 정의 고르기
+
+| 정의                     | 계약                                                         | 성공 값                                |
+| ------------------------ | ------------------------------------------------------------ | -------------------------------------- |
+| `defineRequest(...)`     | method, 상대 path, 선택 input, 선택 `output` / `error`       | 디코딩된 data + response               |
+| `defineEventStream(...)` | path, buffer/queue 한도, 이벤트 이름 → Struct map            | `EventStreamHandle` + open 스냅샷      |
+| `defineWebSocket(...)`   | path, incoming struct 하나, 선택 outgoing struct, queue 한도 | `WebSocketSession` + connection 스냅샷 |
+
+`input`이 없으면 엔드포인트는 인자를 받지 않고, `builder`는 `() => request`일 수 있어요. `input`이 있으면 struct 값을 넘기세요. optional 필드는 빼도 되고, 필수 필드는 빼면 안 돼요.
+
+명령은 opaque로 두세요. 태그나 심볼을 파고들지 마세요.
+
+## 값이 가는 곳
+
+struct가 값을 어떻게 인코딩할지 정하고, `builder`가 어디로 갈지 정해요. `builder`는 **파싱된** 입력의 동기적이고 순수한 함수예요. 실행 시점에 돌아요. throw하면 튜플의 `REQ_BUILD_FAILED`가 되고, 엔드포인트 호출 자체는 throw하지 않아요.
+
+`input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 builder만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+
+타입이 있는 값을 그대로 넘기세요. 그러면 alias, `Date` → ISO, `bigint` → 문자열이 그 struct가 쓰이는 곳마다 적용돼요. 요청 배치, 응답 디코딩, SSE 이벤트, WebSocket 프레임이에요.
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+body는 JSON `{"display_name":"…","email":"…"}`예요. 손으로 쓴 키는 빠져나가는 구멍이에요. `body: { name: input.user.displayName }`은 `name`을 보내요. 부모 객체가 익명이라 alias가 적용되지 않아요.
+
+## 모양이 다를 때
+
+path placeholder, 리터럴, 분기는 `builder`를 쓰세요. 실제 값을 받으니 `if`, `??`, 템플릿, `switch`가 동작해요.
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.filter`는 `page_size`를 보내요. `headers: { 'x-api-version': '2' }`는 리터럴이에요. 인증과 트레이싱은 여전히 interceptor에 두세요. builder가 돈 뒤의 네이티브 요청을 봐요.
+
+## output과 error의 모양
+
+`output`은 2xx body를 위한 Struct 하나이고, `error`는 그 밖 전부를 위한 Struct 하나예요. `ok`가 유일한 분기이고, 디코딩하는 쪽은 항상 한쪽뿐이에요. 한쪽을 빼면 그 body는 읽히지 않아요. fault는 status를 가지고 `data`는 `undefined`로 남아요.
+
+## 관련 레시피
+
+- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)
+- [POST JSON](/ko-KR/recipes/post-json)

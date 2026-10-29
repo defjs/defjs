@@ -1,0 +1,28 @@
+{
+  "extends": "../tsconfig.base.json",
+  "include": [
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "scripts/**/*.ts",
+    "e2e/**/*.ts",
+    "*.ts",
+    ".react-router/types/**/*.ts",
+    "e2e/**/*.tsx",
+    "examples/**/*.spec.ts",
+    "examples/opentelemetry-logging/**/*.ts"
+  ],
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["bun", "vite/client"],
+    "rootDirs": [".", "./.react-router/types"],
+    "paths": {
+      "@/*": ["./app/*"],
+      "@defjs/core": ["../packages/core/src"],
+      "@defjs/react": ["../packages/react/src"],
+      "@defjs/vue": ["../packages/vue/src"],
+      "@defjs/opentelemetry-server": ["../packages/opentelemetry-server/src"]
+    },
+    "resolveJsonModule": true,
+    "esModuleInterop": true
+  }
+}

@@ -1,0 +1,137 @@
+---
+title: "設計決策"
+description: Defjs 如何透過分離 SDK 契約與應用程式執行，讓介面設計、撰寫與發佈更直接。
+---
+
+# 設計決策
+
+Defjs 為更友善的 SDK 設計而生。名稱意為 **define js**，其中 `def` 是 **define** 的縮寫。SDK 作者應能用熟悉的 JavaScript / TypeScript 描述介面、驗證資料、匯出型別，並把這些定義作為套件交付給應用程式。
+
+因此，SDK 公開的是可重用端點定義：Struct 描述輸入、輸出、錯誤與訊息，builder 描述輸入如何進入傳輸。應用程式建立並設定自己的 Client，決定服務位址、身分驗證、平台 handle，以及每次呼叫的結果處理與生命週期。這讓契約可以在不同環境重用，也讓應用程式的執行策略保持明確。
+
+這些定義仍屬於 Defjs 的執行階段契約，包含函式、Struct 與 HTTP / SSE / WebSocket 語意。它們不綁定特定應用程式的 Client，也不承諾能交給任意用戶端或作為純 JSON 執行。完整交付流程見[建置並發佈 SDK](/zh-Hant-TW/recipes/publish-http-sdk)，以下說明這項分工帶來的技術取捨。
+
+## 宣告即斷言
+
+這六條規則決定了「回應怎麼讀」的所有問題。編上號，方便以後討論時直接引用，不必重新推導一遍。
+
+### 1. 你宣告的就是你斷言的
+
+`output` 的意思是「`ok` 為 true 時，body *就是*這個形狀」。`error` 的意思是「`ok` 為 false 時，body *就是*這個形狀」。宣告不是提示，也不是盡力而為的期望，而是對「會收到什麼」的主張。
+
+### 2. `ok` 是唯一分流點，而且只走一邊
+
+2xx 用 `output` 讀。其他一律用 `error` 讀。絕不兩邊都試，也不會拿另一邊來墊底。
+
+### 3. 現實與斷言不符就是失敗，而且明確回報
+
+不猜格式、不降級、不沉默。是後端改了、閘道器插手了，還是有人動過回應，**都不影響結論**——函式庫分辨不出來，也不該裝作分辨得出來。
+
+這條最常被人希望放寬，所以值得把情況講明白。假設有個攻擊者能改寫你頁面本該按 `output` 解析的 `200`，而你收到的是 `3xx`、`4xx` 或 `5xx`。報錯不是麻煩，而是唯一安全的結果。「以防萬一」把原始 body 交給你，等於給任何能注入回應的人一條繞過你所要求的驗證的路。
+
+### 4. 解碼失敗就沒有 body
+
+body *就是*解碼後的值。解碼失敗就沒有值——不存在半成品 body 供你檢查。出錯細節在 `cause` 上；回應只保留 metadata，其他都沒有。
+
+這條由型別系統強制，不靠約定：解碼 fault 的 `response` 是 `HttpMeta`，根本沒有 `body` 欄位，去取它就是編譯錯誤。
+
+### 5. 不想被斷言約束，就不要宣告
+
+省略 `output` 的意思是「我不在乎 2xx 的 body」——它根本不會被讀。省略 `error` 對其餘狀態同理。這是明確的 opt-out，不是漏掉，而且徹底：你 opt out 那一側的 body 讀不出來，不是你的事，連「它讀不出來」這件事本身都不是。
+
+### 6. 3xx 不是成功區間
+
+`ok` 只代表 2xx，所以 3xx 回應（通常是 `304 Not Modified`）一律用 `error` 讀，絕不會用 `output` 讀。如果端點的契約本來就會回 3xx 狀態，就不要宣告 `error`，改為處理 `HTTP_STATUS` fault；或者宣告文字型的 `error`（`struct.string()`）來接受空 body。JSON 的 `error` Struct 無法接受沒有 body 的回應：那是一個失敗，是預期結果，不是缺口。
+
+## 明確的 client
+
+`createClient(...)` 把 endpoint 設定當成明確的值。不同環境或請求範圍可以有不同的 endpoint、憑證、interceptors、serializers、傳輸 handles。
+
+代價：沒有 process-wide 預設。這在伺服器上反而有用 — 當 options 或 closures 會捕捉 auth、cookies、users、tenants 或請求 metadata 時，在請求邊界內建立 client。明確的 client 仍不會隔離 interceptor 捕捉到的狀態。Client 身分本身不是安全邊界。
+
+Client 負責分派 commands。它不擁有進行中的工作。誰啟動 HTTP 請求、SSE 串流或 WebSocket session，誰就要取消或關閉它，並 await 終端 promise。
+
+## 定義、endpoints 與 commands
+
+定義是穩定契約：method、path、input struct、解碼 `ok` 兩邊的 structs、傳輸限制。`defineRequest` 回傳 endpoint。呼叫它會為單次執行建立一個不透明 command。
+
+<include cwd lang="typescript">
+  examples/design-decisions/definitions.ts#example
+</include>
+
+背景工作與 UI 擁有者可以用不同的取消／重試策略執行同一個 `getUser` 形狀。讓 command 保持不透明，可避免應用程式碼依賴內部傳輸 tags 或 symbols。
+
+## 依傳輸區分的結果
+
+三種傳輸都用 error-first tuple。若塞成單一泛用「response」，生命週期事實會被抹掉。
+
+- HTTP → `[err, data, response]` — 解碼後的輸出 + 產出它的回應
+- SSE → `[err, stream, open]` — 一個邏輯串流 + 啟動回應快照
+- WebSocket → `[err, session, connection]` — 邏輯 session + 啟動連線快照
+
+成功時第三個值一定在。HTTP 失敗是 `[error, undefined, undefined]`：fault 已經帶著回應 metadata，而傳給 handler、寫 log 或重新丟出的就是這個 fault。SSE 與 WebSocket 的啟動失敗，若已捕捉到 open 或 connection 快照，第三項仍可能包含它。
+
+SSE 與 WebSocket 的第三個值是快照，不是對「未來重連仍是同一條實體連線」的保證。啟動之後，生命週期控制權屬於回傳的 handle 或 session。
+
+## 執行階段解碼
+
+TypeScript 推導描述的是你期待的形狀；它無法在執行階段檢查伺服器回應。Struct 剖析是契約的另一半。Defjs 會在建構請求前驗證 command input，檢查 representation，再剖析 `ok` 適用那一側的 struct。
+
+對於 HTTP，Struct **只套用一次，而且在 interceptor 鏈之後**。Interceptor 用 `makeResponse(...)` 造出來的回應，和線上真實來的回應一樣會經過同樣的媒體類型檢查、表示轉換與 Struct：回應從哪來，不影響它怎麼被讀，所以不存在「信任 interceptor」這條需要推敲的岔路。內建的 Fetch 傳輸在把回應交回鏈之前，會把已宣告的 body 讀成 JSON、文字、`Blob` 或 bytes。只有 JSON 表示才要求 JSON 媒體類型與 `JSON.parse`；非 JSON 的文字、blobs 與 bytes 對其宣告的表示是有效的。Interceptor 看到的是那個表示，還不是 Struct 解碼後的值。讀取失敗適用於每一種表示；那裡的讀取或剖析失敗會以同樣的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 回報。
+
+順序是：媒體類型（針對 JSON），然後表示，然後 struct。
+
+| 沒守住的是                       | Fault                                            |
+| -------------------------------- | ------------------------------------------------ |
+| 媒體類型不是所宣告表示需要的那個 | `RES_MEDIA_TYPE_INVALID`——在讀 body *之前*就回報 |
+| bytes 不是那個表示               | `RES_DECODE_FAILED`                              |
+| 值不符合那個 struct              | `RES_STRUCT_MISMATCH`（僅 HTTP）                 |
+| 非 2xx，且 `error` 解出來了      | `HTTP_STATUS`，`data` 有型別                     |
+| 非 2xx，且沒宣告 `error`         | `HTTP_STATUS`，`data: undefined`                 |
+
+先檢查媒體類型，就是把「我要的是 JSON，收到的是 HTML」變成一個精確的 fault 而不是一個 parser 錯誤，而且整個跳過讀取、解析和 struct。
+
+## Builder、encoder 與 alias
+
+Struct 是雙向的欄位契約。`.alias(name)` 是 wire 名稱。Struct 決定值怎麼編碼。`builder` 決定值放到哪。
+
+`builder` 是同步純函式。它收到的是剖析後的 input——真實的值，不是綁定視圖——並回傳 request：`path`、`query`、`headers`、`body`。它在 command 執行時跑。丟出錯誤會變成 tuple 上的 `REQ_BUILD_FAILED`；呼叫 endpoint 本身不會 throw。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。
+
+<include cwd lang="typescript">
+  examples/design-decisions/builder-encoder-alias.ts#example
+</include>
+
+預設路徑是把型別化的值交出去。`body: { users: input.users }` 會保留每個使用者的 alias，所以 wire 欄位是 `display_name`。你自己寫的 key（`account_id`、`x-api-version`）是字面。展開型別化物件會保留它的 struct；在邏輯欄位旁邊再加 wire key 是 `REQ_BUILD_FAILED`。
+
+Query 的巢狀形狀是後端的性質，所以放在 client 上：`withQuerySerializer((query) => string)` 看到的是已編碼的 wire 物件，aliases 已套用。沒有 query 時不會呼叫它。Builder 回傳的 `URLSearchParams` 會跳過它。沒有 serializer 時，陣列會重複 key，巢狀物件則失敗。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
+
+Body kind 依值決定，第一個相符者勝出：
+
+- 沒有 `body` → 什麼都不送
+- body 根上有 `urlencoded` 或 `formData` codec → 用那種 form 編碼；值巢在 JSON 裡時這個 tag 不生效
+- `FormData`、`URLSearchParams`、`Blob`、`File`、bytes，或 `ReadableStream` → 原樣送出
+- 字串 → `text/plain;charset=UTF-8`
+- 純物件、陣列、數字、布林值、`null`、`Date` 與 `bigint` → JSON；`JSON.stringify` 會捨棄或攤平的值（`Map`、`Set`、沒有 `toJSON` 的類別實例、函式、`NaN`、Node 串流）→ `REQ_BUILD_FAILED`
+
+`undefined` 欄位會省略。可為 null 的欄位上的 `null` 會送出。字串不是 JSON，除非你自己 stringify 並設定 `content-type`。自己序列化（`JSON.stringify`、qs、protobuf）就離開 struct encoder，所以 aliases 不套用。沒有公開的 `struct.encode`。
+
+`GET` 與 `HEAD` 不能帶 body。WebSocket builder 不能回傳 headers 或 body。靜態 WebSocket subprotocols 留在定義上（`protocols`），不放進 builder。無效的 WebSocket frames 走 session 的 runtime-error listener。SSE 的 `error` struct 給啟動 fault 定型，握手 body 跟 HTTP body 用同一套 kind 規則：`string` 是文字，blobs 與 files 是 blobs，`arrayBuffer` 是 bytes，其餘是 JSON。表示的選擇是共用的，但 fault 對應不是：SSE 握手的讀取、剖析或 Struct 失敗是 `RES_DECODE_FAILED`，Struct 失敗時 `cause` 是 `StructError`；HTTP 把 Struct 失敗報成 `RES_STRUCT_MISMATCH`。
+
+## Observer 與策略放哪裡
+
+Interceptors 負責傳輸層級策略：auth、tracing、short-circuit、審過的重試。它們只跑在所屬傳輸上，並以洋蔥順序組合。執行 options 負責單次工作的生命週期：`signal`、`timeout`、WebSocket heartbeat、選擇性重連。
+
+Observers 回報發生了什麼，但不會變成第二個擁有者。SSE `onInvalidEvent`、WebSocket state listeners、runtime-error listeners 適合有界的診斷與 metrics。回傳的 stream／session 仍擁有 iteration、close、unsubscribe、終端等待。快取、壓制過期結果、idempotency、領域錯誤對應，應放在 `client.execute(...)` 周圍，讓應用程式能看到自己的策略與狀態。
+
+## OpenAPI、sourcemaps 與遙測
+
+Defjs 不會產生或同步第二份 OpenAPI 契約。若 OpenAPI 已是權威來源，就維持它，並在應用邊界加上執行階段驗證。新服務可以直接把 endpoint 定義與 Structs 當 wire 契約 — 不需要第二個真相來源。
+
+`withOpenTelemetryServer(...)` 為 client 加上**出站** Defjs instrumentation。它不會初始化 OpenTelemetry SDK。`tracer`、`meter` 與 `logger` 都是選填（省略 `tracer` 會停用本機 spans 與 span hooks），三種傳輸預設開啟，WebSocket query propagation 預設關閉。操作名稱保持 static、低基數。把 propagation、hooks、URLs、headers、payloads、causes、retention 都當成可能含敏感資料來審。
+
+Sourcemaps 是部署決策，不是 Defjs 行為。公開帶 `sourcesContent` 的 map 會暴露原始碼；隱藏的 map 仍含原始碼與路徑；關閉 maps 就拿掉原始碼層級的 symbolication。把私有 maps 當成可部署的除錯產物，並訂清楚存取與保留規則。
+
+## 相關操作範例
+
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [用本機 Fetch handle 測試](/zh-Hant-TW/recipes/test-with-handle)

@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@defjs/core": ["./packages/core/src"],
+      "@defjs/opentelemetry-server": ["./packages/opentelemetry-server/src"],
+      "@defjs/react": ["./packages/react/src"],
+      "@defjs/vue": ["./packages/vue/src"]
+    },
+    "jsx": "react-jsx"
+  },
+  "include": ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"],
+  "exclude": [
+    "node_modules",
+    "**/dist",
+    "**/coverage",
+    "test-out",
+    "doc",
+    ".superpowers"
+  ]
+}

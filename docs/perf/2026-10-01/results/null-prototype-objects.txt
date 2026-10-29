@@ -1,0 +1,21 @@
+## V8 property mode (node --allow-natives-syntax) and build/read cost per 5-field object
+Object.create(null)            fast= false proto= null
+{} fill then setProto(null)    fast= true proto= null
+{} setProto(null) then fill    fast= true proto= null
+{}                             fast= true proto= [Object: null prototype] {}
+__proto__ own after setProto(null)? true null
+Object.create(null)            build 199 ns/obj  read 20.5 ns/obj
+{} fill then setProto(null)    build 217 ns/obj  read 7.5 ns/obj
+{} setProto(null) then fill    build 145 ns/obj  read 7.3 ns/obj
+{}                             build 57 ns/obj  read 6.5 ns/obj
+== bun (JSC, no natives)
+Object.create(null)            build 26 ns/obj  read 4.9 ns/obj
+{} fill then setProto(null)    build 44 ns/obj  read 17.3 ns/obj
+{} setProto(null) then fill    build 46 ns/obj  read 14.1 ns/obj
+{}                             build 24 ns/obj  read 6.2 ns/obj
+
+## Retained heap per decoded 5-field object (5 x 10k-item lists kept alive)
+node base: retained per decoded object: 246 bytes (5 x 10k-item lists kept alive)
+bun  base: retained per decoded object: 74 bytes (5 x 10k-item lists kept alive)
+node final: retained per decoded object: 62 bytes (5 x 10k-item lists kept alive)
+bun  final: retained per decoded object: 75 bytes (5 x 10k-item lists kept alive)

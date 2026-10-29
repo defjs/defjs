@@ -1,0 +1,127 @@
+From 65a9f66d121eeec518a3a4b1e1119c8710becc9e Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:22:06 +0800
+Subject: [PATCH 02/10] perf(http): stop re-racing the request signal on every
+ await
+
+---
+ packages/core/src/http/http.ts                | 16 +++++++--
+ .../src/http/transport/fetch.response.spec.ts | 36 +++++++++++++++++++
+ packages/core/src/http/transport/fetch.ts     |  9 ++++-
+ 3 files changed, 57 insertions(+), 4 deletions(-)
+
+diff --git a/packages/core/src/http/http.ts b/packages/core/src/http/http.ts
+index 17f952e..285be9f 100644
+--- a/packages/core/src/http/http.ts
++++ b/packages/core/src/http/http.ts
+@@ -306,7 +306,12 @@ export async function executeHttpCommand<
+       return rejected
+     }
+ 
+-    const transportAbort = mergeAbortSignals(transportController.signal, [requestSignal, nextRequest.abort])
++    // transportController already follows requestSignal through abortTransport. Only an interceptor that
++    // swapped the signal needs a composite, which is expensive to build and to listen on.
++    const transportAbort =
++      nextRequest.abort === undefined || nextRequest.abort === requestSignal
++        ? transportController.signal
++        : mergeAbortSignals(transportController.signal, [nextRequest.abort])
+     // Interceptors run after the post-builder check. A deadline that expired there must not start the fetch.
+     const due = resolveTransportCancellation(deadline, transportAbort)
+     if (due) {
+@@ -475,8 +480,13 @@ async function decodeDeclaredBody(struct: AnyStruct, response: HttpResponse<unkn
+     }
+     throw new TypeError('Response body is absent')
+   }
+-  // Blob and byte reads are not themselves cancellable, so the request signal races them.
+-  return await awaitWithSignal(() => parseStructResponse(struct, response.body), signal)
++  // Only a Blob read is asynchronous and not itself cancellable, so only it races the request signal.
++  // Every other body converts synchronously, and the caller checks cancellation right after.
++  if (typeof Blob !== 'undefined' && response.body instanceof Blob) {
++    return await awaitWithSignal(() => parseStructResponse(struct, response.body), signal)
++  }
++  signal.throwIfAborted()
++  return await parseStructResponse(struct, response.body)
+ }
+ 
+ /** Map a transport-tagged body failure onto the fault it was classified as. */
+diff --git a/packages/core/src/http/transport/fetch.response.spec.ts b/packages/core/src/http/transport/fetch.response.spec.ts
+index efd39e3..0a8e3ab 100644
+--- a/packages/core/src/http/transport/fetch.response.spec.ts
++++ b/packages/core/src/http/transport/fetch.response.spec.ts
+@@ -275,6 +275,42 @@ describe('Fetch handler responses', () => {
+     expect(body.locked).toBe(false)
+   })
+ 
++  test('should abort a stalled response body read when cancellation rejects', async () => {
++    const controller = new AbortController()
++    const cancel = vi.fn(() => Promise.reject(new Error('cancel failed')))
++    let startPull!: () => void
++    const pullStarted = new Promise<void>((resolve) => {
++      startPull = resolve
++    })
++    const body = new ReadableStream<Uint8Array>(
++      {
++        cancel,
++        pull() {
++          startPull()
++          return new Promise<void>(() => undefined)
++        },
++      },
++      { highWaterMark: 0 },
++    )
++    const pending = fetchHandler(
++      {
++        abort: controller.signal,
++        baseEndpoint: 'https://example.com',
++        endpoint: '/stalled-body-cancel-rejects',
++        method: 'GET',
++        responseType: 'text',
++      },
++      async () => new Response(body),
++    )
++
++    await pullStarted
++    controller.abort()
++
++    await expect(settleWithin(pending)).rejects.toBe(ERR_ABORTED)
++    expect(cancel).toHaveBeenCalledExactlyOnceWith(controller.signal.reason)
++    expect(body.locked).toBe(false)
++  })
++
+   test('should abort a stalled progress response body read without waiting for cancellation', async () => {
+     const controller = new AbortController()
+     const cancel = vi.fn(() => new Promise<void>(() => undefined))
+diff --git a/packages/core/src/http/transport/fetch.ts b/packages/core/src/http/transport/fetch.ts
+index c78ae78..f336417 100644
+--- a/packages/core/src/http/transport/fetch.ts
++++ b/packages/core/src/http/transport/fetch.ts
+@@ -271,11 +271,17 @@ async function parseFetchResponse(httpRequest: HttpRequest, response: Response,
+     const chunks: Uint8Array[] = []
+     const reader = response.body.getReader()
+     const signal = httpRequest.abort
++    // One listener covers every read: cancelling settles a pending read as done, and the loop then
++    // reports the abort. Racing each read would add a listener and three promises per chunk.
++    const cancelRead = () => void reader.cancel(signal?.reason).catch(() => undefined)
++    signal?.addEventListener('abort', cancelRead, { once: true })
+     let receivedLength = 0
+ 
+     try {
+       while (true) {
+-        const result = signal ? await awaitWithSignal(() => reader.read(), signal) : await reader.read()
++        signal?.throwIfAborted()
++        const result = await reader.read()
++        signal?.throwIfAborted()
+         if (result.done) {
+           break
+         }
+@@ -301,6 +307,7 @@ async function parseFetchResponse(httpRequest: HttpRequest, response: Response,
+       }
+       throw isBodyFailure(error) ? error : new BodyFailure('NET_BODY_INCOMPLETE', error, meta)
+     } finally {
++      signal?.removeEventListener('abort', cancelRead)
+       reader.releaseLock()
+     }
+ 
+-- 
+2.55.0
+

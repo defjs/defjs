@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider, useClient con sustitución opcional del cliente y props del provider.
+---
+
+# React
+
+Proporciona un cliente `@defjs/core` existente a un árbol React. Este paquete no crea, no cachea ni libera (dispose) el cliente. Su entrada está marcada con `'use client'`, así que impórtalo desde componentes de cliente. Se requiere React 18 o posterior.
+
+Mira la [guía de React](/es-ES/docs/integrations/react).
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Provider de contexto. Pasa un cliente de `createClient`. Un `ClientProvider` anidado sustituye el cliente para su subárbol; `useClient()` lee el más cercano. Pasar un `client` distinto cambia el valor del contexto para los descendientes.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` da prioridad al cliente explícito; sin argumento o con `undefined`, lee el `ClientProvider` más cercano. Solo lanza un `Error` cuando ninguna de las dos fuentes proporciona un cliente. La llamada sin argumento `useClient()` sigue siendo válida.
+
+Llama siempre a `useClient(explicitClient)` en el nivel superior de un componente o custom Hook, incluso con un cliente explícito; no en funciones normales ni callbacks de eventos. `explicitClient ?? useClient()` llama condicionalmente a un Hook y no es válido. La sustitución no escribe en Context ni crea un provider; el Hook sigue suscrito a Context.
+
+- **Devuelve** el mismo cliente explícito o el proporcionado por el provider más cercano.
+- **Lanza** un `Error` si ni el argumento explícito ni Context proporcionan un cliente.
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` es obligatorio y pertenece a la aplicación. `children` es opcional: el árbol que puede llamar a `useClient`.

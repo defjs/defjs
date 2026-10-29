@@ -1,0 +1,22 @@
+---
+title: "إدارة جلسات WebSocket"
+description: اتصل، أرسل غلافًا محدَّد النوع واحدًا، استقبل مرة، ثم أغلق وانتظر closed.
+---
+
+# فتح جلسة WebSocket
+
+كل اتجاه هو struct واحد. أنت تملك إلغاء الاشتراك و`close` و`await session.closed`. الإطارات غير الصالحة تذهب إلى `onRuntimeError`.
+
+انظر [WebSocket](/ar/docs/web-socket) للتفاصيل.
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` عنوان توضيحي. مع خادم يرد على `{ "type": "send", "text": "Hello" }` بالرسالة `{ "type": "message", "text": "Hello" }`، تطبع الشيفرة:
+
+```txt
+message Hello
+```
+
+إعادة الاتصال اختيارية (`withWebSocketReconnect`). نبض القلب اختياري أيضًا. WebSocket في المتصفح لا يقبل رؤوس مصافحة عشوائية — استخدم ملفات تعريف الارتباط أو البروتوكولات الفرعية أو تذكرة قصيرة العمر.

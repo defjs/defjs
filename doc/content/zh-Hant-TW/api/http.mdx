@@ -1,0 +1,135 @@
+---
+title: HTTP
+description: defineRequest、execute options，以及 HTTP request／response 型別。
+---
+
+# HTTP
+
+宣告型別化的 request，從 input 組出 command，再執行。
+
+## defineRequest()
+
+<ApiSignature name="defineRequest" />
+
+- **definition** — `method`、`path`，選填 `input` struct、選填 `output` 與 `error` struct，以及選填 `operation`。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。這些 `definition` 成員寫在 [`RequestDefinition`](/zh-Hant-TW/api/core/requestdefinition-type)。恰好在宣告了 `input` 時，`builder` 才必填。
+- **回傳** endpoint。帶 input 呼叫就得到 `HttpCommand`。
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` 是 2xx body 的單一 struct；`error` 是每個非 2xx body 的單一 struct。兩者都不按狀態碼分鍵。省略哪個，那個 body 就根本不會被讀——見 [宣告即斷言](/zh-Hant-TW/docs/design-decisions#宣告即斷言)。
+
+## executeHttpCommand()
+
+<ApiSignature name="executeHttpCommand" />
+
+`client.execute` 走的低階入口。寫功能時請呼叫 `client.execute(command, options)`。
+
+- **回傳** 一個 promise，解析成 [`HttpAwaitResult`](/zh-Hant-TW/api/core/httpawaitresult-type) 所描述的 tuple 形式。
+
+非 2xx 狀態在沒有宣告 `error` struct，或已宣告的 `error` body 解碼成功時，才是 `HTTP_STATUS`。宣告過 `error` 時 fault 的 `data` 是解碼後的錯誤 body，否則是 `undefined`。如果已宣告的 `error` body 無法讀取（media type 錯誤、JSON 無效），或與其 struct 不符，fault 會改為 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，而回應狀態仍會記在 metadata 中。失敗時 tuple 第三項是 `undefined`；回應 metadata 由 fault 攜帶。
+
+## fetchHandler()
+
+<ApiSignature name="fetchHandler" />
+
+預設 HTTP 傳輸。`fetchImpl` 預設為送出當下才解析的全域 `fetch`；`withHTTPHandle` 可以提供另一個。未被替換的平台 Fetch 會收到 `(url, init)`，被替換的全域 Fetch 或自訂 handle 則會收到 `Request`。在沒有回應到達 client，或讀取已宣告的 body 失敗時，它會 reject，而不是 resolve 成一個合成回應。
+
+## makeResponse()
+
+<ApiSignature name="makeResponse" />
+
+不打網路也能組出 `HttpResponse`（interceptors、測試）。預設 status 是 `0`。2xx 時 `ok` 為 true。它回傳的值會走和線上回應完全一樣的媒體類型檢查與宣告 struct；不存在受信任的短路。
+
+## 執行 options
+
+## HttpExecuteOptions
+
+<ApiSignature name="HttpExecuteOptions" />
+
+`HttpExecuteOptions` 是 [`UseRequestConfig`](/zh-Hant-TW/api/core/userequestconfig-type) 再加上 `signal`。`abort` 與 `timeout` 互斥：型別會拒絕兩者並存，執行時同時傳入則以 `REQ_OPTIONS_INVALID` 失敗。`signal` 可與其中任一組合，**不是** `abort` 的別名。合法形狀：`{ signal }`、`{ timeout }`、`{ abort }`、`{ signal, timeout }`、`{ signal, abort }`。`{ abort, timeout }` 非法。`timeout` 必須是 `1..2_147_483_647` 的正 safe integer。呼叫省略 `timeout` 時，會套用 client 的 `withTimeout` 預設值（僅限 HTTP）；`abort` 與 `signal` 會與該預設值組合。
+
+## 型別
+
+### RequestDefinition
+
+`method`、`path`，可選 `input`、`output`、`error`、`operation` 與 `builder`。沒有 `responseType`：struct kind 決定已宣告的 body 怎麼讀。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。
+
+### HttpAwaitResult
+
+<ApiSignature name="HttpAwaitResult" />
+
+成功時第三項只有在宣告過 `output` 時才帶 `body`。失敗時它是 `undefined`——fault 已經握著當時存在的回應 metadata。
+
+### HttpRequest
+
+正規化後的外送 request：`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、`timeout`、`withCredentials`、`xsrf`、`downloadProgress`／`uploadProgress`、`baseEndpoint`、`queryString` 與 `queryParams`。Interceptors 看到它時，`body` 已經是線上值——JSON 就是一段 JSON 文字字串——所以 HMAC 與摘要請對它計算，而不是對 struct input 計算。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。Builder 回傳 `URLSearchParams` 時會把那個實例傳下去。`responseType` 與 `errorResponseType` 是唯讀的：它們由端點的 `output` 與 `error` struct kind 推導而來，不能修改。
+
+### HttpMeta
+
+<ApiSignature name="HttpMeta" />
+
+回應 metadata，只要有回應到達 client 就有。它**不**帶 `body`：body 只有在宣告過的 struct 解出來之後才存在。
+
+### DecodedResponse
+
+<ApiSignature name="DecodedResponse" />
+
+body 已按宣告的 struct 解碼成功的回應。拿到這個型別就是解碼確實發生過的證明——這也正是解碼失敗時只報 `HttpMeta` 的原因。
+
+### HttpResponse
+
+<ApiSignature name="HttpResponse" />
+
+回應沒有 body 時，`body` 是 `undefined`；JSON 的 `null` 仍是 `null`。這個型別是 branded，所以要用 `makeResponse` 建立，而不是用物件字面值。這是傳輸產出、interceptor 看到的線上形狀：`body` 是文字或已解析的 JSON，不是解碼後的值。對於 JSON 表示，字串是 JSON 字串根，不會再次解析；位元組和 blob 仍是原始資料，只解析一次。到達呼叫方的是 `DecodedResponse`。
+
+### HttpProgressEvent
+
+### HttpProgressFn
+
+`loaded`、`total`、`lengthComputable`。回呼可以採用非同步形式。`onDownloadProgress` 或 `onUploadProgress` 拋出錯誤時，該次呼叫會以 `EXT_OBSERVER_FAILED` 失敗，拋出的值作為 `cause`；取消與 `timeout` 仍分別回報 `NET_ABORTED`／`NET_TIMEOUT`。上傳進度只在支援串流請求主體的執行環境中回報（Bun、Node）；在瀏覽器中，`Blob`／`File`、`ArrayBuffer` 與 `FormData` 主體會原樣送出，不會呼叫 `onUploadProgress`。
+
+在伺服器執行環境中，FormData 使用序列化後的 stream，不會把整個主體緩衝成 Blob，並保留實際的 multipart boundary。除非有效且明確的 `Content-Length` 提供總量，否則 total 未知。明確的 content type 在上傳轉換後仍會保留，但 FormData 必須使用其序列化產生的 boundary。`loaded` 計算的是 stream 位元組，不是伺服器已確認的位元組。帶有非 identity 的 `Content-Encoding` 的下載會回報 `total: 0` 與 `lengthComputable: false`；這些 stream 位元組可能已經解壓縮。
+
+見 [HTTP 指南](/zh-Hant-TW/docs/http) 與 [Commands](/zh-Hant-TW/docs/commands)。
+
+## RequestEndpoint
+
+`defineRequest` 的回傳值。帶 input 呼叫就得到 `HttpCommand`。
+
+## BuilderInput
+
+`builder` 看到的、已剖析的 endpoint input。物件節點帶著產出它們的 struct，所以 alias、`Date`、`bigint` 編碼跟著值走。
+
+## HttpRequestShape
+
+<ApiSignature name="HttpRequestShape" />
+
+四個欄位都選填。`query` 是 `URLSearchParams` 或一條 record；巢狀物件在執行時需要 `withQuerySerializer`。`headers` 是 `HeadersInit`，或由純量、純量陣列組成的 record。`path` 為每個 `:name` 片段提供一個純量。
+
+`GET` 與 `HEAD` 的 `body` 是 `never`。其他方法下，它可以是傳輸值（`string`、`Blob`、`ArrayBuffer`、typed array 或 `DataView`、`FormData`、`URLSearchParams` 或 `ReadableStream<Uint8Array>`），也可以是 JSON 資料（`number`、`boolean`、`bigint`、`Date`、`null`、陣列，或鍵為字串的物件）。
+
+## HttpCommand
+
+請求 builder 吐出的不透明 command。丟給 `client.execute`。
+
+## UseRequestConfig
+
+選填的 `onDownloadProgress` 與 `onUploadProgress` 回呼，加上 `abort` 或 `timeout`（不能同時有）。`HttpExecuteOptions` 再加一個 `signal`。
+
+## RequestSuccessData
+
+從宣告的 `output` struct 推出來的成功 body；沒宣告時是 `undefined`。
+
+## RequestErrorData
+
+從宣告的 `error` struct 推出來的錯誤 body；沒宣告時是 `undefined`。
+
+## HttpResponseType
+
+`'arraybuffer' | 'blob' | 'json' | 'text'`
+
+由宣告的 struct kind 決定（`string` → `text`，`blob`／`file` → `blob`，`arrayBuffer` → `arraybuffer`，其餘 → `json`）。不是 `defineRequest` 上的欄位。
+
+## MakeResponseOptions
+
+給 `makeResponse` 的欄位：`status`、`statusText`、`url`、`headers`、`body`、`request`。

@@ -1,0 +1,127 @@
+---
+title: "Inicio rápido"
+description: Exporta un endpoint de SDK, ejecútalo con un cliente local de la aplicación y reutiliza la misma definición con una API real.
+---
+
+# Primeros pasos: una solicitud HTTP
+
+El primer elemento del SDK es un endpoint exportado para `GET /users/:id`. Escribes el contrato en un archivo y lo ejecutas desde un segundo archivo con el cliente de la aplicación. El handler Fetch local permite empezar sin red; la misma definición decodificará después el `200` y el `404` declarado del servicio real.
+
+## Paso 1 — Instalar
+
+`@defjs/core` es ESM y funciona en Node.js o Bun. Node.js 22.18+ (o 24+) ejecuta el `.ts` directamente mediante type stripping; las versiones 22.x anteriores necesitan `--experimental-strip-types`. Mantén `"type": "module"` en package.json. En el navegador sigues necesitando tu bundler y Fetch.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+</Tabs>
+## Paso 2 — Definir la solicitud
+
+Como autor del SDK, crea `src/define-request.ts` y exporta `getUser`. El Struct de entrada describe el valor que aporta quien llama. `builder` lo coloca en la solicitud. Aquí toda la entrada es el objeto de ruta: los campos escalares sin alias rellenan `:id`. La aplicación configurará la URL base y la autenticación.
+
+<include cwd meta="define-request.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` es el cuerpo 2xx. `error` es cualquier otro estado. Un struct cada uno. Usa `struct.or(...)` o una unión discriminada cuando esos cuerpos difieran.
+
+`defineRequest(...)` devuelve un endpoint. Llamar a `getUser(...)` construye el comando opaco que pasarás a `client.execute(...)`. El `builder` de arriba es la función que coloca el input; no es el endpoint.
+
+## Paso 3 — Ejecutarlo en local
+
+Crea `src/execute-locally.ts` junto al primer archivo. La aplicación importa `getUser`, crea su propio cliente y le proporciona un handler Fetch local. Defjs sigue validando la entrada, construyendo el `Request`, eligiendo el contrato según el estado y parseando el cuerpo.
+
+<include cwd meta="execute-locally.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+Ejecútalo:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
+<Tab value="bun">
+```sh
+bun src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+Prueba un usuario que falta — cambia el id del path a `8` y vuelve a ejecutar:
+
+```txt
+User not found
+```
+
+En éxito: `error` es `null`, `user` es la salida Struct del `200`, `response` es un `DecodedResponse`. En un `404` declarado: `error.code` es `'HTTP_STATUS'`, `error.status` es `404` y `error.data` está tipado como `NotFound`. El segundo elemento de la tupla es `undefined` en fallo.
+
+## Paso 4 — Apuntar a una API real
+
+Crea `src/real-api.ts`. Importa el mismo endpoint desde `./define-request.ts`, elimina `withHTTPHandle(...)` y configura la URL base real cuando el servicio implemente `GET /v1/users/:id` con esos cuerpos.
+
+<include cwd meta="real-api.ts">
+  examples/start/real-api.ts#example
+</include>
+
+El endpoint exportado se mantiene. La aplicación cambia la configuración de su cliente.
+
+## Cuando el resultado cambia
+
+- Entrada mala → `REQ_INPUT_INVALID`; opciones de cancel conflictivas → `REQ_OPTIONS_INVALID`; un
+  `builder` que falla → `REQ_BUILD_FAILED`
+- Un estado no-2xx → `HTTP_STATUS`, con `error.data` tipado cuando se declaró `error` y su cuerpo decodifica
+- Un cuerpo JSON declarado con otro media type → `RES_MEDIA_TYPE_INVALID`, avisado antes de leer el cuerpo
+- Un cuerpo declarado (`output` para 2xx, `error` en el resto) que no decodifica → `RES_DECODE_FAILED` o `RES_STRUCT_MISMATCH`, sea cual sea el estado
+- Fallo de Fetch / cancel / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` debe ser un entero seguro positivo en `1..2_147_483_647`. Formas de cancel válidas: `{ signal }`, `{ timeout }`, `{ abort }`, o `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` juntos es inválido. La cancelación te dice lo que vio el llamador — no si una escritura en el servidor se confirmó.
+
+## Siguientes recetas
+
+- [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
+- [POST JSON](/es-ES/recipes/post-json)
+- [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
+- [Consumir un stream SSE](/es-ES/recipes/consume-sse)
+- [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session)
+- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)

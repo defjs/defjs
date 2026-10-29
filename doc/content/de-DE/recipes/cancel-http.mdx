@@ -1,0 +1,20 @@
+---
+title: "Abbruch und Zeitlimits"
+description: Abort oder Timeout eines execute-Aufrufs und NET_ABORTED / NET_TIMEOUT lesen.
+---
+
+# HTTP-Aufruf abbrechen
+
+Gib `signal` plus entweder `abort` oder `timeout` — nicht beides `abort` und `timeout`. `timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein.
+
+Details siehe [HTTP](/de-DE/docs/http#arbeit-abbrechen).
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+Cancellation sagt dir, was der Caller beobachtet hat. Sie beweist nicht, dass ein server-seitiger Write zurückgerollt wurde — halte Mutation-Retries hinter einem Idempotency-Vertrag.

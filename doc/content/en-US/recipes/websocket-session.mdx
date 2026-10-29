@@ -1,0 +1,22 @@
+---
+title: "Manage WebSocket sessions"
+description: Connect, send one typed envelope, receive once, then close and await closed.
+---
+
+# Open a WebSocket session
+
+Each direction is one struct. You own unsubscribe, `close`, and `await session.closed`. Invalid frames go to `onRuntimeError`.
+
+See [WebSocket](/docs/web-socket) for details.
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` is a placeholder. With a server that answers `{ "type": "send", "text": "Hello" }` with `{ "type": "message", "text": "Hello" }`, the snippet prints:
+
+```txt
+message Hello
+```
+
+Reconnect is opt-in (`withWebSocketReconnect`). Heartbeat is opt-in too. Browser WebSockets can’t take arbitrary handshake headers — use cookies, subprotocols, or a short-lived ticket.

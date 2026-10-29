@@ -1,0 +1,77 @@
+---
+title: Defjs
+description: よりよい SDK のために。型付き API 定義を設計・作成・公開し、アプリケーション側で Defjs Client を構成して実行します。
+---
+
+# よりよい SDK をつくるために [#defjs]
+
+**Defjs = define js。** API を JavaScript / TypeScript の定義として記述し、SDK の設計・作成・公開を容易にします。
+
+SDK の作成者は `defineRequest`、`defineEventStream`、`defineWebSocket` で再利用できる型付き API を公開します。Struct は入力・出力・エラーなどのデータ契約を記述し、`builder` は入力をリクエストに配置します。利用するアプリケーションは、その定義を import し、自身の Defjs Client で実行します。
+
+| 責務                 | SDK の作成者                                    | 利用するアプリケーション                                                     |
+| -------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
+| API の契約           | method、相対 path、Struct、`builder` を定義する | 公開された定義からコマンドを作る                                             |
+| 実行環境             | 再利用できる定義を export する                  | endpoint、認証、インターセプター、プラットフォームのトランスポートを構成する |
+| 結果とライフサイクル | 型付きの成功・エラー・イベントを宣言する        | `execute` の結果を扱い、キャンセルとストリームの終了を管理する               |
+| 配布                 | 定義と型宣言をパッケージとして公開する          | SDK と互換性のある `@defjs/core` をインストールする                          |
+
+## 定義を公開し、アプリケーションで実行する
+
+SDK 側の `get-health.ts` は、接続先や認証情報を持たない定義を export します。
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+アプリケーション側の `app.ts` は、その定義を import し、実行環境に合わせてクライアントを作ります。
+
+<include cwd meta="app.ts">
+  examples/home/app.ts#example
+</include>
+
+両ファイルは同じディレクトリに置きます。SDK をパッケージ化したら、アプリケーションの相対 import をパッケージ名に置き換えます。再利用の境界は Defjs の定義と実行契約です。アプリケーションごとの Client 設定を変えても、API 定義を複製する必要はありません。
+
+[クイックスタート](/ja-JP/docs/start) でこの 2 ファイルの流れを動かし、[SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) でパッケージ構成と配布を学べます。設計の理由は [設計上の判断](/ja-JP/docs/design-decisions) を参照してください。
+
+Defjs は結果のキャッシュや自動リトライを追加せず、アプリケーションが所有するストリームを自動では閉じません。
+
+## トランスポートを選ぶ
+
+| やりたいこと                         | ここから                            | 成功時の結果                                                                         |
+| ------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------ |
+| リクエストと status ごとのレスポンス | [HTTP](/ja-JP/docs/http)            | デコード済みデータ + `DecodedResponse`（`output` を宣言していないときは `HttpMeta`） |
+| 長寿命のサーバーイベントフィード     | [SSE](/ja-JP/docs/sse)              | 1 つのストリーム + 起動時の `open` スナップショット                                  |
+| 双方向セッション                     | [WebSocket](/ja-JP/docs/web-socket) | 1 つのセッション + 起動時の `connection` スナップショット                            |
+
+## パッケージを選ぶ
+
+| パッケージ                    | いつ                                                                                                                    |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | API 定義、Struct、`createClient`（HTTP + SSE + WebSocket）                                                              |
+| `@defjs/react`                | `ClientProvider` / `useClient` — [React](/ja-JP/docs/integrations/react) を参照                                         |
+| `@defjs/vue`                  | プラグイン + `injectClient` — [Vue](/ja-JP/docs/integrations/vue) を参照                                                |
+| `@defjs/opentelemetry-server` | アウトバウンドのスパン・メトリクス・ログ — [OpenTelemetry Server](/ja-JP/docs/integrations/opentelemetry-server) を参照 |
+
+## 結果の形
+
+3 つのトランスポートとも、エラーファーストの 3 要素タプルを返します。位置は揃っていますが、意味は違います。
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+失敗したとき、2 番目は `undefined` です。HTTP では、フォールトがレスポンスのメタデータを持つため 3 番目も `undefined` です。SSE と WebSocket では、失敗より前にスナップショットが取れていれば、3 番目は起動時のスナップショットです。[Errors](/ja-JP/docs/errors) を見てください。
+
+## 所有権をひと息で
+
+古くなった HTTP は abort します。SSE は close して `await stream.closed`。WebSocket も close して `await session.closed`。サーバーでは、options が cookie・認証・テナントデータを掴むなら、クライアントをリクエスト境界の中で作ります。ログに出す前に URL・ヘッダー・ボディを redact してください。
+
+## 関連レシピ
+
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [POST JSON](/ja-JP/recipes/post-json)
+- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
+- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
+- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)
+- [ローカル Fetch ハンドルでテストする](/ja-JP/recipes/test-with-handle)

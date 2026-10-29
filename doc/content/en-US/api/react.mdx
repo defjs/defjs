@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider, useClient with an optional client override, and provider props.
+---
+
+# React
+
+Provide an existing `@defjs/core` client to a React tree. This package does not create, cache, or dispose the client. Its entry is marked `'use client'`, so import it from client components. React 18 or later is required.
+
+See the [React guide](/docs/integrations/react).
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Context provider. Pass a client from `createClient`. A nested `ClientProvider` overrides the client for its subtree; `useClient()` reads the nearest one. Passing a different `client` changes the context value for descendants.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` prefers the explicit client; omitted or `undefined` reads the nearest `ClientProvider`. An `Error` is thrown only when neither source supplies a client. Zero-argument `useClient()` calls remain valid.
+
+Always call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.
+
+- **Returns** the exact explicit client or nearest provided client.
+- **Throws** an `Error` when neither an explicit client nor Context supplies a client.
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` is required and owned by the application. `children` is optional: the tree that can call `useClient`.

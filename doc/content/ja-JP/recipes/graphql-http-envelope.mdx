@@ -1,0 +1,20 @@
+---
+title: "GraphQL リクエスト"
+description: GraphQL は HTTP 200 とアプリケーション側の unwrap のままにします。Core は GraphQL プロトコルを出しません。
+---
+
+# GraphQL の HTTP エンベロープを開く
+
+Defjs は GraphQL の `errorPolicy` を実装しません。ワイヤは、ビルダーがクエリ文書と変数を配置する HTTP POST としてモデル化します。エンベロープの `data` を `.nullish()` と宣言し、`data` の欠落と `data: null` の両方をヘルパーで扱えるようにしてください。そのうえで、`data` を確認する前に `errors[]` を取り出して処理します。
+
+詳細は [設計上の判断](/ja-JP/docs/design-decisions) を見てください。
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable viewer unavailable
+```
+
+HTTP の成功は、エンベロープが届いたことだけを意味します。`data: null` のレスポンスも含め、アプリケーションのエラーは、unwrap が throw するか返すまで `errors[]` に残ります。この例では、`errors[]` があれば、`data` が欠落している場合も `data: null` の場合も、Struct の不一致ではなくアプリケーションのエラーとして扱います。

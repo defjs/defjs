@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider, useClient mit optionalem Client-Override und Provider-Props.
+---
+
+# React
+
+Stelle einen bestehenden `@defjs/core`-Client einem React-Tree bereit. Dieses Paket erzeugt den Client nicht, legt ihn nicht im Cache ab und gibt ihn nicht frei. Der Entry ist mit `'use client'` markiert, importiere ihn also aus Client-Komponenten. React 18 oder neuer ist erforderlich.
+
+Siehe den [React-Guide](/de-DE/docs/integrations/react).
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Context-Provider. Übergib einen Client von `createClient`. Ein verschachtelter `ClientProvider` überschreibt den Client für seinen Subtree; `useClient()` liest den nächsten. Übergibst du einen anderen `client`, ändert sich der Context-Wert für Nachfahren.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` bevorzugt den expliziten Client; ohne Argument oder mit `undefined` liest es den nächsten `ClientProvider`. Ein `Error` wird nur ausgelöst, wenn keine der beiden Quellen einen Client liefert. `useClient()` ohne Argument bleibt gültig.
+
+Ruf `useClient(explicitClient)` immer auf oberster Ebene einer Komponente oder eines Custom Hooks auf, auch mit explizitem Client; nicht in normalen Funktionen oder Event-Callbacks. `explicitClient ?? useClient()` ruft einen Hook bedingt auf und ist ungültig. Das Override schreibt nicht in den Context und erzeugt keinen Provider; der Hook abonniert weiterhin den Context.
+
+- **Returns** unverändert den expliziten oder den nächsten bereitgestellten Client.
+- **Throws** einen `Error`, wenn weder ein expliziter Client noch der Context einen Client liefert.
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` ist erforderlich und gehört der Anwendung. `children` ist optional: der Tree, der `useClient` aufrufen kann.

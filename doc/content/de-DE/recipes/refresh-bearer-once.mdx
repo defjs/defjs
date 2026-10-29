@@ -1,0 +1,20 @@
+---
+title: "Token nach 401 erneuern"
+description: Authorization anhängen und einmal innerhalb eines Interceptors erneut senden; next() geht nur nach innen.
+---
+
+# Einen Bearer-Token bei 401 einmal erneuern
+
+`next()` ist der Rest **dieser** Onion — nicht `axios(config)`-Redispatch von außen. Packe Attach + Single-Flight-Refresh + einen Replay in **einen** HTTP-Interceptor, damit äußere Layer nicht zweimal laufen.
+
+Siehe [Interceptors](/de-DE/docs/interceptors).
+
+<include cwd meta="refresh-bearer.ts">
+  examples/recipes/refresh-bearer-once.ts#example
+</include>
+
+```txt
+null 42
+```
+
+`next` nochmal aufzurufen betritt nur Interceptors **innerhalb** dieses Layers (und den Fetch-Handler) erneut. Es lässt äußere Timing-/Auth-Wrapper nicht nochmal laufen — deshalb gehört das 401-Layout in einen Interceptor, nicht in ein zweites `execute`.

@@ -1,0 +1,20 @@
+---
+title: "Requêtes GraphQL"
+description: Garde GraphQL en HTTP 200 plus un déballage applicatif ; Core ne livre pas de protocole GraphQL.
+---
+
+# Déballer une enveloppe GraphQL HTTP
+
+Defjs n’implémente pas de `errorPolicy` GraphQL. Modélise le wire comme un POST HTTP dont le builder place le document de query et les variables. Déclare le `data` de l’enveloppe en `.nullish()` pour que l’absence de `data` et `data: null` atteignent tous deux ton helper, puis déballe `errors[]` avant de vérifier `data`.
+
+Voir [Décisions de conception](/fr-FR/docs/design-decisions).
+
+<include cwd meta="graphql-viewer.ts">
+  examples/recipes/graphql-http-envelope.ts#example
+</include>
+
+```txt
+ada viewer unavailable viewer unavailable
+```
+
+Un succès HTTP veut seulement dire que l’enveloppe est arrivée. Les erreurs applicatives restent dans `errors[]` jusqu’à ce que ton déballage lève une erreur ou renvoie, y compris une réponse avec `data: null`. L’exemple traite l’absence de `data` et `data: null` avec `errors[]` comme des erreurs applicatives, pas comme des écarts de Struct.

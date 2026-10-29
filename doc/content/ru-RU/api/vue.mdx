@@ -1,0 +1,36 @@
+---
+title: "@defjs/vue"
+description: Плагин Vue, стандартный или свой ключ внедрения и injectClient.
+---
+
+# Vue
+
+Отдай существующий `@defjs/core` client Vue-приложению. Этот пакет не создаёт, не кэширует и не dispose’ит client. Нужен Vue 3 или новее.
+
+См. [гайд Vue](/ru-RU/docs/integrations/vue).
+
+## createClientPlugin()
+
+<ApiSignature name="createClientPlugin" />
+
+- **client** — Экземпляр из `createClient`.
+- **Возвращает** Vue-плагин для `app.use(...)`. Установка вызывает `app.provide(HTTP_CLIENT, client)`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+<ApiSignature name="injectClient" />
+
+`injectClient(key)` читает ближайший провайдер для этого ключа; без аргумента или с `undefined` использует `HTTP_CLIENT`. Вызывай в действующем контексте внедрения Vue: синхронном `setup()` или `app.runWithContext()` (Vue 3.3+). Последний даёт только синхронный контекст приложения, без переопределений поддерева и без сохранения через обычный `await`. Контекст, восстановленный компилятором после верхнеуровневого `await` в `<script setup>`, по-прежнему подходит.
+
+Для своего `InjectionKey<Client>` используй `app.provide(key, client)` или `provide(key, client)` в компоненте-предке. Обе стороны должны разделять один и тот же объект `Symbol`; одинаковые описания не делают ключи равными. `createClientPlugin(client)` по-прежнему принимает только клиент и предоставляет только `HTTP_CLIENT`.
+
+- **Возвращает** тот же клиент, который предоставлен по выбранному ключу.
+- **Бросает** `Error`, если нет активного контекста внедрения или клиента по выбранному ключу. Отсутствующий свой ключ не приводит к откату на `HTTP_CLIENT`; одна установка плагина не создаёт контекст внедрения.
+
+## HTTP_CLIENT
+
+<ApiSignature name="HTTP_CLIENT" />
+
+Ключ внедрения зависимостей Vue. Бери `injectClient()`, а не `inject(HTTP_CLIENT)`. Переопредели клиент для поддерева через `provide(HTTP_CLIENT, childClient)`.

@@ -1,0 +1,70 @@
+---
+title: "Настройка клиента / Client"
+description: Настройка базового URL, аутентификации и транспорта для импортированных операций SDK на клиенте приложения.
+---
+
+# Клиент
+
+Приложение создаёт свой `Client`, импортирует эндпоинты из SDK и выполняет их команды. Клиент хранит базовый URL, настройки аутентификации, перехватчиков и транспорта для конкретного окружения; SDK предоставляет контракт API. Один экспортируемый эндпоинт можно использовать в тестах, браузере и на сервере с по-разному настроенными клиентами Defjs.
+
+Клиент выполняет команды HTTP, SSE и WebSocket. Он не кеширует результаты, не организует повторные попытки приложения и не управляет открытыми потоками. Результаты, отмена и освобождение ресурсов остаются ответственностью вызывающей стороны, которая начинает работу.
+
+## Базовая настройка
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)` возвращает перегрузки под каждый вид команды.
+
+## Собери опции
+
+Опции применяются слева направо. Setters заменяют; `withInterceptors(...items)` дописывает.
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+Смешанные interceptors фильтруются по транспорту в момент execute; относительный порядок среди выбранного kind сохраняется.
+
+## Execute по транспорту
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`. `open` — снимок первого успешного handshake соединения возвращённого handle для нативных handle Defjs или обёрток, передающих тот же живой объект `open`; пользовательские handle или обёртки, переопределяющие `open`, используют свой текущий публичный `open` даже после переподключения, а `stream.open` остаётся живым (см. [SSE](/ru-RU/docs/sse)).
+- WebSocket → `[error, session, connection]`
+
+WebSocket execute может переопределить `beforeConnect`, `heartbeat`, `protocols` и `reconnect`. `timeout` — положительное safe integer в `1..2_147_483_647`.
+
+Cleanup на тебе: abort HTTP, close SSE + `await stream.closed`, close WebSocket + `await session.closed`.
+
+## Подставь тестовый транспорт
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## Scope на сервере vs в браузере
+
+На сервере создавай клиент внутри границы запроса, когда опции или замыкания interceptor’ов захватывают auth, cookies, пользователей или tenants. Идентичность клиента сама по себе — не security boundary.
+
+## Справка
+
+| Helper                                                                                                        | Эффект                                                                |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Абсолютный base endpoint для всех транспортов                         |
+| `withHeaders(HeadersInit)`                                                                                    | Статические default headers для HTTP/SSE; headers команды перекрывают |
+| `withTimeout(ms)`                                                                                             | Только default timeout HTTP `execute` (SSE/WS его игнорируют)         |
+| `withHTTPHandle(fetch)`                                                                                       | Заменить Fetch для HTTP                                               |
+| `withSSEHandle(fetch)`                                                                                        | Заменить Fetch для SSE                                                |
+| `withWebSocketHandle(WebSocket)`                                                                              | Заменить конструктор WebSocket                                        |
+| `withInterceptors(...items)`                                                                                  | Дописать смешанные interceptors                                       |
+| `withQuerySerializer(fn)`                                                                                     | Закодировать уже алиаснутый query-объект в query-строку               |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` для HTTP/SSE при true                  |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                             |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Крутилки SSE                                                          |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Крутилки WebSocket                                                    |
+
+## Связанные рецепты
+
+- [Тест с локальным Fetch handle](/ru-RU/recipes/test-with-handle)
+- [Отменить HTTP-вызов](/ru-RU/recipes/cancel-http)

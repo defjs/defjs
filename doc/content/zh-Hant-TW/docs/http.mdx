@@ -1,0 +1,158 @@
+---
+title: "HTTP 請求"
+description: SDK 定義 HTTP 契約，應用程式執行請求、處理狀態與結果，並控制取消或逾時。
+---
+
+# HTTP
+
+SDK 作者透過 `defineRequest` 宣告 method、path、輸入與回應契約，並匯出端點。應用程式匯入端點，用自己的 Client 執行 command，依 `[error, data, response]` 處理結果。
+
+本頁依定義、執行、狀態分支與取消說明。SDK 保留輸入、輸出及已宣告錯誤的型別；應用程式決定身分驗證、逾時、取消，以及如何將結果呈現給使用者。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/http/basic-setup.ts#example
+</include>
+
+## 解析 URL
+
+`withEndpoint(...)` 需要有效的絕對 URL。Endpoint pathname 當目錄保留；query 與 hash 在 command 解析前會丟掉。缺少、相對或無效的 base endpoint 會在建構請求時、任何 interceptor 或傳輸跑之前，以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 這個請求也一樣。HTTP、SSE 與 WebSocket 共用這條規則。
+
+<include cwd>examples/http/resolve-url.ts#example</include>
+
+Path placeholders 是原始 scalars，只 encode 一次。空值與 `.`／`..` 會被拒絕。單一 placeholder 裡的斜線、`?`、`#`、`%`、空白、Unicode 會留在同一個 encoded segment — 別先 encode。
+
+Placeholder 名稱從 `:` 開始，一直到下一個 `/` 或 path 結尾：`/files/:name.json` 把參數命名為 `name.json`，不是 `name`。靜態區段裡的字面冒號不受支援。
+
+Definition path 不能是類似 scheme 或 protocol-relative 的形式（即使前面有空格也一樣），也不能含 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?` 或 `#`。路徑內的一般空格則允許使用，並以 `%20` 送出。解析之後，URL 必須維持 base 的 origin，並留在其目錄之下；像 `../users` 這樣的 path 不能逃出去。非法 path 會在建構期間、傳輸之前以 `REQ_BUILD_FAILED` 失敗。Interceptor 最終的 `req.endpoint` 會按其最終的 `req.baseEndpoint`、用同一條規則檢查；interceptor 可以刻意把 base 換成另一個有效的絕對 URL。確定性的 URL 錯誤絕不會重試。
+
+預設 query encoder 接受 scalars 與 scalars 陣列（陣列會重複 key）。沒有 `withQuerySerializer(...)` 時，巢狀物件會以 `REQ_BUILD_FAILED` 失敗。`path`、`query` 或 `headers` 裡的 `null` 同樣會失敗。`undefined` 的 query 與 header 值會省略。`undefined` 或缺少的 path placeholder 會以 `REQ_BUILD_FAILED` 失敗。
+
+## 放置 input
+
+Struct 負責編碼值。Builder 負責放置它。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。
+
+<include cwd lang="typescript">
+  examples/http/place-input.ts#example
+</include>
+
+那個 body 是 `{"display_name":"Ada"}`，content type 是 `application/json`。Header 的 wire 名稱是 `x-request-id`。呼叫端與剖析結果仍用 `displayName`。
+
+優先把型別化的值交出去，而不是自己拼 wire keys。Alias 在欄位上宣告一次，雙向都適用：`output`／`error`／events／incoming frames 把 `display_name` 解成 `displayName`，而 `body: input.order` 會改寫整棵樹。同一個 `User` struct 可以當建立用的 body，也可以當取得用的 output。自己寫的 key 是例外：父物件是匿名的，所以 alias 不會跑。
+
+| Builder 運算式                                | 線上                                            |
+| --------------------------------------------- | ----------------------------------------------- |
+| `body: input.profile`                         | 型別化物件：套用 alias 與 `Date`／`bigint` 編碼 |
+| `body: { profile: input.profile }`            | 外層 keys 是字面；內層物件仍有型別              |
+| `body: { ...input.profile, role: 'admin' }`   | 展開保留 struct；多出來的 key 是字面            |
+| `body: { name: input.profile.displayName }`   | 匿名父物件：alias 不套用                        |
+| `query: input.filter`／`headers: input.trace` | 型別化的扁平物件：alias 變成 wire key           |
+
+在型別化物件上展開，又同時設定它的 wire key（`display_name` 跟 `displayName` 並排）是 `REQ_BUILD_FAILED`。`path` 或 `headers` 裡的巢狀物件同樣會失敗。
+
+引導在每個節點決定，不只在根上。匿名父物件底下新寫的物件保留你寫下的 key。帶型別的父物件底下，同一個物件改用該欄位的 struct。
+
+```ts
+body: { row: { id: '42' } }              // Anonymous root: emits id
+body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
+```
+
+union 引導同時命中多個分支時，每個分支都編碼再比較。線上結果一致就採用；有差異就是 `REQ_BUILD_FAILED`。
+
+混合 intersection（包含非 object 部分）解析時，標籤是各匹配部分既有標籤的合取；未經解析、新寫的混合 intersection 值按匿名物件處理。
+
+### Query
+
+巢狀 query 形狀（`a[b]`、`a.b`、逗號清單）是後端慣例，所以 hook 在 client 上：
+
+<include cwd>examples/http/query-serializer.ts#example</include>
+
+這裡的 `query` 是已編碼的 wire 物件。Aliases 已經套用，所以 serializer 看到的是 wire keys。回傳的字串會存成 `queryString`，再指派給 `URL.search`，而 `URL.search` 會對空白、`#`、引號與非 ASCII 做 percent-encode。Defjs 不內建巢狀 query encoder。
+
+沒有 serializer 時，陣列會重複 key，巢狀物件是 `REQ_BUILD_FAILED`。Builder 回傳 `URLSearchParams` 時會原樣使用並跳過 serializer。沒有 query 時不會呼叫 serializer。之後 interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
+
+### Body
+
+第一個相符者勝出：
+
+| `body` 值                                            | 送出形式                                                       | 預設 content type                                     |
+| ---------------------------------------------------- | -------------------------------------------------------------- | ----------------------------------------------------- |
+| 省略／`undefined`                                    | 沒有 body                                                      | —                                                     |
+| 根上帶 `urlencoded` 或 `formData` codec 的型別化物件 | `URLSearchParams`／`FormData`；keys 是 wire 名稱；陣列重複 key | form 類型／平台 boundary                              |
+| `FormData`、`URLSearchParams`                        | 原樣                                                           | 同上；Defjs 會清掉 `FormData` 上過期的 `Content-Type` |
+| `Blob`／`File`                                       | 原樣                                                           | `blob.type`，或 `application/octet-stream`            |
+| `ArrayBuffer`、`TypedArray`、`DataView`              | 原樣                                                           | `application/octet-stream`                            |
+| `ReadableStream`                                     | 串流（runtime 允許時 `duplex: 'half'`）                        | `application/octet-stream`                            |
+| `string`                                             | 原樣                                                           | `text/plain;charset=UTF-8`                            |
+| 純物件、陣列、數字、布林值、`null`、`Date`、`bigint` | 編碼後再 `JSON.stringify`                                      | `application/json`                                    |
+
+HTTP 把 builder body 的推斷型別保存在一般的 `request.bodyContentType` 欄位中，該欄位在 `{ ...req }` 複製後仍會保留；它絕不會把這項推斷寫入 `request.headers`。明確的 `content-type` header 一律優先，無論它由 builder、client 預設值、interceptor 或直接傳給 `fetchHandler` 的 request 設定，包括上傳進度把 body 轉成串流時。`bodyContentType` 只在 `body` 仍是 builder 的值時適用；替換後的 body 會重新偵測，因此 interceptor 應以 `content-type` header 宣告其型別。`body: undefined` 送出時不會有函式庫推斷的 Content-Type。FormData 是例外：它的 content type 必須用實際序列化的 boundary。Codec tag 只在 body 根上生效：`body: { meta: input.form }` 是 JSON，form 欄位是普通 JSON 欄位。字串是原始文字；像 `"abc"` 這種 JSON 字串需要 `JSON.stringify` 再加上 `application/json`。`undefined` 欄位會省略；`nullable` 欄位送出 `null` 時是 JSON `null`。
+
+JSON 的每一層都必須是 JSON 資料：純物件、陣列、字串、有限數值、布林值與 `null`，以及 `toJSON()` 會回傳這些值的物件，例如 `Date` 或 `URL`。其他任何值，無論位於根節點或巢狀層級，都會在任何內容送出之前以 `REQ_BUILD_FAILED` 失敗，而不會被送成 `{}`、`null`，或變成完全沒有主體的請求。這些值包括 `Map` 或 `Set`、沒有 `toJSON` 的類別實例、函式、`NaN`、Node 的 `Readable`，或可迭代物件或非同步可迭代物件，包括帶有 `Symbol.iterator` 或 `Symbol.asyncIterator` 方法的物件字面值。錯誤訊息會指出欄位名稱。以 `query` 或 `headers` 給出的可迭代物件會以同樣的方式失敗，而不會被捨棄；請將標頭配對以陣列傳入。請將串流以 Web `ReadableStream` 的形式送出：`ReadableStream.from(iterable)` 或 `Readable.toWeb(readable)`。`body` 型別會在編譯期拒絕上述大多數值；`interface` 的值或類別實例需要 `{ ...value }`。
+
+`GET` 與 `HEAD` 不能回傳 body — 那是型別錯誤。WebSocket builder 不能回傳 `headers` 或 `body`。
+
+<include cwd lang="typescript">
+  examples/http/body.ts#example
+</include>
+
+你自己跑的 `JSON.stringify`、`qs` 或 protobuf 看到的是邏輯名稱。那條路上 alias 不套用。沒有公開的 `struct.encode`。
+
+Builder 可以依真實 input 分支，每個情況回傳不同 body（JSON records、`File`，或 `URLSearchParams`）。原生 `Headers` 也會原樣傳下去，不會重新編碼。
+
+## body 怎麼讀
+
+`output` 是 2xx body 的單一 Struct；`error` 是其餘一切的單一 Struct。Struct kind 決定表示：`string` 是原始文字，`blob`／`file` 是 blobs，`arrayBuffer` 是 bytes，其餘 kind 都是 JSON。兩邊都沒宣告時，body 根本不會被讀。
+
+順序：
+
+1. `ok` 挑邊：2xx 走 `output`，其餘走 `error`。絕不兩邊都走。
+2. 那一側沒宣告 → body 根本不會被讀。2xx 成功且 `data === undefined`；非 2xx 是 `HTTP_STATUS` 且 `data === undefined`。你沒宣告的那一側 body 解不出來會被整個忽略，連「它解不出來」這件事也忽略。
+3. 對 JSON 表示，媒體類型在讀 body **之前**就檢查。不匹配就是 `RES_MEDIA_TYPE_INVALID`，不解析也不解碼。文字、blob、file 與 bytes 會跳過這項檢查。
+4. 讀取表示。失敗是 `RES_DECODE_FAILED`。傳輸來的 JSON 只解析一次：該值上的字串是 JSON 字串根，不會再次解析；位元組和 blob 仍是原始資料，只解析一次。
+5. Struct 解析值。失敗是 `RES_STRUCT_MISMATCH`。
+6. 2xx → 結果加一個有型別的 `response.body`；非 2xx → `HTTP_STATUS` 上有型別的 `data`。
+
+內建的 Fetch 傳輸會在回應還在 interceptor 鏈之內時，替已宣告的那一側執行第 3 步和第 4 步，所以 interceptor 收到的回應，其 `body` 已經是剖析好的 JSON、文字、`Blob` 或 bytes。媒體類型或讀取失敗會在鏈 resolve 之前以 `BodyFailure` reject `next()`（`RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`，或串流中斷時的 `NET_BODY_INCOMPLETE`）。第 5 步只在鏈之後執行一次。`makeResponse(...)` 會跳過鏈內的那次讀取。它的 body 只在鏈之後、與 Struct 驗證同一步解碼。對 JSON 表示，字串 body 在那裡解析；傳輸層已經剖析過的值不會再解析一次。
+
+成功的回應是 `DecodedResponse<T>`：`url`、`status`、`statusText`、`headers`、`ok`，外加一個有型別的 `body`。什麼都沒解碼時你拿到 `HttpMeta`——同樣的欄位，只是沒有 `body`。`ok` 只表示 `200 <= status < 300`。兩者都不是原生 `Response`。傳輸失敗是 fault，所以不存在代表它的 status-0 回應。
+
+## 取消工作
+
+執行 options 可以只傳 `{ signal }`，不需要同時傳入 `abort` 或 `timeout`。**`abort` 與 `timeout` 互斥。** `signal` 可以跟其中一個搭配。
+
+<include cwd>examples/http/cancel.ts#example</include>
+
+`timeout` 必須是 `1..2_147_483_647` 的正 safe integer。省略 `timeout` 的呼叫會使用 client 的 `withTimeout` 預設值。認得的取消 → `NET_ABORTED`；執行逾時 → `NET_TIMEOUT`；interceptor `throw` → `EXT_INTERCEPTOR_FAILED`，但 `ERR_ABORTED`／`ERR_TIMEOUT` 例外，它們會給出 `NET_ABORTED`／`NET_TIMEOUT`；其他 Fetch 失敗 → `NET_UNREACHABLE`。伺服器已接受寫入後再取消，**不能**證明寫入已回滾。
+
+## Credentials 與 XSRF
+
+`withCredentials(true)` 為 HTTP 與 SSE 設 Fetch `credentials: 'include'`。它不會建立 `Authorization`，也不會設定 WebSocket auth。`false` 則不指定 credentials。
+
+`withXSRF(...)` 只給 HTTP。預設：`cookieName: 'XSRF-TOKEN'`、`headerName: 'X-XSRF-TOKEN'`。Header 只在非安全方法、且呼叫端尚未設定時注入。只要 `location` 存在，包括在 Worker 裡，解析後的請求 URL 必須符合 `location.origin`；非同源請求不會呼叫 `tokenProvider`。Cookie 查找另外需要 `document`。會跳過 `GET`、`HEAD`、`OPTIONS`、`TRACE`。在 Worker 或伺服器上若要注入，請傳同步、請求範圍的 `tokenProvider`。
+
+Credentials、XSRF tokens、query strings 別進日常 logs。別把 query params 當一般憑證通道。
+
+## Progress 與 Fetch 邊界
+
+`onDownloadProgress` 在讀已宣告的回應 body 時跑。`loaded` 計算的是從回應串流讀到的位元組數，Fetch 可能已經解壓縮過。只有正的 `Content-Length`，且 `Content-Encoding` 不存在或為 `identity` 時，`lengthComputable` 才是 true。其他編碼，包括 gzip 與 br，會回報 `total: 0` 且 `lengthComputable: false`，因此解碼後的位元組絕不會拿去跟壓縮後的線上位元組長度比較。那一側沒有 struct → body 不會被讀 → 沒有 body-read progress。
+
+`onUploadProgress` 會在 Fetch 讀取 `ReadableStream<Uint8Array>` 主體時回報進度，而不是在伺服器確認收到時。上傳進度只在支援串流請求主體的執行環境中回報：在 Bun 與 Node 中，Defjs 也會把 `Blob`／`File`、`ArrayBuffer` 與 `FormData` 主體轉成串流，因此它們同樣會回報進度。在伺服器執行環境中，搭配 `onUploadProgress` 的 FormData 會直接使用序列化後的串流，保留它的 multipart boundary，且送出時不會附上函式庫產生的 `Content-Length`（在 HTTP/1.1 上以分塊方式傳輸），因此進度、逾時與取消都能運作，而不必緩衝整個主體。除非有效且明確的 `Content-Length` 提供總量，否則它的 total 未知。若端點要求 `Content-Length`，例如某些預簽名上傳目標，請省略 `onUploadProgress`；平台 Fetch 就會以附帶長度的方式送出 FormData。取消會釋放被包住的串流。瀏覽器（包括 Workers）不在此範圍內，因為 Chromium 只能透過 HTTP/2 或更新版本串流請求主體，而 Firefox 完全無法串流請求主體；在那裡，這些主體會原樣送出，而且不會呼叫 `onUploadProgress`。JSON、文字、`URLSearchParams` 與型別陣列主體會一次完整送出，不會產生事件。長度未知的串流，其 `total` 為 `0`（因此 `lengthComputable` 為 `false`）。在無法串流請求主體的執行環境（例如 Firefox）中，`ReadableStream` 主體會在任何內容送出之前以 `ENV_UNSUPPORTED` 失敗；底層原因的訊息為 `ERR_STREAMING_REQUEST_UNSUPPORTED`。在 Chromium 中，`ReadableStream` 主體需要 HTTP/2 或更新版本；透過 HTTP/1.1 時，該次呼叫會以 `NET_UNREACHABLE` 失敗。`onDownloadProgress` 在各執行環境中的行為都相同。
+
+無論下載或上傳，進度回呼拋出錯誤或回傳的 Promise 遭拒絕，都會讓該次呼叫以 `EXT_OBSERVER_FAILED` 失敗，拋出的值作為 `cause`。呼叫端取消與 `timeout` 仍分別回報 `NET_ABORTED`／`NET_TIMEOUT`。
+
+`fetchHandler(httpRequest, fetchImpl?)` 是較低階的 Fetch 邊界：解析 URL、呼叫 Fetch、讀 representation、回傳 `HttpResponse`。預設的 HTTP 與 SSE handle 每次呼叫都會解析 `globalThis.fetch`，所以 import 之後裝上的替換會被用到。HTTP 只對未動過的平台 Fetch 使用 `(url, init)`；被替換的全域或自訂 handle 收到的是原生 `Request`。沒有 Fetch 也能匯入 Core；若 Fetch 仍然不存在，預設的 HTTP／SSE 執行會以 `ENV_UNSUPPORTED` 失敗，自訂 handle 則仍可使用。這條邊界**不會**驗證 command input、分派 `output`，或跑 interceptors。適合注入傳輸測試 — 不能取代 `client.execute`。
+
+## 重放限制
+
+Defjs **不會**自動重試 HTTP。重試讀取仍需要審過的逾時／網路／重複策略。重試 mutation 需要可重放的 bytes、伺服器支援、綁定 auth 範圍 + request bytes 的 idempotency key，以及接收端的重複策略。
+
+Client／command／Fetch 邊界無法知道失敗的寫入有沒有提交。把重放決策放在應用程式或審過的 interceptor。Interceptors 可以 short-circuit 或替換低階 request；最終 status 與 body 仍須滿足 command 契約。
+
+## 相關操作範例
+
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [POST JSON](/zh-Hant-TW/recipes/post-json)
+- [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
+- [用本機 Fetch handle 測試](/zh-Hant-TW/recipes/test-with-handle)

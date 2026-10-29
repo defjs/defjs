@@ -1,0 +1,191 @@
+From 68c658519a1228bc79dee82c985e6d0854a0292c Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:24:42 +0800
+Subject: [PATCH 10/10] perf(struct): keep struct-keyed null-prototype objects
+ in fast mode
+
+---
+ packages/core/src/internal/outbound_request.ts | 18 +++++++++++-------
+ packages/core/src/struct/encode.ts             | 14 +++++++++++---
+ packages/core/src/struct/fields.ts             |  4 ++--
+ packages/core/src/struct/parse.ts              |  5 +++--
+ packages/core/src/struct/utils.ts              | 16 +++++++++++++++-
+ 5 files changed, 42 insertions(+), 15 deletions(-)
+
+diff --git a/packages/core/src/internal/outbound_request.ts b/packages/core/src/internal/outbound_request.ts
+index 6c5aaf2..cc825f8 100644
+--- a/packages/core/src/internal/outbound_request.ts
++++ b/packages/core/src/internal/outbound_request.ts
+@@ -5,7 +5,14 @@ import { isStruct } from '../struct/guards'
+ import { selectUnionOptions } from '../struct/match'
+ import { DEFINITION, STRUCT } from '../struct/symbols'
+ import type { IntersectionDefinition, ObjectDefinition, Path, RecordDefinition, RuntimeStruct, UnionDefinition } from '../struct/types'
+-import { intersectionEncodeError, isIntersectionIdentity, isPlainObject, mergeIntersectionValues, sameWireValue } from '../struct/utils'
++import {
++  intersectionEncodeError,
++  isIntersectionIdentity,
++  isPlainObject,
++  mergeIntersectionValues,
++  nullObject,
++  sameWireValue,
++} from '../struct/utils'
+ 
+ export type OutboundTransport = 'http' | 'sse' | 'webSocket'
+ 
+@@ -398,8 +405,7 @@ function keySetsOf(fields: readonly ResolvedStructField[]): ObjectKeySets {
+ // and the grouping below would only rebuild the same plan on every call.
+ function encodeSingleObject(value: { [key: string]: unknown }, struct: RuntimeStruct, path: Path): { [key: string]: unknown } {
+   const fields = resolveStructFields(struct, struct[DEFINITION] as ObjectDefinition)
+-  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
+-  const output: { [key: string]: unknown } = Object.create(null)
++  const output = nullObject()
+   for (const field of fields) {
+     if (!Object.hasOwn(value, field.key)) {
+       continue
+@@ -446,8 +452,7 @@ function encodeObjectNode(value: { [key: string]: unknown }, members: readonly R
+     }
+   }
+ 
+-  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
+-  const output: { [key: string]: unknown } = Object.create(null)
++  const output = nullObject()
+   const fieldKeys = new Set<string>()
+   const wireKeys = new Set<string>()
+   const plans = new Map<string, WireGroup[]>()
+@@ -707,8 +712,7 @@ function encodeRecord(valueStruct: RuntimeStruct, value: { [key: string]: unknow
+ }
+ 
+ function encodeAnonymousObject(value: { [key: string]: unknown }, path: Path): { [key: string]: unknown } {
+-  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
+-  const output: { [key: string]: unknown } = Object.create(null)
++  const output = nullObject()
+   for (const key of Object.keys(value)) {
+     const item = value[key]
+     if (item === undefined) {
+diff --git a/packages/core/src/struct/encode.ts b/packages/core/src/struct/encode.ts
+index c709574..873ba1f 100644
+--- a/packages/core/src/struct/encode.ts
++++ b/packages/core/src/struct/encode.ts
+@@ -5,7 +5,15 @@ export { matchesDefinition } from './match'
+ import { resolveObjectShape } from './shape'
+ import { DEFINITION } from './symbols'
+ import type { ObjectDefinition, RuntimeStruct } from './types'
+-import { hasOwnKey, intersectionEncodeError, isIntersectionIdentity, isPlainObject, mergeIntersectionValues, sameWireValue } from './utils'
++import {
++  hasOwnKey,
++  intersectionEncodeError,
++  isIntersectionIdentity,
++  isPlainObject,
++  mergeIntersectionValues,
++  nullObject,
++  sameWireValue,
++} from './utils'
+ 
+ export interface EncodeOptions {
+   encodeObject?: (
+@@ -83,7 +91,7 @@ function encodeObjectFields(
+   definition: ObjectDefinition,
+   value: { [key: string]: unknown },
+   options: EncodeOptions,
+-  output: { [key: string]: unknown } = Object.create(null),
++  output: { [key: string]: unknown } = nullObject(),
+ ): { [key: string]: unknown } {
+   const shape = resolveObjectShape(struct, definition)
+   for (const key in shape) {
+@@ -210,7 +218,7 @@ export function encodeValue(struct: RuntimeStruct, value: unknown, options: Enco
+       // Each member encodes on its own. One logical key can leave under every wire key it declares.
+       // Disjoint keys stay one assignment. A key that is already present is merged, not overwritten.
+       if (definition.objectSides && (!options.encodeObject || options.encodeObject === mapAliasedObjectFields) && isPlainObject(value)) {
+-        const output: { [key: string]: unknown } = Object.create(null)
++        const output = nullObject()
+         for (const runtime of parts) {
+           writeObjectFieldsMerged(runtime, value, options, output)
+         }
+diff --git a/packages/core/src/struct/fields.ts b/packages/core/src/struct/fields.ts
+index a668f80..bb19751 100644
+--- a/packages/core/src/struct/fields.ts
++++ b/packages/core/src/struct/fields.ts
+@@ -1,6 +1,6 @@
+ import { resolveObjectShape } from './shape'
+ import { DEFINITION } from './symbols'
+-import { hasOwnKey } from './utils'
++import { hasOwnKey, nullObject } from './utils'
+ import type { ObjectDefinition, RuntimeStruct } from './types'
+ 
+ export interface ResolvedStructField {
+@@ -50,7 +50,7 @@ export function mapAliasedObjectFields(
+   struct: RuntimeStruct,
+   value: { [key: string]: unknown },
+   encodeChild: (struct: RuntimeStruct, value: unknown) => unknown,
+-  output: { [key: string]: unknown } = Object.create(null),
++  output: { [key: string]: unknown } = nullObject(),
+ ): { [key: string]: unknown } {
+   const definition = struct[DEFINITION]
+   if (definition.kind !== 'object') {
+diff --git a/packages/core/src/struct/parse.ts b/packages/core/src/struct/parse.ts
+index 4901e22..eddaa58 100644
+--- a/packages/core/src/struct/parse.ts
++++ b/packages/core/src/struct/parse.ts
+@@ -30,6 +30,7 @@ import {
+   isPlainObject,
+   matchesEnum,
+   mergeIntersectionValues,
++  nullObject,
+   success,
+ } from './utils'
+ 
+@@ -242,7 +243,7 @@ function parseObjectValue(
+     return reportIssues ? failure(issue([...path], 'invalid_type', 'object', input)) : QUIET_FAILURE
+   }
+ 
+-  const output: { [key: string]: unknown } = target ?? Object.create(null)
++  const output: { [key: string]: unknown } = target ?? nullObject()
+   for (const field of resolveStructFields(struct, definition)) {
+     const inputKey = useAliases ? field.wireKey : field.key
+     const inputValue = cachedField?.inputKey === inputKey ? cachedField.value : hasOwnKey(input, inputKey) ? input[inputKey] : undefined
+@@ -410,7 +411,7 @@ function parseIntersectionValue(
+   tagObjects: boolean,
+ ): InternalParseResult<unknown> {
+   if (definition.objectSides && isPlainObject(input)) {
+-    const merged: { [key: string]: unknown } = Object.create(null)
++    const merged = nullObject()
+     for (const option of definition.options) {
+       const runtime = option as RuntimeStruct
+       const result = parseObjectValue(
+diff --git a/packages/core/src/struct/utils.ts b/packages/core/src/struct/utils.ts
+index 486bc4e..ac58d43 100644
+--- a/packages/core/src/struct/utils.ts
++++ b/packages/core/src/struct/utils.ts
+@@ -23,7 +23,7 @@ export function mergeIntersectionValues(left: unknown, right: unknown, tagNodes
+     return { ok: true, value: left }
+   }
+   if (isPlainObject(left) && isPlainObject(right)) {
+-    const output: { [key: string]: unknown } = Object.create(null)
++    const output = nullObject()
+     for (const key of Object.keys(left)) {
+       output[key] = left[key]
+     }
+@@ -170,6 +170,20 @@ export function formatPath(path: Path): string {
+   return output
+ }
+ 
++/**
++ * A null-prototype object for a node whose keys come from a struct.
++ *
++ * V8 puts `Object.create(null)` objects in dictionary mode, which makes every later write and read
++ * slower, including the caller's reads of a decoded body. Dropping the prototype from a fresh literal
++ * keeps fast properties. With no prototype, a `__proto__` key is an ordinary own data property.
++ * Records keep `Object.create(null)`: arbitrary keys are what dictionary mode is for.
++ */
++export function nullObject(): { [key: string]: unknown } {
++  const value = {}
++  Object.setPrototypeOf(value, null)
++  return value as { [key: string]: unknown }
++}
++
+ export function hasOwnKey(value: { [key: string]: unknown }, key: string): boolean {
+   return Object.hasOwn(value, key)
+ }
+-- 
+2.55.0
+

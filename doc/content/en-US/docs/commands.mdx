@@ -1,0 +1,70 @@
+---
+title: "Define and execute / Command"
+description: Design the reusable operations your SDK exports, then execute commands with the consuming application's client.
+---
+
+# Commands
+
+An endpoint is an operation your SDK exports. It describes the API contract without binding an application client. Calling that endpoint with input creates a command; the consuming application's `client.execute(...)` validates and executes it.
+
+One definition → exported endpoint → command with caller input → application-owned execution. HTTP, SSE, and WebSocket share this structure.
+
+## The SDK's public surface
+
+Export named endpoints such as `getUser`, `watchUsers`, or `openRoom`, and share Structs where operations use the same data contract. Keep the request path, input mapping, and response shapes in the definition. Keep deployment addresses, current credentials, and application policy in the [Client](/docs/client) or around the call.
+
+Definitions can live in a local module or an [npm SDK package](/recipes/publish-http-sdk). Optional client factories and convenience methods can build on those exports; they should make their error and lifecycle behavior explicit. A factory is not required to publish an SDK.
+
+## Basic Setup
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## Choose a definition
+
+| Definition               | Contract                                                           | Successful value                         |
+| ------------------------ | ------------------------------------------------------------------ | ---------------------------------------- |
+| `defineRequest(...)`     | Method, relative path, optional input, optional `output` / `error` | Decoded data + response                  |
+| `defineEventStream(...)` | Path, buffer/queue limits, event-name → Struct map                 | `EventStreamHandle` + open snapshot      |
+| `defineWebSocket(...)`   | Path, one incoming struct, optional outgoing struct, queue limit   | `WebSocketSession` + connection snapshot |
+
+No `input` → the endpoint takes no argument, and `builder` may be `() => request`. With `input` → pass the struct value. An optional field may be omitted; a required field may not.
+
+Keep commands opaque. Don’t dig into tags or symbols.
+
+## Where values go
+
+The struct decides how a value is encoded. The `builder` decides where it goes. `builder` is a synchronous pure function of the **parsed** input. It runs at execute time. A throw becomes `REQ_BUILD_FAILED` on the tuple — the endpoint call itself does not throw.
+
+A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+
+Hand the typed value through. Alias, `Date` → ISO, and `bigint` → string then apply everywhere that struct is used: request placement, response decoding, SSE events, and WebSocket frames.
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+The body is JSON `{"display_name":"…","email":"…"}`. A hand-written key is the escape hatch: `body: { name: input.user.displayName }` sends `name`, because the parent object is anonymous and the alias does not apply.
+
+## When the shapes differ
+
+Use `builder` for path placeholders, literals, and branches. It receives the real value, so `if`, `??`, templates, and `switch` work.
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.filter` sends `page_size`. `headers: { 'x-api-version': '2' }` is a literal. Auth and tracing still belong in interceptors: they see the native request after the builder runs.
+
+## Output and error shapes
+
+`output` is one Struct for the 2xx body; `error` is one Struct for everything else. `ok` is the only
+fork, and only one side ever decodes. Omitting a side means that body is never read: the fault
+carries the status and `data` stays `undefined`.
+
+## Related recipes
+
+- [Build and publish an SDK](/recipes/publish-http-sdk)
+- [GET with a declared 404](/recipes/get-declared-404)
+- [POST JSON](/recipes/post-json)

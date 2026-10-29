@@ -1,0 +1,20 @@
+---
+title: "キャンセルとタイムアウト"
+description: execute を abort またはタイムアウトさせ、NET_ABORTED / NET_TIMEOUT を読み取ります。
+---
+
+# HTTP 呼び出しをキャンセルする
+
+`signal` に加えて `abort` か `timeout` のどちらかを渡します — `abort` と `timeout` の両方は不可です。`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。
+
+詳細は [HTTP](/ja-JP/docs/http#作業をキャンセルする) を見てください。
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+キャンセルは呼び出し側が観測したことを伝えます。サーバー側の書き込みがロールバックされたことの証明にはなりません — ミューテーションのリトライは冪等性の契約の後ろに置いてください。

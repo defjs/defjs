@@ -1,0 +1,195 @@
+---
+title: Client
+description: createClient、选项辅助函数，以及 Client 类型。
+---
+
+# Client
+
+建一个 client，options 从左到右叠，然后 `execute` HTTP / SSE / WebSocket command。
+
+## createClient()
+
+<ApiSignature name="createClient" />
+
+Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 client 建在请求边界里。
+
+- **options** — 像 `withEndpoint` 这种 option helper。
+- **返回** 一个 client，`execute` 按传输重载。
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## 选项辅助函数
+
+每个辅助函数都返回 `ClientOption`。对同一项设置，后一次调用会替换前一次，`withInterceptors` 例外，它是追加。
+
+### withEndpoint()
+
+<ApiSignature name="withEndpoint" />
+
+设置拼在相对路径前面的 base URL。
+
+### withInterceptors()
+
+<ApiSignature name="withInterceptors" />
+
+按注册顺序追加 interceptor。混着的 kind 在 execute 时按传输过滤。
+
+### withQuerySerializer()
+
+<ApiSignature name="withQuerySerializer" />
+
+换掉 HTTP、SSE、WebSocket 的 query 编码。`serializer(query)` 收到的是**已经编码的传输对象**（alias 已应用，`Date` 为 ISO，`bigint` 为 string），必须返回 query string，不要带前导 `?`。请求没有 query 时不会调用。builder 返回 `URLSearchParams` 时会跳过它。
+
+### withHeaders()
+
+<ApiSignature name="withHeaders" />
+
+为 HTTP 和 SSE 请求设置静态默认 header，WebSocket 请求不使用它们。`headers` 在 option 生效时被复制，所以之后对该对象的修改不会影响 client。第二次调用 `withHeaders` 会替换第一次，不会合并。
+
+单个请求的优先级：
+
+1. 默认 header 是起始的 header 集合。
+2. request builder 返回的 `headers` 会替换同名的默认值。该名称的第一个值替换默认值（`Headers.set`）；同一数组里后面的值只追加到这次替换上。标量或 `Headers` 实例同样是替换。其他默认名称保留。
+3. interceptor 收到的是合并后的 header，并且可以修改它们。
+4. 使用默认 HTTP transport 时，XSRF header 最后才加，且仅在仍然缺失时添加（见 `withXSRF`）。
+
+随请求变化的值（刷新后的 Bearer token，或对序列化 body 计算的 HMAC）请用 interceptor。
+
+### withTimeout()
+
+<ApiSignature name="withTimeout" />
+
+为**仅 HTTP** 的 `execute` 设置默认超时，单位毫秒。SSE 和 WebSocket 忽略它；它们 execute 的 `timeout` 是另一个按调用计的启动期限。`ms` 必须是不超过 `2_147_483_647` 的正安全整数，否则调用 `withTimeout` 时会抛出 `RangeError`。第二次调用 `withTimeout` 会替换第一次。
+
+该期限涵盖输入解析、builder、interceptor、transport，以及读取已声明的 body。它会与每次调用的 [`HttpExecuteOptions`](/zh-Hans/api/core/httpexecuteoptions-type) 组合：
+
+| 执行选项                    | 效果                                                                             |
+| --------------------------- | -------------------------------------------------------------------------------- |
+| 无                          | 使用 client 默认值；到期为 `NET_TIMEOUT`。                                       |
+| `{ timeout }`               | 本次调用替换 client 默认值。                                                     |
+| `{ abort }` 或 `{ signal }` | 与默认值组合：调用方的 signal 触发为 `NET_ABORTED`，计时器触发为 `NET_TIMEOUT`。 |
+| `{ abort, timeout }`        | 仍然无效：`REQ_OPTIONS_INVALID`。client 默认值从不算作冲突。                     |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+<ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
+
+替换 Fetch（HTTP/SSE）或 WebSocket 构造函数。
+
+### withCredentials()
+
+<ApiSignature name="withCredentials" />
+
+为 `true` 时，HTTP 和 SSE 的 Fetch 用 `credentials: 'include'`。默认关闭。WebSocket 连接不受影响。
+
+### withXSRF()
+
+<ApiSignature name="withXSRF" />
+
+给 HTTP 请求加上 XSRF token header。`options` 就是 `xsrf` 设置，形状与 [`ClientOptions`](/zh-Hans/api/core/clientoptions-type) 上的 `xsrf` 相同：`cookieName`（默认 `XSRF-TOKEN`）、`headerName`（默认 `X-XSRF-TOKEN`）和 `tokenProvider({ request })`。不带参数调用 `withXSRF()` 会启用这些默认值。SSE 和 WebSocket 请求不受影响。
+
+默认 HTTP transport 在以下条件全部满足时添加该 header：方法不是 `GET`、`HEAD`、`OPTIONS` 或 `TRACE`；请求尚未带有该 header；请求同源；并且找到了非空 token。只要存在 `location`（包括 Worker 中），解析后的请求源就必须与 `location.origin` 一致；不存在 `location` 时，带 `baseEndpoint` 的请求视为同源。跨源请求不会调用 `tokenProvider`。提供了该 provider 时，token 取自它，否则取自 `document.cookie`；只有存在 `document` 时才会读取 cookie。
+
+### SSE 设置
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+
+### WebSocket 设置
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+
+## 类型
+
+### Client
+
+<ApiSignature name="Client" />
+
+`execute` 按命令种类各有一个重载（event stream、WebSocket、HTTP），类型参数由 command 推断。
+
+### ClientOption
+
+<ApiSignature name="ClientOption" />
+
+修改 `createClient` 构建的 `ClientConfig`。没有合适的 `with*` helper 时，自己写一个。
+
+### QuerySerializer
+
+<ApiSignature name="QuerySerializer" />
+
+### FetchHandle
+
+<ApiSignature name="FetchHandle" />
+
+Defjs 对 Fetch 实现所要求的调用签名。它不是 `typeof fetch`，所以 mock 不需要提供 `preconnect` 之类的宿主额外成员。默认的 HTTP/SSE handle 每次调用时都会解析 `globalThis.fetch`。HTTP 只有在平台 Fetch 未被替换时才使用 `(url, init)`；被替换的全局实现和自定义 handle 收到的是 `Request`。SSE 始终传入 `Request`。没有 Fetch 时也可以导入 Core；如果默认执行时 Fetch 仍然缺失，则报告 `ENV_UNSUPPORTED`，自定义 handle 仍可使用。
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+<ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
+
+两种传输的重连都是可选开启：没有 `withSSEReconnect` / `withWebSocketReconnect` 就不会重试。一旦设置了 `reconnect`，以下默认值生效：
+
+| 字段         | SSE             | WebSocket       |
+| ------------ | --------------- | --------------- |
+| `attempts`   | 每次中断 `3` 次 | 每次中断 `3` 次 |
+| `delayMs`    | `1000`          | `1000`          |
+| `factor`     | `1`             | `2`             |
+| `jitter`     | `0`             | `0`             |
+| `maxDelayMs` | 无上限          | `30000`         |
+
+两种传输在成功握手后，都会重置每次连接中断的重试预算、回调中的尝试次数和退避指数。`attempts: 0` 禁用重试；省略 `attempts` 并不表示单次中断期间可以无限重试。`maxDelayMs` 限制抖动和取整后的最终延迟；平台计时器上限 `2_147_483_647` 毫秒也始终生效，包括 SSE 未配置上限时。基础延迟为零时始终为零；有效数字在计算中溢出时会被限制在这些上限。
+
+重连选项在传输层运行前校验：`attempts` 必须是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 可以是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 必须是正的有限数；`jitter` 必须是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 禁用后续重试，但所有显式提供的重连字段仍会在首次连接前校验，与 SSE 一样。抖动会在最终上限应用前，让已经受限的基础延迟向任一方向按比例浮动。
+
+对 SSE，`delayMs` 只是起始的基础延迟：服务器发来的 `retry:` 字段只有包含纯数字时，才会在之后的尝试中取代它，恢复连接后也继续生效。`shouldReconnect` 返回 `false` 即停止重试。SSE 的回调还会收到 `lastEventId`、请求的 `method` 和最近一次的 `open` 信息，并且可以是异步的。未提供该回调时，SSE 只对 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求进行重连；提供后，所有请求方法是否重连都由回调的返回结果决定。最新的事件 ID 以 UTF-8 字节写入 `Last-Event-ID`；空 ID 会清除它，包含 NUL 的 ID 会被忽略。WebSocket 的回调则收到 close 的 `code`、`reason` 和 `wasClean`。
+
+SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `default`，即 `missing-struct`），或数据未通过其 struct 校验的事件（`validation-failed`）。该事件一律被丢弃；handler 的返回值会被忽略，它抛出的错误也不会关闭 stream。
+
+对 WebSocket，`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 也可以在每次调用 `execute` 时传入；execute 传入的值在本次调用中替换 client 上的值。`heartbeat.message` 负责构造每次 ping；省略它或它返回 `undefined` 时不发送任何内容。
+
+### ClientOptions
+
+<ApiSignature name="ClientOptions" />
+
+签名里出现的字段是 `sse` 和 `webSocket`。另外八个——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`timeout`、`xsrf` 和 `withCredentials`——继承自未导出的 HTTP 基类型，其中 `endpoint` 必填。`createClient` 不接收这个对象，它接收的是 option helpers。
+
+### ClientConfig
+
+option helpers 修改、`execute` 读取的解析后快照：应用默认值之后的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一个 `ClientSSEConfig`）和 `webSocket` 始终存在。
+
+### ClientSSEConfig
+
+<ApiSignature name="ClientSSEConfig" />
+
+`ClientConfig.sse` 上解析好的 SSE 配置：在 `ClientSSEOptions` 的基础上，把 `handle` 设为必填。
+
+### WebSocketHandle
+
+传输层用到的 WebSocket 实例面：去掉 `binaryType`、ready-state 常量、`dispatchEvent` 和 `on*` handler 属性的 `WebSocket`，再加上只读的 `readyState: number`。
+
+### WebSocketHandleConstructor
+
+<ApiSignature name="WebSocketHandleConstructor" />
+
+传给 `withWebSocketHandle` 的构造函数。它必须暴露 `OPEN` ready-state 常量。
+
+见 [Client 指南](/zh-Hans/docs/client)。

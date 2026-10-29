@@ -1,0 +1,31 @@
+From f65b2ca306f74fcb746f5945845ba8f375475bf8 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:22:07 +0800
+Subject: [PATCH 09/10] perf(http): a lone deadline signal is the request
+ signal
+
+---
+ packages/core/src/http/http.ts | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/packages/core/src/http/http.ts b/packages/core/src/http/http.ts
+index a10ccf0..56ab103 100644
+--- a/packages/core/src/http/http.ts
++++ b/packages/core/src/http/http.ts
+@@ -244,7 +244,12 @@ export async function executeHttpCommand<
+   // The deadline covers parse, the builder, the transport, and declared-body conversion.
+   // release() only clears the timer, so a response that already arrived is not aborted by it.
+   const deadline = armTransportDeadline(cancellation.timeout)
+-  const requestSignal = mergeAbortSignals(controller.signal, [cancellation.abort, cancellation.signal, deadline.signal])
++  // The deadline signal is ours and per request, so alone it is the request signal. A caller signal
++  // still goes through a composite: listeners must never be left on a signal the caller keeps.
++  const requestSignal =
++    cancellation.abort === undefined && cancellation.signal === undefined && deadline.signal
++      ? deadline.signal
++      : mergeAbortSignals(controller.signal, [cancellation.abort, cancellation.signal, deadline.signal])
+   deadline.releaseOnAbort(requestSignal)
+   const stopBeforeTransport = (fault: PreflightFault): HttpExecuteAwaitResult<TOutput, TError> => {
+     deadline.release()
+-- 
+2.55.0
+

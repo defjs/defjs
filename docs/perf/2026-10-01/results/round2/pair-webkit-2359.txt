@@ -1,0 +1,17 @@
+12:59  up 14 days, 12:58, 11 users, load averages: 8.58 8.21 5.82
+== webkit 26.6
+webkit	ping-no-decl	A=18275ns	B=13920ns	B/A=-23.7%	[p25 -25.8%, p75 -19.1%]
+webkit	get-small	A=39063ns	B=32047ns	B/A=-17.8%	[p25 -21.1%, p75 -8.5%]
+webkit	get-small-timeout	A=43620ns	B=41998ns	B/A=1.0%	[p25 -19.0%, p75 11.3%]
+webkit	get-small-2-interceptors	A=43706ns	B=33411ns	B/A=-23.9%	[p25 -44.8%, p75 -21.1%]
+webkit	get-query	A=47227ns	B=36550ns	B/A=-21.7%	[p25 -41.7%, p75 -20.8%]
+webkit	post-json	A=51230ns	B=38580ns	B/A=-21.0%	[p25 -33.7%, p75 -7.5%]
+webkit	post-order-50	A=167763ns	B=92371ns	B/A=-43.2%	[p25 -46.5%, p75 -41.7%]
+webkit	error-404-declared	A=57870ns	B=35311ns	B/A=-26.6%	[p25 -45.8%, p75 -21.1%]
+webkit	get-list-1000	A=934375ns	B=533854ns	B/A=-30.2%	[p25 -59.2%, p75 -25.7%]
+webkit	net-get-small	A=2104167ns	B=1914063ns	B/A=0.9%	[p25 -2.7%, p75 4.6%]
+webkit	net-get-list	A=2802083ns	B=2541667ns	B/A=-9.0%	[p25 -15.8%, p75 -7.9%]
+webkit	struct-decode-1000	A=352431ns	B=187500ns	B/A=-45.5%	[p25 -47.6%, p75 -44.4%]
+webkit	struct-decode-1000+read	A=376838ns	B=214583ns	B/A=-43.1%	[p25 -45.0%, p75 -39.1%]
+webkit	sse-2000-events	A=7625000ns	B=3114583ns	B/A=-59.7%	[p25 -62.2%, p75 -58.6%]
+webkit	ws-2000-messages	A=3343750ns	B=1368750ns	B/A=-59.0%	[p25 -60.0%, p75 -57.4%]

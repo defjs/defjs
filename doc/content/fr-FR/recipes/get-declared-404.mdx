@@ -1,0 +1,22 @@
+---
+title: "Gérer une 404 déclarée"
+description: Exécute un GET et branche sur 200 typé vs 404 déclaré.
+---
+
+# GET avec un 404 déclaré
+
+Déclare les corps de succès et de 404. Branche sur `error.code` et `error.status` — tu obtiens un `error.data` typé pour l’erreur déclarée.
+
+Voir [HTTP](/fr-FR/docs/http) et [Erreurs](/fr-FR/docs/errors) pour les détails.
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` est un placeholder. Avec un serveur qui répond à `GET /users/7` par `200` et `{ "id": 7, "name": "Ada" }`, le snippet affiche :
+
+```txt
+Loaded Ada from 200
+```
+
+Un statut non-2xx est `HTTP_STATUS`. Déclarer `error` donne un type à son corps ; omettre `error` laisse `error.data` à `undefined` et le corps non lu. Si un corps `error` déclaré ne peut pas être lu (mauvais media type, JSON invalide, mauvaise forme), le résultat est un fault `RES_*` à la place. Un seul Struct `error` couvre tous les statuts non-2xx : utilise donc `struct.or(...)` ou une union discriminée quand les formes diffèrent.

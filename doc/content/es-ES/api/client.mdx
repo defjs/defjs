@@ -1,0 +1,195 @@
+---
+title: Cliente
+description: createClient, helpers de opción y el tipo Client.
+---
+
+# Cliente
+
+Crea un cliente, compón opciones de izquierda a derecha y luego `execute` comandos HTTP / SSE / WebSocket.
+
+## createClient()
+
+<ApiSignature name="createClient" />
+
+Las opciones se aplican en orden. Prefiere crear el cliente dentro del límite de la solicitud cuando los interceptores capturan auth o tenants.
+
+- **options** — Helpers de opción como `withEndpoint`.
+- **Devuelve** un cliente cuyo `execute` está sobrecargado por transporte.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## Helpers de opción
+
+Todos los helpers devuelven `ClientOption`. Una llamada posterior reemplaza a una anterior para el mismo ajuste, salvo `withInterceptors`, que añade.
+
+### withEndpoint()
+
+<ApiSignature name="withEndpoint" />
+
+Fija la URL base que se antepone a los paths relativos.
+
+### withInterceptors()
+
+<ApiSignature name="withInterceptors" />
+
+Añade interceptores en orden de registro. Los kinds mixtos se filtran por transporte en el momento de execute.
+
+### withQuerySerializer()
+
+<ApiSignature name="withQuerySerializer" />
+
+Reemplaza la codificación de query para HTTP, SSE y WebSocket. `serializer(query)` recibe el **objeto de cable ya codificado** (alias aplicados, `Date` como ISO, `bigint` como string) y debe devolver el query string sin un `?` inicial. No se llama cuando la solicitud no tiene query. Un builder que devuelve `URLSearchParams` lo salta.
+
+### withHeaders()
+
+<ApiSignature name="withHeaders" />
+
+Fija headers por defecto estáticos para las solicitudes HTTP y SSE. Las solicitudes WebSocket no los usan. `headers` se copia cuando se aplica la opción, así que los cambios posteriores en el objeto no llegan al cliente. Un segundo `withHeaders` reemplaza al primero; no fusiona.
+
+Precedencia para una solicitud:
+
+1. Los valores por defecto son el conjunto inicial de headers.
+2. Los `headers` que devuelve el builder de la solicitud sustituyen a un valor por defecto del mismo nombre cuando el valor es un escalar o una instancia de `Headers`. Un valor de array (una entrada de record como `{ 'x-a': ['one', 'two'] }`, o un `HeadersInit` en forma de array de tuplas) no se añade al valor por defecto del mismo nombre: el primer valor de ese nombre lo sustituye (`Headers.set`) y los siguientes del mismo array solo se añaden a ese reemplazo. Los demás nombres por defecto se quedan.
+3. Los interceptores reciben los headers ya fusionados y pueden cambiarlos.
+4. Con el transporte HTTP por defecto, el header XSRF se añade al final, solo cuando sigue ausente (consulta `withXSRF`).
+
+Usa un interceptor para los valores que cambian en cada solicitud: un token Bearer renovado o un HMAC sobre el body serializado.
+
+### withTimeout()
+
+<ApiSignature name="withTimeout" />
+
+Fija el timeout por defecto, en milisegundos, solo para `execute` **HTTP**. SSE y WebSocket lo ignoran; su `timeout` de execute es un plazo de arranque independiente, por llamada. `ms` debe ser un entero seguro positivo no mayor que `2_147_483_647`; de lo contrario, `withTimeout` lanza un `RangeError` al llamarlo. Un segundo `withTimeout` reemplaza al primero.
+
+El plazo abarca el parseo del input, el builder, los interceptores, el transporte y la lectura de un body declarado. Se combina con las [`HttpExecuteOptions`](/es-ES/api/core/httpexecuteoptions-type) de cada llamada:
+
+| Opciones de execute        | Efecto                                                                                                       |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| ninguna                    | Se aplica el valor por defecto del cliente; la expiración es `NET_TIMEOUT`.                                  |
+| `{ timeout }`              | Sustituye el valor por defecto del cliente para esta llamada.                                                |
+| `{ abort }` o `{ signal }` | Se combina con el valor por defecto: la señal del llamador da `NET_ABORTED` y el temporizador `NET_TIMEOUT`. |
+| `{ abort, timeout }`       | Sigue siendo inválido: `REQ_OPTIONS_INVALID`. El valor por defecto del cliente nunca cuenta como conflicto.  |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+<ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
+
+Reemplaza Fetch (HTTP/SSE) o el constructor WebSocket.
+
+### withCredentials()
+
+<ApiSignature name="withCredentials" />
+
+Cuando es `true`, Fetch usa `credentials: 'include'` para HTTP y SSE. Por defecto está desactivado. Las conexiones WebSocket no se ven afectadas.
+
+### withXSRF()
+
+<ApiSignature name="withXSRF" />
+
+Añade un header con el token XSRF a las solicitudes HTTP. `options` es el ajuste `xsrf`, con la misma forma que `xsrf` en [`ClientOptions`](/es-ES/api/core/clientoptions-type): `cookieName` (por defecto `XSRF-TOKEN`), `headerName` (por defecto `X-XSRF-TOKEN`) y `tokenProvider({ request })`. Llamar a `withXSRF()` sin argumento activa esos valores por defecto. Las solicitudes SSE y WebSocket no se ven afectadas.
+
+El transporte HTTP por defecto añade el header cuando se cumple todo lo siguiente: el método no es `GET`, `HEAD`, `OPTIONS` ni `TRACE`; la solicitud no tiene ya ese header; la solicitud es del mismo origen; y se encuentra un token no vacío. Siempre que exista `location`, incluso en un Worker, el origen resuelto de la solicitud debe coincidir con `location.origin`; si no existe, una solicitud con `baseEndpoint` cuenta como del mismo origen. Las solicitudes de origen cruzado no llaman a `tokenProvider`. El token proviene de ese provider cuando se da y, si no, de `document.cookie`, que solo se lee cuando existe `document`.
+
+### Ajustes SSE
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+
+### Ajustes WebSocket
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+
+## Tipos
+
+### Client
+
+<ApiSignature name="Client" />
+
+`execute` tiene una sobrecarga por tipo de comando (event stream, WebSocket, HTTP), y los parámetros de tipo se infieren a partir del comando.
+
+### ClientOption
+
+<ApiSignature name="ClientOption" />
+
+Muta el `ClientConfig` que construye `createClient`. Escribe una cuando ningún helper `with*` encaje.
+
+### QuerySerializer
+
+<ApiSignature name="QuerySerializer" />
+
+### FetchHandle
+
+<ApiSignature name="FetchHandle" />
+
+La firma de llamada que Defjs necesita de una implementación de Fetch. No es `typeof fetch`, así que un mock no necesita extras del host como `preconnect`. Los handles HTTP/SSE por defecto resuelven `globalThis.fetch` en cada llamada. HTTP usa `(url, init)` solo para el Fetch de la plataforma sin sustituir; los globales reemplazados y los handles personalizados reciben un `Request`. SSE siempre pasa un `Request`. Importar Core sin Fetch es válido; una ejecución por defecto reporta `ENV_UNSUPPORTED` si Fetch sigue ausente, mientras que los handles personalizados siguen siendo utilizables.
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+<ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
+
+El reconnect es opt-in en ambos transportes: sin `withSSEReconnect` / `withWebSocketReconnect` no hay reintento. Una vez definido `reconnect`, se aplican estos valores por defecto:
+
+| Campo        | SSE                  | WebSocket            |
+| ------------ | -------------------- | -------------------- |
+| `attempts`   | `3` por interrupción | `3` por interrupción |
+| `delayMs`    | `1000`               | `1000`               |
+| `factor`     | `1`                  | `2`                  |
+| `jitter`     | `0`                  | `0`                  |
+| `maxDelayMs` | sin tope             | `30000`              |
+
+En ambos transportes, un handshake correcto reinicia el presupuesto de reintentos de esa interrupción, el attempt del callback y el exponente de backoff. `attempts: 0` desactiva el reintento; omitir `attempts` no da reintentos ilimitados dentro de una misma interrupción. `maxDelayMs` limita el retraso final tras el jitter y el redondeo; también se aplica el límite del temporizador de la plataforma, `2_147_483_647` ms, incluso cuando SSE no tiene tope configurado. Una base cero sigue siendo cero; el desbordamiento de números válidos se satura en los topes.
+
+Las opciones de reconexión se validan antes del transporte: `attempts` debe ser un entero seguro no negativo; `delayMs` debe ser finito y no negativo; `maxDelayMs` debe ser un número finito no negativo o `Infinity` positivo, que elimina el tope configurado pero no el límite de la plataforma de `2_147_483_647` ms para el retraso final; `factor` debe ser finito y positivo; `jitter` debe ser finito y estar entre 0 y 1. Los valores no válidos devuelven `REQ_OPTIONS_INVALID`. En WebSocket, `attempts: 0` desactiva los reintentos posteriores, pero todos los campos de reconexión proporcionados explícitamente se siguen validando antes de la conexión inicial, igual que en SSE. El jitter escala la base ya limitada en cualquiera de los dos sentidos antes de aplicar el tope final.
+
+En SSE, `delayMs` es solo el retraso base inicial: un campo `retry:` del servidor formado solo por dígitos lo reemplaza en los intentos posteriores, también después de la recuperación. Si `shouldReconnect` devuelve `false`, cesan los reintentos. El callback de SSE recibe además `lastEventId`, el `method` de la solicitud y la última información de `open`, y puede ser asíncrono. Sin este callback, SSE solo reconecta solicitudes `GET`, `HEAD`, `OPTIONS`, `PUT` y `DELETE`; si se proporciona, su resultado determina si se reconecta para cada método. El último ID de evento se envía como bytes UTF-8 en `Last-Event-ID`; un ID vacío lo borra y un ID que contiene NUL se ignora. El callback de WebSocket recibe en su lugar el `code`, `reason` y `wasClean` del cierre.
+
+El `onInvalidEvent` de SSE gestiona un evento sin struct correspondiente, incluido el caso sin `default` (`missing-struct`), o cuyos datos fallan su struct (`validation-failed`). El evento siempre se descarta; el valor de retorno del handler se ignora y un error que lance no cierra el stream.
+
+En WebSocket, `beforeConnect`, `heartbeat`, `protocols` y `reconnect` también pueden pasarse por llamada a `execute`; el valor de execute sustituye al del cliente para esa llamada. `heartbeat.message` construye cada ping; no se envía nada cuando se omite o devuelve `undefined`.
+
+### ClientOptions
+
+<ApiSignature name="ClientOptions" />
+
+Los campos que se muestran son `sse` y `webSocket`. Los otros ocho — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `timeout`, `xsrf` y `withCredentials` — se heredan de la base HTTP no exportada, y `endpoint` es obligatorio. `createClient` no recibe este objeto; recibe helpers de opción.
+
+### ClientConfig
+
+El snapshot resuelto que mutan los helpers de opción y que lee `execute`: `ClientOptions` tras aplicar los valores por defecto, con `http.handle`, `interceptors`, `sse` (un `ClientSSEConfig`) y `webSocket` siempre presentes.
+
+### ClientSSEConfig
+
+<ApiSignature name="ClientSSEConfig" />
+
+La config SSE resuelta en `ClientConfig.sse`: `ClientSSEOptions` con un `handle` obligatorio.
+
+### WebSocketHandle
+
+La superficie de instancia WebSocket que usa el transporte: `WebSocket` sin `binaryType`, las constantes de ready-state, `dispatchEvent` ni las propiedades de handler `on*`, y con un `readyState: number` de solo lectura.
+
+### WebSocketHandleConstructor
+
+<ApiSignature name="WebSocketHandleConstructor" />
+
+El constructor que se pasa a `withWebSocketHandle`. Debe exponer la constante de ready-state `OPEN`.
+
+Mira la [guía de Cliente](/es-ES/docs/client).

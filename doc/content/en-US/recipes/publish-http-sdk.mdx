@@ -1,0 +1,140 @@
+---
+title: "Build and publish an SDK"
+description: Export API definitions as an npm package with types, and let each application configure its own client.
+---
+
+# Build and publish an SDK [#publish-an-http-sdk-without-hiding-execute]
+
+An SDK packages the API your team offers. With Defjs, export endpoint definitions and their data contracts; consuming applications supply the client configuration and decide when to execute them. This recipe uses HTTP, and the same package boundary works for SSE and WebSocket definitions.
+
+## 1. Define the SDK's operations
+
+Create `src/users.ts` in your SDK project. Keep paths, input mapping, responses, and service errors here. No client instance, deployment address, or current credential is needed to define this operation.
+
+<include cwd meta='title="src/users.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+Expose it from `src/index.ts`:
+
+```ts
+export { getUser } from "./users.js";
+```
+
+The `.js` extension is the path in the compiled ESM package. TypeScript resolves it to `users.ts` while building. Add other operation modules and re-export their endpoints as your SDK grows.
+
+## 2. Package JavaScript and declarations
+
+The SDK project has its own package boundary:
+
+```txt
+users-sdk/
+  package.json
+  tsconfig.json
+  src/
+    index.ts
+    users.ts
+```
+
+Use this `package.json`, replacing the example name with a package scope you own:
+
+```json
+{
+  "name": "@company/users-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.4.0",
+    "typescript": "^7.0.2"
+  }
+}
+```
+
+Core remains an external runtime dependency shared with the application. The peer range states which Core releases your SDK supports; the development dependency lets you build and test against that range. This example matches the current `0.4.x` contract. Choose and test the range for your SDK before publishing; declarations and runtime behavior both depend on it.
+
+Add `tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+
+These library declarations provide types, not runtime polyfills. The application still needs the Web APIs used by its chosen transports.
+
+Build and inspect the package:
+
+```sh
+npm install
+npm run build
+npm pack --dry-run
+npm pack
+```
+
+Check that the tarball contains `dist/index.js`, `dist/index.d.ts`, and the operation modules they reference. Install that tarball into a separate application and verify both its types and execution before publishing. The SDK's README should document the service API, compatible Core versions, expected authentication, and any optional defaults.
+
+## 3. Execute from the consuming application
+
+The local example keeps the definition in `users-sdk.ts` beside `app.ts` so it can run offline. Its import creates no client; the application configures a local Fetch handle and executes the imported operation:
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada
+```
+
+For the packaged SDK, install it together with a compatible Core release:
+
+```sh
+npm install @company/users-sdk @defjs/core@^0.4.0
+```
+
+Replace the example's relative import with:
+
+```ts
+import { getUser } from "@company/users-sdk";
+```
+
+Configure your service address and authentication on the application client. Keep `withHTTPHandle(...)` for local tests; remove it to use the platform Fetch implementation. A second application can import the same endpoint and choose different client settings without changing the SDK definition.
+
+## 4. Verify and publish
+
+Use [client-local tests](/recipes/test-with-handle) to exercise the exported definition, request mapping, response validation, and declared errors. Verify the same endpoint with two clients configured for different service addresses and credentials. Keep typed `HTTP_STATUS` handling available at the call site, and test cancellation and stream cleanup for the transports your SDK exports.
+
+When the package has passed your checks, publish from the SDK directory with your npm account:
+
+```sh
+npm publish --access public
+```
+
+This command publishes a public package. Use your organization's registry and access policy for a private SDK. Defjs does not generate or publish the package for you.
+
+Client factories and convenience methods are optional additions. They can provide service defaults or domain behavior while accepting caller configuration and preserving direct endpoint exports. Document any error mapping or lifecycle policy they introduce. Neither is required for a reusable SDK.
+
+See [Commands](/docs/commands), [Client](/docs/client), and [Design decisions](/docs/design-decisions) for the underlying contracts.

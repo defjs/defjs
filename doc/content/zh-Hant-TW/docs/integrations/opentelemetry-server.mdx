@@ -1,0 +1,187 @@
+---
+title: "OpenTelemetry server"
+description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使用選填的 Tracer、Meter 與 Logger。
+---
+
+# OpenTelemetry server
+
+應用程式在建立伺服器 Client 時安裝這個中介軟體外掛，為 SDK 呼叫設定出站觀測。SDK 定義可以提供靜態 `operation` 名稱；應用程式決定 OpenTelemetry 的 provider、exporter、取樣與生命週期，無需把觀測環境綁定至端點定義。
+
+`@defjs/opentelemetry-server` 追加 HTTP、SSE、WebSocket interceptor，用於出站 Defjs 傳輸插樁。它不提供入站伺服器插樁，也不會初始化 OpenTelemetry SDK。
+
+## 基本用法
+
+在別處初始化 SDK。把 API 物件傳進來：
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/basic-setup.ts#example
+</include>
+
+`tracer` 選填。`meter` 選填 — 省略就關掉套件 metrics。沒有 `propagator` → plugin 會建 composite W3C Trace Context + W3C Baggage propagator。它不會替你讀或初始化全域 SDK 設定。
+
+省略 `tracer` 時，plugin 不建立本機 span，也不呼叫 `trace.getTracer(...)`，並略過 `startSpanHook`、`requestHook` 與 `responseHook`。傳入的 `meter` 和 `logger` 獨立運作。Propagation 仍會轉送擷取到的父 context；WebSocket 的 `queryPropagation` 預設仍是 `false`。傳入 tracer 時，`requireParentSpan: true` 在沒有 active parent 時會略過所有 instrumentation，包含 logs；省略 tracer 時，metrics 與 logs 都不會被擋下。
+
+`withOpenTelemetryServer(options)` 回傳 core `ClientOption`。在 `createClient` 時套用，讓每個啟用的傳輸追加一個 interceptor。HTTP、SSE、WebSocket 預設啟用；`{ enabled: false }` 關掉單一傳輸。
+
+即使請求在傳輸層失敗，plugin 仍可建立傳輸遙測。有沒有東西被匯出，取決於你的 SDK 與 exporters。
+
+## 範圍
+
+SDK init、providers、exporters、processors、context、sampling、redaction、flush、shutdown 由你負責。這個套件消費你傳入的選填 `Tracer`、選填 `Meter`、選填 `Logger`、選填 `TextMapPropagator`。它不提供內建 redactor 或敏感 key 策略。
+
+不提供快取、重試、訊息層級 span 或應用 command 結果策略。伺服器執行環境須符合所選 SDK 與 bridge 的要求；本文可執行的 Winston 範例使用 Bun。peers 為 `@defjs/core`、`@opentelemetry/api` 1.x、`@opentelemetry/core` 2.x/3.x。`@opentelemetry/api-logs` 是套件的一般相依項；應用自行安裝 SDK 與 bridge。
+
+公開 API：`withOpenTelemetryServer`，以及 `OpenTelemetryServerOptions`、`OpenTelemetryServerHttpOptions`、`OpenTelemetryServerSSEOptions`、`OpenTelemetryServerWebSocketOptions`。
+
+## Options 與 hooks
+
+僅在傳入 `tracer` 時呼叫 span hooks。Hooks 放在它們會改動的傳輸旁邊。同步 `startSpanHook(request)` 會在建立 span 前執行並回傳初始 `Attributes`；應用程式 attributes 最後套用，因此可以覆寫內建值。`requestHook` 與 `responseHook` 收到已建立的 span，可以回傳 `void` 或 promise。Hook 失敗**不會**停掉 client 操作；start hook 失敗時會退回內建初始 attributes。
+
+`requestHook` 與 `responseHook` 都不會被 await。HTTP span 在 `responseHook` 的同步部分回傳後立即結束，不會為非同步 hook 延長生命週期。同步部分仍可修改 recording span；結束後不能追加事件。 當 `span.isRecording()` 為 true 時，hook 失敗會記錄 `defjs.otel.hook.error` 與 `exception` 事件。span 不再 recording（已結束或未取樣）時，失敗會透過 `diag.error` 交給 OpenTelemetry 診斷 logger。應用程式必須設定 `@opentelemetry/api` 的 `diag.setLogger(...)` 才能接收；預設不會自動輸出。本套件不初始化 SDK，這類診斷也不是獨立的 SDK `LogRecord`。這類診斷包含 `hook.name`、`error.type`、`traceId`、`spanId`，不包含原始錯誤 message/stack 或請求資料。
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/options-and-hooks.ts#example
+</include>
+
+Hook 簽名：
+
+- 三種傳輸：`startSpanHook(request): Attributes`（同步，在建立 span 前）
+- HTTP：`requestHook(span, request)` 與 `responseHook(span, response, request)`
+- SSE：`requestHook(span, request)` 與 `responseHook(span, stream, request)`
+- WebSocket：`requestHook(span, request)` 與 `responseHook(span, session, request)`
+
+空的傳輸物件會啟用該傳輸。舊的 boolean 傳輸開關（`http: false`）與舊的頂層 hooks 只會被 TypeScript 型別拒絕，執行階段沒有檢查：執行時 `http: false` 仍會讓該傳輸保持啟用，頂層 hook 則會被默默忽略。請使用傳輸 option 物件（`{ enabled: false }`）與傳輸範圍的 hooks。
+
+## 操作身分與 propagation
+
+當 command 有穩定身分時，在 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 設 static `operation`。Plugin 用它做 span names，並當成 `defjs.operation`。它絕不會從解析後的 path、identifier、tenant 或 query string 推身分：
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/operation-names.ts#example
+</include>
+
+Span names 會變成 `GET orders.read`、`SSE orders.watch`、`WebSocket orders.connect`。沒有 `operation` 時，fallback 是 method／`SSE`／`WebSocket`，並省略 `defjs.operation`。
+
+HTTP 與 SSE 把 propagated fields 注入 request headers。注入一律使用新的 `Headers` 副本，不改變呼叫端的 headers，因此外層重試仍使用同一個原始父 context。WebSocket query propagation 是**選擇性開啟**（瀏覽器不能加任意 handshake headers）：
+
+<include cwd>
+  examples/opentelemetry-server/websocket-query-propagation.ts#example
+</include>
+
+啟用 `queryPropagation` 時，propagator 實際注入的欄位會寫到連線 query string 的尾端，並取代同名參數；其他所有參數都保留原有的序列化形式。先審 URL logging、proxy 可見性、access logs、baggage、retention。傳入 `tracer` 時，`requireParentSpan: true` 在沒有 active parent 時跳過 span 建立、propagation、hooks、metrics 與 logs，然後原樣呼叫 `next`。
+
+## HTTP、SSE、WebSocket 語意
+
+Plugin 量的是傳輸生命週期，不是 command 解讀的每一階段。
+
+- **HTTP** — span 在 HTTP interceptor 裡開始，拿到 Defjs `HttpResponse` 就結束。已宣告的 `output`／`error` body 會在回應被回傳**之前**、interceptor 鏈之內，讀成 JSON、文字、`Blob` 或 bytes。JSON 媒體類型檢查與 `JSON.parse` 只套用在 JSON 表示；非 JSON 的文字、blobs 與 bytes 是有效的。任何表示的讀取失敗，或 JSON 的媒體類型／剖析失敗（`RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`NET_BODY_INCOMPLETE`），都會經由 interceptor reject：span 以 `ERROR` 結束，`error.type` 是 `BodyFailure`，沒有 `http.response.status_code`，metric 記成 `BodyFailure`，並記錄一筆 WARN。Struct 驗證（`RES_STRUCT_MISMATCH`）、已宣告的 body 不存在（例如 204）與 `HTTP_STATUS` 轉換發生在之後，所以後續的 fault 改不了已結束的 span。執行逾時只有在逾時的 reject 抵達 OTel interceptor 的 `next()`／傳輸邊界時才會記 log。若只有外層執行在 input 剖析、建構、`next()` 之後的應用 interceptor 工作，或鏈之後的 body 轉換期間觀察到期限，就不會發出 LogRecord；改去觀察外層 command 結果。又因為 span 活在鏈內，傳輸層的 reject 會按 OTel 慣例記成例外類別，而不是執行階段之後才判定的 fault code。
+- **SSE** — span 維持開啟直到 `stream.closed` settle。記錄 `sse.connected`，然後 `sse.closed`／`sse.aborted`／`sse.error`。`sse.aborted` 涵蓋 `stream.close()` 與非逾時的呼叫方 abort（已開啟的串流）；此時 span 以 `OK` 結束。形如逾時的呼叫方 abort（`TimeoutError` 或 `ERR_TIMEOUT`）則會讓 `stream.closed` 以 `kind: 'error'` 與 `code: 'NET_TIMEOUT'` settle；span 以 `ERROR` 結束並帶 `sse.error`。一個邏輯串流（含重連）→ 一個 span。沒有 per-event spans。
+- **WebSocket** — span 維持開啟直到 `session.closed` settle。事件：`websocket.connected`、`websocket.closed`、`websocket.error`。重連中的實體 sockets 仍屬邏輯 session。呼叫方 abort 已開啟的 session，span 以 `ERROR` 結束，帶 `websocket.error`，不記 log；`error.type` 跟隨 abort reason（預設的 `abort()` 為 `AbortError`，`Error` reason 為其 `Error.name`，字串 reason 為 `string`）。伺服器送來的 close frame，不論 code 為何，span 都以 `OK` 結束並帶 `websocket.closed`。沒有 close frame 的突然斷線（1006）則視 runtime 而定：`close` 之前沒有 socket `error`（Bun）時以 `OK` 結束，有（Node.js）時以 `ERROR` 結束並記錄一次 log。沒有 per-message spans。
+
+需要最終 command 結果，而不只是傳輸？把 `client.execute(...)` 包進應用 span：
+
+<include cwd lang="typescript">
+  examples/opentelemetry-server/active-span.ts#example
+</include>
+
+外層 span 是你的。Plugin 仍會回報較低階的傳輸 span — 兩個不同問題。
+
+## 參考
+
+有提供 `meter` 時：
+
+| Metric                                       | 意義                                            |
+| -------------------------------------------- | ----------------------------------------------- |
+| `http.client.request.duration`               | HTTP 請求持續時間（秒）                         |
+| `defjs.client.sse.connect.duration`          | 到 SSE handle 回傳為止的時間                    |
+| `defjs.client.sse.connection.duration`       | Handle 回傳 → 終端 close                        |
+| `defjs.client.sse.active_streams`            | 仍有 pending `closed` 的邏輯 SSE handles        |
+| `defjs.client.websocket.connect.duration`    | 到 WebSocket session 回傳為止的時間             |
+| `defjs.client.websocket.connection.duration` | Session 回傳 → 終端 close                       |
+| `defjs.client.websocket.active_connections`  | 仍有 pending `closed` 的邏輯 WebSocket sessions |
+
+Active SSE／WebSocket instruments 計的是邏輯資源（含重連空檔），不是實體 sockets 或個別 HTTP attempts。
+
+HTTP spans 記錄 method、解析後的 `url.full`、可用時的 server address／port，以及收到時的回應 status。預設 `url.full` 會把 `request.endpoint` 相對於選填的 `request.baseEndpoint` 解析，不會附加獨立的 `request.queryString`。這是建構邊界，不是 sanitization。需要完整或遮罩後的應用程式自有 URL 時，請用 `startSpanHook` 建構。Status `400+` → span status `ERROR`，並以 status string 當 `error.type`。Status `100..399` 不設 span status。Reject（網路失敗、取消、逾時、已宣告 body 的失敗）沒有回應 status。此時 span 以 `ERROR` 結束，`error.type` 設為被丟出錯誤的類別名稱：典型網路失敗是 `TypeError`，取消（不論 abort reason 為何）與逾時是 `Error`，已宣告 body 的失敗是 `BodyFailure`。它絕不會帶 `NET_*` 或 `RES_*` fault code，因為那些是 core 在鏈之後才判定的。取消同樣是 `ERROR` span；只是不產生 log。Metrics 用穩定維度：method、static operation、server address／port、回應 status、低基數錯誤型別。
+
+SSE／WebSocket connection metrics 記錄 connect 時間、邏輯連線持續時間、active 資源數、`defjs.result`、operation、server address／port、低基數失敗型別。預設沒有 request／response bodies、訊息 payloads、queue 長度，或 per-message spans。
+
+把 `url.full` 與 `recordException(...)` 當可能敏感。Defjs 不會替你遮罩。操作名稱與 hook attributes 維持 allowlist；在 `startSpanHook` 或 SDK processors／exporters 做遮罩。未經隱私、基數、retention、redaction 審查，別把原始 URLs、query strings、headers、baggage 或 payloads 複製進自訂遙測。
+
+WebSocket query propagation 可能把 trace context 與 baggage 暴露給瀏覽器、proxies、access logs、遙測。它不是憑證通道。`withCredentials(true)` 是 HTTP／SSE 的 Fetch credentials — 不是 WebSocket auth。
+
+Plugin 不會 init／shut down SDK，也不會 dispose core client 或傳輸 handles。你負責 flush 遙測並關閉 HTTP／SSE／WebSocket 工作。見 [Interceptors](/zh-Hant-TW/docs/interceptors)、[SSE](/zh-Hant-TW/docs/sse)、[WebSocket](/zh-Hant-TW/docs/web-socket)。
+
+## Logs 與第三方 logger
+
+`logger?: Logger` 接受 `@opentelemetry/api-logs` 的原生介面。它獨立於 `tracer` 與 `meter`：省略它就會關掉 Defjs LogRecords，只傳 `logger` 則會在沒有本機 spans 的情況下開啟診斷。Defjs 絕不會去取得全域 logger。Logs API 是套件相依項；SDK、exporters 與 logging bridges 屬於應用程式。
+
+### 沒有本機 span 的 Logs
+
+這個完整範例會建立應用程式自有的 Logs SDK，並刻意讓一次本機傳輸失敗。不需要 Collector，也不需要外部請求：
+
+<include cwd>
+  examples/opentelemetry-server/logs-without-spans.ts#example
+</include>
+
+匯出的診斷嚴重度為 `WARN`（13），event name 是 `http.client.request.exception`，帶固定的訊息和一個 exception type。flush 與 shutdown 由應用程式負責；Defjs 絕不會替你 shut down provider。真實應用會在啟動時設定一次 exporter，並在請求和串流都結束後再關閉它。
+
+### Winston：保留業務程式的 logging API
+
+業務程式碼繼續呼叫 `appLogger.info()` 或 `appLogger.error()`。官方 transport 會把這些記錄轉成 OTel Logs；Defjs 則從同一個 provider 拿到另一個獨立的原生 Logger。請在第一次 log 呼叫前註冊 provider。Transport 是延遲解析全域 Logger 的，所以建構順序無關緊要，但在註冊之前記錄的內容會被丟掉：
+
+<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
+
+這段程式碼只展示啟動時的接線。應用程式結束前，要先做完進行中的工作、等待 Winston 寫入完成、關閉 logger，再 await `provider.shutdown()`。[可執行的 Winston 範例](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging)包含完整的清理流程與一次本機失敗請求。在 repository checkout 中執行 `bun doc/examples/opentelemetry-logging/winston.ts`。
+
+範例用一個示範用的父 context 來展示關聯，而不需要 Trace SDK；那些固定 ID 不是正式環境的 request ID。正式環境的 context manager 必須帶著真正 active 的 request context。Defjs 會明確把它儲存的出站 context 附加到每筆診斷上，包括非同步的串流關閉。業務 logs 則留在它們自己的 active context：可以和 Defjs 共用同一個 trace ID，但 span ID 不同。
+
+Winston 的 OTel transport 與自動 Winston log 傳送，二選一。兩者都開會送出重複的 LogRecords。Console 輸出與 OTel 輸出是不同的目的地；如果會造成重複匯入，就避免把同一筆 console 記錄再收集一次。
+
+### Pino：Node.js instrumentation
+
+在 Node.js 應用程式裡，要在載入 Pino 之前先初始化 SDK 與 instrumentation。這個範例在 `sdk.start()` 之後才用 CommonJS 載入 Pino，讓它的 instrumentation 能觀察到模組載入；在最上方 import Pino 會破壞這個順序。這是 Node 的參考範例，不代表已驗證 Bun 的自動 instrumentation。
+
+<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
+
+`PinoInstrumentation` 預設會啟用 log 傳送與 log 關聯。傳送會把記錄轉進應用程式的 Logs SDK；關聯則在有有效 span context 為 active 時加上 trace 欄位。兩者是各自獨立的功能。另一個選項 `pino-opentelemetry-transport` 會在 worker 裡建立 provider，獨立於主執行緒的 provider。見[官方 Pino 指南](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino)。
+
+### 嚴重度與過濾
+
+OTel 把原本的標籤保留在 `severityText`，並對應到 `severityNumber`。以下使用 Pino 的預設值與 Winston 預設的 npm levels：
+
+| OTel 嚴重度／基準值 | Pino 方法／值 | Winston level |
+| ------------------- | ------------- | ------------- |
+| TRACE / 1           | trace / 10    | silly         |
+| DEBUG / 5           | debug / 20    | debug         |
+| INFO / 9            | info / 30     | info          |
+| WARN / 13           | warn / 40     | warn          |
+| ERROR / 17          | error / 50    | error         |
+| FATAL / 21          | fatal / 60    | 沒有預設對應  |
+
+OTel 為每個嚴重度群組保留四個數值。Winston 的 `http` 對應到 7，`verbose` 對應到 6。自訂 level 要檢查對應：函式庫自己的數值不是 OTel 嚴重度數值，未知的 Winston 標籤可能是未指定的嚴重度。TRACE 這個 log level 與 Tracer API 無關。
+
+嚴重度描述的是事件本身；門檻則決定某個目的地是否接收它。在 Winston 範例中，console 接收 DEBUG 及以上，而它的 OTel transport 接收 INFO 及以上。明確設定的 transport level 會覆蓋 Winston 預設的 logger level。這兩個設定都不會控制 Defjs 直接使用的 OTel Logger。想讓兩條路徑套用同一套策略時，請用 processor 或 Collector 過濾；下游的過濾無法救回上游已經丟掉的記錄。
+
+### Defjs 診斷契約
+
+| 觀察到的結果                                                                                                                  | Defjs LogRecord                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| HTTP OTel 的 `next()` reject（網路失敗、觀察到的逾時、已宣告 body 的失敗），不含取消與公開的 HTTP_STATUS fault                | 一筆 WARN，`http.client.request.exception`，phase `request`                                    |
+| 一般 HTTP 回應，包括已宣告的 `error` body 解碼成功（或沒有宣告 body）的 4xx/5xx，或 status 0                                  | 無；現有的 span／metric 行為維持不變                                                           |
+| 已宣告的 `output`／`error` body 讀取失敗（任何表示），或其 JSON 表示的媒體類型不是 JSON，或 JSON 剖析失敗（任何 HTTP status） | 一筆 WARN，`http.client.request.exception`，phase `request`，`exception.type` 為 `BodyFailure` |
+| SSE 或 WebSocket 連線失敗                                                                                                     | 一筆 WARN，`defjs.client.sse.exception` 或 `defjs.client.websocket.exception`，phase `connect` |
+| SSE 或 WebSocket 終端錯誤，或 `closed` 被 reject，包括 runtime 先觸發 socket `error` 的 WebSocket 突然斷線（1006，Node.js）   | 一筆 WARN，使用相同的傳輸 event name，phase `connection`                                       |
+| 成功、訊息、EOF、正常關閉、伺服器送來的 WebSocket close frame（任何 code，包括 1011），或主動取消                             | 無                                                                                             |
+
+HTTP exception 事件遵循目前標為 Development 的語意慣例。SSE／WS 的 event names 是 Defjs 專屬。SSE 握手因非 2xx 狀態被拒絕時，在這裡會被視為連線失敗；它之後的公開 HTTP_STATUS 轉換不在這個 interceptor 之內。已宣告 body 的讀取對每一種表示都在 HTTP handler 邊界之內；JSON 媒體類型檢查與 `JSON.parse` 只套用在 JSON 表示。任何已宣告表示的讀取失敗，或已宣告 JSON `output`（2xx）或 `error`（其他 status）上格式錯誤的 JSON 或錯誤媒體類型回應，不論 HTTP status 為何，都會發出一筆 WARN。非 JSON 的文字、blobs 與 bytes 不會只因為媒體類型不是 JSON 就失敗。沒有宣告的 body 絕不會被讀取，也就不會有 log。Struct 驗證（`RES_STRUCT_MISMATCH`）、已宣告的 body 不存在（例如 204）以及 `HTTP_STATUS` 轉換發生在 interceptor 之後，不會產生 log。HTTP 執行逾時只有在逾時的 reject 抵達 OTel interceptor 的 `next()`／傳輸邊界時才會記 log。若只有外層執行在 input 剖析、建構、`next()` 之後的應用 interceptor 工作，或鏈之後的 body 轉換期間觀察到期限，就不會發出 LogRecord；請在外層 command 邊界觀察 `client.execute(...)`。`exception.type` 是 interceptor 所觀察到那個東西的類別名稱，不是 Defjs 的 fault code：`BodyFailure`（HTTP body）、`EventStreamFatalError`（SSE 握手）、`DefjsFault`（WebSocket 啟動），或平台類別，例如 `TypeError`（網路失敗）或 `Error`（逾時）。Reason 為 `TimeoutError` 的 abort（例如 `AbortSignal.timeout()`）算逾時而不是取消，並在它的 reject 抵達這條邊界時記下來。SSE 非 2xx 握手不論 body 為何，一律記一次；伺服器送來的 WebSocket close frame 不論 code 為何都不記（包括 1011）。沒有 close frame 的突然斷線（1006）則視 runtime 而定：若平台 WebSocket 在 `close` 之前先觸發 `error`（Node.js），session 以錯誤結束並記一次，帶 `websocket.close.code` `1006`；若不會（Bun），則是正常 close，不記。除此之外，只有 session 以錯誤結束（queue overflow、heartbeat 逾時）才記。Defjs 不會把每個 command 驗證或解碼 fault、每次重連嘗試，或 hook 失敗，當成獨立的 Logs 記錄。
+
+每個請求或邏輯連線，透過這個整合最多只發出一筆終端診斷。新的外層重試是新的生命週期；應用程式 logs 與其他 instrumentation 不在這個保證範圍內。除非應用程式的 Logs pipeline 過濾它們，Logs 獨立於 span 的記錄／取樣。傳入 tracer 時，`requireParentSpan: true` 沿用既有的完整略過行為：沒有 active parent 時，包含 logs 一併略過；沒有 tracer 時，它不會擋下 logs 或 metrics。
+
+診斷包含固定的 body、exception type、phase、static operation、可用的 server address／port，以及協定欄位（HTTP method、SSE fault code 或 WebSocket close code）。它們不會自動複製原始 URLs、queries、headers、bodies、baggage、close reasons、錯誤訊息／堆疊或 hook attributes。請讓操作名稱和自訂 exception 名稱保持不含敏感資訊。既有的 span 資料有它自己的遮罩要求。建構或發出 LogRecord 失敗，不會取代業務結果；OTel 診斷 logger 只會收到一則固定的失敗訊息。
+
+## 相關操作範例
+
+- [用本機 Fetch handle 測試](/zh-Hant-TW/recipes/test-with-handle)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)

@@ -1,0 +1,157 @@
+---
+title: "エラー処理"
+description: SDK が宣言するエラーボディと実行時の失敗を区別し、利用アプリケーションで型付きの結果を扱います。
+---
+
+# Errors
+
+SDK の作成者は `error` Struct で API が返すエラーボディの契約を宣言します。利用アプリケーションは宣言されたエラーと検証・ネットワーク・キャンセルの失敗を区別し、画面表示や業務上の判断に結び付けます。SDK をパッケージ化しても Defjs の型付き結果はそのまま保たれます。
+
+404、タイムアウト、読めないボディは、throw を catch するのではなく error-first タプルを読んで扱います。`Fault` はネイティブの `Error` で（`instanceof Error` は真）、判別に使う field はひとつだけ、`code` です。
+
+`kind` はありません。失敗の類別は code の最初の `_` より前の部分そのものなので、`NET_TIMEOUT` は `NET` の失敗、`RES_STRUCT_MISMATCH` は `RES` の失敗です。粗く振り分けるならプレフィックスを、正確に判断するなら code 全体を読んでください。
+
+## 基本の使い方
+
+<include cwd lang="typescript">
+  examples/errors/basic-setup.ts#example
+</include>
+
+集合が閉じているので、`code` に対する `switch` は網羅的になります。
+
+<include cwd lang="typescript">
+  examples/errors/triage.ts#example
+</include>
+
+## 安定した code
+
+| 類別   | Code                                                                   | 直すべきは誰か                                  |
+| ------ | ---------------------------------------------------------------------- | ----------------------------------------------- |
+| `HTTP` | `HTTP_STATUS`                                                          | 相手が 2xx 以外を返した。業務ロジックとして扱う |
+| `REQ`  | `REQ_INPUT_INVALID`、`REQ_OPTIONS_INVALID`、`REQ_BUILD_FAILED`         | 呼び出し側、またはエンドポイント宣言            |
+| `NET`  | `NET_ABORTED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`NET_BODY_INCOMPLETE` | 誰でもない、あるいはリトライ                    |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH`   | 宣言と相手のすり合わせ                          |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`     | あなたがパイプラインに付けたコード              |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`                            | 宣言した上限、または消費側のペース              |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | ホストのランタイム                              |
+
+集合を閉じているのは意図的です。それが `switch` の網羅性を保ちます。拡張は自分の詳細を新しい code ではなく `cause` で報告します。
+
+HTTP、SSE、WebSocket では、クライアントの `endpoint` に有効な絶対 URL が必要です。URL 解決後も、path はベースエンドポイントのオリジンとディレクトリ内に収まらなければなりません。絶対 URL、プロトコル相対の path、C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への移動は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。エンドポイントの欠落、相対 URL、無効な URL、不正な path は、インターセプターが実行される前のリクエスト組み立て中に `REQ_BUILD_FAILED` になります。ショートサーキットするインターセプターでも、この検査は回避できません。トランスポートの前には、インターセプターの最終的な `req.endpoint` が最終的な `req.baseEndpoint` に対して同じ規則で検証されます。別の有効な絶対ベース URL への明示的な切り替えは許可されます。これらの決定的な URL フォールトはリトライ対象ではありません。
+
+### 形ごとの field
+
+| Code           | `status` | `response`                                                       | `data`                                            |
+| -------------- | -------- | ---------------------------------------------------------------- | ------------------------------------------------- |
+| `HTTP_STATUS`  | 常にある | 常にある。`error` を宣言してデコードできたときだけ `body` を持つ | デコード済みの `error` ボディ、または `undefined` |
+| `RES_*`        | 常にある | 常にあるがメタデータだけ — **`body` なし**                       | なし                                              |
+| それ以外すべて | なし     | トランスポートが既にメタデータを持っていた場合のみ               | なし                                              |
+
+`cause` は下位の値を運びます。struct 不一致なら `StructError`、表現が読めないならパーサーの失敗、拡張が投げたものならそれそのままです。
+
+## トランスポート別のタプルの形
+
+<include cwd lang="typescript">
+  examples/errors/tuple-shapes.ts#example
+</include>
+
+HTTP の失敗では第三要素が `undefined` です。存在したレスポンスのメタデータは、すでに fault が抱えています。これが大事なのは、ハンドラーに渡すもの、ログに出すもの、再 throw するものが fault そのものだからです。メタデータは fault の _隣_ ではなく、fault と _一緒に_ 運ばれる必要があります。
+
+SSE と WebSocket では第三要素は起動時のスナップショットで、起動が失敗したときにも存在しえます。ハンドルやセッションが返ったあとの失敗は、そのライフサイクル上で扱われます。確定した起動タプルを書き換えることは決してありません。
+
+## ボディの読み方
+
+`ok` だけが分岐点で、デコードするのは常に片側だけです。`output` は 2xx ボディを読み、`error` はそれ以外すべてを読みます。片方を省けば、そのボディは読まれません。
+
+| 状況                                            | 結果                                                       |
+| ----------------------------------------------- | ---------------------------------------------------------- |
+| 2xx、`output` を宣言、ボディがデコードできた    | 成功。`data` と `response.body` に型が付く                 |
+| 2xx、`output` を省略                            | 成功。`data` は `undefined` で、レスポンスに `body` はない |
+| non-2xx、`error` を宣言、ボディがデコードできた | 型付き `data` を伴う `HTTP_STATUS`                         |
+| non-2xx、`error` を省略                         | `data: undefined` の `HTTP_STATUS`                         |
+| メディアタイプが表現の要求と違う                | `RES_MEDIA_TYPE_INVALID`。ボディを読む**前**に報告         |
+| バイト列がその表現ではない                      | `RES_DECODE_FAILED`                                        |
+| 値がその struct ではない                        | `RES_STRUCT_MISMATCH`（HTTP のみ）                         |
+| **宣言していない**側のボディが読めない          | 完全に無視 — 下記参照                                      |
+
+覚えておく価値があるのは最後の行です。`output` を宣言して `error` を宣言していない場合、ボディが壊れた JSON の 500 は `HTTP_STATUS` と `status: 500` として報告されます。あなたはエラーボディに関心がないと言ったのであり、それは「読めなかったことにも関心がない」を含みます。
+
+HTTP では、Struct は一度だけ、インターセプターチェーンの後に適用されます。インターセプターが `makeResponse(...)` で作ったレスポンスも、回線から来たものと同じメディアタイプ確認、表現の変換、Struct を通ります。組み込みの Fetch トランスポートは、宣言されたボディを JSON、テキスト、`Blob`、バイト列として読んでからチェーンへ返します。JSON のメディアタイプと `JSON.parse` が必要なのは JSON 表現だけで、非 JSON のテキスト、blob、バイト列も、宣言した表現として有効です。読み取り失敗はすべての表現で起こり得ます。そこでの読み取りまたはパースの失敗は、同じ `RES_*` か `NET_BODY_INCOMPLETE` フォールトとして現れます。
+
+`HttpResponse.ok` は `200 <= status < 300` だけを意味します。トランスポート失敗は fault であってレスポンスではありません。その代わりを務める status 0 のレスポンスは存在しません。
+
+## エラーボディの union を絞り込む
+
+ひとつの `error` struct が 2xx 以外のすべての status を受け持つので、形が異なるときは union を宣言します。そのあと `fault.data` に対して何ができるかは、その union をどう宣言したかで完全に決まります。ライブラリはあなたが要求した型をそのまま返します。
+
+`struct.or(...)` は素の union を作り、TypeScript はそれを自力で絞り込めません。必要な field を検査してください。
+
+<include cwd lang="typescript">
+  examples/errors/narrow-union.ts#example
+</include>
+
+`struct.discriminatedUnion(...)` は、ボディが実際に持っている field で絞り込みます。API が既にエラーにタグを付けているなら、これが一番楽な形です。
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-kind.ts#example
+</include>
+
+API が status を**ボディの中に**入れている場合は、`fault.status` ではなくそれで判別してください。
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-status.ts#example
+</include>
+
+API が対応しているなら、最後の形を選ぶ価値があります。`fault.status` は HTTP 層の数値で、プロキシ・ゲートウェイ・CDN が書き換えられます。一方 `data.status` は、宣言した `error` struct の検証を通った値です。これはボディの形を証明するだけで、バックエンド由来であることは証明しません。プロキシ・ゲートウェイ・CDN も一致する形のボディを返せます。
+
+判別 field を持たないために絞り込めない union は、宣言側の性質であってライブラリの性質ではありません。ライブラリはあなたが宣言した型を渡します。絞り込みたいなら struct に判別 field を足してください。
+
+## 起動時と開いたあと
+
+SSE はハンドルを resolve する前に、status、`text/event-stream`、ボディの有無を検証します。non-2xx は、`error` が省略されているか、そのボディがデコードできた場合に `HTTP_STATUS` になります。宣言されたハンドシェイクボディが読み取れない、パースできない、または Struct に適合しない場合は `RES_DECODE_FAILED` です。Struct の失敗では `cause` に `StructError` が入ります。メディアタイプ違い → `RES_MEDIA_TYPE_INVALID`。成功したハンドシェイクにボディがない → `RES_DECODE_FAILED`。開始時のスナップショットはそれでもタプル第三要素に入り得ます。
+
+WebSocket の起動時はハンドシェイクと最初の物理 open を含みます。コンストラクターの失敗、open 前のクローズ、タイムアウト、キャンセルは、どれも起動タプルを生みます。ソケットが `open` に達しなかった場合でも接続スナップショットは存在しえます。
+
+| トランスポート | 起動後                                                                                                                                                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE            | 致命的エラーでイテレーターが reject。`stream.closed` は `kind: 'error'` と fault の `code` で resolve                                                                                                                                                           |
+| WebSocket      | メッセージ／キュー／ハートビートの失敗は `onRuntimeError`。終端エラーで `receive` が失敗。`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                                           |
+| HTTP           | execute のプロミスは一度だけ確定し、タプルを返します。インターセプターが例外を投げるか `HttpResponse` 以外の結果を返した場合、または進捗コールバックが例外を投げた場合、タプル内のフォールトとして返されます（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
+
+`NET_ABORTED` / `NET_TIMEOUT` は、呼び出し側が起動時に何を見たかを表します。返ってきた stream や session は、やはり閉じて終端 promise を await してください。
+
+## ネイティブ Error のログと cause
+
+Fault はネイティブの `Error` インスタンスなので、診断アダプターは不要です。`String(fault)` は安定したネイティブ形式 `DefjsFault: <message>` を返します。`code` と各バリアントの field — `status`、`response`、`data` — は構造化ログのために列挙可能なままで、`name` とネイティブの `cause` チェーンは列挙不可です。
+
+<include cwd lang="typescript">
+  examples/errors/log-fault.ts#example
+</include>
+
+`format()`、`flatten()`、`prettify()` を呼ぶ前に、`fault.cause instanceof StructError` で絞り込んでください。これらの helper は Struct 側の cause に付いていて、fault にコピーされません。制御フローに `message` や `String(fault)` を解析させないでください。契約は `code` と、レビュー済みの `status` です。
+
+Struct のデフォルトメッセージは、受け取った値の種類を示し、値自体は示しません。たとえば `Expected number at email, received string` です。同じメッセージが `prettify()` と `String(fault)` に現れます。JSON の `SyntaxError` が原因の `RES_DECODE_FAILED` では、フォールトのメッセージは `Response body could not be decoded` になり、元のパーサーエラーは `cause` に残ります。生の `StructIssue.received` の値とパーサーの cause は引き続き機微情報です。カスタムの `errorMap` メッセージはそのまま使われるので、ログに出す前にカスタム文面を確認してください。
+
+## リファレンス
+
+| 分岐                         | 制御フローの判定                   | 使える安定 field                             | 通常はない／機微                    |
+| ---------------------------- | ---------------------------------- | -------------------------------------------- | ----------------------------------- |
+| HTTP status の方針           | `fault.code === 'HTTP_STATUS'`     | `fault.status`、レビュー済み `fault.data`    | ボディ、headers、URL、`cause`       |
+| 呼び出し側のキャンセル       | `fault.code === 'NET_ABORTED'`     | `code`                                       | キャンセル理由とスタック            |
+| タイムアウト                 | `fault.code === 'NET_TIMEOUT'`     | `code`                                       | リクエスト URL と下位の cause       |
+| 契約が破れた                 | `fault.code.startsWith('RES_')`    | `code`、レビュー済み `fault.response.status` | Struct issue、ボディ、入力値        |
+| 自分のコードが投げた         | `fault.code.startsWith('EXT_')`    | `code`、`cause`                              | 拡張が付けたものすべて              |
+| ストリーム／セッション実行時 | `stream.closed` / `session.closed` | 終端の `kind` と `code`                      | イベントペイロード、フレーム、cause |
+
+`cause`、`data`、レスポンスの headers とボディ、URL、`StructIssue.received`、入力値、カスタムメッセージ、スタックは機微情報として扱ってください。issue の path は構造的で、record のキーを保持します。`struct.record(...)` は `Expected number at alice@example.com, received string` を生成し得るため、キーはデフォルトメッセージ、`prettify()`、`String(fault)` の中でも機微情報になり得ます。Struct のデフォルトメッセージと `prettify()` は受け取った値を含みませんが、完全な issue や JSON パーサーの cause をログに出すと、その値が露出することがあります。控えめな要約はこうです。
+
+<include cwd lang="typescript">
+  examples/errors/summarize-fault.ts#example
+</include>
+
+`createNetworkFault`、`createPreflightFault`、`createDecodeFault`、`createHttpStatusFault`、`createUndecodedHttpStatusFault` がこれらのネイティブ Error 値を作ります。通常のリクエスト失敗はこれまで通りタプルで返され、ネイティブ Error の振る舞いを継承しているだけで throw されることはありません。`ERR_ABORTED` と `ERR_TIMEOUT` は、トランスポートの正規化器が認識する共有の cause です。それぞれ列挙不可の `Symbol.for('defjs.cause.aborted')` と `Symbol.for('defjs.cause.timeout')` のブランドを持つので、オブジェクトの同一性に依存せず、Core の複数のコピーにまたがってキャンセルを分類できます。[`isAbortCause`](/ja-JP/api/core/isabortcause) と [`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) は、これらの判定と対応するプラットフォームエラーの判定を公開します。フォールトの cause を分類するときは、その元の `fault.cause` を渡してください。OpenTelemetry は Core のコピーをまたぐ呼び出し側のキャンセルログを抑制し、タイムアウトは引き続きログに記録します。
+
+## 関連レシピ
+
+- [宣言された 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)

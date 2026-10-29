@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider、支援明確 Client 覆寫的 useClient，以及 provider props。
+---
+
+# React
+
+把既有的 `@defjs/core` client 提供給 React 樹。這個套件不會建立、快取或 dispose client。它的入口標記了 `'use client'`，所以請在 client component 中 import。需要 React 18 或更新版本。
+
+見 [React 指南](/zh-Hant-TW/docs/integrations/react)。
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Context provider。把 `createClient` 給的 client 傳進去。巢狀的 `ClientProvider` 會覆蓋其子樹的 client；`useClient()` 讀最近的那一個。傳入不同的 `client`，會改變後代拿到的 context 值。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` 優先回傳明確傳入的 Client；省略參數或傳入 `undefined` 時讀取最近的 `ClientProvider`。兩種來源都沒有 Client 時才拋出 `Error`，原有的 `useClient()` 呼叫仍然有效。
+
+一律在元件或自訂 Hook 頂層呼叫 `useClient(explicitClient)`，即使傳入明確的 Client，也不能在一般函式或事件回呼內呼叫。不要寫 `explicitClient ?? useClient()`，它會條件式呼叫 Hook。明確傳入的值不會寫入 Context，也不會建立 Provider；Hook 仍會訂閱 Context。
+
+- **回傳** 明確傳入或由最近 Provider 提供的同一個 Client。
+- **拋出** 明確參數與 Context 都沒有提供 Client 時拋出 `Error`。
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` 必填，且由應用程式擁有。`children` 選填：它是可以呼叫 `useClient` 的樹。

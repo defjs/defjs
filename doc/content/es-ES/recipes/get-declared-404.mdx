@@ -1,0 +1,22 @@
+---
+title: "Manejar una 404 declarada"
+description: Ejecuta un GET y ramifica entre 200 tipado y 404 declarado.
+---
+
+# GET con un 404 declarado
+
+Declara tanto el cuerpo de éxito como el de 404. Ramifica con `error.code` y `error.status` — obtienes `error.data` tipado para el miss declarado.
+
+Ver detalles en [HTTP](/es-ES/docs/http) y [Errores](/es-ES/docs/errors).
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` es un placeholder. Con un servidor que responde a `GET /users/7` con `200` y `{ "id": 7, "name": "Ada" }`, el snippet imprime:
+
+```txt
+Loaded Ada from 200
+```
+
+Un estado no-2xx es `HTTP_STATUS`. Declarar `error` le da un tipo a su cuerpo; omitir `error` deja `error.data` en `undefined` y el cuerpo sin leer. Si un cuerpo `error` declarado no se puede leer (tipo de medio incorrecto, JSON no válido, forma incorrecta), el resultado es un fallo `RES_*`. Un único Struct `error` cubre todos los estados no-2xx, así que usa `struct.or(...)` o una unión discriminada cuando las formas difieran.

@@ -1,0 +1,89 @@
+---
+title: "Vue"
+description: 在 Vue 中提供應用程式自己的 Client，並執行 SDK 定義、回應變更與取消。
+---
+
+# Vue
+
+應用程式建立 `@defjs/core` Client，再透過 `@defjs/vue` 的 plugin、injection key 與 `injectClient()` 將它接入 Vue。元件可以匯入 SDK 端點，並用注入的 Client 執行 command；SDK 定義不依賴 Vue。
+
+這些外掛只是設定與取得既有 `Client` 的可選輔助。可以直接匯入應用程式固定的 Client、將明確的 Client 傳給可重用邏輯、透過框架注入提供元件樹預設值與子樹覆寫，或採用應用程式自己的組織方式；SDK 定義不要求透過外掛執行。
+
+這個套件不會建立 Client、快取結果、重試 command，也不會在元件卸載時關閉傳輸資源。發起工作的元件或組合式函式負責取消、關閉與清理。
+
+## 基本用法
+
+安裝 `@defjs/core`、`@defjs/vue`，以及 Vue 3.2+（plugin 只需要 `provide`／`inject`，但範例用了 `<script setup>` 和 `onScopeDispose`，它們是 3.2 才有的）。ESM：
+
+`bun add @defjs/core @defjs/vue vue`
+
+建立 client、安裝 plugin，然後用變更時 abort 的方式抓資料：
+
+<include cwd lang="typescript">
+  examples/vue/main.ts#example
+</include>
+
+<include cwd>examples/vue/basic-setup.vue#example</include>
+
+`createClientPlugin(client)` 提供你傳入的那個物件。不 clone，也沒有 disposal hook。在建立 client 時設定 core options 與 interceptors。
+
+`onCleanup` 在 watcher 重跑前與停止時執行。在啟動 async 工作前先註冊。Error-first tuple 仍是應用資料。
+
+## Inject 與覆寫
+
+`injectClient(key)` 讀取所選 key 最近的 provider；省略參數或傳入 `undefined` 時使用 `HTTP_CLIENT`。必須處於有效的 Vue 注入上下文，例如同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。後者只提供同步 app 層級上下文，不攜帶元件子樹覆寫，也不跨一般 `await` 保留；`<script setup>` 頂層 `await` 後由編譯器還原的上下文仍然有效。
+
+自訂 `InjectionKey<Client>` 請用 `app.provide(key, client)` 或祖先的 `provide(key, client)` 設定。提供與取得雙方必須共用同一個 `Symbol` 物件，相同描述不代表相同 key。`createClientPlugin(client)` 仍只接受 Client，並只提供 `HTTP_CLIENT`。
+
+沒有有效注入上下文或所選 key 未提供 Client 時拋出 `Error`。自訂 key 缺少時不會退回 `HTTP_CLIENT`；僅安裝 plugin 並不會建立注入上下文。
+
+只封裝 Client 取得方式的應用程式函式可用 `explicitClient ?? injectClient()`：只有預設分支需要注入上下文。同一組合式函式內其他生命週期 API 的上下文要求仍然存在。非同步工作開始前先在有效上下文取得 Client，之後重用該物件。
+
+用 Vue 的 `provide(HTTP_CLIENT, childClient)` 覆寫子樹：
+
+<include cwd>examples/vue/inject-and-override.vue#example</include>
+
+最近的 provider 勝出。後代拿到 `childClient`；子樹外的兄弟仍用 app 層級 client。 執行 provide 的元件自身仍讀取祖先提供的值。
+
+## 在 watcher 外擁有 HTTP 工作
+
+由 composable 或元件在 watcher 外啟動的工作，用 `AbortController` + `onScopeDispose`。Abort 啟動與進行中的工作；在賦值響應式狀態前檢查 signal。Plugin 或 injection scope 不會推斷誰擁有 command。列表頁請把 `execute` 包進 Vue Query（或類似方案）——`@defjs/vue` 只做 DI，**不會**附帶 `useRequest`。
+
+當某個 scope 擁有 client 時，若要瀏覽器全域重用，保持它與請求無關。若它捕捉 headers、cookies、users、tenants 或 credentials，請在對應的 app／SSR 請求邊界建立，並在那裡 provide 該實例。
+
+## 清掉 realtime scope
+
+即使 scope 在連線中途消失，也要關閉 stream 或 session。Abort 啟動、關閉晚到的 handle、消費單一 iterator、await 終端 promise：
+
+<include cwd>examples/vue/realtime-scope.vue#example</include>
+
+致命的串流錯誤與 queue overflow 會讓 iterator reject，所以迴圈要有 `catch`；否則那個 reject 就是未處理的。範例只保留最後 100 則訊息，並用 id 當 row 的 key，因為內容相同的 payload 會造成重複的 key。停止 scope 時，SSE 的 iteration 正常結束；被 abort 的 WebSocket session 則會讓 `receive` 以 `AbortError` reject，所以要用同樣的方式保護 `catch`。
+
+WebSocket：同一序列 — abort prep、關閉晚到的 session、消費 `session.receive`、unsubscribe `onStateChange`／`onRuntimeError`、close、await `session.closed`。Cleanup 保持冪等；disposal 與 iterator 完成可能碰上。
+
+## SSR 範圍
+
+`createClientPlugin(client)` 把一個實例提供給一個 Vue app。瀏覽器中，若 endpoint、interceptors、捕捉狀態可安全共用就共用。SSR 時，若 headers、cookies、users、tenants 或 credentials 不同，每個請求建立並安裝分開的 client。
+
+App unmount、plugin 移除、元件 scope disposal **不會** abort HTTP、關閉 SSE／WebSocket、unsubscribe listeners，或 dispose core client。啟動工作的擁有者必須把它做完。
+
+## 參考
+
+`@defjs/vue` 的公開 exports：
+
+<include cwd lang="typescript">
+  examples/vue/exports.ts#example
+</include>
+
+- `HTTP_CLIENT` — 給原生 `provide`／`inject` 的 `InjectionKey<Client>`
+- `createClientPlugin(client)` — 提供該 client 的 Vue `Plugin`
+- `injectClient` — 讀取所選 key（預設 `HTTP_CLIENT`）的最近 Client，缺少時拋出錯誤
+
+在 `@defjs/core` 建立 clients 與 options。見 [Client](/zh-Hant-TW/docs/client)、[Commands](/zh-Hant-TW/docs/commands)、[Interceptors](/zh-Hant-TW/docs/interceptors)、[SSE](/zh-Hant-TW/docs/sse)、[WebSocket](/zh-Hant-TW/docs/web-socket)。
+
+## 相關操作範例
+
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
+- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)

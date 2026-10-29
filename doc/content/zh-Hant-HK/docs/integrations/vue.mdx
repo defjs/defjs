@@ -1,0 +1,89 @@
+---
+title: "Vue"
+description: 在 Vue 中提供應用程式自己的 Client，並執行 SDK 定義、回應變更及取消。
+---
+
+# Vue
+
+應用程式建立 `@defjs/core` Client，再透過 `@defjs/vue` 的 plugin、injection key 及 `injectClient()` 將它接入 Vue。組件可以匯入 SDK 端點，並用注入的 Client 執行 command；SDK 定義不依賴 Vue。
+
+呢啲 plugins 只係設定同取得現有 `Client` 嘅可選輔助。你可以直接 import 應用固定嘅 Client、將明確 Client 傳俾可重用邏輯、用框架注入提供組件樹預設值同 subtree override，或者用應用自己嘅組織方式；SDK 定義唔要求經 plugin 執行。
+
+這個套件不會建立 Client、快取結果、重試 command，也不會在組件卸載時關閉傳輸資源。發起工作的組件或組合式函式負責取消、關閉及清理。
+
+## 基本用法
+
+Install `@defjs/core`、`@defjs/vue` 同 Vue 3.2+（plugin 淨係需要 `provide` / `inject`，但例子用 `<script setup>` 同 `onScopeDispose`，兩者要 3.2 先有）。ESM：
+
+`bun add @defjs/core @defjs/vue vue`
+
+建立 client，安裝 plugin，之後取得資料；相關值改變時取消請求：
+
+<include cwd lang="typescript">
+  examples/vue/main.ts#example
+</include>
+
+<include cwd>examples/vue/basic-setup.vue#example</include>
+
+`createClientPlugin(client)` provide 你傳入嘅 exact object。冇 clone，冇 disposal hook。Create client 時 configure core options 同 interceptors。
+
+`onCleanup` 喺 watcher 再 run 之前，同佢停嗰陣 run。開始 async work 之前先 register。Error-first tuple 仍然係 application data。
+
+## Inject 同 override
+
+`injectClient(key)` 讀所選 key 最近嘅 provider；省略參數或者傳入 `undefined` 就用 `HTTP_CLIENT`。要喺有效嘅 Vue 注入上下文 call，例如同步 `setup()` 或者 `app.runWithContext()`（Vue 3.3+）。後者淨係提供同步 app-level context，唔會帶住組件 subtree override，亦唔會跨普通 `await` 保留；`<script setup>` 頂層 `await` 之後由編譯器恢復嘅上下文仍然有效。
+
+自訂 `InjectionKey<Client>` 用 `app.provide(key, client)` 或者祖先嘅 `provide(key, client)` 設定。提供同取得兩邊要 share 同一個 `Symbol` object，相同描述唔代表相同 key。`createClientPlugin(client)` 仍然只接受 Client，同埋只提供 `HTTP_CLIENT`。
+
+冇有效注入上下文或者所選 key 冇提供 Client 時會 throw `Error`。自訂 key 缺失唔會 fallback 去 `HTTP_CLIENT`；淨係安裝 plugin 唔會建立注入上下文。
+
+淨係封裝 Client 取得方式嘅應用 function 可以用 `explicitClient ?? injectClient()`：只有 fallback 分支需要注入上下文。同一個 composable 入面其他 lifecycle API 嘅上下文要求仍然存在。開始 async work 之前喺有效上下文攞 Client，之後重用嗰個 object。
+
+用 Vue 嘅 `provide(HTTP_CLIENT, childClient)` override 一個 subtree：
+
+<include cwd>examples/vue/inject-and-override.vue#example</include>
+
+Nearest provider 贏。Descendants 拎 `childClient`；subtree 外嘅 siblings 繼續用 app-level client。 執行 provide 嘅組件自己仍然讀祖先提供嘅值。
+
+## 喺 watcher 之外 own HTTP work
+
+Composable 或者 component 喺 watcher 外開始嘅 work，用 `AbortController` + `onScopeDispose`。Abort startup 同 active work；assign reactive state 之前 check signal。Plugin 或者 injection scope 唔會推邊個 own 住 command。List pages 用 Vue Query（或者類似嘅）包住 `execute`——`@defjs/vue` 只做 DI，**唔會** ship `useRequest`。
+
+當 scope own 住 client 時，browser-wide reuse 要 keep 佢 request-independent。如果佢 capture headers、cookies、users、tenants 或者 credentials，就喺相關 app/SSR request boundary create，同喺嗰度 provide。
+
+## 清理 realtime scope
+
+即使 scope 喺 mid-connect 消失，都要 close stream 或者 session。Abort startup，close 遲到嘅 handle，consume 唯一個 iterator，await terminal promise：
+
+<include cwd>examples/vue/realtime-scope.vue#example</include>
+
+Stream 嘅 fatal errors 同 queue overflow 會令 iterator reject，所以 loop 要有 `catch`，否則嗰個 rejection 就係 unhandled。例子只保留最後 100 條 message，同用 id 做 row 嘅 key，因為內容一樣嘅 payload 會令 key 重複。Scope 停止時，SSE 嘅 iteration 會正常完結；被 abort 嘅 WebSocket session 就反而令 `receive` 以 `AbortError` reject，所以個 `catch` 要用同樣方式把關。
+
+WebSocket：同一套次序 — abort prep，close 遲到嘅 session，consume `session.receive`，unsubscribe `onStateChange` / `onRuntimeError`，close，await `session.closed`。Keep cleanup idempotent；disposal 同 iterator completion 可以撞埋一齊。
+
+## SSR 嘅 scope
+
+`createClientPlugin(client)` 為一個 Vue app provide 一個 instance。Browser 上，當 endpoint、interceptors 同 captured state 可以 share 就 share。SSR 期間，當 headers、cookies、users、tenants 或者 credentials 唔同時，每個 request create 同 install 分開嘅 client。
+
+App unmount、plugin removal 同 component scope disposal **唔會** abort HTTP、close SSE/WebSocket、unsubscribe listeners，或者 dispose core client。開始工作嘅 owner 一定要 finish 佢。
+
+## 參考
+
+`@defjs/vue` 嘅 public exports：
+
+<include cwd lang="typescript">
+  examples/vue/exports.ts#example
+</include>
+
+- `HTTP_CLIENT` — 畀 native `provide` / `inject` 用嘅 `InjectionKey<Client>`
+- `createClientPlugin(client)` — provide 嗰個 client 嘅 Vue `Plugin`
+- `injectClient` — 讀所選 key（預設 `HTTP_CLIENT`）最近嘅 Client，缺失就 throw
+
+Clients 同 options 喺 `@defjs/core` create。睇 [Client](/zh-Hant-HK/docs/client)、[Commands](/zh-Hant-HK/docs/commands)、[Interceptors](/zh-Hant-HK/docs/interceptors)、[SSE](/zh-Hant-HK/docs/sse) 同 [WebSocket](/zh-Hant-HK/docs/web-socket)。
+
+## 相關配方
+
+- [GET 配 declared 404](/zh-Hant-HK/recipes/get-declared-404)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)
+- [Consume 一條 SSE stream](/zh-Hant-HK/recipes/consume-sse)
+- [開一個 WebSocket session](/zh-Hant-HK/recipes/websocket-session)

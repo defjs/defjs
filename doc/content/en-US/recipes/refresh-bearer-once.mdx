@@ -1,0 +1,20 @@
+---
+title: "Refresh a token after 401"
+description: Attach Authorization and replay once inside one interceptor; next() only goes inward.
+---
+
+# Refresh a Bearer token once on 401
+
+`next()` is the rest of **this** onion — not `axios(config)` re-dispatch from the outside. Put attach + single-flight refresh + one replay in **one** HTTP interceptor so outer layers do not run twice.
+
+See [Interceptors](/docs/interceptors).
+
+<include cwd meta="refresh-bearer.ts">
+  examples/recipes/refresh-bearer-once.ts#example
+</include>
+
+```txt
+null 42
+```
+
+Calling `next` again only re-enters interceptors **inside** this layer (and the Fetch handler). It does not re-run outer timing/auth wrappers — that is why 401 layout belongs in one interceptor, not a second `execute`.

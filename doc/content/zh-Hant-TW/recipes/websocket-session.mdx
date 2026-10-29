@@ -1,0 +1,22 @@
+---
+title: "管理 WebSocket 工作階段"
+description: 連線、送一個型別化 envelope、收一次，然後 close 並 await closed。
+---
+
+# 開啟 WebSocket session
+
+每個方向各一個 struct。Unsubscribe、`close`、`await session.closed` 由你負責。無效 frames 走 `onRuntimeError`。
+
+細節見 [WebSocket](/zh-Hant-TW/docs/web-socket)。
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` 是 placeholder。若 server 以 `{ "type": "message", "text": "Hello" }` 回應 `{ "type": "send", "text": "Hello" }`，這段 snippet 會印出：
+
+```txt
+message Hello
+```
+
+重連是選擇性開啟（`withWebSocketReconnect`）。Heartbeat 也是。瀏覽器 WebSocket 不能帶任意 handshake headers — 改用 cookies、subprotocols，或短效 ticket。

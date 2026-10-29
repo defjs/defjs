@@ -1,0 +1,113 @@
+---
+title: "攔截器"
+description: 應用程式為自己的 Client 組合身分驗證、追蹤與傳輸策略，SDK 的資料契約繼續生效。
+---
+
+# Interceptors
+
+應用程式透過 Client 的 interceptor 設定身分驗證、追蹤、維護時段的短路處理或經過審查的重試策略，SDK 匯出的端點繼續描述輸入、輸出與錯誤契約。可重用策略可以作為獨立匯出，由應用程式明確選擇並設定。
+
+每種傳輸各有一條 chain。Interceptor 接收 `HttpRequest`，回傳該傳輸的結果（`HttpResponse`、事件串流 handle 或 WebSocket session）。輸入驗證在 chain 前；HTTP 狀態分派與 Struct 解碼在 chain 後。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## 洋蔥順序
+
+`withInterceptors(...items)` 接受混合 interceptors。Client 依選定傳輸的 `kind` 篩選，並保留相對註冊順序。每個 interceptor 可以在 `next` 前後各跑一次：
+
+| Factory                      | Request       | `next` 的結果                         |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+多次 `withInterceptors(...)` 會追加。當外層必須看到最終結果時，把廣的 observation 放在較窄的 mutation／retry 外面。
+
+## Clone 並加 request headers
+
+把進來的 `HttpRequest` 當 chain 擁有的。改之前先 clone `Headers`；把新的 request 傳給 `next`：
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+SSE 同套路。瀏覽器 WebSocket 不能加任意 handshake headers — 改 `request.headers` 不會幫瀏覽器 socket 做認證。改用 protocol、URL／query 策略，或伺服器支援的 handshake。
+
+HTTP 絕不會把推斷的 Content-Type 寫入 `request.headers`；interceptors 只看得到已宣告的 header。`request.bodyContentType` 以一般欄位保存 builder body 的推斷型別，因此在 `{ ...req }` 複製後仍會保留。明確的 `content-type` header 一律優先於該欄位與偵測結果，無論它由 builder、client 預設值、interceptor 或直接傳給 `fetchHandler` 的 request 宣告。簽章程式應讀取 `headers.get('content-type') ?? request.bodyContentType`。
+
+替換 HTTP body 時，在複製後的 request 上換 `body`，並用 `content-type` header 宣告其型別。`bodyContentType` 只在 `body` 仍是 builder 的值時適用；替換後的 body 會重新偵測，因此替換進來的字串會是文字，除非 header 另有宣告。設成 `body: undefined` 就不會有函式庫推斷的 Content-Type。對未變更的 builder body，若沒有明確的 header，`bodyContentType: null` 會抑制函式庫的推斷，不過原生 Fetch 仍可能為字串加上它自己的型別。FormData 一律使用它實際的 multipart boundary。別重用已消耗的 `ReadableStream` body。
+
+## Short-circuit 請求
+
+你可以跳過 `next`，但必須回傳預期的結果型別。HTTP 用 `makeResponse(...)` 建相容 wrapper：
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+Command 層仍會依 status 分派。呼叫端需要型別化 `error.data` 時，用單一 `error` struct 描述非 2xx 側。它也仍會檢查已宣告的那一側：JSON 的 `output` 或 `error` 要求合成回應帶有 JSON 的 `content-type` header，而 `body` 應該已經是剖析後的值，就像傳輸會交出來的那樣（`request.responseType` 與 `request.errorResponseType` 指明表示方式）。Short-circuit SSE 或 WebSocket 需要完整相容的 handle／session（closure promises、live state、ownership 與 `[Symbol.asyncDispose]`）。部分物件不算有效策略。結構化 `EventStreamHandle` 與 `WebSocketSessionLike` 實作現在編譯時必須提供標準 disposer；只接收 Defjs handle 的 consumer 不必新增執行期呼叫。
+
+## 重試安全讀取
+
+重試會改行為。策略收窄 — 這個例子對可重放的 `GET`／`HEAD`／`OPTIONS`，在 status `429`、`502`、`503`、`504` 時重試，把 `Retry-After` 上限設 30s，兩次重試後或 abort 時停止：
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+這個迴圈不會重試被丟出的 interceptor／Fetch 錯誤——傳輸失敗是 reject，根本不會產生一個能讓這個迴圈去比對的 status。重試 `POST`／`PUT`／`PATCH`／`DELETE` 需要可重放的 bytes、伺服器支援、idempotency 契約，以及審過的 status 策略。重試歸你管——Core 不會匯出 `retryAfter()`。
+
+在這個範例之外丟出錯誤（或 reject）的 interceptor，會以 `EXT_INTERCEPTOR_FAILED` 回到呼叫方，丟出的值
+掛在 `cause` 上——見[錯誤](/zh-Hant-TW/docs/errors)。若 interceptor 完成時回傳的不是該傳輸預期的結果，也會回報 `EXT_INTERCEPTOR_FAILED`，例如漏寫 `return` 導致的 `undefined`，或在應回傳 `HttpResponse` 時回傳了原生 `Response`。在 HTTP interceptor 裡，想表達取消就改成丟 `ERR_ABORTED` 或 `ERR_TIMEOUT`：呼叫會以
+`NET_ABORTED` 或 `NET_TIMEOUT` resolve。SSE 會把非傳輸層的 throw 包成 `EXT_INTERCEPTOR_FAILED`。WebSocket 的 throw 如果已經是 Fault（帶字串 `code` 的 `Error`），就原樣回傳；其他 throw 則是 `EXT_INTERCEPTOR_FAILED`。
+
+`next(request)` 可能 reject。傳輸失敗是 fault，不是 status 0 的回應，所以想觀察它的 interceptor 要在
+`next` 外面包一層 `try`／`catch`。Defjs 的歸因照樣正確：來自傳輸層的 reject 仍然是 `NET_*` fault，不會
+算到你的 interceptor 頭上。
+
+## 包裝 WebSocket sessions
+
+WebSocket interceptor 最多呼叫一次 `next`。若你包裝 session，請明確委派 live getters 與生命週期成員：
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+Spread session 會把 `state`／`connection`／`bufferedAmount` 快照一次。除非你刻意改 ownership，否則保留 `closed`、`receive`、`close`、精確的 `[Symbol.asyncDispose]()` 轉發與 listener cleanup。Wrapper 必須回傳內部 session 的 teardown promise，不能回傳無關的 resolved promise。若 chain 建立了 session 卻沒交付，Core 會 settle 並關閉它；若成功的 interceptor 回傳不同的 session，Core 會丟掉建立出來的那個。
+
+## 參考
+
+Factories 回傳帶 tag 的傳輸值：
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — HTTP 上的 Basic credentials
+- `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic credentials
+
+`HttpRequest` 可能包含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、static `operation`。它是傳輸整合值 — 不是呼叫端已剖析的 input。序列化之後，`queryParams` 是 `new URLSearchParams(queryString)`。Builder 沒產出 query 時，不會呼叫設定好的 query serializer；builder 的 `URLSearchParams` 會原樣使用。Command 驗證、output 驗證、領域錯誤對應留在各自的層。
+
+URL 驗證從建構請求時就開始：缺少、相對或無效的 base endpoint，或非法 path，會在任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，包括會 short-circuit 的 interceptor。分派之前，最終的 `req.endpoint` 會對最終的 `req.baseEndpoint` 驗證：解析後的 URL 必須維持該 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 可以刻意把 `baseEndpoint` 換成另一個有效的絕對 URL。HTTP、SSE 與 WebSocket 共用這條規則，確定性的 URL 錯誤絕不會重試。
+
+SSE／WebSocket observers 是生命週期 hooks，不是控制流程。擁有者結束時要 unsubscribe WebSocket listeners。Observer 失敗跟傳輸契約走；interceptor 本身可以 throw 或 reject。
+
+記審過的 allowlist：static `operation`、method、status、duration、穩定錯誤碼。預設別記解析後的 URLs、query strings、auth headers、bodies、raw causes、SSE event IDs、WebSocket payloads。
+
+Basic credentials 是 base64，不是加密。用 TLS，伺服器上的 credential providers 保持請求範圍，永遠別記產生出的 header。預設 encoder 是 `globalThis.btoa`；runtime 沒有 `btoa` 或需要審過的 encoder 時，傳 `BasicAuthInterceptorOptions.encode`。
+
+Interceptor 可以強制傳輸策略。它不是 input 驗證、授權或資源擁有權。啟動長期工作的程式碼仍要用 `await using`，或手動關閉並 await 終端 promise。一般 HTTP 仍是 request-scoped，透過它的 timeout / `AbortSignal` 管理；`Client` 不是 `AsyncDisposable`。
+
+## 相關操作範例
+
+- [在 401 時只刷新一次 Bearer token](/zh-Hant-TW/recipes/refresh-bearer-once)
+- [建置並發佈 SDK](/zh-Hant-TW/recipes/publish-http-sdk)
+- [用本機 Fetch handle 測試](/zh-Hant-TW/recipes/test-with-handle)
+- [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)

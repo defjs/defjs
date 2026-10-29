@@ -1,0 +1,22 @@
+---
+title: "使用 SSE 事件流"
+description: 開 typed event stream，iterate 一次，之後 close 同 await closed。
+---
+
+# Consume 一條 SSE stream
+
+每條 stream 淨係一個 async iterator。將 `close` + `await stream.closed` 放喺 `finally`，提早 exit 都唔會 leak Fetch attempt。
+
+詳情睇 [SSE](/zh-Hant-HK/docs/sse)。
+
+<include cwd meta="notifications.ts">
+  examples/recipes/consume-sse.ts#example
+</include>
+
+`api.example.com` 係 placeholder。如果 server 嘅第一個 event 係 `message`，data 係 `{ "text": "hello from the server" }`，snippet 會 print：
+
+```txt
+hello from the server
+```
+
+除非你啟用 `withSSEReconnect(...)`，否則 SSE 唔會重試 network/read failures。有 reconnect object 嘅時候，`attempts` 預設係每次斷線 `3` 次；成功握手會重設預算同退避指數。`attempts: 0` 停用重試。無效嘅重連數值選項會喺任何 request 執行之前以 `REQ_OPTIONS_INVALID` 失敗；見[驗證規則](/zh-Hant-HK/api/core/withssereconnect)。冇 `shouldReconnect` 嘅時候，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request 會重連；用 `ReadableStream` 做 request body 嘅 request 永遠唔會重連。

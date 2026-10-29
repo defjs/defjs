@@ -1,0 +1,116 @@
+---
+title: "인터셉터"
+description: SDK의 API 정의를 공유하면서 앱의 Client에 인증과 추적 등 실행 정책을 추가합니다.
+---
+
+# 인터셉터
+
+사용하는 앱이 SDK의 API 정의를 바꾸지 않고 Client에 인증과 추적 같은 실행 정책을 설정하는 곳입니다. API에 고유한 입력 배치는 `builder`에 두고, 환경과 인증 상태에 의존하는 처리는 앱이 구성하는 인터셉터에 둡니다.
+
+인증 헤더를 더하거나, 점검 창을 short-circuit하거나, 안전한 읽기를 재시도해요 — 명령 검증은 건드리지 않고. 전송마다 체인이 따로 있어요. `HttpRequest`를 받고, 그 전송의 결과(`HttpResponse`, 이벤트 스트림 핸들, WebSocket 세션)를 돌려줘요. 입력 검증은 체인 전에, status 디스패치와 디코딩된 결과는 그 후에 돌아요.
+
+## 기본 사용법
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## Onion 순서
+
+`withInterceptors(...items)`는 혼합 인터셉터를 받아요. 클라이언트는 선택된 전송의 `kind`로 걸러내고 상대 등록 순서를 유지해요. 각 인터셉터는 `next` 전후에 돌 수 있어요.
+
+| 팩토리                       | 요청          | `next`의 결과                         |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+`withInterceptors(...)`를 여러 번 호출하면 추가돼요. 바깥 레이어가 최종 결과를 봐야 할 때는 넓은 관측을 좁은 변경/재시도 밖에 두세요.
+
+## 복제하고 요청 헤더 더하기
+
+들어오는 `HttpRequest`는 체인이 소유한다고 보세요. 바꾸기 전에 `Headers`를 복제하고, 새 요청을 `next`에 넘기세요.
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+SSE도 같은 패턴이에요. 브라우저 WebSocket은 임의 handshake 헤더를 추가할 수 없어요 — `request.headers`를 바꿔도 브라우저 소켓을 인증하지 못해요. 프로토콜, URL/query 정책, 또는 서버가 지원하는 handshake를 쓰세요.
+
+HTTP는 추론한 Content-Type을 `request.headers`에 쓰지 않으므로 인터셉터는 선언된 헤더만 봐요. `request.bodyContentType`은 builder의 body에서 추론한 타입을 일반 필드로 보관하므로 `{ ...req }`로 복사해도 유지돼요. builder, 클라이언트 기본값, 인터셉터, 원시 `fetchHandler` 요청 중 어디에서 선언했든 명시한 `content-type` 헤더가 항상 이 필드와 탐지보다 우선해요. 서명 시에는 `headers.get('content-type') ?? request.bodyContentType`을 읽으세요.
+
+HTTP body를 바꿀 때는 복사한 요청의 `body`를 교체하고 `content-type` 헤더로 그 타입을 선언해요. `bodyContentType`은 `body`가 builder의 값인 동안에만 적용돼요. 교체된 body는 다시 탐지하므로 헤더로 다른 타입을 선언하지 않으면 교체된 문자열은 텍스트예요. `body: undefined`를 두면 라이브러리가 추론한 Content-Type이 없어요. 바뀌지 않은 builder body에서는 명시 헤더가 없을 때 `bodyContentType: null`이 라이브러리의 추론을 억제하지만, 네이티브 Fetch가 문자열에 자기 타입을 여전히 붙일 수 있어요. FormData는 항상 실제 multipart boundary를 써요. 이미 소비된 `ReadableStream` body를 재사용하지 마세요.
+
+## 요청 short-circuit하기
+
+`next`를 건너뛸 수 있지만, 기대하는 결과 타입을 돌려줘야 해요. HTTP에서는 `makeResponse(...)`가 호환 래퍼를 만들어요.
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+명령 레이어는 여전히 status로 디스패치해요. 호출자가 타입이 잡힌 `error.data`가 필요하면 비 2xx 쪽을 `error` struct 하나로 선언해요. 또한 선언된 쪽도 여전히 검사해요. JSON `output`이나 `error`에는 가짜 응답에 JSON `content-type` 헤더가 필요하고, `body`는 전송이 전달했을 방식대로 이미 파싱된 값이어야 해요 (`request.responseType`과 `request.errorResponseType`이 표현을 알려줘요). SSE나 WebSocket을 short-circuit하려면 완전한 호환 핸들/세션이 필요해요 (종료 프로미스, live 상태, 소유권, `[Symbol.asyncDispose]`). 부분 객체는 유효한 정책이 아니에요. 구조적인 `EventStreamHandle`과 `WebSocketSessionLike` 구현은 이제 컴파일 시 표준 disposer도 필요하고, Defjs 핸들을 받기만 하는 소비자에는 새 런타임 호출 요구가 없어요.
+
+## 안전한 읽기 재시도
+
+재시도는 동작을 바꿔요. 정책을 좁게 유지하세요 — 이 예는 다시 보낼 수 있는 `GET` / `HEAD` / `OPTIONS`를 status `429`, `502`, `503`, `504`에 대해 재시도하고, `Retry-After`를 30초로 제한하며, 두 번 재시도하거나 abort에서 멈춰요.
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+던져진 인터셉터/Fetch 오류는 이 루프에서 재시도하지 않아요. 전송 실패는 reject 되니까, 이 루프가 맞춰볼 status 자체가 나오지 않아요. `POST` / `PUT` / `PATCH` / `DELETE` 재시도에는 다시 보낼 수 있는 바이트, 서버 지원, 멱등성 계약, 검토된 status 정책이 필요해요. 재시도는 당신 몫이에요 — Core는 `retryAfter()`를 내보내지 않아요.
+
+이 예시 밖에서 throw(또는 reject)한 인터셉터는 `EXT_INTERCEPTOR_FAILED`로 호출한 쪽에 돌아가고,
+던진 값은 `cause`에 실려요 — [오류](/ko-KR/docs/errors)를 보세요. 전송 방식에서 기대하는 결과가 아닌 값으로
+resolve된 경우도 마찬가지예요. `return`을 빠뜨려 생긴 `undefined`나 `HttpResponse` 대신 반환한
+네이티브 `Response`가 그 예예요. HTTP
+인터셉터에서는 대신 `ERR_ABORTED`나 `ERR_TIMEOUT`을 throw하는 것이 취소를 표현하는 방법이에요. 호출은
+`NET_ABORTED` 또는 `NET_TIMEOUT`으로 resolve돼요. SSE는 전송이 아닌 throw를 `EXT_INTERCEPTOR_FAILED`로 감싸요. WebSocket throw는 이미 Fault(문자열 `code`를 가진 `Error`)이면 그대로 돌려주고, 그 밖의 throw는 `EXT_INTERCEPTOR_FAILED`예요.
+
+`next(request)`는 reject 할 수 있어요. 전송 실패는 fault이고 status 0 응답이 아니니까, 관찰하려는
+인터셉터는 `next`를 `try` / `catch`로 감싸요. 그래도 Defjs의 귀속은 정확해요. 전송에서 온 reject는
+`NET_*` fault로 남고, 당신의 인터셉터 탓이 되지 않아요.
+
+## WebSocket 세션 감싸기
+
+WebSocket 인터셉터는 `next`를 최대 한 번만 호출할 수 있어요. 세션을 감싸면 live getter와 수명 멤버를 명시적으로 위임하세요.
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+세션을 spread하면 `state` / `connection` / `bufferedAmount`가 한 번만 스냅샷돼요. 소유권을 일부러 바꾸지 않는 한 `closed`, `receive`, `close`, 정확한 `[Symbol.asyncDispose]()` 위임, 리스너 정리를 보존하세요. Wrapper는 관계없는 resolved promise가 아니라 내부 session의 teardown promise를 반환해야 해요. 체인이 전달되지 않는 세션을 만들면 Core가 settle하고 닫아요. 성공한 인터셉터가 다른 세션을 돌려주면 Core는 만든 세션을 버려요.
+
+## 참고
+
+팩토리는 태그가 달린 전송 값을 돌려줘요.
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — HTTP용 Basic 자격 증명
+- `basicAuthSSEInterceptor(provider, options?)` — SSE용 Basic 자격 증명
+
+`HttpRequest`에는 `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, 정적 `operation`이 있을 수 있어요. 전송 통합 값이지 호출자의 파싱된 입력이 아니에요. `queryParams`는 직렬화 뒤의 `new URLSearchParams(queryString)`이에요. 설정된 query serializer는 builder가 query를 만들지 않으면 호출되지 않고, builder의 `URLSearchParams`는 그대로 쓰여요. 명령 검증, 출력 검증, 도메인 오류 매핑은 각자 레이어에 두세요.
+
+URL 검증은 요청을 만드는 동안 시작해요. 없거나 상대적이거나 잘못된 base endpoint나 불법 path는 인터셉터나 전송이 돌기 전에, 단축하는 인터셉터를 포함해 `REQ_BUILD_FAILED`로 실패해요. 디스패치 전에 최종 `req.endpoint`를 최종 `req.baseEndpoint`에 대해 검증해요. 해석된 URL은 그 base의 origin을 유지하고 디렉터리 안에 머물러야 하며, path의 C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`, 디렉터리 탈출은 거부돼요. 앞에 공백이 있어도 스킴 형태와 프로토콜 상대 형식은 거부돼요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. interceptor는 `baseEndpoint`를 다른 유효한 절대 URL로 일부러 바꿀 수 있어요. HTTP, SSE, WebSocket이 이 규칙을 공유하고, 결정적인 URL 오류는 재시도하지 않아요.
+
+SSE/WebSocket 옵저버는 수명 훅이지 제어 흐름이 아니에요. 소유자가 끝날 때 WebSocket 리스너를 구독 해제하세요. 옵저버 실패는 전송 계약을 따르고, 인터셉터 자체는 throw하거나 reject할 수 있어요.
+
+검토된 허용 목록만 로그하세요. 정적 `operation`, 메서드, status, 기간, 안정적인 오류 코드요. 기본적으로 해석된 URL, query 문자열, 인증 헤더, body, 원본 cause, SSE 이벤트 ID, WebSocket 페이로드는 로그하지 마세요.
+
+Basic 자격 증명은 base64이지 암호가 아니에요. TLS를 쓰고, 서버에서는 자격 증명 provider를 요청 범위로 두고, 생성된 헤더를 절대 로그하지 마세요. 기본 인코더는 `globalThis.btoa`예요. 런타임에 `btoa`가 없거나 검토된 인코더가 필요하면 `BasicAuthInterceptorOptions.encode`를 넘기세요.
+
+인터셉터는 전송 정책을 강제할 수 있어요. 입력 검증, 인가, 리소스 소유권은 아니에요. 장기 작업을 시작한 코드는 `await using`을 쓰거나 수동으로 닫고 종료 프로미스를 await해요. 일반 HTTP는 request-scoped이고 timeout / `AbortSignal`로 관리해요. `Client`는 `AsyncDisposable`이 아니에요.
+
+## 관련 레시피
+
+- [401에서 Bearer 토큰을 한 번 갱신하기](/ko-KR/recipes/refresh-bearer-once)
+- [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)
+- [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)
+- [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)

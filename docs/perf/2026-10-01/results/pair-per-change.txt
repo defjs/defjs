@@ -1,0 +1,54 @@
+### V1a
+node	get-small	A=31794ns	B=23686ns	B/A=-22.7%	[p25 -29.7%, p75 -20.1%]
+node	get-list-1000	A=727609ns	B=688510ns	B/A=-1.9%	[p25 -7.9%, p75 -1.2%]
+bun	get-small	A=36503ns	B=33444ns	B/A=-3.2%	[p25 -4.6%, p75 -2.4%]
+bun	get-list-1000	A=635539ns	B=627042ns	B/A=0.1%	[p25 -1.4%, p75 1.0%]
+### V1b
+node	get-small	A=20592ns	B=19610ns	B/A=-4.3%	[p25 -5.5%, p75 -4.1%]
+node	get-list-1000	A=703967ns	B=692398ns	B/A=-1.2%	[p25 -2.1%, p75 -0.0%]
+bun	get-small	A=34542ns	B=32829ns	B/A=-4.2%	[p25 -8.2%, p75 -1.3%]
+bun	get-list-1000	A=602016ns	B=589142ns	B/A=-0.2%	[p25 -3.3%, p75 0.3%]
+### V1c
+node	get-small	A=19320ns	B=19016ns	B/A=-1.6%	[p25 -2.8%, p75 -1.1%]
+node	get-list-1000	A=684348ns	B=674650ns	B/A=-1.2%	[p25 -3.7%, p75 -0.3%]
+bun	get-small	A=31665ns	B=30394ns	B/A=-0.6%	[p25 -6.0%, p75 0.3%]
+bun	get-list-1000	A=678639ns	B=608220ns	B/A=-0.7%	[p25 -10.4%, p75 -0.1%]
+### V1d
+node	get-small	A=19915ns	B=17895ns	B/A=-6.4%	[p25 -8.9%, p75 -6.1%]
+node	get-query	A=26431ns	B=24940ns	B/A=-4.8%	[p25 -5.8%, p75 -4.4%]
+bun	get-small	A=31921ns	B=32198ns	B/A=1.6%	[p25 -1.4%, p75 4.4%]
+bun	get-query	A=34466ns	B=33698ns	B/A=-2.5%	[p25 -4.8%, p75 3.3%]
+### V2
+node	struct-decode-1000	A=393926ns	B=385558ns	B/A=-1.8%	[p25 -2.6%, p75 -1.5%]
+node	struct-decode-1000+read	A=683636ns	B=453514ns	B/A=-23.8%	[p25 -41.6%, p75 -22.6%]
+node	get-list-1000	A=788093ns	B=771988ns	B/A=-1.9%	[p25 -3.7%, p75 0.7%]
+node	get-small	A=21781ns	B=19381ns	B/A=-2.8%	[p25 -8.3%, p75 -0.6%]
+node	post-json	A=25835ns	B=25733ns	B/A=-1.3%	[p25 -3.6%, p75 -0.1%]
+bun	struct-decode-1000	A=343508ns	B=356430ns	B/A=7.5%	[p25 2.5%, p75 8.2%]
+bun	struct-decode-1000+read	A=372611ns	B=371244ns	B/A=3.1%	[p25 1.5%, p75 4.6%]
+bun	get-list-1000	A=672474ns	B=682137ns	B/A=0.7%	[p25 -7.3%, p75 1.4%]
+bun	get-small	A=30453ns	B=30887ns	B/A=0.4%	[p25 -14.0%, p75 7.0%]
+bun	post-json	A=39077ns	B=40483ns	B/A=1.6%	[p25 -2.1%, p75 3.3%]
+### V3
+node	post-json	A=27681ns	B=25020ns	B/A=-7.8%	[p25 -14.0%, p75 -6.9%]
+node	post-order-50	A=119123ns	B=85865ns	B/A=-27.6%	[p25 -28.8%, p75 -26.8%]
+node	get-small	A=19578ns	B=18870ns	B/A=-3.6%	[p25 -5.3%, p75 -2.8%]
+bun	post-json	A=39985ns	B=35546ns	B/A=-6.8%	[p25 -11.9%, p75 -3.9%]
+bun	post-order-50	A=160342ns	B=93765ns	B/A=-40.6%	[p25 -42.4%, p75 -39.3%]
+bun	get-small	A=29990ns	B=29477ns	B/A=-0.4%	[p25 -6.8%, p75 0.6%]
+### V4
+node	post-order-50	A=90131ns	B=83927ns	B/A=-6.1%	[p25 -10.7%, p75 -4.6%]
+node	post-json	A=25152ns	B=24541ns	B/A=0.0%	[p25 -3.9%, p75 1.9%]
+bun	post-order-50	A=102625ns	B=96995ns	B/A=1.2%	[p25 -10.3%, p75 9.5%]
+bun	post-json	A=32123ns	B=35382ns	B/A=1.3%	[p25 -2.6%, p75 5.9%]
+### V5
+node	get-small-timeout	A=28760ns	B=21717ns	B/A=-22.3%	[p25 -33.7%, p75 -20.2%]
+node	get-small	A=17876ns	B=17971ns	B/A=1.8%	[p25 -0.0%, p75 3.0%]
+bun	get-small-timeout	A=45847ns	B=42031ns	B/A=-2.6%	[p25 -9.2%, p75 -1.4%]
+bun	get-small	A=48431ns	B=51528ns	B/A=0.7%	[p25 -7.5%, p75 5.9%]
+### S (SSE)
+node	sse-2000-events	A=6545870ns	B=2979839ns	B/A=-55.0%	[p25 -55.8%, p75 -54.9%]
+bun	sse-2000-events	A=5403971ns	B=2627602ns	B/A=-52.5%	[p25 -53.3%, p75 -51.4%]
+### W (WebSocket)
+node	ws-2000-messages	A=3935215ns	B=1968562ns	B/A=-49.9%	[p25 -51.5%, p75 -49.2%]
+bun	ws-2000-messages	A=3193846ns	B=1618023ns	B/A=-49.6%	[p25 -50.2%, p75 -48.7%]

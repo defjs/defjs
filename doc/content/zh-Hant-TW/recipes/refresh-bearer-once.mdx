@@ -1,0 +1,20 @@
+---
+title: "401 後更新權杖"
+description: 在同一個 interceptor 裡掛上 Authorization 並重放一次；next() 只往內走。
+---
+
+# 在 401 時只刷新一次 Bearer token
+
+`next()` 是**這一層**洋蔥的其餘部分 — 不是從外面再用 `axios(config)` 重新分派。把掛上憑證、single-flight refresh、一次重放放在**同一個** HTTP interceptor，外層才不會跑兩次。
+
+見 [Interceptors](/zh-Hant-TW/docs/interceptors)。
+
+<include cwd meta="refresh-bearer.ts">
+  examples/recipes/refresh-bearer-once.ts#example
+</include>
+
+```txt
+null 42
+```
+
+再次呼叫 `next` 只會重新進入這一層**裡面**的 interceptors（以及 Fetch handler）。它不會重跑外層的計時／auth wrappers — 所以 401 的安排要放在一個 interceptor 裡，而不是第二次 `execute`。

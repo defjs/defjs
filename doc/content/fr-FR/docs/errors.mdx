@@ -1,0 +1,157 @@
+---
+title: "Gestion des erreurs"
+description: Décrire les erreurs du SDK et traiter les faults et tuples résultat dans l’application.
+---
+
+# Erreurs
+
+L’auteur du SDK décrit les corps d’erreur déclarés avec Struct. L’application s’appuie sur le fault Defjs pour choisir un message, une nouvelle tentative ou une erreur métier. Un SDK publié doit préserver les informations nécessaires à ses appelants ; les contrats de codes et de tuples ci-dessous restent valables entre paquets.
+
+Traite un 404, un timeout ou un corps illisible en lisant le tuple error-first — pas en attrapant des exceptions. Un `Fault` est un `Error` natif (`instanceof Error` est true), discriminé par un seul champ : `code`.
+
+Il n’y a pas de `kind`. La classe d’un échec est le segment avant le premier `_` de son code : `NET_TIMEOUT` est un échec `NET` et `RES_STRUCT_MISMATCH` un échec `RES`. Lis le préfixe pour le tri grossier et le code entier pour le cas exact.
+
+## Mise en place
+
+<include cwd lang="typescript">
+  examples/errors/basic-setup.ts#example
+</include>
+
+Comme l’ensemble est fermé, un `switch` sur `code` est exhaustif :
+
+<include cwd lang="typescript">
+  examples/errors/triage.ts#example
+</include>
+
+## Codes stables
+
+| Classe | Codes                                                                  | Qui doit changer                                                 |
+| ------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `HTTP` | `HTTP_STATUS`                                                          | Le pair a répondu non-2xx ; traite-le comme de la logique métier |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | L’appel ou la déclaration de l’endpoint                          |
+| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Personne, ou un retry                                            |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | Il faut réconcilier la déclaration et le pair                    |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | Le code que tu as branché sur le pipeline                        |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | Une limite déclarée, ou le rythme du consommateur                |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | La runtime hôte                                                  |
+
+L’ensemble est fermé exprès : c’est ce qui garde un `switch` exhaustif. Les extensions rapportent leur propre détail via `cause`, pas via un nouveau code.
+
+Un `endpoint` client absolu valide est exigé pour HTTP, SSE et WebSocket. Après la résolution de l’URL, le chemin doit rester dans l’origine et le répertoire de l’endpoint de base. Les URL absolues, les chemins relatifs au protocole, les caractères de contrôle C0 (dont tab, CR et LF), les barres obliques inverses, `?`, `#` et les traversées de répertoire sont rejetés. Les formes ressemblant à un schéma et celles relatives au protocole sont rejetées même avec des espaces initiaux ; un espace ordinaire à l’intérieur est autorisé et envoyé sous la forme `%20`. Les endpoints absents, relatifs ou invalides et les chemins illégaux produisent `REQ_BUILD_FAILED` pendant la construction de la requête, avant que les intercepteurs ne tournent ; un intercepteur de court-circuit ne peut pas contourner cette vérification. Avant le transport, le `req.endpoint` final d’un intercepteur est vérifié contre son `req.baseEndpoint` final selon les mêmes règles ; passer explicitement à une autre base absolue valide est autorisé. Ces faults d’URL déterministes ne sont pas réessayables.
+
+### Champs selon la forme
+
+| Code          | `status` | `response`                                                     | `data`                               |
+| ------------- | -------- | -------------------------------------------------------------- | ------------------------------------ |
+| `HTTP_STATUS` | Toujours | Toujours ; n’a `body` que si `error` était déclaré et a décodé | Corps `error` décodé, ou `undefined` |
+| `RES_*`       | Toujours | Toujours, métadonnées seules — **pas de `body`**               | Absent                               |
+| Tout le reste | Absent   | Seulement là où le transport avait déjà des métadonnées        | Absent                               |
+
+`cause` porte la valeur sous-jacente : un `StructError` pour un écart de struct, l’échec du parser pour une représentation illisible, ce qu’une extension a jeté.
+
+## Formes de tuple par transport
+
+<include cwd lang="typescript">
+  examples/errors/tuple-shapes.ts#example
+</include>
+
+Lors d’un échec HTTP, le troisième emplacement vaut `undefined` : le fault porte déjà les métadonnées de réponse qui existaient. C’est important parce que c’est le fault que tu passes à un handler, que tu journalises ou que tu relances — les métadonnées doivent donc voyager _avec_ lui, pas à côté.
+
+Pour SSE et WebSocket, le troisième emplacement est un instantané de démarrage, qui peut être présent même quand le démarrage a échoué. Après qu’un handle ou une session est renvoyé, les échecs ultérieurs vivent sur son cycle de vie — ils ne réécrivent jamais le tuple de démarrage déjà arrêté.
+
+## Comment un corps est lu
+
+`ok` est le seul embranchement, et un seul côté décode. `output` lit un corps 2xx ; `error` lit tout le reste. Omettre l’un veut dire que ce corps n’est jamais lu.
+
+| Situation                                                | Résultat                                                        |
+| -------------------------------------------------------- | --------------------------------------------------------------- |
+| 2xx, `output` déclaré, le corps décode                   | Succès ; `data` et `response.body` typés                        |
+| 2xx, `output` omis                                       | Succès ; `data` vaut `undefined`, la réponse n’a pas de `body`  |
+| Non-2xx, `error` déclaré, le corps décode                | `HTTP_STATUS` avec `data` typé                                  |
+| Non-2xx, `error` omis                                    | `HTTP_STATUS` avec `data: undefined`                            |
+| Le media type n’est pas celui qu’exige la représentation | `RES_MEDIA_TYPE_INVALID`, signalé **avant** la lecture du corps |
+| Les octets ne sont pas cette représentation              | `RES_DECODE_FAILED`                                             |
+| La valeur n’est pas ce struct                            | `RES_STRUCT_MISMATCH` (HTTP seulement)                          |
+| Un corps illisible du côté que tu n’as **pas** déclaré   | Entièrement ignoré — voir plus bas                              |
+
+C’est la dernière ligne qui mérite d’être retenue. Si tu as déclaré `output` mais pas `error`, une 500 dont le corps est du JSON malformé est signalée comme `HTTP_STATUS` avec `status: 500`. Tu as dit que les corps d’erreur ne t’intéressaient pas, et cela inclut de ne pas t’intéresser au fait que l’un n’ait pas pu être lu.
+
+Pour HTTP, le Struct est appliqué une seule fois, après la chaîne d’intercepteurs. Une réponse qu’un intercepteur a construite avec `makeResponse(...)` passe par la même vérification de media type, la même conversion de représentation et le même Struct qu’une réponse venue du réseau. Le transport Fetch intégré lit un corps déclaré comme JSON, texte, `Blob` ou octets avant de le rendre à la chaîne. Seules les représentations JSON exigent un media type JSON et `JSON.parse` ; le texte, les blobs et les octets non JSON sont valides pour leur représentation déclarée. Les échecs de lecture s’appliquent à chaque représentation ; les échecs de lecture ou de parse à ce stade remontent comme le même fault `RES_*` ou `NET_BODY_INCOMPLETE`.
+
+`HttpResponse.ok` signifie seulement `200 <= status < 300`. Un échec de transport est un fault, jamais une réponse — il n’y a pas de réponse au statut 0 qui en tiendrait lieu.
+
+## Restreindre une union de corps d’erreur
+
+Un seul struct `error` couvre tous les statuts non-2xx : quand les formes diffèrent, tu déclares donc une union. Ce que tu peux faire ensuite avec `fault.data` dépend entièrement de la façon dont tu as déclaré cette union — la bibliothèque te rend exactement le type que tu as demandé.
+
+`struct.or(...)` produit une union simple, que TypeScript ne peut pas restreindre tout seul. Teste le champ dont tu as besoin :
+
+<include cwd lang="typescript">
+  examples/errors/narrow-union.ts#example
+</include>
+
+`struct.discriminatedUnion(...)` restreint sur un champ que le corps porte réellement, la forme confortable quand l’API tague déjà ses erreurs :
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-kind.ts#example
+</include>
+
+Quand l’API met le statut **dans** le corps, discrimine là-dessus plutôt que sur `fault.status` :
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-status.ts#example
+</include>
+
+Cette dernière forme est à préférer là où l’API la permet. `fault.status` est le nombre de la couche HTTP, qu’un proxy, une gateway ou un CDN peuvent réécrire ; `data.status` a passé la validation de ton struct `error` déclaré. Cela prouve la forme du corps, pas sa provenance backend : un proxy, une gateway ou un CDN peuvent aussi renvoyer un corps correspondant.
+
+Une union non discriminée qui ne se restreint pas est une propriété de la déclaration, pas de la bibliothèque : elle te rend le type que tu as déclaré. Ajoute un discriminant au struct si tu en veux un.
+
+## Démarrage et après ouverture
+
+SSE valide le statut, `text/event-stream` et la présence d’un corps avant de résoudre le handle. Non-2xx → `HTTP_STATUS` quand `error` est omis ou que son corps se décode. Un corps de handshake déclaré qui ne peut pas être lu ou parsé, ou qui échoue à son Struct, produit `RES_DECODE_FAILED` ; un échec de Struct porte `StructError` comme `cause`. Mauvais media type → `RES_MEDIA_TYPE_INVALID`. Un handshake réussi sans corps → `RES_DECODE_FAILED`. L’instantané d’ouverture peut tout de même atterrir dans le troisième emplacement du tuple.
+
+Le démarrage WebSocket couvre le handshake plus la première ouverture physique. Un échec du constructeur, une fermeture avant l’ouverture, un timeout ou une annulation produisent tous un tuple de démarrage. Un instantané de connexion peut exister même si le socket n’a jamais atteint `open`.
+
+| Transport | Après le démarrage                                                                                                                                                                                                                                                                      |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | L’itérateur est rejeté sur une erreur fatale ; `stream.closed` se résout avec `kind: 'error'` et le `code` du fault                                                                                                                                                                     |
+| WebSocket | `onRuntimeError` pour les échecs de message/file/heartbeat ; `receive` échoue sur les erreurs terminales ; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                                                  |
+| HTTP      | La promesse d’exécution se résout une seule fois, avec le tuple. Si un intercepteur lève une erreur ou renvoie autre chose qu’un `HttpResponse`, ou si un callback de progression lève une erreur, un fault est renvoyé dans ce tuple (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+
+`NET_ABORTED` / `NET_TIMEOUT` décrivent ce que l’appelant a vu au démarrage. Tu fermes quand même un stream ou une session renvoyés et tu await leur promesse terminale.
+
+## Logging d’Error natif et cause
+
+Les faults sont des instances d’`Error` natif : aucun adaptateur de diagnostic n’est nécessaire. `String(fault)` donne la forme native stable `DefjsFault: <message>`. `code` et les champs de variante — `status`, `response`, `data` — restent énumérables pour le logging structuré ; `name` et la chaîne native `cause` ne le sont pas.
+
+<include cwd lang="typescript">
+  examples/errors/log-fault.ts#example
+</include>
+
+Restreins `fault.cause instanceof StructError` avant d’appeler `format()`, `flatten()` ou `prettify()`. Ces helpers vivent sur la cause du Struct ; ils ne sont pas copiés sur le fault. Ne fais pas parser `message` ou `String(fault)` par le flux de contrôle — le contrat, c’est `code` et un `status` revu.
+
+Les messages Struct par défaut nomment le kind reçu, jamais sa valeur : `Expected number at email, received string`. Le même message apparaît dans `prettify()` et `String(fault)`. Pour un `RES_DECODE_FAILED` causé par une `SyntaxError` JSON, le message du fault est `Response body could not be decoded` ; l’erreur de parseur d’origine reste sur `cause`. Les valeurs brutes de `StructIssue.received` et les causes du parseur restent sensibles, et un message `errorMap` personnalisé est utilisé tel quel : revois donc le texte personnalisé avant de le journaliser.
+
+## Référence
+
+| Branche                           | Test de flux de contrôle           | Champs stables utiles                | Souvent absent / sensible                 |
+| --------------------------------- | ---------------------------------- | ------------------------------------ | ----------------------------------------- |
+| Politique de statut HTTP          | `fault.code === 'HTTP_STATUS'`     | `fault.status`, `fault.data` revu    | Corps, headers, URL, `cause`              |
+| Annulation par l’appelant         | `fault.code === 'NET_ABORTED'`     | `code`                               | Raison d’annulation et stack              |
+| Timeout                           | `fault.code === 'NET_TIMEOUT'`     | `code`                               | URL de requête et cause sous-jacente      |
+| Le contrat a cassé                | `fault.code.startsWith('RES_')`    | `code`, `fault.response.status` revu | Issues de Struct, corps, valeurs d’entrée |
+| Ton propre code a levé une erreur | `fault.code.startsWith('EXT_')`    | `code`, `cause`                      | Ce que l’extension a attaché              |
+| Runtime de stream/session         | `stream.closed` / `session.closed` | `kind` et `code` terminaux           | Payloads d’événements, frames, causes     |
+
+Traite `cause`, `data`, les headers et corps de réponse, les URLs, `StructIssue.received`, les valeurs d’entrée, les messages personnalisés et les stacks comme sensibles. Les chemins des issues sont structurels et conservent les clés des records : `struct.record(...)` peut produire `Expected number at alice@example.com, received string`, donc les clés peuvent rester sensibles dans les messages par défaut, `prettify()` et `String(fault)`. Les messages Struct par défaut et `prettify()` omettent les valeurs reçues ; journaliser l’issue complète ou la cause du parseur JSON peut encore les exposer. Un résumé conservateur :
+
+<include cwd lang="typescript">
+  examples/errors/summarize-fault.ts#example
+</include>
+
+`createNetworkFault`, `createPreflightFault`, `createDecodeFault`, `createHttpStatusFault` et `createUndecodedHttpStatusFault` construisent ces valeurs d’Error natif. Les échecs de requête normaux sont toujours renvoyés dans le tuple ; ils ne sont pas jetés simplement parce qu’ils héritent du comportement d’Error natif. `ERR_ABORTED` et `ERR_TIMEOUT` sont les causes partagées que le normaliseur de transport reconnaît. Elles portent des marques non énumérables `Symbol.for('defjs.cause.aborted')` et `Symbol.for('defjs.cause.timeout')`, donc la classification d’une annulation fonctionne d’une copie de Core à l’autre sans identité d’objet. [`isAbortCause`](/fr-FR/api/core/isabortcause) et [`isTimeoutCause`](/fr-FR/api/core/istimeoutcause) exposent ces vérifications et celles des erreurs de plateforme prises en charge ; passe le `fault.cause` sous-jacent pour classer la cause d’un fault. OpenTelemetry supprime les journaux d’annulation par l’appelant d’une copie à l’autre tout en continuant de journaliser les timeouts.
+
+## Recettes liées
+
+- [GET avec un 404 déclaré](/fr-FR/recipes/get-declared-404)
+- [Annuler un appel HTTP](/fr-FR/recipes/cancel-http)

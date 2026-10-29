@@ -1,0 +1,72 @@
+---
+title: "Client configuration / Client"
+description: Configure how your application executes imported SDK operations, independently of their API definitions.
+---
+
+# Client
+
+A `Client` is the consuming application's execution configuration. Import endpoints from your SDK, choose the service address, credentials, interceptors, and transport, then pass commands to `client.execute(...)`.
+
+The SDK's definitions do not bind this instance. A browser, a server request, and a local test can use the same exported operation with different clients. All still follow the same Defjs contract and compatible Core versions. Configure each client's service address for the definitions you execute through it.
+
+The client dispatches HTTP, SSE, and WebSocket commands. Applications choose caching and retry policies and own the work they start; stream reconnection is opt-in.
+
+## Basic Setup
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)` returns overloads for each command kind.
+
+## Compose options
+
+Options apply left to right. Setters replace; `withInterceptors(...items)` appends.
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+Mixed interceptors are filtered by transport at execute time; relative order among the selected kind stays.
+
+## Execute by transport
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live (see [SSE](/docs/sse)).
+- WebSocket → `[error, session, connection]`
+
+WebSocket execute can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect`. `timeout` must be a positive safe integer in `1..2_147_483_647`.
+
+You own cleanup: abort HTTP, close SSE + `await stream.closed`, close WebSocket + `await session.closed`.
+
+## Inject a test transport
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## Scope on server vs browser
+
+On a server, create the client inside the request boundary when options or interceptor closures capture auth, cookies, users, or tenants. Client identity isn’t a security boundary by itself.
+
+## Reference
+
+| Helper                                                                                                        | Effect                                                        |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | Absolute base endpoint for all transports                     |
+| `withHeaders(HeadersInit)`                                                                                    | Static default headers for HTTP/SSE; command headers override |
+| `withTimeout(ms)`                                                                                             | Default HTTP `execute` timeout only (SSE/WS ignore it)        |
+| `withHTTPHandle(fetch)`                                                                                       | Replace Fetch for HTTP                                        |
+| `withSSEHandle(fetch)`                                                                                        | Replace Fetch for SSE                                         |
+| `withWebSocketHandle(WebSocket)`                                                                              | Replace WebSocket constructor                                 |
+| `withInterceptors(...items)`                                                                                  | Append mixed interceptors                                     |
+| `withQuerySerializer(fn)`                                                                                     | Encode an already-aliased query object into a query string    |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` for HTTP/SSE when true         |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                     |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE knobs                                                     |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket knobs                                               |
+
+## Related recipes
+
+- [Test with a local Fetch handle](/recipes/test-with-handle)
+- [Cancel an HTTP call](/recipes/cancel-http)

@@ -1,0 +1,9 @@
+Change ids used in the raw files and how they map to patches:
+  V1a -> 0002 (transport signal reuses transportController)     V1b -> 0002 (single abort listener for body reads)
+  V1c -> 0002 (declared-body decode races only Blob bodies)      V1d -> 0003 (endpoint base memo)
+  V3  -> 0004 (single object encode fast path)                    V4  -> 0005 (tag store)
+  S   -> 0006 (SSE per-event path)                                W   -> 0007 (WebSocket sync decode)
+  T1  -> 0008 (commands carry their executor)                     V5  -> 0009 (lone deadline signal)
+  M1  -> 0001 (deadline listener leak)                            V2  -> 0010 (fast null-prototype objects)
+Each pair-per-change entry compares the tree before and after that single change (A = before, B = after).
+Machine: Apple M1 Max, 32 GiB, macOS (Darwin 27). node v26.10.0 (V8 14.6), bun 1.4.2 (JSC).

@@ -1,0 +1,70 @@
+---
+title: "클라이언트 설정 / Client"
+description: SDK를 사용하는 앱이 endpoint, 인증, 전송 수단을 구성하고 실행 결과와 정리를 관리합니다.
+---
+
+# 클라이언트
+
+SDK가 export하는 정의는 API 계약과 입력 배치를 표현합니다. 사용하는 앱은 `createClient(...)`로 endpoint, 인증, 인터셉터, 플랫폼에 맞는 전송 수단을 독립적으로 구성하고, 정의에서 만든 명령을 실행합니다.
+
+`Client`는 HTTP, SSE, WebSocket 명령을 디스패치합니다. SDK 패키지를 재사용할 때도 Defjs 실행 계약을 따르며, 결과 처리와 취소, 스트림 종료는 앱이 소유합니다. Client는 캐시나 자동 재시도를 추가하지 않고 열린 스트림을 자동으로 닫지 않습니다.
+
+## 기본 사용법
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)`는 명령 종류마다 오버로드를 돌려줘요.
+
+## 옵션 조합하기
+
+옵션은 왼쪽에서 오른쪽으로 적용돼요. setter는 바꾸고, `withInterceptors(...items)`는 추가해요.
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+섞인 interceptor는 실행 시점에 전송별로 걸러지고, 선택된 kind 사이의 상대 순서는 유지돼요.
+
+## 전송별 실행
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`. `open`은 Defjs 네이티브 handle이나 동일한 live `open` 객체를 그대로 전달하는 래퍼일 때 반환된 handle의 연결에서 처음 성공한 핸드셰이크의 스냅샷이며, 커스텀 handle이나 `open`을 재정의하는 래퍼는 재연결 뒤에도 현재 공개한 `open`을 사용하고 `stream.open`은 live로 유지돼요([SSE](/ko-KR/docs/sse) 참고).
+- WebSocket → `[error, session, connection]`
+
+WebSocket 실행은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 덮어쓸 수 있어요. `timeout`은 `1..2_147_483_647` 범위의 양의 안전 정수여야 해요.
+
+정리는 호출하는 쪽이 소유해요. HTTP는 abort하고, SSE는 닫고 `await stream.closed` 하고, WebSocket은 닫고 `await session.closed` 해요.
+
+## 테스트 전송 주입하기
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## 서버 vs 브라우저 범위
+
+서버에서는 옵션이나 interceptor 클로저가 인증, 쿠키, 사용자, 테넌트를 잡을 때 요청 경계 안에서 클라이언트를 만들어요. 클라이언트 정체성 자체가 보안 경계는 아니에요.
+
+## 참고
+
+| Helper                                                                                                        | 효과                                                       |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | 모든 전송의 절대 base endpoint                             |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE의 정적 기본 헤더. 명령 헤더가 덮어써요            |
+| `withTimeout(ms)`                                                                                             | 기본 HTTP `execute` timeout만 (SSE/WS는 무시)              |
+| `withHTTPHandle(fetch)`                                                                                       | HTTP의 Fetch를 바꿔요                                      |
+| `withSSEHandle(fetch)`                                                                                        | SSE의 Fetch를 바꿔요                                       |
+| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket 생성자를 바꿔요                                  |
+| `withInterceptors(...items)`                                                                                  | 섞인 interceptor를 추가해요                                |
+| `withQuerySerializer(fn)`                                                                                     | 이미 alias가 적용된 query 객체를 query 문자열로 인코딩해요 |
+| `withCredentials(boolean)`                                                                                    | true이면 HTTP/SSE에서 Fetch `credentials: 'include'`       |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF 쿠키 → 헤더                                      |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 설정                                                   |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 설정                                             |
+
+## 관련 레시피
+
+- [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)
+- [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)

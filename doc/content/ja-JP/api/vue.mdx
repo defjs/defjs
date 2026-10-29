@@ -1,0 +1,36 @@
+---
+title: "@defjs/vue"
+description: Vue プラグイン、既定またはカスタムの injection key、injectClient です。
+---
+
+# Vue
+
+既存の `@defjs/core` クライアントを Vue アプリに渡します。このパッケージはクライアントを作らず、キャッシュせず、破棄しません。Vue 3 以降が必要です。
+
+[Vue ガイド](/ja-JP/docs/integrations/vue) を見てください。
+
+## createClientPlugin()
+
+<ApiSignature name="createClientPlugin" />
+
+- **client** — `createClient` で作ったクライアントインスタンスです。
+- **戻り値** `app.use(...)` 用の Vue プラグインです。インストールすると `app.provide(HTTP_CLIENT, client)` が呼ばれます。
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+<ApiSignature name="injectClient" />
+
+`injectClient(key)` はそのキーの最も近い provider を読み、省略または `undefined` なら `HTTP_CLIENT` を使います。同期的な `setup()` や `app.runWithContext()`（Vue 3.3+）など、有効な Vue の注入コンテキストで呼んでください。後者は同期的なアプリレベルのコンテキストのみで、サブツリーの上書きを引き継がず、通常の `await` もまたぎません。`<script setup>` のトップレベル `await` 後にコンパイラが復元したコンテキストは引き続き有効です。
+
+カスタムの `InjectionKey<Client>` は `app.provide(key, client)` または祖先の `provide(key, client)` で設定します。提供側と取得側で同じ `Symbol` オブジェクトを共有してください。説明が同じでも別のキーです。`createClientPlugin(client)` は引き続きクライアントだけを受け取り、`HTTP_CLIENT` のみを提供します。
+
+- **戻り値** 選択したキーで提供されたクライアントそのものです。
+- **例外** 有効な注入コンテキストがない場合や、選択したキーのクライアントがない場合に `Error` を throw します。カスタムキーが見つからなくても `HTTP_CLIENT` にはフォールバックしません。プラグインのインストールだけでは注入コンテキストはできません。
+
+## HTTP_CLIENT
+
+<ApiSignature name="HTTP_CLIENT" />
+
+Vue の injection key です。`inject(HTTP_CLIENT)` より `injectClient()` を使ってください。サブツリーの上書きは `provide(HTTP_CLIENT, childClient)` です。

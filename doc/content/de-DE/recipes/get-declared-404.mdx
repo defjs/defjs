@@ -1,0 +1,22 @@
+---
+title: "Deklarierte 404 behandeln"
+description: Ein GET ausführen und zwischen typisiertem 200 und deklariertem 404 branchen.
+---
+
+# GET mit deklariertem 404
+
+Deklariere sowohl Success- als auch 404-Bodies. Branche auf `error.code` und `error.status` — du bekommst typisiertes `error.data` für den deklarierten Miss.
+
+Details siehe [HTTP](/de-DE/docs/http) und [Fehler](/de-DE/docs/errors).
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` ist ein Platzhalter. Bei einem Server, der `GET /users/7` mit `200` und `{ "id": 7, "name": "Ada" }` beantwortet, gibt das Snippet aus:
+
+```txt
+Loaded Ada from 200
+```
+
+Ein Non-2xx-Status ist `HTTP_STATUS`. `error` zu deklarieren gibt dessen Body einen Typ; lässt du `error` weg, bleibt `error.data` `undefined` und der Body ungelesen. Lässt sich ein deklarierter `error`-Body nicht lesen (falscher Media-Type, ungültiges JSON, falsche Shape), ist das Ergebnis stattdessen ein `RES_*`-Fault. Ein einzelner `error`-Struct deckt jeden Non-2xx-Status ab — nutze also `struct.or(...)` oder eine Discriminated Union, wenn die Shapes abweichen.

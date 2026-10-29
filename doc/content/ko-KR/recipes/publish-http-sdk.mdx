@@ -1,0 +1,129 @@
+---
+title: "SDK 작성과 배포"
+description: API 정의와 타입 선언을 npm 패키지로 배포하고, 사용하는 앱이 자신의 Client를 구성하게 합니다.
+---
+
+# SDK 작성과 배포 [#execute를-숨기지-않고-http-sdk-공개하기]
+
+SDK는 팀이 제공하는 API를 패키지로 묶습니다. Defjs에서는 엔드포인트 정의와 데이터 계약을 export하고, 사용하는 앱이 Client 설정과 실행 시점을 결정합니다. 이 예제는 HTTP를 사용하지만 SSE와 WebSocket 정의도 같은 책임 분담으로 패키지화할 수 있습니다.
+
+## 1. SDK 작업 정의하기
+
+SDK 프로젝트에 `src/users.ts`를 만듭니다. path, 입력 배치, 응답, 서비스 오류 계약을 이곳에 둡니다. 작업을 정의하는 데 Client 인스턴스나 배포 주소, 현재 인증 정보를 넣을 필요는 없습니다.
+
+<include cwd meta='title="src/users.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+`src/index.ts`에서 공개합니다.
+
+```ts
+export { getUser } from "./users.js";
+```
+
+`.js` 확장자는 컴파일된 ESM 패키지 안의 경로입니다. TypeScript는 빌드할 때 이 경로를 `users.ts`로 해석합니다. 작업이 늘어나면 모듈을 추가하고 해당 엔드포인트를 같은 진입점에서 다시 export합니다.
+
+## 2. JavaScript와 타입 선언 패키지화하기
+
+다음 `package.json`을 사용하되, 예제 패키지 이름은 자신이 소유한 scope로 바꿉니다.
+
+```json
+{
+  "name": "@company/users-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.4.0",
+    "typescript": "^7.0.2"
+  }
+}
+```
+
+Core는 앱과 공유하는 외부 런타임 의존성으로 남습니다. peer 범위는 SDK가 지원하는 Core 릴리스를 나타내고, 개발 의존성은 해당 범위의 빌드와 테스트에 사용합니다. 이 예제는 현재 `0.4.x` 계약에 맞춥니다. 타입 선언과 런타임 동작 모두 Core에 의존하므로, 배포 전에 지원 범위를 정하고 검증하세요.
+
+`tsconfig.json`을 추가합니다.
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+
+이 `lib` 설정은 타입 선언을 제공하며 런타임 polyfill을 제공하지는 않습니다. 앱에는 선택한 전송 수단이 사용하는 Web API가 필요합니다.
+
+빌드한 뒤 패키지를 확인합니다.
+
+```sh
+npm install
+npm run build
+npm pack --dry-run
+npm pack
+```
+
+tarball에 `dist/index.js`, `dist/index.d.ts`와 이들이 참조하는 작업 모듈이 들어 있는지 확인합니다. 별도 앱에 tarball을 설치해 타입과 실행을 모두 검증한 뒤 배포하세요. SDK README에는 서비스 API, 호환되는 Core 버전, 필요한 인증, 선택적인 기본 설정을 문서화합니다.
+
+## 3. 사용하는 앱에서 실행하기
+
+오프라인으로 실행할 수 있는 로컬 예제는 정의를 `users-sdk.ts`에 저장하고 `app.ts`와 같은 디렉터리에 둡니다. 이 import는 Client를 만들지 않습니다. 앱이 로컬 Fetch 핸들을 구성하고 import한 작업을 실행합니다.
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada
+```
+
+패키지로 배포한 SDK는 호환되는 Core와 함께 설치합니다.
+
+```sh
+npm install @company/users-sdk @defjs/core@^0.4.0
+```
+
+예제의 상대 import를 다음과 같이 바꿉니다.
+
+```ts
+import { getUser } from "@company/users-sdk";
+```
+
+서비스 주소와 인증은 앱의 Client에 설정합니다. 로컬 테스트에서는 `withHTTPHandle(...)`을 유지하고, 플랫폼 Fetch를 사용하려면 제거합니다. 다른 앱도 같은 엔드포인트를 import하고 SDK 정의를 바꾸지 않은 채 다른 Client 설정으로 실행할 수 있습니다.
+
+## 4. 검증하고 배포하기
+
+[클라이언트 로컬 테스트](/ko-KR/recipes/test-with-handle)로 export한 정의, 입력 배치, 응답 검증, 선언된 오류를 확인합니다. 서비스 주소와 인증 정보가 다른 두 Client로 같은 엔드포인트를 검증하세요. 호출 지점에서 타입이 있는 `HTTP_STATUS` 처리를 유지하고, SDK가 제공하는 전송 수단에 대해 취소와 스트림 정리도 테스트합니다.
+
+검증을 마쳤으면 SDK 디렉터리에서 자신의 npm 계정으로 배포합니다.
+
+```sh
+npm publish --access public
+```
+
+이 명령은 공개 패키지를 배포합니다. 비공개 SDK에는 조직의 레지스트리와 접근 정책을 적용하세요. Defjs가 패키지를 생성하거나 배포해 주지는 않습니다.
+
+Client 팩토리와 편의 메서드는 필요할 때 추가할 수 있습니다. 호출자의 설정을 받고 엔드포인트 직접 export를 유지하면서 서비스 기본값이나 도메인 동작을 제공할 수 있습니다. 추가하는 오류 매핑이나 수명 정책은 문서화하세요. 재사용 가능한 SDK를 만들기 위한 필수 요소는 아닙니다.
+
+기반 계약은 [명령](/ko-KR/docs/commands), [클라이언트](/ko-KR/docs/client), [설계 결정](/ko-KR/docs/design-decisions)을 참고하세요.

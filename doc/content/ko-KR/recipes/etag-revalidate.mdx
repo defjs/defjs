@@ -1,0 +1,20 @@
+---
+title: "ETag 조건부 요청"
+description: 304는 HTTP status fault로 두고, 캐시 Map은 execute 밖에 둬요.
+---
+
+# ETag와 304로 재검증하기
+
+`ok`는 2xx를 뜻해서 `304`는 `HTTP_STATUS` fault로 도착해요. 리다이렉트 status도 오류 body가 아니니 `error`는 선언하지 않은 채로 두세요. body는 읽히지 않고, fault가 status를 가져요. 캐시된 상품은 직접 돌려주세요.
+
+[HTTP](/ko-KR/docs/http)를 보세요.
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+Core 안에서 `304`를 가짜 `200`으로 다시 쓰지 마세요. 캐시 소유권은 `execute` 주변의 애플리케이션 코드에 남아요.

@@ -1,0 +1,20 @@
+---
+title: Plugins
+description: Paquetes opcionales que la aplicación conecta a su propio cliente Defjs.
+---
+
+# Plugins
+
+Los plugins son paquetes opcionales que la aplicación consumidora instala en su propio cliente Defjs. `@defjs/core` no los importa, y las definiciones del SDK tampoco. La aplicación es dueña del cliente, del endpoint, de las credenciales y de qué plugins instalar.
+
+Hay dos clases. Los **plugins de framework** entregan un `Client` existente al árbol del framework. Un **plugin middleware** es la forma de plugin de una cadena de interceptores: añade interceptores al cliente de la aplicación. Consulta [Interceptores](/es-ES/docs/interceptors).
+
+| Plugin                                                                                     | Paquete                       | Qué añade                                                                                           | Qué no hace                                                                                         |
+| ------------------------------------------------------------------------------------------ | ----------------------------- | --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| [React](/es-ES/docs/integrations/react) · framework                                        | `@defjs/react`                | `ClientProvider` y `useClient()` para un cliente existente                                          | No crea, no cachea, no reintenta ni libera el cliente. No es una biblioteca de query ni de estado   |
+| [Vue](/es-ES/docs/integrations/vue) · framework                                            | `@defjs/vue`                  | Un plugin de Vue, `HTTP_CLIENT` e `injectClient()`                                                  | No crea, no cachea ni reintenta. No cierra transportes en el unmount. No es una biblioteca de query |
+| [OpenTelemetry en el servidor](/es-ES/docs/integrations/opentelemetry-server) · middleware | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`, una opción de cliente que añade interceptores HTTP, SSE y WebSocket | No inicializa un SDK de OpenTelemetry ni instrumenta peticiones entrantes del servidor              |
+
+React y Vue entregan un `Client` existente al árbol del framework. La aplicación crea ese cliente con `createClient` de `@defjs/core`. El plugin de React lo proporciona por Context. El plugin de Vue lo proporciona con `app.use(createClientPlugin(client))`. Ninguno de los dos paquetes inicia una petición.
+
+El plugin middleware de OpenTelemetry en el servidor es una `ClientOption`. Pasa `withOpenTelemetryServer(...)` a `createClient`. Añade un interceptor por transporte habilitado, en el orden HTTP, SSE, WebSocket. Consulta [Interceptores](/es-ES/docs/interceptors). El paquete no inicializa el SDK de OpenTelemetry.

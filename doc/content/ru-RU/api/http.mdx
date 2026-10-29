@@ -1,0 +1,135 @@
+---
+title: HTTP
+description: defineRequest, опции execute и типы HTTP request/response.
+---
+
+# HTTP
+
+Объяви типизированный запрос, собери команду из input, выполни.
+
+## defineRequest()
+
+<ApiSignature name="defineRequest" />
+
+- **definition** — `method`, `path`, необязательный `input` struct, необязательные `output` и `error` structs, необязательный `operation`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`RequestDefinition`](/ru-RU/api/core/requestdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
+- **Возвращает** эндпоинт. Вызови его с input — получишь `HttpCommand`.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` — один struct для тела 2xx; `error` — один struct для каждого non-2xx тела. Ни то ни другое не ключуется по status. Пропустить одну сторону значит, что это тело не читают — см. [Объявление — это утверждение](/ru-RU/docs/design-decisions#объявление--это-утверждение).
+
+## executeHttpCommand()
+
+<ApiSignature name="executeHttpCommand" />
+
+Низкоуровневый вход, которым пользуется `client.execute`. Прикладной код должен звать `client.execute(command, options)`.
+
+- **Возвращает** promise, который разрешается в форму кортежа, описанную в [`HttpAwaitResult`](/ru-RU/api/core/httpawaitresult-type).
+
+Non-2xx статус — это `HTTP_STATUS`, если struct `error` не объявлен или объявленное тело `error` декодируется. У fault поле `data` — декодированное тело `error`, если оно было объявлено, иначе `undefined`. Если объявленное тело `error` не удаётся прочитать (неверный media type, невалидный JSON) или оно не соответствует своему struct, fault вместо этого — `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED` или `RES_STRUCT_MISMATCH`, а статус ответа по-прежнему указан в его метаданных. При провале третий слот кортежа — `undefined`; метаданные ответа несёт fault.
+
+## fetchHandler()
+
+<ApiSignature name="fetchHandler" />
+
+HTTP-транспорт по умолчанию. `fetchImpl` по умолчанию — глобальный `fetch`, получаемый в момент отправки; другой подставляет `withHTTPHandle`. Неизменённая платформенная реализация Fetch получает `(url, init)`, а заменённая глобальная функция и пользовательский обработчик — `Request`. Promise отклоняется, если ответ не дошёл до клиента или объявленное тело не удалось прочитать; синтетический ответ не создаётся.
+
+## makeResponse()
+
+<ApiSignature name="makeResponse" />
+
+Собери `HttpResponse` без сетевого вызова (interceptors, тесты). Status по умолчанию — `0`. `ok` истинен для 2xx. Возвращённое значение проходит ту же проверку media type и тот же объявленный struct, что и ответ с провода; доверенного short-circuit нет.
+
+## Опции execute
+
+## HttpExecuteOptions
+
+<ApiSignature name="HttpExecuteOptions" />
+
+`HttpExecuteOptions` — это [`UseRequestConfig`](/ru-RU/api/core/userequestconfig-type) плюс `signal`. `abort` и `timeout` взаимоисключающие: тип отвергает оба сразу, а если передать оба в рантайме, вызов завершится с `REQ_OPTIONS_INVALID`. `signal` сочетается с любым из них; это **не** алиас `abort`. Допустимые формы: `{ signal }`, `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`. `{ abort, timeout }` невалиден. `timeout` — положительное safe integer в `1..2_147_483_647`. Если в вызове `timeout` опущен, действует значение по умолчанию из `withTimeout` клиента (только HTTP); `abort` и `signal` сочетаются с этим значением.
+
+## Типы
+
+### RequestDefinition
+
+`method`, `path`, необязательные `input`, `output`, `error`, `operation` и `builder`. `responseType` нет: kind struct выбирает, как читать объявленное тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+
+### HttpAwaitResult
+
+<ApiSignature name="HttpAwaitResult" />
+
+При успехе третий слот несёт `body`, только если был объявлен `output`. При провале он `undefined` — fault уже держит те метаданные ответа, что были.
+
+### HttpRequest
+
+Нормализованный исходящий запрос: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `timeout`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` и `queryParams`. К моменту, когда interceptors его видят, `body` уже имеет wire-значение — для JSON это строка с JSON-текстом, — поэтому HMAC и дайджесты подписывай по нему, а не по input struct. Interceptors видят `queryParams` как `new URLSearchParams(queryString)`. Builder, который возвращает `URLSearchParams`, протаскивает этот же экземпляр. `responseType` и `errorResponseType` только для чтения: они выводятся из kind struct'ов `output` и `error` эндпоинта, и их нельзя менять.
+
+### HttpMeta
+
+<ApiSignature name="HttpMeta" />
+
+Метаданные ответа, доступные, когда response доехал до клиента. `body` тут **нет**: тело существует, только когда объявленный struct его декодировал.
+
+### DecodedResponse
+
+<ApiSignature name="DecodedResponse" />
+
+Ответ, чьё тело декодировалось против объявленного struct. Держать этот тип — доказательство, что декодирование случилось; поэтому провал decode сообщает один `HttpMeta`.
+
+### HttpResponse
+
+<ApiSignature name="HttpResponse" />
+
+`body` равен `undefined`, если у ответа не было тела; JSON `null` остаётся `null`. Тип брендирован, поэтому создавай его через `makeResponse`, а не литералом объекта. Wire-форма, которую производят транспорты и видят interceptors: `body` — текст или уже распарсенный JSON, не декодированное значение. Для JSON-представления строка — это JSON-строка как корень и повторно не парсится; байты и blob'ы сырые и парсятся один раз. До вызывающего доходит `DecodedResponse`.
+
+### HttpProgressEvent
+
+### HttpProgressFn
+
+`loaded`, `total`, `lengthComputable`. Колбэки могут быть асинхронными. Если `onDownloadProgress` или `onUploadProgress` выбрасывает исключение, вызов завершается с ошибкой `EXT_OBSERVER_FAILED`, а выброшенное значение передаётся в `cause`; отмена и `timeout` по-прежнему возвращают `NET_ABORTED` / `NET_TIMEOUT`. Прогресс выгрузки сообщается только в средах выполнения, поддерживающих потоковую отправку тела запроса (Bun, Node); в браузерах тела типа `Blob` / `File`, `ArrayBuffer` и `FormData` отправляются без изменений, и `onUploadProgress` не вызывается.
+
+В серверных средах FormData использует сериализованный поток без буферизации всего тела в Blob и сохраняет фактический разделитель multipart. Полный размер неизвестен, если он не задан явно корректным `Content-Length`. Явно заданные типы содержимого сохраняются при преобразовании загрузки, но FormData должен использовать разделитель своей сериализации. `loaded` считает байты потока, а не подтверждённые сервером байты. При скачивании с `Content-Encoding`, отличным от `identity`, сообщаются `total: 0` и `lengthComputable: false`; байты потока уже могут быть распакованы.
+
+См. [гайд HTTP](/ru-RU/docs/http) и [Команды](/ru-RU/docs/commands).
+
+## RequestEndpoint
+
+То, что возвращает `defineRequest`. Вызови с input — получишь `HttpCommand`.
+
+## BuilderInput
+
+Распарсенный input эндпоинта, который видит `builder`. Узлы-объекты несут struct, который их произвёл, так что кодирование алиаса, `Date` и `bigint` следует за значением.
+
+## HttpRequestShape
+
+<ApiSignature name="HttpRequestShape" />
+
+Все четыре поля необязательны. `query` — это `URLSearchParams` или record; вложенному объекту в рантайме нужен `withQuerySerializer`. `headers` — это `HeadersInit` или record из скаляров либо массивов скаляров. `path` задаёт по одному скаляру на сегмент `:name`.
+
+`body` для `GET` и `HEAD` равен `never`. Иначе это проводное значение (`string`, `Blob`, `ArrayBuffer`, typed array или `DataView`, `FormData`, `URLSearchParams` или `ReadableStream<Uint8Array>`) либо JSON-данные (`number`, `boolean`, `bigint`, `Date`, `null`, массив или объект со строковыми ключами).
+
+## HttpCommand
+
+Непрозрачная команда от request builder. Отдай в `client.execute`.
+
+## UseRequestConfig
+
+Необязательные колбэки `onDownloadProgress` и `onUploadProgress`, плюс `abort` или `timeout` (никогда оба). `HttpExecuteOptions` добавляет `signal`.
+
+## RequestSuccessData
+
+Выведенное success-тело из объявленного struct `output`, или `undefined`, если его нет.
+
+## RequestErrorData
+
+Выведенное error-тело из объявленного struct `error`, или `undefined`, если его нет.
+
+## HttpResponseType
+
+`'arraybuffer' | 'blob' | 'json' | 'text'`
+
+Выбирается по kind объявленного struct (`string` → `text`, `blob` / `file` → `blob`, `arrayBuffer` → `arraybuffer`, всё остальное → `json`). Это не поле `defineRequest`.
+
+## MakeResponseOptions
+
+Поля для `makeResponse`: `status`, `statusText`, `url`, `headers`, `body`, `request`.

@@ -1,0 +1,126 @@
+---
+title: WebSocket
+description: defineWebSocket, session и опции execute.
+---
+
+# WebSocket
+
+Объяви сокет, выполни, шли и принимай типизированные сообщения, потом закрой.
+
+## defineWebSocket()
+
+<ApiSignature name="defineWebSocket" />
+
+- **definition** — `path`, один struct `incoming` и обязательный `maxIncomingQueueSize` (положительное целое); необязательные structs `outgoing` и `input`, `operation`, статические `protocols` и неотрицательный `maxOutgoingQueueSize`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`WebSocketDefinition`](/ru-RU/api/core/websocketdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
+- **Возвращает** эндпоинт. Вызови с input — получишь `WebSocketCommand`.
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+## executeWebSocketCommand()
+
+<ApiSignature name="executeWebSocketCommand" />
+
+Низкоуровневый вход для `client.execute`. В прикладном коде бери клиент.
+
+- **Возвращает** `[null, session, connection]` или `[error, undefined, connection?]`.
+
+WebSocket execute может переопределить `beforeConnect`, `heartbeat`, `protocols` и `reconnect` для одного вызова; каждое значение заменяет значение клиента. Приоритет protocols: execute, затем `withWebSocketProtocols`, затем `protocols` определения.
+
+## WebSocketSession
+
+<ApiSignature name="WebSocketSession" />
+
+Для освобождения принадлежащих области видимости ресурсов предпочитай `await using ownedSession = session`. Ручные `session.close()` и `await session.closed` остаются доступны.
+
+```ts
+async function consume(
+  session: WebSocketSession<unknown, never>,
+): Promise<void> {
+  await using ownedSession = session;
+  for await (const message of ownedSession.receive) console.log(message);
+}
+```
+
+`closed` сообщает окончательное логическое состояние. Асинхронное освобождение запрашивает нативное закрытие и ждёт освобождения ресурсов, которыми управляет Defjs, но при отсутствии события `close` ограничивает ожидание одной секундой и может завершиться отклонением Promise с `DOMException` с именем `TimeoutError`. Оно не доказывает, что физическое TCP-соединение закрылось.
+
+### WebSocketState
+
+`'idle' | 'connecting' | 'open' | 'closing' | 'closed' | 'reconnecting' | 'aborted' | 'error'`
+
+### WebSocketConnectionInfo
+
+`generation` (растёт на reconnect) и, когда они известны, `url`, `protocol` и `extensions`.
+
+### WebSocketCloseInfo
+
+<ApiSignature name="WebSocketCloseInfo" />
+
+`kind` — это `closed`, `aborted` или `error`. `cause` отсутствует у `closed`, необязателен у `aborted` и обязателен у `error`. `code`, `reason` и `wasClean` могут быть у каждого варианта. Ручной `session.close()` заполняет `code` и `reason` у `{ kind: "closed" }`, если событие close их не несёт.
+
+## Опции execute
+
+## WebSocketExecuteOptions
+
+<ApiSignature name="WebSocketExecuteOptions" />
+
+`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `abort` или `timeout` (никогда оба), плюс `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`.
+
+`abort` и `timeout` взаимоисключающи: тип отвергает оба сразу, а если передать оба в рантайме, вызов завершится fault’ом `REQ_OPTIONS_INVALID`. `signal` сочетается с любым из них. `timeout` — дедлайн запуска соединения: последующий reconnect его не взводит заново, а `withTimeout` к WebSocket не применяется.
+
+Когда `reconnect` задан, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
+
+## Сообщения
+
+`incoming` — один struct. Кадры text, `ArrayBuffer`, typed-array и `Blob` читаются как UTF-8, парсятся как JSON, потом проверяются этим struct. Кадр, который не прошёл JSON parse или struct, сообщается в `session.onRuntimeError` и в очередь не кладётся. Клиентской опции для невалидного кадра нет.
+
+`outgoing` — один struct. `session.send` принимает `StructInput` этого struct, кодирует алиасы, затем вызывает `JSON.stringify`. Значения, которые после кодирования невозможно без искажений представить в JSON, вызывают `TypeError` до отправки или попадания в очередь переподключения: в том числе неконечные числа, функции, символы, `Map`, `Set`, потоки и экземпляры классов без JSON-представления. Вложенные значения проходят ту же проверку, что и HTTP-тела JSON. Heartbeat также использует эту проверку; ошибка сериализации heartbeat завершает сессию. Несколько видов сообщений — это `struct.discriminatedUnion`.
+
+```ts
+session.send({ type: "message", text: "Hello" });
+```
+
+См. [гайд WebSocket](/ru-RU/docs/web-socket) и [Открыть WebSocket-сессию](/ru-RU/recipes/websocket-session).
+
+## WebSocketDefinition
+
+`path`, `incoming`, обязательный `maxIncomingQueueSize`, необязательные `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`. Builder может вернуть только `path` и `query`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+
+## WebSocketEndpoint
+
+То, что возвращает `defineWebSocket`. Вызови с input — получишь `WebSocketCommand`.
+
+## WebSocketRequestShape
+
+Только `path` и `query`. `headers` и `body` — `never`.
+
+## WebSocketCommand
+
+Непрозрачная WebSocket-команда. Отдай в `client.execute`.
+
+## UseWebSocketConfig
+
+Heartbeat, reconnect, `beforeConnect`, protocols плюс отмена. `WebSocketExecuteOptions` добавляет `signal`.
+
+## SocketAwaitResult
+
+`[null, session, connection]` или `[error, undefined, connection?]`.
+
+## ManualSocketCloseReason
+
+Причина, записанная при закрытии сессии через `session.close()`.
+
+## WebSocketHeartbeatConfig
+
+`intervalMs`, необязательные `message`, `isAck`, `timeoutMs`.
+
+## WebSocketIncomingData
+
+Декодированный входящий кадр: `Infer` struct `incoming`.
+
+## WebSocketOutgoingData
+
+Значение, которое принимает `session.send`: `StructInput` struct `outgoing`, или `never`, если он не объявлен.
+
+## SocketLifecycleOutcome
+
+Итог одной попытки подключения (`closeInfo`, `connection`, `cause`, `opened`), который использует логика reconnect. Это не окончательный результат сессии; для него см. `WebSocketCloseInfo`.

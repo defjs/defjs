@@ -1,2 +1,23 @@
-export type { InterceptorFn } from './interceptor'
-export { type BasicAuthInterceptorOptions, basicAuthInterceptor } from './authorization/basic_auth_interceptor'
+export type { BasicAuthInterceptorOptions } from "./basic_auth";
+export {
+  basicAuthHttpInterceptor,
+  basicAuthSSEInterceptor,
+} from "./basic_auth";
+export type {
+  HttpInterceptor,
+  HttpInterceptorNext,
+  Interceptor,
+  InterceptorFn,
+  SSEHandler,
+  SSEInterceptor,
+  SSEInterceptorFn,
+  WebSocketHandler,
+  WebSocketInterceptor,
+  WebSocketInterceptorFn,
+  WebSocketSessionLike,
+} from "./interceptor";
+export {
+  createHttpInterceptor,
+  createSSEInterceptor,
+  createWebSocketInterceptor,
+} from "./interceptor";

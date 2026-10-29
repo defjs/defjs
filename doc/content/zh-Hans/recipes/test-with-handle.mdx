@@ -1,0 +1,20 @@
+---
+title: "本地 HTTP 测试"
+description: 用 withHTTPHandle 只换这一个 Client 的 Fetch，command 保持不变。
+---
+
+# 用本地 Fetch handle 做测试
+
+`withHTTPHandle(...)` 只替换该 Client 的 Fetch。URL 拼装、interceptor、状态分派、Struct 解码都还在——不用 DNS、TLS、真服务。
+
+细节见 [Client](/zh-Hans/docs/client)。
+
+<include cwd meta="get-user.test.ts">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+```txt
+Ada 200
+```
+
+生产里用同一个 `getUser` command 对着真实 `withEndpoint(...)` Client——变的只是 handle。

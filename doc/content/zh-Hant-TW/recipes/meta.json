@@ -1,0 +1,5 @@
+{
+  "title": "操作範例",
+  "root": true,
+  "pages": ["index", "..."]
+}

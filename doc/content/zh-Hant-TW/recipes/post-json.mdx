@@ -1,0 +1,20 @@
+---
+title: "傳送 JSON"
+description: 送出型別化的 JSON body，並解碼已宣告的 201。
+---
+
+# POST JSON
+
+把型別化的 body 交給 builder。邏輯欄位名留在 TypeScript；struct 上的 wire alias 會變成 JSON keys。物件 body 是 `application/json`。
+
+細節見 [Commands](/zh-Hant-TW/docs/commands) 與 [HTTP](/zh-Hant-TW/docs/http)。
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com` 是 placeholder。若 server 回應 `201` 與 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`，這段 snippet 會印出：
+
+```txt
+Created Ada → 201
+```

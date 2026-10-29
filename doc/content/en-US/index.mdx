@@ -1,0 +1,88 @@
+---
+title: Defjs
+description: Design and publish TypeScript SDKs with reusable API definitions and application-owned clients.
+---
+
+# Defjs
+
+**Designed for better SDKs.**
+
+Defjs helps teams turn their APIs into reusable TypeScript SDKs. `def` stands for `define`: describe the operations your service offers, export them from a module or npm package, and let each application configure its own client to execute them.
+
+## Define the SDK, configure the application
+
+| SDK author                                                       | SDK consumer                                                         |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Define operations, input, request mapping, responses, and errors | Choose the service address, credentials, interceptors, and transport |
+| Export typed HTTP, SSE, and WebSocket endpoints                  | Import those endpoints and execute commands with a Defjs client      |
+| Maintain and publish the API contract                            | Handle results and own cancellation, streams, and sessions           |
+
+An SDK definition does not capture an application client. The same exported endpoint can serve a browser application, a server, or a local test with different client configurations. Both sides still use the Defjs execution contract and compatible Core versions.
+
+The SDK exports an operation:
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+The application imports it and owns execution:
+
+<include cwd meta="app.ts">
+  examples/home/app.ts#example
+</include>
+
+Calling `getHealth()` creates a command. The network request starts at `client.execute(...)`. When you publish the definition, consumers import it from your SDK package instead of the local file.
+
+## Build your SDK
+
+1. [Define and run your first operation](/docs/start) in separate SDK and application files.
+2. Describe the [data contracts](/docs/struct) and [API definitions](/docs/commands) your SDK exports.
+3. [Test and publish an SDK package](/recipes/publish-http-sdk) with JavaScript, declarations, and a compatible Core dependency.
+4. Configure the consuming application's [Client](/docs/client), then add framework or observability integration where needed.
+
+The [design decisions](/docs/design-decisions) explain why API definitions and execution have separate owners. You can use this same structure inside one application before publishing a package.
+
+## Pick a transport
+
+| You need                           | Start with                    | Successful result                                                        |
+| ---------------------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| Request + status-specific response | [HTTP](/docs/http)            | Decoded data + `DecodedResponse` (`HttpMeta` when no output is declared) |
+| Long-lived server event feed       | [SSE](/docs/sse)              | One stream + startup `open` snapshot                                     |
+| Bidirectional session              | [WebSocket](/docs/web-socket) | One session + startup `connection` snapshot                              |
+
+All three transports follow the same sequence: define an endpoint, create a command with caller input, then execute it with the application's client.
+
+## Pick a package
+
+| Package                       | When                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `@defjs/core`                 | Define SDK operations and contracts; create clients to execute HTTP, SSE, and WebSocket commands       |
+| `@defjs/react`                | `ClientProvider` / `useClient` — see [React](/docs/integrations/react)                                 |
+| `@defjs/vue`                  | Plugin + `injectClient` — see [Vue](/docs/integrations/vue)                                            |
+| `@defjs/opentelemetry-server` | Outbound spans, metrics and logs — see [OpenTelemetry Server](/docs/integrations/opentelemetry-server) |
+
+## Result shapes
+
+All three transports return an error-first three-item tuple. Positions match; meanings don’t:
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+On failure the second item is `undefined`. For HTTP the third item is `undefined` too, because the fault carries the response metadata. For SSE and WebSocket the third item is the startup snapshot when one was captured before the failure. See [Errors](/docs/errors).
+
+## Ownership in one breath
+
+Abort HTTP when it’s stale. Close SSE and `await stream.closed`. Close WebSocket and `await session.closed`. On a server, create the client inside the request boundary when options capture cookies, auth, or tenant data. Redact URLs, headers, and bodies before you log them.
+
+Defjs provides definitions, validation, and execution. Applications choose caching and retry policies; stream reconnection is opt-in. Handwritten SDK packages are supported today. CLI tooling and OpenAPI/SDK generation remain planned.
+
+## Related recipes
+
+- [Build and publish an SDK](/recipes/publish-http-sdk)
+- [GET with a declared 404](/recipes/get-declared-404)
+- [POST JSON](/recipes/post-json)
+- [Cancel an HTTP call](/recipes/cancel-http)
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Open a WebSocket session](/recipes/websocket-session)
+- [Test with a local Fetch handle](/recipes/test-with-handle)
