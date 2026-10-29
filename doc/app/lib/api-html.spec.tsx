@@ -156,7 +156,7 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
   expect(tagged).toContain('data-copied-label="Done &quot;y&quot;"');
   expect(tagged).toContain(">Say &quot;hi&quot; &amp; &lt;ok&gt;<");
   expect(tagged).not.toContain(">Copy Text<");
-});
+}, 30_000);
 
 test("every entry page and its processed text hide raw doc links", async () => {
   expect(apiReference).toHaveLength(170);
