@@ -35,20 +35,6 @@ export function mapOutsideFences(
     })
     .join("\n");
 }
-/** Heads a page with `# title (url)`, reusing the body's own H1 when it has one instead of starting with two. */
-export function titledMarkdown(
-  title: string,
-  url: string,
-  body: string,
-): string {
-  let titled = false;
-  const text = mapOutsideFences(body, (line) => {
-    if (titled || !line.startsWith("# ")) return line;
-    titled = true;
-    return `${line} (${url})`;
-  });
-  return titled ? text : `# ${title} (${url})\n\n${text}`;
-}
 export function readableMarkdown(text: string, locale: string): string {
   const prefix = localePrefix(locale);
   return mapOutsideFences(text, (line) => {

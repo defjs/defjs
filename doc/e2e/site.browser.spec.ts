@@ -84,23 +84,30 @@ test("accepts the built static site, locale routing and reading interactions", a
     "/llms.txt",
     "/llms-full.txt",
     "/llms.mdx/docs/start/content.md",
+    "/llms.mdx/content.md",
+    "/llms.mdx/api/core/definerequest/content.md",
     "/sitemap.xml",
     "/logo.jpg",
   ]) {
     const response = await page.request.get(site.url(resource));
     expect(await response.status()).toBe(200);
-    expect((await response.text()).length).toBeGreaterThan(0);
+    const body = await response.text();
+    expect(body.length).toBeGreaterThan(0);
+    if (resource.startsWith("/llms")) {
+      expect(body).not.toContain("<!-- defjs-best-practice -->");
+      expect(body).not.toContain("Defjs best practice for generated examples:");
+    }
   }
   const llmsIndex = await (
     await page.request.get(site.url("/llms.txt"))
   ).text();
-  const markdownURLs = [...llmsIndex.matchAll(/\]\((https?:\/\/[^)]+)\)/g)].map(
-    (match) => new URL(match[1] ?? ""),
+  expect(llmsIndex).toContain("](/docs/start)");
+  const pageURLs = [...llmsIndex.matchAll(/\]\(([^)]+)\)/g)].map(
+    (match) => new URL(match[1] ?? "", siteUrl),
   );
-  expect(markdownURLs.length).toBeGreaterThan(0);
-  for (const url of markdownURLs) {
+  expect(pageURLs.length).toBeGreaterThan(0);
+  for (const url of pageURLs) {
     expect(url.origin).toBe(new URL(siteUrl).origin);
-    expect(url.pathname.startsWith("/llms.mdx/")).toBe(true);
     const response = await page.request.get(site.url(url.pathname));
     expect(await response.status()).toBe(200);
     expect((await response.text()).length).toBeGreaterThan(0);

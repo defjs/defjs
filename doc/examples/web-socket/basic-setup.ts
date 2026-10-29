@@ -20,10 +20,13 @@ const room = defineWebSocket({
   }),
 });
 
-const [error, session, startupConnection] = await client.execute(room());
-if (error) {
-  console.error(error.code, startupConnection?.generation);
-} else {
+async function main() {
+  const command = room();
+  const [error, session, startupConnection] = await client.execute(command);
+  if (error) {
+    console.error(error.code, startupConnection?.generation);
+    return;
+  }
   await using ownedSession = session;
   const unsubscribe = ownedSession.onRuntimeError((cause) =>
     console.error("runtime", cause),
@@ -39,4 +42,6 @@ if (error) {
     unsubscribe();
   }
 }
+
+void main();
 // #endregion

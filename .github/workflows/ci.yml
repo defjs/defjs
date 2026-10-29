@@ -32,14 +32,14 @@ jobs:
 
   # Vitest's bin is `#!/usr/bin/env node`. `bunx` (without `--bun`) runs that bin on Node.
   # `bun run` follows bunfig `[run] bun = true` and would stay on Bun, which is the `checks` job.
-  # Node 24 is inside vitest's engines (`^22.12.0 || ^24.0.0 || >=26.0.0`) and does not drift with the runner image.
+  # Node 26 is the LTS baseline and matches Vitest's `>=26.0.0` engine range.
   node-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 26
           package-manager-cache: false
       - uses: oven-sh/setup-bun@v2
       - run: bun ci

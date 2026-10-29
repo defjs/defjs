@@ -76,6 +76,18 @@ const client = createClient(
   ),
 );
 
-const [error, invoice] = await client.execute(getInvoice());
-console.log(error, invoice?.total);
+const command = getInvoice();
+const outcome = await client.execute(command);
+const [error, invoice] = outcome;
+
+function reportInvoice(result: typeof outcome) {
+  const [fault, body] = result;
+  if (fault) {
+    console.error(fault.code);
+    return;
+  }
+  console.log(body.total);
+}
+
+reportInvoice(outcome);
 // #endregion

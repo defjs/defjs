@@ -108,8 +108,8 @@ export interface MockTracer extends Tracer {
 export function createMockPropagator(): TextMapPropagator<Headers> {
   return {
     inject: vi.fn(
-      (_ctx: Context, carrier: Headers, _setter?: TextMapSetter<Headers>) => {
-        carrier.set("traceparent", "mock-trace-id");
+      (_ctx: Context, carrier: Headers, setter: TextMapSetter<Headers>) => {
+        setter.set(carrier, "traceparent", "mock-trace-id");
       },
     ),
     extract: vi.fn(

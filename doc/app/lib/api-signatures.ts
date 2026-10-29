@@ -166,34 +166,6 @@ export function remarkApiSignatures(): (
   };
 }
 
-/** Turns authored tags into fences. Code samples that mention the tag stay literal. */
-export function expandApiSignatureTags(
-  markdown: string,
-  catalog: SignatureCatalog,
-  file: string,
-): string {
-  let fence = false;
-  return markdown
-    .split("\n")
-    .map((line) => {
-      if (/^\s*(`{3,}|~{3,})/.test(line)) {
-        fence = !fence;
-        return line;
-      }
-      if (fence) return line;
-      return line.replace(
-        /<ApiSignature\b([^>]*)\/>/g,
-        (_match, attrs: string) => {
-          const name = /\bname="([^"]*)"/.exec(attrs)?.[1];
-          if (name === undefined)
-            throw new Error(`Missing API signature name in ${file}`);
-          return "```ts\n" + signatureText(catalog, name, file) + "\n```";
-        },
-      );
-    })
-    .join("\n");
-}
-
 const declaration =
   /^(?:export\s+)?(?:declare\s+)?(?:async\s+)?(?:function|class|interface|type|const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)/;
 

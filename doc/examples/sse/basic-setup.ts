@@ -16,13 +16,18 @@ const notifications = defineEventStream({
   },
 });
 
-const [error, stream] = await client.execute(notifications());
-if (error) {
-  console.error(error.code);
-} else {
+async function main() {
+  const command = notifications();
+  const [error, stream] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   await using ownedStream = stream;
   for await (const event of ownedStream) {
     if (event.event === "message") console.log(event.data.text);
   }
 }
+
+void main();
 // #endregion

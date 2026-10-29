@@ -18,3 +18,5 @@ ada viewer unavailable viewer unavailable
 ```
 
 HTTP 성공은 envelope가 도착했다는 뜻일 뿐이에요. 애플리케이션 오류는 unwrap이 throw하거나 돌려줄 때까지 `errors[]`에 남아요. `data: null`인 응답도 그래요. 예제는 빠진 `data`와 `data: null`을 `errors[]`와 함께 Struct 불일치가 아니라 애플리케이션 오류로 다뤄요.
+
+`if (error) throw error`는 Defjs fault를 이 헬퍼의 예외로 맞추는 경계예요. HTTP 200의 GraphQL 실패는 `errors[]`의 애플리케이션 오류로 남고, 따로 throw 해요.

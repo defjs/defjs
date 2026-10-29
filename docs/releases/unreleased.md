@@ -35,7 +35,7 @@ These notes describe the current repository source, not a published version. Pac
 
 ## Repository verification
 
-- CI runs the Bun verification gate and Core `core-server` and OpenTelemetry tests on Node 24.
+- CI runs the Bun verification gate and Core `core-server` and OpenTelemetry tests on Node 26.
 - Browser API fixtures keep each setup's server cleanup separate. Documentation browser helpers clean up after the Bun test watchdog and close a late-starting browser without running the expired test body.
 - Long documentation titles wrap on narrow screens, including API symbols and Markdown headings; Chromium and Firefox regressions cover 320 px and 375 px viewports.
 

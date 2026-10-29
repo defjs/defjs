@@ -43,6 +43,8 @@ Query library 可以 own caching、retries、stale-result suppression 同 cancel
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+呢度嘅 `throw error` 係 query function 嘅拒絕通道，唔係 Defjs 嘅預設呼叫方式。先檢查 tuple，只有呢個 adapter 先會 reject，等 query library 記錄呢次失敗。
+
 唔好將同一個 command wrap 入第二個 effect — 兩個 owners 會令 cancel 同 stale-result handling 變模糊。
 
 ## 自己 own realtime 工作

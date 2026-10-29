@@ -11,6 +11,10 @@ Definición → endpoint exportado → comando para una llamada → `client.exec
 
 Las factorías de clientes y los métodos auxiliares son complementos opcionales. Pueden ofrecer valores predeterminados del servicio o comportamiento de dominio, admitir la configuración del consumidor y conservar los endpoints exportados directamente. Documenta las conversiones de errores y las reglas de ciclo de vida que introduzcan. Un SDK reutilizable no requiere una factoría.
 
+## Práctica recomendada
+
+Una definición permanece independiente del cliente. Llamarla solo crea un comando. Ponle un nombre y pásalo a `client.execute` en el cliente que posee la aplicación. La aplicación también posee la dirección del servicio y las credenciales. Inspecciona primero la tupla error-first. Si `error` está presente, informa `error.code` y sal de la función antes de leer el valor de éxito.
+
 ## Configuración básica
 
 <include cwd lang="typescript">

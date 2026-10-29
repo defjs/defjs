@@ -43,6 +43,8 @@ Query 库可以拥有缓存、重试、过期结果抑制、取消。把库给�
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+这里的 `throw error` 是查询函数的拒绝通道，不是 Defjs 的默认调用方式。先检查元组，只有这个适配层才会拒绝，好让查询库记下这次失败。
+
 别把同一 command 再包一层 effect——两个所有者会让取消和过期结果处理含糊。
 
 ## 自己管 realtime 工作

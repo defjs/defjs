@@ -29,6 +29,10 @@ L’application fournit le client et exécute la commande :
 
 Définition et exécution restent liées au contrat Defjs. Le client de l’application apporte la configuration d’exécution ; les endpoints conservent leurs méthodes, chemins et contrats de transport.
 
+## Bonne pratique
+
+Une définition reste indépendante du client. L’appeler crée seulement une commande. Donne-lui un nom, puis passe ce nom à `client.execute` sur le client que l’application possède. L’application possède aussi l’adresse du service et les identifiants. Inspecte d’abord le tuple error-first. Quand `error` est présent, signale `error.code` et sors de la fonction avant de lire la valeur de succès.
+
 Commence par le [démarrage rapide](/fr-FR/docs/start), découvre [Struct](/fr-FR/docs/struct), les [commandes](/fr-FR/docs/commands) et le [client](/fr-FR/docs/client), puis [publie ton SDK](/fr-FR/recipes/publish-http-sdk). Les [décisions de conception](/fr-FR/docs/design-decisions) expliquent cette répartition.
 
 Defjs ne met pas les résultats en cache et n’organise pas les tentatives à l’échelle de l’application. L’application décide de ces politiques, de l’annulation et du nettoyage.

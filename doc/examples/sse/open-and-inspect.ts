@@ -14,10 +14,13 @@ const notifications = defineEventStream({
   events: { message: struct.string() },
 });
 
-const [error, stream, startupOpen] = await client.execute(notifications());
-if (error) {
-  console.error(error.code, startupOpen?.response.status);
-} else {
+async function main() {
+  const command = notifications();
+  const [error, stream, startupOpen] = await client.execute(command);
+  if (error) {
+    console.error(error.code, startupOpen?.response.status);
+    return;
+  }
   console.log(
     stream.open.response.status,
     startupOpen.response.status,
@@ -26,4 +29,6 @@ if (error) {
   stream.close("example-finished");
   await stream.closed;
 }
+
+void main();
 // #endregion

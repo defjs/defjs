@@ -11,6 +11,10 @@ Definition → exportierter Endpoint → Command für einen Aufruf → `client.e
 
 Client-Factories und Komfortmethoden sind optionale Ergänzungen. Sie können Service-Defaults oder Domänenverhalten anbieten, Konfiguration des Aufrufers annehmen und die direkten Endpoint-Exporte beibehalten. Dokumentiere dabei die eingeführten Fehlerabbildungen und Regeln für den Ressourcenlebenszyklus. Für ein wiederverwendbares SDK ist keine Factory erforderlich.
 
+## Bewährte Praxis
+
+Eine Definition bleibt vom Client unabhängig. Ihr Aufruf erzeugt nur einen Command. Gib diesem Command einen Namen und übergib den Namen an `client.execute` des Clients, den die Anwendung besitzt. Adresse und Zugangsdaten gehören ebenfalls der Anwendung. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
+
 ## Grundeinrichtung
 
 <include cwd lang="typescript">

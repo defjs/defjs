@@ -32,6 +32,10 @@ SDK의 `get-health.ts`는 접속 주소나 인증 정보를 갖지 않는 정의
 
 두 파일을 같은 디렉터리에 저장합니다. SDK를 패키지로 배포한 뒤에는 앱의 상대 import를 패키지 이름으로 바꿉니다. 재사용의 경계는 Defjs의 정의와 실행 계약입니다. 앱마다 Client 설정을 바꾸면서 같은 API 정의를 사용할 수 있습니다.
 
+## 모범 사례
+
+정의는 client와 독립입니다. 정의를 호출하면 command만 만들어집니다. 그 command에 이름을 붙인 다음, 애플리케이션이 소유한 client의 `client.execute`에 넘깁니다. 서비스 주소와 자격 증명도 애플리케이션의 것입니다. error-first 튜플을 먼저 확인합니다. `error`가 있으면 `error.code`를 보고하고, 성공 값을 읽기 전에 함수에서 return 합니다.
+
 [빠른 시작](/ko-KR/docs/start)에서 두 파일의 흐름을 실행하고, [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)에서 패키지 구성과 배포 방법을 확인하세요. 설계 배경은 [설계 결정](/ko-KR/docs/design-decisions)에 설명되어 있습니다.
 
 Defjs는 결과 캐시나 자동 재시도를 추가하지 않으며, 앱이 소유한 스트림을 자동으로 닫지 않습니다.

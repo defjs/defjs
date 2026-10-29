@@ -43,6 +43,8 @@ Eine Query-Library kann Caching, Retries, Unterdrückung veralteter Results und 
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+`throw error` hier ist der Rejection-Kanal der Query-Funktion, nicht der normale Defjs-Aufruf. Das Tupel wird zuerst gelesen; nur dieser Adapter lehnt ab, damit die Query-Library den Fehler aufzeichnet.
+
 Wrappe denselben Command nicht in einen zweiten Effect — zwei Owner machen Abbruch und den Umgang mit veralteten Results mehrdeutig.
 
 ## Realtime-Arbeit besitzen

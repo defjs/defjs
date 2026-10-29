@@ -11,17 +11,30 @@ const getUser = defineRequest({
   error: struct.object({ message: struct.string() }),
 });
 
-const [err, user, response] = await client.execute(getUser({ id: 7 }));
-if (err?.code === "HTTP_STATUS" && err.status === 404) {
-  console.log(err.data.message);
-} else if (err?.code === "NET_TIMEOUT") {
-  console.log("timed out");
-} else if (err?.code === "RES_STRUCT_MISMATCH") {
-  console.log(
-    "the response did not match what we declared",
-    err.response.status,
-  );
-} else if (!err) {
+async function main() {
+  const command = getUser({ id: 7 });
+  const [error, user, response] = await client.execute(command);
+  if (error?.code === "HTTP_STATUS" && error.status === 404) {
+    console.log(error.data.message);
+    return;
+  }
+  if (error?.code === "NET_TIMEOUT") {
+    console.log("timed out");
+    return;
+  }
+  if (error?.code === "RES_STRUCT_MISMATCH") {
+    console.log(
+      "the response did not match what we declared",
+      error.response.status,
+    );
+    return;
+  }
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log(user.name, response.status);
 }
+
+void main();
 // #endregion

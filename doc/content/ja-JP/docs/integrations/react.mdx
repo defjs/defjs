@@ -43,6 +43,8 @@ React アプリケーションは SDK から API 定義を import し、自身�
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+ここでの `throw error` はクエリ関数の reject 経路であり、Defjs の既定の呼び出し方ではありません。先にタプルを確認し、このアダプタだけが reject して、クエリライブラリが失敗を記録できるようにします。
+
 同じコマンドを第二の effect で包まないでください — 所有者が二人だと、キャンセルと古い結果の扱いが曖昧になります。
 
 ## リアルタイム作業を所有する

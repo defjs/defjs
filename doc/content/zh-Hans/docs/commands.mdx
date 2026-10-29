@@ -11,6 +11,10 @@ SDK 作者用 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 导出
 
 写好端点后，可直接把它作为包的公开导出，见[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)。
 
+## 最佳实践
+
+定义与 client 彼此独立。调用定义只会创建 command。先给这个 command 起名，再把这个名字交给应用自己的 client 去 `client.execute`。服务地址和凭证也归应用所有。先检查 error-first 元组。`error` 有值时，报告 `error.code`，从函数返回，然后再读取成功值。
+
 ## 基本用法
 
 <include cwd lang="typescript">

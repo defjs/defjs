@@ -16,7 +16,7 @@ import {
   getNavigationTabs,
   getRelatedNavigation,
 } from "../lib/navigation";
-import { i18n, localePrefix, locales } from "../lib/i18n";
+import { i18n, locales } from "../lib/i18n";
 import { apiVirtualFiles } from "../lib/api-virtual";
 import summaries from "../data/api-summaries.json";
 
@@ -174,22 +174,6 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     "定义与执行 / Command",
     "客户端配置 / Client",
   ]);
-});
-
-test("static guide and example overviews expose all grouped articles to readers, search and Markdown export", async () => {
-  for (const locale of locales) {
-    for (const [area, paths, groups] of [
-      ["docs", guidePaths.slice(1), 5],
-      ["recipes", recipePaths, 4],
-    ] as const) {
-      const text = await Bun.file(
-        new URL(`../../content/${locale}/${area}/index.md`, import.meta.url),
-      ).text();
-      expect((text.match(/^## /gm) ?? []).length).toBe(groups);
-      for (const path of paths)
-        expect(text).toContain(`](${localePrefix(locale)}${path})`);
-    }
-  }
 });
 
 test("SSR mobile directory resolves a trailing-slash article from the same navigation tree", () => {

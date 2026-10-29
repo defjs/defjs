@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { expect, test } from "vitest";
 import {
   cleanSignature,
@@ -181,17 +179,31 @@ test("public signatures hide internal members, defaults and blank member lines",
   expect(declaredParameterType("  ", "1")).toBe("number");
 });
 
-test("a generic function type default stays in the signature", () => {
-  const source = readFileSync(
-    join(import.meta.dirname, "../../packages/core/src/client/config.ts"),
-    "utf8",
+test("a generic function type default stays in the public signature", () => {
+  const declaration = `
+export interface SessionOptions {
+  /** Periodic heartbeat ping and optional ACK matching. */
+  heartbeat?: {
+    /** Returns whether an incoming message acknowledges the heartbeat. */
+    isAck?: (message: unknown) => boolean;
+    /** Builds the outbound heartbeat payload. */
+    message?: <T = unknown>() => T | unknown;
+    /** Time to wait for an ACK before treating the connection as unhealthy. */
+    timeoutMs?: number;
+  };
+}
+`;
+  expect(cleanSignature(declaration)).toBe(
+    [
+      "interface SessionOptions {",
+      "  heartbeat?: {",
+      "    isAck?: (message: unknown) => boolean;",
+      "    message?: <T = unknown>() => T | unknown;",
+      "    timeoutMs?: number;",
+      "  };",
+      "}",
+    ].join("\n"),
   );
-  const start = source.indexOf("export interface ClientWebSocketOptions");
-  const end = source.indexOf("\nexport interface ClientSSEOptions");
-  const cleaned = cleanSignature(source.slice(start, end));
-  expect(cleaned).toContain("message?: <T = unknown>() => T | unknown;");
-  expect(cleaned).toContain("timeoutMs?: number;");
-  expect(cleaned.endsWith("}")).toBe(true);
   expect(
     hideDefaultExpressions(
       "isAck?: (message: unknown) => boolean;\n    message?: <T = unknown>() => T | unknown;\n    timeoutMs?: number;",
@@ -202,13 +214,41 @@ test("a generic function type default stays in the signature", () => {
 });
 
 test("a class signature keeps the public surface and drops bodies", () => {
-  const source = readFileSync(
-    join(import.meta.dirname, "../../packages/core/src/struct/errors.ts"),
-    "utf8",
-  );
-  const start = source.indexOf("export class StructError");
-  const end = source.indexOf("\nfunction createFormattedError");
-  expect(cleanSignature(source.slice(start, end))).toBe(
+  const declaration = `
+export class StructError extends Error {
+  /** Issues collected for this failure, in encounter order. */
+  readonly issues: StructIssue[];
+
+  /**
+   * @param issues - Non-empty list of parse issues.
+   */
+  constructor(issues: StructIssue[]) {
+    const first = issues[0]?.message;
+    super(first ?? "Struct parse failed");
+    this.name = "StructError";
+    this.issues = issues;
+  }
+
+  /** Build a nested error tree keyed by path segments. */
+  format(): FormattedStructError {
+    const root = { _errors: [] as string[] };
+    return root;
+  }
+
+  /** Split issues into root form errors and first-segment field errors. */
+  flatten(): FlattenedStructError {
+    const formErrors: string[] = [];
+    const fieldErrors: { [key: string]: string[] } = {};
+    return { fieldErrors, formErrors };
+  }
+
+  /** Render one human-readable line per issue. */
+  prettify(): string {
+    return this.issues.map((item) => item.message).join("\\n");
+  }
+}
+`;
+  expect(cleanSignature(declaration)).toBe(
     [
       "class StructError extends Error {",
       "  readonly issues: StructIssue[];",

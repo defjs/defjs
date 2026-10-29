@@ -18,3 +18,5 @@ ada viewer unavailable viewer unavailable
 ```
 
 HTTP success only means the envelope arrived. Application errors stay in `errors[]` until your unwrap throws or returns, including a response with `data: null`. The example handles both missing `data` and `data: null` with `errors[]` as application errors, not Struct mismatches.
+
+`if (error) throw error` adapts a Defjs fault to that helper. HTTP 200 GraphQL failures stay application errors in `errors[]` and are thrown on their own.

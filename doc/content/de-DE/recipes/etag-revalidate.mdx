@@ -19,4 +19,6 @@ Siehe [HTTP](/de-DE/docs/http).
 Flask
 ```
 
+`throw error` nach dem 304-Zweig ist die Grenze dieses Readers. Die Funktion gibt weiter `Promise<Product>` zurück; ein Fault, der kein 304 ist, verlässt diese Grenze nicht als Defjs-Tupel.
+
 Schreibe `304` nicht in ein vorgetäuschtes `200` innerhalb von Core um. Cache-Ownership bleibt im Application-Code um `execute`.

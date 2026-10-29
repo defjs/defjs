@@ -19,6 +19,15 @@ const client = createClient(
   withEndpoint("https://fixture.invalid"),
   withHTTPHandle(async () => Response.json({ id: 7, name: "Ada" })),
 );
-const [error, user] = await client.execute(getUser({ id: 7 }));
-if (!error) console.log(user.name);
+async function main() {
+  const command = getUser({ id: 7 });
+  const [error, user] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(user.name);
+}
+
+void main();
 // #endregion

@@ -43,6 +43,8 @@ A query library can own caching, retries, stale-result suppression, and cancella
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+`throw error` in this hook is the query function's rejection channel, not the default Defjs call. The tuple is inspected first; only this adapter rejects, so the query library can record the failure.
+
 Don’t wrap the same command in a second effect — two owners make cancel and stale-result handling ambiguous.
 
 ## Own realtime work

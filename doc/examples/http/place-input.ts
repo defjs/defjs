@@ -23,13 +23,19 @@ const updateUser = defineRequest({
   }),
 });
 
-const [error, user] = await client.execute(
-  updateUser({
+async function main() {
+  const command = updateUser({
     id: 7,
     requestId: "request-42",
     profile: { displayName: "Ada" },
-  }),
-);
-if (error) console.error(error.code);
-else console.log(user.id);
+  });
+  const [error, user] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(user.id);
+}
+
+void main();
 // #endregion

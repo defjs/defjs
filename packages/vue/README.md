@@ -40,7 +40,7 @@ app.use(createClientPlugin(client));
 app.mount("#app");
 ```
 
-Import `getUser` from your SDK or a local `api.ts` module that exports a `defineRequest(...)` endpoint. Use the injected client inside a component or composable and own cleanup where the work starts:
+Import `getUser` from your SDK or a local `api.ts` module that exports a `defineRequest(...)` endpoint. Use the injected client inside a component or composable and own cleanup where the work starts. Best practice: name the command, pass that name to `execute`, and return before reading the user when `error` is set. Abort still belongs to the watcher:
 
 ```vue
 <script setup lang="ts">
@@ -58,11 +58,16 @@ watch(
     const abort = new AbortController();
     onCleanup(() => abort.abort());
 
+    const command = getUser({ id });
     void client
-      .execute(getUser({ id }), { signal: abort.signal })
+      .execute(command, { signal: abort.signal })
       .then(([error, user]) => {
-        if (!abort.signal.aborted)
-          name.value = error ? error.message : user.name;
+        if (abort.signal.aborted) return;
+        if (error) {
+          name.value = error.message;
+          return;
+        }
+        name.value = user.name;
       });
   },
   { immediate: true },

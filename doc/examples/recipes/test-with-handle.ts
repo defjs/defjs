@@ -26,8 +26,15 @@ const client = createClient(
     return Response.json({ message: "User not found" }, { status: 404 });
   }),
 );
-const [error, user, response] = await client.execute(getUser({ id: 7 }));
+async function main() {
+  const command = getUser({ id: 7 });
+  const [error, user, response] = await client.execute(command);
+  if (error) {
+    // The test boundary rejects failures so the test process cannot pass.
+    throw error;
+  }
+  console.log(user.name, response.status);
+}
 
-if (error) throw error;
-console.log(user.name, response.status);
+await main();
 // #endregion

@@ -18,3 +18,5 @@ ada viewer unavailable viewer unavailable
 ```
 
 HTTP 成功只代表 envelope 到咗。Application errors 會留喺 `errors[]`，直至你嘅 unwrap throw 或回傳，包括 `data: null` 嘅 response。例子會將缺少 `data` 或 `data: null` 並帶有 `errors[]` 嘅情況，當成 application errors，唔係 Struct mismatches。
+
+`if (error) throw error` 將 Defjs fault 轉成呢個 helper 嘅例外。HTTP 200 上嘅 GraphQL 失敗仍然係 `errors[]` 入面嘅 application error，另外 throw。

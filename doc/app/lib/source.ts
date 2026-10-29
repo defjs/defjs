@@ -1,11 +1,8 @@
 import { llms, loader } from "fumadocs-core/source";
 import { defineDocs } from "fumadocs-mdx/macro";
 import summaries from "../data/api-summaries.json";
-import { absoluteMarkdownLinks } from "./llms";
-import { siteUrl } from "./site";
-import { readableMarkdown, titledMarkdown } from "./markdown";
 import { apiVirtualFiles } from "./api-virtual";
-import { readPageTitle, readProcessedText } from "./page-data";
+import { readProcessedText } from "./page-data";
 import { i18n, locales } from "./i18n";
 export const docs = defineDocs({
   dir: "content",
@@ -36,16 +33,5 @@ export const source = loader({
   i18n,
 });
 export const docsLlms = llms(source, {
-  renderPage: async (page) =>
-    titledMarkdown(
-      readPageTitle(page.data),
-      new URL(page.url, siteUrl).href,
-      absoluteMarkdownLinks(
-        readableMarkdown(
-          await readProcessedText(page.data),
-          page.locale ?? "en-US",
-        ),
-        siteUrl,
-      ),
-    ),
+  renderPage: (page) => readProcessedText(page.data),
 });

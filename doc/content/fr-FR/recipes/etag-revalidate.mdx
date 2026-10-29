@@ -17,4 +17,6 @@ Voir [HTTP](/fr-FR/docs/http).
 Flask
 ```
 
+`throw error` après la branche 304 est la frontière de ce lecteur. La fonction renvoie toujours une `Promise<Product>` ; un fault autre que 304 ne sort pas de cette frontière comme un tuple Defjs.
+
 Ne réécris pas `304` en faux `200` dans Core. La propriété du cache reste dans le code applicatif autour d’`execute`.

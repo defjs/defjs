@@ -18,3 +18,5 @@ ada viewer unavailable viewer unavailable
 ```
 
 HTTP 成功只说明信封到了。应用错误留在 `errors[]` 里，直到你的拆包函数抛出或返回；响应中 `data: null` 的情况也一样。示例把伴随 `errors[]` 的缺失 `data` 和 `data: null` 都作为应用错误处理，而非 Struct 不匹配。
+
+`if (error) throw error` 把 Defjs fault 适配成这个辅助函数的异常。HTTP 200 上的 GraphQL 失败仍是 `errors[]` 里的应用错误，另行抛出。

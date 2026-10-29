@@ -20,11 +20,19 @@ const createUser = defineRequest({
   output: User,
 });
 
-const [parseError, user] = struct.parse(User, {
-  id: 7,
-  name: "Ada",
-  active: true,
-});
-if (!parseError) console.log(user.name);
+function readUser() {
+  const [parseError, user] = struct.parse(User, {
+    id: 7,
+    name: "Ada",
+    active: true,
+  });
+  if (parseError) {
+    console.error(parseError.message);
+    return;
+  }
+  console.log(user.name);
+}
+
+readUser();
 void createUser;
 // #endregion

@@ -14,7 +14,7 @@ description: 在同一個 interceptor 裡掛上 Authorization 並重放一次；
 </include>
 
 ```txt
-null 42
+42
 ```
 
 再次呼叫 `next` 只會重新進入這一層**裡面**的 interceptors（以及 Fetch handler）。它不會重跑外層的計時／auth wrappers — 所以 401 的安排要放在一個 interceptor 裡，而不是第二次 `execute`。

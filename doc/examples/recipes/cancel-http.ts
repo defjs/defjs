@@ -5,21 +5,30 @@ const client = createClient(withEndpoint("https://api.example.com"));
 const getReport = defineRequest({ method: "GET", path: "/report" });
 
 const controller = new AbortController();
-const pending = client.execute(getReport(), {
+const command = getReport();
+const pending = client.execute(command, {
   signal: controller.signal,
   timeout: 5_000,
 });
 
 controller.abort("screen closed");
-const [error] = await pending;
 
-if (error?.code === "NET_ABORTED") {
-  console.log("caller cancelled");
-} else if (error?.code === "NET_TIMEOUT") {
-  console.log("timed out");
-} else if (error) {
-  console.error(error.code);
-} else {
+async function main() {
+  const [error] = await pending;
+  if (error?.code === "NET_ABORTED") {
+    console.log("caller cancelled");
+    return;
+  }
+  if (error?.code === "NET_TIMEOUT") {
+    console.log("timed out");
+    return;
+  }
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log("got the report");
 }
+
+void main();
 // #endregion

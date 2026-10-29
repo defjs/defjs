@@ -7,6 +7,10 @@ description: Exporta un endpoint de SDK, ejecútalo con un cliente local de la a
 
 El primer elemento del SDK es un endpoint exportado para `GET /users/:id`. Escribes el contrato en un archivo y lo ejecutas desde un segundo archivo con el cliente de la aplicación. El handler Fetch local permite empezar sin red; la misma definición decodificará después el `200` y el `404` declarado del servicio real.
 
+## Práctica recomendada
+
+Una definición permanece independiente del cliente. Llamarla solo crea un comando. Ponle un nombre y pásalo a `client.execute` en el cliente que posee la aplicación. La aplicación también posee la dirección del servicio y las credenciales. Inspecciona primero la tupla error-first. Si `error` está presente, informa `error.code` y sal de la función antes de leer el valor de éxito.
+
 ## Paso 1 — Instalar
 
 `@defjs/core` es ESM y funciona en Node.js o Bun. Node.js 22.18+ (o 24+) ejecuta el `.ts` directamente mediante type stripping; las versiones 22.x anteriores necesitan `--experimental-strip-types`. Mantén `"type": "module"` en package.json. En el navegador sigues necesitando tu bundler y Fetch.

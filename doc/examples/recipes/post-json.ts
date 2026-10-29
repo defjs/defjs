@@ -28,15 +28,19 @@ const createUser = defineRequest({
   error: ApiError,
 });
 
-const [error, user, response] = await client.execute(
-  createUser({ name: "Ada", email: "ada@example.com" }),
-);
-
-if (error?.code === "HTTP_STATUS") {
-  console.error(error.status, error.data.message);
-} else if (error) {
-  console.error(error.code);
-} else {
+async function main() {
+  const command = createUser({ name: "Ada", email: "ada@example.com" });
+  const [error, user, response] = await client.execute(command);
+  if (error?.code === "HTTP_STATUS") {
+    console.error(error.status, error.data.message);
+    return;
+  }
+  if (error) {
+    console.error(error.code);
+    return;
+  }
   console.log(`Created ${user.name} → ${response.status}`);
 }
+
+void main();
 // #endregion

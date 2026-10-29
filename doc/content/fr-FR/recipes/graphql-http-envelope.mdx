@@ -18,3 +18,5 @@ ada viewer unavailable viewer unavailable
 ```
 
 Un succès HTTP veut seulement dire que l’enveloppe est arrivée. Les erreurs applicatives restent dans `errors[]` jusqu’à ce que ton déballage lève une erreur ou renvoie, y compris une réponse avec `data: null`. L’exemple traite l’absence de `data` et `data: null` avec `errors[]` comme des erreurs applicatives, pas comme des écarts de Struct.
+
+`if (error) throw error` adapte un fault Defjs à ce helper. Les échecs GraphQL en HTTP 200 restent des erreurs applicatives dans `errors[]` et sont levés à part.

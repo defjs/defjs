@@ -29,6 +29,10 @@ SDK 作者导出带类型的端点定义；应用导入这些定义，创建自�
 
 定义不绑定某个应用的 Client，但仍属于 Defjs 的运行时契约：它包含 Struct、builder 和具体传输语义，并不是任意请求库都能执行的 JSON 描述。
 
+## 最佳实践
+
+定义与 client 彼此独立。调用定义只会创建 command。先给这个 command 起名，再把这个名字交给应用自己的 client 去 `client.execute`。服务地址和凭证也归应用所有。先检查 error-first 元组。`error` 有值时，报告 `error.code`，从函数返回，然后再读取成功值。
+
 从[快速开始](/zh-Hans/docs/start)体验定义与调用，再了解[定义与执行](/zh-Hans/docs/commands)、[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)和[应用的 Client 配置](/zh-Hans/docs/client)。[设计决策](/zh-Hans/docs/design-decisions)解释这些边界如何服务于 SDK 设计。
 
 ## 选传输

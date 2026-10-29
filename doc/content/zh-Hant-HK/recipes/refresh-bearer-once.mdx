@@ -14,7 +14,7 @@ description: 喺同一個 interceptor 入面 attach Authorization 同 replay 一
 </include>
 
 ```txt
-null 42
+42
 ```
 
 再 call `next` 只會重新進入**呢層入面**嘅 interceptors（同 Fetch handler）。佢唔會再 run 外層嘅 timing/auth wrappers——所以 401 嘅佈局要放喺同一個 interceptor，唔係第二次 `execute`。

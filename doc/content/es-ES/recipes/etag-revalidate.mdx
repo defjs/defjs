@@ -19,4 +19,6 @@ Ver [HTTP](/es-ES/docs/http).
 Flask
 ```
 
+`throw error` después de la rama 304 es el límite de este lector. La función sigue devolviendo `Promise<Product>`; un fault que no sea 304 no sale de ese límite como una tupla de Defjs.
+
 No reescribas `304` como un `200` falso dentro de Core. La propiedad de la caché se queda en el código de la aplicación, alrededor de `execute`.

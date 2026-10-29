@@ -7,6 +7,10 @@ description: Einen SDK-Endpoint exportieren, mit einem eigenen Anwendungsclient 
 
 Der erste SDK-Baustein ist ein exportierter Endpoint für `GET /users/:id`. Du schreibst den Vertrag in eine Datei und führst ihn aus einer zweiten Datei mit dem Client der Anwendung aus. Der lokale Fetch-Handler ermöglicht einen ersten Lauf ohne Netzwerk; dieselbe Definition dekodiert später `200` und ein deklariertes `404` vom echten Service.
 
+## Bewährte Praxis
+
+Eine Definition bleibt vom Client unabhängig. Ihr Aufruf erzeugt nur einen Command. Gib diesem Command einen Namen und übergib den Namen an `client.execute` des Clients, den die Anwendung besitzt. Adresse und Zugangsdaten gehören ebenfalls der Anwendung. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
+
 ## Schritt 1 — Installieren
 
 `@defjs/core` ist ESM und läuft auf Node.js oder Bun. Node.js 22.18+ (oder 24+) führt die `.ts`-Datei direkt per Type Stripping aus; ältere 22.x-Releases brauchen `--experimental-strip-types`. Behalte `"type": "module"` in der package.json. Im Browser brauchst du weiterhin Bundler und Fetch.

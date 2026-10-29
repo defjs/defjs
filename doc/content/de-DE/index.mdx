@@ -29,6 +29,10 @@ Die Anwendung stellt den Client bereit und führt den Command aus:
 
 Definitionen und Ausführung bleiben Teil des Defjs-Vertrags. Der Client der Anwendung ergänzt die Laufzeitkonfiguration; die Endpoints enthalten weiterhin Methoden, Pfade und Transportverträge.
 
+## Bewährte Praxis
+
+Eine Definition bleibt vom Client unabhängig. Ihr Aufruf erzeugt nur einen Command. Gib diesem Command einen Namen und übergib den Namen an `client.execute` des Clients, den die Anwendung besitzt. Adresse und Zugangsdaten gehören ebenfalls der Anwendung. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
+
 Beginne mit dem [Schnellstart](/de-DE/docs/start), lerne [Struct](/de-DE/docs/struct), [Commands](/de-DE/docs/commands) und [Client](/de-DE/docs/client) kennen und [veröffentliche dein SDK](/de-DE/recipes/publish-http-sdk). Die [Entwurfsentscheidungen](/de-DE/docs/design-decisions) erklären diese Aufteilung.
 
 Defjs legt keine Ergebnisse im Cache ab und organisiert keine anwendungsweiten Wiederholungen. Die Anwendung entscheidet über diese Regeln sowie Abbruch und Cleanup.

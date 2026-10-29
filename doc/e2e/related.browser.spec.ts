@@ -1,7 +1,20 @@
 import { expect, test } from "vitest";
 import reference from "../app/data/api-reference.json";
+import { locales } from "../app/lib/i18n";
 import { captureBrowserErrors } from "./helpers";
 import { openSite } from "./support/site";
+
+function catalogSignature(names: readonly string[]): string {
+  return names
+    .map((name) => {
+      const signatures = reference.find(
+        (entry) => entry.name === name,
+      )?.signatures;
+      if (!signatures?.length) throw new Error(`missing signature ${name}`);
+      return signatures.map((signature) => signature.trim()).join("\n");
+    })
+    .join("\n\n");
+}
 
 test("connects HTTP guides, examples and module API without truncating related links", async () => {
   const site = await openSite();
@@ -196,31 +209,39 @@ test("an API entry shows its highlighted signature, a linked symbol and its over
   expect(await errors.values()).toEqual([]);
 });
 
-test("an overview page renders the generated signature, highlighted, in English and Chinese", async () => {
-  const signature = reference.find((entry) => entry.name === "defineRequest")
-    ?.signatures[0];
-  if (!signature) throw new Error("missing defineRequest signature");
+test("overview pages render catalog signatures for every language", async () => {
+  const pages = [
+    ["http", catalogSignature(["defineRequest"])],
+    [
+      "interceptors",
+      catalogSignature([
+        "createHttpInterceptor",
+        "InterceptorFn",
+        "HttpInterceptorNext",
+      ]),
+    ],
+  ] as const;
   const site = await openSite();
   const page = await site.browser.newPage();
   const errors = await captureBrowserErrors(page);
-  for (const path of ["/api/http", "/zh-Hans/api/http"]) {
-    await page.goto(site.url(path), { waitUntil: "networkidle" });
-    const block = await page.evaluate(() => {
-      const pre = [...document.querySelectorAll("main pre")].find((node) =>
-        (node.textContent ?? "").includes("function defineRequest"),
+  for (const locale of locales) {
+    const prefix = locale === "en-US" ? "" : `/${locale}`;
+    for (const [slug, signature] of pages) {
+      await page.goto(site.url(`${prefix}/api/${slug}`), {
+        waitUntil: "networkidle",
+      });
+      const block = page
+        .locator("main pre")
+        .filter({ hasText: signature })
+        .first();
+      const figure = block.locator("xpath=ancestor::figure");
+      expect(await page.locator("body").innerHTML()).not.toContain(
+        "<ApiSignature",
       );
-      const figure = pre?.closest("figure");
-      return {
-        text: pre?.textContent ?? "",
-        highlighted: figure?.innerHTML.includes("--shiki-light") ?? false,
-        copy: figure?.querySelector("button") != null,
-        raw: document.body.innerHTML.includes("<ApiSignature"),
-      };
-    });
-    expect(block.raw).toBe(false);
-    expect(block.highlighted).toBe(true);
-    expect(block.copy).toBe(true);
-    expect(block.text.replace(/\s+$/u, "")).toBe(signature.trim());
+      expect(await figure.innerHTML()).toContain("--shiki-light");
+      expect(await figure.locator("button").count()).toBeGreaterThan(0);
+      expect((await block.textContent())?.replace(/\s+$/u, "")).toBe(signature);
+    }
   }
   expect(await errors.values()).toEqual([]);
 });

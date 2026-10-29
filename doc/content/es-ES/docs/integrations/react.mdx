@@ -43,6 +43,8 @@ Una librería de queries puede ser dueña de la caché, los reintentos, la supre
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
+`throw error` aquí es el canal de rechazo de la función de query, no la llamada Defjs por defecto. La tupla se inspecciona primero; solo este adaptador rechaza, para que la librería de queries registre el fallo.
+
 No envuelvas el mismo comando en un segundo effect — dos dueños hacen ambigua la cancelación y el manejo de resultados obsoletos.
 
 ## Ser dueño del trabajo realtime

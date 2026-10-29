@@ -26,6 +26,14 @@ const logsOnlyClient = createClient(
   withOpenTelemetryServer({ logger }),
 );
 
-const [error] = await client.execute(readOrders());
-if (error) console.error(error.code);
+async function main() {
+  const command = readOrders();
+  const [error] = await client.execute(command);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+}
+
+void main();
 // #endregion

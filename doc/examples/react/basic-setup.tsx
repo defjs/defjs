@@ -18,11 +18,16 @@ export function UserName({ id }: { id: number }) {
   useEffect(() => {
     const controller = new AbortController();
 
+    const command = getUser({ id });
     void client
-      .execute(getUser({ id }), { signal: controller.signal })
+      .execute(command, { signal: controller.signal })
       .then(([error, user]) => {
         if (controller.signal.aborted) return;
-        setName(error ? undefined : user.name);
+        if (error) {
+          setName(undefined);
+          return;
+        }
+        setName(user.name);
       });
 
     return () => controller.abort();

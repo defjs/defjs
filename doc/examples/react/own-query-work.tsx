@@ -16,7 +16,9 @@ export function useUserQueryFn(id: number) {
 
   return useCallback(
     async ({ signal }: { signal: AbortSignal }) => {
-      const [error, user] = await client.execute(getUser({ id }), { signal });
+      const command = getUser({ id });
+      const [error, user] = await client.execute(command, { signal });
+      // Query libraries record a failure when the query function rejects.
       if (error) throw error;
       return user;
     },

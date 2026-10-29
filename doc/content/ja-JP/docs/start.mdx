@@ -7,6 +7,10 @@ description: SDK の API 定義を export し、別ファイルでアプリケ�
 
 この例では、SDK 作成者として `GET /users/:id` の型付き定義を export し、利用アプリケーションとして別ファイルで Defjs Client を作ります。最初はローカル Fetch ハンドルで `200` と宣言済みの `404` を確認します。実 API への切り替えではアプリケーションの Client 設定を変え、同じ定義を使います。
 
+## ベストプラクティス
+
+定義は client から独立しています。定義を呼ぶと command ができるだけで、送信は始まりません。その command に名前を付け、アプリケーションが所有する client の `client.execute` に渡します。サービスアドレスと認証情報もアプリケーションのものです。先に error-first のタプルを確認します。`error` があるときは `error.code` を報告し、成功値を読む前に関数から return します。
+
 ## Step 1 — インストール
 
 `@defjs/core` は ESM で、Node.js、Bun で動きます。Node.js 22.18+（または 24+）は type stripping により `.ts` をそのまま実行します。それより古い 22.x では `--experimental-strip-types` が要ります。package.json に `"type": "module"` を書いてください。ブラウザーでもバンドラーと Fetch は要ります。

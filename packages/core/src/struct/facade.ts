@@ -97,7 +97,16 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  *   displayName: struct.string().alias("display_name"),
  * });
  *
- * const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+ * function readUser() {
+ *   const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+ *   if (error) {
+ *     console.error(error.message);
+ *     return;
+ *   }
+ *   console.log(user.displayName);
+ * }
+ *
+ * readUser();
  * ```
  *
  * ### Primitives and containers
@@ -150,7 +159,16 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  *   output: User,
  * })
  *
- * const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+ * function readUser() {
+ *   const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+ *   if (error) {
+ *     console.error(error.message)
+ *     return
+ *   }
+ *   console.log(user.displayName)
+ * }
+ *
+ * readUser()
  * ```
  * @group struct
  */
