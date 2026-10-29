@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider、支持显式 Client 覆盖的 useClient 和 provider props。
+---
+
+# React
+
+把已有的 `@defjs/core` Client 接到 React 树。这个包**不会**创建、缓存或释放这个 Client。它的入口标有 `'use client'`，所以请在客户端组件中导入。需要 React 18 或更高版本。
+
+见 [React 指南](/zh-Hans/docs/integrations/react)。
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+上下文提供组件。把 `createClient` 给的 Client 传进去。嵌套的 `ClientProvider` 会覆盖其子树里的 Client；`useClient()` 读取最近的那一个。传入不同的 `client` 会改变后代拿到的 context 值。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` 优先返回显式 Client；省略参数或传入 `undefined` 时读取最近的 `ClientProvider`。两种来源都没有 Client 时才抛出 `Error`，原来的 `useClient()` 调用仍然有效。
+
+始终在组件或自定义 Hook 顶层调用 `useClient(explicitClient)`，即使传了显式 Client，也不能在普通函数或事件回调里调用。不要写 `explicitClient ?? useClient()`，它会条件调用 Hook。显式值不写入 Context，也不建立 Provider；Hook 仍然订阅 Context。
+
+- **返回** 显式传入或由最近 Provider 提供的同一个 Client。
+- **抛出** 显式参数和 Context 都没有提供 Client 时抛出 `Error`。
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` 必填，由应用持有。`children` 可选：它是可以调用 `useClient` 的子树。

@@ -1,0 +1,20 @@
+---
+title: "ETag 条件请求"
+description: 把 304 当成 HTTP 状态 fault；缓存 Map 放在 execute 外面。
+---
+
+# 用 ETag 和 304 再验证
+
+`ok` 表示 2xx，所以 `304` 是 `HTTP_STATUS` fault。重定向状态也不是错误 body，所以别声明 `error`：body 根本不会被读，fault 带着状态，你自己把缓存里的商品返回去。
+
+见 [HTTP](/zh-Hans/docs/http)。
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+别在 Core 里把 `304` 改写成假的 `200`。缓存所有权留在 `execute` 周围的应用代码里。

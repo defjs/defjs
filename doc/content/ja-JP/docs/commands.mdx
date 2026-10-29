@@ -1,0 +1,63 @@
+---
+title: "定義と実行 / Command"
+description: SDK の API 定義と builder を作成し、利用アプリケーションで型付きコマンドを実行します。
+---
+
+# Commands
+
+SDK の作成者は API の契約を定義し、そのエンドポイント関数を export します。利用するアプリケーションは関数を呼んで不透明なコマンドを作り、自身で構成した `client.execute(...)` に渡します。
+
+定義 → エンドポイント関数 → コマンド → Defjs Client で実行、という流れは HTTP、SSE、WebSocket で共通です。定義の作成やエンドポイント関数の呼び出しだけでは通信は始まりません。入力の検証と `builder` の実行は execute 時に行われます。
+
+以下の短い例は両方の役割を 1 ファイルに示しています。SDK として公開する場合は定義を export し、Client の構成と実行を利用アプリケーションに置きます。
+
+## 基本セットアップ
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## 定義を選ぶ
+
+| 定義                     | 契約                                                           | 成功時の値                                       |
+| ------------------------ | -------------------------------------------------------------- | ------------------------------------------------ |
+| `defineRequest(...)`     | method、相対 path、任意の input、任意の `output` / `error`     | デコード済みデータ + レスポンス                  |
+| `defineEventStream(...)` | path、バッファ/キュー上限、イベント名 → Struct のマップ        | `EventStreamHandle` + open スナップショット      |
+| `defineWebSocket(...)`   | path、incoming struct 1 つ、任意の outgoing struct、キュー上限 | `WebSocketSession` + connection スナップショット |
+
+`input` が無い → エンドポイントは引数を取らず、`builder` は `() => request` でも構いません。`input` がある → struct の値を渡します。任意フィールドは省略でき、必須フィールドは省略できません。
+
+コマンドは不透明なままにしてください。タグや symbol を掘らないでください。
+
+## 値の行き先
+
+struct が値のエンコード方法を決めます。`builder` が行き先を決めます。`builder` は**パース済み**入力の、同期的で純粋な関数です。execute のときに走ります。throw するとタプル上の `REQ_BUILD_FAILED` になります — エンドポイント呼び出し自体は throw しません。
+
+`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+
+型付きの値をそのまま渡してください。エイリアス、`Date` → ISO、`bigint` → 文字列は、その struct が使われるあらゆる場所で適用されます。リクエストへの配置、レスポンスのデコード、SSE イベント、WebSocket フレームです。
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+ボディは JSON の `{"display_name":"…","email":"…"}` です。手書きのキーは逃げ道です。`body: { name: input.user.displayName }` は `name` を送ります。親オブジェクトが匿名なので、エイリアスは適用されません。
+
+## 形が違うとき
+
+path のプレースホルダ、リテラル、分岐には `builder` を使います。受け取るのは実値なので、`if`、`??`、テンプレート、`switch` が使えます。
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.filter` は `page_size` を送ります。`headers: { 'x-api-version': '2' }` はリテラルです。認証とトレーシングは引き続きインターセプターに置きます。ビルダーのあと、ネイティブリクエストを見る場所です。
+
+## 出力とエラーの形
+
+`output` は 2xx ボディ用の struct 1 つ、`error` はそれ以外すべて用の struct 1 つです。`ok` だけが分岐点で、デコードするのは常に片側だけです。片側を省くとそのボディは読まれません。fault は status を運び、`data` は `undefined` のままです。
+
+## 関連レシピ
+
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [POST JSON](/ja-JP/recipes/post-json)

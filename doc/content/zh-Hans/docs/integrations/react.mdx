@@ -1,0 +1,79 @@
+---
+title: "React"
+description: 在 React 中提供应用自己的 Client，并执行 SDK 定义、处理结果与取消。
+---
+
+# React
+
+应用创建 `@defjs/core` Client，再通过 `@defjs/react` 框架插件的 Context 和 `useClient()` 将它接入 React 树。组件或数据请求库可以导入 SDK 端点，并用这个 Client 执行 command；SDK 定义不依赖 React。
+
+这些插件只是设置和获取已有 `Client` 的可选便利。可以直接导入应用固定的 Client、给可复用逻辑传入显式 Client、用框架注入提供组件树默认值与子树覆盖，或采用应用自己的组织方式；SDK 定义不要求通过插件执行。
+
+这个包不会创建 Client、缓存结果、重试 command 或释放传输资源。启动工作的组件、effect 或数据请求库负责取消、关闭及其他生命周期处理。
+
+## 基本用法
+
+装 `@defjs/core`、`@defjs/react`，以及 React 18+。ESM：
+
+`bun add @defjs/core @defjs/react react`
+
+提供 Client，然后获取用户，并在相关值变化时取消请求：
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+<include cwd>examples/react/basic-setup.tsx#example</include>
+
+`ClientProvider` 是普通 Context provider。换 `client` prop 就换后代看到的——不 clone、不替换、不释放。嵌套 provider 形成显式边界。
+
+开发模式下 React 可能多次 setup/cleanup effect。Signal 检查拦住过期 promise 写进当前渲染。Tuple 错误仍是数据。
+
+## 用 `useClient` 读
+
+`useClient(overrideClient)` 优先返回显式 Client；省略参数或传入 `undefined` 时读取最近的 `ClientProvider`。两种来源都没有 Client 时才抛出 `Error`，原来的 `useClient()` 调用仍然有效。
+
+始终在组件或自定义 Hook 顶层调用 `useClient(explicitClient)`，即使传了显式 Client，也不能在普通函数或事件回调里调用。不要写 `explicitClient ?? useClient()`，它会条件调用 Hook。显式值不写入 Context，也不建立 Provider；Hook 仍然订阅 Context。
+
+<include cwd>examples/react/read-with-use-client.tsx#example</include>
+
+Hook 只提供 Client。它不启动工作、不订阅传输，也不把错误优先 tuple 变成异常。
+
+## 自己管 query 工作
+
+Query 库可以拥有缓存、重试、过期结果抑制、取消。把库给你的 signal 传进去。列表页就用 TanStack Query（或类似的库）包住 `client.execute(...)`——`@defjs/react` 只做依赖注入（DI），**不**提供 `useRequest`。
+
+<include cwd>examples/react/own-query-work.tsx#example</include>
+
+别把同一 command 再包一层 effect——两个所有者会让取消和过期结果处理含糊。
+
+## 自己管 realtime 工作
+
+SSE 和 WebSocket handle 的生命周期长于 `client.execute(...)`。等待启动之前先注册清理；关闭在所有者释放之后才到达的 handle；消费唯一的迭代器，并等待终态 promise：
+
+<include cwd>examples/react/own-realtime-work.tsx#example</include>
+
+传给 `execute` 的 `signal` 会一直管着已打开的 session。在清理函数里 abort 它，session 会以 `aborted` 结束，`receive` 以 `AbortError` reject，所以上面的 `catch` 在 effect 被释放之后忽略错误，只报告真正的失败（队列溢出、心跳超时）。被 abort 的 SSE stream 则是 iterator 正常结束。没有这个 `catch`，循环的 reject 就是未处理的 promise rejection。
+
+`EventStreamHandle` 同理：在 `finally` 里 close，await `stream.closed`。WebSocket 消费者还要退订状态/运行时错误监听，并持续读 `session.receive`——有界队列不读会溢出。
+
+## SSR 与 Client 作用域
+
+包入口是 Client Component 边界。浏览器应用在 endpoint、interceptor、捕获的状态对浏览器安全且请求无关时，可以共享模块作用域 Client。SSR 时若 headers、cookie、用户、租户、凭证不同，在每个请求边界里单独创建 Client。
+
+Provider 卸载**不会** abort HTTP、关 SSE/WebSocket、退订监听，也不会调 `dispose`。`@defjs/react` 没有这套生命周期 API。启动每次操作的代码必须收尾或取消。
+
+## 参考
+
+`@defjs/react` 的公开导出：
+
+- `ClientProvider` — 接收 `ClientProviderProps`，提供传入的 Client
+- `useClient` — 显式 Client 优先，否则读最近提供的 Client；两者都没有就抛错
+- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
+
+Client 和 options 在 `@defjs/core` 里创建。见 [Client](/zh-Hans/docs/client)、[Errors](/zh-Hans/docs/errors)、[SSE](/zh-Hans/docs/sse)、[WebSocket](/zh-Hans/docs/web-socket)。
+
+## 相关操作示例
+
+- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)
+- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)

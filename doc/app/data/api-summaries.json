@@ -1,0 +1,852 @@
+[
+  {
+    "slug": "core/createclient",
+    "name": "createClient",
+    "description": "Creates a Defjs client from option helpers."
+  },
+  {
+    "slug": "core/withendpoint",
+    "name": "withEndpoint",
+    "description": "Sets the valid absolute base URL prepended to relative request paths."
+  },
+  {
+    "slug": "core/withinterceptors",
+    "name": "withInterceptors",
+    "description": "Appends interceptors to the client interceptor chain."
+  },
+  {
+    "slug": "core/withqueryserializer",
+    "name": "withQuerySerializer",
+    "description": "Replaces query encoding for HTTP, SSE, and WebSocket requests."
+  },
+  {
+    "slug": "core/withhttphandle",
+    "name": "withHTTPHandle",
+    "description": "Replaces the Fetch-compatible function used for HTTP requests."
+  },
+  {
+    "slug": "core/withssehandle",
+    "name": "withSSEHandle",
+    "description": "Replaces the Fetch-compatible function used to open SSE event streams."
+  },
+  {
+    "slug": "core/withwebsockethandle",
+    "name": "withWebSocketHandle",
+    "description": "Replaces the WebSocket constructor used for socket connections."
+  },
+  {
+    "slug": "core/withcredentials",
+    "name": "withCredentials",
+    "description": "Sets whether HTTP and SSE requests include credentials."
+  },
+  {
+    "slug": "core/withxsrf",
+    "name": "withXSRF",
+    "description": "Enables XSRF cookie-to-header token forwarding for HTTP requests."
+  },
+  {
+    "slug": "core/withssereconnect",
+    "name": "withSSEReconnect",
+    "description": "Configures automatic reconnection after an SSE stream fails."
+  },
+  {
+    "slug": "core/withsseoninvalidevent",
+    "name": "withSSEOnInvalidEvent",
+    "description": "Observes SSE events that have no matching event struct or fail validation."
+  },
+  {
+    "slug": "core/withwebsocketbeforeconnect",
+    "name": "withWebSocketBeforeConnect",
+    "description": "Runs a hook before the initial WebSocket connect and before every reconnect."
+  },
+  {
+    "slug": "core/withwebsocketprotocols",
+    "name": "withWebSocketProtocols",
+    "description": "Sets the WebSocket subprotocols offered during the handshake."
+  },
+  {
+    "slug": "core/withwebsocketheartbeat",
+    "name": "withWebSocketHeartbeat",
+    "description": "Enables WebSocket heartbeat messages with optional acknowledgement detection."
+  },
+  {
+    "slug": "core/withwebsocketreconnect",
+    "name": "withWebSocketReconnect",
+    "description": "Configures automatic reconnection when the socket closes for any reason other than a manual session.close()."
+  },
+  {
+    "slug": "core/client-type",
+    "name": "Client",
+    "description": "A client returned by createClient holds the resolved ClientConfig and executes HTTP, SSE, and WebSocket commands."
+  },
+  {
+    "slug": "core/clientoption-type",
+    "name": "ClientOption",
+    "description": "Function type of the option helpers accepted by createClient."
+  },
+  {
+    "slug": "core/clientoptions-type",
+    "name": "ClientOptions",
+    "description": "Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure."
+  },
+  {
+    "slug": "core/clientconfig-type",
+    "name": "ClientConfig",
+    "description": "Resolved client configuration after option helpers have been applied."
+  },
+  {
+    "slug": "core/clientsseoptions-type",
+    "name": "ClientSSEOptions",
+    "description": "Optional SSE settings applied when creating a client: fetch handle, invalid-event hook, and reconnect policy."
+  },
+  {
+    "slug": "core/clientsseconfig-type",
+    "name": "ClientSSEConfig",
+    "description": "Resolved SSE configuration with a required fetch handle."
+  },
+  {
+    "slug": "core/clientwebsocketoptions-type",
+    "name": "ClientWebSocketOptions",
+    "description": "Optional WebSocket settings applied when creating a client: constructor, beforeConnect hook, heartbeat, protocols, and reconnect policy."
+  },
+  {
+    "slug": "core/queryserializer-type",
+    "name": "QuerySerializer",
+    "description": "Serializes an encoded query object into a query string."
+  },
+  {
+    "slug": "core/websockethandle-type",
+    "name": "WebSocketHandle",
+    "description": "Minimal WebSocket instance surface used by the client transport."
+  },
+  {
+    "slug": "core/websockethandleconstructor-type",
+    "name": "WebSocketHandleConstructor",
+    "description": "Constructor type accepted by withWebSocketHandle."
+  },
+  {
+    "slug": "core/definerequest",
+    "name": "defineRequest",
+    "description": "Declares a typed HTTP request endpoint."
+  },
+  {
+    "slug": "core/executehttpcommand",
+    "name": "executeHttpCommand",
+    "description": "Runs an HttpCommand against client config: validate input, send the request, and parse the response."
+  },
+  {
+    "slug": "core/fetchhandler",
+    "name": "fetchHandler",
+    "description": "Default HTTP transport: perform httpRequest with fetch and return an HttpResponse."
+  },
+  {
+    "slug": "core/makeresponse",
+    "name": "makeResponse",
+    "description": "Builds an HttpResponse without a network call, for interceptors that short-circuit next and for tests."
+  },
+  {
+    "slug": "core/requestdefinition-type",
+    "name": "RequestDefinition",
+    "description": "Contract for an HTTP endpoint: method, path, optional input, and the structs that decode its bodies."
+  },
+  {
+    "slug": "core/requestendpoint-type",
+    "name": "RequestEndpoint",
+    "description": "Callable endpoint returned by defineRequest."
+  },
+  {
+    "slug": "core/builderinput-type",
+    "name": "BuilderInput",
+    "description": "Parsed endpoint input that a request builder receives."
+  },
+  {
+    "slug": "core/httprequestshape-type",
+    "name": "HttpRequestShape",
+    "description": "Request shape an HTTP builder returns: path, query, headers, and body."
+  },
+  {
+    "slug": "core/httpcommand-type",
+    "name": "HttpCommand",
+    "description": "Opaque executable HTTP command produced by a defineRequest endpoint."
+  },
+  {
+    "slug": "core/httpexecuteoptions-type",
+    "name": "HttpExecuteOptions",
+    "description": "Options passed to client.execute or executeHttpCommand for one HTTP call: progress, abort or timeout, and signal."
+  },
+  {
+    "slug": "core/userequestconfig-type",
+    "name": "UseRequestConfig",
+    "description": "Per-request options for HTTP execution: progress callbacks and cancellation."
+  },
+  {
+    "slug": "core/httpawaitresult-type",
+    "name": "HttpAwaitResult",
+    "description": "Await-result tuple for an HTTP call: success is [null, data, response], and failure is [fault, undefined, undefined]."
+  },
+  {
+    "slug": "core/requestsuccessdata-type",
+    "name": "RequestSuccessData",
+    "description": "Decoded success body for the declared output struct, or undefined when none is declared."
+  },
+  {
+    "slug": "core/requesterrordata-type",
+    "name": "RequestErrorData",
+    "description": "Decoded error body for the declared error struct, or undefined when none is declared."
+  },
+  {
+    "slug": "core/httprequest-type",
+    "name": "HttpRequest",
+    "description": "Normalized outgoing HTTP request seen by transports, handlers, interceptors, and fetchHandler after the builder runs."
+  },
+  {
+    "slug": "core/httpmeta-type",
+    "name": "HttpMeta",
+    "description": "Response metadata, available whenever a response reached the client."
+  },
+  {
+    "slug": "core/decodedresponse-type",
+    "name": "DecodedResponse",
+    "description": "Response metadata plus a body that decoded against a declared struct."
+  },
+  {
+    "slug": "core/httpresponse-type",
+    "name": "HttpResponse",
+    "description": "Wire-shape HTTP response that transports produce and interceptors accept."
+  },
+  {
+    "slug": "core/httpresponsetype-type",
+    "name": "HttpResponseType",
+    "description": "Representation used to read an HTTP body before struct validation."
+  },
+  {
+    "slug": "core/httpprogressevent-type",
+    "name": "HttpProgressEvent",
+    "description": "Progress snapshot passed to upload and download callbacks."
+  },
+  {
+    "slug": "core/httpprogressfn-type",
+    "name": "HttpProgressFn",
+    "description": "Callback invoked as request bytes are uploaded or response bytes are downloaded."
+  },
+  {
+    "slug": "core/makeresponseoptions-type",
+    "name": "MakeResponseOptions",
+    "description": "Fields accepted by makeResponse when building a synthetic HttpResponse, for example in interceptors."
+  },
+  {
+    "slug": "core/struct",
+    "name": "struct",
+    "description": "Facade object for building protocol-boundary structs and parsing values with its constructors and struct.parse."
+  },
+  {
+    "slug": "core/struct-any",
+    "name": "struct.any",
+    "description": "Struct that accepts any value except null and undefined, without validation."
+  },
+  {
+    "slug": "core/struct-array",
+    "name": "struct.array",
+    "description": "Struct that parses an array with one item struct."
+  },
+  {
+    "slug": "core/struct-arraybuffer",
+    "name": "struct.arrayBuffer",
+    "description": "Struct that accepts an ArrayBuffer."
+  },
+  {
+    "slug": "core/struct-bigint",
+    "name": "struct.bigint",
+    "description": "Struct that accepts a bigint or a bigint string and outputs a bigint."
+  },
+  {
+    "slug": "core/struct-blob",
+    "name": "struct.blob",
+    "description": "Struct that accepts a Blob."
+  },
+  {
+    "slug": "core/struct-boolean",
+    "name": "struct.boolean",
+    "description": "Struct that accepts boolean values."
+  },
+  {
+    "slug": "core/struct-date",
+    "name": "struct.date",
+    "description": "Struct that accepts a Date, timestamp, or date string and outputs a Date."
+  },
+  {
+    "slug": "core/struct-discriminatedunion",
+    "name": "struct.discriminatedUnion",
+    "description": "Struct that picks one object struct by the value of a tag field."
+  },
+  {
+    "slug": "core/struct-enum",
+    "name": "struct.enum",
+    "description": "Struct that accepts one value from a list of strings or from the values of an object."
+  },
+  {
+    "slug": "core/struct-file",
+    "name": "struct.file",
+    "description": "Struct that accepts a File."
+  },
+  {
+    "slug": "core/struct-formdata",
+    "name": "struct.formData",
+    "description": "Object struct that is encoded as multipart FormData when it is the request body."
+  },
+  {
+    "slug": "core/struct-intersection",
+    "name": "struct.intersection",
+    "description": "Struct that requires a value to satisfy every given struct."
+  },
+  {
+    "slug": "core/struct-literal",
+    "name": "struct.literal",
+    "description": "Struct that accepts exactly one boolean, null, number, or string value."
+  },
+  {
+    "slug": "core/struct-null",
+    "name": "struct.null",
+    "description": "Struct that accepts only null."
+  },
+  {
+    "slug": "core/struct-number",
+    "name": "struct.number",
+    "description": "Struct that accepts number values except NaN."
+  },
+  {
+    "slug": "core/struct-object",
+    "name": "struct.object",
+    "description": "Struct that parses a plain object with a fixed set of fields."
+  },
+  {
+    "slug": "core/struct-or",
+    "name": "struct.or",
+    "description": "Struct that accepts a value matching any one of several structs."
+  },
+  {
+    "slug": "core/struct-parse",
+    "name": "struct.parse",
+    "description": "Parses an unknown value with a struct and returns an error-first tuple."
+  },
+  {
+    "slug": "core/struct-record",
+    "name": "struct.record",
+    "description": "Struct that parses an object with string keys and one value struct."
+  },
+  {
+    "slug": "core/struct-string",
+    "name": "struct.string",
+    "description": "Struct that accepts string values."
+  },
+  {
+    "slug": "core/struct-tuple",
+    "name": "struct.tuple",
+    "description": "Struct that parses a fixed-length array with one struct per position."
+  },
+  {
+    "slug": "core/struct-unknown",
+    "name": "struct.unknown",
+    "description": "Struct that accepts any value except null and undefined, typed as unknown."
+  },
+  {
+    "slug": "core/struct-urlencoded",
+    "name": "struct.urlencoded",
+    "description": "Object struct that is encoded as an URL-encoded form when it is the request body."
+  },
+  {
+    "slug": "core/infer-type",
+    "name": "Infer",
+    "description": "Infers the parsed output type of a struct, as an alias of the internal output brand."
+  },
+  {
+    "slug": "core/structinput-type",
+    "name": "StructInput",
+    "description": "Type helper that extracts the accepted input type of a struct."
+  },
+  {
+    "slug": "core/anystruct-type",
+    "name": "AnyStruct",
+    "description": "Broad struct constraint that accepts any struct, for endpoint and client generics."
+  },
+  {
+    "slug": "core/struct-type",
+    "name": "Struct",
+    "description": "Public struct contract: input and output types, modifier methods, and the _struct type brand."
+  },
+  {
+    "slug": "core/structlike-type",
+    "name": "StructLike",
+    "description": "Minimal structural brand carried by every struct instance."
+  },
+  {
+    "slug": "core/structmethods-type",
+    "name": "StructMethods",
+    "description": "Chainable modifiers available on every Struct instance."
+  },
+  {
+    "slug": "core/objectstruct-type",
+    "name": "ObjectStruct",
+    "description": "Object-shaped struct type produced by struct.object(shape)."
+  },
+  {
+    "slug": "core/parseresult-type",
+    "name": "ParseResult",
+    "description": "Error-first tuple returned by struct.parse."
+  },
+  {
+    "slug": "core/errormap-type",
+    "name": "ErrorMap",
+    "description": "Optional callback that rewrites a StructIssue message before it is stored."
+  },
+  {
+    "slug": "core/structerror-type",
+    "name": "StructError",
+    "description": "Error returned by a failed struct parse, aggregating one or more StructIssues and their formatters."
+  },
+  {
+    "slug": "core/structissue-type",
+    "name": "StructIssue",
+    "description": "A single validation failure produced while parsing a struct."
+  },
+  {
+    "slug": "core/formattedstructerror-type",
+    "name": "FormattedStructError",
+    "description": "Nested error tree returned by StructError.format()."
+  },
+  {
+    "slug": "core/flattenedstructerror-type",
+    "name": "FlattenedStructError",
+    "description": "Flat field and form error bags returned by StructError.flatten()."
+  },
+  {
+    "slug": "core/faultcode-type",
+    "name": "FaultCode",
+    "description": "Every failure Defjs reports, as one closed set of codes."
+  },
+  {
+    "slug": "core/faultclass-type",
+    "name": "FaultClass",
+    "description": "Extracts the class prefix from a fault code: the segment before its first _."
+  },
+  {
+    "slug": "core/fault-type",
+    "name": "Fault",
+    "description": "Union of every failure client.execute can return, discriminated by code."
+  },
+  {
+    "slug": "core/faultof-type",
+    "name": "FaultOf",
+    "description": "Any failure returned by client.execute, expressed by its decoded error-body type."
+  },
+  {
+    "slug": "core/httpstatusfault-type",
+    "name": "HttpStatusFault",
+    "description": "Fault for a non-2xx response, typed by the declared error struct."
+  },
+  {
+    "slug": "core/httpstatusfaultof-type",
+    "name": "HttpStatusFaultOf",
+    "description": "Non-2xx fault expressed by its decoded body type instead of the struct that produced it."
+  },
+  {
+    "slug": "core/decodefault-type",
+    "name": "DecodeFault",
+    "description": "A response arrived but could not be read as declared."
+  },
+  {
+    "slug": "core/preflightfault-type",
+    "name": "PreflightFault",
+    "description": "A failure that may have happened before any response existed."
+  },
+  {
+    "slug": "core/anyfault-type",
+    "name": "AnyFault",
+    "description": "Any fault at all, whatever its decoded error-body type."
+  },
+  {
+    "slug": "core/createhttpstatusfault",
+    "name": "createHttpStatusFault",
+    "description": "Builds an HTTP_STATUS fault for a non-2xx response whose body decoded against the declared error struct."
+  },
+  {
+    "slug": "core/createundecodedhttpstatusfault",
+    "name": "createUndecodedHttpStatusFault",
+    "description": "Builds an HTTP_STATUS fault for a non-2xx response that was never decoded, because the endpoint declared no error struct."
+  },
+  {
+    "slug": "core/createdecodefault",
+    "name": "createDecodeFault",
+    "description": "Builds a decode fault for a response that arrived but could not be read as declared."
+  },
+  {
+    "slug": "core/createnetworkfault",
+    "name": "createNetworkFault",
+    "description": "Builds a NET_* PreflightFault, choosing the code from the shape of cause."
+  },
+  {
+    "slug": "core/createpreflightfault",
+    "name": "createPreflightFault",
+    "description": "Builds a fault for a failure that may have happened before any response existed."
+  },
+  {
+    "slug": "core/err-aborted-type",
+    "name": "ERR_ABORTED",
+    "description": "Shared Error sentinel that marks a request as aborted."
+  },
+  {
+    "slug": "core/err-timeout-type",
+    "name": "ERR_TIMEOUT",
+    "description": "Shared Error sentinel that marks a request as timed out."
+  },
+  {
+    "slug": "core/isabortcause",
+    "name": "isAbortCause",
+    "description": "Whether cause is caller cancellation, across Core copies and platform abort errors."
+  },
+  {
+    "slug": "core/istimeoutcause",
+    "name": "isTimeoutCause",
+    "description": "Whether cause is a timeout, across Core copies and platform timeout errors."
+  },
+  {
+    "slug": "core/createhttpinterceptor",
+    "name": "createHttpInterceptor",
+    "description": "Wraps an InterceptorFn as a tagged HttpInterceptor."
+  },
+  {
+    "slug": "core/createsseinterceptor",
+    "name": "createSSEInterceptor",
+    "description": "Wraps an SSEInterceptorFn as a tagged SSEInterceptor."
+  },
+  {
+    "slug": "core/createwebsocketinterceptor",
+    "name": "createWebSocketInterceptor",
+    "description": "Wraps a WebSocketInterceptorFn as a tagged WebSocketInterceptor."
+  },
+  {
+    "slug": "core/basicauthhttpinterceptor",
+    "name": "basicAuthHttpInterceptor",
+    "description": "HTTP interceptor that sets an Authorization: Basic … header from credentials."
+  },
+  {
+    "slug": "core/basicauthsseinterceptor",
+    "name": "basicAuthSSEInterceptor",
+    "description": "SSE interceptor that sets an Authorization: Basic … header from credentials."
+  },
+  {
+    "slug": "core/interceptor-type",
+    "name": "Interceptor",
+    "description": "Any tagged interceptor accepted by client interceptor options."
+  },
+  {
+    "slug": "core/interceptorfn-type",
+    "name": "InterceptorFn",
+    "description": "HTTP interceptor function: may inspect or modify the request, then call next."
+  },
+  {
+    "slug": "core/httpinterceptor-type",
+    "name": "HttpInterceptor",
+    "description": "Tagged HTTP interceptor accepted by client interceptor options."
+  },
+  {
+    "slug": "core/httpinterceptornext-type",
+    "name": "HttpInterceptorNext",
+    "description": "Continuation that runs the rest of the HTTP interceptor chain, or the handler."
+  },
+  {
+    "slug": "core/sseinterceptor-type",
+    "name": "SSEInterceptor",
+    "description": "Tagged SSE interceptor for client option lists, accepted by withInterceptors."
+  },
+  {
+    "slug": "core/sseinterceptorfn-type",
+    "name": "SSEInterceptorFn",
+    "description": "SSE interceptor function: may inspect, modify, or replace the request, then call next."
+  },
+  {
+    "slug": "core/ssehandler-type",
+    "name": "SSEHandler",
+    "description": "Terminal next function an SSE interceptor receives; it opens an event stream for the request."
+  },
+  {
+    "slug": "core/websocketinterceptor-type",
+    "name": "WebSocketInterceptor",
+    "description": "Tagged WebSocket interceptor for client option lists, accepted by withInterceptors."
+  },
+  {
+    "slug": "core/websocketinterceptorfn-type",
+    "name": "WebSocketInterceptorFn",
+    "description": "WebSocket interceptor function: may inspect, modify, or replace the request, then call next."
+  },
+  {
+    "slug": "core/websockethandler-type",
+    "name": "WebSocketHandler",
+    "description": "Terminal next function a WebSocket interceptor receives; it opens a session for the request."
+  },
+  {
+    "slug": "core/websocketsessionlike-type",
+    "name": "WebSocketSessionLike",
+    "description": "Minimal WebSocket session surface that interceptors see."
+  },
+  {
+    "slug": "core/basicauthinterceptoroptions-type",
+    "name": "BasicAuthInterceptorOptions",
+    "description": "Options for basic-auth interceptors, including a custom credential encoder."
+  },
+  {
+    "slug": "core/defineeventstream",
+    "name": "defineEventStream",
+    "description": "Declare a typed Server-Sent Events endpoint."
+  },
+  {
+    "slug": "core/executeeventstreamcommand",
+    "name": "executeEventStreamCommand",
+    "description": "Open an SSE command against the given client config."
+  },
+  {
+    "slug": "core/eventstreamdefinition-type",
+    "name": "EventStreamDefinition",
+    "description": "Contract that describes an SSE endpoint for defineEventStream."
+  },
+  {
+    "slug": "core/eventstreamendpoint-type",
+    "name": "EventStreamEndpoint",
+    "description": "Callable endpoint returned by defineEventStream."
+  },
+  {
+    "slug": "core/eventstreamrequestshape-type",
+    "name": "EventStreamRequestShape",
+    "description": "Request shape an SSE builder returns: the same fields as HttpRequestShape for method M and path P."
+  },
+  {
+    "slug": "core/eventstreamcommand-type",
+    "name": "EventStreamCommand",
+    "description": "Opaque executable SSE command produced by an EventStreamEndpoint."
+  },
+  {
+    "slug": "core/eventstreamexecuteoptions-type",
+    "name": "EventStreamExecuteOptions",
+    "description": "Per-call options for opening an SSE stream: abort or timeout, plus an optional signal."
+  },
+  {
+    "slug": "core/streamawaitresult-type",
+    "name": "StreamAwaitResult",
+    "description": "Await-result tuple from opening an SSE stream via client.execute."
+  },
+  {
+    "slug": "core/eventstreamhandle-type",
+    "name": "EventStreamHandle",
+    "description": "Open SSE stream: iterate events, read open metadata, and close early."
+  },
+  {
+    "slug": "core/eventstreamopeninfo-type",
+    "name": "EventStreamOpenInfo",
+    "description": "Metadata available once an SSE response has opened."
+  },
+  {
+    "slug": "core/eventstreamcloseinfo-type",
+    "name": "EventStreamCloseInfo",
+    "description": "How an SSE stream ended: clean EOF, abort, or an error carrying its fault code."
+  },
+  {
+    "slug": "core/eventstructs-type",
+    "name": "EventStructs",
+    "description": "Map from SSE event names to the structs that decode their data."
+  },
+  {
+    "slug": "core/eventstreamdata-type",
+    "name": "EventStreamData",
+    "description": "Union of parsed SSE events inferred from an EventStructs map."
+  },
+  {
+    "slug": "core/definewebsocket",
+    "name": "defineWebSocket",
+    "description": "Declare a typed WebSocket endpoint."
+  },
+  {
+    "slug": "core/executewebsocketcommand",
+    "name": "executeWebSocketCommand",
+    "description": "Open a WebSocket command against the given client config."
+  },
+  {
+    "slug": "core/websocketdefinition-type",
+    "name": "WebSocketDefinition",
+    "description": "Contract object passed to defineWebSocket."
+  },
+  {
+    "slug": "core/websocketendpoint-type",
+    "name": "WebSocketEndpoint",
+    "description": "Callable returned by defineWebSocket."
+  },
+  {
+    "slug": "core/websocketrequestshape-type",
+    "name": "WebSocketRequestShape",
+    "description": "Request shape the builder of a WebSocketDefinition may return, where P is the endpoint path."
+  },
+  {
+    "slug": "core/websocketcommand-type",
+    "name": "WebSocketCommand",
+    "description": "Executable command created by calling a WebSocketEndpoint."
+  },
+  {
+    "slug": "core/websocketexecuteoptions-type",
+    "name": "WebSocketExecuteOptions",
+    "description": "Per-call options for executing a WebSocket command."
+  },
+  {
+    "slug": "core/usewebsocketconfig-type",
+    "name": "UseWebSocketConfig",
+    "description": "WebSocket execute options without signal."
+  },
+  {
+    "slug": "core/socketawaitresult-type",
+    "name": "SocketAwaitResult",
+    "description": "Await-result tuple from opening a WebSocket via client.execute."
+  },
+  {
+    "slug": "core/websocketsession-type",
+    "name": "WebSocketSession",
+    "description": "Typed WebSocket session: send and receive messages, observe state, and close."
+  },
+  {
+    "slug": "core/websocketstate-type",
+    "name": "WebSocketState",
+    "description": "Lifecycle state of a managed WebSocket session."
+  },
+  {
+    "slug": "core/websocketconnectioninfo-type",
+    "name": "WebSocketConnectionInfo",
+    "description": "Connection metadata for the current WebSocket generation."
+  },
+  {
+    "slug": "core/websocketcloseinfo-type",
+    "name": "WebSocketCloseInfo",
+    "description": "Logical terminal outcome of a WebSocket session."
+  },
+  {
+    "slug": "core/manualsocketclosereason-type",
+    "name": "ManualSocketCloseReason",
+    "description": "Close code and reason recorded when a session is closed with session.close."
+  },
+  {
+    "slug": "core/websocketheartbeatconfig-type",
+    "name": "WebSocketHeartbeatConfig",
+    "description": "Heartbeat ping and acknowledgement settings for a live WebSocket session."
+  },
+  {
+    "slug": "core/websocketincomingdata-type",
+    "name": "WebSocketIncomingData",
+    "description": "Decoded type of a received WebSocket message."
+  },
+  {
+    "slug": "core/websocketoutgoingdata-type",
+    "name": "WebSocketOutgoingData",
+    "description": "Type accepted by WebSocket session send."
+  },
+  {
+    "slug": "core/socketlifecycleoutcome-type",
+    "name": "SocketLifecycleOutcome",
+    "description": "The outcome of a single connect attempt, not the final result of the session."
+  },
+  {
+    "slug": "vue/createclientplugin",
+    "name": "createClientPlugin",
+    "description": "Create a Vue plugin that provides an existing Defjs client via HTTP_CLIENT."
+  },
+  {
+    "slug": "vue/injectclient",
+    "name": "injectClient",
+    "description": "Vue composable that injects the Defjs client for a key, defaulting to HTTP_CLIENT."
+  },
+  {
+    "slug": "vue/http-client",
+    "name": "HTTP_CLIENT",
+    "description": "Vue injection key for the Defjs Client provided by createClientPlugin."
+  },
+  {
+    "slug": "react/clientprovider-type",
+    "name": "ClientProvider",
+    "description": "Provide a Defjs client to React descendants via context."
+  },
+  {
+    "slug": "react/useclient",
+    "name": "useClient",
+    "description": "React Hook that returns an explicit Defjs client or the nearest ClientProvider."
+  },
+  {
+    "slug": "react/clientproviderprops-type",
+    "name": "ClientProviderProps",
+    "description": "Props of ClientProvider: the required client and optional children."
+  },
+  {
+    "slug": "opentelemetry-server/withopentelemetryserver",
+    "name": "withOpenTelemetryServer",
+    "description": "Client option that installs outbound OpenTelemetry interceptors for HTTP, SSE, and WebSocket."
+  },
+  {
+    "slug": "opentelemetry-server/opentelemetryserveroptions-type",
+    "name": "OpenTelemetryServerOptions",
+    "description": "Options for withOpenTelemetryServer: tracer, meter, logger, propagator, and per-transport settings."
+  },
+  {
+    "slug": "opentelemetry-server/opentelemetryservertransportoptions-type",
+    "name": "OpenTelemetryServerTransportOptions",
+    "description": "Shared per-transport OpenTelemetry client options: whether the transport is enabled and its span hooks, generic over the response type."
+  },
+  {
+    "slug": "opentelemetry-server/opentelemetryserverhttpoptions-type",
+    "name": "OpenTelemetryServerHttpOptions",
+    "description": "Options for the HTTP transport — the shared options with an HttpResponse in responseHook."
+  },
+  {
+    "slug": "opentelemetry-server/opentelemetryserversseoptions-type",
+    "name": "OpenTelemetryServerSSEOptions",
+    "description": "Options for the SSE transport — the shared options with the stream handle in responseHook."
+  },
+  {
+    "slug": "opentelemetry-server/opentelemetryserverwebsocketoptions-type",
+    "name": "OpenTelemetryServerWebSocketOptions",
+    "description": "Options for the WebSocket transport — the shared options plus queryPropagation."
+  },
+  {
+    "slug": "core/fetchhandle-type",
+    "name": "FetchHandle",
+    "description": "Fetch-compatible function used as an HTTP or SSE handle."
+  },
+  {
+    "slug": "core/withheaders",
+    "name": "withHeaders",
+    "description": "Sets static default headers for HTTP and SSE requests built by this client."
+  },
+  {
+    "slug": "core/withtimeout",
+    "name": "withTimeout",
+    "description": "Sets the default timeout, in milliseconds, for HTTP execute only."
+  },
+  {
+    "slug": "core/decodefaultcode-type",
+    "name": "DecodeFaultCode",
+    "description": "Codes whose fault carries response metadata but no body."
+  },
+  {
+    "slug": "core/preflightfaultcode-type",
+    "name": "PreflightFaultCode",
+    "description": "Codes whose fault may never have reached a response."
+  },
+  {
+    "slug": "core/createresolvedrequesturl",
+    "name": "createResolvedRequestUrl",
+    "description": "Resolves a relative definition path under the base endpoint's origin and directory into a URL."
+  },
+  {
+    "slug": "core/eventstreamfaultcode-type",
+    "name": "EventStreamFaultCode",
+    "description": "Fault codes an event stream can end with, drawn from the one shared FaultCode namespace."
+  },
+  {
+    "slug": "core/struct-symbol-type",
+    "name": "STRUCT",
+    "description": "Type-only export of the internal enumerable tag key on objects produced while parsing endpoint input, used by the outbound encoder."
+  }
+]

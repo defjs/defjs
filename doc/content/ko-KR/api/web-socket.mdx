@@ -1,0 +1,126 @@
+---
+title: WebSocket
+description: defineWebSocket, session, 실행 options예요.
+---
+
+# WebSocket
+
+소켓을 선언하고, 실행하고, 타입이 있는 메시지를 보내고 받은 뒤 닫아요.
+
+## defineWebSocket()
+
+<ApiSignature name="defineWebSocket" />
+
+- **definition** — `path`, `incoming` struct 하나, 필수인 양의 정수 `maxIncomingQueueSize`, 선택 `outgoing`과 `input` struct, `operation`, 정적 `protocols`, 음이 아닌 `maxOutgoingQueueSize`예요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 builder만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. 이 `definition` 멤버는 [`WebSocketDefinition`](/ko-KR/api/core/websocketdefinition-type)에 적혀 있어요. `builder`는 `input`을 선언했을 때만 필요해요.
+- **반환** 엔드포인트예요. 입력을 넣어 호출하면 `WebSocketCommand`가 나와요.
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+## executeWebSocketCommand()
+
+<ApiSignature name="executeWebSocketCommand" />
+
+`client.execute`의 저수준 진입점이에요. 애플리케이션 코드에서는 클라이언트를 쓰는 편이 좋아요.
+
+- **반환** `[null, session, connection]` 또는 `[error, undefined, connection?]`예요.
+
+WebSocket 실행은 한 번의 호출에 한해 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 덮어쓸 수 있고, 각각 클라이언트 값을 대체해요. protocol 우선순위는 execute, `withWebSocketProtocols`, 정의의 `protocols` 순서예요.
+
+## WebSocketSession
+
+<ApiSignature name="WebSocketSession" />
+
+소유한 범위를 정리할 때는 `await using ownedSession = session`을 선호해요. 수동 `session.close()`와 `await session.closed`도 그대로 쓸 수 있어요.
+
+```ts
+async function consume(
+  session: WebSocketSession<unknown, never>,
+): Promise<void> {
+  await using ownedSession = session;
+  for await (const message of ownedSession.receive) console.log(message);
+}
+```
+
+`closed`는 논리적인 종료 상태를 보고해요. async disposer는 네이티브 close를 요청하고 Defjs가 소유한 teardown을 기다리지만, close 이벤트가 없으면 1초에서 끊고 `TimeoutError`라는 이름의 `DOMException`으로 reject할 수 있어요. 물리 TCP 연결이 닫혔다는 증명까지는 못 해요.
+
+### WebSocketState
+
+`'idle' | 'connecting' | 'open' | 'closing' | 'closed' | 'reconnecting' | 'aborted' | 'error'`
+
+### WebSocketConnectionInfo
+
+`generation`(재연결할 때마다 증가)과, 알려진 뒤에는 `url`, `protocol`, `extensions`가 있어요.
+
+### WebSocketCloseInfo
+
+<ApiSignature name="WebSocketCloseInfo" />
+
+`kind`는 `closed`, `aborted`, `error` 중 하나예요. `cause`는 `closed`에는 없고, `aborted`에서는 선택, `error`에서는 필수예요. `code`, `reason`, `wasClean`은 모든 변형에 있을 수 있어요. 수동 `session.close()`는 close 이벤트가 그 값을 주지 않을 때 `{ kind: "closed" }`의 `code`와 `reason`을 채워요.
+
+## 실행 options
+
+## WebSocketExecuteOptions
+
+<ApiSignature name="WebSocketExecuteOptions" />
+
+`WebSocketExecuteOptions`는 [`UseWebSocketConfig`](/ko-KR/api/core/usewebsocketconfig-type)예요. `beforeConnect`, `heartbeat`, `protocols`, `reconnect`, 그리고 `abort` 또는 `timeout`(둘 다는 안 됨)에 `signal`이 더해져요. `WebSocketHeartbeatConfig`: `intervalMs`, 선택 `message`, `isAck`, `timeoutMs`예요.
+
+`abort`와 `timeout`은 함께 쓸 수 없어요. 타입이 둘 다 주는 것을 막고, 런타임에 둘 다 넘기면 `REQ_OPTIONS_INVALID` fault로 실패해요. `signal`은 어느 쪽과도 합쳐져요. `timeout`은 연결의 시작 데드라인이에요. 이후 재연결에서는 다시 설정되지 않고, `withTimeout`은 WebSocket에 적용되지 않아요.
+
+`reconnect`를 주면 `attempts` 기본값은 단절마다 3이고, `0`은 꺼요. `open`이 성공하면 예산과 백오프 지수가 초기화되어, 다음 단절은 재시도 1부터 시작해요. `attempts`를 빼도 한 단절 안에서 무제한 재시도가 되지는 않아요. 기본값과 검증 규칙은 [클라이언트](/ko-KR/api/client)를 보세요.
+
+## 메시지
+
+`incoming`은 struct 하나예요. 텍스트, `ArrayBuffer`, typed-array, `Blob` 프레임은 UTF-8로 읽고, JSON 파싱한 뒤 그 struct와 맞춰 봐요. JSON 파싱이나 struct에 실패한 프레임은 `session.onRuntimeError`로 보고되고 큐에 들어가지 않아요. 잘못된 프레임을 보는 클라이언트 옵션은 없어요.
+
+`outgoing`은 struct 하나예요. `session.send`는 그 struct의 `StructInput`을 받고, alias를 인코딩한 뒤 `JSON.stringify`해요. 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거나 재연결 큐에 넣기 전에 `TypeError`를 throw해요. 유한하지 않은 수, 함수, symbol, `Map`, `Set`, 스트림, JSON 표현이 없는 클래스 인스턴스가 여기 포함돼요. 중첩 값도 HTTP JSON body와 같은 가드를 써요. heartbeat도 그 가드를 쓰고, heartbeat 직렬화 실패는 session을 끝내요. 메시지 종류가 여러 개면 `struct.discriminatedUnion`이에요.
+
+```ts
+session.send({ type: "message", text: "Hello" });
+```
+
+[WebSocket 가이드](/ko-KR/docs/web-socket)와 [WebSocket 세션 열기](/ko-KR/recipes/websocket-session)를 보세요.
+
+## WebSocketDefinition
+
+`path`, `incoming`, 필수 `maxIncomingQueueSize`, 선택 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`예요. builder는 `path`와 `query`만 돌려줄 수 있어요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 builder만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요.
+
+## WebSocketEndpoint
+
+`defineWebSocket`이 돌려줘요. 입력을 넣어 호출하면 `WebSocketCommand`가 나와요.
+
+## WebSocketRequestShape
+
+`path`와 `query`만 있어요. `headers`와 `body`는 `never`예요.
+
+## WebSocketCommand
+
+opaque WebSocket 명령이에요. `client.execute`에 넘기세요.
+
+## UseWebSocketConfig
+
+heartbeat, reconnect, `beforeConnect`, protocols, 그리고 취소예요. `WebSocketExecuteOptions`는 `signal`을 더해요.
+
+## SocketAwaitResult
+
+`[null, session, connection]` 또는 `[error, undefined, connection?]`예요.
+
+## ManualSocketCloseReason
+
+`session.close()`로 세션을 닫을 때 기록되는 이유예요.
+
+## WebSocketHeartbeatConfig
+
+`intervalMs`, 선택 `message`, `isAck`, `timeoutMs`예요.
+
+## WebSocketIncomingData
+
+디코딩된 들어오는 프레임이에요. `incoming` struct의 `Infer`예요.
+
+## WebSocketOutgoingData
+
+`session.send`가 받는 값이에요. `outgoing` struct의 `StructInput`이고, 선언이 없으면 `never`예요.
+
+## SocketLifecycleOutcome
+
+연결 시도 한 번의 결과(`closeInfo`, `connection`, `cause`, `opened`)이며 재연결 로직이 써요. session의 최종 결과가 아니에요. 최종 결과는 `WebSocketCloseInfo`를 보세요.

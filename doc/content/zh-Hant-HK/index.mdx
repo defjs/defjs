@@ -1,0 +1,75 @@
+---
+title: Defjs
+description: 為更友好的 SDK 設計而生：定義可重用的介面契約，由應用程式設定 Client 並執行。
+---
+
+# Defjs
+
+**為更友好的 SDK 設計而生。** Defjs 即 **define js**，其中 `def` 是 **define** 的縮寫。用 JavaScript / TypeScript 定義介面，讓 SDK 的編寫、使用與發佈更直接。
+
+SDK 作者匯出帶類型的端點定義；應用程式匯入這些定義，建立自己的 Defjs Client，並決定如何執行。HTTP、SSE、WebSocket 都沿用這套分工。
+
+| SDK 作者負責                                                        | 應用程式負責                                                 |
+| ------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 以 `defineRequest`、`defineEventStream`、`defineWebSocket` 定義端點 | 以 `createClient` 設定服務地址、認證、攔截器及平台 handle    |
+| Struct 描述輸入、輸出、錯誤或訊息；`builder` 將輸入映射到傳輸位置   | 執行 command，處理結果、取消、重試策略及串流或會話的生命週期 |
+| 匯出、測試及發佈可重用契約                                          | 按部署環境、用戶或請求範圍重用這些契約                       |
+
+先由 SDK 匯出定義：
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+再由應用程式建立 Client 並執行：
+
+<include cwd meta="app.ts">
+  examples/home/app.ts#example
+</include>
+
+定義不綁定某個應用程式的 Client，但仍屬於 Defjs 的執行時契約：它包含 Struct、builder 及具體傳輸語義，並不是任何請求函式庫都能執行的 JSON 描述。
+
+從[快速開始](/zh-Hant-HK/docs/start)體驗定義與呼叫，再了解[定義與執行](/zh-Hant-HK/docs/commands)、[建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)及[應用程式的 Client 設定](/zh-Hant-HK/docs/client)。[設計決策](/zh-Hant-HK/docs/design-decisions)解釋這些邊界如何配合 SDK 設計。
+
+## 揀傳輸方式
+
+| 你需要                            | 由呢度開始                               | 成功時嘅 result                                                   |
+| --------------------------------- | ---------------------------------------- | ----------------------------------------------------------------- |
+| Request + 按 status 分嘅 response | [HTTP](/zh-Hant-HK/docs/http)            | Decoded data + `DecodedResponse`（冇聲明 output 時係 `HttpMeta`） |
+| 長駐嘅 server event feed          | [SSE](/zh-Hant-HK/docs/sse)              | 一條 stream + startup `open` snapshot                             |
+| Bidirectional session             | [WebSocket](/zh-Hant-HK/docs/web-socket) | 一個 session + startup `connection` snapshot                      |
+
+傳輸定義描述對應協定的契約；應用程式執行後，按該傳輸的結果及生命週期處理。
+
+## 揀 package
+
+| Package                       | 幾時用                                                                                                          |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | 端點定義、Struct，以及執行 HTTP / SSE / WebSocket 的 `createClient`                                             |
+| `@defjs/react`                | `ClientProvider` / `useClient` — 睇 [React](/zh-Hant-HK/docs/integrations/react)                                |
+| `@defjs/vue`                  | Plugin + `injectClient` — 睇 [Vue](/zh-Hant-HK/docs/integrations/vue)                                           |
+| `@defjs/opentelemetry-server` | Outbound spans、metrics 同 logs — 睇 [OpenTelemetry Server](/zh-Hant-HK/docs/integrations/opentelemetry-server) |
+
+## Result 形狀
+
+三種傳輸都 return error-first 三項 tuple。位置一樣；意思唔一樣：
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+失敗時第二項係 `undefined`。HTTP 嘅第三項亦係 `undefined`，因為 fault 已經帶住 response metadata。SSE 同 WebSocket 嘅第三項，係失敗之前已經 capture 到嘅 startup snapshot（如果有）。詳情睇 [Errors](/zh-Hant-HK/docs/errors)。
+
+## Ownership 一句講晒
+
+HTTP stale 就 abort。SSE close 完之後 `await stream.closed`。WebSocket close 完之後 `await session.closed`。喺 server 上面，如果 options 會 capture cookies、auth 或 tenant data，就喺 request boundary 入面 create client。Log 之前先 redact URLs、headers 同 bodies。
+
+## 相關配方
+
+- [GET 配 declared 404](/zh-Hant-HK/recipes/get-declared-404)
+- [POST JSON](/zh-Hant-HK/recipes/post-json)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)
+- [Consume 一條 SSE stream](/zh-Hant-HK/recipes/consume-sse)
+- [開一個 WebSocket session](/zh-Hant-HK/recipes/websocket-session)
+- [用 local Fetch handle 做 test](/zh-Hant-HK/recipes/test-with-handle)
+- [建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)

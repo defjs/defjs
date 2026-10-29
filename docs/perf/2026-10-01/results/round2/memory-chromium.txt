@@ -1,0 +1,13 @@
+== chromium 153.0.8010.12
+== chromium A
+http { signal }	20000: +15488 KiB	60000: +46126 KiB
+http { signal, timeout }	20000: +24760 KiB	60000: +81179 KiB
+http { timeout }	20000: +23847 KiB	60000: +77770 KiB
+sse { signal }	5000: +5327 KiB	15000: +11571 KiB
+retained per decoded object: 144 bytes (5 x 10k-item lists kept alive)
+== chromium B
+http { signal }	20000: +781 KiB	60000: +774 KiB
+http { signal, timeout }	20000: +818 KiB	60000: +318 KiB
+http { timeout }	20000: +599 KiB	60000: +1184 KiB
+sse { signal }	5000: +654 KiB	15000: +1348 KiB
+retained per decoded object: 52 bytes (5 x 10k-item lists kept alive)

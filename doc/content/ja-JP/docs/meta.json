@@ -1,0 +1,5 @@
+{
+  "title": "ガイド",
+  "root": true,
+  "pages": ["index", "..."]
+}

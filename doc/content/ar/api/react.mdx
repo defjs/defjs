@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider وuseClient مع تجاوز اختياري للعميل وخصائص المزوّد.
+---
+
+# React
+
+وفّر عميل `@defjs/core` موجودًا لشجرة React. هذه الحزمة لا تنشئ العميل ولا تخزّنه ولا تتخلّص منه. مدخلها موسوم بـ `'use client'`، فاستورده من مكوّنات العميل. يلزم React 18 أو أحدث.
+
+انظر [دليل React](/ar/docs/integrations/react).
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+موفر السياق. مرّر عميلًا من `createClient`. يتجاوز `ClientProvider` متداخل العميلَ لشجرته الفرعية؛ ويقرأ `useClient()` أقرب مزوّد. تمرير `client` مختلف يغيّر قيمة السياق للأحفاد.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` يعطي الأولوية للعميل الصريح؛ عند حذف الوسيط أو تمرير `undefined` يقرأ أقرب `ClientProvider`. لا يُرمى `Error` إلا إذا لم يوفّر أي من المصدرين عميلًا. يظل الاستدعاء بلا وسيط `useClient()` صالحًا.
+
+استدعِ `useClient(explicitClient)` دائمًا في المستوى الأعلى لمكوّن أو خطاف مخصص، حتى مع عميل صريح؛ وليس في دالة عادية أو رد نداء لحدث. لا تكتب `explicitClient ?? useClient()` لأنه يستدعي خطافًا بشكل مشروط. لا يكتب التجاوز في Context ولا ينشئ مزوّدًا؛ ويظل الخطاف مشتركًا في Context.
+
+- **يعيد** العميل الصريح نفسه أو العميل الذي يوفّره أقرب مزوّد.
+- **يرمي** `Error` إذا لم يوفّر الوسيط الصريح ولا Context عميلًا.
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` مطلوب ويملكه التطبيق. `children` اختياري: هي الشجرة التي يمكنها استدعاء `useClient`.

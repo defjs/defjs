@@ -1,0 +1,157 @@
+From ad88926d11a719b48e01009fb6905ec78b83aac1 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:22:05 +0800
+Subject: [PATCH 01/10] fix(abort): stop pinning request signals to a caller's
+ long-lived signal
+
+---
+ packages/core/src/http/http.ts             |  2 +-
+ packages/core/src/internal/abort.spec.ts   | 34 ++++++++++++++++++++++
+ packages/core/src/internal/abort.ts        | 13 +++++++++
+ packages/core/src/sse/sse.ts               |  2 +-
+ packages/core/src/web_socket/web_socket.ts |  2 +-
+ 5 files changed, 50 insertions(+), 3 deletions(-)
+
+diff --git a/packages/core/src/http/http.ts b/packages/core/src/http/http.ts
+index c7085c6..17f952e 100644
+--- a/packages/core/src/http/http.ts
++++ b/packages/core/src/http/http.ts
+@@ -244,7 +244,7 @@ export async function executeHttpCommand<
+   // release() only clears the timer, so a response that already arrived is not aborted by it.
+   const deadline = armTransportDeadline(cancellation.timeout)
+   const requestSignal = mergeAbortSignals(controller.signal, [cancellation.abort, cancellation.signal, deadline.signal])
+-  requestSignal.addEventListener('abort', deadline.release, { once: true })
++  deadline.releaseOnAbort(requestSignal)
+   const stopBeforeTransport = (fault: PreflightFault): HttpExecuteAwaitResult<TOutput, TError> => {
+     deadline.release()
+     return fail(fault)
+diff --git a/packages/core/src/internal/abort.spec.ts b/packages/core/src/internal/abort.spec.ts
+index 7c6ed78..c69d7af 100644
+--- a/packages/core/src/internal/abort.spec.ts
++++ b/packages/core/src/internal/abort.spec.ts
+@@ -1,6 +1,7 @@
+ import { afterEach, describe, expect, test, vi } from 'vitest'
+ import { ERR_TIMEOUT } from '../error'
+ import {
++  armTransportDeadline,
+   awaitWithSignal,
+   createAbortTimeoutConflictFault,
+   hasAbortTimeoutConflict,
+@@ -78,6 +79,39 @@ describe('abort helpers', () => {
+     expect(() => validateTransportTimeout(2_147_483_647)).not.toThrow()
+   })
+ 
++  test('should not listen on a signal when no deadline is armed', () => {
++    const signal = new AbortController().signal
++    const add = vi.spyOn(signal, 'addEventListener')
++
++    armTransportDeadline(undefined).releaseOnAbort(signal)
++
++    expect(add).not.toHaveBeenCalled()
++  })
++
++  test('should remove its release listener when the deadline is released', () => {
++    const signal = new AbortController().signal
++    const add = vi.spyOn(signal, 'addEventListener')
++    const remove = vi.spyOn(signal, 'removeEventListener')
++    const deadline = armTransportDeadline(1_000)
++
++    deadline.releaseOnAbort(signal)
++    deadline.release()
++
++    expect(remove).toHaveBeenCalledExactlyOnceWith('abort', add.mock.calls[0]?.[1])
++  })
++
++  test('should release the deadline when the watched signal aborts', () => {
++    vi.useFakeTimers()
++    const controller = new AbortController()
++    const deadline = armTransportDeadline(1_000)
++
++    deadline.releaseOnAbort(controller.signal)
++    controller.abort()
++    vi.advanceTimersByTime(1_000)
++
++    expect(deadline.signal?.aborted).toBe(false)
++  })
++
+   test('should detect abort and timeout field conflict', () => {
+     const signal = new AbortController().signal
+ 
+diff --git a/packages/core/src/internal/abort.ts b/packages/core/src/internal/abort.ts
+index 75303c6..6597d6f 100644
+--- a/packages/core/src/internal/abort.ts
++++ b/packages/core/src/internal/abort.ts
+@@ -109,6 +109,12 @@ export interface TransportDeadline {
+   /** `NET_TIMEOUT` once synchronous work has already used up `timeout`. */
+   expiredFault: () => PreflightFault | undefined
+   release: () => void
++  /**
++   * Release early when `signal` aborts. The listener exists only while a timer is armed and is
++   * removed by `release`: a listener left on a composite signal pins it to every source it follows,
++   * so a caller's long-lived signal would otherwise hold every request that ever used it.
++   */
++  releaseOnAbort: (signal: AbortSignal) => void
+   signal: AbortSignal | undefined
+ }
+ 
+@@ -125,6 +131,7 @@ export function armTransportDeadline(timeout: number | undefined): TransportDead
+     return {
+       expiredFault: () => undefined,
+       release: () => undefined,
++      releaseOnAbort: () => undefined,
+       signal: undefined,
+     }
+   }
+@@ -132,6 +139,7 @@ export function armTransportDeadline(timeout: number | undefined): TransportDead
+   const startedAt = Date.now()
+   const controller = new AbortController()
+   let released = false
++  let watched: AbortSignal | undefined
+   const timer = setTimeout(() => {
+     controller.abort(ERR_TIMEOUT)
+   }, timeout)
+@@ -141,10 +149,15 @@ export function armTransportDeadline(timeout: number | undefined): TransportDead
+     }
+     released = true
+     clearTimeout(timer)
++    watched?.removeEventListener('abort', release)
+   }
+ 
+   return {
+     release,
++    releaseOnAbort(signal) {
++      watched = signal
++      signal.addEventListener('abort', release, { once: true })
++    },
+     signal: controller.signal,
+     expiredFault() {
+       if (released || Date.now() - startedAt < timeout) {
+diff --git a/packages/core/src/sse/sse.ts b/packages/core/src/sse/sse.ts
+index 22798c5..9f543ec 100644
+--- a/packages/core/src/sse/sse.ts
++++ b/packages/core/src/sse/sse.ts
+@@ -258,7 +258,7 @@ async function runEventStreamCommand<
+   // then released once startup settles so it cannot abort the open stream.
+   const deadline = armTransportDeadline(cancellation.timeout)
+   const requestSignal = mergeAbortSignals(controller.signal, [cancellation.abort, cancellation.signal, deadline.signal])
+-  requestSignal.addEventListener('abort', deadline.release, { once: true })
++  deadline.releaseOnAbort(requestSignal)
+   const stopBeforeTransport = (fault: PreflightFault): StreamAwaitResult<EventStreamData<TEvents>, TError> => {
+     deadline.release()
+     return [fault, undefined, undefined]
+diff --git a/packages/core/src/web_socket/web_socket.ts b/packages/core/src/web_socket/web_socket.ts
+index 4c5f000..8c6f6c5 100644
+--- a/packages/core/src/web_socket/web_socket.ts
++++ b/packages/core/src/web_socket/web_socket.ts
+@@ -304,7 +304,7 @@ async function runWebSocketCommand<
+   const chainController = new AbortController()
+   const chainSignal = mergeAbortSignals(chainController.signal, [cancellationConfig.abort, cancellationConfig.signal, deadline.signal])
+   const signal = mergeAbortSignals(controller.signal, [chainSignal])
+-  chainSignal.addEventListener('abort', deadline.release, { once: true })
++  deadline.releaseOnAbort(chainSignal)
+   const stopBeforeTransport = (
+     fault: PreflightFault,
+   ): SocketAwaitResult<WebSocketIncomingData<TIncoming>, WebSocketOutgoingData<TOutgoing>> => {
+-- 
+2.55.0
+

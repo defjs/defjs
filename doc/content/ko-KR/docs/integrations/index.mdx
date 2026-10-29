@@ -1,0 +1,20 @@
+---
+title: 플러그인
+description: 앱이 자신의 Defjs 클라이언트에 끼우는 선택 패키지입니다.
+---
+
+# 플러그인
+
+플러그인은 사용하는 앱이 자신의 Defjs 클라이언트에 설치하는 선택 패키지예요. `@defjs/core`는 플러그인을 import하지 않고, SDK 정의도 import하지 않아요. 클라이언트, endpoint, 자격 증명, 어떤 플러그인을 설치할지는 앱이 가져요.
+
+플러그인은 두 종류예요. **프레임워크 플러그인**은 기존 `Client`를 프레임워크 트리에 넘겨요. **미들웨어 플러그인**은 인터셉터 체인의 플러그인 형태이고, 앱의 클라이언트에 인터셉터를 덧붙여요. [인터셉터](/ko-KR/docs/interceptors)를 보세요.
+
+| 플러그인                                                                         | 패키지                        | 추가하는 것                                                                              | 하지 않는 것                                                                                          |
+| -------------------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [React](/ko-KR/docs/integrations/react) · 프레임워크                             | `@defjs/react`                | 기존 클라이언트를 위한 `ClientProvider`와 `useClient()`                                  | 클라이언트를 만들거나 캐시하거나 재시도하거나 dispose하지 않아요. query나 state 라이브러리가 아니에요 |
+| [Vue](/ko-KR/docs/integrations/vue) · 프레임워크                                 | `@defjs/vue`                  | Vue 플러그인, `HTTP_CLIENT`, `injectClient()`                                            | 만들거나 캐시하거나 재시도하지 않아요. unmount 때 전송을 닫지 않아요. query 라이브러리가 아니에요     |
+| [OpenTelemetry server](/ko-KR/docs/integrations/opentelemetry-server) · 미들웨어 | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`. HTTP, SSE, WebSocket 인터셉터를 덧붙이는 클라이언트 옵션 | OpenTelemetry SDK를 초기화하지 않고, 인바운드 서버 계측도 하지 않아요                                 |
+
+React와 Vue는 기존 `Client`를 프레임워크 트리에 넘겨요. 앱은 그 클라이언트를 `@defjs/core`의 `createClient`로 만들어요. React 플러그인은 Context로 제공하고, Vue 플러그인은 `app.use(createClientPlugin(client))`로 제공해요. 두 패키지 모두 요청을 시작하지 않아요.
+
+OpenTelemetry server 미들웨어 플러그인은 `ClientOption`이에요. `createClient`에 `withOpenTelemetryServer(...)`를 넘기면, 켠 전송마다 인터셉터를 하나, HTTP, SSE, WebSocket 순서로 덧붙여요. [인터셉터](/ko-KR/docs/interceptors)를 보세요. 이 패키지는 OpenTelemetry SDK를 초기화하지 않아요.

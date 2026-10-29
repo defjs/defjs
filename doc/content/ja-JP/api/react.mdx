@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider、明示的なクライアントの上書きに対応する useClient、provider の props です。
+---
+
+# React
+
+既存の `@defjs/core` クライアントを React ツリーに渡します。このパッケージはクライアントを作らず、キャッシュせず、破棄しません。エントリーは `'use client'` が付いているので、クライアントコンポーネントから import してください。React 18 以降が必要です。
+
+[React ガイド](/ja-JP/docs/integrations/react) を見てください。
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Context provider です。`createClient` で作ったクライアントを渡します。入れ子の `ClientProvider` はそのサブツリーのクライアントを上書きし、`useClient()` は一番近いものを読みます。別の `client` を渡すと、子孫から見える context の値が変わります。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` は明示的なクライアントを優先して返します。省略または `undefined` なら最も近い `ClientProvider` を読み、どちらからもクライアントを取得できない場合にのみ `Error` を throw します。引数なしの `useClient()` も引き続き有効です。
+
+明示的なクライアントがあっても、`useClient(explicitClient)` は必ずコンポーネントまたはカスタムフックのトップレベルで呼び、通常の関数やイベントコールバックでは呼ばないでください。`explicitClient ?? useClient()` はフックの条件付き呼び出しになるため無効です。明示的な値は Context に書き込まず、provider も作りません。フックは引き続き Context を購読します。
+
+- **戻り値** 明示的に渡されたクライアント、または最も近い provider のクライアントそのものです。
+- **例外** 明示的な引数と Context のどちらにもクライアントがない場合に `Error` を throw します。
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` は必須で、アプリケーションが所有します。`children` は任意で、`useClient` を呼べるツリーです。

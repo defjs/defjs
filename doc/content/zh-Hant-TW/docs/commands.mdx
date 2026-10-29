@@ -1,0 +1,63 @@
+---
+title: "定義與執行 / Command"
+description: SDK 作者匯出端點契約，應用程式建立 command 並交給自己的 Client 執行。
+---
+
+# Commands
+
+SDK 作者用 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 匯出可重用端點。應用程式匯入端點，傳入業務輸入建立不透明 command，再交給自己的 `client.execute(...)`。
+
+一份 definition → endpoint → opaque command → `client.execute`。HTTP、SSE、WebSocket 都使用這條流程。定義中的 Struct 與 builder 屬於 SDK；服務位址、身分驗證、平台 handle 與執行生命週期屬於應用程式。端點沒有綁定特定 Client，但仍依 Defjs 的傳輸與執行階段契約執行。
+
+端點完成後，就能作為套件的公開匯出，見[建置並發佈 SDK](/zh-Hant-TW/recipes/publish-http-sdk)。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## 選定義
+
+| 定義                     | 契約                                                         | 成功時的值                           |
+| ------------------------ | ------------------------------------------------------------ | ------------------------------------ |
+| `defineRequest(...)`     | Method、相對 path、選填 input、選填 `output`／`error`        | 解碼後的資料 + response              |
+| `defineEventStream(...)` | Path、buffer／queue 限制、event-name → Struct map            | `EventStreamHandle` + open 快照      |
+| `defineWebSocket(...)`   | Path、一個 incoming struct、選填 outgoing struct、queue 限制 | `WebSocketSession` + connection 快照 |
+
+沒有 `input` → endpoint 不吃參數，而且 `builder` 可以是 `() => request`。有 `input` → 傳 struct 值。選填欄位可以省略；必填欄位不行。
+
+讓 commands 保持不透明。別去挖 tags 或 symbols。
+
+## 值放到哪
+
+Struct 決定值怎麼編碼。`builder` 決定值放到哪。`builder` 是**已剖析** input 的同步純函式。它在執行時跑。丟出錯誤會變成 tuple 上的 `REQ_BUILD_FAILED` — 呼叫 endpoint 本身不會 throw。
+
+只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。
+
+把型別化的值交出去。Alias、`Date` → ISO、`bigint` → 字串，會套用在這個 struct 出現的每個地方：request 放置、回應解碼、SSE events、WebSocket frames。
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+Body 是 JSON `{"display_name":"…","email":"…"}`。自己寫的 key 是逃生口：`body: { name: input.user.displayName }` 送出的是 `name`，因為父物件是匿名的，alias 不套用。
+
+## 形狀不一樣時
+
+Path placeholders、字面值、分支用 `builder`。它收到的是真實的值，所以 `if`、`??`、template、`switch` 都能用。
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.filter` 送出 `page_size`。`headers: { 'x-api-version': '2' }` 是字面。Auth 與 tracing 仍屬於 interceptors：它們在 builder 跑完之後看到原生 request。
+
+## `output` 與 `error` 的形狀
+
+`output` 是 2xx body 的單一 Struct；`error` 是其餘一切的單一 Struct。`ok` 是唯一分流點，而且只有一邊會解碼。省略一邊意味著那個 body 根本不會被讀：fault 帶著 status，`data` 保持 `undefined`。
+
+## 相關操作範例
+
+- [已宣告 404 的 GET](/zh-Hant-TW/recipes/get-declared-404)
+- [POST JSON](/zh-Hant-TW/recipes/post-json)

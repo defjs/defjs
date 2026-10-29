@@ -1,0 +1,20 @@
+---
+title: "Envoyer du JSON"
+description: Envoie un corps JSON typé et décode un 201 déclaré.
+---
+
+# POST JSON
+
+Remets le corps typé au builder. Les noms de champs logiques restent en TypeScript ; les alias wire sur le struct deviennent les clés JSON. Un corps objet est `application/json`.
+
+Voir [Commandes](/fr-FR/docs/commands) et [HTTP](/fr-FR/docs/http) pour les détails.
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com` est un placeholder. Avec un serveur qui répond `201` et `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, le snippet affiche :
+
+```txt
+Created Ada → 201
+```

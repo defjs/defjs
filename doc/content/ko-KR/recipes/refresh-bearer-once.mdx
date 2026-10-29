@@ -1,0 +1,20 @@
+---
+title: "401 후 토큰 갱신"
+description: Authorization 첨부와 한 번의 재전송을 interceptor 하나에 두고, next()는 안쪽으로만 가요.
+---
+
+# 401에서 Bearer 토큰을 한 번 갱신하기
+
+`next()`는 **이** onion의 나머지예요. 바깥에서 `axios(config)`로 다시 디스패치하는 게 아니에요. 첨부, single-flight 갱신, 재전송 한 번을 HTTP interceptor **하나**에 두어야 바깥 층이 두 번 돌지 않아요.
+
+[인터셉터](/ko-KR/docs/interceptors)를 보세요.
+
+<include cwd meta="refresh-bearer.ts">
+  examples/recipes/refresh-bearer-once.ts#example
+</include>
+
+```txt
+null 42
+```
+
+`next`를 다시 호출하면 이 층 **안쪽**의 interceptor(그리고 Fetch 핸들러)만 다시 들어가요. 바깥의 타이밍/인증 wrapper는 다시 돌지 않아요. 그래서 401 배치는 두 번째 `execute`가 아니라 interceptor 하나에 있어야 해요.

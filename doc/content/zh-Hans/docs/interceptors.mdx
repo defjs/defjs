@@ -1,0 +1,112 @@
+---
+title: "拦截器"
+description: 应用为自己的 Client 组合鉴权、追踪及传输策略，SDK 的数据契约继续生效。
+---
+
+# 拦截器
+
+应用通过 Client 的 interceptor 配置鉴权、追踪、维护期短路或经过审查的重试策略，SDK 导出的端点继续描述输入、输出和错误契约。可复用策略可以作为独立导出，由应用显式选择并配置。
+
+每种传输各有一条链。Interceptor 接收 `HttpRequest`，返回该传输的结果（`HttpResponse`、事件流 handle 或 WebSocket session）。输入校验在链前；HTTP 状态分派和 Struct 解码在链后。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/interceptors/basic-setup.ts#example
+</include>
+
+## 洋葱顺序
+
+`withInterceptors(...items)` 收混合 interceptor。Client 按选中传输的 `kind` 过滤，保留相对注册顺序。每个 interceptor 可以在 `next` 前后各跑一段：
+
+| Factory                      | Request       | `next` 的结果                         |
+| ---------------------------- | ------------- | ------------------------------------- |
+| `createHttpInterceptor`      | `HttpRequest` | `Promise<HttpResponse<unknown>>`      |
+| `createSSEInterceptor`       | `HttpRequest` | `Promise<EventStreamHandle<unknown>>` |
+| `createWebSocketInterceptor` | `HttpRequest` | `Promise<WebSocketSessionLike>`       |
+
+<include cwd lang="typescript">
+  examples/interceptors/onion-order.ts#example
+</include>
+
+多次 `withInterceptors(...)` 会追加。外层需要看到最终结果时，把覆盖范围更广的观测放在针对性变更或重试的外层。
+
+## 克隆并加请求 headers
+
+传入的 `HttpRequest` 由拦截器链拥有。修改前先克隆 `Headers`；把新请求传给 `next`：
+
+<include cwd lang="typescript">
+  examples/interceptors/add-request-headers.ts#example
+</include>
+
+SSE 同理。浏览器 WebSocket 不能加任意握手 headers——改 `request.headers` 鉴权不了浏览器 socket。用协议、URL/query 策略，或服务端支持的握手。
+
+HTTP 从不把推断出的 Content-Type 写入 `request.headers`；interceptor 只能看到已声明的 header。`request.bodyContentType` 以普通字段保存构建器请求体推断出的类型，因此 `{ ...req }` 拷贝后仍然保留。显式的 `content-type` header 始终优先于该字段和自动检测，无论由构建器、客户端默认值、interceptor，还是原始 `fetchHandler` 请求声明。签名方应读取 `headers.get('content-type') ?? request.bodyContentType`。
+
+替换 HTTP body 时，在拷贝的请求上替换 `body`，并用 `content-type` header 声明其类型。`bodyContentType` 只在 `body` 仍是构建器的值时生效；替换后的请求体会重新检测，因此替换后的字符串是文本，除非 header 另行声明。设置 `body: undefined` 后不会留下库推断的 Content-Type。对未改动的构建器请求体，在没有显式 header 时，`bodyContentType: null` 会抑制库的推断，但原生 Fetch 仍可能为字符串添加自己的类型。FormData 始终使用实际序列化的 multipart 边界。别复用已消费的 `ReadableStream` body。
+
+## 短路请求
+
+可以跳过 `next`，但必须返回期望的结果类型。HTTP 用 `makeResponse(...)` 造兼容包装：
+
+<include cwd lang="typescript">
+  examples/interceptors/short-circuit.ts#example
+</include>
+
+Command 层仍按状态分派。调用方要类型化 `error.data` 时，用一个 `error` struct 描述非 2xx 侧。它也仍会检查声明过的那一侧：JSON `output` 或 `error` 要求合成响应带 JSON `content-type` header，`body` 则应当已经是解析后的值，和传输会交付的一样（`request.responseType` 与 `request.errorResponseType` 指明表示方式）。短路 SSE 或 WebSocket 需要完整兼容的 handle/session（关闭 promise、实时状态、所有权和 `[Symbol.asyncDispose]`）。半截对象不是合法策略。结构化 `EventStreamHandle` 与 `WebSocketSessionLike` 实现现在编译时必须提供标准 disposer；只接收 Defjs handle 的消费者无需新增运行时调用。
+
+## 重试安全读
+
+重试会改行为。策略收窄——这个例子只对可重放的 `GET` / `HEAD` / `OPTIONS`、状态 `429`、`502`、`503`、`504` 重试，把 `Retry-After` 封到 30s，两次重试或 abort 就停：
+
+<include cwd lang="typescript">
+  examples/interceptors/retry-safe-reads.ts#example
+</include>
+
+这个循环不会重试 interceptor/Fetch 抛出的错误——传输失败是 reject，根本不会产出一个能让这个循环去匹配的状态。重试 `POST` / `PUT` / `PATCH` / `DELETE` 需要可重放字节、服务端支持、幂等契约，以及审过的状态策略。重试归你管——Core 不导出 `retryAfter()`。
+
+在这个示例之外抛错（或 reject）的 interceptor，会以 `EXT_INTERCEPTOR_FAILED` 回到调用方，抛出的值挂在
+`cause` 上——见 [Errors](/zh-Hans/docs/errors)。如果 interceptor 完成时返回的不是该传输预期的结果，也会报为 `EXT_INTERCEPTOR_FAILED`，例如漏写 `return` 导致的 `undefined`，或在应该返回 `HttpResponse` 时返回了原生 `Response`。在 HTTP interceptor 里，想表达取消就改成抛 `ERR_ABORTED` 或 `ERR_TIMEOUT`：调用会以 `NET_ABORTED` 或 `NET_TIMEOUT` resolve。SSE 把非传输层的抛错包成 `EXT_INTERCEPTOR_FAILED`。WebSocket 的抛错如果已经是 Fault（带字符串 `code` 的 `Error`），则原样返回；其他抛错是 `EXT_INTERCEPTOR_FAILED`。
+
+`next(request)` 可能 reject。传输失败是 fault，不是 status 0 的响应，所以想观察它的 interceptor 要在
+`next` 外面套 `try` / `catch`。Defjs 的归因照样是对的：来自传输层的 reject 仍然是 `NET_*` fault，不会
+算到你的 interceptor 头上。
+
+## 包装 WebSocket session
+
+WebSocket interceptor 对 `next` 最多调一次。若包装 session，显式委托实时 getter 和生命周期成员：
+
+<include cwd lang="typescript">
+  examples/interceptors/websocket-sessions.ts#example
+</include>
+
+展开 session 会把 `state` / `connection` / `bufferedAmount` 快照一次。除非你故意改所有权，否则保留 `closed`、`receive`、`close`、精确的 `[Symbol.asyncDispose]()` 转发和监听清理。Wrapper 必须返回内部 session 的 teardown promise，不能返回无关的 resolved promise。链创建了 session 却没交出去时，Core 会 settle 并关闭它；成功 interceptor 返回不同 session 时，Core 丢掉创建出来的那个。
+
+## 参考
+
+Factory 返回带标签的传输值：
+
+- `createHttpInterceptor(fn)` → `{ kind: 'http', fn }`
+- `createSSEInterceptor(fn)` → `{ kind: 'sse', fn }`
+- `createWebSocketInterceptor(fn)` → `{ kind: 'web-socket', fn }`
+- `basicAuthHttpInterceptor(provider, options?)` — HTTP 上的 Basic 凭证
+- `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic 凭证
+
+`HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静态 `operation`。它是传输集成值——不是调用方解析后的输入。`queryParams` 是序列化之后的 `new URLSearchParams(queryString)`。builder 没产出 query 时，配好的 query serializer 不会被调用；builder 返回的 `URLSearchParams` 原样使用。Command 校验、output 校验、领域错误映射留在各自层。
+
+URL 校验从请求构建时开始：基础端点缺失、相对或无效，或者路径非法，都会在任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，短路 interceptor 也不例外。分派前，还会相对于最终 `req.baseEndpoint` 校验最终 `req.endpoint`：解析后的 URL 必须与该基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 可以有意把 `baseEndpoint` 换成另一个有效的绝对 URL。HTTP、SSE 和 WebSocket 共用这项规则，确定性的 URL 错误不会重试。
+
+SSE/WebSocket observer 是生命周期钩子，不是控制流。所有者结束时退订 WebSocket 监听。Observer 失败跟传输契约走；interceptor 本身可以抛或 reject。
+
+日志用审过的白名单：静态 `operation`、method、status、耗时、稳定错误 code。默认别日志解析后的 URL、query、鉴权 headers、body、原始 cause、SSE 事件 ID、WebSocket payload。
+
+Basic 凭证是 base64，不是加密。用 TLS，服务端凭证 provider 保持请求作用域，永远别日志生成的 header。默认编码器是 `globalThis.btoa`；运行时没有 `btoa` 或需要审过的编码器时传 `BasicAuthInterceptorOptions.encode`。
+
+Interceptor 能落实传输策略。它不是输入校验、授权或资源所有权。启动长任务的代码仍要用 `await using`，或手动关闭并 await 终止 promise。普通 HTTP 是 request-scoped，通过 timeout / `AbortSignal` 管理；`Client` 不是 `AsyncDisposable`。
+
+## 相关操作示例
+
+- [401 时把 Bearer token 刷新一次](/zh-Hans/recipes/refresh-bearer-once)
+- [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)
+- [用本地 Fetch handle 做测试](/zh-Hans/recipes/test-with-handle)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)

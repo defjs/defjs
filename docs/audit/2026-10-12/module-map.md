@@ -1,0 +1,2964 @@
+# zen-kit module map
+
+- Baseline: branch `feat/up`, commit `6b0b0c1e` (2026-10-12)
+- Coverage: all 2863 git-tracked files, one line per file; untracked directories (`node_modules`, `.idea`, `.superpowers`, `.claude`) are out of scope
+- Source: each partition was written independently by codex (gpt-6.1-sol) and grok (grok-4.7), then merged and corrected by a reviewer
+- Multilingual entries: a translated file's "role" inherits the corresponding en-US page; notes list exceptions whose structure differs from en-US
+
+## Module overview
+
+| Module                                                 | Scope                                                                                                                                                                     | File count |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `@defjs/core` · struct                                 | Runtime data contracts: constructors and modifiers, fail-fast parsing, alias, JSON codec, issues, and error formatting.                                                   | 39         |
+| `@defjs/core` · client + http                          | Client configuration and `with*` options, HTTP definition and execution, Fetch transport (body serialization, upload/download progress, XSRF, timeout, and cancellation). | 40         |
+| `@defjs/core` · sse                                    | SSE definition and execution, event-stream transport (handshake, reconnect, `Last-Event-ID`), and the SSE parser.                                                         | 13         |
+| `@defjs/core` · web_socket                             | WebSocket definition, session state machine, reconnect and backoff, heartbeat, inbound/outbound codec, and URL construction.                                              | 22         |
+| `@defjs/core` · interceptor / error / internal / entry | Interceptor chain, error model (`Fault`/`FaultCode`), internal utilities (URL, abort, backoff, request materialization, transport-source marks), and the package entry.   | 47         |
+| `@defjs/core` · test facilities                        | Regression and e2e tests, Hono test-server fixtures, and Vitest aggregate/server/browser/benchmark configuration.                                                         | 47         |
+| `@defjs/opentelemetry-server`                          | Outbound OpenTelemetry interceptor: trace, metrics, logs, and context propagation for HTTP/SSE/WebSocket.                                                                 | 28         |
+| `@defjs/react` · `@defjs/vue`                          | Framework adapters: React `ClientProvider`/`useClient`, Vue `createClientPlugin`/`injectClient`.                                                                          | 16         |
+| Documentation site project (`doc/`)                    | Fumadocs + React Router site app, build/link-check/preview scripts, unit tests, and site e2e.                                                                             | 59         |
+| Documentation content · en-US guides and examples      | en-US guides, recipes, the home page, and `doc/examples` referenced by the docs and included in type checking.                                                            | 123        |
+| Documentation content · en-US API reference            | en-US API reference pages (module overviews and per-symbol pages).                                                                                                        | 184        |
+| Documentation content · multilingual (CJK)             | Five locales, `ja-JP`, `ko-KR`, `zh-Hans`, `zh-Hant-HK`, and `zh-Hant-TW`, mirroring en-US file by file.                                                                  | 1070       |
+| Documentation content · multilingual (other)           | Five locales, `ar`, `de-DE`, `es-ES`, `fr-FR`, and `ru-RU`, mirroring en-US file by file.                                                                                 | 1070       |
+| Operations and engineering configuration               | CI and release workflows, root configuration, per-package build and publish manifests, lockfiles, and cross-package shared test facilities.                               | 39         |
+| Project documentation                                  | README, design documents, release notes, performance and process records, the license, and the code of conduct.                                                           | 66         |
+
+## `@defjs/core` · struct
+
+Runtime data contracts: constructors and modifiers, fail-fast parsing, alias, JSON codec, issues, and error formatting. (39 files, audit partition `P01-core-struct`)
+
+- `packages/core/src/struct/README.md`: Chinese narrative contract for Struct: constructors, the modifier matrix, alias, intersection merge, issues, and the HTTP boundary. Note: 395 lines; Four `doc/core/*.md` links on lines 383, 392, and 393 are dead, and "binary value" is repeated on lines 56/60 (P01-core-struct-08)
+- `packages/core/src/struct/codec/common.ts`: On outbound encode, map logical keys to wire keys by alias; on inbound, call `parseStructValue` in alias mode. Note: 49 lines; The actual implementation of `encodeJson` / `decodeJson`
+- `packages/core/src/struct/codec/json.spec.ts`: Verifies JSON codec behavior for alias, union, intersection, nullish objects, and prototype keys. Note: 489 lines; Has assertions on real output and on failure paths
+- `packages/core/src/struct/codec/json.ts`: Thin `encodeJson` / `decodeJson` entry used by HTTP, SSE, and WebSocket. Note: 10 lines; Callers outside this partition are `http/http.ts`, `sse/sse.ts`, and `web_socket/codec.ts`
+- `packages/core/src/struct/constructors.browser.spec.ts`: In the browser, verifies File/Blob/ArrayBuffer and the basic conversion constructors. Note: 112 lines; Belongs to the browser project; read-only, not run; Line 88 likewise locks the Date reference
+- `packages/core/src/struct/constructors.discriminated_union.spec.ts`: Verifies discriminatedUnion `TypeError` at definition time and routing by discriminator value. Note: 163 lines; Covers a nullable discriminator, duplicate values, and getters
+- `packages/core/src/struct/constructors.primitives.spec.ts`: Verifies parsing and encoding for constructors such as bigint, date, and intersection. Note: 314 lines; Line 60 `toBe(d)` locks the Date input and output as the same reference
+- `packages/core/src/struct/constructors.ts`: Definition factory for each kind, including bigint/date decode hooks and intersection flattening. Note: 471 lines; Intersection flattening drops an inner nullable (P01-core-struct-04), a single member is returned as-is (05), and a cross-copy hook uses this copy's `issue` (07)
+- `packages/core/src/struct/coverage.spec.ts`: Calls internal parse/encode/fields/match helpers directly to cover defensive branches. Note: 496 lines; Builds internal metadata, but the assertions check concrete results
+- `packages/core/src/struct/encode.spec.ts`: Verifies outbound encoding for type conversion, recursive structures, union arm selection, and intersection merge. Note: 354 lines
+- `packages/core/src/struct/encode.ts`: Recursively encodes outbound values from a definition and merges intersection wire values. Note: 240 lines; `any`/`unknown`/`number` are passed through unchanged, with no depth guard (P01-core-struct-03)
+- `packages/core/src/struct/errors.spec.ts`: Verifies `StructError` format/flatten/prettify views and errorMap. Note: 170 lines; Covers only `() => undefined`; no empty-string case
+- `packages/core/src/struct/errors.ts`: `StructError`, the default `issue()` message, and the per-call errorMap slot. Note: 135 lines; The default message embeds `received` (02); `if (override)` ignores the empty string (06)
+- `packages/core/src/struct/facade.spec.ts`: Verifies facade constructor wiring, modifier immutability, and shape snapshots. Note: 141 lines; Not a complete whitelist of facade keys
+- `packages/core/src/struct/facade.ts`: Public `struct` object, including `enum`/`or` type overloads and `parse`. Note: 98 lines; A numeric enum is inferred as `string | Enum` (`EnumValue`)
+- `packages/core/src/struct/fields.ts`: Parses and caches object fields, detects duplicate wire keys, and applies alias. Note: 74 lines; A duplicate wire key throws `TypeError` the first time fields are parsed
+- `packages/core/src/struct/guards.ts`: Checks the Struct-owned DEFINITION brand, known kinds, and the flags shape. Note: 43 lines
+- `packages/core/src/struct/guide.ts`: Manages the `STRUCT` encoding guide on an endpoint input object and the set of intersection guides. Note: 85 lines; The marker is enumerable, spread keeps it, and `JSON.stringify` skips the symbol
+- `packages/core/src/struct/index.ts`: Re-exports everything from `public_api`. Note: 1 line
+- `packages/core/src/struct/introspection.ts`: Tuple entry for `struct.parse`, and the throwing internal `parseStructValue` adapter. Note: 71 lines; The tuple entry does not catch `RangeError` (P01-core-struct-03)
+- `packages/core/src/struct/match.ts`: At encode time, decides which Structs a parsed value matches in order to choose an encoding branch. Note: 109 lines; date/bigint use a runtime guard
+- `packages/core/src/struct/parse.protocol.spec.ts`: Verifies fail-fast, issue shape, re-entrancy, silent candidates, and cross-package-copy parsing. Note: 828 lines; The cross-copy case does not cover errorMap (P01-core-struct-07)
+- `packages/core/src/struct/parse.security.spec.ts`: Verifies that `__proto__`/`constructor` do not pollute the prototype, and that own fields and the discriminator are read once. Note: 174 lines
+- `packages/core/src/struct/parse.spec.ts`: Verifies the modifier matrix, composite values, alias, required fields, and stripping of unknown keys. Note: 421 lines; No TypeScript numeric-enum case
+- `packages/core/src/struct/parse.ts`: Strict recursive parser that stops at the first issue. Note: 528 lines; No depth or cycle guard (P01-core-struct-03)
+- `packages/core/src/struct/performance.spec.ts`: Uses behavioral assertions to lock the parse and encode semantics that performance optimizations must preserve. Note: 200 lines; No wall-clock threshold
+- `packages/core/src/struct/public_api.spec.ts`: Asserts that the root entry does not provide a runtime `STRUCT` value. Note: 7 lines; Does not lock the full export list
+- `packages/core/src/struct/public_api.ts`: Declares Struct's public values (`struct`, `StructError`) and type exports. Note: 17 lines; `STRUCT` is exported as a type only
+- `packages/core/src/struct/public_api.type.test.ts`: Asserts that `STRUCT` can be used as a type brand and cannot be imported as a runtime value. Note: 13 lines; Executed by the type check
+- `packages/core/src/struct/runtime.spec.ts`: Verifies that modifiers return a new instance, alias, shared field cache, and that a duplicate wire key throws. Note: 193 lines
+- `packages/core/src/struct/runtime.ts`: `makeStruct`: creates an instance and the `alias`/`null`/`nullable`/`nullish`/`optional` modifier chain. Note: 69 lines; Does not mutate the receiver
+- `packages/core/src/struct/shape.spec.ts`: Verifies that a getter-backed recursive object can be parsed and that the error path is nested. Note: 49 lines; Only a shallow recursive fixture
+- `packages/core/src/struct/shape.ts`: Lazily parses and caches an object shape, allowing getters to delay field access. Note: 34 lines
+- `packages/core/src/struct/struct.bench.ts`: Struct hot-path benchmark for `bun run bench:struct`, plus fixture correctness assertions. Note: 539 lines; Not run
+- `packages/core/src/struct/symbols.ts`: Defines the `DEFINITION`, `OMIT`, `FAILED`, and `STRUCT` symbols. Note: 16 lines; `FAILED` is private to the copy; the rest use `Symbol.for`
+- `packages/core/src/struct/types.public.type.test.ts`: Verifies public `Infer`/`StructInput`, parse-tuple narrowing, and that internal types cannot be imported. Note: 66 lines
+- `packages/core/src/struct/types.runtime.type.test.ts`: Verifies inference for basic, composite, and modifier types, and that removed APIs cannot be imported. Note: 259 lines; Does not cover a single-member optional intersection
+- `packages/core/src/struct/types.ts`: Public inference types (`Struct`, `Infer`, `StructInput`, `StructIssue`) and internal definition types. Note: 492 lines; `IntersectionInput/Output` exclude undefined (P01-core-struct-05); The `custom` code has no producer
+- `packages/core/src/struct/utils.ts`: Intersection merge, path formatting, `describeValue`, failure slots, and null-prototype utilities. Note: 276 lines; A string `received` is `JSON.stringify`'d in full
+
+## `@defjs/core` · client + http
+
+Client configuration and `with*` options, HTTP definition and execution, Fetch transport (body serialization, upload/download progress, XSRF, timeout, and cancellation). (40 files, audit partition `P02-core-http-client`)
+
+- `packages/core/src/client/client.spec.ts`: Verifies that client options override in order, and that the default timeout and handle replacement take effect during HTTP execution. Note: 164 lines; Injects Fetch and does not depend on the test server
+- `packages/core/src/client/client.ts`: Defines `Client` and `createClient`, and dispatches HTTP/SSE/WebSocket commands to their executors via `COMMAND_EXECUTE`. Note: 93 lines; Holds a mutable `ClientConfig`
+- `packages/core/src/client/client.type.test.ts`: Uses mutual-assignment `Equal` and `@ts-expect-error` to lock types for client options, cancellation parameters, and removed APIs. Note: 233 lines; `Equal` cannot tell `any` apart; the strict type of the returned tuple is locked by `http.type.test.ts`
+- `packages/core/src/client/command.ts`: Declares the command-kind symbol, `COMMAND_EXECUTE`, and type guards for the three command kinds. Note: 48 lines; `Symbol.for` shares the brand
+- `packages/core/src/client/config.ts`: Defines client config types, HTTP/SSE/WebSocket defaults, and `createClientConfig`. Note: 243 lines; The default fetch is `bind`'d when the module is evaluated (finding 01)
+- `packages/core/src/client/execute.spec.ts`: Verifies that `client.execute` dispatches by command kind, and that an unknown command fails. Note: 105 lines; The SSE/WebSocket cases depend on the test server
+- `packages/core/src/client/index.ts`: Re-exports the client `public_api`. Note: 1 line
+- `packages/core/src/client/option.ts`: Implements every `with*` client option, rewriting `ClientConfig` in call order. Note: 236 lines; The JSDoc for `withEndpoint` and `withTimeout` is wrong (findings 07 and 10)
+- `packages/core/src/client/public_api.ts`: Public entry that exports `createClient`, `Client`, and every client option. Note: 32 lines
+- `packages/core/src/http/builder.type.test.ts`: Locks type constraints on HTTP/SSE/WebSocket builder return shapes, including the GET/HEAD body ban. Note: 214 lines; Type check only
+- `packages/core/src/http/http.browser.spec.ts`: In a real browser, verifies the HTTP tuple, non-JSON rejection, download progress, timeout, and cookie-based XSRF. Note: 167 lines; Browser project; read-only this time
+- `packages/core/src/http/http.client.spec.ts`: Verifies the client-level query serializer, use of the client handle after interceptors, and that a definition snapshot is unaffected by external mutation. Note: 104 lines; Does not depend on the test server
+- `packages/core/src/http/http.content_type.spec.ts`: Verifies that a declared JSON response checks the media type before reading and cancels an unread body. Note: 117 lines; Covers both the output and error sides, and the string exception
+- `packages/core/src/http/http.declaration_routing.spec.ts`: Verifies the output/error declaration matrix, observer failure, and transport-error attribution. Note: 252 lines; The last case is named "nothing declared" but it declares `output`
+- `packages/core/src/http/http.error.spec.ts`: Verifies failure paths and their priority for input, build, interceptors, cancellation, timeout, and response decoding. Note: 1400 lines; Some titles say ABORTED/TIMEOUT, while the assertion is `NET_*`
+- `packages/core/src/http/http.response_type.spec.ts`: Verifies choosing a text/Blob/bytes/JSON representation by struct kind, and the string root of a short-circuit response. Note: 334 lines; Locks that a JSON string root is not parsed a second time
+- `packages/core/src/http/http.spec.ts`: Main HTTP `execute` spec: request building, alias, success/failure tuples, and a real server round trip. Note: 352 lines
+- `packages/core/src/http/http.ts`: `defineRequest` and `executeHttpCommand`: cancellation snapshot, input parsing, builder, interceptor chain, transport, and one-sided declared-body decoding. Note: 546 lines; Manages the deadline, the synthetic signal, and cleanup
+- `packages/core/src/http/http.type.test.ts`: Uses `expectTypeOf` to strictly lock type inference for HTTP definitions, the execution-result tuple, and cancellation options. Note: 246 lines; Can catch `execute` degrading to a return of `any`
+- `packages/core/src/http/http.upload_progress.browser.spec.ts`: Verifies that in the browser an unchanged Blob/FormData upload does not fire progress, and the capability difference for a native streaming request body. Note: 154 lines; Browser project; read-only this time
+- `packages/core/src/http/http.upload_progress.spec.ts`: Verifies throw, cancellation, timeout, and interceptor resend for the server-side upload observer. Note: 268 lines; `skipIf(!streaming)` was not skipped on either Bun or Node
+- `packages/core/src/http/http.upload_progress.worker.browser.spec.ts`: Verifies the global shape of module/classic Workers and the browser policy for upload progress inside them. Note: 103 lines; Asserts there is no `document` inside the Worker; read-only this time
+- `packages/core/src/http/index.ts`: Re-exports the HTTP `public_api`. Note: 1 line
+- `packages/core/src/http/public_api.ts`: Exports HTTP definitions, `fetchHandler`, `makeResponse`, request/response types, and `createResolvedRequestUrl`. Note: 6 lines
+- `packages/core/src/http/request.spec.ts`: Verifies path, query, headers, body representation, and Content-Type assembly in `createHttpRequest`. Note: 287 lines; Uses the real platform Headers/FormData/Blob
+- `packages/core/src/http/request.ts`: Adds response representation, progress callbacks, and XSRF configuration on top of the base transport request to produce an `HttpRequest`. Note: 51 lines; Delegates to `internal/transport_request.ts`; Content-Type is already computed before the interceptor
+- `packages/core/src/http/transport/body.spec.ts`: Verifies body serialization, Content-Type detection, and `bodyContentTypeSource` priority rules. Note: 143 lines; Covers FormData clearing the header
+- `packages/core/src/http/transport/body.ts`: Serializes the HTTP body and, based on body identity, keeps, overrides, or deletes Content-Type. Note: 88 lines; The problem of an interceptor replacing the body (finding 05)
+- `packages/core/src/http/transport/body_failure.spec.ts`: Verifies code, metadata, and source distinction for body-phase failure tags. Note: 128 lines
+- `packages/core/src/http/transport/body_failure.ts`: Defines the coded error tags and type guards used when the transport fails to read the body or an observer fails. Note: 44 lines; Cancellation does not get this tag
+- `packages/core/src/http/transport/fetch.native.browser.spec.ts`: Registers the shared native-fetch suite in the browser project. Note: 3 lines; The implementation lives in `test/fetch-native-suite.ts`; read-only this time
+- `packages/core/src/http/transport/fetch.native.spec.ts`: Registers the shared native-fetch suite in the server project. Note: 3 lines; The suite locks the load-time identity and fast path of the default handle
+- `packages/core/src/http/transport/fetch.response.spec.ts`: Verifies `fetchHandler` response reading, cancellation, download progress, media type, and URL backfill. Note: 545 lines
+- `packages/core/src/http/transport/fetch.spec.ts`: Verifies XSRF injection, native Request construction, upload-stream wrapping, and network errors. Note: 661 lines; Five Content-Length cases assert only `duplex` (finding 11)
+- `packages/core/src/http/transport/fetch.streaming.spec.ts`: Verifies streaming-request capability detection, upload-to-stream conversion and progress, observer errors, and stream release. Note: 1006 lines; The FormData progress case does not check the request Content-Type
+- `packages/core/src/http/transport/fetch.ts`: Default HTTP transport: XSRF, upload/download progress, the platform fast path and custom handle calls, and declared-body reads. Note: 503 lines; The main location of findings 02, 03, 04, 08, and 09
+- `packages/core/src/http/transport/fetch_init.ts`: Detects whether the runtime supports a streaming request body and builds the Fetch init shared by HTTP and SSE. Note: 91 lines; The capability result is cached; defines `ERR_STREAMING_REQUEST_UNSUPPORTED`
+- `packages/core/src/http/transport/utils.spec.ts`: Verifies byte parsing, `getContentLength`, and JSON media-type detection. Note: 197 lines
+- `packages/core/src/http/transport/utils.ts`: Reads Content-Length/Content-Type and decides whether the media type is JSON. Note: 41 lines; Byte utilities re-export `internal/bytes.ts`
+- `packages/core/src/http/xsrf.server.spec.ts`: Uses a bare `fetch` to verify the test server's XSRF token-issuing and validation endpoints. Note: 86 lines; Tests only the test fixture; does not cover `withXSRF` or same-origin detection
+
+## `@defjs/core` · sse
+
+SSE definition and execution, event-stream transport (handshake, reconnect, `Last-Event-ID`), and the SSE parser. (13 files, audit partition `P03a-core-sse`)
+
+- `packages/core/src/sse/index.ts`: SSE module barrel: re-exports only `public_api`. Note: 1 line; No logic
+- `packages/core/src/sse/public_api.ts`: SSE public export boundary: re-exports everything from `sse.ts`, and additionally exports the handle, open info, close info, and `EventStreamFaultCode` as types only. Note: 2 lines; The low-level `fetchEventStream` / `FetchEventStreamOptions` are not in this barrel; tests import them from transport directly
+- `packages/core/src/sse/sse.browser.spec.ts`: Real-browser tests for SSE consumption, the non-2xx error tuple, stopping iteration early, skipping undeclared events, and rejecting a `ReadableStream` request body without reconnecting. Note: 187 lines; Belongs to the browser project; read-only, not executed this time
+- `packages/core/src/sse/sse.fault.spec.ts`: Regression tests for public `execute` startup faults (`HTTP_STATUS`, `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `NET_UNREACHABLE`, `EXT_INTERCEPTOR_FAILED`), runtime `CAP_*` faults, and no reconnect for a streaming request body. Note: 393 lines; Executed by the core-server project
+- `packages/core/src/sse/sse.invalid_event.spec.ts`: Tests that undeclared or invalid events are dropped and handed to `withSSEOnInvalidEvent`, covering order, isolation, and cancellation. Note: 207 lines; Covers synchronous delivery of the same chunk, and an async observer blocking later events
+- `packages/core/src/sse/sse.spec.ts`: Main public `defineEventStream` / `execute` spec: build, handshake, event decoding, cancellation, interceptor ownership, and reconnect method policy. Note: 2221 lines; 75 `test` calls; Mixes the global Hono test server with a custom Fetch handle
+- `packages/core/src/sse/sse.ts`: Defines SSE commands and coordinates input parsing, the builder, the interceptor chain, the startup deadline, startup-fault classification, and per-event Struct decoding. Note: 552 lines; Calls `fetchEventStream`, `transport_request`, `abort`, and the Struct codec; `onopen`/`onclose`/`onerror` are not on the public path
+- `packages/core/src/sse/sse.type.test.ts`: Type-contract tests for the SSE event union (with and without `default`), numeric event names, the error tuple, and the export surface. Note: 239 lines; Covered by the root `typecheck`; not in the core-server Vitest include
+- `packages/core/src/sse/transport/event_stream.advanced.spec.ts`: Tests for low-level `fetchEventStream` hooks, reconnect policy, backoff, queue, cancellation, and async release, mostly with a fake Fetch. Note: 1805 lines; 83 `test` calls; The three cases named exponential backoff, maxDelayMs, and jitter assert only the fetch count (see P03a-core-sse-07)
+- `packages/core/src/sse/transport/event_stream.spec.ts`: Tests for low-level SSE basic stream reading, manual close, handshake rejection, and `Last-Event-ID` reconnect (ASCII, empty `id` clears it, multiple reconnects). Note: 324 lines; Does not cover non-ASCII event IDs
+- `packages/core/src/sse/transport/event_stream.ts`: Performs the physical Fetch attempt, checks the handshake, drives parsing and the bounded event queue, and manages reconnect, `Last-Event-ID`, `closed`, and async release. Note: 718 lines; Depends on `AsyncQueue`, `backoff`, the parser, and the shared cancellation sentinel; The module-level `errorOpenInfoMap` is keyed by the error object
+- `packages/core/src/sse/transport/parser.spec.ts`: Tests for SSE byte reading, line splitting, field recognition, message dispatch, buffer limits, and reader release/cancel. Note: 862 lines; 49 `test` calls; Per the codex mutation probe, deleting `releaseLock` and upstream cancellation is detected (the reviewer did not rerun it)
+- `packages/core/src/sse/transport/parser.ts`: Reads a byte stream, splits lines on CR/LF, matches `data`/`event`/`id`/`retry` fields by bytes, and enforces the buffer limit. Note: 292 lines; Adapted from Azure/fetch-event-source; An `id` containing NUL is ignored; `retry` accepts only digits and is clamped to 2_147_483_647
+
+## `@defjs/core` · web_socket
+
+WebSocket definition, session state machine, reconnect and backoff, heartbeat, inbound/outbound codec, and URL construction. (22 files, audit partition `P03b-core-ws`)
+
+- `packages/core/src/web_socket/build.spec.ts`: Locks WebSocket URL construction: http/https rewritten to ws/wss, base-path joining, path placeholders, and query rules. Note: 138 lines; Covers `build.ts`
+- `packages/core/src/web_socket/build.ts`: Folds endpoint, path, and query into an `HttpRequest`, then resolves the final `ws:`/`wss:` URL. Note: 38 lines; Reuses `fillUrl`, `resolveRequestUrl`, and `resolveTransportQuery` from `internal/url.ts`
+- `packages/core/src/web_socket/codec.spec.ts`: Locks outbound serialization, inbound text/byte/Blob frame decoding, and close-snapshot extraction. Note: 228 lines; Covers rejection of a root value `undefined`; does not cover values such as `Infinity`/`Map` that `JSON.stringify` rewrites
+- `packages/core/src/web_socket/codec.ts`: Outbound values are struct-checked and alias-encoded, then `JSON.stringify`'d; inbound frames are UTF-8 decoded, parsed with a struct, and a close snapshot is extracted. Note: 49 lines; `serializeOutgoingWebSocketMessage` is shared by `send`, queueing during reconnect, and heartbeat; See P03b-core-ws-01
+- `packages/core/src/web_socket/heartbeat.spec.ts`: Uses fake timers to lock heartbeat sending, ACK clearing, fatal timeout, and timer cleanup. Note: 336 lines; A mutation that deletes `clearInterval` is detectable
+- `packages/core/src/web_socket/heartbeat.ts`: Sends heartbeats on an interval, starts the ACK timeout after send, and validates `intervalMs`/`timeoutMs`. Note: 114 lines; Failure ends the session through `onFatal` and does not enter reconnect; Synchronous ACK: see P03b-core-ws-07
+- `packages/core/src/web_socket/index.ts`: WebSocket submodule entry; re-exports `public_api.ts`. Note: 1 line
+- `packages/core/src/web_socket/public_api.ts`: Re-exports the public types and functions from `web_socket.ts`. Note: 1 line; `codec.ts` and `build.ts` are not exported from here
+- `packages/core/src/web_socket/reconnect.spec.ts`: Locks pre-start validation of reconnect options, predicate normalization, `computeReconnectDelay`, and `wait`. Note: 224 lines; No case covers jitter and `maxDelayMs` taking effect together; The case named `returns 0 for attempt 0` actually asserts 1000
+- `packages/core/src/web_socket/reconnect.ts`: Validates reconnect options and normalizes them to a finite attempt count, backoff parameters, and a boolean predicate. Note: 78 lines; An illegal value throws `RangeError` before execute (turned into `REQ_OPTIONS_INVALID`); `attempts: 0` normalizes to no reconnect
+- `packages/core/src/web_socket/web_socket.browser.spec.ts`: In a real browser, verifies message send/receive, binary frames, struct-failure reporting, reconnect, and abort. Note: 179 lines; Read-only and not executed, per the constraint
+- `packages/core/src/web_socket/web_socket.fault.spec.ts`: Locks fault codes for startup failures (abort/timeout, interceptor, connection refused, beforeConnect, missing constructor, illegal input, and queue limit). Note: 147 lines; Most cases use an injected socket; the connection-refused case uses a real unreachable address
+- `packages/core/src/web_socket/web_socket.heartbeat.spec.ts`: Uses a controllable socket to verify that the session layer sends heartbeats automatically and recognizes ACKs. Note: 59 lines; Uses `test/regression/controllable_socket.ts`
+- `packages/core/src/web_socket/web_socket.lifecycle.spec.ts`: Locks adding and removing the same message-listener reference, close-before-start, unexpected messages after start, and beforeConnect with the query serializer. Note: 123 lines; The listener case only regex-matches the source; the rest depend on the globalSetup test server
+- `packages/core/src/web_socket/web_socket.message.spec.ts`: Verifies discriminated-union inbound decoding, struct-failure reporting, alias outbound encoding, heartbeat ACK, and nullable fields. Note: 238 lines; Mixes the test server and a controllable socket
+- `packages/core/src/web_socket/web_socket.message.type.test.ts`: Locks the type relationship of `send` parameters, `receive` elements, and the execute-level heartbeat `message` to the outgoing struct. Note: 84 lines; Covered by the root type check
+- `packages/core/src/web_socket/web_socket.reconnect.spec.ts`: Against the test server, verifies flushing the outbound queue after reconnect, the attempt index the predicate receives, and that a manual close does not enter the predicate. Note: 146 lines; Depends on the globalSetup test server
+- `packages/core/src/web_socket/web_socket.regression.browser.spec.ts`: In a real browser, checks settlement of an immediate close and a 10ms close against native events, and that an outbound root value with no JSON representation is rejected. Note: 194 lines; Read-only and not executed, per the constraint
+- `packages/core/src/web_socket/web_socket.server.spec.ts`: Uses a mock physical socket to cover the state machine, close parameters, reconnect predicate, backoff overflow, queue, dispose, and resource cleanup. Note: 3337 lines; 140 cases; The erroneous close timer and abort-listener cleanup are not locked (see P03b-core-ws-03)
+- `packages/core/src/web_socket/web_socket.spec.ts`: Integration spec against the Hono test server: handshake, send/receive, heartbeat, reconnect queueing, abort, and interceptors. Note: 1151 lines; Mixes the real test server and a controllable socket
+- `packages/core/src/web_socket/web_socket.ts`: `defineWebSocket` and `executeWebSocketCommand`: URL and subprotocol snapshot, physical-attempt state machine, message pump, send, close, reconnect, and bounded dispose. Note: 1416 lines; `attempt` only increases for the whole session (P03b-core-ws-02); A failed `binaryType` write leaves the socket behind (P03b-core-ws-05)
+- `packages/core/src/web_socket/web_socket.type.test.ts`: Locks endpoint and command types, the required `maxIncomingQueueSize`, and type rejection of removed APIs. Note: 92 lines; Covered by the root type check
+
+## `@defjs/core` · interceptor / error / internal / entry
+
+Interceptor chain, error model (`Fault`/`FaultCode`), internal utilities (URL, abort, backoff, request materialization, transport-source marks), and the package entry. (47 files, audit partition `P04-core-infra`)
+
+- `packages/core/src/error/cause.ts`: Defines the shared cancellation/timeout sentinels `ERR_ABORTED`/`ERR_TIMEOUT`, checks the cause shape, and extracts the message. Note: 32 lines; Sentinels are created when the module is evaluated
+- `packages/core/src/error/factory.spec.ts`: Locks each fault factory's message, `name`, enumerable fields, cause chain, and network classification. Note: 207 lines
+- `packages/core/src/error/factory.ts`: Constructs the four `DefjsFault` kinds: HTTP status, decode, preflight, and network. Note: 113 lines; `createDecodeFault` uses the cause's message as the fault message (see P04-core-infra-02)
+- `packages/core/src/error/index.ts`: Forwards the error module's public exit. Note: Only `export * from './public_api'`
+- `packages/core/src/error/public_api.ts`: Exports fault factories, sentinels, and fault types. Note: 2 lines
+- `packages/core/src/error/types.ts`: Defines the closed set of 17 `FaultCode`s, `FaultClass`, and the three-way fault discriminated union. Note: 124 lines
+- `packages/core/src/error/types.type.test.ts`: Uses assignment, `@ts-expect-error`, and `Equal` to lock fault-variant fields and class-name inference. Note: 149 lines; `Equal` accepts `any` (see P04-core-infra-07)
+- `packages/core/src/index.ts`: `@defjs/core` package entry. Note: Only `export * from './public_api'`
+- `packages/core/src/interceptor/basic_auth.spec.ts`: Locks Basic header generation, not mutating the original Headers, custom encode, and construction failure when `btoa` is missing. Note: 144 lines; Does not cover non-Latin-1 credentials
+- `packages/core/src/interceptor/basic_auth.ts`: Injects `Authorization: Basic …` on every HTTP and SSE request. Note: 57 lines; The default encoder is `btoa`; non-Latin-1 needs a custom `encode` (the docs already say so)
+- `packages/core/src/interceptor/index.ts`: Forwards the interceptor module's public exit. Note: Only `export * from './public_api'`
+- `packages/core/src/interceptor/interceptor.runtime.spec.ts`: Locks the SSE interceptor chain wrapping the returned stream, and the kind of `createSSEInterceptor`. Note: 66 lines
+- `packages/core/src/interceptor/interceptor.spec.ts`: Locks HTTP onion order, `makeResponse` short-circuit, and content-type handling when the body is replaced. Note: 188 lines
+- `packages/core/src/interceptor/interceptor.transport.spec.ts`: Locks `resolve*Interceptors` filtering by kind and preserving registration order. Note: 91 lines
+- `packages/core/src/interceptor/interceptor.ts`: Defines the three interceptor types and factories, and composes the onion chain with `reduceRight`. Note: 168 lines; `makeChain` does not validate the return value; a late `next()` is rejected by each executor
+- `packages/core/src/interceptor/interceptor.type.test.ts`: Uses an `any`-rejecting `StrictEqual` to lock interceptor signatures and session-disposal types, and forbids returning a native `Response`. Note: 139 lines
+- `packages/core/src/interceptor/interceptor.websocket.spec.ts`: Locks the WebSocket interceptor chain wrapping the session, and the kind of `createWebSocketInterceptor`. Note: 69 lines
+- `packages/core/src/interceptor/public_api.ts`: Explicitly exports interceptor types, factories, and the Basic-auth interceptor. Note: 16 lines; Does not export `makeChain`/`resolve*`
+- `packages/core/src/internal/abort.spec.ts`: Locks signal merging, listener release, timeout-parameter validation, and `awaitWithSignal` cancellation. Note: 222 lines
+- `packages/core/src/internal/abort.ts`: Merges cancellation signals, picks the abort/timeout sentinel and fault from the signal reason, and manages the transport deadline. Note: 283 lines; `resolveAbortedCause` returns only the two shared sentinels
+- `packages/core/src/internal/async_queue.spec.ts`: Locks the single consumer, capacity limit, waking waiters on close/failure, and buffer clearing. Note: 157 lines
+- `packages/core/src/internal/async_queue.ts`: Bounded single-consumer async queue, used for SSE/WebSocket inbound messages. Note: 98 lines; The iterator has no `return()`; the SSE handle layer adds that separately
+- `packages/core/src/internal/backoff.ts`: Computes reconnect delay from attempt count, factor, jitter, and a cap, and provides a cancellable wait. Note: 49 lines
+- `packages/core/src/internal/builder_types.ts`: Describes the path/query/headers/body types a builder may return, and path-placeholder inference. Note: 113 lines; `PathParams` matches from the colon to the next `/` (see P04-core-infra-04)
+- `packages/core/src/internal/bytes.ts`: Decodes response bytes into text, JSON, Blob, or ArrayBuffer according to the representation. Note: 50 lines; Shares a non-fatal UTF-8 `TextDecoder`, matching Fetch `Response.json()`/`text()` semantics
+- `packages/core/src/internal/endpoint_command.ts`: Pure type helper that infers the endpoint call signature from whether the input is optional. Note: 14 lines; No runtime code
+- `packages/core/src/internal/endpoint_input.spec.ts`: Locks returning the input unchanged when there is no struct, and parsing the input when there is one. Note: 21 lines
+- `packages/core/src/internal/endpoint_input.ts`: Before execution, parses endpoint input with a struct and attaches an encoding tag to objects. Note: 18 lines
+- `packages/core/src/internal/fetch.ts`: Races the Fetch call with `awaitWithSignal`, and yields a late response body after cancellation. Note: 25 lines; `fetchWithSignal`
+- `packages/core/src/internal/http_request.ts`: Defines the `HttpRequest` the transport sees, response-representation types, and the progress-callback interface. Note: 71 lines
+- `packages/core/src/internal/http_request.type.test.ts`: Uses `expectTypeOf` to lock the types and readonly-ness of `responseType`/`errorResponseType`. Note: 13 lines
+- `packages/core/src/internal/http_response.spec.ts`: Locks `makeResponse` defaults, copying request headers and URL, and that failure messages do not contain the URL. Note: 107 lines
+- `packages/core/src/internal/http_response.ts`: Defines `HttpResponse`/`HttpMeta`/`DecodedResponse` and implements `makeResponse` and HTTP failure messages. Note: 97 lines; When `headers` is omitted, copies `request.headers` (documented behavior)
+- `packages/core/src/internal/inbound_representation.ts`: Chooses the inbound body representation (json/text/blob/arraybuffer) from the struct kind. Note: 26 lines
+- `packages/core/src/internal/media_type.ts`: Parses a media-type essence/prefix and recognizes HTTP token characters. Note: 75 lines
+- `packages/core/src/internal/media_type_parameters.ts`: Decides whether media-type parameters are well-formed and returns the parse result. Note: 22 lines
+- `packages/core/src/internal/outbound_request.server.spec.ts`: Locks rejection of a Node `Readable` request body, and sending a Web `ReadableStream` unchanged. Note: 80 lines
+- `packages/core/src/internal/outbound_request.spec.ts`: Locks builder placement rules for path, query, headers, JSON, form, and alias encoding across the three transports. Note: 1431 lines
+- `packages/core/src/internal/outbound_request.ts`: Runs the builder and materializes path, query, headers, and body from struct sources. Note: 818 lines; `materializePath` rejects `null` and objects (including arrays)
+- `packages/core/src/internal/query_serializer.spec.ts`: Locks that a custom query serializer receives the already-encoded object, is not called when there is no query, and that `URLSearchParams` is a bypass. Note: 347 lines; Covers HTTP/SSE/WebSocket
+- `packages/core/src/internal/request_values.ts`: Defines request-building value types and checks and stringifies scalars. Note: 11 lines
+- `packages/core/src/internal/transport_origin.ts`: Uses a module-level WeakSet to mark a rejection value as coming from the transport boundary rather than an interceptor. Note: 32 lines; Used by `http.ts` and `sse.ts`; the mark is kept forever across requests (see P04-core-infra-03)
+- `packages/core/src/internal/transport_request.ts`: Assembles materialized builder results into the base HTTP/SSE transport request. Note: 68 lines; Calls `fillUrl` and `appendRecordToHeaders`
+- `packages/core/src/internal/type_guards.ts`: Runtime guards for Blob, FormData, URLSearchParams, and ReadableStream. Note: 15 lines
+- `packages/core/src/internal/url.spec.ts`: Directly locks URL resolution, placeholder encoding, query parameters, and header appending. Note: 163 lines; The array case locks truncation as the expected result (see P04-core-infra-06)
+- `packages/core/src/internal/url.ts`: Fills path placeholders, builds the query string, appends headers, and resolves the endpoint into a directory-style base URL. Note: 227 lines; `createResolvedRequestUrl` is a public API; Absolute-path validation can be bypassed (see P04-core-infra-01)
+- `packages/core/src/public_api.ts`: Aggregates the public exits of client, error, http, interceptor, sse, struct, and web_socket. Note: 7 lines; `export *` lets executor functions enter the package entry
+
+## `@defjs/core` · test facilities
+
+Regression and e2e tests, Hono test-server fixtures, and Vitest aggregate/server/browser/benchmark configuration. (47 files, audit partition `P05-core-tests`)
+
+- `packages/core/test/body-routes.ts`: Registers HTTP fixture routes on the global Hono test server for stalled uploads, truncation, hangs, and raw-body probing. Note: 94 lines; Registered by `setup.ts`; real-socket scenarios such as `fetch-native-suite.ts` depend on it
+- `packages/core/test/e2e-routes.ts`: Registers echo, inbound-representation, and SSE/WebSocket end-to-end routes, and accumulates `/e2e/miss/` hits in a process-level array. Note: 162 lines; `missHits` is never cleared within one globalSetup lifetime (P05-core-tests-04)
+- `packages/core/test/fetch-native-suite.ts`: Shared native-fetch suite: compares construction, body reads, cancellation, and disconnect behavior of the default `DEFAULT_FETCH` and a custom handle. Note: 669 lines; Called by `fetch.native.spec.ts` and `fetch.native.browser.spec.ts`; the second half hits a real loopback server
+- `packages/core/test/http.e2e.spec.ts`: Locks HTTP builder encoding, body kinds, and inbound representation through a real Hono server, and that a failed request never reaches the server. Note: 819 lines; Ships its own miss-log reader; Two miss assertions use exact equality on a fixed control path (P05-core-tests-04)
+- `packages/core/test/make_fake_handler.spec.ts`: Locks `makeFakeHandler` response fields, pass-through of fake values, and the throw when `baseEndpoint` is missing. Note: 79 lines; The default status 0 matches the documented `makeResponse` default
+- `packages/core/test/make_fake_handler.ts`: Test handler that builds an `HttpResponse` with `makeResponse` directly, without going through `fetchHandler`. Note: 40 lines; Used by 3 specs, only to observe the request or the client contract; it does not prove socket behavior
+- `packages/core/test/miss-log.ts`: Browser-test helper that reads accumulated `/e2e/miss-log` hits and filters them by path suffix. Note: 19 lines; Imported only by `sse.browser.spec.ts` and `http.upload_progress.browser.spec.ts`; callers use `Date.now()` to make a unique path
+- `packages/core/test/multipart-fixture.ts`: Builds a `FormData` with a file and a comparable raw multipart byte expectation. Note: 32 lines; Deliberately does not depend on `formData()`, avoiding Bun dropping the file part's Content-Type
+- `packages/core/test/regression/abort-listeners.spec.ts`: Uses spies to compare how many `abort` listeners are added and removed on the caller signal after HTTP/SSE/WS completion. Note: 176 lines; Compares counts, not callback identity, so removing the wrong function still passes (P05-core-tests-01)
+- `packages/core/test/regression/builder-encoding.spec.ts`: Adversarial builder regression: tags surviving spread, alias collisions, `__proto__`, the query serializer, non-JSON bodies, and cancellation. Note: 1502 lines; All 5 classes of production mutation from the auditor were caught
+- `packages/core/test/regression/builder-tags.type.test.ts`: Positive type cases: tagged builders on record, tuple, and nullish chains must typecheck. Note: 26 lines; No negative cases; Checked by the root `bun check`; Vitest does not run it
+- `packages/core/test/regression/builder-types.type.test.ts`: Uses `expectTypeOf` and `@ts-expect-error` to lock builder argument inference, request sections, HTTP methods, and serializable bodies. Note: 222 lines; `toEqualTypeOf` can reject `any`
+- `packages/core/test/regression/controllable_socket.ts`: WebSocket test double that can manually fire open/message/close. Note: 106 lines; Used by `web_socket.spec.ts`, `web_socket.heartbeat.spec.ts`, `web_socket.message.spec.ts`, and `builder-encoding.spec.ts`
+- `packages/core/test/regression/deadline-boundary.spec.ts`: Uses a fake `Date.now` to lock that a 1ms deadline is judged `NET_TIMEOUT` before the interceptor is called. Note: 16 lines
+- `packages/core/test/regression/deadline.spec.ts`: Locks release behavior when the HTTP/SSE/WS startup deadline expires in the synchronous phase, and after open, failure, and reconnect. Note: 479 lines; The last one uses real 20/30/40ms timers; Repeated 20 times on Bun, all passed
+- `packages/core/test/regression/encoding-scale.spec.ts`: Parses and encodes 10 thousand and 100 thousand nodes and asserts the results are correct. Note: 31 lines; 30s timeout; elapsed time is only printed, with no threshold
+- `packages/core/test/regression/explicit-builder.spec.ts`: At runtime, locks that a declared input with no builder returns `REQ_BUILD_FAILED` and sends zero times. Note: 86 lines; Covers HTTP, SSE, WS, and optional input
+- `packages/core/test/regression/explicit-builder.type.test.ts`: Uses `@ts-expect-error` to lock the type constraint that a declared input requires a builder. Note: 20 lines; Removing the directive reports a missing `builder`, and the error reason is correct
+- `packages/core/test/regression/firefox-app-data.spec.ts`: Checks that `browserLaunchEnv` does not modify `process.env`, and that non-macOS platforms return `undefined`. Note: 23 lines; Does not assert directory creation; the darwin branch does not run on ubuntu CI
+- `packages/core/test/regression/hono-test-server.spec.ts`: Locks WebSocket echo in the root `test/hono-test-server.ts`, and that the port refuses connections after close. Note: 49 lines; Tests the P11 helper; The post-close connection probe, like `setup.ts`, can be misjudged by a port that was grabbed (P05-core-tests-05)
+- `packages/core/test/regression/interceptor-lifecycle.spec.ts`: Locks that caller cancellation and the startup deadline still apply after an interceptor replaces the signal. Note: 187 lines; Uses a controlled Response, ReadableStream, and WS double
+- `packages/core/test/regression/intersection-aliases.spec.ts`: Locks that intersection keeps both sides' wire aliases on arrays, records, tuples, and the HTTP boundary. Note: 316 lines; Checks both the direct codec and the public endpoint
+- `packages/core/test/regression/intersection-contract.spec.ts`: Compares `encodeOutbound` with `encodeJson` via `equivalent()`, checking provenance, passthrough, and wire grouping. Note: 309 lines; Assertions live inside the helper; the oxlint `expect-expect` warning is a false positive
+- `packages/core/test/regression/intersection-exotic.spec.ts`: Locks special intersection combinations such as any/unknown unions, array passthrough, and date conflicts. Note: 99 lines; Assertions likewise go through the `equivalent()` helper
+- `packages/core/test/regression/intersection-guides.spec.ts`: Locks outbound encoding for guide sets, nullish fields, and union disagreement. Note: 284 lines; Allows literal extras but limits newly added `w_*` wire keys
+- `packages/core/test/regression/intersection-property.spec.ts`: Randomly generates intersection combinations and requires outbound encoding to match `encodeJson` on samples that parse successfully. Note: 273 lines; Of the default 1000 runs, 952 passed and 48 were rejected; A regression that rejects every parse would be caught by the other 107 tests
+- `packages/core/test/regression/intersection.spec.ts`: Locks merge, conflict, and tag propagation of mixed intersections for `struct.parse` and outbound encoding. Note: 384 lines; Covers the HTTP/SSE/WS codec
+- `packages/core/test/regression/nested-siblings.spec.ts`: Locks spread extras, child-tag priority, and nested wire-key collisions for deep sibling nodes. Note: 141 lines; Checks the final Request through the public HTTP endpoint and a custom handle
+- `packages/core/test/regression/proxy-bypass.spec.ts`: Uses a `bun --eval` subprocess to verify that loopback bypasses the proxy while keeping the external proxy and the original NO_PROXY value. Note: 58 lines; The proxy and the target are the same service, so it can tell whether the proxy was used
+- `packages/core/test/regression/response-boundaries.spec.ts`: Locks classification of raw/parsed JSON, empty bodies, wrong media types, and body-less SSE errors. Note: 249 lines; Checks read-lock release and observer behavior
+- `packages/core/test/regression/response-media-type.spec.ts`: Uses a fixed media-type table to lock the JSON media-type pre-check on both success and error sides, and the definition snapshot. Note: 100 lines; Both branches of the conditional `expect` run
+- `packages/core/test/regression/response-paths.spec.ts`: Locks response paths for a root string, null, a failed SSE handshake error-body decode, and caller cancellation. Note: 141 lines; Uses a hanging stream with a high-water mark of zero to control the phase
+- `packages/core/test/regression/transport-contract.spec.ts`: Locks the distinction between JSON null and a missing body, an empty SSE body, a pre-cancelled signal, union guides, and the maintenance response. Note: 300 lines; The conditional `expect` follows a fixed mode/status table
+- `packages/core/test/regression/undeclared-body.spec.ts`: Uses a `getReader` spy to lock that the response body on an undeclared side is not read. Note: 21 lines; On Bun, an `arrayBuffer()` read does not go through the JS `getReader`, so this file alone cannot catch it, but the same class of regression is caught by `fetch.response.spec.ts` and others
+- `packages/core/test/regression/union-equivalence.spec.ts`: Locks that equivalent union arms keep extra fields, and that disagreement or an alias collision throws. Note: 82 lines; The second collision check in `encodeObjectNode` is caught by only one case in this file
+- `packages/core/test/setup.ts`: Aggregate-config globalSetup: starts the HTTP/SSE/WS fixture server on an ephemeral port and shuts it down strictly. Note: 714 lines; Includes a 200ms WS patch and a post-close port probe (P05-core-tests-05)
+- `packages/core/test/shared.ts`: Exports the package root, the globalSetup path, runtime spec exclude patterns, and the 100% istanbul coverage config. Note: 26 lines; Importing it runs the root `test/loopback-proxy-bypass.ts`
+- `packages/core/test/sse.e2e.spec.ts`: One real SSE end-to-end: builder path/query/header/body and event decoding. Note: 72 lines; Asserts the whole result after `for await`; zero events fails
+- `packages/core/test/streaming-support.ts`: Temporarily replaces the global `Request` so streaming-request capability detection is cached as unsupported, covering that branch. Note: 33 lines; Used by `sse.fault.spec.ts`, `event_stream.spec.ts`, and `fetch.streaming.spec.ts`, then restores the native constructor
+- `packages/core/test/upload-progress.worker.ts`: Browser module-worker fixture: sends Blob/FormData and reports byte counts and progress counts. Note: 98 lines; Used only by `http.upload_progress.worker.browser.spec.ts`
+- `packages/core/test/vite-xsrf-plugin.ts`: Vite dev-server middleware that same-origin forwards browser-test `/xsrf-*` requests to the in-process Hono server. Note: 48 lines; Loaded only in `vitest.config.browser.ts`
+- `packages/core/test/web_socket.e2e.spec.ts`: One real WebSocket end-to-end: builder path and query, inbound discriminated union, and outbound JSON alias. Note: 82 lines; The iterator ending early fails; finally closes the session
+- `packages/core/test/xsrf-middleware.ts`: Test `/xsrf-token` and `/xsrf-validate` routes that compare the token in the cookie and the header. Note: 35 lines; Does not decide the client origin
+- `packages/core/vitest.config.bench.ts`: Struct benchmark config; runs only the prebuilt `test-out/struct-bench/struct.bench.js`. Note: 9 lines; `bench:struct` builds first; CI does not call it
+- `packages/core/vitest.config.browser.ts`: `core-browser` project: separate Playwright Chromium and Firefox spec globs, plus the XSRF proxy plugin. Note: 33 lines; Has no globalSetup of its own; uses the server address from the aggregate config via `inject`
+- `packages/core/vitest.config.server.ts`: `core-server` project: runs non-browser specs under `src` and `test` with the threads pool. Note: 12 lines; Intentionally has no globalSetup since c0024006; running this config alone lacks `testServerHost`
+- `packages/core/vitest.config.ts`: Core aggregate config: the single globalSetup, the 100% coverage threshold, and the server/browser projects. Note: 22 lines; Both the `test` script in `package.json` and CI go through here
+
+## `@defjs/opentelemetry-server`
+
+Outbound OpenTelemetry interceptor: trace, metrics, logs, and context propagation for HTTP/SSE/WebSocket. (28 files, audit partition `P06-otel-server`)
+
+- `packages/opentelemetry-server/e2e.spec.ts`: Verifies propagation shape and diagnostic-log boundaries through a real Core client, a local Hono/WebSocket test server, and a real W3C propagator. Note: 534 lines; tracer/logger are still `createMockTracer` / `createMockLogger`, with no real SDK, so a write dropped after the span ends, or parentSpanId after re-entry, cannot be seen
+- `packages/opentelemetry-server/src/index.ts`: Package entry; re-exports `public_api`. Note: 1 line
+- `packages/opentelemetry-server/src/interceptor/http.spec.ts`: HTTP interceptor unit tests: span name and attributes, isolation of synchronous hook throws, Headers reuse, and metric and log suppression. Note: 595 lines; "should call responseHook before span ends" cannot detect the hook and `span.end()` being swapped (see P06-otel-server-04)
+- `packages/opentelemetry-server/src/interceptor/http.ts`: Outbound HTTP CLIENT span: extracts the parent context from request headers, injects into the same `Headers`, records duration metrics and exception logs, and ends the span when an `HttpResponse` arrives. Note: 81 lines; `span.end()` runs synchronously after `responseHook` returns; Writes back into the caller's `Headers` in place (see P06-otel-server-01 and P06-otel-server-02)
+- `packages/opentelemetry-server/src/interceptor/sse.spec.ts`: SSE interceptor unit tests: connection events, `activeStreams` increment and decrement, each close kind, startup failure, hooks, and logs. Note: 648 lines
+- `packages/opentelemetry-server/src/interceptor/sse.ts`: Outbound SSE span: injects request headers, keeps the span until `stream.closed` settles, and records events, metrics, and logs by close kind. Note: 133 lines; Writes traceparent back into the caller's `Headers` the same way HTTP does (see P06-otel-server-01)
+- `packages/opentelemetry-server/src/interceptor/web_socket.spec.ts`: WebSocket interceptor unit tests: query injection and custom queryString order, close classification, connection-metric balance, and logs. Note: 816 lines; The mock propagator calls `params.set` itself, and does not cover a query that already has `traceparent`/`baggage`
+- `packages/opentelemetry-server/src/interceptor/web_socket.ts`: Outbound WebSocket span: optionally injects context into the query, keeps the span until `session.closed`, and records connection metrics and logs. Note: 173 lines; `appendInjectedQueryString` only appends and does not replace a same-named key (see P06-otel-server-03)
+- `packages/opentelemetry-server/src/option.spec.ts`: Verifies signal independence, transport switches, default propagation, and `requireParentSpan` for `withOpenTelemetryServer`. Note: 502 lines
+- `packages/opentelemetry-server/src/option.ts`: Declares public option types and pushes enabled HTTP/SSE/WebSocket interceptors onto `config.interceptors`. Note: 140 lines; The runtime value imports `CompositePropagator` and the W3C propagator from `@opentelemetry/core`; Hooks are copied when the ClientOption runs
+- `packages/opentelemetry-server/src/option.type.test.ts`: Locks public option and hook signatures at compile time, and rejects the old boolean switches and top-level hooks. Note: 246 lines; Not in the Vitest `include`; covered by the root `bun check`
+- `packages/opentelemetry-server/src/propagation/carrier.spec.ts`: Verifies read/write of the Headers carrier and the query carrier, and empty-value guards. Note: 91 lines; Asserts only on an empty carrier; after changing `append` to `set` the whole suite still passes 288/288
+- `packages/opentelemetry-server/src/propagation/carrier.ts`: Provides TextMap getter/setter for `Headers` and a setter for WebSocket query parameters. Note: 38 lines; The query setter uses `URLSearchParams.append`
+- `packages/opentelemetry-server/src/public_api.ts`: Explicitly exports `withOpenTelemetryServer` and five public option types. Note: 8 lines
+- `packages/opentelemetry-server/src/telemetry/logs.spec.ts`: Verifies diagnostic LogRecord event names, attributes, cancellation/`HTTP_STATUS` suppression, timeout retention, and isolation of emit failures. Note: 169 lines; Deleting the `HTTP_STATUS` suppression fails this file (both auditors confirmed it)
+- `packages/opentelemetry-server/src/telemetry/logs.ts`: Emits a WARN LogRecord per transport, suppresses caller cancellation and HTTP-status faults, and does not let a log failure affect the business result. Note: 59 lines; Cancellation detection depends on `error === ERR_ABORTED` object identity (see P06-otel-server-05)
+- `packages/opentelemetry-server/src/telemetry/metrics.spec.ts`: Verifies metric names, units, duration conversion, and the full attribute object. Note: 162 lines
+- `packages/opentelemetry-server/src/telemetry/metrics.ts`: Creates the HTTP histogram and the SSE/WebSocket histograms and up-down counters, and assembles low-cardinality attributes. Note: 124 lines
+- `packages/opentelemetry-server/src/telemetry/trace.spec.ts`: Verifies span names, built-in attributes, `startSpanHook` merging, status setting, and synchronous hook failure. Note: 346 lines; Uses a mock tracer
+- `packages/opentelemetry-server/src/telemetry/trace.ts`: Creates the three CLIENT span kinds, sets status and ends them, and runs hooks without awaiting while recording hook errors. Note: 163 lines; `runSpanHook` queues rejection recording on a microtask and does not check whether the span is still recording
+- `packages/opentelemetry-server/src/telemetry/url.spec.ts`: Verifies URL joining, base-path preservation, default-port omission, and fallback on an illegal base. Note: 56 lines
+- `packages/opentelemetry-server/src/telemetry/url.ts`: Reuses Core `createResolvedRequestUrl` to produce `url.full`, `server.address`, and an explicit `server.port`. Note: 28 lines; `url.full` has no query and keeps userinfo (the README states there is no built-in redaction)
+- `packages/opentelemetry-server/src/test-utils.spec.ts`: Locks the difference between a default `makeHttpResponse` body and an explicit JSON `null`. Note: 9 lines
+- `packages/opentelemetry-server/src/test-utils.ts`: Provides mock tracer/propagator/logger/metrics and controllable SSE streams and WebSocket sessions for unit tests. Note: 327 lines; Not part of the build; excluded from coverage; After span `end()` it still accepts `setAttribute`/`addEvent`, and the span id is fixed
+- `packages/opentelemetry-server/test/setup.ts`: Vitest globalSetup: starts and stops Hono HTTP/SSE/WebSocket test routes on an ephemeral port. Note: 78 lines; `/ws` echoes the first same-named value with `c.req.query('traceparent')`
+- `packages/opentelemetry-server/test/shared.ts`: Shares the package-root path, globalSetup path, and 100% coverage config, and loads the loopback proxy bypass. Note: 20 lines
+- `packages/opentelemetry-server/vitest.config.server.ts`: Defines the non-browser Vitest project `opentelemetry-server`, aliases `@defjs/core` to the Core source, and attaches globalSetup. Note: 18 lines
+- `packages/opentelemetry-server/vitest.config.ts`: Aggregate config: mounts only the server project and enables the shared coverage settings. Note: 11 lines
+
+## `@defjs/react` · `@defjs/vue`
+
+Framework adapters: React `ClientProvider`/`useClient`, Vue `createClientPlugin`/`injectClient`. (16 files, audit partition `P07-react-vue`)
+
+- `packages/react/src/core.browser.spec.ts`: In the browser, locks `ClientProvider` instance identity, nearest-wins nested providers, and the error text when no provider is present. Note: 56 lines; Identity uses `toBe`; the error uses `toThrow(full text)`; Collected only by the Chromium/Firefox instances of `react-browser`; `afterEach(cleanup)` only unmounts and does not assert request behavior after unmount
+- `packages/react/src/core.ts`: Uses React Context to hand the application-supplied `Client` to the subtree; `useClient()` throws an adapter error when it cannot read one. Note: 54 lines; First line is `'use client'` (rolldown drops it and warns; the tsdown banner puts the single copy back into the artifact); Uses only `createContext`/`createElement`/`useContext`; Does not create, cache, or release the client
+- `packages/react/src/e2e.browser.spec.ts`: Through the shared test server `GET /api/users`, verifies that the injected client completes a real request and that nested providers each use their own client. Note: 168 lines; `inject('testServerHost')` comes from the root `test/browser-api-server-setup.ts`; Records `outer`/`inner` scope with an interceptor
+- `packages/react/src/index.ts`: React package entry; re-exports `public_api`. Note: 1 line; Build entry; Has no directive of its own
+- `packages/react/src/public_api.ts`: Publicly exports `ClientProvider`, `useClient`, and the `ClientProviderProps` type. Note: 2 lines; Value exports and type exports are separate; no runtime logic
+- `packages/react/test/shared.ts`: Provides `packageRoot`, the 100% coverage config, and the `testServerHost` inject type for package-level Vitest. Note: 26 lines; Side-effect import of `test/loopback-proxy-bypass.ts`; Body matches the Vue copy, but `packageRoot` depends on this file's location
+- `packages/react/vitest.config.browser.ts`: Defines the `react-browser` project: headless Playwright Chromium + Firefox, with `@defjs/core` pointed at source. Note: 41 lines; `dedupe` covers `react`, `react-dom`, and `react-dom/client`; `optimizeDeps.include` prebundles test dependencies; `globalSetup` starts a real test server
+- `packages/react/vitest.config.ts`: React package-level Vitest aggregate entry; mounts only the browser project and applies the coverage config. Note: 11 lines; No comments; The `test` script in `package.json` uses this file
+- `packages/vue/src/core.browser.spec.ts`: In the browser, locks plugin-injected instance identity, multi-level sharing, real request results, subtree override via `provide(HTTP_CLIENT)`, and the error text when the plugin is missing. Note: 305 lines; Subtree override uses the native `provide` inside `setup()`; Does not cover the path "plugin is installed but called outside the injection context"
+- `packages/vue/src/core.ts`: Defines the `HTTP_CLIENT` injection key, a Vue plugin that provides an existing `Client`, and `injectClient()` that reads it. Note: 50 lines; `Symbol('HTTP_CLIENT')` is module-level (not `Symbol.for`); When `inject` returns `undefined` it always throws the "plugin is not installed" text; Does not create or clean up the client
+- `packages/vue/src/index.ts`: Vue package entry; re-exports `public_api`. Note: 1 line; Build entry
+- `packages/vue/src/public_api.ts`: Publicly exports `HTTP_CLIENT`, `createClientPlugin`, and `injectClient`. Note: 1 line; No runtime logic; No longer includes the removed `provideGlobalClient`
+- `packages/vue/test/core.spec.ts`: In the browser project, re-verifies the missing-plugin error text and the instance identity the plugin provides. Note: 49 lines; The filename has no `.browser`, but it is explicitly collected by the include of both `vue-browser` instances; Uses `document` and cannot run in Node; Two cases duplicate the corresponding cases in `src/core.browser.spec.ts`
+- `packages/vue/test/shared.ts`: Provides `packageRoot`, the 100% coverage config, and the `testServerHost` inject type for package-level Vitest. Note: 26 lines; Body matches the React copy; `packageRoot` is computed from this file's location
+- `packages/vue/vitest.config.browser.ts`: Defines the `vue-browser` project: headless Playwright Chromium + Firefox; include covers both `src/**/*.browser.spec.ts` and `test/core.spec.ts`. Note: 42 lines; `define` sets compile-time constants such as `__VUE_OPTIONS_API__`; No `dedupe`/`optimizeDeps`; `@defjs/core` points at source
+- `packages/vue/vitest.config.ts`: Vue package-level Vitest aggregate entry; mounts only the browser project and centralizes the coverage config. Note: 19 lines; The comment "Chromium + Firefox" matches the two instances in the browser config
+
+## Documentation site project (`doc/`)
+
+Fumadocs + React Router site app, build/link-check/preview scripts, unit tests, and site e2e. (59 files, audit partition `P08-doc-site`)
+
+- `doc/app/app.css`: Docs-site Tailwind/Fumadocs theme entry, plus layout overrides for grouped navigation and the mobile drawer. Note: Imported by `root.tsx`; Uses logical direction properties to support RTL
+- `doc/app/components/api-index.tsx`: Client filter form for the API index page; filters by name, package, and category via `filterApiEntries` and emits language-prefixed links. Note: Filters only after hydration; See P08-doc-site-03
+- `doc/app/components/api-reference.tsx`: Renders one API's kind, parameter table, and related-type links from its catalog identity. Note: An unknown identity throws immediately; Covered by `api-reference.test.tsx`
+- `doc/app/components/mdx.tsx`: Registers Fumadocs default components plus Tabs, TypeTable, ApiIndex, and ApiReference for MDX pages, and injects the locale.
+- `doc/app/components/navigation.tsx`: Grouped sidebar, modal mobile drawer, previous/next, and related reading for the docs layout. Note: Includes noscript navigation; `page.tsx` uses its slots
+- `doc/app/components/search.tsx`: Uses `useStaticSearch` to read the current language's static index `/api/search/<locale>.json` and render the search dialog. Note: An index load failure is cached forever by the dependency; see P08-doc-site-01
+- `doc/app/data/api-catalog.ts`: Loads the 168-entry API catalog, provides case-insensitive filtering, and validates identity, slug, and related targets at import time. Note: `toLocaleLowerCase()` has no locale argument; see P08-doc-site-03
+- `doc/app/data/api-entries.json`: Hand-written API catalog data (package name, symbol name, kind, slug, related). Note: 168 entries; Checked both ways by `exports.test.ts` and the source exports
+- `doc/app/data/api-parameters.ts`: A small API parameter table keyed by `package:name`, used by reference pages and LLM text.
+- `doc/app/lib/i18n.ts`: Defines 11 languages, default `en-US`, directory resolution, a hidden default-language prefix, and no fallback language. Note: `fallbackLanguage: null`
+- `doc/app/lib/llms.ts`: Rewrites in-site Markdown links outside fences to absolute URLs, and points index links at `/llms.mdx/.../content.md`. Note: Covered by `markdown.test.ts`
+- `doc/app/lib/markdown.ts`: Turns processed MDX into readable Markdown (headings, parameter tables, component metadata) shared by the search index and llms. Note: Tracks fences of any length
+- `doc/app/lib/navigation-copy.ts`: Navigation group titles, section labels, and region labels for 11 languages. Note: `groups` has 5 items and `exampleGroups` has 4; every language has the same length
+- `doc/app/lib/navigation.ts`: Regroups the reading tree by fixed paths, picks group copy by index, and computes the reading section and related pages. Note: Checks that page URLs are not lost and not duplicated
+- `doc/app/lib/routes.ts`: Maps content files to unique URLs and collects prerender paths (including search, llms, 404, sitemap, and en-US `llms.mdx`). Note: `assertUniqueRoutes`; Covered by `routes.test.ts`
+- `doc/app/lib/site.ts`: Exports the build-time site origin and the GitHub repository URL. Note: `SITE_URL` defaults to `http://localhost:3000`
+- `doc/app/lib/source.ts`: Loads the multilingual content source with `defineDocs({ async: true })` and generates the en-US llms renderer. Note: `page.load()` is memoized by fumadocs-mdx
+- `doc/app/lib/ui-copy.ts`: Site UI copy and Fumadocs `translations` keys for 11 languages. Note: 600 lines; The key set matches en-US, and the translation keys match fumadocs-ui 16.17.1
+- `doc/app/llms/full.ts`: `llms-full.txt` resource route; outputs Markdown for every en-US page.
+- `doc/app/llms/index.ts`: `llms.txt` resource route; outputs an en-US index whose links point at per-page Markdown. Note: Link origins come from `siteUrl`
+- `doc/app/llms/mdx.ts`: `llms.mdx/*` resource route; strips the trailing `content.md` and returns the matching en-US page Markdown. Note: Every prerender path ends in `content.md`
+- `doc/app/root.tsx`: Sets `html lang/dir` from the URL prefix, and mounts RootProvider (i18n and static search), scripts, and the error boundary. Note: `ar` is `rtl`; `body[data-hydrated]` is what e2e waits on
+- `doc/app/routes.ts`: React Router route table: home, sitemap, search, llms, 404, and the catch-all content page.
+- `doc/app/routes/home.tsx`: The home page reuses the content page's loader and component directly. Note: A one-line re-export
+- `doc/app/routes/not-found.tsx`: Renders the localized 404, the generic error page, and the link back home.
+- `doc/app/routes/page.tsx`: Content-page loader and render: resolves language and slug, title (including the API package name), canonical, edit link, and TOC. Note: `use(page.load())` depends on an already-cached promise
+- `doc/app/routes/search.ts`: Prerenders one static search-index JSON per language. Note: The whole page's `readableMarkdown` is the content, with `headings: []`
+- `doc/app/routes/sitemap.ts`: Builds sitemap.xml from every language's page URLs and `siteUrl`. Note: 2255 `<loc>` entries
+- `doc/e2e/browser.test.ts`: On about:blank, verifies that `captureBrowserErrors` keeps console-error details across navigations (Chromium/Firefox). Note: Does not open the docs site; Not executed
+- `doc/e2e/browser.ts`: Playwright preview fixture: `startPreview(..., 0)`, browser lifecycle, error collection, and search-result selection helpers. Note: Port 0, so it can run in parallel; Not executed
+- `doc/e2e/grouped.test.ts`: Verifies grouped navigation, the mobile drawer's focus trap and Escape-to-close, and reading without JS. Note: The case on line 83 runs on Chromium only; Not executed
+- `doc/e2e/hierarchy.test.ts`: Verifies that API symbols nest under their package directory, and the visual hierarchy of groups and children in LTR/RTL. Note: Includes geometry assertions; Not executed
+- `doc/e2e/navigation.test.ts`: Verifies that the current reading section and its start are visible, plus no-JS navigation, 404, and mobile navigation. Note: Not executed
+- `doc/e2e/related.test.ts`: Verifies that related-reading links among the HTTP guide, examples, and module API land on real pages and are not truncated. Note: Not executed
+- `doc/e2e/search.test.ts`: Verifies that search shortcuts respond only after hydration, that only the current language index is downloaded, and that the target page loader is awaited. Note: Not executed
+- `doc/e2e/site.test.ts`: Whole-site smoke: freshness, 11-language routes and lang/dir, assets, llms origin, API index filtering, and search. Note: Line 74 compares the llms origin with the test process's `siteUrl`; Not executed
+- `doc/e2e/theme.test.ts`: Verifies light, dark, and follow-system theme switching, and that the choice survives reload. Note: Not executed
+- `doc/package.json`: Private package manifest for the docs workspace: build, typecheck, test, and preview scripts, plus catalog/workspace dependencies. Note: `license: ISC` and `main: index.js` are template leftovers; `@defjs/core` is `workspace:^`
+- `doc/public/logo.jpg`: Site logo used by the navigation title and pages. Note: 46379-byte JPEG (binary)
+- `doc/react-router.config.ts`: Turns SSR off and uses `collectPrerenderPaths` as the source of static prerender paths for the whole site.
+- `doc/scripts/build-state.ts`: Computes the build-input fingerprint and reads and writes `build-stamp.txt` so e2e can check freshness. Note: Covers only files inside `doc/`, not the root catalog/lockfile or `SITE_URL`; see P08-doc-site-04
+- `doc/scripts/build.ts`: Orchestrates the React Router build, copies `404.html`, deletes search `.data`, checks links, and writes the stamp.
+- `doc/scripts/check-links.ts`: Checks that in-site href/src in generated HTML point at a page or file, and that `#fragment` points at an id on the target page. Note: A directory that exists is allowed through; see P08-doc-site-02
+- `doc/scripts/check-site-url.ts`: Before publish, requires `SITE_URL` to be a non-local HTTPS origin with no path, query, or credentials. Note: Called by the release docs job
+- `doc/scripts/preview.ts`: Serves `build/client` statically with Bun, for e2e and `bun run preview`. Note: CLI default port is 3000; Path boundary: see P08-doc-site-06
+- `doc/test/api-catalog.test.ts`: Locks API filter combinations and catalog identity, slug, and related validation. Note: The case-sensitivity query is `CREATE` (it does not contain `I`)
+- `doc/test/api-reference.test.tsx`: Locks parameter-table requiredness, catalog identity keys, and per-language kind, landmark, and Fumadocs copy. Note: Static render with react-dom/server
+- `doc/test/browser-lifecycle.test.ts`: Uses mocks to lock the preview browser fixture's close order and multi-error propagation. Note: Does not launch a browser
+- `doc/test/build-state.test.ts`: Locks missing/stale stamps, build cleanup (404.html, search `.data`), and part of the fingerprint inputs. Note: Does not cover dependency versions or `SITE_URL`
+- `doc/test/check-links.test.ts`: Uses a small HTML fixture to lock encoded paths, assets, missing pages, missing anchors, and empty output. Note: No negative case for "directory exists but index.html is missing"
+- `doc/test/exports.test.ts`: Bidirectionally checks the four packages' public exports against the API catalog with a regex source scan plus the runtime namespace. Note: The regex misses syntax such as `export type *`; see P08-doc-site-05
+- `doc/test/markdown.test.ts`: Locks LLM Markdown export, API component conversion, headings, and preservation of fenced code.
+- `doc/test/navigation.test.ts`: Locks grouped reading order, labels, and related-reading targets for the real content trees of 11 languages.
+- `doc/test/opentelemetry-logging.test.ts`: Runs the Winston example and locks that it shares a provider with Defjs while log thresholds stay independent. Note: In-memory exporter; no external collector
+- `doc/test/preview.test.ts`: Locks that preview returns nested HTML directly and that an unknown path returns the 404 page. Note: Port 0
+- `doc/test/recipes.test.ts`: Runs the `etag-revalidate` and `refresh-bearer-once` examples and asserts business data after a real 304/401. Note: Only these two recipes run
+- `doc/test/routes.test.ts`: Locks directory-to-URL mapping per language, failure on duplicate URLs, and each language's search prerender path.
+- `doc/tsconfig.json`: Typecheck config for the docs app, scripts, tests, e2e, and the otel example. Note: Extends `../tsconfig.base.json`; `@defjs/*` paths point at package source
+- `doc/vite.config.ts`: Wires the fumadocs-mdx, Tailwind, and React Router plugins, and inlines `SITE_URL` into `import.meta.env`. Note: `resolve.tsconfigPaths: true`
+
+## Documentation content · en-US guides and examples
+
+en-US guides, recipes, the home page, and `doc/examples` referenced by the docs and included in type checking. (123 files, audit partition `P09a-doc-guides`)
+
+- `doc/content/en-US/docs/client.mdx`: English Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: 68 lines
+- `doc/content/en-US/docs/commands.mdx`: English Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: 61 lines; `:44` placeholder grammar is missing; see P04-core-infra-04
+- `doc/content/en-US/docs/design-decisions.mdx`: English Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: 165 lines; `:104-106` writes a declared body as always JSON-parsed (P09a-doc-guides-03); The table at `:111-115` does not hold for an SSE handshake struct failure (P09a-doc-guides-02)
+- `doc/content/en-US/docs/errors.mdx`: English Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: 192 lines; The table at `:79-81` does not hold for an SSE handshake struct failure (P09a-doc-guides-02); `:90-92` see P09a-doc-guides-03; The source-proof wording at `:124-126` see P09a-doc-guides-04; The 17 FaultCodes match the source
+- `doc/content/en-US/docs/http.mdx`: English HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: 167 lines; Authoritative description of representation kinds and read order (`:98-123`); `:22` placeholder grammar is missing; see P04-core-infra-04
+- `doc/content/en-US/docs/index.md`: English Guide index page. Note: 34 lines
+- `doc/content/en-US/docs/integrations/meta.json`: English Docs navigation metadata: defines directory titles or page order. Note: 3 lines
+- `doc/content/en-US/docs/integrations/opentelemetry-server.mdx`: English OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: 179 lines; `:71` and `:164` omit the JSON representation precondition; filed as P09b-doc-api-04
+- `doc/content/en-US/docs/integrations/react.mdx`: English React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: 73 lines
+- `doc/content/en-US/docs/integrations/vue.mdx`: English Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: 77 lines
+- `doc/content/en-US/docs/interceptors.mdx`: English Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: 110 lines
+- `doc/content/en-US/docs/meta.json`: English Docs navigation metadata: defines directory titles or page order. Note: 5 lines
+- `doc/content/en-US/docs/sse.mdx`: English SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: 106 lines; `:62` see P03a-core-sse-02; `:64` see P03a-core-sse-05; `:93` see P03a-core-sse-06; `:99` the repository-verification statement is stale (P09a-doc-guides-05)
+- `doc/content/en-US/docs/start.mdx`: English Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: 137 lines
+- `doc/content/en-US/docs/struct.mdx`: English Struct guide: presence, null, alias, errors, and the public struct constructors. Note: 136 lines
+- `doc/content/en-US/docs/web-socket.mdx`: English WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: 112 lines; `:52` budget lifetime see P03b-core-ws-02
+- `doc/content/en-US/index.mdx`: English Home page: introduces package choice, the result tuple, and resource ownership. Note: 56 lines
+- `doc/content/en-US/meta.json`: English Docs navigation metadata: defines directory titles or page order. Note: 3 lines
+- `doc/content/en-US/recipes/cancel-http.mdx`: Recipe for cancelling and timing out an HTTP call. Note: 20 lines
+- `doc/content/en-US/recipes/consume-sse.mdx`: Recipe for consuming one SSE event and releasing the stream. Note: 22 lines; `:22` same as P03a-core-sse-02 (does not say the budget accumulates per logical stream)
+- `doc/content/en-US/recipes/etag-revalidate.mdx`: Recipe for keeping an application cache and handling ETag/304. Note: 22 lines
+- `doc/content/en-US/recipes/get-declared-404.mdx`: Recipe for declaring 200/404 bodies and narrowing the fault. Note: 26 lines
+- `doc/content/en-US/recipes/graphql-http-envelope.mdx`: Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: 20 lines; The errors[] unwrap promise at `:20` does not hold for data:null (P09a-doc-guides-01)
+- `doc/content/en-US/recipes/index.md`: English Recipe index page. Note: 26 lines
+- `doc/content/en-US/recipes/meta.json`: English Docs navigation metadata: defines directory titles or page order. Note: 5 lines
+- `doc/content/en-US/recipes/post-json.mdx`: Recipe for submitting JSON and decoding a 201. Note: 20 lines
+- `doc/content/en-US/recipes/publish-http-sdk.mdx`: HTTP SDK recipe that exports endpoints and a client factory. Note: 24 lines
+- `doc/content/en-US/recipes/refresh-bearer-once.mdx`: Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: 20 lines
+- `doc/content/en-US/recipes/test-with-handle.mdx`: HTTP test recipe that injects a local Fetch handle. Note: 20 lines
+- `doc/content/en-US/recipes/websocket-session.mdx`: Recipe for sending and receiving one WebSocket envelope. Note: 22 lines
+- `doc/examples/.oxlintrc.json`: Example lint config: allows variables left unused because they are there to teach. Note: 1 line
+- `doc/examples/api/client-defaults.ts`: Demonstrates default headers/timeout and the override priority of the command and of execute. Note: 21 lines
+- `doc/examples/api/create-client-plugin.ts`: Demonstrates installing an existing client as a Vue plugin. Note: 9 lines
+- `doc/examples/api/create-client.ts`: Demonstrates the minimal combination of createClient and withEndpoint. Note: 5 lines
+- `doc/examples/api/define-event-stream.ts`: Demonstrates an SSE definition with events and the required buffer/queue limits. Note: 10 lines
+- `doc/examples/api/define-request.ts`: Demonstrates an HTTP definition with input/output/error and an explicit builder. Note: 12 lines
+- `doc/examples/api/define-web-socket.ts`: Demonstrates a WS definition with subprotocol, incoming/outgoing, and queue limits. Note: 11 lines
+- `doc/examples/api/fault.ts`: Demonstrates reading logs for a native Error fault and a StructError cause. Note: 10 lines; `String(fault)` same as P04-core-infra-02
+- `doc/examples/api/opentelemetry-server-transport-options.ts`: Demonstrates an HTTP startSpanHook that builds the URL and drops a specified query field. Note: 14 lines
+- `doc/examples/api/with-opentelemetry-server.ts`: Demonstrates passing a tracer/logger into the OTel client options. Note: 10 lines
+- `doc/examples/client/basic-setup.ts`: Demonstrates explicitly creating a client that has an endpoint. Note: 5 lines
+- `doc/examples/client/compose-options.ts`: Demonstrates attaching an HTTP observation interceptor and Fetch credentials. Note: 13 lines
+- `doc/examples/client/inject-test-transport.ts`: Demonstrates an offline Fetch fixture and a typed GET result. Note: 16 lines
+- `doc/examples/commands/basic-setup.ts`: Demonstrates the command execution tuple with no input and no output. Note: 8 lines
+- `doc/examples/commands/different-shapes.ts`: Demonstrates different placement of a path, an aliased query, and a static header. Note: 22 lines
+- `doc/examples/commands/where-values-go.ts`: Demonstrates putting a logical User value straight into a JSON body. Note: 17 lines
+- `doc/examples/design-decisions/builder-encoder-alias.ts`: Demonstrates a batch command with a nested array alias, a literal header, and an optional query. Note: 31 lines
+- `doc/examples/design-decisions/definitions.ts`: Demonstrates that calling an endpoint only creates an opaque command and does not execute it. Note: 14 lines
+- `doc/examples/env.d.ts`: Example ambient type shim: declares App, qs, and tracer globals. Note: 10 lines; The ambient declaration provides no runtime value
+- `doc/examples/errors/basic-setup.ts`: Demonstrates branches for HTTP_STATUS, NET_TIMEOUT, and RES_STRUCT_MISMATCH. Note: 24 lines
+- `doc/examples/errors/log-fault.ts`: Demonstrates printing a fault and the StructError cause. Note: 10 lines; `String(fault)` contains the raw response value; see P04-core-infra-02
+- `doc/examples/errors/narrow-by-kind.ts`: Demonstrates narrowing a declared error union by body.kind. Note: 21 lines
+- `doc/examples/errors/narrow-by-status.ts`: Demonstrates narrowing a declared error union by body.status. Note: 14 lines; The accompanying prose at errors.mdx:124-126 see P09a-doc-guides-04
+- `doc/examples/errors/narrow-union.ts`: Demonstrates narrowing a non-discriminated union by field presence. Note: 11 lines
+- `doc/examples/errors/summarize-fault.ts`: Demonstrates a diagnostic summary that keeps only the stable code/status. Note: 10 lines
+- `doc/examples/errors/triage.ts`: Demonstrates a classifying switch that exhausts all 17 FaultCodes. Note: 35 lines
+- `doc/examples/errors/tuple-shapes.ts`: Demonstrates the startup tuple types of the three transports. Note: 24 lines
+- `doc/examples/home/get-health.ts`: Home-page example: defines and executes a JSON health request. Note: 13 lines
+- `doc/examples/http/basic-setup.ts`: Demonstrates handling a successful GET and a declared 404 body. Note: 20 lines
+- `doc/examples/http/body.ts`: Demonstrates an urlencoded login builder and a FormData file-upload builder. Note: 32 lines
+- `doc/examples/http/cancel.ts`: Demonstrates cancelling HTTP immediately after combining a signal with the startup timeout. Note: 14 lines
+- `doc/examples/http/place-input.ts`: Demonstrates alias encoding of path, headers, and body, and PATCH decoding. Note: 32 lines
+- `doc/examples/http/query-serializer.ts`: Demonstrates attaching an external qs library to the client query serializer. Note: 8 lines
+- `doc/examples/http/resolve-url.ts`: Demonstrates a directory endpoint, encoding the path once, and joining the query. Note: 18 lines
+- `doc/examples/interceptors/add-request-headers.ts`: Demonstrates cloning Headers and then adding a dynamic Bearer token. Note: 16 lines
+- `doc/examples/interceptors/basic-setup.ts`: Demonstrates an interceptor observing HTTP duration and status. Note: 13 lines
+- `doc/examples/interceptors/onion-order.ts`: Demonstrates the before/after order of two interceptors. Note: 22 lines
+- `doc/examples/interceptors/retry-safe-reads.ts`: Demonstrates limited GET/HEAD/OPTIONS Retry-After handling and waiting on abort. Note: 56 lines; Span parent-chain problem under an outer retry; see P06-otel-server-01
+- `doc/examples/interceptors/short-circuit.ts`: Demonstrates a 503 maintenance short-circuit with explicit JSON response headers. Note: 20 lines; `makeResponse` explicitly supplies JSON headers and does not pass the request (H4 excluded)
+- `doc/examples/interceptors/websocket-sessions.ts`: Demonstrates wrapping a WS session by delegation, with a live getter and an async disposer. Note: 36 lines
+- `doc/examples/opentelemetry-logging/README.md`: Run, threshold, context, and cleanup notes for the executable Winston example. Note: 34 lines
+- `doc/examples/opentelemetry-logging/winston.ts`: Executable Winston/Defjs dual-path logging example, plus a testable exported function. Note: 69 lines; Actually executed by doc/test/opentelemetry-logging.test.ts
+- `doc/examples/opentelemetry-server/active-span.ts`: Demonstrates recording the final fault with an application span around execute. Note: 25 lines
+- `doc/examples/opentelemetry-server/basic-setup.ts`: Demonstrates passing the application's tracer/meter/logger into withOpenTelemetryServer, and enabling meter-only and logger-only independently. Note: 22 lines
+- `doc/examples/opentelemetry-server/logs-without-spans.ts`: Demonstrates logger-only local failure and shutting down the application's own provider. Note: 24 lines
+- `doc/examples/opentelemetry-server/operation-names.ts`: Demonstrates static operation names for HTTP, SSE, and WS. Note: 26 lines
+- `doc/examples/opentelemetry-server/options-and-hooks.ts`: Demonstrates transport-scoped hooks, URL attributes, and switches. Note: 33 lines
+- `doc/examples/opentelemetry-server/pino-logger.ts`: Demonstrates the instrumentation order of starting the Node SDK and then requiring Pino. Note: 30 lines
+- `doc/examples/opentelemetry-server/websocket-query-propagation.ts`: Demonstrates explicitly enabling WS query propagation. Note: 14 lines
+- `doc/examples/opentelemetry-server/winston-logger.ts`: Demonstrates different thresholds for the Winston console and the OTel transport. Note: 26 lines
+- `doc/examples/react/basic-setup.tsx`: Demonstrates useClient and a cancellable HTTP effect that suppresses a stale result. Note: 33 lines
+- `doc/examples/react/client-provider.tsx`: Demonstrates providing a browser-shared client through Context. Note: 11 lines
+- `doc/examples/react/own-query-work.tsx`: Demonstrates handing a cancellable execute callback to a query library. Note: 28 lines
+- `doc/examples/react/own-realtime-work.tsx`: Demonstrates pre-registered cleanup, consumption, and late-session cleanup inside a WS effect. Note: 60 lines
+- `doc/examples/react/read-with-use-client.tsx`: Demonstrates a button handler executing a health request from the nearest Context. Note: 29 lines
+- `doc/examples/recipes/cancel-http.ts`: Executable example: recipe for cancelling and timing out an HTTP call. Note: 25 lines
+- `doc/examples/recipes/consume-sse.ts`: Executable example: recipe for consuming one SSE event and releasing the stream. Note: 31 lines
+- `doc/examples/recipes/etag-revalidate.ts`: Executable example: recipe for keeping an application cache and handling ETag/304. Note: 57 lines; Executed by doc/test/recipes.test.ts
+- `doc/examples/recipes/get-declared-404.ts`: Executable example: recipe for declaring 200/404 bodies and narrowing the fault. Note: 26 lines
+- `doc/examples/recipes/graphql-http-envelope.ts`: Executable example: recipe for unwrapping GraphQL data/errors on HTTP 200. Note: 48 lines; `data` is only `.optional()`, so it rejects the spec-allowed `data: null` (P09a-doc-guides-01); Its own fixture outputs `ada viewer unavailable`
+- `doc/examples/recipes/post-json.ts`: Executable example: recipe for submitting JSON and decoding a 201. Note: 40 lines
+- `doc/examples/recipes/publish-http-sdk/app.ts`: Demonstrates an SDK caller keeping endpoint execute and the error tuple. Note: 12 lines
+- `doc/examples/recipes/publish-http-sdk/users-sdk.ts`: Demonstrates exporting an endpoint, a Client factory, and a single-purpose helper. Note: 27 lines
+- `doc/examples/recipes/refresh-bearer-once.ts`: Executable example: recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: 64 lines; Executed by doc/test/recipes.test.ts
+- `doc/examples/recipes/test-with-handle.ts`: Executable example: HTTP test recipe that injects a local Fetch handle. Note: 27 lines
+- `doc/examples/recipes/websocket-session.ts`: Executable example: recipe for sending and receiving one WebSocket envelope. Note: 30 lines
+- `doc/examples/sse/basic-setup.ts`: Demonstrates await using ownership and typed SSE iteration. Note: 23 lines
+- `doc/examples/sse/close-and-dispose.ts`: Demonstrates a disposer interface structurally compatible with EventStreamHandle. Note: 14 lines
+- `doc/examples/sse/invalid-events.ts`: Demonstrates a bounded observer for events that were dropped. Note: 15 lines
+- `doc/examples/sse/open-and-inspect.ts`: Demonstrates the startup snapshot, a live open, and manual close/closed. Note: 20 lines
+- `doc/examples/sse/reconnect.ts`: Demonstrates an explicit retry, backoff, and Last-Event-ID policy. Note: 18 lines
+- `doc/examples/sse/stream-result.ts`: Demonstrates the SSE startup tuple type. Note: 10 lines
+- `doc/examples/start/define-request.ts`: Demonstrates the full input/output/error definition of the getting-started GET. Note: 24 lines
+- `doc/examples/start/execute-locally.ts`: Demonstrates the full getting-started program for offline success and a 404. Note: 48 lines
+- `doc/examples/start/real-api.ts`: Demonstrates switching between a fixture and a real endpoint behind the same client interface. Note: 19 lines
+- `doc/examples/struct/aliases.ts`: Demonstrates that the default logical-key parse does not accept a wire alias. Note: 14 lines
+- `doc/examples/struct/any.ts`: Enumerates and demonstrates the public Struct facade constructors. Note: 32 lines
+- `doc/examples/struct/basic-setup.ts`: Demonstrates Infer, an HTTP shape, and standalone Struct parsing. Note: 26 lines
+- `doc/examples/struct/parse-failures.ts`: Demonstrates the first invalid_type issue, plus flatten, format, and prettify. Note: 14 lines
+- `doc/examples/struct/request-placement.ts`: Demonstrates an explicit builder for the four request sections and logical call values. Note: 30 lines
+- `doc/examples/struct/required-optional-null.ts`: Demonstrates field output for required, optional, nullable, and nullish. Note: 18 lines
+- `doc/examples/tsconfig.json`: Example TypeScript config: typechecks TS/TSX and relaxes unused checks. Note: 10 lines; Extends doc/tsconfig.json → tsconfig.base.json (lib ESNext + skipLibCheck), does not include `.vue`, and excludes opentelemetry-logging
+- `doc/examples/vue.d.ts`: Vue module shim: every .vue import is treated as DefineComponent. Note: 5 lines; Does not check SFC contents or that the target exists
+- `doc/examples/vue/basic-setup.vue`: Demonstrates an HTTP watcher with defineProps, cancelled when it runs again. Note: 39 lines; After extracting script setup, the standalone type check passes; the template was not run
+- `doc/examples/vue/exports.ts`: Demonstrates the three Vue adapter runtime exports. Note: 12 lines
+- `doc/examples/vue/inject-and-override.vue`: Demonstrates provide overriding the client inside a subtree, and a child reading it. Note: 21 lines; After extracting script setup, the standalone type check passes; the template was not run
+- `doc/examples/vue/main.ts`: Demonstrates installing the plugin on a Vue app and the mount entry. Note: 12 lines; App.vue is a placeholder application entry; the repo does not provide that component
+- `doc/examples/vue/realtime-scope.vue`: Demonstrates SSE scope cleanup, a late handle, and a list of the latest 100 events. Note: 58 lines; After extracting script setup, the standalone type check passes; the template was not run
+- `doc/examples/web-socket/basic-setup.ts`: Demonstrates await using, a runtime observer, and one send plus one receive. Note: 29 lines
+- `doc/examples/web-socket/closure-and-ownership.ts`: Demonstrates a function that owns a WS session and releases it with await using. Note: 10 lines
+- `doc/examples/web-socket/heartbeat.ts`: Demonstrates an outgoing ping, an incoming pong, and the ack policy. Note: 24 lines
+- `doc/examples/web-socket/reconnect.ts`: Demonstrates opt-in backoff and the physical-close policy. Note: 27 lines
+- `doc/examples/web-socket/state-snapshots.ts`: Demonstrates the WS startup tuple type. Note: 10 lines
+
+## Documentation content · en-US API reference
+
+en-US API reference pages (module overviews and per-symbol pages). (184 files, audit partition `P09b-doc-api`)
+
+- `doc/content/en-US/api/client.mdx`: Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: 290 lines; The SSE/WebSocket defaults table matches the source; `attempts` is a cumulative budget for the whole stream/session and is not stated (P09b-doc-api-01)
+- `doc/content/en-US/api/core/anyfault-type.mdx`: AnyFault: the fault union used when the concrete error struct does not matter. Note: 16 lines; declared in packages/core/src/error/types.ts:124
+- `doc/content/en-US/api/core/anystruct-type.mdx`: AnyStruct: a wide constraint that accepts any struct. Note: 15 lines; declared in packages/core/src/struct/types.ts:148
+- `doc/content/en-US/api/core/basicauthhttpinterceptor.mdx`: Interceptor that sets Basic Authorization on an HTTP request. Note: 20 lines; declared in packages/core/src/interceptor/basic_auth.ts:42
+- `doc/content/en-US/api/core/basicauthinterceptoroptions-type.mdx`: Optional encoder for the Basic-auth interceptor. Note: 20 lines; declared in packages/core/src/interceptor/basic_auth.ts:13
+- `doc/content/en-US/api/core/basicauthsseinterceptor.mdx`: Interceptor that sets Basic Authorization on an SSE request. Note: 20 lines; declared in packages/core/src/interceptor/basic_auth.ts:54
+- `doc/content/en-US/api/core/builderinput-type.mdx`: Endpoint input type the builder receives, already parsed by the input struct. Note: 33 lines; declared in packages/core/src/internal/builder_types.ts:92
+- `doc/content/en-US/api/core/client-type.mdx`: Client returned by createClient, including execute overloaded per command. Note: 31 lines; declared in packages/core/src/client/client.ts:23
+- `doc/content/en-US/api/core/clientconfig-type.mdx`: Resolved client config that execute reads after the option functions have finished writing. Note: 31 lines; declared in packages/core/src/client/config.ts:192
+- `doc/content/en-US/api/core/clientoption-type.mdx`: Type of the option function that createClient accepts. Note: 14 lines; declared in packages/core/src/client/option.ts:14
+- `doc/content/en-US/api/core/clientoptions-type.mdx`: Input-shaped client options corresponding to the option functions. Note: 33 lines; declared in packages/core/src/client/config.ts:157; createClient does not accept that object directly
+- `doc/content/en-US/api/core/clientsseconfig-type.mdx`: Resolved SSE config; the fetch handle is required. Note: 16 lines; declared in packages/core/src/client/config.ts:124
+- `doc/content/en-US/api/core/clientsseoptions-type.mdx`: SSE fetch handle, invalid-event hook, and reconnect policy. Note: 42 lines; declared in packages/core/src/client/config.ts:87; Line 36 does not state that `attempts` is a cumulative budget (P09b-doc-api-01)
+- `doc/content/en-US/api/core/clientwebsocketoptions-type.mdx`: WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: 40 lines; declared in packages/core/src/client/config.ts:51; Line 34 does not state that WS `attempts` is a cumulative budget; same root as P03b-core-ws-02
+- `doc/content/en-US/api/core/createclient.mdx`: Creates a client from several option functions. Note: 19 lines; declared in packages/core/src/client/client.ts:59; Suggests creating it inside the request boundary; the tone is Prefer
+- `doc/content/en-US/api/core/createdecodefault.mdx`: Builds a decode fault: the response arrived, but it cannot be read as declared. Note: 17 lines; declared in packages/core/src/error/factory.ts:59
+- `doc/content/en-US/api/core/createhttpinterceptor.mdx`: Wraps a function as a kind-tagged HTTP interceptor. Note: 17 lines; declared in packages/core/src/interceptor/interceptor.ts:39
+- `doc/content/en-US/api/core/createhttpstatusfault.mdx`: Builds an HTTP_STATUS fault whose error body is already decoded. Note: 17 lines; declared in packages/core/src/error/factory.ts:34
+- `doc/content/en-US/api/core/createnetworkfault.mdx`: Picks a NET_* code from the shape of the cause and builds a network fault. Note: 21 lines; declared in packages/core/src/error/factory.ts:94
+- `doc/content/en-US/api/core/createpreflightfault.mdx`: Builds a preflight fault, which can happen before a response appears. Note: 17 lines; declared in packages/core/src/error/factory.ts:75
+- `doc/content/en-US/api/core/createresolvedrequesturl.mdx`: Resolves a request path against the base endpoint into a URL. Note: 19 lines; declared in packages/core/src/internal/url.ts:135
+- `doc/content/en-US/api/core/createsseinterceptor.mdx`: Wraps a function as a kind-tagged SSE interceptor. Note: 19 lines; declared in packages/core/src/interceptor/interceptor.ts:71
+- `doc/content/en-US/api/core/createundecodedhttpstatusfault.mdx`: Builds an HTTP_STATUS fault whose body was not read. Note: 17 lines; declared in packages/core/src/error/factory.ts:45
+- `doc/content/en-US/api/core/createwebsocketinterceptor.mdx`: Wraps a function as a kind-tagged WebSocket interceptor. Note: 19 lines; declared in packages/core/src/interceptor/interceptor.ts:122
+- `doc/content/en-US/api/core/decodedresponse-type.mdx`: A response whose body has already been decoded with the declared struct. Note: 15 lines; declared in packages/core/src/internal/http_response.ts:40
+- `doc/content/en-US/api/core/decodefault-type.mdx`: Fault raised when the response has arrived but cannot be read as declared. Note: 22 lines; declared in packages/core/src/error/types.ts:85
+- `doc/content/en-US/api/core/decodefaultcode-type.mdx`: Decode-fault codes that carry only response metadata and no body. Note: 14 lines; declared in packages/core/src/error/types.ts:50
+- `doc/content/en-US/api/core/defineeventstream.mdx`: Declares a typed SSE endpoint. Note: 32 lines; declared in packages/core/src/sse/sse.ts:156
+- `doc/content/en-US/api/core/definerequest.mdx`: Declares a typed HTTP endpoint. Note: 36 lines; declared in packages/core/src/http/http.ts:159; Example placeholder `:id`; Placeholder grammar is not written; see P04-core-infra-04
+- `doc/content/en-US/api/core/definewebsocket.mdx`: Declares a typed WebSocket endpoint. Note: 29 lines; declared in packages/core/src/web_socket/web_socket.ts:188
+- `doc/content/en-US/api/core/err-aborted-type.mdx`: Shared Error sentinel that means the caller cancelled. Note: 16 lines; declared in packages/core/src/error/cause.ts:2; States that an SSE/WS interceptor throwing it yields `EXT_INTERCEPTOR_FAILED`; The process-level source-mark exception: see P04-core-infra-03
+- `doc/content/en-US/api/core/err-timeout-type.mdx`: Shared Error sentinel that means a timeout. Note: 16 lines; declared in packages/core/src/error/cause.ts:5; The same transport differences as the `ERR_ABORTED` page; Exception: see P04-core-infra-03
+- `doc/content/en-US/api/core/errormap-type.mdx`: Callback that rewrites the message of a single struct-parse issue. Note: 14 lines; declared in packages/core/src/struct/errors.ts:12; Returning `''` does not replace the message; see P01-core-struct-06
+- `doc/content/en-US/api/core/eventstreamcloseinfo-type.mdx`: How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: 17 lines; declared in packages/core/src/sse/transport/event_stream.ts:63
+- `doc/content/en-US/api/core/eventstreamcommand-type.mdx`: Executable command produced by calling an event-stream endpoint. Note: 22 lines; declared in packages/core/src/sse/sse.ts:110
+- `doc/content/en-US/api/core/eventstreamdata-type.mdx`: Parsed event union inferred from EventStructs. Note: 16 lines; declared in packages/core/src/sse/sse.ts:75
+- `doc/content/en-US/api/core/eventstreamdefinition-type.mdx`: Endpoint contract passed to defineEventStream. Note: 28 lines; declared in packages/core/src/sse/sse.ts:92
+- `doc/content/en-US/api/core/eventstreamendpoint-type.mdx`: Callable endpoint returned by defineEventStream. Note: 18 lines; declared in packages/core/src/sse/sse.ts:123
+- `doc/content/en-US/api/core/eventstreamexecuteoptions-type.mdx`: Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: 16 lines; declared in packages/core/src/sse/sse.ts:120
+- `doc/content/en-US/api/core/eventstreamfaultcode-type.mdx`: Subset of fault codes an SSE stream may use to end. Note: 24 lines; declared in packages/core/src/sse/transport/event_stream.ts:41; Matches the Extract list in dist
+- `doc/content/en-US/api/core/eventstreamhandle-type.mdx`: An opened SSE stream: iterate events, read open, and close early. Note: 32 lines; declared in packages/core/src/sse/transport/event_stream.ts:69
+- `doc/content/en-US/api/core/eventstreamopeninfo-type.mdx`: Metadata available after the SSE response has opened. Note: 17 lines; declared in packages/core/src/sse/transport/event_stream.ts:31
+- `doc/content/en-US/api/core/eventstreamrequestshape-type.mdx`: Return shape of an SSE builder; an alias of HttpRequestShape. Note: 14 lines; declared in packages/core/src/internal/builder_types.ts:66; The symbol page does not repeat the module page's unknown body
+- `doc/content/en-US/api/core/eventstructs-type.mdx`: Map from an SSE event name to its decode struct. Note: 20 lines; declared in packages/core/src/sse/sse.ts:52
+- `doc/content/en-US/api/core/executeeventstreamcommand.mdx`: Low-level entry that opens one SSE command against the client config. Note: 24 lines; declared in packages/core/src/sse/sse.ts:205
+- `doc/content/en-US/api/core/executehttpcommand.mdx`: Low-level entry that executes one HTTP command against the client config. Note: 26 lines; declared in packages/core/src/http/http.ts:199; The symbol-page signature matches dist
+- `doc/content/en-US/api/core/executewebsocketcommand.mdx`: Low-level entry that opens one WebSocket command against the client config. Note: 26 lines; declared in packages/core/src/web_socket/web_socket.ts:1107
+- `doc/content/en-US/api/core/fault-type.mdx`: Fault union that client.execute can return, distinguished by code. Note: 23 lines; declared in packages/core/src/error/types.ts:116
+- `doc/content/en-US/api/core/faultclass-type.mdx`: The category of a fault code: the text before the first underscore. Note: 14 lines; declared in packages/core/src/error/types.ts:47
+- `doc/content/en-US/api/core/faultcode-type.mdx`: The closed set of fault codes that Defjs reports. Note: 44 lines; declared in packages/core/src/error/types.ts:23; The 17 codes match dist
+- `doc/content/en-US/api/core/faultof-type.mdx`: Fault union expressed in terms of the decoded error-body type. Note: 14 lines; declared in packages/core/src/error/types.ts:109
+- `doc/content/en-US/api/core/fetchhandle-type.mdx`: Fetch-compatible function type used by HTTP or SSE. Note: 16 lines; declared in packages/core/src/client/config.ts:22
+- `doc/content/en-US/api/core/fetchhandler.mdx`: Default transport that sends an HTTP request with fetch. Note: 18 lines; declared in packages/core/src/http/transport/fetch.ts:358
+- `doc/content/en-US/api/core/flattenedstructerror-type.mdx`: Form errors and field errors returned by StructError.flatten(). Note: 17 lines; declared in packages/core/src/struct/types.ts:69
+- `doc/content/en-US/api/core/formattedstructerror-type.mdx`: Nested error tree returned by StructError.format(). Note: 17 lines; declared in packages/core/src/struct/types.ts:61
+- `doc/content/en-US/api/core/httpawaitresult-type.mdx`: Triple returned by an HTTP call: success data and the response, or a fault. Note: 17 lines; declared in packages/core/src/http/http.ts:130
+- `doc/content/en-US/api/core/httpcommand-type.mdx`: Executable HTTP command produced by calling a request endpoint. Note: 22 lines; declared in packages/core/src/http/http.ts:61
+- `doc/content/en-US/api/core/httpexecuteoptions-type.mdx`: Progress callbacks and cancellation options for a single HTTP call. Note: 19 lines; declared in packages/core/src/http/http.ts:75
+- `doc/content/en-US/api/core/httpinterceptor-type.mdx`: Kind-tagged HTTP interceptor accepted by withInterceptors. Note: 17 lines; declared in packages/core/src/interceptor/interceptor.ts:28
+- `doc/content/en-US/api/core/httpinterceptornext-type.mdx`: next that keeps running the remaining HTTP interceptors until the transport. Note: 14 lines; declared in packages/core/src/interceptor/interceptor.ts:18
+- `doc/content/en-US/api/core/httpmeta-type.mdx`: Metadata that exists once the response has reached the client; it does not include the body. Note: 21 lines; declared in packages/core/src/internal/http_response.ts:26
+- `doc/content/en-US/api/core/httpprogressevent-type.mdx`: Progress snapshot received by the upload and download callbacks. Note: 20 lines; declared in packages/core/src/internal/http_request.ts:12
+- `doc/content/en-US/api/core/httpprogressfn-type.mdx`: Function type of the upload and download progress callbacks. Note: 16 lines; declared in packages/core/src/internal/http_request.ts:27
+- `doc/content/en-US/api/core/httprequest-type.mdx`: Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: 44 lines; declared in packages/core/src/internal/http_request.ts:36; The signature deliberately omits the internal bodyContentTypeSource
+- `doc/content/en-US/api/core/httprequestshape-type.mdx`: path, query, headers, and body that an HTTP builder may return. Note: 19 lines; declared in packages/core/src/internal/builder_types.ts:52; The signature matches `dist/index.d.ts` (`BodyValue`); Module-page drift: see P09b-doc-api-03
+- `doc/content/en-US/api/core/httpresponse-type.mdx`: On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: 24 lines; declared in packages/core/src/internal/http_response.ts:10
+- `doc/content/en-US/api/core/httpresponsetype-type.mdx`: Representation used to read an HTTP body before struct validation. Note: 14 lines; declared in packages/core/src/internal/http_request.ts:6
+- `doc/content/en-US/api/core/httpstatusfault-type.mdx`: Fault for a non-2xx response; the type parameter is the declared error struct. Note: 18 lines; declared in packages/core/src/error/types.ts:76
+- `doc/content/en-US/api/core/httpstatusfaultof-type.mdx`: Non-2xx fault expressed by the decoded body type. Note: 19 lines; declared in packages/core/src/error/types.ts:63
+- `doc/content/en-US/api/core/infer-type.mdx`: Output type inferred from a struct after a successful parse. Note: 19 lines; declared in packages/core/src/struct/types.ts:163
+- `doc/content/en-US/api/core/interceptor-type.mdx`: Union of the three kind-tagged interceptors the client interceptor option accepts. Note: 14 lines; declared in packages/core/src/interceptor/interceptor.ts:133
+- `doc/content/en-US/api/core/interceptorfn-type.mdx`: Signature of an HTTP interceptor function. Note: 14 lines; declared in packages/core/src/interceptor/interceptor.ts:23
+- `doc/content/en-US/api/core/makeresponse.mdx`: Builds an HttpResponse directly, without sending a network request. Note: 16 lines; declared in packages/core/src/internal/http_response.ts:61; The default status is 0
+- `doc/content/en-US/api/core/makeresponseoptions-type.mdx`: Fields that makeResponse accepts. Note: 21 lines; declared in packages/core/src/internal/http_response.ts:45; States that omitting url/headers copies them from the request
+- `doc/content/en-US/api/core/manualsocketclosereason-type.mdx`: Close code and reason recorded by session.close. Note: 18 lines; declared in packages/core/src/web_socket/web_socket.ts:150
+- `doc/content/en-US/api/core/meta.json`: Core API sidebar group title. Note: 3 lines; Hand-written Fumadocs navigation metadata; title: Core only
+- `doc/content/en-US/api/core/objectstruct-type.mdx`: Object struct type produced by struct.object. Note: 23 lines; declared in packages/core/src/struct/types.ts:270
+- `doc/content/en-US/api/core/parseresult-type.mdx`: Error-first pair returned by struct.parse. Note: 14 lines; declared in packages/core/src/struct/types.ts:14
+- `doc/content/en-US/api/core/preflightfault-type.mdx`: Fault that can fail before a response appears. Note: 20 lines; declared in packages/core/src/error/types.ts:98
+- `doc/content/en-US/api/core/preflightfaultcode-type.mdx`: Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: 14 lines; declared in packages/core/src/error/types.ts:53
+- `doc/content/en-US/api/core/queryserializer-type.mdx`: Function that turns an already-encoded query object into a query string. Note: 16 lines; declared in packages/core/src/client/config.ts:14
+- `doc/content/en-US/api/core/requestdefinition-type.mdx`: Endpoint contract passed to defineRequest. Note: 24 lines; declared in packages/core/src/http/http.ts:112
+- `doc/content/en-US/api/core/requestendpoint-type.mdx`: Callable endpoint returned by defineRequest. Note: 18 lines; declared in packages/core/src/http/http.ts:80
+- `doc/content/en-US/api/core/requesterrordata-type.mdx`: Error body type inferred from the declared error struct. Note: 14 lines; declared in packages/core/src/http/http.ts:96
+- `doc/content/en-US/api/core/requestsuccessdata-type.mdx`: Success body type inferred from the declared output struct. Note: 14 lines; declared in packages/core/src/http/http.ts:93
+- `doc/content/en-US/api/core/socketawaitresult-type.mdx`: Triple returned by WebSocket execute: a session, or a fault. Note: 20 lines; declared in packages/core/src/web_socket/web_socket.ts:101
+- `doc/content/en-US/api/core/socketlifecycleoutcome-type.mdx`: Result of one connection attempt, for the reconnect logic. Note: 26 lines; declared in packages/core/src/web_socket/web_socket.ts:1131
+- `doc/content/en-US/api/core/ssehandler-type.mdx`: Handler at the end of the SSE interceptor chain; it opens the stream. Note: 16 lines; declared in packages/core/src/interceptor/interceptor.ts:50
+- `doc/content/en-US/api/core/sseinterceptor-type.mdx`: Kind-tagged SSE interceptor accepted by withInterceptors. Note: 17 lines; declared in packages/core/src/interceptor/interceptor.ts:60
+- `doc/content/en-US/api/core/sseinterceptorfn-type.mdx`: Signature of an SSE interceptor function. Note: 16 lines; declared in packages/core/src/interceptor/interceptor.ts:55
+- `doc/content/en-US/api/core/streamawaitresult-type.mdx`: Triple returned by SSE execute: the stream and open info, or a fault. Note: 20 lines; declared in packages/core/src/sse/sse.ts:105
+- `doc/content/en-US/api/core/struct-any.mdx`: Accepts any value except null and undefined; the type is any. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:66
+- `doc/content/en-US/api/core/struct-array.mdx`: Parses an array with a single element struct. Note: 18 lines; declared in packages/core/src/struct/constructors.ts:127
+- `doc/content/en-US/api/core/struct-arraybuffer.mdx`: Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:464
+- `doc/content/en-US/api/core/struct-bigint.mdx`: Accepts a bigint value. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:369
+- `doc/content/en-US/api/core/struct-blob.mdx`: Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:360
+- `doc/content/en-US/api/core/struct-boolean.mdx`: Accepts a boolean value. Note: 14 lines; declared in packages/core/src/struct/constructors.ts:47
+- `doc/content/en-US/api/core/struct-date.mdx`: Accepts a Date value. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:389
+- `doc/content/en-US/api/core/struct-discriminatedunion.mdx`: Object union distinguished by a tag field. Note: 32 lines; declared in packages/core/src/struct/constructors.ts:297; States that aliases: true reads the tag from the alias
+- `doc/content/en-US/api/core/struct-enum.mdx`: Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: 18 lines; declared in packages/core/src/struct/facade.ts:35
+- `doc/content/en-US/api/core/struct-file.mdx`: Accepts a File; when it is the body root, it is sent as a file. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:455
+- `doc/content/en-US/api/core/struct-formdata.mdx`: Object struct that is encoded as FormData only when it is the root of the request body. Note: 18 lines; declared in packages/core/src/struct/constructors.ts:160
+- `doc/content/en-US/api/core/struct-intersection.mdx`: The value must satisfy several structs at the same time. Note: 21 lines; declared in packages/core/src/struct/constructors.ts:406
+- `doc/content/en-US/api/core/struct-literal.mdx`: Accepts only one given literal. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:87
+- `doc/content/en-US/api/core/struct-null.mdx`: Accepts only null. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:55
+- `doc/content/en-US/api/core/struct-number.mdx`: Accepts a number other than NaN. Note: 15 lines; declared in packages/core/src/struct/constructors.ts:37
+- `doc/content/en-US/api/core/struct-object.mdx`: Parses a plain object with a fixed set of fields. Note: 24 lines; declared in packages/core/src/struct/constructors.ts:139; Line 16 says `.alias` reads by wire key, which disagrees with `struct.parse` reading the logical name by default (P09b-doc-api-02)
+- `doc/content/en-US/api/core/struct-or.mdx`: Tries several structs in order; the first success wins. Note: 20 lines; declared in packages/core/src/struct/facade.ts:45
+- `doc/content/en-US/api/core/struct-parse.mdx`: Parses an unknown value with a struct and returns an error-first pair. Note: 30 lines; declared in packages/core/src/struct/introspection.ts:44; The wording that it reads the logical name by default is correct; The claim that a returned string replaces the message: see P01-core-struct-06
+- `doc/content/en-US/api/core/struct-record.mdx`: Parses an object whose keys are strings and whose values share one type. Note: 19 lines; declared in packages/core/src/struct/constructors.ts:170
+- `doc/content/en-US/api/core/struct-string.mdx`: Accepts a string. Note: 15 lines; declared in packages/core/src/struct/constructors.ts:27
+- `doc/content/en-US/api/core/struct-symbol-type.mdx`: Internal marker key exported as a type only, for the outbound encoder. Note: 16 lines; declared in packages/core/src/struct/symbols.ts:16
+- `doc/content/en-US/api/core/struct-tuple.mdx`: Parses a fixed-length array, using a different struct at each position. Note: 26 lines; declared in packages/core/src/struct/constructors.ts:182
+- `doc/content/en-US/api/core/struct-type.mdx`: The struct itself: input and output types plus the chained modifier methods. Note: 17 lines; declared in packages/core/src/struct/types.ts:118
+- `doc/content/en-US/api/core/struct-unknown.mdx`: Accepts any value except null and undefined; the type is unknown. Note: 16 lines; declared in packages/core/src/struct/constructors.ts:78
+- `doc/content/en-US/api/core/struct-urlencoded.mdx`: Object struct sent as a URL-encoded form only when it is the root of the request body. Note: 18 lines; declared in packages/core/src/struct/constructors.ts:156
+- `doc/content/en-US/api/core/struct.mdx`: The struct facade: constructors and struct.parse. Note: 56 lines; declared in packages/core/src/struct/facade.ts:74; The overview correctly states that it reads the logical name by default
+- `doc/content/en-US/api/core/structerror-type.mdx`: Error returned when parsing fails, with issues and formatting methods. Note: 27 lines; declared in packages/core/src/struct/errors.ts:19
+- `doc/content/en-US/api/core/structinput-type.mdx`: Extracts the input type a given struct accepts. Note: 23 lines; declared in packages/core/src/struct/types.ts:155
+- `doc/content/en-US/api/core/structissue-type.mdx`: One validation failure produced during parsing. Note: 24 lines; declared in packages/core/src/struct/types.ts:43
+- `doc/content/en-US/api/core/structlike-type.mdx`: Structural brand that every struct carries. Note: 22 lines; declared in packages/core/src/struct/types.ts:28
+- `doc/content/en-US/api/core/structmethods-type.mdx`: Chained modifiers every struct has: alias, null, nullish, and optional. Note: 25 lines; declared in packages/core/src/struct/types.ts:79; The read/write direction of alias is written correctly
+- `doc/content/en-US/api/core/userequestconfig-type.mdx`: HTTP progress and cancellation options, without a signal. Note: 21 lines; declared in packages/core/src/http/http.ts:52
+- `doc/content/en-US/api/core/usewebsocketconfig-type.mdx`: Per-execution WebSocket options, without a signal. Note: 22 lines; declared in packages/core/src/web_socket/web_socket.ts:113
+- `doc/content/en-US/api/core/websocketcloseinfo-type.mdx`: Logical terminal state of a WebSocket session. Note: 22 lines; declared in packages/core/src/web_socket/web_socket.ts:81
+- `doc/content/en-US/api/core/websocketcommand-type.mdx`: Executable command produced by calling a WebSocket endpoint. Note: 23 lines; declared in packages/core/src/web_socket/web_socket.ts:122
+- `doc/content/en-US/api/core/websocketconnectioninfo-type.mdx`: Generation, url, protocol, and extensions of the current physical connection. Note: 23 lines; declared in packages/core/src/web_socket/web_socket.ts:73
+- `doc/content/en-US/api/core/websocketdefinition-type.mdx`: Endpoint contract passed to defineWebSocket. Note: 36 lines; declared in packages/core/src/web_socket/web_socket.ts:61; States that maxOutgoingQueueSize defaults to 0
+- `doc/content/en-US/api/core/websocketendpoint-type.mdx`: Callable endpoint returned by defineWebSocket. Note: 24 lines; declared in packages/core/src/web_socket/web_socket.ts:132
+- `doc/content/en-US/api/core/websocketexecuteoptions-type.mdx`: Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: 34 lines; declared in packages/core/src/web_socket/web_socket.ts:117; Line 30 does not state that WS `attempts` is a cumulative budget; same root as P03b-core-ws-02
+- `doc/content/en-US/api/core/websockethandle-type.mdx`: Surface of the WebSocket instance used by the client transport. Note: 29 lines; declared in packages/core/src/client/config.ts:30
+- `doc/content/en-US/api/core/websockethandleconstructor-type.mdx`: Constructor type accepted by withWebSocketHandle. Note: 18 lines; declared in packages/core/src/client/config.ts:46
+- `doc/content/en-US/api/core/websockethandler-type.mdx`: Handler at the end of the WebSocket interceptor chain; it opens the session. Note: 16 lines; declared in packages/core/src/interceptor/interceptor.ts:101
+- `doc/content/en-US/api/core/websocketheartbeatconfig-type.mdx`: Heartbeat interval, message, acknowledgement check, and timeout. Note: 25 lines; declared in packages/core/src/web_socket/web_socket.ts:157
+- `doc/content/en-US/api/core/websocketincomingdata-type.mdx`: Decoded type of a received WebSocket message. Note: 14 lines; declared in packages/core/src/web_socket/web_socket.ts:45
+- `doc/content/en-US/api/core/websocketinterceptor-type.mdx`: Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: 17 lines; declared in packages/core/src/interceptor/interceptor.ts:111
+- `doc/content/en-US/api/core/websocketinterceptorfn-type.mdx`: Signature of a WebSocket interceptor function. Note: 16 lines; declared in packages/core/src/interceptor/interceptor.ts:106
+- `doc/content/en-US/api/core/websocketoutgoingdata-type.mdx`: Outbound message type accepted by session.send. Note: 14 lines; declared in packages/core/src/web_socket/web_socket.ts:48
+- `doc/content/en-US/api/core/websocketrequestshape-type.mdx`: A WebSocket builder may return only path and query. Note: 23 lines; declared in packages/core/src/internal/builder_types.ts:59; headers and body are never
+- `doc/content/en-US/api/core/websocketsession-type.mdx`: Typed WebSocket session: send, receive, observe state, and close. Note: 41 lines; declared in packages/core/src/web_socket/web_socket.ts:87; The close code and the 1-second teardown match the source
+- `doc/content/en-US/api/core/websocketsessionlike-type.mdx`: Session surface seen by interceptors, with an unknown message type. Note: 27 lines; declared in packages/core/src/interceptor/interceptor.ts:85
+- `doc/content/en-US/api/core/websocketstate-type.mdx`: Lifecycle-state literals of a managed WebSocket session. Note: 25 lines; declared in packages/core/src/web_socket/web_socket.ts:42
+- `doc/content/en-US/api/core/withcredentials.mdx`: Makes HTTP and SSE Fetch calls send credentials. Note: 16 lines; declared in packages/core/src/client/option.ts:232
+- `doc/content/en-US/api/core/withendpoint.mdx`: Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: 17 lines; declared in packages/core/src/client/option.ts:22; Line 14 "relative base": see P02-core-http-client-07
+- `doc/content/en-US/api/core/withheaders.mdx`: Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: 18 lines; declared in packages/core/src/client/option.ts:38
+- `doc/content/en-US/api/core/withhttphandle.mdx`: Replaces the Fetch implementation used by HTTP. Note: 17 lines; declared in packages/core/src/client/option.ts:97
+- `doc/content/en-US/api/core/withinterceptors.mdx`: Appends interceptors in registration order and does not replace existing ones. Note: 17 lines; declared in packages/core/src/client/option.ts:68
+- `doc/content/en-US/api/core/withqueryserializer.mdx`: Replaces how a query object becomes a query string. Note: 19 lines; declared in packages/core/src/client/option.ts:84
+- `doc/content/en-US/api/core/withssehandle.mdx`: Replaces the Fetch implementation used to open an SSE. Note: 17 lines; declared in packages/core/src/client/option.ts:110
+- `doc/content/en-US/api/core/withsseoninvalidevent.mdx`: Observes SSE events that have no struct or that fail validation. Note: 27 lines; declared in packages/core/src/client/option.ts:190; A throw does not close the stream, matching the source
+- `doc/content/en-US/api/core/withssereconnect.mdx`: Turns on automatic SSE reconnect and sets the backoff. Note: 40 lines; declared in packages/core/src/client/option.ts:202; Line 31 does not state that `attempts` is a cumulative budget (P09b-doc-api-01)
+- `doc/content/en-US/api/core/withtimeout.mdx`: Sets the default timeout, which applies only to HTTP execute. Note: 20 lines; declared in packages/core/src/client/option.ts:55; The API page is correct; The source JSDoc's old fault code: see P02-core-http-client-10
+- `doc/content/en-US/api/core/withwebsocketbeforeconnect.mdx`: Runs a hook before every WebSocket connection attempt. Note: 23 lines; declared in packages/core/src/client/option.ts:134
+- `doc/content/en-US/api/core/withwebsockethandle.mdx`: Replaces the WebSocket constructor. Note: 17 lines; declared in packages/core/src/client/option.ts:122
+- `doc/content/en-US/api/core/withwebsocketheartbeat.mdx`: Turns on the WebSocket heartbeat. Note: 29 lines; declared in packages/core/src/client/option.ts:163
+- `doc/content/en-US/api/core/withwebsocketprotocols.mdx`: Sets the subprotocols used for the handshake. Note: 18 lines; declared in packages/core/src/client/option.ts:151
+- `doc/content/en-US/api/core/withwebsocketreconnect.mdx`: Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: 31 lines; declared in packages/core/src/client/option.ts:175; Line 25 budget scope: see P03b-core-ws-02; Line 26 wording that `maxDelayMs` caps the delay: see P03b-core-ws-04
+- `doc/content/en-US/api/core/withxsrf.mdx`: Attaches an XSRF header to HTTP requests that use a non-safe method. Note: 25 lines; declared in packages/core/src/client/option.ts:216; The default cookie/header match the source
+- `doc/content/en-US/api/errors.mdx`: Module page for fault variants, factories, and the two cancellation sentinels. Note: 184 lines; The 17 `FaultCode`s match dist; Line 63's claim that `String(fault)` can be logged directly: see P04-core-infra-02
+- `doc/content/en-US/api/http.mdx`: HTTP module page: defineRequest, execution options, and request and response types. Note: 190 lines; Line 160 writes `HttpRequestShape.body` as `unknown`; the published type is `BodyValue` (P09b-doc-api-03)
+- `doc/content/en-US/api/index.mdx`: API reference entry, pointing at the hand-written lookup page for each package. Note: 36 lines
+- `doc/content/en-US/api/interceptors.md`: Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: 107 lines
+- `doc/content/en-US/api/meta.json`: API-section navigation root; pages are the index plus automatic child pages. Note: 5 lines; Hand-written Fumadocs navigation metadata
+- `doc/content/en-US/api/opentelemetry-server.mdx`: Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: 103 lines; Line 99's "a non-JSON media type must warn" lacks the JSON representation precondition (P09b-doc-api-04)
+- `doc/content/en-US/api/opentelemetry-server/meta.json`: OpenTelemetry server API sidebar title. Note: 3 lines; Hand-written Fumadocs navigation metadata
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: 20 lines; declared in packages/opentelemetry-server/src/option.ts:22
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: 28 lines; declared in packages/opentelemetry-server/src/option.ts:38
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: 20 lines; declared in packages/opentelemetry-server/src/option.ts:23
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: enabled flag and span hooks shared by each transport, generic over the response type. Note: 27 lines; declared in packages/opentelemetry-server/src/option.ts:11
+- `doc/content/en-US/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: WebSocket transport options; adds queryPropagation on top of the shared fields. Note: 22 lines; declared in packages/opentelemetry-server/src/option.ts:24
+- `doc/content/en-US/api/opentelemetry-server/withopentelemetryserver.mdx`: Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: 23 lines; declared in packages/opentelemetry-server/src/option.ts:78
+- `doc/content/en-US/api/react.mdx`: React adapter module page: ClientProvider and useClient. Note: 42 lines; The entry declares use client, matching the dist banner
+- `doc/content/en-US/api/react/clientprovider-type.mdx`: React component that provides an existing client to a subtree through context. Note: 16 lines; declared in packages/react/src/core.ts:31
+- `doc/content/en-US/api/react/clientproviderprops-type.mdx`: Props of ClientProvider: a required client and optional children. Note: 18 lines; declared in packages/react/src/core.ts:9
+- `doc/content/en-US/api/react/meta.json`: React API sidebar title. Note: 3 lines; Hand-written Fumadocs navigation metadata
+- `doc/content/en-US/api/react/useclient.mdx`: Hook that reads the client from the nearest ClientProvider. Note: 17 lines; declared in packages/react/src/core.ts:46
+- `doc/content/en-US/api/sse.mdx`: SSE module page: defineEventStream, execution options, and the stream handle. Note: 125 lines
+- `doc/content/en-US/api/struct.md`: Struct module page: the facade, Infer, and StructError. Note: 123 lines; No Standard Schema claim
+- `doc/content/en-US/api/vue.mdx`: Vue adapter module page: the plugin, the injection key, and injectClient. Note: 40 lines
+- `doc/content/en-US/api/vue/createclientplugin.mdx`: Creates a Vue plugin that provides an existing client to the application. Note: 17 lines; declared in packages/vue/src/core.ts:25
+- `doc/content/en-US/api/vue/http-client.mdx`: Vue injection key used to provide the Defjs client. Note: 14 lines; declared in packages/vue/src/core.ts:10
+- `doc/content/en-US/api/vue/injectclient.mdx`: Reads the client provided by createClientPlugin. Note: 17 lines; declared in packages/vue/src/core.ts:44
+- `doc/content/en-US/api/vue/meta.json`: Vue API sidebar title. Note: 3 lines; Hand-written Fumadocs navigation metadata
+- `doc/content/en-US/api/web-socket.mdx`: WebSocket module page: defineWebSocket, the session, and execution options. Note: 162 lines; Line 106 does not state that WS `attempts` is a cumulative budget; same root as P03b-core-ws-02
+
+## Documentation content · multilingual (CJK)
+
+Five locales, `ja-JP`, `ko-KR`, `zh-Hans`, `zh-Hant-HK`, and `zh-Hant-TW`, mirroring en-US file by file. (1070 files, audit partition `P10a-i18n-cjk`)
+
+- `doc/content/ja-JP/api/client.mdx`: ja-JP translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/anyfault-type.mdx`: ja-JP translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/anystruct-type.mdx`: ja-JP translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/basicauthhttpinterceptor.mdx`: ja-JP translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/basicauthinterceptoroptions-type.mdx`: ja-JP translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/basicauthsseinterceptor.mdx`: ja-JP translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/builderinput-type.mdx`: ja-JP translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/client-type.mdx`: ja-JP translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/clientconfig-type.mdx`: ja-JP translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/clientoption-type.mdx`: ja-JP translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/clientoptions-type.mdx`: ja-JP translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/clientsseconfig-type.mdx`: ja-JP translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/clientsseoptions-type.mdx`: ja-JP translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/clientwebsocketoptions-type.mdx`: ja-JP translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createclient.mdx`: ja-JP translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createdecodefault.mdx`: ja-JP translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createhttpinterceptor.mdx`: ja-JP translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createhttpstatusfault.mdx`: ja-JP translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createnetworkfault.mdx`: ja-JP translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createpreflightfault.mdx`: ja-JP translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createresolvedrequesturl.mdx`: ja-JP translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createsseinterceptor.mdx`: ja-JP translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createundecodedhttpstatusfault.mdx`: ja-JP translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/createwebsocketinterceptor.mdx`: ja-JP translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/decodedresponse-type.mdx`: ja-JP translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/decodefault-type.mdx`: ja-JP translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/decodefaultcode-type.mdx`: ja-JP translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/defineeventstream.mdx`: ja-JP translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/definerequest.mdx`: ja-JP translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/definewebsocket.mdx`: ja-JP translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/err-aborted-type.mdx`: ja-JP translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/err-timeout-type.mdx`: ja-JP translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/errormap-type.mdx`: ja-JP translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamcloseinfo-type.mdx`: ja-JP translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamcommand-type.mdx`: ja-JP translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamdata-type.mdx`: ja-JP translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamdefinition-type.mdx`: ja-JP translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamendpoint-type.mdx`: ja-JP translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamexecuteoptions-type.mdx`: ja-JP translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamfaultcode-type.mdx`: ja-JP translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamhandle-type.mdx`: ja-JP translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamopeninfo-type.mdx`: ja-JP translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstreamrequestshape-type.mdx`: ja-JP translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/eventstructs-type.mdx`: ja-JP translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/executeeventstreamcommand.mdx`: ja-JP translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/executehttpcommand.mdx`: ja-JP translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/executewebsocketcommand.mdx`: ja-JP translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/fault-type.mdx`: ja-JP translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/faultclass-type.mdx`: ja-JP translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/faultcode-type.mdx`: ja-JP translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/faultof-type.mdx`: ja-JP translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/fetchhandle-type.mdx`: ja-JP translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/fetchhandler.mdx`: ja-JP translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/flattenedstructerror-type.mdx`: ja-JP translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/formattedstructerror-type.mdx`: ja-JP translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpawaitresult-type.mdx`: ja-JP translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpcommand-type.mdx`: ja-JP translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpexecuteoptions-type.mdx`: ja-JP translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpinterceptor-type.mdx`: ja-JP translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpinterceptornext-type.mdx`: ja-JP translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpmeta-type.mdx`: ja-JP translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpprogressevent-type.mdx`: ja-JP translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpprogressfn-type.mdx`: ja-JP translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httprequest-type.mdx`: ja-JP translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httprequestshape-type.mdx`: ja-JP translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpresponse-type.mdx`: ja-JP translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpresponsetype-type.mdx`: ja-JP translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpstatusfault-type.mdx`: ja-JP translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/httpstatusfaultof-type.mdx`: ja-JP translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/infer-type.mdx`: ja-JP translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/interceptor-type.mdx`: ja-JP translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/interceptorfn-type.mdx`: ja-JP translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/makeresponse.mdx`: ja-JP translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/makeresponseoptions-type.mdx`: ja-JP translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/manualsocketclosereason-type.mdx`: ja-JP translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/meta.json`: ja-JP translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/objectstruct-type.mdx`: ja-JP translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/parseresult-type.mdx`: ja-JP translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/preflightfault-type.mdx`: ja-JP translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/preflightfaultcode-type.mdx`: ja-JP translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/queryserializer-type.mdx`: ja-JP translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/requestdefinition-type.mdx`: ja-JP translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/requestendpoint-type.mdx`: ja-JP translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/requesterrordata-type.mdx`: ja-JP translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/requestsuccessdata-type.mdx`: ja-JP translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/socketawaitresult-type.mdx`: ja-JP translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/socketlifecycleoutcome-type.mdx`: ja-JP translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/ssehandler-type.mdx`: ja-JP translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/sseinterceptor-type.mdx`: ja-JP translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/sseinterceptorfn-type.mdx`: ja-JP translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/streamawaitresult-type.mdx`: ja-JP translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-any.mdx`: ja-JP translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-array.mdx`: ja-JP translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-arraybuffer.mdx`: ja-JP translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-bigint.mdx`: ja-JP translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-blob.mdx`: ja-JP translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-boolean.mdx`: ja-JP translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-date.mdx`: ja-JP translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-discriminatedunion.mdx`: ja-JP translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-enum.mdx`: ja-JP translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-file.mdx`: ja-JP translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-formdata.mdx`: ja-JP translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-intersection.mdx`: ja-JP translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-literal.mdx`: ja-JP translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-null.mdx`: ja-JP translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-number.mdx`: ja-JP translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-object.mdx`: ja-JP translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-or.mdx`: ja-JP translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-parse.mdx`: ja-JP translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-record.mdx`: ja-JP translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-string.mdx`: ja-JP translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-symbol-type.mdx`: ja-JP translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-tuple.mdx`: ja-JP translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-type.mdx`: ja-JP translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-unknown.mdx`: ja-JP translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct-urlencoded.mdx`: ja-JP translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/struct.mdx`: ja-JP translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/structerror-type.mdx`: ja-JP translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/structinput-type.mdx`: ja-JP translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/structissue-type.mdx`: ja-JP translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/structlike-type.mdx`: ja-JP translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/structmethods-type.mdx`: ja-JP translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/userequestconfig-type.mdx`: ja-JP translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/usewebsocketconfig-type.mdx`: ja-JP translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketcloseinfo-type.mdx`: ja-JP translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketcommand-type.mdx`: ja-JP translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketconnectioninfo-type.mdx`: ja-JP translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketdefinition-type.mdx`: ja-JP translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketendpoint-type.mdx`: ja-JP translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketexecuteoptions-type.mdx`: ja-JP translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websockethandle-type.mdx`: ja-JP translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websockethandleconstructor-type.mdx`: ja-JP translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websockethandler-type.mdx`: ja-JP translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketheartbeatconfig-type.mdx`: ja-JP translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketincomingdata-type.mdx`: ja-JP translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketinterceptor-type.mdx`: ja-JP translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketinterceptorfn-type.mdx`: ja-JP translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketoutgoingdata-type.mdx`: ja-JP translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketrequestshape-type.mdx`: ja-JP translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketsession-type.mdx`: ja-JP translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketsessionlike-type.mdx`: ja-JP translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/websocketstate-type.mdx`: ja-JP translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withcredentials.mdx`: ja-JP translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withendpoint.mdx`: ja-JP translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withheaders.mdx`: ja-JP translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withhttphandle.mdx`: ja-JP translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withinterceptors.mdx`: ja-JP translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withqueryserializer.mdx`: ja-JP translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withssehandle.mdx`: ja-JP translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withsseoninvalidevent.mdx`: ja-JP translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withssereconnect.mdx`: ja-JP translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withtimeout.mdx`: ja-JP translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withwebsocketbeforeconnect.mdx`: ja-JP translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withwebsockethandle.mdx`: ja-JP translation. Replaces the WebSocket constructor. Note: Exception: the two in-site links on line 14 are swapped because the modifier comes first; the target set and anchor text match, and both point at the correct page
+- `doc/content/ja-JP/api/core/withwebsocketheartbeat.mdx`: ja-JP translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withwebsocketprotocols.mdx`: ja-JP translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withwebsocketreconnect.mdx`: ja-JP translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/ja-JP/api/core/withxsrf.mdx`: ja-JP translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/ja-JP/api/errors.mdx`: ja-JP translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Structure matches en-US
+- `doc/content/ja-JP/api/http.mdx`: ja-JP translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/ja-JP/api/index.mdx`: ja-JP translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/ja-JP/api/interceptors.md`: ja-JP translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/ja-JP/api/meta.json`: ja-JP translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server.mdx`: ja-JP translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server/meta.json`: ja-JP translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: ja-JP translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: ja-JP translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: ja-JP translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: ja-JP translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: ja-JP translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/ja-JP/api/opentelemetry-server/withopentelemetryserver.mdx`: ja-JP translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/ja-JP/api/react.mdx`: ja-JP translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/ja-JP/api/react/clientprovider-type.mdx`: ja-JP translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/ja-JP/api/react/clientproviderprops-type.mdx`: ja-JP translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/ja-JP/api/react/meta.json`: ja-JP translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/ja-JP/api/react/useclient.mdx`: ja-JP translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/ja-JP/api/sse.mdx`: ja-JP translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/ja-JP/api/struct.md`: ja-JP translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/ja-JP/api/vue.mdx`: ja-JP translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/ja-JP/api/vue/createclientplugin.mdx`: ja-JP translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/ja-JP/api/vue/http-client.mdx`: ja-JP translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/ja-JP/api/vue/injectclient.mdx`: ja-JP translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/ja-JP/api/vue/meta.json`: ja-JP translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/ja-JP/api/web-socket.mdx`: ja-JP translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/client.mdx`: ja-JP translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/commands.mdx`: ja-JP translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/design-decisions.mdx`: ja-JP translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/errors.mdx`: ja-JP translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/http.mdx`: ja-JP translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/index.md`: ja-JP translation. Guide index page. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/integrations/meta.json`: ja-JP translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/integrations/opentelemetry-server.mdx`: ja-JP translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/integrations/react.mdx`: ja-JP translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/integrations/vue.mdx`: ja-JP translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/interceptors.mdx`: ja-JP translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/meta.json`: ja-JP translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/sse.mdx`: ja-JP translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/start.mdx`: ja-JP translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/struct.mdx`: ja-JP translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/ja-JP/docs/web-socket.mdx`: ja-JP translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Structure matches en-US
+- `doc/content/ja-JP/index.mdx`: ja-JP translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/ja-JP/meta.json`: ja-JP translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/cancel-http.mdx`: ja-JP translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/consume-sse.mdx`: ja-JP translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/etag-revalidate.mdx`: ja-JP translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/get-declared-404.mdx`: ja-JP translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/graphql-http-envelope.mdx`: ja-JP translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/index.md`: ja-JP translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/meta.json`: ja-JP translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/post-json.mdx`: ja-JP translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/publish-http-sdk.mdx`: ja-JP translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/refresh-bearer-once.mdx`: ja-JP translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/test-with-handle.mdx`: ja-JP translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/ja-JP/recipes/websocket-session.mdx`: ja-JP translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/ko-KR/api/client.mdx`: ko-KR translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/anyfault-type.mdx`: ko-KR translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/anystruct-type.mdx`: ko-KR translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/basicauthhttpinterceptor.mdx`: ko-KR translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/basicauthinterceptoroptions-type.mdx`: ko-KR translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/basicauthsseinterceptor.mdx`: ko-KR translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/builderinput-type.mdx`: ko-KR translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/client-type.mdx`: ko-KR translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/clientconfig-type.mdx`: ko-KR translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/clientoption-type.mdx`: ko-KR translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/clientoptions-type.mdx`: ko-KR translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/clientsseconfig-type.mdx`: ko-KR translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/clientsseoptions-type.mdx`: ko-KR translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/clientwebsocketoptions-type.mdx`: ko-KR translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createclient.mdx`: ko-KR translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createdecodefault.mdx`: ko-KR translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createhttpinterceptor.mdx`: ko-KR translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createhttpstatusfault.mdx`: ko-KR translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createnetworkfault.mdx`: ko-KR translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createpreflightfault.mdx`: ko-KR translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createresolvedrequesturl.mdx`: ko-KR translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createsseinterceptor.mdx`: ko-KR translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createundecodedhttpstatusfault.mdx`: ko-KR translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/createwebsocketinterceptor.mdx`: ko-KR translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/decodedresponse-type.mdx`: ko-KR translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/decodefault-type.mdx`: ko-KR translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/decodefaultcode-type.mdx`: ko-KR translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/defineeventstream.mdx`: ko-KR translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/definerequest.mdx`: ko-KR translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/definewebsocket.mdx`: ko-KR translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/err-aborted-type.mdx`: ko-KR translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/err-timeout-type.mdx`: ko-KR translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/errormap-type.mdx`: ko-KR translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamcloseinfo-type.mdx`: ko-KR translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamcommand-type.mdx`: ko-KR translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamdata-type.mdx`: ko-KR translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamdefinition-type.mdx`: ko-KR translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamendpoint-type.mdx`: ko-KR translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamexecuteoptions-type.mdx`: ko-KR translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamfaultcode-type.mdx`: ko-KR translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamhandle-type.mdx`: ko-KR translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamopeninfo-type.mdx`: ko-KR translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstreamrequestshape-type.mdx`: ko-KR translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/eventstructs-type.mdx`: ko-KR translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/executeeventstreamcommand.mdx`: ko-KR translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/executehttpcommand.mdx`: ko-KR translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/executewebsocketcommand.mdx`: ko-KR translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/fault-type.mdx`: ko-KR translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/faultclass-type.mdx`: ko-KR translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/faultcode-type.mdx`: ko-KR translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/faultof-type.mdx`: ko-KR translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/fetchhandle-type.mdx`: ko-KR translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/fetchhandler.mdx`: ko-KR translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/flattenedstructerror-type.mdx`: ko-KR translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/formattedstructerror-type.mdx`: ko-KR translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpawaitresult-type.mdx`: ko-KR translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpcommand-type.mdx`: ko-KR translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpexecuteoptions-type.mdx`: ko-KR translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpinterceptor-type.mdx`: ko-KR translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpinterceptornext-type.mdx`: ko-KR translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpmeta-type.mdx`: ko-KR translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpprogressevent-type.mdx`: ko-KR translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpprogressfn-type.mdx`: ko-KR translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httprequest-type.mdx`: ko-KR translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httprequestshape-type.mdx`: ko-KR translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpresponse-type.mdx`: ko-KR translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpresponsetype-type.mdx`: ko-KR translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpstatusfault-type.mdx`: ko-KR translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/httpstatusfaultof-type.mdx`: ko-KR translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/infer-type.mdx`: ko-KR translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/interceptor-type.mdx`: ko-KR translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/interceptorfn-type.mdx`: ko-KR translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/makeresponse.mdx`: ko-KR translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/makeresponseoptions-type.mdx`: ko-KR translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/manualsocketclosereason-type.mdx`: ko-KR translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/meta.json`: ko-KR translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/objectstruct-type.mdx`: ko-KR translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/parseresult-type.mdx`: ko-KR translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/preflightfault-type.mdx`: ko-KR translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/preflightfaultcode-type.mdx`: ko-KR translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/queryserializer-type.mdx`: ko-KR translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/requestdefinition-type.mdx`: ko-KR translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/requestendpoint-type.mdx`: ko-KR translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/requesterrordata-type.mdx`: ko-KR translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/requestsuccessdata-type.mdx`: ko-KR translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/socketawaitresult-type.mdx`: ko-KR translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/socketlifecycleoutcome-type.mdx`: ko-KR translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/ssehandler-type.mdx`: ko-KR translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/sseinterceptor-type.mdx`: ko-KR translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/sseinterceptorfn-type.mdx`: ko-KR translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/streamawaitresult-type.mdx`: ko-KR translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-any.mdx`: ko-KR translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-array.mdx`: ko-KR translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-arraybuffer.mdx`: ko-KR translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-bigint.mdx`: ko-KR translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-blob.mdx`: ko-KR translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-boolean.mdx`: ko-KR translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-date.mdx`: ko-KR translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-discriminatedunion.mdx`: ko-KR translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-enum.mdx`: ko-KR translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-file.mdx`: ko-KR translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-formdata.mdx`: ko-KR translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-intersection.mdx`: ko-KR translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-literal.mdx`: ko-KR translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-null.mdx`: ko-KR translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-number.mdx`: ko-KR translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-object.mdx`: ko-KR translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-or.mdx`: ko-KR translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-parse.mdx`: ko-KR translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-record.mdx`: ko-KR translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-string.mdx`: ko-KR translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-symbol-type.mdx`: ko-KR translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-tuple.mdx`: ko-KR translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-type.mdx`: ko-KR translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-unknown.mdx`: ko-KR translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct-urlencoded.mdx`: ko-KR translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/struct.mdx`: ko-KR translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/structerror-type.mdx`: ko-KR translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/structinput-type.mdx`: ko-KR translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/structissue-type.mdx`: ko-KR translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/structlike-type.mdx`: ko-KR translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/structmethods-type.mdx`: ko-KR translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/userequestconfig-type.mdx`: ko-KR translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/usewebsocketconfig-type.mdx`: ko-KR translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketcloseinfo-type.mdx`: ko-KR translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketcommand-type.mdx`: ko-KR translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketconnectioninfo-type.mdx`: ko-KR translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketdefinition-type.mdx`: ko-KR translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketendpoint-type.mdx`: ko-KR translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketexecuteoptions-type.mdx`: ko-KR translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websockethandle-type.mdx`: ko-KR translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websockethandleconstructor-type.mdx`: ko-KR translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websockethandler-type.mdx`: ko-KR translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketheartbeatconfig-type.mdx`: ko-KR translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketincomingdata-type.mdx`: ko-KR translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketinterceptor-type.mdx`: ko-KR translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketinterceptorfn-type.mdx`: ko-KR translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketoutgoingdata-type.mdx`: ko-KR translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketrequestshape-type.mdx`: ko-KR translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketsession-type.mdx`: ko-KR translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketsessionlike-type.mdx`: ko-KR translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/websocketstate-type.mdx`: ko-KR translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withcredentials.mdx`: ko-KR translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withendpoint.mdx`: ko-KR translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withheaders.mdx`: ko-KR translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withhttphandle.mdx`: ko-KR translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withinterceptors.mdx`: ko-KR translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withqueryserializer.mdx`: ko-KR translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withssehandle.mdx`: ko-KR translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withsseoninvalidevent.mdx`: ko-KR translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withssereconnect.mdx`: ko-KR translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withtimeout.mdx`: ko-KR translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withwebsocketbeforeconnect.mdx`: ko-KR translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withwebsockethandle.mdx`: ko-KR translation. Replaces the WebSocket constructor. Note: Exception: same as above; link order is swapped and the targets are correct
+- `doc/content/ko-KR/api/core/withwebsocketheartbeat.mdx`: ko-KR translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withwebsocketprotocols.mdx`: ko-KR translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withwebsocketreconnect.mdx`: ko-KR translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/ko-KR/api/core/withxsrf.mdx`: ko-KR translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/ko-KR/api/errors.mdx`: ko-KR translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Structure matches en-US
+- `doc/content/ko-KR/api/http.mdx`: ko-KR translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/ko-KR/api/index.mdx`: ko-KR translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/ko-KR/api/interceptors.md`: ko-KR translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/ko-KR/api/meta.json`: ko-KR translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server.mdx`: ko-KR translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server/meta.json`: ko-KR translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: ko-KR translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: ko-KR translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: ko-KR translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: ko-KR translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: ko-KR translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/ko-KR/api/opentelemetry-server/withopentelemetryserver.mdx`: ko-KR translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/ko-KR/api/react.mdx`: ko-KR translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/ko-KR/api/react/clientprovider-type.mdx`: ko-KR translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/ko-KR/api/react/clientproviderprops-type.mdx`: ko-KR translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/ko-KR/api/react/meta.json`: ko-KR translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/ko-KR/api/react/useclient.mdx`: ko-KR translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/ko-KR/api/sse.mdx`: ko-KR translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/ko-KR/api/struct.md`: ko-KR translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/ko-KR/api/vue.mdx`: ko-KR translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/ko-KR/api/vue/createclientplugin.mdx`: ko-KR translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/ko-KR/api/vue/http-client.mdx`: ko-KR translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/ko-KR/api/vue/injectclient.mdx`: ko-KR translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/ko-KR/api/vue/meta.json`: ko-KR translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/ko-KR/api/web-socket.mdx`: ko-KR translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/client.mdx`: ko-KR translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/commands.mdx`: ko-KR translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/design-decisions.mdx`: ko-KR translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/errors.mdx`: ko-KR translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/http.mdx`: ko-KR translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/index.md`: ko-KR translation. Guide index page. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/integrations/meta.json`: ko-KR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/integrations/opentelemetry-server.mdx`: ko-KR translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/integrations/react.mdx`: ko-KR translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/integrations/vue.mdx`: ko-KR translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/interceptors.mdx`: ko-KR translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/meta.json`: ko-KR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/sse.mdx`: ko-KR translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/start.mdx`: ko-KR translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/struct.mdx`: ko-KR translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/ko-KR/docs/web-socket.mdx`: ko-KR translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Structure matches en-US
+- `doc/content/ko-KR/index.mdx`: ko-KR translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/ko-KR/meta.json`: ko-KR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/cancel-http.mdx`: ko-KR translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/consume-sse.mdx`: ko-KR translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/etag-revalidate.mdx`: ko-KR translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/get-declared-404.mdx`: ko-KR translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/graphql-http-envelope.mdx`: ko-KR translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/index.md`: ko-KR translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/meta.json`: ko-KR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/post-json.mdx`: ko-KR translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/publish-http-sdk.mdx`: ko-KR translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/refresh-bearer-once.mdx`: ko-KR translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/test-with-handle.mdx`: ko-KR translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/ko-KR/recipes/websocket-session.mdx`: ko-KR translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/client.mdx`: zh-Hans translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/anyfault-type.mdx`: zh-Hans translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/anystruct-type.mdx`: zh-Hans translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/basicauthhttpinterceptor.mdx`: zh-Hans translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/basicauthinterceptoroptions-type.mdx`: zh-Hans translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/basicauthsseinterceptor.mdx`: zh-Hans translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/builderinput-type.mdx`: zh-Hans translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/client-type.mdx`: zh-Hans translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/clientconfig-type.mdx`: zh-Hans translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/clientoption-type.mdx`: zh-Hans translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/clientoptions-type.mdx`: zh-Hans translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/clientsseconfig-type.mdx`: zh-Hans translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/clientsseoptions-type.mdx`: zh-Hans translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/clientwebsocketoptions-type.mdx`: zh-Hans translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createclient.mdx`: zh-Hans translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createdecodefault.mdx`: zh-Hans translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createhttpinterceptor.mdx`: zh-Hans translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createhttpstatusfault.mdx`: zh-Hans translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createnetworkfault.mdx`: zh-Hans translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createpreflightfault.mdx`: zh-Hans translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createresolvedrequesturl.mdx`: zh-Hans translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createsseinterceptor.mdx`: zh-Hans translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createundecodedhttpstatusfault.mdx`: zh-Hans translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/createwebsocketinterceptor.mdx`: zh-Hans translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/decodedresponse-type.mdx`: zh-Hans translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/decodefault-type.mdx`: zh-Hans translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/decodefaultcode-type.mdx`: zh-Hans translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/defineeventstream.mdx`: zh-Hans translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/definerequest.mdx`: zh-Hans translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/definewebsocket.mdx`: zh-Hans translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/err-aborted-type.mdx`: zh-Hans translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/err-timeout-type.mdx`: zh-Hans translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/errormap-type.mdx`: zh-Hans translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamcloseinfo-type.mdx`: zh-Hans translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamcommand-type.mdx`: zh-Hans translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamdata-type.mdx`: zh-Hans translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamdefinition-type.mdx`: zh-Hans translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamendpoint-type.mdx`: zh-Hans translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamexecuteoptions-type.mdx`: zh-Hans translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamfaultcode-type.mdx`: zh-Hans translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamhandle-type.mdx`: zh-Hans translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamopeninfo-type.mdx`: zh-Hans translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstreamrequestshape-type.mdx`: zh-Hans translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/eventstructs-type.mdx`: zh-Hans translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/executeeventstreamcommand.mdx`: zh-Hans translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/executehttpcommand.mdx`: zh-Hans translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/executewebsocketcommand.mdx`: zh-Hans translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/fault-type.mdx`: zh-Hans translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/faultclass-type.mdx`: zh-Hans translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/faultcode-type.mdx`: zh-Hans translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/faultof-type.mdx`: zh-Hans translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/fetchhandle-type.mdx`: zh-Hans translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/fetchhandler.mdx`: zh-Hans translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/flattenedstructerror-type.mdx`: zh-Hans translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/formattedstructerror-type.mdx`: zh-Hans translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpawaitresult-type.mdx`: zh-Hans translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpcommand-type.mdx`: zh-Hans translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpexecuteoptions-type.mdx`: zh-Hans translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpinterceptor-type.mdx`: zh-Hans translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpinterceptornext-type.mdx`: zh-Hans translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpmeta-type.mdx`: zh-Hans translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpprogressevent-type.mdx`: zh-Hans translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpprogressfn-type.mdx`: zh-Hans translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httprequest-type.mdx`: zh-Hans translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httprequestshape-type.mdx`: zh-Hans translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpresponse-type.mdx`: zh-Hans translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpresponsetype-type.mdx`: zh-Hans translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpstatusfault-type.mdx`: zh-Hans translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/httpstatusfaultof-type.mdx`: zh-Hans translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/infer-type.mdx`: zh-Hans translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/interceptor-type.mdx`: zh-Hans translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/interceptorfn-type.mdx`: zh-Hans translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/makeresponse.mdx`: zh-Hans translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/makeresponseoptions-type.mdx`: zh-Hans translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/manualsocketclosereason-type.mdx`: zh-Hans translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/meta.json`: zh-Hans translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/objectstruct-type.mdx`: zh-Hans translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/parseresult-type.mdx`: zh-Hans translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/preflightfault-type.mdx`: zh-Hans translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/preflightfaultcode-type.mdx`: zh-Hans translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/queryserializer-type.mdx`: zh-Hans translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/requestdefinition-type.mdx`: zh-Hans translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/requestendpoint-type.mdx`: zh-Hans translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/requesterrordata-type.mdx`: zh-Hans translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/requestsuccessdata-type.mdx`: zh-Hans translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/socketawaitresult-type.mdx`: zh-Hans translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/socketlifecycleoutcome-type.mdx`: zh-Hans translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/ssehandler-type.mdx`: zh-Hans translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/sseinterceptor-type.mdx`: zh-Hans translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/sseinterceptorfn-type.mdx`: zh-Hans translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/streamawaitresult-type.mdx`: zh-Hans translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-any.mdx`: zh-Hans translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-array.mdx`: zh-Hans translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-arraybuffer.mdx`: zh-Hans translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-bigint.mdx`: zh-Hans translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-blob.mdx`: zh-Hans translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-boolean.mdx`: zh-Hans translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-date.mdx`: zh-Hans translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-discriminatedunion.mdx`: zh-Hans translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-enum.mdx`: zh-Hans translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-file.mdx`: zh-Hans translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-formdata.mdx`: zh-Hans translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-intersection.mdx`: zh-Hans translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-literal.mdx`: zh-Hans translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-null.mdx`: zh-Hans translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-number.mdx`: zh-Hans translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-object.mdx`: zh-Hans translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-or.mdx`: zh-Hans translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-parse.mdx`: zh-Hans translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-record.mdx`: zh-Hans translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-string.mdx`: zh-Hans translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-symbol-type.mdx`: zh-Hans translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-tuple.mdx`: zh-Hans translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-type.mdx`: zh-Hans translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-unknown.mdx`: zh-Hans translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct-urlencoded.mdx`: zh-Hans translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/struct.mdx`: zh-Hans translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/structerror-type.mdx`: zh-Hans translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/structinput-type.mdx`: zh-Hans translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/structissue-type.mdx`: zh-Hans translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/structlike-type.mdx`: zh-Hans translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/structmethods-type.mdx`: zh-Hans translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/userequestconfig-type.mdx`: zh-Hans translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/usewebsocketconfig-type.mdx`: zh-Hans translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketcloseinfo-type.mdx`: zh-Hans translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketcommand-type.mdx`: zh-Hans translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketconnectioninfo-type.mdx`: zh-Hans translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketdefinition-type.mdx`: zh-Hans translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketendpoint-type.mdx`: zh-Hans translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketexecuteoptions-type.mdx`: zh-Hans translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websockethandle-type.mdx`: zh-Hans translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websockethandleconstructor-type.mdx`: zh-Hans translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websockethandler-type.mdx`: zh-Hans translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketheartbeatconfig-type.mdx`: zh-Hans translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketincomingdata-type.mdx`: zh-Hans translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketinterceptor-type.mdx`: zh-Hans translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketinterceptorfn-type.mdx`: zh-Hans translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketoutgoingdata-type.mdx`: zh-Hans translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketrequestshape-type.mdx`: zh-Hans translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketsession-type.mdx`: zh-Hans translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketsessionlike-type.mdx`: zh-Hans translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/websocketstate-type.mdx`: zh-Hans translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withcredentials.mdx`: zh-Hans translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withendpoint.mdx`: zh-Hans translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withheaders.mdx`: zh-Hans translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withhttphandle.mdx`: zh-Hans translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withinterceptors.mdx`: zh-Hans translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withqueryserializer.mdx`: zh-Hans translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withssehandle.mdx`: zh-Hans translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withsseoninvalidevent.mdx`: zh-Hans translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withssereconnect.mdx`: zh-Hans translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withtimeout.mdx`: zh-Hans translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withwebsocketbeforeconnect.mdx`: zh-Hans translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withwebsockethandle.mdx`: zh-Hans translation. Replaces the WebSocket constructor. Note: Exception: same as above; link order is swapped and the targets are correct
+- `doc/content/zh-Hans/api/core/withwebsocketheartbeat.mdx`: zh-Hans translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withwebsocketprotocols.mdx`: zh-Hans translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withwebsocketreconnect.mdx`: zh-Hans translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/core/withxsrf.mdx`: zh-Hans translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/errors.mdx`: zh-Hans translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/http.mdx`: zh-Hans translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/index.mdx`: zh-Hans translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/interceptors.md`: zh-Hans translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/meta.json`: zh-Hans translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server.mdx`: zh-Hans translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server/meta.json`: zh-Hans translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: zh-Hans translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: zh-Hans translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: zh-Hans translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: zh-Hans translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: zh-Hans translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/opentelemetry-server/withopentelemetryserver.mdx`: zh-Hans translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/react.mdx`: zh-Hans translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/react/clientprovider-type.mdx`: zh-Hans translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/react/clientproviderprops-type.mdx`: zh-Hans translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/react/meta.json`: zh-Hans translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/react/useclient.mdx`: zh-Hans translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/sse.mdx`: zh-Hans translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/struct.md`: zh-Hans translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/vue.mdx`: zh-Hans translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/vue/createclientplugin.mdx`: zh-Hans translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/vue/http-client.mdx`: zh-Hans translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/vue/injectclient.mdx`: zh-Hans translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/vue/meta.json`: zh-Hans translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hans/api/web-socket.mdx`: zh-Hans translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/client.mdx`: zh-Hans translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/commands.mdx`: zh-Hans translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/design-decisions.mdx`: zh-Hans translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/errors.mdx`: zh-Hans translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/http.mdx`: zh-Hans translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Exception: the two `//` comments inside one inline ```ts fence were translated ("Anonymous root: emits id" / "Typed root, row field declares alias: emits wire_id"); the code bytes are the same and the comment meaning matches; Does not constitute a finding
+- `doc/content/zh-Hans/docs/index.md`: zh-Hans translation. Guide index page. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/integrations/meta.json`: zh-Hans translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/integrations/opentelemetry-server.mdx`: zh-Hans translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Exception (semantic): lines 71 and 169 translate "an absent declared body (for example 204)" as "the case of an undeclared body"; see P10a-i18n-cjk-01; Structure is the same as en-US
+- `doc/content/zh-Hans/docs/integrations/react.mdx`: zh-Hans translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/integrations/vue.mdx`: zh-Hans translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/interceptors.mdx`: zh-Hans translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/meta.json`: zh-Hans translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/sse.mdx`: zh-Hans translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/start.mdx`: zh-Hans translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/zh-Hans/docs/struct.mdx`: zh-Hans translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Exception: the same example passage as `docs/http.mdx`; again only two comment lines were translated, and the meaning matches; Does not constitute a finding
+- `doc/content/zh-Hans/docs/web-socket.mdx`: zh-Hans translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Structure matches en-US
+- `doc/content/zh-Hans/index.mdx`: zh-Hans translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/zh-Hans/meta.json`: zh-Hans translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/cancel-http.mdx`: zh-Hans translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/consume-sse.mdx`: zh-Hans translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/etag-revalidate.mdx`: zh-Hans translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/get-declared-404.mdx`: zh-Hans translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/graphql-http-envelope.mdx`: zh-Hans translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/index.md`: zh-Hans translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/meta.json`: zh-Hans translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/post-json.mdx`: zh-Hans translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/publish-http-sdk.mdx`: zh-Hans translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/refresh-bearer-once.mdx`: zh-Hans translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/test-with-handle.mdx`: zh-Hans translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/zh-Hans/recipes/websocket-session.mdx`: zh-Hans translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/client.mdx`: zh-Hant-HK translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/anyfault-type.mdx`: zh-Hant-HK translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/anystruct-type.mdx`: zh-Hant-HK translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/basicauthhttpinterceptor.mdx`: zh-Hant-HK translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/basicauthinterceptoroptions-type.mdx`: zh-Hant-HK translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/basicauthsseinterceptor.mdx`: zh-Hant-HK translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/builderinput-type.mdx`: zh-Hant-HK translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/client-type.mdx`: zh-Hant-HK translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/clientconfig-type.mdx`: zh-Hant-HK translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/clientoption-type.mdx`: zh-Hant-HK translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/clientoptions-type.mdx`: zh-Hant-HK translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/clientsseconfig-type.mdx`: zh-Hant-HK translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/clientsseoptions-type.mdx`: zh-Hant-HK translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/clientwebsocketoptions-type.mdx`: zh-Hant-HK translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createclient.mdx`: zh-Hant-HK translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createdecodefault.mdx`: zh-Hant-HK translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createhttpinterceptor.mdx`: zh-Hant-HK translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createhttpstatusfault.mdx`: zh-Hant-HK translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createnetworkfault.mdx`: zh-Hant-HK translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createpreflightfault.mdx`: zh-Hant-HK translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createresolvedrequesturl.mdx`: zh-Hant-HK translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createsseinterceptor.mdx`: zh-Hant-HK translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createundecodedhttpstatusfault.mdx`: zh-Hant-HK translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/createwebsocketinterceptor.mdx`: zh-Hant-HK translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/decodedresponse-type.mdx`: zh-Hant-HK translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/decodefault-type.mdx`: zh-Hant-HK translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/decodefaultcode-type.mdx`: zh-Hant-HK translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/defineeventstream.mdx`: zh-Hant-HK translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/definerequest.mdx`: zh-Hant-HK translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/definewebsocket.mdx`: zh-Hant-HK translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/err-aborted-type.mdx`: zh-Hant-HK translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/err-timeout-type.mdx`: zh-Hant-HK translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/errormap-type.mdx`: zh-Hant-HK translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamcloseinfo-type.mdx`: zh-Hant-HK translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamcommand-type.mdx`: zh-Hant-HK translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamdata-type.mdx`: zh-Hant-HK translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamdefinition-type.mdx`: zh-Hant-HK translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamendpoint-type.mdx`: zh-Hant-HK translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamexecuteoptions-type.mdx`: zh-Hant-HK translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamfaultcode-type.mdx`: zh-Hant-HK translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamhandle-type.mdx`: zh-Hant-HK translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamopeninfo-type.mdx`: zh-Hant-HK translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstreamrequestshape-type.mdx`: zh-Hant-HK translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/eventstructs-type.mdx`: zh-Hant-HK translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/executeeventstreamcommand.mdx`: zh-Hant-HK translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/executehttpcommand.mdx`: zh-Hant-HK translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/executewebsocketcommand.mdx`: zh-Hant-HK translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/fault-type.mdx`: zh-Hant-HK translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/faultclass-type.mdx`: zh-Hant-HK translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/faultcode-type.mdx`: zh-Hant-HK translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/faultof-type.mdx`: zh-Hant-HK translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/fetchhandle-type.mdx`: zh-Hant-HK translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/fetchhandler.mdx`: zh-Hant-HK translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/flattenedstructerror-type.mdx`: zh-Hant-HK translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/formattedstructerror-type.mdx`: zh-Hant-HK translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpawaitresult-type.mdx`: zh-Hant-HK translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpcommand-type.mdx`: zh-Hant-HK translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpexecuteoptions-type.mdx`: zh-Hant-HK translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpinterceptor-type.mdx`: zh-Hant-HK translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpinterceptornext-type.mdx`: zh-Hant-HK translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpmeta-type.mdx`: zh-Hant-HK translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpprogressevent-type.mdx`: zh-Hant-HK translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpprogressfn-type.mdx`: zh-Hant-HK translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httprequest-type.mdx`: zh-Hant-HK translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httprequestshape-type.mdx`: zh-Hant-HK translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpresponse-type.mdx`: zh-Hant-HK translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpresponsetype-type.mdx`: zh-Hant-HK translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpstatusfault-type.mdx`: zh-Hant-HK translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/httpstatusfaultof-type.mdx`: zh-Hant-HK translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/infer-type.mdx`: zh-Hant-HK translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/interceptor-type.mdx`: zh-Hant-HK translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/interceptorfn-type.mdx`: zh-Hant-HK translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/makeresponse.mdx`: zh-Hant-HK translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/makeresponseoptions-type.mdx`: zh-Hant-HK translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/manualsocketclosereason-type.mdx`: zh-Hant-HK translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/meta.json`: zh-Hant-HK translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/objectstruct-type.mdx`: zh-Hant-HK translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/parseresult-type.mdx`: zh-Hant-HK translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/preflightfault-type.mdx`: zh-Hant-HK translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/preflightfaultcode-type.mdx`: zh-Hant-HK translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/queryserializer-type.mdx`: zh-Hant-HK translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/requestdefinition-type.mdx`: zh-Hant-HK translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/requestendpoint-type.mdx`: zh-Hant-HK translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/requesterrordata-type.mdx`: zh-Hant-HK translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/requestsuccessdata-type.mdx`: zh-Hant-HK translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/socketawaitresult-type.mdx`: zh-Hant-HK translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/socketlifecycleoutcome-type.mdx`: zh-Hant-HK translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/ssehandler-type.mdx`: zh-Hant-HK translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/sseinterceptor-type.mdx`: zh-Hant-HK translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/sseinterceptorfn-type.mdx`: zh-Hant-HK translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/streamawaitresult-type.mdx`: zh-Hant-HK translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-any.mdx`: zh-Hant-HK translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-array.mdx`: zh-Hant-HK translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-arraybuffer.mdx`: zh-Hant-HK translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-bigint.mdx`: zh-Hant-HK translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-blob.mdx`: zh-Hant-HK translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-boolean.mdx`: zh-Hant-HK translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-date.mdx`: zh-Hant-HK translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-discriminatedunion.mdx`: zh-Hant-HK translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-enum.mdx`: zh-Hant-HK translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-file.mdx`: zh-Hant-HK translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-formdata.mdx`: zh-Hant-HK translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-intersection.mdx`: zh-Hant-HK translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-literal.mdx`: zh-Hant-HK translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-null.mdx`: zh-Hant-HK translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-number.mdx`: zh-Hant-HK translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-object.mdx`: zh-Hant-HK translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-or.mdx`: zh-Hant-HK translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-parse.mdx`: zh-Hant-HK translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-record.mdx`: zh-Hant-HK translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-string.mdx`: zh-Hant-HK translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-symbol-type.mdx`: zh-Hant-HK translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-tuple.mdx`: zh-Hant-HK translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-type.mdx`: zh-Hant-HK translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-unknown.mdx`: zh-Hant-HK translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct-urlencoded.mdx`: zh-Hant-HK translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/struct.mdx`: zh-Hant-HK translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/structerror-type.mdx`: zh-Hant-HK translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/structinput-type.mdx`: zh-Hant-HK translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/structissue-type.mdx`: zh-Hant-HK translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/structlike-type.mdx`: zh-Hant-HK translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/structmethods-type.mdx`: zh-Hant-HK translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/userequestconfig-type.mdx`: zh-Hant-HK translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/usewebsocketconfig-type.mdx`: zh-Hant-HK translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketcloseinfo-type.mdx`: zh-Hant-HK translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketcommand-type.mdx`: zh-Hant-HK translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketconnectioninfo-type.mdx`: zh-Hant-HK translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketdefinition-type.mdx`: zh-Hant-HK translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketendpoint-type.mdx`: zh-Hant-HK translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketexecuteoptions-type.mdx`: zh-Hant-HK translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websockethandle-type.mdx`: zh-Hant-HK translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websockethandleconstructor-type.mdx`: zh-Hant-HK translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websockethandler-type.mdx`: zh-Hant-HK translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketheartbeatconfig-type.mdx`: zh-Hant-HK translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketincomingdata-type.mdx`: zh-Hant-HK translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketinterceptor-type.mdx`: zh-Hant-HK translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketinterceptorfn-type.mdx`: zh-Hant-HK translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketoutgoingdata-type.mdx`: zh-Hant-HK translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketrequestshape-type.mdx`: zh-Hant-HK translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketsession-type.mdx`: zh-Hant-HK translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketsessionlike-type.mdx`: zh-Hant-HK translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/websocketstate-type.mdx`: zh-Hant-HK translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withcredentials.mdx`: zh-Hant-HK translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withendpoint.mdx`: zh-Hant-HK translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withheaders.mdx`: zh-Hant-HK translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withhttphandle.mdx`: zh-Hant-HK translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withinterceptors.mdx`: zh-Hant-HK translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withqueryserializer.mdx`: zh-Hant-HK translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withssehandle.mdx`: zh-Hant-HK translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withsseoninvalidevent.mdx`: zh-Hant-HK translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withssereconnect.mdx`: zh-Hant-HK translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withtimeout.mdx`: zh-Hant-HK translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withwebsocketbeforeconnect.mdx`: zh-Hant-HK translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withwebsockethandle.mdx`: zh-Hant-HK translation. Replaces the WebSocket constructor. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withwebsocketheartbeat.mdx`: zh-Hant-HK translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withwebsocketprotocols.mdx`: zh-Hant-HK translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withwebsocketreconnect.mdx`: zh-Hant-HK translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/core/withxsrf.mdx`: zh-Hant-HK translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/errors.mdx`: zh-Hant-HK translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/http.mdx`: zh-Hant-HK translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/index.mdx`: zh-Hant-HK translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/interceptors.md`: zh-Hant-HK translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/meta.json`: zh-Hant-HK translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server.mdx`: zh-Hant-HK translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/meta.json`: zh-Hant-HK translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: zh-Hant-HK translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: zh-Hant-HK translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: zh-Hant-HK translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: zh-Hant-HK translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: zh-Hant-HK translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/opentelemetry-server/withopentelemetryserver.mdx`: zh-Hant-HK translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/react.mdx`: zh-Hant-HK translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/react/clientprovider-type.mdx`: zh-Hant-HK translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/react/clientproviderprops-type.mdx`: zh-Hant-HK translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/react/meta.json`: zh-Hant-HK translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/react/useclient.mdx`: zh-Hant-HK translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/sse.mdx`: zh-Hant-HK translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/struct.md`: zh-Hant-HK translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/vue.mdx`: zh-Hant-HK translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/vue/createclientplugin.mdx`: zh-Hant-HK translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/vue/http-client.mdx`: zh-Hant-HK translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/vue/injectclient.mdx`: zh-Hant-HK translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/vue/meta.json`: zh-Hant-HK translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/api/web-socket.mdx`: zh-Hant-HK translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/client.mdx`: zh-Hant-HK translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/commands.mdx`: zh-Hant-HK translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/design-decisions.mdx`: zh-Hant-HK translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/errors.mdx`: zh-Hant-HK translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/http.mdx`: zh-Hant-HK translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/index.md`: zh-Hant-HK translation. Guide index page. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/integrations/meta.json`: zh-Hant-HK translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/integrations/opentelemetry-server.mdx`: zh-Hant-HK translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Exception (semantic): lines 71 and 169 are likewise translated as Cantonese for "not-declared body"; see P10a-i18n-cjk-01; Structure is the same as en-US
+- `doc/content/zh-Hant-HK/docs/integrations/react.mdx`: zh-Hant-HK translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/integrations/vue.mdx`: zh-Hant-HK translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/interceptors.mdx`: zh-Hant-HK translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Exception (untranslated): line 83 leaves the whole sentence "Factories return tagged transport values:" untranslated; see P10a-i18n-cjk-02; Structure is the same as en-US
+- `doc/content/zh-Hant-HK/docs/meta.json`: zh-Hant-HK translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/sse.mdx`: zh-Hant-HK translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/start.mdx`: zh-Hant-HK translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/struct.mdx`: zh-Hant-HK translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/docs/web-socket.mdx`: zh-Hant-HK translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/index.mdx`: zh-Hant-HK translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/meta.json`: zh-Hant-HK translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/cancel-http.mdx`: zh-Hant-HK translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/consume-sse.mdx`: zh-Hant-HK translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/etag-revalidate.mdx`: zh-Hant-HK translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/get-declared-404.mdx`: zh-Hant-HK translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/graphql-http-envelope.mdx`: zh-Hant-HK translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/index.md`: zh-Hant-HK translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/meta.json`: zh-Hant-HK translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/post-json.mdx`: zh-Hant-HK translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/publish-http-sdk.mdx`: zh-Hant-HK translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/refresh-bearer-once.mdx`: zh-Hant-HK translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/test-with-handle.mdx`: zh-Hant-HK translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/zh-Hant-HK/recipes/websocket-session.mdx`: zh-Hant-HK translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/client.mdx`: zh-Hant-TW translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/anyfault-type.mdx`: zh-Hant-TW translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/anystruct-type.mdx`: zh-Hant-TW translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/basicauthhttpinterceptor.mdx`: zh-Hant-TW translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/basicauthinterceptoroptions-type.mdx`: zh-Hant-TW translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/basicauthsseinterceptor.mdx`: zh-Hant-TW translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/builderinput-type.mdx`: zh-Hant-TW translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/client-type.mdx`: zh-Hant-TW translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/clientconfig-type.mdx`: zh-Hant-TW translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/clientoption-type.mdx`: zh-Hant-TW translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/clientoptions-type.mdx`: zh-Hant-TW translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/clientsseconfig-type.mdx`: zh-Hant-TW translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/clientsseoptions-type.mdx`: zh-Hant-TW translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/clientwebsocketoptions-type.mdx`: zh-Hant-TW translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createclient.mdx`: zh-Hant-TW translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createdecodefault.mdx`: zh-Hant-TW translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createhttpinterceptor.mdx`: zh-Hant-TW translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createhttpstatusfault.mdx`: zh-Hant-TW translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createnetworkfault.mdx`: zh-Hant-TW translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createpreflightfault.mdx`: zh-Hant-TW translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createresolvedrequesturl.mdx`: zh-Hant-TW translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createsseinterceptor.mdx`: zh-Hant-TW translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createundecodedhttpstatusfault.mdx`: zh-Hant-TW translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/createwebsocketinterceptor.mdx`: zh-Hant-TW translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/decodedresponse-type.mdx`: zh-Hant-TW translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/decodefault-type.mdx`: zh-Hant-TW translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/decodefaultcode-type.mdx`: zh-Hant-TW translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/defineeventstream.mdx`: zh-Hant-TW translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/definerequest.mdx`: zh-Hant-TW translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/definewebsocket.mdx`: zh-Hant-TW translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/err-aborted-type.mdx`: zh-Hant-TW translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/err-timeout-type.mdx`: zh-Hant-TW translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/errormap-type.mdx`: zh-Hant-TW translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamcloseinfo-type.mdx`: zh-Hant-TW translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamcommand-type.mdx`: zh-Hant-TW translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamdata-type.mdx`: zh-Hant-TW translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamdefinition-type.mdx`: zh-Hant-TW translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamendpoint-type.mdx`: zh-Hant-TW translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamexecuteoptions-type.mdx`: zh-Hant-TW translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamfaultcode-type.mdx`: zh-Hant-TW translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamhandle-type.mdx`: zh-Hant-TW translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamopeninfo-type.mdx`: zh-Hant-TW translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstreamrequestshape-type.mdx`: zh-Hant-TW translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/eventstructs-type.mdx`: zh-Hant-TW translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/executeeventstreamcommand.mdx`: zh-Hant-TW translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/executehttpcommand.mdx`: zh-Hant-TW translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/executewebsocketcommand.mdx`: zh-Hant-TW translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/fault-type.mdx`: zh-Hant-TW translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/faultclass-type.mdx`: zh-Hant-TW translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/faultcode-type.mdx`: zh-Hant-TW translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/faultof-type.mdx`: zh-Hant-TW translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/fetchhandle-type.mdx`: zh-Hant-TW translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/fetchhandler.mdx`: zh-Hant-TW translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/flattenedstructerror-type.mdx`: zh-Hant-TW translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/formattedstructerror-type.mdx`: zh-Hant-TW translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpawaitresult-type.mdx`: zh-Hant-TW translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpcommand-type.mdx`: zh-Hant-TW translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpexecuteoptions-type.mdx`: zh-Hant-TW translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpinterceptor-type.mdx`: zh-Hant-TW translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpinterceptornext-type.mdx`: zh-Hant-TW translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpmeta-type.mdx`: zh-Hant-TW translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpprogressevent-type.mdx`: zh-Hant-TW translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpprogressfn-type.mdx`: zh-Hant-TW translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httprequest-type.mdx`: zh-Hant-TW translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httprequestshape-type.mdx`: zh-Hant-TW translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpresponse-type.mdx`: zh-Hant-TW translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpresponsetype-type.mdx`: zh-Hant-TW translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpstatusfault-type.mdx`: zh-Hant-TW translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/httpstatusfaultof-type.mdx`: zh-Hant-TW translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/infer-type.mdx`: zh-Hant-TW translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/interceptor-type.mdx`: zh-Hant-TW translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/interceptorfn-type.mdx`: zh-Hant-TW translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/makeresponse.mdx`: zh-Hant-TW translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/makeresponseoptions-type.mdx`: zh-Hant-TW translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/manualsocketclosereason-type.mdx`: zh-Hant-TW translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/meta.json`: zh-Hant-TW translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/objectstruct-type.mdx`: zh-Hant-TW translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/parseresult-type.mdx`: zh-Hant-TW translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/preflightfault-type.mdx`: zh-Hant-TW translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/preflightfaultcode-type.mdx`: zh-Hant-TW translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/queryserializer-type.mdx`: zh-Hant-TW translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/requestdefinition-type.mdx`: zh-Hant-TW translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/requestendpoint-type.mdx`: zh-Hant-TW translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/requesterrordata-type.mdx`: zh-Hant-TW translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/requestsuccessdata-type.mdx`: zh-Hant-TW translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/socketawaitresult-type.mdx`: zh-Hant-TW translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/socketlifecycleoutcome-type.mdx`: zh-Hant-TW translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/ssehandler-type.mdx`: zh-Hant-TW translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/sseinterceptor-type.mdx`: zh-Hant-TW translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/sseinterceptorfn-type.mdx`: zh-Hant-TW translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/streamawaitresult-type.mdx`: zh-Hant-TW translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-any.mdx`: zh-Hant-TW translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-array.mdx`: zh-Hant-TW translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-arraybuffer.mdx`: zh-Hant-TW translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-bigint.mdx`: zh-Hant-TW translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-blob.mdx`: zh-Hant-TW translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-boolean.mdx`: zh-Hant-TW translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-date.mdx`: zh-Hant-TW translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-discriminatedunion.mdx`: zh-Hant-TW translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-enum.mdx`: zh-Hant-TW translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-file.mdx`: zh-Hant-TW translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-formdata.mdx`: zh-Hant-TW translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-intersection.mdx`: zh-Hant-TW translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-literal.mdx`: zh-Hant-TW translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-null.mdx`: zh-Hant-TW translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-number.mdx`: zh-Hant-TW translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-object.mdx`: zh-Hant-TW translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-or.mdx`: zh-Hant-TW translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-parse.mdx`: zh-Hant-TW translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-record.mdx`: zh-Hant-TW translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-string.mdx`: zh-Hant-TW translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-symbol-type.mdx`: zh-Hant-TW translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-tuple.mdx`: zh-Hant-TW translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-type.mdx`: zh-Hant-TW translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-unknown.mdx`: zh-Hant-TW translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct-urlencoded.mdx`: zh-Hant-TW translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/struct.mdx`: zh-Hant-TW translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/structerror-type.mdx`: zh-Hant-TW translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/structinput-type.mdx`: zh-Hant-TW translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/structissue-type.mdx`: zh-Hant-TW translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/structlike-type.mdx`: zh-Hant-TW translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/structmethods-type.mdx`: zh-Hant-TW translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/userequestconfig-type.mdx`: zh-Hant-TW translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/usewebsocketconfig-type.mdx`: zh-Hant-TW translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketcloseinfo-type.mdx`: zh-Hant-TW translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketcommand-type.mdx`: zh-Hant-TW translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketconnectioninfo-type.mdx`: zh-Hant-TW translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketdefinition-type.mdx`: zh-Hant-TW translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketendpoint-type.mdx`: zh-Hant-TW translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketexecuteoptions-type.mdx`: zh-Hant-TW translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websockethandle-type.mdx`: zh-Hant-TW translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websockethandleconstructor-type.mdx`: zh-Hant-TW translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websockethandler-type.mdx`: zh-Hant-TW translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketheartbeatconfig-type.mdx`: zh-Hant-TW translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketincomingdata-type.mdx`: zh-Hant-TW translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketinterceptor-type.mdx`: zh-Hant-TW translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketinterceptorfn-type.mdx`: zh-Hant-TW translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketoutgoingdata-type.mdx`: zh-Hant-TW translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketrequestshape-type.mdx`: zh-Hant-TW translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketsession-type.mdx`: zh-Hant-TW translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketsessionlike-type.mdx`: zh-Hant-TW translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/websocketstate-type.mdx`: zh-Hant-TW translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withcredentials.mdx`: zh-Hant-TW translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withendpoint.mdx`: zh-Hant-TW translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withheaders.mdx`: zh-Hant-TW translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withhttphandle.mdx`: zh-Hant-TW translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withinterceptors.mdx`: zh-Hant-TW translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withqueryserializer.mdx`: zh-Hant-TW translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withssehandle.mdx`: zh-Hant-TW translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withsseoninvalidevent.mdx`: zh-Hant-TW translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withssereconnect.mdx`: zh-Hant-TW translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withtimeout.mdx`: zh-Hant-TW translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withwebsocketbeforeconnect.mdx`: zh-Hant-TW translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withwebsockethandle.mdx`: zh-Hant-TW translation. Replaces the WebSocket constructor. Note: Exception: same as above; link order is swapped and the targets are correct (zh-Hant-HK keeps English word order, so there is no difference)
+- `doc/content/zh-Hant-TW/api/core/withwebsocketheartbeat.mdx`: zh-Hant-TW translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withwebsocketprotocols.mdx`: zh-Hant-TW translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withwebsocketreconnect.mdx`: zh-Hant-TW translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/core/withxsrf.mdx`: zh-Hant-TW translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/errors.mdx`: zh-Hant-TW translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/http.mdx`: zh-Hant-TW translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/index.mdx`: zh-Hant-TW translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/interceptors.md`: zh-Hant-TW translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/meta.json`: zh-Hant-TW translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server.mdx`: zh-Hant-TW translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/meta.json`: zh-Hant-TW translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: zh-Hant-TW translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: zh-Hant-TW translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: zh-Hant-TW translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: zh-Hant-TW translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: zh-Hant-TW translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/opentelemetry-server/withopentelemetryserver.mdx`: zh-Hant-TW translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/react.mdx`: zh-Hant-TW translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/react/clientprovider-type.mdx`: zh-Hant-TW translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/react/clientproviderprops-type.mdx`: zh-Hant-TW translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/react/meta.json`: zh-Hant-TW translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/react/useclient.mdx`: zh-Hant-TW translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/sse.mdx`: zh-Hant-TW translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/struct.md`: zh-Hant-TW translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/vue.mdx`: zh-Hant-TW translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/vue/createclientplugin.mdx`: zh-Hant-TW translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/vue/http-client.mdx`: zh-Hant-TW translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/vue/injectclient.mdx`: zh-Hant-TW translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/vue/meta.json`: zh-Hant-TW translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/api/web-socket.mdx`: zh-Hant-TW translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/client.mdx`: zh-Hant-TW translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/commands.mdx`: zh-Hant-TW translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/design-decisions.mdx`: zh-Hant-TW translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/errors.mdx`: zh-Hant-TW translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/http.mdx`: zh-Hant-TW translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/index.md`: zh-Hant-TW translation. Guide index page. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/integrations/meta.json`: zh-Hant-TW translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/integrations/opentelemetry-server.mdx`: zh-Hant-TW translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/integrations/react.mdx`: zh-Hant-TW translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/integrations/vue.mdx`: zh-Hant-TW translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/interceptors.mdx`: zh-Hant-TW translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/meta.json`: zh-Hant-TW translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/sse.mdx`: zh-Hant-TW translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/start.mdx`: zh-Hant-TW translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/struct.mdx`: zh-Hant-TW translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/docs/web-socket.mdx`: zh-Hant-TW translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/index.mdx`: zh-Hant-TW translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/meta.json`: zh-Hant-TW translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/cancel-http.mdx`: zh-Hant-TW translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/consume-sse.mdx`: zh-Hant-TW translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/etag-revalidate.mdx`: zh-Hant-TW translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/get-declared-404.mdx`: zh-Hant-TW translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/graphql-http-envelope.mdx`: zh-Hant-TW translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/index.md`: zh-Hant-TW translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/meta.json`: zh-Hant-TW translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/post-json.mdx`: zh-Hant-TW translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/publish-http-sdk.mdx`: zh-Hant-TW translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/refresh-bearer-once.mdx`: zh-Hant-TW translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/test-with-handle.mdx`: zh-Hant-TW translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/zh-Hant-TW/recipes/websocket-session.mdx`: zh-Hant-TW translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+
+## Documentation content · multilingual (other)
+
+Five locales, `ar`, `de-DE`, `es-ES`, `fr-FR`, and `ru-RU`, mirroring en-US file by file. (1070 files, audit partition `P10b-i18n-other`)
+
+- `doc/content/ar/api/client.mdx`: ar translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Exception: inline-code multiset difference (missing none; added `builder`, `builder`, `HeadersInit`, `builder`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged; High-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ar/api/core/anyfault-type.mdx`: ar translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/ar/api/core/anystruct-type.mdx`: ar translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/basicauthhttpinterceptor.mdx`: ar translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/ar/api/core/basicauthinterceptoroptions-type.mdx`: ar translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/ar/api/core/basicauthsseinterceptor.mdx`: ar translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/ar/api/core/builderinput-type.mdx`: ar translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/client-type.mdx`: ar translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/ar/api/core/clientconfig-type.mdx`: ar translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/ar/api/core/clientoption-type.mdx`: ar translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/ar/api/core/clientoptions-type.mdx`: ar translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/ar/api/core/clientsseconfig-type.mdx`: ar translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/ar/api/core/clientsseoptions-type.mdx`: ar translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ar/api/core/clientwebsocketoptions-type.mdx`: ar translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ar/api/core/createclient.mdx`: ar translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/ar/api/core/createdecodefault.mdx`: ar translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ar/api/core/createhttpinterceptor.mdx`: ar translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/ar/api/core/createhttpstatusfault.mdx`: ar translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/ar/api/core/createnetworkfault.mdx`: ar translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/ar/api/core/createpreflightfault.mdx`: ar translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/ar/api/core/createresolvedrequesturl.mdx`: ar translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/ar/api/core/createsseinterceptor.mdx`: ar translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/ar/api/core/createundecodedhttpstatusfault.mdx`: ar translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/ar/api/core/createwebsocketinterceptor.mdx`: ar translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/ar/api/core/decodedresponse-type.mdx`: ar translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/decodefault-type.mdx`: ar translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ar/api/core/decodefaultcode-type.mdx`: ar translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/ar/api/core/defineeventstream.mdx`: ar translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/ar/api/core/definerequest.mdx`: ar translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/ar/api/core/definewebsocket.mdx`: ar translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ar/api/core/err-aborted-type.mdx`: ar translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/ar/api/core/err-timeout-type.mdx`: ar translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/ar/api/core/errormap-type.mdx`: ar translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamcloseinfo-type.mdx`: ar translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamcommand-type.mdx`: ar translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamdata-type.mdx`: ar translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamdefinition-type.mdx`: ar translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamendpoint-type.mdx`: ar translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamexecuteoptions-type.mdx`: ar translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Exception: inline-code multiset difference (missing none; added `builder`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/api/core/eventstreamfaultcode-type.mdx`: ar translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamhandle-type.mdx`: ar translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstreamopeninfo-type.mdx`: ar translation. Metadata available after the SSE response has opened. Note: Exception: inline-code multiset difference (missing none; added `EventStreamOpenInfo`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/api/core/eventstreamrequestshape-type.mdx`: ar translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/ar/api/core/eventstructs-type.mdx`: ar translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/executeeventstreamcommand.mdx`: ar translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/ar/api/core/executehttpcommand.mdx`: ar translation. Low-level entry that executes one HTTP command against the client config. Note: Exception: inline-code multiset difference (missing none; added `output`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/api/core/executewebsocketcommand.mdx`: ar translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/ar/api/core/fault-type.mdx`: ar translation. Fault union that client.execute can return, distinguished by code. Note: Exception: inline-code multiset difference (missing none; added `switch`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/api/core/faultclass-type.mdx`: ar translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/ar/api/core/faultcode-type.mdx`: ar translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/ar/api/core/faultof-type.mdx`: ar translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/ar/api/core/fetchhandle-type.mdx`: ar translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/ar/api/core/fetchhandler.mdx`: ar translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/ar/api/core/flattenedstructerror-type.mdx`: ar translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/ar/api/core/formattedstructerror-type.mdx`: ar translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/ar/api/core/httpawaitresult-type.mdx`: ar translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpcommand-type.mdx`: ar translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpexecuteoptions-type.mdx`: ar translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpinterceptor-type.mdx`: ar translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpinterceptornext-type.mdx`: ar translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpmeta-type.mdx`: ar translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpprogressevent-type.mdx`: ar translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpprogressfn-type.mdx`: ar translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/ar/api/core/httprequest-type.mdx`: ar translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/ar/api/core/httprequestshape-type.mdx`: ar translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpresponse-type.mdx`: ar translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpresponsetype-type.mdx`: ar translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpstatusfault-type.mdx`: ar translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/httpstatusfaultof-type.mdx`: ar translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/ar/api/core/infer-type.mdx`: ar translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/ar/api/core/interceptor-type.mdx`: ar translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/ar/api/core/interceptorfn-type.mdx`: ar translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/ar/api/core/makeresponse.mdx`: ar translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/ar/api/core/makeresponseoptions-type.mdx`: ar translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/ar/api/core/manualsocketclosereason-type.mdx`: ar translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/ar/api/core/meta.json`: ar translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/ar/api/core/objectstruct-type.mdx`: ar translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/ar/api/core/parseresult-type.mdx`: ar translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/ar/api/core/preflightfault-type.mdx`: ar translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/ar/api/core/preflightfaultcode-type.mdx`: ar translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/ar/api/core/queryserializer-type.mdx`: ar translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/ar/api/core/requestdefinition-type.mdx`: ar translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/ar/api/core/requestendpoint-type.mdx`: ar translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/ar/api/core/requesterrordata-type.mdx`: ar translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/requestsuccessdata-type.mdx`: ar translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/socketawaitresult-type.mdx`: ar translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/ar/api/core/socketlifecycleoutcome-type.mdx`: ar translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/ar/api/core/ssehandler-type.mdx`: ar translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/ar/api/core/sseinterceptor-type.mdx`: ar translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ar/api/core/sseinterceptorfn-type.mdx`: ar translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/ar/api/core/streamawaitresult-type.mdx`: ar translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-any.mdx`: ar translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-array.mdx`: ar translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-arraybuffer.mdx`: ar translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-bigint.mdx`: ar translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-blob.mdx`: ar translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-boolean.mdx`: ar translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-date.mdx`: ar translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-discriminatedunion.mdx`: ar translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-enum.mdx`: ar translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-file.mdx`: ar translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-formdata.mdx`: ar translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-intersection.mdx`: ar translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-literal.mdx`: ar translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-null.mdx`: ar translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-number.mdx`: ar translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-object.mdx`: ar translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-or.mdx`: ar translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-parse.mdx`: ar translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-record.mdx`: ar translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-string.mdx`: ar translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-symbol-type.mdx`: ar translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-tuple.mdx`: ar translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-type.mdx`: ar translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-unknown.mdx`: ar translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct-urlencoded.mdx`: ar translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ar/api/core/struct.mdx`: ar translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/ar/api/core/structerror-type.mdx`: ar translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/ar/api/core/structinput-type.mdx`: ar translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/ar/api/core/structissue-type.mdx`: ar translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/ar/api/core/structlike-type.mdx`: ar translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/ar/api/core/structmethods-type.mdx`: ar translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/ar/api/core/userequestconfig-type.mdx`: ar translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/ar/api/core/usewebsocketconfig-type.mdx`: ar translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketcloseinfo-type.mdx`: ar translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketcommand-type.mdx`: ar translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketconnectioninfo-type.mdx`: ar translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketdefinition-type.mdx`: ar translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketendpoint-type.mdx`: ar translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketexecuteoptions-type.mdx`: ar translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/ar/api/core/websockethandle-type.mdx`: ar translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/ar/api/core/websockethandleconstructor-type.mdx`: ar translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/ar/api/core/websockethandler-type.mdx`: ar translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketheartbeatconfig-type.mdx`: ar translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketincomingdata-type.mdx`: ar translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketinterceptor-type.mdx`: ar translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketinterceptorfn-type.mdx`: ar translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketoutgoingdata-type.mdx`: ar translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketrequestshape-type.mdx`: ar translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketsession-type.mdx`: ar translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketsessionlike-type.mdx`: ar translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/ar/api/core/websocketstate-type.mdx`: ar translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/ar/api/core/withcredentials.mdx`: ar translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/ar/api/core/withendpoint.mdx`: ar translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/ar/api/core/withheaders.mdx`: ar translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Exception: inline-code multiset difference (missing none; added `builder`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/api/core/withhttphandle.mdx`: ar translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/ar/api/core/withinterceptors.mdx`: ar translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/ar/api/core/withqueryserializer.mdx`: ar translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/ar/api/core/withssehandle.mdx`: ar translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/ar/api/core/withsseoninvalidevent.mdx`: ar translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/ar/api/core/withssereconnect.mdx`: ar translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/ar/api/core/withtimeout.mdx`: ar translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/ar/api/core/withwebsocketbeforeconnect.mdx`: ar translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/ar/api/core/withwebsockethandle.mdx`: ar translation. Replaces the WebSocket constructor. Note: Structure matches en-US
+- `doc/content/ar/api/core/withwebsocketheartbeat.mdx`: ar translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/ar/api/core/withwebsocketprotocols.mdx`: ar translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/ar/api/core/withwebsocketreconnect.mdx`: ar translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/ar/api/core/withxsrf.mdx`: ar translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/ar/api/errors.mdx`: ar translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Exception: the "DecodeFault" section has a bold count of en 0 / local 1; emphasis only, and the negation and conditional text are kept
+- `doc/content/ar/api/http.mdx`: ar translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/ar/api/index.mdx`: ar translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/ar/api/interceptors.md`: ar translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/ar/api/meta.json`: ar translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/ar/api/opentelemetry-server.mdx`: ar translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Exception: frontmatter `title` is the package name `@defjs/opentelemetry-server`, the same as en-US, kept by design; The heading keeps the English ['OpenTelemetry server'] (protocol/product name); A table cell keeps the English ['W3C Trace Context + Baggage'] (spec/technical name)
+- `doc/content/ar/api/opentelemetry-server/meta.json`: ar translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: ar translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: ar translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: ar translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/ar/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: ar translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ar/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: ar translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/ar/api/opentelemetry-server/withopentelemetryserver.mdx`: ar translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/ar/api/react.mdx`: ar translation. React adapter module page: ClientProvider and useClient. Note: Exception: frontmatter `title` is the package name `@defjs/react`, the same as en-US, kept by design
+- `doc/content/ar/api/react/clientprovider-type.mdx`: ar translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/ar/api/react/clientproviderprops-type.mdx`: ar translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/ar/api/react/meta.json`: ar translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/ar/api/react/useclient.mdx`: ar translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/ar/api/sse.mdx`: ar translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Exception: inline-code multiset difference (missing none; added `builder`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/api/struct.md`: ar translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/ar/api/vue.mdx`: ar translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Exception: frontmatter `title` is the package name `@defjs/vue`, the same as en-US, kept by design
+- `doc/content/ar/api/vue/createclientplugin.mdx`: ar translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/ar/api/vue/http-client.mdx`: ar translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/ar/api/vue/injectclient.mdx`: ar translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/ar/api/vue/meta.json`: ar translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/ar/api/web-socket.mdx`: ar translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Exception: inline-code multiset difference (missing none; added `JSON.parse`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/docs/client.mdx`: ar translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/ar/docs/commands.mdx`: ar translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Exception: inline-code multiset difference (missing none; added `output`, `error`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/docs/design-decisions.mdx`: ar translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Exception: inline-code multiset difference (missing none; added `nullable`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged; In section "1. What you declare is what you assert" the bold count is en 0 / local 2; emphasis only, and the negation and conditional text are kept; In section "4. A failed decode has no body" the bold count is en 0 / local 1; emphasis only, and the negation and conditional text are kept; In section "Runtime decoding" the bold count is en 1 / local 2; emphasis only, and the negation and conditional text are kept
+- `doc/content/ar/docs/errors.mdx`: ar translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Exception: inline-code multiset difference (missing `code`; added none); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged; The body has one fewer digit `0`: en-US "status-0" is translated as Arabic for "status zero", same meaning
+- `doc/content/ar/docs/http.mdx`: ar translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Exception: inline-code multiset difference (missing `throw`; added `cause`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/docs/index.md`: ar translation. Guide index page. Note: Exception: the home link `/` is translated as `/ar` (the site's localized home route, `localePrefix`); the target is correct
+- `doc/content/ar/docs/integrations/meta.json`: ar translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ar/docs/integrations/opentelemetry-server.mdx`: ar translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Exception: frontmatter `title` matches en-US (product name OpenTelemetry), kept by design; In section "Options and hooks" the bold count is en 1 / local 0; emphasis only, and the negation and conditional text are kept
+- `doc/content/ar/docs/integrations/react.mdx`: ar translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Exception: frontmatter `title` matches en-US (product name React), kept by design
+- `doc/content/ar/docs/integrations/vue.mdx`: ar translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Exception: frontmatter `title` matches en-US (product name Vue), kept by design
+- `doc/content/ar/docs/interceptors.mdx`: ar translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Exception: the body has one fewer digit `0`: en-US "status-0" is translated as Arabic for "status zero", same meaning
+- `doc/content/ar/docs/meta.json`: ar translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ar/docs/sse.mdx`: ar translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Exception: inline-code multiset difference (missing none; added `builder`, `headers`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/docs/start.mdx`: ar translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/ar/docs/struct.mdx`: ar translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/ar/docs/web-socket.mdx`: ar translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Exception: inline-code multiset difference (missing none; added `execute`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/index.mdx`: ar translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Exception: frontmatter `title` matches en-US (product name Defjs), kept by design
+- `doc/content/ar/meta.json`: ar translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ar/recipes/cancel-http.mdx`: ar translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/ar/recipes/consume-sse.mdx`: ar translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/ar/recipes/etag-revalidate.mdx`: ar translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/ar/recipes/get-declared-404.mdx`: ar translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Exception: inline-code multiset difference (missing `error`; added none); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ar/recipes/graphql-http-envelope.mdx`: ar translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/ar/recipes/index.md`: ar translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/ar/recipes/meta.json`: ar translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ar/recipes/post-json.mdx`: ar translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/ar/recipes/publish-http-sdk.mdx`: ar translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/ar/recipes/refresh-bearer-once.mdx`: ar translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/ar/recipes/test-with-handle.mdx`: ar translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/ar/recipes/websocket-session.mdx`: ar translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/de-DE/api/client.mdx`: de-DE translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/anyfault-type.mdx`: de-DE translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/anystruct-type.mdx`: de-DE translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/basicauthhttpinterceptor.mdx`: de-DE translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/basicauthinterceptoroptions-type.mdx`: de-DE translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/basicauthsseinterceptor.mdx`: de-DE translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/builderinput-type.mdx`: de-DE translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/client-type.mdx`: de-DE translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/clientconfig-type.mdx`: de-DE translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/clientoption-type.mdx`: de-DE translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/clientoptions-type.mdx`: de-DE translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/clientsseconfig-type.mdx`: de-DE translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/clientsseoptions-type.mdx`: de-DE translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/clientwebsocketoptions-type.mdx`: de-DE translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createclient.mdx`: de-DE translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createdecodefault.mdx`: de-DE translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createhttpinterceptor.mdx`: de-DE translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createhttpstatusfault.mdx`: de-DE translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createnetworkfault.mdx`: de-DE translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createpreflightfault.mdx`: de-DE translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createresolvedrequesturl.mdx`: de-DE translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createsseinterceptor.mdx`: de-DE translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createundecodedhttpstatusfault.mdx`: de-DE translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/createwebsocketinterceptor.mdx`: de-DE translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/decodedresponse-type.mdx`: de-DE translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/decodefault-type.mdx`: de-DE translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/decodefaultcode-type.mdx`: de-DE translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/defineeventstream.mdx`: de-DE translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/definerequest.mdx`: de-DE translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/definewebsocket.mdx`: de-DE translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/err-aborted-type.mdx`: de-DE translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/err-timeout-type.mdx`: de-DE translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/errormap-type.mdx`: de-DE translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamcloseinfo-type.mdx`: de-DE translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamcommand-type.mdx`: de-DE translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamdata-type.mdx`: de-DE translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamdefinition-type.mdx`: de-DE translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamendpoint-type.mdx`: de-DE translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamexecuteoptions-type.mdx`: de-DE translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamfaultcode-type.mdx`: de-DE translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamhandle-type.mdx`: de-DE translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamopeninfo-type.mdx`: de-DE translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstreamrequestshape-type.mdx`: de-DE translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/eventstructs-type.mdx`: de-DE translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/executeeventstreamcommand.mdx`: de-DE translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/executehttpcommand.mdx`: de-DE translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/executewebsocketcommand.mdx`: de-DE translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/fault-type.mdx`: de-DE translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/faultclass-type.mdx`: de-DE translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/faultcode-type.mdx`: de-DE translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/faultof-type.mdx`: de-DE translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/fetchhandle-type.mdx`: de-DE translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/fetchhandler.mdx`: de-DE translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/flattenedstructerror-type.mdx`: de-DE translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/de-DE/api/core/formattedstructerror-type.mdx`: de-DE translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpawaitresult-type.mdx`: de-DE translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpcommand-type.mdx`: de-DE translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpexecuteoptions-type.mdx`: de-DE translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpinterceptor-type.mdx`: de-DE translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpinterceptornext-type.mdx`: de-DE translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpmeta-type.mdx`: de-DE translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpprogressevent-type.mdx`: de-DE translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpprogressfn-type.mdx`: de-DE translation. Function type of the upload and download progress callbacks. Note: Exception: inline-code multiset difference (missing none; added `await`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/de-DE/api/core/httprequest-type.mdx`: de-DE translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httprequestshape-type.mdx`: de-DE translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpresponse-type.mdx`: de-DE translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpresponsetype-type.mdx`: de-DE translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpstatusfault-type.mdx`: de-DE translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/httpstatusfaultof-type.mdx`: de-DE translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/infer-type.mdx`: de-DE translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/interceptor-type.mdx`: de-DE translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/interceptorfn-type.mdx`: de-DE translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/makeresponse.mdx`: de-DE translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/makeresponseoptions-type.mdx`: de-DE translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/manualsocketclosereason-type.mdx`: de-DE translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/meta.json`: de-DE translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/objectstruct-type.mdx`: de-DE translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/parseresult-type.mdx`: de-DE translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/preflightfault-type.mdx`: de-DE translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/preflightfaultcode-type.mdx`: de-DE translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/queryserializer-type.mdx`: de-DE translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/requestdefinition-type.mdx`: de-DE translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/requestendpoint-type.mdx`: de-DE translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/requesterrordata-type.mdx`: de-DE translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/requestsuccessdata-type.mdx`: de-DE translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/socketawaitresult-type.mdx`: de-DE translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/socketlifecycleoutcome-type.mdx`: de-DE translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/ssehandler-type.mdx`: de-DE translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/sseinterceptor-type.mdx`: de-DE translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/sseinterceptorfn-type.mdx`: de-DE translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/streamawaitresult-type.mdx`: de-DE translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-any.mdx`: de-DE translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-array.mdx`: de-DE translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-arraybuffer.mdx`: de-DE translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-bigint.mdx`: de-DE translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-blob.mdx`: de-DE translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-boolean.mdx`: de-DE translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-date.mdx`: de-DE translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-discriminatedunion.mdx`: de-DE translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-enum.mdx`: de-DE translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-file.mdx`: de-DE translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-formdata.mdx`: de-DE translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-intersection.mdx`: de-DE translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-literal.mdx`: de-DE translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-null.mdx`: de-DE translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-number.mdx`: de-DE translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-object.mdx`: de-DE translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-or.mdx`: de-DE translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-parse.mdx`: de-DE translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-record.mdx`: de-DE translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-string.mdx`: de-DE translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-symbol-type.mdx`: de-DE translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-tuple.mdx`: de-DE translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-type.mdx`: de-DE translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-unknown.mdx`: de-DE translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct-urlencoded.mdx`: de-DE translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/struct.mdx`: de-DE translation. The struct facade: constructors and struct.parse. Note: Exception: inline-code multiset difference (missing none; added `bigint`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/de-DE/api/core/structerror-type.mdx`: de-DE translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/structinput-type.mdx`: de-DE translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/structissue-type.mdx`: de-DE translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/structlike-type.mdx`: de-DE translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/structmethods-type.mdx`: de-DE translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/userequestconfig-type.mdx`: de-DE translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/usewebsocketconfig-type.mdx`: de-DE translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketcloseinfo-type.mdx`: de-DE translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketcommand-type.mdx`: de-DE translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketconnectioninfo-type.mdx`: de-DE translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketdefinition-type.mdx`: de-DE translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketendpoint-type.mdx`: de-DE translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketexecuteoptions-type.mdx`: de-DE translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websockethandle-type.mdx`: de-DE translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websockethandleconstructor-type.mdx`: de-DE translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websockethandler-type.mdx`: de-DE translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketheartbeatconfig-type.mdx`: de-DE translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketincomingdata-type.mdx`: de-DE translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketinterceptor-type.mdx`: de-DE translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketinterceptorfn-type.mdx`: de-DE translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketoutgoingdata-type.mdx`: de-DE translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketrequestshape-type.mdx`: de-DE translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketsession-type.mdx`: de-DE translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketsessionlike-type.mdx`: de-DE translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/websocketstate-type.mdx`: de-DE translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withcredentials.mdx`: de-DE translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withendpoint.mdx`: de-DE translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withheaders.mdx`: de-DE translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withhttphandle.mdx`: de-DE translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withinterceptors.mdx`: de-DE translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withqueryserializer.mdx`: de-DE translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withssehandle.mdx`: de-DE translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withsseoninvalidevent.mdx`: de-DE translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withssereconnect.mdx`: de-DE translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withtimeout.mdx`: de-DE translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withwebsocketbeforeconnect.mdx`: de-DE translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withwebsockethandle.mdx`: de-DE translation. Replaces the WebSocket constructor. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withwebsocketheartbeat.mdx`: de-DE translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withwebsocketprotocols.mdx`: de-DE translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withwebsocketreconnect.mdx`: de-DE translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/de-DE/api/core/withxsrf.mdx`: de-DE translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/de-DE/api/errors.mdx`: de-DE translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Exception: the "DecodeFault" section has a bold count of en 0 / local 1; emphasis only, and the negation and conditional text are kept
+- `doc/content/de-DE/api/http.mdx`: de-DE translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/de-DE/api/index.mdx`: de-DE translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/de-DE/api/interceptors.md`: de-DE translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/de-DE/api/meta.json`: de-DE translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server.mdx`: de-DE translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server/meta.json`: de-DE translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: de-DE translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: de-DE translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: de-DE translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: de-DE translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: de-DE translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/de-DE/api/opentelemetry-server/withopentelemetryserver.mdx`: de-DE translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/de-DE/api/react.mdx`: de-DE translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/de-DE/api/react/clientprovider-type.mdx`: de-DE translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/de-DE/api/react/clientproviderprops-type.mdx`: de-DE translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/de-DE/api/react/meta.json`: de-DE translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/de-DE/api/react/useclient.mdx`: de-DE translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/de-DE/api/sse.mdx`: de-DE translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/de-DE/api/struct.md`: de-DE translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/de-DE/api/vue.mdx`: de-DE translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/de-DE/api/vue/createclientplugin.mdx`: de-DE translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/de-DE/api/vue/http-client.mdx`: de-DE translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/de-DE/api/vue/injectclient.mdx`: de-DE translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/de-DE/api/vue/meta.json`: de-DE translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/de-DE/api/web-socket.mdx`: de-DE translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/de-DE/docs/client.mdx`: de-DE translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/de-DE/docs/commands.mdx`: de-DE translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Structure matches en-US
+- `doc/content/de-DE/docs/design-decisions.mdx`: de-DE translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Exception: in section "1. What you declare is what you assert" the bold count is en 0 / local 2; emphasis only, and the negation and conditional text are kept; In section "4. A failed decode has no body" the bold count is en 0 / local 1; emphasis only, and the negation and conditional text are kept
+- `doc/content/de-DE/docs/errors.mdx`: de-DE translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/de-DE/docs/http.mdx`: de-DE translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Structure matches en-US
+- `doc/content/de-DE/docs/index.md`: de-DE translation. Guide index page. Note: Exception: the home link `/` is translated as `/de-DE` (the site's localized home route, `localePrefix`); the target is correct
+- `doc/content/de-DE/docs/integrations/meta.json`: de-DE translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/de-DE/docs/integrations/opentelemetry-server.mdx`: de-DE translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Exception: in section "Options and hooks" the bold count is en 1 / local 0; emphasis only, and the negation and conditional text are kept
+- `doc/content/de-DE/docs/integrations/react.mdx`: de-DE translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/de-DE/docs/integrations/vue.mdx`: de-DE translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Exception: inline-code multiset difference (missing none; added `provide`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/de-DE/docs/interceptors.mdx`: de-DE translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/de-DE/docs/meta.json`: de-DE translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/de-DE/docs/sse.mdx`: de-DE translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/de-DE/docs/start.mdx`: de-DE translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/de-DE/docs/struct.mdx`: de-DE translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/de-DE/docs/web-socket.mdx`: de-DE translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Exception: inline-code multiset difference (missing none; added `execute`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/de-DE/index.mdx`: de-DE translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/de-DE/meta.json`: de-DE translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/cancel-http.mdx`: de-DE translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/consume-sse.mdx`: de-DE translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/etag-revalidate.mdx`: de-DE translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/get-declared-404.mdx`: de-DE translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/graphql-http-envelope.mdx`: de-DE translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/index.md`: de-DE translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/meta.json`: de-DE translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/post-json.mdx`: de-DE translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/publish-http-sdk.mdx`: de-DE translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/refresh-bearer-once.mdx`: de-DE translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/test-with-handle.mdx`: de-DE translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/de-DE/recipes/websocket-session.mdx`: de-DE translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/es-ES/api/client.mdx`: es-ES translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/anyfault-type.mdx`: es-ES translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/anystruct-type.mdx`: es-ES translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/basicauthhttpinterceptor.mdx`: es-ES translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/basicauthinterceptoroptions-type.mdx`: es-ES translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/basicauthsseinterceptor.mdx`: es-ES translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/builderinput-type.mdx`: es-ES translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/client-type.mdx`: es-ES translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/clientconfig-type.mdx`: es-ES translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/clientoption-type.mdx`: es-ES translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/clientoptions-type.mdx`: es-ES translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/clientsseconfig-type.mdx`: es-ES translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/clientsseoptions-type.mdx`: es-ES translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/clientwebsocketoptions-type.mdx`: es-ES translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createclient.mdx`: es-ES translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createdecodefault.mdx`: es-ES translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createhttpinterceptor.mdx`: es-ES translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createhttpstatusfault.mdx`: es-ES translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createnetworkfault.mdx`: es-ES translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createpreflightfault.mdx`: es-ES translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createresolvedrequesturl.mdx`: es-ES translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createsseinterceptor.mdx`: es-ES translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createundecodedhttpstatusfault.mdx`: es-ES translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/createwebsocketinterceptor.mdx`: es-ES translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/decodedresponse-type.mdx`: es-ES translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/decodefault-type.mdx`: es-ES translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/decodefaultcode-type.mdx`: es-ES translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/defineeventstream.mdx`: es-ES translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/definerequest.mdx`: es-ES translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/definewebsocket.mdx`: es-ES translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/err-aborted-type.mdx`: es-ES translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/err-timeout-type.mdx`: es-ES translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/errormap-type.mdx`: es-ES translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamcloseinfo-type.mdx`: es-ES translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamcommand-type.mdx`: es-ES translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamdata-type.mdx`: es-ES translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamdefinition-type.mdx`: es-ES translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamendpoint-type.mdx`: es-ES translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamexecuteoptions-type.mdx`: es-ES translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamfaultcode-type.mdx`: es-ES translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamhandle-type.mdx`: es-ES translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamopeninfo-type.mdx`: es-ES translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstreamrequestshape-type.mdx`: es-ES translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/eventstructs-type.mdx`: es-ES translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/executeeventstreamcommand.mdx`: es-ES translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/executehttpcommand.mdx`: es-ES translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/executewebsocketcommand.mdx`: es-ES translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/fault-type.mdx`: es-ES translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/faultclass-type.mdx`: es-ES translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/faultcode-type.mdx`: es-ES translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/faultof-type.mdx`: es-ES translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/fetchhandle-type.mdx`: es-ES translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/fetchhandler.mdx`: es-ES translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/flattenedstructerror-type.mdx`: es-ES translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/es-ES/api/core/formattedstructerror-type.mdx`: es-ES translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpawaitresult-type.mdx`: es-ES translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpcommand-type.mdx`: es-ES translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpexecuteoptions-type.mdx`: es-ES translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpinterceptor-type.mdx`: es-ES translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpinterceptornext-type.mdx`: es-ES translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpmeta-type.mdx`: es-ES translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpprogressevent-type.mdx`: es-ES translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpprogressfn-type.mdx`: es-ES translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httprequest-type.mdx`: es-ES translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httprequestshape-type.mdx`: es-ES translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpresponse-type.mdx`: es-ES translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpresponsetype-type.mdx`: es-ES translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpstatusfault-type.mdx`: es-ES translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/httpstatusfaultof-type.mdx`: es-ES translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/infer-type.mdx`: es-ES translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/interceptor-type.mdx`: es-ES translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/interceptorfn-type.mdx`: es-ES translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/makeresponse.mdx`: es-ES translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/makeresponseoptions-type.mdx`: es-ES translation. Fields that makeResponse accepts. Note: Exception: inline-code multiset difference (missing none; added `request`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/es-ES/api/core/manualsocketclosereason-type.mdx`: es-ES translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/meta.json`: es-ES translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/objectstruct-type.mdx`: es-ES translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/parseresult-type.mdx`: es-ES translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/preflightfault-type.mdx`: es-ES translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/preflightfaultcode-type.mdx`: es-ES translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/queryserializer-type.mdx`: es-ES translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/requestdefinition-type.mdx`: es-ES translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/requestendpoint-type.mdx`: es-ES translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/requesterrordata-type.mdx`: es-ES translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/requestsuccessdata-type.mdx`: es-ES translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/socketawaitresult-type.mdx`: es-ES translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/socketlifecycleoutcome-type.mdx`: es-ES translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/ssehandler-type.mdx`: es-ES translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/sseinterceptor-type.mdx`: es-ES translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/sseinterceptorfn-type.mdx`: es-ES translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/streamawaitresult-type.mdx`: es-ES translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-any.mdx`: es-ES translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-array.mdx`: es-ES translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-arraybuffer.mdx`: es-ES translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-bigint.mdx`: es-ES translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-blob.mdx`: es-ES translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-boolean.mdx`: es-ES translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-date.mdx`: es-ES translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-discriminatedunion.mdx`: es-ES translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-enum.mdx`: es-ES translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-file.mdx`: es-ES translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-formdata.mdx`: es-ES translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-intersection.mdx`: es-ES translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-literal.mdx`: es-ES translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-null.mdx`: es-ES translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-number.mdx`: es-ES translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-object.mdx`: es-ES translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-or.mdx`: es-ES translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-parse.mdx`: es-ES translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-record.mdx`: es-ES translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-string.mdx`: es-ES translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-symbol-type.mdx`: es-ES translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-tuple.mdx`: es-ES translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-type.mdx`: es-ES translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-unknown.mdx`: es-ES translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct-urlencoded.mdx`: es-ES translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/struct.mdx`: es-ES translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/structerror-type.mdx`: es-ES translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/structinput-type.mdx`: es-ES translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/structissue-type.mdx`: es-ES translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/structlike-type.mdx`: es-ES translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/structmethods-type.mdx`: es-ES translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/userequestconfig-type.mdx`: es-ES translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/usewebsocketconfig-type.mdx`: es-ES translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketcloseinfo-type.mdx`: es-ES translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketcommand-type.mdx`: es-ES translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketconnectioninfo-type.mdx`: es-ES translation. Generation, url, protocol, and extensions of the current physical connection. Note: Exception: inline-code multiset difference (missing none; added `open`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/es-ES/api/core/websocketdefinition-type.mdx`: es-ES translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketendpoint-type.mdx`: es-ES translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketexecuteoptions-type.mdx`: es-ES translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websockethandle-type.mdx`: es-ES translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websockethandleconstructor-type.mdx`: es-ES translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websockethandler-type.mdx`: es-ES translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketheartbeatconfig-type.mdx`: es-ES translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketincomingdata-type.mdx`: es-ES translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketinterceptor-type.mdx`: es-ES translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketinterceptorfn-type.mdx`: es-ES translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketoutgoingdata-type.mdx`: es-ES translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketrequestshape-type.mdx`: es-ES translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketsession-type.mdx`: es-ES translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketsessionlike-type.mdx`: es-ES translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/websocketstate-type.mdx`: es-ES translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withcredentials.mdx`: es-ES translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withendpoint.mdx`: es-ES translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withheaders.mdx`: es-ES translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withhttphandle.mdx`: es-ES translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withinterceptors.mdx`: es-ES translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withqueryserializer.mdx`: es-ES translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withssehandle.mdx`: es-ES translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withsseoninvalidevent.mdx`: es-ES translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withssereconnect.mdx`: es-ES translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withtimeout.mdx`: es-ES translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withwebsocketbeforeconnect.mdx`: es-ES translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withwebsockethandle.mdx`: es-ES translation. Replaces the WebSocket constructor. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withwebsocketheartbeat.mdx`: es-ES translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withwebsocketprotocols.mdx`: es-ES translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withwebsocketreconnect.mdx`: es-ES translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/es-ES/api/core/withxsrf.mdx`: es-ES translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/es-ES/api/errors.mdx`: es-ES translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Structure matches en-US
+- `doc/content/es-ES/api/http.mdx`: es-ES translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/es-ES/api/index.mdx`: es-ES translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/es-ES/api/interceptors.md`: es-ES translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/es-ES/api/meta.json`: es-ES translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server.mdx`: es-ES translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server/meta.json`: es-ES translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: es-ES translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: es-ES translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: es-ES translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: es-ES translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: es-ES translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/es-ES/api/opentelemetry-server/withopentelemetryserver.mdx`: es-ES translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/es-ES/api/react.mdx`: es-ES translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/es-ES/api/react/clientprovider-type.mdx`: es-ES translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/es-ES/api/react/clientproviderprops-type.mdx`: es-ES translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/es-ES/api/react/meta.json`: es-ES translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/es-ES/api/react/useclient.mdx`: es-ES translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/es-ES/api/sse.mdx`: es-ES translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/es-ES/api/struct.md`: es-ES translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/es-ES/api/vue.mdx`: es-ES translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/es-ES/api/vue/createclientplugin.mdx`: es-ES translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/es-ES/api/vue/http-client.mdx`: es-ES translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/es-ES/api/vue/injectclient.mdx`: es-ES translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/es-ES/api/vue/meta.json`: es-ES translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/es-ES/api/web-socket.mdx`: es-ES translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/es-ES/docs/client.mdx`: es-ES translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/es-ES/docs/commands.mdx`: es-ES translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Structure matches en-US
+- `doc/content/es-ES/docs/design-decisions.mdx`: es-ES translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Structure matches en-US
+- `doc/content/es-ES/docs/errors.mdx`: es-ES translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/es-ES/docs/http.mdx`: es-ES translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Structure matches en-US
+- `doc/content/es-ES/docs/index.md`: es-ES translation. Guide index page. Note: Exception: the home link `/` is translated as `/es-ES` (the site's localized home route, `localePrefix`); the target is correct
+- `doc/content/es-ES/docs/integrations/meta.json`: es-ES translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/es-ES/docs/integrations/opentelemetry-server.mdx`: es-ES translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Exception: inline-code multiset difference (missing `provider.shutdown()`; added `dispose`, `await provider.shutdown()`, `HTTP_STATUS`, `HTTP_STATUS`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged; In section "Options and hooks" the bold count is en 1 / local 0; emphasis only, and the negation and conditional text are kept
+- `doc/content/es-ES/docs/integrations/react.mdx`: es-ES translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/es-ES/docs/integrations/vue.mdx`: es-ES translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Exception: inline-code multiset difference (missing none; added `dispose`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/es-ES/docs/interceptors.mdx`: es-ES translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/es-ES/docs/meta.json`: es-ES translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/es-ES/docs/sse.mdx`: es-ES translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/es-ES/docs/start.mdx`: es-ES translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/es-ES/docs/struct.mdx`: es-ES translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/es-ES/docs/web-socket.mdx`: es-ES translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Structure matches en-US
+- `doc/content/es-ES/index.mdx`: es-ES translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/es-ES/meta.json`: es-ES translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/cancel-http.mdx`: es-ES translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/consume-sse.mdx`: es-ES translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/etag-revalidate.mdx`: es-ES translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/get-declared-404.mdx`: es-ES translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/graphql-http-envelope.mdx`: es-ES translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/index.md`: es-ES translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/meta.json`: es-ES translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/post-json.mdx`: es-ES translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/publish-http-sdk.mdx`: es-ES translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/refresh-bearer-once.mdx`: es-ES translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/test-with-handle.mdx`: es-ES translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/es-ES/recipes/websocket-session.mdx`: es-ES translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/fr-FR/api/client.mdx`: fr-FR translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/anyfault-type.mdx`: fr-FR translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/anystruct-type.mdx`: fr-FR translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/basicauthhttpinterceptor.mdx`: fr-FR translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/basicauthinterceptoroptions-type.mdx`: fr-FR translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/basicauthsseinterceptor.mdx`: fr-FR translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/builderinput-type.mdx`: fr-FR translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/client-type.mdx`: fr-FR translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/clientconfig-type.mdx`: fr-FR translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/clientoption-type.mdx`: fr-FR translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/clientoptions-type.mdx`: fr-FR translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/clientsseconfig-type.mdx`: fr-FR translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/clientsseoptions-type.mdx`: fr-FR translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/clientwebsocketoptions-type.mdx`: fr-FR translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createclient.mdx`: fr-FR translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createdecodefault.mdx`: fr-FR translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createhttpinterceptor.mdx`: fr-FR translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createhttpstatusfault.mdx`: fr-FR translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createnetworkfault.mdx`: fr-FR translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createpreflightfault.mdx`: fr-FR translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createresolvedrequesturl.mdx`: fr-FR translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createsseinterceptor.mdx`: fr-FR translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createundecodedhttpstatusfault.mdx`: fr-FR translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/createwebsocketinterceptor.mdx`: fr-FR translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/decodedresponse-type.mdx`: fr-FR translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/decodefault-type.mdx`: fr-FR translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/decodefaultcode-type.mdx`: fr-FR translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/defineeventstream.mdx`: fr-FR translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/definerequest.mdx`: fr-FR translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/definewebsocket.mdx`: fr-FR translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/err-aborted-type.mdx`: fr-FR translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/err-timeout-type.mdx`: fr-FR translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/errormap-type.mdx`: fr-FR translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamcloseinfo-type.mdx`: fr-FR translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Exception: inline-code multiset difference (missing none; added `Symbol.asyncDispose`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/api/core/eventstreamcommand-type.mdx`: fr-FR translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamdata-type.mdx`: fr-FR translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamdefinition-type.mdx`: fr-FR translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamendpoint-type.mdx`: fr-FR translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamexecuteoptions-type.mdx`: fr-FR translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamfaultcode-type.mdx`: fr-FR translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamhandle-type.mdx`: fr-FR translation. An opened SSE stream: iterate events, read open, and close early. Note: Exception: inline-code multiset difference (missing none; added `Symbol.asyncDispose`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/api/core/eventstreamopeninfo-type.mdx`: fr-FR translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstreamrequestshape-type.mdx`: fr-FR translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/eventstructs-type.mdx`: fr-FR translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/executeeventstreamcommand.mdx`: fr-FR translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/executehttpcommand.mdx`: fr-FR translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/executewebsocketcommand.mdx`: fr-FR translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/fault-type.mdx`: fr-FR translation. Fault union that client.execute can return, distinguished by code. Note: Exception: inline-code multiset difference (missing none; added `switch`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/api/core/faultclass-type.mdx`: fr-FR translation. The category of a fault code: the text before the first underscore. Note: Exception: inline-code multiset difference (missing none; added `FaultCode`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/api/core/faultcode-type.mdx`: fr-FR translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/faultof-type.mdx`: fr-FR translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/fetchhandle-type.mdx`: fr-FR translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/fetchhandler.mdx`: fr-FR translation. Default transport that sends an HTTP request with fetch. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/flattenedstructerror-type.mdx`: fr-FR translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/formattedstructerror-type.mdx`: fr-FR translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpawaitresult-type.mdx`: fr-FR translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpcommand-type.mdx`: fr-FR translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpexecuteoptions-type.mdx`: fr-FR translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpinterceptor-type.mdx`: fr-FR translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpinterceptornext-type.mdx`: fr-FR translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpmeta-type.mdx`: fr-FR translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpprogressevent-type.mdx`: fr-FR translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpprogressfn-type.mdx`: fr-FR translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httprequest-type.mdx`: fr-FR translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httprequestshape-type.mdx`: fr-FR translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpresponse-type.mdx`: fr-FR translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpresponsetype-type.mdx`: fr-FR translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpstatusfault-type.mdx`: fr-FR translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/httpstatusfaultof-type.mdx`: fr-FR translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/infer-type.mdx`: fr-FR translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/interceptor-type.mdx`: fr-FR translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/interceptorfn-type.mdx`: fr-FR translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/makeresponse.mdx`: fr-FR translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/makeresponseoptions-type.mdx`: fr-FR translation. Fields that makeResponse accepts. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/manualsocketclosereason-type.mdx`: fr-FR translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/meta.json`: fr-FR translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/objectstruct-type.mdx`: fr-FR translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/parseresult-type.mdx`: fr-FR translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/preflightfault-type.mdx`: fr-FR translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/preflightfaultcode-type.mdx`: fr-FR translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/queryserializer-type.mdx`: fr-FR translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/requestdefinition-type.mdx`: fr-FR translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/requestendpoint-type.mdx`: fr-FR translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/requesterrordata-type.mdx`: fr-FR translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/requestsuccessdata-type.mdx`: fr-FR translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/socketawaitresult-type.mdx`: fr-FR translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/socketlifecycleoutcome-type.mdx`: fr-FR translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/ssehandler-type.mdx`: fr-FR translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/sseinterceptor-type.mdx`: fr-FR translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/sseinterceptorfn-type.mdx`: fr-FR translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/streamawaitresult-type.mdx`: fr-FR translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-any.mdx`: fr-FR translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-array.mdx`: fr-FR translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-arraybuffer.mdx`: fr-FR translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-bigint.mdx`: fr-FR translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-blob.mdx`: fr-FR translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-boolean.mdx`: fr-FR translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-date.mdx`: fr-FR translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-discriminatedunion.mdx`: fr-FR translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-enum.mdx`: fr-FR translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-file.mdx`: fr-FR translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-formdata.mdx`: fr-FR translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-intersection.mdx`: fr-FR translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-literal.mdx`: fr-FR translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-null.mdx`: fr-FR translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-number.mdx`: fr-FR translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-object.mdx`: fr-FR translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-or.mdx`: fr-FR translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-parse.mdx`: fr-FR translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-record.mdx`: fr-FR translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-string.mdx`: fr-FR translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-symbol-type.mdx`: fr-FR translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-tuple.mdx`: fr-FR translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-type.mdx`: fr-FR translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-unknown.mdx`: fr-FR translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct-urlencoded.mdx`: fr-FR translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/struct.mdx`: fr-FR translation. The struct facade: constructors and struct.parse. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/structerror-type.mdx`: fr-FR translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/structinput-type.mdx`: fr-FR translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/structissue-type.mdx`: fr-FR translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/structlike-type.mdx`: fr-FR translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/structmethods-type.mdx`: fr-FR translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/userequestconfig-type.mdx`: fr-FR translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/usewebsocketconfig-type.mdx`: fr-FR translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketcloseinfo-type.mdx`: fr-FR translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketcommand-type.mdx`: fr-FR translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketconnectioninfo-type.mdx`: fr-FR translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketdefinition-type.mdx`: fr-FR translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketendpoint-type.mdx`: fr-FR translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketexecuteoptions-type.mdx`: fr-FR translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websockethandle-type.mdx`: fr-FR translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websockethandleconstructor-type.mdx`: fr-FR translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websockethandler-type.mdx`: fr-FR translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketheartbeatconfig-type.mdx`: fr-FR translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketincomingdata-type.mdx`: fr-FR translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketinterceptor-type.mdx`: fr-FR translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketinterceptorfn-type.mdx`: fr-FR translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketoutgoingdata-type.mdx`: fr-FR translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketrequestshape-type.mdx`: fr-FR translation. A WebSocket builder may return only path and query. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketsession-type.mdx`: fr-FR translation. Typed WebSocket session: send, receive, observe state, and close. Note: Exception: inline-code multiset difference (missing none; added `[Symbol.asyncDispose]()`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/api/core/websocketsessionlike-type.mdx`: fr-FR translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/websocketstate-type.mdx`: fr-FR translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withcredentials.mdx`: fr-FR translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withendpoint.mdx`: fr-FR translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withheaders.mdx`: fr-FR translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withhttphandle.mdx`: fr-FR translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withinterceptors.mdx`: fr-FR translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withqueryserializer.mdx`: fr-FR translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withssehandle.mdx`: fr-FR translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withsseoninvalidevent.mdx`: fr-FR translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withssereconnect.mdx`: fr-FR translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withtimeout.mdx`: fr-FR translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withwebsocketbeforeconnect.mdx`: fr-FR translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withwebsockethandle.mdx`: fr-FR translation. Replaces the WebSocket constructor. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withwebsocketheartbeat.mdx`: fr-FR translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withwebsocketprotocols.mdx`: fr-FR translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withwebsocketreconnect.mdx`: fr-FR translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/fr-FR/api/core/withxsrf.mdx`: fr-FR translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/fr-FR/api/errors.mdx`: fr-FR translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Exception: the "DecodeFault" section has a bold count of en 0 / local 1; emphasis only, and the negation and conditional text are kept
+- `doc/content/fr-FR/api/http.mdx`: fr-FR translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/fr-FR/api/index.mdx`: fr-FR translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/fr-FR/api/interceptors.md`: fr-FR translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/fr-FR/api/meta.json`: fr-FR translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server.mdx`: fr-FR translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server/meta.json`: fr-FR translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: fr-FR translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: fr-FR translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: fr-FR translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: fr-FR translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: fr-FR translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/fr-FR/api/opentelemetry-server/withopentelemetryserver.mdx`: fr-FR translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/fr-FR/api/react.mdx`: fr-FR translation. React adapter module page: ClientProvider and useClient. Note: Structure matches en-US
+- `doc/content/fr-FR/api/react/clientprovider-type.mdx`: fr-FR translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/fr-FR/api/react/clientproviderprops-type.mdx`: fr-FR translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/fr-FR/api/react/meta.json`: fr-FR translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/fr-FR/api/react/useclient.mdx`: fr-FR translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/fr-FR/api/sse.mdx`: fr-FR translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/fr-FR/api/struct.md`: fr-FR translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/fr-FR/api/vue.mdx`: fr-FR translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Structure matches en-US
+- `doc/content/fr-FR/api/vue/createclientplugin.mdx`: fr-FR translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/fr-FR/api/vue/http-client.mdx`: fr-FR translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/fr-FR/api/vue/injectclient.mdx`: fr-FR translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/fr-FR/api/vue/meta.json`: fr-FR translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/fr-FR/api/web-socket.mdx`: fr-FR translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Exception: inline-code multiset difference (missing none; added `[Symbol.asyncDispose]()`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/docs/client.mdx`: fr-FR translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/commands.mdx`: fr-FR translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Exception: inline-code multiset difference (missing none; added `output`, `error`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/docs/design-decisions.mdx`: fr-FR translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Exception: in section "1. What you declare is what you assert" the bold count is en 0 / local 2; emphasis only, and the negation and conditional text are kept; In section "4. A failed decode has no body" the bold count is en 0 / local 1; emphasis only, and the negation and conditional text are kept; In section "Runtime decoding" the bold count is en 1 / local 2; emphasis only, and the negation and conditional text are kept
+- `doc/content/fr-FR/docs/errors.mdx`: fr-FR translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/http.mdx`: fr-FR translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Exception: inline-code multiset difference (missing `throw`; added none); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/docs/index.md`: fr-FR translation. Guide index page. Note: Exception: the home link `/` is translated as `/fr-FR` (the site's localized home route, `localePrefix`); the target is correct
+- `doc/content/fr-FR/docs/integrations/meta.json`: fr-FR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/integrations/opentelemetry-server.mdx`: fr-FR translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Exception: inline-code multiset difference (missing `provider.shutdown()`; added `await provider.shutdown()`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged; In section "Options and hooks" the bold count is en 1 / local 0; emphasis only, and the negation and conditional text are kept
+- `doc/content/fr-FR/docs/integrations/react.mdx`: fr-FR translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/integrations/vue.mdx`: fr-FR translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/interceptors.mdx`: fr-FR translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/meta.json`: fr-FR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/sse.mdx`: fr-FR translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/start.mdx`: fr-FR translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/struct.mdx`: fr-FR translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/fr-FR/docs/web-socket.mdx`: fr-FR translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Structure matches en-US
+- `doc/content/fr-FR/index.mdx`: fr-FR translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Structure matches en-US
+- `doc/content/fr-FR/meta.json`: fr-FR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/cancel-http.mdx`: fr-FR translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/consume-sse.mdx`: fr-FR translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/etag-revalidate.mdx`: fr-FR translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/get-declared-404.mdx`: fr-FR translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Exception: inline-code multiset difference (missing `error`; added none); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/fr-FR/recipes/graphql-http-envelope.mdx`: fr-FR translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/index.md`: fr-FR translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/meta.json`: fr-FR translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/post-json.mdx`: fr-FR translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/publish-http-sdk.mdx`: fr-FR translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/refresh-bearer-once.mdx`: fr-FR translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/test-with-handle.mdx`: fr-FR translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/fr-FR/recipes/websocket-session.mdx`: fr-FR translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+- `doc/content/ru-RU/api/client.mdx`: ru-RU translation. Client overview: createClient, each with* option, and the SSE / WebSocket reconnect-defaults table. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/anyfault-type.mdx`: ru-RU translation. AnyFault: the fault union used when the concrete error struct does not matter. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/anystruct-type.mdx`: ru-RU translation. AnyStruct: a wide constraint that accepts any struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/basicauthhttpinterceptor.mdx`: ru-RU translation. Interceptor that sets Basic Authorization on an HTTP request. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/basicauthinterceptoroptions-type.mdx`: ru-RU translation. Optional encoder for the Basic-auth interceptor. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/basicauthsseinterceptor.mdx`: ru-RU translation. Interceptor that sets Basic Authorization on an SSE request. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/builderinput-type.mdx`: ru-RU translation. Endpoint input type the builder receives, already parsed by the input struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/client-type.mdx`: ru-RU translation. Client returned by createClient, including execute overloaded per command. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/clientconfig-type.mdx`: ru-RU translation. Resolved client config that execute reads after the option functions have finished writing. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/clientoption-type.mdx`: ru-RU translation. Type of the option function that createClient accepts. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/clientoptions-type.mdx`: ru-RU translation. Input-shaped client options corresponding to the option functions. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/clientsseconfig-type.mdx`: ru-RU translation. Resolved SSE config; the fetch handle is required. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/clientsseoptions-type.mdx`: ru-RU translation. SSE fetch handle, invalid-event hook, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/clientwebsocketoptions-type.mdx`: ru-RU translation. WebSocket constructor, beforeConnect, heartbeat, subprotocols, and reconnect policy. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createclient.mdx`: ru-RU translation. Creates a client from several option functions. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createdecodefault.mdx`: ru-RU translation. Builds a decode fault: the response arrived, but it cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createhttpinterceptor.mdx`: ru-RU translation. Wraps a function as a kind-tagged HTTP interceptor. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createhttpstatusfault.mdx`: ru-RU translation. Builds an HTTP_STATUS fault whose error body is already decoded. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createnetworkfault.mdx`: ru-RU translation. Picks a NET_* code from the shape of the cause and builds a network fault. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createpreflightfault.mdx`: ru-RU translation. Builds a preflight fault, which can happen before a response appears. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createresolvedrequesturl.mdx`: ru-RU translation. Resolves a request path against the base endpoint into a URL. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createsseinterceptor.mdx`: ru-RU translation. Wraps a function as a kind-tagged SSE interceptor. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createundecodedhttpstatusfault.mdx`: ru-RU translation. Builds an HTTP_STATUS fault whose body was not read. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/createwebsocketinterceptor.mdx`: ru-RU translation. Wraps a function as a kind-tagged WebSocket interceptor. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/decodedresponse-type.mdx`: ru-RU translation. A response whose body has already been decoded with the declared struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/decodefault-type.mdx`: ru-RU translation. Fault raised when the response has arrived but cannot be read as declared. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/decodefaultcode-type.mdx`: ru-RU translation. Decode-fault codes that carry only response metadata and no body. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/defineeventstream.mdx`: ru-RU translation. Declares a typed SSE endpoint. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/definerequest.mdx`: ru-RU translation. Declares a typed HTTP endpoint. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/definewebsocket.mdx`: ru-RU translation. Declares a typed WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/err-aborted-type.mdx`: ru-RU translation. Shared Error sentinel that means the caller cancelled. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/err-timeout-type.mdx`: ru-RU translation. Shared Error sentinel that means a timeout. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/errormap-type.mdx`: ru-RU translation. Callback that rewrites the message of a single struct-parse issue. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamcloseinfo-type.mdx`: ru-RU translation. How an SSE ends: a normal EOF, an abort, or an error that carries a fault code. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamcommand-type.mdx`: ru-RU translation. Executable command produced by calling an event-stream endpoint. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamdata-type.mdx`: ru-RU translation. Parsed event union inferred from EventStructs. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamdefinition-type.mdx`: ru-RU translation. Endpoint contract passed to defineEventStream. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamendpoint-type.mdx`: ru-RU translation. Callable endpoint returned by defineEventStream. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamexecuteoptions-type.mdx`: ru-RU translation. Cancellation options when opening an SSE: abort and timeout are mutually exclusive, and a signal may also be added. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamfaultcode-type.mdx`: ru-RU translation. Subset of fault codes an SSE stream may use to end. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamhandle-type.mdx`: ru-RU translation. An opened SSE stream: iterate events, read open, and close early. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamopeninfo-type.mdx`: ru-RU translation. Metadata available after the SSE response has opened. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstreamrequestshape-type.mdx`: ru-RU translation. Return shape of an SSE builder; an alias of HttpRequestShape. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/eventstructs-type.mdx`: ru-RU translation. Map from an SSE event name to its decode struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/executeeventstreamcommand.mdx`: ru-RU translation. Low-level entry that opens one SSE command against the client config. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/executehttpcommand.mdx`: ru-RU translation. Low-level entry that executes one HTTP command against the client config. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/executewebsocketcommand.mdx`: ru-RU translation. Low-level entry that opens one WebSocket command against the client config. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/fault-type.mdx`: ru-RU translation. Fault union that client.execute can return, distinguished by code. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/faultclass-type.mdx`: ru-RU translation. The category of a fault code: the text before the first underscore. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/faultcode-type.mdx`: ru-RU translation. The closed set of fault codes that Defjs reports. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/faultof-type.mdx`: ru-RU translation. Fault union expressed in terms of the decoded error-body type. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/fetchhandle-type.mdx`: ru-RU translation. Fetch-compatible function type used by HTTP or SSE. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/fetchhandler.mdx`: ru-RU translation. Default transport that sends an HTTP request with fetch. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ru-RU/api/core/flattenedstructerror-type.mdx`: ru-RU translation. Form errors and field errors returned by StructError.flatten(). Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/formattedstructerror-type.mdx`: ru-RU translation. Nested error tree returned by StructError.format(). Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpawaitresult-type.mdx`: ru-RU translation. Triple returned by an HTTP call: success data and the response, or a fault. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpcommand-type.mdx`: ru-RU translation. Executable HTTP command produced by calling a request endpoint. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpexecuteoptions-type.mdx`: ru-RU translation. Progress callbacks and cancellation options for a single HTTP call. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpinterceptor-type.mdx`: ru-RU translation. Kind-tagged HTTP interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpinterceptornext-type.mdx`: ru-RU translation. next that keeps running the remaining HTTP interceptors until the transport. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpmeta-type.mdx`: ru-RU translation. Metadata that exists once the response has reached the client; it does not include the body. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpprogressevent-type.mdx`: ru-RU translation. Progress snapshot received by the upload and download callbacks. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpprogressfn-type.mdx`: ru-RU translation. Function type of the upload and download progress callbacks. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httprequest-type.mdx`: ru-RU translation. Already-normalized outbound HTTP request seen by the transport and by interceptors. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httprequestshape-type.mdx`: ru-RU translation. path, query, headers, and body that an HTTP builder may return. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpresponse-type.mdx`: ru-RU translation. On-the-wire HTTP response shape produced by the transport and seen by interceptors. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpresponsetype-type.mdx`: ru-RU translation. Representation used to read an HTTP body before struct validation. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpstatusfault-type.mdx`: ru-RU translation. Fault for a non-2xx response; the type parameter is the declared error struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/httpstatusfaultof-type.mdx`: ru-RU translation. Non-2xx fault expressed by the decoded body type. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/infer-type.mdx`: ru-RU translation. Output type inferred from a struct after a successful parse. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/interceptor-type.mdx`: ru-RU translation. Union of the three kind-tagged interceptors the client interceptor option accepts. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/interceptorfn-type.mdx`: ru-RU translation. Signature of an HTTP interceptor function. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/makeresponse.mdx`: ru-RU translation. Builds an HttpResponse directly, without sending a network request. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/makeresponseoptions-type.mdx`: ru-RU translation. Fields that makeResponse accepts. Note: Exception: inline-code multiset difference (missing none; added `request`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ru-RU/api/core/manualsocketclosereason-type.mdx`: ru-RU translation. Close code and reason recorded by session.close. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/meta.json`: ru-RU translation. Core API sidebar group title. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/objectstruct-type.mdx`: ru-RU translation. Object struct type produced by struct.object. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/parseresult-type.mdx`: ru-RU translation. Error-first pair returned by struct.parse. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/preflightfault-type.mdx`: ru-RU translation. Fault that can fail before a response appears. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/preflightfaultcode-type.mdx`: ru-RU translation. Preflight fault codes left after HTTP_STATUS and the decode codes are removed. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/queryserializer-type.mdx`: ru-RU translation. Function that turns an already-encoded query object into a query string. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/requestdefinition-type.mdx`: ru-RU translation. Endpoint contract passed to defineRequest. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/requestendpoint-type.mdx`: ru-RU translation. Callable endpoint returned by defineRequest. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/requesterrordata-type.mdx`: ru-RU translation. Error body type inferred from the declared error struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/requestsuccessdata-type.mdx`: ru-RU translation. Success body type inferred from the declared output struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/socketawaitresult-type.mdx`: ru-RU translation. Triple returned by WebSocket execute: a session, or a fault. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/socketlifecycleoutcome-type.mdx`: ru-RU translation. Result of one connection attempt, for the reconnect logic. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/ssehandler-type.mdx`: ru-RU translation. Handler at the end of the SSE interceptor chain; it opens the stream. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/sseinterceptor-type.mdx`: ru-RU translation. Kind-tagged SSE interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/sseinterceptorfn-type.mdx`: ru-RU translation. Signature of an SSE interceptor function. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/streamawaitresult-type.mdx`: ru-RU translation. Triple returned by SSE execute: the stream and open info, or a fault. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-any.mdx`: ru-RU translation. Accepts any value except null and undefined; the type is any. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-array.mdx`: ru-RU translation. Parses an array with a single element struct. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-arraybuffer.mdx`: ru-RU translation. Accepts an ArrayBuffer; when it is the body root, it is sent as bytes. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-bigint.mdx`: ru-RU translation. Accepts a bigint value. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-blob.mdx`: ru-RU translation. Accepts a Blob; treated as binary when it is the body root or the inbound representation. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-boolean.mdx`: ru-RU translation. Accepts a boolean value. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-date.mdx`: ru-RU translation. Accepts a Date value. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-discriminatedunion.mdx`: ru-RU translation. Object union distinguished by a tag field. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-enum.mdx`: ru-RU translation. Accepts one entry from a list of strings, or the value of an object map rather than its key. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-file.mdx`: ru-RU translation. Accepts a File; when it is the body root, it is sent as a file. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-formdata.mdx`: ru-RU translation. Object struct that is encoded as FormData only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-intersection.mdx`: ru-RU translation. The value must satisfy several structs at the same time. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-literal.mdx`: ru-RU translation. Accepts only one given literal. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-null.mdx`: ru-RU translation. Accepts only null. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-number.mdx`: ru-RU translation. Accepts a number other than NaN. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-object.mdx`: ru-RU translation. Parses a plain object with a fixed set of fields. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-or.mdx`: ru-RU translation. Tries several structs in order; the first success wins. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-parse.mdx`: ru-RU translation. Parses an unknown value with a struct and returns an error-first pair. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-record.mdx`: ru-RU translation. Parses an object whose keys are strings and whose values share one type. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-string.mdx`: ru-RU translation. Accepts a string. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-symbol-type.mdx`: ru-RU translation. Internal marker key exported as a type only, for the outbound encoder. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-tuple.mdx`: ru-RU translation. Parses a fixed-length array, using a different struct at each position. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-type.mdx`: ru-RU translation. The struct itself: input and output types plus the chained modifier methods. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-unknown.mdx`: ru-RU translation. Accepts any value except null and undefined; the type is unknown. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct-urlencoded.mdx`: ru-RU translation. Object struct sent as a URL-encoded form only when it is the root of the request body. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/struct.mdx`: ru-RU translation. The struct facade: constructors and struct.parse. Note: Exception: inline-code multiset difference (missing none; added `bigint`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ru-RU/api/core/structerror-type.mdx`: ru-RU translation. Error returned when parsing fails, with issues and formatting methods. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/structinput-type.mdx`: ru-RU translation. Extracts the input type a given struct accepts. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/structissue-type.mdx`: ru-RU translation. One validation failure produced during parsing. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/structlike-type.mdx`: ru-RU translation. Structural brand that every struct carries. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/structmethods-type.mdx`: ru-RU translation. Chained modifiers every struct has: alias, null, nullish, and optional. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/userequestconfig-type.mdx`: ru-RU translation. HTTP progress and cancellation options, without a signal. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/usewebsocketconfig-type.mdx`: ru-RU translation. Per-execution WebSocket options, without a signal. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketcloseinfo-type.mdx`: ru-RU translation. Logical terminal state of a WebSocket session. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketcommand-type.mdx`: ru-RU translation. Executable command produced by calling a WebSocket endpoint. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketconnectioninfo-type.mdx`: ru-RU translation. Generation, url, protocol, and extensions of the current physical connection. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketdefinition-type.mdx`: ru-RU translation. Endpoint contract passed to defineWebSocket. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketendpoint-type.mdx`: ru-RU translation. Callable endpoint returned by defineWebSocket. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketexecuteoptions-type.mdx`: ru-RU translation. Heartbeat, reconnect, protocol, and cancellation options for one WebSocket execution. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websockethandle-type.mdx`: ru-RU translation. Surface of the WebSocket instance used by the client transport. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websockethandleconstructor-type.mdx`: ru-RU translation. Constructor type accepted by withWebSocketHandle. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websockethandler-type.mdx`: ru-RU translation. Handler at the end of the WebSocket interceptor chain; it opens the session. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketheartbeatconfig-type.mdx`: ru-RU translation. Heartbeat interval, message, acknowledgement check, and timeout. Note: Exception: inline-code multiset difference (missing none; added `message`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ru-RU/api/core/websocketincomingdata-type.mdx`: ru-RU translation. Decoded type of a received WebSocket message. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketinterceptor-type.mdx`: ru-RU translation. Kind-tagged WebSocket interceptor accepted by withInterceptors. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketinterceptorfn-type.mdx`: ru-RU translation. Signature of a WebSocket interceptor function. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketoutgoingdata-type.mdx`: ru-RU translation. Outbound message type accepted by session.send. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketrequestshape-type.mdx`: ru-RU translation. A WebSocket builder may return only path and query. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ru-RU/api/core/websocketsession-type.mdx`: ru-RU translation. Typed WebSocket session: send, receive, observe state, and close. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketsessionlike-type.mdx`: ru-RU translation. Session surface seen by interceptors, with an unknown message type. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/websocketstate-type.mdx`: ru-RU translation. Lifecycle-state literals of a managed WebSocket session. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withcredentials.mdx`: ru-RU translation. Makes HTTP and SSE Fetch calls send credentials. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withendpoint.mdx`: ru-RU translation. Sets the base URL used to resolve request paths (it must actually be absolute) and the WebSocket scheme conversion. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withheaders.mdx`: ru-RU translation. Sets static default headers for HTTP and SSE; a later scalar of the same name overrides. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withhttphandle.mdx`: ru-RU translation. Replaces the Fetch implementation used by HTTP. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withinterceptors.mdx`: ru-RU translation. Appends interceptors in registration order and does not replace existing ones. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withqueryserializer.mdx`: ru-RU translation. Replaces how a query object becomes a query string. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withssehandle.mdx`: ru-RU translation. Replaces the Fetch implementation used to open an SSE. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withsseoninvalidevent.mdx`: ru-RU translation. Observes SSE events that have no struct or that fail validation. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withssereconnect.mdx`: ru-RU translation. Turns on automatic SSE reconnect and sets the backoff. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withtimeout.mdx`: ru-RU translation. Sets the default timeout, which applies only to HTTP execute. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withwebsocketbeforeconnect.mdx`: ru-RU translation. Runs a hook before every WebSocket connection attempt. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withwebsockethandle.mdx`: ru-RU translation. Replaces the WebSocket constructor. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withwebsocketheartbeat.mdx`: ru-RU translation. Turns on the WebSocket heartbeat. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withwebsocketprotocols.mdx`: ru-RU translation. Sets the subprotocols used for the handshake. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withwebsocketreconnect.mdx`: ru-RU translation. Turns on automatic WebSocket reconnect and supplies the backoff formula. Note: Structure matches en-US
+- `doc/content/ru-RU/api/core/withxsrf.mdx`: ru-RU translation. Attaches an XSRF header to HTTP requests that use a non-safe method. Note: Structure matches en-US
+- `doc/content/ru-RU/api/errors.mdx`: ru-RU translation. Module page for fault variants, factories, and the two cancellation sentinels. Note: Exception: the "DecodeFault" section has a bold count of en 0 / local 1; emphasis only, and the negation and conditional text are kept
+- `doc/content/ru-RU/api/http.mdx`: ru-RU translation. HTTP module page: defineRequest, execution options, and request and response types. Note: Structure matches en-US
+- `doc/content/ru-RU/api/index.mdx`: ru-RU translation. API reference entry, pointing at the hand-written lookup page for each package. Note: Structure matches en-US
+- `doc/content/ru-RU/api/interceptors.md`: ru-RU translation. Module page for the HTTP, SSE, and WebSocket interceptor constructors. Note: Structure matches en-US
+- `doc/content/ru-RU/api/meta.json`: ru-RU translation. API-section navigation root; pages are the index plus automatic child pages. Note: Structure matches en-US
+- `doc/content/ru-RU/api/opentelemetry-server.mdx`: ru-RU translation. Overview of options, attributes, and log diagnostics for the outbound OpenTelemetry interceptor. Note: Exception: frontmatter `title` is the package name `@defjs/opentelemetry-server`, the same as en-US, kept by design; A table cell keeps the English ['W3C Trace Context + Baggage'] (spec/technical name)
+- `doc/content/ru-RU/api/opentelemetry-server/meta.json`: ru-RU translation. OpenTelemetry server API sidebar title. Note: Structure matches en-US
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserverhttpoptions-type.mdx`: ru-RU translation. OpenTelemetry options for the HTTP transport; responseHook receives an HttpResponse. Note: Structure matches en-US
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserveroptions-type.mdx`: ru-RU translation. tracer, meter, logger, propagator, and per-transport options for withOpenTelemetryServer. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserversseoptions-type.mdx`: ru-RU translation. OpenTelemetry options for the SSE transport; responseHook receives the stream handle. Note: Structure matches en-US
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryservertransportoptions-type.mdx`: ru-RU translation. enabled flag and span hooks shared by each transport, generic over the response type. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ru-RU/api/opentelemetry-server/opentelemetryserverwebsocketoptions-type.mdx`: ru-RU translation. WebSocket transport options; adds queryPropagation on top of the shared fields. Note: Structure matches en-US
+- `doc/content/ru-RU/api/opentelemetry-server/withopentelemetryserver.mdx`: ru-RU translation. Client option that installs the outbound HTTP, SSE, and WebSocket OpenTelemetry interceptors. Note: Structure matches en-US
+- `doc/content/ru-RU/api/react.mdx`: ru-RU translation. React adapter module page: ClientProvider and useClient. Note: Exception: frontmatter `title` is the package name `@defjs/react`, the same as en-US, kept by design
+- `doc/content/ru-RU/api/react/clientprovider-type.mdx`: ru-RU translation. React component that provides an existing client to a subtree through context. Note: Structure matches en-US
+- `doc/content/ru-RU/api/react/clientproviderprops-type.mdx`: ru-RU translation. Props of ClientProvider: a required client and optional children. Note: Structure matches en-US
+- `doc/content/ru-RU/api/react/meta.json`: ru-RU translation. React API sidebar title. Note: Structure matches en-US
+- `doc/content/ru-RU/api/react/useclient.mdx`: ru-RU translation. Hook that reads the client from the nearest ClientProvider. Note: Structure matches en-US
+- `doc/content/ru-RU/api/sse.mdx`: ru-RU translation. SSE module page: defineEventStream, execution options, and the stream handle. Note: Structure matches en-US
+- `doc/content/ru-RU/api/struct.md`: ru-RU translation. Struct module page: the facade, Infer, and StructError. Note: Structure matches en-US
+- `doc/content/ru-RU/api/vue.mdx`: ru-RU translation. Vue adapter module page: the plugin, the injection key, and injectClient. Note: Exception: frontmatter `title` is the package name `@defjs/vue`, the same as en-US, kept by design
+- `doc/content/ru-RU/api/vue/createclientplugin.mdx`: ru-RU translation. Creates a Vue plugin that provides an existing client to the application. Note: Structure matches en-US
+- `doc/content/ru-RU/api/vue/http-client.mdx`: ru-RU translation. Vue injection key used to provide the Defjs client. Note: Structure matches en-US
+- `doc/content/ru-RU/api/vue/injectclient.mdx`: ru-RU translation. Reads the client provided by createClientPlugin. Note: Structure matches en-US
+- `doc/content/ru-RU/api/vue/meta.json`: ru-RU translation. Vue API sidebar title. Note: Structure matches en-US
+- `doc/content/ru-RU/api/web-socket.mdx`: ru-RU translation. WebSocket module page: defineWebSocket, the session, and execution options. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/client.mdx`: ru-RU translation. Client guide: configuration composition, the execution tuple, test transport, and server scope. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation; A table cell keeps the English ['HTTP XSRF cookie → header'] (spec/technical name)
+- `doc/content/ru-RU/docs/commands.mdx`: ru-RU translation. Command guide: defining an endpoint, an explicit builder, where request values go, and decode declarations. Note: Exception: inline-code multiset difference (missing none; added `output`, `error`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ru-RU/docs/design-decisions.mdx`: ru-RU translation. Design notes: declaration as assertion, decode order, alias encoding, and resource ownership. Note: Exception: high-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ru-RU/docs/errors.mdx`: ru-RU translation. Error guide: the closed fault set, tuples, narrowing error unions, and diagnostic boundaries. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/http.mdx`: ru-RU translation. HTTP guide: URL, builder, body, decoding, cancellation, XSRF, and progress. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/index.md`: ru-RU translation. Guide index page. Note: Exception: the home link `/` is translated as `/ru-RU` (the site's localized home route, `localePrefix`); the target is correct
+- `doc/content/ru-RU/docs/integrations/meta.json`: ru-RU translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/integrations/opentelemetry-server.mdx`: ru-RU translation. OTel integration guide: outbound tracing, metrics, logs, hooks, and third-party loggers. Note: Exception: frontmatter `title` matches en-US (product name OpenTelemetry), kept by design; Inline-code multiset difference (missing `provider.shutdown()`; added `await provider.shutdown()`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged; High-ASCII-ratio passage (heuristic); reviewed as a local sentence that contains technical terms, not a missing translation
+- `doc/content/ru-RU/docs/integrations/react.mdx`: ru-RU translation. React integration guide: Context injection, and effect ownership for HTTP and realtime work. Note: Exception: frontmatter `title` matches en-US (product name React), kept by design
+- `doc/content/ru-RU/docs/integrations/vue.mdx`: ru-RU translation. Vue integration guide: plugin injection, watcher cancellation, subtree override, and scope cleanup. Note: Exception: frontmatter `title` matches en-US (product name Vue), kept by design
+- `doc/content/ru-RU/docs/interceptors.mdx`: ru-RU translation. Interceptor guide: onion order, request mutation, short-circuit, safe retry, and session wrapping. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/meta.json`: ru-RU translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/sse.mdx`: ru-RU translation. SSE guide: handshake, event decoding, reconnect budget, limits, and bounded release. Note: Exception: the heading keeps the English ['Server-Sent Events'] (protocol/product name)
+- `doc/content/ru-RU/docs/start.mdx`: ru-RU translation. Getting-started guide: install, define a GET, execute offline, and switch to a real service. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/struct.mdx`: ru-RU translation. Struct guide: presence, null, alias, errors, and the public struct constructors. Note: Structure matches en-US
+- `doc/content/ru-RU/docs/web-socket.mdx`: ru-RU translation. WebSocket guide: frames, state, queues, reconnect, heartbeat, and ownership. Note: Exception: inline-code multiset difference (missing none; added `jitter`, `execute`); reviewed as adding or removing backticks or an equivalent rewrite; identifiers and values are unchanged
+- `doc/content/ru-RU/index.mdx`: ru-RU translation. Home page: introduces package choice, the result tuple, and resource ownership. Note: Exception: frontmatter `title` matches en-US (product name Defjs), kept by design
+- `doc/content/ru-RU/meta.json`: ru-RU translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/cancel-http.mdx`: ru-RU translation. Recipe for cancelling and timing out an HTTP call. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/consume-sse.mdx`: ru-RU translation. Recipe for consuming one SSE event and releasing the stream. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/etag-revalidate.mdx`: ru-RU translation. Recipe for keeping an application cache and handling ETag/304. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/get-declared-404.mdx`: ru-RU translation. Recipe for declaring 200/404 bodies and narrowing the fault. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/graphql-http-envelope.mdx`: ru-RU translation. Recipe for unwrapping GraphQL data/errors on HTTP 200. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/index.md`: ru-RU translation. Recipe index page. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/meta.json`: ru-RU translation. Docs navigation metadata: defines directory titles or page order. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/post-json.mdx`: ru-RU translation. Recipe for submitting JSON and decoding a 201. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/publish-http-sdk.mdx`: ru-RU translation. HTTP SDK recipe that exports endpoints and a client factory. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/refresh-bearer-once.mdx`: ru-RU translation. Recipe that single-flight refreshes a Bearer token in the same onion layer, then replays once. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/test-with-handle.mdx`: ru-RU translation. HTTP test recipe that injects a local Fetch handle. Note: Structure matches en-US
+- `doc/content/ru-RU/recipes/websocket-session.mdx`: ru-RU translation. Recipe for sending and receiving one WebSocket envelope. Note: Structure matches en-US
+
+## Operations and engineering configuration
+
+CI and release workflows, root configuration, per-package build and publish manifests, lockfiles, and cross-package shared test facilities. (39 files, audit partition `P11-ops`)
+
+- `.editorconfig`: Unifies newlines, indentation, encoding, trailing whitespace, and a 140-column width; `.ts` uses single quotes. Note: 18 lines; `max_line_length = 140` matches `printWidth` in `.oxfmtrc.json`
+- `.github/FUNDING.yml`: Declares the GitHub Sponsors funding account. Note: Only `github: defjs`; Whether the account exists was not verified
+- `.github/ISSUE_TEMPLATE/bug.yml`: Bug-report form that collects the version, reproduction steps, and expected behavior. Note: 56 lines
+- `.github/ISSUE_TEMPLATE/config.yml`: Turns off the blank-issue entry and forces use of a template. Note: Only `blank_issues_enabled: false`
+- `.github/ISSUE_TEMPLATE/feature.yaml`: Feature-request form that collects the need, a proposal, and alternatives. Note: 24 lines; All three textareas are required
+- `.github/dependabot.yml`: Configures weekly Bun dependency updates and monthly GitHub Actions updates. Note: One Bun-ecosystem group `*`, `increase-if-necessary`, `open-pull-requests-limit: 10`
+- `.github/workflows/ci.yml`: On ubuntu-latest, installs dependencies and Playwright browsers, then runs the root `verify`. Note: 20 lines; push is main only; PRs are all branches; Covers the Bun runtime only; No coverage upload
+- `.github/workflows/release.yml`: Manually selected npm publish (one job per package) and GitHub Pages docs deployment. Note: 129 lines; Package jobs build only that package and run no quality checks (P11-ops-03); The adapter job builds when core `dist` does not exist (P11-ops-02); Provenance is not enabled (hardening; see rejected)
+- `.gitignore`: Ignores dependencies, build output, coverage, IDE files, and local env files. Note: 54 lines; Ignores `.env*.local` but not `.env`; no tracked `.env` was found
+- `.oxfmtrc.json`: oxfmt format rules (140 columns, no semicolons, single quotes) and ignored directories. Note: The ignored `field-study/**` does not exist at HEAD; harmless
+- `bun.lock`: Locks dependency resolution and integrity hashes for the whole workspace. Note: 1645 lines, a generated file; `bun install --frozen-lockfile --dry-run` exits 0; Locks both `@types/react-dom@19.3.0` and `doc/@types/react-dom@19.2.3`
+- `bunfig.toml`: Uses the isolated install layout and forces root `bun run` to use the Bun runtime. Note: `[run] bun = true` is why CI runs only Bun
+- `oxlint.config.ts`: Root oxlint rules: namespace imports, type imports, a ban on any and non-null assertions, and some Vitest rules turned off. Note: 34 lines; The turned-off items have comments explaining them
+- `package.json`: Root workspace, Bun catalog, overrides, engines, and the build/test/typecheck/verify script chain. Note: 70 lines; `packageManager: bun@1.4.3`; No pack or tarball consumer check of any kind
+- `packages/core/.gitignore`: Ignores core coverage, dist, Vitest temporary files, snapshots, and the screenshot directory. Note: 6 lines
+- `packages/core/package.json`: `@defjs/core@0.4.0` source manifest: ESM, `sideEffects: false`, published from `dist`. Note: `publishConfig.directory: dist`; devDependencies all go through the catalog
+- `packages/core/tsconfig.build.json`: Core declaration build config: `src` only, `types` cleared, tests excluded. Note: 13 lines; Read by tsdown
+- `packages/core/tsconfig.json`: Core development and test typecheck config; extends the root base. Note: 5 lines; Has no `paths` of its own
+- `packages/core/tsdown.config.ts`: Builds core `index.js`/`index.d.ts` and `index.min.js`, and rewrites `dist/package.json` for publish. Note: 73 lines; `copy` has only `LICENSE` and `README.md`, and omits `THIRD_PARTY_NOTICES.md` (P11-ops-01); Also writes `unpkg`/`jsdelivr`
+- `packages/opentelemetry-server/.gitignore`: Ignores that package's coverage, dist, and node_modules. Note: 3 lines
+- `packages/opentelemetry-server/package.json`: `@defjs/opentelemetry-server@0.0.1` source manifest and peer contract. Note: Depends on `@opentelemetry/api-logs@^0.223.0`; Peers are core `^0.4.0`, api `^1.0.0`, and otel core `^2.0.0`
+- `packages/opentelemetry-server/tsconfig.build.json`: Declaration build config that maps `@defjs/core` to `../core/dist/index.d.ts`. Note: `types: []`; `paths` overrides the parent config and has no source fallback; An independent build cannot resolve it, but the emitted declarations did not degrade
+- `packages/opentelemetry-server/tsconfig.json`: Development typecheck config that maps `@defjs/core` to `../core/src`. Note: The root `typecheck` does not load `tsconfig.build.json`
+- `packages/opentelemetry-server/tsdown.config.ts`: Builds the OTel package's ESM and d.ts and rewrites the dist manifest. Note: 50 lines; `neverBundle` includes core and `@opentelemetry/*`; `writeDistPackageJson` is copied by hand from the other three configs
+- `packages/react/package.json`: `@defjs/react@0.0.1` source manifest and peer contract. Note: Peers are core `^0.4.0` and react `>=18.0.0`; `@types/react`/`@types/react-dom` are pinned to `^19.3.0` and do not go through the catalog (P11-ops-05)
+- `packages/react/tsconfig.build.json`: Declaration build config that maps `@defjs/core` to `../core/dist/index.d.ts`. Note: That path does not exist in the publish job, so the inferred return type of `ClientProvider` degrades to `ProviderProps<any>` (P11-ops-02)
+- `packages/react/tsconfig.json`: Development typecheck config that maps `@defjs/core` to `../core/src`. Note: Structure matches the vue/otel development tsconfig
+- `packages/react/tsdown.config.ts`: Builds the React adapter (JS plus a `'use client'` banner) and rewrites the dist manifest. Note: 53 lines; `neverBundle` includes react, react-dom, and `@defjs/core`
+- `packages/vue/.gitignore`: Ignores the vue package's dist and node_modules. Note: 2 lines
+- `packages/vue/package.json`: `@defjs/vue@0.0.1` source manifest and peer contract. Note: The `vue` devDependency is pinned exactly to `3.5.43`; peer `vue >=3.0.0`, core `^0.4.0`
+- `packages/vue/tsconfig.build.json`: Declaration build config that maps `@defjs/core` to `../core/dist/index.d.ts`. Note: An independent build cannot resolve it, but public functions have explicit return types, so the emitted declarations did not degrade
+- `packages/vue/tsconfig.json`: Development typecheck config that maps `@defjs/core` to `../core/src`. Note: 10 lines
+- `packages/vue/tsdown.config.ts`: Builds the Vue adapter's ESM and d.ts and rewrites the dist manifest. Note: 50 lines; `neverBundle` includes vue and `@defjs/core`
+- `test/browser-api-server-setup.ts`: Shared Hono globalSetup/teardown for the React/Vue browser test projects; provides `testServerHost`. Note: 46 lines; CORS echoes Origin (default `*`) and `credentials: true`
+- `test/firefox-app-data.ts`: On macOS, prepares a temporary Firefox application-data directory and returns a copy of the env. Note: 43 lines; Does not modify `process.env`; A documented temporary workaround
+- `test/hono-test-server.ts`: Starts Hono on an ephemeral 127.0.0.1 port; on close, destroys connections first and then stops the server. Note: 64 lines; `ERR_SERVER_NOT_RUNNING` is treated as success; The server is already `unref()`'d
+- `test/loopback-proxy-bypass.ts`: On import, merges and dedupes loopback hosts into `NO_PROXY`/`no_proxy`. Note: 5 lines; An intentional import side effect
+- `tsconfig.base.json`: Strict TypeScript options shared by the whole repo (ESNext, DOM, `types: ["bun"]`). Note: `skipLibCheck: true`; Does not verify the ES2022 lib baseline the docs claim
+- `tsconfig.json`: Root typecheck project: includes every TS file and maps the four packages to source. Note: 14 lines; Excludes `doc` and `**/dist`; doc is checked separately
+
+## Project documentation
+
+README, design documents, release notes, performance and process records, the license, and the code of conduct. (66 files, audit partition `P12-project-docs`)
+
+- `CODE_OF_CONDUCT.md`: Contributor Covenant 2.0 code of conduct, specifying the reporting channel and the graduated enforcement process. Note: 128 lines; The report address on lines 62-63 has been empty (only `.`) since the first commit; see P12-project-docs-02
+- `DESIGN-builder.md`: Chinese design draft in which `builder` replaces `build` and `struct.request` is removed, including types and body-routing rules. Note: 823 lines; Updated twice with the contract on 2026-10-10, and not synced since; The status line and body `unknown` are stale; see P12-project-docs-05; Not in the tarball, and no current doc links to it
+- `LICENSE`: MIT license text at the repository root (Copyright 2026 MunMunMiao). Note: 21 lines; All four packages are `license: MIT`, and tsdown `copy` puts it into each tarball
+- `README.md`: Repository entry: positioning, quick start, package list, repo tasks, test conventions, release process, and roadmap. Note: 178 lines; The Codecov badge data on line 12 stopped on 2025-03-14; see P12-project-docs-06; Quick Start matches the current API
+- `docs/perf/2026-10-01/bench/analyze.py`: Analysis script that attributes a V8 CPU profile to source modules by bundle markers and summarizes them. Note: Historical performance record; Script quality is not reviewed
+- `docs/perf/2026-10-01/bench/bench.sh`: Node/Bun measurement entry for run, pair, count, leak, and profile; rewrites `__CORE__` to a given source directory. Note: Historical performance record
+- `docs/perf/2026-10-01/bench/browser/page.mjs`: In-page driver for A/B timing and heap sampling in the browser. Note: Historical performance record
+- `docs/perf/2026-10-01/bench/browser/run.mjs`: Uses Playwright to bundle, start a temporary HTTP server, and coordinate browser pairing and heap measurement. Note: Historical performance record
+- `docs/perf/2026-10-01/bench/browser/workloads.mjs`: Browser-side workload definitions for HTTP, a resident signal, and a resident struct. Note: Historical performance record; Imported through the `__CORE__` placeholder
+- `docs/perf/2026-10-01/bench/count.mjs`: Counts Promises, listeners, and platform constructors per operation. Note: Historical performance record
+- `docs/perf/2026-10-01/bench/leak.mjs`: Resident-heap sampling for HTTP/SSE when a signal is reused. Note: Historical performance record
+- `docs/perf/2026-10-01/bench/net-server.mjs`: Loopback JSON server used by the net-* workloads. Note: Historical performance record
+- `docs/perf/2026-10-01/bench/pair.mjs`: Paired timing driver that alternates two builds in the same Node/Bun process. Note: Historical performance record; Depends on the generated `a.gen.mjs` / `b.gen.mjs`
+- `docs/perf/2026-10-01/bench/run.mjs`: Single-version timing of 7 samples, plus Node heap-allocation sampling. Note: Historical performance record
+- `docs/perf/2026-10-01/bench/scenarios.mjs`: Scenario templates for HTTP, struct, SSE, WebSocket, and net-* that go through `client.execute`. Note: Historical performance record; The public APIs it uses still exist at HEAD
+- `docs/perf/2026-10-01/hotspot-analysis.md`: Two rounds of `@defjs/core` hotspot analysis on 2026-10-01, with measurements and reproduction steps. Note: 411 lines; Line 5 says the 10 patches are applied, and sections 1-8 keep the round-one original text; No current doc links to it
+- `docs/perf/2026-10-01/patches/0001-fix-abort-stop-pinning-request-signals-to-a-caller-s.patch`: Historical patch: deadline listeners no longer pin the caller's signal, with a regression test. Note: Already merged into history; `git apply --check` failing against HEAD is expected
+- `docs/perf/2026-10-01/patches/0002-perf-http-stop-re-racing-the-request-signal-on-every.patch`: Historical patch: HTTP no longer re-races the request signal on every request. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0003-perf-http-memoize-the-parsed-client-endpoint-base.patch`: Historical patch: cache the parsed client endpoint base URL. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0004-perf-encode-fast-path-for-a-node-guided-by-one-objec.patch`: Historical patch: encode fast path for a node guided by a single object, with a regression test. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0005-perf-struct-tag-parse-created-nodes-with-a-plain-sto.patch`: Historical patch: tag nodes created during parse with a plain assignment. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0006-perf-sse-synchronous-per-event-path.patch`: Historical patch: synchronous per-event SSE parse path, with parser and reconnect tests. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0007-perf-websocket-decode-text-and-byte-frames-synchrono.patch`: Historical patch: decode WebSocket text and byte frames synchronously. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0008-perf-client-commands-carry-their-executor-so-unused-.patch`: Historical patch: commands carry their executor so unused transports can be tree-shaken. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0009-perf-http-a-lone-deadline-signal-is-the-request-sign.patch`: Historical patch: when only a deadline exists, use it directly as the request signal. Note: Already merged into history
+- `docs/perf/2026-10-01/patches/0010-perf-struct-keep-struct-keyed-null-prototype-objects.patch`: Historical patch: keep struct-keyed null-prototype objects as fast properties. Note: Already merged into history
+- `docs/perf/2026-10-01/results/alloc.txt`: Round-one Node per-operation allocation measurements. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/body-read-and-primitives.txt`: Microbenchmark results for body-read strategy and platform primitives. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/bundle-size.txt`: Round-one bundle size and per-module contribution. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/leak.txt`: Round-one Node/Bun resident-memory data for signals. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/legend.txt`: Legend for result files: change codes, patch mapping, and machine/engine environment. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/null-prototype-objects.txt`: Null-prototype object microbenchmark and resident heap under V8/JSC. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/pair-baseline-vs-all-patches.txt`: Round-one paired measurement summary of the baseline against all patches. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/pair-per-change.txt`: Paired measurement summary, one patch at a time. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/primitives-per-op.txt`: Round-one per-operation platform-primitive counts. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/profile-bun-get-small-baseline.md`: CPU profile summary for the Bun `get-small` baseline. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/profile-node-get-small-all-patches.txt`: CPU profile summary for Node `get-small` after all patches. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/profile-node-get-small-baseline.txt`: CPU profile summary for the Node `get-small` baseline. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/round2/bundle-size.txt`: Round-two final bundle size. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/round2/leak-node-bun.txt`: Round-two Node/Bun resident-heap data. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/round2/memory-chromium.txt`: Round-two Chromium CDP heap data. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/round2/pair-browsers.txt`: Round-two Chromium/Firefox/WebKit paired measurements. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/round2/pair-node-bun.txt`: Round-two Node/Bun paired measurements. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/round2/pair-webkit-2359.txt`: Round-two WebKit 2359 retest results. Note: Original historical measurement text
+- `docs/perf/2026-10-01/results/round2/primitives-per-op.txt`: Round-two final per-operation platform-primitive counts. Note: Original historical measurement text
+- `docs/releases/0.4.0.md`: 0.4.0 release-notes draft: Core breaking changes, transport behavior, adapters, OTel, and packaging notes. Note: 68 lines; The removed APIs are indeed absent from the public surface; The packed-consumer claim on line 66 is stale (P11-ops-04)
+- `docs/superpowers/plans/2026-08-26-bun-release-workflow.md`: Historical implementation plan that replaces Changesets with Bun and per-package tags. Note: Historical plan; The current release is defined by `.github/workflows/release.yml`
+- `docs/superpowers/plans/2026-08-29-defjs-error-otel-disposal.md`: Historical implementation plan for the error model, the OTel `startSpanHook`, and AsyncDisposable. Note: Historical plan; Uses the old `vitest.config.server.ts` command
+- `docs/superpowers/plans/2026-10-10-fumadocs-migration.md`: Implementation tasks and handoff record for migrating the docs site to Fumadocs. Note: Historical plan; The migration landed in `doc/`
+- `docs/superpowers/plans/2026-10-10-starlight-migration.md`: Abandoned Starlight migration plan. Note: Historical plan; Line 3 says it is no longer executed
+- `docs/superpowers/plans/2026-10-11-grouped-navigation.md`: Implementation plan for grouped docs navigation. Note: Historical plan
+- `docs/superpowers/plans/2026-10-11-opentelemetry-server-logger.md`: Contract, tasks, and acceptance plan for the optional OTel Logger signal. Note: Historical plan; Matches the `logger?` option at HEAD
+- `docs/superpowers/specs/2026-08-26-bun-release-workflow-design.md`: Historical design spec for the Bun release process. Note: Historical spec; The packed-consumer gate in it was deleted in `77a75294`, and no current doc links to it
+- `docs/superpowers/specs/2026-10-10-fumadocs-migration-design.md`: Fumadocs migration design spec and known boundaries. Note: Historical spec
+- `docs/superpowers/specs/2026-10-10-starlight-migration-design.md`: Starlight migration research spec. Note: Historical spec; Line 3 says it has been superseded
+- `docs/superpowers/verification/2026-10-10-fumadocs-migration.md`: Same-day acceptance record for the Fumadocs migration. Note: A past-tense record; Cites an untracked `.superpowers/` log
+- `docs/superpowers/verification/2026-10-11-firefox-search.md`: Same-day acceptance record for the Firefox hydration/search wait-condition fix. Note: `data-hydrated` in `doc/app/root.tsx` still matches the record
+- `docs/superpowers/verification/2026-10-11-grouped-navigation.md`: Same-day acceptance record for grouped navigation (items passed; full verify did not). Note: A past-tense record
+- `docs/superpowers/verification/2026-10-11-navigation-and-optional-tracer.md`: Same-day acceptance record for navigation hierarchy and the optional OTel tracer. Note: `tracer?: Tracer` is still at `packages/opentelemetry-server/src/option.ts:40`
+- `logo.jpg`: Project logo referenced, centered, by the root README (800×800 JPEG). Note: Tracked by git; No textual claim
+- `packages/core/README.md`: Package notes published with the `@defjs/core` tarball: install, quick start, boundaries, runtime notes, and doc links. Note: 87 lines; The site links on lines 83-87 are not in the route table (P12-project-docs-01); The verification claims on lines 65 and 72-74 are stale (P11-ops-04)
+- `packages/core/THIRD_PARTY_NOTICES.md`: Attribution for the SSE parser, adapted from Azure/fetch-event-source, plus the full MIT license. Note: 31 lines; The source path on line 5 should be `src/sse/transport/parser.ts`; Not included in the tarball (both filed as P11-ops-01)
+- `packages/core/design.md`: Chinese Core usage manual: client, Struct, request placement, body, HTTP, SSE, WebSocket, and interceptor rules. Note: 250 lines; Line 212 (extra location for P09a-doc-guides-02) and line 237 (P03b-core-ws-06) have stale wording; Not in the tarball
+- `packages/opentelemetry-server/README.md`: Behavior contract published with the OTel package: tracing, metrics, Logs, hooks, transport span boundaries, and examples. Note: 359 lines; The timeout log on line 95 (P12-project-docs-03), `server.port` on lines 230-232/267 (P12-project-docs-04), and the site links on lines 356-359 (P12-project-docs-01)
+- `packages/react/README.md`: Adapter notes published with `@defjs/react`: `ClientProvider`, `useClient`, and application-owned lifecycle. Note: 103 lines; peer `@defjs/core ^0.4.0`, React ≥18; The examples typecheck
+- `packages/vue/README.md`: Adapter notes published with `@defjs/vue`: the client plugin, injection, watch cleanup, and the SSR scope. Note: 120 lines; peer `@defjs/core ^0.4.0`, Vue ≥3; The `provide()` fragment on lines 88-94 lacks a setup context (polish only)

@@ -1,0 +1,5 @@
+{
+  "title": "Ejemplos prácticos",
+  "root": true,
+  "pages": ["index", "..."]
+}

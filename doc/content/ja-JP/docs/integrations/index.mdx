@@ -1,0 +1,20 @@
+---
+title: プラグイン
+description: アプリケーションが自分の Defjs クライアントに組み込む任意のパッケージです。
+---
+
+# プラグイン
+
+プラグインは、利用側のアプリケーションが自分の Defjs クライアントに組み込む任意のパッケージです。`@defjs/core` はプラグインを import せず、SDK の定義も import しません。クライアント、endpoint、資格情報、どのプラグインを入れるかはアプリケーションが持ちます。
+
+プラグインには二種類あります。**フレームワークプラグイン**は、既存の `Client` をフレームワークのツリーに渡します。**ミドルウェアプラグイン**はインターセプターチェーンのプラグイン形態で、アプリケーションのクライアントにインターセプターを追記します。[インターセプター](/ja-JP/docs/interceptors) を参照してください。
+
+| プラグイン                                                                           | パッケージ                    | 追加するもの                                                                                            | しないこと                                                                                       |
+| ------------------------------------------------------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| [React](/ja-JP/docs/integrations/react) · フレームワーク                             | `@defjs/react`                | 既存クライアント向けの `ClientProvider` と `useClient()`                                                | クライアントの作成、キャッシュ、リトライ、破棄をしない。query や state のライブラリではない      |
+| [Vue](/ja-JP/docs/integrations/vue) · フレームワーク                                 | `@defjs/vue`                  | Vue プラグイン、`HTTP_CLIENT`、`injectClient()`                                                         | 作成、キャッシュ、リトライをしない。unmount でトランスポートを閉じない。query ライブラリではない |
+| [OpenTelemetry server](/ja-JP/docs/integrations/opentelemetry-server) · ミドルウェア | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`。HTTP、SSE、WebSocket のインターセプターを追記するクライアントオプション | OpenTelemetry SDK の初期化と、インバウンドのサーバー計装をしない                                 |
+
+React と Vue は、既存の `Client` をフレームワークのツリーに渡します。アプリケーションはそのクライアントを `@defjs/core` の `createClient` で作ります。React プラグインは Context で提供します。Vue プラグインは `app.use(createClientPlugin(client))` で提供します。どちらのパッケージもリクエストは始めません。
+
+OpenTelemetry server ミドルウェアプラグインは `ClientOption` です。`createClient` に `withOpenTelemetryServer(...)` を渡します。有効なトランスポートごとにインターセプターを 1 つ、HTTP、SSE、WebSocket の順で追記します。[インターセプター](/ja-JP/docs/interceptors) を参照してください。このパッケージは OpenTelemetry SDK を初期化しません。

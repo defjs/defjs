@@ -1,0 +1,195 @@
+---
+title: Клиент
+description: createClient, хелперы опций и тип Client.
+---
+
+# Клиент
+
+Создай клиент, примени опции слева направо, затем выполни команды HTTP / SSE / WebSocket через `execute`.
+
+## createClient()
+
+<ApiSignature name="createClient" />
+
+Опции применяются по порядку. Клиент лучше собирать внутри границы запроса, если interceptors замыкают auth или tenants.
+
+- **options** — хелперы вроде `withEndpoint`.
+- **Возвращает** клиент, у которого `execute` перегружен под каждый транспорт.
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## Хелперы option
+
+Все хелперы возвращают `ClientOption`. Более поздний вызов заменяет более ранний для той же настройки, кроме `withInterceptors`: он дописывает.
+
+### withEndpoint()
+
+<ApiSignature name="withEndpoint" />
+
+Задаёт базовый URL, который добавляется перед относительными путями.
+
+### withInterceptors()
+
+<ApiSignature name="withInterceptors" />
+
+Дописывает interceptors в порядке регистрации. Смешанные kind фильтруются по транспорту в момент execute.
+
+### withQuerySerializer()
+
+<ApiSignature name="withQuerySerializer" />
+
+Заменяет кодирование query для HTTP, SSE и WebSocket. `serializer(query)` получает **уже закодированный wire-объект** (алиасы применены, `Date` как ISO, `bigint` как string) и должен вернуть query-строку без ведущего `?`. Его не зовут, когда у запроса нет query. Builder, который возвращает `URLSearchParams`, его пропускает.
+
+### withHeaders()
+
+<ApiSignature name="withHeaders" />
+
+Задаёт статические заголовки по умолчанию для HTTP- и SSE-запросов. WebSocket-запросы их не используют. `headers` копируется в момент применения опции, поэтому последующие правки объекта до клиента не доходят. Второй `withHeaders` заменяет первый, а не сливается с ним.
+
+Приоритет для одного запроса:
+
+1. Значения по умолчанию — начальный набор заголовков.
+2. `headers`, которые вернул builder запроса, заменяют заголовок по умолчанию с тем же именем: скаляр, экземпляр `Headers` и массив (запись record вроде `{ 'x-a': ['one', 'two'] }` или `HeadersInit` в виде массива кортежей). Первое значение этого имени заменяет значение по умолчанию (`Headers.set`); следующие значения того же массива добавляются только к этой замене. Остальные имена по умолчанию остаются.
+3. Interceptors получают объединённые заголовки и могут их менять.
+4. В транспорте HTTP по умолчанию XSRF-заголовок добавляется последним и только если его ещё нет (см. `withXSRF`).
+
+Для значений, которые меняются от запроса к запросу, используй interceptor: обновлённый Bearer-токен или HMAC по сериализованному телу.
+
+### withTimeout()
+
+<ApiSignature name="withTimeout" />
+
+Задаёт таймаут по умолчанию в миллисекундах только для **HTTP** `execute`. SSE и WebSocket его игнорируют: их execute-`timeout` — отдельный дедлайн запуска на каждый вызов. `ms` должен быть положительным safe integer не больше `2_147_483_647`, иначе `withTimeout` бросает `RangeError` сразу при вызове. Второй `withTimeout` заменяет первый.
+
+Дедлайн охватывает разбор input, builder, interceptors, транспорт и чтение объявленного тела. Он сочетается с [`HttpExecuteOptions`](/ru-RU/api/core/httpexecuteoptions-type) каждого вызова:
+
+| Execute-опции                | Эффект                                                                                               |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------- |
+| нет                          | Действует значение клиента; истечение даёт `NET_TIMEOUT`.                                            |
+| `{ timeout }`                | Заменяет значение клиента для этого вызова.                                                          |
+| `{ abort }` или `{ signal }` | Сочетается со значением по умолчанию: сигнал вызывающего даёт `NET_ABORTED`, таймер — `NET_TIMEOUT`. |
+| `{ abort, timeout }`         | По-прежнему недопустимо: `REQ_OPTIONS_INVALID`. Значение клиента конфликтом не считается.            |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+<ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
+
+Подменяют Fetch (HTTP/SSE) или конструктор WebSocket.
+
+### withCredentials()
+
+<ApiSignature name="withCredentials" />
+
+Если `true`, Fetch ставит `credentials: 'include'` для HTTP и SSE. По умолчанию выключено. Соединения WebSocket это не затрагивает.
+
+### withXSRF()
+
+<ApiSignature name="withXSRF" />
+
+Добавляет в HTTP-запросы заголовок с XSRF-токеном. `options` — это настройка `xsrf`, той же формы, что `xsrf` у [`ClientOptions`](/ru-RU/api/core/clientoptions-type): `cookieName` (по умолчанию `XSRF-TOKEN`), `headerName` (по умолчанию `X-XSRF-TOKEN`) и `tokenProvider({ request })`. Вызов `withXSRF()` без аргумента включает эти значения по умолчанию. Запросы SSE и WebSocket это не затрагивает.
+
+Транспорт HTTP по умолчанию добавляет заголовок, когда выполняется всё перечисленное: метод не `GET`, `HEAD`, `OPTIONS` и не `TRACE`; у запроса ещё нет такого заголовка; запрос имеет тот же origin; найден непустой токен. Если существует `location`, в том числе в Worker, origin итогового URL запроса должен совпадать с `location.origin`; без `location` запрос с `baseEndpoint` считается запросом с тем же origin. Для запросов с другим origin `tokenProvider` не вызывается. Токен берётся из этого провайдера, если он задан, иначе из `document.cookie`, которую читают только при наличии `document`.
+
+### Настройки SSE
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+
+### Настройки WebSocket
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+
+## Типы
+
+### Client
+
+<ApiSignature name="Client" />
+
+У `execute` по одной перегрузке на вид команды (event stream, WebSocket, HTTP), и параметры типов выводятся из команды.
+
+### ClientOption
+
+<ApiSignature name="ClientOption" />
+
+Мутирует `ClientConfig`, который собирает `createClient`. Пиши свою опцию, когда ни один хелпер `with*` не подходит.
+
+### QuerySerializer
+
+<ApiSignature name="QuerySerializer" />
+
+### FetchHandle
+
+<ApiSignature name="FetchHandle" />
+
+Сигнатура вызова, которая нужна Defjs от реализации Fetch. Это не `typeof fetch`, поэтому моку не нужны хостовые добавки вроде `preconnect`. Обработчики HTTP/SSE по умолчанию получают `globalThis.fetch` при каждом вызове. HTTP передаёт `(url, init)` только неизменённой платформенной реализации Fetch; заменённая глобальная функция и пользовательские обработчики получают `Request`. SSE всегда передаёт `Request`. Core можно импортировать без Fetch; если Fetch отсутствует и при выполнении, обработчик по умолчанию возвращает `ENV_UNSUPPORTED`, а пользовательские обработчики по-прежнему доступны.
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+<ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
+
+Reconnect включается явно для обоих транспортов: без `withSSEReconnect` / `withWebSocketReconnect` повторов нет. Когда `reconnect` задан, действуют такие значения по умолчанию:
+
+| Поле         | SSE                 | WebSocket           |
+| ------------ | ------------------- | ------------------- |
+| `attempts`   | `3` на каждый обрыв | `3` на каждый обрыв |
+| `delayMs`    | `1000`              | `1000`              |
+| `factor`     | `1`                 | `2`                 |
+| `jitter`     | `0`                 | `0`                 |
+| `maxDelayMs` | без лимита          | `30000`             |
+
+Для обоих транспортов успешное установление соединения сбрасывает бюджет повторов для текущего обрыва, номер попытки в колбэке и показатель степени для задержки. `attempts: 0` отключает повторы; отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. `maxDelayMs` ограничивает итоговую задержку после случайного отклонения и округления; действует также предел платформенного таймера `2_147_483_647` мс, даже если для SSE не задан собственный предел. Нулевая базовая задержка остаётся нулевой; при переполнении вычисления из допустимых чисел задержка ограничивается указанными пределами.
+
+Настройки переподключения проверяются до обращения к транспорту: `attempts` должен быть неотрицательным безопасным целым числом; `delayMs` — конечным неотрицательным числом; `maxDelayMs` — конечным неотрицательным числом или положительной `Infinity`, которая снимает настроенный предел, но не платформенный предел `2_147_483_647` мс для итоговой задержки; `factor` — конечным и положительным; `jitter` — конечным и в пределах 0–1. Недопустимые значения возвращают `REQ_OPTIONS_INVALID`. Для WebSocket `attempts: 0` отключает последующие повторы, но все явно переданные поля переподключения всё равно проверяются до первого подключения, как и в SSE. Jitter масштабирует уже ограниченную базовую задержку в обе стороны, после чего применяется итоговый предел.
+
+Для SSE `delayMs` — лишь начальная базовая задержка: поле `retry:` от сервера, состоящее только из цифр, заменяет её для последующих попыток, в том числе после восстановления соединения. Если `shouldReconnect` возвращает `false`, повторы прекращаются. Колбэк SSE дополнительно получает `lastEventId`, `method` запроса и последнюю информацию `open` и может быть асинхронным. Без этого колбэка SSE переподключается только для запросов `GET`, `HEAD`, `OPTIONS`, `PUT` и `DELETE`; если колбэк задан, его результат определяет, переподключаться ли для каждого метода. Последний ID события передаётся в `Last-Event-ID` как байты UTF-8; пустой ID очищает его, а ID с NUL игнорируется. Колбэк WebSocket вместо этого получает сведения о закрытии: `code`, `reason` и `wasClean`.
+
+SSE `onInvalidEvent` обрабатывает событие, для которого нет подходящего struct, включая отсутствие `default` (`missing-struct`), или чьи данные не проходят свой struct (`validation-failed`). Событие всегда отбрасывается; возвращаемое значение обработчика игнорируется, а брошенная им ошибка поток не закрывает.
+
+Для WebSocket `beforeConnect`, `heartbeat`, `protocols` и `reconnect` можно также передать в `execute` на конкретный вызов; значение из execute заменяет значение клиента на этот вызов. `heartbeat.message` строит каждый ping; если он не задан или возвращает `undefined`, ничего не отправляется.
+
+### ClientOptions
+
+<ApiSignature name="ClientOptions" />
+
+Показанные поля — `sse` и `webSocket`. Остальные восемь — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `timeout`, `xsrf` и `withCredentials` — наследуются от неэкспортируемой HTTP-базы, и `endpoint` обязателен. `createClient` этот объект не принимает; он принимает хелперы option.
+
+### ClientConfig
+
+Готовый снимок, который мутируют хелперы option и читает `execute`: `ClientOptions` после применения значений по умолчанию, где `http.handle`, `interceptors`, `sse` (`ClientSSEConfig`) и `webSocket` присутствуют всегда.
+
+### ClientSSEConfig
+
+<ApiSignature name="ClientSSEConfig" />
+
+Готовый SSE config на `ClientConfig.sse`: `ClientSSEOptions` с обязательным `handle`.
+
+### WebSocketHandle
+
+Поверхность WebSocket-инстанса, которую использует транспорт: `WebSocket` без `binaryType`, констант состояния готовности, `dispatchEvent` и свойств-обработчиков `on*`, зато с `readyState: number` только для чтения.
+
+### WebSocketHandleConstructor
+
+<ApiSignature name="WebSocketHandleConstructor" />
+
+Конструктор, который отдаёшь в `withWebSocketHandle`. Он должен предоставлять константу состояния готовности `OPEN`.
+
+См. [гайд Client](/ru-RU/docs/client).

@@ -1,0 +1,126 @@
+---
+title: "빠른 시작"
+description: SDK의 API 정의를 export하고, 다른 파일에서 앱의 Client를 구성해 로컬과 실제 API에서 실행합니다.
+---
+
+# 시작하기: SDK 정의와 앱 실행 [#시작하기-http-요청-하나]
+
+이 예제에서는 SDK 작성자로서 `GET /users/:id`의 타입이 있는 정의를 export하고, 사용하는 앱의 입장에서 별도 파일에 Defjs Client를 만듭니다. 먼저 로컬 Fetch 핸들로 `200`과 선언된 `404`를 확인합니다. 실제 API로 전환할 때는 앱의 Client 설정을 바꾸고 같은 정의를 사용합니다.
+
+## Step 1 — 설치
+
+`@defjs/core`는 ESM이고 Node.js, Bun에서 돌아요. Node.js 22.18+ (또는 24+)는 type stripping으로 `.ts` 파일을 그대로 실행하고, 그보다 낮은 22.x는 `--experimental-strip-types`가 필요해요. package.json에 `"type": "module"`을 두세요. 브라우저에서는 여전히 번들러와 Fetch가 필요해요.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+</Tabs>
+## Step 2 — SDK 정의 export하기 [#step-2--요청-정의하기]
+
+`src/define-request.ts`를 만듭니다. SDK는 여기서 `getUser`를 export합니다. 입력 Struct는 호출자가 전달할 값을 선언하고, `builder`는 요청에서 그 값을 배치할 위치를 정합니다. 여기서는 입력 전체를 path 객체로 전달하므로 alias가 없는 스칼라 필드가 `:id`를 채웁니다. 정의에는 환경별 URL이나 인증 정보를 넣지 않습니다.
+
+<include cwd meta="src/define-request.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output`은 2xx body예요. `error`는 그 밖의 모든 status예요. 각각 struct 하나예요. body가 달라지면 `struct.or(...)`나 discriminated union을 쓰세요.
+
+`defineRequest(...)`는 엔드포인트를 돌려줘요. `getUser(...)`를 호출하면 `client.execute(...)`에 넘길 opaque 명령이 만들어져요. 위의 `builder`는 입력을 배치하는 함수이지, 엔드포인트가 아니에요.
+
+## Step 3 — 앱의 Client로 실행하기 [#step-3--로컬에서-실행하기]
+
+같은 디렉터리에 `src/execute-locally.ts`를 만들고 `./define-request.ts`에서 정의를 import합니다. 앱은 Client의 endpoint, 인증, 인터셉터, 전송 수단을 선택합니다. 이 예제에서는 로컬 Fetch 핸들을 설정해 네트워크 없이 입력 검증, `Request` 생성, status 분기, body 파싱을 실행합니다.
+
+<include cwd meta="src/execute-locally.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+실행해요:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
+<Tab value="bun">
+```sh
+bun src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+없는 사용자를 시험해 보려면 path id를 `8`로 바꾸고 다시 실행해요:
+
+```txt
+User not found
+```
+
+성공하면 `error`는 `null`이고, `user`는 `200` Struct 출력이고, `response`는 `DecodedResponse<User>`예요. 선언된 `404`에서는 `error.code`가 `'HTTP_STATUS'`이고, `error.status`는 `404`이고, `error.data`는 타입이 잡힌 `NotFound`예요. 실패하면 튜플의 두 번째 항목은 `undefined`예요.
+
+## Step 4 — 실제 API로 연결하기
+
+서비스가 같은 응답 계약으로 `GET /v1/users/:id`를 구현하면 앱에서 `withHTTPHandle(...)`을 제거하고 실제 base URL을 설정합니다. 다음 예제를 `src/real-api.ts`로 저장하면 동일한 `./define-request.ts` 정의를 사용합니다. 예제의 URL은 사용하는 서비스 주소로 바꾸세요.
+
+<include cwd meta="src/real-api.ts">
+  examples/start/real-api.ts#example
+</include>
+
+SDK의 API 정의는 그대로이고 앱의 실행 설정만 달라집니다. 결과와 취소도 계속 앱이 관리합니다. 정의를 배포하는 과정은 [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)에서 이어집니다.
+
+## 결과가 달라질 때
+
+- 잘못된 입력 → `REQ_INPUT_INVALID`. 충돌하는 취소 옵션 → `REQ_OPTIONS_INVALID`. 실패하는 `builder` → `REQ_BUILD_FAILED`
+- non-2xx status → `HTTP_STATUS`. `error`를 선언했고 그 body가 디코딩되면 타입이 있는 `error.data`
+- 선언된 JSON body인데 다른 미디어 타입 → `RES_MEDIA_TYPE_INVALID`. body를 읽기 전에 보고돼요
+- 선언된 body (2xx는 `output`, 그 밖은 `error`)가 디코딩되지 않음 → status와 관계없이 `RES_DECODE_FAILED` 또는 `RES_STRUCT_MISMATCH`
+- Fetch 실패 / 취소 / 타임아웃 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout`은 `1..2_147_483_647` 범위의 양의 안전 정수여야 해요. 유효한 취소 모양은 `{ signal }`, `{ timeout }`, `{ abort }`, 또는 `{ signal, timeout }` / `{ signal, abort }`예요. `{ abort, timeout }`을 함께 주는 건 유효하지 않아요. 취소는 호출자가 본 것을 알려 줄 뿐, 서버 쓰기가 커밋됐는지는 알려 주지 않아요.
+
+## 다음 레시피
+
+- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)
+- [POST JSON](/ko-KR/recipes/post-json)
+- [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)
+- [SSE 스트림 소비하기](/ko-KR/recipes/consume-sse)
+- [WebSocket 세션 열기](/ko-KR/recipes/websocket-session)
+- [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)

@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider、支援明確 Client override 嘅 useClient，同 provider props。
+---
+
+# React
+
+將現有 `@defjs/core` client 提供畀 React tree。呢個 package 唔會 create、cache 或者 dispose client。佢嘅 entry 標記咗 `'use client'`，所以要喺 client components 入面 import。需要 React 18 或以上。
+
+見 [React guide](/zh-Hant-HK/docs/integrations/react)。
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Context provider。傳入 `createClient` 建立嘅 client。巢狀嘅 `ClientProvider` 會喺自己嘅 subtree 覆蓋 client；`useClient()` 讀取最近嗰個。傳入唔同嘅 `client`，會改變 descendants 拎到嘅 context 值。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` 優先 return 明確傳入嘅 Client；省略參數或者傳入 `undefined` 就讀最近嘅 `ClientProvider`。兩個來源都冇 Client 先會 throw `Error`，原本嘅 `useClient()` call 仍然有效。
+
+無論有冇明確 Client，都要喺組件或者 custom Hook 頂層 call `useClient(explicitClient)`，唔可以喺普通 function 或者 event callback 入面 call。唔好寫 `explicitClient ?? useClient()`，因為佢會有條件咁 call Hook。明確值唔會寫入 Context，亦唔會建立 Provider；Hook 仍然會 subscribe Context。
+
+- **Returns** 明確傳入或者最近 Provider 提供嘅同一個 Client。
+- **Throws** 明確參數同 Context 都冇提供 Client 時會 throw `Error`。
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` 必填，由 application 擁有。`children` 可選：佢係可以 call `useClient` 嘅 tree。

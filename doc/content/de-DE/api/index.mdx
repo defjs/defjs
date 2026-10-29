@@ -1,0 +1,40 @@
+---
+title: API-Referenz
+description: Öffentliche Funktionen, Optionen und Typen zum Entwickeln von SDKs und Ausführen ihrer Endpoints.
+---
+
+# API-Referenz
+
+<ApiIndex />
+
+Die Referenz beschreibt die öffentlichen Bausteine für SDK-Autoren und Anwendungen. Signaturen legen den Vertrag fest; [Leitfaden](/de-DE/docs/start) und [Veröffentlichungsrezept](/de-DE/recipes/publish-http-sdk) zeigen die vollständige Verwendung.
+
+- **SDK entwickeln:** Beginne mit [`struct`](/de-DE/api/struct), [`defineRequest`](/de-DE/api/http), [`defineEventStream`](/de-DE/api/sse) oder [`defineWebSocket`](/de-DE/api/web-socket). Exportiere die daraus erzeugten Endpoints.
+- **SDK verwenden:** Konfiguriere [`createClient` und `with*`](/de-DE/api/client), führe die importierten Endpoints aus und behandle [Fehler](/de-DE/api/errors) sowie Transportressourcen.
+- **Anwendung integrieren:** Ergänze [Interceptors](/de-DE/api/interceptors), [React](/de-DE/api/react), [Vue](/de-DE/api/vue) oder [OpenTelemetry](/de-DE/api/opentelemetry-server) am Client der Anwendung.
+
+## Pakete
+
+| Paket                                                            | Was du nachschlägst                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/de-DE/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/de-DE/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/de-DE/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/de-DE/api/opentelemetry-server) | `withOpenTelemetryServer`, Options pro Transport                  |
+
+## @defjs/core
+
+| Seite                                   | Was du nachschlägst                                              |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/de-DE/api/client)             | `createClient`, `with*`-Options, `Client`                        |
+| [HTTP](/de-DE/api/http)                 | `defineRequest`, Execute-Options, `HttpRequest` / `HttpResponse` |
+| [Struct](/de-DE/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/de-DE/api/errors)             | `Fault`-Varianten und Factory-Funktionen                         |
+| [Interceptors](/de-DE/api/interceptors) | HTTP-/SSE-/WebSocket-Interceptor-Helfer                          |
+| [SSE](/de-DE/api/sse)                   | `defineEventStream`, Stream-Handle                               |
+| [WebSocket](/de-DE/api/web-socket)      | `defineWebSocket`, Session                                       |
+
+## Verwandtes
+
+- [Erste Schritte](/de-DE/docs/start)
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)

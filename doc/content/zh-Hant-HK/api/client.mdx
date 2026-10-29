@@ -1,0 +1,195 @@
+---
+title: Client
+description: createClient、option helpers，同 Client type。
+---
+
+# Client
+
+建立一個 client，options 由左到右套用，之後 `execute` HTTP / SSE / WebSocket commands。
+
+## createClient()
+
+<ApiSignature name="createClient" />
+
+Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料，建議喺 request boundary 入面建立 client。
+
+- **options** — Option helpers，例如 `withEndpoint`。
+- **Returns** 一個 client，佢嘅 `execute` 按 transport overload。
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## 選項 helpers
+
+所有 helpers 都 return `ClientOption`。同一個設定，後面嗰次 call 會取代前面嗰次，只有 `withInterceptors` 例外，佢會 append。
+
+### withEndpoint()
+
+<ApiSignature name="withEndpoint" />
+
+設定加喺相對 paths 前面嘅 base URL。
+
+### withInterceptors()
+
+<ApiSignature name="withInterceptors" />
+
+按 registration order append interceptors。Mixed kinds 會喺 execute 時按 transport filter。
+
+### withQuerySerializer()
+
+<ApiSignature name="withQuerySerializer" />
+
+換走 HTTP、SSE 同 WebSocket 嘅 query encoding。`serializer(query)` 收到嘅係**已經 encode 嘅 wire object**（aliases 已套用，`Date` 係 ISO，`bigint` 係 string），一定要 return query string，而且唔可以有 leading `?`。Request 冇 query 嘅時候唔會 call。Builder return `URLSearchParams` 就會 skip 佢。
+
+### withHeaders()
+
+<ApiSignature name="withHeaders" />
+
+為 HTTP 同 SSE requests set 靜態預設 headers。WebSocket requests 唔會用。`headers` 會喺 option 套用嗰刻 copy，所以之後改嗰個 object 唔會影響 client。第二次 `withHeaders` 會取代第一次，唔會合併。
+
+單一 request 嘅優先次序：
+
+1. 預設值係起始嘅 header 集合。
+2. Request builder return 嘅 `headers` 會取代同名嘅預設值。嗰個名嘅第一個值取代預設；同一個 array 入面之後嘅值只會 append 落呢個取代結果。Scalar 或者 `Headers` instance 亦會取代。其他預設名保留。
+3. Interceptors 收到合併後嘅 headers，可以修改。
+4. 用預設 HTTP transport 嘅話，XSRF header 最後先加，而且只喺仍然未有嘅時候先加（見 `withXSRF`）。
+
+每個 request 都會變嘅值，例如刷新後嘅 Bearer token，或者對序列化 body 計算嘅 HMAC，請用 interceptor。
+
+### withTimeout()
+
+<ApiSignature name="withTimeout" />
+
+只為 **HTTP** `execute` set 預設 timeout（毫秒）。SSE 同 WebSocket 會忽略佢；佢哋嘅 execute `timeout` 係另一個、逐次 call 嘅啟動 deadline。`ms` 必須係正安全整數，而且唔可以大過 `2_147_483_647`，否則 `withTimeout` 會喺你 call 佢嗰刻 throw `RangeError`。第二次 `withTimeout` 會取代第一次。
+
+呢個 deadline 涵蓋 input 解析、builder、interceptors、transport，以及讀取已聲明嘅 body。佢會同每次 call 嘅 [`HttpExecuteOptions`](/zh-Hant-HK/api/core/httpexecuteoptions-type) 合併：
+
+| Execute options               | 效果                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| 冇                            | 套用 client 預設值；到期係 `NET_TIMEOUT`。                                |
+| `{ timeout }`                 | 喺該次 call 取代 client 預設值。                                          |
+| `{ abort }` 或者 `{ signal }` | 同預設值合併：caller 嘅 signal 係 `NET_ABORTED`，timer 係 `NET_TIMEOUT`。 |
+| `{ abort, timeout }`          | 依然無效：`REQ_OPTIONS_INVALID`。Client 預設值永遠唔算衝突。              |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+<ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
+
+換走 Fetch（HTTP/SSE）或者 WebSocket constructor。
+
+### withCredentials()
+
+<ApiSignature name="withCredentials" />
+
+`true` 嘅時候，HTTP 同 SSE 嘅 Fetch 會用 `credentials: 'include'`。預設係關。WebSocket 連線唔受影響。
+
+### withXSRF()
+
+<ApiSignature name="withXSRF" />
+
+為 HTTP requests 加 XSRF token header。`options` 就係 `xsrf` 設定，形狀同 [`ClientOptions`](/zh-Hant-HK/api/core/clientoptions-type) 上嘅 `xsrf` 一樣：`cookieName`（default `XSRF-TOKEN`）、`headerName`（default `X-XSRF-TOKEN`）同 `tokenProvider({ request })`。唔傳參數 call `withXSRF()` 會啟用呢啲 defaults。SSE 同 WebSocket requests 唔受影響。
+
+預設 HTTP transport 只會喺以下條件全部成立時加 header：method 唔係 `GET`、`HEAD`、`OPTIONS` 或者 `TRACE`；request 本身未有該 header；request 係 same-origin；而且搵到非空嘅 token。只要有 `location`（包括 Worker），解析後嘅 request origin 就必須同 `location.origin` 一致；冇 `location` 時，有 `baseEndpoint` 嘅 request 就算 same-origin。跨 origin request 唔會 call `tokenProvider`。有提供該 provider 就由佢取得 token，否則由 `document.cookie` 取得；只有 `document` 存在時先會讀取 cookie。
+
+### SSE 調校選項
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+
+### WebSocket 調校選項
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+
+## 類型
+
+### Client
+
+<ApiSignature name="Client" />
+
+`execute` 按命令種類各有一個 overload（event stream、WebSocket、HTTP），type parameters 由 command 推斷。
+
+### ClientOption
+
+<ApiSignature name="ClientOption" />
+
+修改 `createClient` 建立嘅 `ClientConfig`。冇合適嘅 `with*` helper 時，可以自己寫一個。
+
+### QuerySerializer
+
+<ApiSignature name="QuerySerializer" />
+
+### FetchHandle
+
+<ApiSignature name="FetchHandle" />
+
+Defjs 要求 Fetch 實作具備嘅 call signature。佢唔係 `typeof fetch`，所以 mock 唔需要 `preconnect` 呢類 host 額外成員。預設 HTTP/SSE handles 每次 call 都會解析 `globalThis.fetch`。HTTP 只有喺平台原生 Fetch 未被取代時先用 `(url, init)`；被取代嘅 global Fetch 同自訂 handles 都會收到 `Request`。SSE 一律傳入 `Request`。冇 Fetch 亦可以 import Core；如果執行時仍然冇 Fetch，預設執行會回報 `ENV_UNSUPPORTED`，自訂 handles 就仍然可用。
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+<ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
+
+兩種 transport 嘅 reconnect 都係 opt-in：冇 `withSSEReconnect` / `withWebSocketReconnect` 就唔會重試。一旦設咗 `reconnect`，就會套用以下預設值：
+
+| 欄位         | SSE             | WebSocket       |
+| ------------ | --------------- | --------------- |
+| `attempts`   | 每次斷線 `3` 次 | 每次斷線 `3` 次 |
+| `delayMs`    | `1000`          | `1000`          |
+| `factor`     | `1`             | `2`             |
+| `jitter`     | `0`             | `0`             |
+| `maxDelayMs` | 冇上限          | `30000`         |
+
+兩種 transport 每次成功握手，都會重設該次斷線嘅重試預算、callback 嘅嘗試次數同退避指數。`attempts: 0` 停用重試；省略 `attempts` 唔代表同一次斷線可以無限重試。`maxDelayMs` 限制套用 jitter 同四捨五入之後嘅最終延遲；平台 timer 上限 `2_147_483_647` ms 亦適用，包括 SSE 冇設定上限嘅情況。Base 係零就會維持零；有效數值運算溢位時，會限制喺上限。
+
+重連選項會喺 transport 執行之前驗證：`attempts` 必須係非負安全整數；`delayMs` 必須係有限非負數；`maxDelayMs` 可以係有限非負數或者正 `Infinity`，後者會移除設定上限，但最終等待仍然唔會超過 `2_147_483_647` ms；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket `attempts: 0` 會停用之後嘅重試，但所有明確提供嘅重連欄位仍然會喺首次連線之前驗證，同 SSE 一樣。Jitter 會向兩個方向縮放已設上限嘅 base，之後再套用最終上限。
+
+對 SSE 嚟講，`delayMs` 只係起始嘅 base delay：server 傳嚟、只包含數字嘅 `retry:` field 會取代佢，用喺之後嘅嘗試，恢復連線之後亦一樣。`shouldReconnect` 回傳 `false` 就會停止重試。SSE 嘅 callback 另外會收到 `lastEventId`、request 嘅 `method` 同最新嘅 `open` 資料，亦可以係 async。冇呢個 callback 嘅時候，SSE 只會重連 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request；有呢個 callback 嘅話，每種 method 會唔會重連都由佢嘅結果決定。最新 event ID 會以 UTF-8 bytes 放喺 `Last-Event-ID` 送出；空 ID 會清除佢，包含 NUL 嘅 ID 會被忽略。WebSocket 嘅 callback 則會收到 close 嘅 `code`、`reason` 同 `wasClean`。
+
+SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 event（`missing-struct`），或者 data 通唔過 struct 驗證嘅 event（`validation-failed`）。呢類 event 一定會被丟棄；handler 嘅 return 值會被忽略，佢 throw 出嚟嘅 error 亦唔會關閉 stream。
+
+對 WebSocket 嚟講，`beforeConnect`、`heartbeat`、`protocols` 同 `reconnect` 亦可以逐次 call 傳畀 `execute`；execute 嘅值會喺該次 call 取代 client 嘅值。`heartbeat.message` 建立每個 ping；省略或者 return `undefined` 就唔會傳送任何嘢。
+
+### ClientOptions
+
+<ApiSignature name="ClientOptions" />
+
+簽名入面見到嘅 fields 係 `sse` 同 `webSocket`。另外八個——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`timeout`、`xsrf` 同 `withCredentials`——繼承自未匯出嘅 HTTP base，而 `endpoint` 必填。`createClient` 唔接受呢個 object；佢接受 option helpers。
+
+### ClientConfig
+
+Option helpers 修改、`execute` 讀取嘅 resolved snapshot：套用預設值之後嘅 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）同 `webSocket` 一定存在。
+
+### ClientSSEConfig
+
+<ApiSignature name="ClientSSEConfig" />
+
+`ClientConfig.sse` 上面解析好嘅 SSE config：`handle` 必填嘅 `ClientSSEOptions`。
+
+### WebSocketHandle
+
+Transport 使用嘅 WebSocket instance surface：`WebSocket` 去掉 `binaryType`、ready-state 常數、`dispatchEvent` 同 `on*` handler 屬性，再加上唯讀嘅 `readyState: number`。
+
+### WebSocketHandleConstructor
+
+<ApiSignature name="WebSocketHandleConstructor" />
+
+傳畀 `withWebSocketHandle` 嘅 constructor。佢必須公開 `OPEN` ready-state 常數。
+
+睇 [Client guide](/zh-Hant-HK/docs/client)。

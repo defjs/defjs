@@ -1,0 +1,114 @@
+---
+title: "SSE 事件流"
+description: SDK 定義帶類型的事件流，應用程式開啟並使用它，負責取消、關閉及等待終態。
+---
+
+# Server-Sent Events
+
+SDK 作者透過 `defineEventStream` 定義連線輸入、事件名稱到 Struct 的映射及相關限制。應用程式用自己的 Client 開啟串流，取得帶類型的事件及啟動快照，並決定使用與重連策略。
+
+開啟串流、迭代它，再用 `await using` 釋放自有 handle。手動 `close()` 及 `closed` 仍可使用；Client 和插件不會替你釋放返回的串流。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/sse/basic-setup.ts#example
+</include>
+
+## Define 條 stream
+
+`defineEventStream(...)` 要 `events`、positive safe-integer `maxBufferSize`、positive safe-integer `maxQueueSize`，同 relative `path`。Method 預設 `GET`。
+
+Request shape 同 HTTP 一樣：`builder` return `path`、`query`、`headers` 同 `body`。`GET` / `HEAD` 唔可以 return body。聲明過嘅 `error` struct 會 type 住 startup fault，並按 struct kind decode 非 2xx handshake body（`string` 係 text，`blob` / `file` 係 blob，`arrayBuffer` 係 bytes，否則 JSON）。你未 set `Accept` 時，Defjs 會送 `Accept: text/event-stream`。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。`ReadableStream` body 跟 HTTP 嘅規則：如果 runtime 唔支援以 stream 方式送出 request body（例如 Firefox），啟動就會喺送出任何資料之前以 `ENV_UNSUPPORTED` 失敗。喺 Chromium 需要 HTTP/2 或更新版本；用 HTTP/1.1 嘅話，啟動就會以 `NET_UNREACHABLE` 失敗。用 stream 做 body 嘅 request 只會送一次，永遠唔會重連（見「重連」）。
+
+一條 logical stream **只有**你 opt in reconnect 先可以跨幾次 physical Fetch attempts。冇 `withSSEReconnect`，短暫嘅 network 同 stream-read failures 就會完結條 logical stream。Open 成功之後你仍然只有一個 handle 同一個 async iterator。
+
+## Open 同 inspect
+
+`client.execute(...)` 淨係喺 status、content-type 同 body checks 通過之後先 resolve：
+
+<include cwd lang="typescript">
+  examples/sse/open-and-inspect.ts#example
+</include>
+
+Response 一定要 successful，media type essence `text/event-stream`，同埋有 body。Non-2xx startup → `HTTP_STATUS`。聲明過 `error` 嘅時候，嗰個 fault 會帶住 decoded handshake body；media type 唔啱係 `RES_MEDIA_TYPE_INVALID`，body 讀唔成已聲明 kind 就係 `RES_DECODE_FAILED`。Validation 喺 response 到咗之後先 fail 時，response snapshot 仍然可以坐喺 tuple 第三格。
+
+缺少、相對或無效嘅 base endpoint，以及非法 path，都會喺 building 時以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit 嘅 interceptor。解析後嘅 URL 必須保持 base origin，並留喺佢嘅目錄之下；path 入面嘅C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?`、`#`，以及逃出目錄嘅路徑都會被拒絕。形似 scheme 同 protocol-relative 嘅形式，就算前面有空格都會被拒絕；路徑入面嘅普通空格允許，並會以 `%20` 送出。Interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一個規則檢查；容許刻意將 base 換成另一個有效嘅絕對 URL。確定嘅 URL 錯誤永遠唔會重試。
+
+`startupOpen` 係該次執行嘅起始快照；新嘅 `execute` 永遠唔會重用之前執行嘅快照，即使喺收到 response 之前就失敗都一樣。`stream.open` 係 live，之後嘅實體 open 會更新佢。第一次 response 重要時，要保留 tuple value。 `startupOpen` 只喺返回嘅 Defjs 原生 handle 或透傳同一 live `open` 物件嘅 wrapper 上，先保證係所屬連線首次成功 handshake 嘅 snapshot；custom handle 或明確覆寫 `open` 嘅 wrapper 就算已經 reconnect，都保留自己目前公開嘅 `open`，所以共用 `closed` 唔可以繞過 URL 淨化或 headers 過濾，Defjs 亦唔會由任意 metadata 變換反推首次 handshake。
+
+<include cwd lang="typescript">
+  examples/sse/stream-result.ts#example
+</include>
+
+## 解碼 events
+
+Wire event name → `events[eventName]`；否則 `events.default`。冇 matching Struct → event 唔 deliver。Missing SSE `event` field → logical name `message`。
+
+SSE `data` 一開始係 text。`string` struct 會保留嗰段 text。其他 kind 都係 JSON：先 parse text，再用 struct decode。`struct.object`、`struct.number`、`struct.boolean`、`struct.any` 同 `struct.unknown` 都係 JSON，唔係 trimmed text。`ping` 呢類 bare token 唔滿足 `struct.literal('ping')`；data 一定要係 JSON。Server 送 JSON string `"abc"` 時仍然滿足 `struct.string()`：交付嘅值就係嗰段原始 text，引號都喺度，唔會 JSON decode 成 `abc`。
+
+Parser 遵循 WHATWG SSE 嘅行同欄位規則：CR、LF 同 CRLF 會結束一行；空行會送出帶 data 嘅 event；多條 `data:` 行會用 `\n` 連接。Comments 同未知欄位會被忽略，EOF 時未完成嘅 event 唔會送出。每條實體 stream 只會移除開頭一個 UTF-8 BOM。`data` 或 `id` 值入面嘅 U+FEFF 會保留；之後以 BOM 開頭嘅欄位名，例如 `﻿data`，會當成未知欄位而被忽略。
+
+交付嘅值：`event`、解碼後嘅 `data`、可選嘅非空 `id`。有 `default` 時，未知 event names 喺 inferred union 入面係 `string`。
+
+## 觀察無效 events
+
+Invalid/undeclared events 會被 drop，唔會 queue。`withSSEOnInvalidEvent(...)` 可以 observe raw ID、name、text data，再加 `missing-struct` 或者 `validation-failed`，同 optional cause。
+
+<include cwd>examples/sse/invalid-events.ts#example</include>
+
+Observer 喺 transform boundary run。除非 active attempt signal aborted，否則佢嘅 failure 係 isolated。Keep 佢短；唔好將 raw event data 當 trusted。
+
+## 重連
+
+**行為改變：** SSE reconnect 係 opt-in。冇 `withSSEReconnect(...)`，network 同 stream-read failures **唔會** retry（等同 `attempts: 0`）。要 retry 呢啲 failures，就傳 `withSSEReconnect({ attempts: 3 })`（或者其他 reviewed budget）。Normal EOF 唔會 retry。Status/content-type validation、parser limits、message transform failures、queue overflow，同 normal EOF 對 logical stream 仍然係 terminal。
+
+<include cwd>examples/sse/reconnect.ts#example</include>
+
+`attempts` 係每次斷線嘅重試預算；設定 reconnect object 時預設係 `3`。成功握手會重設預算、callback 嘅嘗試次數同退避指數，所以唔同斷線唔會共用 session 生命週期嘅總預算。`attempts: 0` 停用重試。省略 `withSSEReconnect` 亦會停用重試。`delayMs` 係起始間隔（預設 `1000`）；`factor` 會增加呢個間隔（預設 `1`，即係固定 delay）；`maxDelayMs` 係套用 jitter 同四捨五入之後嘅最終延遲硬上限（預設冇設定上限）。SSE `jitter` 同 WebSocket 一樣，係 **0–1 multiplicative factor**。即使冇設定上限，平台 timer 上限仍然係 `2_147_483_647` ms。Base 係零就會維持零；其餘有效數值運算溢位時，會限制喺上限。只包含數字嘅 stream `retry:` field 會更新目前嘅 base interval，恢復連線之後亦一樣。Policy callback 回傳 false、throw 或 reject，都會結束 logical stream。反覆成功 open 之後立刻遇到可重試嘅 stream failure，會按目前嘅 base delay 持續重連（受 jitter 同上限約束），因為每次 open 都會重設預算；用 `shouldReconnect` 停低佢哋。Normal EOF 仍然係 terminal。
+
+重連選項會喺 interceptors 或 Fetch 執行之前檢查：`attempts` 必須係非負安全整數；`delayMs` 必須係有限非負數；`maxDelayMs` 可以係有限非負數或者正 `Infinity`，後者會移除設定上限，但最終等待仍然唔會超過 `2_147_483_647` ms；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`，唔會開啟 stream。
+
+最新解析到嘅 event ID 會喺之後嘅嘗試放喺 `Last-Event-ID`，在線上編碼為 UTF-8 bytes，非 ASCII IDs 亦一樣。空 `id:` 會清除 header；包含 NUL 嘅 ID 會被忽略。除咗呢個 header，之後嘅嘗試重送嘅係第一次嘗試建立嘅 request：`builder` 同 interceptors 每次 `execute` 只會執行一次，所以 method、URL、headers 同 body 都維持不變。如果某個 header 每次嘗試都必須更新，例如有效期短嘅 token，就要喺傳俾 `withSSEHandle` 嘅 Fetch 入面處理；呢個 Fetch 每次嘗試都會執行一次。如果 credential 仍然過期，stream 開啟之後嘅非 2xx 重連 handshake 會令佢以 `RES_DECODE_FAILED` 結束；status 請睇 `stream.open.response.status`。非 2xx 初始 handshake 就會喺已聲明嘅 error body 解碼成功時，回傳 startup `HTTP_STATUS` fault。
+
+重連只會喺安全嘅時候重送 request：
+
+- `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` 都係冪等嘅（RFC 9110 §9.2.2），會喺重試額度之內重連。
+- 其他 method，例如 `POST` 或 `PATCH`，只有 `shouldReconnect` 回傳 `true` 先會重連。連線失敗時，無法判斷 server 係咪已經執行咗操作：一個啟動 LLM 生成嘅 `POST` 會再執行一次、再計一次費，新 events 會喺同一條 stream 入面接住舊 events 出現。傳入 `shouldReconnect` 會取代呢個預設規則，對每種 method 都生效，所以當同一個 client 處理呢兩類 endpoint 時，要喺 callback 嘅 context 入面檢查 `method`。
+- `ReadableStream` body 會喺第一次 attempt 被消耗。無論喺 stream 開啟之前定之後，任何失敗都會以原本嘅 error 結束呢條 stream；唔會呼叫 `shouldReconnect`，亦唔會等待重試延遲。如果 request 需要重連，就用字串、位元組、`Blob`、表單或者 JSON body。
+
+## Buffer 同 queue limits
+
+兩個都一定要係 positive safe integers。Overflow 係 fatal — 唔會 silent discard 舊 events。
+
+| 限制            | 保護乜                                         | Terminal code         |
+| --------------- | ---------------------------------------------- | --------------------- |
+| `maxBufferSize` | Parsing 時 incomplete/oversized SSE line/event | `CAP_BUFFER_EXCEEDED` |
+| `maxQueueSize`  | Events 產出快過唯一個 consumer 讀              | `CAP_QUEUE_OVERFLOW`  |
+
+Fatal stream 亦會清 buffered events、cancel active body、reject iterator，再用 `kind: 'error'` resolve `stream.closed`。
+
+## Close 同 dispose
+
+`EventStreamHandle`：一個 live opening snapshot、一個 terminal promise、一個 `close`、一個 async iterator，同一個 standard async disposer。
+
+<include cwd lang="typescript">
+  examples/sse/close-and-dispose.ts#example
+</include>
+
+Terminal kinds（`closed.kind`）：`eof`、`aborted` 或者 `error`。`error` result 亦會帶 `closed.code`，即係 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或者 `RES_MEDIA_TYPE_INVALID`。
+
+`close(reason)` 會 abort active attempt、關閉 queue，並以 `aborted` settle，即使 reason 係 `TimeoutError` 都一樣。Stream 開啟之後，abort 傳俾 `execute` 嘅 `signal` 或 `abort`，通常會正常結束 iterator 並報告 `aborted`；但如果 abort reason 係 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會 throw `ERR_TIMEOUT`，而 `closed` 會報告 `kind: 'error'` 同 `code: 'NET_TIMEOUT'`。Execute 嘅 `timeout` 選項只係 startup deadline，永遠唔會結束已開啟嘅 stream。Loop `break` / `return` / throw 會呼叫 iterator return，再用 `iterator-return` 關閉。執行 command 嘅 code 負責關閉。
+
+`await using` 會 call 同一條 owned close path，再等 Defjs 嘅 read/reconnect work 停低，同 active reader lock release。佢刻意 bound 住一條永遠唔 settle、由 provider 控制嘅 `ReadableStream.cancel()` promise，所以唔保證嗰個 provider promise 已經完成。要 reason 或 terminal result 時，仍然可以 explicit `stream.close(reason)`，再 `await stream.closed`。
+
+自己 structural implement `EventStreamHandle` 嘅 code，而家必須 provide `[Symbol.asyncDispose](): PromiseLike<void>`，再接去同一個 lifecycle。對 implementer 嚟講係 compile-time breaking change；淨係接收 Defjs handle 嘅 consumer 唔使加新 runtime call。
+
+支援嘅最低 lib 集合係 `ES2022`、`ESNext.Disposable`、`DOM` 同 `DOM.Iterable`。Repository 嘅 declaration tooling 用 TypeScript 7，但冇自動化 packed-consumer 或 minimum-lib 驗證 gate，亦唔承諾支援較舊 compiler。呢個集合只提供 types，唔會提供 runtime Web API polyfills。普通 HTTP client 唔係 `AsyncDisposable`；每個 request 要用佢嘅 timeout 或 `AbortSignal` 管理。
+
+唔好將 credentials、event data、event IDs、causes 同 stream URLs 寫入日常 logs。`withCredentials(true)` 影響 SSE 嘅 Fetch cookies；佢唔會 configure WebSocket auth。
+
+## 相關配方
+
+- [Consume 一條 SSE stream](/zh-Hant-HK/recipes/consume-sse)
+- [Cancel 一個 HTTP call](/zh-Hant-HK/recipes/cancel-http)

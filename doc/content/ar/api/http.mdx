@@ -1,0 +1,144 @@
+---
+title: HTTP
+description: defineRequest، وخيارات التنفيذ، وأنواع طلب/استجابة HTTP.
+---
+
+# HTTP
+
+أعلن طلبًا مضبوط الأنواع، ابنِ أمرًا من المدخل، نفّذه.
+
+## defineRequest()
+
+<ApiSignature name="defineRequest" />
+
+- **definition** — `method` و`path`، وstruct `input` اختياري، وstructs `output` و`error` اختيارية، و`operation` اختياري. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح. يقتصر `input` على تعريف المعاملات، والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`. أعضاء `definition` هذه موثّقة تحت [`RequestDefinition`](/ar/api/core/requestdefinition-type). يكون `builder` مطلوبًا تمامًا عند التصريح بـ `input`.
+- **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `HttpCommand`.
+
+<include cwd>examples/api/define-request.ts#example</include>
+
+`output` هو struct واحد لجسم 2xx؛ و`error` هو struct واحد لكل جسم غير-2xx. ولا يُفهرَس أيٌّ منهما بالحالة. وحذف أحدهما يعني أن ذلك الجسم لا يُقرأ أبدًا — راجع
+[الإعلان هو تأكيد](/ar/docs/design-decisions#الإعلان-هو-تأكيد).
+
+## executeHttpCommand()
+
+<ApiSignature name="executeHttpCommand" />
+
+مدخل منخفض المستوى يستخدمه `client.execute`. شيفرة التطبيق تستدعي `client.execute(command, options)`.
+
+- **يُعيد** وعدًا يُحلّ إلى شكل الـ tuple الموصوف تحت [`HttpAwaitResult`](/ar/api/core/httpawaitresult-type).
+
+الحالة غير-2xx هي `HTTP_STATUS` عندما لا يكون أي struct من نوع `error` معلَنًا أو عندما يُفكّ جسم `error` المعلَن بنجاح. و`data` في الخطأ هو جسم `error` المفكوك إن كان معلَنًا، و`undefined` فيما عدا ذلك. أما عندما تتعذّر قراءةُ جسم `error` المعلَن (نوع وسائط خاطئ، أو JSON غير صالح) أو لا يطابق الـ struct الخاص به، فيكون الخطأ `RES_MEDIA_TYPE_INVALID` أو `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH` بدلًا من ذلك، وتبقى حالة الاستجابة مذكورة في بياناته الوصفية. وعند الفشل يكون العنصر الثالث في الـ tuple هو `undefined`؛ إذ يحمل الخطأ بيانات الاستجابة الوصفية.
+
+## fetchHandler()
+
+<ApiSignature name="fetchHandler" />
+
+نقل HTTP الافتراضي. يأخذ `fetchImpl` افتراضيًا `fetch` العام الذي يُحلّ وقت الإرسال؛ ويوفّر `withHTTPHandle` تنفيذًا آخر. يستقبل Fetch الأصلي للمنصة الذي لم يُستبدَل الوسيطين `(url, init)`، بينما يستقبل البديل العام أو المعالج المخصص `Request`. وهو يرفض — بدل أن يستقر باستجابة مُصطنعة — حين لا تصل أي استجابة إلى العميل أو تفشل قراءة جسم مصرَّح به.
+
+## makeResponse()
+
+<ApiSignature name="makeResponse" />
+
+ابنِ `HttpResponse` دون استدعاء شبكة (معترضات، اختبارات). الحالة الافتراضية `0`. `ok` صحيح لـ 2xx. والقيمة التي يُعيدها تمرّ بنفس فحص نوع الوسائط ونفس الـ struct المعلَن كأي استجابة قادمة من الشبكة؛ فلا يوجد مسار قصير قائم على الثقة.
+
+## خيارات التنفيذ
+
+## HttpExecuteOptions
+
+<ApiSignature name="HttpExecuteOptions" />
+
+`HttpExecuteOptions` هو [`UseRequestConfig`](/ar/api/core/userequestconfig-type) بالإضافة إلى `signal`. لا يمكن استخدام `abort` و`timeout` معًا: النوع يرفض الاثنين معًا، وتمريرهما معًا وقت التشغيل يفشل بـ `REQ_OPTIONS_INVALID`. `signal` يُجمَع مع أيٍّ منهما؛ وهو **ليس** اسمًا بديلًا لـ `abort`. الأشكال الصالحة: `{ signal }`، `{ timeout }`، `{ abort }`، `{ signal, timeout }`، `{ signal, abort }`. `{ abort, timeout }` غير صالح. يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`. عندما يحذف الاستدعاء `timeout`، تُطبَّق القيمة الافتراضية `withTimeout` للعميل (في HTTP فقط)؛ ويتحد `abort` و`signal` مع تلك القيمة الافتراضية.
+
+## الأنواع
+
+### RequestDefinition
+
+`method` و`path`، و`input` و`output` و`error` و`operation` و`builder` اختيارية. لا يوجد `responseType`: نوع الـ struct يختار كيف يُقرأ الجسم المعلَن. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح. يقتصر `input` على تعريف المعاملات، والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+
+### HttpAwaitResult
+
+<ApiSignature name="HttpAwaitResult" />
+
+عند النجاح لا يحمل العنصر الثالث `body` إلا إذا كان `output` معلَنًا. وعند الفشل يكون
+`undefined` — فالخطأ يحمل أصلًا ما وُجد من بيانات الاستجابة الوصفية.
+
+### HttpRequest
+
+طلب صادر موحّد: `method`، `endpoint`، `headers`، `body`، `abort`، `operation`، `timeout`، `withCredentials`، `xsrf`، `downloadProgress` / `uploadProgress`، `baseEndpoint`، `queryString`، و`queryParams`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات (digests) على ذلك، لا على مدخل الـ struct. يرى المعترضون `queryParams` كـ `new URLSearchParams(queryString)`. الـ builder الذي يُرجع `URLSearchParams` يمرّر تلك النسخة كما هي. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من kind الـ struct لـ `output` و`error` في نقطة النهاية ولا يجوز تغييرهما.
+
+### HttpMeta
+
+<ApiSignature name="HttpMeta" />
+
+بيانات وصفية للاستجابة، متاحة كلما وصلت استجابة إلى العميل. وهي **لا** تحمل `body`: فالجسم
+لا يوجد إلا بعد أن يفكّه struct معلَن.
+
+### DecodedResponse
+
+<ApiSignature name="DecodedResponse" />
+
+استجابة فُكّ جسمها مقابل الـ struct المعلَن. وامتلاك هذا النوع هو نفسه الدليل على أن
+الفكّ قد حدث، ولذلك يُبلِّغ فشل الفكّ عن `HttpMeta` وحده.
+
+### HttpResponse
+
+<ApiSignature name="HttpResponse" />
+
+يكون `body` بقيمة `undefined` عندما لا يكون للاستجابة جسم؛ أما `null` في JSON فيبقى `null`. النوع موسوم (branded)، فابنِه بـ `makeResponse` بدل كائن حرفي. هذا شكل الشبكة الذي تنتجه وسائل النقل ويراه المعترضون: `body` نصٌّ أو JSON مُحلَّل مسبقًا، لا
+قيمة مفكوكة. في تمثيل JSON، السلسلة النصية هي جذر نصي JSON ولا تُحلَّل مرة أخرى؛ البايتات والـ blobs خامّة
+وتُحلَّل مرة واحدة. والذي يصل المستدعي هو `DecodedResponse`.
+
+### HttpProgressEvent
+
+### HttpProgressFn
+
+`loaded`، `total`، `lengthComputable`. ردود النداء يمكن أن تكون غير متزامنة. إذا رمى `onDownloadProgress` أو `onUploadProgress` استثناءً، يفشل الاستدعاء بـ
+`EXT_OBSERVER_FAILED`، وتكون القيمة المرمية في `cause`؛ ويظل الإلغاء و`timeout` يُبلَّغ عنهما بالرمزين `NET_ABORTED` / `NET_TIMEOUT` على الترتيب.
+يُبلَّغ عن تقدّم الرفع فقط في بيئات التشغيل التي تدعم إرسال أجسام الطلبات كتدفق (Bun، Node)؛ وفي المتصفحات تُرسل أجسام
+`Blob` / `File` و`ArrayBuffer` و`FormData` دون تغيير ولا يُستدعى `onUploadProgress`.
+
+في بيئات تشغيل الخادم، تستخدم FormData تدفقها المُسلسَل دون تخزين الجسم كاملًا في Blob، وتحافظ على فاصل multipart الفعلي (boundary). يظل حجمها الكلي مجهولًا ما لم يحدده رأس `Content-Length` صالح ومُعيَّن صراحةً. تُحفَظ أنواع المحتوى المحددة صراحةً أثناء تحويل الرفع، باستثناء FormData التي يجب أن تستخدم الفاصل الناتج عن تسلسلها. تحسب `loaded` بايتات التدفق، لا إقرارات الخادم بالاستلام. وعندما تكون قيمة `Content-Encoding` للتنزيل غير `identity`، يُبلَّغ عن `total: 0` و`lengthComputable: false`؛ فقد تكون بايتات التدفق قد فُك ضغطها بالفعل.
+
+انظر [دليل HTTP](/ar/docs/http) و[الأوامر](/ar/docs/commands).
+
+## RequestEndpoint
+
+يعيده `defineRequest`. استدعه بالمدخل لتحصل على `HttpCommand`.
+
+## BuilderInput
+
+مدخل نقطة النهاية المحلَّل الذي يراه `builder`. عقد الكائن تحمل الـ struct الذي أنتجها، فيتبع ترميز alias و`Date` و`bigint` القيمة.
+
+## HttpRequestShape
+
+<ApiSignature name="HttpRequestShape" />
+
+الحقول الأربعة كلها اختيارية. `query` هو `URLSearchParams` أو record؛ والكائن المتداخل يحتاج `withQuerySerializer` وقت التشغيل. `headers` هو `HeadersInit` أو record من قيم عددية أو مصفوفات منها. `path` يوفّر قيمة عددية واحدة لكل مقطع `:name`.
+
+`body` يساوي `never` لـ `GET` و`HEAD`. وفي غير ذلك يكون قيمة نقل (`string` أو `Blob` أو `ArrayBuffer` أو typed array أو `DataView` أو `FormData` أو `URLSearchParams` أو `ReadableStream<Uint8Array>`) أو بيانات JSON (`number` أو `boolean` أو `bigint` أو `Date` أو `null` أو مصفوفة أو كائن بمفاتيح نصية).
+
+## HttpCommand
+
+أمر معتم من باني الطلب. مرّره إلى `client.execute`.
+
+## UseRequestConfig
+
+دالتا `onDownloadProgress` و`onUploadProgress` اختياريتان، بالإضافة إلى `abort` أو `timeout` (لا كلاهما أبدًا). `HttpExecuteOptions` يضيف `signal`.
+
+## RequestSuccessData
+
+جسم النجاح المستنتج من struct `output` المعلَن، أو `undefined` إن لم يُعلن أيّ منه.
+
+## RequestErrorData
+
+جسم الخطأ المستنتج من struct `error` المعلَن، أو `undefined` إن لم يُعلن أيّ منه.
+
+## HttpResponseType
+
+`'arraybuffer' | 'blob' | 'json' | 'text'`
+
+يُختار من نوع الـ struct المعلَن (`string` → `text`، و`blob` / `file` → `blob`، و`arrayBuffer` → `arraybuffer`، وكل ما عدا ذلك ← `json`). ليس حقلًا على `defineRequest`.
+
+## MakeResponseOptions
+
+حقول `makeResponse`: `status`، `statusText`، `url`، `headers`، `body`، `request`.

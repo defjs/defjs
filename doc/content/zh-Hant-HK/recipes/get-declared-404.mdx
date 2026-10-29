@@ -1,0 +1,22 @@
+---
+title: "處理已聲明嘅 404"
+description: Execute 一次 GET，按 typed 200 vs declared 404 分支。
+---
+
+# GET 配 declared 404
+
+同時 declare success 同 404 bodies。用 `error.code` 同 `error.status` 分支 — declared miss 會畀你 typed `error.data`。
+
+詳情睇 [HTTP](/zh-Hant-HK/docs/http) 同 [Errors](/zh-Hant-HK/docs/errors)。
+
+<include cwd meta="get-user.ts">
+  examples/recipes/get-declared-404.ts#example
+</include>
+
+`api.example.com` 係 placeholder。如果 server 對 `GET /users/7` 回應 `200` 同 `{ "id": 7, "name": "Ada" }`，snippet 會 print：
+
+```txt
+Loaded Ada from 200
+```
+
+非 2xx status 係 `HTTP_STATUS`。聲明 `error` 會俾佢個 body 一個 type；唔寫 `error` 就 `error.data` 係 `undefined`，body 亦唔會被讀。如果已聲明嘅 `error` body 讀唔到（media type 唔啱、JSON 無效或者形狀唔啱），結果就會係 `RES_*` fault。一個 `error` Struct 覆蓋所有非 2xx status，所以形狀唔同嘅時候用 `struct.or(...)` 或者 discriminated union。

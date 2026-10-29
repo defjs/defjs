@@ -1,0 +1,126 @@
+---
+title: WebSocket
+description: defineWebSocket، والجلسة، وخيارات التنفيذ.
+---
+
+# WebSocket
+
+أعلن مقبسًا، نفّذه، أرسل/استقبل رسائل مضبوطة الأنواع، ثم أغلق.
+
+## defineWebSocket()
+
+<ApiSignature name="defineWebSocket" />
+
+- **definition** — `path`، وstruct `incoming` واحد، و`maxIncomingQueueSize` المطلوب (عدد صحيح موجب)؛ وstructs `outgoing` و`input` اختيارية، و`operation`، و`protocols` ثابتة، و`maxOutgoingQueueSize` غير سالب. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح. يقتصر `input` على تعريف المعاملات، والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`. أعضاء `definition` هذه موثّقة تحت [`WebSocketDefinition`](/ar/api/core/websocketdefinition-type). يكون `builder` مطلوبًا تمامًا عند التصريح بـ `input`.
+- **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `WebSocketCommand`.
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+## executeWebSocketCommand()
+
+<ApiSignature name="executeWebSocketCommand" />
+
+مدخل منخفض المستوى لـ `client.execute`. فضّل العميل في شيفرة التطبيق.
+
+- **يُرجع** `[null, session, connection]` أو `[error, undefined, connection?]`.
+
+تنفيذ WebSocket يمكنه تجاوز `beforeConnect` و`heartbeat` و`protocols` و`reconnect` لاستدعاء واحد؛ وكل منها يستبدل قيمة العميل. أسبقية البروتوكولات: execute، ثم `withWebSocketProtocols`، ثم `protocols` في التعريف.
+
+## WebSocketSession
+
+<ApiSignature name="WebSocketSession" />
+
+فضّل `await using ownedSession = session` لتنظيف النطاق المملوك. يبقى `session.close()` اليدوي و`await session.closed` متاحين.
+
+```ts
+async function consume(
+  session: WebSocketSession<unknown, never>,
+): Promise<void> {
+  await using ownedSession = session;
+  for await (const message of ownedSession.receive) console.log(message);
+}
+```
+
+`closed` يبلّغ عن الحالة النهائية المنطقية. يطلب المتخلّص غير المتزامن من المنصة إغلاق الاتصال وينتظر أعمال التنظيف التي تديرها Defjs، لكنه لا ينتظر حدث الإغلاق أكثر من ثانية واحدة إن لم يصل، وقد يرفض بـ `DOMException` اسمه `TimeoutError`. ولا يستطيع إثبات أن اتصال TCP المادي أُغلق.
+
+### WebSocketState
+
+`'idle' | 'connecting' | 'open' | 'closing' | 'closed' | 'reconnecting' | 'aborted' | 'error'`
+
+### WebSocketConnectionInfo
+
+`generation` (تزداد عند إعادة الاتصال)، وبعد معرفتها `url` و`protocol` و`extensions`.
+
+### WebSocketCloseInfo
+
+<ApiSignature name="WebSocketCloseInfo" />
+
+`kind` هو `closed` أو `aborted` أو `error`. `cause` غائب في `closed`، واختياري في `aborted`، ومطلوب في `error`. قد تظهر `code` و`reason` و`wasClean` في كل صيغة. يملأ `session.close()` اليدوي `code` و`reason` في `{ kind: "closed" }` عندما لا يحملهما حدث الإغلاق.
+
+## خيارات التنفيذ
+
+## WebSocketExecuteOptions
+
+<ApiSignature name="WebSocketExecuteOptions" />
+
+`WebSocketExecuteOptions` هو [`UseWebSocketConfig`](/ar/api/core/usewebsocketconfig-type): `beforeConnect` و`heartbeat` و`protocols` و`reconnect`، و`abort` أو `timeout` (لا كلاهما أبدًا)، بالإضافة إلى `signal`. `WebSocketHeartbeatConfig`: `intervalMs`، و`message` و`isAck` و`timeoutMs` اختيارية.
+
+`abort` و`timeout` متنافيان: النوع يرفض الاثنين معًا، وتمريرهما معًا وقت التشغيل يفشل بعطل `REQ_OPTIONS_INVALID`. ويتحد `signal` مع أيٍّ منهما. `timeout` مهلة بدء للاتصال: لا تعيد إعادة الاتصال اللاحقة تسليحها، ولا يُطبَّق `withTimeout` على WebSocket.
+
+عند ضبط `reconnect`، تكون القيمة الافتراضية لـ `attempts` هي 3 لكل انقطاع؛ وتعطّل `0` إعادة المحاولة. يعيد `open` الناجح ضبط الميزانية وأُسّ التراجع، فتبدأ كل حالة انقطاع جديدة بإعادة المحاولة 1. لا يعني حذف `attempts` السماح بمحاولات غير محدودة أثناء انقطاع واحد. انظر [العميل](/ar/api/client) للقيم الافتراضية وقواعد التحقق.
+
+## الرسائل
+
+`incoming` هو struct واحد. إطارات النص و`ArrayBuffer` والمصفوفة المنمّطة (typed array) و`Blob` تُقرأ كـ UTF-8، ثم `JSON.parse`، ثم تُفحص مقابل ذلك الـ struct. الإطار الذي يفشل تحليل JSON أو الـ struct يُبلَّغ إلى `session.onRuntimeError` ولا يُصفّ. لا يوجد خيار عميل للإطار غير الصالح.
+
+`outgoing` هو struct واحد. يقبل `session.send` قيمة `StructInput` لذلك الـ struct، ويرمّز الأسماء المستعارة، ثم يستدعي `JSON.stringify`. تؤدي القيم التي لا يستطيع JSON تمثيلها بأمانة بعد الترميز إلى رمي `TypeError` قبل إرسالها أو إدخالها في طابور إعادة الاتصال، بما في ذلك الأعداد غير المنتهية والدوال والرموز و`Map` و`Set` والتدفقات ونسخ الأصناف التي لا تملك تمثيلًا في JSON. تخضع القيم المتداخلة للفحص نفسه المستخدم لأجسام HTTP بصيغة JSON. ويستخدم نبض القلب هذا الفحص أيضًا؛ وينهي فشل تسلسل رسالة نبض القلب الجلسة. يمكن تمثيل عدة أنواع من الرسائل باستخدام `struct.discriminatedUnion`.
+
+```ts
+session.send({ type: "message", text: "Hello" });
+```
+
+انظر [دليل WebSocket](/ar/docs/web-socket) و[فتح جلسة WebSocket](/ar/recipes/websocket-session).
+
+## WebSocketDefinition
+
+`path` و`incoming`، و`maxIncomingQueueSize` مطلوب، و`outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize` اختيارية. الـ builder قد يُرجع `path` و`query` فقط. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح. يقتصر `input` على تعريف المعاملات، والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+
+## WebSocketEndpoint
+
+يعيده `defineWebSocket`. استدعه بالمدخل لتحصل على `WebSocketCommand`.
+
+## WebSocketRequestShape
+
+`path` و`query` فقط. `headers` و`body` هما `never`.
+
+## WebSocketCommand
+
+أمر WebSocket معتم. مرّره إلى `client.execute`.
+
+## UseWebSocketConfig
+
+نبض وإعادة اتصال و`beforeConnect` والبروتوكولات مع الإلغاء. `WebSocketExecuteOptions` يضيف `signal`.
+
+## SocketAwaitResult
+
+`[null, session, connection]` أو `[error, undefined, connection?]`.
+
+## ManualSocketCloseReason
+
+السبب المسجَّل عند إغلاق الجلسة عبر `session.close()`.
+
+## WebSocketHeartbeatConfig
+
+`intervalMs`، و`message` و`isAck` و`timeoutMs` اختيارية.
+
+## WebSocketIncomingData
+
+الإطار الوارد المفكوك: `Infer` لـ struct `incoming`.
+
+## WebSocketOutgoingData
+
+القيمة التي يقبلها `session.send`: `StructInput` لـ struct `outgoing`، أو `never` عندما لا يُعلن أيّ منه.
+
+## SocketLifecycleOutcome
+
+نتيجة محاولة اتصال واحدة (`closeInfo` و`connection` و`cause` و`opened`)، يستخدمها منطق إعادة الاتصال. وهي ليست النتيجة النهائية للجلسة؛ انظر `WebSocketCloseInfo` لذلك.

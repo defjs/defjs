@@ -1,0 +1,140 @@
+---
+title: "데이터 계약 / Struct"
+description: SDK 입력, 출력, 오류를 Struct로 정의하고, 사용하는 앱에서 같은 계약으로 타입 추론과 런타임 검증을 적용합니다.
+---
+
+# Struct
+
+SDK 작성자는 Struct로 API 입력, 출력, 오류와 SSE 이벤트, WebSocket 메시지의 계약을 정의합니다. 타입 추론과 런타임 검증을 같은 선언에 연결하므로 사용하는 앱은 배포된 정의를 그대로 실행할 수 있습니다. Struct는 값의 표현을 정하고, 요청에서의 위치는 `builder`가 정합니다.
+
+요청(과 그 응답)을 Struct로 모델링해요. `Infer`로 TypeScript 타입을 얻고, `struct.parse(...)`로 런타임 검사를 받아요. throw는 없고, error-first 튜플이에요.
+
+## 기본 사용법
+
+<include cwd lang="typescript">
+  examples/struct/basic-setup.ts#example
+</include>
+
+파싱된 출력은 선언된 필드만 유지해요. 필수 필드가 빠지거나, 원시값이 틀리거나, 중첩 값이 나쁘거나, 튜플 길이가 틀리거나, 허용되지 않은 `null`이면 `StructError`이고 부분 값은 없어요. Struct는 불변이에요. `.optional()` 같은 메서드는 새 Struct를 돌려줘요.
+
+## 필수, optional, null
+
+존재와 null 허용은 따로예요.
+
+| 선언                         | 없음 / `undefined`            | `null` | 유효한 값       |
+| ---------------------------- | ----------------------------- | ------ | --------------- |
+| `struct.string()`            | 거부                          | 거부   | 문자열을 받아요 |
+| `struct.string().optional()` | 받아요. 없는 객체 필드는 생략 | 거부   | 문자열을 받아요 |
+| `struct.string().null()`     | 거부                          | 받음   | 문자열을 받아요 |
+| `struct.string().nullish()`  | 받아요. 없는 객체 필드는 생략 | 받음   | 문자열을 받아요 |
+| `struct.null()`              | 거부                          | 받음   | 다른 값은 거부  |
+
+<include cwd lang="typescript">
+  examples/struct/required-optional-null.ts#example
+</include>
+
+`struct.any()`와 `struct.unknown()`도 `null`과 `undefined`를 거부해요. 받으려면 `.null()`, `.optional()`, `.nullish()`를 이어 붙이세요.
+
+루트에서 optional은 `undefined`일 수 있어요. 객체 안에서는 생략된 optional/nullish 필드가 없는 채로 남아요. 중첩된 객체 필드도 같아요. 호출자가 빼도 되면 `.optional()`을 붙이세요. 안의 필드가 모두 optional이어도 필수 객체 필드는 필수로 남아요.
+
+## 요청 배치
+
+path, query, headers, body는 builder가 돌려주는 필드이지, 요청 struct가 아니에요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 builder만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. `struct.urlencoded(shape)`와 `struct.formData(shape)`는 코덱 태그가 있는 객체 struct예요. 태그는 그 값이 body 루트일 때만 돌아요. 키는 alias를 쓰고, 배열은 필드 이름을 반복해요.
+
+<include cwd lang="typescript">
+  examples/struct/request-placement.ts#example
+</include>
+
+| body 루트                                            | 보내는 형태       | 기본 content type                                 |
+| ---------------------------------------------------- | ----------------- | ------------------------------------------------- |
+| 타입이 있는 객체, 배열, 유한한 숫자, boolean, `null` | JSON 텍스트       | `application/json`                                |
+| `string` struct 또는 raw 문자열                      | 텍스트            | `text/plain;charset=UTF-8`                        |
+| 루트의 `struct.urlencoded(shape)`                    | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| 루트의 `struct.formData(shape)`                      | `FormData`        | 플랫폼 multipart boundary                         |
+| `Blob` / `File`                                      | 그 blob           | blob 타입 또는 `application/octet-stream`         |
+| `ArrayBuffer` / view / stream                        | 바이트            | `application/octet-stream`                        |
+
+`NaN`과 `±Infinity`는 배열이나 객체 안을 포함해 `REQ_BUILD_FAILED`로 실패해요.
+
+`struct.file()`은 form 필드와 raw 파일 body를 위한 값 struct예요. WebSocket builder는 `headers`나 `body`를 돌려줄 수 없어요. HTTP와 SSE는 할 수 있어요. `GET`과 `HEAD`는 못 해요.
+
+## 별칭
+
+`.alias(...)`는 논리 이름과 와이어 이름을 나눠요. `struct.parse(...)`는 호출자가 `{ aliases: true }`를 넘기지 않으면 논리 키를 써요. JSON과 평평한 요청 코덱은 alias를 인코딩하고, JSON 응답 디코딩은 와이어 키를 논리 필드로 돌려놔요.
+
+<include cwd lang="typescript">
+  examples/struct/aliases.ts#example
+</include>
+
+| 경계                                  | 필드                        |
+| ------------------------------------- | --------------------------- |
+| `struct.parse(User, ...)`와 명령 입력 | 논리 `displayName`          |
+| builder가 돌려준 타입이 있는 객체     | 와이어 `display_name`       |
+| JSON / SSE / WebSocket 디코딩         | 와이어 → 논리 `displayName` |
+| builder 안에 직접 쓴 익명 객체        | 직접 쓴 키                  |
+
+builder 자체가 읽는 것은 논리 이름(`input.user.displayName`)이에요. 와이어 이름은 serializer가 builder가 돌려준 타입이 있는 객체를 인코딩할 때만 나타나요.
+
+alias는 중첩 필드, 배열, 객체, 유니언, discriminator에서 동작해요. 앱 코드는 논리 이름을 쓰고, 외부 이름은 struct에 한 번 두세요. 타입이 있는 객체를 spread하면 그 인코딩이 유지돼요. 같은 객체에 논리 필드와 와이어 키를 둘 다 두면 `REQ_BUILD_FAILED`예요. 값을 직접 `JSON.stringify`하면 이 경로를 떠나서, serializer는 논리 이름을 봐요.
+
+가이드는 루트만이 아니라 각 노드에서 정해져요. 익명 부모 아래에 새로 쓴 객체는 직접 쓴 키를 유지해요. 타입이 있는 부모 아래에서는 같은 객체가 그 필드의 struct를 써요.
+
+```ts
+body: { row: { id: '42' } }              // Anonymous root: emits id
+body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
+```
+
+union 가이드가 둘 이상의 분기에 맞으면 분기마다 인코딩해서 비교해요. 와이어 결과가 같으면 그 값을 쓰고, 다르면 `REQ_BUILD_FAILED`예요.
+
+object가 아닌 부분을 포함한 혼합 intersection은 파싱될 때 일치한 각 부분의 태그를 합친 연언을 태그로 달고, 파싱되지 않은 새로 쓴 값은 익명 객체로 다뤄요.
+
+## 파싱 실패
+
+`struct.parse(...)`는 `[null, value]` 또는 `[StructError, undefined]`를 돌려줘요. `StructError`는 `Error`를 확장하고 `issues`와 `format()`, `flatten()`, `prettify()`를 노출해요.
+
+<include cwd lang="typescript">
+  examples/struct/parse-failures.ts#example
+</include>
+
+`StructIssue`에는 `code`, `expected`, `message`, `path`, `received`가 있어요. `code`는 `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, `missing_key` 중 하나예요. 기본 message는 받은 값이 아니라 받은 종류를 말해요. `Expected number at id, received string`이에요. issue path는 구조를 나타내며 record 키를 유지해요. `struct.record(...)`는 `Expected number at alice@example.com, received string`을 만들 수 있으므로, 기본 message, `prettify()`, `String(fault)`에도 민감한 키가 남을 수 있어요. 그래서 `message`와 `prettify()`는 받은 payload를 빼요. `received`는 원래 값을 유지하므로 로그하거나 돌려주기 전에 마스킹이 필요해요. `struct.parse(..., { errorMap })`은 그 호출의 message만 다시 쓰며, 다른 Core 사본 struct의 bigint/date 변환 실패도 포함해요. `''`를 포함한 어떤 반환 문자열이든 기본값을 대체하고, `undefined`만 유지해요. 사용자 텍스트는 그대로 쓰이며, map이 값을 넣으면 그 값이 드러날 수 있어요.
+
+Struct 검증은 구조적일 뿐이에요. 공개된 범위, 형식, refinement, 인증, 상태 전이 규칙은 없어요. 그런 검사는 명령을 만들기 전에 하세요.
+
+## 참고
+
+`@defjs/core`의 공개 생성자예요 (내부는 퍼사드 API가 아니에요).
+
+<include cwd lang="typescript">
+  examples/struct/any.ts#example
+</include>
+
+| 생성자                           | 입력                                       | 추론된 출력                   |
+| -------------------------------- | ------------------------------------------ | ----------------------------- |
+| `struct.number()`                | `NaN`이 아닌 숫자                          | ±`Infinity`를 포함한 `number` |
+| `struct.date()`                  | `Date`, 숫자, 또는 날짜 문자열             | 유효한 `Date`                 |
+| `struct.bigint()`                | `bigint` 또는 `BigInt(...)`가 받는 문자열  | `bigint`                      |
+| `struct.enum(...)`               | 선언된 문자열 또는 숫자 멤버               | 그 리터럴 유니언              |
+| `struct.discriminatedUnion(...)` | 필수 리터럴 discriminator가 있는 객체      | 선택된 객체 분기              |
+| `struct.or(...)`                 | 먼저 맞는 분기. 인코딩은 모호함을 검사해요 | 분기 출력의 유니언            |
+| `struct.intersection(...)`       | 모든 멤버가 받는 값                        | 출력의 교집합                 |
+| `struct.record(value)`           | 값이 `value`와 맞는 평범한 객체            | 파싱된 값의 레코드            |
+| `struct.tuple(items)`            | 선언된 길이와 정확히 같은 배열             | 고정 길이 튜플                |
+
+모든 Struct는 `.alias(name)`, `.optional()`, `.null()`, `.nullish()`를 지원해요. `struct.discriminatedUnion`은 필수 리터럴 discriminator가 있는 객체 옵션이 필요하고, 중복은 거부해요.
+
+`struct`, `Infer`, `Struct`, `StructError`, 관련 공개 타입은 `@defjs/core`에서 import하세요. 파서는 `struct.parse(...)`를 쓰세요. `createObjectStruct`, 정의 심볼, 코덱 내부, `packages/core/src`는 import하지 마세요.
+
+퍼사드가 약속하지 않는 것:
+
+- 객체/레코드 출력은 null prototype을 써요. `Object.prototype` 메서드가 있다고 가정하지 마세요.
+- 알 수 없는 객체 키는 버려져요.
+- `struct.number()`는 `NaN`을 거부하고 무한대는 받아요.
+- `struct.or(...)`는 분기를 순서대로 시도하고, 분기가 인코딩에서 서로 다르면 모호한 인코딩을 거부해요.
+- `struct.intersection(...)`은 선언 순서로 멤버를 파싱해요.
+- intersection은 멤버 출력을 깊게 병합해요(`Object.is`로 같은 값과 같은 시각의 Date는 유지하고, plain object와 길이가 같은 배열은 재귀적으로 병합하며, 그 밖의 충돌은 해당 path의 `invalid_intersection`이에요). `unknown` / `any`는 출력에 기여하지 않아요. 하나의 논리 키는 여러 wire key에 대응할 수 있어요. 같은 wire key에 서로 다른 값이 쓰일 때만 충돌이에요.
+- Struct는 경계를 검증해요. 캐시하거나, 인가하거나, 전송 리소스를 소유하지는 않아요.
+
+## 관련 레시피
+
+- [POST JSON](/ko-KR/recipes/post-json)
+- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)

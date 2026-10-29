@@ -1,0 +1,20 @@
+---
+title: "JSON senden"
+description: Typisierten JSON-Body senden und ein deklariertes 201 dekodieren.
+---
+
+# POST JSON
+
+Reich den typisierten Body an den Builder. Logische Feldnamen bleiben in TypeScript; Wire-Aliasse auf dem Struct werden JSON-Keys. Ein Object-Body ist `application/json`.
+
+Details siehe [Commands](/de-DE/docs/commands) und [HTTP](/de-DE/docs/http).
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com` ist ein Platzhalter. Bei einem Server, der mit `201` und `{ "id": 1, "name": "Ada", "email": "ada@example.com" }` antwortet, gibt das Snippet aus:
+
+```txt
+Created Ada → 201
+```

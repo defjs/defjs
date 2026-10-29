@@ -1,0 +1,129 @@
+---
+title: "Créer et publier un SDK"
+description: Publier des endpoints typés dans un paquet ESM avec déclarations ; laisser l’application configurer et gérer son client.
+---
+
+# Créer et publier un SDK [#publier-un-sdk-http-sans-cacher-execute]
+
+Un SDK Defjs publie des endpoints d’API réutilisables. L’auteur définit les entrées, leur placement dans les requêtes et les contrats de réponse ; l’application importe les endpoints, configure son client et traite les résultats. Cette recette va du module d’endpoints à une archive npm vérifiable, puis à son import dans une application.
+
+## 1. Exporter l’endpoint
+
+Crée un répertoire de paquet `users-sdk` et enregistre cette définition dans `src/users.ts`. Le module exporte `getUser` ; il ne crée pas de client d’application préconfiguré et ne lance aucune requête.
+
+<include cwd meta='title="src/users.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+`output` décrit le corps 2xx et `error` celui de tous les autres statuts. L’application peut ainsi traiter le `404` déclaré via `error.code` et `error.status`, puis lire un `error.data` typé. Le résultat de `client.execute(...)` conserve ces informations.
+
+## 2. Définir l’entrée du paquet et sa compilation
+
+Expose l’API publique dans `src/index.ts`. Le suffixe `.js` correspond à la sortie ESM de TypeScript avec `NodeNext` ; le fichier source reste `users.ts`.
+
+```ts title="src/index.ts"
+export { getUser } from "./users.js";
+```
+
+Crée ce `package.json` à la racine du paquet. Remplace `@company` par ton scope npm avant publication. `@defjs/core` est une dépendance peer afin que le SDK et l’application partagent une version compatible de l’environnement d’exécution. Les dépendances de développement permettent la compilation et la vérification des types en local.
+
+```json title="package.json"
+{
+  "name": "@company/users-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.4.0",
+    "typescript": "^7.0.2"
+  }
+}
+```
+
+`files` limite les fichiers du SDK à `dist` ; npm peut aussi inclure les métadonnées du paquet, le README et la licence. `exports` expose JavaScript et déclarations de types au même point d’entrée. `sideEffects: false` convient à ce module qui exporte uniquement des définitions.
+
+```json title="tsconfig.json"
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+
+Les types DOM couvrent les API Web publiques de Defjs ; `ESNext.Disposable` ajoute les types de libération des ressources. Ces entrées `lib` n’installent aucun polyfill d’exécution.
+
+## 3. Compiler et vérifier le paquet
+
+Depuis le répertoire `users-sdk`, exécute :
+
+```sh
+npm install
+npm run build
+npm pack --dry-run
+npm pack
+```
+
+Vérifie notamment la présence de `dist/index.js`, `dist/index.d.ts`, `dist/users.js` et `dist/users.d.ts` dans l’aperçu. Avec le nom d’exemple, la dernière commande crée `company-users-sdk-0.1.0.tgz`. Tu peux ainsi tester les fichiers réellement empaquetés depuis une autre application. Un [test avec un handler Fetch local](/fr-FR/recipes/test-with-handle) doit couvrir les contrats de succès et d’erreur avant publication.
+
+Teste aussi le même endpoint exporté avec deux clients utilisant des adresses de service et des identifiants différents. Dans le projet consommateur séparé, vérifie les types et l’exécution de l’archive. Couvre l’annulation et la fermeture des ressources pour les API de flux. Le README du SDK doit décrire l’API du service, les versions compatibles de Core et l’authentification attendue.
+
+## 4. Utiliser le SDK depuis une application
+
+Installe l’archive et une version compatible de Defjs dans une application ESM séparée. Adapte le chemin relatif à ton arborescence :
+
+```sh
+npm install ../users-sdk/company-users-sdk-0.1.0.tgz @defjs/core@^0.4.0
+```
+
+L’application importe le point d’entrée du paquet :
+
+```ts
+import { getUser } from "@company/users-sdk";
+```
+
+L’exemple exécutable de la documentation ci-dessous utilise l’import relatif `./users-sdk.ts`, car les deux fichiers se trouvent dans le répertoire d’exemple. Pour tester le paquet npm, remplace uniquement cet import par celui ci-dessus. Le client et le handler Fetch local restent dans le code de l’application.
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada
+```
+
+Enregistre l’application dans `app.ts` et lance `bun app.ts`, ou `node app.ts` avec une version de Node.js décrite dans le [démarrage rapide](/fr-FR/docs/start). Le handler local rend ce test indépendant d’un service en cours d’exécution. Pour l’API réelle, l’application retire `withHTTPHandle(...)` et configure l’URL de base, l’authentification et les intercepteurs sur son client. Elle continue de gérer les tuples résultat et l’annulation.
+
+## 5. Publier sur npm
+
+Après vérification du scope, du nom, de la version et de l’archive, et avec un compte npm autorisé à publier dans ce scope, exécute depuis le paquet :
+
+```sh
+npm publish --access public
+```
+
+Les applications peuvent ensuite installer `npm install @company/users-sdk @defjs/core@^0.4.0`. Versionne les changements d’entrées, de sorties, d’erreurs et de placement dans la requête comme des changements du contrat du SDK. Les endpoints Defjs restent exécutés par un client Defjs ; l’export du paquet ne change pas ce contrat.
+
+Les fabriques de clients et méthodes pratiques sont des ajouts facultatifs. Elles peuvent fournir des valeurs par défaut ou un comportement métier tout en acceptant la configuration de l’appelant et en conservant les exports directs d’endpoints. Documente les transformations d’erreurs et les règles de cycle de vie qu’elles introduisent. Aucune fabrique n’est nécessaire pour créer un SDK réutilisable.
+
+Voir les [commandes](/fr-FR/docs/commands), le [client](/fr-FR/docs/client) et les [décisions de conception](/fr-FR/docs/design-decisions).

@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider, 명시적 클라이언트 덮어쓰기를 지원하는 useClient, provider props예요.
+---
+
+# React
+
+기존 `@defjs/core` 클라이언트를 React 트리에 제공해요. 이 패키지는 클라이언트를 만들거나, 캐시하거나, dispose하지 않아요. 진입점에 `'use client'`가 표시돼 있으므로 클라이언트 컴포넌트에서 import하세요. React 18 이상이 필요해요.
+
+[React 가이드](/ko-KR/docs/integrations/react)를 보세요.
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Context provider예요. `createClient`가 준 클라이언트를 넣어요. 중첩된 `ClientProvider`는 자신의 하위 트리에 한해 클라이언트를 덮어쓰고, `useClient()`는 가장 가까운 것을 읽어요. 다른 `client`를 넘기면 하위 컴포넌트가 보는 컨텍스트 값이 바뀌어요.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)`는 명시적 클라이언트를 우선해 돌려줘요. 생략하거나 `undefined`를 넘기면 가장 가까운 `ClientProvider`를 읽고, 두 곳 모두 클라이언트가 없을 때만 `Error`를 던져요. 인자 없는 `useClient()`도 계속 유효해요.
+
+명시적 클라이언트가 있어도 `useClient(explicitClient)`는 항상 컴포넌트나 커스텀 훅의 최상위에서 호출하세요. 일반 함수나 이벤트 콜백에서 호출하면 안 돼요. `explicitClient ?? useClient()`는 훅을 조건부로 호출하므로 유효하지 않아요. 명시적 값은 Context에 쓰거나 provider를 만들지 않으며, 훅은 여전히 Context를 구독해요.
+
+- **반환** 명시적으로 넘긴 클라이언트 또는 가장 가까운 provider가 제공한 동일한 객체예요.
+- **던짐** 명시적 인자와 Context 모두 클라이언트를 제공하지 않으면 `Error`를 던져요.
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client`는 필수이며 애플리케이션이 소유해요. `children`은 선택이고, `useClient`를 호출할 수 있는 트리예요.

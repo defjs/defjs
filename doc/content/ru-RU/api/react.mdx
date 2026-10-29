@@ -1,0 +1,35 @@
+---
+title: "@defjs/react"
+description: ClientProvider, useClient с необязательным переопределением клиента и props провайдера.
+---
+
+# React
+
+Отдай существующий `@defjs/core` client React-дереву. Этот пакет не создаёт, не кэширует и не dispose’ит client. Его entry помечен `'use client'`, поэтому импортируй пакет из клиентских компонентов. Нужен React 18 или новее.
+
+См. [гайд React](/ru-RU/docs/integrations/react).
+
+## ClientProvider
+
+<ApiSignature name="ClientProvider" />
+
+Провайдер контекста. Передай client из `createClient`. Вложенный `ClientProvider` переопределяет client для своего поддерева; `useClient()` читает ближайший. Если передать другой `client`, значение контекста для потомков изменится.
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+## useClient()
+
+<ApiSignature name="useClient" />
+
+`useClient(overrideClient)` отдаёт приоритет явному клиенту; без аргумента или с `undefined` читает ближайший `ClientProvider`. `Error` выбрасывается только тогда, когда ни один источник не предоставляет клиент. Вызов `useClient()` без аргумента по-прежнему допустим.
+
+Всегда вызывай `useClient(explicitClient)` на верхнем уровне компонента или своего хука, даже с явным клиентом; не в обычной функции или обработчике события. `explicitClient ?? useClient()` условно вызывает хук и недопустим. Переопределение не пишет в Context и не создаёт провайдер; хук по-прежнему подписывается на Context.
+
+- **Возвращает** тот же явный клиент или клиент ближайшего провайдера.
+- **Бросает** `Error`, если ни явный аргумент, ни Context не предоставляет клиент.
+
+## ClientProviderProps
+
+<ApiSignature name="ClientProviderProps" />
+
+`client` обязателен и принадлежит приложению. `children` необязателен — дерево, которое может вызывать `useClient`.

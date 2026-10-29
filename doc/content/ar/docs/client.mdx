@@ -1,0 +1,70 @@
+---
+title: "إعداد العميل / Client"
+description: يضبط التطبيق المستهلك عنوان الخدمة والمصادقة ووسائل النقل، ويتولى نتائج التنفيذ والتنظيف.
+---
+
+# العميل
+
+تصف التعريفات التي يصدّرها SDK عقد API ومواضع المدخلات. يستخدم التطبيق المستهلك `createClient(...)` ليضبط بصورة مستقلة عنوان الخدمة والمصادقة والمعترضات ووسائل النقل المناسبة للمنصة، ثم ينفّذ الأوامر المنشأة من تلك التعريفات.
+
+يوزّع `Client` أوامر HTTP وSSE وWebSocket. تظل إعادة استخدام حزمة SDK ضمن عقد تنفيذ Defjs، ويتولى التطبيق معالجة النتائج والإلغاء وإغلاق التدفقات. لا يضيف Client تخزينًا مؤقتًا أو إعادة محاولة تلقائية، ولا يغلق التدفقات المفتوحة تلقائيًا.
+
+## الإعداد الأساسي
+
+<include cwd lang="typescript">
+  examples/client/basic-setup.ts#example
+</include>
+
+`createClient(...)` يُرجع توقيعات متعددة لكل نوع أمر.
+
+## ركّب الخيارات
+
+الخيارات تُطبَّق من اليسار إلى اليمين. المُعيِّنات تستبدل؛ `withInterceptors(...items)` يُلحق.
+
+<include cwd lang="typescript">
+  examples/client/compose-options.ts#example
+</include>
+
+المعترضات المختلطة تُصفّى حسب وسيلة النقل عند التنفيذ؛ الترتيب النسبي بين النوع المختار يبقى.
+
+## نفّذ حسب وسيلة النقل
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`. `open` هي لقطة أول مصافحة ناجحة للاتصال الخاص بالمقبض المُعاد للمقابض الأصلية من Defjs أو الأغلفة التي تمرّر كائن `open` الحي نفسه؛ أما المقابض المخصصة أو الأغلفة التي تستبدل `open` فتستخدم قيمة `open` العامة الحالية حتى بعد إعادة الاتصال، بينما تظل `stream.open` حية (انظر [SSE](/ar/docs/sse)).
+- WebSocket → `[error, session, connection]`
+
+تنفيذ WebSocket يمكن أن يتجاوز `beforeConnect` و`heartbeat` و`protocols` و`reconnect`. يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`.
+
+أنت تملك التنظيف: أجهض HTTP، أغلق SSE + `await stream.closed`، أغلق WebSocket + `await session.closed`.
+
+## احقن نقل اختبار
+
+<include cwd lang="typescript">
+  examples/client/inject-test-transport.ts#example
+</include>
+
+## النطاق على الخادم مقابل المتصفح
+
+على الخادم، أنشئ العميل داخل حدود الطلب عندما تلتقط الخيارات أو إغلاقات المعترض المصادقة أو ملفات تعريف الارتباط أو المستخدمين أو المستأجرين. هوية العميل ليست حد أمان بذاتها.
+
+## المرجع
+
+| المساعد                                                                                                       | الأثر                                                             |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `withEndpoint(url)`                                                                                           | نقطة نهاية أساس مطلقة لكل وسائل النقل                             |
+| `withHeaders(HeadersInit)`                                                                                    | رؤوس افتراضية ثابتة لـ HTTP/SSE؛ رؤوس الأمر تتجاوزها              |
+| `withTimeout(ms)`                                                                                             | مهلة `execute` الافتراضية لـ HTTP فقط (SSE/WS يتجاهلانها)         |
+| `withHTTPHandle(fetch)`                                                                                       | استبدل Fetch لـ HTTP                                              |
+| `withSSEHandle(fetch)`                                                                                        | استبدل Fetch لـ SSE                                               |
+| `withWebSocketHandle(WebSocket)`                                                                              | استبدل مُنشئ WebSocket                                            |
+| `withInterceptors(...items)`                                                                                  | ألحق معترضات مختلطة                                               |
+| `withQuerySerializer(fn)`                                                                                     | رمّز كائن استعلام طُبّقت عليه الأسماء المستعارة إلى سلسلة استعلام |
+| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` لـ HTTP/SSE عندما يكون true        |
+| `withXSRF(options?)`                                                                                          | ملف تعريف ارتباط XSRF لـ HTTP ← رأس                               |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | مفاتيح SSE                                                        |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | مفاتيح WebSocket                                                  |
+
+## وصفات ذات صلة
+
+- [الاختبار بـ Fetch محلي](/ar/recipes/test-with-handle)
+- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)

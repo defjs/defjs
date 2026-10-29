@@ -1,0 +1,20 @@
+---
+title: "JSON 보내기"
+description: 타입이 있는 JSON body를 보내고 선언된 201을 디코딩해요.
+---
+
+# POST JSON
+
+타입이 있는 body를 builder에 넘겨요. 논리 필드 이름은 TypeScript에 두고, struct의 와이어 alias가 JSON 키가 돼요. 객체 body는 `application/json`이에요.
+
+자세한 내용은 [명령](/ko-KR/docs/commands)과 [HTTP](/ko-KR/docs/http)를 보세요.
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com`은 placeholder예요. `201`과 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
+
+```txt
+Created Ada → 201
+```

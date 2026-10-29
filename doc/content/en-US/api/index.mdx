@@ -1,0 +1,38 @@
+---
+title: API Reference
+description: Look up SDK definition APIs, application client configuration, and typed execution results.
+---
+
+# API Reference
+
+<ApiIndex />
+
+Use this reference while building or consuming a Defjs SDK. SDK authors start with [`defineRequest`](/api/core/definerequest), [`defineEventStream`](/api/core/defineeventstream), [`defineWebSocket`](/api/core/definewebsocket), and [Structs](/api/struct). Applications use [Client configuration](/api/client) to execute those definitions and [Errors](/api/errors) to handle results.
+
+Signatures are the contract. Follow the [quick start](/docs/start) and [SDK publishing guide](/recipes/publish-http-sdk) for the complete workflow.
+
+## Packages
+
+| Package                                                    | What you look up                                                  |
+| ---------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                  |
+
+## @defjs/core
+
+| Page                              | What you look up                                                 |
+| --------------------------------- | ---------------------------------------------------------------- |
+| [Client](/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/api/errors)             | `Fault` variants and factories                                   |
+| [Interceptors](/api/interceptors) | HTTP / SSE / WebSocket interceptor helpers                       |
+| [SSE](/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## Related
+
+- [Getting Started](/docs/start)
+- [GET with a declared 404](/recipes/get-declared-404)

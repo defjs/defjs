@@ -1,0 +1,38 @@
+---
+title: API 參考
+description: 查閱 SDK 定義入口、應用程式執行入口，以及傳輸、Struct 及整合的函式和類型。
+---
+
+# API 參考
+
+按職責選擇入口：SDK 作者使用 `defineRequest`、`defineEventStream`、`defineWebSocket` 及 `struct.*` 定義並匯出契約；應用程式使用 `createClient`、`with*` 設定及 `client.execute(...)` 執行這些定義建立的 command。
+
+以下簽章描述 Defjs 的執行時契約。完整開發流程見[快速開始](/zh-Hant-HK/docs/start)及[建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)。
+
+<ApiIndex />
+
+## 套件
+
+| 套件                                                                  | 你嚟查咩                                                          |
+| --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/zh-Hant-HK/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/zh-Hant-HK/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/zh-Hant-HK/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/zh-Hant-HK/api/opentelemetry-server) | `withOpenTelemetryServer`, per-transport options                  |
+
+## @defjs/core
+
+| 頁面                                         | 你嚟查咩                                                         |
+| -------------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/zh-Hant-HK/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/zh-Hant-HK/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/zh-Hant-HK/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/zh-Hant-HK/api/errors)             | `Fault` variants 同 factories                                    |
+| [Interceptors](/zh-Hant-HK/api/interceptors) | HTTP / SSE / WebSocket interceptor helpers                       |
+| [SSE](/zh-Hant-HK/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/zh-Hant-HK/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## 相關
+
+- [快速開始](/zh-Hant-HK/docs/start)
+- [處理已聲明嘅 404](/zh-Hant-HK/recipes/get-declared-404)

@@ -1,0 +1,74 @@
+---
+title: Defjs
+description: Entwickelt für bessere SDKs. Typisierte API-Endpoints definieren, veröffentlichen und mit dem Client der Anwendung ausführen.
+---
+
+# Defjs
+
+**Entwickelt für bessere SDKs.**
+
+Defjs steht für **define js**: API-SDKs lassen sich damit einfacher entwerfen, schreiben und veröffentlichen. Als SDK-Autor exportierst du wiederverwendbare, typisierte Endpoints mit `defineRequest`, `defineEventStream` und `defineWebSocket`. Die Anwendung importiert diese Endpoints und führt sie mit ihrem eigenen Defjs-Client aus.
+
+| SDK-Autor                                                                 | Anwendung                                                                    |
+| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| API-Operationen, Methoden und relative Pfade definieren                   | Base-Endpoint und Transport für die Umgebung konfigurieren                   |
+| Ein- und Ausgaben, Fehler, Events und Nachrichten mit Struct beschreiben  | Authentifizierung, Interceptors und Telemetrie einrichten                    |
+| Mit `builder` Eingaben auf den Request abbilden und Endpoints exportieren | Commands ausführen, Ergebnisse behandeln und Abbruch sowie Streams verwalten |
+
+Das SDK exportiert den Endpoint:
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+Die Anwendung stellt den Client bereit und führt den Command aus:
+
+<include cwd meta="app.ts">
+  examples/home/app.ts#example
+</include>
+
+Definitionen und Ausführung bleiben Teil des Defjs-Vertrags. Der Client der Anwendung ergänzt die Laufzeitkonfiguration; die Endpoints enthalten weiterhin Methoden, Pfade und Transportverträge.
+
+Beginne mit dem [Schnellstart](/de-DE/docs/start), lerne [Struct](/de-DE/docs/struct), [Commands](/de-DE/docs/commands) und [Client](/de-DE/docs/client) kennen und [veröffentliche dein SDK](/de-DE/recipes/publish-http-sdk). Die [Entwurfsentscheidungen](/de-DE/docs/design-decisions) erklären diese Aufteilung.
+
+Defjs legt keine Ergebnisse im Cache ab und organisiert keine anwendungsweiten Wiederholungen. Die Anwendung entscheidet über diese Regeln sowie Abbruch und Cleanup.
+
+## Transport wählen
+
+| Du brauchst                          | Starte mit                          | Erfolgreiches Ergebnis                                                                    |
+| ------------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| Request + statusspezifische Response | [HTTP](/de-DE/docs/http)            | Dekodierte Daten + `DecodedResponse` (`HttpMeta`, wenn kein Output-Struct deklariert ist) |
+| Langlebiger Server-Event-Feed        | [SSE](/de-DE/docs/sse)              | Ein Stream + Startup-`open`-Snapshot                                                      |
+| Bidirektionale Session               | [WebSocket](/de-DE/docs/web-socket) | Eine Session + Startup-`connection`-Snapshot                                              |
+
+## Paket wählen
+
+| Paket                         | Wann                                                                                                             |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | `defineRequest`, `defineEventStream`, `defineWebSocket`, `struct` und `createClient`                             |
+| `@defjs/react`                | `ClientProvider` / `useClient` — siehe [React](/de-DE/docs/integrations/react)                                   |
+| `@defjs/vue`                  | Plugin + `injectClient` — siehe [Vue](/de-DE/docs/integrations/vue)                                              |
+| `@defjs/opentelemetry-server` | Ausgehende Spans, Metrics und Logs — siehe [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) |
+
+## Ergebnisformen
+
+Alle drei Transports liefern ein Error-first-Tupel mit drei Einträgen. Positionen stimmen; Bedeutungen nicht:
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+Bei einem Fehler ist der zweite Eintrag `undefined`. Bei HTTP ist auch der dritte Eintrag `undefined`, weil der Fault die Response-Metadaten trägt. Bei SSE und WebSocket ist der dritte Eintrag der Startup-Snapshot, sofern vor dem Fehler einer erfasst wurde. Siehe [Fehler](/de-DE/docs/errors).
+
+## Ownership in einem Atemzug
+
+Brich HTTP ab, wenn sie veraltet ist. Schließe SSE und `await stream.closed`. Schließe WebSocket und `await session.closed`. Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options Cookies, Auth oder Tenant-Daten erfassen. Schwärze URLs, Headers und Bodies, bevor du sie loggst.
+
+## Verwandte Rezepte
+
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)
+- [POST JSON](/de-DE/recipes/post-json)
+- [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)
+- [SSE-Stream konsumieren](/de-DE/recipes/consume-sse)
+- [WebSocket-Session öffnen](/de-DE/recipes/websocket-session)
+- [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)

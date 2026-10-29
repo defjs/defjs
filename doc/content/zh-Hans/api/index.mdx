@@ -1,0 +1,38 @@
+---
+title: API 参考
+description: 查阅 SDK 定义入口、应用执行入口，以及传输、Struct 和集成的函数与类型。
+---
+
+# API 参考
+
+按职责选择入口：SDK 作者使用 `defineRequest`、`defineEventStream`、`defineWebSocket` 和 `struct.*` 定义并导出契约；应用使用 `createClient`、`with*` 配置和 `client.execute(...)` 执行这些定义创建的 command。
+
+下面的签名描述 Defjs 的运行时契约。完整开发流程见[快速开始](/zh-Hans/docs/start)和[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)。
+
+<ApiIndex />
+
+## 包
+
+| 包                                                                 | 你来查什么                                                        |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| [`@defjs/core`](/zh-Hans/api/client)                               | `createClient`、`defineRequest`、`struct`、HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/zh-Hans/api/vue)                                   | `createClientPlugin`、`injectClient`、`HTTP_CLIENT`               |
+| [`@defjs/react`](/zh-Hans/api/react)                               | `ClientProvider`、`useClient`                                     |
+| [`@defjs/opentelemetry-server`](/zh-Hans/api/opentelemetry-server) | `withOpenTelemetryServer`、各传输的 options                       |
+
+## @defjs/core
+
+| 页面                                 | 你来查什么                                                        |
+| ------------------------------------ | ----------------------------------------------------------------- |
+| [Client](/zh-Hans/api/client)        | `createClient`、`with*` options、`Client`                         |
+| [HTTP](/zh-Hans/api/http)            | `defineRequest`、execute options、 `HttpRequest` / `HttpResponse` |
+| [Struct](/zh-Hans/api/struct)        | `struct.*`、`Infer`、`StructError`                                |
+| [错误](/zh-Hans/api/errors)          | `Fault` 变体和工厂                                                |
+| [拦截器](/zh-Hans/api/interceptors)  | HTTP / SSE / WebSocket 的 interceptor helper                      |
+| [SSE](/zh-Hans/api/sse)              | `defineEventStream`、stream handle                                |
+| [WebSocket](/zh-Hans/api/web-socket) | `defineWebSocket`、session                                        |
+
+## 相关
+
+- [快速开始](/zh-Hans/docs/start)
+- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)

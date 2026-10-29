@@ -1,0 +1,47 @@
+---
+title: API リファレンス
+description: SDK の定義、データ契約、アプリケーションでの実行に使う関数・options・型の API リファレンスです。
+---
+
+# API リファレンス
+
+<ApiIndex />
+
+ワークスペースパッケージの参照です。シグネチャが契約で、いつ使うかはガイドとレシピが説明します。
+
+## 定義と実行の入口
+
+| 目的                       | 参照先                                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SDK の API 定義を作る      | [HTTP](/ja-JP/api/http) の `defineRequest`、[SSE](/ja-JP/api/sse) の `defineEventStream`、[WebSocket](/ja-JP/api/web-socket) の `defineWebSocket` |
+| データ契約と型を作る       | [Struct](/ja-JP/api/struct) の `struct.*` と `Infer`                                                                                              |
+| アプリケーションで実行する | [Client](/ja-JP/api/client) の `createClient`、`with*`、`Client.execute`                                                                          |
+| 実行結果と方針を扱う       | [Errors](/ja-JP/api/errors)、[Interceptors](/ja-JP/api/interceptors)、各トランスポートの handle / session                                         |
+
+SDK の作成者は定義を export します。利用アプリケーションは互換性のある Defjs Client を構成し、結果、キャンセル、ストリームのライフサイクルを管理します。実装から配布までの流れは [クイックスタート](/ja-JP/docs/start) と [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) を参照してください。
+
+## パッケージ
+
+| パッケージ                                                       | ここで探すもの                                                    |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/ja-JP/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/ja-JP/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/ja-JP/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/ja-JP/api/opentelemetry-server) | `withOpenTelemetryServer`, トランスポートごとの options           |
+
+## @defjs/core
+
+| ページ                                  | ここで探すもの                                                   |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/ja-JP/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/ja-JP/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/ja-JP/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/ja-JP/api/errors)             | `Fault` の種類とファクトリ                                       |
+| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket の interceptor ヘルパー                   |
+| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## 関連
+
+- [はじめよう](/ja-JP/docs/start)
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)

@@ -1,0 +1,104 @@
+---
+title: Fehler
+description: Fault-Varianten und Factory-Helper.
+---
+
+# Fehler
+
+Execute gibt einen diskriminierten `Fault` im ersten Tuple-Slot zurück — keine geworfene Exception für deklarierte Failures.
+
+## FaultCode
+
+<ApiSignature name="FaultCode" />
+
+Eine geschlossene Menge. Das Segment vor dem ersten `_` ist die Klasse; ein separates `kind`-Feld gibt es nicht. Die Menge bleibt geschlossen, damit `switch (fault.code)` exhaustiv ist — Extensions melden ihr eigenes Detail über `cause`, nicht über einen neuen Code.
+
+## FaultClass
+
+<ApiSignature name="FaultClass" />
+
+`FaultClass<FaultCode>` ist `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+## Fault
+
+<ApiSignature name="Fault" />
+
+Switche über `fault.code`.
+
+### FaultOf
+
+<ApiSignature name="FaultOf, Fault" />
+
+`FaultOf` ist `Fault`, ausgedrückt über den Typ des dekodierten Error-Bodys statt über das Struct, das ihn erzeugt hat. `HttpAwaitResult` und die Fault-Factories arbeiten mit dekodierten Werten und nutzen deshalb diese Form.
+
+Jede Variante ist ein nativer `Error` mit dem Namen `DefjsFault`, `String(fault)` liefert also `DefjsFault: <message>`. `code` und die Varianten-Metadaten — `status`, `response`, `data` — sind enumerable Own-Properties. Die native `cause`-Chain ist non-enumerable.
+
+Default-Struct-Messages sagen `received <kind>`, nie den empfangenen Wert, zum Beispiel `Expected number at email, received string`. Ein JSON-`SyntaxError` hinter `RES_DECODE_FAILED` ergibt die Message `Response body could not be decoded`. Issue-Pfade sind strukturell und behalten Record-Keys bei: `struct.record(...)` kann `Expected number at alice@example.com, received string` erzeugen, daher können Keys in Default-Messages, `prettify()` und `String(fault)` weiterhin sensibel sein. Rohes `StructIssue.received` und Parser-Causes bleiben sensibel; eigene `errorMap`- und Extension-Messages werden wörtlich verwendet und müssen vor dem Loggen geprüft werden.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+Rufe `format()`, `flatten()` oder `prettify()` erst auf, nachdem du `fault.cause` auf `StructError` eingeengt hast; diese Helper werden nicht auf den Fault kopiert.
+
+### HttpStatusFault
+
+<ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
+
+Jeder Non-2xx-Status. Hat der Endpoint `error` deklariert und der Body dekodiert, ist `data` dieser Body und `response` trägt ihn. Wurde `error` ausgelassen, wird der Body nie gelesen — `data` bleibt damit `undefined` und `response` sind Metadaten allein.
+
+### DecodeFault
+
+<ApiSignature name="DecodeFaultCode, DecodeFault" />
+
+Eine Response kam an, ließ sich aber nicht wie deklariert lesen. `response` sind nur Metadaten: ein Body **ist** ein dekodierter Wert, und genau das Dekodieren ist fehlgeschlagen, es gibt also kein `body`-Feld, nach dem man greifen könnte. Das auslösende Detail liegt auf `cause` — ein `StructError` bei einem Struct-Mismatch, das Parser-Failure bei einer unlesbaren Representation.
+
+### PreflightFault
+
+<ApiSignature name="PreflightFaultCode, PreflightFault" />
+
+Alles, was fehlschlagen konnte, bevor eine Response existierte: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` ist nur dort vorhanden, wo der Transport schon Metadaten zu melden hatte — etwa bei einem Body, der mitten im Download abbrach.
+
+### AnyFault
+
+<ApiSignature name="AnyFault" />
+
+Jeder Fault, unabhängig vom Typ seines dekodierten Error-Bodys. Nutze ihn für Handler, die Faults klassifizieren, ohne sich dafür zu interessieren, welcher Endpoint sie erzeugt hat; bevorzuge `Fault<typeof yourErrorStruct>`, wo der Body-Typ zählt.
+
+## Factories
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+<ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
+
+`createHttpStatusFault` nimmt eine Response, die den dekodierten Body schon trägt; `createUndecodedHttpStatusFault` nimmt nur Metadaten — für einen Endpoint, der kein `error` deklariert hat.
+
+`createNetworkFault` nutzt [`isAbortCause`](/de-DE/api/core/isabortcause) für `NET_ABORTED` und [`isTimeoutCause`](/de-DE/api/core/istimeoutcause) für `NET_TIMEOUT`: Sie erkennen gebrandete Sentinels aus jeder Core-Kopie, eine `DOMException` namens `AbortError` beziehungsweise eine `DOMException` oder einen `Error` namens `TimeoutError`. Alles andere wird auf `NET_UNREACHABLE` gemappt. `createPreflightFault` nimmt den Code direkt; ohne `cause` wird der Code zur Message.
+
+Alle Factories geben native `Error`-Instanzen mit den obigen strukturierten Feldern zurück; sie erzeugen keine Plain-Object-Errors und brauchen für `String(fault)` keinen Adapter.
+
+## Sentinels
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+<ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />
+
+Gemeinsame `Error`-Sentinels, die als `cause` für Abort und Timeout dienen. Wirft ein HTTP-Interceptor einen davon, endet der Aufruf mit `NET_ABORTED` oder `NET_TIMEOUT`. SSE- und WebSocket-Interceptors melden jeden geworfenen Fehler, auch diese beiden, als `EXT_INTERCEPTOR_FAILED`.
+
+Die Sentinels tragen nicht enumerierbare Brands `Symbol.for('defjs.cause.aborted')` und `Symbol.for('defjs.cause.timeout')`. Die Klassifikation hängt nicht von der Objektidentität des Sentinels oder von früheren, davon unabhängigen Ausführungen ab.
+
+## Cause-Prüfungen
+
+<ApiSignature name="isAbortCause, isTimeoutCause" />
+
+[`isAbortCause`](/de-DE/api/core/isabortcause) erkennt einen mit Abort gebrandeten `Error` oder eine `DOMException` namens `AbortError`. [`isTimeoutCause`](/de-DE/api/core/istimeoutcause) erkennt einen mit Timeout gebrandeten `Error` oder eine `DOMException` / einen `Error` namens `TimeoutError`. Übergib `fault.cause`, um den zugrunde liegenden Wert zu klassifizieren; diese Funktionen packen einen Fault nicht aus. Sie funktionieren mit Sentinels aus einer anderen Core-Kopie.
+
+Siehe [Errors-Guide](/de-DE/docs/errors).

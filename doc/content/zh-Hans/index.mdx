@@ -1,0 +1,75 @@
+---
+title: Defjs
+description: 为更友好的 SDK 设计而生：定义可复用的接口契约，由应用配置 Client 并执行。
+---
+
+# Defjs
+
+**为更友好的 SDK 设计而生。** Defjs 即 **define js**，其中 `def` 是 **define** 的缩写。用 JavaScript / TypeScript 定义接口，让 SDK 的编写、使用与发布更直接。
+
+SDK 作者导出带类型的端点定义；应用导入这些定义，创建自己的 Defjs Client，并决定如何执行。HTTP、SSE、WebSocket 都沿用这套分工。
+
+| SDK 作者负责                                                      | 应用负责                                                   |
+| ----------------------------------------------------------------- | ---------------------------------------------------------- |
+| `defineRequest`、`defineEventStream`、`defineWebSocket` 定义端点  | `createClient` 配置服务地址、鉴权、拦截器和平台 handle     |
+| Struct 描述输入、输出、错误或消息；`builder` 将输入映射到传输位置 | 执行 command，处理结果、取消、重试策略及流或会话的生命周期 |
+| 导出、测试和发布可复用契约                                        | 按部署环境、用户或请求作用域复用这些契约                   |
+
+先由 SDK 导出定义：
+
+<include cwd meta="get-health.ts">
+  examples/home/get-health.ts#example
+</include>
+
+再由应用创建 Client 并执行：
+
+<include cwd meta="app.ts">
+  examples/home/app.ts#example
+</include>
+
+定义不绑定某个应用的 Client，但仍属于 Defjs 的运行时契约：它包含 Struct、builder 和具体传输语义，并不是任意请求库都能执行的 JSON 描述。
+
+从[快速开始](/zh-Hans/docs/start)体验定义与调用，再了解[定义与执行](/zh-Hans/docs/commands)、[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)和[应用的 Client 配置](/zh-Hans/docs/client)。[设计决策](/zh-Hans/docs/design-decisions)解释这些边界如何服务于 SDK 设计。
+
+## 选传输
+
+| 你要做的事              | 从这里看                              | 成功时拿到什么                                                      |
+| ----------------------- | ------------------------------------- | ------------------------------------------------------------------- |
+| 请求 + 按状态区分的响应 | [HTTP](/zh-Hans/docs/http)            | 解码后的数据 + `DecodedResponse`（没有声明 output 时是 `HttpMeta`） |
+| 长连接的服务端事件流    | [SSE](/zh-Hans/docs/sse)              | 一条 stream + 启动时的 `open` 快照                                  |
+| 双向会话                | [WebSocket](/zh-Hans/docs/web-socket) | 一个 session + 启动时的 `connection` 快照                           |
+
+传输定义描述相应协议的契约；应用执行后，按该传输的结果和生命周期处理。
+
+## 选包
+
+| 包                            | 什么时候用                                                                                              |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `@defjs/core`                 | 端点定义、Struct，以及执行 HTTP / SSE / WebSocket 的 `createClient`                                     |
+| `@defjs/react`                | `ClientProvider` / `useClient` — 见 [React](/zh-Hans/docs/integrations/react)                           |
+| `@defjs/vue`                  | Plugin + `injectClient` — 见 [Vue](/zh-Hans/docs/integrations/vue)                                      |
+| `@defjs/opentelemetry-server` | 出站 span、metrics 和 logs — 见 [OpenTelemetry Server](/zh-Hans/docs/integrations/opentelemetry-server) |
+
+## 结果长什么样
+
+三种传输都返回错误优先的三项 tuple。位置对齐，含义不一样：
+
+- HTTP → `[error, data, response]`
+- SSE → `[error, stream, open]`
+- WebSocket → `[error, session, connection]`
+
+失败时第二项是 `undefined`。HTTP 的第三项同样是 `undefined`，因为 fault 已经带着响应元数据。SSE 和 WebSocket 的第三项，是失败前已捕获到的启动快照（如果有）。细节见[错误](/zh-Hans/docs/errors)。
+
+## 所有权一句话
+
+HTTP 过期了就 abort。SSE 要 `close` 再 `await stream.closed`。WebSocket 要 `close` 再 `await session.closed`。服务端如果 options 会捕获 cookie、鉴权或租户，把 Client 建在请求边界里。打日志前先把 URL、headers、body 脱敏。
+
+## 相关操作示例
+
+- [声明了 404 的 GET](/zh-Hans/recipes/get-declared-404)
+- [POST JSON](/zh-Hans/recipes/post-json)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)
+- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)
+- [用本地 Fetch handle 做测试](/zh-Hans/recipes/test-with-handle)
+- [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)

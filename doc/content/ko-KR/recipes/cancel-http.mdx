@@ -1,0 +1,20 @@
+---
+title: "취소와 시간 제한"
+description: execute 호출을 abort하거나 타임아웃하고 NET_ABORTED / NET_TIMEOUT을 읽어요.
+---
+
+# HTTP 호출 취소하기
+
+`signal`에 `abort` 또는 `timeout` 중 하나를 더해요 — `abort`와 `timeout`을 함께 쓰지 마세요. `timeout`은 `1..2_147_483_647` 범위의 양의 안전 정수여야 해요.
+
+자세한 내용은 [HTTP](/ko-KR/docs/http#작업-취소하기)를 보세요.
+
+<include cwd meta="cancel-report.ts">
+  examples/recipes/cancel-http.ts#example
+</include>
+
+```txt
+caller cancelled
+```
+
+취소는 호출자가 관찰한 결과를 알려 줘요. 서버 쪽 쓰기가 롤백됐다는 증명은 아니에요 — 변경 재시도는 멱등성 계약 뒤에 두세요.

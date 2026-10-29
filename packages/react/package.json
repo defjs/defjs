@@ -1,0 +1,44 @@
+{
+  "name": "@defjs/react",
+  "version": "0.0.1",
+  "description": "Provide an existing Defjs client to a React tree.",
+  "bugs": {
+    "url": "https://github.com/defjs/defjs/issues"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/defjs/defjs.git"
+  },
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "publishConfig": {
+    "directory": "dist",
+    "linkDirectory": false
+  },
+  "scripts": {
+    "build": "bun --bun tsdown --config-loader native --config tsdown.config.ts",
+    "test:unit": "vitest run --config vitest.config.ts --coverage"
+  },
+  "devDependencies": {
+    "@defjs/core": "workspace:^",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "@vitest/coverage-istanbul": "catalog:",
+    "playwright": "catalog:",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.4.0",
+    "react": ">=18.0.0"
+  }
+}

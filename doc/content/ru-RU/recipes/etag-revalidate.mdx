@@ -1,0 +1,20 @@
+---
+title: "Условные запросы ETag"
+description: Считай 304 fault’ом HTTP_STATUS; Map кэша держи снаружи execute.
+---
+
+# Ревалидация через ETag и 304
+
+`ok` значит 2xx, поэтому `304` приходит как fault `HTTP_STATUS`. Статус редиректа тоже не тело ошибки, так что `error` не объявляй: тело не читают, fault несёт status, а закэшированный продукт возвращаешь сам.
+
+См. [HTTP](/ru-RU/docs/http).
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+Не переписывай `304` в фальшивый `200` внутри Core. Владение кэшем остаётся в коде приложения вокруг `execute`.

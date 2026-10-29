@@ -1,0 +1,195 @@
+---
+title: Client
+description: createClient、option ヘルパー、Client 型です。
+---
+
+# Client
+
+クライアントを作り、options を左から右へ合成して、HTTP / SSE / WebSocket コマンドを `execute` します。
+
+## createClient()
+
+<ApiSignature name="createClient" />
+
+options は順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。
+
+- **options** — `withEndpoint` のような option ヘルパーです。
+- **戻り値** `execute` がトランスポートごとにオーバーロードされたクライアントです。
+
+<include cwd>examples/api/create-client.ts#example</include>
+
+## option ヘルパー
+
+どのヘルパーも `ClientOption` を返します。同じ設定に対しては後の呼び出しが先の呼び出しを置き換えます。ただし `withInterceptors` だけは追記します。
+
+### withEndpoint()
+
+<ApiSignature name="withEndpoint" />
+
+相対 path の前に付けるベース URL をセットします。
+
+### withInterceptors()
+
+<ApiSignature name="withInterceptors" />
+
+登録順でインターセプターを追記します。混在の kind は execute 時にトランスポートごとにフィルタされます。
+
+### withQuerySerializer()
+
+<ApiSignature name="withQuerySerializer" />
+
+HTTP、SSE、WebSocket の query エンコードを差し替えます。`serializer(query)` は**エンコード済みのワイヤオブジェクト**（エイリアス適用済み、`Date` は ISO、`bigint` は文字列）を受け取り、先頭の `?` なしの query 文字列を返す必要があります。リクエストに query が無いときは呼ばれません。`URLSearchParams` を返すビルダーはこれを飛ばします。
+
+### withHeaders()
+
+<ApiSignature name="withHeaders" />
+
+HTTP と SSE のリクエストに使う静的なデフォルトヘッダーをセットします。WebSocket のリクエストでは使われません。`headers` は option の適用時にコピーされるため、あとでそのオブジェクトを変更してもクライアントには反映されません。`withHeaders` を 2 回呼ぶと 2 回目が 1 回目を置き換え、マージはしません。
+
+1 つのリクエストでの優先順位です。
+
+1. デフォルトが最初のヘッダー集合になります。
+2. リクエストビルダーが返す `headers` は、同名のデフォルトを置き換えます。その名前の最初の値がデフォルトを置き換え（`Headers.set`）、同じ配列のあとの値はその置き換え先にだけ追加されます。スカラーや `Headers` インスタンスも置き換えます。それ以外のデフォルト名はそのまま残ります。
+3. インターセプターはマージ後のヘッダーを受け取り、変更できます。
+4. デフォルトの HTTP トランスポートでは、XSRF ヘッダーが最後に、まだ存在しない場合に限って追加されます（`withXSRF` を参照）。
+
+リクエストごとに変わる値には、インターセプターを使ってください。たとえば更新した Bearer トークンや、シリアライズ済みボディに対する HMAC です。
+
+### withTimeout()
+
+<ApiSignature name="withTimeout" />
+
+**HTTP** の `execute` に限って、デフォルトのタイムアウトをミリ秒でセットします。SSE と WebSocket はこれを無視します。それらの execute の `timeout` は、呼び出しごとの別個の開始期限です。`ms` は `2_147_483_647` 以下の正の安全な整数でなければならず、そうでない場合は `withTimeout` の呼び出し時に `RangeError` を投げます。`withTimeout` を 2 回呼ぶと 2 回目が 1 回目を置き換えます。
+
+期限は、入力のパース、ビルダー、インターセプター、トランスポート、宣言されたボディの読み取りまでを含みます。呼び出しごとの [`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) と次のように組み合わさります。
+
+| Execute options                 | 効果                                                                                           |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| なし                            | クライアントのデフォルトが適用され、期限切れは `NET_TIMEOUT` になります。                      |
+| `{ timeout }`                   | この呼び出しに限り、クライアントのデフォルトを置き換えます。                                   |
+| `{ abort }` または `{ signal }` | デフォルトと組み合わさります。呼び出し側のシグナルは `NET_ABORTED`、タイマーは `NET_TIMEOUT`。 |
+| `{ abort, timeout }`            | 引き続き不正で、`REQ_OPTIONS_INVALID` になります。クライアントのデフォルトは競合に数えません。 |
+
+<include cwd>examples/api/client-defaults.ts#example</include>
+
+### withHTTPHandle()
+
+### withSSEHandle()
+
+### withWebSocketHandle()
+
+<ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
+
+Fetch（HTTP/SSE）または WebSocket コンストラクタを差し替えます。
+
+### withCredentials()
+
+<ApiSignature name="withCredentials" />
+
+`true` のとき、HTTP と SSE の Fetch は `credentials: 'include'` を使います。デフォルトはオフです。WebSocket 接続には影響しません。
+
+### withXSRF()
+
+<ApiSignature name="withXSRF" />
+
+HTTP リクエストに XSRF トークンのヘッダーを追加します。`options` は `xsrf` 設定で、[`ClientOptions`](/ja-JP/api/core/clientoptions-type) の `xsrf` と同じ形です。`cookieName`（デフォルト `XSRF-TOKEN`）、`headerName`（デフォルト `X-XSRF-TOKEN`）、`tokenProvider({ request })` です。引数なしの `withXSRF()` はこれらのデフォルトを有効にします。SSE と WebSocket のリクエストには影響しません。
+
+デフォルトの HTTP トランスポートは、次のすべてが成り立つときにヘッダーを追加します。メソッドが `GET`、`HEAD`、`OPTIONS`、`TRACE` のいずれでもないこと、リクエストにそのヘッダーがまだないこと、リクエストが同一オリジンであること、空でないトークンが見つかることです。Worker 内も含め、`location` が存在するときは、解決済みリクエストのオリジンが `location.origin` と一致する必要があります。存在しなければ、`baseEndpoint` を持つリクエストを同一オリジンとみなします。クロスオリジンのリクエストでは `tokenProvider` は呼ばれません。トークンはプロバイダーが指定されていればそこから、なければ `document.cookie` から取得します。cookie を読むのは `document` が存在するときだけです。
+
+### SSE の設定
+
+### withSSEReconnect()
+
+### withSSEOnInvalidEvent()
+
+<ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
+
+### WebSocket の設定
+
+### withWebSocketBeforeConnect()
+
+### withWebSocketProtocols()
+
+### withWebSocketHeartbeat()
+
+### withWebSocketReconnect()
+
+<ApiSignature name="withWebSocketBeforeConnect, withWebSocketProtocols, withWebSocketHeartbeat, withWebSocketReconnect" />
+
+## 型
+
+### Client
+
+<ApiSignature name="Client" />
+
+`execute` はコマンドの種類ごとにオーバーロードが一つあります（event stream、WebSocket、HTTP）。型パラメーターはコマンドから推論されます。
+
+### ClientOption
+
+<ApiSignature name="ClientOption" />
+
+`createClient` が組み立てる `ClientConfig` を変更します。合う `with*` ヘルパーがないときに自作してください。
+
+### QuerySerializer
+
+<ApiSignature name="QuerySerializer" />
+
+### FetchHandle
+
+<ApiSignature name="FetchHandle" />
+
+Defjs が Fetch 実装に求める呼び出しシグネチャです。`typeof fetch` ではないため、モックが `preconnect` のようなホスト固有の拡張を持つ必要はありません。デフォルトの HTTP/SSE ハンドラーは、呼び出しごとに `globalThis.fetch` を解決します。HTTP が `(url, init)` を使うのは、差し替えられていないプラットフォームの Fetch だけで、差し替えたグローバルやカスタムハンドラーには `Request` を渡します。SSE は常に `Request` を渡します。Fetch がなくても Core の import は可能です。実行時にも Fetch がなければ、デフォルトの実行は `ENV_UNSUPPORTED` を報告しますが、カスタムハンドラーは利用できます。
+
+### ClientSSEOptions
+
+### ClientWebSocketOptions
+
+<ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
+
+どちらのトランスポートでも再接続はオプトインです。`withSSEReconnect` / `withWebSocketReconnect` を使わなければリトライはありません。`reconnect` を指定すると、次のデフォルトが適用されます。
+
+| フィールド   | SSE            | WebSocket      |
+| ------------ | -------------- | -------------- |
+| `attempts`   | 障害ごとに `3` | 障害ごとに `3` |
+| `delayMs`    | `1000`         | `1000`         |
+| `factor`     | `1`            | `2`            |
+| `jitter`     | `0`            | `0`            |
+| `maxDelayMs` | 上限なし       | `30000`        |
+
+どちらのトランスポートでも、ハンドシェイクに成功すると、障害ごとのリトライ予算、コールバックの試行番号、バックオフの指数がリセットされます。`attempts: 0` はリトライを無効にします。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。`maxDelayMs` は、ジッターと丸め処理の後の最終的な待ち時間に上限を設けます。SSE に設定上の上限がない場合も含め、プラットフォームのタイマー上限である `2_147_483_647` ms も適用されます。基準値がゼロならゼロのままで、有効な数値からの計算でオーバーフローした場合は上限で飽和します。
+
+再接続オプションはトランスポートの呼び出し前に検証されます。`attempts` は非負の安全な整数、`delayMs` は非負の有限値、`maxDelayMs` は非負の有限値または正の `Infinity`（設定上の上限を解除しますが、最終遅延は引き続き `2_147_483_647` ms 以下に制限されます）、`factor` は有限の正数、`jitter` は有限で 0–1 の範囲でなければなりません。不正な値は `REQ_OPTIONS_INVALID` を返します。WebSocket の `attempts: 0` は以降のリトライを無効にしますが、明示的に指定したすべての再接続フィールドは SSE と同様に初回接続前に検証されます。ジッターは上限適用済みの基準値を増減させ、その後に最終的な上限が適用されます。
+
+SSE では `delayMs` は開始時の基準の待ち時間にすぎず、数字だけのサーバーの `retry:` フィールドが、復旧後も含め、以降の試行でその値を置き換えます。`shouldReconnect` が `false` を返すとリトライを止めます。SSE のコールバックは `lastEventId`、リクエストの `method`、最新の `open` 情報も受け取り、非同期でも構いません。それがなければ、SSE が再接続するのは `GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE` のリクエストだけです。指定されていれば、すべてのメソッドについて、その戻り値で再接続するかどうかを決めます。最新のイベント ID は UTF-8 のバイト列として `Last-Event-ID` に送られます。空の ID は保存された ID を消去し、NUL を含む ID は無視されます。WebSocket のコールバックは代わりに close の `code`、`reason`、`wasClean` を受け取ります。
+
+SSE の `onInvalidEvent` は、一致する struct がないイベント（`default` もない場合を含む。`missing-struct`）や、データが struct の検証に失敗したイベント（`validation-failed`）を扱います。イベントは常に破棄されます。ハンドラーの戻り値は無視され、ハンドラーが投げたエラーでストリームが閉じることはありません。
+
+WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を呼び出しごとに `execute` へ渡すこともできます。execute の値は、その呼び出しに限りクライアントの値を置き換えます。`heartbeat.message` が各 ping を作ります。省略した場合や `undefined` を返す場合は何も送りません。
+
+### ClientOptions
+
+<ApiSignature name="ClientOptions" />
+
+表示されるフィールドは `sse` と `webSocket` です。残りの八つ——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`timeout`、`xsrf`、`withCredentials`——はエクスポートされない HTTP の基底から継承され、`endpoint` は必須です。`createClient` はこのオブジェクトを受け取らず、option ヘルパーを受け取ります。
+
+### ClientConfig
+
+option ヘルパーが変更し、`execute` が読み取る解決済みスナップショットです。デフォルト適用後の `ClientOptions` で、`http.handle`、`interceptors`、`sse`（`ClientSSEConfig`）、`webSocket` が常に存在します。
+
+### ClientSSEConfig
+
+<ApiSignature name="ClientSSEConfig" />
+
+`ClientConfig.sse` にある解決済みの SSE config です。`handle` が必須になった `ClientSSEOptions` です。
+
+### WebSocketHandle
+
+トランスポートが使う WebSocket インスタンスのインターフェースです。`WebSocket` から `binaryType`、ready state の定数、`dispatchEvent`、`on*` ハンドラープロパティを除き、`readyState: number` を読み取り専用にしたものです。
+
+### WebSocketHandleConstructor
+
+<ApiSignature name="WebSocketHandleConstructor" />
+
+`withWebSocketHandle` に渡すコンストラクタです。ready state の定数 `OPEN` を公開している必要があります。
+
+[Client ガイド](/ja-JP/docs/client) を見てください。

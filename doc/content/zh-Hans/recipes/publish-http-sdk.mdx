@@ -1,0 +1,138 @@
+---
+title: "构建并发布 SDK"
+description: 把带类型的端点定义作为 npm 包发布，由每个应用配置自己的 Client。
+---
+
+# 构建并发布 SDK [#发布-http-sdk别藏起-execute]
+
+SDK 把团队提供的 API 打包交付。使用 Defjs 时，SDK 导出端点定义及其数据契约；消费方应用提供 Client 配置并决定何时执行。本例使用 HTTP，同样的包边界也适用于 SSE 和 WebSocket 定义。
+
+## 1. 定义 SDK 操作
+
+在 SDK 项目中创建 `src/users.ts`，集中描述路径、输入映射、响应和服务错误。定义这项操作时，无需创建 Client、指定部署地址或持有当前凭证。
+
+<include cwd meta='title="src/users.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+从 `src/index.ts` 导出端点：
+
+```ts
+export { getUser } from "./users.js";
+```
+
+`.js` 是编译后 ESM 包中的路径，TypeScript 构建时会将它解析为 `users.ts`。SDK 增长时，可以增加操作模块并从入口重新导出端点。项目结构如下：
+
+```txt
+users-sdk/
+  package.json
+  tsconfig.json
+  src/
+    index.ts
+    users.ts
+```
+
+## 2. 打包 JavaScript 和类型声明
+
+创建下面的 `package.json`，将示例包名替换为你拥有的 npm scope：
+
+```json
+{
+  "name": "@company/users-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.4.0",
+    "typescript": "^7.0.2"
+  }
+}
+```
+
+Core 是与应用共享的外部运行时依赖。`peerDependencies` 声明 SDK 支持的 Core 版本；开发依赖用于构建与测试。本例对应当前 `0.4.x` 契约，发布前应根据实际验证选择版本范围，因为类型声明和运行时行为都依赖它。
+
+添加 `tsconfig.json`：
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+
+这些 lib 提供类型声明，不提供运行时 polyfill。应用仍需具备所选传输使用的 Web API。
+
+构建并检查包：
+
+```sh
+npm install
+npm run build
+npm pack --dry-run
+npm pack
+```
+
+确认 tarball 包含 `dist/index.js`、`dist/index.d.ts` 及它们引用的操作模块。先在独立应用中安装这个 tarball，验证类型和执行行为，再发布。SDK 的 README 应说明服务 API、兼容的 Core 版本、所需鉴权及可选默认配置。
+
+## 3. 在消费方应用中执行
+
+下面的本地示例把定义放在与 `app.ts` 同目录的 `users-sdk.ts`，便于离线执行。`./users-sdk.ts` 只导出端点；应用自行创建 Client，配置本地 Fetch handle，再执行导入的操作：
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada
+```
+
+使用发布后的 SDK 时，同时安装兼容的 Core：
+
+```sh
+npm install @company/users-sdk @defjs/core@^0.4.0
+```
+
+把示例中的相对导入替换为 npm 包导入：
+
+```ts
+import { getUser } from "@company/users-sdk";
+```
+
+在应用 Client 上配置实际服务地址与鉴权。本地测试可以保留 `withHTTPHandle(...)`；连接服务时去掉它，使用平台 Fetch。第二个应用也可以导入同一端点，使用不同 Client 配置，而无需更改 SDK 定义。
+
+## 4. 验证并发布
+
+通过[Client 本地测试](/zh-Hans/recipes/test-with-handle)覆盖公开端点、请求映射、响应校验和声明错误。使用两个服务地址和凭证不同的 Client 验证同一端点。调用点应保留带类型的 `HTTP_STATUS` 处理，并测试 SDK 所导出传输的取消、流或会话清理行为。
+
+检查通过后，在 SDK 目录中使用你的 npm 账号发布：
+
+```sh
+npm publish --access public
+```
+
+这条命令会发布公开包。私有 SDK 请遵循组织的 registry 与访问策略。Defjs 不会代你生成或发布这个包。
+
+Client 工厂和便捷方法都是可选补充。它们可以提供服务默认值或领域行为，同时接受调用方配置并保留直接的端点导出。应记录它们引入的错误映射或生命周期策略；一个可复用 SDK 并不要求这两类封装。
+
+底层契约见[定义与执行](/zh-Hans/docs/commands)、[Client](/zh-Hans/docs/client)和[设计决策](/zh-Hans/docs/design-decisions)。

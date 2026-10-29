@@ -1,0 +1,114 @@
+---
+title: "SSE 事件流"
+description: SDK 定义带类型的事件流，应用打开并消费它，负责取消、关闭和等待终态。
+---
+
+# 服务端发送事件（SSE）
+
+SDK 作者通过 `defineEventStream` 定义连接输入、事件名到 Struct 的映射及相关限制。应用用自己的 Client 打开流，获取带类型的事件和启动快照，并决定消费与重连策略。
+
+打开流、迭代它，再用 `await using` 释放自有 handle。手动 `close()` 和 `closed` 仍可使用；Client 和插件不会替你释放返回的流。
+
+## 基本用法
+
+<include cwd lang="typescript">
+  examples/sse/basic-setup.ts#example
+</include>
+
+## 定义流
+
+`defineEventStream(...)` 要 `events`、正安全整数的 `maxBufferSize`、正安全整数的 `maxQueueSize`，以及相对 `path`。Method 默认 `GET`。
+
+请求形状和 HTTP 一样：`builder`，返回 `path`、`query`、`headers`、`body`。`GET` / `HEAD` 的 builder 不能返回 body。声明了 `error` struct 时，启动 fault 带类型，非 2xx 握手 body 按 struct kind 解码（`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON）。你没设 `Accept` 时，Defjs 会发 `Accept: text/event-stream`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。`ReadableStream` 请求体遵循 HTTP 的规则：在不支持流式发送请求体的运行时（例如 Firefox）中，启动会在发送任何内容之前以 `ENV_UNSUPPORTED` 失败。在 Chromium 中，发送这种请求体需要 HTTP/2 或更高版本；使用 HTTP/1.1 时，启动会以 `NET_UNREACHABLE` 失败。流式请求体只发送一次，使用这种请求体的请求不会重连（见「重连」）。
+
+**当你**选择重连时，一条逻辑流可以跨多次物理 Fetch。没有 `withSSEReconnect`，瞬时网络和流读取失败会结束逻辑流。打开成功时你仍拿到一个 handle、一个 async iterator。
+
+## 打开并查看
+
+`client.execute(...)` 只有状态、content-type、body 检查都过了才 resolve：
+
+<include cwd lang="typescript">
+  examples/sse/open-and-inspect.ts#example
+</include>
+
+响应必须成功，媒体类型（不含参数）是 `text/event-stream`，且有 body。启动非 2xx → `HTTP_STATUS`。声明了 `error` 时，这个 fault 带着解码后的握手 body；媒体类型不对是 `RES_MEDIA_TYPE_INVALID`，body 没法按声明的 kind 读出来是 `RES_DECODE_FAILED`。响应到达后校验失败时，第三项仍可能有响应快照。
+
+基础端点缺失、相对或无效，或者路径非法时，会在构建时、任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，即使 interceptor 本来会短路请求也一样。解析后的 URL 必须与基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 的最终 `req.endpoint` 也会相对于最终 `req.baseEndpoint` 按相同规则检查；允许有意把基础端点换成另一个有效的绝对 URL。确定性的 URL 错误不会重试。
+
+`startupOpen` 是本次执行的初始快照；新的 `execute` 绝不会复用上一次执行的快照，即使它在响应到达之前就失败也一样。`stream.open` 是实时的，后续物理打开会更新它。第一次响应重要时，留着 tuple 里的值。 `startupOpen` 仅对返回的 Defjs 原生 handle 或透传同一 live `open` 对象的 wrapper 保证是所属连接首次成功握手的快照；自定义 handle 或显式覆盖 `open` 的 wrapper 则保留其当前公开 `open`，即使已发生重连也一样，因此共享 `closed` 不能绕过 URL 净化或响应头过滤，Defjs 也不从任意元数据变换反推首次握手。
+
+<include cwd lang="typescript">
+  examples/sse/stream-result.ts#example
+</include>
+
+## 解码事件
+
+传输事件名 → `events[eventName]`；否则 `events.default`。没有匹配 Struct → 事件不投递。缺 SSE `event` 字段 → 逻辑名是 `message`。
+
+SSE `data` 一开始是文本。`string` struct 保留这段文本。其余 kind 都是 JSON：先 parse 文本，再用 struct 解码。`struct.object`、`struct.number`、`struct.boolean`、`struct.any`、`struct.unknown` 都是 JSON，不是 trim 过的文本。`ping` 这种裸 token 满足不了 `struct.literal('ping')`；data 必须是 JSON。服务端发 JSON 字符串 `"abc"` 时仍然满足 `struct.string()`：交付的值就是这段原始文本，引号也在，不会 JSON 解码成 `abc`。
+
+解析遵循 WHATWG SSE 的行和字段规则：CR、LF、CRLF 都结束一行；空行会分派含有数据的事件；多行 `data:` 用 `\n` 连接。注释和未知字段会被忽略，EOF 时尚未完成的事件不会分派。每条物理流只会移除开头的一个 UTF-8 BOM。`data` 或 `id` 值内部的 U+FEFF 会保留；后续出现的 BOM 前缀字段名（如 `﻿data`）属于未知字段，会被忽略。
+
+发出的值：`event`、解码后的 `data`、可选非空 `id`。有 `default` 时，未知事件名在推断 union 里是 `string`。
+
+## 观察无效事件
+
+无效/未声明事件会被丢掉，不进队列。`withSSEOnInvalidEvent(...)` 可以观察原始 ID、名字、文本 data，以及 `missing-struct` 或 `validation-failed` 和可选 cause。
+
+<include cwd>examples/sse/invalid-events.ts#example</include>
+
+Observer 跑在 transform 边界。除非当前尝试的 signal 已 abort，它的失败是隔离的。写短一点；别把原始事件 data 当可信输入。
+
+## 重连
+
+**行为变化：** SSE 重连是 opt-in。没有 `withSSEReconnect(...)` 时，网络和流读取失败**不会**重试（等同 `attempts: 0`）。传 `withSSEReconnect({ attempts: 3 })`（或另一份审过的预算）才会重试这些失败。正常 EOF 不重试。状态/content-type 校验、parser 上限、消息 transform 失败、队列溢出、正常 EOF 对逻辑流仍是终止性的。
+
+<include cwd>examples/sse/reconnect.ts#example</include>
+
+`attempts` 是每次中断的重试预算；设了 reconnect 对象时默认 `3`。成功握手会重置预算、回调的尝试次数和退避指数，因此各次中断不会共用整个生命周期的预算。`attempts: 0` 禁用重试。不写 `withSSEReconnect` 同样禁用重试。`delayMs` 是初始间隔（默认 `1000`）；`factor` 放大间隔（默认 `1`，即恒定间隔）；`maxDelayMs` 是施加抖动并取整后最终延迟的硬上限（默认不配置上限）。SSE 的 `jitter` 是与 WebSocket 相同的 **0–1 乘性因子**。即使未配置上限，平台定时器仍以 `2_147_483_647` ms 为限。基数为零时仍保持零；有效数值计算时发生溢出，结果会限制在上限。只含数字的流 `retry:` 字段会更新当前基础间隔，恢复之后也一样。策略回调返回 false / 抛错 / reject 会结束逻辑流。反复成功打开后立刻遇到可重试的流失败，会按当前基础延迟持续重连（受 jitter 和上限约束），因为每次打开都会重置预算；用 `shouldReconnect` 停止它们。正常 EOF 仍然是终止性的。
+
+重连 options 会在 interceptor 或 Fetch 之前检查：`attempts` 必须是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 可以是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 必须是有限的正数；`jitter` 必须是 0–1 范围内的有限数。无效值会返回 `REQ_OPTIONS_INVALID`，不会打开流。
+
+最近解析到的事件 ID 会通过后续尝试的 `Last-Event-ID` 请求头发送，在网络上编码为 UTF-8 字节，非 ASCII ID 也一样。空 `id:` 会清除该请求头；包含 NUL 的 ID 会被忽略。除了这个请求头，后续尝试会重发首次尝试时构建的请求：`builder` 和拦截器在每次 `execute` 中只运行一次，因此请求方法、URL、请求头和请求体都保持不变。如果某个请求头需要在每次尝试时更新，例如有效期较短的令牌，就应在传给 `withSSEHandle` 的 Fetch 实现中设置；该实现会在每次尝试时运行一次。如果凭证仍然过期，流打开之后的非 2xx 重连握手会以 `RES_DECODE_FAILED` 结束这条流；状态可从 `stream.open.response.status` 查看。初始握手非 2xx 时，若声明的错误 body 解码成功，则返回启动 `HTTP_STATUS` fault。
+
+重连只在安全时重发请求：
+
+- `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 是幂等的（RFC 9110 §9.2.2），会在预算内重连。
+- 其他请求方法（例如 `POST` 或 `PATCH`）只有在 `shouldReconnect` 返回 `true` 时才会重连。连接失败并不能说明服务端是否已经执行了请求：重发用于启动大语言模型生成的 `POST` 请求，会再次执行生成并再次计费，新事件也会在同一条流中接在旧事件后面。传入 `shouldReconnect` 会替换所有请求方法的默认重连策略，因此，当同一个客户端同时用于这两类端点时，应检查回调上下文中的 `method`。
+- `ReadableStream` 请求体会在首次尝试时被消耗。无论失败发生在流打开之前还是之后，都会以原始错误结束这条流；不会调用 `shouldReconnect`，也不会等待重连延迟。请求需要重连时，请使用字符串、字节、`Blob`、表单或 JSON 请求体。
+
+## 缓冲区与队列上限
+
+两者都必须是正安全整数。溢出是致命的——不会悄悄丢掉旧事件。
+
+| 上限            | 保护什么                        | 终止 code             |
+| --------------- | ------------------------------- | --------------------- |
+| `maxBufferSize` | 解析时不完整/过大的 SSE 行/事件 | `CAP_BUFFER_EXCEEDED` |
+| `maxQueueSize`  | 生产快于唯一消费者读取的事件    | `CAP_QUEUE_OVERFLOW`  |
+
+致命流还会清空缓冲事件、取消活动 body、reject iterator，并以 `kind: 'error'` resolve `stream.closed`。
+
+## 关闭与释放
+
+`EventStreamHandle`：一个实时的打开快照、一个终止 promise、一个 `close`、一个 async iterator 和一个标准 async disposer。
+
+<include cwd lang="typescript">
+  examples/sse/close-and-dispose.ts#example
+</include>
+
+终止 kind（`closed.kind`）：`eof`、`aborted` 或 `error`。`error` 结果还会带 `closed.code`，即一个 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或 `RES_MEDIA_TYPE_INVALID`。
+
+`close(reason)` 中止当前尝试、关闭队列，以 `aborted` 结束，即使 reason 是 `TimeoutError` 也一样。流打开之后，中止传给 `execute` 的 `signal` 或 `abort` 通常会让迭代器正常结束，并报告 `aborted`；但如果中止原因是 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），迭代器会抛出 `ERR_TIMEOUT`，`closed` 则报告 `kind: 'error'` 和 `code: 'NET_TIMEOUT'`。execute 的 `timeout` option 只是启动期限，绝不会结束一条已打开的流。循环 `break` / `return` / throw 会触发 iterator return，并以 `iterator-return` 关闭。执行 command 的代码拥有关闭权。
+
+`await using` 调用同一条自有 close 路径，并等待 Defjs 读取/重连任务停止及当前 reader lock 释放。它刻意设有界限，不会无限等待永远不 settle 的、由 provider 控制的 `ReadableStream.cancel()` promise，因此不保证这类 provider promise 已完成。需要 reason 或终止结果时，仍可显式调用 `stream.close(reason)`，再 `await stream.closed`。
+
+结构化实现 `EventStreamHandle` 的代码现在必须提供 `[Symbol.asyncDispose](): PromiseLike<void>`，并把它连到同一 lifecycle。对实现者而言，这是编译期 breaking change；只接收 Defjs handle 的消费者无需新增运行时调用。
+
+支持的最低 lib 集合是 `ES2022`、`ESNext.Disposable`、`DOM`、`DOM.Iterable`。仓库声明工具使用 TypeScript 7，但没有自动验证打包产物的使用方或最低 lib 集合的门禁，也不承诺支持旧编译器。这个集合只提供类型，不提供运行时 Web API polyfill。普通 HTTP Client 不是 `AsyncDisposable`，其请求应使用 timeout 或 `AbortSignal` 管理。
+
+日常日志别带 credentials、事件 data、事件 ID、cause、流 URL。`withCredentials(true)` 影响 SSE 的 Fetch cookie；不配置 WebSocket 鉴权。
+
+## 相关操作示例
+
+- [消费 SSE 流](/zh-Hans/recipes/consume-sse)
+- [取消一次 HTTP](/zh-Hans/recipes/cancel-http)

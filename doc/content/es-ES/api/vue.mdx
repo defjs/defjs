@@ -1,0 +1,36 @@
+---
+title: "@defjs/vue"
+description: Plugin de Vue, claves de inyección predeterminadas o personalizadas e injectClient.
+---
+
+# Vue
+
+Proporciona un cliente `@defjs/core` existente a una app de Vue. Este paquete no crea, no cachea ni libera (dispose) el cliente. Se requiere Vue 3 o posterior.
+
+Mira la [guía de Vue](/es-ES/docs/integrations/vue).
+
+## createClientPlugin()
+
+<ApiSignature name="createClientPlugin" />
+
+- **client** — Instancia de `createClient`.
+- **Devuelve** un plugin de Vue para `app.use(...)`. Al instalarlo se llama a `app.provide(HTTP_CLIENT, client)`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+<ApiSignature name="injectClient" />
+
+`injectClient(key)` lee el provider más cercano para esa clave; sin argumento o con `undefined`, usa `HTTP_CLIENT`. Llámalo en un contexto de inyección válido de Vue: `setup()` síncrono o `app.runWithContext()` (Vue 3.3+). Este último solo ofrece contexto síncrono de aplicación, sin sustituciones de subárboles ni contexto a través de un `await` normal. Los contextos restaurados por el compilador tras un `await` de nivel superior en `<script setup>` siguen siendo válidos.
+
+Para una `InjectionKey<Client>` personalizada, usa `app.provide(key, client)` o `provide(key, client)` en un componente ancestro. Ambos lados deben compartir el mismo objeto `Symbol`; descripciones iguales no hacen que las claves sean iguales. `createClientPlugin(client)` sigue aceptando solo el cliente y proporcionando únicamente `HTTP_CLIENT`.
+
+- **Devuelve** el mismo cliente proporcionado para la clave elegida.
+- **Lanza** un `Error` sin contexto de inyección activo o sin cliente para la clave elegida. Una clave personalizada ausente nunca recurre a `HTTP_CLIENT`; instalar el plugin no establece por sí solo un contexto de inyección.
+
+## HTTP_CLIENT
+
+<ApiSignature name="HTTP_CLIENT" />
+
+Clave de inyección de Vue. Prefiere `injectClient()` a `inject(HTTP_CLIENT)`. Sustituye el cliente de un subárbol con `provide(HTTP_CLIENT, childClient)`.

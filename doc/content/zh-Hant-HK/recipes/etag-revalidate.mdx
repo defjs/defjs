@@ -1,0 +1,20 @@
+---
+title: "ETag 條件請求"
+description: 將 304 當 HTTP status fault；cache Map 留喺 execute 外面。
+---
+
+# 用 ETag 同 304 revalidate
+
+`ok` 只代表 2xx，所以 `304` 會以 `HTTP_STATUS` fault 到。Redirect status 亦唔係 error body，所以唔好聲明 `error`：body 根本唔會被讀，fault 帶住 status，你自己 return cached product。
+
+睇 [HTTP](/zh-Hant-HK/docs/http)。
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+唔好喺 Core 入面將 `304` 改寫成假 `200`。Cache ownership 留喺 application code，包住 `execute`。

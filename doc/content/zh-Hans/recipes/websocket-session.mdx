@@ -1,0 +1,22 @@
+---
+title: "管理 WebSocket 会话"
+description: 连上、发一个类型化信封、收一次，再 close 并 await closed。
+---
+
+# 打开 WebSocket 会话
+
+每个方向一个 struct。退订、`close`、`await session.closed` 都归你。非法 frame 进 `onRuntimeError`。
+
+细节见 [WebSocket](/zh-Hans/docs/web-socket)。
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` 是占位地址。假设服务器用 `{ "type": "message", "text": "Hello" }` 回应 `{ "type": "send", "text": "Hello" }`，这段代码会输出：
+
+```txt
+message Hello
+```
+
+重连是可选的（`withWebSocketReconnect`）。Heartbeat 也是可选的。浏览器 WebSocket 不能随意设置握手 headers——用 cookie、子协议或短命 ticket。

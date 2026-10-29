@@ -1,0 +1,20 @@
+---
+title: "ETag 条件付きリクエスト"
+description: 304 は HTTP status の fault として扱い、キャッシュの Map は execute の外に置きます。
+---
+
+# ETag と 304 で再検証する
+
+`ok` は 2xx を意味するので、`304` は `HTTP_STATUS` の fault として届きます。リダイレクト status もエラーボディではないので、`error` は宣言しないでください。ボディは読まれず、fault が status を運び、キャッシュした商品は自分で返します。
+
+詳細は [HTTP](/ja-JP/docs/http) を見てください。
+
+<include cwd meta="etag-cache.ts">
+  examples/recipes/etag-revalidate.ts#example
+</include>
+
+```txt
+Flask
+```
+
+Core の中で `304` を偽の `200` に書き換えないでください。キャッシュの所有は、`execute` の周りのアプリケーションコードに残します。

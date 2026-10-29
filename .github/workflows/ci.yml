@@ -2,39 +2,50 @@ name: CI
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run test
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v4.5.0
+      - run: bun ci
+      - name: Install Playwright browsers
+        run: bunx --bun playwright install --with-deps chromium firefox
+      - name: Lint
+        run: bun run lint
+      - name: Format check
+        run: bun fmt --check
+      - name: Typecheck
+        run: bun run typecheck
+      - name: Unit tests
+        run: bun run test:unit
+      - name: Build
+        run: bun run build
+      - name: E2E tests
+        run: bun run test:e2e
+
+  # Vitest's bin is `#!/usr/bin/env node`. `bunx` (without `--bun`) runs that bin on Node.
+  # `bun run` follows bunfig `[run] bun = true` and would stay on Bun, which is the `checks` job.
+  # Node 24 is inside vitest's engines (`^22.12.0 || ^24.0.0 || >=26.0.0`) and does not drift with the runner image.
+  node-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+          node-version: 24
+          package-manager-cache: false
       - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run lint
-
-  build:
-    needs:
-      - test
-      - lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run build
+      - run: bun ci
+      - name: core-server on Node
+        working-directory: packages/core
+        run: bunx --no-install vitest run --config vitest.config.ts --project core-server --coverage.enabled=false
+      - name: opentelemetry-server on Node
+        working-directory: packages/opentelemetry-server
+        run: bunx --no-install vitest run --config vitest.config.ts --coverage.enabled=false

@@ -1,0 +1,20 @@
+---
+title: "로컬 HTTP 테스트"
+description: withHTTPHandle로 그 클라이언트의 Fetch만 바꾸고 명령은 그대로 둬요.
+---
+
+# 로컬 Fetch 핸들로 테스트하기
+
+`withHTTPHandle(...)`은 그 클라이언트의 Fetch만 바꿔요. DNS, TLS, 실제 서버 없이도 URL 구성, interceptor, status 디스패치, Struct 디코딩은 그대로예요.
+
+자세한 내용은 [클라이언트](/ko-KR/docs/client)를 보세요.
+
+<include cwd meta="get-user.test.ts">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+```txt
+Ada 200
+```
+
+프로덕션에서는 같은 `getUser` 명령을 실제 `withEndpoint(...)` 클라이언트에 쓰세요. 바뀌는 것은 handle뿐이에요.

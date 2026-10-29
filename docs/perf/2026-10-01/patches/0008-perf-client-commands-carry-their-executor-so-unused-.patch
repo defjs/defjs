@@ -1,0 +1,147 @@
+From 345eee4d9193a92872b5b8d64354c46ca9d1c464 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:22:07 +0800
+Subject: [PATCH 08/10] perf(client): commands carry their executor so unused
+ transports tree-shake
+
+---
+ packages/core/src/client/client.ts         | 22 ++++++----------------
+ packages/core/src/client/command.ts        |  6 ++++++
+ packages/core/src/http/http.ts             |  3 ++-
+ packages/core/src/sse/sse.ts               |  3 ++-
+ packages/core/src/web_socket/web_socket.ts |  3 ++-
+ 5 files changed, 18 insertions(+), 19 deletions(-)
+
+diff --git a/packages/core/src/client/client.ts b/packages/core/src/client/client.ts
+index e4ba18e..0cee18b 100644
+--- a/packages/core/src/client/client.ts
++++ b/packages/core/src/client/client.ts
+@@ -1,12 +1,11 @@
+-import type { Command } from './command'
+-import { isEventStreamCommand, isHttpCommand, isWebSocketCommand } from './command'
++import type { Command, CommandExecutor } from './command'
++import { COMMAND_EXECUTE, isEventStreamCommand, isHttpCommand, isWebSocketCommand } from './command'
+ import type { ClientConfig } from './config'
+ import { createClientConfig } from './config'
+ import type { ClientOption } from './option'
+ import type { HttpCommand, HttpExecuteOptions } from '../http/http'
+-import { executeHttpCommand } from '../http/http'
++import type { executeHttpCommand } from '../http/http'
+ import type { EventStructs, EventStreamCommand, EventStreamData, EventStreamExecuteOptions, StreamAwaitResult } from '../sse/sse'
+-import { executeEventStreamCommand } from '../sse/sse'
+ import type { AnyStruct } from '../struct'
+ import type {
+   SocketAwaitResult,
+@@ -15,7 +14,6 @@ import type {
+   WebSocketIncomingData,
+   WebSocketOutgoingData,
+ } from '../web_socket/web_socket'
+-import { executeWebSocketCommand } from '../web_socket/web_socket'
+ 
+ export const CLIENT = Symbol('Client')
+ 
+@@ -77,19 +75,11 @@ export function createClient(...options: ClientOption[]): Client {
+     options?: HttpExecuteOptions,
+   ): ReturnType<typeof executeHttpCommand<TInput, TOutput, TError>>
+   function execute(command: Command, options?: unknown): Promise<unknown> {
+-    if (isHttpCommand(command)) {
+-      return executeHttpCommand(conf, command, options as HttpExecuteOptions | undefined)
+-    }
+-
+-    if (isEventStreamCommand(command)) {
+-      return executeEventStreamCommand(conf, command, options as EventStreamExecuteOptions | undefined)
+-    }
+-
+-    if (isWebSocketCommand(command)) {
+-      return executeWebSocketCommand(
++    if (isHttpCommand(command) || isEventStreamCommand(command) || isWebSocketCommand(command)) {
++      return (command[COMMAND_EXECUTE] as (config: ClientConfig, command: Command, options: unknown) => ReturnType<CommandExecutor>)(
+         conf,
+         command,
+-        options as WebSocketExecuteOptions<WebSocketIncomingData<AnyStruct>, WebSocketOutgoingData<AnyStruct | undefined>> | undefined,
++        options,
+       )
+     }
+ 
+diff --git a/packages/core/src/client/command.ts b/packages/core/src/client/command.ts
+index 82d3fa4..f3634bd 100644
+--- a/packages/core/src/client/command.ts
++++ b/packages/core/src/client/command.ts
+@@ -1,3 +1,4 @@
++import type { ClientConfig } from './config'
+ import type { HttpCommand } from '../http/http'
+ import type { EventStructs, EventStreamCommand } from '../sse/sse'
+ import type { AnyStruct } from '../struct'
+@@ -7,10 +8,15 @@ export const COMMAND_TYPE: unique symbol = Symbol.for('defjs.command.type')
+ export const HTTP_COMMAND: unique symbol = Symbol.for('defjs.command.http')
+ export const EVENT_STREAM_COMMAND: unique symbol = Symbol.for('defjs.command.event-stream')
+ export const WEB_SOCKET_COMMAND: unique symbol = Symbol.for('defjs.command.web-socket')
++/** The command's own runner, so `client.execute` never imports a transport the app does not use. */
++export const COMMAND_EXECUTE: unique symbol = Symbol.for('defjs.command.execute')
++
++export type CommandExecutor = (config: ClientConfig, command: never, options?: never) => Promise<unknown>
+ 
+ export type CommandType = typeof HTTP_COMMAND | typeof EVENT_STREAM_COMMAND | typeof WEB_SOCKET_COMMAND
+ 
+ export interface BaseCommand<TCommandType extends CommandType> {
++  readonly [COMMAND_EXECUTE]: CommandExecutor
+   readonly [COMMAND_TYPE]: TCommandType
+ }
+ 
+diff --git a/packages/core/src/http/http.ts b/packages/core/src/http/http.ts
+index 285be9f..a10ccf0 100644
+--- a/packages/core/src/http/http.ts
++++ b/packages/core/src/http/http.ts
+@@ -1,4 +1,4 @@
+-import { COMMAND_TYPE, HTTP_COMMAND } from '../client/command'
++import { COMMAND_EXECUTE, COMMAND_TYPE, HTTP_COMMAND, type CommandExecutor } from '../client/command'
+ import type { BaseCommand } from '../client/command'
+ import type { HttpClientConfig } from '../client/config'
+ import type { AnyFault, Fault, FaultOf, PreflightFault } from '../error'
+@@ -172,6 +172,7 @@ export function defineRequest<
+ 
+   function create(input?: EndpointInput<TInput>): HttpCommand<TInput, TOutput, TError> {
+     const command: HttpCommand<TInput, TOutput, TError> = {
++      [COMMAND_EXECUTE]: executeHttpCommand as CommandExecutor,
+       [COMMAND_TYPE]: HTTP_COMMAND,
+       definition: endpoint,
+       input,
+diff --git a/packages/core/src/sse/sse.ts b/packages/core/src/sse/sse.ts
+index 5164fe7..4d78e1b 100644
+--- a/packages/core/src/sse/sse.ts
++++ b/packages/core/src/sse/sse.ts
+@@ -1,4 +1,4 @@
+-import { COMMAND_TYPE, EVENT_STREAM_COMMAND } from '../client/command'
++import { COMMAND_EXECUTE, COMMAND_TYPE, EVENT_STREAM_COMMAND, type CommandExecutor } from '../client/command'
+ import type { BaseCommand } from '../client/command'
+ import type { ClientConfig, ClientSSEOptions } from '../client/config'
+ import type { AnyFault, Fault, PreflightFault } from '../error'
+@@ -173,6 +173,7 @@ export function defineEventStream<
+ 
+   function create(input?: EndpointInput<TInput>): EventStreamCommand<TInput, TEvents, TError> {
+     const command: EventStreamCommand<TInput, TEvents, TError> = {
++      [COMMAND_EXECUTE]: executeEventStreamCommand as CommandExecutor,
+       [COMMAND_TYPE]: EVENT_STREAM_COMMAND,
+       endpoint,
+       input,
+diff --git a/packages/core/src/web_socket/web_socket.ts b/packages/core/src/web_socket/web_socket.ts
+index 556b119..83f4906 100644
+--- a/packages/core/src/web_socket/web_socket.ts
++++ b/packages/core/src/web_socket/web_socket.ts
+@@ -1,4 +1,4 @@
+-import { COMMAND_TYPE, WEB_SOCKET_COMMAND } from '../client/command'
++import { COMMAND_EXECUTE, COMMAND_TYPE, WEB_SOCKET_COMMAND, type CommandExecutor } from '../client/command'
+ import type { BaseCommand } from '../client/command'
+ import type { ClientConfig, ClientWebSocketOptions, WebSocketHandle } from '../client/config'
+ 
+@@ -200,6 +200,7 @@ export function defineWebSocket<
+ 
+   function create(input?: EndpointInput<TInput>): WebSocketCommand<TInput, TIncoming, TOutgoing> {
+     const command: WebSocketCommand<TInput, TIncoming, TOutgoing> = {
++      [COMMAND_EXECUTE]: executeWebSocketCommand as CommandExecutor,
+       [COMMAND_TYPE]: WEB_SOCKET_COMMAND,
+       endpoint,
+       input,
+-- 
+2.55.0
+

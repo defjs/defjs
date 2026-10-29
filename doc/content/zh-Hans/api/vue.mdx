@@ -1,0 +1,36 @@
+---
+title: "@defjs/vue"
+description: Vue 插件、默认或自定义 injection key，以及 injectClient。
+---
+
+# Vue
+
+把已有的 `@defjs/core` Client 接到 Vue。这个包**不会**创建、缓存或释放这个 Client。需要 Vue 3 或更高版本。
+
+见 [Vue 指南](/zh-Hans/docs/integrations/vue)。
+
+## createClientPlugin()
+
+<ApiSignature name="createClientPlugin" />
+
+- **client** — `createClient` 给的实例。
+- **返回** 给 `app.use(...)` 用的 Vue plugin。安装时会调用 `app.provide(HTTP_CLIENT, client)`。
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+<ApiSignature name="injectClient" />
+
+`injectClient(key)` 读取所选 key 最近的 provider；省略参数或传入 `undefined` 时使用 `HTTP_CLIENT`。必须处于有效的 Vue 注入上下文，例如同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。后者只提供同步 app 级上下文，不携带组件子树覆盖，也不跨普通 `await` 保持；`<script setup>` 顶层 `await` 后由编译器恢复的上下文仍然有效。
+
+自定义 `InjectionKey<Client>` 用 `app.provide(key, client)` 或祖先的 `provide(key, client)` 设置。提供与获取方必须共享同一个 `Symbol` 对象，相同描述不代表相同 key。`createClientPlugin(client)` 仍只接受 Client，并只提供 `HTTP_CLIENT`。
+
+- **返回** 所选 key 对应的同一个 Client。
+- **抛出** 没有有效注入上下文或所选 key 未提供 Client 时抛出 `Error`。自定义 key 缺失不会回退到 `HTTP_CLIENT`；仅安装插件不能建立注入上下文。
+
+## HTTP_CLIENT
+
+<ApiSignature name="HTTP_CLIENT" />
+
+Vue 注入键。优先用 `injectClient()`，别直接 `inject(HTTP_CLIENT)`。子树覆盖：`provide(HTTP_CLIENT, childClient)`。

@@ -1,0 +1,47 @@
+---
+title: API 레퍼런스
+description: SDK 정의, 데이터 계약, 앱 실행에 사용하는 함수와 옵션, 타입을 안내하는 API 레퍼런스입니다.
+---
+
+# API 레퍼런스
+
+<ApiIndex />
+
+워크스페이스 패키지 조회예요. 시그니처가 계약이에요. 가이드와 레시피는 언제 쓸지 설명해요.
+
+## 정의와 실행의 시작점
+
+| 목적                    | 참고할 API                                                                                                                                     |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| SDK의 API 정의 작성     | [HTTP](/ko-KR/api/http)의 `defineRequest`, [SSE](/ko-KR/api/sse)의 `defineEventStream`, [WebSocket](/ko-KR/api/web-socket)의 `defineWebSocket` |
+| 데이터 계약과 타입 작성 | [Struct](/ko-KR/api/struct)의 `struct.*`, `Infer`                                                                                              |
+| 앱에서 실행             | [Client](/ko-KR/api/client)의 `createClient`, `with*`, `Client.execute`                                                                        |
+| 실행 결과와 정책 처리   | [Errors](/ko-KR/api/errors), [Interceptors](/ko-KR/api/interceptors), 각 전송의 handle / session                                               |
+
+SDK 작성자는 정의를 export합니다. 사용하는 앱은 호환되는 Defjs Client를 구성하고 결과, 취소, 스트림 수명을 관리합니다. 구현에서 배포까지의 흐름은 [빠른 시작](/ko-KR/docs/start)과 [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)를 참고하세요.
+
+## 패키지
+
+| 패키지                                                           | 여기서 찾는 것                                                    |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/ko-KR/api/client)                               | `createClient`, `defineRequest`, `struct`, HTTP / SSE / WebSocket |
+| [`@defjs/vue`](/ko-KR/api/vue)                                   | `createClientPlugin`, `injectClient`, `HTTP_CLIENT`               |
+| [`@defjs/react`](/ko-KR/api/react)                               | `ClientProvider`, `useClient`                                     |
+| [`@defjs/opentelemetry-server`](/ko-KR/api/opentelemetry-server) | `withOpenTelemetryServer`, 전송별 옵션                            |
+
+## @defjs/core
+
+| 페이지                                  | 여기서 찾는 것                                                   |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| [Client](/ko-KR/api/client)             | `createClient`, `with*` options, `Client`                        |
+| [HTTP](/ko-KR/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
+| [Struct](/ko-KR/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
+| [Errors](/ko-KR/api/errors)             | `Fault` 종류와 팩토리                                            |
+| [Interceptors](/ko-KR/api/interceptors) | HTTP / SSE / WebSocket interceptor 헬퍼                          |
+| [SSE](/ko-KR/api/sse)                   | `defineEventStream`, stream handle                               |
+| [WebSocket](/ko-KR/api/web-socket)      | `defineWebSocket`, session                                       |
+
+## 관련
+
+- [시작하기](/ko-KR/docs/start)
+- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)

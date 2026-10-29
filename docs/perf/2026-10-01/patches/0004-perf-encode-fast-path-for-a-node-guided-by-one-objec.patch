@@ -1,0 +1,100 @@
+From 16de043d497c1e29cfc183246036f30f52e4bf78 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:24:28 +0800
+Subject: [PATCH 04/10] perf(encode): fast path for a node guided by one object
+ struct
+
+---
+ .../core/src/internal/outbound_request.ts     | 53 ++++++++++++++++++-
+ .../test/regression/union-equivalence.spec.ts |  8 +++
+ 2 files changed, 60 insertions(+), 1 deletion(-)
+
+diff --git a/packages/core/src/internal/outbound_request.ts b/packages/core/src/internal/outbound_request.ts
+index ef4c6b2..6c5aaf2 100644
+--- a/packages/core/src/internal/outbound_request.ts
++++ b/packages/core/src/internal/outbound_request.ts
+@@ -1,5 +1,5 @@
+ import { encodeValue } from '../struct/encode'
+-import { resolveStructFields } from '../struct/fields'
++import { resolveStructFields, type ResolvedStructField } from '../struct/fields'
+ import { guideMembers, guideTag, isGuideSet, readOwnGuide, type Guide } from '../struct/guide'
+ import { isStruct } from '../struct/guards'
+ import { selectUnionOptions } from '../struct/match'
+@@ -380,7 +380,58 @@ function isPassthroughStruct(struct: RuntimeStruct): boolean {
+   return kind === 'any' || kind === 'unknown'
+ }
+ 
++type ObjectKeySets = { fieldKeys: ReadonlySet<string>; wireKeys: ReadonlySet<string> }
++
++// Keyed by the cached field list, so the sets live exactly as long as the struct that owns them.
++const objectKeySets = new WeakMap<readonly ResolvedStructField[], ObjectKeySets>()
++
++function keySetsOf(fields: readonly ResolvedStructField[]): ObjectKeySets {
++  let sets = objectKeySets.get(fields)
++  if (!sets) {
++    sets = { fieldKeys: new Set(fields.map((field) => field.key)), wireKeys: new Set(fields.map((field) => field.wireKey)) }
++    objectKeySets.set(fields, sets)
++  }
++  return sets
++}
++
++// One object struct is the common node. Its wire keys are unique, so every field is one plain write
++// and the grouping below would only rebuild the same plan on every call.
++function encodeSingleObject(value: { [key: string]: unknown }, struct: RuntimeStruct, path: Path): { [key: string]: unknown } {
++  const fields = resolveStructFields(struct, struct[DEFINITION] as ObjectDefinition)
++  // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
++  const output: { [key: string]: unknown } = Object.create(null)
++  for (const field of fields) {
++    if (!Object.hasOwn(value, field.key)) {
++      continue
++    }
++    const fieldValue = value[field.key]
++    if (fieldValue === undefined) {
++      continue
++    }
++    output[field.wireKey] = encodeGuided(fieldValue, field.struct, [...path, field.key])
++  }
++
++  const { fieldKeys, wireKeys } = keySetsOf(fields)
++  for (const key of Object.keys(value)) {
++    if (fieldKeys.has(key)) {
++      continue
++    }
++    if (wireKeys.has(key)) {
++      throw new TypeError(`wire key collision for "${key}"`)
++    }
++    const extra = value[key]
++    if (extra === undefined) {
++      continue
++    }
++    output[key] = encodeGuided(extra, undefined, [...path, key])
++  }
++  return output
++}
++
+ function encodeObjectNode(value: { [key: string]: unknown }, members: readonly RuntimeStruct[], path: Path): { [key: string]: unknown } {
++  if (members.length === 1 && (members[0] as RuntimeStruct)[DEFINITION].kind === 'object') {
++    return encodeSingleObject(value, members[0] as RuntimeStruct, path)
++  }
+   const objects: RuntimeStruct[] = []
+   const records: RuntimeStruct[] = []
+   const passthroughs: RuntimeStruct[] = []
+diff --git a/packages/core/test/regression/union-equivalence.spec.ts b/packages/core/test/regression/union-equivalence.spec.ts
+index 1c4be90..1dbd2d4 100644
+--- a/packages/core/test/regression/union-equivalence.spec.ts
++++ b/packages/core/test/regression/union-equivalence.spec.ts
+@@ -72,3 +72,11 @@ test('nested mixed intersections retain all object-side tags and hostile keys',
+   expect(encodeOutbound(input)).toEqual({ first_wire: 'A', second_wire: 'B', proto_wire: 'safe' })
+   expect(Object.getPrototypeOf(input)).toBeNull()
+ })
++
++test('object intersections keep literal extras and reject a key that shadows a wire alias', async () => {
++  const Left = struct.object({ id: struct.string().alias('wire_id') })
++  const Right = struct.object({ n: struct.number() })
++  const input = await parseEndpointInput(struct.intersection(Left, Right), { id: '42', n: 1 })
++  expect(encodeOutbound({ ...input, extra: 'kept', dropped: undefined })).toEqual({ wire_id: '42', n: 1, extra: 'kept' })
++  expect(() => encodeOutbound({ ...input, wire_id: 'shadow' })).toThrow(/wire key collision/)
++})
+-- 
+2.55.0
+

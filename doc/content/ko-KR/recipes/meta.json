@@ -1,0 +1,5 @@
+{
+  "title": "실전 예제",
+  "root": true,
+  "pages": ["index", "..."]
+}

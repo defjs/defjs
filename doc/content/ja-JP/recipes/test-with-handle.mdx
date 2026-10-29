@@ -1,0 +1,20 @@
+---
+title: "ローカル HTTP テスト"
+description: withHTTPHandle で 1 クライアント分の Fetch を差し替え、コマンドはそのままにします。
+---
+
+# ローカル Fetch ハンドルでテストする
+
+`withHTTPHandle(...)` はそのクライアントだけ Fetch を差し替えます。URL 組み立て、インターセプター、status 振り分け、Struct デコードはそのまま — DNS・TLS・実サーバーは不要です。
+
+詳細は [Client](/ja-JP/docs/client) を見てください。
+
+<include cwd meta="get-user.test.ts">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+```txt
+Ada 200
+```
+
+本番では同じ `getUser` コマンドを、本物の `withEndpoint(...)` クライアントに対して使います — 変わるのはハンドルだけです。

@@ -1,0 +1,52 @@
+From 807ab971179fa48778e8750259c4b0791b69f684 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:22:06 +0800
+Subject: [PATCH 03/10] perf(http): memoize the parsed client endpoint base
+
+---
+ packages/core/src/internal/url.ts | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/packages/core/src/internal/url.ts b/packages/core/src/internal/url.ts
+index cfe1978..99f646b 100644
+--- a/packages/core/src/internal/url.ts
++++ b/packages/core/src/internal/url.ts
+@@ -136,7 +136,10 @@ export function createResolvedRequestUrl(baseEndpoint: string, path: string, que
+   const base = createEndpointDirectoryBase(baseEndpoint)
+   const normalizedPath = normalizeEndpointPath(path)
+   const url = new URL(normalizedPath, base)
+-  url.search = queryString
++  // The normalized path carries no query, so an empty string would only reassign an empty search.
++  if (queryString) {
++    url.search = queryString
++  }
+   return url
+ }
+ 
+@@ -184,7 +187,14 @@ function isUrlScalarValue(value: unknown): value is UrlScalarValue {
+   return isRequestScalarValue(value) && typeof value !== 'bigint'
+ }
+ 
++// One client usually talks to one endpoint. `new URL(path, base)` only reads the base, so it is shared.
++let lastEndpoint: string | undefined
++let lastBase: URL | undefined
++
+ function createEndpointDirectoryBase(baseEndpoint: string): URL {
++  if (baseEndpoint === lastEndpoint) {
++    return lastBase as URL
++  }
+   let base: URL
+   try {
+     base = new URL(baseEndpoint)
+@@ -199,6 +209,8 @@ function createEndpointDirectoryBase(baseEndpoint: string): URL {
+     base.pathname = `${base.pathname}/`
+   }
+ 
++  lastEndpoint = baseEndpoint
++  lastBase = base
+   return base
+ }
+ 
+-- 
+2.55.0
+

@@ -1,0 +1,126 @@
+---
+title: WebSocket
+description: defineWebSocket、session，以及 execute options。
+---
+
+# WebSocket
+
+声明一个 socket，execute，收发类型化消息，再 close。
+
+## defineWebSocket()
+
+<ApiSignature name="defineWebSocket" />
+
+- **definition** — `path`、一个 `incoming` struct，以及必填的正整数 `maxIncomingQueueSize`；可选 `outgoing` 和 `input` struct、`operation`、静态 `protocols`，以及非负的 `maxOutgoingQueueSize`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`WebSocketDefinition`](/zh-Hans/api/core/websocketdefinition-type)。`builder` 恰好在声明了 `input` 时才必填。
+- **返回** 一个 endpoint。传入 input 调用，得到 `WebSocketCommand`。
+
+<include cwd>examples/api/define-web-socket.ts#example</include>
+
+## executeWebSocketCommand()
+
+<ApiSignature name="executeWebSocketCommand" />
+
+`client.execute` 的底层入口。业务代码走 client。
+
+- **返回** `[null, session, connection]` 或 `[error, undefined, connection?]`。
+
+WebSocket execute 可以为单次调用覆盖 `beforeConnect`、`heartbeat`、`protocols`、`reconnect`，各自替换 client 上的值。protocols 的优先级是：execute，然后是 `withWebSocketProtocols`，最后是定义里的 `protocols`。
+
+## WebSocketSession
+
+<ApiSignature name="WebSocketSession" />
+
+自有作用域优先用 `await using ownedSession = session` 清理。手动 `session.close()` 和 `await session.closed` 仍可使用。
+
+```ts
+async function consume(
+  session: WebSocketSession<unknown, never>,
+): Promise<void> {
+  await using ownedSession = session;
+  for await (const message of ownedSession.receive) console.log(message);
+}
+```
+
+`closed` 报告逻辑终止状态。Async disposer 会请求原生 close 并等待 Defjs 自有 teardown；若一直没有 close event，则以 1 秒为界，并可能用名为 `TimeoutError` 的 `DOMException` reject。它无法证明物理 TCP 连接已经关闭。
+
+### WebSocketState
+
+`'idle' | 'connecting' | 'open' | 'closing' | 'closed' | 'reconnecting' | 'aborted' | 'error'`
+
+### WebSocketConnectionInfo
+
+`generation`（重连就加一），以及在已知时的 `url`、`protocol` 和 `extensions`。
+
+### WebSocketCloseInfo
+
+<ApiSignature name="WebSocketCloseInfo" />
+
+`kind` 是 `closed`、`aborted` 或 `error`。`cause` 在 `closed` 上不存在，在 `aborted` 上可选，在 `error` 上必填。`code`、`reason` 和 `wasClean` 可以出现在每个变体上。手动 `session.close()` 会在 close 事件自己没有这两项时，填上 `{ kind: "closed" }` 的 `code` 和 `reason`。
+
+## 执行选项
+
+## WebSocketExecuteOptions
+
+<ApiSignature name="WebSocketExecuteOptions" />
+
+`WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect`，以及 `abort` 或 `timeout`（不能同时有），再加上 `signal`。`WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。
+
+`abort` 和 `timeout` 互斥：类型层面会拒绝同时传两者，运行时同时传入则以 `REQ_OPTIONS_INVALID` fault 失败。`signal` 可与其中任一组合。`timeout` 是连接的启动期限：之后的重连不会重新计时，`withTimeout` 也不适用于 WebSocket。
+
+设了 `reconnect` 时，每次连接中断的 `attempts` 默认 3；`0` 禁用。成功 `open` 后会重置预算和退避指数，因此每次新的中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断期间可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
+
+## 消息
+
+`incoming` 是一个 struct。文本、`ArrayBuffer`、typed-array、`Blob` frame 都按 UTF-8 读，JSON parse，再拿这个 struct 校验。JSON parse 或 struct 失败的 frame 报到 `session.onRuntimeError`，不进队列。没有 client 级的非法 frame option。
+
+`outgoing` 是一个 struct。`session.send` 接受该 struct 的 `StructInput`，编码 alias，再 `JSON.stringify`。编码后 JSON 无法忠实表示的值会在发送或进入重连队列之前抛出 `TypeError`，包括非有限数字、函数、symbol、`Map`、`Set`、流，以及没有 JSON 表示形式的类实例。嵌套值使用与 HTTP JSON 请求体相同的检查。心跳也使用这项检查；心跳序列化失败会结束 session。多种消息类型可用 `struct.discriminatedUnion` 表达。
+
+```ts
+session.send({ type: "message", text: "Hello" });
+```
+
+见 [WebSocket 指南](/zh-Hans/docs/web-socket) 和[打开 WebSocket 会话](/zh-Hans/recipes/websocket-session)。
+
+## WebSocketDefinition
+
+`path`、`incoming`，必填的 `maxIncomingQueueSize`，可选 `outgoing` / `input` / `operation` / `protocols` / `maxOutgoingQueueSize`。builder 只能返回 `path` 和 `query`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
+
+## WebSocketEndpoint
+
+`defineWebSocket` 的返回值。拿 input 调一下就得到 `WebSocketCommand`。
+
+## WebSocketRequestShape
+
+只有 `path` 和 `query`。`headers` 和 `body` 是 `never`。
+
+## WebSocketCommand
+
+不透明的 WebSocket command。传给 `client.execute`。
+
+## UseWebSocketConfig
+
+heartbeat、reconnect、`beforeConnect`、protocols，再加上取消。`WebSocketExecuteOptions` 再加 `signal`。
+
+## SocketAwaitResult
+
+`[null, session, connection]` 或 `[error, undefined, connection?]`。
+
+## ManualSocketCloseReason
+
+用 `session.close()` 关掉时记下的原因。
+
+## WebSocketHeartbeatConfig
+
+`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。
+
+## WebSocketIncomingData
+
+解码后的入站 frame：`incoming` struct 的 `Infer`。
+
+## WebSocketOutgoingData
+
+`session.send` 接受的值：`outgoing` struct 的 `StructInput`；没声明时是 `never`。
+
+## SocketLifecycleOutcome
+
+一次连接尝试的结果（`closeInfo`、`connection`、`cause`、`opened`），供重连逻辑使用。它不是 session 的最终结果；最终结果见 `WebSocketCloseInfo`。

@@ -1,0 +1,20 @@
+---
+title: 插件
+description: 可选包。使用方应用把它装到自己的 Defjs Client 上。
+---
+
+# 插件
+
+插件是可选包，由使用方应用装到自己的 Defjs Client 上。`@defjs/core` 不导入它们，SDK 定义也不导入。Client、endpoint、凭证，以及安装哪些插件，都归应用所有。
+
+插件分两种。**框架插件**把已有的 `Client` 交给框架树。**中间件插件**是拦截器链的插件形态：它把 interceptor 追加到应用自己的 Client 上。见 [拦截器](/zh-Hans/docs/interceptors)。
+
+| 插件                                                                             | 包                            | 它增加什么                                                                                | 它不做什么                                              |
+| -------------------------------------------------------------------------------- | ----------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| [React](/zh-Hans/docs/integrations/react) · 框架                                 | `@defjs/react`                | 为已有 Client 提供 `ClientProvider` 和 `useClient()`                                      | 不创建、缓存、重试或释放 Client。不是 query 或 state 库 |
+| [Vue](/zh-Hans/docs/integrations/vue) · 框架                                     | `@defjs/vue`                  | Vue 插件、`HTTP_CLIENT` 和 `injectClient()`                                               | 不创建、缓存或重试。卸载时不关闭传输。不是 query 库     |
+| [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server) · 中间件 | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`，一个 Client option，追加 HTTP、SSE、WebSocket interceptor | 不初始化 OpenTelemetry SDK，也不做入站服务端插桩        |
+
+React 和 Vue 把已有的 `Client` 交给框架树。应用用 `@defjs/core` 的 `createClient` 创建这个 Client。React 插件通过 Context 提供它。Vue 插件通过 `app.use(createClientPlugin(client))` 提供它。两个包都不发起请求。
+
+OpenTelemetry 服务端中间件插件是一个 `ClientOption`。创建 Client 时传入 `withOpenTelemetryServer(...)`。它按 HTTP、SSE、WebSocket 的顺序，为每个启用的传输追加一个 interceptor。见 [拦截器](/zh-Hans/docs/interceptors)。这个包不初始化 OpenTelemetry SDK。

@@ -3,3 +3,4 @@ dist
 node_modules/
 *.vitest-temp.json
 __snapshots__
+__screenshots__/

@@ -1,0 +1,20 @@
+---
+title: "Отправка JSON"
+description: Отправь типизированное JSON-тело и декодируй объявленный 201.
+---
+
+# POST JSON
+
+Отдай типизированное тело builder’у. Логические имена полей остаются в TypeScript; wire-алиасы на struct становятся JSON-ключами. Тело-объект — это `application/json`.
+
+Подробности — в [Команды](/ru-RU/docs/commands) и [HTTP](/ru-RU/docs/http).
+
+<include cwd meta="create-user.ts">
+  examples/recipes/post-json.ts#example
+</include>
+
+`api.example.com` — placeholder. Если сервер отвечает `201` и `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, сниппет выведет:
+
+```txt
+Created Ada → 201
+```

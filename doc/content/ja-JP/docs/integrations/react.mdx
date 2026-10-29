@@ -1,0 +1,79 @@
+---
+title: "React"
+description: SDK の API 定義を React で使い、アプリケーションの Client を提供して結果とキャンセルを管理します。
+---
+
+# React
+
+React アプリケーションは SDK から API 定義を import し、自身で構成した Defjs Client をこのフレームワークプラグインでツリーに渡します。SDK の定義は React に依存せず、コンポーネントやデータ層が同じ定義を実行して結果とキャンセルを管理します。
+
+これらのプラグインは、既存の `Client` の提供と取得を補助する任意の仕組みです。アプリ所有の固定クライアントを直接 import する、再利用するロジックに明示的な Client を渡す、ツリーの既定値やサブツリーの上書きにフレームワークの注入を使う、独自の構成を選ぶ、どれも有効です。SDK の定義にプラグインは必須ではありません。
+
+既存の `@defjs/core` クライアントを React ツリーに繋ぎます。得られるのは Context と `useClient()` です。このパッケージはクライアントを**作らず**、キャッシュも足さず、コマンドをリトライせず、トランスポートリソースも破棄しません。作業を始めたコンポーネント、effect、データライブラリが所有します。
+
+## 基本セットアップ
+
+`@defjs/core`、`@defjs/react`、React 18+ を入れます。ESM です。
+
+`bun add @defjs/core @defjs/react react`
+
+クライアントを提供し、ユーザーを取得して変更時に abort します。
+
+<include cwd>examples/react/client-provider.tsx#example</include>
+
+<include cwd>examples/react/basic-setup.tsx#example</include>
+
+`ClientProvider` は普通の Context プロバイダです。違う `client` prop は子孫が見るものを変えます — クローンも差し替えも破棄もしません。入れ子のプロバイダは明示的な境界を作ります。
+
+開発では React が effect を複数回セットアップ/クリーンアップすることがあります。signal チェックは、古い promise が今の描画に書き込むのを止めます。タプルのエラーはそれでもデータです。
+
+## `useClient` で読む
+
+`useClient(overrideClient)` は明示的なクライアントを優先して返します。省略または `undefined` なら最も近い `ClientProvider` を読み、どちらからもクライアントを取得できない場合にのみ `Error` を throw します。引数なしの `useClient()` も引き続き有効です。
+
+明示的なクライアントがあっても、`useClient(explicitClient)` は必ずコンポーネントまたはカスタムフックのトップレベルで呼び、通常の関数やイベントコールバックでは呼ばないでください。`explicitClient ?? useClient()` はフックの条件付き呼び出しになるため無効です。明示的な値は Context に書き込まず、provider も作りません。フックは引き続き Context を購読します。
+
+<include cwd>examples/react/read-with-use-client.tsx#example</include>
+
+フックはクライアントを渡すだけです。作業を始めず、トランスポートを購読せず、エラーファーストのタプルを例外にもしません。
+
+## クエリ作業を所有する
+
+クエリライブラリがキャッシュ、リトライ、古い結果の抑制、キャンセルを所有できます。それが渡す signal を渡します。一覧ページでは `client.execute(...)` を TanStack Query（または類似のもの）で包んでください — `@defjs/react` は DI だけのままで、`useRequest` は**出しません**。
+
+<include cwd>examples/react/own-query-work.tsx#example</include>
+
+同じコマンドを第二の effect で包まないでください — 所有者が二人だと、キャンセルと古い結果の扱いが曖昧になります。
+
+## リアルタイム作業を所有する
+
+SSE と WebSocket のハンドルは `client.execute(...)` より長生きします。起動を await する前にクリーンアップを登録し、破棄後に届いたハンドルを閉じ、その単一イテレータを消費し、終端 promise を await します。
+
+<include cwd>examples/react/own-realtime-work.tsx#example</include>
+
+`execute` に渡した `signal` は、open されたセッションに対しても効き続けます。クリーンアップでそれを abort すると、セッションは `aborted` として終わり、`receive` は `AbortError` で reject されます。そのため上の `catch` は、effect が破棄されたあとのエラーを無視し、本当の失敗（キューのオーバーフロー、ハートビートのタイムアウト）だけを報告します。abort された SSE ストリームは、代わりにイテレータが通常どおり終了します。`catch` が無いと、ループの reject は未処理の promise rejection になります。
+
+`EventStreamHandle` も同じ規則です。`finally` で close し、`stream.closed` を await。WebSocket 消費者は状態/ランタイムエラーリスナーも購読解除し、`session.receive` を読み続けてください — 読まれない有界キューはオーバーフローし得ます。
+
+## SSR とクライアントスコープ
+
+パッケージエントリは Client Component 境界です。ブラウザーアプリは、エンドポイント・インターセプター・掴んだ状態がブラウザー安全でリクエスト非依存なら、モジュールスコープのクライアントを共有できます。SSR では、ヘッダー・cookie・ユーザー・テナント・資格情報が違うとき、リクエスト境界ごとに別のクライアントを作ります。
+
+プロバイダの unmount は HTTP を abort せず、SSE/WebSocket を閉じず、リスナーを購読解除せず、`dispose` も呼びません。`@defjs/react` にそうしたライフサイクル API はありません。各操作を始めたコードが、終わらせるかキャンセルする必要があります。
+
+## リファレンス
+
+`@defjs/react` からの公開エクスポート:
+
+- `ClientProvider` — `ClientProviderProps` を受け、渡されたクライアントを提供
+- `useClient` — 明示的なクライアントを優先し、なければ最も近い provider を読み、どちらもなければ throw
+- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
+
+クライアントと options は `@defjs/core` で作ります。[Client](/ja-JP/docs/client)、[Errors](/ja-JP/docs/errors)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) を見てください。
+
+## 関連レシピ
+
+- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
+- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
+- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
+- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)

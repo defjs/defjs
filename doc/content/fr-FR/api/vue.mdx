@@ -1,0 +1,36 @@
+---
+title: "@defjs/vue"
+description: "Plugin Vue, clés d’injection par défaut ou personnalisées et injectClient."
+---
+
+# Vue
+
+Fournis un client `@defjs/core` existant à une app Vue. Ce paquet ne crée pas, ne met pas en cache et ne libère pas le client. Vue 3 ou plus récent est requis.
+
+Voir le [guide Vue](/fr-FR/docs/integrations/vue).
+
+## createClientPlugin()
+
+<ApiSignature name="createClientPlugin" />
+
+- **client** — Instance issue de `createClient`.
+- **Renvoie** un plugin Vue pour `app.use(...)`. L’installer appelle `app.provide(HTTP_CLIENT, client)`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+<ApiSignature name="injectClient" />
+
+`injectClient(key)` lit le provider le plus proche pour cette clé ; sans argument ou avec `undefined`, il utilise `HTTP_CLIENT`. Appelle-le dans un contexte d’injection Vue valide : `setup()` synchrone ou `app.runWithContext()` (Vue 3.3+). Ce dernier fournit uniquement un contexte synchrone d’application, sans surcharges de sous-arbres ni maintien du contexte après un `await` ordinaire. Les contextes restaurés par le compilateur après un `await` au premier niveau de `<script setup>` restent valides.
+
+Pour une `InjectionKey<Client>` personnalisée, utilise `app.provide(key, client)` ou `provide(key, client)` dans un composant ancêtre. Les deux côtés doivent partager le même objet `Symbol` ; des descriptions identiques ne rendent pas les clés égales. `createClientPlugin(client)` ne prend toujours que le client et fournit uniquement `HTTP_CLIENT`.
+
+- **Renvoie** le client exact fourni pour la clé choisie.
+- **Lève** une `Error` sans contexte d’injection actif ou sans client pour la clé choisie. Une clé personnalisée absente ne déclenche jamais de repli vers `HTTP_CLIENT` ; installer le plugin ne crée pas à lui seul un contexte d’injection.
+
+## HTTP_CLIENT
+
+<ApiSignature name="HTTP_CLIENT" />
+
+Clé d’injection Vue. Préfère `injectClient()` à `inject(HTTP_CLIENT)`. Surcharge le client injecté pour un sous-arbre avec `provide(HTTP_CLIENT, childClient)`.

@@ -1,0 +1,22 @@
+---
+title: "管理 WebSocket 會話"
+description: Connect，send 一個 typed envelope，receive 一次，之後 close 同 await closed。
+---
+
+# 開一個 WebSocket session
+
+每個方向係一個 struct。Unsubscribe、`close`，同 `await session.closed` 都係你 own。Invalid frames 去 `onRuntimeError`。
+
+詳情睇 [WebSocket](/zh-Hant-HK/docs/web-socket)。
+
+<include cwd meta="chat.ts">
+  examples/recipes/websocket-session.ts#example
+</include>
+
+`chat.example.com` 係 placeholder。如果 server 用 `{ "type": "message", "text": "Hello" }` 回應 `{ "type": "send", "text": "Hello" }`，snippet 會 print：
+
+```txt
+message Hello
+```
+
+Reconnect 係 opt-in（`withWebSocketReconnect`）。Heartbeat 都係 opt-in。Browser WebSockets 唔可以拎 arbitrary handshake headers — 用 cookies、subprotocols，或者 short-lived ticket。

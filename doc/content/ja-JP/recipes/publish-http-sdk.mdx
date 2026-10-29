@@ -1,0 +1,129 @@
+---
+title: "SDK を作成・公開する"
+description: API 定義と型宣言を npm パッケージとして公開し、利用するアプリケーションが独自に Client を構成します。
+---
+
+# SDK を作成・公開する [#execute-を隠さずに-http-sdk-を公開する]
+
+SDK は、チームが提供する API をパッケージにまとめたものです。Defjs ではエンドポイント定義とデータ契約を export し、利用するアプリケーションが Client の設定と実行のタイミングを決めます。このレシピでは HTTP を使いますが、SSE と WebSocket の定義も同じ責務の分け方でパッケージ化できます。
+
+## 1. SDK の操作を定義する
+
+SDK プロジェクトに `src/users.ts` を作ります。path、入力の配置、レスポンス、サービスのエラー契約をここに置きます。操作を定義するために Client のインスタンス、デプロイ先の URL、現在の認証情報を持たせる必要はありません。
+
+<include cwd meta='title="src/users.ts"'>
+  examples/recipes/publish-http-sdk/users-sdk.ts#example
+</include>
+
+`src/index.ts` から公開します。
+
+```ts
+export { getUser } from "./users.js";
+```
+
+`.js` 拡張子は、コンパイル後の ESM パッケージ内のパスです。TypeScript はビルド時にこのパスを `users.ts` に解決します。操作が増えたらモジュールを追加し、そのエンドポイントを同じ入口から再 export します。
+
+## 2. JavaScript と型宣言をパッケージ化する
+
+次の `package.json` を用意し、例のパッケージ名を自身が管理する scope に置き換えます。
+
+```json
+{
+  "name": "@company/users-sdk",
+  "version": "0.1.0",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist"],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "@defjs/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "@defjs/core": "^0.4.0",
+    "typescript": "^7.0.2"
+  }
+}
+```
+
+Core は、利用アプリケーションと共有する外部の実行時依存です。peer の範囲は SDK が対応する Core のリリースを表し、開発用依存はその範囲でのビルドとテストに使います。この例は現在の `0.4.x` の契約に合わせています。型宣言と実行時の振る舞いの両方が Core に依存するため、公開前に対応範囲を選び、検証してください。
+
+`tsconfig.json` を追加します。
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022", "ESNext.Disposable", "DOM", "DOM.Iterable"],
+    "strict": true,
+    "declaration": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*.ts"]
+}
+```
+
+これらの `lib` は型宣言を提供するもので、実行時の polyfill ではありません。アプリケーションには、選んだトランスポートが使用する Web API が必要です。
+
+ビルドしてパッケージを確認します。
+
+```sh
+npm install
+npm run build
+npm pack --dry-run
+npm pack
+```
+
+tarball に `dist/index.js`、`dist/index.d.ts`、それらが参照する操作モジュールが含まれることを確認します。別のアプリケーションに tarball をインストールし、型と実行の両方を検証してから公開してください。SDK の README にはサービスの API、対応する Core バージョン、必要な認証、任意のデフォルト設定を記載します。
+
+## 3. 利用アプリケーションから実行する
+
+ローカルで動かせる例では、定義を `users-sdk.ts` に保存し、`app.ts` と同じディレクトリに置きます。この import は Client を作りません。アプリケーションがローカル Fetch ハンドルを構成し、import した操作を実行します。
+
+<include cwd meta='title="app.ts"'>
+  examples/recipes/publish-http-sdk/app.ts#example
+</include>
+
+```txt
+Ada
+```
+
+パッケージ化した SDK は、互換性のある Core と一緒にインストールします。
+
+```sh
+npm install @company/users-sdk @defjs/core@^0.4.0
+```
+
+例の相対 import を次のように置き換えます。
+
+```ts
+import { getUser } from "@company/users-sdk";
+```
+
+サービスの URL と認証はアプリケーションの Client に設定します。ローカルテストでは `withHTTPHandle(...)` を使い、プラットフォームの Fetch を使う場合は外します。別のアプリケーションも同じエンドポイントを import し、SDK の定義を変えずに異なる Client 設定で実行できます。
+
+## 4. 検証して公開する
+
+[クライアントローカルのテスト](/ja-JP/recipes/test-with-handle) で、公開する定義、入力の配置、レスポンスの検証、宣言されたエラーを確認します。同じエンドポイントを、サービスの URL と認証情報が異なる 2 つの Client で検証してください。呼び出し側で型付きの `HTTP_STATUS` を扱えるようにし、SDK が提供するトランスポートについてキャンセルとストリームの終了もテストします。
+
+検証に通ったら、SDK のディレクトリから自身の npm アカウントで公開します。
+
+```sh
+npm publish --access public
+```
+
+このコマンドは公開パッケージを配布します。非公開の SDK では、組織のレジストリとアクセス方針に従ってください。Defjs 自体がパッケージを生成したり公開したりするわけではありません。
+
+Client のファクトリや便利なメソッドは、必要に応じて追加できます。呼び出し側の設定を受け取り、エンドポイントを直接 export したまま、サービスのデフォルト設定やドメインの振る舞いを提供できます。導入するエラー変換やライフサイクルの方針は文書化してください。再利用できる SDK を作るための必須要件ではありません。
+
+基になる契約は [Commands](/ja-JP/docs/commands)、[Client](/ja-JP/docs/client)、[設計上の判断](/ja-JP/docs/design-decisions) を参照してください。

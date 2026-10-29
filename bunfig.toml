@@ -1,4 +1,5 @@
 [install]
+linker = "isolated"
 peer = true
 
 [run]

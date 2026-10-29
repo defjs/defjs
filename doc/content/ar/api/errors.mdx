@@ -1,0 +1,104 @@
+---
+title: الأخطاء
+description: أنواع الأخطاء ودوال المصانع.
+---
+
+# الأخطاء
+
+يُعيد التنفيذ `Fault` مُميَّزًا في الخانة الأولى من الـ tuple — لا استثناءً مرميًّا في حالات الفشل المعلَنة.
+
+## FaultCode
+
+<ApiSignature name="FaultCode" />
+
+مجموعة مغلقة واحدة. والمقطع الذي يسبق أول `_` هو الصنف؛ ولا يوجد حقل `kind` منفصل. وتبقى المجموعة مغلقة حتى يغطي `switch (fault.code)` كل الحالات — فالإضافات تُبلِّغ عن تفصيلها عبر `cause` لا عبر رمز جديد.
+
+## FaultClass
+
+<ApiSignature name="FaultClass" />
+
+`FaultClass<FaultCode>` هو `'CAP' | 'ENV' | 'EXT' | 'HTTP' | 'NET' | 'REQ' | 'RES'`.
+
+## Fault
+
+<ApiSignature name="Fault" />
+
+فرّع باستخدام `switch` على `fault.code`.
+
+### FaultOf
+
+<ApiSignature name="FaultOf, Fault" />
+
+`FaultOf` هو `Fault` معبَّرًا عنه بنوع جسم الخطأ المفكوك بدل الـ struct الذي أنتجه. يعمل `HttpAwaitResult` ومصانع الأعطال بالقيم المفكوكة، لذلك تستخدم هذه الصيغة.
+
+كل صيغة هي `Error` أصلي باسم `DefjsFault`، فـ `String(fault)` يُنتج `DefjsFault: <message>`. و`code` وبيانات الصيغة الوصفية — `status` و`response` و`data` — خصائص ذاتية قابلة للتعداد. أما سلسلة `cause` الأصلية فغير قابلة للتعداد.
+
+تذكر رسائل Struct الافتراضية `received <kind>` ولا تعرض القيمة المستلمة نفسها، مثل `Expected number at email, received string`. ويعطي `SyntaxError` الناتج عن JSON والمسبِّب لـ `RES_DECODE_FAILED` الرسالة `Response body could not be decoded`. مسارات المشكلة بنيوية وتحتفظ بمفاتيح record: يمكن أن ينتج `struct.record(...)` الرسالة `Expected number at alice@example.com, received string`، لذا قد تظل المفاتيح حساسة في الرسائل الافتراضية و`prettify()` و`String(fault)`. تظل `StructIssue.received` الخام وأسباب أخطاء المحلِّل بيانات حساسة؛ وتُستخدم رسائل `errorMap` المخصص والإضافات كما هي، لذا يجب مراجعتها قبل تسجيلها.
+
+<include cwd>examples/api/fault.ts#example</include>
+
+لا تستدعِ `format()` أو `flatten()` أو `prettify()` إلا بعد تضييق `fault.cause` إلى `StructError`؛ فهذه الدوال لا تُنسخ إلى الخطأ.
+
+### HttpStatusFault
+
+<ApiSignature name="HttpStatusFaultOf, HttpStatusFault" />
+
+أي حالة غير-2xx. فإن أعلنت نقطة النهاية `error` وفُكّ الجسم، كان `data` هو ذلك الجسم و`response` يحمله. وإن حُذف `error` فالجسم لا يُقرأ أبدًا، فيبقى `data` بقيمة `undefined` ويكون `response` بيانات وصفية وحدها.
+
+### DecodeFault
+
+<ApiSignature name="DecodeFaultCode, DecodeFault" />
+
+وصلت استجابة لكن تعذّرت قراءتها كما أُعلن. و`response` بيانات وصفية فقط: فالجسم **هو** القيمة المفكوكة، والفكّ نفسه هو ما فشل، فلا حقل `body` يمكن الوصول إليه. والتفصيل المسبِّب يعيش على `cause` — `StructError` عند عدم مطابقة struct، وفشل المحلِّل عند تمثيل غير مقروء.
+
+### PreflightFault
+
+<ApiSignature name="PreflightFaultCode, PreflightFault" />
+
+كل ما كان يمكن أن يفشل قبل وجود استجابة: `REQ_*` و`NET_*` و`EXT_*` و`CAP_*` و`ENV_UNSUPPORTED`. ولا يكون `response` موجودًا إلا حيث كانت لدى طبقة النقل بيانات وصفية تُبلِّغ عنها أصلًا، كجسم انقطع في منتصف التنزيل.
+
+### AnyFault
+
+<ApiSignature name="AnyFault" />
+
+أيّ خطأ، بصرف النظر عن نوع جسم خطئه المفكوك. استخدمه للمعالِجات التي تُصنِّف الأخطاء دون أن يهمّها أي نقطة نهاية أنتجتها؛ وفضِّل `Fault<typeof yourErrorStruct>` حيث يهمّ نوع الجسم.
+
+## المصانع
+
+## createHttpStatusFault()
+
+## createUndecodedHttpStatusFault()
+
+## createDecodeFault()
+
+## createNetworkFault()
+
+## createPreflightFault()
+
+<ApiSignature name="createHttpStatusFault, createUndecodedHttpStatusFault, createDecodeFault, createNetworkFault, createPreflightFault" />
+
+`createHttpStatusFault` يأخذ استجابة تحمل الجسم المفكوك أصلًا؛ و`createUndecodedHttpStatusFault` يأخذ البيانات الوصفية وحدها، لنقطة نهاية لم تُعلن `error`.
+
+يستخدم `createNetworkFault` الدالة [`isAbortCause`](/ar/api/core/isabortcause) للتصنيف `NET_ABORTED` والدالة [`isTimeoutCause`](/ar/api/core/istimeoutcause) للتصنيف `NET_TIMEOUT`. تتعرف الأولى على علامات الإلغاء الموسومة من أي نسخة من Core وعلى `DOMException` باسم `AbortError`؛ وتتعرف الثانية على علامات المهلة الموسومة من أي نسخة من Core وعلى `DOMException` أو `Error` باسم `TimeoutError`. يُصنَّف كل ما عدا ذلك `NET_UNREACHABLE`. ويأخذ `createPreflightFault` الرمز مباشرة؛ فإن لم يُمرَّر `cause` صار الرمز هو الرسالة.
+
+كل المصانع تُعيد نسخًا من `Error` الأصلي بالحقول المهيكلة أعلاه؛ وهي لا تُنشئ أخطاءً ككائنات عادية ولا تحتاج مُهايئًا لـ `String(fault)`.
+
+## العلامات
+
+## ERR_ABORTED
+
+## ERR_TIMEOUT
+
+<ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />
+
+كائنا `Error` المشتركان يُستخدمان كـ `cause` للإلغاء والمهلة. رمي إحداهما من معترض HTTP ينهي الاستدعاء بـ `NET_ABORTED` أو `NET_TIMEOUT`. أما معترضات SSE وWebSocket فتبلّغ عن أي رمي، بما فيه هاتان القيمتان، بوصفه `EXT_INTERCEPTOR_FAILED`.
+
+تحمل العلامات وسمَي `Symbol.for('defjs.cause.aborted')` و`Symbol.for('defjs.cause.timeout')` غير القابلين للتعداد. لا يعتمد التصنيف على هوية كائن العلامة أو على عمليات تنفيذ سابقة لا علاقة لها به.
+
+## التحقق من الأسباب
+
+<ApiSignature name="isAbortCause, isTimeoutCause" />
+
+تتعرف [`isAbortCause`](/ar/api/core/isabortcause) على `Error` موسوم بالإلغاء أو `DOMException` باسم `AbortError`. وتتعرف [`isTimeoutCause`](/ar/api/core/istimeoutcause) على `Error` موسوم بالمهلة أو `DOMException` / `Error` باسم `TimeoutError`. مرّر `fault.cause` لتصنيف القيمة المسبِّبة؛ لا تفكّ هاتان الدالتان غلاف الخطأ. وتعملان مع علامات من نسخة أخرى من Core.
+
+راجع [دليل الأخطاء](/ar/docs/errors).

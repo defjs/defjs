@@ -1,0 +1,92 @@
+From d9527c59212327c0031d3dfa7ec5338187eb11f3 Mon Sep 17 00:00:00 2001
+From: perf <perf@local>
+Date: Thu, 1 Oct 2026 00:24:28 +0800
+Subject: [PATCH 05/10] perf(struct): tag parse-created nodes with a plain
+ store
+
+---
+ packages/core/src/struct/guide.ts | 8 ++++++++
+ packages/core/src/struct/parse.ts | 8 ++++----
+ packages/core/src/struct/utils.ts | 4 ++--
+ 3 files changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/packages/core/src/struct/guide.ts b/packages/core/src/struct/guide.ts
+index 194c0ed..fdca26b 100644
+--- a/packages/core/src/struct/guide.ts
++++ b/packages/core/src/struct/guide.ts
+@@ -66,6 +66,14 @@ export function readOwnGuide(value: object): Guide | undefined {
+   return undefined
+ }
+ 
++/**
++ * Tag a null-prototype node this parse just created. A plain store makes the same enumerable,
++ * writable, configurable data property as `defineStructTag`, without the define path's cost.
++ */
++export function tagOwnNode(value: { [key: string]: unknown }, tag: Guide): void {
++  ;(value as { [STRUCT]?: Guide })[STRUCT] = tag
++}
++
+ /** Enumerable so object spread keeps the struct that parsed this object. `JSON.stringify` still skips it. */
+ export function defineStructTag(value: object, tag: Guide): void {
+   Object.defineProperty(value, STRUCT, {
+diff --git a/packages/core/src/struct/parse.ts b/packages/core/src/struct/parse.ts
+index 76e358a..4901e22 100644
+--- a/packages/core/src/struct/parse.ts
++++ b/packages/core/src/struct/parse.ts
+@@ -1,6 +1,6 @@
+ import { hasErrorMap, issue } from './errors'
+ import { resolveStructFields } from './fields'
+-import { defineStructTag, guideMembers, guideTag, readOwnGuide, type Guide } from './guide'
++import { defineStructTag, guideMembers, guideTag, readOwnGuide, tagOwnNode, type Guide } from './guide'
+ import { selectUnionOptions } from './match'
+ import { DEFINITION, OMIT } from './symbols'
+ import type {
+@@ -266,7 +266,7 @@ function parseObjectValue(
+     }
+   }
+   if (tagObjects && !target) {
+-    defineStructTag(output, struct)
++    tagOwnNode(output, struct)
+   }
+   return success(output)
+ }
+@@ -296,7 +296,7 @@ function parseRecordValue(
+   }
+   // Nullable null never reaches a record parse. The object itself carries the struct that parsed it.
+   if (tagObjects) {
+-    defineStructTag(output, struct)
++    tagOwnNode(output, struct)
+   }
+   return success(output)
+ }
+@@ -430,7 +430,7 @@ function parseIntersectionValue(
+     }
+     if (tagObjects) {
+       // An object intersection always has at least one member struct, so the guide exists.
+-      defineStructTag(merged, guideTag(definition.options as unknown as readonly RuntimeStruct[]) as Guide)
++      tagOwnNode(merged, guideTag(definition.options as unknown as readonly RuntimeStruct[]) as Guide)
+     }
+     return success(merged)
+   }
+diff --git a/packages/core/src/struct/utils.ts b/packages/core/src/struct/utils.ts
+index b44a894..486bc4e 100644
+--- a/packages/core/src/struct/utils.ts
++++ b/packages/core/src/struct/utils.ts
+@@ -1,4 +1,4 @@
+-import { combineGuides, defineStructTag, readOwnGuide } from './guide'
++import { combineGuides, readOwnGuide, tagOwnNode } from './guide'
+ import { DEFINITION } from './symbols'
+ import type { EnumDefinition, ParseFailure, ParseSuccess, Path, RuntimeStruct, StructDefinition, StructIssue } from './types'
+ 
+@@ -41,7 +41,7 @@ export function mergeIntersectionValues(left: unknown, right: unknown, tagNodes
+     if (tagNodes) {
+       const tag = combineGuides(readOwnGuide(left), readOwnGuide(right))
+       if (tag) {
+-        defineStructTag(output, tag)
++        tagOwnNode(output, tag)
+       }
+     }
+     return { ok: true, value: output }
+-- 
+2.55.0
+

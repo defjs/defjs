@@ -1,0 +1,47 @@
+---
+title: مرجع API
+description: مرجع الدوال والخيارات والأنواع لكتابة تعريفات SDK وعقود البيانات وتنفيذها في التطبيق.
+---
+
+# مرجع API
+
+<ApiIndex />
+
+هذا مرجع البحث لحزم مساحة العمل. التوقيعات هي العقد؛ الأدلّة والوصفات تشرح متى تستخدمها.
+
+## مداخل التعريف والتنفيذ
+
+| الهدف                        | المرجع                                                                                                                                     |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| كتابة تعريف API في SDK       | `defineRequest` في [HTTP](/ar/api/http)، و`defineEventStream` في [SSE](/ar/api/sse)، و`defineWebSocket` في [WebSocket](/ar/api/web-socket) |
+| كتابة عقود البيانات والأنواع | `struct.*` و`Infer` في [Struct](/ar/api/struct)                                                                                            |
+| التنفيذ في التطبيق           | `createClient` و`with*` و`Client.execute` في [Client](/ar/api/client)                                                                      |
+| معالجة النتائج والسياسات     | [Errors](/ar/api/errors)، و[Interceptors](/ar/api/interceptors)، والمقابض والجلسات الخاصة بكل نقل                                          |
+
+يصدّر مؤلف SDK التعريفات. يضبط التطبيق المستهلك Defjs Client متوافقًا ويتولى النتائج والإلغاء ودورة حياة التدفقات. راجع [البدء السريع](/ar/docs/start) و[بناء SDK ونشره](/ar/recipes/publish-http-sdk) للمسار من الكتابة إلى التوزيع.
+
+## الحزم
+
+| الحزمة                                                        | ما تبحث عنه                                                       |
+| ------------------------------------------------------------- | ----------------------------------------------------------------- |
+| [`@defjs/core`](/ar/api/client)                               | `createClient` و`defineRequest` و`struct` وHTTP / SSE / WebSocket |
+| [`@defjs/vue`](/ar/api/vue)                                   | `createClientPlugin` و`injectClient` و`HTTP_CLIENT`               |
+| [`@defjs/react`](/ar/api/react)                               | `ClientProvider` و`useClient`                                     |
+| [`@defjs/opentelemetry-server`](/ar/api/opentelemetry-server) | `withOpenTelemetryServer` وخيارات كل وسيلة نقل                    |
+
+## @defjs/core
+
+| الصفحة                               | ما تبحث عنه                                                     |
+| ------------------------------------ | --------------------------------------------------------------- |
+| [Client](/ar/api/client)             | `createClient` وخيارات `with*` و`Client`                        |
+| [HTTP](/ar/api/http)                 | `defineRequest` وخيارات التنفيذ و`HttpRequest` / `HttpResponse` |
+| [Struct](/ar/api/struct)             | `struct.*` و`Infer` و`StructError`                              |
+| [Errors](/ar/api/errors)             | تنويعات `Fault` ومصانعها                                        |
+| [Interceptors](/ar/api/interceptors) | مساعدات interceptor لـ HTTP / SSE / WebSocket                   |
+| [SSE](/ar/api/sse)                   | `defineEventStream` ومقبض التدفق                                |
+| [WebSocket](/ar/api/web-socket)      | `defineWebSocket` والجلسة                                       |
+
+## ذات صلة
+
+- [البدء](/ar/docs/start)
+- [GET مع 404 معلَن](/ar/recipes/get-declared-404)

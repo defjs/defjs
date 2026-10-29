@@ -1,0 +1,65 @@
+---
+title: "Definieren und ausführen / Command"
+description: Wiederverwendbare SDK-Operationen exportieren und ihre Commands mit dem Client der Anwendung ausführen.
+---
+
+# Commands
+
+Als SDK-Autor exportierst du den Endpoint, den `defineRequest`, `defineEventStream` oder `defineWebSocket` zurückgibt. Er beschreibt eine wiederverwendbare API-Operation mit Struct-Verträgen und der Abbildung durch `builder`. Die Anwendung ruft diesen Endpoint mit ihren Eingaben auf, erhält einen opaken Command und übergibt ihn an ihren Client.
+
+Definition → exportierter Endpoint → Command für einen Aufruf → `client.execute(...)`. Diese Aufteilung gilt für HTTP, SSE und WebSocket. Die Beispiele zeigen Definition und Ausführung zusammen; beim [Veröffentlichen eines SDKs](/de-DE/recipes/publish-http-sdk) bleiben Endpoint-Modul und Anwendung getrennt.
+
+Client-Factories und Komfortmethoden sind optionale Ergänzungen. Sie können Service-Defaults oder Domänenverhalten anbieten, Konfiguration des Aufrufers annehmen und die direkten Endpoint-Exporte beibehalten. Dokumentiere dabei die eingeführten Fehlerabbildungen und Regeln für den Ressourcenlebenszyklus. Für ein wiederverwendbares SDK ist keine Factory erforderlich.
+
+## Grundeinrichtung
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## Definition wählen
+
+| Definition               | Vertrag                                                                 | Erfolgreicher Wert                       |
+| ------------------------ | ----------------------------------------------------------------------- | ---------------------------------------- |
+| `defineRequest(...)`     | Method, relativer Path, optionaler Input, optionales `output` / `error` | Dekodierte Daten + Response              |
+| `defineEventStream(...)` | Path, Buffer-/Queue-Limits, Event-Name → Struct-Map                     | `EventStreamHandle` + Open-Snapshot      |
+| `defineWebSocket(...)`   | Path, ein Incoming-Struct, optionaler Outgoing-Struct, Queue-Limit      | `WebSocketSession` + Connection-Snapshot |
+
+Kein `input` → der Endpoint nimmt kein Argument, und `builder` darf `() => request` sein. Mit `input` → den Struct-Wert übergeben. Ein optionales Field darf fehlen; ein required Field nicht.
+
+Halte Commands opak. Grab nicht in Tags oder Symbole.
+
+## Wohin Werte gehen
+
+Der Struct entscheidet, wie ein Wert kodiert wird. Der `builder` entscheidet, wohin er geht. `builder` ist eine synchrone pure Function des **geparsten** Inputs. Er läuft zur Execute-Zeit. Ein geworfener Fehler wird zu `REQ_BUILD_FAILED` auf dem Tupel — der Endpoint-Aufruf selbst wirft nicht.
+
+Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+
+Reich den typisierten Wert durch. Alias, `Date` → ISO und `bigint` → String gelten dann überall, wo dieser Struct genutzt wird: Request-Platzierung, Response-Decoding, SSE-Events und WebSocket-Frames.
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+Der Body ist JSON `{"display_name":"…","email":"…"}`. Ein selbst geschriebener Key ist die Escape-Luke: `body: { name: input.user.displayName }` sendet `name`, weil das Parent-Object anonym ist und der Alias nicht gilt.
+
+## Wenn die Shapes auseinanderlaufen
+
+Nutze `builder` für Path-Placeholder, Literale und Branches. Er bekommt den echten Wert, also funktionieren `if`, `??`, Templates und `switch`.
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.filter` sendet `page_size`. `headers: { 'x-api-version': '2' }` ist ein Literal. Auth und Tracing gehören weiter in Interceptors: sie sehen den nativen Request, nachdem der Builder gelaufen ist.
+
+## Output- und Error-Shapes
+
+`output` ist ein Struct für den 2xx-Body; `error` ist ein Struct für alles andere. `ok` ist die einzige
+Verzweigung, und es dekodiert immer nur eine Seite. Eine Seite auszulassen heißt, dass dieser Body
+nie gelesen wird: der Fault trägt den Status, und `data` bleibt `undefined`.
+
+## Verwandte Rezepte
+
+- [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)
+- [POST JSON](/de-DE/recipes/post-json)

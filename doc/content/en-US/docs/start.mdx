@@ -1,0 +1,130 @@
+---
+title: "Quick start"
+description: Export your first SDK operation, execute it from a separate application, and reuse the definition with another client.
+---
+
+# Getting started: your first SDK operation [#getting-started-one-http-request]
+
+You’ll write two files: an SDK module that exports `GET /users/:id`, and an application that imports it and owns the client. The local Fetch handle keeps the first run offline. The same API definition will then work with a client pointed at your service.
+
+## Step 1 — Install
+
+`@defjs/core` is ESM and runs on Node.js or Bun. Node.js 22.18+ (or 24+) runs the `.ts` file directly through type stripping; older 22.x releases need `--experimental-strip-types`. Keep `"type": "module"` in package.json. In a browser you still need your bundler and Fetch.
+
+<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
+<Tab value="bun">
+```sh
+bun add @defjs/core
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+npm install @defjs/core
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+pnpm add @defjs/core
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+yarn add @defjs/core
+```
+
+</Tab>
+</Tabs>
+## Step 2 — Define the request
+
+Create `src/define-request.ts`. This is the SDK author's module: it exports `getUser` without creating a client. The input struct is the caller's value. `builder` places that value on the request. Here the whole input is the path object, so alias-free scalar fields fill `:id`.
+
+<include cwd meta="define-request.ts">
+  examples/start/define-request.ts#example
+</include>
+
+`output` is the 2xx body. `error` is every other status. One struct each. Use `struct.or(...)` or a discriminated union when those bodies differ.
+
+`defineRequest(...)` returns an endpoint. Calling `getUser(...)` builds the opaque command you’ll pass to `client.execute(...)`. The `builder` above is the function that places input; it is not the endpoint.
+
+## Step 3 — Execute it locally
+
+Create `src/execute-locally.ts` beside the definition. This is the consuming application: it imports `getUser`, creates its own client, and supplies a local Fetch handle. Defjs still validates input, builds the `Request`, dispatches by status, and parses the body.
+
+<include cwd meta="execute-locally.ts">
+  examples/start/execute-locally.ts#example
+</include>
+
+Run it:
+
+<Tabs items={["bun", "npm", "pnpm", "yarn"]}>
+<Tab value="bun">
+```sh
+bun src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="npm">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="pnpm">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+<Tab value="yarn">
+```sh
+node src/execute-locally.ts
+```
+
+</Tab>
+</Tabs>
+```txt
+Loaded Ada from 200
+```
+Try a missing user — change the path id to `8` and run again:
+
+```txt
+User not found
+```
+
+On success: `error` is `null`, `user` is the `200` Struct output, `response` is a `DecodedResponse<User>`. On a declared `404`: `error.code` is `'HTTP_STATUS'`, `error.status` is `404`, and `error.data` is typed `NotFound`. The second tuple item is `undefined` on failure.
+
+## Step 4 — Point at a real API
+
+In `src/real-api.ts`, import the same `getUser` and create a client with your service's base URL. Run this version only after replacing the example address with a service that implements `GET /v1/users/:id` with those bodies.
+
+<include cwd>examples/start/real-api.ts#example</include>
+
+The API definition stays in the SDK module. Service addresses, credentials, interceptors, and execution lifetime stay with the application. Both clients use the same Defjs endpoint contract.
+
+## Publish the definition
+
+Move the definition into an SDK package when more applications need it. Export `getUser`, include its TypeScript declarations, and declare the compatible Core version. Consumers then import from the package instead of `./define-request.ts`; their client configuration remains their own. Follow [Build and publish an SDK](/recipes/publish-http-sdk) for the complete package setup.
+
+## When the result differs
+
+- Bad input → `REQ_INPUT_INVALID`; conflicting cancel options → `REQ_OPTIONS_INVALID`; a failing
+  `builder` → `REQ_BUILD_FAILED`
+- A non-2xx status → `HTTP_STATUS`, with typed `error.data` when `error` was declared and its body decodes
+- A declared JSON body with another media type → `RES_MEDIA_TYPE_INVALID`, reported before the body is read
+- A declared body (`output` for 2xx, `error` otherwise) that won't decode → `RES_DECODE_FAILED` or `RES_STRUCT_MISMATCH`, whatever the status
+- Fetch fail / cancel / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+
+`timeout` must be a positive safe integer in `1..2_147_483_647`. Valid cancel shapes: `{ signal }`, `{ timeout }`, `{ abort }`, or `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` together is invalid. Cancellation tells you what the caller saw — not whether a server write committed.
+
+## Next recipes
+
+- [Build and publish an SDK](/recipes/publish-http-sdk)
+- [GET with a declared 404](/recipes/get-declared-404)
+- [POST JSON](/recipes/post-json)
+- [Cancel an HTTP call](/recipes/cancel-http)
+- [Consume an SSE stream](/recipes/consume-sse)
+- [Open a WebSocket session](/recipes/websocket-session)
+- [Test with a local Fetch handle](/recipes/test-with-handle)

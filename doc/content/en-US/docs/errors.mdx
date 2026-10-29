@@ -1,0 +1,209 @@
+---
+title: "Error handling"
+description: Declare service error contracts in your SDK and handle typed execution failures in the consuming application.
+---
+
+# Errors
+
+The SDK author declares the service's error data alongside each operation. The consuming application decides what a missing resource, expired credential, or failed connection means for its own workflow. Keeping the typed result available lets the same SDK serve different applications without prescribing one domain error policy.
+
+Handle a 404, a timeout, or an unreadable body by reading the error-first tuple — not by catching
+throws. A `Fault` is a native `Error` (`instanceof Error` is true) discriminated by one field:
+`code`.
+
+There is no `kind`. The class of a failure is the segment before the first `_` in its code, so
+`NET_TIMEOUT` is a `NET` failure and `RES_STRUCT_MISMATCH` is a `RES` failure. Read the prefix for
+coarse triage and the whole code for an exact case.
+
+## Basic Setup
+
+<include cwd lang="typescript">
+  examples/errors/basic-setup.ts#example
+</include>
+
+Because the set is closed, a `switch` over `code` is exhaustive:
+
+<include cwd lang="typescript">
+  examples/errors/triage.ts#example
+</include>
+
+## Stable codes
+
+| Class  | Codes                                                                  | Who has to change                                      |
+| ------ | ---------------------------------------------------------------------- | ------------------------------------------------------ |
+| `HTTP` | `HTTP_STATUS`                                                          | The peer answered non-2xx; handle it as business logic |
+| `REQ`  | `REQ_INPUT_INVALID`, `REQ_OPTIONS_INVALID`, `REQ_BUILD_FAILED`         | The call or the endpoint declaration                   |
+| `NET`  | `NET_ABORTED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `NET_BODY_INCOMPLETE` | Nobody, or retry                                       |
+| `RES`  | `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH`   | The declaration and the peer have to be reconciled     |
+| `EXT`  | `EXT_INTERCEPTOR_FAILED`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`     | The code you attached to the pipeline                  |
+| `CAP`  | `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`                            | A declared limit, or the consumer's pace               |
+| `ENV`  | `ENV_UNSUPPORTED`                                                      | The host runtime                                       |
+
+The set is closed on purpose: that is what keeps a `switch` exhaustive. Extensions report their own
+detail through `cause`, not through a new code.
+
+A valid absolute client `endpoint` is required for HTTP, SSE, and WebSocket. After URL resolution,
+the path must stay within the base endpoint's origin and directory. Absolute URLs, protocol-relative
+paths, C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. Missing, relative, or invalid endpoints
+and illegal paths produce `REQ_BUILD_FAILED` during request construction, before interceptors run;
+a short-circuit interceptor cannot bypass this check. Before transport, an interceptor's final
+`req.endpoint` is checked against its final `req.baseEndpoint` under the same rules; explicitly
+switching to another valid absolute base is allowed. These deterministic URL faults are not retryable.
+
+### Fields by shape
+
+| Code            | `status` | `response`                                                    | `data`                               |
+| --------------- | -------- | ------------------------------------------------------------- | ------------------------------------ |
+| `HTTP_STATUS`   | Always   | Always; has `body` only when `error` was declared and decoded | Decoded `error` body, or `undefined` |
+| `RES_*`         | Always   | Always, metadata only — **no `body`**                         | Absent                               |
+| Everything else | Absent   | Only where the transport already had metadata                 | Absent                               |
+
+`cause` carries the underlying value: a `StructError` for a struct mismatch, the parser failure for
+an unreadable representation, whatever an extension threw.
+
+## Tuple shapes by transport
+
+<include cwd lang="typescript">
+  examples/errors/tuple-shapes.ts#example
+</include>
+
+On an HTTP failure the third slot is `undefined`: the fault already carries whatever response
+metadata existed. That matters because a fault is what you pass to a handler, log, or rethrow, so
+the metadata has to travel _with_ it rather than beside it.
+
+For SSE and WebSocket the third slot is a startup snapshot, which can be present even when startup
+failed. After a handle or session returns, later failures live on its lifecycle — they never
+rewrite the settled startup tuple.
+
+## How a body is read
+
+`ok` is the only fork, and only one side ever decodes. `output` reads a 2xx body; `error` reads
+everything else. Omitting one means that body is never read.
+
+| Situation                                              | Outcome                                                        |
+| ------------------------------------------------------ | -------------------------------------------------------------- |
+| 2xx, `output` declared, body decodes                   | Success; `data` and `response.body` typed                      |
+| 2xx, `output` omitted                                  | Success; `data` is `undefined`, response has no `body`         |
+| Non-2xx, `error` declared, body decodes                | `HTTP_STATUS` with typed `data`                                |
+| Non-2xx, `error` omitted                               | `HTTP_STATUS` with `data: undefined`                           |
+| The media type is not what the representation needs    | `RES_MEDIA_TYPE_INVALID`, reported **before** the body is read |
+| The bytes are not that representation                  | `RES_DECODE_FAILED`                                            |
+| The value is not that struct                           | `RES_STRUCT_MISMATCH` (HTTP only)                              |
+| An unreadable body on the side you did **not** declare | Ignored entirely — see below                                   |
+
+That last row is the one worth remembering. If you declared `output` but not `error`, a 500 whose
+body is malformed JSON is reported as `HTTP_STATUS` with `status: 500`. You said you did not care
+about error bodies, and that includes not caring that one could not be read.
+
+For HTTP, the Struct is applied once, after the interceptor chain. A response an interceptor built with
+`makeResponse(...)` goes through the same media-type check, representation conversion and Struct as
+one off the wire. The built-in Fetch transport reads a declared body as JSON, text, `Blob`, or bytes
+before returning it to the chain. Only JSON representations require a JSON media type and
+`JSON.parse`; non-JSON text, blobs, and bytes are valid for their declared representation. Read
+failures apply to every representation; read or parse failures there surface as the same `RES_*` or
+`NET_BODY_INCOMPLETE` fault.
+
+`HttpResponse.ok` means only `200 <= status < 300`. A transport failure is a fault, never a
+response — there is no status-0 response standing in for one.
+
+## Narrowing an error body union
+
+One `error` struct covers every non-2xx status, so when the shapes differ you declare a union. What
+you can do with `fault.data` afterwards depends entirely on how you declared that union — the
+library hands back exactly the type you asked for.
+
+`struct.or(...)` produces a plain union, which TypeScript cannot narrow by itself. Test for the
+field you need:
+
+<include cwd lang="typescript">
+  examples/errors/narrow-union.ts#example
+</include>
+
+`struct.discriminatedUnion(...)` narrows on a field the body actually carries, which is the
+comfortable form when the API already tags its errors:
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-kind.ts#example
+</include>
+
+When the API puts the status **inside** the body, discriminate on that instead of on
+`fault.status`:
+
+<include cwd lang="typescript">
+  examples/errors/narrow-by-status.ts#example
+</include>
+
+That last form is worth preferring where the API supports it. `fault.status` is the HTTP-layer
+number, which a proxy, gateway, or CDN can rewrite; `data.status` passed your declared `error` struct's
+validation. That proves the body's shape, not its backend provenance: a proxy, gateway, or CDN can
+also return a matching body.
+
+A non-discriminated union that will not narrow is a property of the declaration, not of the
+library — it hands you the type you declared. Add a discriminant to the struct if you want one.
+
+## Startup vs post-open
+
+SSE validates status, `text/event-stream`, and the presence of a body before resolving the handle.
+Non-2xx → `HTTP_STATUS` when `error` is omitted or its body decodes. A declared handshake body that
+cannot be read or parsed, or fails its Struct, produces `RES_DECODE_FAILED`; a Struct failure carries
+`StructError` as `cause`. Wrong media type → `RES_MEDIA_TYPE_INVALID`. A successful handshake with
+no body → `RES_DECODE_FAILED`. The opening snapshot can still land in the third tuple slot.
+
+WebSocket startup covers the handshake plus the first physical open. Constructor failure, pre-open
+close, timeout, or cancel all produce a startup tuple. A connection snapshot may exist even when
+the socket never reached `open`.
+
+| Transport | After startup                                                                                                                                                                                                                          |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | The iterator rejects on a fatal error; `stream.closed` resolves with `kind: 'error'` and the fault `code`                                                                                                                              |
+| WebSocket | `onRuntimeError` for message/queue/heartbeat failures; `receive` fails on terminal errors; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                 |
+| HTTP      | The execute promise settles once, with the tuple. A throwing interceptor, an interceptor result that is not an `HttpResponse`, or a throwing progress callback becomes a fault in it (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+
+`NET_ABORTED` / `NET_TIMEOUT` describe what the caller saw at startup. You still close a returned
+stream or session and await its terminal promise.
+
+## Native Error logging and cause
+
+Faults are native `Error` instances, so no diagnostic adapter is needed. `String(fault)` gives the
+stable native form `DefjsFault: <message>`. `code` and the variant fields — `status`, `response`,
+`data` — stay enumerable for structured logging; `name` and the native `cause` chain are
+non-enumerable.
+
+<include cwd lang="typescript">
+  examples/errors/log-fault.ts#example
+</include>
+
+Narrow `fault.cause instanceof StructError` before calling `format()`, `flatten()`, or
+`prettify()`. Those helpers live on the Struct cause; they are not copied onto the fault. Don't
+make control flow parse `message` or `String(fault)` — `code` and a reviewed `status` are the
+contract.
+
+Default Struct messages name the received kind, never its value: `Expected number at email, received string`. The same message appears in `prettify()` and `String(fault)`. For `RES_DECODE_FAILED` caused by a JSON `SyntaxError`, the fault message is `Response body could not be decoded`; the original parser error stays on `cause`. Raw `StructIssue.received` values and parser causes remain sensitive, and a custom `errorMap` message is used verbatim, so review custom text before logging it.
+
+## Reference
+
+| Branch                 | Control-flow check                 | Useful stable fields                     | Usually absent / sensitive        |
+| ---------------------- | ---------------------------------- | ---------------------------------------- | --------------------------------- |
+| HTTP status policy     | `fault.code === 'HTTP_STATUS'`     | `fault.status`, reviewed `fault.data`    | Body, headers, URL, `cause`       |
+| Caller cancellation    | `fault.code === 'NET_ABORTED'`     | `code`                                   | Abort reason and stack            |
+| Timeout                | `fault.code === 'NET_TIMEOUT'`     | `code`                                   | Request URL and underlying cause  |
+| The contract broke     | `fault.code.startsWith('RES_')`    | `code`, reviewed `fault.response.status` | Struct issues, body, input values |
+| Your own code threw    | `fault.code.startsWith('EXT_')`    | `code`, `cause`                          | Whatever the extension attached   |
+| Stream/session runtime | `stream.closed` / `session.closed` | Terminal `kind` and `code`               | Event payloads, frames, causes    |
+
+Treat `cause`, `data`, response headers and bodies, URLs, `StructIssue.received`, input values, custom messages, and stacks as
+sensitive. Issue paths are structural and retain record keys: `struct.record(...)` can produce `Expected number at alice@example.com, received string`, so keys may still be sensitive in default messages, `prettify()`, and `String(fault)`. Default Struct messages and `prettify()` omit received values; logging the complete issue or JSON parser cause can still expose them. A conservative summary:
+
+<include cwd lang="typescript">
+  examples/errors/summarize-fault.ts#example
+</include>
+
+`createNetworkFault`, `createPreflightFault`, `createDecodeFault`, `createHttpStatusFault`, and
+`createUndecodedHttpStatusFault` build these native Error values. Normal request failures still
+return them in the tuple; they are not thrown merely because they inherit native Error behavior.
+`ERR_ABORTED` and `ERR_TIMEOUT` are the shared causes the transport normalizer recognizes. They carry non-enumerable `Symbol.for('defjs.cause.aborted')` and `Symbol.for('defjs.cause.timeout')` brands, so cancellation classification works across Core copies without object identity. [`isAbortCause`](/api/core/isabortcause) and [`isTimeoutCause`](/api/core/istimeoutcause) expose those checks and the supported platform error checks; pass the underlying `fault.cause` when classifying a fault's cause. OpenTelemetry suppresses caller-cancellation logs across copies while continuing to log timeouts.
+
+## Related recipes
+
+- [GET with a declared 404](/recipes/get-declared-404)
+- [Cancel an HTTP call](/recipes/cancel-http)

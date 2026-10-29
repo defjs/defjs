@@ -1,0 +1,68 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+html {
+  scrollbar-gutter: stable;
+}
+
+/* The modal primitive owns focus; the native drawer owns viewport placement. */
+[data-radix-popper-content-wrapper]:has(> .navigation-drawer) {
+  display: contents;
+}
+.navigation-drawer {
+  display: contents;
+}
+
+.navigation-group-heading {
+  margin-block: 1.25rem 0.375rem;
+  padding: 0.375rem 0.5rem;
+  color: var(--color-fd-foreground);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+}
+/* Avoid stacking header padding with the first group's section spacing. */
+.navigation-sidebar aside:not(#nd-sidebar-mobile) > div:first-child {
+  padding-block-end: 0;
+}
+.navigation-sidebar .navigation-group-heading:first-child {
+  margin-block-start: 0;
+}
+.navigation-item {
+  padding-inline-start: calc(0.5rem + var(--navigation-depth, 0) * 0.75rem);
+}
+.navigation-group-heading ~ .navigation-item:not([data-navigation-standalone]),
+.navigation-static-list
+  > li:has(> .navigation-group-heading)
+  ~ li
+  > .navigation-item:not([data-navigation-standalone]) {
+  padding-inline-start: 1.75rem;
+}
+.navigation-group-heading
+  ~ .navigation-item:not([data-navigation-standalone])::before,
+.navigation-static-list
+  > li:has(> .navigation-group-heading)
+  ~ li
+  > .navigation-item:not([data-navigation-standalone])::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0.625rem;
+  border-inline-start: 1px solid var(--color-fd-border);
+  content: "";
+}
+/* Keep native package folders and their depth offsets within the group. */
+.navigation-group-heading ~ div[data-state] {
+  margin-inline-start: 1.25rem;
+}
+
+/* Show the native link label in the wider desktop footer; the drawer footer is too narrow. */
+.navigation-sidebar aside:not(#nd-sidebar-mobile) a[aria-label="GitHub"] {
+  width: auto;
+  gap: 0.5rem;
+  padding-inline: 0.5rem;
+}
+.navigation-sidebar
+  aside:not(#nd-sidebar-mobile)
+  a[aria-label="GitHub"]::after {
+  content: attr(aria-label);
+}

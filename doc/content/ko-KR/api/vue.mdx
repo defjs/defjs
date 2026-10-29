@@ -1,0 +1,36 @@
+---
+title: "@defjs/vue"
+description: Vue 플러그인, 기본 또는 사용자 지정 injection key, injectClient예요.
+---
+
+# Vue
+
+기존 `@defjs/core` 클라이언트를 Vue 앱에 제공해요. 이 패키지는 클라이언트를 만들거나, 캐시하거나, dispose하지 않아요. Vue 3 이상이 필요해요.
+
+[Vue 가이드](/ko-KR/docs/integrations/vue)를 보세요.
+
+## createClientPlugin()
+
+<ApiSignature name="createClientPlugin" />
+
+- **client** — `createClient`가 준 인스턴스예요.
+- **반환** `app.use(...)`용 Vue 플러그인이에요. 설치하면 `app.provide(HTTP_CLIENT, client)`를 호출해요.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+<ApiSignature name="injectClient" />
+
+`injectClient(key)`는 해당 키의 가장 가까운 provider를 읽고, 생략하거나 `undefined`를 넘기면 `HTTP_CLIENT`를 써요. 동기 `setup()`이나 `app.runWithContext()`(Vue 3.3+)처럼 유효한 Vue 주입 컨텍스트에서 호출하세요. 후자는 동기 앱 수준 컨텍스트만 제공하며, 하위 트리 덮어쓰기를 가져오거나 일반 `await`를 넘어 컨텍스트를 유지하지 않아요. `<script setup>`의 최상위 `await` 이후 컴파일러가 복원한 컨텍스트는 여전히 유효해요.
+
+사용자 지정 `InjectionKey<Client>`는 `app.provide(key, client)` 또는 상위 컴포넌트의 `provide(key, client)`로 설정하세요. 제공하는 쪽과 읽는 쪽은 동일한 `Symbol` 객체를 공유해야 해요. 설명이 같아도 같은 키가 아니에요. `createClientPlugin(client)`는 여전히 클라이언트만 받고 `HTTP_CLIENT`만 제공해요.
+
+- **반환** 선택한 키로 제공된 동일한 클라이언트 객체예요.
+- **던짐** 활성 주입 컨텍스트가 없거나 선택한 키에 클라이언트가 없으면 `Error`를 던져요. 사용자 지정 키가 없어도 `HTTP_CLIENT`로 대체하지 않아요. 플러그인 설치만으로 주입 컨텍스트가 생기지는 않아요.
+
+## HTTP_CLIENT
+
+<ApiSignature name="HTTP_CLIENT" />
+
+Vue injection key예요. `inject(HTTP_CLIENT)`보다 `injectClient()`를 쓰세요. 하위 트리는 `provide(HTTP_CLIENT, childClient)`로 덮어요.

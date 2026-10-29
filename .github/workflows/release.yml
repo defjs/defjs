@@ -1,0 +1,162 @@
+name: Release
+
+# Manual, pick-what-you-want trigger. GitHub Actions has no native multi-select input, so each
+# target is its own checkbox in the "Run workflow" form; tick any combination. Package versions
+# are whatever is already committed in each packages/*/package.json — nothing here bumps them.
+on:
+  workflow_dispatch:
+    inputs:
+      core:
+        description: Publish @defjs/core to npm
+        type: boolean
+        default: false
+      opentelemetry-server:
+        description: Publish @defjs/opentelemetry-server to npm
+        type: boolean
+        default: false
+      react:
+        description: Publish @defjs/react to npm
+        type: boolean
+        default: false
+      vue:
+        description: Publish @defjs/vue to npm
+        type: boolean
+        default: false
+      docs:
+        description: Deploy the docs site to GitHub Pages
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    if: ${{ inputs.core }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      # tsdown emits declarations with --noCheck, so this is the typecheck.
+      - name: Typecheck build config
+        run: bunx --no-install tsc -p tsconfig.build.json --noEmit
+        working-directory: packages/core
+      - run: bun --bun run build
+        working-directory: packages/core
+      - name: Assert packed files
+        run: bun test/assert-pack.ts packages/core/dist
+      - working-directory: packages/core/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
+        run: |
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
+          npm publish --access public
+
+  opentelemetry-server:
+    if: ${{ inputs.opentelemetry-server }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
+      - name: Build @defjs/core
+        run: bun --bun run build
+        working-directory: packages/core
+      - name: Typecheck build config
+        run: bunx --no-install tsc -p tsconfig.build.json --noEmit
+        working-directory: packages/opentelemetry-server
+      - run: bun --bun run build
+        working-directory: packages/opentelemetry-server
+      - name: Assert packed files
+        run: bun test/assert-pack.ts packages/opentelemetry-server/dist
+      - working-directory: packages/opentelemetry-server/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
+        run: |
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
+          npm publish --access public
+
+  react:
+    if: ${{ inputs.react }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
+      - name: Build @defjs/core
+        run: bun --bun run build
+        working-directory: packages/core
+      - name: Typecheck build config
+        run: bunx --no-install tsc -p tsconfig.build.json --noEmit
+        working-directory: packages/react
+      - run: bun --bun run build
+        working-directory: packages/react
+      - name: Assert packed files
+        run: bun test/assert-pack.ts packages/react/dist
+      - working-directory: packages/react/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
+        run: |
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
+          npm publish --access public
+
+  vue:
+    if: ${{ inputs.vue }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      # tsconfig.build.json resolves @defjs/core to ../core/dist. tsdown --noCheck will not fail if that file is missing.
+      - name: Build @defjs/core
+        run: bun --bun run build
+        working-directory: packages/core
+      - name: Typecheck build config
+        run: bunx --no-install tsc -p tsconfig.build.json --noEmit
+        working-directory: packages/vue
+      - run: bun --bun run build
+        working-directory: packages/vue
+      - name: Assert packed files
+        run: bun test/assert-pack.ts packages/vue/dist
+      - working-directory: packages/vue/dist
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/npmrc
+        run: |
+          printf '//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}\n' > "$NPM_CONFIG_USERCONFIG"
+          npm publish --access public
+
+  docs:
+    if: ${{ inputs.docs }}
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - run: bun ci
+      - name: Validate production site URL
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+        run: bun doc/scripts/check-site-url.ts
+      - run: bun run typecheck
+      - run: bun run build
+        working-directory: doc
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: doc/build/client
+      - id: deployment
+        uses: actions/deploy-pages@v5

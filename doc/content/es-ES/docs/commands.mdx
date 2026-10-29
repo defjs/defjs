@@ -1,0 +1,65 @@
+---
+title: "Definir y ejecutar / Command"
+description: Exportar operaciones de SDK reutilizables y ejecutar sus comandos con el cliente de la aplicación.
+---
+
+# Comandos
+
+El autor del SDK exporta el endpoint devuelto por `defineRequest`, `defineEventStream` o `defineWebSocket`. El endpoint describe una operación de API reutilizable, sus contratos Struct y cómo `builder` coloca las entradas. La aplicación llama al endpoint con sus valores, recibe un comando opaco y lo pasa a su cliente.
+
+Definición → endpoint exportado → comando para una llamada → `client.execute(...)`. Este reparto se aplica a HTTP, SSE y WebSocket. Los ejemplos reúnen definición y ejecución para facilitar la lectura; al [publicar un SDK](/es-ES/recipes/publish-http-sdk), el módulo de endpoints y la aplicación permanecen separados.
+
+Las factorías de clientes y los métodos auxiliares son complementos opcionales. Pueden ofrecer valores predeterminados del servicio o comportamiento de dominio, admitir la configuración del consumidor y conservar los endpoints exportados directamente. Documenta las conversiones de errores y las reglas de ciclo de vida que introduzcan. Un SDK reutilizable no requiere una factoría.
+
+## Configuración básica
+
+<include cwd lang="typescript">
+  examples/commands/basic-setup.ts#example
+</include>
+
+## Elige una definición
+
+| Definición               | Contrato                                                             | Valor en éxito                            |
+| ------------------------ | -------------------------------------------------------------------- | ----------------------------------------- |
+| `defineRequest(...)`     | Método, path relativo, input opcional, `output` / `error` opcionales | Datos decodificados + respuesta           |
+| `defineEventStream(...)` | Path, límites de buffer/cola, mapa nombre de evento → Struct         | `EventStreamHandle` + snapshot de open    |
+| `defineWebSocket(...)`   | Path, un struct incoming, struct outgoing opcional, límite de cola   | `WebSocketSession` + snapshot de conexión |
+
+Sin `input` → el endpoint no toma argumento, y `builder` puede ser `() => request`. Con `input` → pasa el valor del struct. Un campo opcional puede omitirse; uno requerido no.
+
+Mantén los comandos opacos. No husmees tags ni símbolos.
+
+## Dónde van los valores
+
+El struct decide cómo se codifica un valor. El `builder` decide dónde va. `builder` es una función pura y síncrona del input **ya parseado**. Corre en el momento de execute. Un throw se convierte en `REQ_BUILD_FAILED` en la tupla: la llamada al endpoint en sí no lanza.
+
+Declarar `input` siempre exige un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
+
+Pasa el valor tipado. El alias, `Date` → ISO y `bigint` → string se aplican entonces en todos los sitios donde se usa ese struct: colocación de la solicitud, decodificación de la respuesta, eventos SSE y frames WebSocket.
+
+<include cwd lang="typescript">
+  examples/commands/where-values-go.ts#example
+</include>
+
+El body es JSON `{"display_name":"…","email":"…"}`. Una clave escrita a mano es la vía de escape: `body: { name: input.user.displayName }` envía `name`, porque el objeto padre es anónimo y el alias no aplica.
+
+## Cuando las formas difieren
+
+Usa `builder` para placeholders de path, literales y ramas. Recibe el valor real, así que `if`, `??`, templates y `switch` funcionan.
+
+<include cwd lang="typescript">
+  examples/commands/different-shapes.ts#example
+</include>
+
+`query: input.filter` envía `page_size`. `headers: { 'x-api-version': '2' }` es un literal. Auth y tracing siguen perteneciendo a los interceptores: ven la solicitud nativa después de que corre el builder.
+
+## Formas de output y error
+
+`output` es un Struct para el cuerpo 2xx; `error` es un Struct para todo lo demás. `ok` es la única
+bifurcación, y solo un lado decodifica. Omitir un lado significa que ese cuerpo nunca se lee: el fault
+lleva el estado y `data` se queda en `undefined`.
+
+## Recetas relacionadas
+
+- [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
+- [POST JSON](/es-ES/recipes/post-json)

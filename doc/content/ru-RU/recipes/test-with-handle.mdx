@@ -1,0 +1,20 @@
+---
+title: "Локальные HTTP-тесты"
+description: Подмени Fetch для одного клиента через withHTTPHandle — команда та же.
+---
+
+# Тест с локальным Fetch handle
+
+`withHTTPHandle(...)` заменяет Fetch только для этого клиента. Ты всё равно получаешь сборку URL, interceptors, status dispatch и Struct-decode — без DNS, TLS и настоящего сервера.
+
+Подробности — в [Клиент](/ru-RU/docs/client).
+
+<include cwd meta="get-user.test.ts">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+```txt
+Ada 200
+```
+
+Ту же команду `getUser` гоняй против реального клиента с `withEndpoint(...)` в проде — меняется только handle.

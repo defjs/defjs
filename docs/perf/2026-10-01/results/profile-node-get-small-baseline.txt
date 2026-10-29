@@ -1,0 +1,88 @@
+get-small	33543 ns/op	[min 31901, max 39566]
+total 2104 ms
+
+## self time
+  6.52%  executeHttpCommand [src/http/http.ts]
+  6.01%  (garbage collector) [(native/vm)]
+  5.09%  (program) [(native/vm)]
+  4.04%  refreshCompositeSignal [node:abort_controller]
+  3.39%  SafeWeakRef [node:primordials]
+  3.37%  awaitWithSignal [src/internal/abort.ts]
+  3.27%  (anonymous) [node:abort_controller]
+  3.17%  followCompositeSignal [node:abort_controller]
+  3.05%  parse [(native/vm)]
+  2.72%  _Request [node:undici]
+  2.57%  update [(native/vm)]
+  2.10%  fillUrl [src/internal/url.ts]
+  1.85%  (anonymous) [node:undici]
+  1.74%  addEventListener [node:event_target]
+  1.62%  parseJsonText [src/http/transport/utils.ts]
+  1.52%  Event [node:event_target]
+  1.40%  concatChunks [src/http/transport/utils.ts]
+  1.36%  abortSignal [node:abort_controller]
+  1.24%  addAbortListener [node:abort_listener]
+  1.16%  any [node:abort_controller]
+  1.16%  materializePath [src/internal/outbound_request.ts]
+  1.14%  encodeObjectNode [src/internal/outbound_request.ts]
+  1.10%  #encode [node:encoding]
+  0.91%  parseObjectValue [src/struct/parse.ts]
+  0.90%  makeResponse [src/internal/http_response.ts]
+  0.89%  parseFetchResponse [src/http/transport/fetch.ts]
+  0.82%  validateEventListenerOptions [node:event_target]
+  0.77%  isJsonMediaType [src/http/transport/utils.ts]
+  0.76%  get [node:undici]
+  0.76%  webidl.converters.ByteString [node:undici]
+
+## inclusive time (library)
+ 36.53%  executeHttpCommand [src/http/http.ts]
+ 26.46%  fetchHandler [src/http/transport/fetch.ts]
+ 20.06%  createFetchRequest [src/http/transport/fetch.ts]
+ 10.57%  (anonymous) [src/internal/abort.ts]
+ 10.29%  parseFetchResponse [src/http/transport/fetch.ts]
+ 10.10%  (anonymous) [src/http/transport/fetch.ts]
+  9.99%  dispatch [src/interceptor/interceptor.ts]
+  9.78%  handler [src/http/http.ts]
+  9.04%  awaitWithSignal [src/internal/abort.ts]
+  8.94%  mergeAbortSignals [src/internal/abort.ts]
+  7.44%  resolveRequestUrl [src/internal/url.ts]
+  7.41%  createResolvedRequestUrl [src/internal/url.ts]
+  7.11%  createHttpRequest [src/http/request.ts]
+  6.90%  createBaseTransportRequest [src/internal/transport_request.ts]
+  4.43%  createEndpointDirectoryBase [src/internal/url.ts]
+  3.61%  materializeOutboundRequest [src/internal/outbound_request.ts]
+  3.46%  materializePath [src/internal/outbound_request.ts]
+  3.01%  parseStructValue [src/struct/introspection.ts]
+  2.95%  execute [src/client/client.ts]
+  2.69%  fillUrl [src/internal/url.ts]
+  2.66%  parseRootValue [src/struct/parse.ts]
+  2.65%  parseValueAtPath [src/struct/parse.ts]
+  2.61%  decodeDeclaredBody [src/http/http.ts]
+  2.30%  parseStructResponse [src/http/http.ts]
+  2.26%  encodeGuided [src/internal/outbound_request.ts]
+  2.26%  encodeOutbound [src/internal/outbound_request.ts]
+  2.23%  createFetchRequestInit [src/http/transport/fetch.ts]
+  2.19%  parseBytesBody [src/http/transport/utils.ts]
+  2.14%  parseObjectValue [src/struct/parse.ts]
+  2.02%  encodeTaggedObject [src/internal/outbound_request.ts]
+
+## self time by module
+ 19.98%  (native/vm)
+ 14.33%  node:abort_controller
+ 14.06%  node:undici
+  8.13%  src/http/http.ts
+  6.04%  node:event_target
+  4.07%  src/internal/abort.ts
+  4.00%  src/http/transport/utils.ts
+  3.92%  node:primordials
+  3.64%  src/internal/url.ts
+  3.18%  src/internal/outbound_request.ts
+  2.82%  src/http/transport/fetch.ts
+  2.02%  node:readablestream
+  1.69%  src/struct/parse.ts
+  1.51%  node:url
+  1.30%  node:encoding
+  1.24%  node:abort_listener
+  0.90%  src/internal/http_response.ts
+  0.76%  src/struct/guide.ts
+  0.58%  node:realm
+  0.55%  node:util

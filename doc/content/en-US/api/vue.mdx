@@ -1,0 +1,36 @@
+---
+title: "@defjs/vue"
+description: Vue plugin, default or custom injection keys, and injectClient.
+---
+
+# Vue
+
+Provide an existing `@defjs/core` client to a Vue app. This package does not create, cache, or dispose the client. Vue 3 or later is required.
+
+See the [Vue guide](/docs/integrations/vue).
+
+## createClientPlugin()
+
+<ApiSignature name="createClientPlugin" />
+
+- **client** — Instance from `createClient`.
+- **Returns** a Vue plugin for `app.use(...)`. Installing it calls `app.provide(HTTP_CLIENT, client)`.
+
+<include cwd>examples/api/create-client-plugin.ts#example</include>
+
+## injectClient()
+
+<ApiSignature name="injectClient" />
+
+`injectClient(key)` reads the nearest provider for that key; omitted or `undefined` uses `HTTP_CLIENT`. Call in a valid Vue injection context: synchronous `setup()` or `app.runWithContext()` (Vue 3.3+). The latter supplies only synchronous app-level context, not subtree overrides or context across ordinary `await`. Compiler-restored contexts after top-level `await` in `<script setup>` remain valid.
+
+For a custom `InjectionKey<Client>`, use `app.provide(key, client)` or an ancestor’s `provide(key, client)`. Share the same `Symbol` object; matching descriptions do not make keys equal. `createClientPlugin(client)` still takes only the client and provides `HTTP_CLIENT`.
+
+- **Returns** the exact client provided for the selected key.
+- **Throws** an `Error` without an active injection context or a client for the selected key. A missing custom key never falls back to `HTTP_CLIENT`; installing the plugin alone does not establish an injection context.
+
+## HTTP_CLIENT
+
+<ApiSignature name="HTTP_CLIENT" />
+
+Vue injection key. Prefer `injectClient()` over `inject(HTTP_CLIENT)`. Override a subtree with `provide(HTTP_CLIENT, childClient)`.
