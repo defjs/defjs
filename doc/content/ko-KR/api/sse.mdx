@@ -16,13 +16,13 @@ description: defineEventStream, 요청 옵션, stream handle이에요.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-호출은 `[null, stream, open]` 또는 `[error, undefined, open?]`을 돌려줘요. `error`를 선언하면 fault는 그 struct의 `Fault`이고, 아니면 `Fault<undefined>`예요. `abort`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. SSE는 `abort`만 읽고, 진행률과 WebSocket 필드는 무시해요.
+호출은 `[null, stream, open]` 또는 `[error, undefined, open?]`을 돌려줘요. `error`를 선언하면 fault는 그 struct의 `Fault`이고, 아니면 `Fault<undefined>`예요. `signal`은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. SSE는 `signal`만 읽고, 진행률과 WebSocket 필드는 무시해요.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions`는 `{ abort? }`예요. `timeout`이나 `signal` 필드도 없고 진행률 콜백도 없어요. `abort`는 열린 뒤를 포함해 스트림 전체를 덮어요. 데드라인은 `AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 시작 전용 데드라인도, 클라이언트 기본 데드라인도 없어요. 시작 전용 데드라인이 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요.
+`EventStreamExecuteOptions`는 `{ signal? }`예요. `timeout`이나 `abort` 필드도 없고 진행률 콜백도 없어요. `signal`은 열린 뒤를 포함해 스트림 전체를 덮어요. 데드라인은 `AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 시작 전용 데드라인도, 클라이언트 기본 데드라인도 없어요. 시작 전용 데드라인이 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요.
 
 ## EventStreamHandle
 

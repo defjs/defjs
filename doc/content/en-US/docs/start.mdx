@@ -77,7 +77,7 @@ Move the definition into an SDK package when more applications need it. Export `
 - A declared body (`output` for 2xx, `error` otherwise) that won't decode → `RES_DECODE_FAILED` or `RES_STRUCT_MISMATCH`, whatever the status
 - Fetch fail / cancel / deadline → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-A deadline is `client({ abort: AbortSignal.timeout(ms) })` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no client-level default deadline. Derive a client when one call needs its own `abort`; see [Client](/docs/client). Cancellation tells you what the caller saw — not whether a server write committed.
+A deadline is `client({ signal: AbortSignal.timeout(ms) })` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no client-level default deadline. Derive a client when one call needs its own `signal`; see [Client](/docs/client). Cancellation tells you what the caller saw — not whether a server write committed.
 
 ## Next recipes
 

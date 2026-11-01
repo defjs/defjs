@@ -18,7 +18,7 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 `output` は 2xx ボディ用の struct 1 つ、`error` は 2xx 以外すべてのボディ用の struct 1 つです。どちらも status でキー分けされません。省いた側のボディは読まれません — [宣言は断言である](/ja-JP/docs/design-decisions#declaration-is-an-assertion) を参照してください。
 
-操作を呼ぶと、[`HttpAwaitResult`](/ja-JP/api/core/httpawaitresult-type) に書かれたタプルの promise が返ります。呼び出しごとの options は、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。HTTP が読むのは `abort` と進捗コールバックで、他のフィールドは無視します。
+操作を呼ぶと、[`HttpAwaitResult`](/ja-JP/api/core/httpawaitresult-type) に書かれたタプルの promise が返ります。呼び出しごとの options は、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。HTTP が読むのは `signal` と進捗コールバックで、他のフィールドは無視します。
 
 2xx 以外の status は、`error` struct を宣言していないか、宣言した `error` ボディがデコードできる場合に `HTTP_STATUS` になります。fault の `data` は、`error` を宣言していればデコード済みのエラーボディ、していなければ `undefined` です。宣言した `error` ボディを読めない場合（メディアタイプが違う、JSON が不正）や struct に一致しない場合、fault は代わりに `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED`、`RES_STRUCT_MISMATCH` のいずれかになり、レスポンスの status はそのメタデータに引き続き含まれます。失敗時のタプル第三要素は `undefined` で、レスポンスのメタデータは fault が持ちます。
 
@@ -38,7 +38,7 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `abort` に `onDownloadProgress` と `onUploadProgress` を足したものです。`timeout` フィールドも `signal` フィールドもありません。期限は `abort: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。`abort` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位の既定の期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
+`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `signal` に `onDownloadProgress` と `onUploadProgress` を足したものです。`timeout` フィールドも `abort` フィールドもありません。期限は `signal: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位の既定の期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
 
 ## 型
 
@@ -54,7 +54,7 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 ### HttpRequest
 
-正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでに回線上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。ビルダーが `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。エンドポイントの `output` と `error` の struct kind から導出され、変更してはいけません。
+正規化された送信リクエストです。`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString`、`queryParams` です。インターセプターが見る時点で `body` はすでに回線上の値（JSON なら JSON テキストの文字列）になっているので、HMAC やダイジェストの署名は struct の入力ではなくこの値に対して行ってください。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。ビルダーが `URLSearchParams` を返すと、そのインスタンスがそのまま渡されます。`responseType` と `errorResponseType` は readonly です。エンドポイントの `output` と `error` の struct kind から導出され、変更してはいけません。
 
 ### HttpMeta
 
@@ -102,7 +102,7 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 ## UseRequestConfig
 
-`abort` に、任意の `onDownloadProgress` と `onUploadProgress` が加わります。`HttpExecuteOptions` はこのスライスです。`timeout` フィールドも `signal` フィールドもありません。
+`signal` に、任意の `onDownloadProgress` と `onUploadProgress` が加わります。`HttpExecuteOptions` はこのスライスです。`timeout` フィールドも `abort` フィールドもありません。
 
 ## RequestSuccessData
 

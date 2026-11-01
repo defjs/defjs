@@ -9,7 +9,7 @@ Importa operaciones de tu SDK o de un módulo de definición compartido. La apli
 
 Estos plugins son ayudas opcionales para proporcionar y leer un `Client` existente. Importa un cliente fijo que posee la aplicación, pasa un `Client` de forma explícita a la lógica reutilizable, usa la inyección del framework para valores por defecto y sustituciones a nivel de árbol, o elige tu propia organización. Las definiciones del SDK no requieren estos plugins.
 
-Conecta un cliente `@defjs/core` existente a un árbol React. Obtienes Context y `useClient()`. El paquete **no** crea un cliente, no añade caché, no reintenta operaciones ni libera recursos de transporte. El componente, effect o librería de datos que arranca el trabajo es su dueño. El cliente de `useClient()` se pasa a la operación. El hook devuelve el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó. Para opciones por llamada como `abort`, llámalo donde se ejecuta la operación: `getUser(client({ abort }), input)`. No lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater. `ClientProvider` y `useClient` no aceptan un valor `Client` derivado.
+Conecta un cliente `@defjs/core` existente a un árbol React. Obtienes Context y `useClient()`. El paquete **no** crea un cliente, no añade caché, no reintenta operaciones ni libera recursos de transporte. El componente, effect o librería de datos que arranca el trabajo es su dueño. El cliente de `useClient()` se pasa a la operación. El hook devuelve el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó. Para opciones por llamada como `signal`, llámalo donde se ejecuta la operación: `getUser(client({ signal }), input)`. No lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater. `ClientProvider` y `useClient` no aceptan un valor `Client` derivado.
 
 ## Configuración básica
 
@@ -39,7 +39,7 @@ El hook solo suministra el cliente. No arranca trabajo, no se suscribe a un tran
 
 ## Ser dueño del trabajo de query
 
-Una librería de queries puede ser dueña de la caché, los reintentos, la supresión de resultados obsoletos y la cancelación. Pasa el signal que ella proporciona como `abort` en un cliente derivado. Para páginas de listas, llama a la operación desde TanStack Query (o similar): `@defjs/react` se queda solo en DI y **no** incluye `useRequest`.
+Una librería de queries puede ser dueña de la caché, los reintentos, la supresión de resultados obsoletos y la cancelación. Pasa el signal que ella proporciona como `signal` en un cliente derivado. Para páginas de listas, llama a la operación desde TanStack Query (o similar): `@defjs/react` se queda solo en DI y **no** incluye `useRequest`.
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
@@ -53,7 +53,7 @@ Los handles SSE y WebSocket sobreviven a la llamada a la operación. Registra la
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-El signal `abort` pasado a la operación sigue gobernando una sesión abierta. Abortarlo en la limpieza termina la sesión como `aborted` y rechaza `receive` con `AbortError`, así que el `catch` de arriba ignora los errores una vez que el effect se libera y solo reporta fallos reales (desbordamiento de cola, timeout del acuse del heartbeat). Un stream SSE abortado, en cambio, termina su iterador con normalidad. Sin el `catch`, un rechazo del bucle sería un rechazo de promesa no manejado.
+El `signal` pasado a la operación sigue gobernando una sesión abierta. Abortarlo en la limpieza termina la sesión como `aborted` y rechaza `receive` con `AbortError`, así que el `catch` de arriba ignora los errores una vez que el effect se libera y solo reporta fallos reales (desbordamiento de cola, timeout del acuse del heartbeat). Un stream SSE abortado, en cambio, termina su iterador con normalidad. Sin el `catch`, un rechazo del bucle sería un rechazo de promesa no manejado.
 
 Misma regla para `EventStreamHandle`: cierra en `finally`, await `stream.closed`. Los consumidores WebSocket también deben hacer unsubscribe de listeners de estado/runtime-error y seguir leyendo `session.receive` — una cola acotada sin leer puede hacer overflow.
 

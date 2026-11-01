@@ -12,7 +12,7 @@ const getUser = defineRequest({
 
 async function main() {
   const [error, user] = await getUser(
-    client({ abort: AbortSignal.timeout(5_000) }),
+    client({ signal: AbortSignal.timeout(5_000) }),
     { id: 1 },
   );
   if (error?.code === "NET_TIMEOUT") {

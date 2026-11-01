@@ -56,7 +56,7 @@ test("immediate clean close settles according to observed native events", async 
         path: "/ws/close-immediately",
       });
       const [fault, session] = await connect(
-        client({ abort: cancellation.signal }),
+        client({ signal: cancellation.signal }),
       );
       const closed = session ? (await session.closed).kind : undefined;
       await nativeClosed;
@@ -172,7 +172,7 @@ test("original 10ms closes agree with native-only controls", async () => {
                 protocols,
               });
               const [error, session] = await connect(
-                client({ abort: cancellation.signal }),
+                client({ signal: cancellation.signal }),
               );
               fault = error?.code ?? null;
               if (session) {

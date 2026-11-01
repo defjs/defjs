@@ -118,7 +118,7 @@ describe("builder refactor adversarial audit", () => {
         };
       },
       {
-        abort: new AbortController().signal,
+        signal: new AbortController().signal,
         baseEndpoint: "https://example.test",
       },
     );
@@ -162,7 +162,7 @@ describe("builder refactor adversarial audit", () => {
           body: { child: { ...input.child, display_name: "shadow" } },
         }),
         {
-          abort: new AbortController().signal,
+          signal: new AbortController().signal,
           baseEndpoint: "https://example.test",
         },
       ),
@@ -263,7 +263,7 @@ describe("builder refactor adversarial audit", () => {
         undefined,
         () => ({ headers: { "x-name": "ok\r\nInjected: yes" } }),
         {
-          abort: new AbortController().signal,
+          signal: new AbortController().signal,
           baseEndpoint: "https://example.test",
         },
       ),
@@ -1019,7 +1019,7 @@ describe("builder fixes re-audit", () => {
       path: "/socket",
     });
 
-    const [error] = await endpoint(client({ abort: controller.signal }));
+    const [error] = await endpoint(client({ signal: controller.signal }));
 
     expect(builderCalls).toBe(0);
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -1045,7 +1045,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, session] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
       abortingInput(controller),
     );
     await closeIfOpened(session);
@@ -1074,7 +1074,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, session] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(opened.counters.sockets).toBe(0);
@@ -1093,7 +1093,7 @@ describe("builder fixes re-audit", () => {
 
     const [error, session] = await endpoint(
       createClient(withEndpoint("https://example.test"))({
-        abort: controller.signal,
+        signal: controller.signal,
       }),
     );
 
@@ -1123,7 +1123,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, result] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(builderCalls).toBe(0);
@@ -1154,7 +1154,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, result] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
       abortingInput(controller),
     );
 
@@ -1184,7 +1184,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, result] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(fetches).toBe(0);
@@ -1216,7 +1216,7 @@ describe("builder fixes re-audit", () => {
     const endpoint = defineRequest({ method: "GET", path: "/item" });
 
     const [error, result] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(fetches).toBe(0);
@@ -1248,7 +1248,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, stream] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
     await closeIfOpened(stream);
 
@@ -1282,7 +1282,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, stream] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
       abortingInput(controller),
     );
     await closeIfOpened(stream);
@@ -1315,7 +1315,7 @@ describe("builder fixes re-audit", () => {
     });
 
     const [error, stream] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(fetches).toBe(0);
@@ -1335,7 +1335,7 @@ describe("builder fixes re-audit", () => {
 
     const [error, stream] = await endpoint(
       createClient(withEndpoint("https://example.test"))({
-        abort: controller.signal,
+        signal: controller.signal,
       }),
     );
 

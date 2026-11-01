@@ -5,7 +5,7 @@ description: Прерви вызов или поставь дедлайн и ч�
 
 # Отменить HTTP-вызов
 
-Объедини сигнал вызывающего с дедлайном в `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` — один сигнал. Ручной abort классифицируется как `NET_ABORTED`. Дедлайн классифицируется как `NET_TIMEOUT`.
+Объедини сигнал вызывающего с дедлайном в `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` — один сигнал. Ручной abort классифицируется как `NET_ABORTED`. Дедлайн классифицируется как `NET_TIMEOUT`.
 
 Подробности — в [HTTP](/ru-RU/docs/http#cancel-the-work).
 

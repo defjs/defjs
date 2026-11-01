@@ -159,7 +159,7 @@ Les champs `undefined` sont omis. `null` sur un champ nullable est envoyé. Une 
 
 ## Observateurs et placement de la politique
 
-Les intercepteurs servent à la politique transversale au transport : auth, tracing, court-circuit, retry revu. Ils ne tournent que pour leur transport et se composent en ordre oignon. Les options de requête sur un client dérivé servent à la durée de vie propre au travail : `abort`, heartbeat WebSocket, et reconnexion opt-in.
+Les intercepteurs servent à la politique transversale au transport : auth, tracing, court-circuit, retry revu. Ils ne tournent que pour leur transport et se composent en ordre oignon. Les options de requête sur un client dérivé servent à la durée de vie propre au travail : `signal`, heartbeat WebSocket, et reconnexion opt-in.
 
 Les observateurs rapportent ce qui s’est passé sans devenir un second propriétaire. `onInvalidEvent` SSE, les écouteurs d’état WebSocket et les écouteurs d’erreurs runtime servent aux diagnostics et métriques bornés. Le flux ou la session renvoyé possède toujours l’itération, la fermeture, le désabonnement et l’attente terminale. Cache, suppression de résultats périmés, idempotence et mapping d’erreurs de domaine se placent autour de l’appel d’opération, où ton app voit sa propre politique et son état.
 

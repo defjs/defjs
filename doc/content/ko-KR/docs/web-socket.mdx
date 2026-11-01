@@ -96,7 +96,7 @@ HTTP, SSE와 같이, 없거나 상대적이거나 잘못된 base endpoint나 불
 
 `session.close(code?, reason?)`는 종료를 요청하고 heartbeat를 멈춰요. code는 `1000` 또는 `3000..4999`여야 하고, reason은 123 UTF-8 바이트 이하여야 해요. 잘못된 close 인자는 상태를 바꾸기 전에 throw해요. 수동 close 이유나 논리 종료 결과가 필요하면 `await session.closed`와 함께 쓰세요.
 
-작업에 넘긴 `abort` 신호는 열린 세션에 계속 붙어 있고, 열린 뒤를 포함해 연결 전체를 덮어요. 타임아웃 모양의 abort(`TimeoutError` 또는 `ERR_TIMEOUT`, `AbortSignal.timeout(...)` 포함)는 `'error'`(`NET_TIMEOUT`)로 끝나요. 그 밖의 이유는 `'aborted'`로 끝나고, `receive`는 새 `AbortError`가 아니라 그 이유 자체로 reject돼요. 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요. [SSE](/ko-KR/docs/sse#close-and-dispose)를 보세요.
+작업에 넘긴 `signal`은 열린 세션에 계속 붙어 있고, 열린 뒤를 포함해 연결 전체를 덮어요. 타임아웃 모양의 abort(`TimeoutError` 또는 `ERR_TIMEOUT`, `AbortSignal.timeout(...)` 포함)는 `'error'`(`NET_TIMEOUT`)로 끝나요. 그 밖의 이유는 `'aborted'`로 끝나고, `receive`는 새 `AbortError`가 아니라 그 이유 자체로 reject돼요. 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요. [SSE](/ko-KR/docs/sse#close-and-dispose)를 보세요.
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

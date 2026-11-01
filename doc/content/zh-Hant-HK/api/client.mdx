@@ -55,7 +55,7 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 每個 request 都會變嘅值，例如刷新後嘅 Bearer token，或者對序列化 body 計算嘅 HMAC，請用 interceptor。
 
-冇 client 層級嘅預設 deadline。某次呼叫需要 deadline 時，喺派生 client 上傳 `abort: AbortSignal.timeout(ms)`。手動 abort 係 `NET_ABORTED`。`AbortSignal.timeout` 分類為 `NET_TIMEOUT`。
+冇 client 層級嘅預設 deadline。某次呼叫需要 deadline 時，喺派生 client 上傳 `signal: AbortSignal.timeout(ms)`。手動 abort 係 `NET_ABORTED`。`AbortSignal.timeout` 分類為 `NET_TIMEOUT`。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 <ApiSignature name="Client" />
 
-`Client` 係一個值，唔係 function。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) call [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 就會得到一個。七個已知 field 從參數複製入一個新 object。未知 field 會被忽略，值係 `undefined` 嘅 field 會被略過。冇上一層疊加：`client()`、`client(undefined)` 同 `client({})` 都 return 一個冇 request options 嘅 client。巢狀嘅 `heartbeat`、`protocols` 同 `reconnect` 嘅值按 reference 留住，唔會 clone。WebSocket 喺操作行嗰陣先讀佢哋（嗰陣會複製 heartbeat 嘅 field 同 protocols 列表），所以派生之後再改呢啲物件，仍然可以影響之後嘅呼叫。應用程式傳入之後應該當佢哋係 immutable。派生唔做 I/O。Client 值唔可以 call，call 佢無法編譯，runtime 亦會 throw `TypeError`。每次呼叫建立一個 client 值。同一個值可以傳俾好多操作，但重用帶有 `abort` 嘅值會共用嗰個 signal。`abort` 唔會合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。
+`Client` 係一個值，唔係 function。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) call [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 就會得到一個。七個已知 field 從參數複製入一個新 object。未知 field 會被忽略，值係 `undefined` 嘅 field 會被略過。冇上一層疊加：`client()`、`client(undefined)` 同 `client({})` 都 return 一個冇 request options 嘅 client。巢狀嘅 `heartbeat`、`protocols` 同 `reconnect` 嘅值按 reference 留住，唔會 clone。WebSocket 喺操作行嗰陣先讀佢哋（嗰陣會複製 heartbeat 嘅 field 同 protocols 列表），所以派生之後再改呢啲物件，仍然可以影響之後嘅呼叫。應用程式傳入之後應該當佢哋係 immutable。派生唔做 I/O。Client 值唔可以 call，call 佢無法編譯，runtime 亦會 throw `TypeError`。每次呼叫建立一個 client 值。同一個值可以傳俾好多操作，但重用帶有 `signal` 嘅值會共用嗰個 signal。`signal` 唔會合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。
 
 唔好將 factory 傳俾 React state setter（`setState(factory)` 會將佢當 updater 嚟 call），亦唔好將佢做 Vue `watch` 或者 `computed` 嘅 source（嗰啲會 call function）。
 
@@ -123,11 +123,11 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 <ApiSignature name="RequestOptions" />
 
-七個扁平 field。每種協定讀自己明白嘅 field，其餘忽略。傳 `heartbeat` 俾 HTTP 會被忽略，唔係 fault。SSE 只會由 request options 讀 `abort`。SSE reconnect 來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。冇 compile-time 嘅協定過濾，亦冇 `timeout` 或 `signal` field。
+七個扁平 field。每種協定讀自己明白嘅 field，其餘忽略。傳 `heartbeat` 俾 HTTP 會被忽略，唔係 fault。SSE 只會由 request options 讀 `signal`。SSE reconnect 來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。冇 compile-time 嘅協定過濾，亦冇 `timeout` 或 `abort` field。
 
 | Field                | 協定                   | 取代方式                                                      |
 | -------------------- | ---------------------- | ------------------------------------------------------------- |
-| `abort`              | HTTP、SSE 同 WebSocket | 中止該次呼叫。SSE 同 WebSocket 覆蓋成條連線，包括 open 之後。 |
+| `signal`             | HTTP、SSE 同 WebSocket | 中止該次呼叫。SSE 同 WebSocket 覆蓋成條連線，包括 open 之後。 |
 | `onUploadProgress`   | HTTP                   | 其他協定會忽略。                                              |
 | `onDownloadProgress` | HTTP                   | 其他協定會忽略。                                              |
 | `beforeConnect`      | WebSocket              | 喺該次呼叫取代 client 設定。                                  |
@@ -135,7 +135,7 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 | `heartbeat`          | WebSocket              | 成個換走。`timeoutMs` 係等確認嘅時間，唔係請求 deadline。     |
 | `reconnect`          | WebSocket              | 成個換走。                                                    |
 
-[`HttpExecuteOptions`](/zh-Hant-HK/api/core/httpexecuteoptions-type) 係 HTTP 嗰片（`abort` 加 progress）。[`EventStreamExecuteOptions`](/zh-Hant-HK/api/core/eventstreamexecuteoptions-type) 係 `{ abort? }`。[`WebSocketExecuteOptions`](/zh-Hant-HK/api/core/websocketexecuteoptions-type) 係 WebSocket 嗰片再加 `abort`。
+[`HttpExecuteOptions`](/zh-Hant-HK/api/core/httpexecuteoptions-type) 係 HTTP 嗰片（`signal` 加 progress）。[`EventStreamExecuteOptions`](/zh-Hant-HK/api/core/eventstreamexecuteoptions-type) 係 `{ signal? }`。[`WebSocketExecuteOptions`](/zh-Hant-HK/api/core/websocketexecuteoptions-type) 係 WebSocket 嗰片再加 `signal`。
 
 ### ClientOption
 

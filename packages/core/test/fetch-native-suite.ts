@@ -419,7 +419,7 @@ export function defineNativeFetchSuite(): void {
         await loadTransport(ORIGIN, async () => new Response("ok"));
 
       await expect(
-        fetchHandler(request({ abort: AbortSignal.abort() }), DEFAULT_FETCH),
+        fetchHandler(request({ signal: AbortSignal.abort() }), DEFAULT_FETCH),
       ).rejects.toBe(ERR_ABORTED);
 
       expect(calls).toHaveLength(0);
@@ -592,7 +592,7 @@ export function defineNativeFetchSuite(): void {
       );
 
       const pending = fetchHandler(
-        request({ abort: controller.signal, responseType: "json" }),
+        request({ signal: controller.signal, responseType: "json" }),
         DEFAULT_FETCH,
       );
       await body.reading;
@@ -610,7 +610,7 @@ export function defineNativeFetchSuite(): void {
       );
 
       const pending = fetchHandler(
-        request({ abort: controller.signal, responseType: "json" }),
+        request({ signal: controller.signal, responseType: "json" }),
         DEFAULT_FETCH,
       );
       await body.reading;
@@ -627,7 +627,7 @@ export function defineNativeFetchSuite(): void {
       );
 
       const pending = fetchHandler(
-        request({ abort: AbortSignal.timeout(250), responseType: "json" }),
+        request({ signal: AbortSignal.timeout(250), responseType: "json" }),
         DEFAULT_FETCH,
       );
       await body.reading;
@@ -706,7 +706,7 @@ export function defineNativeFetchSuite(): void {
       const { ERR_ABORTED, fetchHandler } = await loadTransport(ORIGIN);
 
       const pending = fetchHandler(
-        request({ abort: controller.signal, responseType: "json" }),
+        request({ signal: controller.signal, responseType: "json" }),
         async () => response,
       );
       await body.reading;
@@ -896,7 +896,7 @@ export function defineNativeFetchSuite(): void {
             : (input, init) => realFetch(input, init);
 
         const pending = fetchHandler(
-          stalled(key, { abort: controller.signal }),
+          stalled(key, { signal: controller.signal }),
           handle,
         );
         await serverSees(realFetch, key, { opened: 1 });
@@ -920,7 +920,7 @@ export function defineNativeFetchSuite(): void {
             : (input, init) => realFetch(input, init);
 
         const pending = fetchHandler(
-          stalled(key, { abort: controller.signal }),
+          stalled(key, { signal: controller.signal }),
           handle,
         );
         await serverSees(realFetch, key, { opened: 1 });

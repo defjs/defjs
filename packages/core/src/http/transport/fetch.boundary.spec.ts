@@ -133,7 +133,7 @@ describe("HTTP transport boundary regressions", () => {
       });
       const pending = endpoint(
         client({
-          abort: controller.signal,
+          signal: controller.signal,
           onUploadProgress: () => undefined,
         }),
       );
@@ -237,7 +237,7 @@ describe("HTTP transport boundary regressions", () => {
                 : undefined,
           }),
           {
-            abort: new AbortController().signal,
+            signal: new AbortController().signal,
             baseEndpoint: "https://example.com",
             responseType: "text",
           },
@@ -499,7 +499,7 @@ describe("HTTP transport boundary regressions", () => {
         headers: { "content-type": "application/custom" },
       }),
       {
-        abort: new AbortController().signal,
+        signal: new AbortController().signal,
         baseEndpoint: "https://example.com",
       },
     );
@@ -738,7 +738,7 @@ async function expectCancelledStalledFormData(
     path: "/",
   });
   const pending = endpoint(
-    client({ abort: controller.signal, onUploadProgress: () => undefined }),
+    client({ signal: controller.signal, onUploadProgress: () => undefined }),
   );
   try {
     if (when === "preflight") {

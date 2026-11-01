@@ -20,7 +20,7 @@ async function openDuringStartup(abortAfterMs: number) {
     controller.abort(new DOMException("startup deadline", "TimeoutError"));
   }, abortAfterMs);
   const [error, stream] = await notifications(
-    client({ abort: controller.signal }),
+    client({ signal: controller.signal }),
   );
   clearTimeout(timer);
   if (error) {

@@ -98,7 +98,7 @@ Observer 跑在 transform 边界。除非当前尝试的 signal 已 abort，它�
 
 终止 kind（`closed.kind`）：`eof`、`aborted` 或 `error`。`error` 结果还会带 `closed.code`，即一个 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或 `RES_MEDIA_TYPE_INVALID`。
 
-`close(reason)` 中止当前尝试、关闭队列，以 `aborted` 结束，即使 reason 是 `TimeoutError` 也一样。传给操作的 `abort` signal 在流打开之后仍然挂着，并覆盖整条连接。中止它通常会让迭代器正常结束，并报告 `aborted`。如果中止原因是 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），迭代器会抛出 `ERR_TIMEOUT`，`closed` 则报告 `kind: 'error'` 和 `code: 'NET_TIMEOUT'`。client 上没有仅限启动期的期限。应用若需要一个，就自己建 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器：
+`close(reason)` 中止当前尝试、关闭队列，以 `aborted` 结束，即使 reason 是 `TimeoutError` 也一样。传给操作的 `signal` 在流打开之后仍然挂着，并覆盖整条连接。中止它通常会让迭代器正常结束，并报告 `aborted`。如果中止原因是 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），迭代器会抛出 `ERR_TIMEOUT`，`closed` 则报告 `kind: 'error'` 和 `code: 'NET_TIMEOUT'`。client 上没有仅限启动期的期限。应用若需要一个，就自己建 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器：
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

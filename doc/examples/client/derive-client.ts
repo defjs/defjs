@@ -10,9 +10,9 @@ const getUser = defineRequest({
   output: struct.object({ id: struct.number(), name: struct.string() }),
 });
 
-async function main(abort: AbortSignal) {
+async function main(signal: AbortSignal) {
   const requestClient = client({
-    abort,
+    signal,
     onDownloadProgress(event) {
       console.log(event.loaded);
     },

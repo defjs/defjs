@@ -105,7 +105,7 @@ function buildHttp(
   serializer?: (query: { [key: string]: unknown }) => string,
 ) {
   return createHttpRequest(method, path, input, builder, {
-    abort: new AbortController().signal,
+    signal: new AbortController().signal,
     baseEndpoint: "https://api.example.com",
     querySerializer: serializer,
   });

@@ -15,15 +15,15 @@ export const CLIENT = Symbol("Client");
 /**
  * Flat per-call options. Each protocol reads the fields it understands and ignores the rest.
  *
- * SSE reads only `abort` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
+ * SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
  *
- * `abort` cancels HTTP, SSE, and WebSocket calls. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, `heartbeat`, and `reconnect` apply to WebSocket and replace the client setting for that call as a whole value. There is no `timeout` or `signal` field. Pass `AbortSignal.timeout(ms)` as `abort` when a call needs a deadline.
+ * `signal` cancels HTTP, SSE, and WebSocket calls. `onUploadProgress` and `onDownloadProgress` apply to HTTP. `beforeConnect`, `protocols`, `heartbeat`, and `reconnect` apply to WebSocket and replace the client setting for that call as a whole value. There is no `timeout` or `abort` field. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline.
  *
  * @group client
  */
 export type RequestOptions = {
   /** Aborts the call. An already aborted signal fails the call before transport. */
-  abort?: AbortSignal;
+  signal?: AbortSignal;
   /** Observes HTTP upload progress. */
   onUploadProgress?: HttpProgressFn;
   /** Observes HTTP download progress. */
@@ -49,7 +49,7 @@ interface ClientState {
  *
  * A client value carries the base configuration and one call's request options. Operations accept it. It is not callable; create one by calling the factory returned by `createClient`. Calling a client value throws a `TypeError` at runtime and fails to compile.
  *
- * Create a client value per call. Reusing a value that carries `abort` shares that signal between calls.
+ * Create a client value per call. Reusing a value that carries `signal` shares that signal between calls.
  *
  * @group client
  * @see {@link createClient}
@@ -76,7 +76,7 @@ export interface DerivableClient extends Client {
 }
 
 const KNOWN_FIELDS = [
-  "abort",
+  "signal",
   "onUploadProgress",
   "onDownloadProgress",
   "beforeConnect",

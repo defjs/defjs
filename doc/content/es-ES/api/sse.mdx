@@ -16,13 +16,13 @@ Declara un stream de eventos, llama a la operación con un cliente, itera los ev
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-La llamada devuelve `[null, stream, open]` o `[error, undefined, open?]`. Cuando se declara `error`, el fault es `Fault` de ese struct; si no, es `Fault<undefined>`. Pasa `abort` derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). SSE solo lee `abort` e ignora los campos de progreso y de WebSocket.
+La llamada devuelve `[null, stream, open]` o `[error, undefined, open?]`. Cuando se declara `error`, el fault es `Fault` de ese struct; si no, es `Fault<undefined>`. Pasa `signal` derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). SSE solo lee `signal` e ignora los campos de progreso y de WebSocket.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` es `{ abort? }`. No hay campo `timeout` ni `signal`, ni callback de progreso. `abort` cubre todo el stream, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. Una aplicación que quiera un plazo solo de arranque crea su propio `AbortController`, lo aborta con `new DOMException("...", "TimeoutError")` desde un temporizador y limpia el temporizador cuando el await regresa.
+`EventStreamExecuteOptions` es `{ signal? }`. No hay campo `timeout` ni `abort`, ni callback de progreso. `signal` cubre todo el stream, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. Una aplicación que quiera un plazo solo de arranque crea su propio `AbortController`, lo aborta con `new DOMException("...", "TimeoutError")` desde un temporizador y limpia el temporizador cuando el await regresa.
 
 ## EventStreamHandle
 

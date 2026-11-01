@@ -110,7 +110,7 @@ SSE 同 WebSocket 嘅第三項係啟動快照，就算啟動失敗都可能有�
 
 SSE 喺 resolve handle 之前會驗證 status、`text/event-stream` 同 body 存唔存在。非 2xx → 冇聲明 `error` 或者佢嘅 body 解碼成功時係 `HTTP_STATUS`。已聲明嘅 handshake body 讀唔到、解析唔到，或者通唔過 Struct，都會產生 `RES_DECODE_FAILED`；Struct 失敗會以 `StructError` 作為 `cause`。Media type 唔對 → `RES_MEDIA_TYPE_INVALID`。成功 handshake 冇 body → `RES_DECODE_FAILED`。開啟快照照樣可能落喺 tuple 第三項。
 
-WebSocket 嘅啟動期覆蓋 handshake 加第一次物理 open。Constructor 失敗、open 之前就 close，或者 session open 之前就觸發嘅 `abort`，全部都會產出一個啟動 tuple。就算 socket 從來冇到過 `open`，connection 快照都可能存在。
+WebSocket 嘅啟動期覆蓋 handshake 加第一次物理 open。Constructor 失敗、open 之前就 close，或者 session open 之前就觸發嘅 `signal`，全部都會產出一個啟動 tuple。就算 socket 從來冇到過 `open`，connection 快照都可能存在。
 
 | Transport | 啟動之後                                                                                                                                                                                                               |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -118,7 +118,7 @@ WebSocket 嘅啟動期覆蓋 handshake 加第一次物理 open。Constructor 失
 | WebSocket | 訊息／queue／heartbeat 失敗走 `onRuntimeError`；終止性錯誤令 `receive` 失敗；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                               |
 | HTTP      | 操作嘅 promise 只 settle 一次，結果係 tuple。如果 interceptor 拋出錯誤、回傳嘅結果唔係 `HttpResponse`，或者 progress callback 拋出錯誤，就會喺 tuple 入面回傳 fault（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
 
-`NET_ABORTED` 同 `NET_TIMEOUT` 描述 caller 嘅 `abort` signal。HTTP 會用佢哋 settle 操作 tuple。SSE 同 WebSocket 嘅 `abort` 覆蓋成條連線，包括 open 之後：啟動之後先觸發嘅 deadline 會 settle `closed`，而唔係操作 tuple。回俾你嘅 stream 或 session，你照樣要關掉並 await 佢嘅終態 promise。
+`NET_ABORTED` 同 `NET_TIMEOUT` 描述 caller 嘅 `signal`。HTTP 會用佢哋 settle 操作 tuple。SSE 同 WebSocket 嘅 `signal` 覆蓋成條連線，包括 open 之後：啟動之後先觸發嘅 deadline 會 settle `closed`，而唔係操作 tuple。回俾你嘅 stream 或 session，你照樣要關掉並 await 佢嘅終態 promise。
 
 ## 原生 Error 嘅 log 同 cause
 

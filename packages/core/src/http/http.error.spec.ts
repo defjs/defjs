@@ -400,7 +400,7 @@ describe("request http runtime errors", () => {
         path: "/hanging-interceptor",
       });
 
-      const pending = useRequest(guardedClient({ abort: controller.signal }));
+      const pending = useRequest(guardedClient({ signal: controller.signal }));
       await started;
       controller.abort(
         mode === "timeout"
@@ -427,7 +427,7 @@ describe("request http runtime errors", () => {
     const useRequest = defineRequest({ method: "GET", path: "/cached" });
 
     const [error, result, response] = await useRequest(
-      guardedClient({ abort: controller.signal }),
+      guardedClient({ signal: controller.signal }),
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -531,7 +531,7 @@ describe("request http runtime errors", () => {
       });
 
       const [error, result, response] = await useRequest(
-        guardedClient({ abort: controller.signal }),
+        guardedClient({ signal: controller.signal }),
       );
 
       expect(result).toBeUndefined();
@@ -541,10 +541,10 @@ describe("request http runtime errors", () => {
     },
   );
 
-  test("should snapshot HTTP abort before asynchronous work", async () => {
+  test("should snapshot HTTP signal before asynchronous work", async () => {
     let abortReads = 0;
     const options = {
-      get abort() {
+      get signal() {
         abortReads += 1;
         return undefined;
       },
@@ -574,9 +574,7 @@ describe("request http runtime errors", () => {
       path: "/null",
     });
 
-    const [error, result, response] = await useRequest(
-      client({ abort: signal }),
-    );
+    const [error, result, response] = await useRequest(client({ signal }));
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -724,7 +722,7 @@ describe("request http runtime errors", () => {
     });
 
     const controller = new AbortController();
-    const promise = useDelay(client({ abort: controller.signal }), {
+    const promise = useDelay(client({ signal: controller.signal }), {
       ms: 5000,
     });
     controller.abort();
@@ -941,7 +939,7 @@ describe("request http runtime errors", () => {
           createHttpInterceptor((_request, next) =>
             next({
               ..._request,
-              abort: AbortSignal.abort(
+              signal: AbortSignal.abort(
                 mode === "timeout"
                   ? new DOMException("deadline", "TimeoutError")
                   : "stop",
@@ -1068,7 +1066,7 @@ describe("request http runtime errors", () => {
     });
 
     const [error, result, response] = await useItem(
-      guardedClient({ abort: controller.signal }),
+      guardedClient({ signal: controller.signal }),
     );
 
     expect(error?.code).toBe("NET_ABORTED");
@@ -1094,7 +1092,7 @@ describe("request http runtime errors", () => {
     });
 
     const [error, result, response] = await useEmpty(
-      guardedClient({ abort: controller.signal }),
+      guardedClient({ signal: controller.signal }),
     );
 
     expect(error?.code).toBe("NET_ABORTED");

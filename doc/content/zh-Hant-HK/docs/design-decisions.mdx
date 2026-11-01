@@ -125,7 +125,7 @@ Body kind 由 value 決定，第一個 match 贏：
 
 ## Observers 同 policy placement
 
-Interceptors 用嚟做 transport-wide policy：auth、tracing、short-circuit、reviewed retry。佢哋淨係為自己嗰個 transport run，同以 onion order compose。派生 client 上嘅 request options 用嚟做 work-specific lifetime：`abort`、WebSocket heartbeat，同 opt-in reconnect。
+Interceptors 用嚟做 transport-wide policy：auth、tracing、short-circuit、reviewed retry。佢哋淨係為自己嗰個 transport run，同以 onion order compose。派生 client 上嘅 request options 用嚟做 work-specific lifetime：`signal`、WebSocket heartbeat，同 opt-in reconnect。
 
 Observers 報告發生咗咩事，但唔會變成第二個 owner。SSE `onInvalidEvent`、WebSocket state listeners，同 runtime-error listeners 用嚟做 bounded diagnostics 同 metrics。Return 出嚟嘅 stream/session 仍然 own iteration、close、unsubscribe 同 terminal waiting。Caching、stale-result suppression、idempotency，同 domain error mapping 應該圍住操作呼叫，等你嘅 app 睇到自己嘅 policy 同 state。
 

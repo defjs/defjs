@@ -5,7 +5,7 @@ description: 設定應用程式如何呼叫匯入的 SDK 操作，與那些 API 
 
 # Client
 
-`Client` 是使用端應用程式的執行設定。`createClient(...)` 回傳 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。帶著 request options 呼叫這個 factory 會回傳 `Client` 值，操作接受的就是 `Client` 值，它不可呼叫。從 SDK 匯入操作，選擇服務位址、憑證、interceptors 與傳輸，再帶著 client 呼叫操作。`getUser(client({ abort }), { id: 1 })` 啟動一次有宣告 input 的呼叫。`health(client)` 啟動一次沒有 input 的呼叫。整個 input struct 可選時，`search(client)` 與 `search(client, input)` 都合法。沒有第三個 options 引數。呼叫操作就會啟動它。`await` 只等待 error-first tuple。
+`Client` 是使用端應用程式的執行設定。`createClient(...)` 回傳 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。帶著 request options 呼叫這個 factory 會回傳 `Client` 值，操作接受的就是 `Client` 值，它不可呼叫。從 SDK 匯入操作，選擇服務位址、憑證、interceptors 與傳輸，再帶著 client 呼叫操作。`getUser(client({ signal }), { id: 1 })` 啟動一次有宣告 input 的呼叫。`health(client)` 啟動一次沒有 input 的呼叫。整個 input struct 可選時，`search(client)` 與 `search(client, input)` 都合法。沒有第三個 options 引數。呼叫操作就會啟動它。`await` 只等待 error-first tuple。
 
 SDK 的定義不會綁定這個實例。瀏覽器、伺服器請求與本機測試可以用不同的 client 使用同一個匯出的操作。兩邊仍遵循同一份 Defjs 契約與相容的 Core 版本。請為透過該 client 呼叫的操作設定服務位址。
 
@@ -35,7 +35,7 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 
 `client(options?)` 回傳供單次呼叫使用的 `Client` 值。呼叫 `client(options)` 時，七個已知欄位從引數物件複製出來：頂層快照進一個新的 options 物件。未知欄位會被忽略，值為 `undefined` 的欄位會被省略。沒有父層覆疊：`client()`、`client(undefined)` 與 `client({})` 回傳不帶任何 request options 的 client。巢狀的 `heartbeat`、`protocols` 與 `reconnect` 的值依參考保留，不複製。WebSocket 在操作執行時讀取它們（那時會複製 heartbeat 的欄位與 protocols 清單），所以衍生之後再改這些物件，仍可能影響之後的呼叫。應用程式在傳入之後應把它們視為不可變。衍生不會進行 I/O。會拋錯的 getter 會從 `client(options)` 逸出，factory 仍可繼續使用。Client 值不可呼叫；請為每次呼叫建立一個。
 
-`abort` 不會合併。重複使用帶有 `abort` 的 client 值，會在多次呼叫之間共用該 signal，所以請為每次呼叫建立一個 client 值。在應用程式碼裡用 `AbortSignal.any` 組合 signals。
+`signal` 不會合併。重複使用帶有 `signal` 的 client 值，會在多次呼叫之間共用該 signal，所以請為每次呼叫建立一個 client 值。在應用程式碼裡用 `AbortSignal.any` 組合 signals。
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
@@ -45,11 +45,11 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 
 ## 請求 options
 
-[`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 有七個扁平欄位。每種協定只讀自己知道的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 操作會被忽略，不是 fault。SSE 只從請求 options 讀取 `abort`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選。
+[`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 有七個扁平欄位。每種協定只讀自己知道的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 操作會被忽略，不是 fault。SSE 只從請求 options 讀取 `signal`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選。
 
 | 欄位                 | 誰使用               | 規則                                                                                        |
 | -------------------- | -------------------- | ------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP、SSE、WebSocket | 取消該次呼叫。期限是 `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）。手動取消是 `NET_ABORTED`。 |
+| `signal`             | HTTP、SSE、WebSocket | 取消該次呼叫。期限是 `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）。手動取消是 `NET_ABORTED`。 |
 | `onUploadProgress`   | HTTP                 | SSE 與 WebSocket 會忽略。                                                                   |
 | `onDownloadProgress` | HTTP                 | SSE 與 WebSocket 會忽略。                                                                   |
 | `beforeConnect`      | WebSocket            | 在該次呼叫取代 client 的設定。                                                              |
@@ -57,9 +57,9 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 | `heartbeat`          | WebSocket            | 整份替換。`timeoutMs` 是 heartbeat 的確認等待，不是請求期限。                               |
 | `reconnect`          | WebSocket            | 整份替換。                                                                                  |
 
-沒有 `timeout` 欄位，沒有 `signal` 欄位，也沒有 client 層級的預設期限。對 SSE 與 WebSocket，`abort` 涵蓋整條連線，包含開啟之後。沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器。見 [SSE](/zh-Hant-TW/docs/sse#close-and-dispose)。
+沒有 `timeout` 欄位，沒有 `abort` 欄位，也沒有 client 層級的預設期限。對 SSE 與 WebSocket，`signal` 涵蓋整條連線，包含開啟之後。沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器。見 [SSE](/zh-Hant-TW/docs/sse#close-and-dispose)。
 
-`HttpExecuteOptions` 是 HTTP 切片：`abort` 加上進度回呼。`EventStreamExecuteOptions` 是 `{ abort? }`。`WebSocketExecuteOptions` 是 WebSocket 切片再加上 `abort`。
+`HttpExecuteOptions` 是 HTTP 切片：`signal` 加上進度回呼。`EventStreamExecuteOptions` 是 `{ signal? }`。`WebSocketExecuteOptions` 是 WebSocket 切片再加上 `signal`。
 
 ## 依傳輸的結果
 
@@ -83,13 +83,13 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 
 ## 遷移
 
-| 舊                                          | 新                                             |
-| ------------------------------------------- | ---------------------------------------------- |
-| `client.execute(getUser(input), options)`   | `getUser(client(options), input)`              |
-| `execute(cmd, { timeout: 5000 })`           | `client({ abort: AbortSignal.timeout(5000) })` |
-| `execute(cmd, { signal })`                  | `client({ abort: signal })`                    |
-| `client({ abort })({ onDownloadProgress })` | `client({ abort, onDownloadProgress })`        |
-| `createClient(withTimeout(5000), ...)`      | 在呼叫處傳入 `abort`，或包一層應用程式函式     |
+| 舊                                           | 新                                              |
+| -------------------------------------------- | ----------------------------------------------- |
+| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`               |
+| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })` |
+| `execute(cmd, { signal })`                   | `client({ signal })`                            |
+| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`        |
+| `createClient(withTimeout(5000), ...)`       | 在呼叫處傳入 `signal`，或包一層應用程式函式     |
 
 ## 參考
 

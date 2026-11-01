@@ -25,7 +25,7 @@ const client = createClient(
 
 async function main() {
   const [error, user, response] = await getUser(
-    client({ abort: AbortSignal.timeout(5_000) }),
+    client({ signal: AbortSignal.timeout(5_000) }),
     { id: 7 },
   );
   if (error?.code === "HTTP_STATUS" && error.status === 404) {

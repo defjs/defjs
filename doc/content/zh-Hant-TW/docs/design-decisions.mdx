@@ -125,7 +125,7 @@ Body kind 依值決定，第一個相符者勝出：
 
 ## Observer 與策略放哪裡
 
-Interceptors 負責傳輸層級策略：auth、tracing、short-circuit、審過的重試。它們只跑在所屬傳輸上，並以洋蔥順序組合。衍生 client 上的請求 options 負責單次工作的生命週期：`abort`、WebSocket heartbeat，以及選擇性重連。
+Interceptors 負責傳輸層級策略：auth、tracing、short-circuit、審過的重試。它們只跑在所屬傳輸上，並以洋蔥順序組合。衍生 client 上的請求 options 負責單次工作的生命週期：`signal`、WebSocket heartbeat，以及選擇性重連。
 
 Observers 回報發生了什麼，但不會變成第二個擁有者。SSE `onInvalidEvent`、WebSocket state listeners、runtime-error listeners 適合有界的診斷與 metrics。回傳的 stream／session 仍擁有 iteration、close、unsubscribe、終端等待。快取、壓制過期結果、idempotency、領域錯誤對應，應放在操作呼叫周圍，讓應用程式能看到自己的策略與狀態。
 

@@ -173,7 +173,7 @@ test("cancels an in-progress declared SSE handshake body when the caller aborts"
     maxQueueSize: 4,
   });
   const controller = new AbortController();
-  const pending = endpoint(client({ abort: controller.signal }));
+  const pending = endpoint(client({ signal: controller.signal }));
 
   try {
     await readStarted.promise;

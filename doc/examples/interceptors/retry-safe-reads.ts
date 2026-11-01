@@ -68,7 +68,7 @@ const retrySafeReads = createHttpInterceptor(async (request, next) => {
     const response = await next(request);
     if (!retryableStatuses.has(response.status) || attempt >= 2)
       return response;
-    await waitForRetryAfter(response, request.abort);
+    await waitForRetryAfter(response, request.signal);
   }
 });
 // #endregion

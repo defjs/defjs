@@ -77,7 +77,7 @@ API 정의는 SDK 모듈에 남습니다. 서비스 주소, 자격 증명, 인�
 - 선언된 body (2xx는 `output`, 그 밖은 `error`)가 디코딩되지 않음 → status와 관계없이 `RES_DECODE_FAILED` 또는 `RES_STRUCT_MISMATCH`
 - Fetch 실패 / 취소 / 데드라인 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-데드라인은 `client({ abort: AbortSignal.timeout(ms) })`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 클라이언트 기본 데드라인은 없어요. 호출 하나에 자기 `abort`가 필요하면 클라이언트를 파생하세요. [클라이언트](/ko-KR/docs/client)를 보세요. 취소는 호출자가 본 것을 알려 줄 뿐, 서버 쓰기가 커밋됐는지는 알려 주지 않아요.
+데드라인은 `client({ signal: AbortSignal.timeout(ms) })`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 클라이언트 기본 데드라인은 없어요. 호출 하나에 자기 `signal`이 필요하면 클라이언트를 파생하세요. [클라이언트](/ko-KR/docs/client)를 보세요. 취소는 호출자가 본 것을 알려 줄 뿐, 서버 쓰기가 커밋됐는지는 알려 주지 않아요.
 
 ## 다음 레시피
 

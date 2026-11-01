@@ -7,7 +7,7 @@ import {
 } from "../internal/url";
 
 export function createWebSocketRequest(params: {
-  abort: AbortSignal;
+  signal: AbortSignal;
   baseEndpoint: string;
   operation?: string;
   params?: { [key: string]: string };
@@ -21,7 +21,7 @@ export function createWebSocketRequest(params: {
     params.querySerializer,
   );
   const request: HttpRequest = {
-    abort: params.abort,
+    signal: params.signal,
     baseEndpoint: params.baseEndpoint,
     endpoint: fillUrl(params.path, params.params),
     headers: new Headers(),

@@ -192,7 +192,7 @@ test.each(["abort", "timeout"] as const)(
         createSSEInterceptor((request, next) =>
           next({
             ...request,
-            abort: AbortSignal.abort(
+            signal: AbortSignal.abort(
               mode === "timeout"
                 ? new DOMException("deadline", "TimeoutError")
                 : "stop",
@@ -256,7 +256,7 @@ test.each(["caller", "replacement"])(
       withWebSocketHandle(Socket),
       withInterceptors(
         createWebSocketInterceptor((request, next) =>
-          next({ ...request, abort: replacement.signal }),
+          next({ ...request, signal: replacement.signal }),
         ),
       ),
     );
@@ -265,7 +265,7 @@ test.each(["caller", "replacement"])(
       incoming: struct.unknown(),
       maxIncomingQueueSize: 4,
     });
-    const [fault, session] = await endpoint(client({ abort: caller.signal }));
+    const [fault, session] = await endpoint(client({ signal: caller.signal }));
     try {
       expect(fault).toBeNull();
       if (!session) throw new Error("Expected an open session");
@@ -305,7 +305,7 @@ test.each(["abort", "timeout"] as const)(
       path: "/text",
       error: struct.string(),
     });
-    const pending = endpoint(client({ abort: controller.signal }));
+    const pending = endpoint(client({ signal: controller.signal }));
     try {
       await started.promise;
       controller.abort(

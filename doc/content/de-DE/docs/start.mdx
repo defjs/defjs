@@ -77,7 +77,7 @@ Verschiebe die Definition in ein SDK-Paket, wenn weitere Anwendungen sie brauche
 - Ein deklarierter Body (`output` bei 2xx, sonst `error`), der nicht dekodiert → `RES_DECODE_FAILED` oder `RES_STRUCT_MISMATCH`, egal bei welchem Status
 - Fetch-Fehler / Abbruch / Deadline → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-Eine Deadline ist `client({ abort: AbortSignal.timeout(ms) })` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Default-Deadline auf Client-Ebene. Leite einen Client ab, wenn ein Aufruf sein eigenes `abort` braucht; siehe [Client](/de-DE/docs/client). Cancellation sagt dir, was der Caller gesehen hat — nicht, ob ein Server-Write übernommen wurde.
+Eine Deadline ist `client({ signal: AbortSignal.timeout(ms) })` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Default-Deadline auf Client-Ebene. Leite einen Client ab, wenn ein Aufruf sein eigenes `signal` braucht; siehe [Client](/de-DE/docs/client). Cancellation sagt dir, was der Caller gesehen hat — nicht, ob ein Server-Write übernommen wurde.
 
 ## Nächste Rezepte
 

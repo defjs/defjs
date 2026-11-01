@@ -5,7 +5,7 @@ description: Aborta o aplica un plazo a una llamada y lee NET_ABORTED / NET_TIME
 
 # Cancelar una llamada HTTP
 
-Combina el signal de quien llama con un plazo en `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` es un solo signal. Un abort manual se clasifica como `NET_ABORTED`. Un plazo se clasifica como `NET_TIMEOUT`.
+Combina el signal de quien llama con un plazo en `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` es un solo signal. Un abort manual se clasifica como `NET_ABORTED`. Un plazo se clasifica como `NET_TIMEOUT`.
 
 Ver detalles en [HTTP](/es-ES/docs/http#cancel-the-work).
 

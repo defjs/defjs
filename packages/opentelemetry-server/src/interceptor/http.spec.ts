@@ -99,7 +99,7 @@ describe("HTTP client diagnostic logs", () => {
     });
     await expect(
       interceptor.fn(
-        { ...makeHttpRequest(), abort: AbortSignal.abort(ERR_TIMEOUT) },
+        { ...makeHttpRequest(), signal: AbortSignal.abort(ERR_TIMEOUT) },
         async () => {
           throw ERR_TIMEOUT;
         },
@@ -199,7 +199,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       withHTTPHandle(async () => new Response(null, { status: 204 })),
       withOpenTelemetryServer({ tracer, http: { requestHook } }),
     );
-    const derived = base({ abort: new AbortController().signal });
+    const derived = base({ signal: new AbortController().signal });
     const readInventory = defineRequest({ method: "GET", path: "/inventory" });
 
     expect(typeof base).toBe("function");

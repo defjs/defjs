@@ -5,7 +5,7 @@ description: Configure how your application calls imported SDK operations, indep
 
 # Client
 
-A `Client` is the consuming application's execution configuration. `createClient(...)` returns a [`DerivableClient`](/api/core/derivableclient-type). Calling the factory with request options returns a `Client` value, and a `Client` value is what operations accept. It is not callable. Import operations from your SDK, choose the service address, credentials, interceptors, and transport, then call an operation with the client. `getUser(client({ abort }), { id: 1 })` starts a call that declares input. `health(client)` starts one that does not. When the whole input struct is optional, both `search(client)` and `search(client, input)` are valid. There is no third options argument. Calling the operation starts it. `await` only waits for the error-first tuple.
+A `Client` is the consuming application's execution configuration. `createClient(...)` returns a [`DerivableClient`](/api/core/derivableclient-type). Calling the factory with request options returns a `Client` value, and a `Client` value is what operations accept. It is not callable. Import operations from your SDK, choose the service address, credentials, interceptors, and transport, then call an operation with the client. `getUser(client({ signal }), { id: 1 })` starts a call that declares input. `health(client)` starts one that does not. When the whole input struct is optional, both `search(client)` and `search(client, input)` are valid. There is no third options argument. Calling the operation starts it. `await` only waits for the error-first tuple.
 
 The SDK's definitions do not bind this instance. A browser, a server request, and a local test can use the same exported operation with different clients. All still follow the same Defjs contract and compatible Core versions. Configure each client's service address for the operations you call through it.
 
@@ -35,7 +35,7 @@ Mixed interceptors are filtered by transport when the operation runs; relative o
 
 `client(options?)` returns a `Client` value for one call. The seven known fields are copied from the argument object when `client(options)` is called, a top-level snapshot into a fresh options object. Unknown fields are ignored and fields whose value is `undefined` are omitted. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. Deriving performs no I/O. A getter that throws escapes `client(options)` and leaves the factory usable. The client value is not callable; create one per call.
 
-`abort` is not combined. Reusing a client value that carries `abort` shares that signal between calls, so create a client value per call. Combine signals with `AbortSignal.any` in application code.
+`signal` is not combined. Reusing a client value that carries `signal` shares that signal between calls, so create a client value per call. Combine signals with `AbortSignal.any` in application code.
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
@@ -45,11 +45,11 @@ The base configuration from `createClient` is shared by every client value and i
 
 ## Request options
 
-[`RequestOptions`](/api/core/requestoptions-type) has seven flat fields. Each protocol reads only the fields it knows and ignores the rest. Passing `heartbeat` to an HTTP operation is ignored, not a fault. SSE reads only `abort` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter.
+[`RequestOptions`](/api/core/requestoptions-type) has seven flat fields. Each protocol reads only the fields it knows and ignores the rest. Passing `heartbeat` to an HTTP operation is ignored, not a fault. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter.
 
 | Field                | Used by              | Rule                                                                                                       |
 | -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP, SSE, WebSocket | Aborts the call. A deadline is `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). A manual abort is `NET_ABORTED`. |
+| `signal`             | HTTP, SSE, WebSocket | Aborts the call. A deadline is `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). A manual abort is `NET_ABORTED`. |
 | `onUploadProgress`   | HTTP                 | Ignored by SSE and WebSocket.                                                                              |
 | `onDownloadProgress` | HTTP                 | Ignored by SSE and WebSocket.                                                                              |
 | `beforeConnect`      | WebSocket            | Replaces the client setting for that call.                                                                 |
@@ -57,9 +57,9 @@ The base configuration from `createClient` is shared by every client value and i
 | `heartbeat`          | WebSocket            | Replaced whole. `timeoutMs` is the heartbeat acknowledgement wait, not a request deadline.                 |
 | `reconnect`          | WebSocket            | Replaced whole.                                                                                            |
 
-There is no `timeout` field, no `signal` field, and no client-level default deadline. For SSE and WebSocket, `abort` covers the whole connection, including after it is open. There is no startup-only deadline. An application that wants one creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns. See [SSE](/docs/sse#close-and-dispose).
+There is no `timeout` field, no `abort` field, and no client-level default deadline. For SSE and WebSocket, `signal` covers the whole connection, including after it is open. There is no startup-only deadline. An application that wants one creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns. See [SSE](/docs/sse#close-and-dispose).
 
-`HttpExecuteOptions` is the HTTP slice: `abort` plus the progress callbacks. `EventStreamExecuteOptions` is `{ abort? }`. `WebSocketExecuteOptions` is the WebSocket slice plus `abort`.
+`HttpExecuteOptions` is the HTTP slice: `signal` plus the progress callbacks. `EventStreamExecuteOptions` is `{ signal? }`. `WebSocketExecuteOptions` is the WebSocket slice plus `signal`.
 
 ## Results by transport
 
@@ -83,13 +83,13 @@ On a server, create the client inside the request boundary when options or inter
 
 ## Migration
 
-| Old                                         | New                                                       |
-| ------------------------------------------- | --------------------------------------------------------- |
-| `client.execute(getUser(input), options)`   | `getUser(client(options), input)`                         |
-| `execute(cmd, { timeout: 5000 })`           | `client({ abort: AbortSignal.timeout(5000) })`            |
-| `execute(cmd, { signal })`                  | `client({ abort: signal })`                               |
-| `client({ abort })({ onDownloadProgress })` | `client({ abort, onDownloadProgress })`                   |
-| `createClient(withTimeout(5000), ...)`      | pass `abort` at the call, or wrap an application function |
+| Old                                          | New                                                        |
+| -------------------------------------------- | ---------------------------------------------------------- |
+| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                          |
+| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`            |
+| `execute(cmd, { signal })`                   | `client({ signal })`                                       |
+| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                   |
+| `createClient(withTimeout(5000), ...)`       | pass `signal` at the call, or wrap an application function |
 
 ## Reference
 

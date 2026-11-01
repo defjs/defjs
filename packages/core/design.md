@@ -38,12 +38,12 @@ https://api.example.com/v1/user/info
 `client` is created by the application and passed to an operation:
 
 ```ts
-const [error, result] = await getUser(client({ abort }), { id: 7 });
+const [error, result] = await getUser(client({ signal }), { id: 7 });
 ```
 
 `defineRequest` / `defineEventStream` / `defineWebSocket` return an operation. Calling it with a client starts the call and returns an error-first tuple. `createClient` returns a `DerivableClient`, a callable that is also a `Client`. Calling it with `RequestOptions` returns a non-callable `Client` value and does not perform I/O. The factory itself is a `Client` and carries no request options. There is no `.with({ client })` and no `client.execute`.
 
-`RequestOptions` has seven fields: `abort`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, and `reconnect`. `client(options)` copies those seven fields from the argument into a fresh options object, a top-level snapshot. Unknown fields are ignored and fields whose value is `undefined` are omitted. `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. A client value is not callable, so create one per call. `abort` is not combined; reusing a client value that carries `abort` shares the signal between calls. The base configuration from `createClient` is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. A getter that throws escapes `client(options)` and leaves the factory usable; argument-evaluation exceptions are not converted into faults. Illegal values, such as a reconnect policy, are still checked when the operation runs and still return `REQ_OPTIONS_INVALID`. Each protocol reads the fields it understands and ignores the rest. SSE reads only `abort` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
+`RequestOptions` has seven fields: `signal`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, and `reconnect`. `client(options)` copies those seven fields from the argument into a fresh options object, a top-level snapshot. Unknown fields are ignored and fields whose value is `undefined` are omitted. `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. A client value is not callable, so create one per call. `signal` is not combined; reusing a client value that carries `signal` shares the signal between calls. The base configuration from `createClient` is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. A getter that throws escapes `client(options)` and leaves the factory usable; argument-evaluation exceptions are not converted into faults. Illegal values, such as a reconnect policy, are still checked when the operation runs and still return `REQ_OPTIONS_INVALID`. Each protocol reads the fields it understands and ignores the rest. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
 
 `createGlobalClient` / `getGlobalClient` / `setGlobalClient` / `resetGlobalClient` were removed in 0.4. When multiple external APIs are needed, create multiple `Client` instances separately.
 
@@ -197,7 +197,7 @@ const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
   const [error, data, response] = await getUser(
-    client({ abort: AbortSignal.timeout(10_000) }),
+    client({ signal: AbortSignal.timeout(10_000) }),
     { id: 7 },
   );
   if (error) {
@@ -214,7 +214,7 @@ void main();
 
 Success is `[null, data, response]`. Failure is `[error, undefined, undefined]`, and metadata is on the fault. A non-2xx whose `error` decodes successfully is `HTTP_STATUS`; a media type that does not match is `RES_MEDIA_TYPE_INVALID` (before the body is read); a representation that cannot be read is `RES_DECODE_FAILED`; a struct that does not match is `RES_STRUCT_MISMATCH`. A transport failure is a fault, not a response with status 0.
 
-Cancellation is the `abort` field. `AbortSignal.timeout(ms)` is classified as `NET_TIMEOUT`; aborting a signal yourself is `NET_ABORTED`. There is no client-level default timeout and no `signal` field. SSE and WebSocket no longer have a startup-only deadline: the same signal aborts the connection after it opens. To limit only startup, create an `AbortController`, pass its signal, and clear the timer after the operation resolves. An input that fails the struct is `REQ_INPUT_INVALID`.
+Cancellation is the `signal` field. `AbortSignal.timeout(ms)` is classified as `NET_TIMEOUT`; aborting a signal yourself is `NET_ABORTED`. There is no client-level default timeout and no `abort` field. SSE and WebSocket no longer have a startup-only deadline: the same signal aborts the connection after it opens. To limit only startup, create an `AbortController`, pass its signal, and clear the timer after the operation resolves. An input that fails the struct is `REQ_INPUT_INVALID`.
 
 ## SSE
 

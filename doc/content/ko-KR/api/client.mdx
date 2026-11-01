@@ -55,7 +55,7 @@ HTTP와 SSE 요청에 정적 기본 헤더를 설정해요. WebSocket 요청은 
 
 요청마다 달라지는 값은 interceptor를 쓰세요. 갱신된 Bearer 토큰이나 직렬화된 body에 대한 HMAC 같은 값이 그래요.
 
-클라이언트 기본 데드라인은 없어요. 호출 하나에 데드라인이 필요하면 파생 클라이언트에 `abort: AbortSignal.timeout(ms)`를 넘기세요. 수동 취소는 `NET_ABORTED`예요. `AbortSignal.timeout`은 `NET_TIMEOUT`으로 분류돼요.
+클라이언트 기본 데드라인은 없어요. 호출 하나에 데드라인이 필요하면 파생 클라이언트에 `signal: AbortSignal.timeout(ms)`를 넘기세요. 수동 취소는 `NET_ABORTED`예요. `AbortSignal.timeout`은 `NET_TIMEOUT`으로 분류돼요.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ HTTP 요청에 XSRF 토큰 헤더를 추가해요. `options`는 `xsrf` 설정이
 
 <ApiSignature name="Client" />
 
-`Client`는 함수가 아니라 값이에요. [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)와 함께 호출하면 하나가 나와요. 알려진 필드 일곱 개는 인자에서 새 객체로 복사돼요. 알 수 없는 필드는 무시하고, 값이 `undefined`인 필드는 빼요. 부모 덮어쓰기는 없어요. `client()`, `client(undefined)`, `client({})`는 요청 옵션이 없는 클라이언트를 돌려줘요. 중첩된 `heartbeat`, `protocols`, `reconnect` 값은 참조로 유지되고 복제되지 않아요. WebSocket은 작업이 실행될 때 그것들을 읽어요 (그때 heartbeat 필드와 protocols 목록을 복사해요). 그래서 파생한 뒤에 그 객체를 바꾸면 이후 호출에 여전히 영향을 줄 수 있어요. 넘긴 뒤에는 불변으로 다루세요. 파생은 I/O를 하지 않아요. 클라이언트 값은 호출할 수 없고, 호출하면 컴파일되지 않으며 런타임에 `TypeError`를 던져요. 호출마다 클라이언트 값을 만드세요. 같은 값을 여러 작업에 넘길 수 있지만, `abort`가 담긴 값을 재사용하면 그 신호를 공유해요. `abort`는 합치지 않아요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요.
+`Client`는 함수가 아니라 값이에요. [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)와 함께 호출하면 하나가 나와요. 알려진 필드 일곱 개는 인자에서 새 객체로 복사돼요. 알 수 없는 필드는 무시하고, 값이 `undefined`인 필드는 빼요. 부모 덮어쓰기는 없어요. `client()`, `client(undefined)`, `client({})`는 요청 옵션이 없는 클라이언트를 돌려줘요. 중첩된 `heartbeat`, `protocols`, `reconnect` 값은 참조로 유지되고 복제되지 않아요. WebSocket은 작업이 실행될 때 그것들을 읽어요 (그때 heartbeat 필드와 protocols 목록을 복사해요). 그래서 파생한 뒤에 그 객체를 바꾸면 이후 호출에 여전히 영향을 줄 수 있어요. 넘긴 뒤에는 불변으로 다루세요. 파생은 I/O를 하지 않아요. 클라이언트 값은 호출할 수 없고, 호출하면 컴파일되지 않으며 런타임에 `TypeError`를 던져요. 호출마다 클라이언트 값을 만드세요. 같은 값을 여러 작업에 넘길 수 있지만, `signal`이 담긴 값을 재사용하면 그 신호를 공유해요. `signal`은 합치지 않아요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요.
 
 팩토리를 React state setter에 넘기지 마세요 (`setState(factory)`는 updater로 호출해요). Vue `watch`나 `computed`의 소스로 쓰지 마세요 (그 API는 함수를 호출해요).
 
@@ -123,11 +123,11 @@ HTTP 요청에 XSRF 토큰 헤더를 추가해요. `options`는 `xsrf` 설정이
 
 <ApiSignature name="RequestOptions" />
 
-평평한 필드 일곱 개예요. 각 프로토콜은 이해하는 필드를 읽고 나머지는 무시해요. HTTP에 `heartbeat`를 넘기면 무시될 뿐, 오류가 아니에요. SSE는 요청 옵션에서 `abort`만 읽어요. SSE 재연결은 클라이언트 설정(`withSSEReconnect`)에서 오므로, `client({ reconnect })`는 WebSocket에만 영향을 줘요. 컴파일 타임 프로토콜 필터도 없고, `timeout`이나 `signal` 필드도 없어요.
+평평한 필드 일곱 개예요. 각 프로토콜은 이해하는 필드를 읽고 나머지는 무시해요. HTTP에 `heartbeat`를 넘기면 무시될 뿐, 오류가 아니에요. SSE는 요청 옵션에서 `signal`만 읽어요. SSE 재연결은 클라이언트 설정(`withSSEReconnect`)에서 오므로, `client({ reconnect })`는 WebSocket에만 영향을 줘요. 컴파일 타임 프로토콜 필터도 없고, `timeout`이나 `abort` 필드도 없어요.
 
 | 필드                 | 프로토콜             | 대체                                                                        |
 | -------------------- | -------------------- | --------------------------------------------------------------------------- |
-| `abort`              | HTTP, SSE, WebSocket | 호출을 취소해요. SSE와 WebSocket에서는 열린 뒤를 포함해 연결 전체를 덮어요. |
+| `signal`             | HTTP, SSE, WebSocket | 호출을 취소해요. SSE와 WebSocket에서는 열린 뒤를 포함해 연결 전체를 덮어요. |
 | `onUploadProgress`   | HTTP                 | 다른 프로토콜은 무시해요.                                                   |
 | `onDownloadProgress` | HTTP                 | 다른 프로토콜은 무시해요.                                                   |
 | `beforeConnect`      | WebSocket            | 그 호출에 한해 클라이언트 설정을 바꿔요.                                    |
@@ -135,7 +135,7 @@ HTTP 요청에 XSRF 토큰 헤더를 추가해요. `options`는 `xsrf` 설정이
 | `heartbeat`          | WebSocket            | 통째로 바뀌어요. `timeoutMs`는 확인 대기이지, 요청 데드라인이 아니에요.     |
 | `reconnect`          | WebSocket            | 통째로 바뀌어요.                                                            |
 
-[`HttpExecuteOptions`](/ko-KR/api/core/httpexecuteoptions-type)는 HTTP 조각이에요 (`abort`와 진행률). [`EventStreamExecuteOptions`](/ko-KR/api/core/eventstreamexecuteoptions-type)는 `{ abort? }`예요. [`WebSocketExecuteOptions`](/ko-KR/api/core/websocketexecuteoptions-type)는 WebSocket 조각에 `abort`를 더한 거예요.
+[`HttpExecuteOptions`](/ko-KR/api/core/httpexecuteoptions-type)는 HTTP 조각이에요 (`signal`과 진행률). [`EventStreamExecuteOptions`](/ko-KR/api/core/eventstreamexecuteoptions-type)는 `{ signal? }`예요. [`WebSocketExecuteOptions`](/ko-KR/api/core/websocketexecuteoptions-type)는 WebSocket 조각에 `signal`을 더한 거예요.
 
 ### ClientOption
 

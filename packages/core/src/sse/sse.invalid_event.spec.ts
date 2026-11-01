@@ -74,7 +74,7 @@ function createFeed() {
 async function openStream(options: {
   body: BodyInit;
   onInvalidEvent?: InvalidEventObserver;
-  abort?: AbortSignal;
+  signal?: AbortSignal;
 }) {
   const client = createClient(
     withEndpoint("https://api.example.com"),
@@ -89,7 +89,7 @@ async function openStream(options: {
       : []),
   );
   const [error, stream] = await useStream(
-    options.abort ? client({ abort: options.abort }) : client,
+    options.signal ? client({ signal: options.signal }) : client,
   );
   expect(error).toBeNull();
   if (!stream) {
@@ -215,7 +215,7 @@ describe("event stream invalid events", () => {
         started.resolve(signal);
         return gate.promise;
       },
-      abort: controller.signal,
+      signal: controller.signal,
     });
     const next = stream[Symbol.asyncIterator]().next();
     const observerSignal = await started.promise;

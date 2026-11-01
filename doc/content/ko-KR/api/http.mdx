@@ -18,7 +18,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 `output`은 2xx body를 위한 struct 하나이고, `error`는 모든 non-2xx body를 위한 struct 하나예요. 둘 다 status로 키를 나누지 않아요. 하나를 빼면 그 body는 읽히지 않아요 — [선언은 단언이에요](/ko-KR/docs/design-decisions#declaration-is-an-assertion)를 보세요.
 
-작업을 호출하면 [`HttpAwaitResult`](/ko-KR/api/core/httpawaitresult-type)에 적힌 튜플의 promise가 돌아와요. 호출마다의 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. HTTP는 `abort`와 진행률 콜백만 읽고 나머지 필드는 무시해요.
+작업을 호출하면 [`HttpAwaitResult`](/ko-KR/api/core/httpawaitresult-type)에 적힌 튜플의 promise가 돌아와요. 호출마다의 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. HTTP는 `signal`과 진행률 콜백만 읽고 나머지 필드는 무시해요.
 
 2xx가 아닌 status는 `error` struct를 선언하지 않았거나 선언한 `error` body가 디코딩되면 `HTTP_STATUS`예요. fault의 `data`는 선언됐을 때 디코딩된 `error` body이고, 아니면 `undefined`예요. 선언한 `error` body를 읽을 수 없거나(미디어 타입 불일치, 잘못된 JSON) struct와 맞지 않으면 fault는 대신 `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH` 중 하나이고, 응답 status는 그 메타데이터에 그대로 담겨요. 실패하면 튜플의 세 번째 자리는 `undefined`이고, fault가 응답 메타데이터를 가져요.
 
@@ -38,7 +38,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)의 HTTP 조각인 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)예요. `abort`와 `onDownloadProgress`, `onUploadProgress`예요. `timeout`이나 `signal` 필드는 없어요. 데드라인은 `abort: AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. `abort`는 그 호출의 신호예요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 클라이언트 기본 데드라인은 없어요. `heartbeat` 같은 다른 요청 필드는 무시돼요.
+`HttpExecuteOptions`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)의 HTTP 조각인 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)예요. `signal`과 `onDownloadProgress`, `onUploadProgress`예요. `timeout`이나 `abort` 필드는 없어요. 데드라인은 `signal: AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. `signal`은 그 호출의 신호예요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 클라이언트 기본 데드라인은 없어요. `heartbeat` 같은 다른 요청 필드는 무시돼요.
 
 ## 타입
 
@@ -54,7 +54,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ### HttpRequest
 
-정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. interceptor가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. interceptor가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. builder가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 엔드포인트의 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
+정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. interceptor가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. interceptor가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. builder가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 엔드포인트의 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
 
 ### HttpMeta
 
@@ -102,7 +102,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 ## UseRequestConfig
 
-`abort`와 선택 `onDownloadProgress`, `onUploadProgress`예요. `HttpExecuteOptions`가 이 조각이에요. `timeout`이나 `signal` 필드는 없어요.
+`signal`과 선택 `onDownloadProgress`, `onUploadProgress`예요. `HttpExecuteOptions`가 이 조각이에요. `timeout`이나 `abort` 필드는 없어요.
 
 ## RequestSuccessData
 

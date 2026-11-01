@@ -120,7 +120,7 @@ JSON は、ネストした値も含めて、すべて JSON データでなけれ
 
 ## 作業をキャンセルする [#cancel-the-work]
 
-派生したクライアントに `abort` を渡します。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` に分類されます。`timeout` フィールドも、`signal` フィールドも、クライアント単位の既定の期限もありません。`abort` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。呼び出し側のシグナルと期限を合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+派生したクライアントに `signal` を渡します。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` に分類されます。`timeout` フィールドも、`abort` フィールドも、クライアント単位の既定の期限もありません。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。呼び出し側のシグナルと期限を合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
 
 <include cwd>examples/http/deadline.ts#example</include>
 

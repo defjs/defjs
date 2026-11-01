@@ -5,7 +5,7 @@ description: 호출을 abort하거나 타임아웃하고 NET_ABORTED / NET_TIMEO
 
 # HTTP 호출 취소하기
 
-호출자의 신호와 데드라인을 `abort`에 합쳐요. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])`은 신호 하나예요. 수동 취소는 `NET_ABORTED`로 분류돼요. 데드라인은 `NET_TIMEOUT`으로 분류돼요.
+호출자의 신호와 데드라인을 `signal`에 합쳐요. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])`은 신호 하나예요. 수동 취소는 `NET_ABORTED`로 분류돼요. 데드라인은 `NET_TIMEOUT`으로 분류돼요.
 
 자세한 내용은 [HTTP](/ko-KR/docs/http#cancel-the-work)를 보세요.
 

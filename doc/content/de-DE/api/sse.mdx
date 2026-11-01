@@ -16,13 +16,13 @@ Deklariere einen Event-Stream, rufe die Operation mit einem Client auf, iteriere
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-Der Aufruf gibt `[null, stream, open]` oder `[error, undefined, open?]` zurück. Ist `error` deklariert, ist der Fault ein `Fault` dieses Structs; sonst `Fault<undefined>`. Übergib `abort`, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. SSE liest nur `abort` und ignoriert Progress- und WebSocket-Felder.
+Der Aufruf gibt `[null, stream, open]` oder `[error, undefined, open?]` zurück. Ist `error` deklariert, ist der Fault ein `Fault` dieses Structs; sonst `Fault<undefined>`. Übergib `signal`, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. SSE liest nur `signal` und ignoriert Progress- und WebSocket-Felder.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` ist `{ abort? }`. Es gibt kein `timeout`- oder `signal`-Feld und keinen Progress-Callback. `abort` deckt den ganzen Stream ab, auch nachdem er sich öffnet. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Deadline nur für den Start und keine Default-Deadline auf Client-Ebene. Eine Anwendung, die eine Deadline nur für den Start will, erzeugt ihren eigenen `AbortController`, bricht ihn mit `new DOMException("...", "TimeoutError")` aus einem Timer ab und löscht den Timer, nachdem das await zurückkehrt.
+`EventStreamExecuteOptions` ist `{ signal? }`. Es gibt kein `timeout`- oder `abort`-Feld und keinen Progress-Callback. `signal` deckt den ganzen Stream ab, auch nachdem er sich öffnet. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Deadline nur für den Start und keine Default-Deadline auf Client-Ebene. Eine Anwendung, die eine Deadline nur für den Start will, erzeugt ihren eigenen `AbortController`, bricht ihn mit `new DOMException("...", "TimeoutError")` aus einem Timer ab und löscht den Timer, nachdem das await zurückkehrt.
 
 ## EventStreamHandle
 

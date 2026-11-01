@@ -55,7 +55,7 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 
 随请求变化的值（刷新后的 Bearer token，或对序列化 body 计算的 HMAC）请用 interceptor。
 
-没有 client 级的默认期限。某一次调用需要期限时，在派生出的 client 上传 `abort: AbortSignal.timeout(ms)`。手动中止是 `NET_ABORTED`。`AbortSignal.timeout` 归类为 `NET_TIMEOUT`。
+没有 client 级的默认期限。某一次调用需要期限时，在派生出的 client 上传 `signal: AbortSignal.timeout(ms)`。手动中止是 `NET_ABORTED`。`AbortSignal.timeout` 归类为 `NET_TIMEOUT`。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 
 <ApiSignature name="Client" />
 
-`Client` 是一个值，不是函数。用 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 调用 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 会得到一个。七个已知字段从参数复制进一个新对象。未知字段会被忽略，值为 `undefined` 的字段会被省略。没有父级叠加：`client()`、`client(undefined)` 和 `client({})` 返回一个不带请求选项的 client。嵌套的 `heartbeat`、`protocols` 和 `reconnect` 的值按引用保留，不克隆。WebSocket 在操作运行时读取它们（那时会复制 heartbeat 的字段和 protocols 列表），所以派生之后再改这些对象，仍可能影响后来的调用。应用应当在传入之后把它们当作不可变。派生不产生 I/O。client 值不可调用，调用它无法通过编译，运行时会抛出 `TypeError`。每次调用创建一个 client 值。同一个值可以传给多次操作，但复用携带 `abort` 的值会共享这个 signal。`abort` 不会组合；要组合 signal，在应用代码里用 `AbortSignal.any`。
+`Client` 是一个值，不是函数。用 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 调用 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type) 会得到一个。七个已知字段从参数复制进一个新对象。未知字段会被忽略，值为 `undefined` 的字段会被省略。没有父级叠加：`client()`、`client(undefined)` 和 `client({})` 返回一个不带请求选项的 client。嵌套的 `heartbeat`、`protocols` 和 `reconnect` 的值按引用保留，不克隆。WebSocket 在操作运行时读取它们（那时会复制 heartbeat 的字段和 protocols 列表），所以派生之后再改这些对象，仍可能影响后来的调用。应用应当在传入之后把它们当作不可变。派生不产生 I/O。client 值不可调用，调用它无法通过编译，运行时会抛出 `TypeError`。每次调用创建一个 client 值。同一个值可以传给多次操作，但复用携带 `signal` 的值会共享这个 signal。`signal` 不会组合；要组合 signal，在应用代码里用 `AbortSignal.any`。
 
 不要把工厂传给 React 的 state setter（`setState(factory)` 会把它当成 updater 来调用），也不要把它当作 Vue 的 `watch` 或 `computed` 源（那些 API 会调用函数）。
 
@@ -123,11 +123,11 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 
 <ApiSignature name="RequestOptions" />
 
-七个扁平字段。每种协议只读取自己理解的字段，其余忽略。把 `heartbeat` 传给 HTTP 会被忽略，这不是 fault。SSE 从请求选项里只读取 `abort`。SSE 重连来自 client 配置（`withSSEReconnect`），所以 `client({ reconnect })` 只影响 WebSocket。没有编译期的协议过滤，也没有 `timeout` 或 `signal` 字段。
+七个扁平字段。每种协议只读取自己理解的字段，其余忽略。把 `heartbeat` 传给 HTTP 会被忽略，这不是 fault。SSE 从请求选项里只读取 `signal`。SSE 重连来自 client 配置（`withSSEReconnect`），所以 `client({ reconnect })` 只影响 WebSocket。没有编译期的协议过滤，也没有 `timeout` 或 `abort` 字段。
 
 | 字段                 | 协议                   | 替换方式                                                          |
 | -------------------- | ---------------------- | ----------------------------------------------------------------- |
-| `abort`              | HTTP、SSE 和 WebSocket | 中止该次调用。对 SSE 和 WebSocket，它覆盖整条连接，包括打开之后。 |
+| `signal`             | HTTP、SSE 和 WebSocket | 中止该次调用。对 SSE 和 WebSocket，它覆盖整条连接，包括打开之后。 |
 | `onUploadProgress`   | HTTP                   | 其他协议忽略。                                                    |
 | `onDownloadProgress` | HTTP                   | 其他协议忽略。                                                    |
 | `beforeConnect`      | WebSocket              | 替换该次调用的 client 设置。                                      |
@@ -135,7 +135,7 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 | `heartbeat`          | WebSocket              | 整体替换。`timeoutMs` 是等待确认的时间，不是请求期限。            |
 | `reconnect`          | WebSocket              | 整体替换。                                                        |
 
-[`HttpExecuteOptions`](/zh-Hans/api/core/httpexecuteoptions-type) 是 HTTP 切片（`abort` 加上进度）。[`EventStreamExecuteOptions`](/zh-Hans/api/core/eventstreamexecuteoptions-type) 是 `{ abort? }`。[`WebSocketExecuteOptions`](/zh-Hans/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `abort`。
+[`HttpExecuteOptions`](/zh-Hans/api/core/httpexecuteoptions-type) 是 HTTP 切片（`signal` 加上进度）。[`EventStreamExecuteOptions`](/zh-Hans/api/core/eventstreamexecuteoptions-type) 是 `{ signal? }`。[`WebSocketExecuteOptions`](/zh-Hans/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `signal`。
 
 ### ClientOption
 

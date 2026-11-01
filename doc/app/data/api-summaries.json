@@ -172,7 +172,7 @@
   {
     "slug": "core/userequestconfig-type",
     "name": "UseRequestConfig",
-    "description": "HTTP fields of RequestOptions: progress callbacks and abort."
+    "description": "HTTP fields of RequestOptions: progress callbacks and signal."
   },
   {
     "slug": "core/httpawaitresult-type",
@@ -672,7 +672,7 @@
   {
     "slug": "core/usewebsocketconfig-type",
     "name": "UseWebSocketConfig",
-    "description": "WebSocket fields of RequestOptions, plus abort."
+    "description": "WebSocket fields of RequestOptions, plus signal."
   },
   {
     "slug": "core/socketawaitresult-type",

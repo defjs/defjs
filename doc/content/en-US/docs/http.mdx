@@ -136,7 +136,7 @@ there is no status-0 response standing in for one.
 
 ## Cancel the work
 
-Pass `abort` on a derived client. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort classifies as `NET_ABORTED`. There is no `timeout` field, no `signal` field, and no client-level default deadline. `abort` is the call's signal; combine signals with `AbortSignal.any` in application code. Combine a caller signal with a deadline using `AbortSignal.any` in application code.
+Pass `signal` on a derived client. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort classifies as `NET_ABORTED`. There is no `timeout` field, no `abort` field, and no client-level default deadline. `signal` is the call's signal; combine signals with `AbortSignal.any` in application code. Combine a caller signal with a deadline using `AbortSignal.any` in application code.
 
 <include cwd>examples/http/deadline.ts#example</include>
 

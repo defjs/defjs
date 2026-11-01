@@ -55,7 +55,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 استخدم معترضًا للقيم التي تتغيّر لكل طلب: رمز Bearer محدَّث، أو HMAC على الجسم المسلسَل.
 
-لا توجد مهلة افتراضية على مستوى العميل. مرّر `abort: AbortSignal.timeout(ms)` على عميل مشتق عندما يحتاج استدعاء واحد إليها. الإجهاض اليدوي هو `NET_ABORTED`. يُصنَّف `AbortSignal.timeout` كـ `NET_TIMEOUT`.
+لا توجد مهلة افتراضية على مستوى العميل. مرّر `signal: AbortSignal.timeout(ms)` على عميل مشتق عندما يحتاج استدعاء واحد إليها. الإجهاض اليدوي هو `NET_ABORTED`. يُصنَّف `AbortSignal.timeout` كـ `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="Client" />
 
-`Client` قيمة وليس دالة. استدعاء [`DerivableClient`](/ar/api/core/derivableclient-type) مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع واحدة. تُنسخ الحقول السبعة المعروفة من الوسيط إلى كائن جديد. تُتجاهل الحقول غير المعروفة وتُحذف الحقول التي قيمتها `undefined`. لا يوجد تركيب فوق الأصل: `client()` و`client(undefined)` و`client({})` تُرجع عميلًا بلا خيارات طلب. تُحفَظ قيم `heartbeat` و`protocols` و`reconnect` المتداخلة بالمرجع، دون استنساخ. يقرأها WebSocket عند تشغيل العملية (ينسخ حينها حقول heartbeat وقائمة protocols)، لذا قد يؤثر تغيير تلك الكائنات بعد الاشتقاق في استدعاء لاحق. ينبغي للتطبيقات أن تعاملها كغير قابلة للتغيير بعد تمريرها. الاشتقاق لا يؤدي أي إدخال/إخراج. قيمة العميل غير قابلة للاستدعاء، واستدعاؤها يفشل في الترجمة ويرمي `TypeError` وقت التشغيل. أنشئ قيمة عميل لكل استدعاء. يمكن تمرير القيمة نفسها إلى عمليات كثيرة، لكن إعادة استخدام قيمة تحمل `abort` تشارك تلك الإشارة. لا يُجمَع `abort`؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق.
+`Client` قيمة وليس دالة. استدعاء [`DerivableClient`](/ar/api/core/derivableclient-type) مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع واحدة. تُنسخ الحقول السبعة المعروفة من الوسيط إلى كائن جديد. تُتجاهل الحقول غير المعروفة وتُحذف الحقول التي قيمتها `undefined`. لا يوجد تركيب فوق الأصل: `client()` و`client(undefined)` و`client({})` تُرجع عميلًا بلا خيارات طلب. تُحفَظ قيم `heartbeat` و`protocols` و`reconnect` المتداخلة بالمرجع، دون استنساخ. يقرأها WebSocket عند تشغيل العملية (ينسخ حينها حقول heartbeat وقائمة protocols)، لذا قد يؤثر تغيير تلك الكائنات بعد الاشتقاق في استدعاء لاحق. ينبغي للتطبيقات أن تعاملها كغير قابلة للتغيير بعد تمريرها. الاشتقاق لا يؤدي أي إدخال/إخراج. قيمة العميل غير قابلة للاستدعاء، واستدعاؤها يفشل في الترجمة ويرمي `TypeError` وقت التشغيل. أنشئ قيمة عميل لكل استدعاء. يمكن تمرير القيمة نفسها إلى عمليات كثيرة، لكن إعادة استخدام قيمة تحمل `signal` تشارك تلك الإشارة. لا يُجمَع `signal`؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق.
 
 لا تمرّر المصنع إلى ضابط حالة في React (`setState(factory)` سيستدعيه كمُحدِّث) ولا تستخدمه مصدرًا لـ `watch` أو `computed` في Vue (فهما يستدعيان الدالة).
 
@@ -123,11 +123,11 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="RequestOptions" />
 
-سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يفهمها ويتجاهل الباقي. تمرير `heartbeat` إلى HTTP يُتجاهل، وليس عطلًا. يقرأ SSE من خيارات الطلب `abort` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة ولا حقل `timeout` أو `signal`.
+سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يفهمها ويتجاهل الباقي. تمرير `heartbeat` إلى HTTP يُتجاهل، وليس عطلًا. يقرأ SSE من خيارات الطلب `signal` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة ولا حقل `timeout` أو `abort`.
 
 | الحقل                | البروتوكول           | الاستبدال                                                                     |
 | -------------------- | -------------------- | ----------------------------------------------------------------------------- |
-| `abort`              | HTTP وSSE وWebSocket | يُجهض الاستدعاء. في SSE وWebSocket يغطي الاتصال كاملًا، بما فيه ما بعد الفتح. |
+| `signal`             | HTTP وSSE وWebSocket | يُجهض الاستدعاء. في SSE وWebSocket يغطي الاتصال كاملًا، بما فيه ما بعد الفتح. |
 | `onUploadProgress`   | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                  |
 | `onDownloadProgress` | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                  |
 | `beforeConnect`      | WebSocket            | يستبدل إعداد العميل لذلك الاستدعاء.                                           |
@@ -135,7 +135,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 | `heartbeat`          | WebSocket            | يُستبدل كاملًا. `timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.               |
 | `reconnect`          | WebSocket            | يُستبدل كاملًا.                                                               |
 
-[`HttpExecuteOptions`](/ar/api/core/httpexecuteoptions-type) هو شريحة HTTP (`abort` مع التقدّم). [`EventStreamExecuteOptions`](/ar/api/core/eventstreamexecuteoptions-type) هو `{ abort? }`. [`WebSocketExecuteOptions`](/ar/api/core/websocketexecuteoptions-type) هو شريحة WebSocket مع `abort`.
+[`HttpExecuteOptions`](/ar/api/core/httpexecuteoptions-type) هو شريحة HTTP (`signal` مع التقدّم). [`EventStreamExecuteOptions`](/ar/api/core/eventstreamexecuteoptions-type) هو `{ signal? }`. [`WebSocketExecuteOptions`](/ar/api/core/websocketexecuteoptions-type) هو شريحة WebSocket مع `signal`.
 
 ### ClientOption
 

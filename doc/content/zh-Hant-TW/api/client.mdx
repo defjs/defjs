@@ -55,7 +55,7 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 每個 request 都會變的值，請用 interceptor 處理，例如重新整理後的 Bearer token，或對序列化 body 計算的 HMAC。
 
-沒有 client 層級的預設期限。某一次呼叫需要期限時，在衍生的 client 上傳 `abort: AbortSignal.timeout(ms)`。手動取消是 `NET_ABORTED`。`AbortSignal.timeout` 歸類為 `NET_TIMEOUT`。
+沒有 client 層級的預設期限。某一次呼叫需要期限時，在衍生的 client 上傳 `signal: AbortSignal.timeout(ms)`。手動取消是 `NET_ABORTED`。`AbortSignal.timeout` 歸類為 `NET_TIMEOUT`。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 <ApiSignature name="Client" />
 
-`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 會回傳一個。七個已知欄位從引數複製進一個新物件。未知欄位會被忽略，值為 `undefined` 的欄位會被省略。沒有父層覆疊：`client()`、`client(undefined)` 與 `client({})` 回傳不帶任何 request options 的 client。巢狀的 `heartbeat`、`protocols` 與 `reconnect` 的值依參考保留，不複製。WebSocket 在操作執行時讀取它們（那時會複製 heartbeat 的欄位與 protocols 清單），所以衍生之後再改這些物件，仍可能影響之後的呼叫。應用程式在傳入之後應把它們視為不可變。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗，並在執行期拋出 `TypeError`。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `abort` 的值會共用該 signal。`abort` 不會合併；在應用程式碼裡用 `AbortSignal.any` 組合 signals。
+`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 會回傳一個。七個已知欄位從引數複製進一個新物件。未知欄位會被忽略，值為 `undefined` 的欄位會被省略。沒有父層覆疊：`client()`、`client(undefined)` 與 `client({})` 回傳不帶任何 request options 的 client。巢狀的 `heartbeat`、`protocols` 與 `reconnect` 的值依參考保留，不複製。WebSocket 在操作執行時讀取它們（那時會複製 heartbeat 的欄位與 protocols 清單），所以衍生之後再改這些物件，仍可能影響之後的呼叫。應用程式在傳入之後應把它們視為不可變。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗，並在執行期拋出 `TypeError`。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `signal` 的值會共用該 signal。`signal` 不會合併；在應用程式碼裡用 `AbortSignal.any` 組合 signals。
 
 不要把 factory 傳給 React 的 state setter（`setState(factory)` 會把它當成 updater 呼叫），也不要把它當成 Vue 的 `watch` 或 `computed` 來源（那些會呼叫函式）。
 
@@ -123,11 +123,11 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 <ApiSignature name="RequestOptions" />
 
-七個扁平欄位。每種協定只讀自己看得懂的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 會被忽略，不是 fault。SSE 只從請求 options 讀取 `abort`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選，也沒有 `timeout` 或 `signal` 欄位。
+七個扁平欄位。每種協定只讀自己看得懂的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 會被忽略，不是 fault。SSE 只從請求 options 讀取 `signal`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選，也沒有 `timeout` 或 `abort` 欄位。
 
 | 欄位                 | 協定                   | 替換方式                                                          |
 | -------------------- | ---------------------- | ----------------------------------------------------------------- |
-| `abort`              | HTTP、SSE 與 WebSocket | 取消該次呼叫。對 SSE 與 WebSocket，它涵蓋整條連線，包含開啟之後。 |
+| `signal`             | HTTP、SSE 與 WebSocket | 取消該次呼叫。對 SSE 與 WebSocket，它涵蓋整條連線，包含開啟之後。 |
 | `onUploadProgress`   | HTTP                   | 其他協定會忽略。                                                  |
 | `onDownloadProgress` | HTTP                   | 其他協定會忽略。                                                  |
 | `beforeConnect`      | WebSocket              | 在該次呼叫取代 client 的設定。                                    |
@@ -135,7 +135,7 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 | `heartbeat`          | WebSocket              | 整份替換。`timeoutMs` 是確認等待，不是請求期限。                  |
 | `reconnect`          | WebSocket              | 整份替換。                                                        |
 
-[`HttpExecuteOptions`](/zh-Hant-TW/api/core/httpexecuteoptions-type) 是 HTTP 切片（`abort` 加上進度）。[`EventStreamExecuteOptions`](/zh-Hant-TW/api/core/eventstreamexecuteoptions-type) 是 `{ abort? }`。[`WebSocketExecuteOptions`](/zh-Hant-TW/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `abort`。
+[`HttpExecuteOptions`](/zh-Hant-TW/api/core/httpexecuteoptions-type) 是 HTTP 切片（`signal` 加上進度）。[`EventStreamExecuteOptions`](/zh-Hant-TW/api/core/eventstreamexecuteoptions-type) 是 `{ signal? }`。[`WebSocketExecuteOptions`](/zh-Hant-TW/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `signal`。
 
 ### ClientOption
 

@@ -166,7 +166,7 @@ describe.each(["HTTP", "SSE", "WebSocket"] as const)(
           const input = { then };
           const seen: unknown[] = [];
           const { client, fetch, sockets } = transportHarness(transport, true);
-          const options = { abort: caller.signal };
+          const options = { signal: caller.signal };
           let settled: Awaited<ReturnType<typeof executeInput>> | undefined;
           const pending = executeInput(
             client,

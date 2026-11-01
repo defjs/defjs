@@ -310,7 +310,7 @@ describe("operation diagnostic boundary", () => {
       maxQueueSize: 4,
       path: "/stream",
     });
-    const pending = openStream(client({ abort: abort.signal }));
+    const pending = openStream(client({ signal: abort.signal }));
     await started;
     abort.abort();
     const [fault] = await pending;
@@ -379,7 +379,7 @@ describe("operation diagnostic boundary", () => {
       maxIncomingQueueSize: 4,
       incoming: struct.unknown(),
       path: "/ws",
-    })(client({ abort: abort.signal }));
+    })(client({ signal: abort.signal }));
     expect(fault).toBeNull();
     abort.abort();
     await expect(socket?.closed).resolves.toMatchObject({ kind: "aborted" });

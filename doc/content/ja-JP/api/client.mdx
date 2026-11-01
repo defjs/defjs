@@ -55,7 +55,7 @@ HTTP と SSE のリクエストに使う静的なデフォルトヘッダーを�
 
 リクエストごとに変わる値には、インターセプターを使ってください。たとえば更新した Bearer トークンや、シリアライズ済みボディに対する HMAC です。
 
-クライアント単位の既定の期限はありません。1 回の呼び出しに期限が要るときは、派生したクライアントに `abort: AbortSignal.timeout(ms)` を渡します。手動の abort は `NET_ABORTED` です。`AbortSignal.timeout` は `NET_TIMEOUT` に分類されます。
+クライアント単位の既定の期限はありません。1 回の呼び出しに期限が要るときは、派生したクライアントに `signal: AbortSignal.timeout(ms)` を渡します。手動の abort は `NET_ABORTED` です。`AbortSignal.timeout` は `NET_TIMEOUT` に分類されます。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 <ApiSignature name="Client" />
 
-`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。既知の 7 フィールドは引数からコピーされ、新しいオブジェクトに入ります。未知のフィールドは無視され、値が `undefined` のフィールドは省かれます。親の options を重ねることはありません。`client()`、`client(undefined)`、`client({})` はリクエスト options を持たないクライアントを返します。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされません。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`abort` を持つ値を再利用するとそのシグナルを共有します。`abort` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。既知の 7 フィールドは引数からコピーされ、新しいオブジェクトに入ります。未知のフィールドは無視され、値が `undefined` のフィールドは省かれます。親の options を重ねることはありません。`client()`、`client(undefined)`、`client({})` はリクエスト options を持たないクライアントを返します。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされません。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
 
 ファクトリを React の state setter に渡さないでください（`setState(factory)` は updater としてそれを呼びます）。Vue の `watch` や `computed` のソースにも使わないでください（それらは関数を呼びます）。
 
@@ -123,11 +123,11 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 <ApiSignature name="RequestOptions" />
 
-フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `abort` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `signal` フィールドもありません。
+フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `signal` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `abort` フィールドもありません。
 
 | フィールド           | プロトコル           | 置き換え                                                                           |
 | -------------------- | -------------------- | ---------------------------------------------------------------------------------- |
-| `abort`              | HTTP、SSE、WebSocket | 呼び出しを中止します。SSE と WebSocket では、開いたあとも含む接続全体を覆います。  |
+| `signal`             | HTTP、SSE、WebSocket | 呼び出しを中止します。SSE と WebSocket では、開いたあとも含む接続全体を覆います。  |
 | `onUploadProgress`   | HTTP                 | 他のプロトコルは無視します。                                                       |
 | `onDownloadProgress` | HTTP                 | 他のプロトコルは無視します。                                                       |
 | `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                               |
@@ -135,7 +135,7 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 | `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` は確認待ちであり、リクエストの期限ではありません。 |
 | `reconnect`          | WebSocket            | 全体を置き換えます。                                                               |
 
-[`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) は HTTP のスライスです（`abort` と進捗）。[`EventStreamExecuteOptions`](/ja-JP/api/core/eventstreamexecuteoptions-type) は `{ abort? }` です。[`WebSocketExecuteOptions`](/ja-JP/api/core/websocketexecuteoptions-type) は WebSocket のスライスに `abort` を足したものです。
+[`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) は HTTP のスライスです（`signal` と進捗）。[`EventStreamExecuteOptions`](/ja-JP/api/core/eventstreamexecuteoptions-type) は `{ signal? }` です。[`WebSocketExecuteOptions`](/ja-JP/api/core/websocketexecuteoptions-type) は WebSocket のスライスに `signal` を足したものです。
 
 ### ClientOption
 

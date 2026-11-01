@@ -55,7 +55,7 @@ Precedence for one request:
 
 Use an interceptor for values that change per request: a refreshed Bearer token, or an HMAC over the serialized body.
 
-There is no client-level default deadline. Pass `abort: AbortSignal.timeout(ms)` on a derived client when one call needs one. A manual abort is `NET_ABORTED`. `AbortSignal.timeout` classifies as `NET_TIMEOUT`.
+There is no client-level default deadline. Pass `signal: AbortSignal.timeout(ms)` on a derived client when one call needs one. A manual abort is `NET_ABORTED`. `AbortSignal.timeout` classifies as `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ The root client returned by `createClient`, in two shapes. The factory is a func
 
 <ApiSignature name="Client" />
 
-A `Client` is a value, not a function. Calling the [`DerivableClient`](/api/core/derivableclient-type) with [`RequestOptions`](/api/core/requestoptions-type) returns one. The seven known fields are copied from the argument into a fresh object. Unknown fields are ignored and fields whose value is `undefined` are omitted. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. Deriving performs no I/O. A client value is not callable, and calling one fails to compile and throws a `TypeError` at runtime. Create a client value per call. The same value can be passed to many operations, but reusing a value that carries `abort` shares that signal. `abort` is not combined; combine signals with `AbortSignal.any` in application code.
+A `Client` is a value, not a function. Calling the [`DerivableClient`](/api/core/derivableclient-type) with [`RequestOptions`](/api/core/requestoptions-type) returns one. The seven known fields are copied from the argument into a fresh object. Unknown fields are ignored and fields whose value is `undefined` are omitted. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. Deriving performs no I/O. A client value is not callable, and calling one fails to compile and throws a `TypeError` at runtime. Create a client value per call. The same value can be passed to many operations, but reusing a value that carries `signal` shares that signal. `signal` is not combined; combine signals with `AbortSignal.any` in application code.
 
 Do not pass the factory to a React state setter (`setState(factory)` would call it as an updater) or use it as a Vue `watch` or `computed` source (those call a function).
 
@@ -123,11 +123,11 @@ Do not pass the factory to a React state setter (`setState(factory)` would call 
 
 <ApiSignature name="RequestOptions" />
 
-Seven flat fields. Each protocol reads the fields it understands and ignores the rest. Passing `heartbeat` to HTTP is ignored, not a fault. SSE reads only `abort` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter and no `timeout` or `signal` field.
+Seven flat fields. Each protocol reads the fields it understands and ignores the rest. Passing `heartbeat` to HTTP is ignored, not a fault. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter and no `timeout` or `abort` field.
 
 | Field                | Protocol                 | Replacement                                                                                  |
 | -------------------- | ------------------------ | -------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP, SSE, and WebSocket | Aborts the call. For SSE and WebSocket it covers the whole connection, including after open. |
+| `signal`             | HTTP, SSE, and WebSocket | Aborts the call. For SSE and WebSocket it covers the whole connection, including after open. |
 | `onUploadProgress`   | HTTP                     | Ignored by other protocols.                                                                  |
 | `onDownloadProgress` | HTTP                     | Ignored by other protocols.                                                                  |
 | `beforeConnect`      | WebSocket                | Replaces the client setting for that call.                                                   |
@@ -135,7 +135,7 @@ Seven flat fields. Each protocol reads the fields it understands and ignores the
 | `heartbeat`          | WebSocket                | Replaced whole. `timeoutMs` is the acknowledgement wait, not a request deadline.             |
 | `reconnect`          | WebSocket                | Replaced whole.                                                                              |
 
-[`HttpExecuteOptions`](/api/core/httpexecuteoptions-type) is the HTTP slice (`abort` plus progress). [`EventStreamExecuteOptions`](/api/core/eventstreamexecuteoptions-type) is `{ abort? }`. [`WebSocketExecuteOptions`](/api/core/websocketexecuteoptions-type) is the WebSocket slice plus `abort`.
+[`HttpExecuteOptions`](/api/core/httpexecuteoptions-type) is the HTTP slice (`signal` plus progress). [`EventStreamExecuteOptions`](/api/core/eventstreamexecuteoptions-type) is `{ signal? }`. [`WebSocketExecuteOptions`](/api/core/websocketexecuteoptions-type) is the WebSocket slice plus `signal`.
 
 ### ClientOption
 

@@ -23,7 +23,7 @@ const search = defineRequest({
 
 async function main() {
   const [error, text] = await search(
-    client({ abort: AbortSignal.timeout(30_000) }),
+    client({ signal: AbortSignal.timeout(30_000) }),
     { q: "defjs" },
   );
   if (error) {

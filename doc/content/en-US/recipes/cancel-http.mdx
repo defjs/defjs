@@ -5,7 +5,7 @@ description: Abort or time out a call and read NET_ABORTED / NET_TIMEOUT.
 
 # Cancel an HTTP call
 
-Combine the caller's signal with a deadline on `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` is one signal. A manual abort classifies as `NET_ABORTED`. A deadline classifies as `NET_TIMEOUT`.
+Combine the caller's signal with a deadline on `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` is one signal. A manual abort classifies as `NET_ABORTED`. A deadline classifies as `NET_TIMEOUT`.
 
 See [HTTP](/docs/http#cancel-the-work) for details.
 

@@ -49,7 +49,7 @@ describe("client factory and client values", () => {
   test("copies all seven known fields and ignores unknown fields", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const known = {
-      abort: new AbortController().signal,
+      signal: new AbortController().signal,
       onUploadProgress: () => undefined,
       onDownloadProgress: () => undefined,
       beforeConnect: () => undefined,
@@ -57,7 +57,7 @@ describe("client factory and client values", () => {
       heartbeat: { intervalMs: 1_000, message: () => "ping" },
       reconnect: { attempts: 1, delayMs: 10 },
     } as const satisfies RequestOptions;
-    const patch = { ...known, timeout: 100, signal: known.abort };
+    const patch = { ...known, timeout: 100, abort: known.signal };
 
     const derived = base(patch);
 
@@ -71,7 +71,7 @@ describe("client factory and client values", () => {
   test("omits fields whose value is undefined", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const derived = base({
-      abort: undefined,
+      signal: undefined,
       onDownloadProgress: undefined,
       protocols: undefined,
     });
@@ -108,7 +108,7 @@ describe("client factory and client values", () => {
       withHTTPHandle(handle),
     );
 
-    const derived = client({ abort: signal, protocols: ["chat.v1"] });
+    const derived = client({ signal, protocols: ["chat.v1"] });
 
     expect(derived).not.toBe(client);
     expect(handle).not.toHaveBeenCalled();
@@ -134,7 +134,7 @@ describe("client factory and client values", () => {
       output: struct.object({ ok: struct.boolean() }),
     });
 
-    const [error, data] = await read(client({ abort: controller.signal }));
+    const [error, data] = await read(client({ signal: controller.signal }));
 
     expect(error?.code).toBe("NET_ABORTED");
     expect(data).toBeUndefined();
@@ -156,8 +156,8 @@ describe("client factory and client values", () => {
     const read = defineRequest({ method: "GET", path: "/hang" });
     const first = new AbortController();
     const second = new AbortController();
-    const pendingFirst = read(client({ abort: first.signal }));
-    const pendingSecond = read(client({ abort: second.signal }));
+    const pendingFirst = read(client({ signal: first.signal }));
+    const pendingSecond = read(client({ signal: second.signal }));
 
     first.abort();
     const [firstError] = await pendingFirst;
@@ -182,7 +182,7 @@ describe("client factory and client values", () => {
     const reads: string[] = [];
     const patch = {} as RequestOptions;
     const values = {
-      abort: firstSignal,
+      signal: firstSignal,
       beforeConnect: () => undefined,
       heartbeat: { intervalMs: 1_000 },
       onDownloadProgress,
@@ -191,7 +191,7 @@ describe("client factory and client values", () => {
       reconnect: { attempts: 1 },
     } as const;
     for (const key of [
-      "abort",
+      "signal",
       "onUploadProgress",
       "onDownloadProgress",
       "beforeConnect",
@@ -213,7 +213,7 @@ describe("client factory and client values", () => {
     const fixed = derived[CLIENT].options;
 
     expect(reads).toEqual([
-      "abort",
+      "signal",
       "onUploadProgress",
       "onDownloadProgress",
       "beforeConnect",
@@ -234,15 +234,15 @@ describe("client factory and client values", () => {
     const firstSignal = new AbortController().signal;
     const secondSignal = new AbortController().signal;
     const onDownloadProgress = () => undefined;
-    const patch: RequestOptions = { abort: firstSignal };
+    const patch: RequestOptions = { signal: firstSignal };
     const derived = base(patch);
 
-    patch.abort = secondSignal;
-    expect(derived[CLIENT].options).toEqual({ abort: firstSignal });
-    delete patch.abort;
-    expect(derived[CLIENT].options).toEqual({ abort: firstSignal });
+    patch.signal = secondSignal;
+    expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
+    delete patch.signal;
+    expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
     patch.onDownloadProgress = onDownloadProgress;
-    expect(derived[CLIENT].options).toEqual({ abort: firstSignal });
+    expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
     expect(derived[CLIENT].options.onDownloadProgress).toBeUndefined();
   });
 
@@ -250,17 +250,17 @@ describe("client factory and client values", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const firstSignal = new AbortController().signal;
     const secondSignal = new AbortController().signal;
-    const patch: RequestOptions = { abort: firstSignal };
+    const patch: RequestOptions = { signal: firstSignal };
     const first = base(patch);
-    const sibling = base({ abort: secondSignal });
+    const sibling = base({ signal: secondSignal });
 
-    patch.abort = secondSignal;
-    delete patch.abort;
+    patch.signal = secondSignal;
+    delete patch.signal;
     patch.onDownloadProgress = () => undefined;
 
     expect(base[CLIENT].options).toEqual({});
-    expect(first[CLIENT].options).toEqual({ abort: firstSignal });
-    expect(sibling[CLIENT].options).toEqual({ abort: secondSignal });
+    expect(first[CLIENT].options).toEqual({ signal: firstSignal });
+    expect(sibling[CLIENT].options).toEqual({ signal: secondSignal });
     expect(first[CLIENT].options).not.toBe(patch);
     expect(first[CLIENT].config).toBe(base[CLIENT].config);
   });
@@ -280,7 +280,7 @@ describe("client factory and client values", () => {
   test("stores options separately from the parent state and the patch object", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const signal = new AbortController().signal;
-    const patch: RequestOptions = { abort: signal };
+    const patch: RequestOptions = { signal };
     const derived = base(patch);
     const first = derived[CLIENT].options;
     const second = derived[CLIENT].options;
@@ -288,7 +288,7 @@ describe("client factory and client values", () => {
     expect(first).not.toBe(base[CLIENT].options);
     expect(first).not.toBe(patch);
     expect(second).toBe(first);
-    expect(second).toEqual({ abort: signal });
+    expect(second).toEqual({ signal });
   });
 
   test("throws from client(patch) when a patch getter throws and leaves the factory usable", async () => {
@@ -297,8 +297,8 @@ describe("client factory and client values", () => {
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
     );
-    const boom = new Error("abort getter failed");
-    const patch = Object.defineProperty({} as RequestOptions, "abort", {
+    const boom = new Error("signal getter failed");
+    const patch = Object.defineProperty({} as RequestOptions, "signal", {
       configurable: true,
       enumerable: true,
       get() {
@@ -446,8 +446,8 @@ describe("AbortSignal.timeout classification", () => {
     );
     const read = defineRequest({ method: "GET", path: "/hang" });
     const manual = new AbortController();
-    const timed = read(client({ abort: AbortSignal.timeout(20) }));
-    const aborted = read(client({ abort: manual.signal }));
+    const timed = read(client({ signal: AbortSignal.timeout(20) }));
+    const aborted = read(client({ signal: manual.signal }));
     manual.abort();
 
     const [timeoutError] = await timed;
@@ -477,8 +477,8 @@ describe("AbortSignal.timeout classification", () => {
       events: { message: struct.string() },
     });
     const manual = new AbortController();
-    const timed = stream(client({ abort: AbortSignal.timeout(20) }));
-    const aborted = stream(client({ abort: manual.signal }));
+    const timed = stream(client({ signal: AbortSignal.timeout(20) }));
+    const aborted = stream(client({ signal: manual.signal }));
     manual.abort();
 
     const [timeoutError, timeoutStream] = await timed;
@@ -512,8 +512,8 @@ describe("AbortSignal.timeout classification", () => {
       maxIncomingQueueSize: 4,
     });
     const manual = new AbortController();
-    const timed = socket(client({ abort: AbortSignal.timeout(20) }));
-    const aborted = socket(client({ abort: manual.signal }));
+    const timed = socket(client({ signal: AbortSignal.timeout(20) }));
+    const aborted = socket(client({ signal: manual.signal }));
     manual.abort();
 
     const [timeoutError, timeoutSession] = await timed;

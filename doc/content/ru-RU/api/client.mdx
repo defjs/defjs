@@ -55,7 +55,7 @@ description: createClient, хелперы опций и тип Client.
 
 Для значений, которые меняются от запроса к запросу, используй interceptor: обновлённый Bearer-токен или HMAC по сериализованному телу.
 
-Дедлайна по умолчанию на уровне клиента нет. Передай `abort: AbortSignal.timeout(ms)` на выведенном клиенте, когда он нужен одному вызову. Ручной abort — `NET_ABORTED`. `AbortSignal.timeout` классифицируется как `NET_TIMEOUT`.
+Дедлайна по умолчанию на уровне клиента нет. Передай `signal: AbortSignal.timeout(ms)` на выведенном клиенте, когда он нужен одному вызову. Ручной abort — `NET_ABORTED`. `AbortSignal.timeout` классифицируется как `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ description: createClient, хелперы опций и тип Client.
 
 <ApiSignature name="Client" />
 
-`Client` — значение, а не функция. Его возвращает вызов [`DerivableClient`](/ru-RU/api/core/derivableclient-type) с [`RequestOptions`](/ru-RU/api/core/requestoptions-type). Семь известных полей копируются из аргумента в свежий объект. Неизвестные поля игнорируются, а поля со значением `undefined` опускаются. Наложения на родителя нет: `client()`, `client(undefined)` и `client({})` возвращают клиент без опций запроса. Вложенные значения `heartbeat`, `protocols` и `reconnect` хранятся по ссылке, не клонируются. WebSocket читает их, когда выполняется операция (в этот момент копирует поля heartbeat и список protocols), поэтому изменение этих объектов после вывода всё ещё может повлиять на последующий вызов. Приложение должно считать их неизменяемыми после передачи. Вывод не делает I/O. Значение клиента не вызываемое: его вызов не компилируется, а во время выполнения бросает `TypeError`. Создавай значение клиента на каждый вызов. Одно и то же значение можно передать многим операциям, но повторное использование значения с `abort` делит этот сигнал между вызовами. `abort` не объединяется; объединяй сигналы через `AbortSignal.any` в коде приложения.
+`Client` — значение, а не функция. Его возвращает вызов [`DerivableClient`](/ru-RU/api/core/derivableclient-type) с [`RequestOptions`](/ru-RU/api/core/requestoptions-type). Семь известных полей копируются из аргумента в свежий объект. Неизвестные поля игнорируются, а поля со значением `undefined` опускаются. Наложения на родителя нет: `client()`, `client(undefined)` и `client({})` возвращают клиент без опций запроса. Вложенные значения `heartbeat`, `protocols` и `reconnect` хранятся по ссылке, не клонируются. WebSocket читает их, когда выполняется операция (в этот момент копирует поля heartbeat и список protocols), поэтому изменение этих объектов после вывода всё ещё может повлиять на последующий вызов. Приложение должно считать их неизменяемыми после передачи. Вывод не делает I/O. Значение клиента не вызываемое: его вызов не компилируется, а во время выполнения бросает `TypeError`. Создавай значение клиента на каждый вызов. Одно и то же значение можно передать многим операциям, но повторное использование значения с `signal` делит этот сигнал между вызовами. `signal` не объединяется; объединяй сигналы через `AbortSignal.any` в коде приложения.
 
 Не передавай фабрику в setter состояния React (`setState(factory)` вызовет её как updater) и не используй его как источник Vue `watch` или `computed` (они вызывают функцию).
 
@@ -123,11 +123,11 @@ description: createClient, хелперы опций и тип Client.
 
 <ApiSignature name="RequestOptions" />
 
-Семь плоских полей. Каждый протокол читает поля, которые понимает, и игнорирует остальные. Передать `heartbeat` в HTTP — значит, что поле игнорируется, а не что это fault. SSE читает из опций запроса только `abort`. Переподключение SSE берётся из конфигурации клиента (`withSSEReconnect`), поэтому `client({ reconnect })` влияет только на WebSocket. Фильтра протокола на этапе компиляции нет, и полей `timeout` или `signal` нет.
+Семь плоских полей. Каждый протокол читает поля, которые понимает, и игнорирует остальные. Передать `heartbeat` в HTTP — значит, что поле игнорируется, а не что это fault. SSE читает из опций запроса только `signal`. Переподключение SSE берётся из конфигурации клиента (`withSSEReconnect`), поэтому `client({ reconnect })` влияет только на WebSocket. Фильтра протокола на этапе компиляции нет, и полей `timeout` или `abort` нет.
 
 | Поле                 | Протокол              | Замена                                                                                     |
 | -------------------- | --------------------- | ------------------------------------------------------------------------------------------ |
-| `abort`              | HTTP, SSE и WebSocket | Прерывает вызов. Для SSE и WebSocket покрывает всё соединение, в том числе после открытия. |
+| `signal`             | HTTP, SSE и WebSocket | Прерывает вызов. Для SSE и WebSocket покрывает всё соединение, в том числе после открытия. |
 | `onUploadProgress`   | HTTP                  | Другие протоколы игнорируют.                                                               |
 | `onDownloadProgress` | HTTP                  | Другие протоколы игнорируют.                                                               |
 | `beforeConnect`      | WebSocket             | Заменяет настройку клиента для этого вызова.                                               |
@@ -135,7 +135,7 @@ description: createClient, хелперы опций и тип Client.
 | `heartbeat`          | WebSocket             | Заменяется целиком. `timeoutMs` — ожидание подтверждения, а не дедлайн запроса.            |
 | `reconnect`          | WebSocket             | Заменяется целиком.                                                                        |
 
-[`HttpExecuteOptions`](/ru-RU/api/core/httpexecuteoptions-type) — срез HTTP (`abort` плюс прогресс). [`EventStreamExecuteOptions`](/ru-RU/api/core/eventstreamexecuteoptions-type) — это `{ abort? }`. [`WebSocketExecuteOptions`](/ru-RU/api/core/websocketexecuteoptions-type) — срез WebSocket плюс `abort`.
+[`HttpExecuteOptions`](/ru-RU/api/core/httpexecuteoptions-type) — срез HTTP (`signal` плюс прогресс). [`EventStreamExecuteOptions`](/ru-RU/api/core/eventstreamexecuteoptions-type) — это `{ signal? }`. [`WebSocketExecuteOptions`](/ru-RU/api/core/websocketexecuteoptions-type) — срез WebSocket плюс `signal`.
 
 ### ClientOption
 

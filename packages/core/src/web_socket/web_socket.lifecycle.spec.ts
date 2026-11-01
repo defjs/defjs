@@ -39,7 +39,7 @@ describe("web socket runtime lifecycle", () => {
     });
 
     const controller = new AbortController();
-    const executePromise = run(useEchoSocket, { abort: controller.signal });
+    const executePromise = run(useEchoSocket, { signal: controller.signal });
     controller.abort();
 
     const [error, socket, connection] = await executePromise;

@@ -20,7 +20,7 @@ Deklariere einen typisierten Request und rufe die Operation dann mit einem Clien
 wird nach Status gekeyt. Lässt du eines weg, wird dieser Body nie gelesen — siehe
 [Deklaration ist eine Zusicherung](/de-DE/docs/design-decisions#declaration-is-an-assertion).
 
-Der Aufruf der Operation gibt ein Promise auf das Tupel zurück, das unter [`HttpAwaitResult`](/de-DE/api/core/httpawaitresult-type) beschrieben ist. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. HTTP liest `abort` und die Progress-Callbacks und ignoriert die anderen Felder.
+Der Aufruf der Operation gibt ein Promise auf das Tupel zurück, das unter [`HttpAwaitResult`](/de-DE/api/core/httpawaitresult-type) beschrieben ist. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. HTTP liest `signal` und die Progress-Callbacks und ignoriert die anderen Felder.
 
 Ein Non-2xx-Status ist `HTTP_STATUS`, wenn kein `error`-Struct deklariert ist oder der deklarierte `error`-Body dekodiert wird. Das `data` des Faults ist der dekodierte
 `error`-Body, wenn einer deklariert war, sonst `undefined`. Lässt sich ein deklarierter `error`-Body nicht lesen (falscher Media-Type, ungültiges JSON) oder
@@ -46,7 +46,7 @@ Struct wie eine Response von der Leitung; es gibt keinen Short-Circuit, der den 
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` ist der HTTP-Ausschnitt von [`RequestOptions`](/de-DE/api/core/requestoptions-type): [`UseRequestConfig`](/de-DE/api/core/userequestconfig-type), also `abort` plus `onDownloadProgress` und `onUploadProgress`. Es gibt kein `timeout`- oder `signal`-Feld. Eine Deadline ist `abort: AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. `abort` ist das Signal des Aufrufs; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. Es gibt keine Default-Deadline auf Client-Ebene. Andere Request-Felder, etwa `heartbeat`, werden ignoriert.
+`HttpExecuteOptions` ist der HTTP-Ausschnitt von [`RequestOptions`](/de-DE/api/core/requestoptions-type): [`UseRequestConfig`](/de-DE/api/core/userequestconfig-type), also `signal` plus `onDownloadProgress` und `onUploadProgress`. Es gibt kein `timeout`- oder `abort`-Feld. Eine Deadline ist `signal: AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. `signal` ist das Signal des Aufrufs; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. Es gibt keine Default-Deadline auf Client-Ebene. Andere Request-Felder, etwa `heartbeat`, werden ignoriert.
 
 ## Typen
 
@@ -63,7 +63,7 @@ Im Erfolgsfall trägt der dritte Slot nur dann `body`, wenn `output` deklariert 
 
 ### HttpRequest
 
-Normalisierter Outgoing-Request: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` und `queryParams`. Wenn Interceptors ihn sehen, ist `body` bereits der Wire-Wert — bei JSON ein JSON-Text-String —, signiere HMACs und Digests also darüber, nicht über den Struct-Input. Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`. Ein Builder, der `URLSearchParams` zurückgibt, reicht genau diese Instanz durch. `responseType` und `errorResponseType` sind readonly: sie werden aus den Struct-Kinds von `output` und `error` des Endpoints abgeleitet und dürfen nicht geändert werden.
+Normalisierter Outgoing-Request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` und `queryParams`. Wenn Interceptors ihn sehen, ist `body` bereits der Wire-Wert — bei JSON ein JSON-Text-String —, signiere HMACs und Digests also darüber, nicht über den Struct-Input. Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`. Ein Builder, der `URLSearchParams` zurückgibt, reicht genau diese Instanz durch. `responseType` und `errorResponseType` sind readonly: sie werden aus den Struct-Kinds von `output` und `error` des Endpoints abgeleitet und dürfen nicht geändert werden.
 
 ### HttpMeta
 
@@ -118,7 +118,7 @@ Alle vier Felder sind optional. `query` ist `URLSearchParams` oder ein Record; e
 
 ## UseRequestConfig
 
-`abort`, plus optionale `onDownloadProgress` und `onUploadProgress`. `HttpExecuteOptions` ist dieser Ausschnitt. Es gibt kein `timeout`- oder `signal`-Feld.
+`signal`, plus optionale `onDownloadProgress` und `onUploadProgress`. `HttpExecuteOptions` ist dieser Ausschnitt. Es gibt kein `timeout`- oder `abort`-Feld.
 
 ## RequestSuccessData
 

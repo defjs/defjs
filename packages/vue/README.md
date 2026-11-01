@@ -46,7 +46,7 @@ watch(
     const abort = new AbortController();
     onCleanup(() => abort.abort());
 
-    void getUser(client({ abort: abort.signal }), { id }).then(
+    void getUser(client({ signal: abort.signal }), { id }).then(
       ([error, user]) => {
         if (abort.signal.aborted) return;
         if (error) {

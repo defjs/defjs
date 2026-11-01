@@ -9,7 +9,7 @@ React アプリケーションは SDK から API 定義を import し、自身�
 
 これらのプラグインは、既存の `Client` の提供と取得を補助する任意の仕組みです。アプリ所有の固定クライアントを直接 import する、再利用するロジックに明示的な Client を渡す、ツリーの既定値やサブツリーの上書きにフレームワークの注入を使う、独自の構成を選ぶ、どれも有効です。SDK の定義にプラグインは必須ではありません。
 
-既存の `@defjs/core` クライアントを React ツリーに繋ぎます。得られるのは Context と `useClient()` です。このパッケージはクライアントを**作らず**、キャッシュも足さず、操作をリトライせず、トランスポートリソースも破棄しません。作業を始めたコンポーネント、effect、データライブラリが所有します。`useClient()` のクライアントは操作に渡します。フックは渡された[`DerivableClient`](/ja-JP/api/core/derivableclient-type)を返します。`abort` のような呼び出しごとの options は、操作を実行する場所で呼んで渡します。`getUser(client({ abort }), input)` です。state setter には渡さないでください。`setState(client)` は updater としてそれを呼びます。派生した `Client` 値は `ClientProvider` にも `useClient` にも渡せません。
+既存の `@defjs/core` クライアントを React ツリーに繋ぎます。得られるのは Context と `useClient()` です。このパッケージはクライアントを**作らず**、キャッシュも足さず、操作をリトライせず、トランスポートリソースも破棄しません。作業を始めたコンポーネント、effect、データライブラリが所有します。`useClient()` のクライアントは操作に渡します。フックは渡された[`DerivableClient`](/ja-JP/api/core/derivableclient-type)を返します。`signal` のような呼び出しごとの options は、操作を実行する場所で呼んで渡します。`getUser(client({ signal }), input)` です。state setter には渡さないでください。`setState(client)` は updater としてそれを呼びます。派生した `Client` 値は `ClientProvider` にも `useClient` にも渡せません。
 
 ## 基本セットアップ
 
@@ -39,7 +39,7 @@ React アプリケーションは SDK から API 定義を import し、自身�
 
 ## クエリ作業を所有する
 
-クエリライブラリがキャッシュ、リトライ、古い結果の抑制、キャンセルを所有できます。それが渡す signal を、派生したクライアントの `abort` として渡します。一覧ページでは TanStack Query（または類似のもの）から操作を呼んでください — `@defjs/react` は DI だけのままで、`useRequest` は**出しません**。
+クエリライブラリがキャッシュ、リトライ、古い結果の抑制、キャンセルを所有できます。それが渡す signal を、派生したクライアントの `signal` として渡します。一覧ページでは TanStack Query（または類似のもの）から操作を呼んでください — `@defjs/react` は DI だけのままで、`useRequest` は**出しません**。
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
@@ -53,7 +53,7 @@ SSE と WebSocket のハンドルは操作の呼び出しより長生きしま�
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-操作に渡した `abort` シグナルは、open されたセッションに対しても効き続けます。クリーンアップでそれを abort すると、セッションは `aborted` として終わり、`receive` は `AbortError` で reject されます。そのため上の `catch` は、effect が破棄されたあとのエラーを無視し、本当の失敗（キューのオーバーフロー、ハートビートの確認待ちのタイムアウト）だけを報告します。abort された SSE ストリームは、代わりにイテレータが通常どおり終了します。`catch` が無いと、ループの reject は未処理の promise rejection になります。
+操作に渡した `signal`は、open されたセッションに対しても効き続けます。クリーンアップでそれを abort すると、セッションは `aborted` として終わり、`receive` は `AbortError` で reject されます。そのため上の `catch` は、effect が破棄されたあとのエラーを無視し、本当の失敗（キューのオーバーフロー、ハートビートの確認待ちのタイムアウト）だけを報告します。abort された SSE ストリームは、代わりにイテレータが通常どおり終了します。`catch` が無いと、ループの reject は未処理の promise rejection になります。
 
 `EventStreamHandle` も同じ規則です。`finally` で close し、`stream.closed` を await。WebSocket 消費者は状態/ランタイムエラーリスナーも購読解除し、`session.receive` を読み続けてください — 読まれない有界キューはオーバーフローし得ます。
 

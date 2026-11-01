@@ -96,7 +96,7 @@ description: عرّف عقد رسائل WebSocket في SDK بينما تملك �
 
 يطلب `session.close(code?, reason?)` إغلاقًا نهائيًا ويوقف النبض. يجب أن يكون الرمز `1000` أو `3000..4999`؛ والسبب ≤ 123 بايت UTF-8. ترمي وسائط الإغلاق غير الصالحة قبل تغيير الحالة. استخدمه مع `await session.closed` عندما تحتاج سبب إغلاق يدوي أو النتيجة النهائية المنطقية.
 
-تبقى إشارة `abort` الممرَّرة إلى العملية مرفقة بالجلسة المفتوحة وتغطي الاتصال كاملًا، بما فيه ما بعد فتحه. ينهيه إجهاض بشكل مهلة (`TimeoutError` أو `ERR_TIMEOUT`، بما فيه `AbortSignal.timeout(...)`) كـ `'error'` (`NET_TIMEOUT`). وأي سبب آخر ينهيه كـ `'aborted'`، ويرفض `receive` بذلك السبب نفسه، لا بـ `AbortError` جديد. لا توجد مهلة للبدء فقط. التطبيق الذي يريد واحدة ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`. انظر [SSE](/ar/docs/sse#close-and-dispose).
+تبقى إشارة `signal` الممرَّرة إلى العملية مرفقة بالجلسة المفتوحة وتغطي الاتصال كاملًا، بما فيه ما بعد فتحه. ينهيه إجهاض بشكل مهلة (`TimeoutError` أو `ERR_TIMEOUT`، بما فيه `AbortSignal.timeout(...)`) كـ `'error'` (`NET_TIMEOUT`). وأي سبب آخر ينهيه كـ `'aborted'`، ويرفض `receive` بذلك السبب نفسه، لا بـ `AbortError` جديد. لا توجد مهلة للبدء فقط. التطبيق الذي يريد واحدة ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`. انظر [SSE](/ar/docs/sse#close-and-dispose).
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

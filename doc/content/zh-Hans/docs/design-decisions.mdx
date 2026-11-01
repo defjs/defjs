@@ -125,7 +125,7 @@ Body kind 按值决定，先匹配的赢：
 
 ## Observer 和策略放哪
 
-Interceptor 管传输级策略：鉴权、追踪、短路、审过的重试。它们只跑自己的传输，按洋葱顺序组合。派生 client 上的请求选项管这次工作的寿命：`abort`、WebSocket heartbeat，以及可选重连。
+Interceptor 管传输级策略：鉴权、追踪、短路、审过的重试。它们只跑自己的传输，按洋葱顺序组合。派生 client 上的请求选项管这次工作的寿命：`signal`、WebSocket heartbeat，以及可选重连。
 
 Observer 只报告发生了什么，不当第二任所有者。SSE 的 `onInvalidEvent`、WebSocket 状态监听、运行时错误监听，适合有界诊断和指标。返回的 stream/session 仍拥有迭代、关闭、退订和等待终止。缓存、过期结果抑制、幂等、领域错误映射，放在操作调用周围，业务能看见自己的策略和状态。
 

@@ -515,7 +515,7 @@ describe("web socket runtime", () => {
 
     const controller = new AbortController();
     const [error, socket] = await run(useSocket, {
-      abort: controller.signal,
+      signal: controller.signal,
     });
 
     expect(error).toBeNull();
@@ -538,7 +538,7 @@ describe("web socket runtime", () => {
     });
 
     const controller = new AbortController();
-    const executePromise = run(useSocket, { abort: controller.signal });
+    const executePromise = run(useSocket, { signal: controller.signal });
     controller.abort(ERR_ABORTED);
 
     const [error, socket, connection] = await executePromise;
@@ -653,7 +653,7 @@ describe("web socket runtime", () => {
     const [error, socket] = await run(
       (client) => useSocket(client, { key: testKey }),
       {
-        abort: controller.signal,
+        signal: controller.signal,
         reconnect: { attempts: 2, delayMs: 20 },
       },
     );
@@ -711,7 +711,7 @@ describe("web socket runtime", () => {
           key: `abort-during-delay-${crypto.randomUUID()}`,
         }),
       {
-        abort: controller.signal,
+        signal: controller.signal,
         // The delay is the clock under test: abort is joined to the reconnecting signal, so the
         // delay only has to outlive that observation instead of a fixed sleep.
         reconnect: { attempts: 2, delayMs: 60_000 },
@@ -1328,7 +1328,7 @@ describe("web socket runtime", () => {
     });
 
     const [error, session] = await useSocket(
-      guardedClient({ abort: controller.signal }),
+      guardedClient({ signal: controller.signal }),
     );
 
     expect(error?.code).toBe("NET_ABORTED");

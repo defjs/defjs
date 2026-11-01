@@ -96,7 +96,7 @@ WebSocket インターセプターは `next` を高々一度しか呼べませ�
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP の Basic 資格情報
 - `basicAuthSSEInterceptor(provider, options?)` — SSE の Basic 資格情報
 
-`HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。`queryParams` はシリアライズ後の `new URLSearchParams(queryString)` です。ビルダーが query を作らなかったとき、設定済みの query シリアライザは呼ばれません。ビルダーの `URLSearchParams` はそのまま使われます。入力検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
+`HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`signal`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。`queryParams` はシリアライズ後の `new URLSearchParams(queryString)` です。ビルダーが query を作らなかったとき、設定済みの query シリアライザは呼ばれません。ビルダーの `URLSearchParams` はそのまま使われます。入力検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
 
 URL の検証はリクエストの組み立て中に始まります。ベースエンドポイントの欠落、相対 URL、無効な URL、不正な path は、ショートサーキットするものも含め、インターセプターやトランスポートが実行される前に `REQ_BUILD_FAILED` になります。ディスパッチ前には、最終的な `req.endpoint` が最終的な `req.baseEndpoint` に対して検証されます。解決後の URL はそのベースのオリジンを保ち、ディレクトリ内に収まる必要があります。path 内の C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への移動は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。インターセプターが意図的に `baseEndpoint` を別の有効な絶対 URL に差し替えることは許可されます。HTTP、SSE、WebSocket で共通の規則で、決定的な URL エラーは決してリトライされません。
 

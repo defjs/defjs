@@ -218,7 +218,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 
 - Run `bun run fmt`; the formatter is `bun fmt`.
 - Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`.
-- Reintroduce removed APIs: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `signal` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
+- Reintroduce removed APIs: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `abort` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
 - Put authentication or tracing into `builder`, or infer request placement from `input` field names.
 - Add a runtime dependency to `@defjs/core`, or import Node-only modules into shared code.
 - Leave a new public export without TSDoc, or skip regenerating the API data.

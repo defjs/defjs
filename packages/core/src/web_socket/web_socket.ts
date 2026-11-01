@@ -71,7 +71,7 @@ import { normalizeReconnectConfig, shouldReconnect } from "./reconnect";
  * | `reconnecting` | Preparing or waiting for a replacement socket after a close            |
  * | `closing`      | Closure was requested with `session.close()` or disposal               |
  * | `closed`       | Terminal: the session ended without an error or cancellation           |
- * | `aborted`      | Terminal: the session was cancelled through `abort` or `signal`        |
+ * | `aborted`      | Terminal: the session was cancelled through `signal`                   |
  * | `error`        | Terminal: the session failed, including a startup failure or `timeout` |
  *
  * Observe it with `session.state` and `session.onStateChange`.
@@ -282,9 +282,9 @@ interface UseWebSocketBaseConfig<TIncoming = unknown, TOutgoing = unknown> {
 }
 
 /**
- * WebSocket fields of {@link RequestOptions}, plus `abort`.
+ * WebSocket fields of {@link RequestOptions}, plus `signal`.
  *
- * `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for one call. `abort` covers the whole session, including after it opens. There is no startup-only deadline and no `signal` field.
+ * `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for one call. `signal` covers the whole session, including after it opens. There is no startup-only deadline and no `abort` field.
  *
  * @group web-socket
  */
@@ -293,7 +293,7 @@ export type UseWebSocketConfig<
   TOutgoing = unknown,
 > = UseWebSocketBaseConfig<TIncoming, TOutgoing> & {
   /** Aborts the session, including after it is open. */
-  abort?: AbortSignal;
+  signal?: AbortSignal;
 };
 
 /**
@@ -543,7 +543,7 @@ function createSocketRequest(
     return [undefined, createWebSocketRequest(args)];
   } catch (error) {
     return [
-      resolveAbortFault(args.abort) ??
+      resolveAbortFault(args.signal) ??
         createPreflightFault("REQ_BUILD_FAILED", error),
       undefined,
     ];
@@ -587,7 +587,7 @@ async function runWebSocketCommand<
 > {
   setSocketState(state, "connecting");
 
-  const callerAbort = config.abort;
+  const callerAbort = config.signal;
 
   // Same fast path as HTTP/SSE: an already aborted call does not parse, build, or validate the socket.
   if (callerAbort?.aborted) {
@@ -629,7 +629,7 @@ async function runWebSocketCommand<
   const reconnect = callOptions.reconnect;
   const heartbeatConfig = callOptions.heartbeat;
 
-  // `abort` stays in force after open and across reconnects.
+  // `signal` stays in force after open and across reconnects.
   const chainController = new AbortController();
   const chainSignal = mergeAbortSignals(chainController.signal, [callerAbort]);
   const signal = mergeAbortSignals(controller.signal, [chainSignal]);
@@ -679,7 +679,7 @@ async function runWebSocketCommand<
   }
 
   const [requestFault, wsRequest] = createSocketRequest({
-    abort: signal,
+    signal,
     baseEndpoint: clientConfig.endpoint,
     operation: endpoint.operation,
     params: built.params,
@@ -727,7 +727,7 @@ async function runWebSocketCommand<
     const executionSignal = signal;
     const pendingSession = new Promise<WebSocketSessionLike>(
       (resolveSession, rejectSession) => {
-        const signal = mergeAbortSignals(executionSignal, [req.abort]);
+        const signal = mergeAbortSignals(executionSignal, [req.signal]);
         const incomingQueue = new AsyncQueue<WebSocketIncomingData<TIncoming>>({
           maxSize: endpoint.maxIncomingQueueSize,
         });

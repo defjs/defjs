@@ -9,7 +9,7 @@ description: 在 React 中提供應用程式自己的 Client，並執行 SDK 定
 
 呢啲 plugins 只係設定同取得現有 `Client` 嘅可選輔助。你可以直接 import 應用固定嘅 Client、將明確 Client 傳俾可重用邏輯、用框架注入提供組件樹預設值同 subtree override，或者用應用自己嘅組織方式；SDK 定義唔要求經 plugin 執行。
 
-這個套件不會建立 Client、快取結果、重試操作或釋放傳輸資源。啟動工作的組件、effect 或資料請求函式庫負責取消、關閉及其他生命週期處理。`useClient()` 攞到嘅 client 要傳入操作。Hook 返回嘅就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。逐次呼叫需要 `abort` 等 options 時，喺操作行嗰度 call 佢：`getUser(client({ abort }), input)`。唔好傳俾 state setter，因為 `setState(client)` 會將佢當 updater 嚟 call。派生出嚟嘅 `Client` 值唔會被 `ClientProvider` 或者 `useClient` 接受。
+這個套件不會建立 Client、快取結果、重試操作或釋放傳輸資源。啟動工作的組件、effect 或資料請求函式庫負責取消、關閉及其他生命週期處理。`useClient()` 攞到嘅 client 要傳入操作。Hook 返回嘅就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。逐次呼叫需要 `signal` 等 options 時，喺操作行嗰度 call 佢：`getUser(client({ signal }), input)`。唔好傳俾 state setter，因為 `setState(client)` 會將佢當 updater 嚟 call。派生出嚟嘅 `Client` 值唔會被 `ClientProvider` 或者 `useClient` 接受。
 
 ## 基本用法
 
@@ -39,7 +39,7 @@ Hook 淨係供應 client。佢唔會開始工作、subscribe transport，或者�
 
 ## 由 query library own 嘅工作
 
-Query library 可以 own caching、retries、stale-result suppression 同 cancellation。將佢提供嘅 signal 做派生 client 上嘅 `abort` 傳過去。List pages 由 TanStack Query（或者類似嘅）呼叫操作——`@defjs/react` 只做 DI，**唔會** ship `useRequest`。
+Query library 可以 own caching、retries、stale-result suppression 同 cancellation。將佢提供嘅 signal 做派生 client 上嘅 `signal` 傳過去。List pages 由 TanStack Query（或者類似嘅）呼叫操作——`@defjs/react` 只做 DI，**唔會** ship `useRequest`。
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
@@ -53,7 +53,7 @@ SSE 同 WebSocket handles 會 outlive 操作呼叫。Await startup 之前先 reg
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-傳俾操作嘅 `abort` signal 會繼續管住已經 open 嘅 session。喺 cleanup abort 佢，session 會以 `aborted` 完結，`receive` 以 `AbortError` reject，所以上面個 `catch` 喺 effect dispose 之後會忽略 errors，只報真正嘅失敗（queue overflow、heartbeat 確認逾時）。Abort 咗嘅 SSE stream 就反過來，iterator 會正常完結。冇呢個 `catch` 嘅話，loop 嘅 rejection 就會變成 unhandled promise rejection。
+傳俾操作嘅 `signal` 會繼續管住已經 open 嘅 session。喺 cleanup abort 佢，session 會以 `aborted` 完結，`receive` 以 `AbortError` reject，所以上面個 `catch` 喺 effect dispose 之後會忽略 errors，只報真正嘅失敗（queue overflow、heartbeat 確認逾時）。Abort 咗嘅 SSE stream 就反過來，iterator 會正常完結。冇呢個 `catch` 嘅話，loop 嘅 rejection 就會變成 unhandled promise rejection。
 
 `EventStreamHandle` 同一條規則：喺 `finally` close，await `stream.closed`。WebSocket consumers 亦要 unsubscribe state/runtime-error listeners，同保持讀 `session.receive` — unread bounded queue 可以 overflow。
 

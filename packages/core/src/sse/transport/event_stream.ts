@@ -336,7 +336,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   async function start(): Promise<void> {
     while (!closeController.signal.aborted) {
       const attemptAbort = mergeAbortSignals(closeController.signal, [
-        request.abort,
+        request.signal,
       ]);
       let response: Response | undefined;
       let readerStarted = false;
@@ -414,11 +414,11 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
 
         const normalizedError = normalizeAbortError(
           error,
-          request.abort,
+          request.signal,
           closeController.signal,
         );
 
-        if (closeController.signal.aborted || request.abort?.aborted) {
+        if (closeController.signal.aborted || request.signal?.aborted) {
           finishAborted(attemptAbort);
           return;
         }
@@ -427,7 +427,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         const fatalError = toEventStreamFatalError(retryError);
         if (fatalError) {
           await observeFatalError(fatalError, attemptAbort);
-          if (closeController.signal.aborted || request.abort?.aborted) {
+          if (closeController.signal.aborted || request.signal?.aborted) {
             finishAborted(attemptAbort);
           } else {
             finishError(fatalError);
@@ -447,7 +447,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         try {
           retryDelay = await resolveRetryDelay(retryError, attemptAbort);
         } catch (policyError) {
-          if (closeController.signal.aborted || request.abort?.aborted) {
+          if (closeController.signal.aborted || request.signal?.aborted) {
             finishAborted(attemptAbort);
           } else {
             finishError(policyError);
@@ -465,7 +465,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         } catch (waitError) {
           // wait() rejects only from the merged close/request abort signal.
           /* istanbul ignore else -- @preserve */
-          if (closeController.signal.aborted || request.abort?.aborted) {
+          if (closeController.signal.aborted || request.signal?.aborted) {
             finishAborted(attemptAbort);
           } else {
             finishError(waitError);

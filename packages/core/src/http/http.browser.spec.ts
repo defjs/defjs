@@ -104,7 +104,7 @@ describe("http browser runtime", () => {
     });
 
     const [error, result, response] = await useDelay(
-      baseClient({ abort: AbortSignal.timeout(100) }),
+      baseClient({ signal: AbortSignal.timeout(100) }),
       { ms: 1000 },
     );
 

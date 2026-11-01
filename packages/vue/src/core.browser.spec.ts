@@ -169,7 +169,7 @@ describe("vue browser runtime", () => {
   test("injects the identical client and passes a derived client value through at runtime", () => {
     const client = createClient();
     const abort = new AbortController();
-    const childClient = client({ abort: abort.signal });
+    const childClient = client({ signal: abort.signal });
     let injected: DerivableClient | undefined;
     let overridden: DerivableClient | undefined;
 

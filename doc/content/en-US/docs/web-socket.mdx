@@ -96,7 +96,7 @@ As with HTTP and SSE, a missing, relative, or invalid base endpoint or an illega
 
 `session.close(code?, reason?)` requests terminal closure and stops heartbeat. Code must be `1000` or `3000..4999`; reason ≤ 123 UTF-8 bytes. Invalid close args throw before changing state. Use it with `await session.closed` when you need a manual close reason or the logical terminal result.
 
-The `abort` signal passed to the operation stays attached to the opened session and covers the whole connection, including after it is open. A timeout-shaped abort (`TimeoutError` or `ERR_TIMEOUT`, including `AbortSignal.timeout(...)`) ends it as `'error'` (`NET_TIMEOUT`). Any other reason ends it as `'aborted'`, and `receive` rejects with that reason itself, not a new `AbortError`. There is no startup-only deadline. An application that wants one creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns. See [SSE](/docs/sse#close-and-dispose).
+The `signal` passed to the operation stays attached to the opened session and covers the whole connection, including after it is open. A timeout-shaped abort (`TimeoutError` or `ERR_TIMEOUT`, including `AbortSignal.timeout(...)`) ends it as `'error'` (`NET_TIMEOUT`). Any other reason ends it as `'aborted'`, and `receive` rejects with that reason itself, not a new `AbortError`. There is no startup-only deadline. An application that wants one creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns. See [SSE](/docs/sse#close-and-dispose).
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

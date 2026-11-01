@@ -114,7 +114,7 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new TypeError("lost the race"),
       phase: "request",
-      request: { ...makeHttpRequest(), abort: AbortSignal.abort() },
+      request: { ...makeHttpRequest(), signal: AbortSignal.abort() },
       transport: "http",
     });
     expect(records).toEqual([]);
@@ -126,7 +126,7 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new Error("socket hang up"),
       phase: "request",
-      request: { ...makeHttpRequest(), abort: AbortSignal.abort(ERR_TIMEOUT) },
+      request: { ...makeHttpRequest(), signal: AbortSignal.abort(ERR_TIMEOUT) },
       transport: "http",
     });
     expect(records).toHaveLength(1);
@@ -141,7 +141,7 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new TypeError("refused"),
       phase: "connect",
-      request: { ...makeHttpRequest(), abort: abort.signal },
+      request: { ...makeHttpRequest(), signal: abort.signal },
       transport: "websocket",
     });
     expect(records).toHaveLength(1);
@@ -154,7 +154,7 @@ describe("client exception logs", () => {
       context: ROOT_CONTEXT,
       error: new TypeError("offline"),
       phase: "request",
-      request: { ...makeHttpRequest(), abort: new AbortController().signal },
+      request: { ...makeHttpRequest(), signal: new AbortController().signal },
       transport: "http",
     });
     expect(records).toHaveLength(1);

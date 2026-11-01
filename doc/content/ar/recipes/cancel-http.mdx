@@ -5,7 +5,7 @@ description: أجهض استدعاءً أو ضع له مهلة، واقرأ NET_
 
 # إلغاء استدعاء HTTP
 
-اجمع إشارة المستدعي مع مهلة على `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` إشارة واحدة. يُصنَّف الإجهاض اليدوي `NET_ABORTED`. وتُصنَّف المهلة `NET_TIMEOUT`.
+اجمع إشارة المستدعي مع مهلة على `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` إشارة واحدة. يُصنَّف الإجهاض اليدوي `NET_ABORTED`. وتُصنَّف المهلة `NET_TIMEOUT`.
 
 انظر [HTTP](/ar/docs/http#cancel-the-work) للتفاصيل.
 

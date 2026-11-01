@@ -150,7 +150,7 @@ ne peut pas être lu ou parsé, ou qui échoue son Struct, produit `RES_DECODE_F
 corps → `RES_DECODE_FAILED`. L’instantané d’ouverture peut encore atterrir dans le troisième emplacement du tuple.
 
 Le démarrage WebSocket couvre le handshake plus la première ouverture physique. Un échec du constructeur, une fermeture avant l’ouverture,
-ou un `abort` qui se déclenche avant l’ouverture de la session produisent tous un tuple de démarrage. Un instantané de connexion peut exister même quand
+ou un `signal` qui se déclenche avant l’ouverture de la session produisent tous un tuple de démarrage. Un instantané de connexion peut exister même quand
 le socket n’a jamais atteint `open`.
 
 | Transport | Après le démarrage                                                                                                                                                                                                                                                   |
@@ -159,7 +159,7 @@ le socket n’a jamais atteint `open`.
 | WebSocket | `onRuntimeError` pour les échecs de message, de file ou de heartbeat ; `receive` échoue sur les erreurs terminales ; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                     |
 | HTTP      | La promesse de l’opération se résout une fois, avec le tuple. Un intercepteur qui lève, un résultat d’intercepteur qui n’est pas un `HttpResponse`, ou un callback de progression qui lève devient un fault dedans (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
 
-`NET_ABORTED` et `NET_TIMEOUT` décrivent le signal `abort` de l’appelant. Pour HTTP ils résolvent le tuple de l’opération. Pour SSE et WebSocket, `abort` couvre toute la connexion, y compris après son ouverture : une échéance qui se déclenche après le démarrage résout `closed` plutôt que le tuple de l’opération. Tu fermes quand même un flux ou une
+`NET_ABORTED` et `NET_TIMEOUT` décrivent le `signal` de l’appelant. Pour HTTP ils résolvent le tuple de l’opération. Pour SSE et WebSocket, `signal` couvre toute la connexion, y compris après son ouverture : une échéance qui se déclenche après le démarrage résout `closed` plutôt que le tuple de l’opération. Tu fermes quand même un flux ou une
 session renvoyé et tu attends sa promesse terminale.
 
 ## Journalisation d’Error natif et cause

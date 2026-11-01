@@ -66,7 +66,7 @@ describe("web socket startup faults", () => {
           createWebSocketInterceptor((request, next) =>
             next({
               ...request,
-              abort: AbortSignal.abort(
+              signal: AbortSignal.abort(
                 mode === "timeout"
                   ? new DOMException("deadline", "TimeoutError")
                   : "stop",

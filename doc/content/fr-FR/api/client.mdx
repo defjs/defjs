@@ -55,7 +55,7 @@ Préséance pour une requête :
 
 Utilise un intercepteur pour les valeurs qui changent par requête : un jeton Bearer renouvelé, ou un HMAC sur le corps sérialisé.
 
-Il n’y a pas d’échéance par défaut au niveau du client. Passe `abort: AbortSignal.timeout(ms)` sur un client dérivé quand un appel en a besoin. Un abort manuel est `NET_ABORTED`. `AbortSignal.timeout` se classe en `NET_TIMEOUT`.
+Il n’y a pas d’échéance par défaut au niveau du client. Passe `signal: AbortSignal.timeout(ms)` sur un client dérivé quand un appel en a besoin. Un abort manuel est `NET_ABORTED`. `AbortSignal.timeout` se classe en `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -115,7 +115,7 @@ Le client racine renvoyé par `createClient`, sous deux formes. La factory est u
 
 <ApiSignature name="Client" />
 
-Un `Client` est une valeur, pas une fonction. Appeler le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) en renvoie une. Les sept champs connus sont copiés depuis l’argument dans un objet neuf. Les champs inconnus sont ignorés et les champs dont la valeur est `undefined` sont omis. Il n’y a pas de superposition au parent : `client()`, `client(undefined)` et `client({})` renvoient un client sans options de requête. Les valeurs imbriquées `heartbeat`, `protocols` et `reconnect` sont conservées par référence, pas clonées. WebSocket les lit quand l’opération s’exécute (il copie alors les champs de heartbeat et la liste protocols), donc modifier ces objets après la dérivation peut encore affecter un appel ultérieur. Les applications doivent les traiter comme immuables après les avoir passés. Dériver ne fait aucune I/O. Une valeur de client n’est pas appelable : l’appeler échoue à la compilation et lève une `TypeError` à l’exécution. Crée une valeur de client par appel. La même valeur peut être passée à beaucoup d’opérations, mais réutiliser une valeur qui porte `abort` partage ce signal. `abort` n’est pas combiné ; combine les signaux avec `AbortSignal.any` dans le code applicatif.
+Un `Client` est une valeur, pas une fonction. Appeler le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) en renvoie une. Les sept champs connus sont copiés depuis l’argument dans un objet neuf. Les champs inconnus sont ignorés et les champs dont la valeur est `undefined` sont omis. Il n’y a pas de superposition au parent : `client()`, `client(undefined)` et `client({})` renvoient un client sans options de requête. Les valeurs imbriquées `heartbeat`, `protocols` et `reconnect` sont conservées par référence, pas clonées. WebSocket les lit quand l’opération s’exécute (il copie alors les champs de heartbeat et la liste protocols), donc modifier ces objets après la dérivation peut encore affecter un appel ultérieur. Les applications doivent les traiter comme immuables après les avoir passés. Dériver ne fait aucune I/O. Une valeur de client n’est pas appelable : l’appeler échoue à la compilation et lève une `TypeError` à l’exécution. Crée une valeur de client par appel. La même valeur peut être passée à beaucoup d’opérations, mais réutiliser une valeur qui porte `signal` partage ce signal. `signal` n’est pas combiné ; combine les signaux avec `AbortSignal.any` dans le code applicatif.
 
 Ne passe pas la factory à un setter d’état React (`setState(factory)` l’appellerait comme updater) et ne l’utilise pas comme source d’un `watch` ou d’un `computed` Vue (ceux-ci appellent une fonction).
 
@@ -123,11 +123,11 @@ Ne passe pas la factory à un setter d’état React (`setState(factory)` l’ap
 
 <ApiSignature name="RequestOptions" />
 
-Sept champs plats. Chaque protocole lit les champs qu’il comprend et ignore le reste. Passer `heartbeat` à HTTP est ignoré, pas un fault. SSE ne lit que `abort` dans les options de requête. La reconnexion SSE vient de la configuration du client (`withSSEReconnect`), donc `client({ reconnect })` n’affecte que WebSocket. Il n’y a pas de filtre de protocole à la compilation, ni de champ `timeout` ou `signal`.
+Sept champs plats. Chaque protocole lit les champs qu’il comprend et ignore le reste. Passer `heartbeat` à HTTP est ignoré, pas un fault. SSE ne lit que `signal` dans les options de requête. La reconnexion SSE vient de la configuration du client (`withSSEReconnect`), donc `client({ reconnect })` n’affecte que WebSocket. Il n’y a pas de filtre de protocole à la compilation, ni de champ `timeout` ou `abort`.
 
 | Champ                | Protocole              | Remplacement                                                                                         |
 | -------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP, SSE et WebSocket | Abandonne l’appel. Pour SSE et WebSocket, il couvre toute la connexion, y compris après l’ouverture. |
+| `signal`             | HTTP, SSE et WebSocket | Abandonne l’appel. Pour SSE et WebSocket, il couvre toute la connexion, y compris après l’ouverture. |
 | `onUploadProgress`   | HTTP                   | Ignoré par les autres protocoles.                                                                    |
 | `onDownloadProgress` | HTTP                   | Ignoré par les autres protocoles.                                                                    |
 | `beforeConnect`      | WebSocket              | Remplace le réglage client pour cet appel.                                                           |
@@ -135,7 +135,7 @@ Sept champs plats. Chaque protocole lit les champs qu’il comprend et ignore le
 | `heartbeat`          | WebSocket              | Remplacé en entier. `timeoutMs` est l’attente d’acquittement, pas une échéance de requête.           |
 | `reconnect`          | WebSocket              | Remplacé en entier.                                                                                  |
 
-[`HttpExecuteOptions`](/fr-FR/api/core/httpexecuteoptions-type) est la tranche HTTP (`abort` plus la progression). [`EventStreamExecuteOptions`](/fr-FR/api/core/eventstreamexecuteoptions-type) est `{ abort? }`. [`WebSocketExecuteOptions`](/fr-FR/api/core/websocketexecuteoptions-type) est la tranche WebSocket plus `abort`.
+[`HttpExecuteOptions`](/fr-FR/api/core/httpexecuteoptions-type) est la tranche HTTP (`signal` plus la progression). [`EventStreamExecuteOptions`](/fr-FR/api/core/eventstreamexecuteoptions-type) est `{ signal? }`. [`WebSocketExecuteOptions`](/fr-FR/api/core/websocketexecuteoptions-type) est la tranche WebSocket plus `signal`.
 
 ### ClientOption
 

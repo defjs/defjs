@@ -20,7 +20,7 @@ Declara una solicitud tipada y llama a la operación con un cliente y su entrada
 claveado por estado. Omitir uno significa que ese cuerpo nunca se lee — consulta
 [La declaración es una afirmación](/es-ES/docs/design-decisions#declaration-is-an-assertion).
 
-Llamar a la operación devuelve una promesa de la tupla descrita en [`HttpAwaitResult`](/es-ES/api/core/httpawaitresult-type). Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). HTTP lee `abort` y los callbacks de progreso e ignora los demás campos.
+Llamar a la operación devuelve una promesa de la tupla descrita en [`HttpAwaitResult`](/es-ES/api/core/httpawaitresult-type). Pasa las opciones de cada llamada derivando un cliente a partir de [`RequestOptions`](/es-ES/api/core/requestoptions-type). HTTP lee `signal` y los callbacks de progreso e ignora los demás campos.
 
 Un estado no-2xx es `HTTP_STATUS` cuando no se declara un struct `error` o el cuerpo `error` declarado decodifica. El `data` del fault es el cuerpo
 `error` decodificado cuando se declaró uno, y `undefined` en caso contrario. Cuando un cuerpo `error` declarado no se puede leer (media type incorrecto, JSON inválido) o
@@ -46,7 +46,7 @@ que uno del cable; no hay un cortocircuito de confianza.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `abort` más `onDownloadProgress` y `onUploadProgress`. No hay campo `timeout` ni `signal`. Un plazo es `abort: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. `abort` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
+`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `signal` más `onDownloadProgress` y `onUploadProgress`. No hay campo `timeout` ni `abort`. Un plazo es `signal: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
 
 ## Tipos
 
@@ -63,7 +63,7 @@ En éxito, el tercer hueco lleva `body` solo cuando se declaró `output`. En fal
 
 ### HttpRequest
 
-Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` y `queryParams`. Cuando los interceptores la ven, `body` ya es el valor de cable — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual. `responseType` y `errorResponseType` son de solo lectura: se derivan de los kinds de struct `output` y `error` del endpoint y no deben cambiarse.
+Solicitud saliente normalizada: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` y `queryParams`. Cuando los interceptores la ven, `body` ya es el valor de cable — para JSON, un string de texto JSON — así que firma HMAC y digests contra eso, no contra la entrada del struct. Los interceptores ven `queryParams` como `new URLSearchParams(queryString)`. Un builder que devuelve `URLSearchParams` pasa esa instancia tal cual. `responseType` y `errorResponseType` son de solo lectura: se derivan de los kinds de struct `output` y `error` del endpoint y no deben cambiarse.
 
 ### HttpMeta
 
@@ -118,7 +118,7 @@ Los cuatro campos son opcionales. `query` es `URLSearchParams` o un record; un o
 
 ## UseRequestConfig
 
-`abort`, más `onDownloadProgress` y `onUploadProgress` opcionales. `HttpExecuteOptions` es este recorte. No hay campo `timeout` ni `signal`.
+`signal`, más `onDownloadProgress` y `onUploadProgress` opcionales. `HttpExecuteOptions` es este recorte. No hay campo `timeout` ni `abort`.
 
 ## RequestSuccessData
 

@@ -232,14 +232,14 @@ export function createFetchRequestInit(
   return createFetchInitBase(request, {
     defaultAccept: "application/json, text/plain, */*",
     headers,
-    signal: request.abort,
+    signal: request.signal,
     wrapReadableStreamBody: uploadProgress
       ? (body) =>
           wrapUploadProgressStream(
             body,
             uploadProgress,
             getContentLength(headers),
-            request.abort,
+            request.signal,
           )
       : undefined,
   });
@@ -341,7 +341,7 @@ async function parseFetchResponse(
 
   // Progress needs the chunks, so only an unobserved read takes the bulk path.
   if (response.body && platform && !downloadProgress) {
-    const bytes = await readWholeBody(response, httpRequest.abort, meta);
+    const bytes = await readWholeBody(response, httpRequest.signal, meta);
     try {
       body = parseBytesBody(responseType, bytes, contentType);
     } catch (error) {
@@ -350,7 +350,7 @@ async function parseFetchResponse(
   } else if (response.body) {
     const chunks: Uint8Array[] = [];
     const reader = response.body.getReader();
-    const signal = httpRequest.abort;
+    const signal = httpRequest.signal;
     // One listener covers every read: cancelling settles a pending read as done, and the loop then
     // reports the abort. Racing each read would add a listener and three promises per chunk.
     const cancelRead = () =>
@@ -433,7 +433,7 @@ async function parseFetchResponse(
  * global `fetch` resolved at send time. It rejects, rather than resolving with
  * a synthetic response, when no response reached the client.
  *
- * @param httpRequest - Normalized request (URL, headers, body, abort, progress hooks).
+ * @param httpRequest - Normalized request (URL, headers, body, signal, progress hooks).
  * @param fetchImpl - Fetch implementation; defaults to global `fetch`. The library default handle is called as
  *   `(url, init)` while the global is untouched, and its body is read in one piece unless download progress is observed. Any other handle receives a
  *   `Request` and its body is read chunk by chunk.
@@ -475,7 +475,7 @@ export async function fetchHandler(
     response = await sendFetchRequest(observed, fetchImpl);
   } catch (error) {
     // sendFetchRequest already turned cancellation into the abort cause, and cancellation outranks the observer.
-    throw observerFailure !== undefined && !httpRequest.abort?.aborted
+    throw observerFailure !== undefined && !httpRequest.signal?.aborted
       ? observerFailure
       : error;
   }
@@ -490,7 +490,7 @@ async function sendFetchRequest(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
 ): Promise<HttpResponse<unknown>> {
-  const abortSignal = httpRequest.abort;
+  const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
   let prepared = httpRequest;
   let request: Request | undefined;
@@ -568,7 +568,7 @@ async function prepareUploadProgressRequest(
     return request;
   }
 
-  request.abort?.throwIfAborted();
+  request.signal?.throwIfAborted();
   const converted = convertBodyToUploadStream(body);
   if (!converted) {
     return request;
@@ -590,8 +590,8 @@ async function prepareUploadProgressRequest(
   const total = getContentLength(headers);
   const startEvent = { lengthComputable: total > 0, loaded: 0, total };
   try {
-    if (request.abort) {
-      await awaitWithSignal(() => uploadProgress(startEvent), request.abort);
+    if (request.signal) {
+      await awaitWithSignal(() => uploadProgress(startEvent), request.signal);
     } else {
       await uploadProgress(startEvent);
     }

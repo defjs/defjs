@@ -178,7 +178,7 @@ describe("useClient", () => {
   it("returns the identical client and passes a derived client value through at runtime", () => {
     const client = createClient();
     const abort = new AbortController();
-    const derived = client({ abort: abort.signal });
+    const derived = client({ signal: abort.signal });
     let provided: DerivableClient | undefined;
     let overridden: unknown;
 

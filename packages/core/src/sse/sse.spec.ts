@@ -638,7 +638,7 @@ describe("request event stream runtime", () => {
     controller.abort("stop");
 
     const [error, stream, open] = await useStream(
-      baseClient({ abort: controller.signal }),
+      baseClient({ signal: controller.signal }),
     );
 
     expect(stream).toBeUndefined();
@@ -711,7 +711,7 @@ describe("request event stream runtime", () => {
     });
 
     const [error, stream] = await useStream(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -746,7 +746,7 @@ describe("request event stream runtime", () => {
     });
 
     const [error, stream] = await useStream(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -775,7 +775,7 @@ describe("request event stream runtime", () => {
       events: {},
       path: "/events",
     });
-    const pending = useStream(client({ abort: controller.signal }));
+    const pending = useStream(client({ signal: controller.signal }));
 
     await started;
     controller.abort("caller stopped");
@@ -1067,7 +1067,7 @@ describe("request event stream runtime", () => {
       });
 
       const [error, stream, open] = await useStream(
-        guardedClient({ abort: controller.signal }),
+        guardedClient({ signal: controller.signal }),
       );
 
       expect(stream).toBeUndefined();
@@ -1105,7 +1105,7 @@ describe("request event stream runtime", () => {
     });
 
     const [error, stream] = await useStream(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(error).toBeNull();
@@ -1137,7 +1137,7 @@ describe("request event stream runtime", () => {
     });
 
     const [error, stream] = await useStream(
-      baseClient({ abort: controller.signal }),
+      baseClient({ signal: controller.signal }),
     );
 
     expect(error).toBeNull();
@@ -1731,7 +1731,7 @@ describe("request event stream runtime", () => {
     });
 
     const [error, stream, open] = await useStream(
-      baseClient({ abort: controller.signal }),
+      baseClient({ signal: controller.signal }),
     );
 
     expect(stream).toBeUndefined();
@@ -2164,7 +2164,7 @@ describe("request event stream runtime", () => {
     const abortController = new AbortController();
 
     const [error, stream] = await useStream(
-      client({ abort: abortController.signal }),
+      client({ signal: abortController.signal }),
     );
 
     expect(error).toBeNull();
@@ -2268,11 +2268,11 @@ describe("request event stream runtime", () => {
     },
   );
 
-  test("should snapshot SSE abort before asynchronous work", async () => {
-    let abortReads = 0;
+  test("should snapshot SSE signal before asynchronous work", async () => {
+    let signalReads = 0;
     const options = {
-      get abort() {
-        abortReads += 1;
+      get signal() {
+        signalReads += 1;
         return undefined;
       },
     };
@@ -2301,7 +2301,7 @@ describe("request event stream runtime", () => {
     const [error, stream] = await useStream(client(options));
 
     expect(error).toBeNull();
-    expect(abortReads).toBe(1);
+    expect(signalReads).toBe(1);
     expect(handle).toHaveBeenCalledOnce();
     await expect(stream?.closed).resolves.toEqual({ kind: "eof" });
   });
@@ -2490,7 +2490,7 @@ describe("sse reconnect method policy", () => {
     });
 
     const [error, stream] = await useEvents(
-      guardedClient({ abort: controller.signal }),
+      guardedClient({ signal: controller.signal }),
     );
 
     expect(error?.code).toBe("NET_ABORTED");

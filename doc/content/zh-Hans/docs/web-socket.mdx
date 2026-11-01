@@ -96,7 +96,7 @@ Definition 的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及�
 
 `session.close(code?, reason?)` 请求终止关闭，并停掉 heartbeat。code 必须是 `1000` 或 `3000..4999`；reason ≤ 123 个 UTF-8 字节。非法 close 参数在改状态之前就抛。要手动关闭原因或逻辑终止结果时，配上 `await session.closed`。
 
-传给操作的 `abort` signal 会一直挂在已打开的 session 上，并覆盖整条连接，包括已经打开之后。超时形状的中止（`TimeoutError` 或 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）以 kind `error`（`NET_TIMEOUT`）结束。其他 abort reason 以 kind `aborted` 结束，`receive` 以该 reason 本身 reject，而不是新的 `AbortError`。没有仅限启动期的期限。应用若需要一个，就自己建 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。见 [SSE](/zh-Hans/docs/sse#close-and-dispose)。
+传给操作的 `signal` 会一直挂在已打开的 session 上，并覆盖整条连接，包括已经打开之后。超时形状的中止（`TimeoutError` 或 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）以 kind `error`（`NET_TIMEOUT`）结束。其他 abort reason 以 kind `aborted` 结束，`receive` 以该 reason 本身 reject，而不是新的 `AbortError`。没有仅限启动期的期限。应用若需要一个，就自己建 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。见 [SSE](/zh-Hans/docs/sse#close-and-dispose)。
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

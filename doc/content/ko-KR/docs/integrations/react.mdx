@@ -9,7 +9,7 @@ SDK나 공유 정의 모듈에서 작업을 import합니다. React 애플리케�
 
 이 플러그인은 기존 `Client`를 제공하고 읽기 위한 선택적 도구예요. 앱이 소유한 고정 클라이언트를 직접 import하거나, 재사용 로직에 Client를 명시적으로 넘기거나, 트리 기본값과 하위 트리 덮어쓰기에 프레임워크 주입을 쓰거나, 앱만의 구성을 선택해도 돼요. SDK 정의에 이 플러그인이 필수는 아니에요.
 
-기존 `@defjs/core` 클라이언트를 React 트리에 연결해요. Context와 `useClient()`를 받아요. 패키지는 클라이언트를 **만들지 않고**, 캐시를 더하지 않으며, 작업을 재시도하지 않고, 전송 리소스를 dispose하지도 않아요. 작업을 시작한 컴포넌트, effect, 또는 데이터 라이브러리가 소유해요. `useClient()`가 준 클라이언트는 작업에 넘깁니다. 훅은 제공된 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 그대로 돌려줘요. `abort` 같은 호출별 옵션이 필요하면 작업이 실행되는 곳에서 호출하세요: `getUser(client({ abort }), input)`. state setter에 넘기지 마세요. `setState(client)`는 updater로 호출해요. 파생된 `Client` 값은 `ClientProvider`와 `useClient`가 받지 않아요.
+기존 `@defjs/core` 클라이언트를 React 트리에 연결해요. Context와 `useClient()`를 받아요. 패키지는 클라이언트를 **만들지 않고**, 캐시를 더하지 않으며, 작업을 재시도하지 않고, 전송 리소스를 dispose하지도 않아요. 작업을 시작한 컴포넌트, effect, 또는 데이터 라이브러리가 소유해요. `useClient()`가 준 클라이언트는 작업에 넘깁니다. 훅은 제공된 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 그대로 돌려줘요. `signal` 같은 호출별 옵션이 필요하면 작업이 실행되는 곳에서 호출하세요: `getUser(client({ signal }), input)`. state setter에 넘기지 마세요. `setState(client)`는 updater로 호출해요. 파생된 `Client` 값은 `ClientProvider`와 `useClient`가 받지 않아요.
 
 ## 기본 사용법
 
@@ -39,7 +39,7 @@ SDK나 공유 정의 모듈에서 작업을 import합니다. React 애플리케�
 
 ## 쿼리 작업 소유하기
 
-쿼리 라이브러리가 캐싱, 재시도, 낡은 결과 억제, 취소를 소유할 수 있어요. 라이브러리가 주는 signal은 파생 클라이언트의 `abort`로 넘기세요. 목록 페이지에서는 TanStack Query(또는 비슷한 것)에서 작업을 호출하세요. `@defjs/react`는 DI만 하고 `useRequest`를 제공하지 **않아요**.
+쿼리 라이브러리가 캐싱, 재시도, 낡은 결과 억제, 취소를 소유할 수 있어요. 라이브러리가 주는 signal은 파생 클라이언트의 `signal`로 넘기세요. 목록 페이지에서는 TanStack Query(또는 비슷한 것)에서 작업을 호출하세요. `@defjs/react`는 DI만 하고 `useRequest`를 제공하지 **않아요**.
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
@@ -53,7 +53,7 @@ SSE와 WebSocket 핸들은 작업 호출보다 오래 살아요. 시작을 await
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-작업에 넘긴 `abort` 신호는 열린 세션에도 계속 적용돼요. cleanup에서 abort하면 세션이 `aborted`로 끝나고 `receive`가 `AbortError`로 reject되므로, 위의 `catch`는 effect가 dispose된 뒤의 오류를 무시하고 진짜 실패(큐 오버플로, heartbeat 확인 타임아웃)만 보고해요. abort된 SSE 스트림은 대신 이터레이터가 정상적으로 끝나요. `catch`가 없으면 루프의 reject가 처리되지 않은 프로미스 rejection이 돼요.
+작업에 넘긴 `signal`은 열린 세션에도 계속 적용돼요. cleanup에서 abort하면 세션이 `aborted`로 끝나고 `receive`가 `AbortError`로 reject되므로, 위의 `catch`는 effect가 dispose된 뒤의 오류를 무시하고 진짜 실패(큐 오버플로, heartbeat 확인 타임아웃)만 보고해요. abort된 SSE 스트림은 대신 이터레이터가 정상적으로 끝나요. `catch`가 없으면 루프의 reject가 처리되지 않은 프로미스 rejection이 돼요.
 
 `EventStreamHandle`도 같은 규칙이에요. `finally`에서 닫고 `stream.closed`를 await 하세요. WebSocket 소비자는 상태/런타임 오류 리스너도 구독 해제하고 `session.receive`를 계속 읽어야 해요 — 읽지 않은 한정 큐는 오버플로할 수 있어요.
 

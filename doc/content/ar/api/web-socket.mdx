@@ -16,7 +16,7 @@ description: defineWebSocket، والجلسة، وخيارات الطلب.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-يُرجع الاستدعاء `[null, session, connection]` أو `[error, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `abort` و`beforeConnect` و`heartbeat` و`protocols` و`reconnect`، ويتجاهل حقول تقدّم HTTP.
+يُرجع الاستدعاء `[null, session, connection]` أو `[error, undefined, connection?]`. مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ WebSocket الحقول `signal` و`beforeConnect` و`heartbeat` و`protocols` و`reconnect`، ويتجاهل حقول تقدّم HTTP.
 
 يستبدل كل من `beforeConnect` و`heartbeat` و`protocols` و`reconnect` قيمة العميل لذلك الاستدعاء كاملة. أسبقية البروتوكول هي العميل المشتق، ثم `withWebSocketProtocols`، ثم `protocols` في التعريف. `heartbeat.timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.
 
@@ -55,9 +55,9 @@ async function consume(
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` هو [`UseWebSocketConfig`](/ar/api/core/usewebsocketconfig-type): `beforeConnect` و`heartbeat` و`protocols` و`reconnect` و`abort`. `WebSocketHeartbeatConfig`: `intervalMs`، و`message` و`isAck` و`timeoutMs` الاختيارية. لا يوجد حقل `timeout` أو `signal`.
+`WebSocketExecuteOptions` هو [`UseWebSocketConfig`](/ar/api/core/usewebsocketconfig-type): `beforeConnect` و`heartbeat` و`protocols` و`reconnect` و`signal`. `WebSocketHeartbeatConfig`: `intervalMs`، و`message` و`isAck` و`timeoutMs` الاختيارية. لا يوجد حقل `timeout` أو `abort`.
 
-يغطي `abort` الجلسة كاملة، بما فيها ما بعد فتحها. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة للبدء فقط ولا مهلة افتراضية على مستوى العميل. `abort` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. يُستبدل `heartbeat` كاملًا؛ وينتظر `timeoutMs` فيه إقرارًا وليس مهلة للطلب.
+يغطي `signal` الجلسة كاملة، بما فيها ما بعد فتحها. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة للبدء فقط ولا مهلة افتراضية على مستوى العميل. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. يُستبدل `heartbeat` كاملًا؛ وينتظر `timeoutMs` فيه إقرارًا وليس مهلة للطلب.
 
 عندما يُضبط `reconnect`، تكون `attempts` افتراضيًا 3 لكل انقطاع؛ و`0` يعطّل. يعيد `open` الناجح ضبط الميزانية وأُس التراجع، فيبدأ كل انقطاع جديد عند إعادة المحاولة 1. حذف `attempts` لا يمنح محاولات غير محدودة داخل انقطاع واحد. انظر [العميل](/ar/api/client) للافتراضيات وقواعد التحقق.
 
@@ -87,7 +87,7 @@ session.send({ type: "message", text: "Hello" });
 
 ## UseWebSocketConfig
 
-`beforeConnect` و`heartbeat` و`protocols` و`reconnect` و`abort`. `WebSocketExecuteOptions` هو هذه الشريحة. لا يوجد حقل `signal`.
+`beforeConnect` و`heartbeat` و`protocols` و`reconnect` و`signal`. `WebSocketExecuteOptions` هو هذه الشريحة. لا يوجد حقل `abort`.
 
 ## SocketAwaitResult
 

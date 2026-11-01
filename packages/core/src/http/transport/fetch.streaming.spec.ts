@@ -121,7 +121,7 @@ describe("Fetch handler streaming", () => {
 
     try {
       const response = await fetchHandler({
-        abort: controller.signal,
+        signal: controller.signal,
         body: stream,
         endpoint: "/upload",
         baseEndpoint: "https://example.com",
@@ -283,7 +283,7 @@ describe("Fetch handler streaming", () => {
     const failure = await settleWithin(
       fetchHandler(
         {
-          abort: controller.signal,
+          signal: controller.signal,
           baseEndpoint: "https://example.com",
           body: stream,
           endpoint: "/upload",
@@ -311,7 +311,7 @@ describe("Fetch handler streaming", () => {
     const fetchMock = vi.fn(() => new Promise<Response>(() => undefined));
     const pending = fetchHandler(
       {
-        abort: controller.signal,
+        signal: controller.signal,
         baseEndpoint: "https://example.com",
         body: stream,
         endpoint: "/upload",
@@ -362,7 +362,7 @@ describe("Fetch handler streaming", () => {
     });
     const pending = fetchHandler(
       {
-        abort: controller.signal,
+        signal: controller.signal,
         baseEndpoint: "https://example.com",
         body: stream,
         endpoint: "/upload",
@@ -496,7 +496,7 @@ describe("Fetch handler streaming", () => {
 
     const response = await fetchHandler(
       {
-        abort: new AbortController().signal,
+        signal: new AbortController().signal,
         baseEndpoint: "https://example.com",
         body: body(),
         endpoint: "/upload",
@@ -691,7 +691,7 @@ describe("Fetch handler streaming", () => {
     const observerError = new Error("observer failed after abort");
     const pending = fetchHandler(
       {
-        abort: controller.signal,
+        signal: controller.signal,
         baseEndpoint: "https://example.com",
         body: new ReadableStream<Uint8Array>({
           start(streamController) {

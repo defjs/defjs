@@ -16,7 +16,7 @@ description: defineWebSocket、session，以及请求选项。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。按次选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 传入。WebSocket 读取 `abort`、`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect`，忽略 HTTP 进度字段。
+调用返回 `[null, session, connection]` 或 `[error, undefined, connection?]`。按次选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 传入。WebSocket 读取 `signal`、`beforeConnect`、`heartbeat`、`protocols` 和 `reconnect`，忽略 HTTP 进度字段。
 
 `beforeConnect`、`heartbeat`、`protocols` 和 `reconnect` 各自整体替换该次调用的 client 值。protocols 的优先级是：派生 client，然后是 `withWebSocketProtocols`，最后是定义里的 `protocols`。`heartbeat.timeoutMs` 是等待确认的时间，不是请求期限。
 
@@ -55,9 +55,9 @@ async function consume(
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `abort`。`WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。没有 `timeout` 或 `signal` 字段。
+`WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `signal`。`WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。没有 `timeout` 或 `abort` 字段。
 
-`abort` 覆盖整个 session，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。`abort` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。`heartbeat` 整体替换；它的 `timeoutMs` 等待确认，不是请求期限。
+`signal` 覆盖整个 session，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。`signal` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。`heartbeat` 整体替换；它的 `timeoutMs` 等待确认，不是请求期限。
 
 设了 `reconnect` 时，每次连接中断的 `attempts` 默认 3；`0` 禁用。成功 `open` 后会重置预算和退避指数，因此每次新的中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断期间可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
 
@@ -87,7 +87,7 @@ session.send({ type: "message", text: "Hello" });
 
 ## UseWebSocketConfig
 
-`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `abort`。`WebSocketExecuteOptions` 就是这个切片。没有 `signal` 字段。
+`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `signal`。`WebSocketExecuteOptions` 就是这个切片。没有 `abort` 字段。
 
 ## SocketAwaitResult
 

@@ -159,7 +159,7 @@ Der Body-Kind wird am Wert entschieden, erster Match:
 
 ## Observer und Policy-Platzierung
 
-Interceptor sind für transportweite Policy: Auth, Tracing, Short-Circuit, reviewed Retry. Sie laufen nur für ihren Transport und komponieren in Onion-Order. Request-Optionen an einem abgeleiteten Client sind für die Lifetime dieser Arbeit: `abort`, WebSocket-Heartbeat und opt-in Reconnect.
+Interceptor sind für transportweite Policy: Auth, Tracing, Short-Circuit, reviewed Retry. Sie laufen nur für ihren Transport und komponieren in Onion-Order. Request-Optionen an einem abgeleiteten Client sind für die Lifetime dieser Arbeit: `signal`, WebSocket-Heartbeat und opt-in Reconnect.
 
 Observer melden, was passiert ist, ohne zweiter Owner zu werden. SSE `onInvalidEvent`, WebSocket-State-Listener und Runtime-Error-Listener sind für begrenzte Diagnostics und Metrics. Der zurückgegebene Stream oder die Session besitzt weiterhin Iteration, Close, Unsubscribe und Terminal-Warten. Caching, Unterdrückung veralteter Results, Idempotency und Domain-Error-Mapping gehören um den Operationsaufruf, wo deine App ihre eigene Policy und ihren State sieht.
 

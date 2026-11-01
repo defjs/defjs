@@ -77,7 +77,7 @@ API 定義留喺 SDK 模組。服務地址、認證、攔截器同執行壽命�
 - 已聲明嘅 body（2xx 係 `output`，其餘係 `error`）解唔出 → `RES_DECODE_FAILED` 或者 `RES_STRUCT_MISMATCH`，唔理 status 係咩
 - Fetch fail / cancel / deadline → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-Deadline 係 `client({ abort: AbortSignal.timeout(ms) })`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇 client 層級嘅預設 deadline。某次呼叫要自己嘅 `abort` 時，派生一個 client；睇 [Client](/zh-Hant-HK/docs/client)。Cancellation 淨係話你 caller 見到咩 — 唔證明 server write 有冇 commit。
+Deadline 係 `client({ signal: AbortSignal.timeout(ms) })`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇 client 層級嘅預設 deadline。某次呼叫要自己嘅 `signal` 時，派生一個 client；睇 [Client](/zh-Hant-HK/docs/client)。Cancellation 淨係話你 caller 見到咩 — 唔證明 server write 有冇 commit。
 
 ## 下一步配方
 

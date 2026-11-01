@@ -18,7 +18,7 @@ description: defineRequest、request options，以及 HTTP request／response �
 
 `output` 是 2xx body 的單一 struct；`error` 是每個非 2xx body 的單一 struct。兩者都不按狀態碼分鍵。省略哪個，那個 body 就根本不會被讀——見 [宣告即斷言](/zh-Hant-TW/docs/design-decisions#declaration-is-an-assertion)。
 
-呼叫操作會回傳一個 promise，其值是 [`HttpAwaitResult`](/zh-Hant-TW/api/core/httpawaitresult-type) 所描述的 tuple。每次呼叫的 options 要從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。HTTP 讀 `abort` 與進度回呼，並忽略其他欄位。
+呼叫操作會回傳一個 promise，其值是 [`HttpAwaitResult`](/zh-Hant-TW/api/core/httpawaitresult-type) 所描述的 tuple。每次呼叫的 options 要從 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 衍生 client 來傳。HTTP 讀 `signal` 與進度回呼，並忽略其他欄位。
 
 非 2xx 狀態在沒有宣告 `error` struct，或已宣告的 `error` body 解碼成功時，才是 `HTTP_STATUS`。宣告過 `error` 時 fault 的 `data` 是解碼後的錯誤 body，否則是 `undefined`。如果已宣告的 `error` body 無法讀取（media type 錯誤、JSON 無效），或與其 struct 不符，fault 會改為 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，而回應狀態仍會記在 metadata 中。失敗時 tuple 第三項是 `undefined`；回應 metadata 由 fault 攜帶。
 
@@ -38,7 +38,7 @@ description: defineRequest、request options，以及 HTTP request／response �
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 的 HTTP 切片：[`UseRequestConfig`](/zh-Hant-TW/api/core/userequestconfig-type)，也就是 `abort` 加上 `onDownloadProgress` 與 `onUploadProgress`。沒有 `timeout` 或 `signal` 欄位。期限是 `abort: AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動取消是 `NET_ABORTED`。`abort` 是該次呼叫的 signal；在應用程式碼裡用 `AbortSignal.any` 組合 signals。沒有 client 層級的預設期限。其他請求欄位，例如 `heartbeat`，會被忽略。
+`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 的 HTTP 切片：[`UseRequestConfig`](/zh-Hant-TW/api/core/userequestconfig-type)，也就是 `signal` 加上 `onDownloadProgress` 與 `onUploadProgress`。沒有 `timeout` 或 `abort` 欄位。期限是 `signal: AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動取消是 `NET_ABORTED`。`signal` 是該次呼叫的 signal；在應用程式碼裡用 `AbortSignal.any` 組合 signals。沒有 client 層級的預設期限。其他請求欄位，例如 `heartbeat`，會被忽略。
 
 ## 型別
 
@@ -54,7 +54,7 @@ description: defineRequest、request options，以及 HTTP request／response �
 
 ### HttpRequest
 
-正規化後的外送 request：`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、`withCredentials`、`xsrf`、`downloadProgress`／`uploadProgress`、`baseEndpoint`、`queryString` 與 `queryParams`。Interceptors 看到它時，`body` 已經是線上值——JSON 就是一段 JSON 文字字串——所以 HMAC 與摘要請對它計算，而不是對 struct input 計算。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。Builder 回傳 `URLSearchParams` 時會把那個實例傳下去。`responseType` 與 `errorResponseType` 是唯讀的：它們由端點的 `output` 與 `error` struct kind 推導而來，不能修改。
+正規化後的外送 request：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress`／`uploadProgress`、`baseEndpoint`、`queryString` 與 `queryParams`。Interceptors 看到它時，`body` 已經是線上值——JSON 就是一段 JSON 文字字串——所以 HMAC 與摘要請對它計算，而不是對 struct input 計算。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。Builder 回傳 `URLSearchParams` 時會把那個實例傳下去。`responseType` 與 `errorResponseType` 是唯讀的：它們由端點的 `output` 與 `error` struct kind 推導而來，不能修改。
 
 ### HttpMeta
 
@@ -102,7 +102,7 @@ body 已按宣告的 struct 解碼成功的回應。拿到這個型別就是解�
 
 ## UseRequestConfig
 
-`abort`，加上選填的 `onDownloadProgress` 與 `onUploadProgress`。`HttpExecuteOptions` 就是這個切片。沒有 `timeout` 或 `signal` 欄位。
+`signal`，加上選填的 `onDownloadProgress` 與 `onUploadProgress`。`HttpExecuteOptions` 就是這個切片。沒有 `timeout` 或 `abort` 欄位。
 
 ## RequestSuccessData
 
