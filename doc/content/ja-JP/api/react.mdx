@@ -13,7 +13,7 @@ description: ClientProvider、明示的なクライアントの上書きに対�
 
 <ApiSignature name="ClientProvider" />
 
-Context provider です。`createClient` で作ったクライアントを渡します。入れ子の `ClientProvider` はそのサブツリーのクライアントを上書きし、`useClient()` は一番近いものを読みます。別の `client` を渡すと、子孫から見える context の値が変わります。
+Context provider です。`createClient` が返す `DerivableClient` を渡します。入れ子の `ClientProvider` はそのサブツリーのクライアントを上書きし、`useClient()` は一番近いものを読みます。別の `client` を渡すと、子孫から見える context の値が変わります。
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,7 +21,7 @@ Context provider です。`createClient` で作ったクライアントを渡し
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` は明示的なクライアントを優先して返します。省略または `undefined` なら最も近い `ClientProvider` を読み、どちらからもクライアントを取得できない場合にのみ `Error` を throw します。引数なしの `useClient()` も引き続き有効です。そのクライアントを操作に渡してください。`Client` は関数です。state setter に渡さないでください。`setState(client)` は updater としてそれを呼びます。
+`useClient(overrideClient)` は明示的なクライアントを優先して返します。省略または `undefined` なら最も近い `ClientProvider` を読み、どちらからもクライアントを取得できない場合にのみ `Error` を throw します。引数なしの `useClient()` も引き続き有効です。そのクライアントを操作に渡してください。フックは渡された[`DerivableClient`](/ja-JP/api/core/derivableclient-type)を返します。操作を実行する場所でリクエスト options を付けて呼ぶと、`Client` 値が派生します。state setter には渡さないでください。`setState(client)` は updater としてそれを呼びます。派生した `Client` 値は `ClientProvider` にも `useClient` にも渡せません。
 
 明示的なクライアントがあっても、`useClient(explicitClient)` は必ずコンポーネントまたはカスタムフックのトップレベルで呼び、通常の関数やイベントコールバックでは呼ばないでください。`explicitClient ?? useClient()` はフックの条件付き呼び出しになるため無効です。明示的な値は Context に書き込まず、provider も作りません。フックは引き続き Context を購読します。
 

@@ -14,7 +14,7 @@ export function createHttpRequest(
   input: unknown,
   builder: OutboundBuilder | undefined,
   options: {
-    abort: AbortSignal;
+    signal: AbortSignal;
     baseEndpoint: string;
     defaultHeaders?: Headers;
     downloadProgress?: HttpProgressFn;
@@ -36,7 +36,7 @@ export function createHttpRequest(
   },
 ): HttpRequest {
   const request = createBaseTransportRequest(method, path, input, builder, {
-    abort: options.abort,
+    signal: options.signal,
     baseEndpoint: options.baseEndpoint,
     defaultHeaders: options.defaultHeaders,
     inputDeclared: options.inputDeclared,

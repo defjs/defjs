@@ -16,13 +16,13 @@ description: defineEventStream, опции запроса и stream handle.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-Вызов возвращает `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, fault — это `Fault` этого struct; иначе `Fault<undefined>`. Передавай `abort`, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). SSE читает только `abort` и игнорирует прогресс и поля WebSocket.
+Вызов возвращает `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, fault — это `Fault` этого struct; иначе `Fault<undefined>`. Передавай `signal`, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). SSE читает только `signal` и игнорирует прогресс и поля WebSocket.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` — это `{ abort? }`. Полей `timeout` или `signal` нет, и колбэка прогресса нет. `abort` покрывает весь поток, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. Приложение, которому нужен дедлайн только на старт, создаёт свой `AbortController`, прерывает его через `new DOMException("...", "TimeoutError")` из таймера и сбрасывает таймер после того, как `await` вернулся.
+`EventStreamExecuteOptions` — это `{ signal? }`. Полей `timeout` или `abort` нет, и колбэка прогресса нет. `signal` покрывает весь поток, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. Приложение, которому нужен дедлайн только на старт, создаёт свой `AbortController`, прерывает его через `new DOMException("...", "TimeoutError")` из таймера и сбрасывает таймер после того, как `await` вернулся.
 
 ## EventStreamHandle
 

@@ -10,16 +10,16 @@ import {
 
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withHTTPHandle,
   withXSRF,
 } from "../client";
-import type { Client } from "../client";
 import { struct } from "../struct";
 import { defineRequest } from "./index";
 
 describe("http browser runtime", () => {
-  let baseClient: Client;
+  let baseClient: DerivableClient;
 
   beforeEach(() => {
     baseClient = createClient(withEndpoint(inject("testServerHost")));
@@ -104,7 +104,7 @@ describe("http browser runtime", () => {
     });
 
     const [error, result, response] = await useDelay(
-      baseClient({ abort: AbortSignal.timeout(100) }),
+      baseClient({ signal: AbortSignal.timeout(100) }),
       { ms: 1000 },
     );
 

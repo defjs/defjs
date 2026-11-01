@@ -110,7 +110,7 @@ SSE 與 WebSocket 的第三項是啟動快照，即使啟動失敗也可能有�
 
 SSE 在 resolve handle 之前會驗證狀態、`text/event-stream` 以及 body 是否存在。非 2xx → 在省略 `error` 或其 body 解碼成功時是 `HTTP_STATUS`。已宣告的握手 body 讀不出來、剖析失敗，或 Struct 失敗，會產生 `RES_DECODE_FAILED`；Struct 失敗時 `cause` 是 `StructError`。媒體類型不對 → `RES_MEDIA_TYPE_INVALID`。成功的握手卻沒有 body → `RES_DECODE_FAILED`。開啟快照照樣可能落在 tuple 第三項。
 
-WebSocket 的啟動期覆蓋握手加第一次實體 open。建構器失敗、open 之前就關閉，或 session 開啟前就觸發的 `abort`，都會產出一個啟動 tuple。即使 socket 從沒到過 `open`，連線快照也可能存在。
+WebSocket 的啟動期覆蓋握手加第一次實體 open。建構器失敗、open 之前就關閉，或 session 開啟前就觸發的 `signal`，都會產出一個啟動 tuple。即使 socket 從沒到過 `open`，連線快照也可能存在。
 
 | 傳輸      | 啟動之後                                                                                                                                                                                        |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -118,7 +118,7 @@ WebSocket 的啟動期覆蓋握手加第一次實體 open。建構器失敗、op
 | WebSocket | 訊息／佇列／心跳失敗走 `onRuntimeError`；終止性錯誤讓 `receive` 失敗；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                               |
 | HTTP      | 操作的 Promise 只會確定結果一次，結果為 tuple。攔截器拋出錯誤、回傳非 `HttpResponse` 的結果，或進度回呼拋出錯誤時，都會在 tuple 中回傳 fault（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
 
-`NET_ABORTED` 與 `NET_TIMEOUT` 描述的是呼叫方的 `abort` signal。對 HTTP，它們讓操作 tuple 確定結果。對 SSE 與 WebSocket，`abort` 涵蓋整條連線，包含開啟之後：啟動之後才觸發的期限會讓 `closed` 確定結果，而不是操作 tuple。回傳給你的 stream 或 session，你照樣要關掉並 await 它的終態 promise。
+`NET_ABORTED` 與 `NET_TIMEOUT` 描述的是呼叫方的 `signal`。對 HTTP，它們讓操作 tuple 確定結果。對 SSE 與 WebSocket，`signal` 涵蓋整條連線，包含開啟之後：啟動之後才觸發的期限會讓 `closed` 確定結果，而不是操作 tuple。回傳給你的 stream 或 session，你照樣要關掉並 await 它的終態 promise。
 
 ## 原生 Error 的 log 與 cause
 

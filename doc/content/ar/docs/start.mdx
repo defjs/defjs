@@ -77,7 +77,7 @@ User not found
 - جسم معلَن (`output` لـ 2xx، و`error` فيما عداها) لا يُفك ← `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH`، أيًّا كانت الحالة
 - فشل Fetch / إلغاء / مهلة ← `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-المهلة هي `client({ abort: AbortSignal.timeout(ms) })` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة افتراضية على مستوى العميل. اشتق عميلًا عندما يحتاج استدعاء واحد إلى `abort` خاص به؛ انظر [العميل](/ar/docs/client). يخبرك الإلغاء بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
+المهلة هي `client({ signal: AbortSignal.timeout(ms) })` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة افتراضية على مستوى العميل. اشتق عميلًا عندما يحتاج استدعاء واحد إلى `signal` خاص به؛ انظر [العميل](/ar/docs/client). يخبرك الإلغاء بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
 
 ## الوصفات التالية
 

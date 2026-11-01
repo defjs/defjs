@@ -98,7 +98,7 @@ description: صدّر تعريفات تدفقات أحداث محدَّدة ال
 
 الأنواع النهائية (`closed.kind`): `eof` أو `aborted` أو `error`. تحمل نتيجة `error` أيضًا `closed.code`، وهو `EventStreamFaultCode`: `CAP_BUFFER_EXCEEDED` أو `CAP_QUEUE_OVERFLOW` أو `EXT_HOOK_FAILED` أو `EXT_OBSERVER_FAILED` أو `NET_TIMEOUT` أو `NET_UNREACHABLE` أو `RES_DECODE_FAILED` أو `RES_MEDIA_TYPE_INVALID`.
 
-يجهض `close(reason)` المحاولة النشطة، ويغلق الطابور، ويستقر كـ `aborted`، حتى عندما يكون السبب `TimeoutError`. تبقى إشارة `abort` الممرَّرة إلى العملية مرفقة بعد فتح التدفق وتغطي الاتصال كاملًا. إجهاضها عادةً ينهي المكرّر ويبلّغ `aborted`. إذا كان سبب الإجهاض `TimeoutError` أو `ERR_TIMEOUT` (مثل `AbortSignal.timeout(...)`)، يرمي المكرّر `ERR_TIMEOUT` ويبلّغ `closed` عن `kind: 'error'` مع `code: 'NET_TIMEOUT'`. لا توجد مهلة للبدء فقط على العميل. التطبيق الذي يريد واحدة ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`:
+يجهض `close(reason)` المحاولة النشطة، ويغلق الطابور، ويستقر كـ `aborted`، حتى عندما يكون السبب `TimeoutError`. تبقى إشارة `signal` الممرَّرة إلى العملية مرفقة بعد فتح التدفق وتغطي الاتصال كاملًا. إجهاضها عادةً ينهي المكرّر ويبلّغ `aborted`. إذا كان سبب الإجهاض `TimeoutError` أو `ERR_TIMEOUT` (مثل `AbortSignal.timeout(...)`)، يرمي المكرّر `ERR_TIMEOUT` ويبلّغ `closed` عن `kind: 'error'` مع `code: 'NET_TIMEOUT'`. لا توجد مهلة للبدء فقط على العميل. التطبيق الذي يريد واحدة ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`:
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

@@ -77,7 +77,7 @@ API 定义留在 SDK 模块里。服务地址、凭证、拦截器和执行寿�
 - 声明过的 body（2xx 是 `output`，其余是 `error`）解不出来 → `RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，与状态无关
 - Fetch 失败 / 取消 / 期限 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-期限是 `client({ abort: AbortSignal.timeout(ms) })`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有 client 级的默认期限。某一次调用需要自己的 `abort` 时，派生一个 client；见 [Client](/zh-Hans/docs/client)。取消只说明调用方看到了什么——无法说明服务端写入是否已经提交。
+期限是 `client({ signal: AbortSignal.timeout(ms) })`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有 client 级的默认期限。某一次调用需要自己的 `signal` 时，派生一个 client；见 [Client](/zh-Hans/docs/client)。取消只说明调用方看到了什么——无法说明服务端写入是否已经提交。
 
 ## 接下来的操作示例
 

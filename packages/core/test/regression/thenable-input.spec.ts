@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   defineEventStream,
   defineRequest,
   defineWebSocket,
@@ -10,12 +11,12 @@ import {
   withSSEHandle,
   withWebSocketHandle,
 } from "../../src";
-import type { AnyStruct, Client, HttpExecuteOptions } from "../../src";
+import type { AnyStruct, HttpExecuteOptions } from "../../src";
 
 type Transport = "HTTP" | "SSE" | "WebSocket";
 
 function executeInput(
-  client: Client,
+  client: DerivableClient,
   transport: Transport,
   schema: AnyStruct | undefined,
   input: unknown,
@@ -165,7 +166,7 @@ describe.each(["HTTP", "SSE", "WebSocket"] as const)(
           const input = { then };
           const seen: unknown[] = [];
           const { client, fetch, sockets } = transportHarness(transport, true);
-          const options = { abort: caller.signal };
+          const options = { signal: caller.signal };
           let settled: Awaited<ReturnType<typeof executeInput>> | undefined;
           const pending = executeInput(
             client,

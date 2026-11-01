@@ -20,24 +20,25 @@ type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Expect<T extends true> = T;
 
 const client = createClient(withEndpoint("https://example.test"));
-const abort = new AbortController().signal;
+const signal = new AbortController().signal;
 
-const derived: Client = client({ abort });
+const derived: Client = client({ signal });
 const noOptions: Client = client();
 void [derived, noOptions];
-client({ abort })({ protocols: ["chat.v1"] })();
+// @ts-expect-error A derived client is not callable.
+client({ signal })({ protocols: ["chat.v1"] })();
 
 // @ts-expect-error timeout was removed from request options.
 client({ timeout: 100 });
-// @ts-expect-error signal was removed; cancellation is abort.
-client({ signal: abort });
+// @ts-expect-error abort was renamed; cancellation is signal.
+client({ abort: signal });
 // @ts-expect-error Client has no public execute member.
 void client.execute;
 
 export type OptionKeys = Expect<
   Equal<
     keyof RequestOptions,
-    | "abort"
+    | "signal"
     | "onUploadProgress"
     | "onDownloadProgress"
     | "beforeConnect"
@@ -64,20 +65,20 @@ export const search = defineRequest({
 });
 
 getUser(client, { id: 1 });
-getUser(client({ abort }), { id: 1 });
+getUser(client({ signal }), { id: 1 });
 health(client);
-health(client({ abort }));
+health(client({ signal }));
 search(client);
-search(client({ abort }), { q: "Ada" });
+search(client({ signal }), { q: "Ada" });
 
 // @ts-expect-error an operation with no input does not accept a second argument.
-health(client, { abort });
+health(client, { signal });
 // @ts-expect-error operations do not accept a third options argument.
-getUser(client, { id: 1 }, { abort });
+getUser(client, { id: 1 }, { signal });
 // @ts-expect-error a required input cannot be omitted.
-getUser(client({ abort }));
+getUser(client({ signal }));
 // @ts-expect-error the input value must match the struct.
-getUser(client({ abort }), { id: "wrong" });
+getUser(client({ signal }), { id: "wrong" });
 // @ts-expect-error the old endpoint(input) entry is rejected; the first argument is a Client.
 getUser({ id: 1 });
 
@@ -100,7 +101,7 @@ export const room = defineWebSocket({
   outgoing: Outgoing,
   maxIncomingQueueSize: 10,
 });
-const shared = client({ abort });
+const shared = client({ signal });
 getUser(shared, { id: 1 });
 health(shared);
 updates(shared);
@@ -130,14 +131,14 @@ room(
 );
 
 // @ts-expect-error a misspelled field is not a request option.
-client({ abrot: abort });
+client({ signla: signal });
 // @ts-expect-error excess properties of an object literal are rejected.
-client({ abort, applicationExtra: true });
-const saved = { abort, applicationExtra: true };
+client({ signal, applicationExtra: true });
+const saved = { signal, applicationExtra: true };
 client(saved);
 
 async function result() {
-  const [error, user, response] = await getUser(client({ abort }), { id: 1 });
+  const [error, user, response] = await getUser(client({ signal }), { id: 1 });
   if (error) {
     // @ts-expect-error the error branch cannot read the success value.
     void user.name;
@@ -155,7 +156,7 @@ async function result() {
 void result;
 
 async function resources() {
-  const [streamError, stream] = await updates(client({ abort }));
+  const [streamError, stream] = await updates(client({ signal }));
   if (streamError) return;
   await using ownedStream = stream;
   for await (const event of ownedStream) {
@@ -163,7 +164,7 @@ async function resources() {
     void text;
     break;
   }
-  const [socketError, session] = await room(client({ abort }));
+  const [socketError, session] = await room(client({ signal }));
   if (socketError) return;
   await using ownedSession = session;
   ownedSession.send({ type: "ping" });

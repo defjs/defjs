@@ -125,7 +125,7 @@ body 종류는 값에서, 먼저 맞는 규칙으로 결정돼요.
 
 ## 옵저버와 정책 위치
 
-interceptor는 전송 전역 정책용이에요. 인증, 트레이싱, short-circuit, 검토된 재시도예요. 자기 전송에서만 돌고 onion 순서로 조합돼요. 파생 클라이언트의 요청 옵션은 작업별 수명용이에요. `abort`, WebSocket heartbeat, opt-in 재연결이에요.
+interceptor는 전송 전역 정책용이에요. 인증, 트레이싱, short-circuit, 검토된 재시도예요. 자기 전송에서만 돌고 onion 순서로 조합돼요. 파생 클라이언트의 요청 옵션은 작업별 수명용이에요. `signal`, WebSocket heartbeat, opt-in 재연결이에요.
 
 옵저버는 무슨 일이 있었는지 보고할 뿐 두 번째 소유자가 되지 않아요. SSE `onInvalidEvent`, WebSocket 상태 리스너, 런타임 오류 리스너는 한계가 있는 진단과 메트릭용이에요. 돌려받은 스트림/세션이 여전히 순회, close, unsubscribe, 종료 대기를 소유해요. 캐싱, 낡은 결과 억제, 멱등성, 도메인 오류 매핑은 작업 호출 주변에 두세요. 앱이 자기 정책과 상태를 볼 수 있는 곳이에요.
 

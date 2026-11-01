@@ -19,7 +19,7 @@ description: defineRequest、request options，同 HTTP request/response types�
 `output` 係 2xx body 嘅單一 struct；`error` 係每個非 2xx body 嘅單一 struct。兩者都唔會按 status code 分 key。唔寫邊個，嗰個 body 就根本唔會被讀——睇
 [聲明即斷言](/zh-Hant-HK/docs/design-decisions#declaration-is-an-assertion)。
 
-呼叫操作會 return 一個 promise，內容係 [`HttpAwaitResult`](/zh-Hant-HK/api/core/httpawaitresult-type) 描述嘅 tuple。逐次呼叫嘅 options 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client。HTTP 讀 `abort` 同 progress callbacks，其餘 field 忽略。
+呼叫操作會 return 一個 promise，內容係 [`HttpAwaitResult`](/zh-Hant-HK/api/core/httpawaitresult-type) 描述嘅 tuple。逐次呼叫嘅 options 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client。HTTP 讀 `signal` 同 progress callbacks，其餘 field 忽略。
 
 非 2xx status 喺冇聲明 `error` struct，或者已聲明嘅 `error` body 解碼成功嘅時候，就係 `HTTP_STATUS`。聲明過 `error` 嘅時候 fault 嘅 `data` 係解碼之後嘅 error body，否則就係 `undefined`。如果已聲明嘅 `error` body 讀唔到（media type 錯、JSON 無效），或者同佢嘅 struct 唔匹配，fault 就會改為 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，而 response status 仍然會記喺 metadata 入面。失敗時 tuple 第三項係 `undefined`；response metadata 由 fault 帶住。
 
@@ -39,7 +39,7 @@ description: defineRequest、request options，同 HTTP request/response types�
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` 係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 嘅 HTTP 切片：[`UseRequestConfig`](/zh-Hant-HK/api/core/userequestconfig-type)，即係 `abort` 加上 `onDownloadProgress` 同 `onUploadProgress`。冇 `timeout` 或 `signal` field。Deadline 係 `abort: AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。後到嘅 `abort` 取代之前嘅 signal。喺應用程式程式碼用 `AbortSignal.any` 合併 signal。冇 client 層級嘅預設 deadline。其他 request field，例如 `heartbeat`，會被忽略。
+`HttpExecuteOptions` 係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 嘅 HTTP 切片：[`UseRequestConfig`](/zh-Hant-HK/api/core/userequestconfig-type)，即係 `signal` 加上 `onDownloadProgress` 同 `onUploadProgress`。冇 `timeout` 或 `abort` field。Deadline 係 `signal: AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。`signal` 係該次呼叫嘅 signal；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。冇 client 層級嘅預設 deadline。其他 request field，例如 `heartbeat`，會被忽略。
 
 ## 類型
 
@@ -55,7 +55,7 @@ description: defineRequest、request options，同 HTTP request/response types�
 
 ### HttpRequest
 
-Normalized outgoing request：`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 同 `queryParams`。Interceptors 見到佢嗰陣，`body` 已經係 wire value——JSON 嘅話就係 JSON 文字字串——所以簽 HMAC 同 digest 要對住嗰個，唔好對住 struct input。Interceptors 見到嘅 `queryParams` 係 `new URLSearchParams(queryString)`。Builder return `URLSearchParams` 就會將嗰個 instance 直接傳落去。`responseType` 同 `errorResponseType` 係唯讀：佢哋由端點嘅 `output` 同 `error` struct kind 推導出嚟，唔可以改。
+Normalized outgoing request：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 同 `queryParams`。Interceptors 見到佢嗰陣，`body` 已經係 wire value——JSON 嘅話就係 JSON 文字字串——所以簽 HMAC 同 digest 要對住嗰個，唔好對住 struct input。Interceptors 見到嘅 `queryParams` 係 `new URLSearchParams(queryString)`。Builder return `URLSearchParams` 就會將嗰個 instance 直接傳落去。`responseType` 同 `errorResponseType` 係唯讀：佢哋由端點嘅 `output` 同 `error` struct kind 推導出嚟，唔可以改。
 
 ### HttpMeta
 
@@ -103,7 +103,7 @@ Response 冇 body 嘅時候，`body` 係 `undefined`；JSON `null` 就保持係 
 
 ## UseRequestConfig
 
-`abort`，加上可選嘅 `onDownloadProgress` 同 `onUploadProgress`。`HttpExecuteOptions` 就係呢一片。冇 `timeout` 或 `signal` field。
+`signal`，加上可選嘅 `onDownloadProgress` 同 `onUploadProgress`。`HttpExecuteOptions` 就係呢一片。冇 `timeout` 或 `abort` field。
 
 ## RequestSuccessData
 

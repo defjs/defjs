@@ -5,16 +5,16 @@ description: createClient, Option-Helper und der Client-Type.
 
 # Client
 
-`createClient(...)` gibt einen aufrufbaren [`Client`](/de-DE/api/core/client-type) zurück. Komponiere Client-Options von links nach rechts, dann rufe `client(options?)` auf, um einen Client abzuleiten, und übergib ihn an eine Operation: `getUser(client(options), input)`.
+`createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Komponiere Client-Options von links nach rechts, dann rufe `client(options?)` auf, um einen [`Client`](/de-DE/api/core/client-type)-Wert zu erhalten, und übergib ihn an eine Operation: `getUser(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Options gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants per Closure einschließen. Der zurückgegebene Client ist eine Funktion. Ihn aufzurufen gibt einen neuen Client zurück und führt kein I/O aus.
+Options gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants per Closure einschließen. Die zurückgegebene Factory ist eine Funktion. Sie aufzurufen gibt einen `Client`-Wert zurück und führt kein I/O aus. Die Factory selbst ist ebenfalls ein `Client` und trägt keine Request-Options.
 
 - **options** — Option-Helper wie `withEndpoint`.
-- **Returns** einen aufrufbaren Client. Die Basiskonfiguration teilt jeder abgeleitete Client, und sie ist zur Laufzeit nicht eingefroren. Sie ist per Konvention fest: nichts in der Bibliothek ändert sie, und Anwendungen sollten das auch nicht.
+- **Returns** eine aufrufbare Factory. Die Basiskonfiguration teilt jeder Client-Wert, und sie ist zur Laufzeit nicht eingefroren. Sie ist per Konvention fest: nichts in der Bibliothek ändert sie, und Anwendungen sollten das auch nicht.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -55,7 +55,7 @@ Vorrang für einen Request:
 
 Nutze einen Interceptor für Werte, die sich pro Request ändern: ein erneuertes Bearer-Token oder ein HMAC über den serialisierten Body.
 
-Es gibt keine Default-Deadline auf Client-Ebene. Übergib `abort: AbortSignal.timeout(ms)` an einem abgeleiteten Client, wenn ein Aufruf eine braucht. Ein manueller Abbruch ist `NET_ABORTED`. `AbortSignal.timeout` wird als `NET_TIMEOUT` klassifiziert.
+Es gibt keine Default-Deadline auf Client-Ebene. Übergib `signal: AbortSignal.timeout(ms)` an einem abgeleiteten Client, wenn ein Aufruf eine braucht. Ein manueller Abbruch ist `NET_ABORTED`. `AbortSignal.timeout` wird als `NET_TIMEOUT` klassifiziert.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -105,31 +105,37 @@ Der Default-HTTP-Transport setzt den Header, wenn alle Bedingungen zutreffen: Di
 
 ## Typen
 
+### DerivableClient
+
+<ApiSignature name="DerivableClient" />
+
+Der Root-Client, den `createClient` zurückgibt, in zwei Formen. Die Factory ist eine Funktion und zugleich ein `Client` ohne Request-Options, daher funktioniert `getUser(client, input)` direkt. Mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufgerufen gibt sie einen einfachen `Client`-Wert für einen Aufruf zurück. Dieser Wert ist nicht aufrufbar, daher lässt sich `client()()` nicht kompilieren und wirft zur Laufzeit einen `TypeError`. Das Ableiten geschieht einmal, von der Factory aus; es gibt keine Kette. Schreibe den Typ als `DerivableClient` statt als `ReturnType<typeof createClient>`.
+
 ### Client
 
 <ApiSignature name="Client" />
 
-Ein `Client` ist eine Funktion. Mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufgerufen gibt er einen neuen Client zurück. Die sieben bekannten Felder werden aus dem Argument in ein frisches Objekt kopiert, das über die aktuellen Options gelegt wird. Ein späteres Feld gewinnt. Ein Feld mit dem Wert `undefined` gilt als nicht angegeben und behält den Wert des übergeordneten Clients. Ein abgeleiteter Client kann eine Einstellung, die sein übergeordneter Client hat, nicht entfernen. Um wieder ohne diese Einstellung dazustehen, leite erneut von dem Client ab, der sie nicht hatte (behalte den Root-Client). Verschachtelte Werte von `heartbeat`, `protocols` und `reconnect` werden per Referenz gehalten, nicht geklont, und ersetzen den Wert des übergeordneten Clients als Ganzes, nicht gemergt. WebSocket liest sie, wenn die Operation läuft (es kopiert dann die Heartbeat-Felder und die Protocols-Liste), daher kann eine Änderung dieser Objekte nach dem Ableiten einen späteren Aufruf noch beeinflussen. Anwendungen sollten sie nach dem Übergeben als unveränderlich behandeln. Der ursprüngliche Client wird nicht mutiert. `client()`, `client(undefined)` und `client({})` kopieren die aktuellen Options. Das Ableiten führt kein I/O aus. Denselben Client-Wert kannst du an viele Operationen übergeben. `abort` wird ersetzt, nicht kombiniert; kombiniere Signale in Anwendungscode mit `AbortSignal.any`.
+Ein `Client` ist ein Wert, keine Funktion. Den [`DerivableClient`](/de-DE/api/core/derivableclient-type) mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufzurufen gibt einen zurück. Die sieben bekannten Felder werden aus dem Argument in ein frisches Objekt kopiert. Unbekannte Felder werden ignoriert, und Felder mit dem Wert `undefined` werden weggelassen. Es gibt kein Überlagern über einen übergeordneten Client: `client()`, `client(undefined)` und `client({})` geben einen Client ohne Request-Options zurück. Verschachtelte Werte von `heartbeat`, `protocols` und `reconnect` werden per Referenz gehalten, nicht geklont. WebSocket liest sie, wenn die Operation läuft (es kopiert dann die Heartbeat-Felder und die Protocols-Liste), daher kann eine Änderung dieser Objekte nach dem Ableiten einen späteren Aufruf noch beeinflussen. Anwendungen sollten sie nach dem Übergeben als unveränderlich behandeln. Das Ableiten führt kein I/O aus. Ein Client-Wert ist nicht aufrufbar; ein Aufruf lässt sich nicht kompilieren und wirft zur Laufzeit einen `TypeError`. Erzeuge pro Aufruf einen Client-Wert. Denselben Wert kannst du an viele Operationen übergeben, aber ein Wert mit `signal` teilt dieses Signal bei Wiederverwendung. `signal` wird nicht kombiniert; kombiniere Signale in Anwendungscode mit `AbortSignal.any`.
 
-Übergib einen Client nicht an einen React-State-Setter (`setState(client)` würde ihn als Updater aufrufen) und nutze ihn nicht als Quelle eines Vue-`watch` oder `computed` (die rufen eine Funktion auf).
+Übergib die Factory nicht an einen React-State-Setter (`setState(factory)` würde sie als Updater aufrufen) und nutze sie nicht als Quelle eines Vue-`watch` oder `computed` (die rufen eine Funktion auf).
 
 ### RequestOptions
 
 <ApiSignature name="RequestOptions" />
 
-Sieben flache Felder. Jedes Protokoll liest die Felder, die es versteht, und ignoriert den Rest. `heartbeat` an HTTP zu übergeben wird ignoriert, das ist kein Fault. SSE liest aus den Request-Optionen nur `abort`. SSE-Reconnect kommt aus der Client-Konfiguration (`withSSEReconnect`), daher betrifft `client({ reconnect })` nur WebSocket. Es gibt keinen Compile-Time-Filter nach Protokoll und kein `timeout`- oder `signal`-Feld.
+Sieben flache Felder. Jedes Protokoll liest die Felder, die es versteht, und ignoriert den Rest. `heartbeat` an HTTP zu übergeben wird ignoriert, das ist kein Fault. SSE liest aus den Request-Optionen nur `signal`. SSE-Reconnect kommt aus der Client-Konfiguration (`withSSEReconnect`), daher betrifft `client({ reconnect })` nur WebSocket. Es gibt keinen Compile-Time-Filter nach Protokoll und kein `timeout`- oder `abort`-Feld.
 
-| Feld                 | Protokoll               | Ersetzung                                                                                                 |
-| -------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP, SSE und WebSocket | Ersetzt das vorherige Signal. Bei SSE und WebSocket deckt es die ganze Verbindung ab, auch nach dem Open. |
-| `onUploadProgress`   | HTTP                    | Von anderen Protokollen ignoriert.                                                                        |
-| `onDownloadProgress` | HTTP                    | Von anderen Protokollen ignoriert.                                                                        |
-| `beforeConnect`      | WebSocket               | Ersetzt die Client-Einstellung für diesen Aufruf.                                                         |
-| `protocols`          | WebSocket               | Ersetzt die Client-Liste.                                                                                 |
-| `heartbeat`          | WebSocket               | Als Ganzes ersetzt. `timeoutMs` ist die Wartezeit auf die Bestätigung, keine Request-Deadline.            |
-| `reconnect`          | WebSocket               | Als Ganzes ersetzt.                                                                                       |
+| Feld                 | Protokoll               | Ersetzung                                                                                         |
+| -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE und WebSocket | Bricht den Aufruf ab. Bei SSE und WebSocket deckt es die ganze Verbindung ab, auch nach dem Open. |
+| `onUploadProgress`   | HTTP                    | Von anderen Protokollen ignoriert.                                                                |
+| `onDownloadProgress` | HTTP                    | Von anderen Protokollen ignoriert.                                                                |
+| `beforeConnect`      | WebSocket               | Ersetzt die Client-Einstellung für diesen Aufruf.                                                 |
+| `protocols`          | WebSocket               | Ersetzt die Client-Liste.                                                                         |
+| `heartbeat`          | WebSocket               | Als Ganzes ersetzt. `timeoutMs` ist die Wartezeit auf die Bestätigung, keine Request-Deadline.    |
+| `reconnect`          | WebSocket               | Als Ganzes ersetzt.                                                                               |
 
-[`HttpExecuteOptions`](/de-DE/api/core/httpexecuteoptions-type) ist der HTTP-Ausschnitt (`abort` plus Progress). [`EventStreamExecuteOptions`](/de-DE/api/core/eventstreamexecuteoptions-type) ist `{ abort? }`. [`WebSocketExecuteOptions`](/de-DE/api/core/websocketexecuteoptions-type) ist der WebSocket-Ausschnitt plus `abort`.
+[`HttpExecuteOptions`](/de-DE/api/core/httpexecuteoptions-type) ist der HTTP-Ausschnitt (`signal` plus Progress). [`EventStreamExecuteOptions`](/de-DE/api/core/eventstreamexecuteoptions-type) ist `{ signal? }`. [`WebSocketExecuteOptions`](/de-DE/api/core/websocketexecuteoptions-type) ist der WebSocket-Ausschnitt plus `signal`.
 
 ### ClientOption
 

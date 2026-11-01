@@ -27,7 +27,7 @@ onScopeDispose(stop);
 
 void (async () => {
   const [error, nextStream] = await notifications(
-    client({ abort: controller.signal }),
+    client({ signal: controller.signal }),
   );
   if (error) return;
 

@@ -9,7 +9,7 @@ description: 在 Vue 中提供应用自己的 Client，并执行 SDK 定义、�
 
 这些插件只是设置和获取已有 `Client` 的可选便利。可以直接导入应用固定的 Client、给可复用逻辑传入显式 Client、用框架注入提供组件树默认值与子树覆盖，或采用应用自己的组织方式；SDK 定义不要求通过插件执行。
 
-这个包**不会**创建 Client、缓存结果、重试操作，也不会在组件卸载时关闭传输资源。`Client` 是函数：不要把它当作 `watch` 或 `computed` 的源，因为那些 API 会调用函数。发起工作的组件或组合式函数负责取消、关闭和清理。
+这个包**不会**创建 Client、缓存结果、重试操作，也不会在组件卸载时关闭传输资源。注入的值就是提供的那个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)；在操作运行的地方带上请求选项调用它，即可派生出一个 `Client` 值。不要把它当作 `watch` 或 `computed` 的源，因为那些 API 会调用函数。派生出的 `Client` 值不被插件或 `injectClient` 接受。发起工作的组件或组合式函数负责取消、关闭和清理。
 
 ## 基本用法
 

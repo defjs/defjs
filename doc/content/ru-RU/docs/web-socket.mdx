@@ -96,7 +96,7 @@ Opt-in на клиенте или на выведенном клиенте. Ин
 
 `session.close(code?, reason?)` просит терминальное закрытие и останавливает heartbeat. Code должен быть `1000` или `3000..4999`; reason ≤ 123 байт UTF-8. Невалидные аргументы close бросают до смены state. Используй вместе с `await session.closed`, когда нужен ручной close reason или логический терминальный результат.
 
-Сигнал `abort`, переданный операции, остаётся привязан к открытой сессии и покрывает всё соединение, в том числе после открытия. Abort в форме таймаута (`TimeoutError` или `ERR_TIMEOUT`, включая `AbortSignal.timeout(...)`) завершает её как `'error'` (`NET_TIMEOUT`). Любая другая причина завершает её как `'aborted'`, и `receive` reject’ит самой этой причиной, а не новым `AbortError`. Дедлайна только на старт нет. Приложение, которому он нужен, создаёт свой `AbortController`, прерывает его через `new DOMException("...", "TimeoutError")` из таймера и сбрасывает таймер после того, как `await` вернулся. См. [SSE](/ru-RU/docs/sse#close-and-dispose).
+Переданный операции `signal` остаётся привязан к открытой сессии и покрывает всё соединение, в том числе после открытия. Abort в форме таймаута (`TimeoutError` или `ERR_TIMEOUT`, включая `AbortSignal.timeout(...)`) завершает её как `'error'` (`NET_TIMEOUT`). Любая другая причина завершает её как `'aborted'`, и `receive` reject’ит самой этой причиной, а не новым `AbortError`. Дедлайна только на старт нет. Приложение, которому он нужен, создаёт свой `AbortController`, прерывает его через `new DOMException("...", "TimeoutError")` из таймера и сбрасывает таймер после того, как `await` вернулся. См. [SSE](/ru-RU/docs/sse#close-and-dispose).
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

@@ -16,13 +16,13 @@ description: defineEventStream、リクエスト options、stream handle です�
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`abort` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `abort` だけで、進捗と WebSocket のフィールドは無視します。
+呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`signal` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `signal` だけで、進捗と WebSocket のフィールドは無視します。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` は `{ abort? }` です。`timeout` フィールドも `signal` フィールドも、進捗コールバックもありません。`abort` は開いたあとも含むストリーム全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。起動時だけの期限が欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
+`EventStreamExecuteOptions` は `{ signal? }` です。`timeout` フィールドも `abort` フィールドも、進捗コールバックもありません。`signal` は開いたあとも含むストリーム全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。起動時だけの期限が欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
 
 ## EventStreamHandle
 

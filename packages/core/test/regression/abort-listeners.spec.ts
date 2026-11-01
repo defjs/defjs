@@ -78,7 +78,7 @@ test.each(["success", "fault", "abort", "timeout"] as const)(
     const signal = watch(caller.signal);
     const pending = httpEndpoint(
       client({
-        abort: caller.signal,
+        signal: caller.signal,
       }),
     );
     if (mode === "abort") caller.abort("stop");
@@ -132,7 +132,7 @@ test("SSE releases caller abort listeners after a reconnecting stream closes", a
   );
   const caller = new AbortController();
   const signal = watch(caller.signal);
-  const [fault, stream] = await sseEndpoint(client({ abort: caller.signal }));
+  const [fault, stream] = await sseEndpoint(client({ signal: caller.signal }));
   expect(fault).toBeNull();
   if (!stream) throw new Error("Expected an SSE stream");
   const values: string[] = [];
@@ -164,7 +164,7 @@ test.each(["fault", "abort", "timeout"] as const)(
     const signal = watch(caller.signal);
     const pending = sseEndpoint(
       client({
-        abort: caller.signal,
+        signal: caller.signal,
       }),
     );
     if (mode === "abort") caller.abort("stop");
@@ -193,7 +193,9 @@ test.each(MALFORMED_INTERCEPTOR_RESULTS)(
     );
     const caller = new AbortController();
     const signal = watch(caller.signal);
-    const [fault, stream] = await sseEndpoint(client({ abort: caller.signal }));
+    const [fault, stream] = await sseEndpoint(
+      client({ signal: caller.signal }),
+    );
     expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
     expect(stream).toBeUndefined();
     signal.expectReleased();
@@ -219,7 +221,7 @@ test("SSE closes an opened stream and releases caller listeners when the interce
   );
   const caller = new AbortController();
   const signal = watch(caller.signal);
-  const [fault, stream] = await sseEndpoint(client({ abort: caller.signal }));
+  const [fault, stream] = await sseEndpoint(client({ signal: caller.signal }));
   expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
   expect(stream).toBeUndefined();
   expect(opened).toBeDefined();
@@ -256,7 +258,7 @@ test.each([
     );
     try {
       const [fault, stream] = await sseEndpoint(
-        client({ abort: caller.signal }),
+        client({ signal: caller.signal }),
       );
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
       expect(stream).toBeUndefined();
@@ -313,7 +315,7 @@ test("WebSocket closes an opened session and releases caller listeners when the 
   const caller = new AbortController();
   const signal = watch(caller.signal);
   const [fault, session] = await socketEndpoint(
-    client({ abort: caller.signal }),
+    client({ signal: caller.signal }),
   );
   expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
   expect(session).toBeUndefined();
@@ -351,7 +353,7 @@ test.each([
     );
     try {
       const [fault, session] = await socketEndpoint(
-        client({ abort: caller.signal }),
+        client({ signal: caller.signal }),
       );
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
       expect(session).toBeUndefined();
@@ -394,7 +396,7 @@ test.each(["success", "fault", "abort", "timeout"] as const)(
     const signal = watch(caller.signal);
     const pending = socketEndpoint(
       client({
-        abort: caller.signal,
+        signal: caller.signal,
       }),
     );
     if (mode === "abort") caller.abort("stop");

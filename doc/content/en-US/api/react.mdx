@@ -13,7 +13,7 @@ See the [React guide](/docs/integrations/react).
 
 <ApiSignature name="ClientProvider" />
 
-Context provider. Pass a client from `createClient`. A nested `ClientProvider` overrides the client for its subtree; `useClient()` reads the nearest one. Passing a different `client` changes the context value for descendants.
+Context provider. Pass the `DerivableClient` returned by `createClient`. A nested `ClientProvider` overrides the client for its subtree; `useClient()` reads the nearest one. Passing a different `client` changes the context value for descendants.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,7 +21,7 @@ Context provider. Pass a client from `createClient`. A nested `ClientProvider` o
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` prefers the explicit client; omitted or `undefined` reads the nearest `ClientProvider`. An `Error` is thrown only when neither source supplies a client. Zero-argument `useClient()` calls remain valid. Pass that client into an operation. A `Client` is a function: do not pass it to a state setter, because `setState(client)` would call it as an updater.
+`useClient(overrideClient)` prefers the explicit client; omitted or `undefined` reads the nearest `ClientProvider`. An `Error` is thrown only when neither source supplies a client. Zero-argument `useClient()` calls remain valid. Pass that client into an operation. The hook returns the [`DerivableClient`](/api/core/derivableclient-type) that was supplied; call it with request options where the operation runs to derive a `Client` value. Do not pass it to a state setter, because `setState(client)` would call it as an updater. A derived `Client` value is not accepted by `ClientProvider` or `useClient`.
 
 Always call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.
 

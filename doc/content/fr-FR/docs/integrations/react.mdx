@@ -9,7 +9,7 @@ Importe les opérations de ton SDK ou d’un module de définition partagé. L�
 
 Ces plugins sont des helpers facultatifs pour fournir et lire un `Client` existant. Importe un client fixe possédé par l’application, passe un `Client` explicitement à de la logique réutilisable, utilise l’injection du framework pour les défauts et les surcharges au niveau de l’arbre, ou choisis ta propre organisation. Les définitions de SDK n’exigent pas ces plugins.
 
-Branche un client `@defjs/core` existant dans un arbre React. Tu obtiens Context et `useClient()`. Le package ne **crée pas** de client, n’ajoute pas de cache, ne réessaie pas les opérations et ne libère pas les ressources de transport. Le composant, l’effet ou la lib de data qui démarre le travail le possède. Le client issu de `useClient()` est passé à l’opération. Un `Client` est une fonction : ne le passe pas à un setter d’état, car `setState(client)` l’appellerait comme updater.
+Branche un client `@defjs/core` existant dans un arbre React. Tu obtiens Context et `useClient()`. Le package ne **crée pas** de client, n’ajoute pas de cache, ne réessaie pas les opérations et ne libère pas les ressources de transport. Le composant, l’effet ou la lib de data qui démarre le travail le possède. Le client issu de `useClient()` est passé à l’opération. Le hook renvoie le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) fourni. Pour des options par appel comme `signal`, appelle-le là où l’opération s’exécute : `getUser(client({ signal }), input)`. Ne le passe pas à un setter d’état, car `setState(client)` l’appellerait comme updater. Une valeur `Client` dérivée n’est pas acceptée par `ClientProvider` ni `useClient`.
 
 ## Mise en place
 
@@ -39,7 +39,7 @@ Le hook ne fournit que le client. Il ne démarre pas de travail, ne s’abonne p
 
 ## Posséder le travail de query
 
-Une lib de query peut posséder le cache, les retries, la suppression de résultats périmés et l’annulation. Passe le signal qu’elle fournit comme `abort` sur un client dérivé. Pour les pages de liste, appelle l’opération depuis TanStack Query (ou équivalent) — `@defjs/react` reste DI seulement et ne fournit **pas** `useRequest`.
+Une lib de query peut posséder le cache, les retries, la suppression de résultats périmés et l’annulation. Passe le signal qu’elle fournit comme `signal` sur un client dérivé. Pour les pages de liste, appelle l’opération depuis TanStack Query (ou équivalent) — `@defjs/react` reste DI seulement et ne fournit **pas** `useRequest`.
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
@@ -53,7 +53,7 @@ Les handles SSE et WebSocket survivent à l’appel d’opération. Enregistre l
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-Le signal `abort` passé à l’opération continue de gouverner une session ouverte. L’abandonner dans le cleanup termine la session en `aborted` et fait rejeter `receive` avec `AbortError`, donc le `catch` ci-dessus ignore les erreurs une fois l’effet nettoyé et ne rapporte que les vrais échecs (dépassement de file, timeout d’acquittement de heartbeat). Un flux SSE abandonné termine à la place son itérateur normalement. Sans le `catch`, un rejet venant de la boucle serait un rejet de promesse non géré.
+Le `signal` passé à l’opération continue de gouverner une session ouverte. L’abandonner dans le cleanup termine la session en `aborted` et fait rejeter `receive` avec `AbortError`, donc le `catch` ci-dessus ignore les erreurs une fois l’effet nettoyé et ne rapporte que les vrais échecs (dépassement de file, timeout d’acquittement de heartbeat). Un flux SSE abandonné termine à la place son itérateur normalement. Sans le `catch`, un rejet venant de la boucle serait un rejet de promesse non géré.
 
 Même règle pour `EventStreamHandle` : ferme dans `finally`, attends `stream.closed`. Les consommateurs WebSocket doivent aussi se désabonner des listeners d’état et d’erreur runtime et continuer à lire `session.receive` — une file bornée non lue peut déborder.
 

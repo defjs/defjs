@@ -1,6 +1,7 @@
 // #region example
 import {
   createClient,
+  type DerivableClient,
   defineRequest,
   struct,
   type Infer,
@@ -30,7 +31,7 @@ const readProduct = defineRequest({
   output: Product,
 });
 
-function createReader(client: ReturnType<typeof createClient>) {
+function createReader(client: DerivableClient) {
   const cache = new Map<string, { etag: string; product: Product }>();
 
   return async (sku: string): Promise<Product> => {

@@ -77,7 +77,7 @@ Déplace la définition dans un paquet SDK quand d’autres applications en ont 
 - Un corps déclaré (`output` pour un 2xx, `error` sinon) qui ne décode pas → `RES_DECODE_FAILED` ou `RES_STRUCT_MISMATCH`, quel que soit le statut
 - Échec Fetch / annulation / échéance → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-Une échéance est `client({ abort: AbortSignal.timeout(ms) })` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance par défaut au niveau du client. Dérive un client quand un appel a besoin de son propre `abort` ; voir [Client](/fr-FR/docs/client). L’annulation te dit ce que l’appelant a vu — pas si une écriture serveur a été appliquée.
+Une échéance est `client({ signal: AbortSignal.timeout(ms) })` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance par défaut au niveau du client. Dérive un client quand un appel a besoin de son propre `signal` ; voir [Client](/fr-FR/docs/client). L’annulation te dit ce que l’appelant a vu — pas si une écriture serveur a été appliquée.
 
 ## Recettes suivantes
 

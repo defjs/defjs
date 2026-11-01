@@ -1,4 +1,8 @@
-import { createClient, withEndpoint } from "../src/client";
+import {
+  createClient,
+  type DerivableClient,
+  withEndpoint,
+} from "../src/client";
 import { defineRequest } from "../src/http";
 import type { HttpProgressFn } from "../src/http";
 import { supportsStreamingRequestBody } from "../src/http/transport/fetch";
@@ -60,9 +64,7 @@ async function reportUpload(host: string): Promise<ModuleWorkerReport> {
   };
 }
 
-async function sendBlob(
-  client: ReturnType<typeof createClient>,
-): Promise<UploadCallReport> {
+async function sendBlob(client: DerivableClient): Promise<UploadCallReport> {
   let calls = 0;
   const onUploadProgress: HttpProgressFn = () => {
     calls += 1;
@@ -84,9 +86,7 @@ async function sendBlob(
   };
 }
 
-async function sendForm(
-  client: ReturnType<typeof createClient>,
-): Promise<UploadCallReport> {
+async function sendForm(client: DerivableClient): Promise<UploadCallReport> {
   let calls = 0;
   const onUploadProgress: HttpProgressFn = () => {
     calls += 1;

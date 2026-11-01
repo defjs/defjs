@@ -1,6 +1,6 @@
 "use client";
 
-import type { Client } from "@defjs/core";
+import type { DerivableClient } from "@defjs/core";
 import {
   createContext,
   createElement,
@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-const HttpClientContext = createContext<Client | null>(null);
+const HttpClientContext = createContext<DerivableClient | null>(null);
 
 /**
  * Props of {@link ClientProvider}: the required `client` and optional `children`.
@@ -16,8 +16,8 @@ const HttpClientContext = createContext<Client | null>(null);
  * @group react
  */
 export interface ClientProviderProps {
-  /** Defjs client owned by the application. */
-  client: Client;
+  /** Derivable client returned by `createClient`, owned by the application. */
+  client: DerivableClient;
   /** React tree that can call {@link useClient}. */
   children?: ReactNode;
 }
@@ -25,13 +25,13 @@ export interface ClientProviderProps {
 /**
  * Provide a Defjs client to React descendants via context.
  *
- * Pass an existing client from `createClient` as `client`; descendants read it with `useClient`. The component does not create, cache, or dispose the client. A nested `ClientProvider` overrides the client for its own subtree, and a different `client` prop changes the context value for descendants.
+ * Pass the client returned by `createClient` as `client`; descendants read it with `useClient`. The component does not create, cache, or dispose the client. A nested `ClientProvider` overrides the client for its own subtree, and a different `client` prop changes the context value for descendants.
  *
  * @param props - `client` and optional `children`.
  * @returns A context provider element.
  *
  * @group react
- * @see {@link Client}
+ * @see {@link DerivableClient}
  * @see {@link ClientProviderProps}
  * @exampleFile examples/react/client-provider.tsx#example
  */
@@ -39,7 +39,7 @@ export function ClientProvider({
   client,
   children,
 }: ClientProviderProps): React.FunctionComponentElement<
-  React.ProviderProps<Client | null>
+  React.ProviderProps<DerivableClient | null>
 > {
   return createElement(HttpClientContext.Provider, { value: client }, children);
 }
@@ -51,10 +51,10 @@ export function ClientProvider({
  *
  * Always call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.
  *
- * The returned value is that same function. `Client` is callable, so do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater.
+ * The returned value is the exact `DerivableClient` that was supplied. Call it with request options at the call site to derive a `Client` value for one call: `getUser(client({ signal }), input)`. It is a function, so do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater. The provider holds only a root client; a derived `Client` value is not accepted, so create it where the operation is called.
  *
- * @param overrideClient - Client to use before context; `undefined` uses the provider.
- * @returns The selected client function.
+ * @param overrideClient - Derivable client to use before context; `undefined` uses the provider.
+ * @returns The selected derivable client.
  * @throws If neither an explicit client nor a `ClientProvider` is available.
  *
  * @example
@@ -62,9 +62,9 @@ export function ClientProvider({
  * const client = useClient()
  * ```
  * @group react
- * @see {@link Client}
+ * @see {@link DerivableClient}
  */
-export function useClient(overrideClient?: Client): Client {
+export function useClient(overrideClient?: DerivableClient): DerivableClient {
   const providedClient = useContext(HttpClientContext);
   const client = overrideClient ?? providedClient;
 

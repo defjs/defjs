@@ -16,13 +16,13 @@ description: defineEventStream، وخيارات الطلب، ومقبض التد
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-يُرجع الاستدعاء `[null, stream, open]` أو `[error, undefined, open?]`. عندما يُعلَن `error`، يكون الخطأ `Fault` لذلك الـ struct؛ وإلا فهو `Fault<undefined>`. مرّر `abort` باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ SSE الحقل `abort` فقط ويتجاهل التقدّم وحقول WebSocket.
+يُرجع الاستدعاء `[null, stream, open]` أو `[error, undefined, open?]`. عندما يُعلَن `error`، يكون الخطأ `Fault` لذلك الـ struct؛ وإلا فهو `Fault<undefined>`. مرّر `signal` باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ SSE الحقل `signal` فقط ويتجاهل التقدّم وحقول WebSocket.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` هو `{ abort? }`. لا يوجد حقل `timeout` أو `signal` ولا رد نداء تقدّم. يغطي `abort` التدفق كاملًا، بما فيه ما بعد فتحه. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة للبدء فقط ولا مهلة افتراضية على مستوى العميل. التطبيق الذي يريد مهلة للبدء فقط ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`.
+`EventStreamExecuteOptions` هو `{ signal? }`. لا يوجد حقل `timeout` أو `abort` ولا رد نداء تقدّم. يغطي `signal` التدفق كاملًا، بما فيه ما بعد فتحه. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة للبدء فقط ولا مهلة افتراضية على مستوى العميل. التطبيق الذي يريد مهلة للبدء فقط ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`.
 
 ## EventStreamHandle
 

@@ -5,16 +5,16 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 # العميل
 
-تُرجع `createClient(...)` [`Client`](/ar/api/core/client-type) قابلًا للاستدعاء. ركّب خيارات العميل من اليسار إلى اليمين، ثم استدعِ `client(options?)` لاشتقاق عميل ومرّره إلى عملية: `getUser(client(options), input)`.
+تُرجع `createClient(...)` [`DerivableClient`](/ar/api/core/derivableclient-type). ركّب خيارات العميل من اليسار إلى اليمين، ثم استدعِ `client(options?)` للحصول على قيمة [`Client`](/ar/api/core/client-type) ومرّرها إلى عملية: `getUser(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-تُطبَّق الخيارات بالترتيب. فضّل إنشاء العميل داخل حدود الطلب عندما تغلق المعترضات على المصادقة أو المستأجرين. العميل المُرجَع دالة. استدعاؤه يُرجع عميلًا جديدًا ولا يؤدي أي إدخال/إخراج.
+تُطبَّق الخيارات بالترتيب. فضّل إنشاء العميل داخل حدود الطلب عندما تغلق المعترضات على المصادقة أو المستأجرين. المصنع المُرجَع دالة. استدعاؤه يُرجع قيمة `Client` ولا يؤدي أي إدخال/إخراج. والمصنع نفسه هو أيضًا `Client` ولا يحمل أي خيارات طلب.
 
 - **options** — مساعدات خيارات مثل `withEndpoint`.
-- **يُرجع** عميلًا قابلًا للاستدعاء. الإعداد الأساسي مشترك بين كل عميل مشتق، وهو غير مُجمَّد وقت التشغيل. هو ثابت بالاصطلاح: لا شيء في المكتبة يغيّره، ولا ينبغي للتطبيقات أن تغيّره.
+- **يُرجع** مصنعًا قابلًا للاستدعاء. الإعداد الأساسي مشترك بين كل قيمة عميل، وهو غير مُجمَّد وقت التشغيل. هو ثابت بالاصطلاح: لا شيء في المكتبة يغيّره، ولا ينبغي للتطبيقات أن تغيّره.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -55,7 +55,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 استخدم معترضًا للقيم التي تتغيّر لكل طلب: رمز Bearer محدَّث، أو HMAC على الجسم المسلسَل.
 
-لا توجد مهلة افتراضية على مستوى العميل. مرّر `abort: AbortSignal.timeout(ms)` على عميل مشتق عندما يحتاج استدعاء واحد إليها. الإجهاض اليدوي هو `NET_ABORTED`. يُصنَّف `AbortSignal.timeout` كـ `NET_TIMEOUT`.
+لا توجد مهلة افتراضية على مستوى العميل. مرّر `signal: AbortSignal.timeout(ms)` على عميل مشتق عندما يحتاج استدعاء واحد إليها. الإجهاض اليدوي هو `NET_ABORTED`. يُصنَّف `AbortSignal.timeout` كـ `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -105,31 +105,37 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 ## الأنواع
 
+### DerivableClient
+
+<ApiSignature name="DerivableClient" />
+
+العميل الجذر الذي تُرجعه `createClient`، بصيغتين. المصنع دالة وهو أيضًا `Client` بلا خيارات طلب، لذا يعمل `getUser(client, input)` مباشرة. استدعاؤه مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع قيمة `Client` عادية لاستدعاء واحد. هذه القيمة غير قابلة للاستدعاء، لذا يفشل `client()()` في الترجمة ويرمي `TypeError` وقت التشغيل. الاشتقاق يحدث مرة واحدة من المصنع؛ لا توجد سلسلة. اكتب النوع `DerivableClient` بدل `ReturnType<typeof createClient>`.
+
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` دالة. استدعاؤها مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع عميلًا جديدًا. تُنسخ الحقول السبعة المعروفة من الوسيط إلى كائن جديد يُركَّب فوق الخيارات الحالية. الحقل اللاحق يغلب. الحقل الذي قيمته `undefined` يُعامل كأنه غير مُمرَّر ويُبقي قيمة الأصل. لا يستطيع العميل المشتق إسقاط إعداد يملكه الأصل. للعودة إلى غياب الإعداد، اشتق مرة أخرى من العميل الذي لم يملكه (أبقِ العميل الجذر). تُحفَظ قيم `heartbeat` و`protocols` و`reconnect` المتداخلة بالمرجع، دون استنساخ، وتستبدل قيمة الأصل كاملة، لا بالدمج. يقرأها WebSocket عند تشغيل العملية (ينسخ حينها حقول heartbeat وقائمة protocols)، لذا قد يؤثر تغيير تلك الكائنات بعد الاشتقاق في استدعاء لاحق. ينبغي للتطبيقات أن تعاملها كغير قابلة للتغيير بعد تمريرها. العميل الأصلي لا يُغيَّر. `client()` و`client(undefined)` و`client({})` تنسخ الخيارات الحالية. الاشتقاق لا يؤدي أي إدخال/إخراج. يمكن تمرير قيمة العميل نفسها إلى عمليات كثيرة. يُستبدل `abort` ولا يُجمَع؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق.
+`Client` قيمة وليس دالة. استدعاء [`DerivableClient`](/ar/api/core/derivableclient-type) مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع واحدة. تُنسخ الحقول السبعة المعروفة من الوسيط إلى كائن جديد. تُتجاهل الحقول غير المعروفة وتُحذف الحقول التي قيمتها `undefined`. لا يوجد تركيب فوق الأصل: `client()` و`client(undefined)` و`client({})` تُرجع عميلًا بلا خيارات طلب. تُحفَظ قيم `heartbeat` و`protocols` و`reconnect` المتداخلة بالمرجع، دون استنساخ. يقرأها WebSocket عند تشغيل العملية (ينسخ حينها حقول heartbeat وقائمة protocols)، لذا قد يؤثر تغيير تلك الكائنات بعد الاشتقاق في استدعاء لاحق. ينبغي للتطبيقات أن تعاملها كغير قابلة للتغيير بعد تمريرها. الاشتقاق لا يؤدي أي إدخال/إخراج. قيمة العميل غير قابلة للاستدعاء، واستدعاؤها يفشل في الترجمة ويرمي `TypeError` وقت التشغيل. أنشئ قيمة عميل لكل استدعاء. يمكن تمرير القيمة نفسها إلى عمليات كثيرة، لكن إعادة استخدام قيمة تحمل `signal` تشارك تلك الإشارة. لا يُجمَع `signal`؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق.
 
-لا تمرّر عميلًا إلى ضابط حالة في React (`setState(client)` سيستدعيه كمُحدِّث) ولا تستخدمه مصدرًا لـ `watch` أو `computed` في Vue (فهما يستدعيان الدالة).
+لا تمرّر المصنع إلى ضابط حالة في React (`setState(factory)` سيستدعيه كمُحدِّث) ولا تستخدمه مصدرًا لـ `watch` أو `computed` في Vue (فهما يستدعيان الدالة).
 
 ### RequestOptions
 
 <ApiSignature name="RequestOptions" />
 
-سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يفهمها ويتجاهل الباقي. تمرير `heartbeat` إلى HTTP يُتجاهل، وليس عطلًا. يقرأ SSE من خيارات الطلب `abort` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة ولا حقل `timeout` أو `signal`.
+سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يفهمها ويتجاهل الباقي. تمرير `heartbeat` إلى HTTP يُتجاهل، وليس عطلًا. يقرأ SSE من خيارات الطلب `signal` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة ولا حقل `timeout` أو `abort`.
 
-| الحقل                | البروتوكول           | الاستبدال                                                                            |
-| -------------------- | -------------------- | ------------------------------------------------------------------------------------ |
-| `abort`              | HTTP وSSE وWebSocket | يستبدل الإشارة السابقة. في SSE وWebSocket يغطي الاتصال كاملًا، بما فيه ما بعد الفتح. |
-| `onUploadProgress`   | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                         |
-| `onDownloadProgress` | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                         |
-| `beforeConnect`      | WebSocket            | يستبدل إعداد العميل لذلك الاستدعاء.                                                  |
-| `protocols`          | WebSocket            | يستبدل قائمة العميل.                                                                 |
-| `heartbeat`          | WebSocket            | يُستبدل كاملًا. `timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.                      |
-| `reconnect`          | WebSocket            | يُستبدل كاملًا.                                                                      |
+| الحقل                | البروتوكول           | الاستبدال                                                                     |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------- |
+| `signal`             | HTTP وSSE وWebSocket | يُجهض الاستدعاء. في SSE وWebSocket يغطي الاتصال كاملًا، بما فيه ما بعد الفتح. |
+| `onUploadProgress`   | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                  |
+| `onDownloadProgress` | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                  |
+| `beforeConnect`      | WebSocket            | يستبدل إعداد العميل لذلك الاستدعاء.                                           |
+| `protocols`          | WebSocket            | يستبدل قائمة العميل.                                                          |
+| `heartbeat`          | WebSocket            | يُستبدل كاملًا. `timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.               |
+| `reconnect`          | WebSocket            | يُستبدل كاملًا.                                                               |
 
-[`HttpExecuteOptions`](/ar/api/core/httpexecuteoptions-type) هو شريحة HTTP (`abort` مع التقدّم). [`EventStreamExecuteOptions`](/ar/api/core/eventstreamexecuteoptions-type) هو `{ abort? }`. [`WebSocketExecuteOptions`](/ar/api/core/websocketexecuteoptions-type) هو شريحة WebSocket مع `abort`.
+[`HttpExecuteOptions`](/ar/api/core/httpexecuteoptions-type) هو شريحة HTTP (`signal` مع التقدّم). [`EventStreamExecuteOptions`](/ar/api/core/eventstreamexecuteoptions-type) هو `{ signal? }`. [`WebSocketExecuteOptions`](/ar/api/core/websocketexecuteoptions-type) هو شريحة WebSocket مع `signal`.
 
 ### ClientOption
 

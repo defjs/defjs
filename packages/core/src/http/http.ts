@@ -50,7 +50,7 @@ import {
 import { getContentType, isJsonMediaType } from "./transport/utils";
 
 /**
- * HTTP fields of {@link RequestOptions}: progress callbacks and `abort`.
+ * HTTP fields of {@link RequestOptions}: progress callbacks and `signal`.
  *
  * `onDownloadProgress` and `onUploadProgress` are {@link HttpProgressFn}
  * callbacks. They receive an {@link HttpProgressEvent} with `loaded`, `total`,
@@ -60,7 +60,7 @@ import { getContentType, isJsonMediaType } from "./transport/utils";
  */
 export type UseRequestConfig = {
   /** Aborts the call. */
-  abort?: AbortSignal;
+  signal?: AbortSignal;
   /** Observes download progress. */
   onDownloadProgress?: HttpProgressFn;
   /** Observes upload progress. */
@@ -70,7 +70,7 @@ export type UseRequestConfig = {
 /**
  * HTTP fields read from {@link RequestOptions} for one call.
  *
- * Progress callbacks and `abort`. There is no `timeout` or `signal`.
+ * Progress callbacks and `signal`. There is no `timeout` or `abort`.
  *
  * @group http
  */
@@ -277,7 +277,7 @@ async function executeHttpCommand<
     return [fault as Fault<TError>, undefined, undefined];
   };
 
-  const callerAbort = config.abort;
+  const callerAbort = config.signal;
 
   // Fast path: caller already aborted before we did any struct work — skip parseEndpointInput.
   if (callerAbort?.aborted) {
@@ -330,7 +330,7 @@ async function executeHttpCommand<
       parsedInput,
       definition.builder,
       {
-        abort: requestSignal,
+        signal: requestSignal,
         baseEndpoint: clientConfig.endpoint,
         defaultHeaders: clientConfig.headers,
         downloadProgress: config.onDownloadProgress,
@@ -386,9 +386,9 @@ async function executeHttpCommand<
     // transportController already follows requestSignal through abortTransport. Only an interceptor that
     // swapped the signal needs a composite, which is expensive to build and to listen on.
     const transportAbort =
-      nextRequest.abort === undefined || nextRequest.abort === requestSignal
+      nextRequest.signal === undefined || nextRequest.signal === requestSignal
         ? transportController.signal
-        : mergeAbortSignals(transportController.signal, [nextRequest.abort]);
+        : mergeAbortSignals(transportController.signal, [nextRequest.signal]);
     const due = resolveAbortFault(transportAbort);
     if (due) {
       // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
@@ -402,7 +402,7 @@ async function executeHttpCommand<
     const pending = fetchHandler(
       {
         ...nextRequest,
-        abort: transportAbort,
+        signal: transportAbort,
       },
       clientConfig.http.handle,
     )

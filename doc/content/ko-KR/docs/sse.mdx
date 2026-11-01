@@ -98,7 +98,7 @@ SSE `data`는 텍스트로 시작해요. `string` struct는 그 텍스트를 유
 
 종료 종류(`closed.kind`)는 `eof`, `aborted`, `error`예요. `error` 결과는 `closed.code`도 가지며, 이는 `EventStreamFaultCode`예요. `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID`예요.
 
-`close(reason)`은 이유가 `TimeoutError`여도 활성 시도를 abort하고, 큐를 닫고, `aborted`로 정해요. 작업에 넘긴 `abort` 신호는 스트림이 열린 뒤에도 붙어 있고 연결 전체를 덮어요. 그걸 abort하면 보통 이터레이터가 끝나고 `aborted`를 보고해요. abort 이유가 `TimeoutError`나 `ERR_TIMEOUT`이면(예를 들어 `AbortSignal.timeout(...)`) 이터레이터는 `ERR_TIMEOUT`을 던지고 `closed`는 `kind: 'error'`와 `code: 'NET_TIMEOUT'`을 보고해요. 클라이언트에 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요.
+`close(reason)`은 이유가 `TimeoutError`여도 활성 시도를 abort하고, 큐를 닫고, `aborted`로 정해요. 작업에 넘긴 `signal`은 스트림이 열린 뒤에도 붙어 있고 연결 전체를 덮어요. 그걸 abort하면 보통 이터레이터가 끝나고 `aborted`를 보고해요. abort 이유가 `TimeoutError`나 `ERR_TIMEOUT`이면(예를 들어 `AbortSignal.timeout(...)`) 이터레이터는 `ERR_TIMEOUT`을 던지고 `closed`는 `kind: 'error'`와 `code: 'NET_TIMEOUT'`을 보고해요. 클라이언트에 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요.
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

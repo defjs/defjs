@@ -170,13 +170,13 @@ export type StreamAwaitResult<
 /**
  * SSE field of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.
  *
- * `abort` covers the whole stream, including after it opens. There is no startup-only deadline.
+ * `signal` covers the whole stream, including after it opens. There is no startup-only deadline.
  *
  * @group sse
  */
 export type EventStreamExecuteOptions = {
   /** Aborts the stream, including after it is open. */
-  abort?: AbortSignal;
+  signal?: AbortSignal;
 };
 
 /**
@@ -267,7 +267,7 @@ async function runEventStreamCommand<
   config: EventStreamExecuteOptions,
   controller: AbortController,
 ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>> {
-  const callerAbort = config.abort;
+  const callerAbort = config.signal;
 
   // Fast path: caller already aborted before we did any struct work.
   if (callerAbort?.aborted) {
@@ -296,7 +296,7 @@ async function runEventStreamCommand<
     ];
   }
 
-  // `abort` stays in force after open. Listeners stay off the caller's signal.
+  // `signal` stays in force after open. Listeners stay off the caller's signal.
   const requestSignal = mergeAbortSignals(controller.signal, [callerAbort]);
   const stopBeforeTransport = (
     fault: PreflightFault,
@@ -333,7 +333,7 @@ async function runEventStreamCommand<
       parsedInput,
       endpoint.builder,
       {
-        abort: requestSignal,
+        signal: requestSignal,
         baseEndpoint: clientConfig.endpoint,
         defaultHeaders: clientConfig.headers,
         inputDeclared: endpoint.input !== undefined,
@@ -386,7 +386,7 @@ async function runEventStreamCommand<
         void rejected.catch(() => undefined);
         return rejected;
       }
-      const transportAbort = mergeAbortSignals(requestSignal, [req.abort]);
+      const transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
       const due = resolveAbortFault(transportAbort);
       if (due) {
         // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
@@ -424,7 +424,7 @@ async function runEventStreamCommand<
       // Type boundary: SSEHandler returns EventStreamHandle<unknown>; the concrete type is narrowed by the interceptor chain.
       const failure: EventStreamFailureInfo = {};
       const promise = fetchEventStream(
-        { ...req, abort: streamAbort },
+        { ...req, signal: streamAbort },
         {
           fetch: clientConfig.sse.handle,
           failure,

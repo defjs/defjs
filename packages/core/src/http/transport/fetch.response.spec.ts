@@ -213,7 +213,7 @@ describe("Fetch handler responses", () => {
       baseEndpoint: inject("testServerHost"),
       endpoint: "/delay",
       method: "GET",
-      abort: abort.signal,
+      signal: abort.signal,
       queryParams: new URLSearchParams({ ms: "5000" }),
     };
 
@@ -236,7 +236,7 @@ describe("Fetch handler responses", () => {
     );
     const pending = fetchHandler(
       {
-        abort: controller.signal,
+        signal: controller.signal,
         baseEndpoint: "https://example.com",
         endpoint: "/ignored-abort",
         method: "GET",
@@ -274,7 +274,7 @@ describe("Fetch handler responses", () => {
     );
     const pending = fetchHandler(
       {
-        abort: controller.signal,
+        signal: controller.signal,
         baseEndpoint: "https://example.com",
         endpoint: "/stalled-body",
         method: "GET",
@@ -310,7 +310,7 @@ describe("Fetch handler responses", () => {
     );
     const pending = fetchHandler(
       {
-        abort: controller.signal,
+        signal: controller.signal,
         baseEndpoint: "https://example.com",
         endpoint: "/stalled-body-cancel-rejects",
         method: "GET",
@@ -346,7 +346,7 @@ describe("Fetch handler responses", () => {
     );
     const pending = fetchHandler(
       {
-        abort: controller.signal,
+        signal: controller.signal,
         baseEndpoint: "https://example.com",
         downloadProgress: vi.fn(),
         endpoint: "/stalled-progress-body",
@@ -370,7 +370,7 @@ describe("Fetch handler responses", () => {
       baseEndpoint: inject("testServerHost"),
       endpoint: "/delay",
       method: "GET",
-      abort: signal,
+      signal,
       queryParams: new URLSearchParams({ ms: "10000" }),
     };
 

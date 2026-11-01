@@ -1,5 +1,5 @@
 export { createClient } from "./client";
-export type { Client, RequestOptions } from "./client";
+export type { Client, DerivableClient, RequestOptions } from "./client";
 export type {
   ClientConfig,
   ClientOptions,

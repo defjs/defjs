@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, inject, test } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withQuerySerializer,
   type Client,
@@ -9,7 +10,7 @@ import { struct } from "../struct";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 
 describe("web socket runtime lifecycle", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));
@@ -38,7 +39,7 @@ describe("web socket runtime lifecycle", () => {
     });
 
     const controller = new AbortController();
-    const executePromise = run(useEchoSocket, { abort: controller.signal });
+    const executePromise = run(useEchoSocket, { signal: controller.signal });
     controller.abort();
 
     const [error, socket, connection] = await executePromise;

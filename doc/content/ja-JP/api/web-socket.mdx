@@ -16,7 +16,7 @@ description: defineWebSocket、session、リクエスト options です。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとの options は、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `abort`、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` で、HTTP の進捗フィールドは無視します。
+呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとの options は、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `signal`、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` で、HTTP の進捗フィールドは無視します。
 
 `beforeConnect`、`heartbeat`、`protocols`、`reconnect` は、それぞれがその呼び出しに限りクライアントの値を全体として置き換えます。protocols の優先順位は、派生したクライアント、`withWebSocketProtocols`、定義の `protocols` の順です。`heartbeat.timeoutMs` は確認待ちであり、リクエストの期限ではありません。
 
@@ -55,9 +55,9 @@ async function consume(
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`abort` です。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。`timeout` フィールドも `signal` フィールドもありません。
+`WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`signal` です。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。`timeout` フィールドも `abort` フィールドもありません。
 
-`abort` は開いたあとも含むセッション全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。あとの `abort` が前のシグナルを置き換えます。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
+`signal` は開いたあとも含むセッション全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。`signal` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
 
 `reconnect` を指定したとき、`attempts` のデフォルトは障害ごとに 3 です。`0` はリトライを無効にします。`open` に成功すると予算とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。デフォルトと検証規則は [Client](/ja-JP/api/client) を参照してください。
 
@@ -87,7 +87,7 @@ session.send({ type: "message", text: "Hello" });
 
 ## UseWebSocketConfig
 
-`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`abort` です。`WebSocketExecuteOptions` はこのスライスです。`signal` フィールドはありません。
+`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`signal` です。`WebSocketExecuteOptions` はこのスライスです。`abort` フィールドはありません。
 
 ## SocketAwaitResult
 

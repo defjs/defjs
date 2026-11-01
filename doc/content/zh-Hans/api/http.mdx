@@ -19,7 +19,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 `output` 是 2xx body 的单一 struct；`error` 是每个非 2xx body 的单一 struct。两者都不按状态码分键。省略哪个，那个 body 就根本不会被读——见
 [声明即断言](/zh-Hans/docs/design-decisions#declaration-is-an-assertion)。
 
-调用该操作会返回一个 promise，其值是 [`HttpAwaitResult`](/zh-Hans/api/core/httpawaitresult-type) 所描述的 tuple。按次选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 传入。HTTP 读取 `abort` 和进度回调，忽略其余字段。
+调用该操作会返回一个 promise，其值是 [`HttpAwaitResult`](/zh-Hans/api/core/httpawaitresult-type) 所描述的 tuple。按次选项通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 传入。HTTP 读取 `signal` 和进度回调，忽略其余字段。
 
 没有声明 `error` struct，或所声明的 `error` body 能成功解码时，非 2xx 状态才是 `HTTP_STATUS`。声明过 `error` 时 fault 的 `data` 是解码后的错误 body，否则是 `undefined`。如果所声明的 `error` body 无法读取（媒体类型错误、JSON 无效）或与其 struct 不匹配，则 fault 改为 `RES_MEDIA_TYPE_INVALID`、`RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，响应状态仍会记在它的元数据里。失败时 tuple 第三项是 `undefined`；响应元数据由 fault 携带。
 
@@ -39,7 +39,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 切片：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `abort` 加上 `onDownloadProgress` 和 `onUploadProgress`。没有 `timeout` 或 `signal` 字段。期限是 `abort: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。后一次 `abort` 替换上一次的 signal。要组合 signal，在应用代码里用 `AbortSignal.any`。没有 client 级的默认期限。其他请求字段，例如 `heartbeat`，会被忽略。
+`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 切片：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `signal` 加上 `onDownloadProgress` 和 `onUploadProgress`。没有 `timeout` 或 `abort` 字段。期限是 `signal: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。`signal` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。没有 client 级的默认期限。其他请求字段，例如 `heartbeat`，会被忽略。
 
 ## 类型
 
@@ -55,7 +55,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 ### HttpRequest
 
-规范化后的出站请求：`method`、`endpoint`、`headers`、`body`、`abort`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 和 `queryParams`。Interceptor 看到它时，`body` 已经是传输值——JSON 时是 JSON 文本字符串——所以 HMAC 和摘要要针对它来签，而不是针对 struct 输入。Interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。builder 返回 `URLSearchParams` 时，传过去的就是那个实例。`responseType` 和 `errorResponseType` 是只读的：它们由端点的 `output` 与 `error` struct kind 推导而来，不能修改。
+规范化后的出站请求：`method`、`endpoint`、`headers`、`body`、`signal`、`operation`、`withCredentials`、`xsrf`、`downloadProgress` / `uploadProgress`、`baseEndpoint`、`queryString` 和 `queryParams`。Interceptor 看到它时，`body` 已经是传输值——JSON 时是 JSON 文本字符串——所以 HMAC 和摘要要针对它来签，而不是针对 struct 输入。Interceptor 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。builder 返回 `URLSearchParams` 时，传过去的就是那个实例。`responseType` 和 `errorResponseType` 是只读的：它们由端点的 `output` 与 `error` struct kind 推导而来，不能修改。
 
 ### HttpMeta
 
@@ -103,7 +103,7 @@ body 已按声明的 struct 解码成功的响应。拿到这个类型就是解�
 
 ## UseRequestConfig
 
-`abort`，加上可选的 `onDownloadProgress` 和 `onUploadProgress`。`HttpExecuteOptions` 就是这个切片。没有 `timeout` 或 `signal` 字段。
+`signal`，加上可选的 `onDownloadProgress` 和 `onUploadProgress`。`HttpExecuteOptions` 就是这个切片。没有 `timeout` 或 `abort` 字段。
 
 ## RequestSuccessData
 

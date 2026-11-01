@@ -29,7 +29,7 @@ test("should settle public HTTP cancellation when an interceptor hangs after a r
     ),
   );
   const useRequest = defineRequest({ method: "GET", path: "/" });
-  const pending = useRequest(client({ abort: controller.signal }));
+  const pending = useRequest(client({ signal: controller.signal }));
 
   await nextResolved;
   controller.abort("caller stopped");

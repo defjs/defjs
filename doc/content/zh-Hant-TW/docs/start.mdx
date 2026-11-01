@@ -77,7 +77,7 @@ API 定義留在 SDK 模組。服務位址、憑證、interceptors 與執行生�
 - 已宣告的 body（2xx 用 `output`，其餘用 `error`）解不出來 → `RES_DECODE_FAILED` 或 `RES_STRUCT_MISMATCH`，不論狀態碼是什麼
 - Fetch 失敗／取消／期限 → `NET_UNREACHABLE`／`NET_ABORTED`／`NET_TIMEOUT`
 
-期限是 `client({ abort: AbortSignal.timeout(ms) })`，歸類為 `NET_TIMEOUT`。手動取消是 `NET_ABORTED`。沒有 client 層級的預設期限。某一次呼叫需要自己的 `abort` 時，衍生一個 client；見 [Client](/zh-Hant-TW/docs/client)。取消只告訴你呼叫端看到什麼 — 不代表伺服器寫入有沒有提交。
+期限是 `client({ signal: AbortSignal.timeout(ms) })`，歸類為 `NET_TIMEOUT`。手動取消是 `NET_ABORTED`。沒有 client 層級的預設期限。某一次呼叫需要自己的 `signal` 時，衍生一個 client；見 [Client](/zh-Hant-TW/docs/client)。取消只告訴你呼叫端看到什麼 — 不代表伺服器寫入有沒有提交。
 
 ## 接下來的操作範例
 

@@ -1,10 +1,15 @@
 import { afterEach, beforeEach, describe, expect, inject, test } from "vitest";
-import { createClient, withEndpoint, type Client } from "../client";
+import {
+  createClient,
+  type DerivableClient,
+  withEndpoint,
+  type Client,
+} from "../client";
 import { struct } from "../struct";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 
 describe("web socket runtime reconnect", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));

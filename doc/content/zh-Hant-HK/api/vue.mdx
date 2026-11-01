@@ -22,7 +22,7 @@ description: Vue plugin、預設或者自訂 injection key，同 injectClient。
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` 讀所選 key 最近嘅 provider；省略參數或者傳入 `undefined` 就用 `HTTP_CLIENT`。要喺有效嘅 Vue 注入上下文 call，例如同步 `setup()` 或者 `app.runWithContext()`（Vue 3.3+）。後者淨係提供同步 app-level context，唔會帶住組件 subtree override，亦唔會跨普通 `await` 保留；`<script setup>` 頂層 `await` 之後由編譯器恢復嘅上下文仍然有效。將嗰個 client 傳入操作。`Client` 係 function：唔好將佢做 `watch` 或者 `computed` 嘅 source，因為嗰啲會 call function。
+`injectClient(key)` 讀所選 key 最近嘅 provider；省略參數或者傳入 `undefined` 就用 `HTTP_CLIENT`。要喺有效嘅 Vue 注入上下文 call，例如同步 `setup()` 或者 `app.runWithContext()`（Vue 3.3+）。後者淨係提供同步 app-level context，唔會帶住組件 subtree override，亦唔會跨普通 `await` 保留；`<script setup>` 頂層 `await` 之後由編譯器恢復嘅上下文仍然有效。將嗰個 client 傳入操作。注入嘅值就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)；喺操作行嗰度用 request options call 佢，就會派生一個 `Client` 值。唔好將佢做 `watch` 或者 `computed` 嘅 source，因為嗰啲會 call function。派生出嚟嘅 `Client` 值唔會被 plugin 或者 `injectClient` 接受。
 
 自訂 `InjectionKey<Client>` 用 `app.provide(key, client)` 或者祖先嘅 `provide(key, client)` 設定。提供同取得兩邊要 share 同一個 `Symbol` object，相同描述唔代表相同 key。`createClientPlugin(client)` 仍然只接受 Client，同埋只提供 `HTTP_CLIENT`。
 

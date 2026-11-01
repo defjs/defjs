@@ -96,7 +96,7 @@ WebSocket backoff jitter 是**乘法**（`jitter: 0.2` 會在捨入前，把已�
 
 `session.close(code?, reason?)` 請求終端關閉並停掉 heartbeat。Code 必須是 `1000` 或 `3000..4999`；reason ≤ 123 UTF-8 bytes。無效的 close 參數會在改 state 前 throw。需要手動 close reason 或邏輯終端結果時，搭配 `await session.closed` 使用。
 
-傳給操作的 `abort` signal 會一直附著在已開啟的 session 上，並涵蓋整條連線，包含開啟之後。逾時形狀的 abort（`TimeoutError` 或 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）會以 `'error'`（`NET_TIMEOUT`）結束。其他 reason 則以 `'aborted'` 結束，而且 `receive` 會以該 reason 本身 reject，不是新的 `AbortError`。沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器。見 [SSE](/zh-Hant-TW/docs/sse#close-and-dispose)。
+傳給操作的 `signal` 會一直附著在已開啟的 session 上，並涵蓋整條連線，包含開啟之後。逾時形狀的 abort（`TimeoutError` 或 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）會以 `'error'`（`NET_TIMEOUT`）結束。其他 reason 則以 `'aborted'` 結束，而且 `receive` 會以該 reason 本身 reject，不是新的 `AbortError`。沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器。見 [SSE](/zh-Hant-TW/docs/sse#close-and-dispose)。
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

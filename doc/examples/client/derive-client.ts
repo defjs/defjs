@@ -10,14 +10,14 @@ const getUser = defineRequest({
   output: struct.object({ id: struct.number(), name: struct.string() }),
 });
 
-async function main(abort: AbortSignal) {
-  const withAbort = client({ abort });
-  const withProgress = withAbort({
+async function main(signal: AbortSignal) {
+  const requestClient = client({
+    signal,
     onDownloadProgress(event) {
       console.log(event.loaded);
     },
   });
-  const [error, user] = await getUser(withProgress, { id: 1 });
+  const [error, user] = await getUser(requestClient, { id: 1 });
   if (error) {
     console.error(error.code);
     return;

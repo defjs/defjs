@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no Vue dependen
 bun add @defjs/core @defjs/vue vue
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.5.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
 
 ## Quick start
 
@@ -46,7 +46,7 @@ watch(
     const abort = new AbortController();
     onCleanup(() => abort.abort());
 
-    void getUser(client({ abort: abort.signal }), { id }).then(
+    void getUser(client({ signal: abort.signal }), { id }).then(
       ([error, user]) => {
         if (abort.signal.aborted) return;
         if (error) {
@@ -72,13 +72,13 @@ watch(
 
 Creates a Vue plugin that provides the supplied client as `HTTP_CLIENT`.
 
-### `injectClient(key?): Client`
+### `injectClient(key?): DerivableClient`
 
 Returns the nearest client for `key`, defaulting to `HTTP_CLIENT`. Call it in a valid injection context: synchronous `setup()` or `app.runWithContext()` (Vue 3.3+). Throws without an active context or a client for the key; a missing custom key never falls back to `HTTP_CLIENT`.
 
 ### `HTTP_CLIENT`
 
-Public `InjectionKey<Client>` for native subtree overrides:
+Public `InjectionKey<DerivableClient>` for native subtree overrides:
 
 ```ts
 provide(HTTP_CLIENT, createClient(withEndpoint("https://preview.example.com")));
@@ -98,7 +98,7 @@ app.use(createClientPlugin(client));
 
 ## Notes
 
-- `Client` is a function. `injectClient()` returns that same function. Pass it straight to `createClientPlugin` or `provide`. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`; the plugin stores the function as-is.
+- `injectClient()` returns the `DerivableClient` that was provided, a function. Call it with request options where the operation runs to derive a `Client` value. Pass it straight to `createClientPlugin` or `provide`. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`; the plugin stores it as-is. A derived `Client` value is not accepted.
 - Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
 - The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. App unmount does not clean them up.
 - Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.

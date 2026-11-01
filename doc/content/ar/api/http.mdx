@@ -19,7 +19,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 `output` هو struct واحد لجسم 2xx؛ و`error` هو struct واحد لكل جسم غير-2xx. لا يُفتاح أي منهما بالحالة. حذف أحدهما يعني أن ذلك الجسم لا يُقرأ أبدًا — انظر
 [الإعلان تأكيد](/ar/docs/design-decisions#declaration-is-an-assertion).
 
-يُرجع استدعاء العملية وعدًا بالـ tuple الموصوف تحت [`HttpAwaitResult`](/ar/api/core/httpawaitresult-type). مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ HTTP الحقل `abort` وردود نداء التقدّم ويتجاهل الحقول الأخرى.
+يُرجع استدعاء العملية وعدًا بالـ tuple الموصوف تحت [`HttpAwaitResult`](/ar/api/core/httpawaitresult-type). مرّر خيارات كل استدعاء باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ HTTP الحقل `signal` وردود نداء التقدّم ويتجاهل الحقول الأخرى.
 
 الحالة غير-2xx هي `HTTP_STATUS` عندما لا يُعلَن struct `error` أو يُفك جسم `error` المعلَن. `data` في الخطأ هو جسم
 `error` المفكوك عندما أُعلن واحد، و`undefined` فيما عدا ذلك. عندما يتعذّر قراءة جسم `error` معلَن (نوع وسائط خاطئ، أو JSON غير صالح) أو
@@ -44,7 +44,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `abort` مع `onDownloadProgress` و`onUploadProgress`. لا يوجد حقل `timeout` أو `signal`. المهلة هي `abort: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. `abort` لاحق يستبدل الإشارة السابقة. اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
+`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `signal` مع `onDownloadProgress` و`onUploadProgress`. لا يوجد حقل `timeout` أو `abort`. المهلة هي `signal: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
 
 ## الأنواع
 
@@ -61,7 +61,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ### HttpRequest
 
-طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`abort` و`operation` و`withCredentials` و`xsrf` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`queryString` و`queryParams`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل الـ struct. يرى المعترضون `queryParams` كـ `new URLSearchParams(queryString)`. الـ builder الذي يُرجع `URLSearchParams` يمرّر تلك النسخة كما هي. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في نقطة النهاية ولا يجوز تغييرهما.
+طلب صادر موحّد: `method` و`endpoint` و`headers` و`body` و`signal` و`operation` و`withCredentials` و`xsrf` و`downloadProgress` / `uploadProgress` و`baseEndpoint` و`queryString` و`queryParams`. حين يراه المعترضون يكون `body` قد صار القيمة السلكية أصلًا — وفي JSON هو سلسلة نصية JSON — فوقّع HMAC والبصمات على ذلك، لا على مدخل الـ struct. يرى المعترضون `queryParams` كـ `new URLSearchParams(queryString)`. الـ builder الذي يُرجع `URLSearchParams` يمرّر تلك النسخة كما هي. `responseType` و`errorResponseType` للقراءة فقط: يُشتقّان من نوع struct لـ `output` و`error` في نقطة النهاية ولا يجوز تغييرهما.
 
 ### HttpMeta
 
@@ -116,7 +116,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 ## UseRequestConfig
 
-`abort`، مع `onDownloadProgress` و`onUploadProgress` الاختياريين. `HttpExecuteOptions` هو هذه الشريحة. لا يوجد حقل `timeout` أو `signal`.
+`signal`، مع `onDownloadProgress` و`onUploadProgress` الاختياريين. `HttpExecuteOptions` هو هذه الشريحة. لا يوجد حقل `timeout` أو `abort`.
 
 ## RequestSuccessData
 

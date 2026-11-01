@@ -98,7 +98,7 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 終端の種別（`closed.kind`）は `eof`、`aborted`、`error` のいずれかです。`error` 結果は `closed.code` も持ち、これは `EventStreamFaultCode` です。`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED`、または `RES_MEDIA_TYPE_INVALID` です。
 
-`close(reason)` はアクティブな試行を abort し、キューを閉じ、理由が `TimeoutError` でも `aborted` として確定します。操作に渡した `abort` シグナルは、ストリームが開いたあとも付いたままで、接続全体を覆います。それを abort すると、通常はイテレータが終了し、`aborted` を報告します。abort の理由が `TimeoutError` または `ERR_TIMEOUT`（たとえば `AbortSignal.timeout(...)`）なら、イテレータは `ERR_TIMEOUT` を throw し、`closed` は `kind: 'error'` と `code: 'NET_TIMEOUT'` を報告します。クライアントに起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
+`close(reason)` はアクティブな試行を abort し、キューを閉じ、理由が `TimeoutError` でも `aborted` として確定します。操作に渡した `signal`は、ストリームが開いたあとも付いたままで、接続全体を覆います。それを abort すると、通常はイテレータが終了し、`aborted` を報告します。abort の理由が `TimeoutError` または `ERR_TIMEOUT`（たとえば `AbortSignal.timeout(...)`）なら、イテレータは `ERR_TIMEOUT` を throw し、`closed` は `kind: 'error'` と `code: 'NET_TIMEOUT'` を報告します。クライアントに起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

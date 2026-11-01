@@ -21,7 +21,7 @@ import {
 type BaseTransport = "http" | "sse";
 
 type BaseTransportRequest = HttpRequest & {
-  abort: AbortSignal;
+  signal: AbortSignal;
   baseEndpoint: string;
   headers: Headers;
   queryParams: URLSearchParams;
@@ -29,7 +29,7 @@ type BaseTransportRequest = HttpRequest & {
 };
 
 export type BaseTransportRequestOptions<TTransport extends BaseTransport> = {
-  abort: AbortSignal;
+  signal: AbortSignal;
   baseEndpoint: string;
   defaultHeaders?: Headers;
   inputDeclared?: boolean;
@@ -82,7 +82,7 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
   }
 
   const request: BaseTransportRequest = {
-    abort: options.abort,
+    signal: options.signal,
     baseEndpoint: options.baseEndpoint,
     body: built.body as HttpRequest["body"],
     bodyContentTypeSource: built.body,

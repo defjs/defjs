@@ -16,74 +16,40 @@ import {
 
 const json = (body: unknown) => Response.json(body);
 
-describe("callable client derivation", () => {
-  test("returns a new client and leaves the original request options empty", () => {
+describe("client factory and client values", () => {
+  test("the factory is a function and returns fresh plain client values", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const first = base();
     const second = base();
 
     expect(typeof base).toBe("function");
+    expect(typeof first).toBe("object");
     expect(first).not.toBe(base);
-    expect(second).not.toBe(base);
     expect(first).not.toBe(second);
     expect(base[CLIENT].options).toEqual({});
     expect(first[CLIENT].options).toEqual({});
     expect(first[CLIENT].config).toBe(base[CLIENT].config);
   });
 
-  test("overlays fields, lets a later call win, and treats undefined as not provided", () => {
-    const base = createClient(withEndpoint("https://example.test"));
-    const firstSignal = new AbortController().signal;
-    const secondSignal = new AbortController().signal;
-    const onDownloadProgress = () => undefined;
-    const withAbort = base({ abort: firstSignal });
-    const withProgress = withAbort({ onDownloadProgress });
-    const replaced = withProgress({ abort: secondSignal });
-    const keptAbort = replaced({ abort: undefined });
-    const keptProgress = keptAbort({ onDownloadProgress: undefined });
-    const copiedEmpty = keptProgress({});
-    const copiedUndefined = keptProgress(undefined);
-    const copiedOmitted = keptProgress();
+  test("calling a derived client value throws a TypeError", () => {
+    const derived = createClient(withEndpoint("https://example.test"))();
 
-    expect(base[CLIENT].options).toEqual({});
-    expect(withAbort[CLIENT].options).toEqual({ abort: firstSignal });
-    expect(withProgress[CLIENT].options).toEqual({
-      abort: firstSignal,
-      onDownloadProgress,
-    });
-    expect(replaced[CLIENT].options).toEqual({
-      abort: secondSignal,
-      onDownloadProgress,
-    });
-    expect(replaced[CLIENT].options.abort).not.toBe(firstSignal);
-    expect(keptAbort[CLIENT].options.abort).toBe(secondSignal);
-    expect(keptAbort[CLIENT].options.onDownloadProgress).toBe(
-      onDownloadProgress,
-    );
-    expect(keptProgress[CLIENT].options.abort).toBe(secondSignal);
-    expect(keptProgress[CLIENT].options.onDownloadProgress).toBe(
-      onDownloadProgress,
-    );
-    expect(copiedEmpty[CLIENT].options).toEqual(keptProgress[CLIENT].options);
-    expect(copiedUndefined[CLIENT].options).toEqual(
-      keptProgress[CLIENT].options,
-    );
-    expect(copiedOmitted[CLIENT].options).toEqual(keptProgress[CLIENT].options);
-    expect(copiedEmpty[CLIENT].options).not.toBe(keptProgress[CLIENT].options);
-    expect(copiedUndefined[CLIENT].options).not.toBe(
-      keptProgress[CLIENT].options,
-    );
-    expect(copiedOmitted[CLIENT].options).not.toBe(
-      keptProgress[CLIENT].options,
-    );
-    expect(copiedEmpty).not.toBe(copiedUndefined);
-    expect(copiedEmpty).not.toBe(copiedOmitted);
+    expect(() => (derived as unknown as () => void)()).toThrow(TypeError);
   });
 
-  test("keeps every parent field on an empty patch and overrides each field on its own", () => {
+  test("client(), client(undefined), and client({}) carry no request options", () => {
     const base = createClient(withEndpoint("https://example.test"));
-    const parentValues = {
-      abort: new AbortController().signal,
+
+    for (const client of [base(), base(undefined), base({})]) {
+      expect(client[CLIENT].options).toEqual({});
+      expect(client[CLIENT].options).not.toBe(base[CLIENT].options);
+    }
+  });
+
+  test("copies all seven known fields and ignores unknown fields", () => {
+    const base = createClient(withEndpoint("https://example.test"));
+    const known = {
+      signal: new AbortController().signal,
       onUploadProgress: () => undefined,
       onDownloadProgress: () => undefined,
       beforeConnect: () => undefined,
@@ -91,86 +57,46 @@ describe("callable client derivation", () => {
       heartbeat: { intervalMs: 1_000, message: () => "ping" },
       reconnect: { attempts: 1, delayMs: 10 },
     } as const satisfies RequestOptions;
-    const parent = base(parentValues);
-    const kept = parent({});
+    const patch = { ...known, timeout: 100, abort: known.signal };
 
-    expect(kept[CLIENT].options).toEqual(parentValues);
-    expect(kept[CLIENT].options).not.toBe(parent[CLIENT].options);
-    expect(kept[CLIENT].options.protocols).toBe(parentValues.protocols);
-    expect(kept[CLIENT].options.heartbeat).toBe(parentValues.heartbeat);
-    expect(kept[CLIENT].options.reconnect).toBe(parentValues.reconnect);
-    expect(parent[CLIENT].options).toEqual(parentValues);
+    const derived = base(patch);
 
-    const overrides = {
-      abort: new AbortController().signal,
-      onUploadProgress: () => undefined,
-      onDownloadProgress: () => undefined,
-      beforeConnect: () => undefined,
-      protocols: ["chat.v2"],
-      heartbeat: { intervalMs: 2_000 },
-      reconnect: { attempts: 4, delayMs: 20 },
-    } as const satisfies RequestOptions;
-
-    expect(parent({ abort: overrides.abort })[CLIENT].options).toEqual({
-      ...parentValues,
-      abort: overrides.abort,
-    });
-    expect(
-      parent({ onUploadProgress: overrides.onUploadProgress })[CLIENT].options,
-    ).toEqual({
-      ...parentValues,
-      onUploadProgress: overrides.onUploadProgress,
-    });
-    expect(
-      parent({ onDownloadProgress: overrides.onDownloadProgress })[CLIENT]
-        .options,
-    ).toEqual({
-      ...parentValues,
-      onDownloadProgress: overrides.onDownloadProgress,
-    });
-    expect(
-      parent({ beforeConnect: overrides.beforeConnect })[CLIENT].options,
-    ).toEqual({
-      ...parentValues,
-      beforeConnect: overrides.beforeConnect,
-    });
-    expect(parent({ protocols: overrides.protocols })[CLIENT].options).toEqual({
-      ...parentValues,
-      protocols: overrides.protocols,
-    });
-    expect(parent({ heartbeat: overrides.heartbeat })[CLIENT].options).toEqual({
-      ...parentValues,
-      heartbeat: overrides.heartbeat,
-    });
-    expect(parent({ reconnect: overrides.reconnect })[CLIENT].options).toEqual({
-      ...parentValues,
-      reconnect: overrides.reconnect,
-    });
-    expect(parent[CLIENT].options).toEqual(parentValues);
+    expect(derived[CLIENT].options).toEqual(known);
+    expect(Object.keys(derived[CLIENT].options).sort()).toEqual(
+      Object.keys(known).sort(),
+    );
+    expect(derived[CLIENT].options).not.toBe(patch);
   });
 
-  test("replaces nested request options as whole values", () => {
+  test("omits fields whose value is undefined", () => {
     const base = createClient(withEndpoint("https://example.test"));
-    const firstHeartbeat = { intervalMs: 1_000, message: () => "ping" };
-    const secondHeartbeat = { intervalMs: 2_000 };
-    const firstProtocols = ["chat.v1"];
-    const secondProtocols = ["chat.v2"];
-    const firstReconnect = { attempts: 1, delayMs: 10 };
-    const secondReconnect = { attempts: 4, delayMs: 20 };
     const derived = base({
-      heartbeat: firstHeartbeat,
-      protocols: firstProtocols,
-      reconnect: firstReconnect,
-    })({
-      heartbeat: secondHeartbeat,
-      protocols: secondProtocols,
-      reconnect: secondReconnect,
+      signal: undefined,
+      onDownloadProgress: undefined,
+      protocols: undefined,
     });
 
-    expect(derived[CLIENT].options.heartbeat).toBe(secondHeartbeat);
-    expect(derived[CLIENT].options.protocols).toBe(secondProtocols);
-    expect(derived[CLIENT].options.reconnect).toBe(secondReconnect);
-    expect(base[CLIENT].options).toEqual({});
+    expect(Object.keys(derived[CLIENT].options)).toEqual([]);
+  });
+
+  test("keeps nested heartbeat, protocols, and reconnect by reference", () => {
+    const base = createClient(withEndpoint("https://example.test"));
+    const heartbeat = { intervalMs: 1_000 };
+    const protocols = ["chat.v1"];
+    const reconnect = { attempts: 1, delayMs: 10 };
+    const derived = base({ heartbeat, protocols, reconnect });
+
+    expect(derived[CLIENT].options.heartbeat).toBe(heartbeat);
+    expect(derived[CLIENT].options.protocols).toBe(protocols);
+    expect(derived[CLIENT].options.reconnect).toBe(reconnect);
+
+    heartbeat.intervalMs = 2_000;
+    protocols.push("chat.v2");
+    reconnect.attempts = 5;
+
+    expect(derived[CLIENT].options.heartbeat?.intervalMs).toBe(2_000);
+    expect(derived[CLIENT].options.protocols).toEqual(["chat.v1", "chat.v2"]);
+    expect(derived[CLIENT].options.reconnect?.attempts).toBe(5);
   });
 
   test("does not perform I/O or listen for abort while deriving", () => {
@@ -182,7 +108,7 @@ describe("callable client derivation", () => {
       withHTTPHandle(handle),
     );
 
-    const derived = client({ abort: signal })({ protocols: ["chat.v1"] })();
+    const derived = client({ signal, protocols: ["chat.v1"] });
 
     expect(derived).not.toBe(client);
     expect(handle).not.toHaveBeenCalled();
@@ -208,7 +134,7 @@ describe("callable client derivation", () => {
       output: struct.object({ ok: struct.boolean() }),
     });
 
-    const [error, data] = await read(client({ abort: controller.signal }));
+    const [error, data] = await read(client({ signal: controller.signal }));
 
     expect(error?.code).toBe("NET_ABORTED");
     expect(data).toBeUndefined();
@@ -230,8 +156,8 @@ describe("callable client derivation", () => {
     const read = defineRequest({ method: "GET", path: "/hang" });
     const first = new AbortController();
     const second = new AbortController();
-    const pendingFirst = read(client({ abort: first.signal }));
-    const pendingSecond = read(client({ abort: second.signal }));
+    const pendingFirst = read(client({ signal: first.signal }));
+    const pendingSecond = read(client({ signal: second.signal }));
 
     first.abort();
     const [firstError] = await pendingFirst;
@@ -256,7 +182,7 @@ describe("callable client derivation", () => {
     const reads: string[] = [];
     const patch = {} as RequestOptions;
     const values = {
-      abort: firstSignal,
+      signal: firstSignal,
       beforeConnect: () => undefined,
       heartbeat: { intervalMs: 1_000 },
       onDownloadProgress,
@@ -265,7 +191,7 @@ describe("callable client derivation", () => {
       reconnect: { attempts: 1 },
     } as const;
     for (const key of [
-      "abort",
+      "signal",
       "onUploadProgress",
       "onDownloadProgress",
       "beforeConnect",
@@ -287,7 +213,7 @@ describe("callable client derivation", () => {
     const fixed = derived[CLIENT].options;
 
     expect(reads).toEqual([
-      "abort",
+      "signal",
       "onUploadProgress",
       "onDownloadProgress",
       "beforeConnect",
@@ -308,49 +234,53 @@ describe("callable client derivation", () => {
     const firstSignal = new AbortController().signal;
     const secondSignal = new AbortController().signal;
     const onDownloadProgress = () => undefined;
-    const patch: RequestOptions = { abort: firstSignal };
+    const patch: RequestOptions = { signal: firstSignal };
     const derived = base(patch);
 
-    patch.abort = secondSignal;
-    expect(derived[CLIENT].options).toEqual({ abort: firstSignal });
-    delete patch.abort;
-    expect(derived[CLIENT].options).toEqual({ abort: firstSignal });
+    patch.signal = secondSignal;
+    expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
+    delete patch.signal;
+    expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
     patch.onDownloadProgress = onDownloadProgress;
-    expect(derived[CLIENT].options).toEqual({ abort: firstSignal });
+    expect(derived[CLIENT].options).toEqual({ signal: firstSignal });
     expect(derived[CLIENT].options.onDownloadProgress).toBeUndefined();
   });
 
-  test("keeps the parent and other derived clients fixed when the patch changes", () => {
+  test("keeps the factory and other client values fixed when the patch changes", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const firstSignal = new AbortController().signal;
     const secondSignal = new AbortController().signal;
-    const onDownloadProgress = () => undefined;
-    const patch: RequestOptions = { abort: firstSignal };
-    const parent = base(patch);
-    const child = parent();
-    const childFromUndefined = parent(undefined);
-    const sibling = base({ abort: secondSignal });
+    const patch: RequestOptions = { signal: firstSignal };
+    const first = base(patch);
+    const sibling = base({ signal: secondSignal });
 
-    patch.abort = secondSignal;
-    delete patch.abort;
-    patch.onDownloadProgress = onDownloadProgress;
+    patch.signal = secondSignal;
+    delete patch.signal;
+    patch.onDownloadProgress = () => undefined;
 
     expect(base[CLIENT].options).toEqual({});
-    expect(parent[CLIENT].options).toEqual({ abort: firstSignal });
-    expect(child[CLIENT].options).toEqual({ abort: firstSignal });
-    expect(childFromUndefined[CLIENT].options).toEqual({ abort: firstSignal });
-    expect(sibling[CLIENT].options).toEqual({ abort: secondSignal });
-    expect(child[CLIENT].options).not.toBe(parent[CLIENT].options);
-    expect(child[CLIENT].options).not.toBe(patch);
-    expect(child).not.toBe(parent);
-    expect(childFromUndefined).not.toBe(parent);
-    expect(child[CLIENT].config).toBe(parent[CLIENT].config);
+    expect(first[CLIENT].options).toEqual({ signal: firstSignal });
+    expect(sibling[CLIENT].options).toEqual({ signal: secondSignal });
+    expect(first[CLIENT].options).not.toBe(patch);
+    expect(first[CLIENT].config).toBe(base[CLIENT].config);
+  });
+
+  test("does not read unknown getters", () => {
+    const base = createClient(withEndpoint("https://example.test"));
+    const read = vi.fn(() => 1);
+    const patch = Object.defineProperty({} as RequestOptions, "extra", {
+      enumerable: true,
+      get: read,
+    });
+
+    expect(base(patch)[CLIENT].options).toEqual({});
+    expect(read).not.toHaveBeenCalled();
   });
 
   test("stores options separately from the parent state and the patch object", () => {
     const base = createClient(withEndpoint("https://example.test"));
     const signal = new AbortController().signal;
-    const patch: RequestOptions = { abort: signal };
+    const patch: RequestOptions = { signal };
     const derived = base(patch);
     const first = derived[CLIENT].options;
     const second = derived[CLIENT].options;
@@ -358,17 +288,17 @@ describe("callable client derivation", () => {
     expect(first).not.toBe(base[CLIENT].options);
     expect(first).not.toBe(patch);
     expect(second).toBe(first);
-    expect(second).toEqual({ abort: signal });
+    expect(second).toEqual({ signal });
   });
 
-  test("throws from client(patch) when a patch getter throws and leaves the parent usable", async () => {
+  test("throws from client(patch) when a patch getter throws and leaves the factory usable", async () => {
     const handle = vi.fn(async () => json({ ok: true }));
     const parent = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
     );
-    const boom = new Error("abort getter failed");
-    const patch = Object.defineProperty({} as RequestOptions, "abort", {
+    const boom = new Error("signal getter failed");
+    const patch = Object.defineProperty({} as RequestOptions, "signal", {
       configurable: true,
       enumerable: true,
       get() {
@@ -516,8 +446,8 @@ describe("AbortSignal.timeout classification", () => {
     );
     const read = defineRequest({ method: "GET", path: "/hang" });
     const manual = new AbortController();
-    const timed = read(client({ abort: AbortSignal.timeout(20) }));
-    const aborted = read(client({ abort: manual.signal }));
+    const timed = read(client({ signal: AbortSignal.timeout(20) }));
+    const aborted = read(client({ signal: manual.signal }));
     manual.abort();
 
     const [timeoutError] = await timed;
@@ -547,8 +477,8 @@ describe("AbortSignal.timeout classification", () => {
       events: { message: struct.string() },
     });
     const manual = new AbortController();
-    const timed = stream(client({ abort: AbortSignal.timeout(20) }));
-    const aborted = stream(client({ abort: manual.signal }));
+    const timed = stream(client({ signal: AbortSignal.timeout(20) }));
+    const aborted = stream(client({ signal: manual.signal }));
     manual.abort();
 
     const [timeoutError, timeoutStream] = await timed;
@@ -582,8 +512,8 @@ describe("AbortSignal.timeout classification", () => {
       maxIncomingQueueSize: 4,
     });
     const manual = new AbortController();
-    const timed = socket(client({ abort: AbortSignal.timeout(20) }));
-    const aborted = socket(client({ abort: manual.signal }));
+    const timed = socket(client({ signal: AbortSignal.timeout(20) }));
+    const aborted = socket(client({ signal: manual.signal }));
     manual.abort();
 
     const [timeoutError, timeoutSession] = await timed;

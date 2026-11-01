@@ -44,7 +44,7 @@ test.each(["abort", "timeout"] as const)(
       ),
     );
     try {
-      const pending = request(first({ abort: controller.signal }));
+      const pending = request(first({ signal: controller.signal }));
       await entered.promise;
       controller.abort(
         mode === "timeout"
@@ -131,7 +131,7 @@ test.each(["abort", "timeout"] as const)(
     );
     try {
       const [fault, stream, open] = await events(
-        first({ abort: controller.signal }),
+        first({ signal: controller.signal }),
       );
       expect(fault).toBeNull();
       expect(open?.response.headers.get("x-tenant")).toBe("first");
@@ -168,7 +168,7 @@ test.each(["abort", "timeout"] as const)(
           return new Promise<Response>(() => undefined);
         }),
       );
-      const pending = events(stalled({ abort: stalledController.signal }));
+      const pending = events(stalled({ signal: stalledController.signal }));
       await started.promise;
       stalledController.abort(new DOMException("deadline", "TimeoutError"));
       const [timeoutFault, , timeoutOpen] = await pending;
@@ -224,7 +224,7 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
     maxBufferSize: 1024,
     maxQueueSize: 4,
   });
-  const pending = declared(first({ abort: controller.signal }));
+  const pending = declared(first({ signal: controller.signal }));
   await entered.promise;
   await Promise.resolve();
   controller.abort();

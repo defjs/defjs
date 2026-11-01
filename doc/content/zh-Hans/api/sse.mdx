@@ -16,13 +16,13 @@ description: defineEventStream、请求选项，以及 stream handle。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-调用返回 `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 来传入 `abort`。SSE 只读取 `abort`，忽略进度和 WebSocket 字段。
+调用返回 `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 来传入 `signal`。SSE 只读取 `signal`，忽略进度和 WebSocket 字段。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` 是 `{ abort? }`。没有 `timeout` 或 `signal` 字段，也没有进度回调。`abort` 覆盖整条流，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。应用若需要仅限启动期的期限，就自己建一个 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。
+`EventStreamExecuteOptions` 是 `{ signal? }`。没有 `timeout` 或 `abort` 字段，也没有进度回调。`signal` 覆盖整条流，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。应用若需要仅限启动期的期限，就自己建一个 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。
 
 ## EventStreamHandle
 

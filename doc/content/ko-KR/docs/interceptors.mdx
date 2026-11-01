@@ -96,7 +96,7 @@ WebSocket 인터셉터는 `next`를 최대 한 번만 호출할 수 있어요. �
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP용 Basic 자격 증명
 - `basicAuthSSEInterceptor(provider, options?)` — SSE용 Basic 자격 증명
 
-`HttpRequest`에는 `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, 정적 `operation`이 있을 수 있어요. 전송 통합 값이지 호출자의 파싱된 입력이 아니에요. `queryParams`는 직렬화 뒤의 `new URLSearchParams(queryString)`이에요. 설정된 query serializer는 builder가 query를 만들지 않으면 호출되지 않고, builder의 `URLSearchParams`는 그대로 쓰여요. 입력 검증, 출력 검증, 도메인 오류 매핑은 각자 레이어에 두세요.
+`HttpRequest`에는 `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `signal`, 정적 `operation`이 있을 수 있어요. 전송 통합 값이지 호출자의 파싱된 입력이 아니에요. `queryParams`는 직렬화 뒤의 `new URLSearchParams(queryString)`이에요. 설정된 query serializer는 builder가 query를 만들지 않으면 호출되지 않고, builder의 `URLSearchParams`는 그대로 쓰여요. 입력 검증, 출력 검증, 도메인 오류 매핑은 각자 레이어에 두세요.
 
 URL 검증은 요청을 만드는 동안 시작해요. 없거나 상대적이거나 잘못된 base endpoint나 불법 path는 인터셉터나 전송이 돌기 전에, 단축하는 인터셉터를 포함해 `REQ_BUILD_FAILED`로 실패해요. 디스패치 전에 최종 `req.endpoint`를 최종 `req.baseEndpoint`에 대해 검증해요. 해석된 URL은 그 base의 origin을 유지하고 디렉터리 안에 머물러야 하며, path의 C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`, 디렉터리 탈출은 거부돼요. 앞에 공백이 있어도 스킴 형태와 프로토콜 상대 형식은 거부돼요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. interceptor는 `baseEndpoint`를 다른 유효한 절대 URL로 일부러 바꿀 수 있어요. HTTP, SSE, WebSocket이 이 규칙을 공유하고, 결정적인 URL 오류는 재시도하지 않아요.
 

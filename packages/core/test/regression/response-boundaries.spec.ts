@@ -210,7 +210,7 @@ test.each(["abort", "timeout"] as const)(
       output: struct.unknown(),
     });
     let settled = false;
-    const pending = endpoint(client({ abort: controller.signal })).then(
+    const pending = endpoint(client({ signal: controller.signal })).then(
       (result) => {
         settled = true;
         return result;
@@ -411,7 +411,7 @@ test.each(["json", "text", "blob", "arrayBuffer"] as const)(
         error: errors[kind],
       });
       const controller = new AbortController();
-      const pending = endpoint(client({ abort: controller.signal }));
+      const pending = endpoint(client({ signal: controller.signal }));
       try {
         await started.promise;
         controller.abort(

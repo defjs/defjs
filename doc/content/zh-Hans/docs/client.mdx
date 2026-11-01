@@ -5,13 +5,13 @@ description: 配置应用如何调用导入的 SDK 操作，与它们的 API 定
 
 # Client
 
-`Client` 是消费方应用的执行配置，并且它是一个函数。`createClient(...)` 返回这个函数。从 SDK 导入操作，选定服务地址、凭证、拦截器和传输，再把 client 传给操作。`getUser(client({ abort }), { id: 1 })` 启动一次声明了 input 的调用。`health(client)` 启动一次没有 input 的调用。整个 input struct 可选时，`search(client)` 和 `search(client, input)` 都合法。没有第三个 options 参数。调用操作即开始它。`await` 只等待 error-first tuple。
+`Client` 是消费方应用的执行配置。`createClient(...)` 返回一个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)。用请求选项调用这个工厂会得到一个 `Client` 值，操作接受的就是 `Client` 值。它不可调用。从 SDK 导入操作，选定服务地址、凭证、拦截器和传输，再把 client 传给操作。`getUser(client({ signal }), { id: 1 })` 启动一次声明了 input 的调用。`health(client)` 启动一次没有 input 的调用。整个 input struct 可选时，`search(client)` 和 `search(client, input)` 都合法。没有第三个 options 参数。调用操作即开始它。`await` 只等待 error-first tuple。
 
 SDK 的定义不绑定这个实例。浏览器、服务端请求和本地测试可以用不同的 client 调用同一个导出的操作。它们仍遵循同一份 Defjs 契约和兼容的 Core 版本。为你通过该 client 调用的操作配置它的服务地址。
 
 同一个 client 值可以传给多次操作。应用选择缓存和重试策略，并拥有自己启动的工作。HTTP 不会自动重试。流的重连需要显式启用。
 
-因为 `Client` 是函数，不要把它传给 React 的 state setter：`setState(client)` 会把它当成 updater 来调用。不要把它当作 Vue 的 `watch` 或 `computed` 源：那些 API 会调用函数。
+工厂是一个函数，同时也是不带请求选项的 `Client`。不要把工厂传给 React 的 state setter：`setState(factory)` 会把它当成 updater 来调用。不要把它当作 Vue 的 `watch` 或 `computed` 源：那些 API 会调用函数。派生出的 client 值是普通对象。
 
 ## 基本用法
 
@@ -19,7 +19,7 @@ SDK 的定义不绑定这个实例。浏览器、服务端请求和本地测试�
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` 返回一个可调用的 [`Client`](/zh-Hans/api/core/client-type)。它不是按传输分成的一组重载。
+`createClient(...)` 返回一个可调用的工厂，它同时也是一个 [`Client`](/zh-Hans/api/core/client-type)。它不是按传输分成的一组重载。
 
 ## 组合 options
 
@@ -33,33 +33,33 @@ Options 从左到右生效。Setter 会替换；`withInterceptors(...items)` 是
 
 ## 派生 client
 
-`client(options?)` 返回一个新 client。调用 `client(options)` 时，七个已知字段从参数对象复制出来：顶层快照进一个新的 options 对象，再叠到当前 options 上。后出现的字段胜出。字段的值是 `undefined` 时，视为未提供，保留父级的值。派生出的 client 不能丢掉父级已有的设置；要回到没有这项设置，从当初没有它的那个 client 再派生一次（保留根 client）。嵌套的 `heartbeat`、`protocols` 和 `reconnect` 的值按引用保留，不克隆，并且整体替换父级的值，不会合并。WebSocket 在操作运行时读取它们（那时会复制 heartbeat 的字段和 protocols 列表），所以派生之后再改这些对象，仍可能影响后来的调用。应用应当在传入之后把它们当作不可变。派生不产生 I/O。原来的 client 绝不会被修改。`client()`、`client(undefined)` 和 `client({})` 复制当前 options。
+`client(options?)` 返回一个仅供单次调用的 `Client` 值。调用 `client(options)` 时，七个已知字段从参数对象复制出来：顶层快照进一个新的 options 对象。未知字段会被忽略，值为 `undefined` 的字段会被省略。没有父级叠加：`client()`、`client(undefined)` 和 `client({})` 返回一个不带请求选项的 client。嵌套的 `heartbeat`、`protocols` 和 `reconnect` 的值按引用保留，不克隆。WebSocket 在操作运行时读取它们（那时会复制 heartbeat 的字段和 protocols 列表），所以派生之后再改这些对象，仍可能影响后来的调用。应用应当在传入之后把它们当作不可变。派生不产生 I/O。会抛错的 getter 会从 `client(options)` 中逃出，工厂仍可继续使用。client 值不可调用；每次调用创建一个。
 
-`abort` 不会组合。后一次 `abort` 替换上一次的 signal。要组合 signal，在应用代码里用 `AbortSignal.any`。
+`signal` 不会组合。复用携带 `signal` 的 client 值会在多次调用间共享这个 signal，所以每次调用创建一个 client 值。要组合 signal，在应用代码里用 `AbortSignal.any`。
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-`createClient` 给出的基础配置由每个派生 client 共享，运行时不会冻结。它按约定固定：库不会改它，应用也不应该改。client 上的 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 就是那份顶层快照。应用代码调用 client，再把它传给操作。它不读取这份内部状态。
+`createClient` 给出的基础配置由每个 client 值共享，运行时不会冻结。它按约定固定：库不会改它，应用也不应该改。client 上的 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 就是那份顶层快照。应用代码把 client 传给操作。它不读取这份内部状态。
 
 ## 请求选项
 
-[`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 有七个扁平字段。每种协议只读取自己认识的字段，其余忽略。把 `heartbeat` 传给 HTTP 操作会被忽略，这不是 fault。SSE 从请求选项里只读取 `abort`。SSE 重连来自 client 配置（`withSSEReconnect`），所以 `client({ reconnect })` 只影响 WebSocket。没有编译期的协议过滤。
+[`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 有七个扁平字段。每种协议只读取自己认识的字段，其余忽略。把 `heartbeat` 传给 HTTP 操作会被忽略，这不是 fault。SSE 从请求选项里只读取 `signal`。SSE 重连来自 client 配置（`withSSEReconnect`），所以 `client({ reconnect })` 只影响 WebSocket。没有编译期的协议过滤。
 
-| 字段                 | 使用者               | 规则                                                                                             |
-| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| `abort`              | HTTP、SSE、WebSocket | 替换上一个 signal。期限是 `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）。手动中止是 `NET_ABORTED`。 |
-| `onUploadProgress`   | HTTP                 | SSE 和 WebSocket 忽略。                                                                          |
-| `onDownloadProgress` | HTTP                 | SSE 和 WebSocket 忽略。                                                                          |
-| `beforeConnect`      | WebSocket            | 替换该次调用的 client 设置。                                                                     |
-| `protocols`          | WebSocket            | 替换 client 上的列表。不是追加。                                                                 |
-| `heartbeat`          | WebSocket            | 整体替换。`timeoutMs` 是心跳等待确认的时间，不是请求期限。                                       |
-| `reconnect`          | WebSocket            | 整体替换。                                                                                       |
+| 字段                 | 使用者               | 规则                                                                                        |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP、SSE、WebSocket | 中止该次调用。期限是 `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）。手动中止是 `NET_ABORTED`。 |
+| `onUploadProgress`   | HTTP                 | SSE 和 WebSocket 忽略。                                                                     |
+| `onDownloadProgress` | HTTP                 | SSE 和 WebSocket 忽略。                                                                     |
+| `beforeConnect`      | WebSocket            | 替换该次调用的 client 设置。                                                                |
+| `protocols`          | WebSocket            | 替换 client 上的列表。不是追加。                                                            |
+| `heartbeat`          | WebSocket            | 整体替换。`timeoutMs` 是心跳等待确认的时间，不是请求期限。                                  |
+| `reconnect`          | WebSocket            | 整体替换。                                                                                  |
 
-没有 `timeout` 字段，没有 `signal` 字段，也没有 client 级的默认期限。对 SSE 和 WebSocket，`abort` 覆盖整条连接，包括已经打开之后。没有仅限启动期的期限。应用若需要一个，就自己建 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。见 [SSE](/zh-Hans/docs/sse#close-and-dispose)。
+没有 `timeout` 字段，没有 `abort` 字段，也没有 client 级的默认期限。对 SSE 和 WebSocket，`signal` 覆盖整条连接，包括已经打开之后。没有仅限启动期的期限。应用若需要一个，就自己建 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。见 [SSE](/zh-Hans/docs/sse#close-and-dispose)。
 
-`HttpExecuteOptions` 是 HTTP 切片：`abort` 加上进度回调。`EventStreamExecuteOptions` 是 `{ abort? }`。`WebSocketExecuteOptions` 是 WebSocket 切片再加上 `abort`。
+`HttpExecuteOptions` 是 HTTP 切片：`signal` 加上进度回调。`EventStreamExecuteOptions` 是 `{ signal? }`。`WebSocketExecuteOptions` 是 WebSocket 切片再加上 `signal`。
 
 ## 按传输区分的结果
 
@@ -83,12 +83,13 @@ Options 从左到右生效。Setter 会替换；`withInterceptors(...items)` 是
 
 ## 迁移
 
-| 旧                                        | 新                                             |
-| ----------------------------------------- | ---------------------------------------------- |
-| `client.execute(getUser(input), options)` | `getUser(client(options), input)`              |
-| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })` |
-| `execute(cmd, { signal })`                | `client({ abort: signal })`                    |
-| `createClient(withTimeout(5000), ...)`    | 在调用处传入 `abort`，或包一层应用函数         |
+| 旧                                           | 新                                              |
+| -------------------------------------------- | ----------------------------------------------- |
+| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`               |
+| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })` |
+| `execute(cmd, { signal })`                   | `client({ signal })`                            |
+| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`        |
+| `createClient(withTimeout(5000), ...)`       | 在调用处传入 `signal`，或包一层应用函数         |
 
 ## 参考
 

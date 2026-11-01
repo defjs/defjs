@@ -16,7 +16,7 @@ description: defineWebSocket, session и опции запроса.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавай, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `abort`, `beforeConnect`, `heartbeat`, `protocols` и `reconnect` и игнорирует поля прогресса HTTP.
+Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавай, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `signal`, `beforeConnect`, `heartbeat`, `protocols` и `reconnect` и игнорирует поля прогресса HTTP.
 
 `beforeConnect`, `heartbeat`, `protocols` и `reconnect` каждое целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
 
@@ -55,9 +55,9 @@ async function consume(
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `abort`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`. Полей `timeout` или `signal` нет.
+`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`. Полей `timeout` или `abort` нет.
 
-`abort` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. Более поздний `abort` заменяет предыдущий сигнал. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
+`signal` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. `signal` — сигнал вызова; объединяй сигналы через `AbortSignal.any` в коде приложения. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
 
 Когда задан `reconnect`, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
 
@@ -87,7 +87,7 @@ session.send({ type: "message", text: "Hello" });
 
 ## UseWebSocketConfig
 
-`beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `abort`. `WebSocketExecuteOptions` — этот срез. Поля `signal` нет.
+`beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `signal`. `WebSocketExecuteOptions` — этот срез. Поля `abort` нет.
 
 ## SocketAwaitResult
 

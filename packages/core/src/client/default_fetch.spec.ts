@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import type { DerivableClient } from "./client";
 
 // The transform of the whole graph must not be charged to the first test.
 await import("../index");
@@ -271,7 +272,7 @@ describe("request-time default fetch", () => {
         withInterceptors,
       } = await import("../index");
       const { ERR_FETCH_UNSUPPORTED } = await import("./config");
-      const run = (client: ReturnType<typeof createClient>) =>
+      const run = (client: DerivableClient) =>
         transport === "HTTP"
           ? defineRequest({ method: "GET", path: "/" })(client)
           : defineEventStream({

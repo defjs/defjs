@@ -96,7 +96,7 @@ Browser WebSocket constructors 唔接受 arbitrary handshake headers，builder �
 
 `session.close(code?, reason?)` 要求 terminal closure 同停 heartbeat。Code 一定要係 `1000` 或者 `3000..4999`；reason ≤ 123 UTF-8 bytes。Invalid close args 會喺改 state 之前 throw。要 manual close reason 或 logical terminal result 時，同 `await session.closed` 一齊用。
 
-傳俾操作嘅 `abort` signal 會一直掛喺已經 open 嘅 session，並覆蓋成條連線，包括 open 之後。Timeout 形狀嘅 abort（`TimeoutError` 或者 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）會以 `'error'`（`NET_TIMEOUT`）完結。其他 reason 會以 `'aborted'` 完結，而 `receive` 會以嗰個 reason 本身 reject，唔係新嘅 `AbortError`。冇只限啟動嘅 deadline。應用程式想要一個，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。睇 [SSE](/zh-Hant-HK/docs/sse#close-and-dispose)。
+傳俾操作嘅 `signal` 會一直掛喺已經 open 嘅 session，並覆蓋成條連線，包括 open 之後。Timeout 形狀嘅 abort（`TimeoutError` 或者 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）會以 `'error'`（`NET_TIMEOUT`）完結。其他 reason 會以 `'aborted'` 完結，而 `receive` 會以嗰個 reason 本身 reject，唔係新嘅 `AbortError`。冇只限啟動嘅 deadline。應用程式想要一個，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。睇 [SSE](/zh-Hant-HK/docs/sse#close-and-dispose)。
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

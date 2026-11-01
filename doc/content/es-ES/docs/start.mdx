@@ -77,7 +77,7 @@ Mueve la definición a un paquete de SDK cuando más aplicaciones la necesiten. 
 - Un cuerpo declarado (`output` para 2xx, `error` en el resto) que no decodifica → `RES_DECODE_FAILED` o `RES_STRUCT_MISMATCH`, sea cual sea el estado
 - Fallo de Fetch / cancelación / plazo → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-Un plazo es `client({ abort: AbortSignal.timeout(ms) })` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo por defecto a nivel de cliente. Deriva un cliente cuando una llamada necesita su propio `abort`; consulta [Cliente](/es-ES/docs/client). La cancelación te dice lo que vio quien llama — no si una escritura en el servidor se confirmó.
+Un plazo es `client({ signal: AbortSignal.timeout(ms) })` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo por defecto a nivel de cliente. Deriva un cliente cuando una llamada necesita su propio `signal`; consulta [Cliente](/es-ES/docs/client). La cancelación te dice lo que vio quien llama — no si una escritura en el servidor se confirmó.
 
 ## Siguientes recetas
 

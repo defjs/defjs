@@ -16,7 +16,7 @@ description: defineWebSocket, session, 요청 옵션이에요.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-호출은 `[null, session, connection]` 또는 `[error, undefined, connection?]`을 돌려줘요. 호출마다의 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. WebSocket은 `abort`, `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 읽고, HTTP 진행률 필드는 무시해요.
+호출은 `[null, session, connection]` 또는 `[error, undefined, connection?]`을 돌려줘요. 호출마다의 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. WebSocket은 `signal`, `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 읽고, HTTP 진행률 필드는 무시해요.
 
 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`는 각각 그 호출에 한해 클라이언트 값을 통째로 바꿔요. protocol 우선순위는 파생 클라이언트, `withWebSocketProtocols`, 정의의 `protocols` 순서예요. `heartbeat.timeoutMs`는 확인 대기이지, 요청 데드라인이 아니에요.
 
@@ -55,9 +55,9 @@ async function consume(
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions`는 [`UseWebSocketConfig`](/ko-KR/api/core/usewebsocketconfig-type)예요. `beforeConnect`, `heartbeat`, `protocols`, `reconnect`, `abort`예요. `WebSocketHeartbeatConfig`: `intervalMs`, 선택 `message`, `isAck`, `timeoutMs`예요. `timeout`이나 `signal` 필드는 없어요.
+`WebSocketExecuteOptions`는 [`UseWebSocketConfig`](/ko-KR/api/core/usewebsocketconfig-type)예요. `beforeConnect`, `heartbeat`, `protocols`, `reconnect`, `signal`이에요. `WebSocketHeartbeatConfig`: `intervalMs`, 선택 `message`, `isAck`, `timeoutMs`예요. `timeout`이나 `abort` 필드는 없어요.
 
-`abort`는 열린 뒤를 포함해 세션 전체를 덮어요. 데드라인은 `AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 시작 전용 데드라인도, 클라이언트 기본 데드라인도 없어요. 나중 `abort`가 이전 신호를 바꿔요. `heartbeat`는 통째로 바뀌고, 그 `timeoutMs`는 확인을 기다리는 시간이지 요청 데드라인이 아니에요.
+`signal`은 열린 뒤를 포함해 세션 전체를 덮어요. 데드라인은 `AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 시작 전용 데드라인도, 클라이언트 기본 데드라인도 없어요. `signal`은 그 호출의 신호예요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. `heartbeat`는 통째로 바뀌고, 그 `timeoutMs`는 확인을 기다리는 시간이지 요청 데드라인이 아니에요.
 
 `reconnect`를 주면 `attempts` 기본값은 단절마다 3이고, `0`은 꺼요. `open`이 성공하면 예산과 백오프 지수가 초기화되어, 다음 단절은 재시도 1부터 시작해요. `attempts`를 빼도 한 단절 안에서 무제한 재시도가 되지는 않아요. 기본값과 검증 규칙은 [클라이언트](/ko-KR/api/client)를 보세요.
 
@@ -87,7 +87,7 @@ session.send({ type: "message", text: "Hello" });
 
 ## UseWebSocketConfig
 
-`beforeConnect`, `heartbeat`, `protocols`, `reconnect`, `abort`예요. `WebSocketExecuteOptions`가 이 조각이에요. `signal` 필드는 없어요.
+`beforeConnect`, `heartbeat`, `protocols`, `reconnect`, `signal`이에요. `WebSocketExecuteOptions`가 이 조각이에요. `abort` 필드는 없어요.
 
 ## SocketAwaitResult
 

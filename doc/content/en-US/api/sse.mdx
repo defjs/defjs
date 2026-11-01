@@ -16,13 +16,13 @@ Declare an event stream, call the operation with a client, iterate events, then 
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `error` is declared, the fault is `Fault` of that struct; otherwise it is `Fault<undefined>`. Pass `abort` by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). SSE reads only `abort` and ignores progress and WebSocket fields.
+The call returns `[null, stream, open]` or `[error, undefined, open?]`. When `error` is declared, the fault is `Fault` of that struct; otherwise it is `Fault<undefined>`. Pass `signal` by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). SSE reads only `signal` and ignores progress and WebSocket fields.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` is `{ abort? }`. There is no `timeout` or `signal` field and no progress callback. `abort` covers the whole stream, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no startup-only deadline and no client-level default deadline. An application that wants a startup-only deadline creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns.
+`EventStreamExecuteOptions` is `{ signal? }`. There is no `timeout` or `abort` field and no progress callback. `signal` covers the whole stream, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no startup-only deadline and no client-level default deadline. An application that wants a startup-only deadline creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns.
 
 ## EventStreamHandle
 

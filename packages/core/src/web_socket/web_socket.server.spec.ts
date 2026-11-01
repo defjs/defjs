@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { getEventListeners } from "node:events";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withInterceptors,
   withQuerySerializer,
@@ -283,7 +284,7 @@ function expectListenerReleased(
 }
 
 function clientObservingAbortListeners(): {
-  client: Client;
+  client: DerivableClient;
   observed: {
     current: ReturnType<typeof instrumentAbortListeners> | undefined;
   };
@@ -295,7 +296,7 @@ function clientObservingAbortListeners(): {
     withEndpoint("http://localhost"),
     withInterceptors(
       createWebSocketInterceptor((request, next) => {
-        const signal = request.abort;
+        const signal = request.signal;
         if (!signal) {
           throw new Error("Expected session signal");
         }
@@ -320,7 +321,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   async function run(
-    client: Client,
+    client: DerivableClient,
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
@@ -341,7 +342,7 @@ describe("web socket runtime environment edge cases", () => {
     const [error, socket, connection] = await run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
 
     expect(error).toMatchObject({
@@ -366,7 +367,7 @@ describe("web socket runtime environment edge cases", () => {
     const [error, socket, connection] = await run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -524,7 +525,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const client = createClient(withEndpoint("http://localhost"));
     const executePromise = run(client, useSocket, {
-      abort: controller.signal,
+      signal: controller.signal,
     });
 
     await listening.promise;
@@ -551,7 +552,7 @@ describe("web socket runtime environment edge cases", () => {
     const [error, socket] = await run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
 
     expect(error).toBeNull();
@@ -612,7 +613,7 @@ describe("web socket runtime environment edge cases", () => {
         withInterceptors(abortingInterceptor),
       ),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -641,7 +642,7 @@ describe("web socket runtime environment edge cases", () => {
       ),
       useSocket,
       {
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
 
@@ -674,7 +675,7 @@ describe("web socket runtime environment edge cases", () => {
         withInterceptors(abortingInterceptor),
       ),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -694,7 +695,7 @@ describe("web socket runtime environment edge cases", () => {
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1068,7 +1069,7 @@ describe("web socket runtime environment edge cases", () => {
           },
           timeoutMs: 1_000,
         },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
 
@@ -1157,7 +1158,7 @@ describe("web socket runtime environment edge cases", () => {
       createClient(withEndpoint("http://localhost")),
       useSocket,
       {
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -1209,7 +1210,7 @@ describe("web socket runtime environment edge cases", () => {
             return true;
           },
         },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
 
@@ -1263,7 +1264,7 @@ describe("web socket runtime environment edge cases", () => {
             throw new Error("late classifier failure");
           },
         },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
 
@@ -1391,7 +1392,7 @@ describe("web socket runtime environment edge cases", () => {
           const [error, socket, connection] = await run(
             createClient(withEndpoint("http://localhost")),
             useSocket,
-            { abort: controller.signal, heartbeat: { intervalMs: 20 } },
+            { signal: controller.signal, heartbeat: { intervalMs: 20 } },
           );
 
           expect(abortedDuringRegistration).toBe(true);
@@ -1442,7 +1443,7 @@ describe("web socket runtime environment edge cases", () => {
     const [error, session] = await run(
       createClient(withEndpoint("http://localhost")),
       endpoint,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
     const nativeSocket = lastMockInstance;
     if (!nativeSocket) throw new Error("Expected physical socket");
@@ -1818,7 +1819,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(client, useSocket, {
       reconnect: { attempts: 1, delayMs: 0 },
-      abort: controller.signal,
+      signal: controller.signal,
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     lastMockInstance?.triggerOpen();
@@ -3000,7 +3001,7 @@ describe("web socket runtime environment edge cases", () => {
         useSocket,
         {
           reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
-          abort: controller.signal,
+          signal: controller.signal,
         },
       );
       if (!socket || !lastMockInstance) {
@@ -3118,7 +3119,7 @@ describe("web socket runtime environment edge cases", () => {
       useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3207,7 +3208,7 @@ describe("web socket runtime environment edge cases", () => {
           jitter: 1,
           maxDelayMs: Number.MAX_VALUE,
         },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3431,7 +3432,7 @@ describe("web socket runtime environment edge cases", () => {
             rejectHook = reject;
           });
         },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
 
@@ -3467,7 +3468,7 @@ describe("web socket runtime environment edge cases", () => {
       useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0, shouldReconnect },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3495,7 +3496,7 @@ describe("web socket runtime environment edge cases", () => {
       useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
 
@@ -3714,7 +3715,7 @@ describe("web socket runtime environment edge cases", () => {
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -4054,7 +4055,7 @@ describe("web socket runtime environment edge cases", () => {
         useSocket,
         {
           reconnect: { attempts: 1, delayMs: 0 },
-          abort: controller.signal,
+          signal: controller.signal,
         },
       );
       if (!socket || !lastMockInstance) {
@@ -4108,7 +4109,7 @@ describe("web socket runtime environment edge cases", () => {
       useSocket,
       {
         reconnect: { attempts: 1, delayMs: 1_000 },
-        abort: controller.signal,
+        signal: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4805,7 +4806,7 @@ describe("web socket runtime environment edge cases", () => {
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
       useSocket,
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -4932,7 +4933,7 @@ describe("web socket incoming frame path", () => {
     return createView(buffer, padding, bytes.length);
   }
 
-  async function openSession(options?: { abort?: AbortSignal }) {
+  async function openSession(options?: { signal?: AbortSignal }) {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const [error, socket] = (await useSocket(
       createClient(withEndpoint("http://localhost"))(options),
@@ -5076,7 +5077,7 @@ describe("web socket incoming frame path", () => {
 
   test("should settle promptly when the session is aborted while a Blob frame is being read", async () => {
     const controller = new AbortController();
-    const { native, socket } = await openSession({ abort: controller.signal });
+    const { native, socket } = await openSession({ signal: controller.signal });
     const pendingReceive = socket.receive[Symbol.asyncIterator]()
       .next()
       .catch((error: unknown) => error);
@@ -5257,7 +5258,7 @@ describe("web socket preflight precedence", () => {
       );
 
       const [error, session, connection] = await endpoint(
-        client({ abort: controller.signal }),
+        client({ signal: controller.signal }),
       );
 
       expect(builderCalls).toBe(1);
@@ -5340,7 +5341,7 @@ describe("web socket preflight precedence", () => {
     );
 
     const [error, session, connection] = await endpoint(
-      client({ abort: controller.signal }),
+      client({ signal: controller.signal }),
     );
 
     expect(session).toBeUndefined();
@@ -5364,7 +5365,7 @@ describe("web socket preflight precedence", () => {
 
     const [error, session, connection] = await endpoint(
       createClient(withEndpoint("https://example.test"))({
-        abort: controller.signal,
+        signal: controller.signal,
         heartbeat: {
           get intervalMs(): number {
             heartbeatReads += 1;
@@ -5463,13 +5464,13 @@ function countingSocket(): CountingSocket {
 
 function guardedClient(
   opened: CountingSocket,
-  abort: AbortSignal,
-  options?: Omit<RequestOptions, "abort">,
+  signal: AbortSignal,
+  options?: Omit<RequestOptions, "signal">,
 ): Client {
   return createClient(
     withEndpoint("https://example.test"),
     withWebSocketHandle(opened.handle),
-  )({ ...options, abort });
+  )({ ...options, signal });
 }
 
 function watchAbortListeners(signal: AbortSignal): {

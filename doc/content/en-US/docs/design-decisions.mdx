@@ -159,7 +159,7 @@ Body kind is decided from the value, first match:
 
 ## Observers and policy placement
 
-Interceptors are for transport-wide policy: auth, tracing, short-circuit, reviewed retry. They run only for their transport and compose in onion order. Request options on a derived client are for work-specific lifetime: `abort`, WebSocket heartbeat, and opt-in reconnect.
+Interceptors are for transport-wide policy: auth, tracing, short-circuit, reviewed retry. They run only for their transport and compose in onion order. Request options on a derived client are for work-specific lifetime: `signal`, WebSocket heartbeat, and opt-in reconnect.
 
 Observers report what happened without becoming a second owner. SSE `onInvalidEvent`, WebSocket state listeners, and runtime-error listeners are for bounded diagnostics and metrics. The returned stream/session still owns iteration, close, unsubscribe, and terminal waiting. Caching, stale-result suppression, idempotency, and domain error mapping belong around the operation call, where your app can see its own policy and state.
 

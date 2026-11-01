@@ -5,7 +5,7 @@ description: Abort 或為一次呼叫設定期限，並讀取 NET_ABORTED / NET_
 
 # 取消 HTTP 呼叫
 
-把呼叫端的 signal 與期限組合在 `abort` 上。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 是一個 signal。手動取消歸類為 `NET_ABORTED`。期限歸類為 `NET_TIMEOUT`。
+把呼叫端的 signal 與期限組合在 `signal` 上。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 是一個 signal。手動取消歸類為 `NET_ABORTED`。期限歸類為 `NET_TIMEOUT`。
 
 細節見 [HTTP](/zh-Hant-TW/docs/http#cancel-the-work)。
 

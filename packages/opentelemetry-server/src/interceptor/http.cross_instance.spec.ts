@@ -34,7 +34,7 @@ describe("caller cancellation across two @defjs/core instances", () => {
       method: "GET",
       path: "/inventory",
     });
-    const pending = readInventory(client({ abort: abort.signal }));
+    const pending = readInventory(client({ signal: abort.signal }));
     await started;
     abort.abort();
 
@@ -62,7 +62,7 @@ describe("caller cancellation across two @defjs/core instances", () => {
       method: "GET",
       path: "/inventory",
     });
-    const pending = readInventory(client({ abort: abort.signal }));
+    const pending = readInventory(client({ signal: abort.signal }));
     await started;
     abort.abort(new DOMException("deadline", "TimeoutError"));
 

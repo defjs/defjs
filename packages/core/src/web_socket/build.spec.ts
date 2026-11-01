@@ -11,7 +11,7 @@ function createWebSocketUrl(
   querySerializer?: QuerySerializer,
 ): string {
   const request = createWebSocketRequest({
-    abort: new AbortController().signal,
+    signal: new AbortController().signal,
     baseEndpoint,
     params,
     path,
@@ -136,7 +136,7 @@ describe("web socket build helpers", () => {
 
   test("createWebSocketUrlFromRequest converts https to wss", () => {
     const request = createWebSocketRequest({
-      abort: new AbortController().signal,
+      signal: new AbortController().signal,
       baseEndpoint: "https://api.example.com/v1",
       params: { roomId: "9" },
       query: { token: "abc" },
@@ -152,7 +152,7 @@ describe("web socket build helpers", () => {
 
   test("createWebSocketUrlFromRequest converts http to ws", () => {
     const request = createWebSocketRequest({
-      abort: new AbortController().signal,
+      signal: new AbortController().signal,
       baseEndpoint: "http://api.example.com/v1",
       params: {},
       query: {},
@@ -166,7 +166,7 @@ describe("web socket build helpers", () => {
 
   test("createWebSocketUrlFromRequest keeps non-http protocols unchanged", () => {
     const request = createWebSocketRequest({
-      abort: new AbortController().signal,
+      signal: new AbortController().signal,
       baseEndpoint: "wss://api.example.com/v1",
       params: {},
       query: {},

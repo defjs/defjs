@@ -7,7 +7,7 @@ const getReport = defineRequest({ method: "GET", path: "/report" });
 const controller = new AbortController();
 const pending = getReport(
   client({
-    abort: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
+    signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
   }),
 );
 

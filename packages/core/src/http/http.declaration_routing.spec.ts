@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { createClient, withEndpoint, withHTTPHandle } from "../client";
+import {
+  createClient,
+  type DerivableClient,
+  withEndpoint,
+  withHTTPHandle,
+} from "../client";
 import { struct } from "../struct";
 import { defineRequest } from "./http";
 
@@ -24,7 +29,7 @@ function clientFor(
   body: string,
   status: number,
   headers: Record<string, string>,
-): ReturnType<typeof createClient> {
+): DerivableClient {
   const handle = (async () =>
     new Response(body, { headers, status })) as unknown as typeof fetch;
 
@@ -214,7 +219,7 @@ describe("declaration routing", () => {
   describe("transport and extension failures outrank the declaration table", () => {
     const observerError = new Error("observer exploded");
 
-    function clientStreaming(): ReturnType<typeof createClient> {
+    function clientStreaming(): DerivableClient {
       const handle = (async () => {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {

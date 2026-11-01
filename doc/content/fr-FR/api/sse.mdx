@@ -16,13 +16,13 @@ Déclare un flux d’événements, appelle l’opération avec un client, itère
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-L’appel renvoie `[null, stream, open]` ou `[error, undefined, open?]`. Quand `error` est déclaré, le fault est `Fault` de ce struct ; sinon c’est `Fault<undefined>`. Passe `abort` en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). SSE ne lit que `abort` et ignore les champs de progression et de WebSocket.
+L’appel renvoie `[null, stream, open]` ou `[error, undefined, open?]`. Quand `error` est déclaré, le fault est `Fault` de ce struct ; sinon c’est `Fault<undefined>`. Passe `signal` en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). SSE ne lit que `signal` et ignore les champs de progression et de WebSocket.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` est `{ abort? }`. Il n’y a pas de champ `timeout` ou `signal`, ni de callback de progression. `abort` couvre tout le flux, y compris après son ouverture. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance limitée au démarrage, ni d’échéance par défaut au niveau du client. Une application qui veut une échéance limitée au démarrage crée son propre `AbortController`, l’abandonne avec `new DOMException("...", "TimeoutError")` depuis un timer, et efface le timer après le retour de l’await.
+`EventStreamExecuteOptions` est `{ signal? }`. Il n’y a pas de champ `timeout` ou `abort`, ni de callback de progression. `signal` couvre tout le flux, y compris après son ouverture. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance limitée au démarrage, ni d’échéance par défaut au niveau du client. Une application qui veut une échéance limitée au démarrage crée son propre `AbortController`, l’abandonne avec `new DOMException("...", "TimeoutError")` depuis un timer, et efface le timer après le retour de l’await.
 
 ## EventStreamHandle
 

@@ -47,12 +47,12 @@ async function main() {
 void main();
 ```
 
-Calling `getUser(client, { id: 1 })` validates, builds, and sends the request. `client({ abort })` derives a new client for one call and does not perform I/O. Return before reading the success value when `error` is set. Once published, import `getUser` from your SDK package instead of the local file — see [Build and publish an SDK](https://defjs.lyz.cloud/recipes/publish-http-sdk).
+Calling `getUser(client, { id: 1 })` validates, builds, and sends the request. `client({ signal })` returns a `Client` value for one call and does not perform I/O. Return before reading the success value when `error` is set. Once published, import `getUser` from your SDK package instead of the local file — see [Build and publish an SDK](https://defjs.lyz.cloud/recipes/publish-http-sdk).
 
 ## Rules that matter
 
 - Calling an operation with a client performs I/O. A definition does not capture a client. There is no global client.
-- Per-call options are the seven `RequestOptions` fields: `abort`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, and `reconnect`. `client(options)` copies those fields into a fresh object. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, so treat them as immutable after passing them. Pass `AbortSignal.timeout(ms)` as `abort` when a call needs a deadline. That reason is `NET_TIMEOUT`; a manual abort is `NET_ABORTED`. A getter that throws does so from `client(options)`, not as a fault. SSE and WebSocket have no startup-only deadline: the signal aborts the whole connection.
+- Per-call options are the seven `RequestOptions` fields: `signal`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, and `reconnect`. `client(options)` returns a non-callable client value that copies those fields into a fresh object; fields set to `undefined` are omitted. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, so treat them as immutable after passing them. Pass `AbortSignal.timeout(ms)` as `signal` when a call needs a deadline. That reason is `NET_TIMEOUT`; a manual abort is `NET_ABORTED`. A getter that throws does so from `client(options)`, not as a fault. SSE and WebSocket have no startup-only deadline: the signal aborts the whole connection.
 - `input` declares parameters; a synchronous, pure `builder` places them on `path`, `query`, `headers`, and `body`. Every definition with `input` requires an explicit `builder`.
 - Structs validate at runtime. `output` is the 2xx body, `error` every other status; omit a side and that body is never read.
 - Failures are returned as `Fault` instances in an error-first tuple — `HTTP_STATUS`, `REQ_*`, `NET_*`, `RES_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `String(error)` gives the message; `error.code` and the cause chain stay structured for logs.

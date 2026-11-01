@@ -7,7 +7,7 @@ description: "Use when authoring, consuming, debugging, or testing Defjs SDKs an
 
 ## Check the project and version
 
-Inspect the consuming project and its installed `@defjs/core` version, package-root types, and README. These notes were verified against Core `0.5.0`. If the version is different or unknown, verify the relevant API against that version before applying these notes; report what could not be verified. Follow the consuming project's conventions and tests. Change dependencies only when the user requests or authorizes it.
+Inspect the consuming project and its installed `@defjs/core` version, package-root types, and README. These notes were verified against Core `0.6.0`. If the version is different or unknown, verify the relevant API against that version before applying these notes; report what could not be verified. Follow the consuming project's conventions and tests. Change dependencies only when the user requests or authorizes it.
 
 ## Define and execute
 

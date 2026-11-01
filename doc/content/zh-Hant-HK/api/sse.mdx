@@ -16,13 +16,13 @@ description: defineEventStream、request options，同 stream handle。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-呼叫 return `[null, stream, open]` 或者 `[error, undefined, open?]`。聲明過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`abort` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `abort`，progress 同 WebSocket field 會忽略。
+呼叫 return `[null, stream, open]` 或者 `[error, undefined, open?]`。聲明過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`signal` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `signal`，progress 同 WebSocket field 會忽略。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`EventStreamExecuteOptions` 係 `{ abort? }`。冇 `timeout` 或 `signal` field，亦冇 progress callback。`abort` 覆蓋成條 stream，包括 open 之後。Deadline 係 `AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇只限啟動嘅 deadline，亦冇 client 層級嘅預設 deadline。應用程式想要只限啟動嘅 deadline，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。
+`EventStreamExecuteOptions` 係 `{ signal? }`。冇 `timeout` 或 `abort` field，亦冇 progress callback。`signal` 覆蓋成條 stream，包括 open 之後。Deadline 係 `AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇只限啟動嘅 deadline，亦冇 client 層級嘅預設 deadline。應用程式想要只限啟動嘅 deadline，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。
 
 ## EventStreamHandle
 

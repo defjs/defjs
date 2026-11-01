@@ -20,7 +20,7 @@ Declare a typed request, then call the operation with a client and its input.
 keyed by status. Omitting one means that body is never read — see
 [Declaration is an assertion](/docs/design-decisions#declaration-is-an-assertion).
 
-Calling the operation returns a promise of the tuple described under [`HttpAwaitResult`](/api/core/httpawaitresult-type). Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). HTTP reads `abort` and the progress callbacks and ignores the other fields.
+Calling the operation returns a promise of the tuple described under [`HttpAwaitResult`](/api/core/httpawaitresult-type). Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). HTTP reads `signal` and the progress callbacks and ignores the other fields.
 
 A non-2xx status is `HTTP_STATUS` when no `error` struct is declared or the declared `error` body decodes. The fault's `data` is the decoded
 `error` body when one was declared, and `undefined` otherwise. When a declared `error` body cannot be read (wrong media type, invalid JSON) or
@@ -46,7 +46,7 @@ struct as one off the wire; there is no trusted short-circuit.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` is the HTTP slice of [`RequestOptions`](/api/core/requestoptions-type): [`UseRequestConfig`](/api/core/userequestconfig-type), which is `abort` plus `onDownloadProgress` and `onUploadProgress`. There is no `timeout` or `signal` field. A deadline is `abort: AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. A later `abort` replaces the previous signal. Combine signals with `AbortSignal.any` in application code. There is no client-level default deadline. Other request fields, such as `heartbeat`, are ignored.
+`HttpExecuteOptions` is the HTTP slice of [`RequestOptions`](/api/core/requestoptions-type): [`UseRequestConfig`](/api/core/userequestconfig-type), which is `signal` plus `onDownloadProgress` and `onUploadProgress`. There is no `timeout` or `abort` field. A deadline is `signal: AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. `signal` is the call's signal; combine signals with `AbortSignal.any` in application code. There is no client-level default deadline. Other request fields, such as `heartbeat`, are ignored.
 
 ## Types
 
@@ -63,7 +63,7 @@ On success the third slot carries `body` only when `output` was declared. On fai
 
 ### HttpRequest
 
-Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed.
+Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed.
 
 ### HttpMeta
 
@@ -118,7 +118,7 @@ All four fields are optional. `query` is `URLSearchParams` or a record; a nested
 
 ## UseRequestConfig
 
-`abort`, plus optional `onDownloadProgress` and `onUploadProgress`. `HttpExecuteOptions` is this slice. There is no `timeout` or `signal` field.
+`signal`, plus optional `onDownloadProgress` and `onUploadProgress`. `HttpExecuteOptions` is this slice. There is no `timeout` or `abort` field.
 
 ## RequestSuccessData
 

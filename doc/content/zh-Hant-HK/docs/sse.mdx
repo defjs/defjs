@@ -98,7 +98,7 @@ Fatal stream 亦會清 buffered events、cancel active body、reject iterator，
 
 Terminal kinds（`closed.kind`）：`eof`、`aborted` 或者 `error`。`error` result 亦會帶 `closed.code`，即係 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或者 `RES_MEDIA_TYPE_INVALID`。
 
-`close(reason)` 會 abort active attempt、關閉 queue，並以 `aborted` settle，即使 reason 係 `TimeoutError` 都一樣。傳俾操作嘅 `abort` signal 喺 stream open 之後仍然掛住，並覆蓋成條連線。Abort 佢通常會正常結束 iterator 並報告 `aborted`。如果 abort reason 係 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會 throw `ERR_TIMEOUT`，而 `closed` 會報告 `kind: 'error'` 同 `code: 'NET_TIMEOUT'`。Client 上面冇只限啟動嘅 deadline。應用程式想要一個，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer：
+`close(reason)` 會 abort active attempt、關閉 queue，並以 `aborted` settle，即使 reason 係 `TimeoutError` 都一樣。傳俾操作嘅 `signal` 喺 stream open 之後仍然掛住，並覆蓋成條連線。Abort 佢通常會正常結束 iterator 並報告 `aborted`。如果 abort reason 係 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會 throw `ERR_TIMEOUT`，而 `closed` 會報告 `kind: 'error'` 同 `code: 'NET_TIMEOUT'`。Client 上面冇只限啟動嘅 deadline。應用程式想要一個，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer：
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 

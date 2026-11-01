@@ -5,16 +5,16 @@ description: createClient、option ヘルパー、Client 型です。
 
 # Client
 
-`createClient(...)` は呼び出し可能な [`Client`](/ja-JP/api/core/client-type) を返します。クライアント options を左から右へ合成し、`client(options?)` でクライアントを派生させて操作に渡します。`getUser(client(options), input)` です。
+`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。クライアント options を左から右へ合成し、`client(options?)` を呼んで [`Client`](/ja-JP/api/core/client-type) 値を得て、操作に渡します。`getUser(client(options), input)` です。
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-options は順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。返るクライアントは関数です。それを呼ぶと新しいクライアントが返り、I/O はしません。
+options は順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。返るファクトリは関数です。それを呼ぶと `Client` 値が返り、I/O はしません。ファクトリ自身も `Client` であり、リクエスト options は持ちません。
 
 - **options** — `withEndpoint` のような option ヘルパーです。
-- **戻り値** 呼び出し可能なクライアントです。基底設定は派生したクライアントすべてが共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。
+- **戻り値** 呼び出し可能なファクトリです。基底設定はすべての `Client` 値が共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -55,7 +55,7 @@ HTTP と SSE のリクエストに使う静的なデフォルトヘッダーを�
 
 リクエストごとに変わる値には、インターセプターを使ってください。たとえば更新した Bearer トークンや、シリアライズ済みボディに対する HMAC です。
 
-クライアント単位の既定の期限はありません。1 回の呼び出しに期限が要るときは、派生したクライアントに `abort: AbortSignal.timeout(ms)` を渡します。手動の abort は `NET_ABORTED` です。`AbortSignal.timeout` は `NET_TIMEOUT` に分類されます。
+クライアント単位の既定の期限はありません。1 回の呼び出しに期限が要るときは、派生したクライアントに `signal: AbortSignal.timeout(ms)` を渡します。手動の abort は `NET_ABORTED` です。`AbortSignal.timeout` は `NET_TIMEOUT` に分類されます。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -105,31 +105,37 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 ## 型
 
+### DerivableClient
+
+<ApiSignature name="DerivableClient" />
+
+`createClient` が返すルートのクライアントで、2 つの形を持ちます。ファクトリは関数であり、リクエスト options を持たない `Client` でもあるため、`getUser(client, input)` をそのまま呼べます。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、1 回の呼び出し用のプレーンな `Client` 値が返ります。その値は呼び出せないため、`client()()` はコンパイルに失敗し、実行時には `TypeError` を投げます。派生はファクトリから 1 回だけ行い、連鎖はありません。型は `ReturnType<typeof createClient>` ではなく `DerivableClient` と書いてください。
+
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` は関数です。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、新しいクライアントが返ります。既知の 7 フィールドは引数からコピーされ、現在の options の上に重ねた新しいオブジェクトに入ります。あとのフィールドが勝ちます。値が `undefined` のフィールドは未指定として扱い、親の値を残します。派生したクライアントは、親が持つ設定を外せません。設定を無くすには、その設定を持っていなかったクライアントからもう一度派生します（ルートのクライアントは残します）。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされず、マージされずに親の値全体が置き換わります。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。元のクライアントは変更されません。`client()`、`client(undefined)`、`client({})` は現在の options をコピーします。派生は I/O をしません。同じクライアント値を多くの操作に渡せます。`abort` は合成されず置き換わります。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。既知の 7 フィールドは引数からコピーされ、新しいオブジェクトに入ります。未知のフィールドは無視され、値が `undefined` のフィールドは省かれます。親の options を重ねることはありません。`client()`、`client(undefined)`、`client({})` はリクエスト options を持たないクライアントを返します。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされません。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
 
-クライアントを React の state setter に渡さないでください（`setState(client)` は updater としてそれを呼びます）。Vue の `watch` や `computed` のソースにも使わないでください（それらは関数を呼びます）。
+ファクトリを React の state setter に渡さないでください（`setState(factory)` は updater としてそれを呼びます）。Vue の `watch` や `computed` のソースにも使わないでください（それらは関数を呼びます）。
 
 ### RequestOptions
 
 <ApiSignature name="RequestOptions" />
 
-フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `abort` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `signal` フィールドもありません。
+フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `signal` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `abort` フィールドもありません。
 
-| フィールド           | プロトコル           | 置き換え                                                                                |
-| -------------------- | -------------------- | --------------------------------------------------------------------------------------- |
-| `abort`              | HTTP、SSE、WebSocket | 前のシグナルを置き換えます。SSE と WebSocket では、開いたあとも含む接続全体を覆います。 |
-| `onUploadProgress`   | HTTP                 | 他のプロトコルは無視します。                                                            |
-| `onDownloadProgress` | HTTP                 | 他のプロトコルは無視します。                                                            |
-| `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                                    |
-| `protocols`          | WebSocket            | クライアントのリストを置き換えます。                                                    |
-| `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` は確認待ちであり、リクエストの期限ではありません。      |
-| `reconnect`          | WebSocket            | 全体を置き換えます。                                                                    |
+| フィールド           | プロトコル           | 置き換え                                                                           |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------- |
+| `signal`             | HTTP、SSE、WebSocket | 呼び出しを中止します。SSE と WebSocket では、開いたあとも含む接続全体を覆います。  |
+| `onUploadProgress`   | HTTP                 | 他のプロトコルは無視します。                                                       |
+| `onDownloadProgress` | HTTP                 | 他のプロトコルは無視します。                                                       |
+| `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                               |
+| `protocols`          | WebSocket            | クライアントのリストを置き換えます。                                               |
+| `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` は確認待ちであり、リクエストの期限ではありません。 |
+| `reconnect`          | WebSocket            | 全体を置き換えます。                                                               |
 
-[`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) は HTTP のスライスです（`abort` と進捗）。[`EventStreamExecuteOptions`](/ja-JP/api/core/eventstreamexecuteoptions-type) は `{ abort? }` です。[`WebSocketExecuteOptions`](/ja-JP/api/core/websocketexecuteoptions-type) は WebSocket のスライスに `abort` を足したものです。
+[`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) は HTTP のスライスです（`signal` と進捗）。[`EventStreamExecuteOptions`](/ja-JP/api/core/eventstreamexecuteoptions-type) は `{ signal? }` です。[`WebSocketExecuteOptions`](/ja-JP/api/core/websocketexecuteoptions-type) は WebSocket のスライスに `signal` を足したものです。
 
 ### ClientOption
 

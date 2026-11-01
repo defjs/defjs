@@ -14,7 +14,7 @@ async function formBlob(
 }
 
 const options = {
-  abort: new AbortController().signal,
+  signal: new AbortController().signal,
   baseEndpoint: "https://api.example.com",
 };
 
@@ -44,7 +44,7 @@ describe("http request helpers", () => {
         query: { include: input.include, tags: input.tags },
       })) as OutboundBuilder,
       {
-        abort: abort.signal,
+        signal: abort.signal,
         baseEndpoint: "https://api.example.com/v1",
         operation: "users.update",
         querySerializer: (query) => {
@@ -82,7 +82,7 @@ describe("http request helpers", () => {
   test("should reject missing path params", () => {
     expect(() =>
       createHttpRequest("GET", "/user/:id", undefined, () => ({ path: {} }), {
-        abort: new AbortController().signal,
+        signal: new AbortController().signal,
         baseEndpoint: "https://api.example.com",
       }),
     ).toThrow("Missing path param: id");
@@ -97,7 +97,7 @@ describe("http request helpers", () => {
         query: input,
       })) as OutboundBuilder,
       {
-        abort: new AbortController().signal,
+        signal: new AbortController().signal,
         baseEndpoint: "https://api.example.com",
         querySerializer: (query) => {
           expect(query).toEqual({ filter: ["active"], include: true });

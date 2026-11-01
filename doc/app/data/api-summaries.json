@@ -2,7 +2,7 @@
   {
     "slug": "core/createclient",
     "name": "createClient",
-    "description": "Creates a Defjs client from option helpers."
+    "description": "Creates a Defjs DerivableClient from option helpers."
   },
   {
     "slug": "core/withendpoint",
@@ -77,7 +77,7 @@
   {
     "slug": "core/client-type",
     "name": "Client",
-    "description": "Application client returned by createClient."
+    "description": "Client value that operations accept."
   },
   {
     "slug": "core/requestoptions-type",
@@ -172,7 +172,7 @@
   {
     "slug": "core/userequestconfig-type",
     "name": "UseRequestConfig",
-    "description": "HTTP fields of RequestOptions: progress callbacks and abort."
+    "description": "HTTP fields of RequestOptions: progress callbacks and signal."
   },
   {
     "slug": "core/httpawaitresult-type",
@@ -672,7 +672,7 @@
   {
     "slug": "core/usewebsocketconfig-type",
     "name": "UseWebSocketConfig",
-    "description": "WebSocket fields of RequestOptions, plus abort."
+    "description": "WebSocket fields of RequestOptions, plus signal."
   },
   {
     "slug": "core/socketawaitresult-type",
@@ -737,7 +737,7 @@
   {
     "slug": "vue/http-client",
     "name": "HTTP_CLIENT",
-    "description": "Vue injection key for the Defjs Client provided by createClientPlugin."
+    "description": "Vue injection key for the Defjs DerivableClient provided by createClientPlugin."
   },
   {
     "slug": "react/clientprovider-type",
@@ -818,5 +818,10 @@
     "slug": "core/struct-symbol-type",
     "name": "STRUCT",
     "description": "Type-only export of the internal enumerable tag key on objects produced while parsing endpoint input, used by the outbound encoder."
+  },
+  {
+    "slug": "core/derivableclient-type",
+    "name": "DerivableClient",
+    "description": "Callable root client returned by createClient."
   }
 ]

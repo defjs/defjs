@@ -277,7 +277,7 @@ describe("fetchEventStream advanced", () => {
     const controller = new AbortController();
     const request: HttpRequest = {
       ...createRequest("/sse/slow"),
-      abort: controller.signal,
+      signal: controller.signal,
     };
 
     setTimeout(() => controller.abort(ERR_ABORTED), 50);
@@ -301,7 +301,7 @@ describe("fetchEventStream advanced", () => {
           }),
       );
       const opening = fetchEventStream(
-        { ...createRequest("/events"), abort: controller.signal },
+        { ...createRequest("/events"), signal: controller.signal },
         { fetch: fetch as unknown as typeof globalThis.fetch },
       );
 
@@ -326,7 +326,7 @@ describe("fetchEventStream advanced", () => {
     timeoutError.name = "TimeoutError";
     const request: HttpRequest = {
       ...createRequest("/sse/slow"),
-      abort: controller.signal,
+      signal: controller.signal,
     };
 
     let unexpectedHandle: EventStreamHandle<EventStreamMessage> | undefined;
@@ -617,7 +617,7 @@ describe("fetchEventStream advanced", () => {
       markObserved = resolve;
     });
     const opening = fetchEventStream(
-      { ...createRequest("/events"), abort: abortController.signal },
+      { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: async () =>
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
@@ -713,7 +713,7 @@ describe("fetchEventStream advanced", () => {
     const controller = new AbortController();
     const request: HttpRequest = {
       ...createRequest("/events"),
-      abort: controller.signal,
+      signal: controller.signal,
     };
     const fetch = vi.fn(async () => {
       throw new Error("network error");
@@ -948,7 +948,7 @@ describe("fetchEventStream advanced", () => {
       markStarted = resolve;
     });
     const opening = fetchEventStream(
-      { ...createRequest("/events"), abort: abortController.signal },
+      { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: async () =>
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
@@ -977,7 +977,7 @@ describe("fetchEventStream advanced", () => {
     });
     let transformSignal: AbortSignal | undefined;
     const stream = await fetchEventStream(
-      { ...createRequest("/events"), abort: abortController.signal },
+      { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: async () =>
           new Response(
@@ -1017,7 +1017,7 @@ describe("fetchEventStream advanced", () => {
       markStarted = resolve;
     });
     const stream = await fetchEventStream(
-      { ...createRequest("/events"), abort: abortController.signal },
+      { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: async () =>
           new Response("data: value\n\n", {
@@ -1057,7 +1057,7 @@ describe("fetchEventStream advanced", () => {
         { highWaterMark: 0 },
       );
       const stream = await fetchEventStream(
-        { ...createRequest("/events"), abort: controller.signal },
+        { ...createRequest("/events"), signal: controller.signal },
         {
           fetch: async () =>
             new Response(body, {
@@ -1103,7 +1103,7 @@ describe("fetchEventStream advanced", () => {
       markStarted = resolve;
     });
     const opening = fetchEventStream(
-      { ...createRequest("/events"), abort: abortController.signal },
+      { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: async () => {
           throw new Error("network failure");
@@ -1128,7 +1128,7 @@ describe("fetchEventStream advanced", () => {
       markStarted = resolve;
     });
     const opening = fetchEventStream(
-      { ...createRequest("/events"), abort: abortController.signal },
+      { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: async () => {
           throw new Error("network failure");
@@ -1151,7 +1151,7 @@ describe("fetchEventStream advanced", () => {
   test("should prefer a queued abort over a synchronous shouldReconnect result", async () => {
     const abortController = new AbortController();
     const opening = fetchEventStream(
-      { ...createRequest("/events"), abort: abortController.signal },
+      { ...createRequest("/events"), signal: abortController.signal },
       {
         fetch: async () => {
           throw new Error("network failure");
@@ -2009,7 +2009,7 @@ describe("fetchEventStream message path", () => {
     const fetch = respondWith("data: a\n\n");
     const onerror = vi.fn(() => 0);
     const stream = await fetchEventStream(
-      { ...request, abort: controller.signal },
+      { ...request, signal: controller.signal },
       {
         fetch,
         onerror,
@@ -2041,7 +2041,7 @@ describe("fetchEventStream message path", () => {
 
     try {
       const stream = await fetchEventStream(
-        { ...request, abort: controller.signal },
+        { ...request, signal: controller.signal },
         {
           fetch: respondWith("data: a\n\n"),
           transformMessage() {
@@ -2066,7 +2066,7 @@ describe("fetchEventStream message path", () => {
     const controller = new AbortController();
     const transformed: string[] = [];
     const stream = await fetchEventStream(
-      { ...request, abort: controller.signal },
+      { ...request, signal: controller.signal },
       {
         fetch: respondWith("data: a\n\ndata: b\n\ndata: c\n\n"),
         transformMessage(message) {

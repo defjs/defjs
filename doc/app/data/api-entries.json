@@ -5,6 +5,7 @@
     "kind": "function",
     "slug": "core/createclient",
     "related": [
+      "@defjs/core:DerivableClient",
       "@defjs/core:Client",
       "@defjs/core:ClientOption",
       "@defjs/core:RequestOptions"
@@ -1023,35 +1024,38 @@
     "name": "createClientPlugin",
     "kind": "function",
     "slug": "vue/createclientplugin",
-    "related": ["@defjs/core:Client"]
+    "related": ["@defjs/core:DerivableClient"]
   },
   {
     "package": "@defjs/vue",
     "name": "injectClient",
     "kind": "function",
     "slug": "vue/injectclient",
-    "related": ["@defjs/core:Client"]
+    "related": ["@defjs/core:DerivableClient"]
   },
   {
     "package": "@defjs/vue",
     "name": "HTTP_CLIENT",
     "kind": "constant",
     "slug": "vue/http-client",
-    "related": ["@defjs/core:Client", "@defjs/vue:injectClient"]
+    "related": ["@defjs/core:DerivableClient", "@defjs/vue:injectClient"]
   },
   {
     "package": "@defjs/react",
     "name": "ClientProvider",
     "kind": "function",
     "slug": "react/clientprovider-type",
-    "related": ["@defjs/core:Client", "@defjs/react:ClientProviderProps"]
+    "related": [
+      "@defjs/core:DerivableClient",
+      "@defjs/react:ClientProviderProps"
+    ]
   },
   {
     "package": "@defjs/react",
     "name": "useClient",
     "kind": "function",
     "slug": "react/useclient",
-    "related": ["@defjs/core:Client"]
+    "related": ["@defjs/core:DerivableClient"]
   },
   {
     "package": "@defjs/react",
@@ -1168,5 +1172,16 @@
     "kind": "type",
     "slug": "core/struct-symbol-type",
     "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DerivableClient",
+    "kind": "type",
+    "slug": "core/derivableclient-type",
+    "related": [
+      "@defjs/core:createClient",
+      "@defjs/core:Client",
+      "@defjs/core:RequestOptions"
+    ]
   }
 ]

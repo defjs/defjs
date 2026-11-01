@@ -5,7 +5,7 @@ description: 呼び出しを abort またはタイムアウトさせ、NET_ABORT
 
 # HTTP 呼び出しをキャンセルする
 
-呼び出し側のシグナルと期限を `abort` に合成します。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` は一つのシグナルです。手動の abort は `NET_ABORTED` に分類されます。期限は `NET_TIMEOUT` に分類されます。
+呼び出し側のシグナルと期限を `signal` に合成します。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` は一つのシグナルです。手動の abort は `NET_ABORTED` に分類されます。期限は `NET_TIMEOUT` に分類されます。
 
 詳細は [HTTP](/ja-JP/docs/http#cancel-the-work) を見てください。
 

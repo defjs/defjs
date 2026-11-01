@@ -13,7 +13,7 @@ Siehe den [React-Guide](/de-DE/docs/integrations/react).
 
 <ApiSignature name="ClientProvider" />
 
-Context-Provider. Übergib einen Client von `createClient`. Ein verschachtelter `ClientProvider` überschreibt den Client für seinen Subtree; `useClient()` liest den nächsten. Übergibst du einen anderen `client`, ändert sich der Context-Wert für Nachfahren.
+Context-Provider. Übergib den `DerivableClient`, den `createClient` zurückgibt. Ein verschachtelter `ClientProvider` überschreibt den Client für seinen Subtree; `useClient()` liest den nächsten. Übergibst du einen anderen `client`, ändert sich der Context-Wert für Nachfahren.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,7 +21,7 @@ Context-Provider. Übergib einen Client von `createClient`. Ein verschachtelter 
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` bevorzugt den expliziten Client; ohne Argument oder mit `undefined` liest es den nächsten `ClientProvider`. Ein `Error` wird nur ausgelöst, wenn keine der beiden Quellen einen Client liefert. `useClient()` ohne Argument bleibt gültig. Übergib diesen Client an eine Operation. Ein `Client` ist eine Funktion: übergib ihn nicht an einen State-Setter, denn `setState(client)` würde ihn als Updater aufrufen.
+`useClient(overrideClient)` bevorzugt den expliziten Client; ohne Argument oder mit `undefined` liest es den nächsten `ClientProvider`. Ein `Error` wird nur ausgelöst, wenn keine der beiden Quellen einen Client liefert. `useClient()` ohne Argument bleibt gültig. Übergib diesen Client an eine Operation. Der Hook gibt den [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück, der geliefert wurde; rufe ihn dort, wo die Operation läuft, mit Request-Options auf, um einen `Client`-Wert abzuleiten. Übergib ihn nicht an einen State-Setter, denn `setState(client)` würde ihn als Updater aufrufen. Ein abgeleiteter `Client`-Wert wird von `ClientProvider` und `useClient` nicht akzeptiert.
 
 Ruf `useClient(explicitClient)` immer auf oberster Ebene einer Komponente oder eines Custom Hooks auf, auch mit explizitem Client; nicht in normalen Funktionen oder Event-Callbacks. `explicitClient ?? useClient()` ruft einen Hook bedingt auf und ist ungültig. Das Override schreibt nicht in den Context und erzeugt keinen Provider; der Hook abonniert weiterhin den Context.
 

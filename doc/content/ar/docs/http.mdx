@@ -136,7 +136,7 @@ body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias
 
 ## ألغِ العمل [#cancel-the-work]
 
-مرّر `abort` على عميل مشتق. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. يُصنَّف الإجهاض اليدوي `NET_ABORTED`. لا يوجد حقل `timeout`، ولا حقل `signal`، ولا مهلة افتراضية على مستوى العميل. `abort` لاحق يستبدل الإشارة السابقة. اجمع إشارة المستدعي مع مهلة باستخدام `AbortSignal.any` في شيفرة التطبيق.
+مرّر `signal` على عميل مشتق. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. يُصنَّف الإجهاض اليدوي `NET_ABORTED`. لا يوجد حقل `timeout`، ولا حقل `abort`، ولا مهلة افتراضية على مستوى العميل. `signal` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. اجمع إشارة المستدعي مع مهلة باستخدام `AbortSignal.any` في شيفرة التطبيق.
 
 <include cwd>examples/http/deadline.ts#example</include>
 

@@ -9,6 +9,7 @@ import {
 
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   type Client,
   type RequestOptions,
@@ -33,7 +34,7 @@ const terminalWebSocketStates = {
 } as const satisfies Record<WebSocketState, boolean>;
 
 describe("web socket browser runtime", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));
@@ -67,15 +68,15 @@ describe("web socket browser runtime", () => {
         controller.abort();
       }
     });
-    const callerAbort =
-      options && "abort" in options && options.abort instanceof AbortSignal
-        ? options.abort
+    const callerSignal =
+      options && "signal" in options && options.signal instanceof AbortSignal
+        ? options.signal
         : undefined;
     pending = operation(
       client({
         ...options,
-        abort: callerAbort
-          ? AbortSignal.any([controller.signal, callerAbort])
+        signal: callerSignal
+          ? AbortSignal.any([controller.signal, callerSignal])
           : controller.signal,
       }),
     ).then((result) => {
@@ -246,7 +247,7 @@ describe("web socket browser runtime", () => {
         }),
         path: "/ws/echo",
       }),
-      { abort: controller.signal },
+      { signal: controller.signal },
     );
 
     expect(error).toBeNull();

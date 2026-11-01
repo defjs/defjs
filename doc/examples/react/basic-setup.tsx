@@ -18,7 +18,7 @@ export function UserName({ id }: { id: number }) {
   useEffect(() => {
     const controller = new AbortController();
 
-    void getUser(client({ abort: controller.signal }), { id }).then(
+    void getUser(client({ signal: controller.signal }), { id }).then(
       ([error, user]) => {
         if (controller.signal.aborted) return;
         if (error) {

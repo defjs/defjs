@@ -9,7 +9,7 @@ SDK나 공유 정의 모듈에서 작업을 import합니다. Vue 애플리케이
 
 이 플러그인은 기존 `Client`를 제공하고 읽기 위한 선택적 도구예요. 앱이 소유한 고정 클라이언트를 직접 import하거나, 재사용 로직에 Client를 명시적으로 넘기거나, 트리 기본값과 하위 트리 덮어쓰기에 프레임워크 주입을 쓰거나, 앱만의 구성을 선택해도 돼요. SDK 정의에 이 플러그인이 필수는 아니에요.
 
-기존 `@defjs/core` 클라이언트를 Vue에 연결해요. 플러그인, injection key, `injectClient()`를 받아요. 패키지는 클라이언트를 **만들지 않고**, 결과를 캐시하지 않으며, 작업을 재시도하지 않고, unmount 때 전송 리소스를 닫지도 않아요. `Client`는 함수예요. `watch`나 `computed`의 소스로 쓰지 마세요. 그 API는 함수를 호출해요.
+기존 `@defjs/core` 클라이언트를 Vue에 연결해요. 플러그인, injection key, `injectClient()`를 받아요. 패키지는 클라이언트를 **만들지 않고**, 결과를 캐시하지 않으며, 작업을 재시도하지 않고, unmount 때 전송 리소스를 닫지도 않아요. 주입된 값은 제공된 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)예요. 작업이 실행되는 곳에서 요청 옵션과 함께 호출해 `Client` 값을 파생하세요. `watch`나 `computed`의 소스로 쓰지 마세요. 그 API는 함수를 호출해요. 파생된 `Client` 값은 플러그인과 `injectClient`가 받지 않아요.
 
 ## 기본 사용법
 

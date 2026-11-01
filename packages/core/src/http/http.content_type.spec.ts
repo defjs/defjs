@@ -1,5 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
-import { createClient, withEndpoint, withHTTPHandle } from "../client";
+import {
+  createClient,
+  type DerivableClient,
+  withEndpoint,
+  withHTTPHandle,
+} from "../client";
 import { struct } from "../struct";
 import { defineRequest } from "./http";
 
@@ -9,7 +14,7 @@ const ApiError = struct.object({ message: struct.string() });
 function clientReturning(
   body: string,
   init: ResponseInit,
-): { cancelled: () => boolean; client: ReturnType<typeof createClient> } {
+): { cancelled: () => boolean; client: DerivableClient } {
   let cancelled = false;
   const handle = vi.fn(async () => {
     const stream = new ReadableStream<Uint8Array>({

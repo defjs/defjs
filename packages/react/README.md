@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no React depend
 bun add @defjs/core @defjs/react react
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.5.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
 
 ## Quick start
 
@@ -58,7 +58,7 @@ export function UserProfile({ id }: { id: number }) {
   useEffect(() => {
     const abort = new AbortController();
 
-    void getUser(client({ abort: abort.signal }), { id }).then(
+    void getUser(client({ signal: abort.signal }), { id }).then(
       ([error, user]) => {
         if (abort.signal.aborted) return;
         if (error) {
@@ -80,15 +80,15 @@ export function UserProfile({ id }: { id: number }) {
 
 ### `<ClientProvider client={client}>`
 
-Provides the exact supplied `Client` to descendants. Nested providers follow normal React Context rules.
+Provides the exact supplied `DerivableClient` to descendants. Nested providers follow normal React Context rules.
 
-### `useClient(overrideClient?): Client`
+### `useClient(overrideClient?): DerivableClient`
 
 Returns `overrideClient` when supplied, otherwise the nearest provided client. Throws only when neither source supplies one. Call it at the top level of a component or Hook — never as `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context.
 
 ## Notes
 
-- `Client` is a function. `useClient()` returns that same function. Do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater and will invoke the client.
+- `useClient()` returns the `DerivableClient` that was supplied, a function. Call it with request options where the operation runs to derive a `Client` value. Do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater and will invoke it. A derived `Client` value is not accepted by `ClientProvider` or `useClient`.
 - Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
 - The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. Provider unmount does not clean them up.
 - Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.

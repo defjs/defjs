@@ -77,7 +77,7 @@ API 定義は SDK モジュールに残ります。サービスアドレス、�
 - 宣言済みボディ（2xx なら `output`、それ以外は `error`）がデコードできない → `RES_DECODE_FAILED` または `RES_STRUCT_MISMATCH`。status は問いません
 - Fetch 失敗 / キャンセル / 期限 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-期限は `client({ abort: AbortSignal.timeout(ms) })` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。クライアント単位の既定の期限はありません。1 回の呼び出しに独自の `abort` が要るときはクライアントを派生させてください。[Client](/ja-JP/docs/client) を参照してください。キャンセルは呼び出し側が見たことを伝えます — サーバー側の書き込みがコミットしたかどうかではありません。
+期限は `client({ signal: AbortSignal.timeout(ms) })` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。クライアント単位の既定の期限はありません。1 回の呼び出しに独自の `signal` が要るときはクライアントを派生させてください。[Client](/ja-JP/docs/client) を参照してください。キャンセルは呼び出し側が見たことを伝えます — サーバー側の書き込みがコミットしたかどうかではありません。
 
 ## 次のレシピ
 

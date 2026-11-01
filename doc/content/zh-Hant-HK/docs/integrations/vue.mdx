@@ -9,7 +9,7 @@ description: 在 Vue 中提供應用程式自己的 Client，並執行 SDK 定�
 
 呢啲 plugins 只係設定同取得現有 `Client` 嘅可選輔助。你可以直接 import 應用固定嘅 Client、將明確 Client 傳俾可重用邏輯、用框架注入提供組件樹預設值同 subtree override，或者用應用自己嘅組織方式；SDK 定義唔要求經 plugin 執行。
 
-這個套件不會建立 Client、快取結果、重試操作，也不會在組件卸載時關閉傳輸資源。`Client` 係 function：唔好將佢做 `watch` 或者 `computed` 嘅 source，因為嗰啲會 call function。發起工作的組件或組合式函式負責取消、關閉及清理。
+這個套件不會建立 Client、快取結果、重試操作，也不會在組件卸載時關閉傳輸資源。注入嘅值就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)；喺操作行嗰度用 request options call 佢，就會派生一個 `Client` 值。唔好將佢做 `watch` 或者 `computed` 嘅 source，因為嗰啲會 call function。派生出嚟嘅 `Client` 值唔會被 plugin 或者 `injectClient` 接受。發起工作的組件或組合式函式負責取消、關閉及清理。
 
 ## 基本用法
 

@@ -81,7 +81,7 @@ export type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void;
  * @group http
  */
 export interface HttpRequest {
-  abort?: AbortSignal;
+  signal?: AbortSignal;
   /** Trusted absolute base; its origin and directory bound the resolved endpoint path. */
   baseEndpoint?: string;
   body?:

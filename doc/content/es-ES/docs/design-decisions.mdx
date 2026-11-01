@@ -159,7 +159,7 @@ Los campos `undefined` se omiten. `null` en un campo nullable se envía. Un stri
 
 ## Observadores y dónde va la política
 
-Los interceptores son para política de todo el transporte: auth, tracing, cortocircuito, reintento revisado. Corren solo para su transporte y se componen en orden de cebolla. Las opciones de solicitud de un cliente derivado son para el tiempo de vida propio de ese trabajo: `abort`, heartbeat de WebSocket y reconexión opt-in.
+Los interceptores son para política de todo el transporte: auth, tracing, cortocircuito, reintento revisado. Corren solo para su transporte y se componen en orden de cebolla. Las opciones de solicitud de un cliente derivado son para el tiempo de vida propio de ese trabajo: `signal`, heartbeat de WebSocket y reconexión opt-in.
 
 Los observadores informan de lo que ocurrió sin convertirse en un segundo dueño. El `onInvalidEvent` de SSE, los listeners de estado de WebSocket y los listeners de errores de runtime sirven para diagnósticos y métricas acotados. El stream/sesión devuelto sigue siendo dueño de la iteración, el cierre, el unsubscribe y la espera terminal. La caché, la supresión de resultados obsoletos, la idempotencia y el mapeo de errores de dominio van alrededor de la llamada a la operación, donde tu app puede ver su propia política y su estado.
 

@@ -541,7 +541,7 @@ describe("fetchEventStream", () => {
       baseEndpoint: inject("testServerHost"),
       endpoint: "/sse/infinite",
       method: "GET",
-      abort: controller.signal,
+      signal: controller.signal,
     };
 
     await expect(fetchEventStream(request)).rejects.toBe(ERR_ABORTED);

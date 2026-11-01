@@ -96,7 +96,7 @@ HTTP と SSE と同様、ベースエンドポイントの欠落、相対 URL、
 
 `session.close(code?, reason?)` は終端クローズを要求し、ハートビートを止めます。code は `1000` か `3000..4999`、reason は UTF-8 で 123 バイト以下です。不正な close 引数は、状態を変える前に throw します。手動の close 理由や論理的な終端結果が要るときは、`await session.closed` と一緒に使ってください。
 
-操作に渡した `abort` シグナルは、開いたセッションに付いたままで、開いたあとも含む接続全体を覆います。タイムアウト形の abort（`TimeoutError` または `ERR_TIMEOUT`。`AbortSignal.timeout(...)` を含む）は `'error'`（`NET_TIMEOUT`）として終わります。それ以外の理由は `'aborted'` として終わり、`receive` はその理由そのもので reject し、新しい `AbortError` にはなりません。起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。[SSE](/ja-JP/docs/sse#close-and-dispose) を参照してください。
+操作に渡した `signal`は、開いたセッションに付いたままで、開いたあとも含む接続全体を覆います。タイムアウト形の abort（`TimeoutError` または `ERR_TIMEOUT`。`AbortSignal.timeout(...)` を含む）は `'error'`（`NET_TIMEOUT`）として終わります。それ以外の理由は `'aborted'` として終わり、`receive` はその理由そのもので reject し、新しい `AbortError` にはなりません。起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。[SSE](/ja-JP/docs/sse#close-and-dispose) を参照してください。
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

@@ -5,7 +5,7 @@ description: Abandonne ou borne un appel dans le temps et lis NET_ABORTED / NET_
 
 # Annuler un appel HTTP
 
-Combine le signal de l’appelant et une échéance sur `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` est un seul signal. Un abort manuel se classe en `NET_ABORTED`. Une échéance se classe en `NET_TIMEOUT`.
+Combine le signal de l’appelant et une échéance sur `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` est un seul signal. Un abort manuel se classe en `NET_ABORTED`. Une échéance se classe en `NET_TIMEOUT`.
 
 Voir [HTTP](/fr-FR/docs/http#cancel-the-work) pour les détails.
 

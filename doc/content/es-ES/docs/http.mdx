@@ -136,7 +136,7 @@ no hay una respuesta de estado 0 que haga sus veces.
 
 ## Cancela el trabajo [#cancel-the-work]
 
-Pasa `abort` en un cliente derivado. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual se clasifica como `NET_ABORTED`. No hay campo `timeout`, ni campo `signal`, ni un plazo por defecto a nivel de cliente. Un `abort` posterior sustituye al signal anterior. Combina un signal de quien llama con un plazo usando `AbortSignal.any` en el código de la aplicación.
+Pasa `signal` en un cliente derivado. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual se clasifica como `NET_ABORTED`. No hay campo `timeout`, ni campo `abort`, ni un plazo por defecto a nivel de cliente. `signal` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. Combina un signal de quien llama con un plazo usando `AbortSignal.any` en el código de la aplicación.
 
 <include cwd>examples/http/deadline.ts#example</include>
 

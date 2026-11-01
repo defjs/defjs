@@ -19,7 +19,7 @@ export function Notifications() {
 
     void (async () => {
       const [error, session] = await notifications(
-        client({ abort: controller.signal }),
+        client({ signal: controller.signal }),
       );
       if (error) return;
 

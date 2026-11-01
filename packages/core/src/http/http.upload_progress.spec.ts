@@ -111,7 +111,7 @@ describe("upload progress observer failures", () => {
         markStarted = resolve;
       });
       const pending = executeUpload(createUploadBody("Blob"), {
-        abort: controller.signal,
+        signal: controller.signal,
         onUploadProgress() {
           markStarted();
           return new Promise<void>(() => undefined);
@@ -137,7 +137,7 @@ describe("upload progress observer failures", () => {
       const [error, result, response] = await executeUpload(
         createUploadBody("ReadableStream"),
         {
-          abort: controller.signal,
+          signal: controller.signal,
           onUploadProgress() {
             seen += 1;
             if (seen < 2) {
@@ -173,7 +173,7 @@ describe("upload progress observer failures", () => {
               markObserved();
               return new Promise<void>(() => undefined);
             },
-            abort: AbortSignal.timeout(50),
+            signal: AbortSignal.timeout(50),
           },
           readingHandle(false),
         );

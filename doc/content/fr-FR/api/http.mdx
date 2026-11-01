@@ -20,7 +20,7 @@ Déclare une requête typée, puis appelle l’opération avec un client et son 
 indexé par statut. En omettre un veut dire que ce corps n’est jamais lu — voir
 [Une déclaration est une affirmation](/fr-FR/docs/design-decisions#declaration-is-an-assertion).
 
-Appeler l’opération renvoie une promesse du tuple décrit sous [`HttpAwaitResult`](/fr-FR/api/core/httpawaitresult-type). Passe les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). HTTP lit `abort` et les callbacks de progression et ignore les autres champs.
+Appeler l’opération renvoie une promesse du tuple décrit sous [`HttpAwaitResult`](/fr-FR/api/core/httpawaitresult-type). Passe les options par appel en dérivant un client depuis [`RequestOptions`](/fr-FR/api/core/requestoptions-type). HTTP lit `signal` et les callbacks de progression et ignore les autres champs.
 
 Un statut non-2xx est `HTTP_STATUS` quand aucun struct `error` n’est déclaré ou que le corps `error` déclaré décode. Le `data` du fault est le corps
 `error` décodé quand un a été déclaré, et `undefined` sinon. Quand un corps `error` déclaré ne peut pas être lu (mauvais media type, JSON invalide) ou
@@ -46,7 +46,7 @@ qu’une valeur venue du fil ; il n’y a pas de court-circuit de confiance.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `abort` plus `onDownloadProgress` et `onUploadProgress`. Il n’y a pas de champ `timeout` ou `signal`. Une échéance est `abort: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Un `abort` ultérieur remplace le signal précédent. Combine les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
+`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `signal` plus `onDownloadProgress` et `onUploadProgress`. Il n’y a pas de champ `timeout` ou `abort`. Une échéance est `signal: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. `signal` est le signal de l’appel ; combine les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
 
 ## Types
 
@@ -63,7 +63,7 @@ En succès, le troisième emplacement porte `body` seulement quand `output` a é
 
 ### HttpRequest
 
-Requête sortante normalisée : `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` et `queryParams`. Quand les intercepteurs la voient, `body` est déjà la valeur wire — pour du JSON, une chaîne de texte JSON — signe donc les HMAC et les digests sur celle-ci, pas sur l’entrée du struct. Les intercepteurs voient `queryParams` comme `new URLSearchParams(queryString)`. Un builder qui renvoie `URLSearchParams` fait passer cette instance telle quelle. `responseType` et `errorResponseType` sont readonly : ils sont dérivés des kinds de struct `output` et `error` de l’endpoint et ne doivent pas être modifiés.
+Requête sortante normalisée : `method`, `endpoint`, `headers`, `body`, `signal`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString` et `queryParams`. Quand les intercepteurs la voient, `body` est déjà la valeur wire — pour du JSON, une chaîne de texte JSON — signe donc les HMAC et les digests sur celle-ci, pas sur l’entrée du struct. Les intercepteurs voient `queryParams` comme `new URLSearchParams(queryString)`. Un builder qui renvoie `URLSearchParams` fait passer cette instance telle quelle. `responseType` et `errorResponseType` sont readonly : ils sont dérivés des kinds de struct `output` et `error` de l’endpoint et ne doivent pas être modifiés.
 
 ### HttpMeta
 
@@ -118,7 +118,7 @@ Les quatre champs sont facultatifs. `query` est `URLSearchParams` ou un record ;
 
 ## UseRequestConfig
 
-`abort`, plus `onDownloadProgress` et `onUploadProgress` facultatifs. `HttpExecuteOptions` est cette tranche. Il n’y a pas de champ `timeout` ou `signal`.
+`signal`, plus `onDownloadProgress` et `onUploadProgress` facultatifs. `HttpExecuteOptions` est cette tranche. Il n’y a pas de champ `timeout` ou `abort`.
 
 ## RequestSuccessData
 

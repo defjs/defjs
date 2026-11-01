@@ -146,7 +146,7 @@ test("WebSocket physical open does not cancel on its own while caller abort rema
     ),
   );
   let settled = false;
-  const pending = socketEndpoint(client({ abort: controller.signal })).then(
+  const pending = socketEndpoint(client({ signal: controller.signal })).then(
     (result) => {
       settled = true;
       return result;
@@ -178,7 +178,7 @@ test("WebSocket respects an already-aborted signal supplied by an interceptor", 
     withWebSocketHandle(Socket),
     withInterceptors(
       createWebSocketInterceptor((request, next) =>
-        next({ ...request, abort: AbortSignal.abort("stop") }),
+        next({ ...request, signal: AbortSignal.abort("stop") }),
       ),
     ),
   );
@@ -204,7 +204,7 @@ test("HTTP honours both the caller signal and an interceptor replacement signal"
     }),
     withInterceptors(
       createHttpInterceptor((request, next) =>
-        next({ ...request, abort: AbortSignal.abort("stop") }),
+        next({ ...request, signal: AbortSignal.abort("stop") }),
       ),
     ),
   );
@@ -224,11 +224,11 @@ test("HTTP honours both the caller signal and an interceptor replacement signal"
       }),
       withInterceptors(
         createHttpInterceptor((request, next) =>
-          next({ ...request, abort: replacement.signal }),
+          next({ ...request, signal: replacement.signal }),
         ),
       ),
     );
-    const pending = endpoint(client({ abort: caller.signal }));
+    const pending = endpoint(client({ signal: caller.signal }));
     const transportSignal = await started.promise;
     if (mode === "caller") caller.abort("caller stopped");
     else replacement.abort("interceptor stopped");
@@ -262,7 +262,7 @@ test("SSE keeps caller cancellation after an interceptor supplies its own signal
     withEndpoint("https://example.test"),
     withInterceptors(
       createSSEInterceptor((request, next) =>
-        next({ ...request, abort: replacement.signal }),
+        next({ ...request, signal: replacement.signal }),
       ),
     ),
     withSSEHandle(async (request) => {
@@ -278,7 +278,7 @@ test("SSE keeps caller cancellation after an interceptor supplies its own signal
     maxBufferSize: 1024,
     maxQueueSize: 4,
   });
-  const [fault, stream] = await endpoint(client({ abort: controller.signal }));
+  const [fault, stream] = await endpoint(client({ signal: controller.signal }));
   try {
     expect(fault).toBeNull();
     await started.promise;
