@@ -10,7 +10,7 @@ It is a middleware plugin — the plugin form of an interceptor chain. Your appl
 bun add @defjs/core @defjs/opentelemetry-server @opentelemetry/api @opentelemetry/core
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.4.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.5.0` range.
 
 ## Quick start
 

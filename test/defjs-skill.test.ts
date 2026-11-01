@@ -33,7 +33,7 @@ test("Defjs Skill has portable metadata and core guidance", async () => {
     "withEndpoint",
   ])
     expect(body).toContain(name);
-  expect(body).toContain("0.4.0");
+  expect(body).toContain("0.5.0");
   expect(body).toMatch(/synchronous pure/);
   expect(body).toMatch(/getUser\(client/);
   expect(body).toContain("client(options)");

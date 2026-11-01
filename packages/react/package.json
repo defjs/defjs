@@ -1,6 +1,6 @@
 {
   "name": "@defjs/react",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Provide an existing Defjs client to a React tree.",
   "bugs": {
     "url": "https://github.com/defjs/defjs/issues"
@@ -38,7 +38,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.4.0",
+    "@defjs/core": "^0.5.0",
     "react": ">=18.0.0"
   }
 }
