@@ -70,7 +70,7 @@ export interface OpenTelemetryServerTransportOptions<TResponse> {
  *
  * - The HTTP span ends as soon as `responseHook` returns; the hook is not awaited, so only its synchronous part can still change the span. A status of 400 or above ends it `ERROR` with `error.type` set to the status string; 100–399 leaves its status unset. An asynchronous hook rejection after end is reported through `diag.error`; configure `diag.setLogger(...)` from `@opentelemetry/api` to receive it. It cannot append events to an ended span.
  *
- * - A rejection through the interceptor has no response status and does not call `responseHook`. That includes a network failure, cancellation, timeout, any declared-body read failure (`BodyFailure`, including text, blob, and bytes, not only JSON), and a progress observer failure (`EXT_OBSERVER_FAILED`). The span ends `ERROR` with `error.type` set to the thrown class name, such as `TypeError`, `Error` or `BodyFailure`. Caller cancellation is `Error` whatever the abort reason.
+ * - A rejection through the interceptor has no response status and does not call `responseHook`. That includes a network failure, caller cancellation, an abort whose reason is `TimeoutError`, any declared-body read failure (`BodyFailure`, including text, blob, and bytes, not only JSON), and a progress observer failure (`EXT_OBSERVER_FAILED`). The span ends `ERROR` with `error.type` set to the thrown class name, such as `TypeError`, `Error` or `BodyFailure`. Caller cancellation is `Error` whatever the abort reason. There is no `timeout` option; a deadline is `abort`.
  *
  * Pass `{ enabled: false }` to skip HTTP instrumentation. Span hooks run only when a `tracer` is supplied.
  *
@@ -86,7 +86,7 @@ export type OpenTelemetryServerHttpOptions =
  *
  * - `responseHook(span, stream, req)` runs once the stream has opened, before the span records `sse.connected`. `stream` is the `EventStreamHandle` the transport returned; `req` is the original `HttpRequest`.
  *
- * - SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()` or a non-timeout caller abort of the open stream; the span still ends without error), or `sse.error` (including a timeout-shaped abort, which ends the span `ERROR`). No per-event spans are created.
+ * - SSE is traced at connection level. After startup the span stays open until `stream.closed` settles, and records `sse.connected`, then one of `sse.closed` (server EOF), `sse.aborted` (`stream.close()` or a caller abort of the open stream whose reason is not `TimeoutError`; the span still ends without error), or `sse.error` (including an abort whose reason is `TimeoutError`, which ends the span `ERROR`). No per-event spans are created.
  *
  * - A non-2xx handshake is observed as a connection failure: the span ends `ERROR` and, with a `logger`, one `WARN` is emitted whatever the response body.
  *

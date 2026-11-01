@@ -20,12 +20,11 @@ describe("web socket runtime lifecycle", () => {
   });
 
   async function run(
-    command: unknown,
-    options?: unknown,
+    operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
+    options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    return client.execute(command as never, options as never) as Promise<
-      SocketAwaitResult<unknown, unknown>
-    >;
+    const bound = options === undefined ? client : client(options);
+    return operation(bound);
   }
 
   test("should allow closing websocket before startup", async () => {
@@ -39,7 +38,7 @@ describe("web socket runtime lifecycle", () => {
     });
 
     const controller = new AbortController();
-    const executePromise = run(useEchoSocket(), { signal: controller.signal });
+    const executePromise = run(useEchoSocket, { abort: controller.signal });
     controller.abort();
 
     const [error, socket, connection] = await executePromise;
@@ -65,7 +64,7 @@ describe("web socket runtime lifecycle", () => {
       path: "/ws/invalid",
     });
 
-    const [error, socket] = await run(useInvalidSocket());
+    const [error, socket] = await run(useInvalidSocket);
 
     expect(error).toBeNull();
     if (!socket) {
@@ -102,14 +101,13 @@ describe("web socket runtime lifecycle", () => {
 
     let callCount = 0;
 
-    const command = useBeforeConnectSocket({ token: "secret-0" });
-    const [error, socket, connection] = await clientWithSerializer.execute(
-      command,
-      {
+    const [error, socket, connection] = await useBeforeConnectSocket(
+      clientWithSerializer({
         beforeConnect: async () => {
           callCount += 1;
         },
-      },
+      }),
+      { token: "secret-0" },
     );
 
     expect(error).toBeNull();

@@ -1,6 +1,6 @@
 ---
 title: "로컬 HTTP 테스트"
-description: withHTTPHandle로 그 클라이언트의 Fetch만 바꾸고 명령은 그대로 둬요.
+description: withHTTPHandle로 그 클라이언트의 Fetch만 바꾸고 작업은 그대로 둬요.
 ---
 
 # 로컬 Fetch 핸들로 테스트하기
@@ -17,4 +17,4 @@ description: withHTTPHandle로 그 클라이언트의 Fetch만 바꾸고 명령�
 Ada 200
 ```
 
-프로덕션에서는 같은 `getUser` 명령을 실제 `withEndpoint(...)` 클라이언트에 쓰세요. 바뀌는 것은 handle뿐이에요.
+프로덕션에서는 같은 `getUser` 작업을 실제 `withEndpoint(...)` 클라이언트에 쓰세요. 바뀌는 것은 handle뿐이에요.

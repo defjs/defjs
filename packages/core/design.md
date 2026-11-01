@@ -35,13 +35,15 @@ https://api.example.com/v1/user/info
 
 ## Client rules
 
-`client` is an executor that is created and passed explicitly:
+`client` is created by the application and passed to an operation:
 
 ```ts
-const [error, result] = await client.execute(command, options);
+const [error, result] = await getUser(client({ abort }), { id: 7 });
 ```
 
-`defineRequest` / `defineEventStream` / `defineWebSocket` return an **endpoint**. Calling the endpoint yields one command; `client.execute(command, options)` runs it. There is no `.with({ client })`.
+`defineRequest` / `defineEventStream` / `defineWebSocket` return an operation. Calling it with a client starts the call and returns an error-first tuple. `client(options)` returns a new client and does not perform I/O. There is no `.with({ client })` and no `client.execute`.
+
+`RequestOptions` has seven fields: `abort`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, and `reconnect`. `client(options)` copies those seven fields from the argument into a fresh options object, a top-level snapshot. A later call overlays that object. A field whose value is `undefined` is treated as not provided and keeps the parent's value, so a derived client cannot drop a setting its parent has. To go back to no setting, derive again from the client that did not have it. `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned, and replace the parent value as a whole. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. The base configuration from `createClient` is shared by every derived client and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. `client()`, `client(undefined)`, and `client({})` copy the current options. A getter that throws escapes `client(options)`; argument-evaluation exceptions are not converted into faults. Illegal values, such as a reconnect policy, are still checked when the operation runs and still return `REQ_OPTIONS_INVALID`. Each protocol reads the fields it understands and ignores the rest. SSE reads only `abort` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
 
 `createGlobalClient` / `getGlobalClient` / `setGlobalClient` / `resetGlobalClient` were removed in 0.4. When multiple external APIs are needed, create multiple `Client` instances separately.
 
@@ -95,7 +97,7 @@ The validation DSL, string lengths, and business rules belong in the application
 
 ## Request placement
 
-`builder` is a synchronous pure function. It receives the parsed real values and returns `{ path?, query?, headers?, body? }`. It runs when the command executes. A thrown error becomes `REQ_BUILD_FAILED` on the tuple; calling the endpoint itself does not throw.
+`builder` is a synchronous pure function. It receives the parsed real values and returns `{ path?, query?, headers?, body? }`. It runs when the operation executes. A thrown error becomes `REQ_BUILD_FAILED` on the tuple; the operation returns that fault instead of throwing.
 
 `defineRequest`, `defineEventStream`, and `defineWebSocket` must explicitly provide a `builder` whenever `input` is declared. `input` only defines the input parameters; where each value is placed is decided only by the builder, and the library does not infer placement from input field names or the path template. Only a definition with no `input` may omit `builder`.
 
@@ -126,7 +128,7 @@ const getUser = defineRequest({
 });
 ```
 
-The calls are `updateUser({ id: 7, user: { displayName: 'Ada' } })` and `getUser({ id: 7 })` respectively. Prefer handing over typed values: `body: input.user` applies aliases across the whole tree. Keys of an object you write yourself are literal wire keys, and aliases do not apply. A spread keeps the struct; a logical key and a wire key appearing at the same time is `REQ_BUILD_FAILED`.
+The calls are `updateUser(client, { id: 7, user: { displayName: 'Ada' } })` and `getUser(client, { id: 7 })` respectively. Prefer handing over typed values: `body: input.user` applies aliases across the whole tree. Keys of an object you write yourself are literal wire keys, and aliases do not apply. A spread keeps the struct; a logical key and a wire key appearing at the same time is `REQ_BUILD_FAILED`.
 
 `path` values must be scalars. A header value may be a scalar or an array of scalars. `null` in path, query, or headers is `REQ_BUILD_FAILED`. `undefined` query and header values are omitted; an `undefined` or missing path placeholder is `REQ_BUILD_FAILED`. A `nullable` `null` is sent. Path placeholders are raw scalars, and each segment is encoded only once; empty values and `.` / `..` are rejected.
 
@@ -194,10 +196,10 @@ const getUser = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const command = getUser({ id: 7 });
-  const [error, data, response] = await client.execute(command, {
-    timeout: 10_000,
-  });
+  const [error, data, response] = await getUser(
+    client({ abort: AbortSignal.timeout(10_000) }),
+    { id: 7 },
+  );
   if (error) {
     console.error(error.code);
     return;
@@ -212,7 +214,7 @@ void main();
 
 Success is `[null, data, response]`. Failure is `[error, undefined, undefined]`, and metadata is on the fault. A non-2xx whose `error` decodes successfully is `HTTP_STATUS`; a media type that does not match is `RES_MEDIA_TYPE_INVALID` (before the body is read); a representation that cannot be read is `RES_DECODE_FAILED`; a struct that does not match is `RES_STRUCT_MISMATCH`. A transport failure is a fault, not a response with status 0.
 
-`abort` and `timeout` in the execution options are mutually exclusive, and either can also be combined with `signal`. An illegal timeout, or both appearing together, is `REQ_OPTIONS_INVALID`. An input that fails the struct is `REQ_INPUT_INVALID`.
+Cancellation is the `abort` field. `AbortSignal.timeout(ms)` is classified as `NET_TIMEOUT`; aborting a signal yourself is `NET_ABORTED`. There is no client-level default timeout and no `signal` field. SSE and WebSocket no longer have a startup-only deadline: the same signal aborts the connection after it opens. To limit only startup, create an `AbortController`, pass its signal, and clear the timer after the operation resolves. An input that fails the struct is `REQ_INPUT_INVALID`.
 
 ## SSE
 
@@ -240,8 +242,7 @@ const watchUser = defineEventStream({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const command = watchUser({ id: 7 });
-  const [error, stream, open] = await client.execute(command);
+  const [error, stream, open] = await watchUser(client, { id: 7 });
   if (error) {
     console.error(error.code);
     return;
@@ -289,8 +290,7 @@ const room = defineWebSocket({
 const client = createClient(withEndpoint("https://chat.example.com"));
 
 async function main() {
-  const command = room({ roomId: "1" });
-  const [error, session] = await client.execute(command);
+  const [error, session] = await room(client, { roomId: "1" });
   if (error) {
     console.error(error.code);
     return;
@@ -304,7 +304,7 @@ void main();
 
 Inbound text, `ArrayBuffer`, TypedArray, and `Blob` are read as UTF-8, then `JSON.parse`d, then handed to `incoming`. Bad JSON and struct failures go to `session.onRuntimeError`; that frame is not enqueued, and the session continues. Frames that are not text, bytes, or a Blob are dropped directly, with no notification. There is no `withWebSocketOnInvalidEvent`.
 
-`session.send` validates and serializes synchronously: struct encoding, then `JSON.stringify`. Query rules are the same as HTTP; a complex query is no longer JSON-encoded on its own. Static `protocols` are written on the definition; the `execute` options and `withWebSocketProtocols` can still override them, and the priority is execution options, client, then definition. The selected list is copied before the logical session starts and reused on reconnect; the builder, `beforeConnect`, and interceptors cannot change subprotocols. When a token-in-subprotocol is needed, obtain the token first, then pass it through that `execute` call's `protocols` option.
+`session.send` validates and serializes synchronously: struct encoding, then `JSON.stringify`. Query rules are the same as HTTP; a complex query is no longer JSON-encoded on its own. Static `protocols` are written on the definition; `RequestOptions.protocols` and `withWebSocketProtocols` can still override them, and the priority is request options, client, then definition. The selected list is copied before the logical session starts and reused on reconnect; the builder, `beforeConnect`, and interceptors cannot change subprotocols. When a token-in-subprotocol is needed, obtain the token first, then pass it through that call's `protocols` option.
 
 ## interceptor
 

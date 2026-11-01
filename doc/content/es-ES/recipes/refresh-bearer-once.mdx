@@ -3,9 +3,9 @@ title: "Renovar un token tras 401"
 description: Adjunta Authorization y reintenta una vez dentro de un interceptor; next() solo va hacia dentro.
 ---
 
-# Refrescar un token Bearer una vez ante un 401
+# Renueva un Bearer token una vez ante un 401
 
-`next()` es el resto de **esta** cebolla — no un reenvío `axios(config)` desde fuera. Pon el attach, el refresh single-flight y un replay en **un** interceptor HTTP para que las capas exteriores no corran dos veces.
+`next()` es el resto de **esta** cebolla — no un reenvío `axios(config)` desde fuera. Pon el attach, el refresh single-flight y un único replay en **un** interceptor HTTP para que las capas exteriores no corran dos veces.
 
 Ver [Interceptores](/es-ES/docs/interceptors).
 
@@ -17,4 +17,4 @@ Ver [Interceptores](/es-ES/docs/interceptors).
 42
 ```
 
-Llamar a `next` otra vez solo vuelve a entrar en los interceptores **dentro** de esta capa (y el handler Fetch). No reejecuta wrappers exteriores de timing/auth — por eso el layout del 401 va en un interceptor, no en un segundo `execute`.
+Llamar a `next` otra vez solo vuelve a entrar en los interceptores **dentro** de esta capa (y en el handler de Fetch). No vuelve a ejecutar los wrappers exteriores de tiempo o auth — por eso el 401 va en un interceptor, no en una segunda llamada a la operación.

@@ -35,7 +35,7 @@ describe("inbound representation by struct kind", () => {
       path: "/raw",
     });
 
-    const [error, result] = await client.execute(useRequest());
+    const [error, result] = await useRequest(client);
 
     expect(error).toBeNull();
     expect(result).toBe("zen-kit");
@@ -49,7 +49,7 @@ describe("inbound representation by struct kind", () => {
       path: "/raw",
     });
 
-    const [error, result] = await client.execute(useRequest());
+    const [error, result] = await useRequest(client);
 
     expect(error).toBeNull();
     expect(result).toBe('"abc"');
@@ -67,7 +67,7 @@ describe("inbound representation by struct kind", () => {
       path: "/file",
     });
 
-    const [error, result] = await client.execute(useRequest());
+    const [error, result] = await useRequest(client);
 
     expect(error).toBeNull();
     expect(result).toBeInstanceOf(Blob);
@@ -88,7 +88,7 @@ describe("inbound representation by struct kind", () => {
       path: "/bytes",
     });
 
-    const [error, result] = await client.execute(useRequest());
+    const [error, result] = await useRequest(client);
 
     expect(error).toBeNull();
     expect(result).toBeInstanceOf(ArrayBuffer);
@@ -128,9 +128,9 @@ describe("inbound representation by struct kind", () => {
       path: "/flag",
     });
 
-    const [objectError, objectResult] = await client.execute(useObject());
-    const [numberError, numberResult] = await client.execute(useNumber());
-    const [booleanError, booleanResult] = await client.execute(useBoolean());
+    const [objectError, objectResult] = await useObject(client);
+    const [numberError, numberResult] = await useNumber(client);
+    const [booleanError, booleanResult] = await useBoolean(client);
 
     expect(objectError).toBeNull();
     expect(objectResult).toEqual({ id: 1 });
@@ -149,7 +149,7 @@ describe("inbound representation by struct kind", () => {
       path: "/missing",
     });
 
-    const [error] = await client.execute(useRequest());
+    const [error] = await useRequest(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code !== "HTTP_STATUS") {
@@ -171,7 +171,7 @@ describe("inbound representation by struct kind", () => {
       path: "/missing",
     });
 
-    const [error] = await client.execute(useRequest());
+    const [error] = await useRequest(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code !== "HTTP_STATUS") {
@@ -192,7 +192,7 @@ describe("inbound representation by struct kind", () => {
       path: "/missing",
     });
 
-    const [error] = await client.execute(useRequest());
+    const [error] = await useRequest(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code !== "HTTP_STATUS") {
@@ -234,8 +234,8 @@ describe("inbound representation by struct kind", () => {
       path: "/ok",
     });
 
-    const [error] = await client.execute(useMissing());
-    const [okError, okResult] = await client.execute(useOk());
+    const [error] = await useMissing(client);
+    const [okError, okResult] = await useOk(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code !== "HTTP_STATUS") {
@@ -259,7 +259,7 @@ describe("inbound representation by struct kind", () => {
       path: "/missing",
     });
 
-    const [error] = await client.execute(useRequest());
+    const [error] = await useRequest(client);
 
     expect(error?.code).toBe("RES_STRUCT_MISMATCH");
   });
@@ -307,7 +307,7 @@ describe("inbound representation by struct kind", () => {
 
     const messages = [];
     for (let i = 0; i < payloads.length; i += 1) {
-      const [error] = await client.execute(useRequest());
+      const [error] = await useRequest(client);
       expect(error?.code).toBe("HTTP_STATUS");
       if (error?.code !== "HTTP_STATUS") {
         throw new Error("Expected an http status fault");
@@ -342,7 +342,7 @@ describe("inbound representation by struct kind", () => {
       path: "/root-string",
     });
 
-    const [error, data] = await client.execute(useRequest());
+    const [error, data] = await useRequest(client);
 
     expect(error).toBeNull();
     expect(data).toBe("123");
@@ -367,7 +367,7 @@ describe("inbound representation by struct kind", () => {
       path: "/object-text",
     });
 
-    const [error, data] = await client.execute(useRequest());
+    const [error, data] = await useRequest(client);
 
     expect(error?.code).toBe("RES_STRUCT_MISMATCH");
     expect(data).toBeUndefined();
@@ -389,7 +389,7 @@ describe("inbound representation by struct kind", () => {
       path: "/missing-bytes",
     });
 
-    const [error] = await client.execute(useRequest());
+    const [error] = await useRequest(client);
 
     expect(error?.code).toBe("RES_STRUCT_MISMATCH");
   });
@@ -410,7 +410,7 @@ describe("inbound representation by struct kind", () => {
       path: "/missing",
     });
 
-    const [error] = await client.execute(useRequest());
+    const [error] = await useRequest(client);
 
     expect(error?.code).toBe("RES_STRUCT_MISMATCH");
   });
@@ -433,7 +433,7 @@ describe("inbound representation by struct kind", () => {
       path: "/deep",
     });
 
-    const [error, data] = await client.execute(useRequest());
+    const [error, data] = await useRequest(client);
 
     expect(error?.code).toBe("RES_STRUCT_MISMATCH");
     expect(error?.cause).toBeInstanceOf(StructError);

@@ -3,9 +3,9 @@ title: "Renouveler un jeton après 401"
 description: Pose Authorization et rejoue une fois dans un seul intercepteur ; next() ne va que vers l’intérieur.
 ---
 
-# Rafraîchir un Bearer une fois sur 401
+# Renouveler un Bearer une fois sur 401
 
-`next()` est le reste de **cet** oignon — pas un `axios(config)` redistribué de l’extérieur. Mets l’attache + le refresh single-flight + un replay dans **un** intercepteur HTTP pour que les couches externes ne tournent pas deux fois.
+`next()` est le reste de **cet** oignon — pas un `axios(config)` redistribué depuis l’extérieur. Place l’attache, le refresh single-flight et un seul rejeu dans **un** intercepteur HTTP pour que les couches extérieures ne tournent pas deux fois.
 
 Voir [Intercepteurs](/fr-FR/docs/interceptors).
 
@@ -17,4 +17,4 @@ Voir [Intercepteurs](/fr-FR/docs/interceptors).
 42
 ```
 
-Rappeler `next` ne ré-entre que dans les intercepteurs **à l’intérieur** de cette couche (et le handler Fetch). Il ne relance pas les wrappers externes de timing/auth — c’est pourquoi le layout 401 appartient à un seul intercepteur, pas à un second `execute`.
+Appeler `next` à nouveau ne réentre que dans les intercepteurs **à l’intérieur** de cette couche (et le handler Fetch). Cela ne relance pas les wrappers extérieurs de timing ou d’auth — c’est pourquoi le traitement du 401 appartient à un seul intercepteur, pas à un second appel de l’opération.

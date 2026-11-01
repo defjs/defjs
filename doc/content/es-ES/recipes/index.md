@@ -1,9 +1,9 @@
 ---
 title: "Ejemplos prácticos"
-description: Probar y publicar SDK e integrar HTTP, autenticación y tiempo real en las aplicaciones.
+description: Crea y publica un SDK reutilizable, y luego configura autenticación, llamadas y trabajo en tiempo real en las aplicaciones consumidoras.
 ---
 
-Estas recetas mantienen el mismo reparto: el SDK exporta endpoints tipados; la aplicación los ejecuta con su cliente y gestiona resultados y ciclos de vida. Para crear tu SDK, empieza con las [pruebas HTTP locales](/es-ES/recipes/test-with-handle) y la [publicación](/es-ES/recipes/publish-http-sdk). Las demás recetas cubren contratos de API y políticas de la aplicación.
+Empieza por [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk) para el recorrido completo desde la definición exportada hasta el paquete npm y la aplicación consumidora. Las recetas de abajo muestran contratos de operación concretos y políticas de aplicación que puedes componer alrededor de ese SDK.
 
 ## HTTP
 
@@ -22,7 +22,7 @@ Estas recetas mantienen el mismo reparto: el SDK exporta endpoints tipados; la a
 - [Consumir eventos SSE](/es-ES/recipes/consume-sse)
 - [Gestionar sesiones WebSocket](/es-ES/recipes/websocket-session)
 
-## Pruebas y publicación de SDK [#pruebas-y-empaquetado]
+## Pruebas y publicación de SDK [#testing-and-packaging]
 
 - [Pruebas HTTP locales](/es-ES/recipes/test-with-handle)
 - [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)

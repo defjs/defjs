@@ -110,15 +110,15 @@ SSE 和 WebSocket 的第三项是启动快照，即使启动失败也可能有�
 
 SSE 在 resolve handle 之前会校验状态、`text/event-stream` 以及 body 是否存在。非 2xx 在未声明 `error` 或其 body 解码成功时 → `HTTP_STATUS`。已声明的握手 body 无法读取、无法解析或未通过 Struct 校验时 → `RES_DECODE_FAILED`；Struct 失败会以 `StructError` 作为 `cause`。媒体类型不对 → `RES_MEDIA_TYPE_INVALID`。成功握手却没有 body → `RES_DECODE_FAILED`。开启快照照样可能落在 tuple 第三项。
 
-WebSocket 的启动期覆盖握手加第一次物理 open。构造器失败、open 之前就关闭、超时或取消，都会产出一个启动 tuple。即使 socket 从没到过 `open`，连接快照也可能存在。
+WebSocket 的启动期覆盖握手加第一次物理 open。构造器失败、open 之前就关闭，或 session 打开前触发的 `abort`，都会产出一个启动 tuple。即使 socket 从没到过 `open`，连接快照也可能存在。
 
-| 传输      | 启动之后                                                                                                                                                                               |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | 致命错误时迭代器 reject；`stream.closed` 以 `kind: 'error'` 和对应的 fault `code` resolve                                                                                              |
-| WebSocket | 消息/队列/心跳失败走 `onRuntimeError`；终止性错误让 `receive` 失败；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                        |
-| HTTP      | execute 返回的 Promise 只会完成一次，结果为元组。拦截器抛出异常或返回非 `HttpResponse` 的结果时，元组中的错误码为 `EXT_INTERCEPTOR_FAILED`；进度回调抛出异常则为 `EXT_OBSERVER_FAILED` |
+| 传输      | 启动之后                                                                                                                                                                                |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | 致命错误时迭代器 reject；`stream.closed` 以 `kind: 'error'` 和对应的 fault `code` resolve                                                                                               |
+| WebSocket | 消息/队列/心跳失败走 `onRuntimeError`；终止性错误让 `receive` 失败；`session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                         |
+| HTTP      | 操作返回的 Promise 只会完成一次，结果为元组。拦截器抛出异常、返回的结果不是 `HttpResponse`，或进度回调抛出异常，都会变成其中的 fault（`EXT_INTERCEPTOR_FAILED`、`EXT_OBSERVER_FAILED`） |
 
-`NET_ABORTED` / `NET_TIMEOUT` 描述的是调用方在启动期看到了什么。返回给你的 stream 或 session，你照样要关掉并 await 它的终态 promise。
+`NET_ABORTED` 和 `NET_TIMEOUT` 描述的是调用方的 `abort` signal。对 HTTP，它们让操作 tuple 完成。对 SSE 和 WebSocket，`abort` 覆盖整条连接，包括已经打开之后：启动之后才到的期限让 `closed` 完成，而不是操作 tuple。返回给你的 stream 或 session，你照样要关掉并 await 它的终态 promise。
 
 ## 原生 Error 的日志与 cause
 

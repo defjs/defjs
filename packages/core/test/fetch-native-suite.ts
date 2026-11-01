@@ -300,7 +300,7 @@ export function defineNativeFetchSuite(): void {
       const api = client.createClient(client.withEndpoint(ORIGIN));
       const ping = http.defineRequest({ method: "GET", path: "/ping" });
 
-      const [failure] = await api.execute(ping());
+      const [failure] = await ping(api);
 
       expect(failure).toBeNull();
       expect(calls).toHaveLength(1);
@@ -691,7 +691,7 @@ export function defineNativeFetchSuite(): void {
       );
       const ping = http.defineRequest({ method: "GET", path: "/ping" });
 
-      await api.execute(ping());
+      await ping(api);
 
       expect(calls).toHaveLength(1);
       expect(calls[0]).toHaveLength(1);
@@ -924,13 +924,7 @@ export function defineNativeFetchSuite(): void {
           handle,
         );
         await serverSees(realFetch, key, { opened: 1 });
-        // A platform timeout, armed once the body is in flight, so a slow host cannot fire it during the request phase.
-        const deadline = AbortSignal.timeout(100);
-        deadline.addEventListener(
-          "abort",
-          () => controller.abort(deadline.reason),
-          { once: true },
-        );
+        controller.abort(new DOMException("deadline", "TimeoutError"));
 
         await expect(settleWithin(pending, 3000)).rejects.toBe(ERR_TIMEOUT);
         await serverSees(realFetch, key, { closed: 1, opened: 1 });

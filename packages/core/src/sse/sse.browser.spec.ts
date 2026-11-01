@@ -25,7 +25,7 @@ describe("sse browser runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream, open] = await baseClient.execute(useBasicStream());
+    const [error, stream, open] = await useBasicStream(baseClient);
 
     expect(error).toBeNull();
     expect(open?.response?.ok).toBe(true);
@@ -52,7 +52,7 @@ describe("sse browser runtime", () => {
       path: "/500",
     });
 
-    const [error, stream, open] = await baseClient.execute(useFailedStream());
+    const [error, stream, open] = await useFailedStream(baseClient);
 
     expect(error?.code).toBe("HTTP_STATUS");
     expect(stream).toBeUndefined();
@@ -66,7 +66,7 @@ describe("sse browser runtime", () => {
       events: { tick: struct.string() },
       path: "/sse/infinite",
     });
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -94,7 +94,7 @@ describe("sse browser runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -130,7 +130,7 @@ describe("sse browser runtime", () => {
       path,
     });
 
-    const [error, events] = await baseClient.execute(useStream());
+    const [error, events] = await useStream(baseClient);
     const hits = await missHits(baseClient, path);
 
     expect(events).toBeUndefined();
@@ -176,7 +176,7 @@ describe("sse browser runtime", () => {
       path,
     });
 
-    const [error, events] = await client.execute(useStream());
+    const [error, events] = await useStream(client);
     const hits = await missHits(client, path);
 
     expect(events).toBeUndefined();

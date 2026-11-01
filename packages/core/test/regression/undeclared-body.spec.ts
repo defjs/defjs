@@ -33,7 +33,7 @@ test.each([200, 500])(
             output: struct.object({ id: struct.number() }),
           });
 
-    const [fault, value] = await client.execute(endpoint());
+    const [fault, value] = await endpoint(client);
     expect(value).toBeUndefined();
     expect(fault?.code ?? null).toBe(status === 200 ? null : "HTTP_STATUS");
     expect(reads).not.toHaveBeenCalled();

@@ -16,9 +16,9 @@ export const HTTP_CLIENT: InjectionKey<Client> = Symbol("HTTP_CLIENT");
 /**
  * Create a Vue plugin that provides an existing Defjs client via {@link HTTP_CLIENT}.
  *
- * Does not create, cache, or dispose the client — pass an instance from `createClient`. Installing it calls `app.provide(HTTP_CLIENT, client)`, so components read the client with `injectClient()`.
+ * Does not create, cache, or dispose the client — pass the function from `createClient`. Installing it calls `app.provide(HTTP_CLIENT, client)`, so components read the client with `injectClient()`. The client is stored as that function: it is not wrapped in `ref`, `reactive`, or `markRaw`.
  *
- * @param client - The Client instance to provide to the app.
+ * @param client - The client function to provide to the app.
  * @returns A Vue `Plugin` for `app.use(...)`.
  *
  * @group vue
@@ -40,11 +40,13 @@ export function createClientPlugin(client: Client): Plugin {
  *
  * For a custom `InjectionKey<Client>`, use `app.provide(key, client)` or an ancestor’s `provide(key, client)`. Share the same `Symbol` object; matching descriptions do not make keys equal. `createClientPlugin(client)` still takes only the client and provides `HTTP_CLIENT`.
  *
- * It returns the exact client provided for the selected key, and throws an `Error` without an active injection context or a client for the selected key. Installing the plugin alone does not establish an injection context.
+ * It returns the exact client function provided for the selected key, and throws an `Error` without an active injection context or a client for the selected key. Installing the plugin alone does not establish an injection context.
+ *
+ * `Client` is callable. Pass it to `provide` as-is. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`.
  *
  * @param key - Injection key; use the same object with `app.provide` or `provide`.
  * Defaults to `HTTP_CLIENT`, as provided by {@link createClientPlugin}.
- * @returns The injected `Client` instance.
+ * @returns The injected client function.
  * @throws If called outside a Vue injection context or no client was provided for
  * the requested key. A missing custom key does not fall back to `HTTP_CLIENT`.
  *

@@ -55,7 +55,7 @@ test.each([
       input: struct.object({ value: field }),
       builder: (input) => ({ body: input }),
     });
-    const [fault] = await client.execute(endpoint({ value }));
+    const [fault] = await endpoint(client, { value });
     expect(fault?.code ?? null).toBeNull();
     expect(sent).toEqual([{ value }]);
   },

@@ -3,9 +3,9 @@ title: "SDK 작성과 배포"
 description: API 정의와 타입 선언을 npm 패키지로 배포하고, 사용하는 앱이 자신의 Client를 구성하게 합니다.
 ---
 
-# SDK 작성과 배포 [#execute를-숨기지-않고-http-sdk-공개하기]
+# SDK 작성과 배포 [#publish-an-http-sdk-without-hiding-execute]
 
-SDK는 팀이 제공하는 API를 패키지로 묶습니다. Defjs에서는 엔드포인트 정의와 데이터 계약을 export하고, 사용하는 앱이 Client 설정과 실행 시점을 결정합니다. 이 예제는 HTTP를 사용하지만 SSE와 WebSocket 정의도 같은 책임 분담으로 패키지화할 수 있습니다.
+SDK는 팀이 제공하는 API를 패키지로 묶습니다. Defjs에서는 엔드포인트 정의와 데이터 계약을 export하고, 사용하는 애플리케이션이 클라이언트 설정을 제공하고 언제 호출할지 정합니다. 이 예제는 HTTP를 쓰고, 같은 패키지 경계가 SSE와 WebSocket 정의에도 통합니다.
 
 ## 1. SDK 작업 정의하기
 
@@ -24,6 +24,17 @@ export { getUser } from "./users";
 작업이 늘어나면 모듈을 추가하고 해당 엔드포인트를 같은 진입점에서 다시 export합니다.
 
 ## 2. JavaScript와 타입 선언 패키지화하기
+
+SDK 프로젝트는 자기 패키지 경계를 가집니다.
+
+```txt
+users-sdk/
+  package.json
+  tsconfig.json
+  src/
+    index.ts
+    users.ts
+```
 
 다음 `package.json`을 사용하되, 예제 패키지 이름은 자신이 소유한 scope로 바꿉니다.
 
@@ -87,9 +98,9 @@ bun pm pack
 
 tarball에 `dist/index.js`와 `dist/index.d.ts`가 들어 있는지 확인합니다. 별도 앱에 tarball을 설치해 타입과 실행을 모두 검증한 뒤 배포하세요. SDK README에는 서비스 API, 호환되는 Core 버전, 필요한 인증, 선택적인 기본 설정을 문서화합니다.
 
-## 3. 사용하는 앱에서 실행하기
+## 3. 사용하는 애플리케이션에서 호출하기
 
-오프라인으로 실행할 수 있는 로컬 예제는 정의를 `users-sdk.ts`에 저장하고 `app.ts`와 같은 디렉터리에 둡니다. 이 import는 Client를 만들지 않습니다. 앱이 로컬 Fetch 핸들을 구성하고 import한 작업을 실행합니다.
+오프라인으로 돌릴 수 있는 로컬 예제는 정의를 `app.ts` 옆의 `users-sdk.ts`에 둡니다. 이 import는 클라이언트를 만들지 않습니다. 애플리케이션이 로컬 Fetch 핸들을 구성하고 import한 작업을 호출합니다.
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -127,4 +138,4 @@ bun publish --access public
 
 Client 팩토리와 편의 메서드는 필요할 때 추가할 수 있습니다. 호출자의 설정을 받고 엔드포인트 직접 export를 유지하면서 서비스 기본값이나 도메인 동작을 제공할 수 있습니다. 추가하는 오류 매핑이나 수명 정책은 문서화하세요. 재사용 가능한 SDK를 만들기 위한 필수 요소는 아닙니다.
 
-기반 계약은 [명령](/ko-KR/docs/commands), [클라이언트](/ko-KR/docs/client), [설계 결정](/ko-KR/docs/design-decisions)을 참고하세요.
+기반 계약은 [HTTP](/ko-KR/docs/http), [클라이언트](/ko-KR/docs/client), [설계 결정](/ko-KR/docs/design-decisions)을 참고하세요.

@@ -527,7 +527,7 @@ HTTP `output` / `error`, SSE event data, and WebSocket frames all choose a repre
 ## 7. Naming
 
 - The definition field `build` → `builder`.
-- In the current terminology "builder" means the return value of `defineXxx` (`RequestCommandBuilder` and so on). To avoid one word with two meanings, the return value is renamed **endpoint**: `getUser` is an endpoint, and calling it yields a command. Types are renamed accordingly (for example `RequestEndpoint`, `EventStreamEndpoint`, `WebSocketEndpoint`; when they collide with existing internal type names, those are adjusted together).
+- In the current terminology "builder" means the return value of `defineXxx` (`RequestCommandBuilder` and so on). To avoid one word with two meanings, the return value is renamed **endpoint**: `getUser` is an endpoint, and calling it with a client runs the operation. Types are renamed accordingly (for example `RequestEndpoint`, `EventStreamEndpoint`, `WebSocketEndpoint`; when they collide with existing internal type names, those are adjusted together).
 - `withQueryParamsSerializer` → `withQuerySerializer` (the contract change is in 3.3).
 
 ---
@@ -555,7 +555,7 @@ HTTP `output` / `error`, SSE event data, and WebSocket frames all choose a repre
 - The `input` struct, `parseEndpointInput`, and `REQ_INPUT_INVALID`.
 - `encode.ts`, outbound alias, and the primitive `encode` hooks (date / bigint).
 - `protocols` on the WebSocket definition layer.
-- method, the path template, `operation`, the single `error` struct, the command and `client.execute` pipeline, and the response and fault model.
+- method, the path template, `operation`, the single `error` struct, the operation call, and the response and fault model.
 
 ### Add
 
@@ -585,7 +585,7 @@ The role of "getting the native request and handling it in place" belongs to the
 
 ### 9.2 `protocols` entering the builder return value
 
-Subprotocols come from execute `protocols` > client `withWebSocketProtocols` > definition `protocols`. The chosen list is copied before the logical session starts and reused on reconnect; the builder, `beforeConnect`, and interceptors cannot change it. When a dynamic token-in-subprotocol is needed, obtain the token first, then pass it through that execute's `protocols`.
+Subprotocols come from the call's `protocols` > client `withWebSocketProtocols` > definition `protocols`. The chosen list is copied before the logical session starts and reused on reconnect; the builder, `beforeConnect`, and interceptors cannot change it. When a dynamic token-in-subprotocol is needed, obtain the token first, then pass it through that call's `protocols`.
 
 ### 9.3 Deleting the `input` struct and using only TS types outbound
 
@@ -599,7 +599,7 @@ Nested query formats have many variants, and rebuilding one is reinventing the w
 
 ## 10. Costs
 
-1. **Unit-testing the builder directly does not match the runtime result.** Calling the builder with a literal, the value carries no type, so the encoded result differs. Tests should go through a command plus a fake handle (`doc/recipes/test-with-handle.md`). There is no public API for "stamping a type onto a value".
+1. **Unit-testing the builder directly does not match the runtime result.** Calling the builder with a literal, the value carries no type, so the encoded result differs. Tests should go through an operation call plus a fake handle (`doc/recipes/test-with-handle.md`). There is no public API for "stamping a type onto a value".
 2. **`toEqual` and logs can see `[STRUCT]`.** This affects only the input value the builder receives internally.
 3. **parse has two paths** (attach the type / do not attach), and a test must lock in that "response decoding does not attach".
 4. **The nested-query check falls back to runtime** (see 5.3).

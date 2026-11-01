@@ -206,7 +206,7 @@ interface PreservedStruct<T, I, O, OO extends boolean>
 /**
  * Broad struct constraint that accepts any struct, for endpoint and client generics.
  *
- * Used by generics such as `defineRequest`, `Fault`, and `HttpCommand`. Prefer a concrete `Struct<…>` when you need precise input and output inference.
+ * Used by generics such as `defineRequest` and `Fault`. Prefer a concrete `Struct<…>` when you need precise input and output inference.
  *
  * @group struct
  */

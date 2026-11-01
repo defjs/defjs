@@ -1,36 +1,28 @@
 ---
 title: SSE
-description: defineEventStream、execute options，同 stream handle。
+description: defineEventStream、request options，同 stream handle。
 ---
 
 # SSE
 
-聲明一條 event stream，執行佢，逐個讀取 events，之後關閉。
+聲明一條 event stream，用 client 呼叫操作，逐個讀取 events，之後關閉。
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
 - **definition** — `path`、`events` map，以及必填、為正整數嘅上限 `maxBufferSize` 同 `maxQueueSize`；可選 `method`（default `'GET'`）、`operation`、`input` 同 `error`。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` members 寫喺 [`EventStreamDefinition`](/zh-Hant-HK/api/core/eventstreamdefinition-type)。只有俾咗 error struct type 嗰陣 `error` 先必填，`builder` 恰好喺聲明咗 `input` 嗰陣先必填。
-- **Returns** 一個 endpoint。用 input call 佢，就會得到 `EventStreamCommand`。
+- **Returns** 一個操作。第一個參數係 [`Client`](/zh-Hant-HK/api/core/client-type)。之後嘅參數只係 input。呼叫就開始 stream。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-## executeEventStreamCommand()
-
-<ApiSignature name="executeEventStreamCommand" />
-
-`client.execute` 嘅 low-level entry。Application code 優先用 client。
-
-- **Returns** `[null, stream, open]` 或者 `[error, undefined, open?]`。聲明過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。
-
-## 執行 options
+呼叫 return `[null, stream, open]` 或者 `[error, undefined, open?]`。聲明過 `error` 嘅時候，fault 係嗰個 struct 嘅 `Fault`；否則就係 `Fault<undefined>`。`abort` 要由 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 派生 client 傳入。SSE 只讀 `abort`，progress 同 WebSocket field 會忽略。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`abort` 或者 `timeout`（唔可以兩個一齊），再加上 `signal`；冇 progress callbacks。type 會拒絕兩者並存，runtime 兩者都傳會以 `REQ_OPTIONS_INVALID` 失敗。`signal` 可以同其中一個合併使用。`timeout` 係啟動 deadline：涵蓋 input 解析、builder、interceptors 同 handshake，唔會 abort 已經開啟嘅 stream。`withTimeout` 唔適用於 SSE。
+`EventStreamExecuteOptions` 係 `{ abort? }`。冇 `timeout` 或 `signal` field，亦冇 progress callback。`abort` 覆蓋成條 stream，包括 open 之後。Deadline 係 `AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。冇只限啟動嘅 deadline，亦冇 client 層級嘅預設 deadline。應用程式想要只限啟動嘅 deadline，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。
 
 ## EventStreamHandle
 
@@ -57,8 +49,6 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 `kind` 係 `eof`、`aborted` 或者 `error`。每個 variant 都可以帶 `reason` 同 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-HK/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
 
-## 事件 map
-
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
@@ -79,15 +69,11 @@ Parser 遵循 WHATWG SSE 嘅行同欄位規則，每條實體 stream 只會移�
 
 ## EventStreamEndpoint
 
-`defineEventStream` 嘅回傳。用 input call 一次就攞到 `EventStreamCommand`。
+`defineEventStream` 嘅回傳。第一個參數係 client。之後嘅參數只係 input。
 
 ## EventStreamRequestShape
 
 Fields 同條 stream 嘅 method 同 path 對應嘅 `HttpRequestShape` 一樣。
-
-## EventStreamCommand
-
-Opaque SSE command。交畀 `client.execute`。
 
 ## StreamAwaitResult
 

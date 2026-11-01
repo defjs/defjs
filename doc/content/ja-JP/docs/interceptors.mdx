@@ -7,7 +7,7 @@ description: SDK の API 定義を共有しながら、アプリケーション�
 
 SDK の API 定義を変えずに、利用アプリケーションが Client に認証やトレーシングなどの実行方針を設定するための場所です。API 固有の入力配置は `builder` に、環境や認証状態に依存する処理はアプリケーションが構成するインターセプターに置きます。
 
-認証ヘッダーの追加、メンテナンス中のリクエストのショートサーキット、安全な読み取りのリトライ — コマンド検証には触れずに。トランスポートごとにチェーンがあります。入ってくるのは `HttpRequest`。返すのはそのトランスポートの結果（`HttpResponse`、イベントストリームハンドル、または WebSocket セッション）です。入力検証はチェーンの前、status 振り分けとデコード済み結果は後です。
+認証ヘッダーの追加、メンテナンス中のリクエストのショートサーキット、安全な読み取りのリトライ — 操作の検証には触れずに。トランスポートごとにチェーンがあります。入ってくるのは `HttpRequest`。返すのはそのトランスポートの結果（`HttpResponse`、イベントストリームハンドル、または WebSocket セッション）です。入力検証はチェーンの前、status 振り分けとデコード済み結果は後です。
 
 ## 基本セットアップ
 
@@ -53,7 +53,7 @@ HTTP ボディを差し替えるときは、コピーしたリクエストの `b
   examples/interceptors/short-circuit.ts#example
 </include>
 
-コマンド層はそれでも status で振り分けます。呼び出し側が型付き `error.data` を要する場合は、非 2xx 側を一つの `error` struct で宣言してください。宣言された側の確認も行われます。JSON の `output` や `error` には、合成レスポンスに JSON の `content-type` ヘッダーが要り、`body` はトランスポートが渡すのと同じく、すでにパース済みの値であるべきです（どの表現かは `request.responseType` と `request.errorResponseType` が示します）。SSE や WebSocket のショートサーキットには、互換な完全なハンドル/セッション（閉鎖 promise、ライブ状態、所有権、`[Symbol.asyncDispose]`）が要ります。部分オブジェクトは有効な方針ではありません。構造的な `EventStreamHandle` と `WebSocketSessionLike` の実装には、今やコンパイル時にその標準 disposer が要ります。Defjs のハンドルを受け取るだけの利用者には、新しい実行時呼び出しは要りません。
+操作はそれでも status で振り分けます。呼び出し側が型付き `error.data` を要する場合は、非 2xx 側を一つの `error` struct で宣言してください。宣言された側の確認も行われます。JSON の `output` や `error` には、合成レスポンスに JSON の `content-type` ヘッダーが要り、`body` はトランスポートが渡すのと同じく、すでにパース済みの値であるべきです（どの表現かは `request.responseType` と `request.errorResponseType` が示します）。SSE や WebSocket のショートサーキットには、互換な完全なハンドル/セッション（閉鎖 promise、ライブ状態、所有権、`[Symbol.asyncDispose]`）が要ります。部分オブジェクトは有効な方針ではありません。構造的な `EventStreamHandle` と `WebSocketSessionLike` の実装には、今やコンパイル時にその標準 disposer が要ります。Defjs のハンドルを受け取るだけの利用者には、新しい実行時呼び出しは要りません。
 
 ## 安全な読み取りをリトライする
 
@@ -96,7 +96,7 @@ WebSocket インターセプターは `next` を高々一度しか呼べませ�
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP の Basic 資格情報
 - `basicAuthSSEInterceptor(provider, options?)` — SSE の Basic 資格情報
 
-`HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。`queryParams` はシリアライズ後の `new URLSearchParams(queryString)` です。ビルダーが query を作らなかったとき、設定済みの query シリアライザは呼ばれません。ビルダーの `URLSearchParams` はそのまま使われます。コマンド検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
+`HttpRequest` には `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、静的な `operation` が含まれることがあります。トランスポート統合の値であり、呼び出し側のパース済み入力ではありません。`queryParams` はシリアライズ後の `new URLSearchParams(queryString)` です。ビルダーが query を作らなかったとき、設定済みの query シリアライザは呼ばれません。ビルダーの `URLSearchParams` はそのまま使われます。入力検証、出力検証、ドメインエラー写像はそれぞれの層に置いてください。
 
 URL の検証はリクエストの組み立て中に始まります。ベースエンドポイントの欠落、相対 URL、無効な URL、不正な path は、ショートサーキットするものも含め、インターセプターやトランスポートが実行される前に `REQ_BUILD_FAILED` になります。ディスパッチ前には、最終的な `req.endpoint` が最終的な `req.baseEndpoint` に対して検証されます。解決後の URL はそのベースのオリジンを保ち、ディレクトリ内に収まる必要があります。path 内の C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への移動は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。インターセプターが意図的に `baseEndpoint` を別の有効な絶対 URL に差し替えることは許可されます。HTTP、SSE、WebSocket で共通の規則で、決定的な URL エラーは決してリトライされません。
 
@@ -106,7 +106,7 @@ SSE/WebSocket のオブザーバーはライフサイクルフックであり、
 
 Basic 資格情報は base64 であり、暗号化ではありません。TLS を使い、サーバーでは資格情報プロバイダをリクエストスコープに保ち、生成ヘッダーをログしないでください。デフォルトエンコーダは `globalThis.btoa` です。ランタイムに `btoa` がない、またはレビュー済みエンコーダが要るときは `BasicAuthInterceptorOptions.encode` を渡してください。
 
-インターセプターはトランスポート方針を強制できます。入力検証でも認可でも、リソース所有でもありません。長期の SSE/WebSocket 作業を始めたコードは、引き続き `await using` を使うか、手動でキャンセル、close、終端 promise の await をします。通常の HTTP は request-scoped で timeout / `AbortSignal` により管理され、`Client` は `AsyncDisposable` ではありません。
+インターセプターはトランスポート方針を強制できます。入力検証でも認可でも、リソース所有でもありません。長期の SSE/WebSocket 作業を始めたコードは、引き続き `await using` を使うか、手動でキャンセル、close、終端 promise の await をします。通常の HTTP は request-scoped で `AbortSignal` により管理され、`Client` は `AsyncDisposable` ではありません。
 
 ## 関連レシピ
 

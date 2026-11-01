@@ -1,9 +1,9 @@
 ---
 title: "操作示例"
-description: 定义、测试和发布 SDK，并在应用中处理 HTTP、鉴权和实时通信的完整示例。
+description: 构建并发布可复用的 SDK，再在消费方应用里配置鉴权、调用和实时工作。
 ---
 
-这些示例覆盖 SDK 的定义、测试和发布，也展示应用如何配置 Client、处理结果和管理资源。先掌握[定义与执行](/zh-Hans/docs/commands)，再按任务选用；准备跨项目复用时，直接看[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)。
+先从[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)看起，它覆盖从导出定义到 npm 包和消费方应用的整条路径。下面的示例让你掌握可以围绕这份 SDK 组合的单项操作契约和应用策略。
 
 ## HTTP
 
@@ -22,7 +22,7 @@ description: 定义、测试和发布 SDK，并在应用中处理 HTTP、鉴权�
 - [消费 SSE 事件流](/zh-Hans/recipes/consume-sse)
 - [管理 WebSocket 会话](/zh-Hans/recipes/websocket-session)
 
-## SDK 测试与发布 [#测试与封装]
+## SDK 测试与发布 [#testing-and-packaging]
 
 - [本地 HTTP 测试](/zh-Hans/recipes/test-with-handle)
 - [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)

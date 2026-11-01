@@ -8,20 +8,8 @@ import { defineWebSocket } from "../web_socket";
 import { createClient } from "./client";
 import { withEndpoint, withInterceptors } from "./option";
 
-describe("Client.execute", () => {
-  test("client should have execute method", () => {
-    const client = createClient(withEndpoint("https://example.com"));
-    expect(typeof client.execute).toBe("function");
-  });
-
-  test("execute rejects for unsupported command kind", async () => {
-    const client = createClient(withEndpoint("https://example.com"));
-    await expect(client.execute({ kind: "test" } as never)).rejects.toThrow(
-      "Unsupported command",
-    );
-  });
-
-  test("client.execute dispatches http command", async () => {
+describe("operation dispatch", () => {
+  test("an HTTP operation runs against the client", async () => {
     const useGet = defineRequest({
       method: "GET",
       output: struct.object({ ok: struct.boolean() }),
@@ -41,13 +29,13 @@ describe("Client.execute", () => {
       ),
     );
 
-    const [error, result] = await client.execute(useGet());
+    const [error, result] = await useGet(client);
 
     expect(error).toBeNull();
     expect(result).toEqual({ ok: true });
   });
 
-  test("client.execute dispatches event-stream command", async () => {
+  test("an event-stream operation runs against the client", async () => {
     const useBasicSse = defineEventStream({
       maxBufferSize: 1024,
       maxQueueSize: 16,
@@ -59,7 +47,7 @@ describe("Client.execute", () => {
 
     const client = createClient(withEndpoint(inject("testServerHost")));
 
-    const [error, stream, open] = await client.execute(useBasicSse());
+    const [error, stream, open] = await useBasicSse(client);
 
     expect(error).toBeNull();
     if (!stream || !open) {
@@ -78,7 +66,7 @@ describe("Client.execute", () => {
     await expect(stream.closed).resolves.toBeDefined();
   });
 
-  test("client.execute dispatches web-socket command", async () => {
+  test("a web-socket operation runs against the client", async () => {
     const useChatSocket = defineWebSocket({
       maxIncomingQueueSize: 16,
       incoming: struct.object({
@@ -91,7 +79,7 @@ describe("Client.execute", () => {
 
     const client = createClient(withEndpoint(inject("testServerHost")));
 
-    const [error, socket, connection] = await client.execute(useChatSocket());
+    const [error, socket, connection] = await useChatSocket(client);
 
     expect(error).toBeNull();
     if (!socket || !connection) {

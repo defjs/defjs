@@ -1,13 +1,17 @@
 ---
 title: "用戶端設定 / Client"
-description: 應用程式建立自己的 Client，設定服務位址、身分驗證與傳輸，並執行 SDK 匯出的端點。
+description: 設定應用程式如何呼叫匯入的 SDK 操作，與那些 API 定義彼此獨立。
 ---
 
 # Client
 
-應用程式透過 `createClient(...)` 設定服務位址、身分驗證、攔截器、序列化方式與平台 handle，再執行 SDK 匯出端點所建立的 command。SDK 定義無需綁定這些環境設定，同一端點可以用於瀏覽器、伺服器請求範圍與本機測試。
+`Client` 是使用端應用程式的執行設定，而且它是一個函式。`createClient(...)` 回傳那個函式。從 SDK 匯入操作，選擇服務位址、憑證、interceptors 與傳輸，再帶著 client 呼叫操作。`getUser(client({ abort }), { id: 1 })` 啟動一次有宣告 input 的呼叫。`health(client)` 啟動一次沒有 input 的呼叫。整個 input struct 可選時，`search(client)` 與 `search(client, input)` 都合法。沒有第三個 options 引數。呼叫操作就會啟動它。`await` 只等待 error-first tuple。
 
-`Client` 儲存設定並分派 HTTP、SSE、WebSocket command。呼叫端負責結果處理、快取或重試策略，以及請求取消、串流與工作階段的關閉；Client 本身不快取結果或接管已回傳的活動資源。HTTP 重試由應用程式策略實作；SSE 與 WebSocket 的重連需要明確啟用。
+SDK 的定義不會綁定這個實例。瀏覽器、伺服器請求與本機測試可以用不同的 client 使用同一個匯出的操作。兩邊仍遵循同一份 Defjs 契約與相容的 Core 版本。請為透過該 client 呼叫的操作設定服務位址。
+
+同一個 client 值可以傳給許多操作。應用程式選擇快取與重試策略，並擁有自己啟動的工作。HTTP 不會自動重試。串流重連需要明確啟用。
+
+因為 `Client` 是函式，不要把它傳給 React 的 state setter：`setState(client)` 會把它當成 updater 呼叫。不要把它當成 Vue 的 `watch` 或 `computed` 來源：那些會呼叫函式。
 
 ## 基本用法
 
@@ -15,7 +19,7 @@ description: 應用程式建立自己的 Client，設定服務位址、身分驗
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` 會依 command 種類回傳 overloads。
+`createClient(...)` 回傳一個可呼叫的 [`Client`](/zh-Hant-TW/api/core/client-type)。它不是一組依傳輸區分的 overloads。
 
 ## 組合 options
 
@@ -25,15 +29,45 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
   examples/client/compose-options.ts#example
 </include>
 
-混合的 interceptors 在執行時依傳輸篩選；被選中的同一種類內，相對順序會保留。
+混合的 interceptors 在操作執行時依傳輸篩選；被選中的同一種類內，相對順序會保留。
 
-## 依傳輸執行
+## 衍生 client
+
+`client(options?)` 回傳新的 client。呼叫 `client(options)` 時，七個已知欄位從引數物件複製出來：頂層快照進一個新的 options 物件，再覆疊到目前的 options 上。較後的欄位勝出。欄位的值為 `undefined` 時，視為未提供，保留父層的值。衍生出的 client 不能丟掉父層已有的設定；要回到沒有這項設定，從當初沒有它的那個 client 再衍生一次（保留根 client）。巢狀的 `heartbeat`、`protocols` 與 `reconnect` 的值依參考保留，不複製，並且整份替換父層的值，不會合併。WebSocket 在操作執行時讀取它們（那時會複製 heartbeat 的欄位與 protocols 清單），所以衍生之後再改這些物件，仍可能影響之後的呼叫。應用程式在傳入之後應把它們視為不可變。衍生不會進行 I/O。原本的 client 絕不會被修改。`client()`、`client(undefined)` 與 `client({})` 會複製目前的 options。
+
+`abort` 不會合併。較後的 `abort` 會取代前一個 signal。在應用程式碼裡用 `AbortSignal.any` 組合 signals。
+
+<include cwd lang="typescript">
+  examples/client/derive-client.ts#example
+</include>
+
+`createClient` 的基礎設定由每個衍生 client 共用，執行期不會凍結。它依慣例固定：函式庫不會改它，應用程式也不應該改。該 client 上的 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 就是那份頂層快照。應用程式碼呼叫 client，並把它傳給操作。它不會讀取那份內部狀態。
+
+## 請求 options
+
+[`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 有七個扁平欄位。每種協定只讀自己知道的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 操作會被忽略，不是 fault。SSE 只從請求 options 讀取 `abort`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選。
+
+| 欄位                 | 誰使用               | 規則                                                                                             |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
+| `abort`              | HTTP、SSE、WebSocket | 取代前一個 signal。期限是 `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）。手動取消是 `NET_ABORTED`。 |
+| `onUploadProgress`   | HTTP                 | SSE 與 WebSocket 會忽略。                                                                        |
+| `onDownloadProgress` | HTTP                 | SSE 與 WebSocket 會忽略。                                                                        |
+| `beforeConnect`      | WebSocket            | 在該次呼叫取代 client 的設定。                                                                   |
+| `protocols`          | WebSocket            | 取代 client 的清單。不會追加。                                                                   |
+| `heartbeat`          | WebSocket            | 整份替換。`timeoutMs` 是 heartbeat 的確認等待，不是請求期限。                                    |
+| `reconnect`          | WebSocket            | 整份替換。                                                                                       |
+
+沒有 `timeout` 欄位，沒有 `signal` 欄位，也沒有 client 層級的預設期限。對 SSE 與 WebSocket，`abort` 涵蓋整條連線，包含開啟之後。沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器。見 [SSE](/zh-Hant-TW/docs/sse#close-and-dispose)。
+
+`HttpExecuteOptions` 是 HTTP 切片：`abort` 加上進度回呼。`EventStreamExecuteOptions` 是 `{ abort? }`。`WebSocketExecuteOptions` 是 WebSocket 切片再加上 `abort`。
+
+## 依傳輸的結果
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`. `open` 對於 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper，是回傳 handle 所屬連線首次成功握手的快照；自訂 handle 或覆寫 `open` 的 wrapper 則以其目前公開的 `open` 為準，即使已發生重連也一樣，`stream.open` 仍保持即時更新（見 [SSE](/zh-Hant-TW/docs/sse)）。
+- SSE → `[error, stream, open]`。`open` 對於 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper，是回傳連線首次成功握手的快照；自訂 handle 或覆寫 `open` 的 wrapper 則以其目前公開的 `open` 為準，即使已發生重連也一樣，`stream.open` 仍保持即時更新（見 [SSE](/zh-Hant-TW/docs/sse)）。
 - WebSocket → `[error, session, connection]`
 
-WebSocket execute 可覆寫 `beforeConnect`、`heartbeat`、`protocols`、`reconnect`。`timeout` 必須是 `1..2_147_483_647` 的正 safe integer。
+`error` 有值時，先返回，再使用成功值。
 
 清理由你負責：abort HTTP、close SSE + `await stream.closed`、close WebSocket + `await session.closed`。
 
@@ -47,13 +81,21 @@ WebSocket execute 可覆寫 `beforeConnect`、`heartbeat`、`protocols`、`recon
 
 在伺服器上，若 options 或 interceptor closures 會捕捉 auth、cookies、users、tenants，請在請求邊界內建立 client。Client 身分本身不是安全邊界。
 
+## 遷移
+
+| 舊                                        | 新                                             |
+| ----------------------------------------- | ---------------------------------------------- |
+| `client.execute(getUser(input), options)` | `getUser(client(options), input)`              |
+| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })` |
+| `execute(cmd, { signal })`                | `client({ abort: signal })`                    |
+| `createClient(withTimeout(5000), ...)`    | 在呼叫處傳入 `abort`，或包一層應用程式函式     |
+
 ## 參考
 
 | Helper                                                                                                        | 效果                                                       |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | 所有傳輸共用的絕對 base endpoint                           |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP／SSE 的靜態預設 headers；command headers 會覆寫       |
-| `withTimeout(ms)`                                                                                             | 只當 HTTP `execute` 的預設 timeout（SSE／WS 會忽略）       |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP／SSE 的靜態預設 headers；builder headers 會覆寫       |
 | `withHTTPHandle(fetch)`                                                                                       | 替換 HTTP 的 Fetch                                         |
 | `withSSEHandle(fetch)`                                                                                        | 替換 SSE 的 Fetch                                          |
 | `withWebSocketHandle(WebSocket)`                                                                              | 替換 WebSocket constructor                                 |

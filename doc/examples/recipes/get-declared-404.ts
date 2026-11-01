@@ -13,8 +13,7 @@ const getUser = defineRequest({
 });
 
 async function main() {
-  const command = getUser({ id: 7 });
-  const [error, user, response] = await client.execute(command);
+  const [error, user, response] = await getUser(client, { id: 7 });
   if (error?.code === "HTTP_STATUS" && error.status === 404) {
     console.log(error.data.message);
     return;

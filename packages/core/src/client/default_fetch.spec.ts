@@ -52,7 +52,7 @@ describe("request-time default fetch", () => {
             output: struct.string(),
             path: "/",
           });
-          const [fault, data] = await client.execute(endpoint());
+          const [fault, data] = await endpoint(client);
           expect(fault).toBeNull();
           expect(data).toBe("after");
         } else {
@@ -62,7 +62,7 @@ describe("request-time default fetch", () => {
             maxQueueSize: 16,
             path: "/",
           });
-          const [fault, stream] = await client.execute(endpoint());
+          const [fault, stream] = await endpoint(client);
           expect(fault).toBeNull();
           expect(await stream?.[Symbol.asyncIterator]().next()).toEqual({
             done: false,
@@ -95,15 +95,13 @@ describe("request-time default fetch", () => {
       const client = createClient(withEndpoint("https://example.com"));
       const [fault, result, response] =
         transport === "HTTP"
-          ? await client.execute(defineRequest({ method: "GET", path: "/" })())
-          : await client.execute(
-              defineEventStream({
-                events: { message: struct.string() },
-                maxBufferSize: 1024,
-                maxQueueSize: 16,
-                path: "/",
-              })(),
-            );
+          ? await defineRequest({ method: "GET", path: "/" })(client)
+          : await defineEventStream({
+              events: { message: struct.string() },
+              maxBufferSize: 1024,
+              maxQueueSize: 16,
+              path: "/",
+            })(client);
 
       expect(fault?.code).toBe("ENV_UNSUPPORTED");
       expect(result).toBeUndefined();
@@ -126,15 +124,13 @@ describe("request-time default fetch", () => {
       vi.stubGlobal("fetch", undefined);
       const [fault] =
         transport === "HTTP"
-          ? await client.execute(defineRequest({ method: "GET", path: "/" })())
-          : await client.execute(
-              defineEventStream({
-                events: { message: struct.string() },
-                maxBufferSize: 1024,
-                maxQueueSize: 16,
-                path: "/",
-              })(),
-            );
+          ? await defineRequest({ method: "GET", path: "/" })(client)
+          : await defineEventStream({
+              events: { message: struct.string() },
+              maxBufferSize: 1024,
+              maxQueueSize: 16,
+              path: "/",
+            })(client);
 
       expect(fault?.code).toBe("ENV_UNSUPPORTED");
     },
@@ -147,9 +143,11 @@ describe("request-time default fetch", () => {
       await import("../index");
     const client = createClient(withEndpoint("https://example.com"));
     vi.stubGlobal("fetch", async () => new Response("installed"));
-    const [fault, data] = await client.execute(
-      defineRequest({ method: "GET", output: struct.string(), path: "/" })(),
-    );
+    const [fault, data] = await defineRequest({
+      method: "GET",
+      output: struct.string(),
+      path: "/",
+    })(client);
 
     expect(fault).toBeNull();
     expect(data).toBe("installed");
@@ -178,16 +176,14 @@ describe("request-time default fetch", () => {
       ),
     );
     expect(
-      (await client.execute(defineRequest({ method: "GET", path: "/" })()))[0],
+      (await defineRequest({ method: "GET", path: "/" })(client))[0],
     ).toBeNull();
-    const [fault, stream] = await client.execute(
-      defineEventStream({
-        events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
-        path: "/",
-      })(),
-    );
+    const [fault, stream] = await defineEventStream({
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 16,
+      path: "/",
+    })(client);
     expect(fault).toBeNull();
     expect(await stream?.[Symbol.asyncIterator]().next()).toEqual({
       done: false,
@@ -234,24 +230,20 @@ describe("request-time default fetch", () => {
         ),
       );
       if (transport === "HTTP") {
-        const [fault, data] = await client.execute(
-          defineRequest({
-            method: "GET",
-            output: struct.string(),
-            path: "/",
-          })(),
-        );
+        const [fault, data] = await defineRequest({
+          method: "GET",
+          output: struct.string(),
+          path: "/",
+        })(client);
         expect(fault).toBeNull();
         expect(data).toBe("cached");
       } else {
-        const [fault, stream] = await client.execute(
-          defineEventStream({
-            events: { message: struct.string() },
-            maxBufferSize: 1024,
-            maxQueueSize: 16,
-            path: "/",
-          })(),
-        );
+        const [fault, stream] = await defineEventStream({
+          events: { message: struct.string() },
+          maxBufferSize: 1024,
+          maxQueueSize: 16,
+          path: "/",
+        })(client);
         expect(fault).toBeNull();
         expect(await stream?.[Symbol.asyncIterator]().next()).toMatchObject({
           done: false,
@@ -281,15 +273,13 @@ describe("request-time default fetch", () => {
       const { ERR_FETCH_UNSUPPORTED } = await import("./config");
       const run = (client: ReturnType<typeof createClient>) =>
         transport === "HTTP"
-          ? client.execute(defineRequest({ method: "GET", path: "/" })())
-          : client.execute(
-              defineEventStream({
-                events: { message: struct.string() },
-                maxBufferSize: 1024,
-                maxQueueSize: 16,
-                path: "/",
-              })(),
-            );
+          ? defineRequest({ method: "GET", path: "/" })(client)
+          : defineEventStream({
+              events: { message: struct.string() },
+              maxBufferSize: 1024,
+              maxQueueSize: 16,
+              path: "/",
+            })(client);
       expect(
         (await run(createClient(withEndpoint("https://example.com"))))[0]?.code,
       ).toBe("ENV_UNSUPPORTED");

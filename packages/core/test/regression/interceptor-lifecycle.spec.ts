@@ -104,11 +104,8 @@ test.each([
       ),
     );
     try {
-      const [fault, session, snapshot] = await client.execute(
-        socketEndpoint(),
-        {
-          reconnect: { attempts: 1, delayMs: 0 },
-        },
+      const [fault, session, snapshot] = await socketEndpoint(
+        client({ reconnect: { attempts: 1, delayMs: 0 } }),
       );
       expect(fault).toBeNull();
       expect(readConnection).toHaveBeenCalledOnce();
@@ -130,7 +127,7 @@ test.each([
   },
 );
 
-test("WebSocket physical open releases the startup deadline while caller abort remains active", async () => {
+test("WebSocket physical open does not cancel on its own while caller abort remains active", async () => {
   vi.useFakeTimers();
   const { instances, Socket } = socketHarness();
   const entered = Promise.withResolvers<void>();
@@ -149,16 +146,16 @@ test("WebSocket physical open releases the startup deadline while caller abort r
     ),
   );
   let settled = false;
-  const pending = client
-    .execute(socketEndpoint(), { timeout: 100, signal: controller.signal })
-    .then((result) => {
+  const pending = socketEndpoint(client({ abort: controller.signal })).then(
+    (result) => {
       settled = true;
       return result;
-    });
+    },
+  );
   try {
     await entered.promise;
     await vi.advanceTimersByTimeAsync(101);
-    // The existing reconnect audit requires the startup timeout to end at first physical open.
+    // No startup deadline remains after the socket opens. Only the caller signal can cancel it.
     expect(settled).toBe(false);
     controller.abort("stop post-open interceptor");
     const [fault, session] = await pending;
@@ -185,7 +182,7 @@ test("WebSocket respects an already-aborted signal supplied by an interceptor", 
       ),
     ),
   );
-  const [fault, session] = await client.execute(socketEndpoint());
+  const [fault, session] = await socketEndpoint(client);
   try {
     expect(fault?.code).toBe("NET_ABORTED");
     expect(session).toBeUndefined();
@@ -211,7 +208,7 @@ test("HTTP honours both the caller signal and an interceptor replacement signal"
       ),
     ),
   );
-  const [blockedFault] = await blocked.execute(endpoint());
+  const [blockedFault] = await endpoint(blocked);
   expect(blockedFault?.code).toBe("NET_ABORTED");
   expect(calls).toEqual([]);
 
@@ -231,7 +228,7 @@ test("HTTP honours both the caller signal and an interceptor replacement signal"
         ),
       ),
     );
-    const pending = client.execute(endpoint(), { signal: caller.signal });
+    const pending = endpoint(client({ abort: caller.signal }));
     const transportSignal = await started.promise;
     if (mode === "caller") caller.abort("caller stopped");
     else replacement.abort("interceptor stopped");
@@ -281,9 +278,7 @@ test("SSE keeps caller cancellation after an interceptor supplies its own signal
     maxBufferSize: 1024,
     maxQueueSize: 4,
   });
-  const [fault, stream] = await client.execute(endpoint(), {
-    signal: controller.signal,
-  });
+  const [fault, stream] = await endpoint(client({ abort: controller.signal }));
   try {
     expect(fault).toBeNull();
     await started.promise;

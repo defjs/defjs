@@ -1,42 +1,34 @@
 ---
 title: SSE
-description: defineEventStream، وخيارات التنفيذ، ومقبض التدفق.
+description: defineEventStream، وخيارات الطلب، ومقبض التدفق.
 ---
 
 # SSE
 
-أعلن تدفق أحداث، نفّذه، مرّ على أحداثه، ثم أغلقه.
+أعلن تدفق أحداث، واستدعِ العملية بعميل، وكرّر الأحداث، ثم أغلق.
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`، وخريطة `events`، والحدّان المطلوبان `maxBufferSize` و`maxQueueSize` (عددان صحيحان موجبان)؛ و`method` اختياري (الافتراضي `'GET'`)، و`operation` و`input` و`error` اختيارية. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح. يقتصر `input` على تعريف المعاملات، والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`. أعضاء `definition` هذه موثّقة تحت [`EventStreamDefinition`](/ar/api/core/eventstreamdefinition-type). يكون `error` مطلوبًا فقط عند إعطاء نوع struct للخطأ، ويكون `builder` مطلوبًا تمامًا عند التصريح بـ `input`.
-- **يُرجع** نقطة نهاية. استدعِها بالمدخل لتحصل على `EventStreamCommand`.
+- **definition** — `path` وخريطة `events` والحدان المطلوبان من الأعداد الصحيحة الموجبة `maxBufferSize` و`maxQueueSize`؛ و`method` اختياري (الافتراضي `'GET'`) و`operation` و`input` و`error`. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`. أعضاء `definition` هذه موثّقة تحت [`EventStreamDefinition`](/ar/api/core/eventstreamdefinition-type). `error` مطلوب فقط عند إعطاء نوع struct خطأ، و`builder` مطلوب تمامًا عندما يُعلَن `input`.
+- **يُرجع** عملية. الوسيط الأول هو [`Client`](/ar/api/core/client-type). الوسائط التالية هي المدخل فقط. استدعاؤها يبدأ التدفق.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-## executeEventStreamCommand()
-
-<ApiSignature name="executeEventStreamCommand" />
-
-مدخل منخفض المستوى لـ `client.execute`. فضّل العميل في شيفرة التطبيق.
-
-- **يُرجع** `[null, stream, open]` أو `[error, undefined, open?]`. عند إعلان `error` يكون الخطأ `Fault` لذلك الـ struct؛ وإلا فهو `Fault<undefined>`.
-
-## خيارات التنفيذ
+يُرجع الاستدعاء `[null, stream, open]` أو `[error, undefined, open?]`. عندما يُعلَن `error`، يكون الخطأ `Fault` لذلك الـ struct؛ وإلا فهو `Fault<undefined>`. مرّر `abort` باشتقاق عميل من [`RequestOptions`](/ar/api/core/requestoptions-type). يقرأ SSE الحقل `abort` فقط ويتجاهل التقدّم وحقول WebSocket.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`abort` أو `timeout` (لا كلاهما أبدًا) بالإضافة إلى `signal`؛ ولا توجد دوال تقدّم. النوع يرفض الاثنين معًا، وتمريرهما معًا وقت التشغيل يفشل بـ `REQ_OPTIONS_INVALID`. ويتحد `signal` مع أيٍّ منهما. `timeout` مهلة بدء: تشمل تحليل المدخل والـ `builder` والمعترضات والمصافحة، ولا تُجهض تدفقًا مفتوحًا. `withTimeout` لا يُطبَّق على SSE.
+`EventStreamExecuteOptions` هو `{ abort? }`. لا يوجد حقل `timeout` أو `signal` ولا رد نداء تقدّم. يغطي `abort` التدفق كاملًا، بما فيه ما بعد فتحه. المهلة هي `AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة للبدء فقط ولا مهلة افتراضية على مستوى العميل. التطبيق الذي يريد مهلة للبدء فقط ينشئ `AbortController` خاصًا به، ويجهضه بـ `new DOMException("...", "TimeoutError")` من مؤقت، ويمسح المؤقت بعد أن يُرجع `await`.
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-الخانة الثالثة في الـ tuple هي لقطة البدء لـ `open`؛ أما `stream.open` فيتبع أحدث اتصال بعد إعادة الاتصال. تلك الخانة الثالثة هي لقطة أول مصافحة ناجحة للاتصال الخاص بالمقبض المُعاد فقط إذا كان مقبضًا أصليًا من Defjs أو غلافًا يمرّر كائن `open` الحي نفسه؛ أما المقابض المخصصة والأغلفة التي تستبدل `open` فتحتفظ بقيمة `open` العامة الحالية حتى بعد إعادة الاتصال، لذلك لا تسمح مشاركة `closed` بتجاوز تنقية URL أو تصفية الرؤوس، ولا تعيد Defjs بناء بيانات المصافحة الأولى من تحويلات اعتباطية. فضّل `await using stream = handle` لتنظيف النطاق المملوك. المتخلّص يوقف قراءة Defjs وعمل إعادة الاتصال وينتظر تحرير قفل القارئ؛ ولا يعد بأن وعد `ReadableStream.cancel()` العالق الذي يتحكم به المزوّد سينتهي. يبقى `close()` / `closed` اليدويان متاحين.
+الموضع الثالث في الـ tuple هو لقطة بدء `open`؛ ويتبع `stream.open` آخر اتصال بعد إعادة الاتصال. ذلك الموضع الثالث هو لقطة أول مصافحة ناجحة للاتصال المُرجَع فقط لمقبض Defjs أصلي أو غلاف يمرّر كائن `open` الحي نفسه؛ وتحتفظ المقابض المخصصة والأغلفة التي تغلّب `open` بـ `open` العام الحالي حتى بعد إعادة الاتصال، فلا يستطيع `closed` المشترك تجاوز تنظيف عنوان URL أو ترشيح الرؤوس، ولا يعيد Defjs بناء بيانات أول مصافحة الوصفية من تحويلات اعتباطية. فضّل `await using stream = handle` لتنظيف النطاق المملوك. يوقف المتخلّص قراءة Defjs وعمل إعادة الاتصال وينتظر تحرير قفل القارئ؛ وهو لا يعد بأن وعد `ReadableStream.cancel()` العالق الذي يتحكم فيه الموفّر سينتهي. يبقى `close()` / `closed` اليدويان متاحين.
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
@@ -45,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-التطبيقات البنيوية لـ `EventStreamHandle` يجب أن تنفّذ الآن `[Symbol.asyncDispose]()` وتُرجع مسار التخلّص المملوك نفسه. هذا تغيير كاسر وقت الترجمة للمقابض المخصصة؛ والكود الذي يستقبل فقط مقابض تعيدها Defjs بلا متطلب استدعاء وقت تشغيل جديد.
+يجب أن تنفّذ التطبيقات الهيكلية لـ `EventStreamHandle` الآن `[Symbol.asyncDispose]()` وتُرجع مسار التفكيك المملوك نفسه. هذا تغيير كاسر وقت الترجمة للمقابض المخصصة؛ والشيفرة التي تتلقى فقط مقابض يُرجعها Defjs ليس لها متطلب استدعاء وقت تشغيل جديد.
 
 ### EventStreamOpenInfo
 
@@ -55,39 +47,33 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` هو `eof` أو `aborted` أو `error`. كل صيغة قد تحمل `reason` و`cause`. وحده `error` يملك `code`، وهو أحد [`EventStreamFaultCode`](/ar/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
-
-## خريطة الأحداث
+`kind` هو `eof` أو `aborted` أو `error`. قد تحمل كل صيغة `reason` و`cause`. لـ `error` فقط `code`، واحد من [`EventStreamFaultCode`](/ar/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
 
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
 
-المفتاح هو اسم حدث SSE؛ والرسالة التي لا تحمل حقل `event:` اسمها `message`. عندما لا يطابق أي مفتاح، يُستخدم struct الـ `default`. struct حدث من نوع `string` يُبقي نص `data` الخام. كل نوع آخر هو نص JSON: `JSON.parse`، ثم الـ struct. لذلك يحتاج `struct.literal` العاري نص JSON، لا رمزًا بلا اقتباس. أجسام `error` في المصافحة تستخدم قاعدة النوع نفسها كـ HTTP: `string` نص، و`blob` / `file` blobs، و`arrayBuffer` بايتات، وكل ما عدا ذلك JSON.
+المفتاح هو اسم حدث SSE؛ والرسالة التي بلا حقل `event:` تُسمّى `message`. عندما لا يطابق أي مفتاح، يُستخدم struct `default`. يُبقي struct حدث من نوع `string` نص `data` الخام. كل نوع آخر هو نص JSON: `JSON.parse` ثم الـ struct. لذلك يحتاج `struct.literal` العاري نص JSON، لا رمزًا غير مقتبس. تستخدم أجسام `error` في المصافحة قاعدة النوع نفسها كما في HTTP: `string` نص، و`blob` / `file` كائنات blob، و`arrayBuffer` بايتات، وكل ما عدا ذلك JSON.
 
-إعادة الاتصال تعيش على العميل (`withSSEReconnect`). `jitter` في SSE **عامل ضربي بين 0 و1**، مثل WebSocket.
+تعيش إعادة الاتصال على العميل (`withSSEReconnect`). `jitter` في SSE **معامل ضربي بين 0 و1**، مثل WebSocket.
 
-تُعاد ميزانية إعادة المحاولة وأُسّ التراجع إلى قيمتيهما الابتدائيتين بعد مصافحة ناجحة؛ ويُحسبان لكل انقطاع. تُرجع الخيارات الرقمية غير الصالحة `REQ_OPTIONS_INVALID` قبل فتح التدفق، وتضع `maxDelayMs` سقفًا للتأخير النهائي بعد تطبيق `jitter`. راجع [`withSSEReconnect`](/ar/api/core/withssereconnect) لقواعد التحقق والقيم الافتراضية والتعامل مع `Last-Event-ID` بترميز UTF-8.
+تُصفَّر ميزانية إعادة المحاولة وأُس التراجع بعد مصافحة ناجحة؛ وتنطبق لكل انقطاع. تُرجع الخيارات الرقمية غير الصالحة `REQ_OPTIONS_INVALID` قبل فتح تدفق، ويحدّ `maxDelayMs` التأخير النهائي بعد الاهتزاز. انظر [`withSSEReconnect`](/ar/api/core/withssereconnect) لقواعد التحقق والافتراضيات ومعالجة `Last-Event-ID` بترميز UTF-8.
 
-يتبع المحلِّل قواعد الأسطر والحقول في WHATWG SSE، ولا يزيل إلا علامة BOM واحدة لـ UTF-8 في بداية كل تدفق فعلي. يُحفَظ U+FEFF داخل قيم البيانات أو المعرّفات؛ أما اسم الحقل الذي تسبقه BOM لاحقًا فيُتجاهل بوصفه غير معروف. تُجمع البيانات متعددة الأسطر باستخدام `\n`، ويؤدي السطر الفارغ إلى تسليم حدث يحمل بيانات، ويُهمَل الحدث غير المكتمل عند نهاية التدفق (EOF).
+يتبع المحلّل قواعد أسطر وحقول SSE في WHATWG ويزيل BOM واحدًا فقط من UTF-8 في بداية كل تدفق فيزيائي. يُحفَظ U+FEFF في قيم البيانات أو المعرّف؛ ويُتجاهل اسم حقل لاحق مسبوق بـ BOM بوصفه غير معروف. تنضم البيانات متعددة الأسطر بـ `\n`، والسطر الفارغ يُرسل حدثًا يحمل بيانات، والحدث غير المكتمل عند EOF يُهمَل.
 
 انظر [دليل SSE](/ar/docs/sse) و[استهلاك تدفق SSE](/ar/recipes/consume-sse).
 
 ## EventStreamDefinition
 
-`path` و`events`، و`maxBufferSize` و`maxQueueSize` مطلوبان، و`method` / `operation` / `input` / `error` اختيارية. شكل الطلب يطابق HTTP، بما في ذلك `body`. `GET` و`HEAD` لا يمكنهما إرجاع جسم. عند التصريح بـ `input`، يجب دائمًا توفير `builder` صريح. يقتصر `input` على تعريف المعاملات، والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تصرّح بـ `input`.
+`path` و`events` و`maxBufferSize` و`maxQueueSize` المطلوبان، و`method` / `operation` / `input` / `error` الاختيارية. شكل الطلب يطابق HTTP، بما فيه `body`. لا يستطيع `GET` و`HEAD` إرجاع جسم. `input` المعلَن يتطلب دائمًا `builder` صريحًا. يقتصر `input` على تعريف المعاملات؛ والـ builder وحده يقرر أين تذهب كل قيمة. يمكن حذف `builder` فقط من التعريفات التي لا تعلن `input`.
 
 ## EventStreamEndpoint
 
-يعيده `defineEventStream`. استدعه بالمدخل لتحصل على `EventStreamCommand`.
+يُرجعه `defineEventStream`. الوسيط الأول عميل. الوسائط التالية هي المدخل فقط.
 
 ## EventStreamRequestShape
 
-نفس حقول `HttpRequestShape` لطريقة التدفق ومساره.
-
-## EventStreamCommand
-
-أمر SSE معتم. مرّره إلى `client.execute`.
+الحقول نفسها لـ `HttpRequestShape` لطريقة التدفق ومساره.
 
 ## StreamAwaitResult
 
@@ -95,4 +81,4 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 ## EventStreamData
 
-حمولة الحدث المحللة المستنتجة من خريطة `EventStructs`.
+حمولة الحدث المحلَّلة المستنتجة من خريطة `EventStructs`.

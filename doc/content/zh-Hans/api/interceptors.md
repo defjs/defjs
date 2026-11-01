@@ -5,7 +5,7 @@ description: HTTP、SSE、WebSocket interceptor 构造函数。
 
 # 拦截器
 
-为某一种传输包装 `next`。用 `withInterceptors` 注册。混着的列表在 execute 时按 kind 过滤。
+为某一种传输包装 `next`。用 `withInterceptors` 注册。混着的列表在操作运行时按 kind 过滤。
 
 ## createHttpInterceptor()
 

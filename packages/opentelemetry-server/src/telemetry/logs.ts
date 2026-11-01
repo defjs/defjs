@@ -32,11 +32,11 @@ interface ClientExceptionLog {
 }
 
 /**
- * Caller cancellation produces no log. A timeout still logs.
+ * Caller cancellation produces no log. An abort whose reason is `TimeoutError` or `ERR_TIMEOUT` still logs.
  *
- * The request signal alone is not cancellation: WebSocket `finish()` aborts that same signal
+ * `request.abort` alone is not cancellation: WebSocket `finish()` aborts that same signal
  * when a connect fails. Cancellation is an abort sentinel from any `@defjs/core` copy, or an
- * `AbortError`, on the rejection or on the signal reason. `TimeoutError` and `ERR_TIMEOUT` log.
+ * `AbortError`, on the rejection or on `request.abort.reason`. There is no `timeout` option.
  */
 function isCallerCancellation(request: HttpRequest, error: unknown): boolean {
   const reason = request.abort?.reason;

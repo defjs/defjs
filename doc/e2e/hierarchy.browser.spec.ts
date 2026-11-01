@@ -76,7 +76,19 @@ test("distinguishes navigation groups from their children in both reading direct
         rtl ? standalone.right - group.right : standalone.left - group.left,
       ),
     ).toBeLessThanOrEqual(2);
-    expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(5);
+    expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(6);
+    const aiLabel = {
+      "/zh-Hans": "AI",
+      "/ar": "الذكاء الاصطناعي",
+      "/de-DE": "KI",
+    }[path];
+    const aiHeading = await textBox(
+      sidebar.getByRole("heading", { level: 2, name: aiLabel, exact: true }),
+    );
+    const aiPage = await textBox(sidebar.locator(`a[href="${path}/docs/ai"]`));
+    expect(
+      rtl ? aiHeading.right - aiPage.right : aiPage.left - aiHeading.left,
+    ).toBeGreaterThanOrEqual(INDENT);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth,

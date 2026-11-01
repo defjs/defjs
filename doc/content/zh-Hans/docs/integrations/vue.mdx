@@ -5,11 +5,11 @@ description: 在 Vue 中提供应用自己的 Client，并执行 SDK 定义、�
 
 # Vue
 
-应用创建 `@defjs/core` Client，再通过 `@defjs/vue` 的 plugin、injection key 和 `injectClient()` 将它接入 Vue。组件可以导入 SDK 端点，并用注入的 Client 执行 command；SDK 定义不依赖 Vue。
+从 SDK 或共享定义模块导入操作。Vue 应用配置并提供 client；SDK 包可以不依赖 Vue。组件和 composable 调用这些操作，并拥有自己启动的工作。`injectClient()` 拿到的 client 要传进操作。
 
 这些插件只是设置和获取已有 `Client` 的可选便利。可以直接导入应用固定的 Client、给可复用逻辑传入显式 Client、用框架注入提供组件树默认值与子树覆盖，或采用应用自己的组织方式；SDK 定义不要求通过插件执行。
 
-这个包不会创建 Client、缓存结果、重试 command，也不会在组件卸载时关闭传输资源。发起工作的组件或组合式函数负责取消、关闭和清理。
+这个包**不会**创建 Client、缓存结果、重试操作，也不会在组件卸载时关闭传输资源。`Client` 是函数：不要把它当作 `watch` 或 `computed` 的源，因为那些 API 会调用函数。发起工作的组件或组合式函数负责取消、关闭和清理。
 
 ## 基本用法
 
@@ -47,7 +47,7 @@ description: 在 Vue 中提供应用自己的 Client，并执行 SDK 定义、�
 
 ## Watcher 外自己管 HTTP
 
-对于 composable 或组件在 watcher 外启动的工作，用 `AbortController` + `onScopeDispose`。Abort 启动中和进行中的工作；写响应式状态前先看 signal。Plugin 或 injection 作用域不会推断谁拥有 command。列表页就用 Vue Query（或类似的库）包住 `execute`——`@defjs/vue` 只做依赖注入（DI），**不**提供 `useRequest`。
+对于 composable 或组件在 watcher 外启动的工作，用 `AbortController` + `onScopeDispose`。Abort 启动中和进行中的工作；写响应式状态前先看 signal。Plugin 或 injection 作用域不会推断谁拥有一次操作。列表页从 Vue Query（或类似的库）里调用操作——`@defjs/vue` 只做依赖注入（DI），**不**提供 `useRequest`。
 
 作用域拥有 Client 时，浏览器级复用要保持请求无关。若捕获了 headers、cookie、用户、租户或凭证，就在对应应用/SSR 请求边界创建，并在那里 provide。
 
@@ -79,7 +79,7 @@ App 卸载、插件移除、组件作用域释放**不会** abort HTTP、关 SSE
 - `createClientPlugin(client)` — 提供该 Client 的 Vue `Plugin`
 - `injectClient` — 读取所选 key（默认 `HTTP_CLIENT`）的最近 Client，缺失就抛错
 
-Client 和 options 在 `@defjs/core` 里创建。见 [Client](/zh-Hans/docs/client)、[Commands](/zh-Hans/docs/commands)、[Interceptors](/zh-Hans/docs/interceptors)、[SSE](/zh-Hans/docs/sse)、[WebSocket](/zh-Hans/docs/web-socket)。
+Client 和 options 在 `@defjs/core` 里创建。见 [Client](/zh-Hans/docs/client)、[HTTP](/zh-Hans/docs/http)、[Interceptors](/zh-Hans/docs/interceptors)、[SSE](/zh-Hans/docs/sse)、[WebSocket](/zh-Hans/docs/web-socket)。
 
 ## 相关操作示例
 

@@ -44,22 +44,18 @@ describe("declaration routing", () => {
     });
 
     test("should decode the success body on 2xx", async () => {
-      const [fault, data] = await clientFor(
-        '{"id":1}',
-        200,
-        JSON_HEADERS,
-      ).execute(useRequest());
+      const [fault, data] = await useRequest(
+        clientFor('{"id":1}', 200, JSON_HEADERS),
+      );
 
       expect(fault).toBeNull();
       expect(data).toEqual({ id: 1 });
     });
 
     test("should decode the error body on non-2xx", async () => {
-      const [fault] = await clientFor(
-        '{"message":"nope"}',
-        500,
-        JSON_HEADERS,
-      ).execute(useRequest());
+      const [fault] = await useRequest(
+        clientFor('{"message":"nope"}', 500, JSON_HEADERS),
+      );
 
       expect(fault?.code).toBe("HTTP_STATUS");
       if (fault?.code !== "HTTP_STATUS")
@@ -73,11 +69,9 @@ describe("declaration routing", () => {
     ])(
       "should report an unreadable %s body it was told to decode",
       async (_label, status) => {
-        const [fault] = await clientFor(
-          "{not json",
-          status,
-          JSON_HEADERS,
-        ).execute(useRequest());
+        const [fault] = await useRequest(
+          clientFor("{not json", status, JSON_HEADERS),
+        );
 
         expect(fault?.code).toBe("RES_DECODE_FAILED");
       },
@@ -92,11 +86,9 @@ describe("declaration routing", () => {
     });
 
     test("should ignore an unreadable non-2xx body", async () => {
-      const [fault, data, response] = await clientFor(
-        "{not json",
-        500,
-        JSON_HEADERS,
-      ).execute(useRequest());
+      const [fault, data, response] = await useRequest(
+        clientFor("{not json", 500, JSON_HEADERS),
+      );
 
       expect(data).toBeUndefined();
       expect(response).toBeUndefined();
@@ -109,11 +101,9 @@ describe("declaration routing", () => {
     });
 
     test("should ignore a non-JSON non-2xx body", async () => {
-      const [fault] = await clientFor(
-        "<html>gateway</html>",
-        502,
-        HTML_HEADERS,
-      ).execute(useRequest());
+      const [fault] = await useRequest(
+        clientFor("<html>gateway</html>", 502, HTML_HEADERS),
+      );
 
       expect(fault?.code).toBe("HTTP_STATUS");
       if (fault?.code !== "HTTP_STATUS")
@@ -131,11 +121,9 @@ describe("declaration routing", () => {
     });
 
     test("should ignore an unreadable 2xx body", async () => {
-      const [fault, data, response] = await clientFor(
-        "{not json",
-        200,
-        JSON_HEADERS,
-      ).execute(useRequest());
+      const [fault, data, response] = await useRequest(
+        clientFor("{not json", 200, JSON_HEADERS),
+      );
 
       expect(fault).toBeNull();
       expect(data).toBeUndefined();
@@ -144,11 +132,9 @@ describe("declaration routing", () => {
     });
 
     test("should ignore a non-JSON 2xx body", async () => {
-      const [fault, data] = await clientFor(
-        "<html>ok</html>",
-        200,
-        HTML_HEADERS,
-      ).execute(useRequest());
+      const [fault, data] = await useRequest(
+        clientFor("<html>ok</html>", 200, HTML_HEADERS),
+      );
 
       expect(fault).toBeNull();
       expect(data).toBeUndefined();
@@ -183,10 +169,12 @@ describe("declaration routing", () => {
             ? defineRequest({ error: ApiError, method: "GET", path: "/x" })
             : defineRequest({ method: "GET", output: User, path: "/x" });
 
-        const [fault, data] = await createClient(
-          withEndpoint("https://api.example.test"),
-          withHTTPHandle(handle),
-        ).execute(endpoint());
+        const [fault, data] = await endpoint(
+          createClient(
+            withEndpoint("https://api.example.test"),
+            withHTTPHandle(handle),
+          ),
+        );
 
         expect(cancelled).toBe(true);
         expect(data).toBeUndefined();
@@ -199,11 +187,9 @@ describe("declaration routing", () => {
     const useRequest = defineRequest({ method: "GET", path: "/x" });
 
     test("should succeed on 2xx without reading the body", async () => {
-      const [fault, data, response] = await clientFor(
-        "<html>ok</html>",
-        200,
-        HTML_HEADERS,
-      ).execute(useRequest());
+      const [fault, data, response] = await useRequest(
+        clientFor("<html>ok</html>", 200, HTML_HEADERS),
+      );
 
       expect(fault).toBeNull();
       expect(data).toBeUndefined();
@@ -212,11 +198,9 @@ describe("declaration routing", () => {
     });
 
     test("should report a non-2xx status without reading the body", async () => {
-      const [fault] = await clientFor(
-        "<html>boom</html>",
-        503,
-        HTML_HEADERS,
-      ).execute(useRequest());
+      const [fault] = await useRequest(
+        clientFor("<html>boom</html>", 503, HTML_HEADERS),
+      );
 
       expect(fault?.code).toBe("HTTP_STATUS");
       if (fault?.code !== "HTTP_STATUS")
@@ -254,11 +238,13 @@ describe("declaration routing", () => {
         output: User,
         path: "/x",
       });
-      const [fault] = await clientStreaming().execute(useRequest(), {
-        onDownloadProgress: () => {
-          throw observerError;
-        },
-      });
+      const [fault] = await useRequest(
+        clientStreaming()({
+          onDownloadProgress: () => {
+            throw observerError;
+          },
+        }),
+      );
 
       expect(fault?.code).toBe("EXT_OBSERVER_FAILED");
       expect(fault?.cause).toBe(observerError);
@@ -269,12 +255,14 @@ describe("declaration routing", () => {
       // there is no transfer to observe. Do not "fix" this by forcing a read nobody asked for.
       const useRequest = defineRequest({ method: "GET", path: "/x" });
       let calls = 0;
-      const [fault, data] = await clientStreaming().execute(useRequest(), {
-        onDownloadProgress: () => {
-          calls += 1;
-          throw observerError;
-        },
-      });
+      const [fault, data] = await useRequest(
+        clientStreaming()({
+          onDownloadProgress: () => {
+            calls += 1;
+            throw observerError;
+          },
+        }),
+      );
 
       expect(calls).toBe(0);
       expect(fault).toBeNull();
@@ -294,10 +282,12 @@ describe("declaration routing", () => {
         output: User,
         path: "/x",
       });
-      const [fault] = await createClient(
-        withEndpoint("https://api.example.test"),
-        withHTTPHandle(handle),
-      ).execute(useRequest());
+      const [fault] = await useRequest(
+        createClient(
+          withEndpoint("https://api.example.test"),
+          withHTTPHandle(handle),
+        ),
+      );
 
       expect(fault?.code).toBe("NET_UNREACHABLE");
       expect(fault?.cause).toBe(networkError);
@@ -316,10 +306,12 @@ describe("declaration routing", () => {
         output: User,
         path: "/x",
       });
-      const [fault] = await createClient(
-        withEndpoint("https://api.example.test"),
-        withHTTPHandle(handle),
-      ).execute(useRequest());
+      const [fault] = await useRequest(
+        createClient(
+          withEndpoint("https://api.example.test"),
+          withHTTPHandle(handle),
+        ),
+      );
 
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
       expect(fault?.cause).toBe("offline");
@@ -341,10 +333,12 @@ describe("declaration routing", () => {
         output: User,
         path: "/x",
       });
-      const [fault] = await createClient(
-        withEndpoint("https://api.example.test"),
-        withHTTPHandle(handle),
-      ).execute(useRequest());
+      const [fault] = await useRequest(
+        createClient(
+          withEndpoint("https://api.example.test"),
+          withHTTPHandle(handle),
+        ),
+      );
 
       expect(fault?.code).toBe("NET_BODY_INCOMPLETE");
       expect(fault?.cause).toBe(readError);

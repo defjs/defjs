@@ -66,12 +66,12 @@ Path, query, headers, and body are fields the builder returns, not a request str
   examples/struct/aliases.ts#example
 </include>
 
-| Boundary                                    | Field                        |
-| ------------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)` and command input | Logical `displayName`        |
-| Typed object returned from the builder      | Wire `display_name`          |
-| JSON / SSE / WebSocket decoding             | Wire → logical `displayName` |
-| Anonymous object written in the builder     | The key you wrote            |
+| Boundary                                      | Field                        |
+| --------------------------------------------- | ---------------------------- |
+| `struct.parse(User, ...)` and operation input | Logical `displayName`        |
+| Typed object returned from the builder        | Wire `display_name`          |
+| JSON / SSE / WebSocket decoding               | Wire → logical `displayName` |
+| Anonymous object written in the builder       | The key you wrote            |
 
 The builder itself reads logical names (`input.user.displayName`); the wire name appears only when the serializer encodes the typed object the builder returns.
 
@@ -98,7 +98,7 @@ A mixed intersection that contains a non-object part is tagged, when parsed, wit
 
 A `StructIssue` has `code`, `expected`, `message`, `path`, and `received`. `code` is `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union`, or `missing_key`. Default messages name the received kind, never the value: `Expected number at id, received string`. Issue paths are structural and retain record keys: `struct.record(...)` can produce `Expected number at alice@example.com, received string`, so keys may still be sensitive in default messages, `prettify()`, and `String(fault)`. `message` and `prettify()` therefore omit received payloads; `received` keeps the original value and needs redaction before logging or returning. `struct.parse(..., { errorMap })` rewrites messages for that call only, including bigint/date conversion failures in a struct from another Core copy. Any returned string, including `''`, replaces the default; only `undefined` keeps it. Custom text is used verbatim and may expose values if the map includes them.
 
-Struct validation is structural only. No public range, format, refinement, auth, or state-transition rules. Do those checks before you build a command.
+Struct validation is structural only. No public range, format, refinement, auth, or state-transition rules. Do those checks before you call an operation.
 
 ## Reference
 

@@ -7,7 +7,7 @@ Project-level guide for AI coding agents in this repository. Read it before chan
 Defjs separates the two sides of an SDK:
 
 - **Definition** — SDK authors declare operations with `defineRequest`, `defineEventStream`, and `defineWebSocket` from `@defjs/core`. A definition is data: importing it starts no request and binds no client.
-- **Execution** — an application creates its own client (`createClient(withEndpoint(...))`) and runs commands with `client.execute(command, options)`.
+- **Execution** — an application creates its own client (`createClient(withEndpoint(...))`) and calls an operation: `getUser(client, input)` or `getUser(client(options), input)`. Calling the operation performs I/O.
 
 Definitions can be published on their own; the consuming application keeps ownership of endpoint, credentials, interceptors, and transports.
 
@@ -30,10 +30,10 @@ Read the reference that matches your change before editing:
 
 ## Contracts that must not break
 
-1. **Definition and execution stay separate.** Calling an endpoint creates a command; only `client.execute` performs I/O. There is no global client (`createGlobalClient` and friends were removed in 0.4; do not reintroduce them).
+1. **Definition and execution stay separate.** Calling an operation performs I/O. A definition does not capture a client. There is no global client (`createGlobalClient` and friends were removed in 0.4; do not reintroduce them).
 2. **`input` declares parameters; `builder` places them.** A definition with `input` must provide an explicit `builder`. Placement is never inferred from field names or the path template.
 3. **`builder` is a synchronous pure function.** It returns `{ path?, query?, headers?, body? }`, runs at execution time, and a throw becomes `REQ_BUILD_FAILED`.
-4. **Results are error-first tuples.** `execute` returns `[error, ...]`; request, response, and transport failures do not throw at the call site. Preserve the fault codes and causes documented in `design.md`.
+4. **Results are error-first tuples.** An operation returns `[error, ...]`; request, response, and transport failures do not throw at the call site. Preserve the fault codes and causes documented in `design.md`.
 5. **`struct` only declares structure.** Instances have no `.parse()`; there is no public `struct.encode`, no `setErrorMap`, and no zero-filling or partial results. Validation DSL and business rules belong to the application.
 6. **`@defjs/core` stays dependency-free and platform-neutral.** `packages/core/package.json` has no `dependencies`. Do not import Node-only APIs into shared code paths.
 7. **Plugins stay thin.** Two kinds share the rule that they add no caching and no state:
@@ -46,7 +46,7 @@ Authentication, tracing, and cross-request header changes belong in an intercept
 
 ## Example best practice
 
-Examples, READMEs, and guides follow the minimal example in `doc/examples/http/basic-setup.ts`. LLM resources use Fumadocs output directly; keep guidance in the documentation source, without handwritten preambles, duplicated examples, or post-generation Markdown rewriting. A definition does not capture a client. Calling it creates a command; bind that command to a name and pass the name to `client.execute`. `input` declares the value and a synchronous pure `builder` places it. The application owns the endpoint, credentials, and client. Read the error-first tuple and return from the surrounding function before using a success value. Complete scripts wrap that call in a function so the return stays legal in ESM, and leave definitions and exports outside it. Several operations use names such as `firstCommand` and `retryCommand`. Ordinary Defjs faults stay on the tuple; exception-based adapters must be explicitly identified as integration-specific policies, not the default calling style. Preserve cancellation, retries, ETag handling, SSE/WebSocket runtime errors, and close or dispose ownership. Do not rewrite historical design, audit, or performance records to match current example style.
+Examples, READMEs, and guides follow the minimal example in `doc/examples/http/basic-setup.ts`. LLM resources use Fumadocs output directly; keep guidance in the documentation source, without handwritten preambles, duplicated examples, or post-generation Markdown rewriting. A definition does not capture a client. Calling an operation runs it; do not bind that call to a command name. `client(options)` derives a new client and does not perform I/O. `input` declares the value and a synchronous pure `builder` places it. The application owns the endpoint, credentials, and client. Read the error-first tuple and return from the surrounding function before using a success value. Complete scripts wrap that call in a function so the return stays legal in ESM, and leave definitions and exports outside it. Ordinary Defjs faults stay on the tuple; exception-based adapters must be explicitly identified as integration-specific policies, not the default calling style. Preserve cancellation, retries, ETag handling, SSE/WebSocket runtime errors, and close or dispose ownership. Do not rewrite historical design, audit, or performance records to match current example style.
 
 ## Repository map
 
@@ -54,7 +54,7 @@ Examples, READMEs, and guides follow the minimal example in `doc/examples/http/b
 
 | Module         | Contents                                           |
 | -------------- | -------------------------------------------------- |
-| `client/`      | client creation, command, execute, options         |
+| `client/`      | client creation, derivation, request options       |
 | `error/`       | fault types and factory                            |
 | `http/`        | request definitions, request building, transports  |
 | `sse/`         | event-stream definitions and transports            |
@@ -194,7 +194,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 
 ## Documentation site rules
 
-- There are 11 locales: `en-US`, `zh-Hans`, `zh-Hant-TW`, `zh-Hant-HK`, `ja-JP`, `ko-KR`, `de-DE`, `fr-FR`, `es-ES`, `ru-RU`, `ar`. Every locale carries every guide; there is no fallback to English for guides. API reference text is English TSDoc in every locale. Each locale keeps only its 11 overview pages: `api/index.mdx`, `client.mdx`, `errors.mdx`, `http.mdx`, `interceptors.md`, `opentelemetry-server.mdx`, `react.mdx`, `sse.mdx`, `struct.md`, `vue.mdx`, and `web-socket.mdx`. The 170 entry URLs come from generated data, so `navigation.spec.ts` still asserts 208 unique URLs per locale.
+- There are 11 locales: `en-US`, `zh-Hans`, `zh-Hant-TW`, `zh-Hant-HK`, `ja-JP`, `ko-KR`, `de-DE`, `fr-FR`, `es-ES`, `ru-RU`, `ar`. Every locale carries every guide; there is no fallback to English for guides. API reference text is English TSDoc in every locale. Each locale keeps only its 11 overview pages: `api/index.mdx`, `client.mdx`, `errors.mdx`, `http.mdx`, `interceptors.md`, `opentelemetry-server.mdx`, `react.mdx`, `sse.mdx`, `struct.md`, `vue.mdx`, and `web-socket.mdx`. The 164 entry URLs come from generated data, so `navigation.spec.ts` still asserts 203 unique URLs per locale.
 - Overview pages must not hand-copy a signature of a generated entry. Write `<ApiSignature name="withEndpoint" />`. Several names go in that attribute, comma-separated, in source order: `<ApiSignature name="ERR_ABORTED, ERR_TIMEOUT" />`. The MDX build replaces the tag with the generated signature before highlighting, so search and `llms` see the fence. An unknown or ambiguous name fails the build with the file path. `api-signatures.spec.ts` fails with `hand-copied signature of a generated entry` when a fence declares a catalog name. Example fences whose names are not entries stay hand-written.
 - Complete TS/TSX examples live in `doc/examples/` and are embedded with `<include>`. The export scan understands only `export { ... }`, `export type { ... }`, declarations, and `export * from`; a new form such as `export type * as ns from` fails `doc/app/data/exports.spec.ts`.
 - Vue single-file examples are not statically checked.
@@ -218,7 +218,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 
 - Run `bun run fmt`; the formatter is `bun fmt`.
 - Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`.
-- Reintroduce removed APIs: global client, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
+- Reintroduce removed APIs: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `signal` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
 - Put authentication or tracing into `builder`, or infer request placement from `input` field names.
 - Add a runtime dependency to `@defjs/core`, or import Node-only modules into shared code.
 - Leave a new public export without TSDoc, or skip regenerating the API data.

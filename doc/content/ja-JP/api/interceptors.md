@@ -5,7 +5,7 @@ description: HTTP、SSE、WebSocket のインターセプターコンストラ�
 
 # Interceptors
 
-1 つのトランスポート向けに `next` を包みます。`withInterceptors` で登録します。混在リストは execute 時に kind でフィルタされます。
+1 つのトランスポート向けに `next` を包みます。`withInterceptors` で登録します。混在リストは、操作が実行されるときに kind でフィルタされます。
 
 ## createHttpInterceptor()
 

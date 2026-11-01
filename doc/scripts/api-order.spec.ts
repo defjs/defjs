@@ -3,6 +3,8 @@ import catalog from "../app/data/api-entries.json";
 import { apiOrder, compareApiIdentity } from "./api-order";
 
 test("historical order matches the committed catalog and sorts unknowns last", () => {
+  expect(apiOrder).not.toContain("@defjs/core:ClientState");
+  expect(catalog.map((entry) => entry.name)).not.toContain("ClientState");
   expect([...apiOrder]).toEqual(
     catalog.map((entry) => `${entry.package}:${entry.name}`),
   );

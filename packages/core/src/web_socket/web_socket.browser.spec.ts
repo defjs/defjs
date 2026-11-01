@@ -7,12 +7,16 @@ import {
   test,
 } from "vitest";
 
-import { createClient, withEndpoint, type Client } from "../client";
+import {
+  createClient,
+  withEndpoint,
+  type Client,
+  type RequestOptions,
+} from "../client";
 import { struct, StructError } from "../struct";
 import {
   defineWebSocket,
   type SocketAwaitResult,
-  type WebSocketExecuteOptions,
   type WebSocketSession,
   type WebSocketState,
 } from "./index";
@@ -36,8 +40,8 @@ describe("web socket browser runtime", () => {
   });
 
   async function run(
-    command: unknown,
-    options?: Omit<WebSocketExecuteOptions, "abort">,
+    operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
+    options?: RequestOptions,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
     const controller = new AbortController();
     let pending: Promise<SocketAwaitResult<unknown, unknown>> | undefined;
@@ -63,11 +67,17 @@ describe("web socket browser runtime", () => {
         controller.abort();
       }
     });
-    pending = (
-      client.execute(
-        command as never,
-        { ...options, abort: controller.signal } as never,
-      ) as Promise<SocketAwaitResult<unknown, unknown>>
+    const callerAbort =
+      options && "abort" in options && options.abort instanceof AbortSignal
+        ? options.abort
+        : undefined;
+    pending = operation(
+      client({
+        ...options,
+        abort: callerAbort
+          ? AbortSignal.any([controller.signal, callerAbort])
+          : controller.signal,
+      }),
     ).then((result) => {
       session = result[1];
       return result;
@@ -93,7 +103,7 @@ describe("web socket browser runtime", () => {
       protocols: ["json"],
     });
 
-    const [error, socket, connection] = await run(useEchoSocket());
+    const [error, socket, connection] = await run(useEchoSocket);
 
     expect(error).toBeNull();
     expect(connection?.protocol).toBe("json");
@@ -132,7 +142,7 @@ describe("web socket browser runtime", () => {
       protocols: ["json"],
     });
 
-    const [error, socket] = await run(useBinarySocket());
+    const [error, socket] = await run(useBinarySocket);
 
     expect(error).toBeNull();
     if (!socket) {
@@ -162,7 +172,7 @@ describe("web socket browser runtime", () => {
       path: "/ws/error-before-close",
     });
 
-    const [error, socket] = await run(useInvalidSocket());
+    const [error, socket] = await run(useInvalidSocket);
 
     expect(error).toBeNull();
     if (!socket) {
@@ -190,21 +200,24 @@ describe("web socket browser runtime", () => {
   });
 
   test("should reconnect in real browsers", async () => {
-    const command = defineWebSocket({
-      builder: (input) => ({ query: input }),
-      maxIncomingQueueSize: 16,
-      incoming: struct.object({
-        type: struct.literal("reconnected"),
-        attempt: struct.number(),
-      }),
-      input: struct.object({
-        key: struct.string(),
-      }),
-      path: "/ws/reconnect",
-    })({ key: `browser-reconnect-${crypto.randomUUID()}` });
-    const [error, socket] = await run(command, {
-      reconnect: { attempts: 1, delayMs: 0 },
-    });
+    const [error, socket] = await run(
+      (client) =>
+        defineWebSocket({
+          builder: (input) => ({ query: input }),
+          maxIncomingQueueSize: 16,
+          incoming: struct.object({
+            type: struct.literal("reconnected"),
+            attempt: struct.number(),
+          }),
+          input: struct.object({
+            key: struct.string(),
+          }),
+          path: "/ws/reconnect",
+        })(client, { key: `browser-reconnect-${crypto.randomUUID()}` }),
+      {
+        reconnect: { attempts: 1, delayMs: 0 },
+      },
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -224,15 +237,17 @@ describe("web socket browser runtime", () => {
 
   test("should abort an open session in real browsers", async () => {
     const controller = new AbortController();
-    const command = defineWebSocket({
-      maxIncomingQueueSize: 16,
-      incoming: struct.object({
-        type: struct.literal("ready"),
-        ok: struct.boolean(),
+    const [error, socket] = await run(
+      defineWebSocket({
+        maxIncomingQueueSize: 16,
+        incoming: struct.object({
+          type: struct.literal("ready"),
+          ok: struct.boolean(),
+        }),
+        path: "/ws/echo",
       }),
-      path: "/ws/echo",
-    })();
-    const [error, socket] = await run(command, { signal: controller.signal });
+      { abort: controller.signal },
+    );
 
     expect(error).toBeNull();
     if (!socket) {

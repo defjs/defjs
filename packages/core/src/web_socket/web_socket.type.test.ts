@@ -1,6 +1,4 @@
 import { expectTypeOf } from "vitest";
-import type { WEB_SOCKET_COMMAND } from "../client/command";
-import { COMMAND_TYPE } from "../client/command";
 // @ts-expect-error WebSocketCommandBuilder was renamed to WebSocketEndpoint
 import type { WebSocketCommandBuilder } from "./web_socket";
 // @ts-expect-error withWebSocketOnInvalidEvent was removed
@@ -35,13 +33,9 @@ const useChat = defineWebSocket({
 // @ts-expect-error maxIncomingQueueSize is required for every endpoint owner
 defineWebSocket({ path: "/ws", incoming: struct.string() });
 
-function takesWebSocketEndpoint<
-  TInput extends AnyStruct | undefined,
-  TIncoming extends AnyStruct,
-  TOutgoing extends AnyStruct | undefined,
->(
-  endpoint: WebSocketEndpoint<TInput, TIncoming, TOutgoing>,
-): WebSocketEndpoint<TInput, TIncoming, TOutgoing> {
+function takesWebSocketEndpoint<Args extends unknown[], Incoming, Outgoing>(
+  endpoint: WebSocketEndpoint<Args, Incoming, Outgoing>,
+): WebSocketEndpoint<Args, Incoming, Outgoing> {
   return endpoint;
 }
 
@@ -53,10 +47,6 @@ void (undefined as unknown as WebSocketCommandBuilder<
 >);
 void withWebSocketOnInvalidEvent;
 
-const command = useChat();
-expectTypeOf(command[COMMAND_TYPE]).toEqualTypeOf<typeof WEB_SOCKET_COMMAND>();
-expectTypeOf(command.endpoint.path).toEqualTypeOf<string>();
-expectTypeOf(command.endpoint.maxIncomingQueueSize).toEqualTypeOf<number>();
 expectTypeOf<WebSocketIncomingData<typeof Incoming>>().toEqualTypeOf<{
   text: string;
   type: "message";

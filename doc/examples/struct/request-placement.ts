@@ -1,5 +1,5 @@
 // #region example
-import { defineRequest, struct } from "@defjs/core";
+import { defineRequest, struct, type Client } from "@defjs/core";
 
 const createUser = defineRequest({
   method: "POST",
@@ -20,11 +20,15 @@ const createUser = defineRequest({
   }),
 });
 
-const command = createUser({
-  organizationId: "acme",
-  notify: true,
-  requestId: "request-42",
-  user: { displayName: "Ada" },
-});
-void command;
+async function submit(client: Client) {
+  const [error] = await createUser(client, {
+    organizationId: "acme",
+    notify: true,
+    requestId: "request-42",
+    user: { displayName: "Ada" },
+  });
+  if (error) return;
+}
+
+void submit;
 // #endregion

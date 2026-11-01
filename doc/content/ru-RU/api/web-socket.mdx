@@ -1,30 +1,24 @@
 ---
 title: WebSocket
-description: defineWebSocket, session и опции execute.
+description: defineWebSocket, session и опции запроса.
 ---
 
 # WebSocket
 
-Объяви сокет, выполни, шли и принимай типизированные сообщения, потом закрой.
+Объяви сокет, вызови операцию с клиентом, шли и принимай типизированные сообщения, потом закрой.
 
 ## defineWebSocket()
 
 <ApiSignature name="defineWebSocket" />
 
 - **definition** — `path`, один struct `incoming` и обязательный `maxIncomingQueueSize` (положительное целое); необязательные structs `outgoing` и `input`, `operation`, статические `protocols` и неотрицательный `maxOutgoingQueueSize`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`WebSocketDefinition`](/ru-RU/api/core/websocketdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
-- **Возвращает** эндпоинт. Вызови с input — получишь `WebSocketCommand`.
+- **Возвращает** операцию. Первый аргумент — [`Client`](/ru-RU/api/core/client-type). Дальше идёт только input. Вызов открывает сессию.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-## executeWebSocketCommand()
+Вызов возвращает `[null, session, connection]` или `[error, undefined, connection?]`. Опции одного вызова передавай, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). WebSocket читает `abort`, `beforeConnect`, `heartbeat`, `protocols` и `reconnect` и игнорирует поля прогресса HTTP.
 
-<ApiSignature name="executeWebSocketCommand" />
-
-Низкоуровневый вход для `client.execute`. В прикладном коде бери клиент.
-
-- **Возвращает** `[null, session, connection]` или `[error, undefined, connection?]`.
-
-WebSocket execute может переопределить `beforeConnect`, `heartbeat`, `protocols` и `reconnect` для одного вызова; каждое значение заменяет значение клиента. Приоритет protocols: execute, затем `withWebSocketProtocols`, затем `protocols` определения.
+`beforeConnect`, `heartbeat`, `protocols` и `reconnect` каждое целиком заменяет значение клиента для этого вызова. Приоритет protocols: выведенный клиент, затем `withWebSocketProtocols`, затем `protocols` определения. `heartbeat.timeoutMs` — ожидание подтверждения, а не дедлайн запроса.
 
 ## WebSocketSession
 
@@ -57,17 +51,15 @@ async function consume(
 
 `kind` — это `closed`, `aborted` или `error`. `cause` отсутствует у `closed`, необязателен у `aborted` и обязателен у `error`. `code`, `reason` и `wasClean` могут быть у каждого варианта. Ручной `session.close()` заполняет `code` и `reason` у `{ kind: "closed" }`, если событие close их не несёт.
 
-## Опции execute
-
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `abort` или `timeout` (никогда оба), плюс `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`.
+`WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `abort`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`. Полей `timeout` или `signal` нет.
 
-`abort` и `timeout` взаимоисключающи: тип отвергает оба сразу, а если передать оба в рантайме, вызов завершится fault’ом `REQ_OPTIONS_INVALID`. `signal` сочетается с любым из них. `timeout` — дедлайн запуска соединения: последующий reconnect его не взводит заново, а `withTimeout` к WebSocket не применяется.
+`abort` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. Более поздний `abort` заменяет предыдущий сигнал. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
 
-Когда `reconnect` задан, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
+Когда задан `reconnect`, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
 
 ## Сообщения
 
@@ -87,19 +79,15 @@ session.send({ type: "message", text: "Hello" });
 
 ## WebSocketEndpoint
 
-То, что возвращает `defineWebSocket`. Вызови с input — получишь `WebSocketCommand`.
+То, что возвращает `defineWebSocket`. Первый аргумент — клиент. Дальше идёт только input.
 
 ## WebSocketRequestShape
 
 Только `path` и `query`. `headers` и `body` — `never`.
 
-## WebSocketCommand
-
-Непрозрачная WebSocket-команда. Отдай в `client.execute`.
-
 ## UseWebSocketConfig
 
-Heartbeat, reconnect, `beforeConnect`, protocols плюс отмена. `WebSocketExecuteOptions` добавляет `signal`.
+`beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `abort`. `WebSocketExecuteOptions` — этот срез. Поля `signal` нет.
 
 ## SocketAwaitResult
 

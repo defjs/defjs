@@ -1,15 +1,15 @@
 ---
 title: "Vue"
-description: Einen Anwendungsclient in Vue bereitstellen und importierte SDK-Endpoints mit explizitem Cleanup ausführen.
+description: Ein frameworkunabhängiges SDK mit einem von der Anwendung bereitgestellten Vue-Client konsumieren und das Cleanup dem Aufrufer überlassen.
 ---
 
 # Vue
 
-Die Vue-Anwendung importiert die Endpoints aus ihrem SDK und führt sie über einen injizierten Client aus. Das SDK bleibt unabhängig von Vue. Erzeuge und konfiguriere den Client an der passenden Anwendungs- oder Request-Grenze; das Framework-Plugin stellt ihn den Komponenten bereit.
+Importiere Operationen aus deinem SDK oder einem gemeinsamen Definitionsmodul. Die Vue-Anwendung konfiguriert und stellt den Client bereit; das SDK-Paket kann unabhängig von Vue bleiben. Komponenten und Composables rufen diese Operationen auf und besitzen die Arbeit, die sie starten. Der Client aus `injectClient()` wird an die Operation übergeben.
 
 Diese Plugins sind optionale Helfer, um einen bestehenden `Client` bereitzustellen und zu lesen. Du kannst einen festen anwendungseigenen Client importieren, wiederverwendbarer Logik einen Client explizit übergeben, Framework-Injection für Vorgaben im Baum und Subtree-Overrides nutzen oder deine eigene Struktur wählen. SDK-Definitionen setzen diese Plugins nicht voraus.
 
-Verdrahte einen bestehenden `@defjs/core`-Client in Vue. Du bekommst ein Plugin, einen Injection-Key und `injectClient()`. Das Paket erzeugt **keine** Clients, legt keine Results im Cache ab, wiederholt keine Commands und schließt Transport-Resources bei Unmount nicht.
+Verdrahte einen bestehenden `@defjs/core`-Client in Vue. Du bekommst ein Plugin, einen Injection-Key und `injectClient()`. Das Paket erzeugt **keine** Clients, legt keine Results im Cache ab, wiederholt keine Operationen und schließt Transport-Resources bei Unmount nicht. Ein `Client` ist eine Funktion: nutze ihn nicht als Quelle eines `watch` oder `computed`, denn die rufen eine Funktion auf.
 
 ## Grundeinrichtung
 
@@ -47,7 +47,7 @@ Nächster Provider gewinnt. Descendants bekommen `childClient`; Siblings außerh
 
 ## HTTP-Arbeit außerhalb eines Watchers besitzen
 
-Für Arbeit, die ein Composable oder eine Komponente außerhalb eines Watchers startet, nutze `AbortController` + `onScopeDispose`. Brich Startup und aktive Arbeit ab; prüfe das Signal, bevor du reaktiven State zuweist. Ein Plugin oder Injection-Scope inferiert nicht, wer einen Command besitzt. Für List-Pages umhülle `execute` mit Vue Query (oder ähnlich) — `@defjs/vue` bleibt nur DI und liefert **kein** `useRequest`.
+Für Arbeit, die ein Composable oder eine Komponente außerhalb eines Watchers startet, nutze `AbortController` + `onScopeDispose`. Brich Startup und aktive Arbeit ab; prüfe das Signal, bevor du reaktiven State zuweist. Ein Plugin oder Injection-Scope inferiert nicht, wer eine Operation besitzt. Für List-Pages rufe die Operation aus Vue Query (oder ähnlich) auf — `@defjs/vue` bleibt nur DI und liefert **kein** `useRequest`.
 
 Wenn ein Scope einen Client besitzt, halte ihn request-independent für browser-weite Reuse. Wenn er Headers, Cookies, User, Tenants oder Credentials erfasst, erzeuge ihn in der relevanten App-/SSR-Request-Grenze und stelle diese Instanz dort per `provide` bereit.
 
@@ -79,7 +79,7 @@ App-Unmount, Plugin-Removal und Component-Scope-Disposal brechen HTTP **nicht** 
 - `createClientPlugin(client)` — Vue-`Plugin`, das diesen Client provides
 - `injectClient` — nächster Client zum gewählten Key (Standard `HTTP_CLIENT`); wirft, wenn er fehlt
 
-Erzeuge Clients und Options in `@defjs/core`. Siehe [Client](/de-DE/docs/client), [Commands](/de-DE/docs/commands), [Interceptors](/de-DE/docs/interceptors), [SSE](/de-DE/docs/sse) und [WebSocket](/de-DE/docs/web-socket).
+Erzeuge Clients und Options in `@defjs/core`. Siehe [Client](/de-DE/docs/client), [HTTP](/de-DE/docs/http), [Interceptors](/de-DE/docs/interceptors), [SSE](/de-DE/docs/sse) und [WebSocket](/de-DE/docs/web-socket).
 
 ## Verwandte Rezepte
 

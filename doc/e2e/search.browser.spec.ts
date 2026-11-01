@@ -18,11 +18,11 @@ const overviewQueries: Record<string, { docs: string; recipes: string }> = {
   "zh-Hant-HK": { docs: "讀到", recipes: "掌握" },
   "ja-JP": { docs: "担当", recipes: "設計" },
   "ko-KR": { docs: "맡습니다", recipes: "수명을" },
-  "de-DE": { docs: "begleitet", recipes: "Lebenszyklen" },
-  "fr-FR": { docs: "accompagne", recipes: "cycles" },
-  "es-ES": { docs: "recorrido", recipes: "ciclos" },
-  "ru-RU": { docs: "опубликованного", recipes: "жизненным" },
-  ar: { docs: "يسهّل", recipes: "لتصميم" },
+  "de-DE": { docs: "Anwendungspfad", recipes: "Operationsverträge" },
+  "fr-FR": { docs: "empaqueter", recipes: "composer" },
+  "es-ES": { docs: "autoría", recipes: "recorrido" },
+  "ru-RU": { docs: "упаковать", recipes: "собрать" },
+  ar: { docs: "تأليف", recipes: "تركيبها" },
 };
 
 /** Text hits are `${pageUrl}-${n}`. Fumadocs navigates to `pageUrl`, not the suffixed id. */

@@ -1,26 +1,29 @@
 import { useState } from "react";
 import { Link } from "react-router";
 import { localePrefix } from "../lib/i18n";
-import { getUi } from "../lib/ui-copy";
+import { useAppTranslations } from "../lib/use-app-translations";
+import { useI18n } from "fumadocs-ui/contexts/i18n";
+import type { MessageKey } from "../lib/messages";
 import { apiEntries, filterApiEntries } from "../data/api-catalog";
 
 const packages = [...new Set(apiEntries.map((entry) => entry.package))];
 const kinds = [...new Set(apiEntries.map((entry) => entry.kind))];
 
-export function ApiIndex({ locale }: { locale: string }) {
+export function ApiIndex() {
+  const { locale } = useI18n();
   const [query, setQuery] = useState(""),
     [packageName, setPackageName] = useState(""),
     [kind, setKind] = useState("");
-  const copy = getUi(locale);
+  const t = useAppTranslations();
   const kindLabel = (name: string) =>
-    copy.kinds[name as keyof typeof copy.kinds];
+    t(`api.kind.${name}` as Extract<MessageKey, `api.kind.${string}`>);
   const entries = filterApiEntries(apiEntries, query, packageName, kind);
   const prefix = localePrefix(locale);
   return (
     <section>
       <div className="flex flex-wrap gap-3">
         <label>
-          {copy.name}{" "}
+          {t("ui.name")}{" "}
           <input
             type="search"
             value={query}
@@ -29,28 +32,28 @@ export function ApiIndex({ locale }: { locale: string }) {
           />
         </label>
         <div>
-          <label htmlFor="api-package">{copy.package}</label>
+          <label htmlFor="api-package">{t("ui.package")}</label>
           <select
             id="api-package"
             value={packageName}
             onChange={(event) => setPackageName(event.target.value)}
             className="rounded border p-2"
           >
-            <option value="">{copy.allPackages}</option>
+            <option value="">{t("ui.allPackages")}</option>
             {packages.map((name) => (
               <option key={name}>{name}</option>
             ))}
           </select>
         </div>
         <div>
-          <label htmlFor="api-category">{copy.category}</label>
+          <label htmlFor="api-category">{t("ui.category")}</label>
           <select
             id="api-category"
             value={kind}
             onChange={(event) => setKind(event.target.value)}
             className="rounded border p-2"
           >
-            <option value="">{copy.allCategories}</option>
+            <option value="">{t("ui.allCategories")}</option>
             {kinds.map((name) => (
               <option key={name} value={name}>
                 {kindLabel(name)}
@@ -60,10 +63,10 @@ export function ApiIndex({ locale }: { locale: string }) {
         </div>
       </div>
       <p role="status" aria-live="polite">
-        {copy.results.replace("{count}", String(entries.length))}
+        {t("ui.results", { variables: { count: String(entries.length) } })}
       </p>
       {entries.length === 0 ? (
-        <p>{copy.noResults}</p>
+        <p>{t("ui.noResults")}</p>
       ) : (
         <ul>
           {entries.map((entry) => (

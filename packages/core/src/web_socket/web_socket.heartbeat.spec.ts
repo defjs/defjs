@@ -29,19 +29,26 @@ describe("web socket runtime heartbeat", () => {
         withEndpoint("https://example.test"),
         withWebSocketHandle(Socket as unknown as typeof WebSocket),
       );
-      const pending = client.execute(useHeartbeatSocket(), {
-        heartbeat: {
-          intervalMs: 10,
-          isAck(message: { type: string }) {
-            return message.type === "pong";
+      const pending = useHeartbeatSocket(
+        client({
+          heartbeat: {
+            intervalMs: 10,
+            isAck(message: unknown) {
+              return (
+                typeof message === "object" &&
+                message !== null &&
+                "type" in message &&
+                message.type === "pong"
+              );
+            },
+            message: () => ({
+              at: 1,
+              type: "ping" as const,
+            }),
+            timeoutMs: 100,
           },
-          message: () => ({
-            at: 1,
-            type: "ping" as const,
-          }),
-          timeoutMs: 100,
-        },
-      });
+        }),
+      );
       const [error, socket] = await openControllableSocket(pending, latest);
       const native = latest();
 

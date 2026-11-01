@@ -1,13 +1,13 @@
 ---
 title: "Abbruch und Zeitlimits"
-description: Abort oder Timeout eines execute-Aufrufs und NET_ABORTED / NET_TIMEOUT lesen.
+description: Einen Aufruf abbrechen oder mit einer Deadline beenden und NET_ABORTED / NET_TIMEOUT lesen.
 ---
 
 # HTTP-Aufruf abbrechen
 
-Gib `signal` plus entweder `abort` oder `timeout` — nicht beides `abort` und `timeout`. `timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein.
+Kombiniere das Signal des Aufrufers mit einer Deadline auf `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` ist ein Signal. Ein manueller Abbruch wird als `NET_ABORTED` klassifiziert. Eine Deadline wird als `NET_TIMEOUT` klassifiziert.
 
-Details siehe [HTTP](/de-DE/docs/http#arbeit-abbrechen).
+Details siehe [HTTP](/de-DE/docs/http#cancel-the-work).
 
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example

@@ -18,16 +18,25 @@ describe("caller cancellation across two @defjs/core instances", () => {
   test("does not log caller cancellation when the client comes from another core instance", async () => {
     const { logger, records } = createMockLogger();
     const abort = new AbortController();
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const client = appCore.createClient(
       appCore.withEndpoint("https://example.invalid"),
-      appCore.withHTTPHandle(() => new Promise<Response>(() => undefined)),
+      appCore.withHTTPHandle(() => {
+        markStarted();
+        return new Promise<Response>(() => undefined);
+      }),
       withOpenTelemetryServer({ logger }),
     );
-    const pending = client.execute(
-      appCore.defineRequest({ method: "GET", path: "/inventory" })(),
-      { abort: abort.signal },
-    );
-    setTimeout(() => abort.abort(), 10);
+    const readInventory = appCore.defineRequest({
+      method: "GET",
+      path: "/inventory",
+    });
+    const pending = readInventory(client({ abort: abort.signal }));
+    await started;
+    abort.abort();
 
     const [fault] = await pending;
     expect(fault?.code).toBe("NET_ABORTED");
@@ -36,16 +45,28 @@ describe("caller cancellation across two @defjs/core instances", () => {
 
   test("still logs a timeout from another core instance", async () => {
     const { logger, records } = createMockLogger();
+    const abort = new AbortController();
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const client = appCore.createClient(
       appCore.withEndpoint("https://example.invalid"),
-      appCore.withHTTPHandle(() => new Promise<Response>(() => undefined)),
+      appCore.withHTTPHandle(() => {
+        markStarted();
+        return new Promise<Response>(() => undefined);
+      }),
       withOpenTelemetryServer({ logger }),
     );
+    const readInventory = appCore.defineRequest({
+      method: "GET",
+      path: "/inventory",
+    });
+    const pending = readInventory(client({ abort: abort.signal }));
+    await started;
+    abort.abort(new DOMException("deadline", "TimeoutError"));
 
-    const [fault] = await client.execute(
-      appCore.defineRequest({ method: "GET", path: "/inventory" })(),
-      { timeout: 30 },
-    );
+    const [fault] = await pending;
     expect(fault?.code).toBe("NET_TIMEOUT");
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({

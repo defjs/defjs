@@ -28,7 +28,7 @@ test.each([200, 403])(
       error: struct.unknown(),
     });
 
-    const [fault, data] = await client.execute(endpoint());
+    const [fault, data] = await endpoint(client);
 
     expect(fault?.code ?? null).toBe(status === 200 ? null : "HTTP_STATUS");
     expect(fault?.code === "HTTP_STATUS" ? fault.data : data).toBe("123");
@@ -55,7 +55,7 @@ test.each([200, 403])(
       error: struct.literal("ready"),
     });
 
-    const [fault, data] = await client.execute(endpoint());
+    const [fault, data] = await endpoint(client);
 
     expect(fault?.code ?? null).toBe(status === 200 ? null : "HTTP_STATUS");
     expect(fault?.code === "HTTP_STATUS" ? fault.data : data).toBe("ready");
@@ -83,7 +83,7 @@ test.each([200, 403])(
       error: payload,
     });
 
-    const [fault, data] = await client.execute(endpoint());
+    const [fault, data] = await endpoint(client);
 
     expect(fault?.code).toBe("RES_STRUCT_MISMATCH");
     expect(data).toBeUndefined();
@@ -105,7 +105,7 @@ test("preserves a decoded null SSE handshake error body", async () => {
     maxQueueSize: 4,
   });
 
-  const [fault] = await client.execute(endpoint());
+  const [fault] = await endpoint(client);
 
   expect(fault?.code).toBe("HTTP_STATUS");
   if (fault?.code !== "HTTP_STATUS") throw new Error("Expected HTTP_STATUS");
@@ -133,7 +133,7 @@ test("reports an unreadable declared SSE handshake body as a decode fault", asyn
     maxQueueSize: 4,
   });
 
-  const [fault, stream] = await client.execute(endpoint());
+  const [fault, stream] = await endpoint(client);
 
   // The published handshake contract requires RES_DECODE_FAILED. HTTP_STATUS with
   // undefined data also violates the public contract for the declared error struct.
@@ -173,7 +173,7 @@ test("cancels an in-progress declared SSE handshake body when the caller aborts"
     maxQueueSize: 4,
   });
   const controller = new AbortController();
-  const pending = client.execute(endpoint(), { signal: controller.signal });
+  const pending = endpoint(client({ abort: controller.signal }));
 
   try {
     await readStarted.promise;

@@ -26,10 +26,9 @@ const stop = () => {
 onScopeDispose(stop);
 
 void (async () => {
-  const command = notifications();
-  const [error, nextStream] = await client.execute(command, {
-    signal: controller.signal,
-  });
+  const [error, nextStream] = await notifications(
+    client({ abort: controller.signal }),
+  );
   if (error) return;
 
   stream = nextStream;

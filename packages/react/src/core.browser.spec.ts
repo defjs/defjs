@@ -168,6 +168,28 @@ describe("useClient", () => {
     }
   });
 
+  it("returns the identical function and accepts a derived client override", () => {
+    const client = createClient();
+    const abort = new AbortController();
+    const derived = client({ abort: abort.signal });
+    let provided: Client | undefined;
+    let overridden: Client | undefined;
+
+    function Consumer() {
+      provided = useClient();
+      overridden = useClient(derived);
+      return null;
+    }
+
+    render(createElement(ClientProvider, { client }, createElement(Consumer)));
+
+    expect(typeof provided).toBe("function");
+    expect(provided).toBe(client);
+    expect(typeof overridden).toBe("function");
+    expect(overridden).toBe(derived);
+    expect(overridden).not.toBe(client);
+  });
+
   it("throws when no provider is present", () => {
     function Child() {
       useClient();

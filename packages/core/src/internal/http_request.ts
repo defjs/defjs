@@ -39,8 +39,8 @@ export interface HttpProgressEvent {
  * Callbacks may be async and are awaited before the next chunk is processed. A
  * callback that throws or rejects fails the call with `EXT_OBSERVER_FAILED`,
  * with the thrown value as `cause`, for downloads and uploads alike. Caller
- * cancellation and `timeout` still take precedence and report `NET_ABORTED` or
- * `NET_TIMEOUT`.
+ * cancellation still takes precedence and reports `NET_ABORTED`, or `NET_TIMEOUT`
+ * when the abort reason is a timeout.
  *
  * Upload progress for a `Blob`, `File`, `ArrayBuffer`, or `FormData` body is
  * reported only where the runtime can stream request bodies (Bun, Node). In
@@ -50,8 +50,8 @@ export interface HttpProgressEvent {
  *
  * On server runtimes, FormData with `onUploadProgress` reads its serialized
  * stream directly, keeps its multipart boundary, and is sent without a
- * library-generated `Content-Length` (chunked over HTTP/1.1), so progress,
- * timeout, and abort work without buffering the whole body. It reports an
+ * library-generated `Content-Length` (chunked over HTTP/1.1), so progress
+ * and abort work without buffering the whole body. It reports an
  * unknown total unless a valid explicit `Content-Length` supplies it. For an
  * endpoint that requires `Content-Length`, such as some presigned upload
  * targets, omit `onUploadProgress`; platform Fetch then sends FormData with its
@@ -124,7 +124,6 @@ export interface HttpRequest {
    * unread and does not fall back to `responseType`.
    */
   readonly errorResponseType?: HttpResponseType;
-  timeout?: number;
   uploadProgress?: HttpProgressFn;
   withCredentials?: boolean;
   xsrf?: {

@@ -5,7 +5,7 @@ description: SDK で送受信メッセージの契約を定義し、アプリケ
 
 # WebSocket
 
-SDK の作成者は `defineWebSocket` で path、入力の配置、incoming / outgoing の Struct を公開します。利用アプリケーションは接続先、プラットフォームの WebSocket 実装、実行時の方針を構成し、セッションの送受信と終了を管理します。
+SDK は WebSocket 操作の path、入力、送受信メッセージ、キュー上限を定義します。利用アプリケーションはクライアントを構成し、操作を呼び、派生したクライアントで呼び出し固有の接続 options を選びます。操作は SDK の HTTP や SSE の操作と一緒に export してください。
 
 開始 → 受信 → 送信 → `await using` で解放します。購読解除と破棄は呼び出し側の所有です。手動の `close()` / `closed` も残っています。クライアント、プロバイダ、インターセプターはセッションを自動 close しません。
 
@@ -25,7 +25,7 @@ SDK の作成者は `defineWebSocket` で path、入力の配置、incoming / ou
 
 受信したテキスト、`ArrayBuffer`、typed-array、`Blob` のフレームは UTF-8 として読まれ、JSON パースされ、`incoming` に対して検査されます。壊れた JSON と struct の失敗は `session.onRuntimeError` へ行き、キューには入りません。セッションは開いたままです。テキストでもバイト列でも `Blob` でもないフレームは無視されます。`withWebSocketOnInvalidEvent` はありません。
 
-`session.send(...)` は同期的に検証してシリアライズします。struct のエンコード、それから `JSON.stringify` です。open ならすぐ送り、送信キューが有効な `reconnecting` 中はキューし、書けないときは `InvalidStateError` を throw します。outgoing struct が無いとき、ペイロードが struct に失敗したとき、送信キューが無効か満杯のとき、ネイティブ send が失敗したときも throw します。定義上の静的な `protocols` リストはエンドポイント契約です（たとえば `graphql-transport-ws`）。実行 options と `withWebSocketProtocols` はそれでも上書きできます。サブプロトコルを決められるのはこれらの options だけです。ビルダー、`beforeConnect`、インターセプターは変更できないので、サブプロトコルに載せるトークンは、その呼び出しの execute の `protocols` option として渡します。ビルダーが返せるのは `path` と `query` だけです。
+`session.send(...)` は同期的に検証してシリアライズします。struct のエンコード、それから `JSON.stringify` です。open ならすぐ送り、送信キューが有効な `reconnecting` 中はキューし、書けないときは `InvalidStateError` を throw します。outgoing struct が無いとき、ペイロードが struct に失敗したとき、送信キューが無効か満杯のとき、ネイティブ send が失敗したときも throw します。定義上の静的な `protocols` リストはエンドポイント契約です（たとえば `graphql-transport-ws`）。派生したクライアントの `protocols` と `withWebSocketProtocols` はそれでも上書きできます。サブプロトコルを決められるのはこれらの options だけです。ビルダー、`beforeConnect`、インターセプターは変更できないので、サブプロトコルに載せるトークンは、その呼び出しの派生したクライアントの `protocols` として渡します。ビルダーが返せるのは `path` と `query` だけです。
 
 struct のエンコード後、JSON で忠実に表現できない値は、送信や再接続キューへの追加の前に `TypeError` を throw します。非有限の数値、関数、symbol、`Map`、`Set`、ストリーム、JSON 表現を持たないクラスインスタンスが該当します。入れ子の値も HTTP の JSON ボディと同じ規則に従います。`struct.number()` は引き続き無限大を受け付け、`NaN` を拒否します。struct 層で受け付けられた値でも、有効な JSON になるとは限りません。ハートビートも同じシリアライザを使い、シリアライズの失敗で論理セッションが終了します。
 
@@ -45,7 +45,7 @@ struct のエンコード後、JSON で忠実に表現できない値は、送�
 
 `open` は物理ソケットが開いた状態です。`reconnecting` は、置き換え前の準備と待ちを含みます。`connection.generation` は `open` に達した物理ソケットごとに増えます。`session.connection` は再接続のたびに更新されます。タプルの `startupConnection` が最初の成功した接続のスナップショットを保持するのは、Defjs のネイティブセッションか、同じライブ `connection` オブジェクトをそのまま渡すラッパーの場合だけです。独自セッションや `connection` を変換するラッパーでは、返されたセッションが現在公開している `connection` が使われます。`closed` の共有では URL のサニタイズやメタデータのフィルタリングを迂回できず、Defjs は任意の変換から最初の接続のメタデータを再構築しません。
 
-起動失敗 → `[error, undefined, connection?]` です。open 前のコンストラクタ失敗では connection が無いことがあります。起動中のタイムアウトや close では、スナップショットがまだ付くことがあります。セッションが返ったあとのランタイムエラーは、オブザーバー、`receive`、`closed` を通ります — 2 つ目の execute タプルにはなりません。
+起動失敗 → `[error, undefined, connection?]` です。open 前のコンストラクタ失敗では connection が無いことがあります。起動中の abort や close では、スナップショットがまだ付くことがあります。セッションが返ったあとのランタイムエラーは、オブザーバー、`receive`、`closed` を通ります — 2 つ目の結果タプルにはなりません。
 
 <include cwd lang="typescript">
   examples/web-socket/state-snapshots.ts#example
@@ -65,7 +65,7 @@ WebSocket のバックオフ jitter は**乗法**です（`jitter: 0.2` は、�
 
 ## ハートビート
 
-実行時かクライアントスコープでオプトインします。間隔ごとに `message()` を outgoing struct 経由で送ります。任意の `isAck(message)` が ack を認識します — そのメッセージはタイムアウトを消し、`receive` には**届けられません**。
+クライアントか派生したクライアントでオプトインします。間隔ごとに `message()` を outgoing struct 経由で送ります。任意の `isAck(message)` が ack を認識します — そのメッセージは確認待ちを消し、`receive` には**届けられません**。`heartbeat` は値全体が置き換わります。`timeoutMs` はその確認をどれだけ待つかです。リクエストの期限ではありません。
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -84,7 +84,7 @@ WebSocket のバックオフ jitter は**乗法**です（`jitter: 0.2` は、�
 
 ## プロトコルと認証
 
-定義の `protocols`、クライアントの `withWebSocketProtocols(...)`、execute の `protocols` が、コンストラクタのサブプロトコルリストを決めます。優先順位は、実行 → クライアント → 定義です。最初に決まったリストは論理セッション用にコピーされ、再接続でも再利用されます。
+定義の `protocols`、クライアントの `withWebSocketProtocols(...)`、派生したクライアントの `protocols` が、コンストラクタのサブプロトコルリストを決めます。優先順位は、派生したクライアント → クライアント → 定義です。派生したリストはクライアントのリストを置き換え、追記はしません。最初に決まったリストは論理セッション用にコピーされ、再接続でも再利用されます。
 
 ブラウザーの WebSocket コンストラクタは任意のハンドシェイクヘッダーを受け付けず、ビルダーも `headers` や `body` を返せません。Defjs は `http:` を `ws:` に、`https:` を `wss:` に変換し、path プレースホルダを一度だけエンコードし、query 規則は HTTP と同じです。デフォルトはスカラーと繰り返すキー、入れ子オブジェクトには `withQuerySerializer`、query が無いときはシリアライザを呼びません。
 
@@ -96,7 +96,7 @@ HTTP と SSE と同様、ベースエンドポイントの欠落、相対 URL、
 
 `session.close(code?, reason?)` は終端クローズを要求し、ハートビートを止めます。code は `1000` か `3000..4999`、reason は UTF-8 で 123 バイト以下です。不正な close 引数は、状態を変える前に throw します。手動の close 理由や論理的な終端結果が要るときは、`await session.closed` と一緒に使ってください。
 
-`execute` に渡した `signal` や `abort` は、open されたセッションに付いたままです。タイムアウト形の abort（`TimeoutError` または `ERR_TIMEOUT`）は `'error'`（`NET_TIMEOUT`）として終わります。それ以外の abort 理由は `'aborted'` として終わり、`receive` はその理由そのもので reject し、新しい `AbortError` にはなりません。`timeout` は起動時の期限にすぎません。
+操作に渡した `abort` シグナルは、開いたセッションに付いたままで、開いたあとも含む接続全体を覆います。タイムアウト形の abort（`TimeoutError` または `ERR_TIMEOUT`。`AbortSignal.timeout(...)` を含む）は `'error'`（`NET_TIMEOUT`）として終わります。それ以外の理由は `'aborted'` として終わり、`receive` はその理由そのもので reject し、新しい `AbortError` にはなりません。起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。[SSE](/ja-JP/docs/sse#close-and-dispose) を参照してください。
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

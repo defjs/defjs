@@ -17,15 +17,20 @@ const room = defineWebSocket({
 });
 
 async function main() {
-  const command = room();
-  const [error, session] = await client.execute(command, {
-    heartbeat: {
-      intervalMs: 30_000,
-      timeoutMs: 10_000,
-      message: () => ({ type: "ping" as const }),
-      isAck: (message) => message.type === "pong",
-    },
-  });
+  const [error, session] = await room(
+    client({
+      heartbeat: {
+        intervalMs: 30_000,
+        timeoutMs: 10_000,
+        message: () => ({ type: "ping" as const }),
+        isAck: (message) =>
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "pong",
+      },
+    }),
+  );
   if (error) {
     console.error(error.code);
     return;

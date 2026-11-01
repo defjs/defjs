@@ -58,17 +58,16 @@ export function UserProfile({ id }: { id: number }) {
   useEffect(() => {
     const abort = new AbortController();
 
-    const command = getUser({ id });
-    void client
-      .execute(command, { signal: abort.signal })
-      .then(([error, user]) => {
+    void getUser(client({ abort: abort.signal }), { id }).then(
+      ([error, user]) => {
         if (abort.signal.aborted) return;
         if (error) {
           setName(error.message);
           return;
         }
         setName(user.name);
-      });
+      },
+    );
 
     return () => abort.abort();
   }, [client, id]);
@@ -89,6 +88,7 @@ Returns `overrideClient` when supplied, otherwise the nearest provided client. T
 
 ## Notes
 
+- `Client` is a function. `useClient()` returns that same function. Do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater and will invoke the client.
 - Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
 - The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. Provider unmount does not clean them up.
 - Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.

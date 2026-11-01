@@ -3,9 +3,9 @@ title: "建置並發佈 SDK"
 description: 將帶類型的端點定義作為 npm 套件發佈，由每個應用程式設定自己的 Client。
 ---
 
-# 建置並發佈 SDK [#publish-一個唔隱藏-execute-嘅-http-sdk]
+# 建置並發佈 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-SDK 將團隊提供的 API 打包交付。使用 Defjs 時，SDK 匯出端點定義及其資料契約；使用套件的應用程式提供 Client 設定並決定何時執行。本例使用 HTTP，相同的套件邊界亦適用於 SSE 及 WebSocket 定義。
+SDK 將團隊提供的 API 打包交付。使用 Defjs 時，SDK 匯出端點定義及其資料契約；使用套件的應用程式提供 Client 設定並決定何時呼叫。本例使用 HTTP，相同的套件邊界亦適用於 SSE 及 WebSocket 定義。
 
 ## 1. 定義 SDK 操作
 
@@ -96,9 +96,9 @@ bun pm pack
 
 確認 tarball 包含 `dist/index.js`、`dist/index.d.ts`。先在獨立應用程式中安裝這個 tarball，驗證類型及執行行為，再發佈。SDK 的 README 應說明服務 API、兼容的 Core 版本、所需認證及可選預設設定。
 
-## 3. 在使用套件的應用程式中執行
+## 3. 由使用方應用程式呼叫
 
-以下本地例子把定義放在與 `app.ts` 同目錄的 `users-sdk.ts`，方便離線執行。`./users-sdk.ts` 只匯出端點；應用程式自行建立 Client，設定本地 Fetch handle，再執行匯入的操作：
+以下本地例子把定義放在與 `app.ts` 同目錄的 `users-sdk.ts`，方便離線執行。匯入唔會建立 client；應用程式設定本地 Fetch handle，再呼叫匯入的操作：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -136,4 +136,4 @@ bun publish --access public
 
 Client 工廠及便捷方法都是可選補充。它們可以提供服務預設值或領域行為，同時接受呼叫方設定並保留直接的端點匯出。應記錄它們引入的錯誤映射或生命週期策略；可重用的 SDK 並不要求這兩類封裝。
 
-底層契約見[定義與執行](/zh-Hant-HK/docs/commands)、[Client](/zh-Hant-HK/docs/client)及[設計決策](/zh-Hant-HK/docs/design-decisions)。
+底層契約見 [HTTP](/zh-Hant-HK/docs/http)、[Client](/zh-Hant-HK/docs/client)及[設計決策](/zh-Hant-HK/docs/design-decisions)。

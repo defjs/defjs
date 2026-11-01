@@ -1,13 +1,13 @@
 ---
 title: "Отмена и таймауты"
-description: Abort или timeout execute и читай NET_ABORTED / NET_TIMEOUT.
+description: Прерви вызов или поставь дедлайн и читай NET_ABORTED / NET_TIMEOUT.
 ---
 
 # Отменить HTTP-вызов
 
-Передай `signal` плюс либо `abort`, либо `timeout` — не оба `abort` и `timeout`. `timeout` — положительное safe integer в `1..2_147_483_647`.
+Объедини сигнал вызывающего с дедлайном в `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` — один сигнал. Ручной abort классифицируется как `NET_ABORTED`. Дедлайн классифицируется как `NET_TIMEOUT`.
 
-Подробности — в [HTTP](/ru-RU/docs/http#отмени-работу).
+Подробности — в [HTTP](/ru-RU/docs/http#cancel-the-work).
 
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example

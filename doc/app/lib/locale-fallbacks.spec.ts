@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { localePrefix } from "./i18n";
-import { getNav } from "./navigation-copy";
-import { getUi } from "./ui-copy";
+import { getTranslator } from "./translations";
 
 test("the default locale is served from the root and is also the implicit locale", () => {
   expect(localePrefix()).toBe("");
@@ -9,11 +8,11 @@ test("the default locale is served from the root and is also the implicit locale
   expect(localePrefix("zh-Hans")).toBe("/zh-Hans");
 });
 
-test("an unknown locale reads the English navigation and interface copy", () => {
-  expect(getNav("xx-XX")).toBe(getNav("en-US"));
-  expect(getNav()).toBe(getNav("en-US"));
-  expect(getUi("xx-XX")).toBe(getUi("en-US"));
-  expect(getUi()).toBe(getUi("en-US"));
-  expect(getNav("zh-Hans")).not.toBe(getNav("en-US"));
-  expect(getUi("zh-Hans")).not.toBe(getUi("en-US"));
+test("an unknown locale reads English navigation and interface translations", () => {
+  const english = getTranslator("en-US");
+  for (const key of ["nav.navigation", "ui.error"] as const) {
+    expect(getTranslator("xx-XX")(key)).toBe(english(key));
+    expect(getTranslator()(key)).toBe(english(key));
+    expect(getTranslator("zh-Hans")(key)).not.toBe(english(key));
+  }
 });

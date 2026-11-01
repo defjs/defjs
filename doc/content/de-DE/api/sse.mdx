@@ -1,36 +1,28 @@
 ---
 title: SSE
-description: defineEventStream, Execute-Options und das Stream-Handle.
+description: defineEventStream, Request-Optionen und das Stream-Handle.
 ---
 
 # SSE
 
-Deklariere einen Event-Stream, führe ihn aus, iteriere Events, dann schließe.
+Deklariere einen Event-Stream, rufe die Operation mit einem Client auf, iteriere Events, dann schließe.
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
 - **definition** — `path`, `events`-Map und die erforderlichen positiven Integer-Limits `maxBufferSize` und `maxQueueSize`; optional `method` (Default `'GET'`), `operation`, `input` und `error`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Member stehen unter [`EventStreamDefinition`](/de-DE/api/core/eventstreamdefinition-type). `error` ist nur erforderlich, wenn ein Error-Struct-Typ angegeben ist, und `builder` genau dann, wenn `input` deklariert ist.
-- **Returns** einen Endpoint. Ruf ihn mit Input auf und du bekommst einen `EventStreamCommand`.
+- **Returns** eine Operation. Das erste Argument ist ein [`Client`](/de-DE/api/core/client-type). Weitere Argumente sind nur der Input. Der Aufruf startet den Stream.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-## executeEventStreamCommand()
-
-<ApiSignature name="executeEventStreamCommand" />
-
-Low-Level-Einstieg für `client.execute`. Im Application-Code lieber den Client nutzen.
-
-- **Returns** `[null, stream, open]` oder `[error, undefined, open?]`. Ist `error` deklariert, ist der Fault ein `Fault` dieses Structs; sonst `Fault<undefined>`.
-
-## Execute-Optionen
+Der Aufruf gibt `[null, stream, open]` oder `[error, undefined, open?]` zurück. Ist `error` deklariert, ist der Fault ein `Fault` dieses Structs; sonst `Fault<undefined>`. Übergib `abort`, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. SSE liest nur `abort` und ignoriert Progress- und WebSocket-Felder.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`abort` oder `timeout` (nie beides) plus `signal`; keine Progress-Callbacks. Der Typ lehnt beides ab, und beides zur Laufzeit zu übergeben scheitert mit `REQ_OPTIONS_INVALID`. `signal` kombiniert mit einem von beiden. `timeout` ist eine Startup-Deadline: Sie umfasst Input-Parsing, den Builder, Interceptors und den Handshake und bricht keinen offenen Stream ab. `withTimeout` gilt nicht für SSE.
+`EventStreamExecuteOptions` ist `{ abort? }`. Es gibt kein `timeout`- oder `signal`-Feld und keinen Progress-Callback. `abort` deckt den ganzen Stream ab, auch nachdem er sich öffnet. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Deadline nur für den Start und keine Default-Deadline auf Client-Ebene. Eine Anwendung, die eine Deadline nur für den Start will, erzeugt ihren eigenen `AbortController`, bricht ihn mit `new DOMException("...", "TimeoutError")` aus einem Timer ab und löscht den Timer, nachdem das await zurückkehrt.
 
 ## EventStreamHandle
 
@@ -57,8 +49,6 @@ Strukturelle Implementierungen von `EventStreamHandle` müssen jetzt `[Symbol.as
 
 `kind` ist `eof`, `aborted` oder `error`. Jede Variante kann `reason` und `cause` tragen. Nur `error` hat `code`, einen von [`EventStreamFaultCode`](/de-DE/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
 
-## Event-Map
-
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
@@ -79,15 +69,11 @@ Siehe [SSE-Guide](/de-DE/docs/sse) und [SSE-Stream konsumieren](/de-DE/recipes/c
 
 ## EventStreamEndpoint
 
-Kommt von `defineEventStream`. Mit Input aufrufen → `EventStreamCommand`.
+Kommt von `defineEventStream`. Das erste Argument ist ein Client. Weitere Argumente sind nur der Input.
 
 ## EventStreamRequestShape
 
 Dieselben Felder wie `HttpRequestShape` für Method und Path des Streams.
-
-## EventStreamCommand
-
-Opakes SSE-Command. Gib es `client.execute`.
 
 ## StreamAwaitResult
 

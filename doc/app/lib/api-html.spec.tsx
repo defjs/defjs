@@ -15,9 +15,10 @@ import {
   renderMarkdown,
   tagCopyButton,
 } from "./api-html";
-import { getUi } from "./ui-copy";
+import { getTranslator } from "./translations";
+import { TestI18nProvider } from "../components/test-i18n";
 
-const ui = getUi("en-US");
+const t = getTranslator("en-US");
 
 function assertClean(label: string, text: string): void {
   if (text.includes("{@link") || text.includes("\\<"))
@@ -86,7 +87,7 @@ function entry(overrides: Partial<ApiEntryView> = {}): ApiEntryView {
 }
 
 test("server rendering highlights like the MDX code blocks and keeps prose", async () => {
-  const rendered = await renderApiEntry(entry(), ui, "Client");
+  const rendered = await renderApiEntry(entry(), t, "Client");
   expect(rendered.summary).toBe("Creates a client.");
   expect(rendered.name).toBe("createClient");
   expect(rendered.signaturesHtml[0]).toContain("data-api-copy");
@@ -116,14 +117,14 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
       throws: [],
       examples: [],
     }),
-    ui,
+    t,
     "Client",
   );
   expect(empty.descriptionHtml).toBe("");
   expect(empty.signaturesHtml).toEqual([]);
   expect(empty.membersHtml).toBe("");
-  expect(await renderMarkdown("  ", copyLabels(ui))).toBe("");
-  expect(await renderFieldTable([], ui)).toBe("");
+  expect(await renderMarkdown("  ", copyLabels(t))).toBe("");
+  expect(await renderFieldTable([], t)).toBe("");
   const arabic = await renderFieldTable(
     [
       {
@@ -134,21 +135,26 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
         deprecated: false,
       },
     ],
-    getUi("ar"),
+    getTranslator("ar"),
     "ar",
   );
   expect(arabic).toContain('lang="en" dir="ltr"');
   expect(arabic).toContain(">Gone</");
   expect(arabic).not.toContain(">Prop<");
-  const translated = await renderApiEntry(entry(), getUi("ar"), "Client", "ar");
+  const translated = await renderApiEntry(
+    entry(),
+    getTranslator("ar"),
+    "Client",
+    "ar",
+  );
   expect(translated.membersHtml).toContain('lang="en" dir="ltr"');
   expect(translated.membersHtml).toContain("Identifier");
   expect(translated.descriptionHtml).not.toContain('lang="en"');
   expect(translated.signaturesHtml[0]).toContain(
-    getUi("ar").translations["Copy Text(code block)(aria-label)"],
+    getTranslator("ar")("Copy Text(code block)(aria-label)"),
   );
   expect(translated.signaturesHtml[0]).toContain(
-    `data-copied-label="${getUi("ar").translations["Copied Text(code block)(aria-label)"]}"`,
+    `data-copied-label="${getTranslator("ar")("Copied Text(code block)(aria-label)")}"`,
   );
   const tagged = tagCopyButton(
     '<button type="button"><span class="sr-only">Copy Text</span></button><button type="button"><span class="sr-only">Copy Text</span></button>',
@@ -161,13 +167,16 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
 }, 30_000);
 
 test("every entry page and its processed text hide raw doc links", async () => {
-  expect(apiReference).toHaveLength(170);
+  expect(apiReference).toHaveLength(164);
+  expect(apiReference.map((entry) => entry.name)).not.toContain("ClientState");
   for (const item of apiReference) {
     const view = buildApiEntryView(item, "en-US", apiTargets());
-    const rendered = await renderApiEntry(view, ui, "Overview title");
+    const rendered = await renderApiEntry(view, t, "Overview title");
     const page = renderToStaticMarkup(
       <MemoryRouter>
-        <ApiEntryPage view={rendered} locale="en-US" />
+        <TestI18nProvider>
+          <ApiEntryPage view={rendered} />
+        </TestI18nProvider>
       </MemoryRouter>,
     );
     assertClean(item.slug, page);
@@ -184,7 +193,7 @@ test("every entry page and its processed text hide raw doc links", async () => {
     (slug, locale) =>
       Promise.resolve(renderApiEntryMarkdownBySlug(slug, locale)),
   );
-  expect(files).toHaveLength(170);
+  expect(files).toHaveLength(164);
   for (const file of files) {
     expect(file.type).toBe("page");
     if (file.type !== "page") continue;

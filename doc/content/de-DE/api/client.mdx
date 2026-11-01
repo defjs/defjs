@@ -5,16 +5,16 @@ description: createClient, Option-Helper und der Client-Type.
 
 # Client
 
-Erzeuge einen Client, komponiere Options von links nach rechts, dann `execute` HTTP- / SSE- / WebSocket-Commands.
+`createClient(...)` gibt einen aufrufbaren [`Client`](/de-DE/api/core/client-type) zurück. Komponiere Client-Options von links nach rechts, dann rufe `client(options?)` auf, um einen Client abzuleiten, und übergib ihn an eine Operation: `getUser(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Options gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants per Closure einschließen.
+Options gelten in Reihenfolge. Erzeuge den Client lieber innerhalb der Request-Grenze, wenn Interceptors Auth oder Tenants per Closure einschließen. Der zurückgegebene Client ist eine Funktion. Ihn aufzurufen gibt einen neuen Client zurück und führt kein I/O aus.
 
 - **options** — Option-Helper wie `withEndpoint`.
-- **Returns** einen Client, dessen `execute` pro Transport overloaded ist.
+- **Returns** einen aufrufbaren Client. Die Basiskonfiguration teilt jeder abgeleitete Client, und sie ist zur Laufzeit nicht eingefroren. Sie ist per Konvention fest: nichts in der Bibliothek ändert sie, und Anwendungen sollten das auch nicht.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -32,7 +32,7 @@ Setzt die Base-URL, die den relativen Paths vorangestellt wird.
 
 <ApiSignature name="withInterceptors" />
 
-Hängt Interceptors in Registration-Order an. Gemischte Kinds werden zur Execute-Zeit nach Transport gefiltert.
+Hängt Interceptors in Registration-Order an. Gemischte Kinds werden nach Transport gefiltert, wenn die Operation läuft.
 
 ### withQuerySerializer()
 
@@ -55,20 +55,7 @@ Vorrang für einen Request:
 
 Nutze einen Interceptor für Werte, die sich pro Request ändern: ein erneuertes Bearer-Token oder ein HMAC über den serialisierten Body.
 
-### withTimeout()
-
-<ApiSignature name="withTimeout" />
-
-Setzt das Default-Timeout in Millisekunden nur für **HTTP**-`execute`. SSE und WebSocket ignorieren es; ihr `timeout` bei execute ist eine eigene Startup-Deadline pro Aufruf. `ms` muss eine positive Safe Integer sein, nicht größer als `2_147_483_647`, sonst wirft `withTimeout` beim Aufruf einen `RangeError`. Ein zweites `withTimeout` ersetzt das erste.
-
-Die Deadline umfasst Input-Parsing, den Builder, Interceptors, den Transport und das Lesen eines deklarierten Bodys. Sie kombiniert sich mit den [`HttpExecuteOptions`](/de-DE/api/core/httpexecuteoptions-type) jedes Aufrufs:
-
-| Execute-Options               | Wirkung                                                                                               |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------- |
-| keine                         | Der Client-Default gilt; Ablauf ist `NET_TIMEOUT`.                                                    |
-| `{ timeout }`                 | Ersetzt den Client-Default für diesen Aufruf.                                                         |
-| `{ abort }` oder `{ signal }` | Kombiniert sich mit dem Default: das Signal des Aufrufers ist `NET_ABORTED`, der Timer `NET_TIMEOUT`. |
-| `{ abort, timeout }`          | Weiterhin ungültig: `REQ_OPTIONS_INVALID`. Der Client-Default zählt nie als Konflikt.                 |
+Es gibt keine Default-Deadline auf Client-Ebene. Übergib `abort: AbortSignal.timeout(ms)` an einem abgeleiteten Client, wenn ein Aufruf eine braucht. Ein manueller Abbruch ist `NET_ABORTED`. `AbortSignal.timeout` wird als `NET_TIMEOUT` klassifiziert.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -122,7 +109,27 @@ Der Default-HTTP-Transport setzt den Header, wenn alle Bedingungen zutreffen: Di
 
 <ApiSignature name="Client" />
 
-`execute` hat je Command-Art eine Overload (Event Stream, WebSocket, HTTP), und die Typparameter werden aus dem Command abgeleitet.
+Ein `Client` ist eine Funktion. Mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufgerufen gibt er einen neuen Client zurück. Die sieben bekannten Felder werden aus dem Argument in ein frisches Objekt kopiert, das über die aktuellen Options gelegt wird. Ein späteres Feld gewinnt. Ein Feld mit dem Wert `undefined` gilt als nicht angegeben und behält den Wert des übergeordneten Clients. Ein abgeleiteter Client kann eine Einstellung, die sein übergeordneter Client hat, nicht entfernen. Um wieder ohne diese Einstellung dazustehen, leite erneut von dem Client ab, der sie nicht hatte (behalte den Root-Client). Verschachtelte Werte von `heartbeat`, `protocols` und `reconnect` werden per Referenz gehalten, nicht geklont, und ersetzen den Wert des übergeordneten Clients als Ganzes, nicht gemergt. WebSocket liest sie, wenn die Operation läuft (es kopiert dann die Heartbeat-Felder und die Protocols-Liste), daher kann eine Änderung dieser Objekte nach dem Ableiten einen späteren Aufruf noch beeinflussen. Anwendungen sollten sie nach dem Übergeben als unveränderlich behandeln. Der ursprüngliche Client wird nicht mutiert. `client()`, `client(undefined)` und `client({})` kopieren die aktuellen Options. Das Ableiten führt kein I/O aus. Denselben Client-Wert kannst du an viele Operationen übergeben. `abort` wird ersetzt, nicht kombiniert; kombiniere Signale in Anwendungscode mit `AbortSignal.any`.
+
+Übergib einen Client nicht an einen React-State-Setter (`setState(client)` würde ihn als Updater aufrufen) und nutze ihn nicht als Quelle eines Vue-`watch` oder `computed` (die rufen eine Funktion auf).
+
+### RequestOptions
+
+<ApiSignature name="RequestOptions" />
+
+Sieben flache Felder. Jedes Protokoll liest die Felder, die es versteht, und ignoriert den Rest. `heartbeat` an HTTP zu übergeben wird ignoriert, das ist kein Fault. SSE liest aus den Request-Optionen nur `abort`. SSE-Reconnect kommt aus der Client-Konfiguration (`withSSEReconnect`), daher betrifft `client({ reconnect })` nur WebSocket. Es gibt keinen Compile-Time-Filter nach Protokoll und kein `timeout`- oder `signal`-Feld.
+
+| Feld                 | Protokoll               | Ersetzung                                                                                                 |
+| -------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP, SSE und WebSocket | Ersetzt das vorherige Signal. Bei SSE und WebSocket deckt es die ganze Verbindung ab, auch nach dem Open. |
+| `onUploadProgress`   | HTTP                    | Von anderen Protokollen ignoriert.                                                                        |
+| `onDownloadProgress` | HTTP                    | Von anderen Protokollen ignoriert.                                                                        |
+| `beforeConnect`      | WebSocket               | Ersetzt die Client-Einstellung für diesen Aufruf.                                                         |
+| `protocols`          | WebSocket               | Ersetzt die Client-Liste.                                                                                 |
+| `heartbeat`          | WebSocket               | Als Ganzes ersetzt. `timeoutMs` ist die Wartezeit auf die Bestätigung, keine Request-Deadline.            |
+| `reconnect`          | WebSocket               | Als Ganzes ersetzt.                                                                                       |
+
+[`HttpExecuteOptions`](/de-DE/api/core/httpexecuteoptions-type) ist der HTTP-Ausschnitt (`abort` plus Progress). [`EventStreamExecuteOptions`](/de-DE/api/core/eventstreamexecuteoptions-type) ist `{ abort? }`. [`WebSocketExecuteOptions`](/de-DE/api/core/websocketexecuteoptions-type) ist der WebSocket-Ausschnitt plus `abort`.
 
 ### ClientOption
 
@@ -164,17 +171,17 @@ Bei SSE ist `delayMs` nur die anfängliche Basisverzögerung: Ein `retry:`-Feld 
 
 SSE-`onInvalidEvent` behandelt ein Event ohne passendes Struct, auch ohne `default` (`missing-struct`), oder dessen Daten an ihrem Struct scheitern (`validation-failed`). Das Event wird immer verworfen; der Rückgabewert des Handlers wird ignoriert, und ein Fehler, den er wirft, schließt den Stream nicht.
 
-Bei WebSocket lassen sich `beforeConnect`, `heartbeat`, `protocols` und `reconnect` auch pro Aufruf an `execute` übergeben; der Execute-Wert ersetzt für diesen Aufruf den Client-Wert. `heartbeat.message` baut jeden Ping; fehlt es oder gibt es `undefined` zurück, wird nichts gesendet.
+Bei WebSocket lassen sich `beforeConnect`, `heartbeat`, `protocols` und `reconnect` auch an einem abgeleiteten Client übergeben; jeder ersetzt den Client-Wert für diesen Aufruf als Ganzes. `heartbeat.message` baut jeden Ping; fehlt es oder gibt es `undefined` zurück, wird nichts gesendet. `heartbeat.timeoutMs` wartet auf eine Bestätigung. Es ist keine Request-Deadline.
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-Die gezeigten Felder sind `sse` und `webSocket`. Die anderen acht — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `timeout`, `xsrf` und `withCredentials` — werden von der nicht exportierten HTTP-Basis geerbt, und `endpoint` ist erforderlich. `createClient` nimmt dieses Objekt nicht entgegen, sondern Option-Helper.
+Die gezeigten Felder sind `sse` und `webSocket`. Die anderen sieben — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` und `withCredentials` — werden von der nicht exportierten HTTP-Basis geerbt, und `endpoint` ist erforderlich. Es gibt kein `timeout` auf Client-Ebene. `createClient` nimmt dieses Objekt nicht entgegen, sondern Option-Helper.
 
 ### ClientConfig
 
-Der aufgelöste Snapshot, den Option-Helper mutieren und den `execute` liest: `ClientOptions` nach Anwendung der Defaults, wobei `http.handle`, `interceptors`, `sse` (ein `ClientSSEConfig`) und `webSocket` immer vorhanden sind.
+Der aufgelöste Snapshot, den Option-Helper mutieren und den eine Operation liest: `ClientOptions` nach Anwendung der Defaults, wobei `http.handle`, `interceptors`, `sse` (ein `ClientSSEConfig`) und `webSocket` immer vorhanden sind.
 
 ### ClientSSEConfig
 
@@ -184,7 +191,7 @@ Das aufgelöste SSE-Config auf `ClientConfig.sse`: `ClientSSEOptions` mit einem 
 
 ### WebSocketHandle
 
-Die WebSocket-Instanzfläche, die der Transport nutzt: `WebSocket` ohne `binaryType`, ohne die Ready-State-Konstanten, ohne `dispatchEvent` und ohne die `on*`-Handler-Properties, aber mit einem schreibgeschützten `readyState: number`.
+Die WebSocket-Instanzfläche, die der Transport nutzt: `WebSocket` ohne `binaryType`, mit den Ready-State-Konstanten, mit `dispatchEvent` und den `on*`-Handler-Properties, und mit einem schreibgeschützten `readyState: number`.
 
 ### WebSocketHandleConstructor
 

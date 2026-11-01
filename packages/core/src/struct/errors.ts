@@ -124,7 +124,9 @@ export class StructError extends Error {
 }
 
 function createFormattedError(): FormattedStructError {
-  return Object.assign(Object.create(null), { _errors: [] as string[] });
+  const node: FormattedStructError = Object.create(null);
+  node._errors = [];
+  return node;
 }
 
 function formatErrorTreeKey(segment: number | string): string {

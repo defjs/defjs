@@ -14,10 +14,9 @@ const readOrders = defineRequest({
   path: "/orders",
 });
 
-const command = readOrders();
-const outcome = await tracer.startActiveSpan("orders.command", async (span) => {
+const outcome = await tracer.startActiveSpan("orders.read", async (span) => {
   try {
-    const outcome = await client.execute(command);
+    const outcome = await readOrders(client);
     const [error] = outcome;
     if (error) {
       span.setAttribute("error.type", error.code);

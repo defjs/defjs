@@ -5,16 +5,12 @@ import {
   englishAttributes,
 } from "../lib/api-entry-actions";
 import type { RenderedApiEntry } from "../lib/api-html";
-import { getUi } from "../lib/ui-copy";
+import { useAppTranslations } from "../lib/use-app-translations";
+import { useI18n } from "fumadocs-ui/contexts/i18n";
 
-export function ApiEntryPage({
-  view,
-  locale,
-}: {
-  view: RenderedApiEntry;
-  locale: string;
-}) {
-  const ui = getUi(locale);
+export function ApiEntryPage({ view }: { view: RenderedApiEntry }) {
+  const { locale = "en-US" } = useI18n();
+  const t = useAppTranslations();
   const prose = englishAttributes(locale);
   const root = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -83,11 +79,11 @@ export function ApiEntryPage({
     <div ref={root}>
       <p>
         <code {...(prose ?? {})}>{view.packageName}</code> ·{" "}
-        {ui.kinds[view.kind]}
+        {t(`api.kind.${view.kind}`)}
       </p>
       {view.signaturesHtml.length > 0 && (
         <section>
-          <h2>{ui.signature}</h2>
+          <h2>{t("api.signature")}</h2>
           {view.signaturesHtml.map((html, index) => (
             <Injected key={index} html={html} />
           ))}
@@ -98,34 +94,38 @@ export function ApiEntryPage({
       )}
       {view.parameterSections.map((table, index) => (
         <section key={index}>
-          <h2>{ui.parameters}</h2>
+          <h2>{t("api.parameters")}</h2>
           {table.signatureHtml && <Injected html={table.signatureHtml} />}
           <Injected html={table.tableHtml} />
         </section>
       ))}
       {view.membersHtml && (
         <section>
-          <h2>{ui.members}</h2>
+          <h2>{t("api.members")}</h2>
           <Injected html={view.membersHtml} />
         </section>
       )}
       <ProseList
-        heading={ui.returns}
+        heading={t("api.returns")}
         locale={locale}
         parts={view.returnsHtml}
       />
-      <ProseList heading={ui.throws} locale={locale} parts={view.throwsHtml} />
+      <ProseList
+        heading={t("api.throws")}
+        locale={locale}
+        parts={view.throwsHtml}
+      />
       {view.examplesHtml.length > 0 && (
         <section>
-          <h2>{ui.examples}</h2>
+          <h2>{t("api.examples")}</h2>
           {view.examplesHtml.map((html, index) => (
             <EnglishHtml key={index} locale={locale} html={html} />
           ))}
         </section>
       )}
       {view.related.length > 0 && (
-        <nav aria-label={ui.seeAlso}>
-          <h2>{ui.seeAlso}</h2>
+        <nav aria-label={t("api.seeAlso")}>
+          <h2>{t("api.seeAlso")}</h2>
           {view.related.map((target) => (
             <Link
               className="me-3"

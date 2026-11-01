@@ -29,8 +29,10 @@ const createUser = defineRequest({
 });
 
 async function main() {
-  const command = createUser({ name: "Ada", email: "ada@example.com" });
-  const [error, user, response] = await client.execute(command);
+  const [error, user, response] = await createUser(client, {
+    name: "Ada",
+    email: "ada@example.com",
+  });
   if (error?.code === "HTTP_STATUS") {
     console.error(error.status, error.data.message);
     return;

@@ -15,8 +15,7 @@ const notifications = defineEventStream({
 });
 
 async function main() {
-  const command = notifications();
-  const [error, stream, startupOpen] = await client.execute(command);
+  const [error, stream, startupOpen] = await notifications(client);
   if (error) {
     console.error(error.code, startupOpen?.response.status);
     return;

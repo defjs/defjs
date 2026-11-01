@@ -49,11 +49,13 @@ describe("HTTP transport boundary regressions", () => {
       }),
       path: "/e2e/echo-raw",
     });
-    const [fault, data] = await client.execute(endpoint(), {
-      onUploadProgress: (event) => {
-        events.push(event);
-      },
-    });
+    const [fault, data] = await endpoint(
+      client({
+        onUploadProgress: (event) => {
+          events.push(event);
+        },
+      }),
+    );
 
     expect(fault).toBeNull();
     expect(data?.contentType).toContain("multipart/form-data");
@@ -80,7 +82,7 @@ describe("HTTP transport boundary regressions", () => {
   test.runIf(!("Bun" in globalThis)).each(["timeout", "abort"] as const)(
     "should promptly settle a stalled native FormData File upload on %s and unlock the serialized reader",
     async (mode) => {
-      // The 20ms deadline stays frozen until the file stream's pull runs.
+      // Serialization stays frozen until the file stream's pull runs.
       vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
       let release!: () => void;
       let opened!: () => void;
@@ -129,15 +131,15 @@ describe("HTTP transport boundary regressions", () => {
         method: "POST",
         path: "/upload",
       });
-      const pending = client.execute(
-        endpoint(),
-        mode === "timeout"
-          ? { timeout: 20, onUploadProgress: () => undefined }
-          : { abort: controller.signal, onUploadProgress: () => undefined },
+      const pending = endpoint(
+        client({
+          abort: controller.signal,
+          onUploadProgress: () => undefined,
+        }),
       );
       try {
         // Node 24 resumes FormData serialization on a zero-delay timer and
-        // reads the file on the following immediate. Flush both before the deadline.
+        // reads the file on the following immediate. Flush both before cancelling.
         vi.advanceTimersByTime(0);
         await new Promise<void>((resolve) => {
           setImmediate(resolve);
@@ -145,11 +147,11 @@ describe("HTTP transport boundary regressions", () => {
         await reading;
         expect(serialized.body).not.toBeNull();
         expect(serialized.body?.locked).toBe(true);
-        if (mode === "abort") {
-          controller.abort();
-        } else {
-          await vi.advanceTimersByTimeAsync(20);
-        }
+        controller.abort(
+          mode === "timeout"
+            ? new DOMException("deadline", "TimeoutError")
+            : undefined,
+        );
         const [fault] = await pending;
         expect(fault?.code).toBe(
           mode === "timeout" ? "NET_TIMEOUT" : "NET_ABORTED",
@@ -168,14 +170,14 @@ describe("HTTP transport boundary regressions", () => {
   test.each(["timeout", "abort"] as const)(
     "should cancel and unlock a stalled serialized FormData stream on %s",
     async (mode) => {
-      await expectCancelledStalledFormData(mode, 0);
+      await expectCancelledStalledFormData(mode, "body");
     },
   );
 
   test.each(["timeout", "abort"] as const)(
-    "should cancel and unlock a stalled serialized FormData stream on %s when the preflight outlasts the deadline in real time",
+    "should classify %s during preflight and leave the serialized body unlocked",
     async (mode) => {
-      await expectCancelledStalledFormData(mode, 40);
+      await expectCancelledStalledFormData(mode, "preflight");
     },
   );
 
@@ -316,7 +318,7 @@ describe("HTTP transport boundary regressions", () => {
         method: "POST",
         path: "/upload",
       });
-      const [fault] = await client.execute(endpoint());
+      const [fault] = await endpoint(client);
       expect(fault).toBeNull();
       expect(sent).toBe(declaration === "remove" ? "" : '{"next":true}');
       expect(contentType).toBe(
@@ -357,7 +359,7 @@ describe("HTTP transport boundary regressions", () => {
       method: "POST",
       path: "/",
     });
-    expect((await client.execute(endpoint()))[0]).toBeNull();
+    expect((await endpoint(client))[0]).toBeNull();
     expect(signedType).toBe("application/json");
     expect(contentType).toBe("application/json");
   });
@@ -409,7 +411,7 @@ describe("HTTP transport boundary regressions", () => {
         method: "POST",
         path: "/",
       });
-      expect((await client.execute(endpoint()))[0]).toBeNull();
+      expect((await endpoint(client))[0]).toBeNull();
       expect(signedType).toBe(
         rewrite === "bodyReplacement"
           ? "text/plain;charset=UTF-8"
@@ -449,7 +451,7 @@ describe("HTTP transport boundary regressions", () => {
         method: "POST",
         path: "/",
       });
-      expect((await client.execute(endpoint()))[0]).toBeNull();
+      expect((await endpoint(client))[0]).toBeNull();
       expect(contentType).toBe("application/custom");
     },
   );
@@ -482,7 +484,7 @@ describe("HTTP transport boundary regressions", () => {
       method: "POST",
       path: "/",
     });
-    expect((await client.execute(endpoint()))[0]).toBeNull();
+    expect((await endpoint(client))[0]).toBeNull();
     expect(signedType).toBe("application/json");
     expect(contentType).toBe("application/json");
   });
@@ -608,17 +610,16 @@ describe("HTTP transport boundary regressions", () => {
                 withEndpoint(`http://127.0.0.1:${address.port}`),
                 withHTTPHandle((input, init) => fetch(input, init)),
               );
-        const [fault, data] = await client.execute(
-          defineRequest({
-            method: "GET",
-            output: struct.string(),
-            path: "/",
-          })(),
-          {
+        const [fault, data] = await defineRequest({
+          method: "GET",
+          output: struct.string(),
+          path: "/",
+        })(
+          client({
             onDownloadProgress: (event) => {
               events.push(event);
             },
-          },
+          }),
         );
         expect(fault).toBeNull();
         expect(data).toBe(text);
@@ -658,8 +659,8 @@ describe("HTTP transport boundary regressions", () => {
           return new Response(null, { status: 204 });
         }),
       );
-      const [fault] = await client.execute(
-        defineRequest({ method: "POST", path: "/" })(),
+      const [fault] = await defineRequest({ method: "POST", path: "/" })(
+        client,
       );
       expect(fault).toBeNull();
       expect(tokenProvider).toHaveBeenCalledTimes(
@@ -683,10 +684,8 @@ describe("HTTP transport boundary regressions", () => {
 
 async function expectCancelledStalledFormData(
   mode: "timeout" | "abort",
-  preflightMs: number,
+  when: "body" | "preflight",
 ): Promise<void> {
-  // The deadline stays frozen until the transport is reading the stalled body.
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const form = new FormData();
   const cancel = vi.fn();
   let release!: () => void;
@@ -716,6 +715,10 @@ async function expectCancelledStalledFormData(
   }
   vi.stubGlobal("Response", SerializedResponse);
   const controller = new AbortController();
+  const reason =
+    mode === "timeout"
+      ? new DOMException("deadline", "TimeoutError")
+      : undefined;
   const client = createClient(
     withEndpoint("https://example.com"),
     withHTTPHandle(async (input) => {
@@ -726,33 +729,31 @@ async function expectCancelledStalledFormData(
   );
   const endpoint = defineRequest({
     builder: () => {
-      if (preflightMs > 0) {
-        // performance.now is not frozen with Date, so this outlasts a real 20ms deadline.
-        const start = performance.now();
-        while (performance.now() - start < preflightMs) {
-          // Busy-wait. A real timer would already have fired.
-        }
+      if (when === "preflight") {
+        controller.abort(reason);
       }
       return { body: form };
     },
     method: "POST",
     path: "/",
   });
-  const pending = client.execute(
-    endpoint(),
-    mode === "timeout"
-      ? { timeout: 20, onUploadProgress: () => undefined }
-      : { abort: controller.signal, onUploadProgress: () => undefined },
+  const pending = endpoint(
+    client({ abort: controller.signal, onUploadProgress: () => undefined }),
   );
   try {
+    if (when === "preflight") {
+      const [fault] = await pending;
+      expect(fault?.code).toBe(
+        mode === "timeout" ? "NET_TIMEOUT" : "NET_ABORTED",
+      );
+      expect(cancel).not.toHaveBeenCalled();
+      expect(source.locked).toBe(false);
+      return;
+    }
     await handleEntered;
     expect(source.locked).toBe(true);
     expect(cancel).not.toHaveBeenCalled();
-    if (mode === "abort") {
-      controller.abort();
-    } else {
-      await vi.advanceTimersByTimeAsync(20);
-    }
+    controller.abort(reason);
     const [fault] = await pending;
     expect(fault?.code).toBe(
       mode === "timeout" ? "NET_TIMEOUT" : "NET_ABORTED",
@@ -764,6 +765,5 @@ async function expectCancelledStalledFormData(
       release();
       await pending;
     }
-    vi.useRealTimers();
   }
 }

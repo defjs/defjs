@@ -1,13 +1,13 @@
 ---
 title: "HTTP 請求"
-description: SDK 定義 HTTP 契約，應用程式執行請求、處理狀態與結果，並控制取消或逾時。
+description: 為 SDK 設計 HTTP 操作，並用應用程式擁有的設定與取消去呼叫它們。
 ---
 
 # HTTP
 
-SDK 作者透過 `defineRequest` 宣告 method、path、輸入與回應契約，並匯出端點。應用程式匯入端點，用自己的 Client 執行 command，依 `[error, data, response]` 處理結果。
+SDK 定義每一項 HTTP 操作的 method、相對 path、input 對應、回應與錯誤契約。應用程式匯入該操作，設定自己的 client，呼叫它，並處理結果。同一份定義可以放進 npm 套件，也可以在本機共用。
 
-本頁依定義、執行、狀態分支與取消說明。SDK 保留輸入、輸出及已宣告錯誤的型別；應用程式決定身分驗證、逾時、取消，以及如何將結果呈現給使用者。
+服務位址與憑證留在 client 設定裡。呼叫端擁有取消，以及是否重試寫入的策略；被取消的請求可能已經到達服務。
 
 ## 基本用法
 
@@ -17,7 +17,7 @@ SDK 作者透過 `defineRequest` 宣告 method、path、輸入與回應契約，
 
 ## 解析 URL
 
-`withEndpoint(...)` 需要有效的絕對 URL。Endpoint pathname 當目錄保留；query 與 hash 在 command 解析前會丟掉。缺少、相對或無效的 base endpoint 會在建構請求時、任何 interceptor 或傳輸跑之前，以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 這個請求也一樣。HTTP、SSE 與 WebSocket 共用這條規則。
+`withEndpoint(...)` 需要有效的絕對 URL。Endpoint pathname 當目錄保留；query 與 hash 在請求 URL 解析前會丟掉。缺少、相對或無效的 base endpoint 會在建構請求時、任何 interceptor 或傳輸跑之前，以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 這個請求也一樣。HTTP、SSE 與 WebSocket 共用這條規則。
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
@@ -118,13 +118,15 @@ Builder 可以依真實 input 分支，每個情況回傳不同 body（JSON reco
 
 成功的回應是 `DecodedResponse<T>`：`url`、`status`、`statusText`、`headers`、`ok`，外加一個有型別的 `body`。什麼都沒解碼時你拿到 `HttpMeta`——同樣的欄位，只是沒有 `body`。`ok` 只表示 `200 <= status < 300`。兩者都不是原生 `Response`。傳輸失敗是 fault，所以不存在代表它的 status-0 回應。
 
-## 取消工作
+## 取消工作 [#cancel-the-work]
 
-執行 options 可以只傳 `{ signal }`，不需要同時傳入 `abort` 或 `timeout`。**`abort` 與 `timeout` 互斥。** `signal` 可以跟其中一個搭配。
+在衍生的 client 上傳 `abort`。期限是 `AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動取消歸類為 `NET_ABORTED`。沒有 `timeout` 欄位，沒有 `signal` 欄位，也沒有 client 層級的預設期限。較後的 `abort` 會取代前一個 signal。在應用程式碼裡用 `AbortSignal.any` 把呼叫端的 signal 與期限組合起來。
+
+<include cwd>examples/http/deadline.ts#example</include>
 
 <include cwd>examples/http/cancel.ts#example</include>
 
-`timeout` 必須是 `1..2_147_483_647` 的正 safe integer。省略 `timeout` 的呼叫會使用 client 的 `withTimeout` 預設值。認得的取消 → `NET_ABORTED`；執行逾時 → `NET_TIMEOUT`；interceptor `throw` → `EXT_INTERCEPTOR_FAILED`，但 `ERR_ABORTED`／`ERR_TIMEOUT` 例外，它們會給出 `NET_ABORTED`／`NET_TIMEOUT`；其他 Fetch 失敗 → `NET_UNREACHABLE`。伺服器已接受寫入後再取消，**不能**證明寫入已回滾。
+認得的取消 → `NET_ABORTED`；期限 abort → `NET_TIMEOUT`；interceptor `throw` → `EXT_INTERCEPTOR_FAILED`，但 `ERR_ABORTED`／`ERR_TIMEOUT` 例外，它們會給出 `NET_ABORTED`／`NET_TIMEOUT`；其他 Fetch 失敗 → `NET_UNREACHABLE`。伺服器已接受寫入後再取消，**不能**證明寫入已回滾。
 
 ## Credentials 與 XSRF
 
@@ -138,17 +140,17 @@ Credentials、XSRF tokens、query strings 別進日常 logs。別把 query param
 
 `onDownloadProgress` 在讀已宣告的回應 body 時跑。`loaded` 計算的是從回應串流讀到的位元組數，Fetch 可能已經解壓縮過。只有正的 `Content-Length`，且 `Content-Encoding` 不存在或為 `identity` 時，`lengthComputable` 才是 true。其他編碼，包括 gzip 與 br，會回報 `total: 0` 且 `lengthComputable: false`，因此解碼後的位元組絕不會拿去跟壓縮後的線上位元組長度比較。那一側沒有 struct → body 不會被讀 → 沒有 body-read progress。
 
-`onUploadProgress` 會在 Fetch 讀取 `ReadableStream<Uint8Array>` 主體時回報進度，而不是在伺服器確認收到時。上傳進度只在支援串流請求主體的執行環境中回報：在 Bun 與 Node 中，Defjs 也會把 `Blob`／`File`、`ArrayBuffer` 與 `FormData` 主體轉成串流，因此它們同樣會回報進度。在伺服器執行環境中，搭配 `onUploadProgress` 的 FormData 會直接使用序列化後的串流，保留它的 multipart boundary，且送出時不會附上函式庫產生的 `Content-Length`（在 HTTP/1.1 上以分塊方式傳輸），因此進度、逾時與取消都能運作，而不必緩衝整個主體。除非有效且明確的 `Content-Length` 提供總量，否則它的 total 未知。若端點要求 `Content-Length`，例如某些預簽名上傳目標，請省略 `onUploadProgress`；平台 Fetch 就會以附帶長度的方式送出 FormData。取消會釋放被包住的串流。瀏覽器（包括 Workers）不在此範圍內，因為 Chromium 只能透過 HTTP/2 或更新版本串流請求主體，而 Firefox 完全無法串流請求主體；在那裡，這些主體會原樣送出，而且不會呼叫 `onUploadProgress`。JSON、文字、`URLSearchParams` 與型別陣列主體會一次完整送出，不會產生事件。長度未知的串流，其 `total` 為 `0`（因此 `lengthComputable` 為 `false`）。在無法串流請求主體的執行環境（例如 Firefox）中，`ReadableStream` 主體會在任何內容送出之前以 `ENV_UNSUPPORTED` 失敗；底層原因的訊息為 `ERR_STREAMING_REQUEST_UNSUPPORTED`。在 Chromium 中，`ReadableStream` 主體需要 HTTP/2 或更新版本；透過 HTTP/1.1 時，該次呼叫會以 `NET_UNREACHABLE` 失敗。`onDownloadProgress` 在各執行環境中的行為都相同。
+`onUploadProgress` 會在 Fetch 讀取 `ReadableStream<Uint8Array>` 主體時回報進度，而不是在伺服器確認收到時。上傳進度只在支援串流請求主體的執行環境中回報：在 Bun 與 Node 中，Defjs 也會把 `Blob`／`File`、`ArrayBuffer` 與 `FormData` 主體轉成串流，因此它們同樣會回報進度。在伺服器執行環境中，搭配 `onUploadProgress` 的 FormData 會直接使用序列化後的串流，保留它的 multipart boundary，且送出時不會附上函式庫產生的 `Content-Length`（在 HTTP/1.1 上以分塊方式傳輸），因此進度與取消都能運作，而不必緩衝整個主體。除非有效且明確的 `Content-Length` 提供總量，否則它的 total 未知。若端點要求 `Content-Length`，例如某些預簽名上傳目標，請省略 `onUploadProgress`；平台 Fetch 就會以附帶長度的方式送出 FormData。取消會釋放被包住的串流。瀏覽器（包括 Workers）不在此範圍內，因為 Chromium 只能透過 HTTP/2 或更新版本串流請求主體，而 Firefox 完全無法串流請求主體；在那裡，這些主體會原樣送出，而且不會呼叫 `onUploadProgress`。JSON、文字、`URLSearchParams` 與型別陣列主體會一次完整送出，不會產生事件。長度未知的串流，其 `total` 為 `0`（因此 `lengthComputable` 為 `false`）。在無法串流請求主體的執行環境（例如 Firefox）中，`ReadableStream` 主體會在任何內容送出之前以 `ENV_UNSUPPORTED` 失敗；底層原因的訊息為 `ERR_STREAMING_REQUEST_UNSUPPORTED`。在 Chromium 中，`ReadableStream` 主體需要 HTTP/2 或更新版本；透過 HTTP/1.1 時，該次呼叫會以 `NET_UNREACHABLE` 失敗。`onDownloadProgress` 在各執行環境中的行為都相同。
 
-無論下載或上傳，進度回呼拋出錯誤或回傳的 Promise 遭拒絕，都會讓該次呼叫以 `EXT_OBSERVER_FAILED` 失敗，拋出的值作為 `cause`。呼叫端取消與 `timeout` 仍分別回報 `NET_ABORTED`／`NET_TIMEOUT`。
+無論下載或上傳，進度回呼拋出錯誤或回傳的 Promise 遭拒絕，都會讓該次呼叫以 `EXT_OBSERVER_FAILED` 失敗，拋出的值作為 `cause`。呼叫端取消仍回報 `NET_ABORTED`；abort reason 是逾時時則回報 `NET_TIMEOUT`。
 
-`fetchHandler(httpRequest, fetchImpl?)` 是較低階的 Fetch 邊界：解析 URL、呼叫 Fetch、讀 representation、回傳 `HttpResponse`。預設的 HTTP 與 SSE handle 每次呼叫都會解析 `globalThis.fetch`，所以 import 之後裝上的替換會被用到。HTTP 只對未動過的平台 Fetch 使用 `(url, init)`；被替換的全域或自訂 handle 收到的是原生 `Request`。沒有 Fetch 也能匯入 Core；若 Fetch 仍然不存在，預設的 HTTP／SSE 執行會以 `ENV_UNSUPPORTED` 失敗，自訂 handle 則仍可使用。這條邊界**不會**驗證 command input、分派 `output`，或跑 interceptors。適合注入傳輸測試 — 不能取代 `client.execute`。
+`fetchHandler(httpRequest, fetchImpl?)` 是較低階的 Fetch 邊界：解析 URL、呼叫 Fetch、讀 representation、回傳 `HttpResponse`。預設的 HTTP 與 SSE handle 每次呼叫都會解析 `globalThis.fetch`，所以 import 之後裝上的替換會被用到。HTTP 只對未動過的平台 Fetch 使用 `(url, init)`；被替換的全域或自訂 handle 收到的是原生 `Request`。沒有 Fetch 也能匯入 Core；若 Fetch 仍然不存在，預設的 HTTP／SSE 呼叫會以 `ENV_UNSUPPORTED` 失敗，自訂 handle 則仍可使用。這條邊界**不會**驗證操作 input、分派 `output`，或跑 interceptors。適合注入傳輸測試 — 不能取代呼叫操作。
 
 ## 重放限制
 
 Defjs **不會**自動重試 HTTP。重試讀取仍需要審過的逾時／網路／重複策略。重試 mutation 需要可重放的 bytes、伺服器支援、綁定 auth 範圍 + request bytes 的 idempotency key，以及接收端的重複策略。
 
-Client／command／Fetch 邊界無法知道失敗的寫入有沒有提交。把重放決策放在應用程式或審過的 interceptor。Interceptors 可以 short-circuit 或替換低階 request；最終 status 與 body 仍須滿足 command 契約。
+Client 或 Fetch 邊界無法知道失敗的寫入有沒有提交。把重放決策放在應用程式或審過的 interceptor。Interceptors 可以 short-circuit 或替換低階 request；最終 status 與 body 仍須滿足操作契約。
 
 ## 相關操作範例
 

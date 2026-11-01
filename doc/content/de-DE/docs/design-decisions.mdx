@@ -1,17 +1,23 @@
 ---
 title: "Entwurfsentscheidungen"
-description: Wie getrennte API-Definitionen und Client-Konfiguration das Entwerfen, Veröffentlichen und Wiederverwenden von SDKs erleichtern.
+description: Wie die Trennung von API-Definitionen und Client-Ausführung SDKs leichter zu entwerfen, zu veröffentlichen und wiederzuverwenden macht.
 ---
 
 # Entwurfsentscheidungen
 
-**Defjs = define js.** Das Ziel ist, SDKs einfacher zu entwerfen, zu schreiben und zu veröffentlichen. Ein SDK bündelt wiederverwendbare API-Endpoints, Struct-Verträge und die Abbildung von Eingaben auf Requests. Die Anwendung liefert ihren eigenen Defjs-Client mit Base-Endpoint, Authentifizierung, Interceptors und Transport.
+Defjs soll das Entwerfen von SDKs freundlicher machen. `def` heißt `define`: Ein Team beschreibt die API seines Services und veröffentlicht wiederverwendbare Definitionen, während jede konsumierende Anwendung entscheidet, wie sie aufgerufen werden. Der Rest des Entwurfs folgt aus dieser Trennung.
 
-Die Trennung betrifft die Verantwortung: Der SDK-Autor legt fest, was eine Operation bedeutet; die Anwendung legt fest, wo und unter welchen Laufzeitbedingungen sie ausgeführt wird. Sie behandelt Ergebnisse und besitzt Abbruch, Streams und Sessions. So lässt sich derselbe API-Vertrag teilen, ohne Umgebungskonfiguration oder aktiven Zustand in das SDK einzubauen.
+## SDK schreiben und in der Anwendung ausführen
 
-Definitionen sind ausführbare Defjs-Verträge mit Methoden, Pfaden und Transportsemantik. Sie sind weder transportfreie Datenschemas noch mit beliebigen Clients austauschbar. Defjs erzeugt auch keinen Client-Code. Der [Schnellstart](/de-DE/docs/start) zeigt die zwei Seiten; das [Veröffentlichungsrezept](/de-DE/recipes/publish-http-sdk) führt sie bis zum npm-Paket.
+Der SDK-Autor besitzt Operationen, Input-Verträge, Request-Abbildung, Response-Dekodierung und deklarierte Service-Fehler. Die Anwendung besitzt Client-Konfiguration, aktuelle Zugangsdaten, den Zeitpunkt des Aufrufs, die Ergebnisbehandlung und die Lebensdauer von Ressourcen. Ein exportierter Endpoint kann von unterschiedlichen Clients genutzt werden, ohne die Umgebung einer bestimmten Anwendung ins SDK einzubauen.
 
-## Deklaration ist eine Zusicherung
+Eine Operation mit einem Client aufzurufen startet die Arbeit. Definitionen sind ausführbare Defjs-Module mit Structs und Buildern, kein clientneutrales Austauschformat. SDK-Autoren deklarieren eine kompatible Core-Abhängigkeit und liefern JavaScript plus TypeScript-Deklarationen. [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk) zeigt diese Grenze in einem Paket.
+
+Optionale Factories oder Komfortmethoden können Defaults oder domänenspezifisches Verhalten liefern. Endpoints verfügbar zu halten lässt Anwendungen die Kontrolle behalten, wenn diese Defaults nicht passen. Framework-Plugins und Telemetrie hängen am konsumierenden Client, das Definitionspaket kann also unabhängig von React, Vue oder dem Observability-Setup einer Anwendung bleiben.
+
+Diese Trennung macht Tests auch praktisch: Rufe die echte SDK-Definition über ein clientlokales Handle auf und beobachte Request und dekodiertes Ergebnis. Laufzeitvalidierung, explizite Fehler und Cleanup in der Hand des Aufrufers tragen einen verlässlichen SDK-Vertrag.
+
+## Deklaration ist eine Zusicherung [#declaration-is-an-assertion]
 
 Diese sechs Regeln entscheiden jede Frage danach, wie eine Response gelesen wird. Sie sind numeriert, damit eine
 spätere Diskussion eine davon zitieren kann, statt sie neu herzuleiten.
@@ -69,17 +75,17 @@ erwartete Ergebnis, keine Lücke.
 
 Der Preis: kein process-weites Default. Dieser Preis hilft auf einem Server — erzeuge den Client innerhalb der Request-Grenze, wenn Options oder Closures Auth, Cookies, User, Tenants oder Request-Metadata erfassen. Ein expliziter Client isoliert trotzdem keinen State, den ein Interceptor erfasst. Client-Identität ist für sich keine Security-Grenze.
 
-Ein Client dispatcht Commands. Er besitzt keine aktive Arbeit. Wer einen HTTP-Request, SSE-Stream oder eine WebSocket-Session startet, muss abbrechen oder schließen und auf das Terminal-Promise warten.
+Ein Client trägt Konfiguration. Er besitzt keine aktive Arbeit. Wer einen HTTP-Request, SSE-Stream oder eine WebSocket-Session startet, muss abbrechen oder schließen und auf das Terminal-Promise warten.
 
-## Definitionen, Endpoints und Commands
+## Definitionen und Operationen
 
-Die Definition ist der stabile Vertrag: Method, Path, Input-Struct, die Structs, die jede Seite von `ok` dekodieren, Transport-Limits. `defineRequest` gibt einen Endpoint zurück. Der Aufruf erzeugt einen opaken Command für eine einzelne Ausführung.
+Die Definition ist der stabile Vertrag: Method, Path, Input-Struct, die Structs, die jede Seite von `ok` dekodieren, Transport-Limits. `defineRequest` gibt eine Operation zurück. Sie mit einem Client aufzurufen startet diesen Aufruf. Denselben Client-Wert kannst du an viele Operationen übergeben.
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
 </include>
 
-Ein Background-Job und ein UI-Owner können dieselbe `getUser`-Form mit unterschiedlichen Cancel-/Retry-Policies ausführen. Opake Commands verhindern, dass App-Code von internen Transport-Tags oder Symbolen abhängt.
+Ein Background-Job und ein UI-Owner können dieselbe `getUser`-Operation mit unterschiedlichen Clients aufrufen, damit jeder seinen eigenen Abbruch und seine Retry-Regel wählen kann. Anwendungscode hängt nicht von internen Transport-Tags oder Symbolen ab.
 
 ## Transport-spezifische Ergebnisse
 
@@ -100,7 +106,7 @@ Session.
 
 ## Runtime-Decoding
 
-TypeScript-Inferenz beschreibt, was du erwartest; sie kann eine Server-Response zur Laufzeit nicht prüfen. Struct-Parsing ist die zweite Hälfte des Vertrags. Defjs validiert Command-Input vor dem Request-Bau, prüft die Representation und parst dann den Struct der Seite von `ok`, die gilt.
+TypeScript-Inferenz beschreibt, was du erwartest; sie kann eine Server-Response zur Laufzeit nicht prüfen. Struct-Parsing ist die zweite Hälfte des Vertrags. Defjs validiert den Input der Operation vor dem Request-Bau, prüft die Representation und parst dann den Struct der Seite von `ok`, die gilt.
 
 Bei HTTP wird der Struct **einmal, nach der Interceptor-Chain**, angewendet. Eine Response, die ein Interceptor mit
 `makeResponse(...)` gebaut hat, durchläuft dieselbe Media-Type-Prüfung, Representation-Konvertierung und denselben
@@ -129,7 +135,7 @@ Fault statt eines Parser-Errors, und es überspringt Lesen, Parsen und Struct ko
 
 Ein Struct ist der Field-Vertrag, in beide Richtungen. `.alias(name)` ist der Wire-Name. Der Struct entscheidet, wie ein Wert encodet wird. Der `builder` entscheidet, wohin dieser Wert geht.
 
-`builder` ist synchron und pure. Er bekommt den geparsten Input — den echten Wert, keine Binding-Sicht — und gibt den Request zurück: `path`, `query`, `headers` und `body`. Er läuft, wenn der Command ausgeführt wird. Ein geworfener Fehler wird zu `REQ_BUILD_FAILED` auf dem Tupel; der Endpoint-Aufruf wirft nicht. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
+`builder` ist synchron und pure. Er bekommt den geparsten Input — den echten Wert, keine Binding-Sicht — und gibt den Request zurück: `path`, `query`, `headers` und `body`. Er läuft, wenn die Operation aufgerufen wird. Ein geworfener Fehler wird zu `REQ_BUILD_FAILED` auf dem Tupel; der Aufruf der Operation wirft nicht. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen.
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
@@ -153,9 +159,9 @@ Der Body-Kind wird am Wert entschieden, erster Match:
 
 ## Observer und Policy-Platzierung
 
-Interceptor sind für transportweite Policy: Auth, Tracing, Short-Circuit, reviewed Retry. Sie laufen nur für ihren Transport und komponieren in Onion-Order. Execution-Options sind für work-spezifische Lifetime: `signal`, `timeout`, WebSocket-Heartbeat, opt-in Reconnect.
+Interceptor sind für transportweite Policy: Auth, Tracing, Short-Circuit, reviewed Retry. Sie laufen nur für ihren Transport und komponieren in Onion-Order. Request-Optionen an einem abgeleiteten Client sind für die Lifetime dieser Arbeit: `abort`, WebSocket-Heartbeat und opt-in Reconnect.
 
-Observer melden, was passiert ist, ohne zweiter Owner zu werden. SSE `onInvalidEvent`, WebSocket-State-Listener und Runtime-Error-Listener sind für begrenzte Diagnostics und Metrics. Der zurückgegebene Stream/Session besitzt weiterhin Iteration, Close, Unsubscribe und Terminal-Warten. Caching, Unterdrückung veralteter Results, Idempotency und Domain-Error-Mapping gehören um `client.execute(...)`, wo deine App ihre eigene Policy und ihren State sieht.
+Observer melden, was passiert ist, ohne zweiter Owner zu werden. SSE `onInvalidEvent`, WebSocket-State-Listener und Runtime-Error-Listener sind für begrenzte Diagnostics und Metrics. Der zurückgegebene Stream oder die Session besitzt weiterhin Iteration, Close, Unsubscribe und Terminal-Warten. Caching, Unterdrückung veralteter Results, Idempotency und Domain-Error-Mapping gehören um den Operationsaufruf, wo deine App ihre eigene Policy und ihren State sieht.
 
 ## OpenAPI, Sourcemaps und Telemetry
 

@@ -14,7 +14,6 @@ import { StructError, struct } from "../struct";
 import { createPrimitiveStruct } from "../struct/runtime";
 import { MALFORMED_INTERCEPTOR_RESULTS } from "../../test/malformed_interceptor_results";
 import { defineRequest } from "./index";
-import type { HttpExecuteOptions } from "./http";
 
 describe("request http runtime errors", () => {
   let client: Client;
@@ -51,7 +50,7 @@ describe("request http runtime errors", () => {
       path: "/text",
     });
 
-    const [error, result] = await client.execute(useRequest());
+    const [error, result] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(error?.code).toBe("RES_DECODE_FAILED");
@@ -70,7 +69,7 @@ describe("request http runtime errors", () => {
       path: "/account/not-found",
     });
 
-    const [error, result, response] = await client.execute(useMissingAccount());
+    const [error, result, response] = await useMissingAccount(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -100,9 +99,9 @@ describe("request http runtime errors", () => {
       path: "/null",
     });
 
-    const [error, result, response] = await client.execute(
-      useValidatedRequest({ id: "oops" } as never),
-    );
+    const [error, result, response] = await useValidatedRequest(client, {
+      id: "oops",
+    } as never);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -154,8 +153,9 @@ describe("request http runtime errors", () => {
       path: "/search",
     });
 
-    const [error, result, response] = await guardedClient.execute(
-      useRequest({} as never),
+    const [error, result, response] = await useRequest(
+      guardedClient,
+      {} as never,
     );
 
     expect(error?.code).toBe("REQ_INPUT_INVALID");
@@ -174,7 +174,7 @@ describe("request http runtime errors", () => {
       path: "/json",
     });
 
-    const [error, result, response] = await client.execute(useBadResponse());
+    const [error, result, response] = await useBadResponse(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -210,7 +210,7 @@ describe("request http runtime errors", () => {
         path,
       });
 
-      const [error, result, response] = await client.execute(useRequest());
+      const [error, result, response] = await useRequest(client);
 
       expect(result).toBeUndefined();
       expect(response).toBeUndefined();
@@ -233,7 +233,7 @@ describe("request http runtime errors", () => {
       path: "/json/malformed-error",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -255,7 +255,7 @@ describe("request http runtime errors", () => {
       path: "/500",
     });
 
-    const [error, result, response] = await client.execute(useUndecodedError());
+    const [error, result, response] = await useUndecodedError(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -280,7 +280,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useBadBuild({}));
+    const [error, result, response] = await useBadBuild(client, {});
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -303,7 +303,7 @@ describe("request http runtime errors", () => {
       path: "/users",
     });
 
-    const [fault, result, response] = await guardedClient.execute(useRequest());
+    const [fault, result, response] = await useRequest(guardedClient);
 
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(result).toBeUndefined();
@@ -333,7 +333,7 @@ describe("request http runtime errors", () => {
       path: "/users",
     });
 
-    const [fault, result, response] = await guardedClient.execute(useRequest());
+    const [fault, result, response] = await useRequest(guardedClient);
 
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(result).toBeUndefined();
@@ -361,7 +361,7 @@ describe("request http runtime errors", () => {
       path: "/intercepted",
     });
 
-    const [error, result, response] = await client.execute(useIntercepted());
+    const [error, result, response] = await useIntercepted(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -381,7 +381,6 @@ describe("request http runtime errors", () => {
   ] as const)(
     "should cancel a hanging interceptor on %s",
     async (mode, expectedCode) => {
-      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
       const controller = new AbortController();
       let markStarted!: () => void;
       const started = new Promise<void>((resolve) => {
@@ -401,25 +400,16 @@ describe("request http runtime errors", () => {
         path: "/hanging-interceptor",
       });
 
-      try {
-        const pending = guardedClient.execute(
-          useRequest(),
-          mode === "abort" ? { signal: controller.signal } : { timeout: 1 },
-        );
+      const pending = useRequest(guardedClient({ abort: controller.signal }));
+      await started;
+      controller.abort(
+        mode === "timeout"
+          ? new DOMException("deadline", "TimeoutError")
+          : "caller stopped",
+      );
 
-        // Fake timers hold the 1ms deadline until the interceptor has actually started.
-        await started;
-        if (mode === "abort") {
-          controller.abort("caller stopped");
-        } else {
-          await vi.advanceTimersByTimeAsync(1);
-        }
-
-        const result = await pending;
-        expect(result[0]).toMatchObject({ code: expectedCode });
-      } finally {
-        vi.useRealTimers();
-      }
+      const result = await pending;
+      expect(result[0]).toMatchObject({ code: expectedCode });
     },
   );
 
@@ -436,9 +426,8 @@ describe("request http runtime errors", () => {
     );
     const useRequest = defineRequest({ method: "GET", path: "/cached" });
 
-    const [error, result, response] = await guardedClient.execute(
-      useRequest(),
-      { signal: controller.signal },
+    const [error, result, response] = await useRequest(
+      guardedClient({ abort: controller.signal }),
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -477,8 +466,7 @@ describe("request http runtime errors", () => {
       );
       const useRequest = defineRequest({ method: "GET", path: "/hidden" });
 
-      const [error, result, response] =
-        await guardedClient.execute(useRequest());
+      const [error, result, response] = await useRequest(guardedClient);
 
       expect(transportSignal?.aborted).toBe(true);
       await expect(hiddenResponse).rejects.toBe(ERR_ABORTED);
@@ -515,7 +503,7 @@ describe("request http runtime errors", () => {
     );
     const useRequest = defineRequest({ method: "GET", path: "/cached" });
 
-    const [error] = await guardedClient.execute(useRequest());
+    const [error] = await useRequest(guardedClient);
     await vi.waitFor(() => expect(lateResponse).toBeDefined());
 
     expect(error).toBeNull();
@@ -542,9 +530,8 @@ describe("request http runtime errors", () => {
         path: "/null",
       });
 
-      const [error, result, response] = await guardedClient.execute(
-        useRequest(),
-        { signal: controller.signal },
+      const [error, result, response] = await useRequest(
+        guardedClient({ abort: controller.signal }),
       );
 
       expect(result).toBeUndefined();
@@ -554,93 +541,12 @@ describe("request http runtime errors", () => {
     },
   );
 
-  test("should reject with.abort and with.timeout before parsing HTTP input", async () => {
-    const controller = new AbortController();
-    const useRequest = defineRequest({
-      builder: () => ({}),
-      input: struct.object({
-        id: struct.string(),
-      }),
-      method: "GET",
-      output: struct.null(),
-      path: "/null",
-    });
-
-    const [error, result, response] = await client.execute(
-      useRequest({ id: 1 } as never),
-      {
-        abort: controller.signal,
-        timeout: 1,
-      } as never,
-    );
-
-    expect(result).toBeUndefined();
-    expect(response).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error?.message).toBe("abort and timeout cannot be used together");
-  });
-
-  test("should prefer HTTP cancellation config conflict over an already aborted signal", async () => {
-    const controller = new AbortController();
-    controller.abort(ERR_ABORTED);
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.null(),
-      path: "/null",
-    });
-
-    const [error, result, response] = await client.execute(useRequest(), {
-      abort: controller.signal,
-      timeout: 1,
-    } as never);
-
-    expect(result).toBeUndefined();
-    expect(response).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error?.message).toBe("abort and timeout cannot be used together");
-  });
-
-  test.each([-1, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648])(
-    "should reject invalid timeout %s before HTTP transport",
-    async (timeout) => {
-      const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
-      const guardedClient = createClient(
-        withEndpoint("https://example.com"),
-        withHTTPHandle(fetchMock as unknown as typeof fetch),
-      );
-      const useRequest = defineRequest({ method: "GET", path: "/timeout" });
-
-      const [error, result, response] = await guardedClient.execute(
-        useRequest(),
-        { timeout },
-      );
-
-      expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-      expect(result).toBeUndefined();
-      expect(response).toBeUndefined();
-      expect(fetchMock).not.toHaveBeenCalled();
-    },
-  );
-
-  test("should prefer invalid timeout over an already aborted HTTP signal alias", async () => {
-    const controller = new AbortController();
-    controller.abort("caller stopped");
-    const useRequest = defineRequest({ method: "GET", path: "/timeout" });
-
-    const [error] = await client.execute(useRequest(), {
-      signal: controller.signal,
-      timeout: 0,
-    });
-
-    expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-  });
-
-  test("should snapshot HTTP cancellation options before asynchronous work", async () => {
-    let timeoutReads = 0;
+  test("should snapshot HTTP abort before asynchronous work", async () => {
+    let abortReads = 0;
     const options = {
-      get timeout() {
-        timeoutReads += 1;
-        return timeoutReads === 1 ? undefined : Number.POSITIVE_INFINITY;
+      get abort() {
+        abortReads += 1;
+        return undefined;
       },
     };
     const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
@@ -650,34 +556,13 @@ describe("request http runtime errors", () => {
     );
     const useRequest = defineRequest({ method: "GET", path: "/snapshot" });
 
-    const [error, result, response] = await guardedClient.execute(
-      useRequest(),
-      options as HttpExecuteOptions,
-    );
+    const [error, result, response] = await useRequest(guardedClient(options));
 
     expect(error).toBeNull();
     expect(result).toBeUndefined();
     expect(response?.status).toBe(204);
-    expect(timeoutReads).toBe(1);
+    expect(abortReads).toBe(1);
     expect(fetchMock).toHaveBeenCalledOnce();
-  });
-
-  test("should return a definition error when reading HTTP cancellation options throws", async () => {
-    const options = Object.defineProperty({}, "abort", {
-      get() {
-        throw new Error("abort getter failed");
-      },
-    });
-    const useRequest = defineRequest({ method: "GET", path: "/snapshot" });
-
-    const [error, result, response] = await client.execute(
-      useRequest(),
-      options as HttpExecuteOptions,
-    );
-
-    expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-    expect(result).toBeUndefined();
-    expect(response).toBeUndefined();
   });
 
   test("should return ABORTED when signal is aborted with explicit undefined reason", async () => {
@@ -689,9 +574,9 @@ describe("request http runtime errors", () => {
       path: "/null",
     });
 
-    const [error, result, response] = await client.execute(useRequest(), {
-      abort: signal,
-    });
+    const [error, result, response] = await useRequest(
+      client({ abort: signal }),
+    );
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -712,7 +597,7 @@ describe("request http runtime errors", () => {
       path: "/transport-error",
     });
 
-    const [error, result, response] = await guardedClient.execute(useRequest());
+    const [error, result, response] = await useRequest(guardedClient);
 
     expect(error).toMatchObject({ cause: ERR_ABORTED, code: "NET_ABORTED" });
     expect(result).toBeUndefined();
@@ -734,13 +619,12 @@ describe("request http runtime errors", () => {
       path: "/download",
     });
 
-    const [error, result, response] = await guardedClient.execute(
-      useRequest(),
-      {
+    const [error, result, response] = await useRequest(
+      guardedClient({
         async onDownloadProgress() {
           throw observerError;
         },
-      },
+      }),
     );
 
     expect(error).toMatchObject({
@@ -771,7 +655,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -802,7 +686,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -825,9 +709,7 @@ describe("request http runtime errors", () => {
       path: "/null",
     });
 
-    const [error] = await client.execute(
-      useBadRequest({ id: "invalid" } as never),
-    );
+    const [error] = await useBadRequest(client, { id: "invalid" } as never);
 
     expect(error?.code).toBe("REQ_INPUT_INVALID");
   });
@@ -842,8 +724,9 @@ describe("request http runtime errors", () => {
     });
 
     const controller = new AbortController();
-    const command = useDelay({ ms: 5000 });
-    const promise = client.execute(command, { signal: controller.signal });
+    const promise = useDelay(client({ abort: controller.signal }), {
+      ms: 5000,
+    });
     controller.abort();
 
     const [error] = await promise;
@@ -878,7 +761,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -906,7 +789,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -937,7 +820,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -972,7 +855,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(error).toBeNull();
     expect(result).toBeUndefined();
@@ -999,7 +882,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -1031,7 +914,7 @@ describe("request http runtime errors", () => {
       path: "/test",
     });
 
-    const [error, result, response] = await client.execute(useRequest());
+    const [error, result, response] = await useRequest(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -1041,516 +924,6 @@ describe("request http runtime errors", () => {
     expect(error?.message).toContain("Server Error");
     if (error?.code === "HTTP_STATUS") {
       expect(error.data).toEqual({ code: "ERR" });
-    }
-  });
-
-  test("should support timeout in second-stage config", async () => {
-    // Execute-option timeout is the behavior under test. A handle that never
-    // resolves keeps that deadline on fake timers, with no second real clock.
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    let markStarted!: () => void;
-    const started = new Promise<void>((resolve) => {
-      markStarted = resolve;
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.com"),
-      withHTTPHandle(() => {
-        markStarted();
-        return new Promise<Response>(() => undefined);
-      }),
-    );
-    const useDelay = defineRequest({
-      builder: (input) => ({ query: { ms: input.ms } }),
-      input: struct.object({ ms: struct.number() }),
-      method: "GET",
-      output: struct.null(),
-      path: "/delay",
-    });
-
-    try {
-      const pending = slowClient.execute(useDelay({ ms: 100 }), {
-        timeout: 10,
-      });
-      await started;
-      await vi.advanceTimersByTimeAsync(10);
-
-      const [error, result, response] = await pending;
-      expect(result).toBeUndefined();
-      expect(response).toBeUndefined();
-      expect(error?.code).toBe("NET_TIMEOUT");
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  test("should release the timeout timer after a successful request without aborting its signal", async () => {
-    vi.useFakeTimers();
-    let requestSignal: AbortSignal | undefined;
-    const successfulClient = createClient(
-      withEndpoint("https://example.com"),
-      withHTTPHandle(async () => new Response(null, { status: 204 })),
-      withInterceptors(
-        createHttpInterceptor((request, next) => {
-          requestSignal = request.abort;
-          return next(request);
-        }),
-      ),
-    );
-    const useRequest = defineRequest({ method: "GET", path: "/success" });
-
-    try {
-      const [error, result, response] = await successfulClient.execute(
-        useRequest(),
-        { timeout: 60_000 },
-      );
-
-      expect(error).toBeNull();
-      expect(result).toBeUndefined();
-      expect(response?.status).toBe(204);
-      expect(requestSignal?.aborted).toBe(false);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  test("should report timeout when synchronous response conversion outlasts the deadline", async () => {
-    let clock = 1_000;
-    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
-    const body: { id?: number } = {};
-    Object.defineProperty(body, "id", {
-      enumerable: true,
-      get() {
-        clock += 40;
-        return 1;
-      },
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          }),
-        ),
-      ),
-    );
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.object({ id: struct.number() }),
-      path: "/slow-decode",
-    });
-
-    try {
-      const [error, result] = await slowClient.execute(useRequest(), {
-        timeout: 30,
-      });
-
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("NET_TIMEOUT");
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  test("should prefer caller cancellation when synchronous response conversion also crosses the deadline", async () => {
-    let clock = 1_000;
-    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
-    const controller = new AbortController();
-    const body: { id?: number } = {};
-    Object.defineProperty(body, "id", {
-      enumerable: true,
-      get() {
-        controller.abort("caller stopped");
-        clock += 40;
-        return 1;
-      },
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          }),
-        ),
-      ),
-    );
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.object({ id: struct.number() }),
-      path: "/slow-decode",
-    });
-
-    try {
-      const [error, result] = await slowClient.execute(useRequest(), {
-        signal: controller.signal,
-        timeout: 30,
-      });
-
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("NET_ABORTED");
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  test("should report timeout when a declared error conversion outlasts the deadline", async () => {
-    let clock = 1_000;
-    let converted = false;
-    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
-    const body: { id?: number } = {};
-    Object.defineProperty(body, "id", {
-      enumerable: true,
-      get() {
-        converted = true;
-        clock += 40;
-        return 1;
-      },
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 403,
-          }),
-        ),
-      ),
-    );
-    const shape = struct.object({ id: struct.number() });
-    const useRequest = defineRequest({
-      error: shape,
-      method: "GET",
-      output: shape,
-      path: "/slow-error",
-    });
-
-    try {
-      const [error, result] = await slowClient.execute(useRequest(), {
-        timeout: 30,
-      });
-
-      expect(converted).toBe(true);
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("NET_TIMEOUT");
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  test("should report timeout when declared conversion fails after the deadline", async () => {
-    let clock = 1_000;
-    let converted = false;
-    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
-    const body: { id?: number } = {};
-    Object.defineProperty(body, "id", {
-      enumerable: true,
-      get() {
-        converted = true;
-        clock += 40;
-        return "wrong" as unknown as number;
-      },
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          }),
-        ),
-      ),
-    );
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.object({ id: struct.number() }),
-      path: "/slow-mismatch",
-    });
-
-    try {
-      const [error, result] = await slowClient.execute(useRequest(), {
-        timeout: 30,
-      });
-
-      expect(converted).toBe(true);
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("NET_TIMEOUT");
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  test("should report timeout when synchronous decoding throws after the deadline", async () => {
-    let clock = 1_000;
-    let converted = false;
-    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
-    const body: { id?: number } = {};
-    Object.defineProperty(body, "id", {
-      enumerable: true,
-      get() {
-        converted = true;
-        clock += 40;
-        throw new TypeError("broken body");
-      },
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          }),
-        ),
-      ),
-    );
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.object({ id: struct.number() }),
-      path: "/slow-decode-throw",
-    });
-
-    try {
-      const [error, result] = await slowClient.execute(useRequest(), {
-        timeout: 30,
-      });
-
-      expect(converted).toBe(true);
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("NET_TIMEOUT");
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  test("should prefer caller cancellation when declared conversion fails after the deadline", async () => {
-    let clock = 1_000;
-    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
-    const controller = new AbortController();
-    const body: { id?: number } = {};
-    Object.defineProperty(body, "id", {
-      enumerable: true,
-      get() {
-        controller.abort("caller stopped");
-        clock += 40;
-        return "wrong" as unknown as number;
-      },
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          }),
-        ),
-      ),
-    );
-    const useRequest = defineRequest({
-      method: "GET",
-      output: struct.object({ id: struct.number() }),
-      path: "/slow-mismatch-abort",
-    });
-
-    try {
-      const [error, result] = await slowClient.execute(useRequest(), {
-        signal: controller.signal,
-        timeout: 30,
-      });
-
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("NET_ABORTED");
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  test("should report timeout when an undeclared response outlasts the deadline", async () => {
-    let clock = 1_000;
-    let converted = false;
-    const now = vi.spyOn(Date, "now").mockImplementation(() => clock);
-    const body: { id?: number } = {};
-    Object.defineProperty(body, "id", {
-      enumerable: true,
-      get() {
-        converted = true;
-        return 1;
-      },
-    });
-    const slowClient = createClient(
-      withEndpoint("https://example.test"),
-      withInterceptors(
-        createHttpInterceptor(async () => {
-          clock += 40;
-          return makeResponse({
-            body,
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
-        }),
-      ),
-    );
-    const useRequest = defineRequest({
-      method: "GET",
-      path: "/slow-undeclared",
-    });
-
-    try {
-      const [error, result] = await slowClient.execute(useRequest(), {
-        timeout: 30,
-      });
-
-      expect(converted).toBe(false);
-      expect(result).toBeUndefined();
-      expect(error?.code).toBe("NET_TIMEOUT");
-    } finally {
-      now.mockRestore();
-    }
-  });
-
-  test("should release the timeout timer when request construction fails", async () => {
-    vi.useFakeTimers();
-    const buildError = new Error("build failed");
-    const useRequest = defineRequest({
-      builder() {
-        throw buildError;
-      },
-      input: struct.object({ id: struct.string() }),
-      method: "GET",
-      path: "/build-error",
-    });
-
-    try {
-      const [error, result, response] = await client.execute(
-        useRequest({ id: "request" }),
-        { timeout: 60_000 },
-      );
-
-      expect(error).toMatchObject({
-        cause: buildError,
-        code: "REQ_BUILD_FAILED",
-      });
-      expect(result).toBeUndefined();
-      expect(response).toBeUndefined();
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  test("should return TIMEOUT when an interceptor never settles after next resolves", async () => {
-    vi.useFakeTimers();
-    let markNextResolved!: () => void;
-    const nextResolved = new Promise<void>((resolve) => {
-      markNextResolved = resolve;
-    });
-    const hangingClient = createClient(
-      withEndpoint("https://example.com"),
-      withHTTPHandle(async () => new Response(null, { status: 204 })),
-      withInterceptors(
-        createHttpInterceptor(async (request, next) => {
-          await next(request);
-          markNextResolved();
-          return await new Promise<never>(() => undefined);
-        }),
-      ),
-    );
-    const useRequest = defineRequest({
-      method: "GET",
-      path: "/hang-after-next",
-    });
-
-    try {
-      const pending = hangingClient.execute(useRequest(), { timeout: 40 });
-      let outcome: Awaited<typeof pending> | undefined;
-      void pending.then((result) => {
-        outcome = result;
-      });
-
-      await nextResolved;
-      await vi.advanceTimersByTimeAsync(40);
-
-      expect(outcome?.[0]).toMatchObject({ code: "NET_TIMEOUT" });
-      expect(outcome?.[1]).toBeUndefined();
-      expect(outcome?.[2]).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  test("should time out a hanging HTTP handle with a platform timer", async () => {
-    vi.useFakeTimers();
-    const hangingClient = createClient(
-      withEndpoint("https://example.com"),
-      withHTTPHandle(() => new Promise<Response>(() => undefined)),
-    );
-    const useRequest = defineRequest({ method: "GET", path: "/hang" });
-
-    try {
-      const pending = hangingClient.execute(useRequest(), { timeout: 40 });
-      await vi.advanceTimersByTimeAsync(40);
-
-      const [error, result, response] = await pending;
-      expect(error).toMatchObject({ code: "NET_TIMEOUT" });
-      expect(result).toBeUndefined();
-      expect(response).toBeUndefined();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  test("should settle interceptor finally before returning TIMEOUT", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    const logs: string[] = [];
-    let markEntered!: () => void;
-    const entered = new Promise<void>((resolve) => {
-      markEntered = resolve;
-    });
-    let settled = false;
-    const hangingClient = createClient(
-      withEndpoint("https://example.com"),
-      withHTTPHandle(() => new Promise<Response>(() => undefined)),
-      withInterceptors(
-        createHttpInterceptor(async (req, next) => {
-          markEntered();
-          try {
-            return await next(req);
-          } finally {
-            logs.push("after");
-          }
-        }),
-      ),
-    );
-    const useRequest = defineRequest({ method: "GET", path: "/hang" });
-
-    try {
-      const pending = hangingClient.execute(useRequest(), { timeout: 40 });
-      void pending.then(() => {
-        settled = true;
-      });
-
-      await entered;
-      expect(settled).toBe(false);
-      expect(logs).toEqual([]);
-      await vi.advanceTimersByTimeAsync(40);
-      expect(settled).toBe(true);
-      const [error] = await pending;
-      expect(error).toMatchObject({ code: "NET_TIMEOUT" });
-      expect(logs).toEqual(["after"]);
-    } finally {
-      vi.useRealTimers();
     }
   });
 
@@ -1579,7 +952,7 @@ describe("request http runtime errors", () => {
       );
       const useRequest = defineRequest({ method: "GET", path: "/preabort" });
 
-      const [error] = await guardedClient.execute(useRequest());
+      const [error] = await useRequest(guardedClient);
 
       expect(fetches).toBe(0);
       expect(error?.code).toBe(
@@ -1599,7 +972,7 @@ describe("request http runtime errors", () => {
     );
     const useRequest = defineRequest({ method: "GET", path: "/intercepted" });
 
-    const [error] = await guardedClient.execute(useRequest());
+    const [error] = await useRequest(guardedClient);
 
     expect(error).toMatchObject({
       code: "EXT_INTERCEPTOR_FAILED",
@@ -1641,8 +1014,7 @@ describe("request http runtime errors", () => {
         );
 
         for (const useRequest of [useUndeclared, useDeclared]) {
-          const [error, result, response] =
-            await guardedClient.execute(useRequest());
+          const [error, result, response] = await useRequest(guardedClient);
 
           expect(error).toMatchObject({ code: "EXT_INTERCEPTOR_FAILED" });
           expect(error?.cause).toBeInstanceOf(TypeError);
@@ -1651,27 +1023,6 @@ describe("request http runtime errors", () => {
         }
       },
     );
-
-    test("should release the timeout timer", async () => {
-      vi.useFakeTimers();
-      const guardedClient = createClient(
-        withEndpoint("https://example.com"),
-        withInterceptors(
-          createHttpInterceptor(async () => new Response() as never),
-        ),
-      );
-
-      try {
-        const [error] = await guardedClient.execute(useUndeclared(), {
-          timeout: 60_000,
-        });
-
-        expect(error?.code).toBe("EXT_INTERCEPTOR_FAILED");
-        expect(vi.getTimerCount()).toBe(0);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
 
     test("should accept a response derived from next() by spreading", async () => {
       const guardedClient = createClient(
@@ -1690,10 +1041,64 @@ describe("request http runtime errors", () => {
         ),
       );
 
-      const [error, , response] = await guardedClient.execute(useDeclared());
+      const [error, , response] = await useDeclared(guardedClient);
 
       expect(error).toBeNull();
       expect(response?.status).toBe(201);
     });
+  });
+
+  test("should treat an abort inside the builder as NET_ABORTED before transport", async () => {
+    const controller = new AbortController();
+    let fetched = 0;
+    const guardedClient = createClient(
+      withEndpoint("https://example.test"),
+      withHTTPHandle(async () => {
+        fetched += 1;
+        return new Response(null, { status: 204 });
+      }),
+    );
+    const useItem = defineRequest({
+      builder: () => {
+        controller.abort();
+        return {};
+      },
+      method: "GET",
+      path: "/item",
+    });
+
+    const [error, result, response] = await useItem(
+      guardedClient({ abort: controller.signal }),
+    );
+
+    expect(error?.code).toBe("NET_ABORTED");
+    expect(result).toBeUndefined();
+    expect(response).toBeUndefined();
+    expect(fetched).toBe(0);
+  });
+
+  test("should report a caller abort during an interceptor when no body is declared", async () => {
+    const controller = new AbortController();
+    const guardedClient = createClient(
+      withEndpoint("https://example.test"),
+      withInterceptors(
+        createHttpInterceptor(async () => {
+          controller.abort();
+          return makeResponse({ status: 204 });
+        }),
+      ),
+    );
+    const useEmpty = defineRequest({
+      method: "GET",
+      path: "/empty",
+    });
+
+    const [error, result, response] = await useEmpty(
+      guardedClient({ abort: controller.signal }),
+    );
+
+    expect(error?.code).toBe("NET_ABORTED");
+    expect(result).toBeUndefined();
+    expect(response).toBeUndefined();
   });
 });

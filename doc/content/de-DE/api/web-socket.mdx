@@ -1,30 +1,24 @@
 ---
 title: WebSocket
-description: defineWebSocket, Session und Execute-Options.
+description: defineWebSocket, Session und Request-Optionen.
 ---
 
 # WebSocket
 
-Deklariere einen Socket, führe ihn aus, sende/empfange typisierte Messages, dann schließe.
+Deklariere einen Socket, rufe die Operation mit einem Client auf, sende und empfange typisierte Messages, dann schließe.
 
 ## defineWebSocket()
 
 <ApiSignature name="defineWebSocket" />
 
 - **definition** — `path`, ein `incoming`-Struct und die erforderliche positive Integer-Größe `maxIncomingQueueSize`; optional `outgoing`- und `input`-Structs, `operation`, statische `protocols` und eine nicht negative `maxOutgoingQueueSize`. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Diese `definition`-Member stehen unter [`WebSocketDefinition`](/de-DE/api/core/websocketdefinition-type). `builder` ist genau dann erforderlich, wenn `input` deklariert ist.
-- **Returns** einen Endpoint. Ruf ihn mit Input auf und du bekommst einen `WebSocketCommand`.
+- **Returns** eine Operation. Das erste Argument ist ein [`Client`](/de-DE/api/core/client-type). Weitere Argumente sind nur der Input. Der Aufruf öffnet die Session.
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-## executeWebSocketCommand()
+Der Aufruf gibt `[null, session, connection]` oder `[error, undefined, connection?]` zurück. Übergib Optionen pro Aufruf, indem du einen Client aus [`RequestOptions`](/de-DE/api/core/requestoptions-type) ableitest. WebSocket liest `abort`, `beforeConnect`, `heartbeat`, `protocols` und `reconnect` und ignoriert HTTP-Progress-Felder.
 
-<ApiSignature name="executeWebSocketCommand" />
-
-Low-Level-Einstieg für `client.execute`. Im Application-Code lieber den Client nutzen.
-
-- **Returns** `[null, session, connection]` oder `[error, undefined, connection?]`.
-
-WebSocket-Execute kann `beforeConnect`, `heartbeat`, `protocols` und `reconnect` für einen Aufruf überschreiben; jeder Wert ersetzt den Client-Wert. Vorrang der Protocols: Execute, dann `withWebSocketProtocols`, dann die `protocols` der Definition.
+`beforeConnect`, `heartbeat`, `protocols` und `reconnect` ersetzen jeweils den Client-Wert für diesen Aufruf als Ganzes. Der Vorrang der Protocols ist der abgeleitete Client, dann `withWebSocketProtocols`, dann die `protocols` der Definition. `heartbeat.timeoutMs` ist die Wartezeit auf die Bestätigung, keine Request-Deadline.
 
 ## WebSocketSession
 
@@ -57,15 +51,13 @@ async function consume(
 
 `kind` ist `closed`, `aborted` oder `error`. `cause` fehlt bei `closed`, ist bei `aborted` optional und bei `error` erforderlich. `code`, `reason` und `wasClean` können in jeder Variante stehen. Ein manuelles `session.close()` füllt `code` und `reason` von `{ kind: "closed" }`, wenn das Close-Event sie nicht trägt.
 
-## Execute-Optionen
-
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` ist [`UseWebSocketConfig`](/de-DE/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` und `abort` oder `timeout` (nie beides), plus `signal`. `WebSocketHeartbeatConfig`: `intervalMs`, optionales `message`, `isAck`, `timeoutMs`.
+`WebSocketExecuteOptions` ist [`UseWebSocketConfig`](/de-DE/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` und `abort`. `WebSocketHeartbeatConfig`: `intervalMs`, optionales `message`, `isAck`, `timeoutMs`. Es gibt kein `timeout`- oder `signal`-Feld.
 
-`abort` und `timeout` schließen sich gegenseitig aus: der Typ lehnt beides ab, und beides zur Laufzeit zu übergeben scheitert mit einem `REQ_OPTIONS_INVALID`-Fault. `signal` kombiniert mit einem von beiden. `timeout` ist eine Startup-Deadline für die Verbindung: ein späterer Reconnect startet sie nicht erneut, und `withTimeout` gilt nicht für WebSocket.
+`abort` deckt die ganze Session ab, auch nachdem sie sich öffnet. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Es gibt keine Deadline nur für den Start und keine Default-Deadline auf Client-Ebene. Ein späteres `abort` ersetzt das vorherige Signal. `heartbeat` wird als Ganzes ersetzt; sein `timeoutMs` wartet auf eine Bestätigung und ist keine Request-Deadline.
 
 Ist `reconnect` gesetzt, ist der Default für `attempts` 3 je Ausfall; `0` schaltet aus. Ein erfolgreiches `open` setzt Budget und Backoff-Exponenten zurück, daher beginnt jeder neue Ausfall bei Retry 1. `attempts` wegzulassen ergibt innerhalb eines Ausfalls keine unbegrenzten Retries. Defaults und Validierungsregeln stehen unter [Client](/de-DE/api/client).
 
@@ -87,19 +79,15 @@ Siehe [WebSocket-Guide](/de-DE/docs/web-socket) und [WebSocket-Session öffnen](
 
 ## WebSocketEndpoint
 
-Kommt von `defineWebSocket`. Mit Input aufrufen → `WebSocketCommand`.
+Kommt von `defineWebSocket`. Das erste Argument ist ein Client. Weitere Argumente sind nur der Input.
 
 ## WebSocketRequestShape
 
 Nur `path` und `query`. `headers` und `body` sind `never`.
 
-## WebSocketCommand
-
-Opakes WebSocket-Command. Gib es `client.execute`.
-
 ## UseWebSocketConfig
 
-Heartbeat, Reconnect, `beforeConnect`, Protocols, plus Cancellation. `WebSocketExecuteOptions` legt `signal` drauf.
+`beforeConnect`, `heartbeat`, `protocols`, `reconnect` und `abort`. `WebSocketExecuteOptions` ist dieser Ausschnitt. Es gibt kein `signal`-Feld.
 
 ## SocketAwaitResult
 

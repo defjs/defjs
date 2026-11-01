@@ -5,11 +5,11 @@ description: Consume a framework-independent SDK with an application-provided Vu
 
 # Vue
 
-Import operations from your SDK or shared definition module. The Vue application configures and provides the client; the SDK package can stay independent of Vue. Components and composables execute those definitions and own the work they start.
+Import operations from your SDK or shared definition module. The Vue application configures and provides the client; the SDK package can stay independent of Vue. Components and composables call those operations and own the work they start. The client from `injectClient()` is passed into the operation.
 
 These plugins are optional helpers for providing and reading an existing `Client`. Import a fixed application-owned client, pass a `Client` explicitly to reusable logic, use framework injection for tree-level defaults and overrides, or choose your own organization. SDK definitions do not require these plugins.
 
-Wire an existing `@defjs/core` client into Vue. You get a plugin, an injection key, and `injectClient()`. The package does **not** create clients, cache results, retry commands, or close transport resources on unmount.
+Wire an existing `@defjs/core` client into Vue. You get a plugin, an injection key, and `injectClient()`. The package does **not** create clients, cache results, retry operations, or close transport resources on unmount. A `Client` is a function: do not use it as a `watch` or `computed` source, because those call a function.
 
 ## Basic Setup
 
@@ -47,7 +47,7 @@ Nearest provider wins. Descendants get `childClient`; siblings outside the subtr
 
 ## Own HTTP work outside a watcher
 
-For work started by a composable or component outside a watcher, use `AbortController` + `onScopeDispose`. Abort startup and active work; check the signal before assigning reactive state. A plugin or injection scope does not infer who owns a command. For list pages, wrap `execute` with Vue Query (or similar) — `@defjs/vue` stays DI only and does **not** ship `useRequest`.
+For work started by a composable or component outside a watcher, use `AbortController` + `onScopeDispose`. Abort startup and active work; check the signal before assigning reactive state. A plugin or injection scope does not infer who owns an operation. For list pages, call the operation from Vue Query (or similar) — `@defjs/vue` stays DI only and does **not** ship `useRequest`.
 
 When a scope owns a client, keep it request-independent for browser-wide reuse. If it captures headers, cookies, users, tenants, or credentials, create it in the relevant app/SSR request boundary and provide that instance there.
 
@@ -79,7 +79,7 @@ Public exports from `@defjs/vue`:
 - `createClientPlugin(client)` — Vue `Plugin` that provides that client
 - `injectClient` — nearest client for the selected key (default `HTTP_CLIENT`); throws if missing
 
-Create clients and options in `@defjs/core`. See [Client](/docs/client), [Commands](/docs/commands), [Interceptors](/docs/interceptors), [SSE](/docs/sse), and [WebSocket](/docs/web-socket).
+Create clients and options in `@defjs/core`. See [Client](/docs/client), [HTTP](/docs/http), [Interceptors](/docs/interceptors), [SSE](/docs/sse), and [WebSocket](/docs/web-socket).
 
 ## Related recipes
 

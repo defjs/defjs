@@ -1,41 +1,41 @@
 ---
 title: "البدء السريع"
-description: صدّر تعريف API من SDK، واضبط Client في ملف التطبيق، ثم نفّذ التعريف محليًا ومع API حقيقي.
+description: صدّر أول عملية في SDK، واستدعها من تطبيق منفصل، وأعد استخدام التعريف مع عميل آخر.
 ---
 
-# البدء: تعريف SDK وتنفيذه في التطبيق [#البدء-طلب-http-واحد]
+# البدء: أول عملية في SDK [#getting-started-one-http-request]
 
-في هذا المثال ستصدّر تعريفًا محدَّد الأنواع لـ `GET /users/:id` بصفتك مؤلف SDK، ثم تنشئ Defjs Client في ملف مستقل بصفتك مطوّر التطبيق المستهلك. ابدأ بمعالج Fetch محلي لفحص `200` و`404` المعلَن. عند الانتقال إلى API حقيقي، غيّر إعداد Client في التطبيق مع الإبقاء على التعريف نفسه.
+ستكتب ملفين: وحدة SDK تصدّر `GET /users/:id`، وتطبيقًا يستوردها ويملك العميل. معالج Fetch المحلي يُبقي التشغيل الأول دون شبكة. ثم يعمل تعريف API نفسه مع عميل موجَّه إلى خدمتك.
 
 ## الممارسة الموصى بها
 
-يبقى التعريف مستقلاً عن العميل. استدعاؤه ينشئ command فقط. امنح هذا command اسمًا، ثم مرّره إلى `client.execute` على العميل الذي يملكه التطبيق. يملك التطبيق أيضًا عنوان الخدمة وبيانات الاعتماد. افحص صف error-first أولًا. عندما تكون `error` موجودة، أبلغ `error.code` وعُد من الدالة قبل قراءة قيمة النجاح.
+يبقى التعريف مستقلاً عن العميل. استدعِ العملية بعميل التطبيق، كما في `getUser(client, { id: 7 })`. لا وسيط ثالث للخيارات. استدعاء العملية يبدأها؛ و`await` ينتظر فقط. يملك التطبيق أيضًا عنوان الخدمة وبيانات الاعتماد. افحص صف error-first أولًا. عندما تكون `error` موجودة، أبلغ `error.code` وعُد من الدالة قبل قراءة قيمة النجاح.
 
 ## الخطوة 1 — التثبيت
 
-`@defjs/core` هو ESM ويعمل على Node.js أو Bun. يشغّل Node.js 22.18+ (أو 24+) ملف `.ts` مباشرة عبر type stripping؛ أما إصدارات 22.x الأقدم فتحتاج `--experimental-strip-types`. ضع `"type": "module"` في package.json. في المتصفح ما زلت تحتاج المُجمّع وFetch.
+`@defjs/core` هو ESM ويعمل على Node.js أو Bun. يشغّل Node.js 22.18+ (أو 24+) ملف `.ts` مباشرة عبر type stripping؛ أما إصدارات 22.x الأقدم فتحتاج `--experimental-strip-types`. أبقِ `"type": "module"` في package.json. في المتصفح ما زلت تحتاج المُجمّع وFetch.
 
 ```sh
 bun add @defjs/core
 ```
 
-## الخطوة 2 — صدّر تعريف SDK [#الخطوة-2--عرّف-الطلب]
+## الخطوة 2 — عرّف الطلب
 
-أنشئ `src/define-request.ts` ليصدّر SDK الدالة `getUser`. يعلن Struct المدخل القيمة التي يمرّرها المستدعي، ويحدّد `builder` موضعها في الطلب. هنا يُمرَّر المدخل كاملًا بوصفه كائن المسار، فتملأ الحقول ذات القيم المفردة بلا alias الموضع `:id`. أبقِ عناوين الخدمة وبيانات الاعتماد الخاصة بالبيئة خارج التعريف.
+أنشئ `src/define-request.ts`. هذه وحدة مؤلف SDK: تصدّر `getUser` دون إنشاء عميل. struct المدخل هو قيمة المستدعي. يضع `builder` تلك القيمة على الطلب. هنا المدخل كاملًا هو كائن المسار، فتملأ الحقول ذات القيم المفردة بلا alias الموضع `:id`.
 
-<include cwd meta="src/define-request.ts">
+<include cwd meta="define-request.ts">
   examples/start/define-request.ts#example
 </include>
 
 `output` هو جسم 2xx. `error` هو كل حالة أخرى. struct واحد لكل منهما. استخدم `struct.or(...)` أو اتحادًا مميّزًا عندما تختلف تلك الأجسام.
 
-`defineRequest(...)` يُرجع نقطة نهاية. استدعاء `getUser(...)` يبني الأمر المعتم الذي ستمرّره إلى `client.execute(...)`. الـ `builder` أعلاه هو الدالة التي تضع المدخل؛ وليس نقطة النهاية.
+`defineRequest(...)` يُرجع عملية. استدعاء `getUser(client, input)` يبدأ الطلب. الـ `builder` أعلاه هو الدالة التي تضع المدخل؛ وليس العملية. حيث يُعلَن `input`، يكون `builder` مطلوبًا ومتزامنًا ونقيًا.
 
-## الخطوة 3 — نفّذ باستخدام Client التطبيق [#الخطوة-3--نفّذه-محليًا]
+## الخطوة 3 — استدعها محليًا
 
-أنشئ `src/execute-locally.ts` في المجلد نفسه واستورد التعريف من `./define-request.ts`. يختار التطبيق عنوان الخدمة والمصادقة والمعترضات ووسيلة النقل في Client. يضبط هذا المثال معالج Fetch محليًا لتنفيذ التحقق من المدخل وبناء `Request` والتفرّع بحسب الحالة وتحليل الجسم دون شبكة.
+أنشئ `src/execute-locally.ts` بجانب التعريف. هذا هو التطبيق المستهلك: يستورد `getUser`، وينشئ عميله، ويوفّر معالج Fetch محليًا. يظل Defjs يتحقق من المدخل، ويبني `Request`، ويتفرّع بحسب الحالة، ويحلّل الجسم.
 
-<include cwd meta="src/execute-locally.ts">
+<include cwd meta="execute-locally.ts">
   examples/start/execute-locally.ts#example
 </include>
 
@@ -55,31 +55,33 @@ Loaded Ada from 200
 User not found
 ```
 
-عند النجاح: `error` هو `null`، و`user` هو مخرج Struct لـ `200`، و`response` هو `DecodedResponse`. عند `404` معلَن: `error.code` هو `'HTTP_STATUS'`، و`error.status` هو `404`، و`error.data` محدَّد النوع كـ `NotFound`. العنصر الثاني في الـ tuple هو `undefined` عند الفشل.
+عند النجاح: `error` هو `null`، و`user` هو مخرج Struct لـ `200`، و`response` هو `DecodedResponse<User>`. عند `404` معلَن: `error.code` هو `'HTTP_STATUS'`، و`error.status` هو `404`، و`error.data` محدَّد النوع كـ `NotFound`. العنصر الثاني في الـ tuple هو `undefined` عند الفشل.
 
 ## الخطوة 4 — وجّه إلى API حقيقي
 
-عندما تنفّذ الخدمة `GET /v1/users/:id` بعقد الاستجابة نفسه، احذف `withHTTPHandle(...)` من إعداد التطبيق واضبط عنوان الأساس الحقيقي. احفظ المثال التالي في `src/real-api.ts` ليستورد التعريف نفسه من `./define-request.ts`. استبدل عنوان المثال بعنوان خدمتك.
+في `src/real-api.ts`، استورد `getUser` نفسه وأنشئ عميلًا بعنوان الأساس لخدمتك. شغّل هذه النسخة فقط بعد استبدال عنوان المثال بخدمة تنفّذ `GET /v1/users/:id` بتلك الأجسام.
 
-<include cwd meta="src/real-api.ts">
-  examples/start/real-api.ts#example
-</include>
+<include cwd>examples/start/real-api.ts#example</include>
 
-يبقى تعريف API في SDK كما هو، ويتغيّر إعداد التنفيذ في التطبيق. يواصل التطبيق إدارة النتائج والإلغاء. انتقل إلى [بناء SDK ونشره](/ar/recipes/publish-http-sdk) لتوزيع التعريف في حزمة.
+يبقى تعريف API في وحدة SDK. تبقى عناوين الخدمة وبيانات الاعتماد والمعترضات وعمر التنفيذ مع التطبيق. يستخدم العميلان عقد نقطة نهاية Defjs نفسه.
+
+## انشر التعريف
+
+انقل التعريف إلى حزمة SDK عندما تحتاجه تطبيقات أكثر. صدّر `getUser`، وأدرج تصريحات TypeScript، وأعلن إصدار Core المتوافق. يستورد المستهلكون بعد ذلك من الحزمة بدل `./define-request.ts`؛ ويبقى إعداد عميلهم ملكهم. اتبع [بناء SDK ونشره](/ar/recipes/publish-http-sdk) لإعداد الحزمة كاملًا.
 
 ## عندما تختلف النتيجة
 
-- مدخل سيئ ← `REQ_INPUT_INVALID`؛ خيارات إلغاء متعارضة ← `REQ_OPTIONS_INVALID`؛ فشل
-  `builder` → `REQ_BUILD_FAILED`
-- حالة غير-2xx → `HTTP_STATUS`، مع `error.data` محدَّد النوع عند إعلان `error` وفكّ جسمه
+- مدخل سيئ ← `REQ_INPUT_INVALID`؛ فشل `builder` ← `REQ_BUILD_FAILED`
+- حالة غير-2xx ← `HTTP_STATUS`، مع `error.data` محدَّد النوع عندما يُعلَن `error` ويُفك جسمه
 - جسم JSON معلَن بنوع وسائط آخر ← `RES_MEDIA_TYPE_INVALID`، يُبلَّغ قبل قراءة الجسم
-- جسم معلَن (`output` لـ 2xx، و`error` فيما عداها) لا يُفكّ ← `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH`، أيًّا كانت الحالة
+- جسم معلَن (`output` لـ 2xx، و`error` فيما عداها) لا يُفك ← `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH`، أيًّا كانت الحالة
 - فشل Fetch / إلغاء / مهلة ← `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-يجب أن يكون `timeout` عددًا صحيحًا آمنًا موجبًا في `1..2_147_483_647`. أشكال الإلغاء الصالحة: `{ signal }`، `{ timeout }`، `{ abort }`، أو `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` معًا غير صالح. الإلغاء يخبرك بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
+المهلة هي `client({ abort: AbortSignal.timeout(ms) })` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة افتراضية على مستوى العميل. اشتق عميلًا عندما يحتاج استدعاء واحد إلى `abort` خاص به؛ انظر [العميل](/ar/docs/client). يخبرك الإلغاء بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
 
 ## الوصفات التالية
 
+- [بناء SDK ونشره](/ar/recipes/publish-http-sdk)
 - [GET مع 404 معلَن](/ar/recipes/get-declared-404)
 - [POST JSON](/ar/recipes/post-json)
 - [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)

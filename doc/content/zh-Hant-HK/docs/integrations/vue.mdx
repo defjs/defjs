@@ -5,11 +5,11 @@ description: 在 Vue 中提供應用程式自己的 Client，並執行 SDK 定�
 
 # Vue
 
-應用程式建立 `@defjs/core` Client，再透過 `@defjs/vue` 的 plugin、injection key 及 `injectClient()` 將它接入 Vue。組件可以匯入 SDK 端點，並用注入的 Client 執行 command；SDK 定義不依賴 Vue。
+應用程式建立 `@defjs/core` Client，再透過 `@defjs/vue` 的 plugin、injection key 及 `injectClient()` 將它接入 Vue。組件同 composable 呼叫呢啲操作，並擁有自己開始嘅工作。`injectClient()` 攞到嘅 client 要傳入操作。SDK 定義不依賴 Vue。
 
 呢啲 plugins 只係設定同取得現有 `Client` 嘅可選輔助。你可以直接 import 應用固定嘅 Client、將明確 Client 傳俾可重用邏輯、用框架注入提供組件樹預設值同 subtree override，或者用應用自己嘅組織方式；SDK 定義唔要求經 plugin 執行。
 
-這個套件不會建立 Client、快取結果、重試 command，也不會在組件卸載時關閉傳輸資源。發起工作的組件或組合式函式負責取消、關閉及清理。
+這個套件不會建立 Client、快取結果、重試操作，也不會在組件卸載時關閉傳輸資源。`Client` 係 function：唔好將佢做 `watch` 或者 `computed` 嘅 source，因為嗰啲會 call function。發起工作的組件或組合式函式負責取消、關閉及清理。
 
 ## 基本用法
 
@@ -47,7 +47,7 @@ Nearest provider 贏。Descendants 拎 `childClient`；subtree 外嘅 siblings �
 
 ## 喺 watcher 之外 own HTTP work
 
-Composable 或者 component 喺 watcher 外開始嘅 work，用 `AbortController` + `onScopeDispose`。Abort startup 同 active work；assign reactive state 之前 check signal。Plugin 或者 injection scope 唔會推邊個 own 住 command。List pages 用 Vue Query（或者類似嘅）包住 `execute`——`@defjs/vue` 只做 DI，**唔會** ship `useRequest`。
+Composable 或者 component 喺 watcher 外開始嘅 work，用 `AbortController` + `onScopeDispose`。Abort startup 同 active work；assign reactive state 之前 check signal。Plugin 或者 injection scope 唔會推邊個 own 住操作。List pages 由 Vue Query（或者類似嘅）呼叫操作——`@defjs/vue` 只做 DI，**唔會** ship `useRequest`。
 
 當 scope own 住 client 時，browser-wide reuse 要 keep 佢 request-independent。如果佢 capture headers、cookies、users、tenants 或者 credentials，就喺相關 app/SSR request boundary create，同喺嗰度 provide。
 
@@ -79,7 +79,7 @@ App unmount、plugin removal 同 component scope disposal **唔會** abort HTTP�
 - `createClientPlugin(client)` — provide 嗰個 client 嘅 Vue `Plugin`
 - `injectClient` — 讀所選 key（預設 `HTTP_CLIENT`）最近嘅 Client，缺失就 throw
 
-Clients 同 options 喺 `@defjs/core` create。睇 [Client](/zh-Hant-HK/docs/client)、[Commands](/zh-Hant-HK/docs/commands)、[Interceptors](/zh-Hant-HK/docs/interceptors)、[SSE](/zh-Hant-HK/docs/sse) 同 [WebSocket](/zh-Hant-HK/docs/web-socket)。
+Clients 同 options 喺 `@defjs/core` create。睇 [Client](/zh-Hant-HK/docs/client)、[HTTP](/zh-Hant-HK/docs/http)、[Interceptors](/zh-Hant-HK/docs/interceptors)、[SSE](/zh-Hant-HK/docs/sse) 同 [WebSocket](/zh-Hant-HK/docs/web-socket)。
 
 ## 相關配方
 

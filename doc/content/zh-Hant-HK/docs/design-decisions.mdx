@@ -5,11 +5,17 @@ description: Defjs 如何透過分離 SDK 契約與應用程式執行，讓介�
 
 # 設計決策
 
-Defjs 為更友好的 SDK 設計而生。名稱意為 **define js**，其中 `def` 是 **define** 的縮寫。SDK 作者應能用熟悉的 JavaScript / TypeScript 描述介面、驗證資料、匯出類型，並把這些定義作為套件交付給應用程式。
+Defjs 係為咗令 SDK 設計更友好。`def` 即係 `define`：團隊描述自己服務嘅 API 並發佈可重用定義，每個使用方應用程式決定點樣呼叫。其餘設計都由呢個分開出發。
 
-因此，SDK 公開的是可重用端點定義：Struct 描述輸入、輸出、錯誤及訊息，builder 描述輸入如何進入傳輸。應用程式建立並設定自己的 Client，決定服務地址、認證、平台 handle，以及每次呼叫的結果處理與生命週期。這讓契約可以在不同環境重用，也讓應用程式的執行策略保持明確。
+## SDK 編寫同應用程式執行
 
-這些定義仍屬於 Defjs 的執行時契約，包含函式、Struct 及 HTTP / SSE / WebSocket 語義。它們不綁定某個應用程式的 Client，也不承諾能交給任意客戶端或作為純 JSON 執行。完整交付流程見[建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)，以下說明這項分工帶來的技術取捨。
+SDK 作者擁有操作、input 契約、request 映射、response 解碼，同已聲明嘅服務錯誤。應用程式擁有 client 設定、而家嘅認證、呼叫時機、結果處理同資源壽命。匯出嘅端點可以由唔同 client 使用，而唔使將任何一個應用程式嘅環境嵌進 SDK。
+
+用 client 呼叫操作就開始工作。定義係可執行嘅 Defjs 模組，帶 Struct 同 builder，唔係一個同 client 無關嘅交換格式。SDK 作者聲明兼容嘅 Core dependency，並交付 JavaScript 加 TypeScript declarations。[建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk) 喺一個套件入面示範呢條邊界。
+
+可選嘅 factory 或者便捷方法可以提供預設值或領域行為。端點仍然公開，應用程式先可以喺呢啲預設唔啱用時保持控制。框架插件同 telemetry 掛喺使用方 client，所以定義套件可以唔依賴 React、Vue，或者應用程式嘅可觀測性設定。
+
+呢個分開亦令測試變得實際：經一個 client 本地 handle 呼叫真正嘅 SDK 定義，再觀察 request 同解碼結果。Runtime 驗證、明確錯誤，同由呼叫方擁有嘅清理，支撐一份可靠嘅 SDK 契約。
 
 ## 聲明即斷言 [#declaration-is-an-assertion]
 
@@ -49,17 +55,17 @@ body **就係**解碼之後嘅值。解碼失敗就冇值——唔存在半成�
 
 代價：冇 process-wide default。呢個代價喺 server 上面好有用 — 當 options 或者 closures capture auth、cookies、users、tenants 或者 request metadata 時，喺 request boundary 入面 create client。Explicit client 仍然唔會 isolate interceptor capture 嘅 state。Client identity 本身唔係 security boundary。
 
-Client 負責 dispatch commands。佢唔 own 住 active work。邊個開始 HTTP request、SSE stream 或者 WebSocket session，就要 cancel 或者 close，再 await terminal promise。
+Client 帶住設定。佢唔 own 住 active work。邊個開始 HTTP request、SSE stream 或者 WebSocket session，就要 cancel 或者 close，再 await terminal promise。
 
-## Definitions、endpoints 同 commands
+## 定義同操作
 
-Definition 係穩定嘅 contract：method、path、input struct、decode `ok` 兩邊嘅 structs、transport limits。`defineRequest` return 一個 endpoint。Call 佢會為單次 execution create 一個 opaque command。
+Definition 係穩定嘅 contract：method、path、input struct、decode `ok` 兩邊嘅 structs、transport limits。`defineRequest` return 一個操作。用 client call 佢就開始該次呼叫。同一個 client 值可以傳俾好多操作。
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
 </include>
 
-Background job 同 UI owner 可以用唔同 cancel/retry policy 去 execute 同一個 `getUser` 形狀。Command 保持 opaque，就唔會令 app code 依賴 internal transport tags 或者 symbols。
+Background job 同 UI owner 可以用唔同 client 呼叫同一個 `getUser` 操作，各自揀自己嘅取消同重試策略。應用程式程式碼唔依賴 internal transport tags 或者 symbols。
 
 ## 按 transport 而異嘅 result
 
@@ -75,7 +81,7 @@ Background job 同 UI owner 可以用唔同 cancel/retry policy 去 execute 同�
 
 ## Runtime 解碼
 
-TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check server response。Struct parsing 係 contract 嘅另一半。Defjs 會喺 request construction 之前 validate command input，檢查 representation，再 parse `ok` 適用嗰邊嘅 struct。
+TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check server response。Struct parsing 係 contract 嘅另一半。Defjs 會喺 request construction 之前 validate 操作 input，檢查 representation，再 parse `ok` 適用嗰邊嘅 struct。
 
 對 HTTP 嚟講，Struct **只會套用一次，而且係喺 interceptor chain 之後**。Interceptor 用 `makeResponse(...)` 造出嚟嘅 response，會經過同線上真實嚟嘅 response 一樣嘅 media type 檢查、representation 轉換同 Struct：response 由邊嚟，唔影響佢點被讀，所以唔存在「信 interceptor」呢條要考慮嘅岔路。內置 Fetch transport 會先將已聲明嘅 body 讀成 JSON、text、`Blob` 或 bytes，再交返俾 chain。只有 JSON representation 需要 JSON media type 同 `JSON.parse`；非 JSON text、blobs 同 bytes，只要符合聲明嘅 representation 就有效。Interceptors 見到嘅係嗰個 representation，未係經 Struct 解碼嘅值。讀取失敗適用於所有 representation；嗰度嘅讀取或解析失敗會顯示為同一個 `RES_*` 或者 `NET_BODY_INCOMPLETE` fault。
 
@@ -95,7 +101,7 @@ TypeScript inference 描述你 expect 嘅嘢；佢唔可以喺 runtime check ser
 
 Struct 係 field contract，兩個方向都係。`.alias(name)` 係 wire name。Struct 決定一個 value 點 encode。`builder` 決定個 value 去邊。
 
-`builder` 係 synchronous，而且 pure。佢收到 parsed input——真實 value，唔係 binding view——再 return request：`path`、`query`、`headers` 同 `body`。Command execute 嗰陣先 run。Throw 會變成 tuple 上面嘅 `REQ_BUILD_FAILED`；call endpoint 本身唔會 throw。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
+`builder` 係 synchronous，而且 pure。佢收到 parsed input——真實 value，唔係 binding view——再 return request：`path`、`query`、`headers` 同 `body`。呼叫操作嗰陣先 run。Throw 會變成 tuple 上面嘅 `REQ_BUILD_FAILED`；呼叫操作本身唔會 throw。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
@@ -119,9 +125,9 @@ Body kind 由 value 決定，第一個 match 贏：
 
 ## Observers 同 policy placement
 
-Interceptors 用嚟做 transport-wide policy：auth、tracing、short-circuit、reviewed retry。佢哋淨係為自己嗰個 transport run，同以 onion order compose。Execution options 用嚟做 work-specific lifetime：`signal`、`timeout`、WebSocket heartbeat、opt-in reconnect。
+Interceptors 用嚟做 transport-wide policy：auth、tracing、short-circuit、reviewed retry。佢哋淨係為自己嗰個 transport run，同以 onion order compose。派生 client 上嘅 request options 用嚟做 work-specific lifetime：`abort`、WebSocket heartbeat，同 opt-in reconnect。
 
-Observers 報告發生咗咩事，但唔會變成第二個 owner。SSE `onInvalidEvent`、WebSocket state listeners，同 runtime-error listeners 用嚟做 bounded diagnostics 同 metrics。Return 出嚟嘅 stream/session 仍然 own iteration、close、unsubscribe 同 terminal waiting。Caching、stale-result suppression、idempotency，同 domain error mapping 應該包喺 `client.execute(...)` 外圍，等你嘅 app 睇到自己嘅 policy 同 state。
+Observers 報告發生咗咩事，但唔會變成第二個 owner。SSE `onInvalidEvent`、WebSocket state listeners，同 runtime-error listeners 用嚟做 bounded diagnostics 同 metrics。Return 出嚟嘅 stream/session 仍然 own iteration、close、unsubscribe 同 terminal waiting。Caching、stale-result suppression、idempotency，同 domain error mapping 應該圍住操作呼叫，等你嘅 app 睇到自己嘅 policy 同 state。
 
 ## OpenAPI、sourcemaps 同 telemetry
 

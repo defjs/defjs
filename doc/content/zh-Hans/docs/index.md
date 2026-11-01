@@ -1,22 +1,22 @@
 ---
 title: "指南"
-description: 从 SDK 接口定义、测试和发布，到应用 Client 配置、执行与生命周期管理。
+description: 设计 SDK 契约与操作、发布它们，并在消费方应用里配置执行。
 ---
 
-Defjs 即 **define js**，其中 `def` 是 **define** 的缩写。这组指南围绕一个完整流程展开：SDK 作者定义并发布接口契约，应用配置自己的 Client 来执行。
+Defjs 把团队发布的 API 和应用使用的 client 分开。这组指南围绕两条路径：沿 SDK 编写路径定义并打包操作；沿应用路径配置执行并处理结果。
 
-SDK 作者可以从[快速开始](/zh-Hans/docs/start)、[定义与执行](/zh-Hans/docs/commands)读到[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)。应用开发者可以从[Client](/zh-Hans/docs/client)进入，再按所用传输阅读结果、取消和资源管理规则。
-
-## SDK 开发 [#开始使用]
+## SDK 开发 [#getting-started]
 
 - [项目概览](/zh-Hans)
 - [快速开始](/zh-Hans/docs/start)
 - [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)
+- [为何定义与执行彼此独立](/zh-Hans/docs/design-decisions)
 
-## 契约与执行 [#调用与契约]
+## 契约与执行 [#calls-and-contracts]
+
+SDK 作者拥有 Struct 和端点定义。应用提供 Client，并用它调用操作。
 
 - [数据契约 / Struct](/zh-Hans/docs/struct)
-- [定义与执行 / Command](/zh-Hans/docs/commands)
 - [客户端配置 / Client](/zh-Hans/docs/client)
 
 ## 请求与实时通信
@@ -32,9 +32,16 @@ SDK 作者可以从[快速开始](/zh-Hans/docs/start)、[定义与执行](/zh-H
 
 ## 插件
 
+给消费方应用的 client 用的可选包。SDK 定义与它们保持独立。
+
 - [插件](/zh-Hans/docs/integrations)
 - [React](/zh-Hans/docs/integrations/react)
 - [Vue](/zh-Hans/docs/integrations/vue)
 - [OpenTelemetry 服务端](/zh-Hans/docs/integrations/opentelemetry-server)
+
+## AI
+
+- [AI 辅助开发](/zh-Hans/docs/ai)
+- [调用 AI API](/zh-Hans/docs/ai-api)
 
 [设计决策](/zh-Hans/docs/design-decisions)

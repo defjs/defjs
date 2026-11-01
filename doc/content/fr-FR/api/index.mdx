@@ -1,17 +1,15 @@
 ---
 title: Référence API
-description: Fonctions, options et types publics pour créer des SDK et exécuter leurs endpoints.
+description: Consulter les API de définition de SDK, la configuration du client applicatif et les résultats d’exécution typés.
 ---
 
 # Référence API
 
 <ApiIndex />
 
-Cette référence décrit les éléments publics destinés aux auteurs de SDK et aux applications. Les signatures fixent le contrat ; le [guide](/fr-FR/docs/start) et la [recette de publication](/fr-FR/recipes/publish-http-sdk) montrent leur utilisation complète.
+Utilise cette référence pendant que tu construis ou consommes un SDK Defjs. Les auteurs de SDK commencent par [`defineRequest`](/fr-FR/api/core/definerequest), [`defineEventStream`](/fr-FR/api/core/defineeventstream), [`defineWebSocket`](/fr-FR/api/core/definewebsocket) et les [Structs](/fr-FR/api/struct). Les applications utilisent la [configuration du Client](/fr-FR/api/client) pour appeler ces opérations et les [Erreurs](/fr-FR/api/errors) pour traiter les résultats.
 
-- **Créer un SDK :** commence par [`struct`](/fr-FR/api/struct), [`defineRequest`](/fr-FR/api/http), [`defineEventStream`](/fr-FR/api/sse) ou [`defineWebSocket`](/fr-FR/api/web-socket), puis exporte les endpoints obtenus.
-- **Utiliser un SDK :** configure [`createClient` et `with*`](/fr-FR/api/client), exécute les endpoints importés et gère les [erreurs](/fr-FR/api/errors) et les ressources de transport.
-- **Intégrer l’application :** ajoute les [intercepteurs](/fr-FR/api/interceptors), [React](/fr-FR/api/react), [Vue](/fr-FR/api/vue) ou [OpenTelemetry](/fr-FR/api/opentelemetry-server) au client de l’application.
+Les signatures sont le contrat. Suis le [démarrage rapide](/fr-FR/docs/start) et le [guide de publication de SDK](/fr-FR/recipes/publish-http-sdk) pour le parcours complet.
 
 ## Paquets
 
@@ -24,17 +22,17 @@ Cette référence décrit les éléments publics destinés aux auteurs de SDK et
 
 ## @defjs/core
 
-| Page                                     | Ce que tu cherches                                                 |
-| ---------------------------------------- | ------------------------------------------------------------------ |
-| [Client](/fr-FR/api/client)              | `createClient`, options `with*`, `Client`                          |
-| [HTTP](/fr-FR/api/http)                  | `defineRequest`, options d’execute, `HttpRequest` / `HttpResponse` |
-| [Struct](/fr-FR/api/struct)              | `struct.*`, `Infer`, `StructError`                                 |
-| [Erreurs](/fr-FR/api/errors)             | variantes et fabriques de `Fault`                                  |
-| [Intercepteurs](/fr-FR/api/interceptors) | helpers d’intercepteur HTTP / SSE / WebSocket                      |
-| [SSE](/fr-FR/api/sse)                    | `defineEventStream`, handle de flux                                |
-| [WebSocket](/fr-FR/api/web-socket)       | `defineWebSocket`, session                                         |
+| Page                                     | Ce que tu cherches                                                    |
+| ---------------------------------------- | --------------------------------------------------------------------- |
+| [Client](/fr-FR/api/client)              | `createClient`, options `with*`, `Client`                             |
+| [HTTP](/fr-FR/api/http)                  | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
+| [Struct](/fr-FR/api/struct)              | `struct.*`, `Infer`, `StructError`                                    |
+| [Erreurs](/fr-FR/api/errors)             | variantes et fabriques de `Fault`                                     |
+| [Intercepteurs](/fr-FR/api/interceptors) | helpers d’intercepteur HTTP / SSE / WebSocket                         |
+| [SSE](/fr-FR/api/sse)                    | `defineEventStream`, handle de flux                                   |
+| [WebSocket](/fr-FR/api/web-socket)       | `defineWebSocket`, session                                            |
 
 ## Voir aussi
 
-- [Bien démarrer](/fr-FR/docs/start)
+- [Démarrage rapide](/fr-FR/docs/start)
 - [GET avec un 404 déclaré](/fr-FR/recipes/get-declared-404)

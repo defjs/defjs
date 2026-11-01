@@ -1,4 +1,4 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import {
   createClient,
   createHttpInterceptor,
@@ -25,7 +25,6 @@ const events = defineEventStream({
 test.each(["abort", "timeout"] as const)(
   "HTTP %s cannot mark a sentinel for another client",
   async (mode) => {
-    vi.useFakeTimers();
     const entered = Promise.withResolvers<void>();
     const controller = new AbortController();
     const first = createClient(
@@ -45,24 +44,23 @@ test.each(["abort", "timeout"] as const)(
       ),
     );
     try {
-      const pending = first.execute(request(), {
-        signal: controller.signal,
-        ...(mode === "timeout" ? { timeout: 10 } : {}),
-      });
+      const pending = request(first({ abort: controller.signal }));
       await entered.promise;
-      if (mode === "abort") controller.abort();
-      else await vi.advanceTimersByTimeAsync(11);
+      controller.abort(
+        mode === "timeout"
+          ? new DOMException("deadline", "TimeoutError")
+          : undefined,
+      );
       expect((await pending)[0]?.code).toBe(
         mode === "abort" ? "NET_ABORTED" : "NET_TIMEOUT",
       );
-      const [fault, stream, open] = await second.execute(events());
+      const [fault, stream, open] = await events(second);
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
       expect(fault?.cause).toBe(cause);
       expect(stream).toBeUndefined();
       expect(open).toBeUndefined();
     } finally {
       controller.abort();
-      vi.useRealTimers();
     }
   },
 );
@@ -103,16 +101,12 @@ test.each(["http", "sse"] as const)(
       ),
     );
     const first =
-      transport === "http"
-        ? await client.execute(request())
-        : await client.execute(events());
+      transport === "http" ? await request(client) : await events(client);
     expect(first[0]?.code).toBe("NET_UNREACHABLE");
     expect(seen).toEqual([cause]);
     transportFailure = false;
     const second =
-      transport === "http"
-        ? await client.execute(request())
-        : await client.execute(events());
+      transport === "http" ? await request(client) : await events(client);
     expect(second[0]?.code).toBe("EXT_INTERCEPTOR_FAILED");
     expect(second[0]?.cause).toBe(cause);
   },
@@ -121,7 +115,6 @@ test.each(["http", "sse"] as const)(
 test.each(["abort", "timeout"] as const)(
   "SSE %s cannot leak open info into another client startup",
   async (mode) => {
-    vi.useFakeTimers();
     const controller = new AbortController();
     const cause = mode === "abort" ? ERR_ABORTED : ERR_TIMEOUT;
     const first = createClient(
@@ -137,9 +130,9 @@ test.each(["abort", "timeout"] as const)(
       ),
     );
     try {
-      const [fault, stream, open] = await first.execute(events(), {
-        signal: controller.signal,
-      });
+      const [fault, stream, open] = await events(
+        first({ abort: controller.signal }),
+      );
       expect(fault).toBeNull();
       expect(open?.response.headers.get("x-tenant")).toBe("first");
       controller.abort(
@@ -147,7 +140,11 @@ test.each(["abort", "timeout"] as const)(
           ? new DOMException("deadline", "TimeoutError")
           : undefined,
       );
-      await stream?.closed;
+      await expect(stream?.closed).resolves.toMatchObject(
+        mode === "timeout"
+          ? { code: "NET_TIMEOUT", kind: "error" }
+          : { kind: "aborted" },
+      );
       await stream?.[Symbol.asyncDispose]();
       const second = createClient(
         withEndpoint("https://second.example"),
@@ -155,25 +152,30 @@ test.each(["abort", "timeout"] as const)(
           throw cause;
         }),
       );
-      const [nextFault, nextStream, nextOpen] = await second.execute(events());
+      const [nextFault, nextStream, nextOpen] = await events(second);
       expect(nextFault?.code).toBe(
         mode === "abort" ? "NET_ABORTED" : "NET_TIMEOUT",
       );
       expect(nextFault?.cause).toBe(cause);
       expect(nextStream).toBeUndefined();
       expect(nextOpen).toBeUndefined();
+      const started = Promise.withResolvers<void>();
+      const stalledController = new AbortController();
       const stalled = createClient(
         withEndpoint("https://third.example"),
-        withSSEHandle(async () => new Promise<Response>(() => {})),
+        withSSEHandle(async () => {
+          started.resolve();
+          return new Promise<Response>(() => undefined);
+        }),
       );
-      const pending = stalled.execute(events(), { timeout: 10 });
-      await vi.advanceTimersByTimeAsync(11);
+      const pending = events(stalled({ abort: stalledController.signal }));
+      await started.promise;
+      stalledController.abort(new DOMException("deadline", "TimeoutError"));
       const [timeoutFault, , timeoutOpen] = await pending;
       expect(timeoutFault?.code).toBe("NET_TIMEOUT");
       expect(timeoutOpen).toBeUndefined();
     } finally {
       controller.abort();
-      vi.useRealTimers();
     }
   },
 );
@@ -222,7 +224,7 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
     maxBufferSize: 1024,
     maxQueueSize: 4,
   });
-  const pending = first.execute(declared(), { signal: controller.signal });
+  const pending = declared(first({ abort: controller.signal }));
   await entered.promise;
   await Promise.resolve();
   controller.abort();
@@ -234,7 +236,7 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
       throw ERR_ABORTED;
     }),
   );
-  const [fault, , open] = await second.execute(events());
+  const [fault, , open] = await events(second);
   expect(fault?.code).toBe("NET_ABORTED");
   expect(open).toBeUndefined();
 });

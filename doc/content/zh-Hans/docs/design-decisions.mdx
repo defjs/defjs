@@ -5,13 +5,19 @@ description: Defjs 如何通过分离 SDK 契约与应用执行，让接口设�
 
 # 设计决策
 
-Defjs 为更友好的 SDK 设计而生。名称意为 **define js**，其中 `def` 是 **define** 的缩写。SDK 作者应能用熟悉的 JavaScript / TypeScript 描述接口、验证数据、导出类型，并把这些定义作为包交付给应用。
+Defjs 为的是让 SDK 设计更友好。`def` 的意思是 `define`：团队描述自己服务的 API 并发布可复用的定义，每个消费方应用再决定如何调用它们。其余设计都从这道分界长出来。
 
-因此，SDK 公开的是可复用端点定义：Struct 描述输入、输出、错误与消息，builder 描述输入如何进入传输。应用创建和配置自己的 Client，决定服务地址、鉴权、平台 handle，以及每次调用的结果处理和生命周期。这让契约可以在不同环境中复用，也让应用的运行策略保持明确。
+## SDK 编写与应用执行
 
-这些定义仍属于 Defjs 的运行时契约，包含函数、Struct 与 HTTP / SSE / WebSocket 语义。它们不绑定某个应用 Client，也不承诺能交给任意客户端或作为纯 JSON 执行。完整交付流程见[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)，下面说明这一分工带来的技术取舍。
+SDK 作者拥有操作、输入契约、请求映射、响应解码，以及声明过的服务错误。应用拥有 client 配置、当前凭证、调用时机、结果处理和资源寿命。导出的端点可以被不同的 client 使用，而不把任何一个应用的环境嵌进 SDK。
 
-## 声明即断言
+带着 client 调用操作，工作才开始。定义是可执行的 Defjs 模块，带 Struct 和 builder，不是一份与 client 无关的交换格式。SDK 作者声明兼容的 Core 依赖，并交付 JavaScript 和 TypeScript 声明。[构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk) 在一个包里演示这条边界。
+
+可选的工厂或便捷方法可以提供默认值或领域行为。端点仍然可用，这样默认值不合适时应用仍能自己控制。框架插件和遥测挂在消费方 client 上，因此定义包可以不依赖 React、Vue 或应用自己的可观测性配置。
+
+这道分界也让测试变得实际：通过 client 本地的 handle 调用真正的 SDK 定义，再观察请求和解码结果。运行时校验、明确的错误，以及调用方自己的清理，支撑一份可靠的 SDK 契约。
+
+## 声明即断言 [#declaration-is-an-assertion]
 
 这六条规则决定了「响应怎么读」的所有问题。编上号，方便以后讨论时直接引用，不必重新推导。
 
@@ -49,17 +55,17 @@ body **就是**解码后的值。解码失败，就没有值——不存在半�
 
 代价是：没有进程级默认 Client。服务端这点反而有用——options 或闭包会捕获鉴权、cookie、用户、租户或请求元数据时，把 Client 建在请求边界里。显式 Client 并不能隔离 interceptor 捕获的状态。Client 身份本身也不是安全边界。
 
-Client 负责分派 command，并不拥有正在进行的工作。谁启动了 HTTP 请求、SSE 流或 WebSocket 会话，谁就要取消或关闭，并 await 终止 promise。
+Client 携带配置，并不拥有正在进行的工作。谁启动了 HTTP 请求、SSE 流或 WebSocket 会话，谁就要取消或关闭，并 await 终止 promise。
 
-## Definition、endpoint、command
+## 定义与操作
 
-Definition 是稳定契约：method、path、input struct、解码 `ok` 两侧的 struct、传输限制。`defineRequest` 返回 endpoint。调用它会创建用于单次执行的不透明命令。
+Definition 是稳定契约：method、path、input struct、解码 `ok` 两侧的 struct、传输限制。`defineRequest` 返回一个操作。带着 client 调用它，这次调用就开始。同一个 client 值可以传给多次操作。
 
 <include cwd lang="typescript">
   examples/design-decisions/definitions.ts#example
 </include>
 
-后台任务和 UI 可以共用同一个 `getUser` 形状，但取消/重试策略可以不同。保持 command 不透明，能避免业务代码依赖内部传输标签或 symbol。
+后台任务和 UI 所有者可以用不同的 client 调用同一个 `getUser` 操作，因此各自可以选择自己的取消和重试策略。应用代码不依赖内部传输标签或 symbol。
 
 ## 按传输区分的结果
 
@@ -75,7 +81,7 @@ Definition 是稳定契约：method、path、input struct、解码 `ok` 两侧�
 
 ## 运行时解码
 
-TypeScript 推断只描述你期望什么，拦不住服务端真返回什么。Struct 解析是契约的另一半。Defjs 在构造请求前校验 command 输入，检查表示，再 parse `ok` 那一侧的 struct。
+TypeScript 推断只描述你期望什么，拦不住服务端真返回什么。Struct 解析是契约的另一半。Defjs 在构造请求前校验操作输入，检查表示，再 parse `ok` 那一侧的 struct。
 
 对于 HTTP，Struct **只应用一次，且在 interceptor 链之后**。interceptor 用 `makeResponse(...)` 构造的响应，与真实网络响应经过同一套媒体类型检查、表示转换和 Struct 校验：响应来源不影响读取方式，因此无需单独考虑「信任 interceptor」的路径。内置 Fetch 传输在把响应交回链之前，会按声明将 body 读取为 JSON、文本、`Blob` 或字节。只有 JSON 表示要求 JSON 媒体类型和 `JSON.parse`；非 JSON 的文本、blob 和字节都可以是符合声明的有效表示。interceptor 看到的是这种表示，还不是 Struct 解码后的值。任何表示都可能读取失败；这里的读取或解析失败会以同样的 `RES_*` 或 `NET_BODY_INCOMPLETE` fault 报出。
 
@@ -95,7 +101,7 @@ TypeScript 推断只描述你期望什么，拦不住服务端真返回什么。
 
 Struct 是字段契约，两个方向都是。`.alias(name)` 是传输字段名。Struct 决定值怎么编码。`builder` 决定这个值放哪。
 
-`builder` 是同步纯函数。它收到的是 解析后的 input——实际值，不是绑定视图——并返回请求：`path`、`query`、`headers`、`body`。command 执行时才跑。抛错会变成 tuple 上的 `REQ_BUILD_FAILED`；调用 endpoint 本身不抛。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
+`builder` 是同步纯函数。它收到的是解析后的 input——实际值，不是绑定视图——并返回请求：`path`、`query`、`headers`、`body`。操作被调用时才跑。抛错会变成 tuple 上的 `REQ_BUILD_FAILED`；调用操作本身不抛。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 <include cwd lang="typescript">
   examples/design-decisions/builder-encoder-alias.ts#example
@@ -119,9 +125,9 @@ Body kind 按值决定，先匹配的赢：
 
 ## Observer 和策略放哪
 
-Interceptor 管传输级策略：鉴权、追踪、短路、审过的重试。它们只跑自己的传输，按洋葱顺序组合。执行 options 管这次工作的寿命：`signal`、`timeout`、WebSocket heartbeat、可选重连。
+Interceptor 管传输级策略：鉴权、追踪、短路、审过的重试。它们只跑自己的传输，按洋葱顺序组合。派生 client 上的请求选项管这次工作的寿命：`abort`、WebSocket heartbeat，以及可选重连。
 
-Observer 只报告发生了什么，不当第二任所有者。SSE 的 `onInvalidEvent`、WebSocket 状态监听、运行时错误监听，适合有界诊断和指标。返回的 stream/session 仍拥有迭代、关闭、退订和等待终止。缓存、过期结果抑制、幂等、领域错误映射，放在 `client.execute(...)` 周围，业务能看见自己的策略和状态。
+Observer 只报告发生了什么，不当第二任所有者。SSE 的 `onInvalidEvent`、WebSocket 状态监听、运行时错误监听，适合有界诊断和指标。返回的 stream/session 仍拥有迭代、关闭、退订和等待终止。缓存、过期结果抑制、幂等、领域错误映射，放在操作调用周围，业务能看见自己的策略和状态。
 
 ## OpenAPI、sourcemap、telemetry
 

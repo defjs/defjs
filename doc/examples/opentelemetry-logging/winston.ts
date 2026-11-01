@@ -49,8 +49,7 @@ export async function runWinstonLoggingExample(
       path: "/inventory",
       operation: "inventory.read",
     });
-    const command = inventory();
-    const [fault] = await client.execute(command);
+    const [fault] = await inventory(client);
     if (fault?.code !== "NET_UNREACHABLE") {
       throw new Error("Expected the local transport to return NET_UNREACHABLE");
     }

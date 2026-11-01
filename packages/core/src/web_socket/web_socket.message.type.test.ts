@@ -31,7 +31,7 @@ const listen = defineWebSocket({
 });
 
 async function assertReceiveAndSend(): Promise<void> {
-  const [error, socket] = await createClient().execute(chat());
+  const [error, socket] = await chat(createClient());
   if (error || !socket) {
     return;
   }
@@ -51,7 +51,7 @@ async function assertReceiveAndSend(): Promise<void> {
 void assertReceiveAndSend;
 
 async function assertSendWithoutOutgoingIsRejected(): Promise<void> {
-  const [error, socket] = await createClient().execute(listen());
+  const [error, socket] = await listen(createClient());
   if (error || !socket) {
     return;
   }
@@ -61,16 +61,24 @@ async function assertSendWithoutOutgoingIsRejected(): Promise<void> {
 }
 void assertSendWithoutOutgoingIsRejected;
 
-void createClient().execute(chat(), {
-  heartbeat: {
-    intervalMs: 1_000,
-    isAck(message) {
-      expectTypeOf(message).toEqualTypeOf<Infer<typeof Incoming>>();
-      return message.type === "pong";
+void chat(
+  createClient()({
+    heartbeat: {
+      intervalMs: 1_000,
+      isAck(message) {
+        // @ts-expect-error heartbeat messages are unknown and are not inferred from the operation.
+        expectTypeOf(message).toEqualTypeOf<Infer<typeof Incoming>>();
+        return (
+          typeof message === "object" &&
+          message !== null &&
+          "type" in message &&
+          message.type === "pong"
+        );
+      },
+      message: () => ({ text: "ping", type: "say" as const }),
     },
-    message: () => ({ text: "ping", type: "say" as const }),
-  },
-});
+  }),
+);
 
 const mismatchedHeartbeat: WebSocketExecuteOptions<
   Infer<typeof Incoming>,

@@ -1,10 +1,5 @@
-import {
-  COMMAND_EXECUTE,
-  COMMAND_TYPE,
-  EVENT_STREAM_COMMAND,
-  type CommandExecutor,
-} from "../client/command";
-import type { BaseCommand } from "../client/command";
+import type { Client } from "../client/client";
+import { CLIENT } from "../client/client";
 import type { ClientConfig, ClientSSEOptions } from "../client/config";
 import { DEFAULT_FETCH, ERR_FETCH_UNSUPPORTED } from "../client/config";
 import type { AnyFault, Fault, PreflightFault } from "../error";
@@ -17,21 +12,15 @@ import {
 } from "../error";
 import type { SSEHandler } from "../interceptor/interceptor";
 import { makeChain, resolveSSEInterceptors } from "../interceptor/interceptor";
-import type { UseCancellationConfig } from "../internal/abort";
 import {
-  armTransportDeadline,
   awaitWithSignal,
-  createAbortTimeoutConflictFault,
-  hasAbortTimeoutConflict,
   mergeAbortSignals,
   releaseAbortSignal,
   resolveAbortCause,
   resolveAbortedFault,
-  resolveTransportCancellation,
-  snapshotCancellationConfig,
-  validateTransportTimeout,
+  resolveAbortFault,
 } from "../internal/abort";
-import type { EndpointCallable } from "../internal/endpoint_command";
+import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import type { EndpointInput, ParsedInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
@@ -157,7 +146,7 @@ export type EventStreamDefinition<
 export type { EventStreamRequestShape } from "../internal/builder_types";
 
 /**
- * Await-result tuple from opening an SSE stream via `client.execute`.
+ * Await-result tuple from opening an SSE stream.
  *
  * - On success: `[null, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live.
  *
@@ -179,46 +168,32 @@ export type StreamAwaitResult<
     ];
 
 /**
- * Opaque executable SSE command produced by an `EventStreamEndpoint`.
+ * SSE field of {@link RequestOptions}. HTTP progress and WebSocket fields are ignored.
  *
- * Created by calling an `EventStreamEndpoint` with input. It also has internal symbol-keyed members that identify and run the command. Treat it as opaque and pass it to `client.execute`. `endpoint` is the definition plus `method`, which is always a string (it defaults to `'GET'` when the definition omits it). `ResolvedEventStreamDefinition` names that shape and is not exported.
- *
- * @group sse
- */
-export interface EventStreamCommand<
-  TInput extends AnyStruct | undefined,
-  TEvents extends EventStructs,
-  TError extends AnyStruct | undefined = undefined,
-> extends BaseCommand<typeof EVENT_STREAM_COMMAND> {
-  readonly endpoint: ResolvedEventStreamDefinition<TInput, TEvents, TError>;
-  readonly input: EndpointInput<TInput> | undefined;
-}
-
-/**
- * Per-call options for opening an SSE stream: abort or timeout, plus an optional signal.
- *
- * Cancellation is `abort` **or** `timeout`, not both; passing both makes the call resolve with a `REQ_OPTIONS_INVALID` fault. `signal` combines with either and is not an alias for `abort`. `timeout` must be a positive safe integer up to 2147483647.
- *
- * For SSE, `timeout` is a startup deadline. It covers input parsing, the builder, the interceptors, and opening the connection, and stops applying once the stream is open. The client-level `withTimeout` default does not apply to SSE.
+ * `abort` covers the whole stream, including after it opens. There is no startup-only deadline.
  *
  * @group sse
  */
-export type EventStreamExecuteOptions = UseCancellationConfig & {
-  signal?: AbortSignal;
+export type EventStreamExecuteOptions = {
+  /** Aborts the stream, including after it is open. */
+  abort?: AbortSignal;
 };
 
 /**
- * Callable endpoint returned by defineEventStream.
+ * Operation returned by `defineEventStream`.
  *
- * Returned by `defineEventStream`. Call it to get an `EventStreamCommand`: with no arguments when the endpoint declares no `input`, with an optional argument when the input struct accepts `undefined`, and otherwise with the struct's input value.
+ * The first argument is a {@link Client}. Further arguments are the input only. Calling it opens the stream and returns the existing error-first tuple.
  *
  * @group sse
  */
 export type EventStreamEndpoint<
-  TInput extends AnyStruct | undefined,
-  TEvents extends EventStructs,
+  Args extends unknown[],
+  Event,
   TError extends AnyStruct | undefined = undefined,
-> = EndpointCallable<TInput, EventStreamCommand<TInput, TEvents, TError>>;
+> = (
+  client: Client,
+  ...args: Args
+) => Promise<StreamAwaitResult<Event, TError>>;
 
 type ResolvedEventStreamDefinition<
   TInput extends AnyStruct | undefined = undefined,
@@ -231,15 +206,15 @@ type ResolvedEventStreamDefinition<
 /**
  * Declare a typed Server-Sent Events endpoint.
  *
- * Pass path, event structs, and buffer/queue limits. Call the returned endpoint
- * with input to get an `EventStreamCommand` for `client.execute`.
+ * Pass path, event structs, and buffer/queue limits. Call the returned operation
+ * with a client and, when declared, the input.
  *
  * - **definition** — `path`, an `events` map, and the required `maxBufferSize` and `maxQueueSize` limits (positive safe integers). Optional `method` (default `'GET'`), `operation`, `input`, and `error`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
  *
  * @param definition - SSE contract (path, events, buffer limits, optional input).
- * @returns An endpoint that creates `EventStreamCommand` values from input.
+ * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
  * @group sse
  * @exampleFile examples/api/define-event-stream.ts#example
@@ -260,62 +235,25 @@ export function defineEventStream<
       NoInfer<TInput>,
       EventStreamRequestShape<NoInfer<P>, NoInfer<M>>
     >,
-): EventStreamEndpoint<TInput, TEvents, TError> {
+): EventStreamEndpoint<EndpointArgs<TInput>, EventStreamData<TEvents>, TError> {
   // EventStreamErrorField is conditional, so this parameter is not directly the resolved endpoint.
   const endpoint = {
     ...definition,
     method: definition.method ?? "GET",
   } as unknown as ResolvedEventStreamDefinition<TInput, TEvents, TError>;
 
-  function create(
-    input?: EndpointInput<TInput>,
-  ): EventStreamCommand<TInput, TEvents, TError> {
-    const command: EventStreamCommand<TInput, TEvents, TError> = {
-      [COMMAND_EXECUTE]: executeEventStreamCommand as CommandExecutor,
-      [COMMAND_TYPE]: EVENT_STREAM_COMMAND,
+  return (async (client: Client, input?: EndpointInput<TInput>) =>
+    runEventStreamCommand(
+      client[CLIENT].config,
       endpoint,
       input,
-    };
-
-    return command;
-  }
-
-  return ((input?: EndpointInput<TInput>) =>
-    create(input)) as EventStreamEndpoint<TInput, TEvents, TError>;
-}
-
-/**
- * Open an SSE command against the given client config.
- *
- * Prefer `client.execute(command)` in application code; this is the low-level entry used by the client.
- *
- * The result is `[null, stream, open]` or `[fault, undefined, open | undefined]`. The fault is `Fault<TError>`: the decoded handshake body is on `data` when `error` is declared, and `Fault<undefined>` otherwise.
- *
- * @param clientConfig - Resolved client configuration.
- * @param command - SSE command from an `EventStreamEndpoint`.
- * @param options - Optional execute options (abort, timeout).
- * @returns Await-result tuple of `[error, stream, open]`.
- * @group sse
- */
-export async function executeEventStreamCommand<
-  TInput extends AnyStruct | undefined,
-  TEvents extends EventStructs,
-  TError extends AnyStruct | undefined = undefined,
->(
-  clientConfig: ClientConfig,
-  command: EventStreamCommand<TInput, TEvents, TError>,
-  options?: EventStreamExecuteOptions,
-): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>> {
-  const { endpoint, input } = command;
-  const config = options ?? {};
-  const controller = new AbortController();
-  return runEventStreamCommand(
-    clientConfig,
-    endpoint,
-    input,
-    config,
-    controller,
-  );
+      client[CLIENT].options,
+      new AbortController(),
+    )) as EventStreamEndpoint<
+    EndpointArgs<TInput>,
+    EventStreamData<TEvents>,
+    TError
+  >;
 }
 
 async function runEventStreamCommand<
@@ -329,37 +267,11 @@ async function runEventStreamCommand<
   config: EventStreamExecuteOptions,
   controller: AbortController,
 ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>> {
-  let cancellation;
-  try {
-    cancellation = snapshotCancellationConfig(config);
-  } catch (error) {
-    return [
-      createPreflightFault("REQ_OPTIONS_INVALID", error),
-      undefined,
-      undefined,
-    ];
-  }
-
-  if (hasAbortTimeoutConflict(cancellation)) {
-    return [createAbortTimeoutConflictFault(), undefined, undefined];
-  }
-
-  try {
-    validateTransportTimeout(cancellation.timeout);
-  } catch (error) {
-    return [
-      createPreflightFault("REQ_OPTIONS_INVALID", error),
-      undefined,
-      undefined,
-    ];
-  }
+  const callerAbort = config.abort;
 
   // Fast path: caller already aborted before we did any struct work.
-  const preAbortedSignal = [cancellation.abort, cancellation.signal].find(
-    (signal) => signal?.aborted,
-  );
-  if (preAbortedSignal) {
-    return [resolveAbortedFault(preAbortedSignal), undefined, undefined];
+  if (callerAbort?.aborted) {
+    return [resolveAbortedFault(callerAbort), undefined, undefined];
   }
 
   // Snapshot the validated reconnect policy at preflight so an interceptor cannot change it.
@@ -384,19 +296,11 @@ async function runEventStreamCommand<
     ];
   }
 
-  // The execute timeout is a startup deadline: armed before parse and the synchronous builder,
-  // then released once startup settles so it cannot abort the open stream.
-  const deadline = armTransportDeadline(cancellation.timeout);
-  const requestSignal = mergeAbortSignals(controller.signal, [
-    cancellation.abort,
-    cancellation.signal,
-    deadline.signal,
-  ]);
-  deadline.releaseOnAbort(requestSignal);
+  // `abort` stays in force after open. Listeners stay off the caller's signal.
+  const requestSignal = mergeAbortSignals(controller.signal, [callerAbort]);
   const stopBeforeTransport = (
     fault: PreflightFault,
   ): StreamAwaitResult<EventStreamData<TEvents>, TError> => {
-    deadline.release();
     releaseAbortSignal(requestSignal);
     return [fault, undefined, undefined];
   };
@@ -411,18 +315,12 @@ async function runEventStreamCommand<
     );
   } catch (error) {
     return stopBeforeTransport(
-      resolveTransportCancellation(
-        deadline,
-        requestSignal,
+      resolveAbortFault(requestSignal) ??
         createPreflightFault("REQ_INPUT_INVALID", error),
-      ),
     );
   }
 
-  const parsedCancellation = resolveTransportCancellation(
-    deadline,
-    requestSignal,
-  );
+  const parsedCancellation = resolveAbortFault(requestSignal);
   if (parsedCancellation) {
     return stopBeforeTransport(parsedCancellation);
   }
@@ -442,25 +340,18 @@ async function runEventStreamCommand<
         inputGuides,
         operation: endpoint.operation,
         querySerializer: clientConfig.querySerializer,
-        timeout: cancellation.timeout,
         transport: "sse",
         withCredentials: clientConfig.withCredentials,
       },
     );
   } catch (error) {
     return stopBeforeTransport(
-      resolveTransportCancellation(
-        deadline,
-        requestSignal,
+      resolveAbortFault(requestSignal) ??
         createPreflightFault("REQ_BUILD_FAILED", error),
-      ),
     );
   }
 
-  const builtCancellation = resolveTransportCancellation(
-    deadline,
-    requestSignal,
-  );
+  const builtCancellation = resolveAbortFault(requestSignal);
   if (builtCancellation) {
     return stopBeforeTransport(builtCancellation);
   }
@@ -495,9 +386,8 @@ async function runEventStreamCommand<
         void rejected.catch(() => undefined);
         return rejected;
       }
-      // Interceptors run after the post-builder check. A deadline that expired there must not start the fetch.
       const transportAbort = mergeAbortSignals(requestSignal, [req.abort]);
-      const due = resolveTransportCancellation(deadline, transportAbort);
+      const due = resolveAbortFault(transportAbort);
       if (due) {
         // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
         // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
@@ -626,7 +516,6 @@ async function runEventStreamCommand<
         : createEventStreamFault(cause, fromTransport, openInfo?.response);
     return [fault as Fault<TError>, undefined, openInfo];
   } finally {
-    deadline.release();
     if (!streamDelivered) {
       releaseAbortSignal(requestSignal);
     }

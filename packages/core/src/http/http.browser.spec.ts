@@ -38,7 +38,7 @@ describe("http browser runtime", () => {
       path: "/json",
     });
 
-    const [error, result, response] = await baseClient.execute(useGetAccount());
+    const [error, result, response] = await useGetAccount(baseClient);
 
     expect(error).toBeNull();
     expect(result).toEqual({ id: 1 });
@@ -52,9 +52,7 @@ describe("http browser runtime", () => {
       path: "/text",
     });
 
-    const [error, result, response] = await baseClient.execute(
-      useMalformedResponse(),
-    );
+    const [error, result, response] = await useMalformedResponse(baseClient);
 
     expect(error?.code).toBe("RES_MEDIA_TYPE_INVALID");
     expect(result).toBeUndefined();
@@ -79,13 +77,13 @@ describe("http browser runtime", () => {
       path: "/",
     });
 
-    const [error, result, response] = await baseClient.execute(
-      useCreateAccount({ payload: new Uint8Array(32 * 1024).buffer }),
-      {
+    const [error, result, response] = await useCreateAccount(
+      baseClient({
         onDownloadProgress(event) {
           downloadLoaded.push(event.loaded);
         },
-      },
+      }),
+      { payload: new Uint8Array(32 * 1024).buffer },
     );
 
     expect(error).toBeNull();
@@ -97,7 +95,7 @@ describe("http browser runtime", () => {
     expect(downloadLoaded.length).toBeGreaterThan(0);
   });
 
-  test("should preserve fetch timeout semantics in request runtime", async () => {
+  test("should classify AbortSignal.timeout as NET_TIMEOUT in request runtime", async () => {
     const useDelay = defineRequest({
       builder: (input) => ({ query: { ms: input.ms } }),
       input: struct.object({ ms: struct.number() }),
@@ -105,9 +103,9 @@ describe("http browser runtime", () => {
       path: "/delay",
     });
 
-    const [error, result, response] = await baseClient.execute(
-      useDelay({ ms: 1000 }),
-      { timeout: 100 },
+    const [error, result, response] = await useDelay(
+      baseClient({ abort: AbortSignal.timeout(100) }),
+      { ms: 1000 },
     );
 
     expect(result).toBeUndefined();
@@ -135,7 +133,7 @@ describe("http browser runtime", () => {
       path: "/xsrf",
     });
 
-    const [error, result, response] = await client.execute(useXsrf());
+    const [error, result, response] = await useXsrf(client);
 
     expect(error).toBeNull();
     expect(result).toBeUndefined();
@@ -158,7 +156,7 @@ describe("http browser runtime", () => {
       path: "/xsrf-validate",
     });
 
-    const [error, result, response] = await client.execute(useValidate());
+    const [error, result, response] = await useValidate(client);
 
     expect(error).toBeNull();
     expect(result).toEqual({ ok: true });
@@ -178,7 +176,7 @@ describe("http browser runtime", () => {
       path: "/xsrf-validate",
     });
 
-    const [error, result, response] = await client.execute(useValidate());
+    const [error, result, response] = await useValidate(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();

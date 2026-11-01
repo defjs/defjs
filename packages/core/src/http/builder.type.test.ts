@@ -5,12 +5,14 @@ import { defineEventStream } from "../sse/sse";
 import { struct } from "../struct";
 import type { WebSocketRequestShape } from "../web_socket/web_socket";
 import { defineWebSocket } from "../web_socket/web_socket";
+import { createClient } from "../client";
 import { defineRequest } from "./http";
 
+const client = createClient();
 const health = defineRequest({ method: "GET", path: "/health" });
-health();
-// @ts-expect-error an endpoint with no input does not accept an argument
-health({});
+health(client);
+// @ts-expect-error an operation with no input does not accept a second argument
+health(client, {});
 
 const scalarInput = struct.object({ userId: struct.number().alias("user_id") });
 const getUser = defineRequest({
@@ -20,8 +22,8 @@ const getUser = defineRequest({
   path: "/users/:user_id",
 });
 // @ts-expect-error a required input cannot be omitted
-getUser();
-getUser({ userId: 7 });
+getUser(client);
+getUser(client, { userId: 7 });
 defineRequest({
   // @ts-expect-error path keys must match the template
   builder: (input) => ({ path: { usr_id: input.userId } }),
@@ -133,9 +135,9 @@ const search = defineRequest({
   method: "GET",
   path: "/search",
 });
-search();
-search({});
-search({ q: "ada" });
+search(client);
+search(client, {});
+search(client, { q: "ada" });
 
 const nullableUser = struct.object({ id: struct.number() }).nullable();
 defineRequest({

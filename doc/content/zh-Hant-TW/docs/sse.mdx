@@ -5,7 +5,7 @@ description: SDK 定義具型別的事件串流，應用程式開啟並使用它
 
 # Server-Sent Events
 
-SDK 作者透過 `defineEventStream` 定義連線輸入、事件名稱到 Struct 的對應與相關限制。應用程式用自己的 Client 開啟串流，取得具型別的事件和啟動快照，並決定使用與重連策略。
+SDK 匯出帶有 input、事件契約與緩衝上限的事件串流操作。應用程式在自己的 client 上設定身分驗證與選用的重連，需要串流時呼叫匯入的操作。
 
 開啟串流、迭代它，再用 `await using` 釋放自有 handle。手動 `close()` 與 `closed` 仍可使用；Client 和外掛不會替你釋放回傳的串流。
 
@@ -25,7 +25,7 @@ Request 形狀跟 HTTP 一樣：`builder` 回傳 `path`、`query`、`headers`、
 
 ## 開啟與檢查
 
-`client.execute(...)` 只有在 status、content-type、body 檢查通過後才會 resolve：
+操作只有在 status、content-type、body 檢查通過後才會 resolve：
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
@@ -35,7 +35,7 @@ Request 形狀跟 HTTP 一樣：`builder` 回傳 `path`、`query`、`headers`、
 
 缺少、相對或無效的 base endpoint，或非法 path，會在建構期間、任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 也一樣。解析後的 URL 必須維持 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 最終的 `req.endpoint` 會按其最終的 `req.baseEndpoint`、用同一條規則檢查；刻意把 base 換成另一個有效的絕對 URL 是允許的。確定性的 URL 錯誤絕不會重試。
 
-`startupOpen` 是該次執行的初始快照；新的 `execute` 絕不會重用前一次執行的快照，即使它在回應抵達前就失敗也一樣。`stream.open` 是 live 的，之後的實體 opens 會變。第一個回應重要時，留住 tuple 那個值。 `startupOpen` 僅對回傳的 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper 保證是所屬連線首次成功握手的快照；自訂 handle 或明確覆寫 `open` 的 wrapper 則保留其目前公開的 `open`，即使已發生重連也一樣，因此共用 `closed` 不能繞過 URL 淨化或標頭過濾，Defjs 也不從任意中繼資料轉換反推首次握手。
+`startupOpen` 是該次呼叫的初始快照；新的呼叫絕不會重用前一次呼叫的快照，即使它在回應抵達前就失敗也一樣。`stream.open` 是 live 的，之後的實體 opens 會變。第一個回應重要時，留住 tuple 那個值。 `startupOpen` 僅對回傳的 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper 保證是所屬連線首次成功握手的快照；自訂 handle 或明確覆寫 `open` 的 wrapper 則保留其目前公開的 `open`，即使已發生重連也一樣，因此共用 `closed` 不能繞過 URL 淨化或標頭過濾，Defjs 也不從任意中繼資料轉換反推首次握手。
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -69,7 +69,7 @@ Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，�
 
 重連選項會在 interceptor 或 Fetch 之前檢查：`attempts` 必須是非負的 safe integer；`delayMs` 必須是非負有限數；`maxDelayMs` 可以是非負有限數或正 `Infinity`，後者移除設定上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 必須是有限且為正；`jitter` 必須是有限且落在 0–1。無效的值會回傳 `REQ_OPTIONS_INVALID`，且不會開啟串流。
 
-最新剖析到的事件 ID 會在後續嘗試中成為 `Last-Event-ID`，在線上以 UTF-8 位元組編碼，包括非 ASCII 的 ID。空的 `id:` 會清掉這個標頭；含有 NUL 的 ID 會被忽略。除了這個標頭，後續嘗試重送的都是第一次嘗試時建好的請求：builder 與攔截器在每次 `execute` 中只會執行一次，因此請求方法、URL、標頭與主體維持不變。如果某個標頭的值在每次嘗試時都必須更新，例如短效權杖，請在傳給 `withSSEHandle` 的 Fetch 實作中處理；這個 Fetch 實作會在每次嘗試時執行一次。如果憑證仍然過期，串流已經開啟之後的非 2xx 重連握手會以 `RES_DECODE_FAILED` 結束它；狀態請看 `stream.open.response.status`。非 2xx 的初始握手則會在已宣告的錯誤 body 解碼成功時，回傳啟動期的 `HTTP_STATUS` fault。
+最新剖析到的事件 ID 會在後續嘗試中成為 `Last-Event-ID`，在線上以 UTF-8 位元組編碼，包括非 ASCII 的 ID。空的 `id:` 會清掉這個標頭；含有 NUL 的 ID 會被忽略。除了這個標頭，後續嘗試重送的都是第一次嘗試時建好的請求：builder 與攔截器在每次呼叫中只會執行一次，因此請求方法、URL、標頭與主體維持不變。如果某個標頭的值在每次嘗試時都必須更新，例如短效權杖，請在傳給 `withSSEHandle` 的 Fetch 實作中處理；這個 Fetch 實作會在每次嘗試時執行一次。如果憑證仍然過期，串流已經開啟之後的非 2xx 重連握手會以 `RES_DECODE_FAILED` 結束它；狀態請看 `stream.open.response.status`。非 2xx 的初始握手則會在已宣告的錯誤 body 解碼成功時，回傳啟動期的 `HTTP_STATUS` fault。
 
 重連只在安全時重送請求：
 
@@ -88,7 +88,7 @@ Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，�
 
 致命串流也會清掉 buffered events、取消 active body、reject iterator，並以 `kind: 'error'` resolve `stream.closed`。
 
-## Close 與 dispose
+## Close 與 dispose [#close-and-dispose]
 
 `EventStreamHandle`：一個 live opening 快照、一個終端 promise、一個 `close`、一個 async iterator，以及一個標準 async disposer。
 
@@ -98,13 +98,17 @@ Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，�
 
 終端 kinds（`closed.kind`）：`eof`、`aborted` 或 `error`。`error` 結果還帶 `closed.code`，也就是 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或 `RES_MEDIA_TYPE_INVALID`。
 
-`close(reason)` 會 abort active attempt、關閉 queue、以 `aborted` settle，即使 reason 是 `TimeoutError` 也一樣。在串流開啟之後，abort 傳給 `execute` 的 `signal` 或 `abort`，通常會讓 iterator 正常結束並回報 `aborted`；若 abort reason 是 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會丟出 `ERR_TIMEOUT`，`closed` 則回報 `kind: 'error'` 且 `code: 'NET_TIMEOUT'`。execute 的 `timeout` 選項只是啟動期限，絕不會結束已開啟的串流。迴圈 `break`／`return`／throw 會觸發 iterator return，並以 `iterator-return` 關閉。執行 command 的程式碼擁有關閉責任。
+`close(reason)` 會 abort active attempt、關閉 queue、以 `aborted` settle，即使 reason 是 `TimeoutError` 也一樣。傳給操作的 `abort` signal 在串流開啟之後仍附著，並涵蓋整條連線。Abort 它通常會讓 iterator 結束並回報 `aborted`。若 abort reason 是 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會丟出 `ERR_TIMEOUT`，`closed` 則回報 `kind: 'error'` 且 `code: 'NET_TIMEOUT'`。Client 上沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器：
+
+<include cwd>examples/sse/startup-deadline.ts#example</include>
+
+迴圈 `break`／`return`／throw 會觸發 iterator return，並以 `iterator-return` 關閉。啟動操作的程式碼擁有關閉責任。
 
 `await using` 會呼叫同一條自有 close 路徑，並等待 Defjs 讀取／重連工作停止，以及 active reader lock 釋放。它刻意設有界限，不會無限等待永遠不 settle 的 provider-controlled `ReadableStream.cancel()` promise，因此不保證這類 provider promise 已完成。需要 reason 或終端結果時，仍可明確呼叫 `stream.close(reason)`，再 `await stream.closed`。
 
 結構化實作 `EventStreamHandle` 的程式碼現在必須提供 `[Symbol.asyncDispose](): PromiseLike<void>`，並接到同一個 lifecycle。對實作者而言，這是編譯期 breaking change；只接收 Defjs handle 的 consumer 不必新增執行期呼叫。
 
-支援的最低 lib 集合是 `ES2022`、`ESNext.Disposable`、`DOM` 與 `DOM.Iterable`。儲存庫的宣告工具使用 TypeScript 7，但沒有自動化的 packed-consumer 或 minimum-lib 驗證關卡，也不承諾較舊的 compiler。這組 lib 提供的是型別，不是執行階段的 Web API polyfill。一般 HTTP Client 不是 `AsyncDisposable`，其請求應使用 timeout 或 `AbortSignal` 管理。
+支援的最低 lib 集合是 `ES2022`、`ESNext.Disposable`、`DOM` 與 `DOM.Iterable`。儲存庫的宣告工具使用 TypeScript 7，但沒有自動化的 packed-consumer 或 minimum-lib 驗證關卡，也不承諾較舊的 compiler。這組 lib 提供的是型別，不是執行階段的 Web API polyfill。`Client` 不是 `AsyncDisposable`；每個請求用它的 `AbortSignal` 管理。
 
 Credentials、event data、event IDs、causes、stream URLs 別進日常 logs。`withCredentials(true)` 影響 SSE 的 Fetch cookies；它不會設定 WebSocket auth。
 

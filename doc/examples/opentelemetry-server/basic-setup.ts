@@ -27,8 +27,7 @@ const logsOnlyClient = createClient(
 );
 
 async function main() {
-  const command = readOrders();
-  const [error] = await client.execute(command);
+  const [error] = await readOrders(client);
   if (error) {
     console.error(error.code);
     return;

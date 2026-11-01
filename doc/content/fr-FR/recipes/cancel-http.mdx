@@ -1,13 +1,13 @@
 ---
 title: "Annulation et délais"
-description: Aborte ou timeout un execute et lis NET_ABORTED / NET_TIMEOUT.
+description: Abandonne ou borne un appel dans le temps et lis NET_ABORTED / NET_TIMEOUT.
 ---
 
 # Annuler un appel HTTP
 
-Passe `signal` plus soit `abort` soit `timeout` — pas `abort` et `timeout` ensemble. `timeout` doit être un entier sûr positif dans `1..2_147_483_647`.
+Combine le signal de l’appelant et une échéance sur `abort`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` est un seul signal. Un abort manuel se classe en `NET_ABORTED`. Une échéance se classe en `NET_TIMEOUT`.
 
-Voir [HTTP](/fr-FR/docs/http#annuler-le-travail) pour les détails.
+Voir [HTTP](/fr-FR/docs/http#cancel-the-work) pour les détails.
 
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
@@ -17,4 +17,4 @@ Voir [HTTP](/fr-FR/docs/http#annuler-le-travail) pour les détails.
 caller cancelled
 ```
 
-L’annulation te dit ce que l’appelant a observé. Elle ne prouve pas qu’une écriture côté serveur a été annulée (rollback) — garde les retries de mutation derrière un contrat d’idempotence.
+L’annulation te dit ce que l’appelant a observé. Elle ne prouve pas qu’une écriture côté serveur a été annulée — garde les nouvelles tentatives de mutation derrière un contrat d’idempotence.

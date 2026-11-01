@@ -36,7 +36,6 @@ export type BaseTransportRequestOptions<TTransport extends BaseTransport> = {
   inputGuides?: WeakMap<object, Guide>;
   operation?: string;
   querySerializer?: QuerySerializer;
-  timeout?: number;
   transport: TTransport;
   withCredentials?: boolean;
 };
@@ -93,7 +92,6 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
     operation: options.operation,
     queryParams,
     queryString,
-    timeout: options.timeout,
     withCredentials: options.withCredentials ?? false,
   };
 

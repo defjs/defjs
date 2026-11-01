@@ -21,8 +21,7 @@ const room = defineWebSocket({
 });
 
 async function main() {
-  const command = room();
-  const [error, session, startupConnection] = await client.execute(command);
+  const [error, session, startupConnection] = await room(client);
   if (error) {
     console.error(error.code, startupConnection?.generation);
     return;

@@ -10,7 +10,7 @@ import type { AnyStruct, Infer } from "../struct/types";
  * | Class  | Meaning                                                        |
  * | ------ | -------------------------------------------------------------- |
  * | `HTTP` | The peer answered with a non-2xx status.                        |
- * | `REQ`  | The request never left: input, execute options, or build.       |
+ * | `REQ`  | The request never left: input, request options, or build.       |
  * | `NET`  | No usable response: cancel, timeout, connect, truncated body.   |
  * | `RES`  | A response arrived but could not be read as declared.           |
  * | `EXT`  | Code you attached to the pipeline threw.                        |
@@ -150,7 +150,7 @@ export type PreflightFault = Error & {
 };
 
 /**
- * Any failure returned by `client.execute`, expressed by its decoded error-body type.
+ * Any failure returned by an operation, expressed by its decoded error-body type.
  *
  * `Fault<TErr>` is `FaultOf` applied to `Infer<TErr>`, and `HttpAwaitResult` uses
  * `FaultOf<TErrorData>`. Pass a decoded type, not a struct: write
@@ -163,7 +163,7 @@ export type FaultOf<TData = undefined> =
   DecodeFault | HttpStatusFaultOf<TData> | PreflightFault;
 
 /**
- * Union of every failure `client.execute` can return, discriminated by `code`.
+ * Union of every failure an operation can return, discriminated by `code`.
  *
  * `Fault<TErr>` is {@link FaultOf} applied to the decoded body type, so it is the
  * union of {@link DecodeFault}, {@link HttpStatusFault}<TErr>, and

@@ -1,21 +1,22 @@
 ---
 title: "Guide"
-description: Concevoir des endpoints de SDK et leurs contrats, puis les tester, les intégrer et les publier avec un client propre à l’application.
+description: Concevoir les contrats et les opérations du SDK, les publier, et configurer l’exécution dans les applications consommatrices.
 ---
 
-Defjs accompagne le passage du contrat d’API au SDK publié. Lis le [démarrage rapide](/fr-FR/docs/start), puis les [commandes](/fr-FR/docs/commands) et le [client](/fr-FR/docs/client) : le SDK exporte les endpoints, l’application configure leur exécution. [Struct](/fr-FR/docs/struct) décrit les contrats de données partagés ; les [décisions de conception](/fr-FR/docs/design-decisions) en expliquent les limites.
+Defjs sépare l’API qu’une équipe publie du client qu’une application utilise. Suis le parcours d’écriture du SDK pour définir et empaqueter les opérations ; suis le parcours de l’application pour configurer l’exécution et traiter les résultats.
 
-Une fois le premier endpoint opérationnel, passe aux [tests locaux](/fr-FR/recipes/test-with-handle) et à la [publication sur npm](/fr-FR/recipes/publish-http-sdk). Les guides de transport et les plugins détaillent ensuite le contrat du SDK et les responsabilités de l’application.
-
-## Développement de SDK [#premiers-pas]
+## Développement de SDK [#getting-started]
 
 - [Présentation du projet](/fr-FR)
 - [Démarrage rapide](/fr-FR/docs/start)
+- [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk)
+- [Pourquoi les définitions et l’exécution sont séparées](/fr-FR/docs/design-decisions)
 
-## Contrats et exécution [#appels-et-contrats]
+## Contrats et exécution [#calls-and-contracts]
+
+L’auteur du SDK possède les Structs et les définitions d’endpoints. L’application fournit le Client et appelle les opérations avec lui.
 
 - [Contrats de données / Struct](/fr-FR/docs/struct)
-- [Définir et exécuter / Command](/fr-FR/docs/commands)
 - [Configuration du client / Client](/fr-FR/docs/client)
 
 ## Requêtes et temps réel
@@ -31,9 +32,16 @@ Une fois le premier endpoint opérationnel, passe aux [tests locaux](/fr-FR/reci
 
 ## Plugins
 
+Paquets facultatifs pour le client de l’application consommatrice. Les définitions du SDK en restent indépendantes.
+
 - [Plugins](/fr-FR/docs/integrations)
 - [React](/fr-FR/docs/integrations/react)
 - [Vue](/fr-FR/docs/integrations/vue)
 - [Serveur OpenTelemetry](/fr-FR/docs/integrations/opentelemetry-server)
+
+## IA
+
+- [Développement assisté par IA](/fr-FR/docs/ai)
+- [Appeler des API d’IA](/fr-FR/docs/ai-api)
 
 [Décisions de conception](/fr-FR/docs/design-decisions)

@@ -45,7 +45,7 @@ test.each([200, 403])(
                 ),
               ),
         );
-        const [fault, data] = await client.execute(endpoint());
+        const [fault, data] = await endpoint(client);
         expect(fault?.code ?? null).toBe(
           valid
             ? status === 200
@@ -80,7 +80,7 @@ test("SSE handshake errors use the same JSON media-type validation", async () =>
           }),
       ),
     );
-    const [fault, stream] = await client.execute(endpoint());
+    const [fault, stream] = await endpoint(client);
     expect(fault?.code).toBe(valid ? "HTTP_STATUS" : "RES_MEDIA_TYPE_INVALID");
     expect(stream).toBeUndefined();
     if (fault?.code === "HTTP_STATUS") expect(fault.data).toBeNull();
@@ -110,10 +110,6 @@ test.each([200, 403])(
     definition.output = struct.string().alias("changed");
     definition.error = struct.string().alias("changed");
     definition.builder = () => ({ body: "changed" });
-    const command = endpoint({ value: "original" });
-    expect(command.definition.input).toBe(shape);
-    expect(command.definition.output).not.toBe(definition.output);
-    expect(command.definition.error).not.toBe(definition.error);
     const observed: unknown[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
@@ -129,7 +125,7 @@ test.each([200, 403])(
         }),
       ),
     );
-    const [fault, data] = await client.execute(command);
+    const [fault, data] = await endpoint(client, { value: "original" });
     expect(observed).toEqual([["POST", "/first", "first", "original"]]);
     expect(fault?.code ?? null).toBe(status === 200 ? null : "HTTP_STATUS");
     expect(fault?.code === "HTTP_STATUS" ? fault.data : data).toBe("result");

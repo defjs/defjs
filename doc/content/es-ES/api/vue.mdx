@@ -5,16 +5,16 @@ description: Plugin de Vue, claves de inyección predeterminadas o personalizada
 
 # Vue
 
-Proporciona un cliente `@defjs/core` existente a una app de Vue. Este paquete no crea, no cachea ni libera (dispose) el cliente. Se requiere Vue 3 o posterior.
+Proporciona un cliente `@defjs/core` existente a una app Vue. Este paquete no crea, no cachea ni dispone el cliente. Se requiere Vue 3 o posterior.
 
-Mira la [guía de Vue](/es-ES/docs/integrations/vue).
+Consulta la [guía de Vue](/es-ES/docs/integrations/vue).
 
 ## createClientPlugin()
 
 <ApiSignature name="createClientPlugin" />
 
 - **client** — Instancia de `createClient`.
-- **Devuelve** un plugin de Vue para `app.use(...)`. Al instalarlo se llama a `app.provide(HTTP_CLIENT, client)`.
+- **Devuelve** un plugin de Vue para `app.use(...)`. Instalarlo llama a `app.provide(HTTP_CLIENT, client)`.
 
 <include cwd>examples/api/create-client-plugin.ts#example</include>
 
@@ -22,15 +22,15 @@ Mira la [guía de Vue](/es-ES/docs/integrations/vue).
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` lee el provider más cercano para esa clave; sin argumento o con `undefined`, usa `HTTP_CLIENT`. Llámalo en un contexto de inyección válido de Vue: `setup()` síncrono o `app.runWithContext()` (Vue 3.3+). Este último solo ofrece contexto síncrono de aplicación, sin sustituciones de subárboles ni contexto a través de un `await` normal. Los contextos restaurados por el compilador tras un `await` de nivel superior en `<script setup>` siguen siendo válidos.
+`injectClient(key)` lee el provider más cercano de esa clave; omitida o `undefined` usa `HTTP_CLIENT`. Llámalo en un contexto de inyección de Vue válido: `setup()` síncrono o `app.runWithContext()` (Vue 3.3+). Este último solo aporta el contexto síncrono a nivel de app, no las sustituciones de subárbol ni el contexto a través de un `await` ordinario. Los contextos que el compilador restaura tras un `await` de nivel superior en `<script setup>` siguen siendo válidos. Pasa ese cliente a una operación. Un `Client` es una función: no lo uses como fuente de `watch` o `computed`, porque esos llaman a una función.
 
-Para una `InjectionKey<Client>` personalizada, usa `app.provide(key, client)` o `provide(key, client)` en un componente ancestro. Ambos lados deben compartir el mismo objeto `Symbol`; descripciones iguales no hacen que las claves sean iguales. `createClientPlugin(client)` sigue aceptando solo el cliente y proporcionando únicamente `HTTP_CLIENT`.
+Para una `InjectionKey<Client>` personalizada, usa `app.provide(key, client)` o el `provide(key, client)` de un ancestro. Comparte el mismo objeto `Symbol`; que las descripciones coincidan no hace iguales las claves. `createClientPlugin(client)` sigue recibiendo solo el cliente y proporciona `HTTP_CLIENT`.
 
-- **Devuelve** el mismo cliente proporcionado para la clave elegida.
-- **Lanza** un `Error` sin contexto de inyección activo o sin cliente para la clave elegida. Una clave personalizada ausente nunca recurre a `HTTP_CLIENT`; instalar el plugin no establece por sí solo un contexto de inyección.
+- **Devuelve** el cliente exacto proporcionado para la clave seleccionada.
+- **Lanza** un `Error` sin un contexto de inyección activo o sin un cliente para la clave seleccionada. Una clave personalizada ausente nunca cae a `HTTP_CLIENT`; instalar el plugin por sí solo no establece un contexto de inyección.
 
 ## HTTP_CLIENT
 
 <ApiSignature name="HTTP_CLIENT" />
 
-Clave de inyección de Vue. Prefiere `injectClient()` a `inject(HTTP_CLIENT)`. Sustituye el cliente de un subárbol con `provide(HTTP_CLIENT, childClient)`.
+Clave de inyección de Vue. Prefiere `injectClient()` a `inject(HTTP_CLIENT)`. Sustituye un subárbol con `provide(HTTP_CLIENT, childClient)`.

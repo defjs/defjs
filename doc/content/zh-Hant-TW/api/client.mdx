@@ -5,16 +5,16 @@ description: createClient、option helpers，以及 Client 型別。
 
 # Client
 
-建立 client，options 由左到右組合，再 `execute` HTTP／SSE／WebSocket commands。
+`createClient(...)` 回傳可呼叫的 [`Client`](/zh-Hant-TW/api/core/client-type)。Options 由左到右組合，再呼叫 `client(options?)` 衍生 client，並把它傳給操作：`getUser(client(options), input)`。
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請求邊界內建立 client。
+Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請求邊界內建立 client。回傳的 client 是一個函式。呼叫它會回傳新的 client，而且不會進行 I/O。
 
 - **options** — 像 `withEndpoint` 這類 option helpers。
-- **回傳** `execute` 依傳輸 overload 的 client。
+- **回傳** 可呼叫的 client。基礎設定由每個衍生 client 共用，執行期不會凍結。它依慣例固定：函式庫不會改它，應用程式也不應該改。
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -32,7 +32,7 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 <ApiSignature name="withInterceptors" />
 
-依註冊順序追加 interceptors。混合的 kinds 在執行時依傳輸篩選。
+依註冊順序追加 interceptors。混合的 kinds 在操作執行時依傳輸篩選。
 
 ### withQuerySerializer()
 
@@ -55,20 +55,7 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 每個 request 都會變的值，請用 interceptor 處理，例如重新整理後的 Bearer token，或對序列化 body 計算的 HMAC。
 
-### withTimeout()
-
-<ApiSignature name="withTimeout" />
-
-設定預設 timeout（單位為毫秒），只適用於 **HTTP** 的 `execute`。SSE 與 WebSocket 會忽略它；它們 execute 的 `timeout` 是另一個，針對每次呼叫的啟動期限。`ms` 必須是不大於 `2_147_483_647` 的正安全整數，否則呼叫 `withTimeout` 時會丟出 `RangeError`。第二次呼叫 `withTimeout` 會取代第一次。
-
-這個期限涵蓋 input 解析、builder、interceptors、傳輸，以及讀取已宣告的 body。它會與每次呼叫的 [`HttpExecuteOptions`](/zh-Hant-TW/api/core/httpexecuteoptions-type) 組合：
-
-| Execute options             | 效果                                                                     |
-| --------------------------- | ------------------------------------------------------------------------ |
-| 無                          | 套用 client 預設值；逾時為 `NET_TIMEOUT`。                               |
-| `{ timeout }`               | 此次呼叫取代 client 預設值。                                             |
-| `{ abort }` 或 `{ signal }` | 與預設值組合：呼叫端的 signal 為 `NET_ABORTED`，計時器為 `NET_TIMEOUT`。 |
-| `{ abort, timeout }`        | 仍然無效：`REQ_OPTIONS_INVALID`。client 預設值永遠不算衝突。             |
+沒有 client 層級的預設期限。某一次呼叫需要期限時，在衍生的 client 上傳 `abort: AbortSignal.timeout(ms)`。手動取消是 `NET_ABORTED`。`AbortSignal.timeout` 歸類為 `NET_TIMEOUT`。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -122,7 +109,27 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 <ApiSignature name="Client" />
 
-`execute` 依命令種類各有一個 overload（event stream、WebSocket、HTTP），型別參數由 command 推斷。
+`Client` 是一個函式。帶著 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫它，會回傳新的 client。七個已知欄位從引數複製進一個新物件，再覆疊到目前的 options 上。較後的欄位勝出。欄位的值為 `undefined` 時，視為未提供，保留父層的值。衍生出的 client 不能丟掉父層已有的設定；要回到沒有這項設定，從當初沒有它的那個 client 再衍生一次（保留根 client）。巢狀的 `heartbeat`、`protocols` 與 `reconnect` 的值依參考保留，不複製，並且整份替換父層的值，不會合併。WebSocket 在操作執行時讀取它們（那時會複製 heartbeat 的欄位與 protocols 清單），所以衍生之後再改這些物件，仍可能影響之後的呼叫。應用程式在傳入之後應把它們視為不可變。原本的 client 不會被修改。`client()`、`client(undefined)` 與 `client({})` 會複製目前的 options。衍生不會進行 I/O。同一個 client 值可以傳給許多操作。`abort` 會被替換，不會合併；在應用程式碼裡用 `AbortSignal.any` 組合 signals。
+
+不要把 client 傳給 React 的 state setter（`setState(client)` 會把它當成 updater 呼叫），也不要把它當成 Vue 的 `watch` 或 `computed` 來源（那些會呼叫函式）。
+
+### RequestOptions
+
+<ApiSignature name="RequestOptions" />
+
+七個扁平欄位。每種協定只讀自己看得懂的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 會被忽略，不是 fault。SSE 只從請求 options 讀取 `abort`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選，也沒有 `timeout` 或 `signal` 欄位。
+
+| 欄位                 | 協定                   | 替換方式                                                               |
+| -------------------- | ---------------------- | ---------------------------------------------------------------------- |
+| `abort`              | HTTP、SSE 與 WebSocket | 取代前一個 signal。對 SSE 與 WebSocket，它涵蓋整條連線，包含開啟之後。 |
+| `onUploadProgress`   | HTTP                   | 其他協定會忽略。                                                       |
+| `onDownloadProgress` | HTTP                   | 其他協定會忽略。                                                       |
+| `beforeConnect`      | WebSocket              | 在該次呼叫取代 client 的設定。                                         |
+| `protocols`          | WebSocket              | 取代 client 的清單。                                                   |
+| `heartbeat`          | WebSocket              | 整份替換。`timeoutMs` 是確認等待，不是請求期限。                       |
+| `reconnect`          | WebSocket              | 整份替換。                                                             |
+
+[`HttpExecuteOptions`](/zh-Hant-TW/api/core/httpexecuteoptions-type) 是 HTTP 切片（`abort` 加上進度）。[`EventStreamExecuteOptions`](/zh-Hant-TW/api/core/eventstreamexecuteoptions-type) 是 `{ abort? }`。[`WebSocketExecuteOptions`](/zh-Hant-TW/api/core/websocketexecuteoptions-type) 是 WebSocket 切片再加上 `abort`。
 
 ### ClientOption
 
@@ -164,17 +171,17 @@ Defjs 對 Fetch 實作所需的呼叫簽章。它不是 `typeof fetch`，因此 
 
 SSE 的 `onInvalidEvent` 會處理兩種事件：沒有對應 struct 的事件，包括連 `default` 也沒有的情況（`missing-struct`），以及資料未通過其 struct 驗證的事件（`validation-failed`）。這類事件一律會被丟棄；handler 的回傳值會被忽略，它丟出的錯誤也不會關閉 stream。
 
-對 WebSocket 來說，`beforeConnect`、`heartbeat`、`protocols` 與 `reconnect` 也可以在每次呼叫 `execute` 時傳入；execute 的值會在該次呼叫取代 client 的值。`heartbeat.message` 負責建立每一次 ping；省略它或它回傳 `undefined` 時，不會送出任何東西。
+對 WebSocket 來說，`beforeConnect`、`heartbeat`、`protocols` 與 `reconnect` 也可以在衍生的 client 上傳入；每一項都會在該次呼叫整份取代 client 的值。`heartbeat.message` 負責建立每一次 ping；省略它或它回傳 `undefined` 時，不會送出任何東西。`heartbeat.timeoutMs` 等待確認。它不是請求期限。
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-簽名裡出現的欄位是 `sse` 與 `webSocket`。另外八個——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`timeout`、`xsrf` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別，其中 `endpoint` 必填。`createClient` 不接收這個物件，而是接收 option helpers。
+簽名裡出現的欄位是 `sse` 與 `webSocket`。另外七個——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別，其中 `endpoint` 必填。沒有 client 層級的 `timeout`。`createClient` 不接收這個物件，而是接收 option helpers。
 
 ### ClientConfig
 
-解析後的快照，由 option helpers 修改、由 `execute` 讀取：套用預設值之後的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）與 `webSocket` 一定存在。
+解析後的快照，由 option helpers 修改、由操作讀取：套用預設值之後的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）與 `webSocket` 一定存在。
 
 ### ClientSSEConfig
 

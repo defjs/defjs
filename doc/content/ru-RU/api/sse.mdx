@@ -1,36 +1,28 @@
 ---
 title: SSE
-description: defineEventStream, опции execute и stream handle.
+description: defineEventStream, опции запроса и stream handle.
 ---
 
 # SSE
 
-Объяви event stream, выполни, итерируй события, потом закрой.
+Объяви поток событий, вызови операцию с клиентом, итерируй события, потом закрой.
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
 - **definition** — `path`, карта `events` и обязательные лимиты `maxBufferSize` и `maxQueueSize` (положительные целые); необязательные `method` (по умолчанию `'GET'`), `operation`, `input` и `error`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`EventStreamDefinition`](/ru-RU/api/core/eventstreamdefinition-type). `error` обязателен только когда задан тип error-struct, а `builder` — ровно тогда, когда объявлен `input`.
-- **Возвращает** эндпоинт. Вызови с input — получишь `EventStreamCommand`.
+- **Возвращает** операцию. Первый аргумент — [`Client`](/ru-RU/api/core/client-type). Дальше идёт только input. Вызов начинает поток.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-## executeEventStreamCommand()
-
-<ApiSignature name="executeEventStreamCommand" />
-
-Низкоуровневый вход для `client.execute`. В прикладном коде бери клиент.
-
-- **Возвращает** `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, fault — это `Fault` этого struct; иначе `Fault<undefined>`.
-
-## Опции execute
+Вызов возвращает `[null, stream, open]` или `[error, undefined, open?]`. Если объявлен `error`, fault — это `Fault` этого struct; иначе `Fault<undefined>`. Передавай `abort`, выводя клиент из [`RequestOptions`](/ru-RU/api/core/requestoptions-type). SSE читает только `abort` и игнорирует прогресс и поля WebSocket.
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`abort` или `timeout` (никогда оба) плюс `signal`; колбэков прогресса нет. Тип отвергает оба сразу, а если передать оба в рантайме, вызов завершится с `REQ_OPTIONS_INVALID`. `signal` сочетается с любым из них. `timeout` — дедлайн запуска: он охватывает разбор input, builder, interceptors и handshake и не обрывает уже открытый поток. `withTimeout` к SSE не применяется.
+`EventStreamExecuteOptions` — это `{ abort? }`. Полей `timeout` или `signal` нет, и колбэка прогресса нет. `abort` покрывает весь поток, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. Приложение, которому нужен дедлайн только на старт, создаёт свой `AbortController`, прерывает его через `new DOMException("...", "TimeoutError")` из таймера и сбрасывает таймер после того, как `await` вернулся.
 
 ## EventStreamHandle
 
@@ -57,8 +49,6 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 `kind` — это `eof`, `aborted` или `error`. Каждый вариант может нести `reason` и `cause`. `code` есть только у `error`, одно из [`EventStreamFaultCode`](/ru-RU/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
 
-## Карта событий
-
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
@@ -79,15 +69,11 @@ Reconnect живёт на клиенте (`withSSEReconnect`). SSE `jitter` — 
 
 ## EventStreamEndpoint
 
-То, что возвращает `defineEventStream`. Вызови с input — получишь `EventStreamCommand`.
+То, что возвращает `defineEventStream`. Первый аргумент — клиент. Дальше идёт только input.
 
 ## EventStreamRequestShape
 
 Те же поля, что у `HttpRequestShape`, для method и path стрима.
-
-## EventStreamCommand
-
-Непрозрачная SSE-команда. Отдай в `client.execute`.
 
 ## StreamAwaitResult
 

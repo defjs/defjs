@@ -59,7 +59,7 @@ const IDEMPOTENT_METHODS: ReadonlySet<string> = new Set([
 /**
  * Metadata available once an SSE response has opened.
  *
- * `response` is the handshake response and `url` is the resolved request URL. It is the third element of a successful `client.execute` result and the value of `EventStreamHandle.open`.
+ * `response` is the handshake response and `url` is the resolved request URL. It is the third element of a successful event-stream result and the value of `EventStreamHandle.open`.
  *
  * @group sse
  */
@@ -109,7 +109,7 @@ export type EventStreamCloseInfo =
 /**
  * Open SSE stream: iterate events, read open metadata, and close early.
  *
- * `EventStreamMessage` is the raw `{ id: string; event: string; data: string }` message. Handles returned by `client.execute` carry parsed {@link EventStreamData}.
+ * `EventStreamMessage` is the raw `{ id: string; event: string; data: string }` message. Handles returned by an event-stream operation carry parsed {@link EventStreamData}.
  *
  * `open` is the startup snapshot ({@link EventStreamOpenInfo}); after a reconnect it can change, so read `stream.open` again. `closed` resolves with an {@link EventStreamCloseInfo} when the stream ends.
  *
@@ -852,7 +852,7 @@ function createEventStreamRequestInit(
 
 function validateOpenResponse(open: EventStreamOpenInfo): void {
   const { response } = open;
-  // A non-2xx handshake is a status fault, which `executeEventStreamCommand` builds from the open
+  // A non-2xx handshake is a status fault, which the event-stream operation builds from the open
   // info; the code here is only the fallback for a response that never carried a status.
   if (!response.ok) {
     throw new EventStreamFatalError(

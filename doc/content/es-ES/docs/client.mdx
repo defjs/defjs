@@ -1,13 +1,17 @@
 ---
 title: "Configuración del cliente / Client"
-description: Configurar URL base, autenticación y transporte para operaciones importadas del SDK en el cliente de la aplicación.
+description: Configura cómo llama tu aplicación a las operaciones importadas del SDK, con independencia de sus definiciones de API.
 ---
 
 # Cliente
 
-La aplicación crea su `Client`, importa endpoints del SDK y ejecuta sus comandos. El cliente contiene la URL base, autenticación, interceptores y transporte del entorno; el SDK aporta el contrato de la API. Así, un mismo endpoint exportado puede usarse en pruebas, navegador y servidor con clientes Defjs configurados de forma distinta.
+Un `Client` es la configuración de ejecución de la aplicación consumidora, y es una función. `createClient(...)` devuelve esa función. Importa operaciones de tu SDK, elige la dirección del servicio, las credenciales, los interceptores y el transporte, y llama a una operación con el cliente. `getUser(client({ abort }), { id: 1 })` arranca una llamada que declara entrada. `health(client)` arranca una que no la declara. Cuando todo el struct de entrada es opcional, tanto `search(client)` como `search(client, input)` son válidos. No hay un tercer argumento de opciones. Llamar a la operación la arranca. `await` solo espera la tupla error-first.
 
-El cliente ejecuta comandos HTTP, SSE y WebSocket. No almacena resultados en caché, no organiza los reintentos de la aplicación ni supervisa streams abiertos. Los resultados, la cancelación y la limpieza corresponden a quien inicia el trabajo.
+Las definiciones del SDK no atan esta instancia. Un navegador, una solicitud de servidor y una prueba local pueden usar la misma operación exportada con clientes distintos. Todos siguen el mismo contrato de Defjs y versiones compatibles de Core. Configura la dirección de servicio de cada cliente para las operaciones que llames a través de él.
+
+El mismo valor de cliente puede pasarse a muchas operaciones. Las aplicaciones eligen las políticas de caché y de reintento y son dueñas del trabajo que arrancan. HTTP no se reintenta automáticamente. La reconexión de streams es opt-in.
+
+Como un `Client` es una función, no lo pases a un setter de estado de React: `setState(client)` lo llamaría como updater. No lo uses como fuente de `watch` o `computed` de Vue: esos llaman a una función.
 
 ## Configuración básica
 
@@ -15,27 +19,57 @@ El cliente ejecuta comandos HTTP, SSE y WebSocket. No almacena resultados en cac
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` devuelve sobrecargas para cada tipo de comando.
+`createClient(...)` devuelve un [`Client`](/es-ES/api/core/client-type) invocable. No es un conjunto de sobrecargas por transporte.
 
 ## Componer opciones
 
-Las opciones se aplican de izquierda a derecha. Los setters reemplazan; `withInterceptors(...items)` añade.
+Las opciones se aplican de izquierda a derecha. Los setters sustituyen; `withInterceptors(...items)` añade.
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
 </include>
 
-Los interceptores mixtos se filtran por transporte en el momento de execute; el orden relativo entre el tipo seleccionado se conserva.
+Los interceptores mixtos se filtran por transporte cuando corre la operación; el orden relativo entre los del kind elegido se mantiene.
 
-## Ejecutar por transporte
+## Derivar un cliente
+
+`client(options?)` devuelve un cliente nuevo. Cuando se llama a `client(options)`, los siete campos conocidos se copian del objeto argumento: una instantánea de nivel superior en un objeto de opciones nuevo, superpuesta a las opciones actuales. Un campo posterior gana. Un campo cuyo valor es `undefined` se trata como no proporcionado y conserva el valor del padre. Un cliente derivado no puede quitar un ajuste que su padre tiene. Para volver a no tener ese ajuste, deriva otra vez desde el cliente que no lo tenía (conserva el cliente raíz). Los valores anidados `heartbeat`, `protocols` y `reconnect` se conservan por referencia, no se clonan, y sustituyen el valor del padre como un entero, no se fusionan. WebSocket los lee cuando se ejecuta la operación (entonces copia los campos de heartbeat y la lista protocols), así que mutar esos objetos después de derivar todavía puede afectar a una llamada posterior. Las aplicaciones deben tratarlos como inmutables después de pasarlos. Derivar no hace E/S. El cliente original nunca se muta. `client()`, `client(undefined)` y `client({})` copian las opciones actuales.
+
+`abort` no se combina. Un `abort` posterior sustituye al signal anterior. Combina signals con `AbortSignal.any` en el código de la aplicación.
+
+<include cwd lang="typescript">
+  examples/client/derive-client.ts#example
+</include>
+
+La configuración base de `createClient` la comparte cada cliente derivado y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían. Las [`RequestOptions`](/es-ES/api/core/requestoptions-type) de un cliente son esa instantánea de nivel superior. El código de la aplicación llama al cliente y lo pasa a una operación. No lee ese estado interno.
+
+## Opciones de la solicitud
+
+[`RequestOptions`](/es-ES/api/core/requestoptions-type) tiene siete campos planos. Cada protocolo lee solo los campos que conoce e ignora el resto. Pasar `heartbeat` a una operación HTTP se ignora, no es un fault. SSE solo lee `abort` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación.
+
+| Campo                | Lo usa               | Regla                                                                                                                  |
+| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP, SSE, WebSocket | Sustituye al signal anterior. Un plazo es `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). Un abort manual es `NET_ABORTED`. |
+| `onUploadProgress`   | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                            |
+| `onDownloadProgress` | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                            |
+| `beforeConnect`      | WebSocket            | Sustituye el ajuste del cliente para esa llamada.                                                                      |
+| `protocols`          | WebSocket            | Sustituye la lista del cliente. No se añade.                                                                           |
+| `heartbeat`          | WebSocket            | Se sustituye entero. `timeoutMs` es la espera del acuse del heartbeat, no un plazo de la solicitud.                    |
+| `reconnect`          | WebSocket            | Se sustituye entero.                                                                                                   |
+
+No hay campo `timeout`, ni campo `signal`, ni un plazo por defecto a nivel de cliente. En SSE y WebSocket, `abort` cubre toda la conexión, también después de abrirse. No hay un plazo solo de arranque. Una aplicación que quiera uno crea su propio `AbortController`, lo aborta con `new DOMException("...", "TimeoutError")` desde un temporizador y limpia el temporizador cuando el await regresa. Consulta [SSE](/es-ES/docs/sse#close-and-dispose).
+
+`HttpExecuteOptions` es el recorte HTTP: `abort` más los callbacks de progreso. `EventStreamExecuteOptions` es `{ abort? }`. `WebSocketExecuteOptions` es el recorte WebSocket más `abort`.
+
+## Resultados por transporte
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`. `open` es el snapshot del primer handshake exitoso de la conexión del handle devuelto para handles nativos de Defjs o wrappers que transmiten el mismo objeto `open` en vivo; los handles propios o wrappers que sobrescriben `open` usan su `open` público actual incluso tras una reconexión, mientras `stream.open` sigue en vivo (véase [SSE](/es-ES/docs/sse)).
+- SSE → `[error, stream, open]`. `open` es la instantánea del primer handshake correcto de la conexión devuelta para handles nativos de Defjs o wrappers que reenvían el mismo objeto `open` en vivo; los handles personalizados o los wrappers que sustituyen `open` usan su `open` público actual incluso después de reconectar, mientras que `stream.open` sigue en vivo (consulta [SSE](/es-ES/docs/sse)).
 - WebSocket → `[error, session, connection]`
 
-El execute de WebSocket puede sobrescribir `beforeConnect`, `heartbeat`, `protocols` y `reconnect`. `timeout` debe ser un entero seguro positivo en `1..2_147_483_647`.
+Vuelve antes de usar el valor de éxito cuando `error` está presente.
 
-Tú gestionas la limpieza: aborta HTTP, cierra SSE + `await stream.closed`, cierra WebSocket + `await session.closed`.
+Tú eres dueño de la limpieza: aborta HTTP, cierra SSE + `await stream.closed`, cierra WebSocket + `await session.closed`.
 
 ## Inyectar un transporte de prueba
 
@@ -43,26 +77,34 @@ Tú gestionas la limpieza: aborta HTTP, cierra SSE + `await stream.closed`, cier
   examples/client/inject-test-transport.ts#example
 </include>
 
-## Ámbito en servidor vs navegador
+## Ámbito en servidor frente a navegador
 
-En un servidor, crea el cliente dentro del límite de la solicitud cuando las opciones o clausuras de interceptor capturan auth, cookies, usuarios o tenants. La identidad del cliente no es por sí sola un límite de seguridad.
+En un servidor, crea el cliente dentro del límite de la solicitud cuando las opciones o los cierres de un interceptor capturan auth, cookies, usuarios o tenants. La identidad del cliente no es por sí sola un límite de seguridad.
+
+## Migración
+
+| Antes                                     | Ahora                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------- |
+| `client.execute(getUser(input), options)` | `getUser(client(options), input)`                                   |
+| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })`                      |
+| `execute(cmd, { signal })`                | `client({ abort: signal })`                                         |
+| `createClient(withTimeout(5000), ...)`    | pasa `abort` en la llamada, o envuelve una función de la aplicación |
 
 ## Referencia
 
 | Helper                                                                                                        | Efecto                                                               |
 | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | Endpoint base absoluto para todos los transportes                    |
-| `withHeaders(HeadersInit)`                                                                                    | Cabeceras estáticas por defecto para HTTP/SSE; las del comando ganan |
-| `withTimeout(ms)`                                                                                             | Timeout por defecto solo de `execute` HTTP (SSE/WS lo ignoran)       |
-| `withHTTPHandle(fetch)`                                                                                       | Reemplazar Fetch para HTTP                                           |
-| `withSSEHandle(fetch)`                                                                                        | Reemplazar Fetch para SSE                                            |
-| `withWebSocketHandle(WebSocket)`                                                                              | Reemplazar el constructor WebSocket                                  |
-| `withInterceptors(...items)`                                                                                  | Añadir interceptores mixtos                                          |
+| `withHeaders(HeadersInit)`                                                                                    | Cabeceras estáticas por defecto para HTTP/SSE; las del builder ganan |
+| `withHTTPHandle(fetch)`                                                                                       | Sustituye Fetch para HTTP                                            |
+| `withSSEHandle(fetch)`                                                                                        | Sustituye Fetch para SSE                                             |
+| `withWebSocketHandle(WebSocket)`                                                                              | Sustituye el constructor de WebSocket                                |
+| `withInterceptors(...items)`                                                                                  | Añade interceptores mixtos                                           |
 | `withQuerySerializer(fn)`                                                                                     | Codifica un objeto de query ya con alias en un query string          |
 | `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` para HTTP/SSE cuando es true          |
-| `withXSRF(options?)`                                                                                          | Cookie XSRF HTTP → cabecera                                          |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Controles SSE                                                        |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Controles WebSocket                                                  |
+| `withXSRF(options?)`                                                                                          | Cookie XSRF de HTTP → cabecera                                       |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Mandos de SSE                                                        |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Mandos de WebSocket                                                  |
 
 ## Recetas relacionadas
 

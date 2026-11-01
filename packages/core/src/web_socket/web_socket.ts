@@ -1,10 +1,5 @@
-import {
-  COMMAND_EXECUTE,
-  COMMAND_TYPE,
-  WEB_SOCKET_COMMAND,
-  type CommandExecutor,
-} from "../client/command";
-import type { BaseCommand } from "../client/command";
+import type { Client, RequestOptions } from "../client/client";
+import { CLIENT } from "../client/client";
 import type {
   ClientConfig,
   ClientWebSocketOptions,
@@ -22,22 +17,15 @@ import {
   makeChain,
   resolveWebSocketInterceptors,
 } from "../interceptor/interceptor";
-import type { UseCancellationConfig } from "../internal/abort";
 import {
-  armTransportDeadline,
   awaitWithSignal,
-  createAbortTimeoutConflictFault,
-  hasAbortTimeoutConflict,
   mergeAbortSignals,
   releaseAbortSignal,
   resolveAbortedFault,
   resolveAbortFault,
-  resolveTransportCancellation,
-  snapshotCancellationConfig,
-  validateTransportTimeout,
 } from "../internal/abort";
 import { AsyncQueue } from "../internal/async_queue";
-import type { EndpointCallable } from "../internal/endpoint_command";
+import type { EndpointArgs } from "../internal/endpoint_command";
 import type { EndpointInput, ParsedInput } from "../internal/endpoint_input";
 import { parseEndpointInput } from "../internal/endpoint_input";
 import type { HttpRequest } from "../internal/http_request";
@@ -142,13 +130,13 @@ interface WebSocketDefinitionBase<
  *
  * - `maxIncomingQueueSize` is required and must be a positive safe integer. `maxOutgoingQueueSize` must be a non-negative safe integer; it defaults to `0`, which disables queueing of messages sent while the session is `reconnecting`.
  *
- * - `protocols` is the static default subprotocol list. The `protocols` execute option and {@link withWebSocketProtocols} override it.
+ * - `protocols` is the static default subprotocol list. `RequestOptions.protocols` and {@link withWebSocketProtocols} override it.
  *
  * - `operation` is a static, low-cardinality name for telemetry.
  *
- * - `input` is the struct for the command input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.
+ * - `input` is the struct for the operation input. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. The builder may return `path` and `query` only; see {@link WebSocketRequestShape}.
  *
- * Invalid queue limits are reported when the command executes, as a `REQ_OPTIONS_INVALID` fault.
+ * Invalid queue limits are reported when the operation runs, as a `REQ_OPTIONS_INVALID` fault.
  *
  * @group web-socket
  */
@@ -172,7 +160,7 @@ export type { WebSocketRequestShape } from "../internal/builder_types";
  *
  * - `generation` counts the physical sockets that reached `open`: `1` after the first open, one more after each reconnect. A snapshot taken before any open has `0`.
  *
- * `session.connection` exposes the session's current public connection info. The `connection` in the execute result preserves the first successful snapshot only for a native Defjs session or a wrapper forwarding the same live `connection` object. Custom sessions and wrappers that transform `connection` instead return their current public `connection`. Sharing `closed` cannot bypass URL sanitization or metadata filtering, and Defjs does not reconstruct first-connection metadata from arbitrary transformations.
+ * `session.connection` exposes the session's current public connection info. The `connection` in the operation result preserves the first successful snapshot only for a native Defjs session or a wrapper forwarding the same live `connection` object. Custom sessions and wrappers that transform `connection` instead return their current public `connection`. Sharing `closed` cannot bypass URL sanitization or metadata filtering, and Defjs does not reconstruct first-connection metadata from arbitrary transformations.
  *
  * @group web-socket
  */
@@ -264,7 +252,7 @@ export interface WebSocketSession<
 }
 
 /**
- * Await-result tuple from opening a WebSocket via `client.execute`.
+ * Await-result tuple from opening a WebSocket.
  *
  * - On success: `[null, session, connection]`. `session.connection` moves forward on reconnect. The tuple's `connection` preserves the first successful snapshot only for a native Defjs session or a wrapper forwarding the same live `connection` object. Custom sessions and wrappers that transform `connection` instead return their current public `connection`. Sharing `closed` cannot bypass URL sanitization or metadata filtering, and Defjs does not reconstruct first-connection metadata from arbitrary transformations.
  *
@@ -294,100 +282,48 @@ interface UseWebSocketBaseConfig<TIncoming = unknown, TOutgoing = unknown> {
 }
 
 /**
- * WebSocket execute options without signal.
+ * WebSocket fields of {@link RequestOptions}, plus `abort`.
  *
- * The WebSocket-specific part of {@link WebSocketExecuteOptions}, which adds `signal`.
- *
- * - `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for one call.
- *
- * - Cancellation is either `abort` or `timeout`, never both. The type rejects both, and at runtime passing both fails with a `REQ_OPTIONS_INVALID` fault.
+ * `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for one call. `abort` covers the whole session, including after it opens. There is no startup-only deadline and no `signal` field.
  *
  * @group web-socket
  */
 export type UseWebSocketConfig<
   TIncoming = unknown,
   TOutgoing = unknown,
-> = UseWebSocketBaseConfig<TIncoming, TOutgoing> & UseCancellationConfig;
+> = UseWebSocketBaseConfig<TIncoming, TOutgoing> & {
+  /** Aborts the session, including after it is open. */
+  abort?: AbortSignal;
+};
 
 /**
- * Per-call options for executing a WebSocket command.
+ * WebSocket fields read from {@link RequestOptions} for one call.
  *
- * {@link UseWebSocketConfig} plus `signal`. Expanded:
- *
- * ```ts
- * type WebSocketExecuteOptions<TIncoming = unknown, TOutgoing = unknown> = {
- *   beforeConnect?: (context: {
- *     attempt: number;
- *     signal: AbortSignal;
- *   }) => void | Promise<void>;
- *   heartbeat?: WebSocketHeartbeatConfig<TIncoming, TOutgoing>;
- *   protocols?: readonly string[];
- *   reconnect?: ClientWebSocketOptions["reconnect"];
- *   signal?: AbortSignal;
- * } & (
- *   { abort?: AbortSignal; timeout?: never } | { abort?: never; timeout?: number }
- * );
- * ```
- *
- * - `abort` and `timeout` are mutually exclusive. The type rejects both, and at runtime passing both fails with a `REQ_OPTIONS_INVALID` fault.
- *
- * - `signal` combines with either one; it is not an alias for `abort`.
- *
- * - `timeout` must be a positive safe integer no greater than `2_147_483_647`. It limits how long opening the session may take and is not applied again on reconnect.
- *
- * - `beforeConnect`, `heartbeat`, `protocols`, and `reconnect` override the client-level options for this call.
- *
- * - When `reconnect` is set, `attempts` defaults to `3` per outage; `0` disables. Successful `open` resets the budget and backoff exponent. Omitting `attempts` does not give unlimited retries within one outage. See {@link withWebSocketReconnect} for validation and final delay caps.
- *
- * See {@link WebSocketHeartbeatConfig}.
+ * See {@link UseWebSocketConfig}. `heartbeat` callbacks are not inferred from the operation; narrow `unknown` messages yourself.
  *
  * @group web-socket
+ * @see {@link WebSocketHeartbeatConfig}
  */
 export type WebSocketExecuteOptions<
   TIncoming = unknown,
   TOutgoing = unknown,
-> = UseWebSocketConfig<TIncoming, TOutgoing> & {
-  signal?: AbortSignal;
-};
+> = UseWebSocketConfig<TIncoming, TOutgoing>;
 
 /**
- * Executable command created by calling a WebSocketEndpoint.
+ * Operation returned by `defineWebSocket`.
  *
- * Created by calling a {@link WebSocketEndpoint}. It holds the endpoint definition and the unparsed input. Pass it to `client.execute` to open a session; nothing connects until then.
- *
- * `BaseCommand` carries symbol-keyed members that route the command to the right transport. They are internal, so treat the command as opaque.
- *
- * @group web-socket
- */
-export interface WebSocketCommand<
-  TInput extends AnyStruct | undefined,
-  TIncoming extends AnyStruct,
-  TOutgoing extends AnyStruct | undefined,
-> extends BaseCommand<typeof WEB_SOCKET_COMMAND> {
-  readonly endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>;
-  readonly input: EndpointInput<TInput> | undefined;
-}
-
-/**
- * Callable returned by defineWebSocket.
- *
- * Returned by {@link defineWebSocket}. Calling it creates a {@link WebSocketCommand} that you pass to `client.execute`. The call signature depends on `input`:
- *
- * - No `input` declared: `() => WebSocketCommand`.
- *
- * - `input` accepts `undefined`: `(input?: StructInput<TInput>) => WebSocketCommand`.
- *
- * - Otherwise: `(input: StructInput<TInput>) => WebSocketCommand`.
- *
- * Calling the endpoint does not connect. The input is parsed when the command is executed.
+ * The first argument is a {@link Client}. Further arguments are the input only. Calling it opens the session and returns the existing error-first tuple.
  *
  * @group web-socket
  */
 export type WebSocketEndpoint<
-  TInput extends AnyStruct | undefined,
-  TIncoming extends AnyStruct,
-  TOutgoing extends AnyStruct | undefined,
-> = EndpointCallable<TInput, WebSocketCommand<TInput, TIncoming, TOutgoing>>;
+  Args extends unknown[],
+  Incoming,
+  Outgoing = never,
+> = (
+  client: Client,
+  ...args: Args
+) => Promise<SocketAwaitResult<Incoming, Outgoing>>;
 
 type SocketRefState = {
   connection?: WebSocketConnectionInfo;
@@ -428,7 +364,7 @@ export type ManualSocketCloseReason = {
  *
  * - `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`.
  *
- * Set it with {@link withWebSocketHeartbeat} or the `heartbeat` execute option.
+ * Set it with {@link withWebSocketHeartbeat} or the `heartbeat` request option.
  *
  * @group web-socket
  */
@@ -446,14 +382,14 @@ export interface WebSocketHeartbeatConfig<
  * Declare a typed WebSocket endpoint.
  *
  * Pass path, incoming (and optional outgoing) message structs, and queue limits.
- * Call the returned endpoint with input to get a `WebSocketCommand` for `client.execute`.
+ * Call the returned operation with a client and, when declared, the input.
  *
  * - **definition** — `path`, one `incoming` struct, and the required `maxIncomingQueueSize` (a positive safe integer). Optional `outgoing` and `input` structs, static `protocols`, `maxOutgoingQueueSize` (a non-negative safe integer), and `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * A WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.
  *
  * @param definition - WebSocket contract (path, structs, queue limits, optional input).
- * @returns An endpoint that creates `WebSocketCommand` values from input.
+ * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
  * @group web-socket
  * @exampleFile examples/api/define-web-socket.ts#example
@@ -468,7 +404,11 @@ export function defineWebSocket<
     input?: TInput;
     path: P;
   } & BuilderField<NoInfer<TInput>, WebSocketRequestShape<NoInfer<P>>>,
-): WebSocketEndpoint<TInput, TIncoming, TOutgoing> {
+): WebSocketEndpoint<
+  EndpointArgs<TInput>,
+  WebSocketIncomingData<TIncoming>,
+  WebSocketOutgoingData<TOutgoing>
+> {
   // Snapshot the top-level definition so a later mutation of the caller's object cannot retarget this endpoint.
   const endpoint = { ...definition } as WebSocketDefinition<
     TInput,
@@ -476,21 +416,156 @@ export function defineWebSocket<
     TOutgoing
   >;
 
-  function create(
-    input?: EndpointInput<TInput>,
-  ): WebSocketCommand<TInput, TIncoming, TOutgoing> {
-    const command: WebSocketCommand<TInput, TIncoming, TOutgoing> = {
-      [COMMAND_EXECUTE]: executeWebSocketCommand as CommandExecutor,
-      [COMMAND_TYPE]: WEB_SOCKET_COMMAND,
+  return (async (client: Client, input?: EndpointInput<TInput>) => {
+    const requestOptions = client[CLIENT].options;
+    const controller = new AbortController();
+    const socketState: SocketRefState = {
+      listeners: {
+        runtimeError: new Set(),
+        stateChange: new Set(),
+      },
+      status: "idle",
+      transition: 0,
+    };
+    return runWebSocketCommand(
+      client[CLIENT].config,
       endpoint,
       input,
-    };
+      requestOptions,
+      controller,
+      socketState,
+    );
+  }) as WebSocketEndpoint<
+    EndpointArgs<TInput>,
+    WebSocketIncomingData<TIncoming>,
+    WebSocketOutgoingData<TOutgoing>
+  >;
+}
 
-    return command;
+type StageOutcome<T> =
+  [fault: PreflightFault, value: undefined] | [fault: undefined, value: T];
+
+type ResolvedCallOptions<TIncoming, TOutgoing> = {
+  beforeConnect: ClientWebSocketOptions["beforeConnect"];
+  heartbeat: WebSocketHeartbeatConfig<TIncoming, TOutgoing> | undefined;
+  protocols: readonly string[] | undefined;
+  reconnect: ReturnType<typeof normalizeReconnectConfig>;
+};
+
+function readQueueLimits(
+  maxIncomingQueueSize: number,
+  maxOutgoingQueueSize: number | undefined,
+): StageOutcome<true> {
+  try {
+    validateWebSocketQueueLimits(maxIncomingQueueSize, maxOutgoingQueueSize);
+    return [undefined, true];
+  } catch (error) {
+    return [createPreflightFault("REQ_OPTIONS_INVALID", error), undefined];
   }
+}
 
-  return ((input?: EndpointInput<TInput>) =>
-    create(input)) as WebSocketEndpoint<TInput, TIncoming, TOutgoing>;
+function readCallOptions<TIncoming, TOutgoing>(
+  config: RequestOptions,
+  webSocket: ClientWebSocketOptions,
+): StageOutcome<ResolvedCallOptions<TIncoming, TOutgoing>> {
+  try {
+    const beforeConnect = config.beforeConnect;
+    const configuredProtocols = config.protocols;
+    const protocols = configuredProtocols
+      ? [...configuredProtocols]
+      : undefined;
+    const reconnectOption = config.reconnect ?? webSocket.reconnect;
+    const heartbeatOption = (config.heartbeat ?? webSocket.heartbeat) as
+      // Type boundary: client config stores the heartbeat as a generic shape; the local type adds incoming/outgoing specificity.
+      WebSocketHeartbeatConfig<TIncoming, TOutgoing> | undefined;
+    const heartbeat = heartbeatOption
+      ? {
+          intervalMs: heartbeatOption.intervalMs,
+          isAck: heartbeatOption.isAck,
+          message: heartbeatOption.message,
+          timeoutMs: heartbeatOption.timeoutMs,
+        }
+      : undefined;
+    validateHeartbeatConfig(heartbeat);
+    const reconnect = normalizeReconnectConfig(reconnectOption);
+    return [undefined, { beforeConnect, heartbeat, protocols, reconnect }];
+  } catch (error) {
+    return [createPreflightFault("REQ_OPTIONS_INVALID", error), undefined];
+  }
+}
+
+function parseInput<TInput extends AnyStruct | undefined>(
+  inputStruct: TInput | undefined,
+  input: EndpointInput<TInput> | undefined,
+  guides: WeakMap<object, Guide>,
+  signal: AbortSignal,
+): StageOutcome<ParsedInput<TInput>> {
+  try {
+    return [undefined, parseEndpointInput<TInput>(inputStruct, input, guides)];
+  } catch (error) {
+    return [
+      resolveAbortFault(signal) ??
+        createPreflightFault("REQ_INPUT_INVALID", error),
+      undefined,
+    ];
+  }
+}
+
+function buildOutbound<TInput extends AnyStruct | undefined>(
+  parsedInput: ParsedInput<TInput>,
+  builder: OutboundBuilder | undefined,
+  inputDeclared: boolean,
+  guides: WeakMap<object, Guide>,
+  signal: AbortSignal,
+): StageOutcome<MaterializedRequest> {
+  try {
+    return [
+      undefined,
+      materializeOutboundRequest(
+        runOutboundBuilder(parsedInput, builder, inputDeclared),
+        "webSocket",
+        guides,
+      ),
+    ];
+  } catch (error) {
+    return [
+      resolveAbortFault(signal) ??
+        createPreflightFault("REQ_BUILD_FAILED", error),
+      undefined,
+    ];
+  }
+}
+
+function createSocketRequest(
+  args: Parameters<typeof createWebSocketRequest>[0],
+): StageOutcome<HttpRequest> {
+  try {
+    return [undefined, createWebSocketRequest(args)];
+  } catch (error) {
+    return [
+      resolveAbortFault(args.abort) ??
+        createPreflightFault("REQ_BUILD_FAILED", error),
+      undefined,
+    ];
+  }
+}
+
+function resolveSocketConstructor(
+  handle: ClientWebSocketOptions["handle"],
+): StageOutcome<
+  NonNullable<ClientWebSocketOptions["handle"] | typeof WebSocket>
+> {
+  const candidate = handle ?? globalThis.WebSocket;
+  if (typeof candidate !== "function") {
+    return [
+      createPreflightFault(
+        "ENV_UNSUPPORTED",
+        new Error("WebSocket is not supported in current runtime"),
+      ),
+      undefined,
+    ];
+  }
+  return [undefined, candidate];
 }
 
 async function runWebSocketCommand<
@@ -501,10 +576,7 @@ async function runWebSocketCommand<
   clientConfig: ClientConfig,
   endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>,
   input: EndpointInput<TInput> | undefined,
-  config: WebSocketExecuteOptions<
-    WebSocketIncomingData<TIncoming>,
-    WebSocketOutgoingData<TOutgoing>
-  >,
+  config: RequestOptions,
   controller: AbortController,
   state: SocketRefState,
 ): Promise<
@@ -515,116 +587,58 @@ async function runWebSocketCommand<
 > {
   setSocketState(state, "connecting");
 
-  let cancellationConfig: ReturnType<typeof snapshotCancellationConfig>;
-  try {
-    cancellationConfig = snapshotCancellationConfig(config);
-  } catch (error) {
-    const definitionError = createPreflightFault("REQ_OPTIONS_INVALID", error);
-    state.error = definitionError;
-    setSocketState(state, "error");
-    return [definitionError, undefined, undefined];
-  }
-
-  if (hasAbortTimeoutConflict(cancellationConfig)) {
-    const definitionError = createAbortTimeoutConflictFault();
-    state.error = definitionError;
-    setSocketState(state, "error");
-    return [definitionError, undefined, undefined];
-  }
-
-  try {
-    validateTransportTimeout(cancellationConfig.timeout);
-  } catch (error) {
-    const definitionError = createPreflightFault("REQ_OPTIONS_INVALID", error);
-    state.error = definitionError;
-    setSocketState(state, "error");
-    return [definitionError, undefined, undefined];
-  }
+  const callerAbort = config.abort;
 
   // Same fast path as HTTP/SSE: an already aborted call does not parse, build, or validate the socket.
-  const preAbortedSignal = [
-    cancellationConfig.abort,
-    cancellationConfig.signal,
-  ].find((signal) => signal?.aborted);
-  if (preAbortedSignal) {
-    const aborted = resolveAbortedFault(preAbortedSignal);
+  if (callerAbort?.aborted) {
+    const aborted = resolveAbortedFault(callerAbort);
     state.error = aborted;
     setSocketState(state, aborted.code === "NET_ABORTED" ? "aborted" : "error");
     return [aborted, undefined, undefined];
   }
 
-  try {
-    validateWebSocketQueueLimits(
-      endpoint.maxIncomingQueueSize,
-      endpoint.maxOutgoingQueueSize,
-    );
-  } catch (error) {
-    const definitionError = createPreflightFault("REQ_OPTIONS_INVALID", error);
-    state.error = definitionError;
+  // Queue limits and call options run before the abort signals exist.
+  const stopInvalidOptions = (
+    fault: PreflightFault,
+  ): SocketAwaitResult<
+    WebSocketIncomingData<TIncoming>,
+    WebSocketOutgoingData<TOutgoing>
+  > => {
+    state.error = fault;
     setSocketState(state, "error");
-    return [definitionError, undefined, undefined];
+    return [fault, undefined, undefined];
+  };
+
+  const [queueFault] = readQueueLimits(
+    endpoint.maxIncomingQueueSize,
+    endpoint.maxOutgoingQueueSize,
+  );
+  if (queueFault) {
+    return stopInvalidOptions(queueFault);
   }
 
-  let beforeConnectOption: ClientWebSocketOptions["beforeConnect"];
-  let protocolsOption: readonly string[] | undefined;
-  let reconnect: ReturnType<typeof normalizeReconnectConfig>;
-  let heartbeatConfig:
-    | WebSocketHeartbeatConfig<
-        WebSocketIncomingData<TIncoming>,
-        WebSocketOutgoingData<TOutgoing>
-      >
-    | undefined;
-  try {
-    beforeConnectOption = config.beforeConnect;
-    const configuredProtocols = config.protocols;
-    protocolsOption = configuredProtocols
-      ? [...configuredProtocols]
-      : undefined;
-    const reconnectOption =
-      config.reconnect ?? clientConfig.webSocket.reconnect;
-    const heartbeatOption = (config.heartbeat ??
-      clientConfig.webSocket.heartbeat) as
-      // Type boundary: client config stores the heartbeat as a generic shape; the local type adds incoming/outgoing specificity.
-      | WebSocketHeartbeatConfig<
-          WebSocketIncomingData<TIncoming>,
-          WebSocketOutgoingData<TOutgoing>
-        >
-      | undefined;
-    heartbeatConfig = heartbeatOption
-      ? {
-          intervalMs: heartbeatOption.intervalMs,
-          isAck: heartbeatOption.isAck,
-          message: heartbeatOption.message,
-          timeoutMs: heartbeatOption.timeoutMs,
-        }
-      : undefined;
-    validateHeartbeatConfig(heartbeatConfig);
-    reconnect = normalizeReconnectConfig(reconnectOption);
-  } catch (error) {
-    const definitionError = createPreflightFault("REQ_OPTIONS_INVALID", error);
-    state.error = definitionError;
-    setSocketState(state, "error");
-    return [definitionError, undefined, undefined];
+  const [optionsFault, callOptions] = readCallOptions<
+    WebSocketIncomingData<TIncoming>,
+    WebSocketOutgoingData<TOutgoing>
+  >(config, clientConfig.webSocket);
+  if (optionsFault) {
+    return stopInvalidOptions(optionsFault);
   }
+  const beforeConnectOption = callOptions.beforeConnect;
+  const protocolsOption = callOptions.protocols;
+  const reconnect = callOptions.reconnect;
+  const heartbeatConfig = callOptions.heartbeat;
 
-  // Startup deadline: armed before parse and the synchronous builder, released when startup
-  // settles. A later reconnect does not re-arm it.
-  const deadline = armTransportDeadline(cancellationConfig.timeout);
+  // `abort` stays in force after open and across reconnects.
   const chainController = new AbortController();
-  const chainSignal = mergeAbortSignals(chainController.signal, [
-    cancellationConfig.abort,
-    cancellationConfig.signal,
-    deadline.signal,
-  ]);
+  const chainSignal = mergeAbortSignals(chainController.signal, [callerAbort]);
   const signal = mergeAbortSignals(controller.signal, [chainSignal]);
-  deadline.releaseOnAbort(chainSignal);
   const stopBeforeTransport = (
     fault: PreflightFault,
   ): SocketAwaitResult<
     WebSocketIncomingData<TIncoming>,
     WebSocketOutgoingData<TOutgoing>
   > => {
-    deadline.release();
     releaseAbortSignal(chainSignal);
     releaseAbortSignal(signal);
     state.error = fault;
@@ -633,86 +647,59 @@ async function runWebSocketCommand<
   };
 
   const inputGuides = new WeakMap<object, Guide>();
-  let parsedInput: ParsedInput<TInput>;
-  try {
-    parsedInput = parseEndpointInput<TInput>(
-      endpoint.input,
-      input,
-      inputGuides,
-    );
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveTransportCancellation(
-        deadline,
-        signal,
-        createPreflightFault("REQ_INPUT_INVALID", error),
-      ),
-    );
+  const [inputFault, parsedInput] = parseInput(
+    endpoint.input,
+    input,
+    inputGuides,
+    signal,
+  );
+  if (inputFault) {
+    return stopBeforeTransport(inputFault);
   }
 
-  const parsedCancellation = resolveTransportCancellation(deadline, signal);
+  const parsedCancellation = resolveAbortFault(signal);
   if (parsedCancellation) {
     return stopBeforeTransport(parsedCancellation);
   }
 
-  let built: MaterializedRequest;
-  try {
-    built = materializeOutboundRequest(
-      runOutboundBuilder(
-        parsedInput,
-        endpoint.builder,
-        endpoint.input !== undefined,
-      ),
-      "webSocket",
-      inputGuides,
-    );
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveTransportCancellation(
-        deadline,
-        signal,
-        createPreflightFault("REQ_BUILD_FAILED", error),
-      ),
-    );
+  const [buildFault, built] = buildOutbound(
+    parsedInput,
+    endpoint.builder,
+    endpoint.input !== undefined,
+    inputGuides,
+    signal,
+  );
+  if (buildFault) {
+    return stopBeforeTransport(buildFault);
   }
 
-  const builtCancellation = resolveTransportCancellation(deadline, signal);
+  const builtCancellation = resolveAbortFault(signal);
   if (builtCancellation) {
     return stopBeforeTransport(builtCancellation);
   }
 
-  let wsRequest: HttpRequest;
-  try {
-    wsRequest = createWebSocketRequest({
-      abort: signal,
-      baseEndpoint: clientConfig.endpoint,
-      operation: endpoint.operation,
-      params: built.params,
-      path: endpoint.path,
-      query: built.query as
-        { [key: string]: RequestBuildValue } | URLSearchParams | undefined,
-      querySerializer: clientConfig.querySerializer,
-      withCredentials: clientConfig.withCredentials,
-    });
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveTransportCancellation(
-        deadline,
-        signal,
-        createPreflightFault("REQ_BUILD_FAILED", error),
-      ),
-    );
+  const [requestFault, wsRequest] = createSocketRequest({
+    abort: signal,
+    baseEndpoint: clientConfig.endpoint,
+    operation: endpoint.operation,
+    params: built.params,
+    path: endpoint.path,
+    query: built.query as
+      { [key: string]: RequestBuildValue } | URLSearchParams | undefined,
+    querySerializer: clientConfig.querySerializer,
+    withCredentials: clientConfig.withCredentials,
+  });
+  if (requestFault) {
+    return stopBeforeTransport(requestFault);
   }
 
-  const WebSocketCtor = clientConfig.webSocket.handle ?? globalThis.WebSocket;
-  if (typeof WebSocketCtor !== "function") {
-    return stopBeforeTransport(
-      createPreflightFault(
-        "ENV_UNSUPPORTED",
-        new Error("WebSocket is not supported in current runtime"),
-      ),
-    );
+  const constructorStage = resolveSocketConstructor(
+    clientConfig.webSocket.handle,
+  );
+  if (constructorStage[0]) {
+    return stopBeforeTransport(constructorStage[0]);
   }
+  const WebSocketCtor = constructorStage[1];
   const WebSocketImpl = WebSocketCtor as unknown as new (
     url: string | URL,
     protocols?: string | string[],
@@ -977,16 +964,6 @@ async function runWebSocketCommand<
           url: string,
           protocols: readonly string[],
         ): Promise<SocketLifecycleOutcome> {
-          // Query serialization and interceptors have already run. Do not construct a socket once cancelled.
-          const due = resolveTransportCancellation(deadline, signal);
-          if (due) {
-            return {
-              cause: due,
-              closeInfo: { cause: due, reason: due.message },
-              opened: false,
-            };
-          }
-
           let socket: WebSocketHandle;
           try {
             socket =
@@ -1118,7 +1095,6 @@ async function runWebSocketCommand<
               if (!startupSettled) {
                 startupConnection = latestConnection;
                 startupSettled = true;
-                deadline.release();
                 // Type boundary: session is created as WebSocketSession<...> above; resolveSession expects WebSocketSessionLike (structural match).
                 resolveSession(session as WebSocketSessionLike);
               }
@@ -1335,7 +1311,6 @@ async function runWebSocketCommand<
           }
 
           finished = true;
-          deadline.release();
           stopHeartbeat(sessionController);
 
           const activeSocket = sessionController.currentSocket;
@@ -1527,7 +1502,6 @@ async function runWebSocketCommand<
       );
     }
     chainSettled = true;
-    deadline.release();
     releaseAbortSignal(chainSignal);
     let deliveredSession = [...undeliveredSessions].some(
       (createdSession) =>
@@ -1579,7 +1553,6 @@ async function runWebSocketCommand<
     return [null, typedSession, connection];
   } catch (error) {
     chainSettled = true;
-    deadline.release();
     releaseAbortSignal(chainSignal);
     const signalError = resolveAbortFault(chainSignal);
     // The startup catch funnels every failure: a value that is already a fault (a refused
@@ -1612,59 +1585,6 @@ async function runWebSocketCommand<
     releaseAbortSignal(signal);
     return [requestError as Fault<undefined>, undefined, state.connection];
   }
-}
-
-/**
- * Open a WebSocket command against the given client config.
- *
- * Prefer `client.execute(command)` in application code; this is the low-level entry used by the client.
- *
- * The result is `[null, session, connection]` or `[fault, undefined, connection | undefined]`, where the fault is `Fault<undefined>`.
- *
- * WebSocket execute options can override the client's `beforeConnect`, `heartbeat`, `protocols`, and `reconnect`.
- *
- * @param clientConfig - Resolved client configuration.
- * @param command - WebSocket command from a `WebSocketEndpoint`.
- * @param options - Optional execute options (heartbeat, reconnect, abort).
- * @returns Await-result tuple of `[error, socket, connection]`.
- * @group web-socket
- */
-export async function executeWebSocketCommand<
-  TInput extends AnyStruct | undefined,
-  TIncoming extends AnyStruct,
-  TOutgoing extends AnyStruct | undefined,
->(
-  clientConfig: ClientConfig,
-  command: WebSocketCommand<TInput, TIncoming, TOutgoing>,
-  options?: WebSocketExecuteOptions<
-    WebSocketIncomingData<TIncoming>,
-    WebSocketOutgoingData<TOutgoing>
-  >,
-): Promise<
-  SocketAwaitResult<
-    WebSocketIncomingData<TIncoming>,
-    WebSocketOutgoingData<TOutgoing>
-  >
-> {
-  const { endpoint, input } = command;
-  const config = options ?? {};
-  const controller = new AbortController();
-  const state: SocketRefState = {
-    listeners: {
-      runtimeError: new Set(),
-      stateChange: new Set(),
-    },
-    status: "idle",
-    transition: 0,
-  };
-  return runWebSocketCommand(
-    clientConfig,
-    endpoint,
-    input,
-    config,
-    controller,
-    state,
-  );
 }
 
 /**

@@ -1,55 +1,66 @@
 ---
 title: Defjs
-description: Entwickelt für bessere SDKs. Typisierte API-Endpoints definieren, veröffentlichen und mit dem Client der Anwendung ausführen.
+description: TypeScript-SDKs mit wiederverwendbaren API-Definitionen und anwendungseigenen Clients entwerfen und veröffentlichen.
 ---
 
 # Defjs
 
 **Entwickelt für bessere SDKs.**
 
-Defjs steht für **define js**: API-SDKs lassen sich damit einfacher entwerfen, schreiben und veröffentlichen. Als SDK-Autor exportierst du wiederverwendbare, typisierte Endpoints mit `defineRequest`, `defineEventStream` und `defineWebSocket`. Die Anwendung importiert diese Endpoints und führt sie mit ihrem eigenen Defjs-Client aus.
+Defjs hilft Teams, ihre APIs in wiederverwendbare TypeScript-SDKs zu verwandeln. `def` steht für `define`: Beschreibe die Operationen, die dein Service anbietet, exportiere sie aus einem Modul oder npm-Paket, und lass jede Anwendung ihren eigenen Client konfigurieren, um sie aufzurufen.
 
-| SDK-Autor                                                                 | Anwendung                                                                    |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| API-Operationen, Methoden und relative Pfade definieren                   | Base-Endpoint und Transport für die Umgebung konfigurieren                   |
-| Ein- und Ausgaben, Fehler, Events und Nachrichten mit Struct beschreiben  | Authentifizierung, Interceptors und Telemetrie einrichten                    |
-| Mit `builder` Eingaben auf den Request abbilden und Endpoints exportieren | Commands ausführen, Ergebnisse behandeln und Abbruch sowie Streams verwalten |
+## SDK definieren, Anwendung konfigurieren
 
-Das SDK exportiert den Endpoint:
+| SDK-Autor                                                                | SDK-Nutzer                                                        |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------- |
+| Operationen, Eingabe, Request-Abbildung, Responses und Fehler definieren | Service-Adresse, Zugangsdaten, Interceptors und Transport wählen  |
+| Typisierte HTTP-, SSE- und WebSocket-Endpoints exportieren               | Diese Endpoints importieren und mit einem Defjs-Client aufrufen   |
+| Den API-Vertrag pflegen und veröffentlichen                              | Ergebnisse behandeln und Abbruch, Streams sowie Sessions besitzen |
+
+Eine SDK-Definition bindet keinen Anwendungsclient. Derselbe exportierte Endpoint kann eine Browser-Anwendung, einen Server oder einen lokalen Test mit unterschiedlichen Client-Konfigurationen bedienen. Beide Seiten nutzen weiterhin den Defjs-Ausführungsvertrag und kompatible Core-Versionen.
+
+Das SDK exportiert eine Operation:
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example
 </include>
 
-Die Anwendung stellt den Client bereit und führt den Command aus:
+Die Anwendung importiert sie und besitzt die Ausführung:
 
 <include cwd meta="app.ts">
   examples/home/app.ts#example
 </include>
 
-Definitionen und Ausführung bleiben Teil des Defjs-Vertrags. Der Client der Anwendung ergänzt die Laufzeitkonfiguration; die Endpoints enthalten weiterhin Methoden, Pfade und Transportverträge.
+Der Aufruf `getHealth(client)` startet den Request. Veröffentlichst du die Definition, importieren Nutzer sie aus deinem SDK-Paket statt aus der lokalen Datei.
 
 ## Bewährte Praxis
 
-Eine Definition bleibt vom Client unabhängig. Ihr Aufruf erzeugt nur einen Command. Gib diesem Command einen Namen und übergib den Namen an `client.execute` des Clients, den die Anwendung besitzt. Adresse und Zugangsdaten gehören ebenfalls der Anwendung. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
+Eine Definition bleibt vom Client unabhängig. Übergib den Client der Anwendung als erstes Argument, etwa `getHealth(client)`. Die Anwendung besitzt außerdem die Service-Adresse und die Zugangsdaten. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
 
-Beginne mit dem [Schnellstart](/de-DE/docs/start), lerne [Struct](/de-DE/docs/struct), [Commands](/de-DE/docs/commands) und [Client](/de-DE/docs/client) kennen und [veröffentliche dein SDK](/de-DE/recipes/publish-http-sdk). Die [Entwurfsentscheidungen](/de-DE/docs/design-decisions) erklären diese Aufteilung.
+## Dein SDK bauen
 
-Defjs legt keine Ergebnisse im Cache ab und organisiert keine anwendungsweiten Wiederholungen. Die Anwendung entscheidet über diese Regeln sowie Abbruch und Cleanup.
+1. [Definiere deine erste Operation und führe sie aus](/de-DE/docs/start), in getrennten Dateien für SDK und Anwendung.
+2. Beschreibe die [Datenverträge](/de-DE/docs/struct) und [HTTP-Operationen](/de-DE/docs/http), die dein SDK exportiert.
+3. [Teste und veröffentliche ein SDK-Paket](/de-DE/recipes/publish-http-sdk) mit JavaScript, Deklarationen und einer kompatiblen Core-Abhängigkeit.
+4. Konfiguriere den [Client](/de-DE/docs/client) der konsumierenden Anwendung und ergänze danach Framework- oder Observability-Integration, wo sie gebraucht wird.
+
+Die [Entwurfsentscheidungen](/de-DE/docs/design-decisions) erklären, warum API-Definitionen und Ausführung getrennte Eigentümer haben. Dieselbe Struktur kannst du in einer Anwendung nutzen, bevor du ein Paket veröffentlichst.
 
 ## Transport wählen
 
-| Du brauchst                          | Starte mit                          | Erfolgreiches Ergebnis                                                                    |
-| ------------------------------------ | ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| Request + statusspezifische Response | [HTTP](/de-DE/docs/http)            | Dekodierte Daten + `DecodedResponse` (`HttpMeta`, wenn kein Output-Struct deklariert ist) |
-| Langlebiger Server-Event-Feed        | [SSE](/de-DE/docs/sse)              | Ein Stream + Startup-`open`-Snapshot                                                      |
-| Bidirektionale Session               | [WebSocket](/de-DE/docs/web-socket) | Eine Session + Startup-`connection`-Snapshot                                              |
+| Du brauchst                          | Starte mit                          | Erfolgreiches Ergebnis                                                             |
+| ------------------------------------ | ----------------------------------- | ---------------------------------------------------------------------------------- |
+| Request + statusspezifische Response | [HTTP](/de-DE/docs/http)            | Dekodierte Daten + `DecodedResponse` (`HttpMeta`, wenn kein Output deklariert ist) |
+| Langlebiger Server-Event-Feed        | [SSE](/de-DE/docs/sse)              | Ein Stream + Startup-`open`-Snapshot                                               |
+| Bidirektionale Session               | [WebSocket](/de-DE/docs/web-socket) | Eine Session + Startup-`connection`-Snapshot                                       |
+
+Alle drei Transports folgen derselben Folge: eine Operation definieren, dann mit dem Client der Anwendung und der Eingabe des Aufrufers aufrufen.
 
 ## Paket wählen
 
 | Paket                         | Wann                                                                                                             |
 | ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | `defineRequest`, `defineEventStream`, `defineWebSocket`, `struct` und `createClient`                             |
+| `@defjs/core`                 | SDK-Operationen und Verträge definieren; Clients erzeugen und HTTP-, SSE- und WebSocket-Operationen aufrufen     |
 | `@defjs/react`                | `ClientProvider` / `useClient` — siehe [React](/de-DE/docs/integrations/react)                                   |
 | `@defjs/vue`                  | Plugin + `injectClient` — siehe [Vue](/de-DE/docs/integrations/vue)                                              |
 | `@defjs/opentelemetry-server` | Ausgehende Spans, Metrics und Logs — siehe [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) |
@@ -68,8 +79,11 @@ Bei einem Fehler ist der zweite Eintrag `undefined`. Bei HTTP ist auch der dritt
 
 Brich HTTP ab, wenn sie veraltet ist. Schließe SSE und `await stream.closed`. Schließe WebSocket und `await session.closed`. Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options Cookies, Auth oder Tenant-Daten erfassen. Schwärze URLs, Headers und Bodies, bevor du sie loggst.
 
+Defjs liefert Definitionen, Validierung und Ausführung. Anwendungen wählen Caching- und Retry-Regeln; Stream-Reconnect ist opt-in. Handgeschriebene SDK-Pakete werden heute unterstützt. CLI-Werkzeuge und OpenAPI-/SDK-Generierung bleiben geplant.
+
 ## Verwandte Rezepte
 
+- [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk)
 - [GET mit deklariertem 404](/de-DE/recipes/get-declared-404)
 - [POST JSON](/de-DE/recipes/post-json)
 - [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)

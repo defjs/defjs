@@ -44,7 +44,7 @@ test.each([200, 403])(
           }),
         ),
       );
-      const [fault, data] = await client.execute(nullEndpoint());
+      const [fault, data] = await nullEndpoint(client);
       observations.push({
         mode,
         code: fault?.code ?? null,
@@ -76,7 +76,7 @@ test.each([200, 403])(
         ),
       ),
     );
-    const [fault, data] = await client.execute(nullEndpoint());
+    const [fault, data] = await nullEndpoint(client);
     expect(fault?.code ?? null).toBe(status === 200 ? null : "HTTP_STATUS");
     expect(fault?.code === "HTTP_STATUS" ? fault.data : data).toBeNull();
   },
@@ -98,7 +98,7 @@ test.each([200, 403])(
           ),
         ),
       );
-      const [fault, data] = await client.execute(nullEndpoint());
+      const [fault, data] = await nullEndpoint(client);
       expect(fault?.code ?? null).toBe(
         present ? (status === 200 ? null : "HTTP_STATUS") : "RES_DECODE_FAILED",
       );
@@ -133,7 +133,7 @@ test.each([200, 403])(
               ),
             ]),
       );
-      const [fault, data] = await client.execute(nullEndpoint());
+      const [fault, data] = await nullEndpoint(client);
       observations.push({
         mode,
         code: fault?.code ?? null,
@@ -167,7 +167,7 @@ test("SSE rejects empty JSON but accepts encoded null and empty raw text", async
       maxBufferSize: 1024,
       maxQueueSize: 4,
     });
-    const [fault] = await client.execute(endpoint());
+    const [fault] = await endpoint(client);
     expect(fault?.code).toBe(
       mode === "empty-json" ? "RES_DECODE_FAILED" : "HTTP_STATUS",
     );
@@ -176,7 +176,7 @@ test("SSE rejects empty JSON but accepts encoded null and empty raw text", async
   }
 });
 
-test.each(["abort", "timeout"])(
+test.each(["abort", "timeout"] as const)(
   "SSE classifies a pre-cancelled interceptor signal as %s",
   async (mode) => {
     let fetches = 0;
@@ -207,7 +207,7 @@ test.each(["abort", "timeout"])(
       maxBufferSize: 1024,
       maxQueueSize: 4,
     });
-    const [fault, stream] = await client.execute(endpoint());
+    const [fault, stream] = await endpoint(client);
     try {
       expect(fetches).toBe(0);
       expect(fault?.code).toBe(
@@ -265,9 +265,7 @@ test.each(["caller", "replacement"])(
       incoming: struct.unknown(),
       maxIncomingQueueSize: 4,
     });
-    const [fault, session] = await client.execute(endpoint(), {
-      signal: caller.signal,
-    });
+    const [fault, session] = await endpoint(client({ abort: caller.signal }));
     try {
       expect(fault).toBeNull();
       if (!session) throw new Error("Expected an open session");
@@ -281,7 +279,7 @@ test.each(["caller", "replacement"])(
   },
 );
 
-test.each(["abort", "timeout"])(
+test.each(["abort", "timeout"] as const)(
   "synthetic error text decoding remains bounded by %s",
   async (mode) => {
     vi.useFakeTimers();
@@ -307,14 +305,15 @@ test.each(["abort", "timeout"])(
       path: "/text",
       error: struct.string(),
     });
-    const pending = client.execute(endpoint(), {
-      signal: controller.signal,
-      ...(mode === "timeout" ? { timeout: 100 } : {}),
-    });
+    const pending = endpoint(client({ abort: controller.signal }));
     try {
       await started.promise;
-      if (mode === "abort") controller.abort("stop read");
-      else await vi.advanceTimersByTimeAsync(101);
+      controller.abort(
+        mode === "timeout"
+          ? new DOMException("deadline", "TimeoutError")
+          : "stop read",
+      );
+      await vi.advanceTimersByTimeAsync(0);
       expect((await pending)[0]?.code).toBe(
         mode === "abort" ? "NET_ABORTED" : "NET_TIMEOUT",
       );
@@ -349,9 +348,7 @@ test("equivalent union guides ignore object key order and preserve extras", asyn
       },
     }),
   });
-  expect(
-    (await client.execute(endpoint({ row: { a: "A", b: 2 } })))[0],
-  ).toBeNull();
+  expect((await endpoint(client, { row: { a: "A", b: 2 } }))[0]).toBeNull();
   expect(sent).toEqual({ row: { a: "A", b: 2, extra: "kept" } });
 });
 
@@ -388,9 +385,9 @@ test("union agreement must preserve numeric differences seen by a custom query s
       query: { ...input, row: { x: input.row.x, y: input.row.y } },
     }),
   });
-  const [fault] = await client.execute(
-    endpoint({ row: { x: Infinity, y: -Infinity } }),
-  );
+  const [fault] = await endpoint(client, {
+    row: { x: Infinity, y: -Infinity },
+  });
   expect({ code: fault?.code ?? null, serialized, requests }).toEqual({
     code: "REQ_BUILD_FAILED",
     serialized: [],
@@ -417,7 +414,7 @@ test("the documented maintenance response supplies a decoded declared error", as
     path: "/maintenance",
     error: struct.object({ message: struct.string() }),
   });
-  const [fault] = await client.execute(endpoint());
+  const [fault] = await endpoint(client);
   expect(fault?.code).toBe("HTTP_STATUS");
   expect(fault?.code === "HTTP_STATUS" ? fault.data : undefined).toEqual({
     message: "Temporarily unavailable",
@@ -443,11 +440,7 @@ test("a WebSocket endpoint retains its definition when the configuration object 
       }),
     ),
   );
-  expect((await client.execute(first()))[0]?.code).toBe(
-    "EXT_INTERCEPTOR_FAILED",
-  );
-  expect((await client.execute(second()))[0]?.code).toBe(
-    "EXT_INTERCEPTOR_FAILED",
-  );
+  expect((await first(client))[0]?.code).toBe("EXT_INTERCEPTOR_FAILED");
+  expect((await second(client))[0]?.code).toBe("EXT_INTERCEPTOR_FAILED");
   expect(paths).toEqual(["/first", "/second"]);
 });

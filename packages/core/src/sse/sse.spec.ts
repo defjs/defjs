@@ -4,18 +4,16 @@ import {
   createClient,
   withCredentials,
   withEndpoint,
-  withHTTPHandle,
   withInterceptors,
   withSSEHandle,
   withSSEOnInvalidEvent,
   withSSEReconnect,
 } from "../client";
 import type { Client } from "../client";
-import { ERR_ABORTED } from "../error";
+import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createSSEInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
-import type { EventStreamExecuteOptions } from "./sse";
 import type { EventStreamHandle } from "./transport/event_stream";
 
 function createSSEClientFromText(
@@ -116,7 +114,7 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream, open] = await baseClient.execute(useBasicStream());
+    const [error, stream, open] = await useBasicStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -152,7 +150,7 @@ describe("request event stream runtime", () => {
       withEndpoint(inject("testServerHost")),
       withCredentials(true),
     );
-    const [error, stream] = await client.execute(useBasicStream());
+    const [error, stream] = await useBasicStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -206,9 +204,7 @@ describe("request event stream runtime", () => {
       },
     });
 
-    const [error, stream] = await client.execute(
-      chat({ model: "grok", stream: true }),
-    );
+    const [error, stream] = await chat(client, { model: "grok", stream: true });
 
     expect(error).toBeNull();
     if (!stream) {
@@ -231,7 +227,7 @@ describe("request event stream runtime", () => {
       path: "/sse/no-id",
     });
 
-    const [error, stream] = await baseClient.execute(useNoIdStream());
+    const [error, stream] = await useNoIdStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -259,7 +255,7 @@ describe("request event stream runtime", () => {
       path: "/sse/empty-id",
     });
 
-    const [error, stream] = await baseClient.execute(useEmptyIdStream());
+    const [error, stream] = await useEmptyIdStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -292,7 +288,7 @@ describe("request event stream runtime", () => {
       path: "/sse/mixed",
     });
 
-    const [error, stream] = await baseClient.execute(useMixedStream());
+    const [error, stream] = await useMixedStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -330,7 +326,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -352,7 +348,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -374,7 +370,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -396,7 +392,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -426,7 +422,7 @@ describe("request event stream runtime", () => {
       'event: profile\ndata: {"display_name":"Miao","nested":{"trace_id":"trace-1"}}\n\n',
     );
 
-    const [error, stream] = await client.execute(useAliasStream());
+    const [error, stream] = await useAliasStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -457,7 +453,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -497,7 +493,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -530,7 +526,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -556,7 +552,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -576,7 +572,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -612,7 +608,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -627,7 +623,7 @@ describe("request event stream runtime", () => {
     ]);
   });
 
-  test("should reject an already aborted stream command before startup", async () => {
+  test("should reject an already aborted stream before startup", async () => {
     const useStream = defineEventStream({
       maxBufferSize: 1024,
       maxQueueSize: 16,
@@ -638,12 +634,11 @@ describe("request event stream runtime", () => {
     });
 
     const controller = new AbortController();
-    const command = useStream();
     controller.abort("stop");
 
-    const [error, stream, open] = await baseClient.execute(command, {
-      signal: controller.signal,
-    });
+    const [error, stream, open] = await useStream(
+      baseClient({ abort: controller.signal }),
+    );
 
     expect(stream).toBeUndefined();
     expect(open).toBeUndefined();
@@ -654,41 +649,6 @@ describe("request event stream runtime", () => {
     }
 
     expect(error.code).toBe("NET_ABORTED");
-  });
-
-  test("should reject with.abort and with.timeout before starting SSE transport", async () => {
-    const controller = new AbortController();
-    let interceptorCalls = 0;
-    const client = createClient(
-      withEndpoint(inject("testServerHost")),
-      withHTTPHandle(globalThis.fetch),
-      withInterceptors(
-        createSSEInterceptor(async (req, next) => {
-          interceptorCalls += 1;
-          return await next(req);
-        }),
-      ),
-    );
-    const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
-      events: {
-        message: struct.string(),
-      },
-      path: "/sse/basic",
-    });
-
-    const command = useStream();
-    const [error, stream, open] = await client.execute(command, {
-      abort: controller.signal,
-      timeout: 1,
-    } as never);
-
-    expect(stream).toBeUndefined();
-    expect(open).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error?.message).toBe("abort and timeout cannot be used together");
-    expect(interceptorCalls).toBe(0);
   });
 
   test("should close a stream hidden by a throwing interceptor", async () => {
@@ -717,7 +677,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeDefined();
     expect(stream).toBeUndefined();
@@ -749,9 +709,9 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream(), {
-      signal: controller.signal,
-    });
+    const [error, stream] = await useStream(
+      client({ abort: controller.signal }),
+    );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
     expect(stream).toBeUndefined();
@@ -784,9 +744,9 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream(), {
-      signal: controller.signal,
-    });
+    const [error, stream] = await useStream(
+      client({ abort: controller.signal }),
+    );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
     expect(stream).toBeUndefined();
@@ -814,7 +774,7 @@ describe("request event stream runtime", () => {
       events: {},
       path: "/events",
     });
-    const pending = client.execute(useStream(), { signal: controller.signal });
+    const pending = useStream(client({ abort: controller.signal }));
 
     await started;
     controller.abort("caller stopped");
@@ -850,7 +810,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     expect(stream).toBeDefined();
@@ -903,7 +863,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     expect(stream).toBeDefined();
@@ -948,7 +908,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const pending = client.execute(useStream());
+    const pending = useStream(client);
     await handleWaiting;
     const [error, stream] = await pending;
     releaseHandle();
@@ -997,7 +957,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
     if (!invokeLateNext) {
       throw new Error("Expected the interceptor to capture next()");
     }
@@ -1016,30 +976,6 @@ describe("request event stream runtime", () => {
     stream?.close("test complete");
   });
 
-  test("should prefer SSE cancellation config conflict over an already aborted signal", async () => {
-    const controller = new AbortController();
-    controller.abort(ERR_ABORTED);
-    const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
-      events: {
-        message: struct.string(),
-      },
-      path: "/sse/basic",
-    });
-
-    const command = useStream();
-    const [error, stream, open] = await baseClient.execute(command, {
-      abort: controller.signal,
-      timeout: 1,
-    } as never);
-
-    expect(stream).toBeUndefined();
-    expect(open).toBeUndefined();
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error?.message).toBe("abort and timeout cannot be used together");
-  });
-
   test("should abort stream after connection via stream.close", async () => {
     const useStream = defineEventStream({
       maxBufferSize: 1024,
@@ -1050,7 +986,7 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1071,7 +1007,7 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1097,7 +1033,7 @@ describe("request event stream runtime", () => {
       path: "/json",
     });
 
-    const [error, stream, open] = await baseClient.execute(useInvalidStream());
+    const [error, stream, open] = await useInvalidStream(baseClient);
 
     expect(stream).toBeUndefined();
     expect(open?.response?.status).toBe(200);
@@ -1129,10 +1065,9 @@ describe("request event stream runtime", () => {
         path: "/sse/basic",
       });
 
-      const command = useStream();
-      const [error, stream, open] = await guardedClient.execute(command, {
-        signal: controller.signal,
-      });
+      const [error, stream, open] = await useStream(
+        guardedClient({ abort: controller.signal }),
+      );
 
       expect(stream).toBeUndefined();
       expect(open).toBeUndefined();
@@ -1140,6 +1075,53 @@ describe("request event stream runtime", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     },
   );
+
+  test("should classify a TimeoutError abort after open as NET_TIMEOUT", async () => {
+    const controller = new AbortController();
+    const handle = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream<Uint8Array>(
+            {
+              pull() {
+                return new Promise<void>(() => undefined);
+              },
+            },
+            { highWaterMark: 0 },
+          ),
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+    );
+    const client = createClient(
+      withEndpoint("https://api.example.com"),
+      withSSEHandle(handle as unknown as typeof fetch),
+    );
+    const useStream = defineEventStream({
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 16,
+      path: "/events",
+    });
+
+    const [error, stream] = await useStream(
+      client({ abort: controller.signal }),
+    );
+
+    expect(error).toBeNull();
+    if (!stream) {
+      throw new Error("Expected stream");
+    }
+    const next = stream[Symbol.asyncIterator]().next();
+    controller.abort(new DOMException("deadline", "TimeoutError"));
+
+    await expect(next).rejects.toBe(ERR_TIMEOUT);
+    await expect(stream.closed).resolves.toMatchObject({
+      cause: ERR_TIMEOUT,
+      code: "NET_TIMEOUT",
+      kind: "error",
+    });
+    expect(handle).toHaveBeenCalledOnce();
+  });
 
   test("should ignore non-aborted signal during startup", async () => {
     const controller = new AbortController();
@@ -1153,10 +1135,9 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const command = useStream();
-    const [error, stream] = await baseClient.execute(command, {
-      abort: controller.signal,
-    });
+    const [error, stream] = await useStream(
+      baseClient({ abort: controller.signal }),
+    );
 
     expect(error).toBeNull();
     expect(stream).toBeDefined();
@@ -1172,7 +1153,7 @@ describe("request event stream runtime", () => {
       path: "/500",
     });
 
-    const [error, stream, open] = await baseClient.execute(useStream());
+    const [error, stream, open] = await useStream(baseClient);
 
     expect(stream).toBeUndefined();
     expect(open?.response?.status).toBe(500);
@@ -1201,7 +1182,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code === "HTTP_STATUS") {
@@ -1231,7 +1212,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code === "HTTP_STATUS") {
@@ -1269,7 +1250,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code === "HTTP_STATUS") {
@@ -1298,7 +1279,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("RES_DECODE_FAILED");
     if (error?.code !== "RES_DECODE_FAILED") {
@@ -1327,7 +1308,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("RES_DECODE_FAILED");
     if (error?.code !== "RES_DECODE_FAILED") {
@@ -1356,7 +1337,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code !== "HTTP_STATUS") {
@@ -1385,7 +1366,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code !== "HTTP_STATUS") {
@@ -1421,7 +1402,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     if (error?.code !== "HTTP_STATUS") {
@@ -1471,7 +1452,7 @@ describe("request event stream runtime", () => {
         withEndpoint("https://example.com"),
         withSSEHandle(handle),
       );
-      const [error] = await client.execute(useStream());
+      const [error] = await useStream(client);
 
       expect(error?.code).toBe("RES_MEDIA_TYPE_INVALID");
       expect(cancelled).toBe(true);
@@ -1497,7 +1478,7 @@ describe("request event stream runtime", () => {
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
     );
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error?.code).toBe("RES_DECODE_FAILED");
     expect(error?.response?.status).toBe(401);
@@ -1514,7 +1495,7 @@ describe("request event stream runtime", () => {
       path: "/sse/unknown-event",
     });
 
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1538,7 +1519,7 @@ describe("request event stream runtime", () => {
       path: "/sse/empty-data",
     });
 
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1563,7 +1544,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1586,7 +1567,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1606,7 +1587,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1626,7 +1607,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1658,7 +1639,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1694,7 +1675,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1721,7 +1702,7 @@ describe("request event stream runtime", () => {
       path: "/sse/no-event-name",
     });
 
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1748,10 +1729,9 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const command = useStream();
-    const [error, stream, open] = await baseClient.execute(command, {
-      abort: controller.signal,
-    });
+    const [error, stream, open] = await useStream(
+      baseClient({ abort: controller.signal }),
+    );
 
     expect(stream).toBeUndefined();
     expect(open).toBeUndefined();
@@ -1773,7 +1753,7 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream, open] = await baseClient.execute(useStream({}));
+    const [error, stream, open] = await useStream(baseClient, {});
 
     expect(stream).toBeUndefined();
     expect(open).toBeUndefined();
@@ -1790,7 +1770,7 @@ describe("request event stream runtime", () => {
       path: "/500",
     });
 
-    const [error, stream, open] = await baseClient.execute(useStream());
+    const [error, stream, open] = await useStream(baseClient);
 
     expect(stream).toBeUndefined();
     expect(open?.response?.status).toBe(500);
@@ -1815,7 +1795,7 @@ describe("request event stream runtime", () => {
       ),
     );
 
-    const [error, stream, open] = await client.execute(useStream());
+    const [error, stream, open] = await useStream(client);
 
     expect(stream).toBeUndefined();
     expect(open?.response?.status).toBe(503);
@@ -1845,7 +1825,7 @@ describe("request event stream runtime", () => {
       path: "/sse/unknown-event",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1891,7 +1871,7 @@ describe("request event stream runtime", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1934,7 +1914,7 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -1994,7 +1974,7 @@ describe("request event stream runtime", () => {
       path: "/stream",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -2045,7 +2025,7 @@ describe("request event stream runtime", () => {
       path: "/stream",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -2098,7 +2078,7 @@ describe("request event stream runtime", () => {
       path: "/stream",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -2122,7 +2102,7 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream] = await baseClient.execute(useStream());
+    const [error, stream] = await useStream(baseClient);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -2182,9 +2162,9 @@ describe("request event stream runtime", () => {
     });
     const abortController = new AbortController();
 
-    const [error, stream] = await client.execute(useStream(), {
-      signal: abortController.signal,
-    });
+    const [error, stream] = await useStream(
+      client({ abort: abortController.signal }),
+    );
 
     expect(error).toBeNull();
     if (!stream) {
@@ -2235,7 +2215,7 @@ describe("request event stream runtime", () => {
       path: "/stream",
     });
 
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
 
     expect(error).toBeNull();
     if (!stream) {
@@ -2278,7 +2258,7 @@ describe("request event stream runtime", () => {
         [limitName]: limit,
       } as never);
 
-      const [error, stream, open] = await client.execute(useStream());
+      const [error, stream, open] = await useStream(client);
 
       expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
       expect(stream).toBeUndefined();
@@ -2287,56 +2267,12 @@ describe("request event stream runtime", () => {
     },
   );
 
-  test.each([-1, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648])(
-    "should reject invalid timeout %s before SSE transport",
-    async (timeout) => {
-      const handle = vi.fn() as unknown as typeof fetch;
-      const client = createClient(
-        withEndpoint("https://api.example.com"),
-        withSSEHandle(handle),
-      );
-      const useStream = defineEventStream({
-        events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
-        path: "/stream",
-      });
-
-      const [error, stream, open] = await client.execute(useStream(), {
-        timeout,
-      });
-
-      expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-      expect(stream).toBeUndefined();
-      expect(open).toBeUndefined();
-      expect(handle).not.toHaveBeenCalled();
-    },
-  );
-
-  test("should prefer invalid timeout over an already aborted SSE signal alias", async () => {
-    const controller = new AbortController();
-    controller.abort("caller stopped");
-    const useStream = defineEventStream({
-      events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
-      path: "/stream",
-    });
-
-    const [error] = await baseClient.execute(useStream(), {
-      signal: controller.signal,
-      timeout: 0,
-    });
-
-    expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-  });
-
-  test("should snapshot SSE cancellation options before asynchronous work", async () => {
-    let timeoutReads = 0;
+  test("should snapshot SSE abort before asynchronous work", async () => {
+    let abortReads = 0;
     const options = {
-      get timeout() {
-        timeoutReads += 1;
-        return timeoutReads === 1 ? undefined : Number.POSITIVE_INFINITY;
+      get abort() {
+        abortReads += 1;
+        return undefined;
       },
     };
     const handle = vi.fn(
@@ -2361,38 +2297,12 @@ describe("request event stream runtime", () => {
       path: "/snapshot",
     });
 
-    const [error, stream] = await client.execute(
-      useStream(),
-      options as EventStreamExecuteOptions,
-    );
+    const [error, stream] = await useStream(client(options));
 
     expect(error).toBeNull();
-    expect(timeoutReads).toBe(1);
+    expect(abortReads).toBe(1);
     expect(handle).toHaveBeenCalledOnce();
     await expect(stream?.closed).resolves.toEqual({ kind: "eof" });
-  });
-
-  test("should return a definition error when reading SSE cancellation options throws", async () => {
-    const options = Object.defineProperty({}, "abort", {
-      get() {
-        throw new Error("abort getter failed");
-      },
-    });
-    const useStream = defineEventStream({
-      events: {},
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
-      path: "/snapshot",
-    });
-
-    const [error, stream, open] = await baseClient.execute(
-      useStream(),
-      options as EventStreamExecuteOptions,
-    );
-
-    expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-    expect(stream).toBeUndefined();
-    expect(open).toBeUndefined();
   });
 
   test("should handle request validation failure on invalid input", async () => {
@@ -2409,11 +2319,9 @@ describe("request event stream runtime", () => {
       path: "/sse/basic",
     });
 
-    const [error, stream, open] = await baseClient.execute(
-      useStream(
-        // @ts-expect-error testing runtime defensive behavior with invalid input type
-        { id: "invalid" },
-      ),
+    const [error, stream, open] = await useStream(
+      baseClient, // @ts-expect-error testing runtime defensive behavior with invalid input type
+      { id: "invalid" },
     );
 
     expect(stream).toBeUndefined();
@@ -2465,7 +2373,7 @@ describe("sse reconnect method policy", () => {
       withSSEReconnect({ attempts: 2, delayMs: 0 }),
     );
 
-    const [fault, stream] = await client.execute(usePost());
+    const [fault, stream] = await usePost(client);
 
     expect(fault).toBeNull();
     if (!stream) {
@@ -2506,7 +2414,7 @@ describe("sse reconnect method policy", () => {
       }),
     );
 
-    const [fault, stream] = await client.execute(usePost());
+    const [fault, stream] = await usePost(client);
 
     expect(fault).toBeNull();
     if (!stream) {
@@ -2549,7 +2457,7 @@ describe("sse reconnect method policy", () => {
       path: "/events",
     });
 
-    const [fault, stream] = await client.execute(useGet());
+    const [fault, stream] = await useGet(client);
 
     expect(fault).toBeNull();
     if (!stream) {
@@ -2557,5 +2465,35 @@ describe("sse reconnect method policy", () => {
     }
     await stream.closed;
     expect(recorded).toEqual(["1", "2"]);
+  });
+
+  test("should treat an abort inside the builder as NET_ABORTED before opening a stream", async () => {
+    const controller = new AbortController();
+    let fetched = 0;
+    const guardedClient = createClient(
+      withEndpoint("https://example.test"),
+      withSSEHandle(async () => {
+        fetched += 1;
+        return new Response(null, { status: 200 });
+      }),
+    );
+    const useEvents = defineEventStream({
+      builder: () => {
+        controller.abort();
+        return {};
+      },
+      events: { message: struct.string() },
+      maxBufferSize: 64,
+      maxQueueSize: 1,
+      path: "/events",
+    });
+
+    const [error, stream] = await useEvents(
+      guardedClient({ abort: controller.signal }),
+    );
+
+    expect(error?.code).toBe("NET_ABORTED");
+    expect(stream).toBeUndefined();
+    expect(fetched).toBe(0);
   });
 });

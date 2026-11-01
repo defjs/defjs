@@ -3,7 +3,7 @@ import { defineRequest } from "../http";
 import { defineEventStream } from "../sse";
 import { createHttpInterceptor } from "../interceptor";
 import { struct } from "../struct";
-import { createClient } from "./client";
+import { CLIENT, createClient } from "./client";
 import {
   withCredentials,
   withEndpoint,
@@ -14,7 +14,6 @@ import {
   withSSEHandle,
   withSSEOnInvalidEvent,
   withSSEReconnect,
-  withTimeout,
   withWebSocketBeforeConnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
@@ -31,16 +30,14 @@ describe("Client", () => {
     baseClient = createClient(withEndpoint("https://example.com/v1"));
   });
 
-  test("withHeaders and withTimeout apply to HTTP execute", async () => {
-    const seen: { headers: Headers; timedOut: boolean }[] = [];
+  test("withHeaders apply to an HTTP operation", async () => {
+    const seen: { headers: Headers }[] = [];
     const client = createClient(
       withEndpoint("https://example.com"),
       withHeaders({ "X-Tenant": "acme", "X-Override": "default" }),
-      withTimeout(30),
       withHTTPHandle(async (input, init) => {
         const request = new Request(input, init);
-        seen.push({ headers: new Headers(request.headers), timedOut: false });
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        seen.push({ headers: new Headers(request.headers) });
         return Response.json({ ok: true });
       }),
     );
@@ -53,18 +50,10 @@ describe("Client", () => {
       output: struct.object({ ok: struct.boolean() }),
     });
 
-    const [headerError] = await client.execute(
-      usePing({ override: "command" }),
-      { timeout: 5_000 },
-    );
+    const [headerError] = await usePing(client, { override: "command" });
     expect(headerError).toBeNull();
     expect(seen[0]?.headers.get("X-Tenant")).toBe("acme");
     expect(seen[0]?.headers.get("X-Override")).toBe("command");
-
-    const [timeoutError] = await client.execute(
-      usePing({ override: "command" }),
-    );
-    expect(timeoutError?.code).toBe("NET_TIMEOUT");
   });
 
   test.each(["HTTP", "SSE"] as const)(
@@ -88,29 +77,25 @@ describe("Client", () => {
       );
       const pending =
         transport === "HTTP"
-          ? client.execute(
-              defineRequest({
-                builder: () => ({
-                  headers: [
-                    ["X-Scope", "first"],
-                    ["x-scope", "second"],
-                  ],
-                }),
-                method: "GET",
-                path: "/headers",
-              })(),
-            )
-          : client.execute(
-              defineEventStream({
-                builder: () => ({
-                  headers: { "x-scope": ["first", "second"] },
-                }),
-                events: { message: struct.unknown() },
-                maxBufferSize: 1024,
-                maxQueueSize: 1,
-                path: "/headers",
-              })(),
-            );
+          ? defineRequest({
+              builder: () => ({
+                headers: [
+                  ["X-Scope", "first"],
+                  ["x-scope", "second"],
+                ],
+              }),
+              method: "GET",
+              path: "/headers",
+            })(client)
+          : defineEventStream({
+              builder: () => ({
+                headers: { "x-scope": ["first", "second"] },
+              }),
+              events: { message: struct.unknown() },
+              maxBufferSize: 1024,
+              maxQueueSize: 1,
+              path: "/headers",
+            })(client);
 
       const [fault, stream] = await pending;
       stream?.close();
@@ -123,11 +108,7 @@ describe("Client", () => {
     },
   );
 
-  test("withTimeout rejects invalid zero", () => {
-    expect(() => withTimeout(0)).toThrow(RangeError);
-  });
-
-  test("withEndpoint is used for execute URL", async () => {
+  test("withEndpoint is used for the operation URL", async () => {
     const seen: string[] = [];
     const client = createClient(
       withEndpoint("https://original.example"),
@@ -145,13 +126,13 @@ describe("Client", () => {
       output: struct.object({ ok: struct.boolean() }),
       path: "/ping",
     });
-    const [error] = await client.execute(usePing());
+    const [error] = await usePing(client);
 
     expect(error).toBeNull();
     expect(seen).toEqual(["https://original.example/ping"]);
   });
 
-  test("HTTP handle, credentials, interceptors, serializer, and xsrf apply on execute", async () => {
+  test("HTTP handle, credentials, interceptors, serializer, and xsrf apply when an operation runs", async () => {
     const customFetch = vi.fn(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init);
@@ -192,7 +173,7 @@ describe("Client", () => {
       input: struct.object({ q: struct.string() }),
       output: struct.object({ ok: struct.boolean() }),
     });
-    const [error, data] = await client.execute(request({ q: "zen" }));
+    const [error, data] = await request(client, { q: "zen" });
     expect(error).toBeNull();
     expect(data).toEqual({ ok: true });
     expect(customFetch).toHaveBeenCalledOnce();
@@ -220,10 +201,11 @@ describe("Client", () => {
       withWebSocketReconnect({ attempts: 3, delayMs: 1_000 }),
     );
 
-    expect(client.execute).toEqual(expect.any(Function));
+    expect(typeof client).toBe("function");
+    expect(client()[CLIENT]).toBeDefined();
   });
 
   test("unused base client is constructable", () => {
-    expect(baseClient.execute).toEqual(expect.any(Function));
+    expect(typeof baseClient).toBe("function");
   });
 });

@@ -22,17 +22,16 @@ watch(
     const controller = new AbortController();
     onCleanup(() => controller.abort());
 
-    const command = getUser({ id });
-    void client
-      .execute(command, { signal: controller.signal })
-      .then(([error, user]) => {
+    void getUser(client({ abort: controller.signal }), { id }).then(
+      ([error, user]) => {
         if (controller.signal.aborted) return;
         if (error) {
           name.value = "Unable to load user.";
           return;
         }
         name.value = user.name;
-      });
+      },
+    );
   },
   { immediate: true },
 );

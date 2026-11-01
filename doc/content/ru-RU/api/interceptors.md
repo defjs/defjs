@@ -5,7 +5,7 @@ description: Конструкторы interceptor’ов HTTP, SSE и WebSocket.
 
 # Interceptors
 
-Оберни `next` для одного транспорта. Регистрируй через `withInterceptors`. Смешанные списки фильтруются по kind в момент execute.
+Оберни `next` для одного транспорта. Регистрируй через `withInterceptors`. Смешанные списки фильтруются по kind, когда выполняется операция.
 
 ## createHttpInterceptor()
 

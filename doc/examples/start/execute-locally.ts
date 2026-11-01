@@ -24,10 +24,10 @@ const client = createClient(
 );
 
 async function main() {
-  const command = getUser({ id: 7 });
-  const [error, user, response] = await client.execute(command, {
-    timeout: 5_000,
-  });
+  const [error, user, response] = await getUser(
+    client({ abort: AbortSignal.timeout(5_000) }),
+    { id: 7 },
+  );
   if (error?.code === "HTTP_STATUS" && error.status === 404) {
     console.log(error.data.message);
     return;

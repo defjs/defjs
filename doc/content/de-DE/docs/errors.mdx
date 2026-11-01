@@ -1,6 +1,6 @@
 ---
 title: "Fehlerbehandlung"
-description: Fehlerverträge im SDK beschreiben und Faults sowie Ergebnis-Tupel in der Anwendung behandeln.
+description: Fehlerverträge des Services im SDK deklarieren und typisierte Ausführungsfehler in der konsumierenden Anwendung behandeln.
 ---
 
 # Fehlerbehandlung
@@ -110,15 +110,15 @@ Eine nicht diskriminierte Union, die sich nicht einengen lässt, ist eine Eigens
 
 SSE validiert Status, `text/event-stream` und die Anwesenheit eines Bodys, bevor das Handle aufgelöst wird. Non-2xx → `HTTP_STATUS`, wenn `error` fehlt oder sein Body dekodiert. Ein deklarierter Handshake-Body, der sich nicht lesen oder parsen lässt oder an seinem Struct scheitert, erzeugt `RES_DECODE_FAILED`; ein Struct-Fehler trägt `StructError` als `cause`. Falscher Media-Type → `RES_MEDIA_TYPE_INVALID`. Ein erfolgreicher Handshake ohne Body → `RES_DECODE_FAILED`. Der Opening-Snapshot kann trotzdem im dritten Tuple-Slot landen.
 
-Der WebSocket-Startup umfasst den Handshake plus das erste physische Open. Constructor-Failure, Close vor dem Open, Timeout oder Abbruch erzeugen alle ein Startup-Tuple. Ein Connection-Snapshot kann existieren, auch wenn der Socket `open` nie erreicht hat.
+Der WebSocket-Startup umfasst den Handshake plus das erste physische Open. Constructor-Failure, Close vor dem Open oder ein `abort`, der feuert, bevor die Session sich öffnet, erzeugen alle ein Startup-Tupel. Ein Connection-Snapshot kann existieren, auch wenn der Socket `open` nie erreicht hat.
 
-| Transport | Nach dem Startup                                                                                                                                                                                                                                                                                     |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | Der Iterator wird bei einem fatalen Error abgelehnt; `stream.closed` löst mit `kind: 'error'` und dem Fault-`code` auf                                                                                                                                                                               |
-| WebSocket | `onRuntimeError` für Message-/Queue-/Heartbeat-Failures; `receive` schlägt bei terminalen Errors fehl; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                                                                   |
-| HTTP      | Das Execute-Promise wird einmal mit dem Tupel abgeschlossen. Ein vom Interceptor geworfener Fehler, ein Interceptor-Ergebnis, das kein `HttpResponse` ist, oder ein vom Fortschritts-Callback geworfener Fehler wird darin als Fault zurückgegeben (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+| Transport | Nach dem Startup                                                                                                                                                                                                                                                                                           |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | Der Iterator wird bei einem fatalen Error abgelehnt; `stream.closed` löst mit `kind: 'error'` und dem Fault-`code` auf                                                                                                                                                                                     |
+| WebSocket | `onRuntimeError` für Message-/Queue-/Heartbeat-Failures; `receive` schlägt bei terminalen Errors fehl; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                                                                         |
+| HTTP      | Das Promise der Operation wird einmal mit dem Tupel abgeschlossen. Ein vom Interceptor geworfener Fehler, ein Interceptor-Ergebnis, das kein `HttpResponse` ist, oder ein vom Fortschritts-Callback geworfener Fehler wird darin als Fault zurückgegeben (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
 
-`NET_ABORTED` / `NET_TIMEOUT` beschreiben, was der Caller beim Startup gesehen hat. Du schließt einen zurückgegebenen Stream oder eine Session trotzdem und awaitest deren terminales Promise.
+`NET_ABORTED` und `NET_TIMEOUT` beschreiben das `abort`-Signal des Aufrufers. Bei HTTP schließen sie das Tupel der Operation ab. Bei SSE und WebSocket deckt `abort` die ganze Verbindung ab, auch nachdem sie offen ist: Eine Deadline, die nach dem Startup feuert, schließt `closed` ab und nicht das Tupel der Operation. Du schließt einen zurückgegebenen Stream oder eine Session trotzdem und awaitest deren terminales Promise.
 
 ## Native-Error-Logging und cause
 
@@ -154,4 +154,4 @@ Behandle `cause`, `data`, Response-Headers und -Bodies, URLs, `StructIssue.recei
 ## Verwandte Rezepte
 
 - [GET mit deklarierter 404](/de-DE/recipes/get-declared-404)
-- [Einen HTTP-Call abbrechen](/de-DE/recipes/cancel-http)
+- [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)

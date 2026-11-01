@@ -133,23 +133,8 @@ const useGetUser = defineRequest({
   path: "/users",
   output: struct.object({ name: struct.string() }),
 });
-const httpCommand = useGetUser();
 
-void client.execute(httpCommand, {
-  timeout: 1,
-  onUploadProgress: () => undefined,
-});
-
-void client.execute(httpCommand, {
-  abort: new AbortController().signal,
-  // @ts-expect-error abort and timeout cannot be used together on HTTP execute
-  timeout: 1,
-});
-
-type ExecuteOptions = NonNullable<Parameters<Client["execute"]>[1]>;
-type HttpExecuteHelpers = Expect<
-  "onUploadProgress" extends keyof ExecuteOptions ? true : false
->;
+void useGetUser(client({ onUploadProgress: () => undefined }));
 
 createClient(withWebSocketHandle(NodeWebSocket));
 
@@ -291,7 +276,6 @@ createClient(
 export type Cases =
   | ClientAsyncDisposeCase
   | ClientCases
-  | HttpExecuteHelpers
   | OptionsCases
   | QueryConfigCases
   | QueryOptionCases

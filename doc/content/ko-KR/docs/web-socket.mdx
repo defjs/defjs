@@ -5,7 +5,7 @@ description: SDK에서 송수신 메시지 계약을 정의하고, 앱에서 연
 
 # WebSocket
 
-SDK 작성자는 `defineWebSocket`으로 path, 입력 배치, incoming / outgoing Struct를 공개합니다. 사용하는 앱은 접속 주소, 플랫폼의 WebSocket 구현, 실행 정책을 구성하고 세션의 송수신과 종료를 관리합니다.
+SDK는 WebSocket 작업의 path, 입력, incoming과 outgoing 메시지, 큐 한도를 정의합니다. 사용하는 애플리케이션은 클라이언트를 구성하고 작업을 호출하며, 파생 클라이언트에서 그 호출의 연결 옵션을 고릅니다. HTTP나 SSE 작업과 함께 그 작업을 export하세요.
 
 시작 → 수신 → 송신 → `await using`으로 놓기. unsubscribe와 disposal은 호출하는 쪽이 소유해요. 수동 `close()` / `closed`도 그대로 쓸 수 있어요. 클라이언트, provider, interceptor는 세션을 자동으로 닫지 않아요.
 
@@ -25,7 +25,7 @@ SDK 작성자는 `defineWebSocket`으로 path, 입력 배치, incoming / outgoin
 
 들어오는 텍스트, `ArrayBuffer`, typed-array, `Blob` 프레임은 UTF-8로 읽고, JSON 파싱한 뒤 `incoming`과 맞춰 봐요. 잘못된 JSON과 struct 실패는 `session.onRuntimeError`로 가고 큐에 들어가지 않아요. 세션은 그대로 있어요. 텍스트, 바이트, `Blob`이 아닌 프레임은 무시돼요. `withWebSocketOnInvalidEvent`는 없어요.
 
-`session.send(...)`는 동기적으로 검증하고 직렬화해요. struct 인코딩 다음 `JSON.stringify`예요. open이면 바로 보내고, outgoing 큐가 켜져 있으면 `reconnecting` 동안 큐에 넣고, 쓸 수 없으면 `InvalidStateError`를 throw해요. outgoing struct가 없거나, payload가 struct에 실패하거나, outgoing 큐가 꺼져 있거나 가득 찼거나, 네이티브 send가 실패해도 throw해요. 정의의 정적 `protocols` 목록이 엔드포인트 계약이에요 (예를 들어 `graphql-transport-ws`). 실행 옵션과 `withWebSocketProtocols`는 여전히 그걸 덮어쓸 수 있어요. 서브프로토콜은 그 옵션들만 정해요. builder, `beforeConnect`, interceptor는 바꿀 수 없으므로, 서브프로토콜 안의 토큰은 그 호출의 execute `protocols` 옵션으로 넘겨요. builder는 `path`와 `query`만 돌려줄 수 있어요.
+`session.send(...)`는 동기적으로 검증하고 직렬화해요. struct 인코딩 다음 `JSON.stringify`예요. open이면 바로 보내고, outgoing 큐가 켜져 있으면 `reconnecting` 동안 큐에 넣고, 쓸 수 없으면 `InvalidStateError`를 throw해요. outgoing struct가 없거나, payload가 struct에 실패하거나, outgoing 큐가 꺼져 있거나 가득 찼거나, 네이티브 send가 실패해도 throw해요. 정의의 정적 `protocols` 목록이 엔드포인트 계약이에요 (예를 들어 `graphql-transport-ws`). 파생 클라이언트의 `protocols`와 `withWebSocketProtocols`는 여전히 그걸 덮어쓸 수 있어요. 서브프로토콜은 그 옵션들만 정해요. builder, `beforeConnect`, interceptor는 바꿀 수 없으므로, 서브프로토콜 안의 토큰은 그 호출의 파생 클라이언트 `protocols`로 넘겨요. builder는 `path`와 `query`만 돌려줄 수 있어요.
 
 struct 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거나 재연결 큐에 넣기 전에 `TypeError`를 throw해요. 유한하지 않은 수, 함수, symbol, `Map`, `Set`, 스트림, JSON 표현이 없는 클래스 인스턴스예요. 중첩 값도 HTTP JSON body와 같은 규칙을 따라요. `struct.number()`는 여전히 무한대를 받고 `NaN`은 거부해요. struct 계층에서 값을 받아들였다고 해서 유효한 JSON이 되는 것은 아니에요. heartbeat도 같은 직렬화기를 쓰고, 그 직렬화 실패는 논리 세션을 끝내요.
 
@@ -45,7 +45,7 @@ struct 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거�
 
 `open`은 물리 소켓이 열린 상태예요. `reconnecting`은 교체 전의 준비와 지연을 포함해요. `connection.generation`은 `open`에 도달한 물리 소켓마다 증가해요. `session.connection`은 재연결 때 갱신돼요. 튜플의 `startupConnection`이 처음 성공한 연결의 스냅샷을 보존하는 것은 Defjs 네이티브 세션이나 동일한 live `connection` 객체를 그대로 전달하는 래퍼뿐이에요. 사용자 지정 세션이나 `connection`을 변환하는 래퍼는 반환된 세션이 현재 공개하는 `connection`을 대신 사용해요. `closed`를 공유해도 URL 정제나 메타데이터 필터링을 우회할 수 없고, Defjs는 임의의 변환에서 첫 연결의 메타데이터를 재구성하지 않아요.
 
-시작 실패는 `[error, undefined, connection?]`예요. open 전의 생성자 실패는 connection이 없을 수 있고, 시작 중의 timeout/close는 스냅샷을 줄 수 있어요. 세션이 돌아온 뒤의 런타임 오류는 옵저버, `receive`, `closed`로 이동해요. 두 번째 execute 튜플이 아니에요.
+시작 실패는 `[error, undefined, connection?]`예요. open 전의 생성자 실패는 connection이 없을 수 있고, 시작 중의 abort나 close는 스냅샷을 줄 수 있어요. 세션이 돌아온 뒤의 런타임 오류는 옵저버, `receive`, `closed`로 이동해요. 두 번째 결과 튜플이 아니에요.
 
 <include cwd lang="typescript">
   examples/web-socket/state-snapshots.ts#example
@@ -65,7 +65,7 @@ WebSocket backoff jitter는 **곱셈**이에요 (`jitter: 0.2`는 상한이 걸�
 
 ## Heartbeat
 
-실행 범위나 클라이언트 범위에서 opt-in이에요. 간격마다 `message()`를 outgoing struct로 보내요. 선택 `isAck(message)`가 ack를 알아보면 그 메시지는 timeout을 지우고 `receive`로 **전달되지 않아요**.
+클라이언트나 파생 클라이언트에서 opt-in이에요. 간격마다 `message()`를 outgoing struct로 보내요. 선택 `isAck(message)`가 ack를 알아보면 그 메시지는 확인 대기를 지우고 `receive`로 **전달되지 않아요**. `heartbeat`는 값 전체를 바꿔요. `timeoutMs`는 그 확인을 얼마나 기다릴지예요. 요청 데드라인이 아니에요.
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -84,7 +84,7 @@ WebSocket backoff jitter는 **곱셈**이에요 (`jitter: 0.2`는 상한이 걸�
 
 ## 프로토콜과 인증
 
-정의 `protocols`, 클라이언트 `withWebSocketProtocols(...)`, 실행 `protocols`가 생성자 서브프로토콜 목록을 설정해요. 우선순위는 실행 → 클라이언트 → 정의예요. 처음 정의된 목록이 논리 세션용으로 복사되고 재연결에서 재사용돼요.
+정의 `protocols`, 클라이언트 `withWebSocketProtocols(...)`, 파생 클라이언트의 `protocols`가 생성자 서브프로토콜 목록을 설정해요. 우선순위는 파생 클라이언트 → 클라이언트 → 정의예요. 파생 목록은 클라이언트 목록을 바꿔요. 추가되지 않아요. 처음 정의된 목록이 논리 세션용으로 복사되고 재연결에서 재사용돼요.
 
 브라우저 WebSocket 생성자는 임의 handshake 헤더를 받지 않고, builder는 `headers`나 `body`를 돌려줄 수 없어요. Defjs는 `http:`를 `ws:`로, `https:`를 `wss:`로 바꾸고, path placeholder를 한 번 인코딩하고, HTTP와 같은 query 규칙을 써요. 기본은 스칼라와 반복 키이고, 중첩 객체는 `withQuerySerializer`이고, query가 없으면 serializer를 호출하지 않아요.
 
@@ -96,7 +96,7 @@ HTTP, SSE와 같이, 없거나 상대적이거나 잘못된 base endpoint나 불
 
 `session.close(code?, reason?)`는 종료를 요청하고 heartbeat를 멈춰요. code는 `1000` 또는 `3000..4999`여야 하고, reason은 123 UTF-8 바이트 이하여야 해요. 잘못된 close 인자는 상태를 바꾸기 전에 throw해요. 수동 close 이유나 논리 종료 결과가 필요하면 `await session.closed`와 함께 쓰세요.
 
-`execute`에 넘긴 `signal`이나 `abort`는 열린 세션에 계속 붙어 있어요. 세션이 열린 뒤 timeout 모양의 abort(`TimeoutError` 또는 `ERR_TIMEOUT`)는 `kind`가 `error`(`NET_TIMEOUT`)로 끝나요. 그 밖의 abort 이유는 `kind`가 `aborted`로 끝나고, `receive`는 새 `AbortError`가 아니라 그 이유 자체로 reject돼요. `timeout`은 시작 시점의 마감일 뿐이에요.
+작업에 넘긴 `abort` 신호는 열린 세션에 계속 붙어 있고, 열린 뒤를 포함해 연결 전체를 덮어요. 타임아웃 모양의 abort(`TimeoutError` 또는 `ERR_TIMEOUT`, `AbortSignal.timeout(...)` 포함)는 `'error'`(`NET_TIMEOUT`)로 끝나요. 그 밖의 이유는 `'aborted'`로 끝나고, `receive`는 새 `AbortError`가 아니라 그 이유 자체로 reject돼요. 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요. [SSE](/ko-KR/docs/sse#close-and-dispose)를 보세요.
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

@@ -321,9 +321,9 @@ describe("builder refactor adversarial audit", () => {
     });
     const values = Array.from({ length: 256 }, (_, index) => index);
 
-    const [error] = await client.execute(
-      endpoint({ search: { filters: { tagName: "large", values } } }),
-    );
+    const [error] = await endpoint(client, {
+      search: { filters: { tagName: "large", values } },
+    });
     expect(error).toBeNull();
     expect(serialized).toEqual({ filters: { tag_name: "large", values } });
     expect(captured?.queryString).toContain("payload=");
@@ -347,7 +347,7 @@ describe("builder refactor adversarial audit", () => {
       path: "/bytes",
     });
 
-    const [error] = await client.execute(upload());
+    const [error] = await upload(client);
     expect(error).toBeNull();
     expect(received).toEqual([1, 2]);
   });
@@ -373,8 +373,8 @@ describe("builder refactor adversarial audit", () => {
       path: "/stream",
     });
 
-    const [firstError] = await client.execute(upload());
-    const [secondError] = await client.execute(upload());
+    const [firstError] = await upload(client);
+    const [secondError] = await upload(client);
     expect(firstError).toBeNull();
     expect(secondError?.code).toBe("NET_UNREACHABLE");
   });
@@ -409,10 +409,10 @@ describe("builder refactor adversarial audit", () => {
       path: "/undefined",
     });
 
-    const [thrown] = await client.execute(throwsValue());
-    const [value] = await client.execute(returnsValue());
-    const [promise] = await client.execute(returnsPromise());
-    const [undefinedResult] = await client.execute(returnsUndefined());
+    const [thrown] = await throwsValue(client);
+    const [value] = await returnsValue(client);
+    const [promise] = await returnsPromise(client);
+    const [undefinedResult] = await returnsUndefined(client);
 
     expect(thrown?.code).toBe("REQ_BUILD_FAILED");
     expect(thrown?.cause).toBe("boom");
@@ -446,7 +446,7 @@ describe("builder refactor adversarial audit", () => {
         path: "/body",
       });
 
-      const [error] = await client.execute(endpoint());
+      const [error] = await endpoint(client);
       expect(error?.code).toBe("REQ_BUILD_FAILED");
       expect(error?.message).toBe("GET/HEAD requests cannot have a body");
       expect(handleCalls).toBe(0);
@@ -482,7 +482,7 @@ describe("builder refactor adversarial audit", () => {
         path: "/events",
       });
 
-      const [error, stream] = await client.execute(endpoint());
+      const [error, stream] = await endpoint(client);
       expect(error?.code).toBe("REQ_BUILD_FAILED");
       expect(error?.message).toBe("GET/HEAD requests cannot have a body");
       expect(stream).toBeUndefined();
@@ -516,7 +516,7 @@ describe("builder refactor adversarial audit", () => {
       path: "/coherent",
     });
 
-    const [error] = await client.execute(endpoint({ displayName: "Ada" }));
+    const [error] = await endpoint(client, { displayName: "Ada" });
     expect(error).toBeNull();
     expect(captured?.queryString).toBe("page=2");
     expect(captured?.queryParams?.get("page")).toBe("2");
@@ -548,9 +548,7 @@ describe("builder refactor adversarial audit", () => {
       path: "/rooms/:room/events",
     });
 
-    const [error, stream] = await client.execute(
-      feed({ room: "blue", since: "2" }),
-    );
+    const [error, stream] = await feed(client, { room: "blue", since: "2" });
     expect(error).toBeNull();
     expect(captured?.endpoint).toBe("/rooms/blue/events");
     expect(captured?.queryString).toBe("since=2");
@@ -592,7 +590,7 @@ describe("builder refactor adversarial audit", () => {
       path: "/e2e/ws/:room",
     });
 
-    const [error, socket] = await client.execute(Chat({ room: "blue" }));
+    const [error, socket] = await Chat(client, { room: "blue" });
     expect(error).toBeNull();
     expect(captured?.endpoint).toBe("/e2e/ws/blue");
     expect(captured?.queryString).toBe("since=2");
@@ -629,28 +627,24 @@ describe("builder refactor adversarial audit", () => {
         const builder = (() => ({ path: { id: value } })) as never;
         const execute = {
           HTTP: () =>
-            client.execute(
-              defineRequest({ builder, method: "GET", path: "/items/:id" })(),
+            defineRequest({ builder, method: "GET", path: "/items/:id" })(
+              client,
             ),
           SSE: () =>
-            client.execute(
-              defineEventStream({
-                builder,
-                events: { message: struct.string() },
-                maxBufferSize: 1024,
-                maxQueueSize: 4,
-                path: "/items/:id",
-              })(),
-            ),
+            defineEventStream({
+              builder,
+              events: { message: struct.string() },
+              maxBufferSize: 1024,
+              maxQueueSize: 4,
+              path: "/items/:id",
+            })(client),
           WebSocket: () =>
-            client.execute(
-              defineWebSocket({
-                builder,
-                incoming: struct.unknown(),
-                maxIncomingQueueSize: 1,
-                path: "/items/:id",
-              })(),
-            ),
+            defineWebSocket({
+              builder,
+              incoming: struct.unknown(),
+              maxIncomingQueueSize: 1,
+              path: "/items/:id",
+            })(client),
         }[transport];
 
         const [error, result] = await execute();
@@ -666,26 +660,6 @@ describe("builder refactor adversarial audit", () => {
 });
 
 const Proto = struct.object({ value: struct.string().alias("__proto__") });
-const PHASE_TIMEOUT_MS = 15;
-const SLOW_PHASE_MS = 40;
-
-// Only Date is faked (see the hooks in 'builder fixes re-audit'): the clock moves where a test advances it,
-// while the real deadline timer still cannot fire during synchronous work.
-function advanceClock(ms: number): void {
-  vi.setSystemTime(Date.now() + ms);
-}
-
-function slowInput(): { id: string } {
-  const input = {} as { id: string };
-  Object.defineProperty(input, "id", {
-    enumerable: true,
-    get() {
-      advanceClock(SLOW_PHASE_MS);
-      return "ok";
-    },
-  });
-  return input;
-}
 
 function abortingInput(controller: AbortController): { id: string } {
   const input = {} as { id: string };
@@ -837,7 +811,7 @@ describe("builder fixes re-audit", () => {
       outgoing: Proto,
       path: "/e2e/ws/:room",
     });
-    const [error, socket] = await client.execute(endpoint({ value: "query" }));
+    const [error, socket] = await endpoint(client, { value: "query" });
     expect(error).toBeNull();
     if (!socket) throw new Error("Expected socket");
     try {
@@ -879,9 +853,7 @@ describe("builder fixes re-audit", () => {
         method: "POST",
         path: "/form",
       });
-      const [error] = await client.execute(
-        endpoint({ values: ["first", "second"] }),
-      );
+      const [error] = await endpoint(client, { values: ["first", "second"] });
       expect(error).toBeNull();
       expect(fields?.getAll("__proto__")).toEqual(["first", "second"]);
     },
@@ -939,7 +911,7 @@ describe("builder fixes re-audit", () => {
         method: "POST",
         path: "/events/:__proto__",
       });
-      const [error, stream] = await client.execute(endpoint({ value: "safe" }));
+      const [error, stream] = await endpoint(client, { value: "safe" });
       expect(error).toBeNull();
       expect(captured?.endpoint).toBe("/events/safe");
       expect(captured?.headers?.get("__proto__")).toBe("safe");
@@ -983,7 +955,7 @@ describe("builder fixes re-audit", () => {
         method: "GET",
         path: "/response",
       });
-      const [error, result] = await client.execute(endpoint());
+      const [error, result] = await endpoint(client);
       if (status === 200) {
         expect(error).toBeNull();
         expect(result).toEqual({ value: "safe" });
@@ -1008,22 +980,18 @@ describe("builder fixes re-audit", () => {
         }),
       ),
     );
-    await client.execute(
-      defineRequest({
-        method: "GET",
-        path: "/",
-        output: struct.string(),
-        error: struct.object({}),
-      })(),
-    );
-    await client.execute(
-      defineRequest({
-        method: "GET",
-        path: "/",
-        error: struct.arrayBuffer(),
-      })(),
-    );
-    await client.execute(defineRequest({ method: "GET", path: "/" })());
+    await defineRequest({
+      method: "GET",
+      path: "/",
+      output: struct.string(),
+      error: struct.object({}),
+    })(client);
+    await defineRequest({
+      method: "GET",
+      path: "/",
+      error: struct.arrayBuffer(),
+    })(client);
+    await defineRequest({ method: "GET", path: "/" })(client);
     expect(
       requests.map((request) => [
         request.responseType,
@@ -1051,70 +1019,10 @@ describe("builder fixes re-audit", () => {
       path: "/socket",
     });
 
-    const [error] = await client.execute(endpoint(), {
-      signal: controller.signal,
-    });
+    const [error] = await endpoint(client({ abort: controller.signal }));
 
     expect(builderCalls).toBe(0);
     expect(error).toMatchObject({ code: "NET_ABORTED" });
-  });
-
-  test("returns NET_TIMEOUT when a WebSocket builder outlasts the execute timeout", async () => {
-    let builderCalls = 0;
-    const opened = createOpeningSocket();
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withWebSocketHandle(opened.Socket as unknown as typeof WebSocket),
-    );
-    const endpoint = defineWebSocket({
-      builder: () => {
-        builderCalls += 1;
-        advanceClock(SLOW_PHASE_MS);
-        return {};
-      },
-      incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
-      path: "/socket",
-    });
-
-    const [error, session] = await client.execute(endpoint(), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-    await closeIfOpened(session);
-
-    expect(builderCalls).toBe(1);
-    expect(opened.counters.sockets).toBe(0);
-    expect(session).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
-  });
-
-  test("returns NET_TIMEOUT when WebSocket input parsing outlasts the execute timeout", async () => {
-    let builderCalls = 0;
-    const opened = createOpeningSocket();
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withWebSocketHandle(opened.Socket as unknown as typeof WebSocket),
-    );
-    const endpoint = defineWebSocket({
-      builder: () => {
-        builderCalls += 1;
-        return {};
-      },
-      incoming: struct.unknown(),
-      input: struct.object({ id: struct.string() }),
-      maxIncomingQueueSize: 1,
-      path: "/socket",
-    });
-
-    const [error, session] = await client.execute(endpoint(slowInput()), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-    await closeIfOpened(session);
-
-    expect(builderCalls).toBe(0);
-    expect(opened.counters.sockets).toBe(0);
-    expect(session).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
   });
 
   test("does not run a WebSocket builder when input parsing aborts the signal", async () => {
@@ -1136,9 +1044,9 @@ describe("builder fixes re-audit", () => {
       path: "/socket",
     });
 
-    const [error, session] = await client.execute(
-      endpoint(abortingInput(controller)),
-      { signal: controller.signal },
+    const [error, session] = await endpoint(
+      client({ abort: controller.signal }),
+      abortingInput(controller),
     );
     await closeIfOpened(session);
 
@@ -1146,34 +1054,6 @@ describe("builder fixes re-audit", () => {
     expect(opened.counters.sockets).toBe(0);
     expect(session).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
-  });
-
-  test("returns NET_TIMEOUT when a WebSocket builder throws after the execute timeout", async () => {
-    let builderCalls = 0;
-    const opened = createOpeningSocket();
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withWebSocketHandle(opened.Socket as unknown as typeof WebSocket),
-    );
-    const endpoint = defineWebSocket({
-      builder: () => {
-        builderCalls += 1;
-        advanceClock(SLOW_PHASE_MS);
-        throw new Error("build failed after the deadline");
-      },
-      incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
-      path: "/socket",
-    });
-
-    const [error, session] = await client.execute(endpoint(), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-
-    expect(builderCalls).toBe(1);
-    expect(opened.counters.sockets).toBe(0);
-    expect(session).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
   });
 
   test("returns NET_ABORTED when a WebSocket builder aborts and then throws", async () => {
@@ -1193,9 +1073,9 @@ describe("builder fixes re-audit", () => {
       path: "/socket",
     });
 
-    const [error, session] = await client.execute(endpoint(), {
-      signal: controller.signal,
-    });
+    const [error, session] = await endpoint(
+      client({ abort: controller.signal }),
+    );
 
     expect(opened.counters.sockets).toBe(0);
     expect(session).toBeUndefined();
@@ -1211,9 +1091,11 @@ describe("builder fixes re-audit", () => {
       path: "/socket",
     });
 
-    const [error, session] = await createClient(
-      withEndpoint("https://example.test"),
-    ).execute(endpoint(), { signal: controller.signal });
+    const [error, session] = await endpoint(
+      createClient(withEndpoint("https://example.test"))({
+        abort: controller.signal,
+      }),
+    );
 
     expect(session).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -1240,74 +1122,14 @@ describe("builder fixes re-audit", () => {
       path: "/item",
     });
 
-    const [error, result] = await client.execute(endpoint(), {
-      signal: controller.signal,
-    });
+    const [error, result] = await endpoint(
+      client({ abort: controller.signal }),
+    );
 
     expect(builderCalls).toBe(0);
     expect(fetches).toBe(0);
     expect(result).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
-  });
-
-  test("returns NET_TIMEOUT when an HTTP builder outlasts the execute timeout", async () => {
-    let builderCalls = 0;
-    let fetches = 0;
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
-        fetches += 1;
-        return new Response("ok", { status: 200 });
-      }),
-    );
-    const endpoint = defineRequest({
-      builder: () => {
-        builderCalls += 1;
-        advanceClock(SLOW_PHASE_MS);
-        return {};
-      },
-      method: "GET",
-      path: "/item",
-    });
-
-    const [error, result] = await client.execute(endpoint(), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-
-    expect(builderCalls).toBe(1);
-    expect(fetches).toBe(0);
-    expect(result).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
-  });
-
-  test("returns NET_TIMEOUT when HTTP input parsing outlasts the execute timeout", async () => {
-    let builderCalls = 0;
-    let fetches = 0;
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
-        fetches += 1;
-        return new Response("ok", { status: 200 });
-      }),
-    );
-    const endpoint = defineRequest({
-      builder: () => {
-        builderCalls += 1;
-        return {};
-      },
-      input: struct.object({ id: struct.string() }),
-      method: "GET",
-      path: "/item",
-    });
-
-    const [error, result] = await client.execute(endpoint(slowInput()), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-
-    expect(builderCalls).toBe(0);
-    expect(fetches).toBe(0);
-    expect(result).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
   });
 
   test("does not run an HTTP builder when input parsing aborts the signal", async () => {
@@ -1331,45 +1153,15 @@ describe("builder fixes re-audit", () => {
       path: "/item",
     });
 
-    const [error, result] = await client.execute(
-      endpoint(abortingInput(controller)),
-      { signal: controller.signal },
+    const [error, result] = await endpoint(
+      client({ abort: controller.signal }),
+      abortingInput(controller),
     );
 
     expect(builderCalls).toBe(0);
     expect(fetches).toBe(0);
     expect(result).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
-  });
-
-  test("returns NET_TIMEOUT when an HTTP builder throws after the execute timeout", async () => {
-    let builderCalls = 0;
-    let fetches = 0;
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withHTTPHandle(async () => {
-        fetches += 1;
-        return new Response("ok", { status: 200 });
-      }),
-    );
-    const endpoint = defineRequest({
-      builder: () => {
-        builderCalls += 1;
-        advanceClock(SLOW_PHASE_MS);
-        throw new Error("build failed after the deadline");
-      },
-      method: "GET",
-      path: "/item",
-    });
-
-    const [error, result] = await client.execute(endpoint(), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-
-    expect(builderCalls).toBe(1);
-    expect(fetches).toBe(0);
-    expect(result).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
   });
 
   test("returns NET_ABORTED when an HTTP builder aborts and then throws", async () => {
@@ -1391,9 +1183,9 @@ describe("builder fixes re-audit", () => {
       path: "/item",
     });
 
-    const [error, result] = await client.execute(endpoint(), {
-      signal: controller.signal,
-    });
+    const [error, result] = await endpoint(
+      client({ abort: controller.signal }),
+    );
 
     expect(fetches).toBe(0);
     expect(result).toBeUndefined();
@@ -1423,9 +1215,9 @@ describe("builder fixes re-audit", () => {
     );
     const endpoint = defineRequest({ method: "GET", path: "/item" });
 
-    const [error, result] = await client.execute(endpoint(), {
-      signal: controller.signal,
-    });
+    const [error, result] = await endpoint(
+      client({ abort: controller.signal }),
+    );
 
     expect(fetches).toBe(0);
     expect(result).toBeUndefined();
@@ -1455,81 +1247,15 @@ describe("builder fixes re-audit", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(endpoint(), {
-      signal: controller.signal,
-    });
+    const [error, stream] = await endpoint(
+      client({ abort: controller.signal }),
+    );
     await closeIfOpened(stream);
 
     expect(builderCalls).toBe(0);
     expect(fetches).toBe(0);
     expect(stream).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
-  });
-
-  test("returns NET_TIMEOUT when an SSE builder outlasts the execute timeout", async () => {
-    let builderCalls = 0;
-    let fetches = 0;
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
-        fetches += 1;
-        return sseResponse();
-      }),
-    );
-    const endpoint = defineEventStream({
-      builder: () => {
-        builderCalls += 1;
-        advanceClock(SLOW_PHASE_MS);
-        return {};
-      },
-      events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
-      path: "/events",
-    });
-
-    const [error, stream] = await client.execute(endpoint(), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-    await closeIfOpened(stream);
-
-    expect(builderCalls).toBe(1);
-    expect(fetches).toBe(0);
-    expect(stream).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
-  });
-
-  test("returns NET_TIMEOUT when SSE input parsing outlasts the execute timeout", async () => {
-    let builderCalls = 0;
-    let fetches = 0;
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
-        fetches += 1;
-        return sseResponse();
-      }),
-    );
-    const endpoint = defineEventStream({
-      builder: () => {
-        builderCalls += 1;
-        return {};
-      },
-      events: { message: struct.string() },
-      input: struct.object({ id: struct.string() }),
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
-      path: "/events",
-    });
-
-    const [error, stream] = await client.execute(endpoint(slowInput()), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-    await closeIfOpened(stream);
-
-    expect(builderCalls).toBe(0);
-    expect(fetches).toBe(0);
-    expect(stream).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
   });
 
   test("does not run an SSE builder when input parsing aborts the signal", async () => {
@@ -1555,9 +1281,9 @@ describe("builder fixes re-audit", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(
-      endpoint(abortingInput(controller)),
-      { signal: controller.signal },
+    const [error, stream] = await endpoint(
+      client({ abort: controller.signal }),
+      abortingInput(controller),
     );
     await closeIfOpened(stream);
 
@@ -1565,39 +1291,6 @@ describe("builder fixes re-audit", () => {
     expect(fetches).toBe(0);
     expect(stream).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
-  });
-
-  test("returns NET_TIMEOUT when an SSE builder throws after the execute timeout", async () => {
-    let builderCalls = 0;
-    let fetches = 0;
-    const client = createClient(
-      withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
-        fetches += 1;
-        return sseResponse();
-      }),
-    );
-    const endpoint = defineEventStream({
-      builder: () => {
-        builderCalls += 1;
-        advanceClock(SLOW_PHASE_MS);
-        throw new Error("build failed after the deadline");
-      },
-      events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
-      path: "/events",
-    });
-
-    const [error, stream] = await client.execute(endpoint(), {
-      timeout: PHASE_TIMEOUT_MS,
-    });
-    await closeIfOpened(stream);
-
-    expect(builderCalls).toBe(1);
-    expect(fetches).toBe(0);
-    expect(stream).toBeUndefined();
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
   });
 
   test("returns NET_ABORTED when an SSE builder aborts and then throws", async () => {
@@ -1621,9 +1314,9 @@ describe("builder fixes re-audit", () => {
       path: "/events",
     });
 
-    const [error, stream] = await client.execute(endpoint(), {
-      signal: controller.signal,
-    });
+    const [error, stream] = await endpoint(
+      client({ abort: controller.signal }),
+    );
 
     expect(fetches).toBe(0);
     expect(stream).toBeUndefined();
@@ -1640,9 +1333,11 @@ describe("builder fixes re-audit", () => {
       path: "/events",
     });
 
-    const [error, stream] = await createClient(
-      withEndpoint("https://example.test"),
-    ).execute(endpoint(), { signal: controller.signal });
+    const [error, stream] = await endpoint(
+      createClient(withEndpoint("https://example.test"))({
+        abort: controller.signal,
+      }),
+    );
 
     expect(stream).toBeUndefined();
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -1682,7 +1377,7 @@ describe("builder fixes re-audit", () => {
       maxQueueSize: 4,
       path: "/events",
     });
-    const [error, stream] = await client.execute(endpoint());
+    const [error, stream] = await endpoint(client);
     expect(error).toBeNull();
     if (!stream) {
       throw new Error("Expected stream");
@@ -1766,7 +1461,7 @@ describe("builder fixes re-audit", () => {
       maxIncomingQueueSize: 4,
       path: "/socket",
     });
-    const [openError, session] = await client.execute(endpoint());
+    const [openError, session] = await endpoint(client);
     expect(openError).toBeNull();
     if (!session || !opened) {
       throw new Error("Expected socket");
@@ -1802,17 +1497,30 @@ describe("builder fixes re-audit", () => {
         }),
         path: "/ws/heartbeat",
       });
-      const pending = client.execute(endpoint(), {
-        heartbeat: {
-          intervalMs: 10,
-          isAck: (message: { kind: string; ok: boolean }) => {
-            seen.push(message);
-            return message.kind === "pong";
+      const pending = endpoint(
+        client({
+          heartbeat: {
+            intervalMs: 10,
+            isAck: (message: unknown) => {
+              if (
+                typeof message !== "object" ||
+                message === null ||
+                !("kind" in message) ||
+                !("ok" in message)
+              ) {
+                return false;
+              }
+              seen.push({
+                kind: String(message.kind),
+                ok: message.ok === true,
+              });
+              return message.kind === "pong";
+            },
+            message: () => ({ at: 1, type: "ping" as const }),
+            timeoutMs: 100,
           },
-          message: () => ({ at: 1, type: "ping" as const }),
-          timeoutMs: 100,
-        },
-      });
+        }),
+      );
       const [error, session] = await openControllableSocket(pending, latest);
       expect(error).toBeNull();
       const socket = latest();
@@ -1869,7 +1577,7 @@ describe("builder fixes re-audit", () => {
       maxQueueSize: 4,
       path: "/events",
     });
-    const [error] = await client.execute(endpoint());
+    const [error] = await endpoint(client);
     expect(error).toMatchObject({
       code: "HTTP_STATUS",
       data: { code: "DENIED" },
@@ -1919,9 +1627,7 @@ test("preserves a nested spread extra when its parent remains typed", async () =
     }),
   });
 
-  const [fault] = await client.execute(
-    endpoint({ profile: { displayName: "Ada" } }),
-  );
+  const [fault] = await endpoint(client, { profile: { displayName: "Ada" } });
   expect(fault).toBeNull();
   expect(sentBody).toEqual({ profile: { display_name: "Ada", role: "admin" } });
 });
@@ -1944,9 +1650,7 @@ test("rejects a nested spread wire-key collision before sending a typed parent",
     }),
   });
 
-  const [fault] = await client.execute(
-    endpoint({ profile: { displayName: "Ada" } }),
-  );
+  const [fault] = await endpoint(client, { profile: { displayName: "Ada" } });
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
   expect(calls).toBe(0);
 });

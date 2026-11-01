@@ -1,55 +1,66 @@
 ---
 title: Defjs
-description: Diseñado para crear mejores SDK. Define y publica endpoints tipados y ejecútalos con el cliente de tu aplicación.
+description: Diseña y publica SDK de TypeScript con definiciones de API reutilizables y clientes que posee la aplicación.
 ---
 
 # Defjs
 
-**Diseñado para crear mejores SDK.**
+**Diseñado para mejores SDK.**
 
-Defjs significa **define js**: facilita el diseño, la escritura y la publicación de SDK de API. Quien desarrolla el SDK exporta endpoints tipados y reutilizables con `defineRequest`, `defineEventStream` y `defineWebSocket`. La aplicación los importa y los ejecuta con su propio cliente Defjs.
+Defjs ayuda a los equipos a convertir sus API en SDK de TypeScript reutilizables. `def` significa `define`: describe las operaciones que ofrece tu servicio, expórtalas desde un módulo o un paquete npm y deja que cada aplicación configure su propio cliente para llamarlas.
 
-| Autor del SDK                                                                | Aplicación                                                             |
-| ---------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| Definir operaciones, métodos y rutas relativas de la API                     | Configurar la URL base y el transporte del entorno                     |
-| Describir entradas, salidas, errores, eventos y mensajes con Struct          | Configurar autenticación, interceptores y telemetría                   |
-| Colocar las entradas en la solicitud mediante `builder` y exportar endpoints | Ejecutar comandos, tratar resultados y gestionar cancelación y streams |
+## Define el SDK, configura la aplicación
 
-El SDK exporta el endpoint:
+| Autor del SDK                                                             | Consumidor del SDK                                                                    |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Definir operaciones, entrada, mapeo de la solicitud, respuestas y errores | Elegir la dirección del servicio, las credenciales, los interceptores y el transporte |
+| Exportar endpoints tipados de HTTP, SSE y WebSocket                       | Importar esos endpoints y llamarlos con un cliente Defjs                              |
+| Mantener y publicar el contrato de la API                                 | Tratar resultados y ser dueño de la cancelación, los streams y las sesiones           |
+
+Una definición de SDK no captura un cliente de aplicación. El mismo endpoint exportado puede servir a una aplicación de navegador, a un servidor o a una prueba local con configuraciones de cliente distintas. Los dos lados siguen usando el contrato de ejecución de Defjs y versiones compatibles de Core.
+
+El SDK exporta una operación:
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example
 </include>
 
-La aplicación proporciona el cliente y ejecuta el comando:
+La aplicación la importa y es dueña de la ejecución:
 
 <include cwd meta="app.ts">
   examples/home/app.ts#example
 </include>
 
-Definición y ejecución siguen formando parte del contrato de Defjs. El cliente de la aplicación aporta la configuración de ejecución; los endpoints conservan métodos, rutas y contratos de transporte.
+Llamar a `getHealth(client)` arranca la solicitud. Cuando publiques la definición, los consumidores la importan desde tu paquete de SDK en lugar del archivo local.
 
 ## Práctica recomendada
 
-Una definición permanece independiente del cliente. Llamarla solo crea un comando. Ponle un nombre y pásalo a `client.execute` en el cliente que posee la aplicación. La aplicación también posee la dirección del servicio y las credenciales. Inspecciona primero la tupla error-first. Si `error` está presente, informa `error.code` y sal de la función antes de leer el valor de éxito.
+Una definición permanece independiente del cliente. Pasa el cliente de la aplicación como primer argumento, como en `getHealth(client)`. La aplicación también es dueña de la dirección del servicio y de las credenciales. Inspecciona primero la tupla error-first. Si `error` está presente, informa `error.code` y sal de la función antes de leer el valor de éxito.
 
-Empieza por el [inicio rápido](/es-ES/docs/start), aprende sobre [Struct](/es-ES/docs/struct), [comandos](/es-ES/docs/commands) y [cliente](/es-ES/docs/client) y después [publica tu SDK](/es-ES/recipes/publish-http-sdk). Las [decisiones de diseño](/es-ES/docs/design-decisions) explican este reparto.
+## Construye tu SDK
 
-Defjs no almacena resultados en caché ni organiza los reintentos de la aplicación. La aplicación decide esas políticas y gestiona la cancelación y la limpieza.
+1. [Define y ejecuta tu primera operación](/es-ES/docs/start) en archivos separados de SDK y de aplicación.
+2. Describe los [contratos de datos](/es-ES/docs/struct) y las [operaciones HTTP](/es-ES/docs/http) que exporta tu SDK.
+3. [Prueba y publica un paquete de SDK](/es-ES/recipes/publish-http-sdk) con JavaScript, declaraciones y una dependencia de Core compatible.
+4. Configura el [Client](/es-ES/docs/client) de la aplicación consumidora y añade después la integración de framework u observabilidad donde haga falta.
+
+Las [decisiones de diseño](/es-ES/docs/design-decisions) explican por qué las definiciones de API y la ejecución tienen dueños distintos. Puedes usar esta misma estructura dentro de una sola aplicación antes de publicar un paquete.
 
 ## Elige un transporte
 
-| Necesitas                                      | Empieza por                         | Resultado correcto                                                                            |
-| ---------------------------------------------- | ----------------------------------- | --------------------------------------------------------------------------------------------- |
-| Solicitud + respuesta por estado               | [HTTP](/es-ES/docs/http)            | Datos decodificados + `DecodedResponse` (`HttpMeta` cuando no se declara un struct de salida) |
-| Feed de eventos del servidor de larga duración | [SSE](/es-ES/docs/sse)              | Un stream + snapshot de arranque `open`                                                       |
-| Sesión bidireccional                           | [WebSocket](/es-ES/docs/web-socket) | Una sesión + snapshot de arranque `connection`                                                |
+| Necesitas                                      | Empieza por                         | Resultado correcto                                                               |
+| ---------------------------------------------- | ----------------------------------- | -------------------------------------------------------------------------------- |
+| Solicitud + respuesta según el estado          | [HTTP](/es-ES/docs/http)            | Datos decodificados + `DecodedResponse` (`HttpMeta` cuando no se declara output) |
+| Feed de eventos del servidor de larga duración | [SSE](/es-ES/docs/sse)              | Un stream + snapshot de arranque `open`                                          |
+| Sesión bidireccional                           | [WebSocket](/es-ES/docs/web-socket) | Una sesión + snapshot de arranque `connection`                                   |
+
+Los tres transportes siguen la misma secuencia: define una operación y llámala con el cliente de la aplicación y la entrada de quien llama.
 
 ## Elige un paquete
 
 | Paquete                       | Cuándo                                                                                                       |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `@defjs/core`                 | `defineRequest`, `defineEventStream`, `defineWebSocket`, `struct` y `createClient`                           |
+| `@defjs/core`                 | Definir operaciones y contratos del SDK; crear clientes y llamar a operaciones HTTP, SSE y WebSocket         |
 | `@defjs/react`                | `ClientProvider` / `useClient` — ver [React](/es-ES/docs/integrations/react)                                 |
 | `@defjs/vue`                  | Plugin + `injectClient` — ver [Vue](/es-ES/docs/integrations/vue)                                            |
 | `@defjs/opentelemetry-server` | Spans, métricas y logs salientes — ver [OpenTelemetry Server](/es-ES/docs/integrations/opentelemetry-server) |
@@ -62,14 +73,17 @@ Los tres transportes devuelven una tupla de tres elementos con el error primero.
 - SSE → `[error, stream, open]`
 - WebSocket → `[error, session, connection]`
 
-Si falla, el segundo elemento es `undefined`. En HTTP el tercero también es `undefined`, porque el fallo ya lleva los metadatos de la respuesta. En SSE y WebSocket el tercero es el snapshot de arranque cuando se capturó uno antes del fallo. Ver [Errores](/es-ES/docs/errors).
+Si falla, el segundo elemento es `undefined`. En HTTP el tercero también es `undefined`, porque el fault ya lleva los metadatos de la respuesta. En SSE y WebSocket el tercero es la instantánea de arranque cuando se capturó una antes del fallo. Ver [Errores](/es-ES/docs/errors).
 
 ## Responsabilidad en una frase
 
 Aborta HTTP cuando ya no sirve. Cierra SSE y `await stream.closed`. Cierra WebSocket y `await session.closed`. En un servidor, crea el cliente dentro del límite de la solicitud cuando las opciones capturan cookies, auth o datos de tenant. Redacta URL, cabeceras y cuerpos antes de registrarlos.
 
+Defjs aporta definiciones, validación y ejecución. Las aplicaciones eligen las políticas de caché y de reintento; la reconexión de streams es opt-in. Hoy se admiten paquetes de SDK escritos a mano. El tooling de CLI y la generación OpenAPI/SDK siguen planeados.
+
 ## Recetas relacionadas
 
+- [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
 - [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
 - [POST JSON](/es-ES/recipes/post-json)
 - [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)

@@ -5,7 +5,7 @@ description: Export API definitions as an npm package with types, and let each a
 
 # Build and publish an SDK [#publish-an-http-sdk-without-hiding-execute]
 
-An SDK packages the API your team offers. With Defjs, export endpoint definitions and their data contracts; consuming applications supply the client configuration and decide when to execute them. This recipe uses HTTP, and the same package boundary works for SSE and WebSocket definitions.
+An SDK packages the API your team offers. With Defjs, export endpoint definitions and their data contracts; consuming applications supply the client configuration and decide when to call them. This recipe uses HTTP, and the same package boundary works for SSE and WebSocket definitions.
 
 ## 1. Define the SDK's operations
 
@@ -98,9 +98,9 @@ bun pm pack
 
 Check that the tarball contains `dist/index.js` and `dist/index.d.ts`. Install that tarball into a separate application and verify both its types and execution before publishing. The SDK's README should document the service API, compatible Core versions, expected authentication, and any optional defaults.
 
-## 3. Execute from the consuming application
+## 3. Call it from the consuming application
 
-The local example keeps the definition in `users-sdk.ts` beside `app.ts` so it can run offline. Its import creates no client; the application configures a local Fetch handle and executes the imported operation:
+The local example keeps the definition in `users-sdk.ts` beside `app.ts` so it can run offline. Its import creates no client; the application configures a local Fetch handle and calls the imported operation:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -138,4 +138,4 @@ This command publishes a public package. Use your organization's registry and ac
 
 Client factories and convenience methods are optional additions. They can provide service defaults or domain behavior while accepting caller configuration and preserving direct endpoint exports. Document any error mapping or lifecycle policy they introduce. Neither is required for a reusable SDK.
 
-See [Commands](/docs/commands), [Client](/docs/client), and [Design decisions](/docs/design-decisions) for the underlying contracts.
+See [HTTP](/docs/http), [Client](/docs/client), and [Design decisions](/docs/design-decisions) for the underlying contracts.

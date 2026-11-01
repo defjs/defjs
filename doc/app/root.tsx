@@ -8,8 +8,8 @@ import {
   isRouteErrorResponse,
 } from "react-router";
 import { RootProvider } from "fumadocs-ui/provider/react-router";
-import { useI18n } from "fumadocs-ui/contexts/i18n";
-import { getUi } from "./lib/ui-copy";
+import { getI18nProps } from "./lib/translations";
+import { useAppTranslations } from "./lib/use-app-translations";
 import { locales } from "./lib/i18n";
 import NotFound, { ErrorPage } from "./routes/not-found";
 import StaticSearch from "./components/search";
@@ -39,16 +39,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <body data-hydrated={hydrated}>
         <RootProvider
           dir={locale === "ar" ? "rtl" : "ltr"}
-          i18n={{
-            locale,
-            defaultLanguage: "en-US",
-            hideLocale: "default-locale",
-            translations: getUi(locale).translations,
-            locales: locales.map((locale) => ({
-              locale,
-              name: getUi(locale).label,
-            })),
-          }}
+          i18n={getI18nProps(locale)}
           search={{ SearchDialog: StaticSearch }}
         >
           {children}
@@ -63,7 +54,7 @@ export default function App() {
   return <Outlet />;
 }
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const { locale } = useI18n();
+  const t = useAppTranslations();
   if (isRouteErrorResponse(error) && error.status === 404) return <NotFound />;
-  return <ErrorPage title={getUi(locale).error} />;
+  return <ErrorPage title={t("ui.error")} />;
 }

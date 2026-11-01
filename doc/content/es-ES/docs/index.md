@@ -1,21 +1,22 @@
 ---
 title: "Guía"
-description: Diseña endpoints y contratos de SDK, pruébalos con un cliente propio de la aplicación e intégralos y publícalos.
+description: Diseña contratos y operaciones de SDK, publícalos y configura la ejecución en las aplicaciones que los consumen.
 ---
 
-Defjs acompaña el recorrido desde el contrato de API hasta el SDK publicado. Lee el [inicio rápido](/es-ES/docs/start), después [comandos](/es-ES/docs/commands) y [cliente](/es-ES/docs/client): el SDK exporta endpoints y la aplicación configura su ejecución. [Struct](/es-ES/docs/struct) describe los contratos de datos compartidos y las [decisiones de diseño](/es-ES/docs/design-decisions) explican los límites.
+Defjs separa la API que publica un equipo del cliente que usa una aplicación. Sigue el camino de autoría del SDK para definir y empaquetar operaciones; sigue el camino de la aplicación para configurar la ejecución y tratar los resultados.
 
-Cuando funcione el primer endpoint, continúa con las [pruebas locales](/es-ES/recipes/test-with-handle) y la [publicación en npm](/es-ES/recipes/publish-http-sdk). Las guías de transporte y los plugins profundizan en el contrato del SDK y las responsabilidades de la aplicación.
-
-## Desarrollo de SDK [#primeros-pasos]
+## Desarrollo de SDK [#getting-started]
 
 - [Resumen del proyecto](/es-ES)
 - [Inicio rápido](/es-ES/docs/start)
+- [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
+- [Por qué las definiciones y la ejecución están separadas](/es-ES/docs/design-decisions)
 
-## Contratos y ejecución [#llamadas-y-contratos]
+## Contratos y ejecución [#calls-and-contracts]
+
+Los autores del SDK son dueños de los Struct y de las definiciones de endpoint. Las aplicaciones aportan el Client y llaman a las operaciones con él.
 
 - [Contratos de datos / Struct](/es-ES/docs/struct)
-- [Definir y ejecutar / Command](/es-ES/docs/commands)
 - [Configuración del cliente / Client](/es-ES/docs/client)
 
 ## Solicitudes y tiempo real
@@ -31,9 +32,16 @@ Cuando funcione el primer endpoint, continúa con las [pruebas locales](/es-ES/r
 
 ## Plugins
 
+Paquetes opcionales para el cliente de la aplicación consumidora. Las definiciones del SDK siguen siendo independientes de ellos.
+
 - [Plugins](/es-ES/docs/integrations)
 - [React](/es-ES/docs/integrations/react)
 - [Vue](/es-ES/docs/integrations/vue)
 - [OpenTelemetry en el servidor](/es-ES/docs/integrations/opentelemetry-server)
+
+## IA
+
+- [Desarrollo asistido por IA](/es-ES/docs/ai)
+- [Llamar a API de IA](/es-ES/docs/ai-api)
 
 [Decisiones de diseño](/es-ES/docs/design-decisions)

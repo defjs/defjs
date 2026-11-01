@@ -77,7 +77,12 @@
   {
     "slug": "core/client-type",
     "name": "Client",
-    "description": "A client returned by createClient holds the resolved ClientConfig and executes HTTP, SSE, and WebSocket commands."
+    "description": "Application client returned by createClient."
+  },
+  {
+    "slug": "core/requestoptions-type",
+    "name": "RequestOptions",
+    "description": "Flat per-call options. Each protocol reads the fields it understands and ignores the rest."
   },
   {
     "slug": "core/clientoption-type",
@@ -130,11 +135,6 @@
     "description": "Declares a typed HTTP request endpoint."
   },
   {
-    "slug": "core/executehttpcommand",
-    "name": "executeHttpCommand",
-    "description": "Runs an HttpCommand against client config: validate input, send the request, and parse the response."
-  },
-  {
     "slug": "core/fetchhandler",
     "name": "fetchHandler",
     "description": "Default HTTP transport: perform httpRequest with fetch and return an HttpResponse."
@@ -152,7 +152,7 @@
   {
     "slug": "core/requestendpoint-type",
     "name": "RequestEndpoint",
-    "description": "Callable endpoint returned by defineRequest."
+    "description": "Operation returned by defineRequest."
   },
   {
     "slug": "core/builderinput-type",
@@ -165,19 +165,14 @@
     "description": "Request shape an HTTP builder returns: path, query, headers, and body."
   },
   {
-    "slug": "core/httpcommand-type",
-    "name": "HttpCommand",
-    "description": "Opaque executable HTTP command produced by a defineRequest endpoint."
-  },
-  {
     "slug": "core/httpexecuteoptions-type",
     "name": "HttpExecuteOptions",
-    "description": "Options passed to client.execute or executeHttpCommand for one HTTP call: progress, abort or timeout, and signal."
+    "description": "HTTP fields read from RequestOptions for one call."
   },
   {
     "slug": "core/userequestconfig-type",
     "name": "UseRequestConfig",
-    "description": "Per-request options for HTTP execution: progress callbacks and cancellation."
+    "description": "HTTP fields of RequestOptions: progress callbacks and abort."
   },
   {
     "slug": "core/httpawaitresult-type",
@@ -432,12 +427,12 @@
   {
     "slug": "core/fault-type",
     "name": "Fault",
-    "description": "Union of every failure client.execute can return, discriminated by code."
+    "description": "Union of every failure an operation can return, discriminated by code."
   },
   {
     "slug": "core/faultof-type",
     "name": "FaultOf",
-    "description": "Any failure returned by client.execute, expressed by its decoded error-body type."
+    "description": "Any failure returned by an operation, expressed by its decoded error-body type."
   },
   {
     "slug": "core/httpstatusfault-type",
@@ -600,11 +595,6 @@
     "description": "Declare a typed Server-Sent Events endpoint."
   },
   {
-    "slug": "core/executeeventstreamcommand",
-    "name": "executeEventStreamCommand",
-    "description": "Open an SSE command against the given client config."
-  },
-  {
     "slug": "core/eventstreamdefinition-type",
     "name": "EventStreamDefinition",
     "description": "Contract that describes an SSE endpoint for defineEventStream."
@@ -612,7 +602,7 @@
   {
     "slug": "core/eventstreamendpoint-type",
     "name": "EventStreamEndpoint",
-    "description": "Callable endpoint returned by defineEventStream."
+    "description": "Operation returned by defineEventStream."
   },
   {
     "slug": "core/eventstreamrequestshape-type",
@@ -620,19 +610,14 @@
     "description": "Request shape an SSE builder returns: the same fields as HttpRequestShape for method M and path P."
   },
   {
-    "slug": "core/eventstreamcommand-type",
-    "name": "EventStreamCommand",
-    "description": "Opaque executable SSE command produced by an EventStreamEndpoint."
-  },
-  {
     "slug": "core/eventstreamexecuteoptions-type",
     "name": "EventStreamExecuteOptions",
-    "description": "Per-call options for opening an SSE stream: abort or timeout, plus an optional signal."
+    "description": "SSE field of RequestOptions. HTTP progress and WebSocket fields are ignored."
   },
   {
     "slug": "core/streamawaitresult-type",
     "name": "StreamAwaitResult",
-    "description": "Await-result tuple from opening an SSE stream via client.execute."
+    "description": "Await-result tuple from opening an SSE stream."
   },
   {
     "slug": "core/eventstreamhandle-type",
@@ -665,11 +650,6 @@
     "description": "Declare a typed WebSocket endpoint."
   },
   {
-    "slug": "core/executewebsocketcommand",
-    "name": "executeWebSocketCommand",
-    "description": "Open a WebSocket command against the given client config."
-  },
-  {
     "slug": "core/websocketdefinition-type",
     "name": "WebSocketDefinition",
     "description": "Contract object passed to defineWebSocket."
@@ -677,7 +657,7 @@
   {
     "slug": "core/websocketendpoint-type",
     "name": "WebSocketEndpoint",
-    "description": "Callable returned by defineWebSocket."
+    "description": "Operation returned by defineWebSocket."
   },
   {
     "slug": "core/websocketrequestshape-type",
@@ -685,24 +665,19 @@
     "description": "Request shape the builder of a WebSocketDefinition may return, where P is the endpoint path."
   },
   {
-    "slug": "core/websocketcommand-type",
-    "name": "WebSocketCommand",
-    "description": "Executable command created by calling a WebSocketEndpoint."
-  },
-  {
     "slug": "core/websocketexecuteoptions-type",
     "name": "WebSocketExecuteOptions",
-    "description": "Per-call options for executing a WebSocket command."
+    "description": "WebSocket fields read from RequestOptions for one call."
   },
   {
     "slug": "core/usewebsocketconfig-type",
     "name": "UseWebSocketConfig",
-    "description": "WebSocket execute options without signal."
+    "description": "WebSocket fields of RequestOptions, plus abort."
   },
   {
     "slug": "core/socketawaitresult-type",
     "name": "SocketAwaitResult",
-    "description": "Await-result tuple from opening a WebSocket via client.execute."
+    "description": "Await-result tuple from opening a WebSocket."
   },
   {
     "slug": "core/websocketsession-type",
@@ -818,11 +793,6 @@
     "slug": "core/withheaders",
     "name": "withHeaders",
     "description": "Sets static default headers for HTTP and SSE requests built by this client."
-  },
-  {
-    "slug": "core/withtimeout",
-    "name": "withTimeout",
-    "description": "Sets the default timeout, in milliseconds, for HTTP execute only."
   },
   {
     "slug": "core/decodefaultcode-type",

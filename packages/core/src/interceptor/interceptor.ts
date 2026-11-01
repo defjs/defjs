@@ -14,8 +14,8 @@ import type {
  * Continuation that runs the rest of the HTTP interceptor chain, or the handler.
  *
  * `next(req)` only goes inward: the interceptors registered after this one, then
- * the Fetch handler. It is not a re-dispatch of `client.execute` from the
- * outside of the chain. Call `next` again for a safe
+ * the Fetch handler. It is not a new operation call from outside the chain.
+ * Call `next` again for a safe
  * replay (for example one 401 refresh) from the same interceptor; outer layers
  * do not run a second time. Once the chain has settled, calling `next` rejects
  * with `HTTP interceptor next() cannot be called after the chain has settled`.
@@ -58,10 +58,10 @@ export interface HttpInterceptor {
  * Returns `{ kind: 'http', fn }`. Call `next(req)` (optionally with a modified
  * request) or short-circuit with `makeResponse`. `next` runs only the
  * interceptors registered after this one and then the fetch handler. HTTP
- * interceptors do not run for SSE or WebSocket commands.
+ * interceptors do not run for SSE or WebSocket operations.
  *
  * A deterministic URL error from `next(req)` rejects the returned promise, so
- * `.then` or `.catch` recovery runs; if it is not recovered, `client.execute`
+ * `.then` or `.catch` recovery runs; if it is not recovered, the operation
  * still reports `REQ_BUILD_FAILED`.
  *
  * @param fn - HTTP interceptor function.
@@ -117,7 +117,7 @@ export type SSEInterceptorFn = (
  *
  * Created by `createSSEInterceptor`. The `kind` tag lets `withInterceptors`
  * accept HTTP, SSE, and WebSocket interceptors in one list; only `kind: 'sse'`
- * interceptors run for SSE commands.
+ * interceptors run for SSE operations.
  *
  * @group interceptors
  */
@@ -129,12 +129,12 @@ export interface SSEInterceptor {
 /**
  * Wraps an `SSEInterceptorFn` as a tagged `SSEInterceptor`.
  *
- * Returns `{ kind: 'sse', fn }`. SSE interceptors run only for SSE commands, in
+ * Returns `{ kind: 'sse', fn }`. SSE interceptors run only for SSE operations, in
  * registration order; `next(req)` opens the stream through the remaining
  * interceptors.
  *
  * A deterministic URL error from `next(req)` rejects the returned promise, so
- * `.then` or `.catch` recovery runs; if it is not recovered, `client.execute`
+ * `.then` or `.catch` recovery runs; if it is not recovered, the operation
  * still reports `REQ_BUILD_FAILED`.
  *
  * `EventStreamHandle` extends `AsyncDisposable`. A structural short-circuit
@@ -208,7 +208,7 @@ export type WebSocketHandler = (
  * {@link WebSocketSessionLike} to short-circuit. Wrap it with
  * `createWebSocketInterceptor` to register it through `withInterceptors`.
  *
- * The chain runs once per `execute`. Reconnects happen inside the session it
+ * The chain runs once per operation. Reconnects happen inside the session it
  * returns and do not run it again.
  *
  * @group interceptors
@@ -223,7 +223,7 @@ export type WebSocketInterceptorFn = (
  *
  * Created by `createWebSocketInterceptor`. The `kind` tag lets
  * `withInterceptors` accept HTTP, SSE, and WebSocket interceptors in one list;
- * only `kind: 'web-socket'` interceptors run for WebSocket commands.
+ * only `kind: 'web-socket'` interceptors run for WebSocket operations.
  *
  * @group interceptors
  */
@@ -236,7 +236,7 @@ export interface WebSocketInterceptor {
  * Wraps a `WebSocketInterceptorFn` as a tagged `WebSocketInterceptor`.
  *
  * Returns `{ kind: 'web-socket', fn }`. WebSocket interceptors run only for
- * WebSocket commands. `next` and the interceptor return a
+ * WebSocket operations. `next` and the interceptor return a
  * {@link WebSocketSessionLike}, the interceptor-facing session. A wrapper or
  * short-circuit session must forward its `[Symbol.asyncDispose]()` teardown.
  *
@@ -257,7 +257,7 @@ export function createWebSocketInterceptor(
 /**
  * Any tagged interceptor accepted by client interceptor options.
  *
- * `kind` (`'http'`, `'sse'`, or `'web-socket'`) selects which commands an
+ * `kind` (`'http'`, `'sse'`, or `'web-socket'`) selects which operations an
  * interceptor runs for. `withInterceptors` accepts any mix; each transport runs
  * only its own kind, in registration order.
  *

@@ -29,7 +29,7 @@ describe("request http runtime", () => {
       path: "/account",
     });
 
-    const [error, result, response] = await client.execute(useCreateAccount());
+    const [error, result, response] = await useCreateAccount(client);
 
     expect(error).toBeNull();
     expect(result).toEqual({ id: 1, name: "Jack" });
@@ -47,7 +47,7 @@ describe("request http runtime", () => {
       path: "/account/not-found",
     });
 
-    const [error, result, response] = await client.execute(useMissingAccount());
+    const [error, result, response] = await useMissingAccount(client);
 
     expect(result).toBeUndefined();
     expect(response).toBeUndefined();
@@ -78,7 +78,7 @@ describe("request http runtime", () => {
       path: "/json/alias",
     });
 
-    const [error, result] = await client.execute(useUser({ name: "Miao" }));
+    const [error, result] = await useUser(client, { name: "Miao" });
 
     expect(error).toBeNull();
     expect(result).toEqual({ name: "Miao" });
@@ -97,7 +97,7 @@ describe("request http runtime", () => {
       path: "/",
     });
 
-    const [error, result] = await client.execute(useEcho({ name: "Miao" }));
+    const [error, result] = await useEcho(client, { name: "Miao" });
 
     expect(error).toBeNull();
     expect(result).toEqual({ name: "Miao" });
@@ -129,7 +129,7 @@ describe("request http runtime", () => {
       path: "/search",
     });
 
-    const [error] = await optionalClient.execute(useOptionalObjects({}));
+    const [error] = await useOptionalObjects(optionalClient, {});
 
     expect(error).toBeNull();
     expect(capturedRequest?.endpoint).toBe("/search");
@@ -188,16 +188,23 @@ describe("request http runtime", () => {
       path: "/inspect/:id",
     });
 
-    const command = useInspectRequest({
-      id: 7,
-      include: true,
-      nickname: "Miao",
-      tags: ["a", "b"],
-      token: "secret",
-    });
-
     const [[firstError, firstResult], [secondError, secondResult]] =
-      await Promise.all([client.execute(command), client.execute(command)]);
+      await Promise.all([
+        useInspectRequest(client, {
+          id: 7,
+          include: true,
+          nickname: "Miao",
+          tags: ["a", "b"],
+          token: "secret",
+        }),
+        useInspectRequest(client, {
+          id: 7,
+          include: true,
+          nickname: "Miao",
+          tags: ["a", "b"],
+          token: "secret",
+        }),
+      ]);
 
     expect(firstError).toBeNull();
     expect(secondError).toBeNull();
@@ -230,7 +237,7 @@ describe("request http runtime", () => {
       path: "/users/:id",
     });
 
-    const [error] = await client.execute(useUser({ id: "a/b ?#%猫" }));
+    const [error] = await useUser(client, { id: "a/b ?#%猫" });
 
     expect(error).toBeNull();
     expect(endpoint).toBe("/users/a%2Fb%20%3F%23%25%E7%8C%AB");
@@ -269,7 +276,7 @@ describe("request http runtime", () => {
       path: "/xsrf",
     });
 
-    const [error, result] = await client.execute(useInspectXsrf());
+    const [error, result] = await useInspectXsrf(client);
 
     expect(error).toBeNull();
     expect(result).toEqual({ ok: true });
@@ -289,7 +296,7 @@ describe("request http runtime", () => {
       path: "/raw-input",
     });
 
-    const [error, result, response] = await client.execute(useRawInput());
+    const [error, result, response] = await useRawInput(client);
 
     expect(error?.code).toBe("REQ_BUILD_FAILED");
     expect(result).toBeUndefined();
@@ -316,7 +323,7 @@ describe("request http runtime", () => {
       path: "/ignored-output",
     });
 
-    const [error, result, response] = await client.execute(useIgnoredOutput());
+    const [error, result, response] = await useIgnoredOutput(client);
 
     expect(error).toBeNull();
     expect(result).toBeUndefined();
@@ -331,7 +338,7 @@ describe("request http runtime", () => {
       path: "/500",
     });
 
-    const [error, result, response] = await client.execute(useNoOutput());
+    const [error, result, response] = await useNoOutput(client);
 
     expect(error?.code).toBe("HTTP_STATUS");
     expect(result).toBeUndefined();

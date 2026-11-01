@@ -8,7 +8,7 @@ import {
 import { openSite } from "./support/site";
 import type { Site } from "./support/site";
 import { locales } from "../app/lib/i18n";
-import { uiCopy } from "../app/lib/ui-copy";
+import { getTranslator } from "../app/lib/translations";
 import { siteUrl } from "../app/lib/site";
 
 async function openPage(site: Site) {
@@ -65,16 +65,16 @@ test("the language switcher round-trips through every locale", async () => {
   ]) {
     await page
       .getByRole("button", {
-        name: uiCopy[selected as keyof typeof uiCopy].translations[
-          "Choose a language(language switcher)(aria-label)"
-        ],
+        name: getTranslator(selected)(
+          "Choose a language(language switcher)(aria-label)",
+        ),
         exact: true,
       })
       .first()
       .click();
     await page
       .getByRole("button", {
-        name: uiCopy[target as keyof typeof uiCopy].label,
+        name: getTranslator(target)("ui.language"),
         exact: true,
       })
       .last()
@@ -84,6 +84,56 @@ test("the language switcher round-trips through every locale", async () => {
     await page.locator(`html[lang="${target}"]`).waitFor();
     expect(await page.locator("html").getAttribute("lang")).toBe(target);
     await page.keyboard.press("Escape");
+    selected = target;
+  }
+  expect(await errors.values()).toEqual([]);
+});
+
+test("API labels, counts and links follow Provider language switches", async () => {
+  const site = await openSite();
+  const { page, errors } = await openPage(site);
+  await disableViewTransitions(page);
+  await page.goto(site.url("/api"), { waitUntil: "networkidle" });
+  await waitForHydration(page);
+  let selected = "en-US";
+  for (const [target, label, count] of [
+    ["zh-Hans", "名称", "结果：1"],
+    ["ar", "الاسم", "النتائج: 1"],
+    ["en-US", "Name", "Results: 1"],
+  ] as const) {
+    await page
+      .getByRole("button", {
+        name: getTranslator(selected)(
+          "Choose a language(language switcher)(aria-label)",
+        ),
+        exact: true,
+      })
+      .first()
+      .click();
+    await page
+      .getByRole("button", {
+        name: getTranslator(target)("ui.language"),
+        exact: true,
+      })
+      .last()
+      .click();
+    const prefix = target === "en-US" ? "" : `/${target}`;
+    await page.waitForURL(site.url(`${prefix}/api`));
+    await page.locator(`html[lang="${target}"]`).waitFor();
+    await page.keyboard.press("Escape");
+    await page.getByLabel(label, { exact: true }).fill("withEndpoint");
+    const status = page.getByRole("status").filter({ hasText: count });
+    await status.waitFor();
+    expect(await status.textContent()).toBe(count);
+    expect(
+      await page
+        .getByRole("link", { name: "withEndpoint", exact: true })
+        .last()
+        .getAttribute("href"),
+    ).toBe(`${prefix}/api/core/withendpoint`);
+    expect(await page.locator("html").getAttribute("dir")).toBe(
+      target === "ar" ? "rtl" : "ltr",
+    );
     selected = target;
   }
   expect(await errors.values()).toEqual([]);
@@ -166,7 +216,9 @@ test("the API index filters by name, package and category", async () => {
   await page.getByLabel("Name", { exact: true }).fill("does-not-exist");
   expect(await page.getByRole("status").textContent()).toContain("0");
   expect(
-    await page.getByText(uiCopy["en-US"].noResults, { exact: true }).count(),
+    await page
+      .getByText(getTranslator("en-US")("ui.noResults"), { exact: true })
+      .count(),
   ).toBe(1);
   expect(await errors.values()).toEqual([]);
 });
@@ -243,7 +295,11 @@ test("pages render their content without JavaScript", async () => {
   expect(await reading.locator("main").count()).toBe(1);
   expect(await reading.getByRole("heading", { level: 1 }).count()).toBe(1);
   expect(await reading.title()).toBe("Defjs");
-  for (const path of ["/docs/start", "/docs", "/api/core/withtimeout"]) {
+  for (const path of [
+    "/docs/start",
+    "/docs",
+    "/api/core/requestoptions-type",
+  ]) {
     await reading.goto(site.url(path));
     expect(
       await reading.locator('meta[name="description"]:not([content])').count(),

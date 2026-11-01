@@ -1,0 +1,36 @@
+---
+title: "Llamar a API de IA"
+description: "Llama a un servicio de IA desde la aplicación sin exponer las credenciales del proveedor y lee un flujo de eventos ficticio sin red."
+---
+
+Llamar a un servicio de IA desde la aplicación es distinto de pedir a un asistente que escriba Defjs. [Desarrollo asistido por IA](/es-ES/docs/ai) es ese recorrido del asistente. Los formatos de API y de eventos SSE son propios de cada proveedor. El flujo de esta página es un backend ficticio, no el protocolo de un proveedor concreto.
+
+## Llamar a una API de IA desde la aplicación [#call-an-api]
+
+Define la llamada con el contrato HTTP o SSE que ya usas y llama a la operación en un cliente que posee la aplicación. Empieza por las [solicitudes HTTP](/es-ES/docs/http) y los [flujos de eventos SSE](/es-ES/docs/sse). [Enviar JSON](/es-ES/recipes/post-json) es el cuerpo JSON habitual. [Consumir eventos SSE](/es-ES/recipes/consume-sse) muestra cómo leer y cerrar un flujo, pero se detiene después del primer evento. Ese ejemplo no es una respuesta de IA completa. Para obtener una respuesta completa de IA, sigue leyendo hasta la señal de finalización del proveedor o EOF, gestiona los errores del flujo y cierra el flujo; adapta también los nombres de eventos y los esquemas de datos al formato del proveedor. [Cancelación y tiempos de espera](/es-ES/recipes/cancel-http) muestra cómo quien llama detiene una llamada HTTP.
+
+Deja el secreto del proveedor en un servidor que pueda gastarlo. No lo pongas en el paquete del navegador, en una variable de compilación pública ni en un cliente que se envíe al navegador. Las credenciales son de la aplicación: configúralas en el cliente del servidor o añádelas en un interceptor que solo se ejecute dentro de ese límite del servidor. El sitio es la [configuración del cliente](/es-ES/docs/client) y los [interceptores](/es-ES/docs/interceptors). `withCredentials` solo elige el modo de cookies de Fetch. No guarda el secreto del proveedor.
+
+Cuando la operación regresa, la aplicación es dueña del flujo. En SSE, lee los eventos, cierra el handle y espera a que se cierre. En HTTP, aborta la llamada cuando la respuesta ya no hace falta. Un aborto no demuestra que el servicio deshizo un trabajo que ya había aceptado.
+
+No reintentes un POST en flujo solo porque el intento falló. Defjs no reintenta HTTP por su cuenta. La reconexión SSE permanece apagada hasta que la aplicación la activa, y un método como POST no se vuelve a enviar salvo que esa política lo permita de forma explícita. Un intento fallido puede haber iniciado ya un trabajo que el servicio cobra. Enviar el mismo POST otra vez puede iniciar ese trabajo por segunda vez. Lee las reglas de reenvío en las [solicitudes HTTP](/es-ES/docs/http) y las de reconexión en los [flujos de eventos SSE](/es-ES/docs/sse) antes de añadir un reintento.
+
+## Flujo ficticio sin red [#fictional-stream]
+
+El formato de cable de abajo es ficticio. No es el formato de eventos de un proveedor concreto. `withSSEHandle` aporta la respuesta, así que el ejemplo no necesita red ni credenciales reales. El cuerpo son dos eventos `delta` y después un evento de finalización. El bucle conserva los dos textos. No se detiene después del primer evento.
+
+<include cwd lang="typescript">
+  examples/ai/fictional-completion.ts#example
+</include>
+
+En un proyecto con `@defjs/core` instalado, guarda el ejemplo como `fictional-completion.ts` y ejecútalo:
+
+```sh
+bun fictional-completion.ts
+```
+
+Salida esperada:
+
+```txt
+Hello there
+```

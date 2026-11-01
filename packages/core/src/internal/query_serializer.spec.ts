@@ -63,13 +63,11 @@ describe("query serializer contract", () => {
       path: "/search",
     });
 
-    const [error] = await client.execute(
-      search({
-        filter: { min: 1n, since: birthday, state: "open" },
-        pageSize: 10,
-        tags: ["a", "b"],
-      }),
-    );
+    const [error] = await search(client, {
+      filter: { min: 1n, since: birthday, state: "open" },
+      pageSize: 10,
+      tags: ["a", "b"],
+    });
 
     expect(error).toBeNull();
     expect(received).toEqual({
@@ -106,7 +104,7 @@ describe("query serializer contract", () => {
       path: "/items",
     });
 
-    const [error] = await client.execute(list());
+    const [error] = await list(client);
 
     expect(error).toBeNull();
     expect(captured?.queryString).toBe("include=true&tags=a&tags=b");
@@ -122,8 +120,9 @@ describe("query serializer contract", () => {
       path: "/items",
     });
 
-    expect(() => search()).not.toThrow();
-    const [error] = await client.execute(search());
+    const pending = search(client);
+    expect(pending).toBeInstanceOf(Promise);
+    const [error] = await pending;
 
     expect(error?.code).toBe("REQ_BUILD_FAILED");
     expect(error?.cause).toBeInstanceOf(TypeError);
@@ -141,7 +140,7 @@ describe("query serializer contract", () => {
       path: "/items",
     });
 
-    const [error] = await client.execute(search());
+    const [error] = await search(client);
 
     expect(error?.code).toBe("REQ_BUILD_FAILED");
     expect(error?.cause).toBeInstanceOf(TypeError);
@@ -174,7 +173,7 @@ describe("query serializer contract", () => {
       path: "/items",
     });
 
-    const [error] = await client.execute(list());
+    const [error] = await list(client);
 
     expect(error).toBeNull();
     expect(captured?.queryString).toBe("tag=a&tag=b");
@@ -201,7 +200,7 @@ describe("query serializer contract", () => {
       path: "/items",
     });
 
-    const [error] = await client.execute(search());
+    const [error] = await search(client);
 
     expect(error).toBeNull();
     expect(captured?.queryString).toBe("filter[state]=open&tag=a&tag=b");
@@ -227,7 +226,7 @@ describe("query serializer contract", () => {
     );
     const health = defineRequest({ method: "GET", path: "/health" });
 
-    const [error] = await client.execute(health());
+    const [error] = await health(client);
 
     expect(error).toBeNull();
     expect(calls).toBe(0);
@@ -268,10 +267,11 @@ describe("query serializer contract", () => {
       path: "/events",
     });
 
-    const [encodedError] = await client.execute(
-      events({ roomId: "blue", since: birthday }),
-    );
-    const [nativeError] = await client.execute(native());
+    const [encodedError] = await events(client, {
+      roomId: "blue",
+      since: birthday,
+    });
+    const [nativeError] = await native(client);
 
     expect(encodedError?.code.startsWith("NET_")).toBe(true);
     expect(nativeError?.code.startsWith("NET_")).toBe(true);
@@ -310,8 +310,8 @@ describe("query serializer contract", () => {
       path: "/ws",
     });
 
-    await client.execute(encoded({ roomId: "blue", since: birthday }));
-    await client.execute(native());
+    await encoded(client, { roomId: "blue", since: birthday });
+    await native(client);
 
     expect(seen).toEqual([
       { room_id: "blue", since: "1815-12-10T00:00:00.000Z" },
@@ -334,7 +334,7 @@ describe("query serializer contract", () => {
       path: "/ws",
     });
 
-    const [error] = await client.execute(socket());
+    const [error] = await socket(client);
 
     expect(urls).toEqual([]);
     expect(error?.code).toBe("REQ_BUILD_FAILED");
@@ -362,7 +362,7 @@ describe("query serializer contract", () => {
       path: "/items",
     });
 
-    const [error] = await client.execute(searchRequest());
+    const [error] = await searchRequest(client);
 
     expect(error).toBeNull();
     expect(

@@ -5,7 +5,7 @@ description: SDK でイベントと起動時エラーの契約を定義し、ア
 
 # Server-Sent Events
 
-SDK の作成者は `defineEventStream` で path、入力の配置、イベント名と Struct、起動時エラーの契約を公開します。利用アプリケーションは自身の Defjs Client で接続し、受け取ったイベントとストリームのライフサイクルを管理します。
+SDK は、入力、イベント契約、バッファ上限を持つイベントストリーム操作を export します。アプリケーションは自分のクライアントで認証と任意の再接続を構成し、ストリームが必要なときに import した操作を呼びます。
 
 ストリームを開き、反復し、所有しているハンドルを `await using` で解放します。手動の `close()` と `closed` も残っています。クライアントやプラグインは、返されたストリームを代わりに dispose しません。
 
@@ -25,7 +25,7 @@ SDK の作成者は `defineEventStream` で path、入力の配置、イベン�
 
 ## 開いて調べる
 
-`client.execute(...)` は、status、content-type、ボディの検査が通ったあとでのみ解決します。
+操作は、status、content-type、ボディの検査が通ったあとでのみ解決します。
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
@@ -35,7 +35,7 @@ SDK の作成者は `defineEventStream` で path、入力の配置、イベン�
 
 ベースエンドポイントの欠落、相対 URL、無効な URL、不正な path は、組み立て中に `REQ_BUILD_FAILED` になります。インターセプターがショートサーキットする場合でも、インターセプターやトランスポートの実行前に失敗します。解決後の URL はベースのオリジンを保ち、ディレクトリ内に収まる必要があります。path 内の C0 制御文字（タブ、CR、LF を含む）、バックスラッシュ、`?`、`#`、ディレクトリ外への移動は拒否されます。先頭に空白があっても、スキームらしき形式とプロトコル相対形式は拒否されます。パス内部の普通の空白は許可され、`%20` として送られます。インターセプターの最終的な `req.endpoint` は、最終的な `req.baseEndpoint` に対して同じ規則で検証されます。ベースを意図的に別の有効な絶対 URL に差し替えることは許可されます。決定的な URL エラーは決してリトライされません。
 
-`startupOpen` はその実行の初期スナップショットです。新しい `execute` は、レスポンス到着前に失敗した場合でも、前の実行のスナップショットを再利用しません。`stream.open` はライブで、後の物理 open で変わります。最初のレスポンスが重要なときはタプル側の値を残してください。 `startupOpen` が返されたハンドルの接続の最初の成功したハンドシェイクのスナップショットになるのは、Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合だけであり、独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先されるため、`closed` の共有によって URL のサニタイズやヘッダーのフィルタリングを迂回することはなく、Defjs は任意の変換から最初のハンドシェイクのメタデータを復元しません。
+`startupOpen` はその呼び出しの初期スナップショットです。新しい呼び出しは、レスポンス到着前に失敗した場合でも、前の呼び出しのスナップショットを再利用しません。`stream.open` はライブで、後の物理 open で変わります。最初のレスポンスが重要なときはタプル側の値を残してください。 `startupOpen` が返されたハンドルの接続の最初の成功したハンドシェイクのスナップショットになるのは、Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合だけであり、独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先されるため、`closed` の共有によって URL のサニタイズやヘッダーのフィルタリングを迂回することはなく、Defjs は任意の変換から最初のハンドシェイクのメタデータを復元しません。
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
@@ -69,7 +69,7 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 再接続 options はインターセプターや Fetch の前に検証されます。`attempts` は非負の安全な整数、`delayMs` は非負の有限値、`maxDelayMs` は非負の有限値または正の `Infinity`（設定上の上限を解除しますが、最終遅延は引き続き `2_147_483_647` ms 以下に制限されます）、`factor` は有限で正、`jitter` は有限で 0–1 の範囲である必要があります。無効な値では、ストリームを開かずに `REQ_OPTIONS_INVALID` が返ります。
 
-最後にパースしたイベント ID は、後の試行で `Last-Event-ID` になり、非 ASCII の ID も含め、ワイヤ上では UTF-8 バイトとしてエンコードされます。空の `id:` はヘッダーを消し、NUL を含む ID は無視されます。そのヘッダーを除けば、後の試行が送り直すのは最初の一回のために組み立てたリクエストです。`builder` とインターセプターは `execute` ごとに一度だけ実行されるので、メソッド、URL、ヘッダー、ボディは変わりません。有効期間の短いトークンなど、試行のたびに最新の値が必要なヘッダーは、`withSSEHandle` に渡す Fetch で設定します。その Fetch は試行ごとに一度実行されます。それでも資格情報が期限切れになった場合、ストリームが開いたあとの再接続ハンドシェイクが non-2xx だと、ストリームは `RES_DECODE_FAILED` で終了します。status は `stream.open.response.status` で確認してください。一方、最初のハンドシェイクが non-2xx なら、宣言したエラーボディがデコードできた場合は起動時の `HTTP_STATUS` フォールトを返します。
+最後にパースしたイベント ID は、後の試行で `Last-Event-ID` になり、非 ASCII の ID も含め、ワイヤ上では UTF-8 バイトとしてエンコードされます。空の `id:` はヘッダーを消し、NUL を含む ID は無視されます。そのヘッダーを除けば、後の試行が送り直すのは最初の一回のために組み立てたリクエストです。`builder` とインターセプターは呼び出しごとに一度だけ実行されるので、メソッド、URL、ヘッダー、ボディは変わりません。有効期間の短いトークンなど、試行のたびに最新の値が必要なヘッダーは、`withSSEHandle` に渡す Fetch で設定します。その Fetch は試行ごとに一度実行されます。それでも資格情報が期限切れになった場合、ストリームが開いたあとの再接続ハンドシェイクが non-2xx だと、ストリームは `RES_DECODE_FAILED` で終了します。status は `stream.open.response.status` で確認してください。一方、最初のハンドシェイクが non-2xx なら、宣言したエラーボディがデコードできた場合は起動時の `HTTP_STATUS` フォールトを返します。
 
 再接続がリクエストを送り直すのは、それが安全なときだけです。
 
@@ -88,7 +88,7 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 致命的なストリームはバッファ済みイベントも消し、アクティブなボディをキャンセルし、イテレータを reject し、`kind: 'error'` で `stream.closed` を解決します。
 
-## 閉じて破棄する
+## 閉じて破棄する [#close-and-dispose]
 
 `EventStreamHandle` は、ライブなオープニングスナップショット 1 つ、終端 promise 1 つ、`close` 1 つ、非同期イテレータ 1 つ、標準の非同期 disposer 1 つです。
 
@@ -98,13 +98,17 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 終端の種別（`closed.kind`）は `eof`、`aborted`、`error` のいずれかです。`error` 結果は `closed.code` も持ち、これは `EventStreamFaultCode` です。`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED`、または `RES_MEDIA_TYPE_INVALID` です。
 
-`close(reason)` はアクティブな試行を abort し、キューを閉じ、理由が `TimeoutError` でも `aborted` として確定します。ストリームが open されたあとに `execute` に渡した `signal` や `abort` を abort すると、通常はイテレータが終了し、`aborted` を報告します。ただし abort の理由が `TimeoutError` または `ERR_TIMEOUT`（たとえば `AbortSignal.timeout(...)`）なら、イテレータは `ERR_TIMEOUT` を throw し、`closed` は `kind: 'error'` と `code: 'NET_TIMEOUT'` を報告します。execute の `timeout` option は起動時の期限にすぎず、open 済みのストリームを終わらせることはありません。ループの `break` / `return` / throw はイテレータ return を呼び、`iterator-return` で閉じます。コマンドを実行したコードが閉鎖を所有します。
+`close(reason)` はアクティブな試行を abort し、キューを閉じ、理由が `TimeoutError` でも `aborted` として確定します。操作に渡した `abort` シグナルは、ストリームが開いたあとも付いたままで、接続全体を覆います。それを abort すると、通常はイテレータが終了し、`aborted` を報告します。abort の理由が `TimeoutError` または `ERR_TIMEOUT`（たとえば `AbortSignal.timeout(...)`）なら、イテレータは `ERR_TIMEOUT` を throw し、`closed` は `kind: 'error'` と `code: 'NET_TIMEOUT'` を報告します。クライアントに起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
+
+<include cwd>examples/sse/startup-deadline.ts#example</include>
+
+ループの `break` / `return` / throw はイテレータ return を呼び、`iterator-return` で閉じます。操作を始めたコードが閉鎖を所有します。
 
 `await using` は同じ所有クローズ経路を呼び、Defjs の読み取り/再接続処理が止まり、アクティブな reader lock が解放されるまで待ちます。provider が制御する、決して settle しない `ReadableStream.cancel()` の promise については意図的に上限付きなので、その provider promise が完了したことは保証しません。理由や終端結果が要るときは、明示的な `stream.close(reason)` と `await stream.closed` も有効です。
 
 構造的な独自 `EventStreamHandle` 実装は、今や `[Symbol.asyncDispose](): PromiseLike<void>` を提供し、同じライフサイクルへ繋ぐ必要があります。実装者にとってはコンパイル時の破壊的変更です。Defjs のハンドルを受け取るだけの利用者は、実行時に新しいものを呼ぶ必要はありません。
 
-サポートされる最低 lib 集合は `ES2022`、`ESNext.Disposable`、`DOM`、`DOM.Iterable` です。リポジトリの宣言用ツールは TypeScript 7 を使いますが、自動の packed-consumer 検証や最低 lib の検証ゲートはなく、古いコンパイラの対応も保証しません。この集合が提供するのは型であり、実行時の Web API の polyfill ではありません。通常の HTTP クライアントは `AsyncDisposable` ではありません。各リクエストは timeout か `AbortSignal` で管理してください。
+サポートされる最低 lib 集合は `ES2022`、`ESNext.Disposable`、`DOM`、`DOM.Iterable` です。リポジトリの宣言用ツールは TypeScript 7 を使いますが、自動の packed-consumer 検証や最低 lib の検証ゲートはなく、古いコンパイラの対応も保証しません。この集合が提供するのは型であり、実行時の Web API の polyfill ではありません。`Client` は `AsyncDisposable` ではありません。各リクエストは `AbortSignal` で管理してください。
 
 資格情報、イベントデータ、イベント ID、cause、ストリーム URL は日常ログに出さないでください。`withCredentials(true)` は SSE の Fetch cookie に効きますが、WebSocket 認証は設定しません。
 

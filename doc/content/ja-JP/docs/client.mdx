@@ -1,13 +1,17 @@
 ---
 title: "クライアント設定 / Client"
-description: SDK を使うアプリケーションが endpoint、認証、トランスポートを構成し、実行結果とクリーンアップを管理します。
+description: import した SDK の操作を、API 定義とは独立してアプリケーションがどう呼ぶかを構成します。
 ---
 
 # Client
 
-SDK が export する定義は、API の契約と入力の配置を表します。利用するアプリケーションは `createClient(...)` で endpoint、認証、インターセプター、プラットフォームに応じたトランスポートを独立して構成し、その定義から作ったコマンドを実行します。
+`Client` は、利用するアプリケーションの実行設定であり、関数です。`createClient(...)` がその関数を返します。SDK から操作を import し、サービスアドレス、認証情報、インターセプター、トランスポートを選んでから、クライアントを渡して操作を呼びます。入力を宣言した呼び出しは `getUser(client({ abort }), { id: 1 })` で始まります。入力を宣言していない呼び出しは `health(client)` で始まります。入力 struct 全体が任意なら、`search(client)` と `search(client, input)` の両方が有効です。第 3 の options 引数はありません。操作を呼ぶと処理が始まります。`await` が待つのは error-first タプルだけです。
 
-`Client` は HTTP・SSE・WebSocket コマンドをディスパッチします。SDK パッケージを再利用するときも Defjs の実行契約に従い、結果の扱い、キャンセル、ストリームの終了はアプリケーションが所有します。Client はキャッシュや自動リトライを追加せず、開いたストリームを自動では閉じません。
+SDK の定義はこのインスタンスに束縛されません。ブラウザー、サーバーリクエスト、ローカルテストが、異なるクライアントで同じ export された操作を使えます。どれも同じ Defjs 契約と互換性のある Core の版に従います。そのクライアントを通して呼ぶ操作に合わせて、各クライアントのサービスアドレスを構成してください。
+
+同じクライアント値を多くの操作に渡せます。キャッシュとリトライの方針はアプリケーションが選び、始めた作業を所有します。HTTP は自動ではリトライされません。ストリームの再接続はオプトインです。
+
+`Client` は関数なので、React の state setter に渡さないでください。`setState(client)` は updater としてそれを呼びます。Vue の `watch` や `computed` のソースにも使わないでください。それらは関数を呼びます。
 
 ## 基本セットアップ
 
@@ -15,7 +19,7 @@ SDK が export する定義は、API の契約と入力の配置を表します�
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` はコマンド種別ごとのオーバーロードを返します。
+`createClient(...)` は呼び出し可能な [`Client`](/ja-JP/api/core/client-type) を 1 つ返します。トランスポートごとのオーバーロードの集合ではありません。
 
 ## options を合成する
 
@@ -25,15 +29,45 @@ options は左から右へ適用されます。setter は置換、`withIntercept
   examples/client/compose-options.ts#example
 </include>
 
-混在インターセプターは実行時にトランスポートでフィルタされ、選ばれた種別内の相対順はそのままです。
+混在インターセプターは操作の実行時にトランスポートでフィルタされ、選ばれた種別内の相対順はそのままです。
 
-## トランスポート別に実行する
+## クライアントを派生する
+
+`client(options?)` は新しいクライアントを返します。`client(options)` を呼ぶとき、既知の 7 フィールドは引数オブジェクトからコピーされます。現在の options の上に重ねる、新しい options オブジェクトへのトップレベルのスナップショットです。あとのフィールドが勝ちます。値が `undefined` のフィールドは未指定として扱い、親の値を残します。派生したクライアントは、親が持つ設定を外せません。設定を無くすには、その設定を持っていなかったクライアントからもう一度派生します（ルートのクライアントは残します）。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされず、マージされずに親の値全体が置き換わります。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。元のクライアントは決して変更されません。`client()`、`client(undefined)`、`client({})` は現在の options をコピーします。
+
+`abort` は合成されません。あとの `abort` が前のシグナルを置き換えます。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+
+<include cwd lang="typescript">
+  examples/client/derive-client.ts#example
+</include>
+
+`createClient` からの基底設定は、派生したクライアントすべてが共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。そのクライアントの [`RequestOptions`](/ja-JP/api/core/requestoptions-type) は、そのトップレベルのスナップショットです。アプリケーションコードはクライアントを呼び、操作に渡します。その内部状態は読みません。
+
+## リクエスト options
+
+[`RequestOptions`](/ja-JP/api/core/requestoptions-type) にはフラットなフィールドが 7 つあります。各プロトコルは自分が知るフィールドだけを読み、残りは無視します。HTTP の操作に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `abort` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはありません。
+
+| フィールド           | 使うもの             | 規則                                                                                                                    |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP、SSE、WebSocket | 前のシグナルを置き換えます。期限は `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）です。手動の abort は `NET_ABORTED` です。 |
+| `onUploadProgress`   | HTTP                 | SSE と WebSocket は無視します。                                                                                         |
+| `onDownloadProgress` | HTTP                 | SSE と WebSocket は無視します。                                                                                         |
+| `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                                                                    |
+| `protocols`          | WebSocket            | クライアントのリストを置き換えます。追記はしません。                                                                    |
+| `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` はハートビートの確認待ちであり、リクエストの期限ではありません。                        |
+| `reconnect`          | WebSocket            | 全体を置き換えます。                                                                                                    |
+
+`timeout` フィールドも、`signal` フィールドも、クライアント単位の既定の期限もありません。SSE と WebSocket では、`abort` は開いたあとも含む接続全体を覆います。起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。[SSE](/ja-JP/docs/sse#close-and-dispose) を参照してください。
+
+`HttpExecuteOptions` は HTTP のスライスです。`abort` と進捗コールバックです。`EventStreamExecuteOptions` は `{ abort? }` です。`WebSocketExecuteOptions` は WebSocket のスライスに `abort` を足したものです。
+
+## トランスポート別に結果を見る
 
 - HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`. `open` は Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合、返されたハンドルの接続の最初の成功したハンドシェイクのスナップショットであり、独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先され、`stream.open` はライブのままです（[SSE](/ja-JP/docs/sse) を参照）。
+- SSE → `[error, stream, open]`。`open` は、Defjs のネイティブハンドルか同じライブ `open` オブジェクトをそのまま渡すラッパーの場合、返された接続の最初の成功したハンドシェイクのスナップショットです。独自ハンドルや `open` を上書きするラッパーでは再接続後も現在公開している `open` が優先され、`stream.open` はライブのままです（[SSE](/ja-JP/docs/sse) を参照）。
 - WebSocket → `[error, session, connection]`
 
-WebSocket の execute は `beforeConnect`、`heartbeat`、`protocols`、`reconnect` を上書きできます。`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。
+`error` があるときは、成功値を使う前に return してください。
 
 クリーンアップは呼び出し側の責任です。HTTP は abort、SSE は close + `await stream.closed`、WebSocket は close + `await session.closed`。
 
@@ -47,13 +81,21 @@ WebSocket の execute は `beforeConnect`、`heartbeat`、`protocols`、`reconne
 
 サーバーでは、options やインターセプターのクロージャが認証・cookie・ユーザー・テナントを掴むなら、クライアントをリクエスト境界の中で作ります。クライアントの同一性そのものがセキュリティ境界ではありません。
 
+## 移行
+
+| 旧                                        | 新                                                        |
+| ----------------------------------------- | --------------------------------------------------------- |
+| `client.execute(getUser(input), options)` | `getUser(client(options), input)`                         |
+| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })`            |
+| `execute(cmd, { signal })`                | `client({ abort: signal })`                               |
+| `createClient(withTimeout(5000), ...)`    | 呼び出し時に `abort` を渡すか、アプリケーション関数で包む |
+
 ## リファレンス
 
 | ヘルパー                                                                                                      | 効果                                                                   |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | 全トランスポートの絶対ベースエンドポイント                             |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE の静的なデフォルトヘッダー。コマンドのヘッダーが上書きする    |
-| `withTimeout(ms)`                                                                                             | HTTP の `execute` のデフォルト timeout だけ（SSE/WS は無視する）       |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE の静的なデフォルトヘッダー。ビルダーのヘッダーが上書きする    |
 | `withHTTPHandle(fetch)`                                                                                       | HTTP の Fetch を差し替え                                               |
 | `withSSEHandle(fetch)`                                                                                        | SSE の Fetch を差し替え                                                |
 | `withWebSocketHandle(WebSocket)`                                                                              | WebSocket コンストラクタを差し替え                                     |

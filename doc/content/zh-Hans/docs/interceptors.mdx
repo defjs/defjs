@@ -53,7 +53,7 @@ HTTP 从不把推断出的 Content-Type 写入 `request.headers`；interceptor �
   examples/interceptors/short-circuit.ts#example
 </include>
 
-Command 层仍按状态分派。调用方要类型化 `error.data` 时，用一个 `error` struct 描述非 2xx 侧。它也仍会检查声明过的那一侧：JSON `output` 或 `error` 要求合成响应带 JSON `content-type` header，`body` 则应当已经是解析后的值，和传输会交付的一样（`request.responseType` 与 `request.errorResponseType` 指明表示方式）。短路 SSE 或 WebSocket 需要完整兼容的 handle/session（关闭 promise、实时状态、所有权和 `[Symbol.asyncDispose]`）。半截对象不是合法策略。结构化 `EventStreamHandle` 与 `WebSocketSessionLike` 实现现在编译时必须提供标准 disposer；只接收 Defjs handle 的消费者无需新增运行时调用。
+操作仍按状态分派。调用方要类型化 `error.data` 时，用一个 `error` struct 描述非 2xx 侧。它也仍会检查声明过的那一侧：JSON `output` 或 `error` 要求合成响应带 JSON `content-type` header，`body` 则应当已经是解析后的值，和传输会交付的一样（`request.responseType` 与 `request.errorResponseType` 指明表示方式）。短路 SSE 或 WebSocket 需要完整兼容的 handle/session（关闭 promise、实时状态、所有权和 `[Symbol.asyncDispose]`）。半截对象不是合法策略。结构化 `EventStreamHandle` 与 `WebSocketSessionLike` 实现现在编译时必须提供标准 disposer；只接收 Defjs handle 的消费者无需新增运行时调用。
 
 ## 重试安全读
 
@@ -92,7 +92,7 @@ Factory 返回带标签的传输值：
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP 上的 Basic 凭证
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic 凭证
 
-`HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort`、`timeout`、静态 `operation`。它是传输集成值——不是调用方解析后的输入。`queryParams` 是序列化之后的 `new URLSearchParams(queryString)`。builder 没产出 query 时，配好的 query serializer 不会被调用；builder 返回的 `URLSearchParams` 原样使用。Command 校验、output 校验、领域错误映射留在各自层。
+`HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`abort` 和静态 `operation`。它是传输集成值——不是调用方解析后的输入。`queryParams` 是序列化之后的 `new URLSearchParams(queryString)`。builder 没产出 query 时，配好的 query serializer 不会被调用；builder 返回的 `URLSearchParams` 原样使用。输入校验、output 校验、领域错误映射留在各自层。
 
 URL 校验从请求构建时开始：基础端点缺失、相对或无效，或者路径非法，都会在任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，短路 interceptor 也不例外。分派前，还会相对于最终 `req.baseEndpoint` 校验最终 `req.endpoint`：解析后的 URL 必须与该基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 可以有意把 `baseEndpoint` 换成另一个有效的绝对 URL。HTTP、SSE 和 WebSocket 共用这项规则，确定性的 URL 错误不会重试。
 
@@ -102,7 +102,7 @@ SSE/WebSocket observer 是生命周期钩子，不是控制流。所有者结束
 
 Basic 凭证是 base64，不是加密。用 TLS，服务端凭证 provider 保持请求作用域，永远别日志生成的 header。默认编码器是 `globalThis.btoa`；运行时没有 `btoa` 或需要审过的编码器时传 `BasicAuthInterceptorOptions.encode`。
 
-Interceptor 能落实传输策略。它不是输入校验、授权或资源所有权。启动长任务的代码仍要用 `await using`，或手动关闭并 await 终止 promise。普通 HTTP 是 request-scoped，通过 timeout / `AbortSignal` 管理；`Client` 不是 `AsyncDisposable`。
+Interceptor 能落实传输策略。它不是输入校验、授权或资源所有权。启动长任务的代码仍要用 `await using`，或手动关闭并 await 终止 promise。普通 HTTP 是 request-scoped，通过它的 `AbortSignal` 管理；`Client` 不是 `AsyncDisposable`。
 
 ## 相关操作示例
 

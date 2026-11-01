@@ -14,10 +14,9 @@ Defjs separates the API a team publishes from the client an application uses. Fo
 
 ## Contracts and execution [#calls-and-contracts]
 
-SDK authors own Structs and endpoint definitions. Applications supply the Client and call `execute`.
+SDK authors own Structs and endpoint definitions. Applications supply the Client and call operations with it.
 
 - [Data contracts / Struct](/docs/struct)
-- [Define and execute / Command](/docs/commands)
 - [Client configuration / Client](/docs/client)
 
 ## Requests and realtime
@@ -39,5 +38,10 @@ Optional packages for the consuming application's client. SDK definitions stay i
 - [React](/docs/integrations/react)
 - [Vue](/docs/integrations/vue)
 - [OpenTelemetry server](/docs/integrations/opentelemetry-server)
+
+## AI
+
+- [AI-assisted development](/docs/ai)
+- [Calling AI APIs](/docs/ai-api)
 
 [Design decisions](/docs/design-decisions)

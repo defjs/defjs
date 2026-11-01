@@ -197,10 +197,10 @@ export type BuilderInput<S> =
 
 export type BuilderField<TInput, TShape> = [TInput] extends [undefined]
   ? {
-      /** Pure, synchronous request builder, evaluated when the command runs. Optional without input. */
+      /** Pure, synchronous request builder, evaluated when the operation runs. Optional without input. */
       builder?: () => TShape;
     }
   : {
-      /** Pure, synchronous function that explicitly places parsed input on the request when the command runs. */
+      /** Pure, synchronous function that explicitly places parsed input on the request when the operation runs. */
       builder: (input: BuilderInput<TInput>) => TShape;
     };

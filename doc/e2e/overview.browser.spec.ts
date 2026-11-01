@@ -6,7 +6,6 @@ import { openSite } from "./support/site";
 const guideArticles = [
   "/docs/start",
   "/docs/struct",
-  "/docs/commands",
   "/docs/client",
   "/docs/http",
   "/docs/sse",
@@ -17,6 +16,8 @@ const guideArticles = [
   "/docs/integrations/react",
   "/docs/integrations/vue",
   "/docs/integrations/opentelemetry-server",
+  "/docs/ai",
+  "/docs/ai-api",
   "/docs/design-decisions",
 ];
 const recipeArticles = [
@@ -65,7 +66,7 @@ test("grouped overview articles stay visible and clickable in every language", a
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     for (const [area, paths, groups] of [
-      ["docs", guideArticles, 5],
+      ["docs", guideArticles, 6],
       ["recipes", recipeArticles, 4],
     ] as const) {
       await page.goto(site.url(`${prefix}/${area}`), {
@@ -93,7 +94,7 @@ test("grouped overview articles export as Markdown", async () => {
   const site = await openSite();
   const page = await site.browser.newPage();
   for (const [area, paths, groups] of [
-    ["docs", guideArticles, 5],
+    ["docs", guideArticles, 6],
     ["recipes", recipeArticles, 4],
   ] as const) {
     const exported = await page.request.get(

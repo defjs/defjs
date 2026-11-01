@@ -21,7 +21,7 @@ Context provider。把 `createClient` 給的 client 傳進去。巢狀的 `Clien
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` 優先回傳明確傳入的 Client；省略參數或傳入 `undefined` 時讀取最近的 `ClientProvider`。兩種來源都沒有 Client 時才拋出 `Error`，原有的 `useClient()` 呼叫仍然有效。
+`useClient(overrideClient)` 優先回傳明確傳入的 Client；省略參數或傳入 `undefined` 時讀取最近的 `ClientProvider`。兩種來源都沒有 Client 時才拋出 `Error`，原有的 `useClient()` 呼叫仍然有效。把那個 client 傳進操作。`Client` 是函式：不要把它傳給 state setter，因為 `setState(client)` 會把它當成 updater 呼叫。
 
 一律在元件或自訂 Hook 頂層呼叫 `useClient(explicitClient)`，即使傳入明確的 Client，也不能在一般函式或事件回呼內呼叫。不要寫 `explicitClient ?? useClient()`，它會條件式呼叫 Hook。明確傳入的值不會寫入 Context，也不會建立 Provider；Hook 仍會訂閱 Context。
 

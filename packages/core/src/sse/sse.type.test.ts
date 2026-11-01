@@ -1,6 +1,4 @@
 import { expectTypeOf } from "vitest";
-import type { EVENT_STREAM_COMMAND } from "../client/command";
-import { COMMAND_TYPE } from "../client/command";
 import type { ClientSSEOptions } from "../client/config";
 
 // @ts-expect-error client-level SSE queue configuration was removed.
@@ -78,23 +76,18 @@ const chatStream = defineEventStream({
 void chatStream;
 
 function takesEventStreamEndpoint<
-  TInput extends AnyStruct | undefined,
-  TEvents extends EventStructs,
+  Args extends unknown[],
+  Event,
+  TError extends AnyStruct | undefined,
 >(
-  endpoint: EventStreamEndpoint<TInput, TEvents>,
-): EventStreamEndpoint<TInput, TEvents> {
+  endpoint: EventStreamEndpoint<Args, Event, TError>,
+): EventStreamEndpoint<Args, Event, TError> {
   return endpoint;
 }
 
 expectTypeOf(takesEventStreamEndpoint(useEvents)).toEqualTypeOf<
   typeof useEvents
 >();
-
-const command = useEvents();
-expectTypeOf(command[COMMAND_TYPE]).toEqualTypeOf<
-  typeof EVENT_STREAM_COMMAND
->();
-expectTypeOf(command.endpoint.path).toEqualTypeOf<string>();
 
 void (undefined as unknown as EventStreamCommandBuilder<
   undefined,
@@ -124,7 +117,7 @@ const catalogEvents = defineEventStream({
 });
 
 async function assertNamedEventNarrowing(): Promise<void> {
-  const [error, stream] = await createClient().execute(catalogEvents());
+  const [error, stream] = await catalogEvents(createClient());
   if (error) return;
 
   for await (const event of stream) {
@@ -161,7 +154,7 @@ async function assertNamedEventNarrowing(): Promise<void> {
 void assertNamedEventNarrowing;
 
 async function assertRequiredStartupOpenInfo(): Promise<void> {
-  const [error, stream, open] = await createClient().execute(useEvents());
+  const [error, stream, open] = await useEvents(createClient());
   if (error) return;
 
   expectTypeOf(open).toEqualTypeOf<EventStreamOpenInfo>();
@@ -266,7 +259,7 @@ const streamWithError = defineEventStream({
 });
 
 async function assertDeclaredSseStartupFault(): Promise<void> {
-  const [error] = await createClient().execute(streamWithError());
+  const [error] = await streamWithError(createClient());
   if (!error) {
     return;
   }
@@ -279,7 +272,7 @@ async function assertDeclaredSseStartupFault(): Promise<void> {
 void assertDeclaredSseStartupFault;
 
 async function assertUndeclaredSseStartupFault(): Promise<void> {
-  const [error] = await createClient().execute(useEvents());
+  const [error] = await useEvents(createClient());
   if (!error) {
     return;
   }

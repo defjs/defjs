@@ -12,8 +12,7 @@ const getUser = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const command = getUser({ id: 1 });
-  const [error, user] = await client.execute(command);
+  const [error, user] = await getUser(client, { id: 1 });
   if (error) {
     console.error(error.code);
     return;

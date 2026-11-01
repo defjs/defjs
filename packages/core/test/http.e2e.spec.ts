@@ -10,8 +10,7 @@ import {
   withInterceptors,
   withQuerySerializer,
 } from "../src";
-import type { AnyStruct, Client, Infer } from "../src";
-import type { HttpCommand } from "../src/http/http";
+import type { Client, Infer } from "../src";
 
 test("should settle public HTTP cancellation when an interceptor hangs after a real response", async () => {
   const controller = new AbortController();
@@ -30,7 +29,7 @@ test("should settle public HTTP cancellation when an interceptor hangs after a r
     ),
   );
   const useRequest = defineRequest({ method: "GET", path: "/" });
-  const pending = client.execute(useRequest(), { signal: controller.signal });
+  const pending = useRequest(client({ abort: controller.signal }));
 
   await nextResolved;
   controller.abort("caller stopped");
@@ -128,15 +127,13 @@ function stringifyQuery(
   return parts.join("&");
 }
 
-async function ok<
-  TInput extends AnyStruct | undefined,
-  TOutput extends AnyStruct,
-  TError extends AnyStruct | undefined,
->(
+async function ok<T>(
   client: Client,
-  command: HttpCommand<TInput, TOutput, TError>,
-): Promise<Infer<TOutput>> {
-  const [error, result] = await client.execute(command);
+  operation: (
+    client: Client,
+  ) => Promise<readonly [unknown, T | undefined, ...unknown[]]>,
+): Promise<T> {
+  const [error, result] = await operation(client);
   expect(error).toBeNull();
   if (result === undefined) {
     throw new Error("Expected a decoded success value");
@@ -153,14 +150,16 @@ describe("request builder through the real server", () => {
     client = createClient(withEndpoint(host));
   });
 
-  async function echo<TInput extends AnyStruct | undefined>(
-    command: HttpCommand<TInput, typeof EchoReport, undefined>,
+  async function echo(
+    operation: (
+      client: Client,
+    ) => Promise<readonly [unknown, Echo | undefined, ...unknown[]]>,
   ): Promise<Echo> {
-    return ok(client, command);
+    return ok(client, operation);
   }
 
   async function missHits(path: string): Promise<readonly string[]> {
-    const log = await ok(client, readMissLog());
+    const log = await ok(client, readMissLog);
     return log.hits.filter((hit) => hit.endsWith(` ${path}`));
   }
 
@@ -181,7 +180,9 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo/orgs/:org_id/users/:user_id",
     });
 
-    const report = await echo(loadUser({ orgId: 3, userId: 7 }));
+    const report = await echo((client) =>
+      loadUser(client, { orgId: 3, userId: 7 }),
+    );
 
     expect(report.method).toBe("GET");
     expect(report.path).toBe("/e2e/echo/orgs/3/users/7");
@@ -202,8 +203,12 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const report = await echo(
-      search({ keyword: "ada lovelace", pageSize: 10, tags: ["a", "b"] }),
+    const report = await echo((client) =>
+      search(client, {
+        keyword: "ada lovelace",
+        pageSize: 10,
+        tags: ["a", "b"],
+      }),
     );
 
     expect(report.rawQuery).toBe(
@@ -226,7 +231,7 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const report = await ok(serialized, list());
+    const report = await ok(serialized, list);
 
     expect(report.rawQuery).toBe("tag=a&tag=b");
   });
@@ -254,9 +259,12 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const report = await ok(
-      serialized,
-      search({ filter: { state: "open" }, pageSize: 10, tags: ["a", "b"] }),
+    const report = await ok(serialized, (client) =>
+      search(client, {
+        filter: { state: "open" },
+        pageSize: 10,
+        tags: ["a", "b"],
+      }),
     );
 
     expect(seen).toEqual({
@@ -295,8 +303,10 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const record = await echo(withRecord({ traceId: "abc" }));
-    const native = await echo(withNative());
+    const record = await echo((client) =>
+      withRecord(client, { traceId: "abc" }),
+    );
+    const native = await echo(withNative);
 
     expect(record.headers["x-api-version"]).toBe("2");
     expect(record.headers["x-trace-id"]).toBe("abc");
@@ -320,8 +330,8 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const report = await echo(
-      createUser({
+    const report = await echo((client) =>
+      createUser(client, {
         user: {
           amount: 12345678901234567890n,
           birthday: new Date("1815-12-10T00:00:00.000Z"),
@@ -351,7 +361,7 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo/me",
     });
 
-    const report = await echo(patchProfile({ bio: null }));
+    const report = await echo((client) => patchProfile(client, { bio: null }));
 
     expect(report.method).toBe("PATCH");
     expect(report.headers["content-type"]).toBe("application/merge-patch+json");
@@ -389,11 +399,13 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const form = await echo(
-      login({ form: { password: "secret", remember: true, userName: "ada" } }),
+    const form = await echo((client) =>
+      login(client, {
+        form: { password: "secret", remember: true, userName: "ada" },
+      }),
     );
-    const native = await echo(
-      token({ clientId: "cid", scope: ["read", "write"] }),
+    const native = await echo((client) =>
+      token(client, { clientId: "cid", scope: ["read", "write"] }),
     );
 
     expect(form.headers["content-type"]).toBe(
@@ -439,11 +451,13 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const coded = await echo(
-      upload({ form: { file: notes, tags: ["red", "blue"], title: "Ada" } }),
+    const coded = await echo((client) =>
+      upload(client, {
+        form: { file: notes, tags: ["red", "blue"], title: "Ada" },
+      }),
     );
-    const native = await echo(
-      uploadMany({
+    const native = await echo((client) =>
+      uploadMany(client, {
         photos: [
           new File(["aaa"], "ignored-0.png", { type: "image/png" }),
           new File(["bbb"], "ignored-1.png", { type: "image/png" }),
@@ -511,8 +525,10 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const note = await echo(sendNote({ note: "hello plain" }));
-    const xml = await echo(sendXml({ id: "7" }));
+    const note = await echo((client) =>
+      sendNote(client, { note: "hello plain" }),
+    );
+    const xml = await echo((client) => sendXml(client, { id: "7" }));
 
     expect(note.headers["content-type"]).toBe("text/plain;charset=UTF-8");
     expect(note.bodyText).toBe("hello plain");
@@ -546,8 +562,8 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const blob = await echo(sendBlob({ file: picture }));
-    const file = await echo(sendFile({ file: document }));
+    const blob = await echo((client) => sendBlob(client, { file: picture }));
+    const file = await echo((client) => sendFile(client, { file: document }));
 
     expect(blob.headers["content-type"]).toBe("image/png");
     expect(blob.bodyBase64).toBe(bytesToBase64(Uint8Array.from([1, 2, 3, 4])));
@@ -572,8 +588,8 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const bytes = await echo(sendBytes());
-    const protobuf = await echo(sendProtobuf());
+    const bytes = await echo(sendBytes);
+    const protobuf = await echo(sendProtobuf);
 
     expect(bytes.headers["content-type"]).toBe("application/octet-stream");
     expect(bytes.bodyBase64).toBe(bytesToBase64(Uint8Array.from([1, 2, 3, 4])));
@@ -599,7 +615,7 @@ describe("request builder through the real server", () => {
         path: "/e2e/echo",
       });
 
-      const report = await echo(sendStream());
+      const report = await echo(sendStream);
 
       expect(report.headers["content-type"]).toBe("application/octet-stream");
       expect(report.bodyText).toBe("stream-bytes");
@@ -640,19 +656,19 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo",
     });
 
-    const json = await echo(
-      importData({ records: [{ name: "Ada" }], source: "json" }),
+    const json = await echo((client) =>
+      importData(client, { records: [{ name: "Ada" }], source: "json" }),
     );
-    const file = await echo(
-      importData({
+    const file = await echo((client) =>
+      importData(client, {
         file: new File(["file-bytes"], "data.bin", {
           type: "application/x-demo",
         }),
         source: "file",
       }),
     );
-    const url = await echo(
-      importData({ source: "url", url: "https://example.com/a" }),
+    const url = await echo((client) =>
+      importData(client, { source: "url", url: "https://example.com/a" }),
     );
 
     expect(json.headers["content-type"]).toBe("application/json");
@@ -688,8 +704,8 @@ describe("request builder through the real server", () => {
       path: "/e2e/echo/users/:id",
     });
 
-    const report = await echo(
-      updateUser({
+    const report = await echo((client) =>
+      updateUser(client, {
         draft: true,
         id: 7,
         profile: { displayName: "Ada" },
@@ -719,8 +735,9 @@ describe("request builder through the real server", () => {
       path: missPath,
     });
 
-    expect(() => explode()).not.toThrow();
-    const [error, result, response] = await client.execute(explode());
+    const pending = explode(client);
+    expect(pending).toBeInstanceOf(Promise);
+    const [error, result, response] = await pending;
     await pingMiss(controlPath);
 
     expect(error).toMatchObject({ code: "REQ_BUILD_FAILED" });
@@ -752,9 +769,9 @@ describe("request builder through the real server", () => {
       path: missPath,
     });
 
-    const [error, result, response] = await client.execute(
-      create({ name: 1 } as never),
-    );
+    const [error, result, response] = await create(client, {
+      name: 1,
+    } as never);
     await pingMiss(controlPath);
 
     expect(error).toMatchObject({ code: "REQ_INPUT_INVALID" });
@@ -790,8 +807,8 @@ describe("inbound representation through the real server", () => {
       path: "/e2e/in/text-error",
     });
 
-    const text = await ok(client, readText());
-    const [error, result, response] = await client.execute(readTextError());
+    const text = await ok(client, readText);
+    const [error, result, response] = await readTextError(client);
 
     expect(text).toBe("hello-text");
     expect(result).toBeUndefined();
@@ -817,8 +834,8 @@ describe("inbound representation through the real server", () => {
       path: "/e2e/in/blob-error",
     });
 
-    const blob = await ok(client, readBlob());
-    const [error] = await client.execute(readBlobError());
+    const blob = await ok(client, readBlob);
+    const [error] = await readBlobError(client);
 
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("image/png");
@@ -850,8 +867,8 @@ describe("inbound representation through the real server", () => {
       path: "/e2e/in/bytes-error",
     });
 
-    const bytes = await ok(client, readBytes());
-    const [error] = await client.execute(readBytesError());
+    const bytes = await ok(client, readBytes);
+    const [error] = await readBytesError(client);
 
     expect(bytes).toBeInstanceOf(ArrayBuffer);
     expect(new Uint8Array(bytes)).toEqual(Uint8Array.from([9, 8, 7]));
@@ -885,8 +902,8 @@ describe("inbound representation through the real server", () => {
       path: "/e2e/in/json-error",
     });
 
-    const user = await ok(client, readUser());
-    const [error] = await client.execute(readUserError());
+    const user = await ok(client, readUser);
+    const [error] = await readUserError(client);
 
     expect(user).toEqual({
       birthday: new Date("1815-12-10T00:00:00.000Z"),

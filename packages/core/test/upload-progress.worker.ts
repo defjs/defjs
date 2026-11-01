@@ -75,9 +75,7 @@ async function sendBlob(
     output: EchoReport,
     path: "/e2e/echo",
   });
-  const [error, result] = await client.execute(endpoint(), {
-    onUploadProgress,
-  });
+  const [error, result] = await endpoint(client({ onUploadProgress }));
   return {
     bodyBase64: result?.bodyBase64 ?? null,
     calls,
@@ -99,9 +97,7 @@ async function sendForm(
     output: RawEcho,
     path: "/e2e/echo-raw",
   });
-  const [error, result] = await client.execute(endpoint(), {
-    onUploadProgress,
-  });
+  const [error, result] = await endpoint(client({ onUploadProgress }));
   return {
     bodyBase64: result?.bodyBase64 ?? null,
     calls,

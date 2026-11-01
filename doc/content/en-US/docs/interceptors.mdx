@@ -7,7 +7,7 @@ description: Apply authentication and transport policies to the application clie
 
 Interceptors let applications configure execution independently of the SDK's operation definitions. An SDK may export an authentication interceptor or a client factory as an optional helper; applications choose where to install it and supply their current credentials.
 
-Add auth headers, short-circuit maintenance windows, or retry safe reads — without touching command validation. Each transport has its own chain. You get an `HttpRequest` in; you return that transport’s result (`HttpResponse`, event-stream handle, or WebSocket session). Input validation runs before the chain; status dispatch and decoded results after.
+Add auth headers, short-circuit maintenance windows, or retry safe reads — without touching operation validation. Each transport has its own chain. You get an `HttpRequest` in; you return that transport’s result (`HttpResponse`, event-stream handle, or WebSocket session). Input validation runs before the chain; status dispatch and decoded results after.
 
 ## Basic Setup
 
@@ -53,7 +53,7 @@ You can skip `next`, but you must return the expected result type. For HTTP, `ma
   examples/interceptors/short-circuit.ts#example
 </include>
 
-The command layer still dispatches by status. Declare one `error` struct for the non-2xx side when callers need typed `error.data`. It also still checks the declared side: a JSON `output` or `error` needs a JSON `content-type` header on the synthetic response, and `body` should already be the parsed value, the way the transport would deliver it (`request.responseType` and `request.errorResponseType` name the representation). Short-circuiting SSE or WebSocket needs a complete compatible handle/session (closure promises, live state, ownership, and `[Symbol.asyncDispose]`). Partial objects aren’t valid policy. Structural `EventStreamHandle` and `WebSocketSessionLike` implementations now need that standard disposer at compile time; consumers that only receive Defjs handles have no new runtime call requirement.
+The operation still dispatches by status. Declare one `error` struct for the non-2xx side when callers need typed `error.data`. It also still checks the declared side: a JSON `output` or `error` needs a JSON `content-type` header on the synthetic response, and `body` should already be the parsed value, the way the transport would deliver it (`request.responseType` and `request.errorResponseType` name the representation). Short-circuiting SSE or WebSocket needs a complete compatible handle/session (closure promises, live state, ownership, and `[Symbol.asyncDispose]`). Partial objects aren’t valid policy. Structural `EventStreamHandle` and `WebSocketSessionLike` implementations now need that standard disposer at compile time; consumers that only receive Defjs handles have no new runtime call requirement.
 
 ## Retry safe reads
 
@@ -96,7 +96,7 @@ Factories return tagged transport values:
 - `basicAuthHttpInterceptor(provider, options?)` — Basic credentials on HTTP
 - `basicAuthSSEInterceptor(provider, options?)` — Basic credentials on SSE
 
-`HttpRequest` may include `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout`, and static `operation`. It’s a transport integration value — not the caller’s parsed input. `queryParams` is `new URLSearchParams(queryString)` after serialization. A configured query serializer is not called when the builder produced no query, and a builder `URLSearchParams` is used as-is. Keep command validation, output validation, and domain error mapping in their layers.
+`HttpRequest` may include `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, and static `operation`. It’s a transport integration value — not the caller’s parsed input. `queryParams` is `new URLSearchParams(queryString)` after serialization. A configured query serializer is not called when the builder produced no query, and a builder `URLSearchParams` is used as-is. Keep input validation, output validation, and domain error mapping in their layers.
 
 URL validation starts during request building: a missing, relative, or invalid base endpoint or an illegal path fails with `REQ_BUILD_FAILED` before any interceptor or transport runs, including a short-circuiting interceptor. Before dispatch, the final `req.endpoint` is validated against the final `req.baseEndpoint`: the resolved URL must keep that base's origin and stay under its directory; C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes in the path are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. An interceptor may deliberately replace `baseEndpoint` with another valid absolute URL. HTTP, SSE, and WebSocket share the rule, and deterministic URL errors are never retried.
 
@@ -106,7 +106,7 @@ Log a reviewed allowlist: static `operation`, method, status, duration, stable e
 
 Basic credentials are base64, not encrypted. Use TLS, keep credential providers request-scoped on a server, never log the generated header. Default encoder is `globalThis.btoa`; pass `BasicAuthInterceptorOptions.encode` when the runtime lacks `btoa` or needs a reviewed encoder.
 
-An interceptor can enforce transport policy. It is not input validation, authorization, or resource ownership. The code that starts long-lived work still uses `await using` or manually closes and awaits the terminal promise. Ordinary HTTP remains request-scoped and is managed with its timeout / `AbortSignal`; `Client` is not `AsyncDisposable`.
+An interceptor can enforce transport policy. It is not input validation, authorization, or resource ownership. The code that starts long-lived work still uses `await using` or manually closes and awaits the terminal promise. Ordinary HTTP remains request-scoped and is managed with its `AbortSignal`; `Client` is not `AsyncDisposable`.
 
 ## Related recipes
 

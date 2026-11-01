@@ -76,8 +76,7 @@ const client = createClient(
   ),
 );
 
-const command = getInvoice();
-const outcome = await client.execute(command);
+const outcome = await getInvoice(client);
 const [error, invoice] = outcome;
 
 function reportInvoice(result: typeof outcome) {

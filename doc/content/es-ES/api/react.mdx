@@ -5,15 +5,15 @@ description: ClientProvider, useClient con sustitución opcional del cliente y p
 
 # React
 
-Proporciona un cliente `@defjs/core` existente a un árbol React. Este paquete no crea, no cachea ni libera (dispose) el cliente. Su entrada está marcada con `'use client'`, así que impórtalo desde componentes de cliente. Se requiere React 18 o posterior.
+Proporciona un cliente `@defjs/core` existente a un árbol React. Este paquete no crea, no cachea ni dispone el cliente. Su entrada está marcada `'use client'`, así que impórtalo desde componentes de cliente. Se requiere React 18 o posterior.
 
-Mira la [guía de React](/es-ES/docs/integrations/react).
+Consulta la [guía de React](/es-ES/docs/integrations/react).
 
 ## ClientProvider
 
 <ApiSignature name="ClientProvider" />
 
-Provider de contexto. Pasa un cliente de `createClient`. Un `ClientProvider` anidado sustituye el cliente para su subárbol; `useClient()` lee el más cercano. Pasar un `client` distinto cambia el valor del contexto para los descendientes.
+Provider de Context. Pasa un cliente de `createClient`. Un `ClientProvider` anidado sustituye el cliente de su subárbol; `useClient()` lee el más cercano. Pasar un `client` distinto cambia el valor de contexto para los descendientes.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,15 +21,15 @@ Provider de contexto. Pasa un cliente de `createClient`. Un `ClientProvider` ani
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` da prioridad al cliente explícito; sin argumento o con `undefined`, lee el `ClientProvider` más cercano. Solo lanza un `Error` cuando ninguna de las dos fuentes proporciona un cliente. La llamada sin argumento `useClient()` sigue siendo válida.
+`useClient(overrideClient)` prefiere el cliente explícito; omitido o `undefined` lee el `ClientProvider` más cercano. Solo se lanza un `Error` cuando ninguna de las dos fuentes aporta un cliente. Las llamadas `useClient()` sin argumentos siguen siendo válidas. Pasa ese cliente a una operación. Un `Client` es una función: no lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater.
 
-Llama siempre a `useClient(explicitClient)` en el nivel superior de un componente o custom Hook, incluso con un cliente explícito; no en funciones normales ni callbacks de eventos. `explicitClient ?? useClient()` llama condicionalmente a un Hook y no es válido. La sustitución no escribe en Context ni crea un provider; el Hook sigue suscrito a Context.
+Llama siempre a `useClient(explicitClient)` en el nivel superior de un componente o de un Hook personalizado, incluso con un cliente explícito; no en una función ordinaria ni en un callback de evento. No escribas `explicitClient ?? useClient()`, que llama a un Hook de forma condicional. La sustitución no escribe en el Context ni crea un provider, y el Hook sigue suscrito al Context.
 
-- **Devuelve** el mismo cliente explícito o el proporcionado por el provider más cercano.
-- **Lanza** un `Error` si ni el argumento explícito ni Context proporcionan un cliente.
+- **Devuelve** el cliente explícito exacto o el cliente proporcionado más cercano.
+- **Lanza** un `Error` cuando ni un cliente explícito ni el Context aportan un cliente.
 
 ## ClientProviderProps
 
 <ApiSignature name="ClientProviderProps" />
 
-`client` es obligatorio y pertenece a la aplicación. `children` es opcional: el árbol que puede llamar a `useClient`.
+`client` es obligatorio y lo posee la aplicación. `children` es opcional: el árbol que puede llamar a `useClient`.

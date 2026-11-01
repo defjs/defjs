@@ -8,7 +8,7 @@ import { CodeBlock, Pre } from "fumadocs-ui/components/codeblock";
 import { wrapEnglishHtml } from "./api-entry-actions";
 import type { ApiEntryView } from "./api-entry-view";
 import type { ApiField } from "./api-text";
-import type { getUi } from "./ui-copy";
+import type { Translator } from "./translations";
 
 const themes = { light: "github-light", dark: "github-dark" } as const;
 
@@ -39,17 +39,15 @@ export interface RenderedApiEntry {
   overviewTitle: string;
 }
 
-type UiCopy = ReturnType<typeof getUi>;
-
 export interface CopyLabels {
   copy: string;
   copied: string;
 }
 
-export function copyLabels(ui: UiCopy): CopyLabels {
+export function copyLabels(t: Translator): CopyLabels {
   return {
-    copy: ui.translations["Copy Text(code block)(aria-label)"],
-    copied: ui.translations["Copied Text(code block)(aria-label)"],
+    copy: t("Copy Text(code block)(aria-label)"),
+    copied: t("Copied Text(code block)(aria-label)"),
   };
 }
 
@@ -119,11 +117,11 @@ export async function renderMarkdown(
 
 export async function renderFieldTable(
   rows: readonly ApiField[],
-  ui: UiCopy,
+  t: Translator,
   locale = "en-US",
 ): Promise<string> {
   if (rows.length === 0) return "";
-  const labels = copyLabels(ui);
+  const labels = copyLabels(t);
   const body: string[] = [];
   for (const row of rows) {
     const name = `${escapeHtml(row.name)}${row.required ? "" : "?"}`;
@@ -134,25 +132,25 @@ export async function renderFieldTable(
       `<div class="border-t px-3 py-2"><code>${name}</code> <code>${escapeHtml(row.type)}</code>${wrapEnglishHtml(await renderMarkdown(prose, labels), locale)}</div>`,
     );
   }
-  const prop = escapeHtml(ui.translations["Prop(type table)"]);
-  const type = escapeHtml(ui.translations["Type(type table)"]);
+  const prop = escapeHtml(t("Prop(type table)"));
+  const type = escapeHtml(t("Type(type table)"));
   return `<div class="my-6 rounded-2xl border bg-fd-card text-sm overflow-hidden"><div class="flex px-3 py-1 text-fd-muted-foreground"><p class="w-1/4">${prop}</p><p>${type}</p></div>${body.join("")}</div>`;
 }
 
 export async function renderApiEntry(
   view: ApiEntryView,
-  ui: UiCopy,
+  t: Translator,
   overviewTitle: string,
   locale = "en-US",
 ): Promise<RenderedApiEntry> {
-  const labels = copyLabels(ui);
+  const labels = copyLabels(t);
   const parameterSections: RenderedParameterSection[] = [];
   for (const section of view.parameterTables) {
     parameterSections.push({
       signatureHtml: section.signature
         ? await highlightCode(section.signature, "ts", labels)
         : "",
-      tableHtml: await renderFieldTable(section.rows, ui, locale),
+      tableHtml: await renderFieldTable(section.rows, t, locale),
     });
   }
   const examplesHtml: string[] = [];
@@ -173,7 +171,7 @@ export async function renderApiEntry(
     ),
     descriptionHtml: await renderMarkdown(view.description, labels),
     parameterSections,
-    membersHtml: await renderFieldTable(view.members, ui, locale),
+    membersHtml: await renderFieldTable(view.members, t, locale),
     returnsHtml: await Promise.all(
       view.returns.map((part) => renderMarkdown(part, labels)),
     ),

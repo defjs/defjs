@@ -1,6 +1,6 @@
 ---
 title: "ETag conditional requests"
-description: Treat 304 as an HTTP status fault; keep the cache Map outside execute.
+description: Treat 304 as an HTTP status fault; keep the cache Map outside the operation call.
 ---
 
 # Revalidate with ETag and a 304
@@ -21,4 +21,4 @@ Flask
 
 `throw error` after the 304 branch is this reader's boundary. The function still returns `Promise<Product>`; a non-304 fault is not returned as a Defjs tuple from that boundary.
 
-Do not rewrite `304` into a fake `200` inside Core. Cache ownership stays in application code around `execute`.
+Do not rewrite `304` into a fake `200` inside Core. Cache ownership stays in application code around the operation call.

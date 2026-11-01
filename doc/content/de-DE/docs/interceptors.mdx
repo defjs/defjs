@@ -1,13 +1,13 @@
 ---
 title: "Interceptors"
-description: Auth, Tracing und Transportregeln am Anwendungsclient ergänzen und SDK-Endpoints wiederverwenden.
+description: Authentifizierung und Transportregeln am Anwendungsclient anwenden, ohne die API-Definitionen deines SDKs zu ändern.
 ---
 
 # Interceptors
 
-Interceptors gehören zur Laufzeitkonfiguration des Clients der Anwendung. So nutzt derselbe exportierte SDK-Endpoint je nach Umgebung andere Credentials, Tracing- oder Retry-Regeln. Stabile Parameter und ihre Request-Abbildung bleiben im Endpoint und seinem `builder`; Authentifizierung und andere übergreifende Regeln werden am Client eingerichtet.
+Interceptors lassen Anwendungen die Ausführung unabhängig von den Operationsdefinitionen des SDKs konfigurieren. Ein SDK darf einen Authentifizierungs-Interceptor oder eine Client-Factory als optionalen Helfer exportieren; Anwendungen entscheiden, wo sie ihn installieren, und liefern ihre aktuellen Zugangsdaten.
 
-Füge Auth-Headers hinzu, schließe Maintenance Windows per Short-Circuit kurz oder wiederhole sichere Reads — ohne Command-Validierung anzufassen. Jeder Transport hat seine eigene Chain. Du bekommst ein `HttpRequest` rein; du gibst das Ergebnis dieses Transports zurück (`HttpResponse`, Event-Stream-Handle oder WebSocket-Session). Input-Validierung läuft vor der Chain; Status-Dispatch und dekodierte Results danach.
+Füge Auth-Headers hinzu, schließe Maintenance Windows per Short-Circuit kurz oder wiederhole sichere Reads — ohne die Validierung der Operation anzufassen. Jeder Transport hat seine eigene Chain. Du bekommst ein `HttpRequest` rein; du gibst das Ergebnis dieses Transports zurück (`HttpResponse`, Event-Stream-Handle oder WebSocket-Session). Input-Validierung läuft vor der Chain; Status-Dispatch und dekodierte Results danach.
 
 ## Grundeinrichtung
 
@@ -53,7 +53,7 @@ Du kannst `next` überspringen, musst aber den erwarteten Result-Type zurückgeb
   examples/interceptors/short-circuit.ts#example
 </include>
 
-Die Command-Layer dispatcht weiterhin nach Status. Deklariere ein einzelnes `error`-Struct für die Nicht-2xx-Seite, wenn Caller typisiertes `error.data` brauchen. Sie prüft außerdem weiterhin die deklarierte Seite: Ein JSON-`output` oder -`error` braucht einen JSON-`content-type`-Header auf der synthetischen Response, und `body` sollte bereits der geparste Wert sein, so wie der Transport ihn liefern würde (`request.responseType` und `request.errorResponseType` benennen die Representation). Short-Circuit von SSE oder WebSocket braucht ein vollständiges kompatibles Handle/Session (Closure-Promises, Live-State, Ownership und `[Symbol.asyncDispose]`). Partial Objects sind keine gültige Policy. Strukturelle `EventStreamHandle`- und `WebSocketSessionLike`-Implementierungen brauchen diesen Standard-Disposer jetzt zur Compile-Zeit; Consumer, die nur Defjs-Handles empfangen, haben keine neue Runtime-Aufrufpflicht.
+Die Operation dispatcht weiterhin nach Status. Deklariere ein einzelnes `error`-Struct für die Nicht-2xx-Seite, wenn Caller typisiertes `error.data` brauchen. Sie prüft außerdem weiterhin die deklarierte Seite: Ein JSON-`output` oder -`error` braucht einen JSON-`content-type`-Header auf der synthetischen Response, und `body` sollte bereits der geparste Wert sein, so wie der Transport ihn liefern würde (`request.responseType` und `request.errorResponseType` benennen die Representation). Short-Circuit von SSE oder WebSocket braucht ein vollständiges kompatibles Handle/Session (Closure-Promises, Live-State, Ownership und `[Symbol.asyncDispose]`). Partial Objects sind keine gültige Policy. Strukturelle `EventStreamHandle`- und `WebSocketSessionLike`-Implementierungen brauchen diesen Standard-Disposer jetzt zur Compile-Zeit; Consumer, die nur Defjs-Handles empfangen, haben keine neue Runtime-Aufrufpflicht.
 
 ## Sichere Reads wiederholen
 
@@ -97,7 +97,7 @@ Factories geben tagged Transport-Values zurück:
 - `basicAuthHttpInterceptor(provider, options?)` — Basic Credentials auf HTTP
 - `basicAuthSSEInterceptor(provider, options?)` — Basic Credentials auf SSE
 
-`HttpRequest` kann `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort`, `timeout` und static `operation` enthalten. Es ist ein Transport-Integrationswert — nicht der geparste Input des Callers. `queryParams` ist `new URLSearchParams(queryString)` nach der Serialisierung. Ein konfigurierter Query-Serializer wird nicht aufgerufen, wenn der Builder keine Query erzeugt hat, und Builder-`URLSearchParams` werden as-is genutzt. Halte Command-Validierung, Output-Validierung und Domain-Error-Mapping in ihren Layern.
+`HttpRequest` kann `endpoint`, `baseEndpoint`, `method`, `headers`, `body`, `queryParams`, `queryString`, `abort` und static `operation` enthalten. Es ist ein Transport-Integrationswert — nicht der geparste Input des Callers. `queryParams` ist `new URLSearchParams(queryString)` nach der Serialisierung. Ein konfigurierter Query-Serializer wird nicht aufgerufen, wenn der Builder keine Query erzeugt hat, und Builder-`URLSearchParams` werden as-is genutzt. Halte Input-Validierung, Output-Validierung und Domain-Error-Mapping in ihren Layern.
 
 Die URL-Validierung beginnt während des Request-Baus: Ein fehlender, relativer oder ungültiger Basis-Endpoint oder ein unzulässiger Pfad scheitert mit `REQ_BUILD_FAILED`, bevor ein Interceptor oder Transport läuft, auch ein kurzschließender Interceptor. Vor dem Dispatch wird das endgültige `req.endpoint` gegen das endgültige `req.baseEndpoint` geprüft: Die aufgelöste URL muss den Origin dieser Basis behalten und unter ihrem Verzeichnis bleiben; C0-Steuerzeichen (einschließlich Tab, CR und LF), Backslashes, `?`, `#` und Verzeichnis-Escapes im Pfad werden abgelehnt. Schemaähnliche und protokollrelative Formen werden auch mit führenden Leerzeichen abgelehnt; ein normales Leerzeichen im Pfadinneren ist erlaubt und wird als `%20` gesendet. Ein Interceptor darf `baseEndpoint` absichtlich durch eine andere gültige absolute URL ersetzen. HTTP, SSE und WebSocket teilen die Regel, und deterministische URL-Fehler werden nie erneut versucht.
 
@@ -107,11 +107,11 @@ Logge eine geprüfte Allowlist: statische `operation`, Method, Status, Duration,
 
 Basic Credentials sind Base64, nicht encrypted. Nutze TLS, halte Credential-Provider request-scoped auf einem Server, logge nie den generierten Header. Default-Encoder ist `globalThis.btoa`; gib `BasicAuthInterceptorOptions.encode`, wenn die Runtime kein `btoa` hat oder einen reviewed Encoder braucht.
 
-Ein Interceptor kann Transport-Policy erzwingen. Er ist keine Input-Validierung, Authorization oder Resource-Ownership. Der Code, der langlebige Arbeit startet, nutzt weiterhin `await using` oder schließt manuell und wartet auf das Terminal-Promise. Normales HTTP bleibt request-scoped und wird mit seinem Timeout / `AbortSignal` verwaltet; `Client` ist nicht `AsyncDisposable`.
+Ein Interceptor kann Transport-Policy erzwingen. Er ist keine Input-Validierung, Authorization oder Resource-Ownership. Der Code, der langlebige Arbeit startet, nutzt weiterhin `await using` oder schließt manuell und wartet auf das Terminal-Promise. Normales HTTP bleibt request-scoped und wird mit seinem `AbortSignal` verwaltet; `Client` ist nicht `AsyncDisposable`.
 
 ## Verwandte Rezepte
 
 - [Einen Bearer-Token bei 401 einmal erneuern](/de-DE/recipes/refresh-bearer-once)
-- [Ein HTTP-SDK veröffentlichen, ohne execute zu verstecken](/de-DE/recipes/publish-http-sdk)
+- [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk)
 - [Mit lokalem Fetch-Handle testen](/de-DE/recipes/test-with-handle)
 - [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)

@@ -166,6 +166,38 @@ describe("vue browser runtime", () => {
     expect(childClient).toBe(inner);
   });
 
+  test("injects the identical function and overrides a subtree with a derived client", () => {
+    const client = createClient();
+    const abort = new AbortController();
+    const childClient = client({ abort: abort.signal });
+    let injected: Client | undefined;
+    let overridden: Client | undefined;
+
+    const Child = defineComponent({
+      setup() {
+        overridden = injectClient();
+        return () => h("div");
+      },
+    });
+    const Boundary = defineComponent({
+      setup() {
+        provide(HTTP_CLIENT, childClient);
+        injected = injectClient();
+        return () => h(Child);
+      },
+    });
+
+    mountRuntime(Boundary, (app) => {
+      app.use(createClientPlugin(client));
+    });
+
+    expect(typeof injected).toBe("function");
+    expect(injected).toBe(client);
+    expect(typeof overridden).toBe("function");
+    expect(overridden).toBe(childClient);
+    expect(overridden).not.toBe(client);
+  });
+
   test("overrides one custom key without changing the default or siblings", () => {
     const normal = createClient();
     const outerBilling = createClient();
@@ -224,7 +256,7 @@ describe("vue browser runtime", () => {
         const isLoading = ref(true);
         const client = injectClient();
 
-        usersRequest = client.execute(getUsers()).then(([error, result]) => {
+        usersRequest = getUsers(client).then(([error, result]) => {
           isLoading.value = false;
 
           if (error) {
@@ -306,9 +338,7 @@ describe("vue browser runtime", () => {
         const userNames = ref("loading");
 
         outerClient = injectClient();
-        outerRequest = (
-          outerClient.execute(getUsers()) as Promise<UsersResult>
-        ).then((result) => {
+        outerRequest = getUsers(outerClient).then((result) => {
           const [error, users] = result;
           userNames.value = error
             ? "error"
@@ -336,9 +366,7 @@ describe("vue browser runtime", () => {
         const userNames = ref("loading");
 
         innerLeafClient = injectClient();
-        innerRequest = (
-          innerLeafClient.execute(getUsers()) as Promise<UsersResult>
-        ).then((result) => {
+        innerRequest = getUsers(innerLeafClient).then((result) => {
           const [error, users] = result;
           userNames.value = error
             ? "error"

@@ -1,13 +1,13 @@
 ---
 title: "HTTP-Anfragen"
-description: HTTP-Endpoints im SDK definieren und mit dem Client der Anwendung ausführen, auswerten und abbrechen.
+description: HTTP-Operationen für dein SDK entwerfen und mit anwendungseigener Konfiguration und Abbruch aufrufen.
 ---
 
 # HTTP
 
-Mit `defineRequest` exportiert das SDK eine HTTP-Operation mit Methode, relativem Pfad, Eingabe, `builder` und optionalen `output`-/`error`-Verträgen. Die Anwendung importiert den Endpoint und führt seinen Command mit ihrem Client aus. Dort legt sie Base-URL, Authentifizierung und Transport fest, behandelt das Ergebnis-Tupel und steuert Abbruch oder Timeout.
+Das SDK definiert für jede HTTP-Operation Methode, relativen Pfad, Input-Abbildung, Response und Fehlervertrag. Die Anwendung importiert diese Operation, konfiguriert ihren eigenen Client, ruft sie auf und behandelt das Ergebnis. Dieselbe Definition kann in einem npm-Paket ausgeliefert oder lokal geteilt werden.
 
-Die folgenden Beispiele zeigen beide Seiten zusammen. Für die Paketgrenze zwischen SDK und Anwendung siehe [SDK veröffentlichen](/de-DE/recipes/publish-http-sdk).
+Halte Service-Adressen und Zugangsdaten in der Client-Konfiguration. Der Aufrufer besitzt den Abbruch und jede Regel, die einen Write wiederholt; ein abgebrochener Request kann den Service schon erreicht haben.
 
 ## Grundeinrichtung
 
@@ -17,7 +17,7 @@ Die folgenden Beispiele zeigen beide Seiten zusammen. Für die Paketgrenze zwisc
 
 ## URL auflösen
 
-`withEndpoint(...)` braucht eine gültige absolute URL. Endpoint-Pathname bleibt als Directory; Query und Hash werden vor der Command-Resolution verworfen. Ein fehlender, relativer oder ungültiger Basis-Endpoint scheitert mit `REQ_BUILD_FAILED` während des Request-Baus, bevor ein Interceptor oder Transport läuft, auch wenn ein Interceptor den Request kurzschließen würde. HTTP, SSE und WebSocket teilen diese Regel.
+`withEndpoint(...)` braucht eine gültige absolute URL. Endpoint-Pathname bleibt als Directory; Query und Hash werden verworfen, bevor die Request-URL aufgelöst wird. Ein fehlender, relativer oder ungültiger Basis-Endpoint scheitert mit `REQ_BUILD_FAILED` während des Request-Baus, bevor ein Interceptor oder Transport läuft, auch wenn ein Interceptor den Request kurzschließen würde. HTTP, SSE und WebSocket teilen diese Regel.
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
@@ -68,7 +68,7 @@ Genestete Query-Shape (`a[b]`, `a.b`, Komma-Listen) ist eine Backend-Konvention,
 
 <include cwd>examples/http/query-serializer.ts#example</include>
 
-`query` hier ist das encodierte Wire-Object. Aliasse sind schon angewandt, ein Serializer wie `qs` droppt sie also nicht. Der Return-String wird als `queryString` gespeichert und dann `URL.search` zugewiesen, das Spaces, `#`, Quotes und Nicht-ASCII prozentkodiert. Defjs hängt nicht von `qs` ab.
+`query` hier ist das encodierte Wire-Object. Aliasse sind schon angewandt, der Serializer sieht also Wire-Keys. Der Return-String wird als `queryString` gespeichert und dann `URL.search` zugewiesen, das Spaces, `#`, Quotes und Nicht-ASCII prozentkodiert. Defjs liefert keinen Encoder für genestete Queries.
 
 Ohne Serializer wiederholen Arrays Keys, und ein genestetes Object ist `REQ_BUILD_FAILED`. `URLSearchParams` aus dem Builder wird so genutzt und überspringt den Serializer. Ohne Query wird der Serializer nicht aufgerufen. Interceptors sehen danach `queryParams` als `new URLSearchParams(queryString)`.
 
@@ -134,13 +134,15 @@ ein typisiertes `body`. Wo nichts dekodiert wurde, bekommst du `HttpMeta` — di
 bedeutet nur `200 <= status < 300`. Keines von beiden ist eine native `Response`. Ein Transport-Failure ist ein Fault, also
 gibt es keine Status-0-Response, die dafür einsteht.
 
-## Arbeit abbrechen
+## Arbeit abbrechen [#cancel-the-work]
 
-Execution-Options akzeptieren `{ signal }` auch allein, ohne `abort` oder `timeout`. **`abort` und `timeout` schließen sich gegenseitig aus.** `signal` kann mit jedem der beiden kombiniert werden.
+Übergib `abort` an einem abgeleiteten Client. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch wird als `NET_ABORTED` klassifiziert. Es gibt kein `timeout`-Feld, kein `signal`-Feld und keine Default-Deadline auf Client-Ebene. Ein späteres `abort` ersetzt das vorherige Signal. Kombiniere ein Caller-Signal mit einer Deadline in Anwendungscode mit `AbortSignal.any`.
+
+<include cwd>examples/http/deadline.ts#example</include>
 
 <include cwd>examples/http/cancel.ts#example</include>
 
-`timeout` muss eine positive Safe Integer in `1..2_147_483_647` sein. Ein Aufruf ohne `timeout` bekommt den `withTimeout`-Default des Clients. Erkannter Abbruch → `NET_ABORTED`; Execution-Timeout → `NET_TIMEOUT`; Interceptor-`throw` → `EXT_INTERCEPTOR_FAILED`, außer `ERR_ABORTED` / `ERR_TIMEOUT`, die `NET_ABORTED` / `NET_TIMEOUT` ergeben; andere Fetch-Failures → `NET_UNREACHABLE`. Ein Abbruch nach akzeptiertem Server-Write beweist **nicht**, dass der Write zurückgerollt wurde.
+Erkannter Abbruch → `NET_ABORTED`; ein Deadline-Abbruch → `NET_TIMEOUT`; Interceptor-`throw` → `EXT_INTERCEPTOR_FAILED`, außer `ERR_ABORTED` / `ERR_TIMEOUT`, die `NET_ABORTED` / `NET_TIMEOUT` ergeben; andere Fetch-Failures → `NET_UNREACHABLE`. Ein Abbruch nach akzeptiertem Server-Write beweist **nicht**, dass der Write zurückgerollt wurde.
 
 ## Credentials und XSRF
 
@@ -154,17 +156,17 @@ Halte Credentials, XSRF-Tokens und Query Strings aus Routine-Logs. Nutze Query-P
 
 `onDownloadProgress` läuft, während ein deklarierter Response-Body gelesen wird. `loaded` zählt Bytes, die aus dem Response-Stream gelesen wurden; Fetch kann sie bereits dekomprimiert haben. `lengthComputable` ist nur bei positivem `Content-Length` und fehlendem oder `identity`-`Content-Encoding` true. Andere Encodings, einschließlich gzip und br, melden `total: 0` und `lengthComputable: false`, damit dekodierte Bytes nie mit einer komprimierten Wire-Länge verglichen werden. Kein Struct für diese Seite → der Body wird nicht gelesen → kein Body-Read-Progress.
 
-`onUploadProgress` meldet den Fortschritt eines `ReadableStream<Uint8Array>`-Bodys, während Fetch ihn liest, nicht wenn der Server ihn bestätigt. Der Upload-Fortschritt wird nur in Runtimes gemeldet, die Request-Bodys streamen können: In Bun und Node konvertiert Defjs auch `Blob`-/`File`-, `ArrayBuffer`- und `FormData`-Bodys in einen Stream, sodass auch für sie der Fortschritt gemeldet wird. In Server-Runtimes nutzt FormData mit `onUploadProgress` den serialisierten Stream direkt, behält seine Multipart-Boundary und wird ohne ein von der Library erzeugtes `Content-Length` gesendet (über HTTP/1.1 per Chunked-Übertragung). So funktionieren Progress, Timeout und Abbruch, ohne den gesamten Body zu puffern. Sein Total ist unbekannt, sofern kein gültiges explizites `Content-Length` es liefert. Bei einem Endpoint, der `Content-Length` verlangt, etwa manchen vorsignierten Upload-Zielen, lasse `onUploadProgress` weg; das Fetch der Plattform sendet FormData dann mit seiner Länge. Ein Abbruch gibt den umhüllten Stream frei. Browser, einschließlich Workers, sind davon ausgenommen, weil Chromium Request-Bodys nur über HTTP/2 oder höher streamen kann und Firefox das Streaming von Request-Bodys gar nicht unterstützt; dort werden diese Bodys unverändert gesendet und `onUploadProgress` wird nicht aufgerufen. JSON-, Text-, `URLSearchParams`- und Typed-Array-Bodys werden als Ganzes gesendet und erzeugen keine Events. Bei einem Stream ohne bekannte Länge ist `total` gleich `0` (und damit `lengthComputable` gleich `false`). Ein Request mit einem `ReadableStream`-Body scheitert in einer Runtime ohne Unterstützung für das Streaming von Requests, etwa Firefox, mit `ENV_UNSUPPORTED`, bevor etwas gesendet wird; die Meldung der zugrunde liegenden Fehlerursache lautet `ERR_STREAMING_REQUEST_UNSUPPORTED`. In Chromium erfordert ein `ReadableStream`-Body HTTP/2 oder höher; über HTTP/1.1 scheitert der Aufruf mit `NET_UNREACHABLE`. `onDownloadProgress` verhält sich in jeder Runtime gleich.
+`onUploadProgress` meldet den Fortschritt eines `ReadableStream<Uint8Array>`-Bodys, während Fetch ihn liest, nicht wenn der Server ihn bestätigt. Der Upload-Fortschritt wird nur in Runtimes gemeldet, die Request-Bodys streamen können: In Bun und Node konvertiert Defjs auch `Blob`-/`File`-, `ArrayBuffer`- und `FormData`-Bodys in einen Stream, sodass auch für sie der Fortschritt gemeldet wird. In Server-Runtimes nutzt FormData mit `onUploadProgress` den serialisierten Stream direkt, behält seine Multipart-Boundary und wird ohne ein von der Library erzeugtes `Content-Length` gesendet (über HTTP/1.1 per Chunked-Übertragung). So funktionieren Progress und Abbruch, ohne den gesamten Body zu puffern. Sein Total ist unbekannt, sofern kein gültiges explizites `Content-Length` es liefert. Bei einem Endpoint, der `Content-Length` verlangt, etwa manchen vorsignierten Upload-Zielen, lasse `onUploadProgress` weg; das Fetch der Plattform sendet FormData dann mit seiner Länge. Ein Abbruch gibt den umhüllten Stream frei. Browser, einschließlich Workers, sind davon ausgenommen, weil Chromium Request-Bodys nur über HTTP/2 oder höher streamen kann und Firefox das Streaming von Request-Bodys gar nicht unterstützt; dort werden diese Bodys unverändert gesendet und `onUploadProgress` wird nicht aufgerufen. JSON-, Text-, `URLSearchParams`- und Typed-Array-Bodys werden als Ganzes gesendet und erzeugen keine Events. Bei einem Stream ohne bekannte Länge ist `total` gleich `0` (und damit `lengthComputable` gleich `false`). Ein Request mit einem `ReadableStream`-Body scheitert in einer Runtime ohne Unterstützung für das Streaming von Requests, etwa Firefox, mit `ENV_UNSUPPORTED`, bevor etwas gesendet wird; die Meldung der zugrunde liegenden Fehlerursache lautet `ERR_STREAMING_REQUEST_UNSUPPORTED`. In Chromium erfordert ein `ReadableStream`-Body HTTP/2 oder höher; über HTTP/1.1 scheitert der Aufruf mit `NET_UNREACHABLE`. `onDownloadProgress` verhält sich in jeder Runtime gleich.
 
-Wirft ein Fortschritts-Callback einen Fehler oder wird das von ihm zurückgegebene Promise abgelehnt, scheitert der Aufruf mit `EXT_OBSERVER_FAILED`; der geworfene Wert wird als `cause` gespeichert. Das gilt für Downloads und Uploads gleichermaßen. Ein Abbruch durch den Aufrufer und `timeout` führen weiterhin zu `NET_ABORTED` / `NET_TIMEOUT`.
+Wirft ein Fortschritts-Callback einen Fehler oder wird das von ihm zurückgegebene Promise abgelehnt, scheitert der Aufruf mit `EXT_OBSERVER_FAILED`; der geworfene Wert wird als `cause` gespeichert. Das gilt für Downloads und Uploads gleichermaßen. Ein Abbruch durch den Aufrufer meldet weiterhin `NET_ABORTED`, oder `NET_TIMEOUT`, wenn der Abort-Grund ein Timeout ist.
 
-`fetchHandler(httpRequest, fetchImpl?)` ist die niedrigere Fetch-Grenze: löst die URL auf, ruft Fetch, liest die Representation und gibt `HttpResponse` zurück. Die Default-Handles für HTTP und SSE lösen `globalThis.fetch` bei jedem Aufruf auf, daher wird eine nach dem Import installierte Ersetzung verwendet. HTTP nutzt `(url, init)` nur für unangetastetes Plattform-Fetch; ein ersetztes globales oder eigenes Handle erhält einen nativen `Request`. Core ohne Fetch zu importieren ist gültig; eine Default-Ausführung von HTTP/SSE scheitert mit `ENV_UNSUPPORTED`, wenn Fetch dann noch fehlt, während eigene Handles nutzbar bleiben. Diese Grenze validiert **nicht** Command-Input, dispatcht kein `output` und führt keine Interceptors aus. Nützlich für injizierte Transport-Tests — kein Ersatz für `client.execute`.
+`fetchHandler(httpRequest, fetchImpl?)` ist die niedrigere Fetch-Grenze: löst die URL auf, ruft Fetch, liest die Representation und gibt `HttpResponse` zurück. Die Default-Handles für HTTP und SSE lösen `globalThis.fetch` bei jedem Aufruf auf, daher wird eine nach dem Import installierte Ersetzung verwendet. HTTP nutzt `(url, init)` nur für unangetastetes Plattform-Fetch; ein ersetztes globales oder eigenes Handle erhält einen nativen `Request`. Core ohne Fetch zu importieren ist gültig; eine Default-Ausführung von HTTP/SSE scheitert mit `ENV_UNSUPPORTED`, wenn Fetch dann noch fehlt, während eigene Handles nutzbar bleiben. Diese Grenze validiert **nicht** den Input der Operation, dispatcht kein `output` und führt keine Interceptors aus. Nützlich für injizierte Transport-Tests — kein Ersatz dafür, die Operation aufzurufen.
 
 ## Replay-Limits
 
 Defjs wiederholt HTTP **nicht** automatisch. Einen Read zu wiederholen braucht trotzdem eine geprüfte Timeout-/Network-/Duplicate-Policy. Eine Mutation zu wiederholen braucht wiederholbare Bytes, Server-Support, einen Idempotency-Key gebunden an Auth-Scope + Request-Bytes und eine Receiver-Duplicate-Policy.
 
-Eine Client-/Command-/Fetch-Grenze kann nicht wissen, ob ein fehlgeschlagener Write auf dem Server übernommen wurde. Halte Replay-Entscheidungen in der App oder einem geprüften Interceptor. Interceptors können den Low-Level-Request kurzschließen oder ersetzen; finaler Status und Body müssen trotzdem den Command-Vertrag erfüllen.
+Eine Client- oder Fetch-Grenze kann nicht wissen, ob ein fehlgeschlagener Write auf dem Server übernommen wurde. Halte Replay-Entscheidungen in der App oder einem geprüften Interceptor. Interceptors können den Low-Level-Request kurzschließen oder ersetzen; finaler Status und Body müssen trotzdem den Vertrag der Operation erfüllen.
 
 ## Verwandte Rezepte
 

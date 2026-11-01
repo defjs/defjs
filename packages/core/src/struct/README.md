@@ -44,8 +44,7 @@ const getUser = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const command = getUser({ id: 1 });
-  const [error, user] = await client.execute(command);
+  const [error, user] = await getUser(client, { id: 1 });
   if (error) {
     console.error(error.code);
     return;
@@ -251,8 +250,9 @@ async function main() {
       return Response.json({ user_id: 1, display_name: "Ada" });
     }),
   );
-  const command = echoUser({ user: { id: 1, displayName: "Ada" } });
-  const [requestError, responseUser] = await client.execute(command);
+  const [requestError, responseUser] = await echoUser(client, {
+    user: { id: 1, displayName: "Ada" },
+  });
   if (requestError) {
     console.error(requestError.code);
     return;
@@ -392,7 +392,7 @@ In the endpoint runtime, Struct errors are wrapped again by the corresponding tr
 ```typescript
 import { StructError } from "@defjs/core";
 
-const [error, result] = await client.execute(command);
+const [error] = await getUser(client, { id: 1 });
 
 if (error?.code === "RES_STRUCT_MISMATCH") {
   if (error.cause instanceof StructError) {
@@ -437,6 +437,6 @@ The following sources align with the current public API and can be used as refer
 - [`parse.ts`](./parse.ts) and [`introspection.ts`](./introspection.ts): strict Struct parsing and the internal adapter implementation.
 - [`errors.ts`](./errors.ts): `StructError`, issue messages, and error views.
 - [`doc/content/en-US/docs/struct.mdx`](../../../../doc/content/en-US/docs/struct.mdx): Struct documentation for users.
-- [`doc/content/en-US/docs/commands.mdx`](../../../../doc/content/en-US/docs/commands.mdx): request input, the explicit builder, and transport constraints.
+- [`doc/content/en-US/docs/http.mdx`](../../../../doc/content/en-US/docs/http.mdx): request input, the explicit builder, and transport constraints.
 
 If historical documents or research materials contain examples of `tag.*`, `RuntimeStruct`, `TypeOf`, `InputOf`, or of importing `codec`/`introspection` directly, they do not represent the current `@defjs/core` public API; the current root-entry exports, type tests, and the sources above are authoritative.

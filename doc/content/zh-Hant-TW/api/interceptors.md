@@ -5,7 +5,7 @@ description: HTTP、SSE、WebSocket interceptor 的 constructors。
 
 # Interceptors
 
-針對一種傳輸包住 `next`。用 `withInterceptors` 註冊。混合清單在執行時依 kind 篩選。
+針對一種傳輸包住 `next`。用 `withInterceptors` 註冊。混合清單在操作執行時依 kind 篩選。
 
 ## createHttpInterceptor()
 

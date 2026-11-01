@@ -1,13 +1,13 @@
 ---
 title: "キャンセルとタイムアウト"
-description: execute を abort またはタイムアウトさせ、NET_ABORTED / NET_TIMEOUT を読み取ります。
+description: 呼び出しを abort またはタイムアウトさせ、NET_ABORTED / NET_TIMEOUT を読み取ります。
 ---
 
 # HTTP 呼び出しをキャンセルする
 
-`signal` に加えて `abort` か `timeout` のどちらかを渡します — `abort` と `timeout` の両方は不可です。`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。
+呼び出し側のシグナルと期限を `abort` に合成します。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` は一つのシグナルです。手動の abort は `NET_ABORTED` に分類されます。期限は `NET_TIMEOUT` に分類されます。
 
-詳細は [HTTP](/ja-JP/docs/http#作業をキャンセルする) を見てください。
+詳細は [HTTP](/ja-JP/docs/http#cancel-the-work) を見てください。
 
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example

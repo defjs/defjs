@@ -1,24 +1,15 @@
 ---
 title: مرجع API
-description: مرجع الدوال والخيارات والأنواع لكتابة تعريفات SDK وعقود البيانات وتنفيذها في التطبيق.
+description: ابحث عن واجهات تعريف SDK وإعداد عميل التطبيق ونتائج التنفيذ محدَّدة الأنواع.
 ---
 
 # مرجع API
 
 <ApiIndex />
 
-هذا مرجع البحث لحزم مساحة العمل. التوقيعات هي العقد؛ الأدلّة والوصفات تشرح متى تستخدمها.
+استخدم هذا المرجع أثناء بناء SDK من Defjs أو استهلاكه. يبدأ مؤلفو SDK من [`defineRequest`](/ar/api/core/definerequest) و[`defineEventStream`](/ar/api/core/defineeventstream) و[`defineWebSocket`](/ar/api/core/definewebsocket) و[Structs](/ar/api/struct). تستخدم التطبيقات [إعداد العميل](/ar/api/client) لاستدعاء تلك العمليات و[الأخطاء](/ar/api/errors) لمعالجة النتائج.
 
-## مداخل التعريف والتنفيذ
-
-| الهدف                        | المرجع                                                                                                                                     |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| كتابة تعريف API في SDK       | `defineRequest` في [HTTP](/ar/api/http)، و`defineEventStream` في [SSE](/ar/api/sse)، و`defineWebSocket` في [WebSocket](/ar/api/web-socket) |
-| كتابة عقود البيانات والأنواع | `struct.*` و`Infer` في [Struct](/ar/api/struct)                                                                                            |
-| التنفيذ في التطبيق           | `createClient` و`with*` و`Client.execute` في [Client](/ar/api/client)                                                                      |
-| معالجة النتائج والسياسات     | [Errors](/ar/api/errors)، و[Interceptors](/ar/api/interceptors)، والمقابض والجلسات الخاصة بكل نقل                                          |
-
-يصدّر مؤلف SDK التعريفات. يضبط التطبيق المستهلك Defjs Client متوافقًا ويتولى النتائج والإلغاء ودورة حياة التدفقات. راجع [البدء السريع](/ar/docs/start) و[بناء SDK ونشره](/ar/recipes/publish-http-sdk) للمسار من الكتابة إلى التوزيع.
+التوقيعات هي العقد. اتبع [البدء السريع](/ar/docs/start) و[دليل نشر SDK](/ar/recipes/publish-http-sdk) لمسار العمل الكامل.
 
 ## الحزم
 
@@ -31,15 +22,15 @@ description: مرجع الدوال والخيارات والأنواع لكتا�
 
 ## @defjs/core
 
-| الصفحة                               | ما تبحث عنه                                                     |
-| ------------------------------------ | --------------------------------------------------------------- |
-| [Client](/ar/api/client)             | `createClient` وخيارات `with*` و`Client`                        |
-| [HTTP](/ar/api/http)                 | `defineRequest` وخيارات التنفيذ و`HttpRequest` / `HttpResponse` |
-| [Struct](/ar/api/struct)             | `struct.*` و`Infer` و`StructError`                              |
-| [Errors](/ar/api/errors)             | تنويعات `Fault` ومصانعها                                        |
-| [Interceptors](/ar/api/interceptors) | مساعدات interceptor لـ HTTP / SSE / WebSocket                   |
-| [SSE](/ar/api/sse)                   | `defineEventStream` ومقبض التدفق                                |
-| [WebSocket](/ar/api/web-socket)      | `defineWebSocket` والجلسة                                       |
+| الصفحة                            | ما تبحث عنه                                                           |
+| --------------------------------- | --------------------------------------------------------------------- |
+| [العميل](/ar/api/client)          | `createClient` وخيارات `with*` و`Client`                              |
+| [HTTP](/ar/api/http)              | `defineRequest` و`HttpExecuteOptions` و`HttpRequest` / `HttpResponse` |
+| [Struct](/ar/api/struct)          | `struct.*` و`Infer` و`StructError`                                    |
+| [الأخطاء](/ar/api/errors)         | صيغ `Fault` والمصانع                                                  |
+| [المعترضات](/ar/api/interceptors) | مساعدات معترضات HTTP / SSE / WebSocket                                |
+| [SSE](/ar/api/sse)                | `defineEventStream` ومقبض التدفق                                      |
+| [WebSocket](/ar/api/web-socket)   | `defineWebSocket` والجلسة                                             |
 
 ## ذات صلة
 
