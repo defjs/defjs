@@ -5,13 +5,11 @@ import {
   struct,
   withEndpoint,
   withHeaders,
-  withTimeout,
 } from "@defjs/core";
 
 const client = createClient(
   withEndpoint("https://api.example.com"),
   withHeaders({ "X-Client": "web", Accept: "application/json" }),
-  withTimeout(5_000),
 );
 
 const search = defineRequest({
@@ -23,10 +21,11 @@ const search = defineRequest({
   output: struct.string(),
 });
 
-// The execute timeout replaces the 5 s client default for this call only.
 async function main() {
-  const command = search({ q: "defjs" });
-  const [error, text] = await client.execute(command, { timeout: 30_000 });
+  const [error, text] = await search(
+    client({ abort: AbortSignal.timeout(30_000) }),
+    { q: "defjs" },
+  );
   if (error) {
     console.error(error.code);
     return;

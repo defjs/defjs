@@ -3,42 +3,48 @@ title: Defjs
 description: よりよい SDK のために。型付き API 定義を設計・作成・公開し、アプリケーション側で Defjs Client を構成して実行します。
 ---
 
-# よりよい SDK をつくるために [#defjs]
+# Defjs
 
-**Defjs = define js。** API を JavaScript / TypeScript の定義として記述し、SDK の設計・作成・公開を容易にします。
+**よりよい SDK のために設計されています。**
 
-SDK の作成者は `defineRequest`、`defineEventStream`、`defineWebSocket` で再利用できる型付き API を公開します。Struct は入力・出力・エラーなどのデータ契約を記述し、`builder` は入力をリクエストに配置します。利用するアプリケーションは、その定義を import し、自身の Defjs Client で実行します。
+Defjs は、チームが API を再利用できる TypeScript SDK にするのを助けます。`def` は `define` です。サービスが提供する操作を記述し、モジュールまたは npm パッケージから export し、各アプリケーションが自分のクライアントを構成してそれらを呼びます。
 
-| 責務                 | SDK の作成者                                    | 利用するアプリケーション                                                     |
-| -------------------- | ----------------------------------------------- | ---------------------------------------------------------------------------- |
-| API の契約           | method、相対 path、Struct、`builder` を定義する | 公開された定義からコマンドを作る                                             |
-| 実行環境             | 再利用できる定義を export する                  | endpoint、認証、インターセプター、プラットフォームのトランスポートを構成する |
-| 結果とライフサイクル | 型付きの成功・エラー・イベントを宣言する        | `execute` の結果を扱い、キャンセルとストリームの終了を管理する               |
-| 配布                 | 定義と型宣言をパッケージとして公開する          | SDK と互換性のある `@defjs/core` をインストールする                          |
+## SDK を定義し、アプリケーションを構成する
 
-## 定義を公開し、アプリケーションで実行する
+| SDK の作成者                                               | SDK の利用者                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------------ |
+| 操作、入力、リクエストの配置、レスポンス、エラーを定義する | サービスアドレス、認証情報、インターセプター、トランスポートを選ぶ |
+| 型付きの HTTP、SSE、WebSocket エンドポイントを export する | それらのエンドポイントを import し、Defjs のクライアントで呼び出す |
+| API 契約を保守して公開する                                 | 結果を扱い、キャンセル、ストリーム、セッションを所有する           |
 
-SDK 側の `get-health.ts` は、接続先や認証情報を持たない定義を export します。
+SDK の定義はアプリケーションのクライアントを捕まえません。同じ export されたエンドポイントが、異なるクライアント設定で、ブラウザーアプリケーション、サーバー、ローカルテストに使えます。どちらも Defjs の実行契約と互換性のある Core の版を使います。
+
+SDK は操作を export します。
 
 <include cwd meta="get-health.ts">
   examples/home/get-health.ts#example
 </include>
 
-アプリケーション側の `app.ts` は、その定義を import し、実行環境に合わせてクライアントを作ります。
+アプリケーションはそれを import し、実行を所有します。
 
 <include cwd meta="app.ts">
   examples/home/app.ts#example
 </include>
 
-両ファイルは同じディレクトリに置きます。SDK をパッケージ化したら、アプリケーションの相対 import をパッケージ名に置き換えます。再利用の境界は Defjs の定義と実行契約です。アプリケーションごとの Client 設定を変えても、API 定義を複製する必要はありません。
+`getHealth(client)` を呼ぶとリクエストが始まります。定義を公開すると、利用者はローカルファイルではなく SDK パッケージから import します。
 
 ## ベストプラクティス
 
-定義は client から独立しています。定義を呼ぶと command ができるだけで、送信は始まりません。その command に名前を付け、アプリケーションが所有する client の `client.execute` に渡します。サービスアドレスと認証情報もアプリケーションのものです。先に error-first のタプルを確認します。`error` があるときは `error.code` を報告し、成功値を読む前に関数から return します。
+定義は client から独立しています。アプリケーションの client を第一引数として渡します。たとえば `getHealth(client)` です。サービスアドレスと認証情報もアプリケーションのものです。先に error-first のタプルを確認します。`error` があるときは `error.code` を報告し、成功値を読む前に関数から return します。
 
-[クイックスタート](/ja-JP/docs/start) でこの 2 ファイルの流れを動かし、[SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) でパッケージ構成と配布を学べます。設計の理由は [設計上の判断](/ja-JP/docs/design-decisions) を参照してください。
+## SDK を作る
 
-Defjs は結果のキャッシュや自動リトライを追加せず、アプリケーションが所有するストリームを自動では閉じません。
+1. [最初の操作を定義して動かす](/ja-JP/docs/start) を、SDK とアプリケーションの別ファイルで行います。
+2. SDK が export する [データ契約](/ja-JP/docs/struct) と [HTTP 操作](/ja-JP/docs/http) を記述します。
+3. JavaScript、型宣言、互換性のある Core 依存とともに [SDK パッケージをテストして公開します](/ja-JP/recipes/publish-http-sdk)。
+4. 利用アプリケーションの [Client](/ja-JP/docs/client) を構成し、必要ならフレームワークや可観測性の連携を足します。
+
+[設計上の判断](/ja-JP/docs/design-decisions) は、API 定義と実行の所有者が分かれている理由を説明します。パッケージを公開する前に、同じ構成を一つのアプリケーションの中で使うこともできます。
 
 ## トランスポートを選ぶ
 
@@ -48,11 +54,13 @@ Defjs は結果のキャッシュや自動リトライを追加せず、アプ�
 | 長寿命のサーバーイベントフィード     | [SSE](/ja-JP/docs/sse)              | 1 つのストリーム + 起動時の `open` スナップショット                                  |
 | 双方向セッション                     | [WebSocket](/ja-JP/docs/web-socket) | 1 つのセッション + 起動時の `connection` スナップショット                            |
 
+3 つのトランスポートは同じ順序です。操作を定義し、アプリケーションのクライアントと呼び出し側の入力を渡して呼びます。
+
 ## パッケージを選ぶ
 
 | パッケージ                    | いつ                                                                                                                    |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | API 定義、Struct、`createClient`（HTTP + SSE + WebSocket）                                                              |
+| `@defjs/core`                 | SDK の操作と契約を定義し、クライアントを作って HTTP、SSE、WebSocket の操作を呼びます                                    |
 | `@defjs/react`                | `ClientProvider` / `useClient` — [React](/ja-JP/docs/integrations/react) を参照                                         |
 | `@defjs/vue`                  | プラグイン + `injectClient` — [Vue](/ja-JP/docs/integrations/vue) を参照                                                |
 | `@defjs/opentelemetry-server` | アウトバウンドのスパン・メトリクス・ログ — [OpenTelemetry Server](/ja-JP/docs/integrations/opentelemetry-server) を参照 |
@@ -71,8 +79,11 @@ Defjs は結果のキャッシュや自動リトライを追加せず、アプ�
 
 古くなった HTTP は abort します。SSE は close して `await stream.closed`。WebSocket も close して `await session.closed`。サーバーでは、options が cookie・認証・テナントデータを掴むなら、クライアントをリクエスト境界の中で作ります。ログに出す前に URL・ヘッダー・ボディを redact してください。
 
+Defjs が提供するのは定義、検証、実行です。キャッシュとリトライの方針はアプリケーションが選び、ストリームの再接続はオプトインです。手書きの SDK パッケージは現在サポートされています。CLI ツールと OpenAPI / SDK 生成は計画中のままです。
+
 ## 関連レシピ
 
+- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
 - [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
 - [POST JSON](/ja-JP/recipes/post-json)
 - [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)

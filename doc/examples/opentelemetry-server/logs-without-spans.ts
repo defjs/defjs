@@ -34,8 +34,7 @@ async function main() {
       path: "/orders",
       operation: "orders.read",
     });
-    const command = readOrders();
-    const [error] = await client.execute(command);
+    const [error] = await readOrders(client);
     if (error) {
       console.error(error.code);
       return;

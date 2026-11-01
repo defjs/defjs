@@ -24,7 +24,7 @@ For complete guides, examples, and the API reference, visit **[defjs.lyz.cloud](
 bun add @defjs/core
 ```
 
-Best practice: keep the definition independent of the client. Calling it creates a command; name that command, execute the name, and return from the function when the error-first tuple is set.
+Best practice: keep the definition independent of the client. Calling an operation runs it. Return from the function when the error-first tuple is set.
 
 ```ts
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
@@ -40,8 +40,7 @@ const getUser = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const command = getUser({ id: 1 });
-  const [error, user] = await client.execute(command);
+  const [error, user] = await getUser(client, { id: 1 });
   if (error) {
     console.error(error.code);
     return;

@@ -1,18 +1,18 @@
 ---
 title: HTTP
-description: defineRequest, execute options, and HTTP request/response types.
+description: defineRequest, request options, and HTTP request/response types.
 ---
 
 # HTTP
 
-Declare a typed request, build a command from input, execute it.
+Declare a typed request, then call the operation with a client and its input.
 
 ## defineRequest()
 
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, optional `input` struct, optional `output` and `error` structs, optional `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`RequestDefinition`](/api/core/requestdefinition-type). `builder` is required exactly when `input` is declared.
-- **Returns** an endpoint. Call it with input to get an `HttpCommand`.
+- **Returns** an operation. Call it as `getUser(client, input)`, or `health(client)` when no input is declared. When the whole input struct is optional, the input argument may be omitted. Calling it starts the request. There is no third options argument.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -20,13 +20,7 @@ Declare a typed request, build a command from input, execute it.
 keyed by status. Omitting one means that body is never read — see
 [Declaration is an assertion](/docs/design-decisions#declaration-is-an-assertion).
 
-## executeHttpCommand()
-
-<ApiSignature name="executeHttpCommand" />
-
-Low-level entry used by `client.execute`. Application code should call `client.execute(command, options)`.
-
-- **Returns** a promise that resolves to the tuple form described under [`HttpAwaitResult`](/api/core/httpawaitresult-type).
+Calling the operation returns a promise of the tuple described under [`HttpAwaitResult`](/api/core/httpawaitresult-type). Pass per-call options by deriving a client from [`RequestOptions`](/api/core/requestoptions-type). HTTP reads `abort` and the progress callbacks and ignores the other fields.
 
 A non-2xx status is `HTTP_STATUS` when no `error` struct is declared or the declared `error` body decodes. The fault's `data` is the decoded
 `error` body when one was declared, and `undefined` otherwise. When a declared `error` body cannot be read (wrong media type, invalid JSON) or
@@ -48,13 +42,11 @@ Build an `HttpResponse` without a network call (interceptors, tests). Default st
 true for 2xx. The value it returns goes through the same media-type check and the same declared
 struct as one off the wire; there is no trusted short-circuit.
 
-## Execute options
-
 ## HttpExecuteOptions
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` is [`UseRequestConfig`](/api/core/userequestconfig-type) plus `signal`. `abort` and `timeout` are mutually exclusive: the type rejects both, and passing both at runtime fails with `REQ_OPTIONS_INVALID`. `signal` combines with either; it is **not** an alias for `abort`. Valid shapes: `{ signal }`, `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`. `{ abort, timeout }` is invalid. `timeout` must be a positive safe integer in `1..2_147_483_647`. When a call omits `timeout`, the client's `withTimeout` default applies (HTTP only); `abort` and `signal` combine with that default.
+`HttpExecuteOptions` is the HTTP slice of [`RequestOptions`](/api/core/requestoptions-type): [`UseRequestConfig`](/api/core/userequestconfig-type), which is `abort` plus `onDownloadProgress` and `onUploadProgress`. There is no `timeout` or `signal` field. A deadline is `abort: AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. A later `abort` replaces the previous signal. Combine signals with `AbortSignal.any` in application code. There is no client-level default deadline. Other request fields, such as `heartbeat`, are ignored.
 
 ## Types
 
@@ -71,7 +63,7 @@ On success the third slot carries `body` only when `output` was declared. On fai
 
 ### HttpRequest
 
-Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `timeout`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed.
+Normalized outgoing request: `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, and `queryParams`. By the time interceptors see it, `body` is already the wire value — for JSON, a JSON text string — so sign HMACs and digests against that, not the struct input. Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through. `responseType` and `errorResponseType` are readonly: they are derived from the endpoint's `output` and `error` struct kinds and must not be changed.
 
 ### HttpMeta
 
@@ -100,17 +92,17 @@ and blobs are raw and are parsed once. `DecodedResponse` is what reaches the cal
 ### HttpProgressFn
 
 `loaded`, `total`, `lengthComputable`. Callbacks may be async. A throwing `onDownloadProgress` or `onUploadProgress` fails the call with
-`EXT_OBSERVER_FAILED`, with the thrown value as `cause`; cancellation and `timeout` still report `NET_ABORTED` / `NET_TIMEOUT`.
+`EXT_OBSERVER_FAILED`, with the thrown value as `cause`; cancellation still reports `NET_ABORTED`, or `NET_TIMEOUT` when the abort reason is a timeout.
 Upload progress is reported only where the runtime can stream request bodies (Bun, Node); in browsers, `Blob` / `File`,
 `ArrayBuffer`, and `FormData` bodies are sent unchanged and `onUploadProgress` is not called.
 
 In server runtimes, FormData uses its serialized stream without whole-body Blob buffering and preserves the actual multipart boundary. Its total is unknown unless a valid explicit `Content-Length` supplies it. Explicit content types survive upload conversion, except that FormData must use its serialization's boundary. `loaded` counts stream bytes, not server acknowledgements. Downloads with a non-identity `Content-Encoding` report `total: 0` and `lengthComputable: false`; their stream bytes may already be decompressed.
 
-See [HTTP guide](/docs/http) and [Commands](/docs/commands).
+See [HTTP guide](/docs/http) and [Client](/docs/client).
 
 ## RequestEndpoint
 
-Returned by `defineRequest`. Call with input to get an `HttpCommand`.
+Returned by `defineRequest`. The first argument is a [`Client`](/api/core/client-type). Further arguments are the input only.
 
 ## BuilderInput
 
@@ -124,13 +116,9 @@ All four fields are optional. `query` is `URLSearchParams` or a record; a nested
 
 `body` is `never` for `GET` and `HEAD`. Otherwise it is a wire value (`string`, `Blob`, `ArrayBuffer`, a typed array or `DataView`, `FormData`, `URLSearchParams`, or `ReadableStream<Uint8Array>`) or JSON data (`number`, `boolean`, `bigint`, `Date`, `null`, an array, or an object with string keys).
 
-## HttpCommand
-
-Opaque command from a request builder. Pass to `client.execute`.
-
 ## UseRequestConfig
 
-Optional `onDownloadProgress` and `onUploadProgress` callbacks, plus `abort` or `timeout` (never both). `HttpExecuteOptions` adds `signal`.
+`abort`, plus optional `onDownloadProgress` and `onUploadProgress`. `HttpExecuteOptions` is this slice. There is no `timeout` or `signal` field.
 
 ## RequestSuccessData
 

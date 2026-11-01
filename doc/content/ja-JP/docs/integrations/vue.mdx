@@ -5,11 +5,11 @@ description: SDK の API 定義を Vue で使い、アプリケーションの C
 
 # Vue
 
-Vue アプリケーションは SDK から API 定義を import し、自身で構成した Defjs Client を provide します。SDK の定義は Vue に依存せず、コンポーネントやデータ層が実行結果とキャンセルを管理します。
+Vue アプリケーションは SDK から API 定義を import し、自身で構成した Defjs Client を provide します。SDK の定義は Vue に依存せず、コンポーネントや composable が操作を呼び、始めた作業を所有します。`injectClient()` のクライアントは操作に渡します。
 
 これらのプラグインは、既存の `Client` の提供と取得を補助する任意の仕組みです。アプリ所有の固定クライアントを直接 import する、再利用するロジックに明示的な Client を渡す、ツリーの既定値やサブツリーの上書きにフレームワークの注入を使う、独自の構成を選ぶ、どれも有効です。SDK の定義にプラグインは必須ではありません。
 
-既存の `@defjs/core` クライアントを Vue に繋ぎます。得られるのはプラグイン、injection key、`injectClient()` です。このパッケージはクライアントを**作らず**、結果をキャッシュせず、コマンドをリトライせず、unmount でトランスポートリソースも閉じません。
+既存の `@defjs/core` クライアントを Vue に繋ぎます。得られるのはプラグイン、injection key、`injectClient()` です。このパッケージはクライアントを**作らず**、結果をキャッシュせず、操作をリトライせず、unmount でトランスポートリソースも閉じません。`Client` は関数です。`watch` や `computed` のソースに使わないでください。それらは関数を呼びます。
 
 ## 基本セットアップ
 
@@ -47,7 +47,7 @@ Vue アプリケーションは SDK から API 定義を import し、自身で�
 
 ## watcher の外で HTTP 作業を所有する
 
-composable やコンポーネントが watcher の外で始めた作業には、`AbortController` + `onScopeDispose` を使います。起動と進行中の作業を abort し、リアクティブ状態を代入する前に signal を確認してください。プラグインや注入スコープは、誰がコマンドを所有するかを推論しません。一覧ページでは `execute` を Vue Query（または類似のもの）で包んでください — `@defjs/vue` は DI だけのままで、`useRequest` は**出しません**。
+composable やコンポーネントが watcher の外で始めた作業には、`AbortController` + `onScopeDispose` を使います。起動と進行中の作業を abort し、リアクティブ状態を代入する前に signal を確認してください。プラグインや注入スコープは、誰が操作を所有するかを推論しません。一覧ページでは Vue Query（または類似のもの）から操作を呼んでください — `@defjs/vue` は DI だけのままで、`useRequest` は**出しません**。
 
 スコープがクライアントを所有するとき、ブラウザー全体で再利用するならリクエスト非依存に保ってください。ヘッダー・cookie・ユーザー・テナント・資格情報を掴むなら、関連するアプリ/SSR のリクエスト境界で作り、そこで provide してください。
 
@@ -79,7 +79,7 @@ WebSocket も同じ順序です — 準備を abort、遅いセッションを c
 - `createClientPlugin(client)` — そのクライアントを provide する Vue `Plugin`
 - `injectClient` — 選択したキー（既定は `HTTP_CLIENT`）の最も近いクライアント、なければ throw
 
-クライアントと options は `@defjs/core` で作ります。[Client](/ja-JP/docs/client)、[Commands](/ja-JP/docs/commands)、[Interceptors](/ja-JP/docs/interceptors)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) を見てください。
+クライアントと options は `@defjs/core` で作ります。[Client](/ja-JP/docs/client)、[HTTP](/ja-JP/docs/http)、[Interceptors](/ja-JP/docs/interceptors)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) を見てください。
 
 ## 関連レシピ
 

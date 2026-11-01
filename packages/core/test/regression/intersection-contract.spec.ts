@@ -275,7 +275,7 @@ test("an HTTP split array matches the WebSocket encode.ts body", async () => {
     method: "POST",
     path: "/",
   });
-  const [fault] = await client.execute(endpoint({ row: [value] }));
+  const [fault] = await endpoint(client, { row: [value] });
   expect(fault).toBeNull();
   expect(body).toEqual(
     JSON.parse(serializeOutgoingWebSocketMessage(splitArray, { row: [value] })),
@@ -301,7 +301,7 @@ test("a valid nullable record reaches the HTTP handle", async () => {
     method: "POST",
     path: "/",
   });
-  const [fault] = await client.execute(endpoint({ note: "ok", rows: null }));
+  const [fault] = await endpoint(client, { note: "ok", rows: null });
   expect(fault).toBeNull();
   expect(calls).toBe(1);
 });

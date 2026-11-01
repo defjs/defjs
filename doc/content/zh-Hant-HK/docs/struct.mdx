@@ -66,12 +66,12 @@ Path、query、headers 同 body 係 builder return 嘅 fields，唔係一個 req
   examples/struct/aliases.ts#example
 </include>
 
-| 邊界                                       | 欄位                         |
-| ------------------------------------------ | ---------------------------- |
-| `struct.parse(User, ...)` 同 command input | Logical `displayName`        |
-| Builder return 嘅 typed object             | Wire `display_name`          |
-| JSON / SSE / WebSocket decoding            | Wire → logical `displayName` |
-| Builder 入面手寫嘅 anonymous object        | 你寫嘅嗰個 key               |
+| 邊界                                   | 欄位                         |
+| -------------------------------------- | ---------------------------- |
+| `struct.parse(User, ...)` 同操作 input | Logical `displayName`        |
+| Builder return 嘅 typed object         | Wire `display_name`          |
+| JSON / SSE / WebSocket decoding        | Wire → logical `displayName` |
+| Builder 入面手寫嘅 anonymous object    | 你寫嘅嗰個 key               |
 
 Builder 本身讀嘅係 logical names（`input.user.displayName`）；wire name 只會喺 serializer encode builder return 嘅 typed object 嗰陣出現。
 
@@ -98,7 +98,7 @@ union 引導同時 match 多過一個 branch 嘅時候，每個 branch 都 encod
 
 `StructIssue` 有 `code`、`expected`、`message`、`path` 同 `received`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。預設訊息只會寫收到嘅種類，永遠唔會包含值：`Expected number at id, received string`。Issue path 係結構性嘅，會保留 record 嘅 key：`struct.record(...)` 可以產生 `Expected number at alice@example.com, received string`，所以 key 喺預設訊息、`prettify()` 同 `String(fault)` 入面仍然可能敏感。所以 `message` 同 `prettify()` 唔會包含收到嘅 payloads；`received` 保留原始值，寫 log 或回傳之前需要遮蓋敏感資料。`struct.parse(..., { errorMap })` 只改寫該次 call 嘅訊息，包括另一份 Core 嘅 struct 所產生嘅 bigint/date 轉換失敗。任何回傳嘅 string（包括 `''`）都會取代預設值；只有 `undefined` 先會保留佢。自訂文字會原樣使用，如果 map 加入咗值，就可能洩露資料。
 
-Struct validation 淨係 structural。冇 public range、format、refinement、auth 或者 state-transition rules。嗰啲 checks 喺你 build command 之前自己做。
+Struct validation 淨係 structural。冇 public range、format、refinement、auth 或者 state-transition rules。嗰啲 checks 喺你呼叫操作之前自己做。
 
 ## 參考
 

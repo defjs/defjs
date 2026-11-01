@@ -15,12 +15,11 @@ describe("web socket runtime reconnect", () => {
   });
 
   async function run(
-    command: unknown,
-    options?: unknown,
+    operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
+    options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    return client.execute(command as never, options as never) as Promise<
-      SocketAwaitResult<unknown, unknown>
-    >;
+    const bound = options === undefined ? client : client(options);
+    return operation(bound);
   }
 
   test("should reconnect and flush queued messages", async () => {
@@ -48,10 +47,6 @@ describe("web socket runtime reconnect", () => {
       path: "/ws/reconnect",
     });
 
-    const command = useReconnectSocket({
-      key: `queue-case-${crypto.randomUUID()}`,
-    });
-
     const states: string[] = [];
     let session:
       | {
@@ -59,9 +54,15 @@ describe("web socket runtime reconnect", () => {
         }
       | undefined;
 
-    const executePromise = run(command, {
-      reconnect: { attempts: 1, delayMs: 0 },
-    });
+    const executePromise = run(
+      (client) =>
+        useReconnectSocket(client, {
+          key: `queue-case-${crypto.randomUUID()}`,
+        }),
+      {
+        reconnect: { attempts: 1, delayMs: 0 },
+      },
+    );
 
     const [error, socket] = await executePromise;
 
@@ -108,18 +109,18 @@ describe("web socket runtime reconnect", () => {
 
     const attempts: number[] = [];
 
-    const command = useRetrySocket();
-
-    const [error, socket, connection] = await retryClient.execute(command, {
-      reconnect: {
-        attempts: 2,
-        delayMs: 0,
-        shouldReconnect(context: { attempt: number }) {
-          attempts.push(context.attempt);
-          return context.attempt < 2;
+    const [error, socket, connection] = await useRetrySocket(
+      retryClient({
+        reconnect: {
+          attempts: 2,
+          delayMs: 0,
+          shouldReconnect(context: { attempt: number }) {
+            attempts.push(context.attempt);
+            return context.attempt < 2;
+          },
         },
-      },
-    });
+      }),
+    );
 
     expect(socket).toBeUndefined();
     expect(connection?.url).toBe("ws://127.0.0.1:1/ws/reconnect");
@@ -138,8 +139,7 @@ describe("web socket runtime reconnect", () => {
     });
 
     const attempts: number[] = [];
-    const command = useSocket();
-    const [error, socket] = await run(command, {
+    const [error, socket] = await run(useSocket, {
       reconnect: {
         attempts: 1,
         delayMs: 0,

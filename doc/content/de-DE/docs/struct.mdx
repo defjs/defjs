@@ -1,11 +1,13 @@
 ---
 title: "Datenverträge / Struct"
-description: Datenverträge eines SDKs für Eingaben, Antworten, Fehler und Nachrichten mit Struct definieren.
+description: Definiere die Input- und Response-Verträge, die dein SDK mit seinen Nutzern teilt, mit Typen und Laufzeitvalidierung.
 ---
 
 # Struct
 
-Struct bildet die Datenverträge deines SDKs ab: Parameter, Antworten, deklarierte Fehler, SSE-Events und WebSocket-Nachrichten. Der SDK-Autor definiert diese Formen einmal; Defjs verwendet sie beim Ausführen durch den Client der Anwendung für Typinferenz, Kodierung und Prüfung zur Laufzeit. `Infer` liefert TypeScript-Typen, `struct.parse(...)` ein Error-first-Tupel ohne Throw. `builder` legt weiterhin fest, wo eine Eingabe im Request steht.
+Structs drücken den Datenvertrag aus, den dein SDK zusagt: Input des Aufrufers, Service-Responses, deklarierte Fehler und Echtzeit-Nachrichten. Nutze sie über exportierte Operationen hinweg wieder, damit Nutzer konsistente TypeScript-Typen und Laufzeitvalidierung bekommen, unabhängig vom Client, den sie konfigurieren.
+
+Du bekommst TypeScript-Typen über `Infer` und Laufzeitprüfungen über `struct.parse(...)` — kein Throw, Error-first-Tupel.
 
 ## Grundeinrichtung
 
@@ -66,7 +68,7 @@ Path, Query, Headers und Body sind Fields, die der Builder zurückgibt, kein Req
 
 | Grenze                                         | Feld                             |
 | ---------------------------------------------- | -------------------------------- |
-| `struct.parse(User, ...)` und Command-Input    | Logisches `displayName`          |
+| `struct.parse(User, ...)` und Operations-Input | Logisches `displayName`          |
 | Typisiertes Object, das der Builder zurückgibt | Wire `display_name`              |
 | JSON- / SSE- / WebSocket-Decoding              | Wire → logisches `displayName`   |
 | Anonymes Object, im Builder geschrieben        | Der Key, den du geschrieben hast |
@@ -96,7 +98,7 @@ Eine gemischte Intersection, die einen Nicht-Objekt-Teil enthält, bekommt beim 
 
 Ein `StructIssue` hat `code`, `expected`, `message`, `path` und `received`. `code` ist `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` oder `missing_key`. Default-Messages nennen den empfangenen Kind, nie den Wert: `Expected number at id, received string`. Issue-Pfade sind strukturell und behalten Record-Keys bei: `struct.record(...)` kann `Expected number at alice@example.com, received string` erzeugen, daher können Keys in Default-Messages, `prettify()` und `String(fault)` weiterhin sensibel sein. `message` und `prettify()` lassen empfangene Payloads daher weg; `received` behält den Originalwert und muss vor Logging oder Return geschwärzt werden. `struct.parse(..., { errorMap })` schreibt Messages nur für diesen Call um, einschließlich bigint-/date-Konvertierungsfehlern in einem Struct aus einer anderen Core-Kopie. Jeder zurückgegebene String, auch `''`, ersetzt den Default; nur `undefined` behält ihn. Eigener Text wird wörtlich verwendet und kann Werte offenlegen, wenn die Map sie aufnimmt.
 
-Struct-Validierung ist nur strukturell. Keine öffentlichen Range-, Format-, Refinement-, Auth- oder State-Transition-Rules. Mach diese Checks, bevor du einen Command baust.
+Struct-Validierung ist nur strukturell. Keine öffentlichen Range-, Format-, Refinement-, Auth- oder State-Transition-Rules. Mach diese Checks, bevor du eine Operation aufrufst.
 
 ## Referenz
 

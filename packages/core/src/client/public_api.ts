@@ -1,4 +1,5 @@
 export { createClient } from "./client";
+export type { Client, RequestOptions } from "./client";
 export type {
   ClientConfig,
   ClientOptions,
@@ -21,7 +22,6 @@ export {
   withSSEHandle,
   withSSEOnInvalidEvent,
   withSSEReconnect,
-  withTimeout,
   withWebSocketBeforeConnect,
   withWebSocketHandle,
   withWebSocketHeartbeat,
@@ -29,4 +29,3 @@ export {
   withWebSocketReconnect,
   withXSRF,
 } from "./option";
-export type { Client } from "./client";

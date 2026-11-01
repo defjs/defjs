@@ -24,7 +24,7 @@ describe("Response", () => {
       ),
     );
     const request = defineRequest({ method: "GET", path: "/cached" });
-    const [fault, , response] = await client.execute(request());
+    const [fault, , response] = await request(client);
 
     expect(fault).toBeNull();
     expect(response?.status).toBe(200);

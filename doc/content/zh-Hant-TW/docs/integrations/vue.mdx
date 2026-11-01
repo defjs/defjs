@@ -5,11 +5,11 @@ description: 在 Vue 中提供應用程式自己的 Client，並執行 SDK 定�
 
 # Vue
 
-應用程式建立 `@defjs/core` Client，再透過 `@defjs/vue` 的 plugin、injection key 與 `injectClient()` 將它接入 Vue。元件可以匯入 SDK 端點，並用注入的 Client 執行 command；SDK 定義不依賴 Vue。
+從 SDK 或共用的定義模組匯入操作。Vue 應用程式設定並提供 client；SDK 套件可以不依賴 Vue。元件與 composable 呼叫那些操作，並擁有自己啟動的工作。`injectClient()` 取出的 client 會傳進操作。
 
 這些外掛只是設定與取得既有 `Client` 的可選輔助。可以直接匯入應用程式固定的 Client、將明確的 Client 傳給可重用邏輯、透過框架注入提供元件樹預設值與子樹覆寫，或採用應用程式自己的組織方式；SDK 定義不要求透過外掛執行。
 
-這個套件不會建立 Client、快取結果、重試 command，也不會在元件卸載時關閉傳輸資源。發起工作的元件或組合式函式負責取消、關閉與清理。
+把既有的 `@defjs/core` client 接進 Vue。你拿到 plugin、injection key 與 `injectClient()`。這個套件**不會**建立 client、快取結果、重試操作，或在卸載時關閉傳輸資源。`Client` 是函式：不要把它當成 `watch` 或 `computed` 來源，因為那些會呼叫函式。
 
 ## 基本用法
 
@@ -47,7 +47,7 @@ description: 在 Vue 中提供應用程式自己的 Client，並執行 SDK 定�
 
 ## 在 watcher 外擁有 HTTP 工作
 
-由 composable 或元件在 watcher 外啟動的工作，用 `AbortController` + `onScopeDispose`。Abort 啟動與進行中的工作；在賦值響應式狀態前檢查 signal。Plugin 或 injection scope 不會推斷誰擁有 command。列表頁請把 `execute` 包進 Vue Query（或類似方案）——`@defjs/vue` 只做 DI，**不會**附帶 `useRequest`。
+由 composable 或元件在 watcher 外啟動的工作，用 `AbortController` + `onScopeDispose`。Abort 啟動與進行中的工作；在賦值響應式狀態前檢查 signal。Plugin 或 injection scope 不會推斷誰擁有一項操作。列表頁請從 Vue Query（或類似方案）呼叫操作——`@defjs/vue` 只做 DI，**不會**附帶 `useRequest`。
 
 當某個 scope 擁有 client 時，若要瀏覽器全域重用，保持它與請求無關。若它捕捉 headers、cookies、users、tenants 或 credentials，請在對應的 app／SSR 請求邊界建立，並在那裡 provide 該實例。
 
@@ -79,7 +79,7 @@ App unmount、plugin 移除、元件 scope disposal **不會** abort HTTP、關�
 - `createClientPlugin(client)` — 提供該 client 的 Vue `Plugin`
 - `injectClient` — 讀取所選 key（預設 `HTTP_CLIENT`）的最近 Client，缺少時拋出錯誤
 
-在 `@defjs/core` 建立 clients 與 options。見 [Client](/zh-Hant-TW/docs/client)、[Commands](/zh-Hant-TW/docs/commands)、[Interceptors](/zh-Hant-TW/docs/interceptors)、[SSE](/zh-Hant-TW/docs/sse)、[WebSocket](/zh-Hant-TW/docs/web-socket)。
+在 `@defjs/core` 建立 clients 與 options。見 [Client](/zh-Hant-TW/docs/client)、[HTTP](/zh-Hant-TW/docs/http)、[Interceptors](/zh-Hant-TW/docs/interceptors)、[SSE](/zh-Hant-TW/docs/sse)、[WebSocket](/zh-Hant-TW/docs/web-socket)。
 
 ## 相關操作範例
 

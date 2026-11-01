@@ -27,6 +27,7 @@ import {
   makeHttpRequest,
   makeHttpResponse,
 } from "../test-utils";
+import { withOpenTelemetryServer } from "../option";
 import { createOpenTelemetryHttpInterceptor } from "./http";
 
 let mockPropagator: ReturnType<typeof createMockPropagator>;
@@ -182,12 +183,38 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       method: "POST",
       path: "/",
     });
-    const [fault] = await client.execute(request());
+    const [fault] = await request(client);
 
     expect(fault).toBeNull();
     expect(mockPropagator.inject).toHaveBeenCalled();
     expect(signedType).toBe("application/json");
     expect(contentType).toBe(signedType);
+  });
+
+  test("records one span and one request hook for a base call and a derived call", async () => {
+    const { tracer, spans } = createMockTracer();
+    const requestHook = vi.fn();
+    const base = createClient(
+      withEndpoint("https://example.test"),
+      withHTTPHandle(async () => new Response(null, { status: 204 })),
+      withOpenTelemetryServer({ tracer, http: { requestHook } }),
+    );
+    const derived = base({ abort: new AbortController().signal });
+    const readInventory = defineRequest({ method: "GET", path: "/inventory" });
+
+    expect(typeof base).toBe("function");
+    expect(typeof derived).toBe("function");
+    expect(derived).not.toBe(base);
+
+    const [baseFault] = await readInventory(base);
+    expect(baseFault).toBeNull();
+    expect(spans).toHaveLength(1);
+    expect(requestHook).toHaveBeenCalledTimes(1);
+
+    const [derivedFault] = await readInventory(derived);
+    expect(derivedFault).toBeNull();
+    expect(spans).toHaveLength(2);
+    expect(requestHook).toHaveBeenCalledTimes(2);
   });
 
   test("should inject traceparent header via propagator", async () => {

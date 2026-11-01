@@ -3,9 +3,9 @@ title: "建置並發佈 SDK"
 description: 將具型別的端點定義作為 npm 套件發佈，由每個應用程式設定自己的 Client。
 ---
 
-# 建置並發佈 SDK [#發布-http-sdk且不要藏起-execute]
+# 建置並發佈 SDK [#publish-an-http-sdk-without-hiding-execute]
 
-SDK 將團隊提供的 API 打包交付。使用 Defjs 時，SDK 匯出端點定義及其資料契約；使用套件的應用程式提供 Client 設定並決定何時執行。本例使用 HTTP，相同的套件邊界也適用於 SSE 與 WebSocket 定義。
+SDK 將團隊提供的 API 打包交付。使用 Defjs 時，SDK 匯出端點定義及其資料契約；使用套件的應用程式提供 Client 設定並決定何時呼叫它們。本例使用 HTTP，相同的套件邊界也適用於 SSE 與 WebSocket 定義。
 
 ## 1. 定義 SDK 操作
 
@@ -53,10 +53,10 @@ users-sdk/
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.4.0"
+    "@defjs/core": "^0.5.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.4.0",
+    "@defjs/core": "^0.5.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -96,9 +96,9 @@ bun pm pack
 
 確認 tarball 包含 `dist/index.js`、`dist/index.d.ts`。先在獨立應用程式中安裝這個 tarball，驗證型別與執行行為，再發佈。SDK 的 README 應說明服務 API、相容的 Core 版本、所需身分驗證方式與選用的預設設定。
 
-## 3. 在使用套件的應用程式中執行
+## 3. 在使用套件的應用程式中呼叫
 
-以下本機範例把定義放在與 `app.ts` 同目錄的 `users-sdk.ts`，方便離線執行。`./users-sdk.ts` 只匯出端點；應用程式自行建立 Client，設定本機 Fetch handle，再執行匯入的操作：
+以下本機範例把定義放在與 `app.ts` 同目錄的 `users-sdk.ts`，方便離線執行。匯入不會建立 client；應用程式設定本機 Fetch handle，並呼叫匯入的操作：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -111,7 +111,7 @@ Ada
 使用發佈後的 SDK 時，同時安裝相容的 Core：
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.4.0
+bun add @company/users-sdk @defjs/core@^0.5.0
 ```
 
 將範例中的相對匯入替換為 npm 套件匯入：
@@ -136,4 +136,4 @@ bun publish --access public
 
 Client 工廠與便捷方法都是選用的補充。它們可以提供服務預設值或領域行為，同時接受呼叫端設定並保留直接的端點匯出。應記錄它們引入的錯誤對應或生命週期策略；可重用的 SDK 並不要求這兩類封裝。
 
-底層契約見[定義與執行](/zh-Hant-TW/docs/commands)、[Client](/zh-Hant-TW/docs/client)與[設計決策](/zh-Hant-TW/docs/design-decisions)。
+底層契約見 [HTTP](/zh-Hant-TW/docs/http)、[Client](/zh-Hant-TW/docs/client) 與[設計決策](/zh-Hant-TW/docs/design-decisions)。

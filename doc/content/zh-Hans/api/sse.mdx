@@ -1,42 +1,34 @@
 ---
 title: SSE
-description: defineEventStream、execute options，以及 stream handle。
+description: defineEventStream、请求选项，以及 stream handle。
 ---
 
 # SSE
 
-声明一条事件流，execute，迭代事件，再 close。
+声明一条事件流，带着 client 调用该操作，迭代事件，再 close。
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
 - **definition** — `path`、`events` map，以及必填的正整数上限 `maxBufferSize` 和 `maxQueueSize`；可选 `method`（默认 `'GET'`）、`operation`、`input` 和 `error`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`EventStreamDefinition`](/zh-Hans/api/core/eventstreamdefinition-type)。只有给出了 error struct 类型时 `error` 才必填，`builder` 恰好在声明了 `input` 时才必填。
-- **返回** 一个 endpoint。传入 input 调用，得到 `EventStreamCommand`。
+- **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即开始这条流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-## executeEventStreamCommand()
-
-<ApiSignature name="executeEventStreamCommand" />
-
-`client.execute` 的底层入口。业务代码走 client。
-
-- **返回** `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。
-
-## 执行选项
+调用返回 `[null, stream, open]` 或 `[error, undefined, open?]`。声明了 `error` 时，fault 是那个 struct 的 `Fault`；否则是 `Fault<undefined>`。通过从 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 派生 client 来传入 `abort`。SSE 只读取 `abort`，忽略进度和 WebSocket 字段。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`abort` 或 `timeout`（不能同时有），再加上 `signal`；没有进度回调。类型会拒绝两者并存，运行时同时传入则以 `REQ_OPTIONS_INVALID` 失败。`signal` 可与其中任一组合。`timeout` 是启动期限：它涵盖输入解析、builder、interceptor 和握手，不会中止已经打开的 stream。`withTimeout` 不适用于 SSE。
+`EventStreamExecuteOptions` 是 `{ abort? }`。没有 `timeout` 或 `signal` 字段，也没有进度回调。`abort` 覆盖整条流，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。应用若需要仅限启动期的期限，就自己建一个 `AbortController`，用定时器以 `new DOMException("...", "TimeoutError")` 中止它，并在 await 返回后清掉定时器。
 
 ## EventStreamHandle
 
 <ApiSignature name="EventStreamHandle" />
 
-tuple 第三项是 `open` 的启动快照；重连之后，`stream.open` 跟随最新的连接。这一第三项仅对返回的 Defjs 原生 handle 或透传同一 live `open` 对象的 wrapper 保证是所属连接首次成功握手的快照；自定义 handle 或显式覆盖 `open` 的 wrapper 则保留其当前公开 `open`，即使已发生重连也一样，因此共享 `closed` 不能绕过 URL 净化或响应头过滤，Defjs 也不从任意元数据变换反推首次握手。 自有作用域优先用 `await using stream = handle` 清理。disposer 会停止 Defjs 的读取和重连任务，并等待 reader lock 释放；它不承诺由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手动 `close()` / `closed` 仍可使用。
+tuple 第三项是 `open` 的启动快照；重连之后，`stream.open` 跟随最新的连接。这一第三项仅对返回的 Defjs 原生 handle 或透传同一 live `open` 对象的 wrapper 保证是所属连接首次成功握手的快照；自定义 handle 或显式覆盖 `open` 的 wrapper 则保留其当前公开 `open`，即使已发生重连也一样，因此共享 `closed` 不能绕过 URL 净化或响应头过滤，Defjs 也不从任意元数据变换反推首次握手。自有作用域优先用 `await using stream = handle` 清理。disposer 会停止 Defjs 的读取和重连任务，并等待 reader lock 释放；它不承诺由 provider 控制且卡住的 `ReadableStream.cancel()` promise 一定完成。手动 `close()` / `closed` 仍可使用。
 
 ```ts
 async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
@@ -56,8 +48,6 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 <ApiSignature name="EventStreamCloseInfo" />
 
 `kind` 是 `eof`、`aborted` 或 `error`。每个变体都可以带 `reason` 和 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hans/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
-
-## 事件映射
 
 ## EventStructs
 
@@ -79,15 +69,11 @@ key 是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有
 
 ## EventStreamEndpoint
 
-`defineEventStream` 的返回值。拿 input 调一下就得到 `EventStreamCommand`。
+`defineEventStream` 的返回值。第一个参数是 client。其余参数只是 input。
 
 ## EventStreamRequestShape
 
 和这条流的 method、path 对应的 `HttpRequestShape` 字段相同。
-
-## EventStreamCommand
-
-不透明的 SSE command。传给 `client.execute`。
 
 ## StreamAwaitResult
 

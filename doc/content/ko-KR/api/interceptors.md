@@ -5,7 +5,7 @@ description: HTTP, SSE, WebSocket 인터셉터 생성자예요.
 
 # 인터셉터
 
-전송 하나에서 `next`를 감싸요. `withInterceptors`로 등록해요. 혼합 목록은 실행 시점에 kind로 걸러져요.
+전송 하나에서 `next`를 감싸요. `withInterceptors`로 등록해요. 혼합 목록은 작업이 돌 때 kind로 걸러져요.
 
 ## createHttpInterceptor()
 

@@ -66,12 +66,12 @@ path、query、headers、body はビルダーが返すフィールドであり�
   examples/struct/aliases.ts#example
 </include>
 
-| 境界                                     | フィールド                    |
-| ---------------------------------------- | ----------------------------- |
-| `struct.parse(User, ...)` とコマンド入力 | 論理名 `displayName`          |
-| ビルダーが返した型付きオブジェクト       | ワイヤ名 `display_name`       |
-| JSON / SSE / WebSocket のデコード        | ワイヤ → 論理名 `displayName` |
-| ビルダー内で書いた匿名オブジェクト       | 自分で書いたキー              |
+| 境界                                   | フィールド                    |
+| -------------------------------------- | ----------------------------- |
+| `struct.parse(User, ...)` と操作の入力 | 論理名 `displayName`          |
+| ビルダーが返した型付きオブジェクト     | ワイヤ名 `display_name`       |
+| JSON / SSE / WebSocket のデコード      | ワイヤ → 論理名 `displayName` |
+| ビルダー内で書いた匿名オブジェクト     | 自分で書いたキー              |
 
 ビルダー自体が読むのは論理名（`input.user.displayName`）です。ワイヤ名が現れるのは、シリアライザがビルダーの返した型付きオブジェクトをエンコードするときだけです。
 
@@ -98,7 +98,7 @@ union のガイドが複数の分岐に一致したら、分岐ごとにエン�
 
 `StructIssue` は `code`、`expected`、`message`、`path`、`received` を持ちます。`code` は `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union`、`missing_key` のいずれかです。デフォルトのメッセージは受け取った値の種類を示し、値自体は示しません。たとえば `Expected number at id, received string` です。issue の path は構造的で、record のキーを保持します。`struct.record(...)` は `Expected number at alice@example.com, received string` を生成し得るため、キーはデフォルトメッセージ、`prettify()`、`String(fault)` の中でも機微情報になり得ます。したがって `message` と `prettify()` は受信ペイロードを含みません。`received` は元の値を保持するので、ログや返却の前に redact してください。`struct.parse(..., { errorMap })` は、その呼び出しだけのメッセージを書き換えます。別の Core のコピーで作った struct の bigint/date 変換失敗も対象です。`''` を含む、返された文字列はすべてデフォルトを置き換え、`undefined` だけがデフォルトを保ちます。カスタム文面はそのまま使われ、map が値を含めればその値が露出することがあります。
 
-Struct の検証は構造だけです。公開された範囲、形式、refinement、認証、状態遷移の規則はありません。そうした検査はコマンドを作る前に行ってください。
+Struct の検証は構造だけです。公開された範囲、形式、refinement、認証、状態遷移の規則はありません。そうした検査は操作を呼ぶ前に行ってください。
 
 ## リファレンス
 

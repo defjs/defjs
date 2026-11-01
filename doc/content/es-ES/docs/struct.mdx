@@ -1,11 +1,13 @@
 ---
 title: "Contratos de datos / Struct"
-description: Definir con Struct los contratos del SDK para entradas, respuestas, errores y mensajes.
+description: Define los contratos de entrada y de respuesta que tu SDK comparte con sus consumidores, con tipos y validación en runtime.
 ---
 
 # Struct
 
-Struct describe los contratos de datos de tu SDK: parámetros, respuestas, errores declarados, eventos SSE y mensajes WebSocket. El autor del SDK define estas formas una vez; Defjs las usa para inferir tipos, codificar y validar cuando el cliente de la aplicación ejecuta un comando. `Infer` proporciona tipos TypeScript y `struct.parse(...)` devuelve una tupla error-first sin lanzar excepciones. `builder` sigue decidiendo dónde colocar las entradas en la solicitud.
+Los Structs expresan el contrato de datos que promete tu SDK: la entrada de quien llama, las respuestas del servicio, los errores declarados y los mensajes en tiempo real. Reutilízalos entre las operaciones exportadas para que los consumidores obtengan tipos de TypeScript y validación en runtime coherentes, con independencia del cliente que configuren.
+
+Obtienes tipos de TypeScript mediante `Infer`, y comprobaciones en runtime mediante `struct.parse(...)` — sin throw, tupla error-first.
 
 ## Configuración básica
 
@@ -64,12 +66,12 @@ Path, query, headers y body son campos que devuelve el builder, no un struct de 
   examples/struct/aliases.ts#example
 </include>
 
-| Límite                                             | Campo                        |
-| -------------------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)` y la entrada del comando | Lógico `displayName`         |
-| Objeto tipado devuelto por el builder              | Cable `display_name`         |
-| Decodificación JSON / SSE / WebSocket              | Cable → lógico `displayName` |
-| Objeto anónimo escrito en el builder               | La clave que escribiste      |
+| Límite                                                 | Campo                        |
+| ------------------------------------------------------ | ---------------------------- |
+| `struct.parse(User, ...)` y la entrada de la operación | Lógico `displayName`         |
+| Objeto tipado devuelto por el builder                  | Cable `display_name`         |
+| Decodificación JSON / SSE / WebSocket                  | Cable → lógico `displayName` |
+| Objeto anónimo escrito en el builder                   | La clave que escribiste      |
 
 El propio builder lee nombres lógicos (`input.user.displayName`); el nombre de cable aparece solo cuando el serializador codifica el objeto tipado que devuelve el builder.
 
@@ -96,7 +98,7 @@ Una intersección mixta que contiene una parte que no es un objeto queda etiquet
 
 Un `StructIssue` tiene `code`, `expected`, `message`, `path` y `received`. `code` es `custom`, `invalid_enum`, `invalid_intersection`, `invalid_literal`, `invalid_type`, `invalid_union` o `missing_key`. Los mensajes por defecto nombran el kind recibido, nunca el valor: `Expected number at id, received string`. Los paths de los issues son estructurales y conservan las claves de los registros: `struct.record(...)` puede producir `Expected number at alice@example.com, received string`, así que las claves pueden seguir siendo sensibles en los mensajes por defecto, `prettify()` y `String(fault)`. Por tanto `message` y `prettify()` omiten los payloads recibidos; `received` conserva el valor original y hay que redactarlo antes de registrar o devolver. `struct.parse(..., { errorMap })` reescribe los mensajes solo para esa llamada, incluidos los fallos de conversión de bigint/date en un struct de otra copia de Core. Cualquier cadena devuelta, incluida `''`, reemplaza el valor por defecto; solo `undefined` lo conserva. El texto personalizado se usa tal cual y puede exponer valores si el mapa los incluye.
 
-La validación Struct es solo estructural. No hay reglas públicas de rango, formato, refinement, auth o transición de estado. Haz esas comprobaciones antes de construir un comando.
+La validación Struct es solo estructural. No hay reglas públicas de rango, formato, refinement, auth o transición de estado. Haz esas comprobaciones antes de llamar a una operación.
 
 ## Referencia
 

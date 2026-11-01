@@ -97,7 +97,7 @@ test("shared array field keeps both member aliases at the HTTP boundary", async 
       return new Response(null, { status: 204 });
     }),
   );
-  const [fault] = await client.execute(endpoint({ rows: [logical] }));
+  const [fault] = await endpoint(client, { rows: [logical] });
   expect(fault).toBeNull();
   expect(actual).toEqual({ rows: [wire] });
 });
@@ -219,7 +219,7 @@ test("outbound encode writes both wire keys when a fresh object aliases one logi
       return new Response(null, { status: 204 });
     }),
   );
-  const [fault] = await client.execute(endpoint({ note: "hi" }));
+  const [fault] = await endpoint(client, { note: "hi" });
   expect(fault).toBeNull();
   expect(actual).toEqual({ note: "hi", row: { first: "Ada", second: "Ada" } });
 });

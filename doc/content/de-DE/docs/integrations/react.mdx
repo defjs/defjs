@@ -1,15 +1,15 @@
 ---
 title: "React"
-description: Einen Anwendungsclient in React bereitstellen und importierte SDK-Endpoints mit explizitem Cleanup ausführen.
+description: Ein frameworkunabhängiges SDK mit einem von React bereitgestellten Client konsumieren und die Request-Lebensdauer der Komponente überlassen.
 ---
 
 # React
 
-Die React-Anwendung importiert die Endpoints aus ihrem SDK und führt sie über den bereitgestellten Client aus. Das SDK selbst benötigt dafür keine React-Abhängigkeit. Erzeuge und konfiguriere den Client an der passenden Anwendungs- oder Request-Grenze; Dieses Framework-Plugin macht ihn über Provider und Hooks im Komponentenbaum verfügbar.
+Importiere Operationen aus deinem SDK oder einem gemeinsamen Definitionsmodul. Die React-Anwendung besitzt den Client und stellt ihn über dieses Framework-Plugin bereit; das SDK-Paket kann unabhängig von React bleiben und von anderen Anwendungen wiederverwendet werden.
 
 Diese Plugins sind optionale Helfer, um einen bestehenden `Client` bereitzustellen und zu lesen. Du kannst einen festen anwendungseigenen Client importieren, wiederverwendbarer Logik einen Client explizit übergeben, Framework-Injection für Vorgaben im Baum und Subtree-Overrides nutzen oder deine eigene Struktur wählen. SDK-Definitionen setzen diese Plugins nicht voraus.
 
-Verdrahte einen bestehenden `@defjs/core`-Client in einen React-Tree. Du bekommst Context und `useClient()`. Das Paket erzeugt **keinen** Client, fügt keinen Cache hinzu, wiederholt keine Commands und gibt keine Transport-Resources frei. Die Komponente, der Effect oder die Data-Library, die Arbeit startet, besitzt sie.
+Verdrahte einen bestehenden `@defjs/core`-Client in einen React-Tree. Du bekommst Context und `useClient()`. Das Paket erzeugt **keinen** Client, fügt keinen Cache hinzu, wiederholt keine Operationen und gibt keine Transport-Resources frei. Die Komponente, der Effect oder die Data-Library, die Arbeit startet, besitzt sie. Der Client aus `useClient()` wird an die Operation übergeben. Ein `Client` ist eine Funktion: übergib ihn nicht an einen State-Setter, denn `setState(client)` würde ihn als Updater aufrufen.
 
 ## Grundeinrichtung
 
@@ -39,21 +39,21 @@ Der Hook liefert nur den Client. Er startet keine Arbeit, subscribed keinen Tran
 
 ## Query-Arbeit besitzen
 
-Eine Query-Library kann Caching, Retries, Unterdrückung veralteter Results und Abbruch besitzen. Gib ihr das Signal, das sie liefert. Für List-Pages umhülle `client.execute(...)` mit TanStack Query (oder ähnlich) — `@defjs/react` bleibt nur DI und liefert **kein** `useRequest`.
+Eine Query-Library kann Caching, Retries, Unterdrückung veralteter Results und Abbruch besitzen. Übergib das Signal, das sie liefert, als `abort` an einem abgeleiteten Client. Für List-Pages rufe die Operation aus TanStack Query (oder ähnlich) auf — `@defjs/react` bleibt nur DI und liefert **kein** `useRequest`.
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
 `throw error` hier ist der Rejection-Kanal der Query-Funktion, nicht der normale Defjs-Aufruf. Das Tupel wird zuerst gelesen; nur dieser Adapter lehnt ab, damit die Query-Library den Fehler aufzeichnet.
 
-Wrappe denselben Command nicht in einen zweiten Effect — zwei Owner machen Abbruch und den Umgang mit veralteten Results mehrdeutig.
+Starte dieselbe Operation nicht in einem zweiten Effect — zwei Owner machen Abbruch und den Umgang mit veralteten Results mehrdeutig.
 
 ## Realtime-Arbeit besitzen
 
-SSE- und WebSocket-Handles überleben `client.execute(...)`. Registriere Cleanup vor dem Await von Startup, schließe ein Handle, das nach Disposal ankommt, konsumiere seinen einzelnen Iterator, warte auf sein Terminal-Promise:
+SSE- und WebSocket-Handles überleben den Aufruf der Operation. Registriere Cleanup vor dem Await von Startup, schließe ein Handle, das nach Disposal ankommt, konsumiere seinen einzelnen Iterator, warte auf sein Terminal-Promise:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-Das `signal`, das an `execute` übergeben wurde, regiert weiterhin eine geöffnete Session. Es im Cleanup abzubrechen beendet die Session als `aborted` und lässt `receive` mit `AbortError` ablehnen; das `catch` oben ignoriert daher Errors, sobald der Effect aufgeräumt ist, und meldet nur echte Failures (Queue-Overflow, Heartbeat-Timeout). Ein abgebrochener SSE-Stream beendet stattdessen seinen Iterator normal. Ohne das `catch` wäre eine Ablehnung aus dem Loop eine unbehandelte Promise Rejection.
+Das `abort`-Signal, das an die Operation übergeben wurde, regiert weiterhin eine geöffnete Session. Es im Cleanup abzubrechen beendet die Session als `aborted` und lässt `receive` mit `AbortError` ablehnen; das `catch` oben ignoriert daher Errors, sobald der Effect aufgeräumt ist, und meldet nur echte Failures (Queue-Overflow, Timeout der Heartbeat-Bestätigung). Ein abgebrochener SSE-Stream beendet stattdessen seinen Iterator normal. Ohne das `catch` wäre eine Ablehnung aus dem Loop eine unbehandelte Promise Rejection.
 
 Dieselbe Regel für `EventStreamHandle`: in `finally` schließen, auf `stream.closed` warten. WebSocket-Consumer müssen auch State-/Runtime-Error-Listener abmelden und `session.receive` weiterlesen — eine ungelesene begrenzte Queue kann überlaufen.
 

@@ -5,16 +5,16 @@ description: createClient, option helpers, and the Client type.
 
 # Client
 
-Create a client, compose options left to right, then `execute` HTTP / SSE / WebSocket commands.
+`createClient(...)` returns a callable [`Client`](/api/core/client-type). Compose client options left to right, then call `client(options?)` to derive a client and pass it to an operation: `getUser(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Options apply in order. Prefer creating the client inside the request boundary when interceptors close over auth or tenants.
+Options apply in order. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. The returned client is a function. Calling it returns a new client and performs no I/O.
 
 - **options** — Option helpers such as `withEndpoint`.
-- **Returns** a client whose `execute` is overloaded per transport.
+- **Returns** a callable client. The base configuration is shared by every derived client and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -32,7 +32,7 @@ Sets the base URL prepended to relative paths.
 
 <ApiSignature name="withInterceptors" />
 
-Appends interceptors in registration order. Mixed kinds are filtered per transport at execute time.
+Appends interceptors in registration order. Mixed kinds are filtered per transport when the operation runs.
 
 ### withQuerySerializer()
 
@@ -55,20 +55,7 @@ Precedence for one request:
 
 Use an interceptor for values that change per request: a refreshed Bearer token, or an HMAC over the serialized body.
 
-### withTimeout()
-
-<ApiSignature name="withTimeout" />
-
-Sets the default timeout, in milliseconds, for **HTTP** `execute` only. SSE and WebSocket ignore it; their execute `timeout` is a separate, per-call startup deadline. `ms` must be a positive safe integer no greater than `2_147_483_647`, otherwise `withTimeout` throws a `RangeError` when you call it. A second `withTimeout` replaces the first.
-
-The deadline covers input parsing, the builder, interceptors, the transport, and reading a declared body. It combines with the [`HttpExecuteOptions`](/api/core/httpexecuteoptions-type) of each call:
-
-| Execute options             | Effect                                                                                    |
-| --------------------------- | ----------------------------------------------------------------------------------------- |
-| none                        | The client default applies; expiry is `NET_TIMEOUT`.                                      |
-| `{ timeout }`               | Replaces the client default for this call.                                                |
-| `{ abort }` or `{ signal }` | Combines with the default: the caller's signal is `NET_ABORTED`, the timer `NET_TIMEOUT`. |
-| `{ abort, timeout }`        | Still invalid: `REQ_OPTIONS_INVALID`. The client default never counts as a conflict.      |
+There is no client-level default deadline. Pass `abort: AbortSignal.timeout(ms)` on a derived client when one call needs one. A manual abort is `NET_ABORTED`. `AbortSignal.timeout` classifies as `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -122,7 +109,27 @@ The default HTTP transport adds the header when all of these hold: the method is
 
 <ApiSignature name="Client" />
 
-`execute` has one overload per command kind (event stream, WebSocket, HTTP), and the type parameters are inferred from the command.
+A `Client` is a function. Calling it with [`RequestOptions`](/api/core/requestoptions-type) returns a new client. The seven known fields are copied from the argument into a fresh object overlaid on the current options. A later field wins. A field whose value is `undefined` is treated as not provided and keeps the parent's value. A derived client cannot drop a setting its parent has; to go back to no setting, derive again from the client that did not have it (keep the root client). Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned, and replace the parent value as a whole, not merged. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. The original client is not mutated. `client()`, `client(undefined)`, and `client({})` copy the current options. Deriving performs no I/O. The same client value can be passed to many operations. `abort` is replaced, not combined; combine signals with `AbortSignal.any` in application code.
+
+Do not pass a client to a React state setter (`setState(client)` would call it as an updater) or use it as a Vue `watch` or `computed` source (those call a function).
+
+### RequestOptions
+
+<ApiSignature name="RequestOptions" />
+
+Seven flat fields. Each protocol reads the fields it understands and ignores the rest. Passing `heartbeat` to HTTP is ignored, not a fault. SSE reads only `abort` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter and no `timeout` or `signal` field.
+
+| Field                | Protocol                 | Replacement                                                                                               |
+| -------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP, SSE, and WebSocket | Replaces the previous signal. For SSE and WebSocket it covers the whole connection, including after open. |
+| `onUploadProgress`   | HTTP                     | Ignored by other protocols.                                                                               |
+| `onDownloadProgress` | HTTP                     | Ignored by other protocols.                                                                               |
+| `beforeConnect`      | WebSocket                | Replaces the client setting for that call.                                                                |
+| `protocols`          | WebSocket                | Replaces the client list.                                                                                 |
+| `heartbeat`          | WebSocket                | Replaced whole. `timeoutMs` is the acknowledgement wait, not a request deadline.                          |
+| `reconnect`          | WebSocket                | Replaced whole.                                                                                           |
+
+[`HttpExecuteOptions`](/api/core/httpexecuteoptions-type) is the HTTP slice (`abort` plus progress). [`EventStreamExecuteOptions`](/api/core/eventstreamexecuteoptions-type) is `{ abort? }`. [`WebSocketExecuteOptions`](/api/core/websocketexecuteoptions-type) is the WebSocket slice plus `abort`.
 
 ### ClientOption
 
@@ -164,17 +171,17 @@ For SSE, `delayMs` is only the starting base delay: a digits-only server `retry:
 
 SSE `onInvalidEvent` handles an event with no matching struct, including no `default` (`missing-struct`), or whose data fails its struct (`validation-failed`). The event is always dropped; the handler's return value is ignored, and an error it throws does not close the stream.
 
-For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can also be passed per call to `execute`; the execute value replaces the client value for that call. `heartbeat.message` builds each ping; nothing is sent when it is omitted or returns `undefined`.
+For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can also be passed on a derived client; each replaces the client value for that call as a whole. `heartbeat.message` builds each ping; nothing is sent when it is omitted or returns `undefined`. `heartbeat.timeoutMs` waits for an acknowledgement. It is not a request deadline.
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-The shown fields are `sse` and `webSocket`. The other eight — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `timeout`, `xsrf`, and `withCredentials` — are inherited from the non-exported HTTP base, and `endpoint` is required. `createClient` does not take this object; it takes option helpers.
+The shown fields are `sse` and `webSocket`. The other seven — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, and `withCredentials` — are inherited from the non-exported HTTP base, and `endpoint` is required. There is no client-level `timeout`. `createClient` does not take this object; it takes option helpers.
 
 ### ClientConfig
 
-The resolved snapshot that option helpers mutate and `execute` reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`) and `webSocket` always present.
+The resolved snapshot that option helpers mutate and an operation reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`) and `webSocket` always present.
 
 ### ClientSSEConfig
 

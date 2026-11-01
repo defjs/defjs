@@ -3,7 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { ApiEntryPage } from "./api-entry-page";
 import type { RenderedApiEntry } from "../lib/api-html";
-import { uiCopy } from "../lib/ui-copy";
+import { getTranslator } from "../lib/translations";
+import { TestI18nProvider } from "./test-i18n";
 
 function view(overrides: Partial<RenderedApiEntry> = {}): RenderedApiEntry {
   return {
@@ -35,7 +36,9 @@ function view(overrides: Partial<RenderedApiEntry> = {}): RenderedApiEntry {
 const render = (entry: RenderedApiEntry, locale = "en-US") =>
   renderToStaticMarkup(
     <MemoryRouter>
-      <ApiEntryPage view={entry} locale={locale} />
+      <TestI18nProvider locale={locale}>
+        <ApiEntryPage view={entry} />
+      </TestI18nProvider>
     </MemoryRouter>,
   );
 
@@ -43,14 +46,14 @@ test("an entry page shows signature, then prose, fields, examples and the overvi
   const html = render(view());
   const marks = [
     "@defjs/core",
-    uiCopy["en-US"].signature,
+    getTranslator("en-US")("api.signature"),
     "BODY",
-    uiCopy["en-US"].parameters,
-    uiCopy["en-US"].members,
-    uiCopy["en-US"].returns,
-    uiCopy["en-US"].throws,
-    uiCopy["en-US"].examples,
-    uiCopy["en-US"].seeAlso,
+    getTranslator("en-US")("api.parameters"),
+    getTranslator("en-US")("api.members"),
+    getTranslator("en-US")("api.returns"),
+    getTranslator("en-US")("api.throws"),
+    getTranslator("en-US")("api.examples"),
+    getTranslator("en-US")("api.seeAlso"),
     ">Client</a>",
   ];
   let cursor = -1;
@@ -93,12 +96,14 @@ test("empty sections stay hidden and members use the locale", () => {
     }),
     "zh-Hans",
   );
-  expect(html).not.toContain(uiCopy["zh-Hans"].signature);
-  expect(html).not.toContain(uiCopy["zh-Hans"].seeAlso);
-  expect(html).toContain(uiCopy["zh-Hans"].members);
-  expect(html).toContain(uiCopy["zh-Hans"].kinds.function);
+  expect(html).not.toContain(getTranslator("zh-Hans")("api.signature"));
+  expect(html).not.toContain(getTranslator("zh-Hans")("api.seeAlso"));
+  expect(html).toContain(getTranslator("zh-Hans")("api.members"));
+  expect(html).toContain(getTranslator("zh-Hans")("api.kind.function"));
   expect(html).toContain('lang="en"');
-  expect(html).not.toContain(`<h2 lang="en">${uiCopy["zh-Hans"].members}</h2>`);
+  expect(html).not.toContain(
+    `<h2 lang="en">${getTranslator("zh-Hans")("api.members")}</h2>`,
+  );
   expect(html).toContain("function enum(value: number): void;");
   expect(html).toContain(">value</code>");
   expect(html).toContain(">client</code>");
@@ -116,7 +121,7 @@ test("empty sections stay hidden and members use the locale", () => {
     }),
     "zh-Hans",
   );
-  const seeAlso = linked.indexOf(uiCopy["zh-Hans"].seeAlso);
+  const seeAlso = linked.indexOf(getTranslator("zh-Hans")("api.seeAlso"));
   const nameAt = linked.indexOf(">FetchHandle</a>", seeAlso);
   expect(linked.slice(linked.lastIndexOf("<a", nameAt), nameAt)).toContain(
     'lang="en"',

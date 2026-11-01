@@ -1,30 +1,24 @@
 ---
 title: HTTP
-description: defineRequest, 실행 options, HTTP request/response 타입이에요.
+description: defineRequest, 요청 옵션, HTTP request/response 타입이에요.
 ---
 
 # HTTP
 
-타입이 있는 요청을 선언하고, 입력으로 명령을 만든 뒤 실행해요.
+타입이 있는 요청을 선언한 다음, 클라이언트와 입력으로 작업을 호출해요.
 
 ## defineRequest()
 
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, 선택 `input` struct, 선택 `output`과 `error` struct, 선택 `operation`이에요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 builder만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. 이 `definition` 멤버는 [`RequestDefinition`](/ko-KR/api/core/requestdefinition-type)에 적혀 있어요. `builder`는 `input`을 선언했을 때만 필요해요.
-- **반환** 엔드포인트예요. 입력을 넣어 호출하면 `HttpCommand`가 나와요.
+- **반환** 작업이에요. 입력이 없으면 `health(client)`처럼, 있으면 `getUser(client, input)`처럼 호출해요. 입력 struct 전체가 선택이면 입력 인자를 생략할 수 있어요. 호출하면 요청이 시작돼요. 세 번째 옵션 인자는 없어요.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
-`output`은 2xx body를 위한 struct 하나이고, `error`는 모든 non-2xx body를 위한 struct 하나예요. 둘 다 status로 키를 나누지 않아요. 하나를 빼면 그 body는 읽히지 않아요 — [선언은 단언이에요](/ko-KR/docs/design-decisions#선언은-단언이에요)를 보세요.
+`output`은 2xx body를 위한 struct 하나이고, `error`는 모든 non-2xx body를 위한 struct 하나예요. 둘 다 status로 키를 나누지 않아요. 하나를 빼면 그 body는 읽히지 않아요 — [선언은 단언이에요](/ko-KR/docs/design-decisions#declaration-is-an-assertion)를 보세요.
 
-## executeHttpCommand()
-
-<ApiSignature name="executeHttpCommand" />
-
-`client.execute`가 쓰는 저수준 진입점이에요. 애플리케이션 코드는 `client.execute(command, options)`를 호출해야 해요.
-
-- **반환** [`HttpAwaitResult`](/ko-KR/api/core/httpawaitresult-type)에 적힌 튜플 형태로 resolve되는 promise예요.
+작업을 호출하면 [`HttpAwaitResult`](/ko-KR/api/core/httpawaitresult-type)에 적힌 튜플의 promise가 돌아와요. 호출마다의 옵션은 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)로 클라이언트를 파생해서 넘기세요. HTTP는 `abort`와 진행률 콜백만 읽고 나머지 필드는 무시해요.
 
 2xx가 아닌 status는 `error` struct를 선언하지 않았거나 선언한 `error` body가 디코딩되면 `HTTP_STATUS`예요. fault의 `data`는 선언됐을 때 디코딩된 `error` body이고, 아니면 `undefined`예요. 선언한 `error` body를 읽을 수 없거나(미디어 타입 불일치, 잘못된 JSON) struct와 맞지 않으면 fault는 대신 `RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `RES_STRUCT_MISMATCH` 중 하나이고, 응답 status는 그 메타데이터에 그대로 담겨요. 실패하면 튜플의 세 번째 자리는 `undefined`이고, fault가 응답 메타데이터를 가져요.
 
@@ -40,13 +34,11 @@ description: defineRequest, 실행 options, HTTP request/response 타입이에�
 
 네트워크 호출 없이 `HttpResponse`를 만들어요 (interceptor, 테스트). 기본 status는 `0`이에요. `ok`는 2xx일 때 true예요. 반환값은 와이어에서 온 응답과 같은 미디어 타입 검사와 같은 선언된 struct를 거쳐요. 신뢰하는 short-circuit은 없어요.
 
-## 실행 options
-
 ## HttpExecuteOptions
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions`는 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)에 `signal`을 더한 것이에요. `abort`와 `timeout`은 함께 지정할 수 없어요. 타입이 둘 다 주는 것을 막고, 런타임에 둘 다 넘기면 `REQ_OPTIONS_INVALID`로 실패해요. `signal`은 어느 쪽과도 조합돼요. `abort`의 별칭이 **아니에요**. 유효한 모양: `{ signal }`, `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`. `{ abort, timeout }`은 유효하지 않아요. `timeout`은 `1..2_147_483_647` 범위의 양의 안전 정수여야 해요. 호출에서 `timeout`을 생략하면 클라이언트의 `withTimeout` 기본값이 적용돼요 (HTTP 전용). `abort`와 `signal`은 그 기본값과 합쳐져요.
+`HttpExecuteOptions`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)의 HTTP 조각인 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)예요. `abort`와 `onDownloadProgress`, `onUploadProgress`예요. `timeout`이나 `signal` 필드는 없어요. 데드라인은 `abort: AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 나중 `abort`가 이전 신호를 바꿔요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 클라이언트 기본 데드라인은 없어요. `heartbeat` 같은 다른 요청 필드는 무시돼요.
 
 ## 타입
 
@@ -62,7 +54,7 @@ description: defineRequest, 실행 options, HTTP request/response 타입이에�
 
 ### HttpRequest
 
-정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `timeout`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. interceptor가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. interceptor가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. builder가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 엔드포인트의 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
+정규화된 나가는 요청이에요. `method`, `endpoint`, `headers`, `body`, `abort`, `operation`, `withCredentials`, `xsrf`, `downloadProgress` / `uploadProgress`, `baseEndpoint`, `queryString`, `queryParams`예요. interceptor가 볼 시점에 `body`는 이미 와이어 값이에요. JSON이면 JSON 텍스트 문자열이므로, HMAC이나 다이제스트는 struct 입력이 아니라 이 값을 기준으로 서명하세요. interceptor가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요. builder가 `URLSearchParams`를 돌려주면 그 인스턴스가 그대로 통과해요. `responseType`과 `errorResponseType`은 readonly예요. 엔드포인트의 `output`과 `error` struct kind에서 유도되며, 바꾸면 안 돼요.
 
 ### HttpMeta
 
@@ -86,15 +78,15 @@ description: defineRequest, 실행 options, HTTP request/response 타입이에�
 
 ### HttpProgressFn
 
-`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소와 `timeout`은 여전히 `NET_ABORTED` / `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요(Bun, Node). 브라우저에서는 `Blob` / `File`, `ArrayBuffer`, `FormData` body가 그대로 보내지고 `onUploadProgress`는 호출되지 않아요.
+`loaded`, `total`, `lengthComputable`이에요. 콜백은 비동기 함수일 수 있어요. `onDownloadProgress`나 `onUploadProgress`에서 예외를 던지면 던진 값을 `cause`로 담아 호출이 `EXT_OBSERVER_FAILED`로 실패해요. 취소는 여전히 `NET_ABORTED`를 보고하고, abort 이유가 타임아웃이면 `NET_TIMEOUT`을 보고해요. 업로드 진행률은 요청 body 스트리밍을 지원하는 런타임에서만 보고돼요(Bun, Node). 브라우저에서는 `Blob` / `File`, `ArrayBuffer`, `FormData` body가 그대로 보내지고 `onUploadProgress`는 호출되지 않아요.
 
 서버 런타임에서 FormData는 본문 전체를 Blob으로 버퍼링하지 않고 직렬화된 스트림을 쓰며, 실제 multipart boundary를 유지해요. 유효한 명시적 `Content-Length`가 없으면 total을 알 수 없어요. 명시 content type은 업로드 변환 뒤에도 남지만, FormData는 그 직렬화의 boundary를 써야 해요. `loaded`는 서버 확인이 아니라 스트림 바이트를 세요. identity가 아닌 `Content-Encoding`의 다운로드는 `total: 0`과 `lengthComputable: false`를 보고하고, 스트림 바이트는 이미 압축이 풀려 있을 수 있어요.
 
-[HTTP 가이드](/ko-KR/docs/http)와 [명령](/ko-KR/docs/commands)을 보세요.
+[HTTP 가이드](/ko-KR/docs/http)와 [클라이언트](/ko-KR/docs/client)를 보세요.
 
 ## RequestEndpoint
 
-`defineRequest`가 돌려줘요. 입력을 넣어 호출하면 `HttpCommand`가 나와요.
+`defineRequest`가 돌려줘요. 첫 인자는 [`Client`](/ko-KR/api/core/client-type)예요. 그 뒤 인자는 입력뿐이에요.
 
 ## BuilderInput
 
@@ -108,13 +100,9 @@ description: defineRequest, 실행 options, HTTP request/response 타입이에�
 
 `GET`과 `HEAD`의 `body`는 `never`예요. 그 외에는 와이어 값(`string`, `Blob`, `ArrayBuffer`, typed array 또는 `DataView`, `FormData`, `URLSearchParams`, `ReadableStream<Uint8Array>`)이거나 JSON 데이터(`number`, `boolean`, `bigint`, `Date`, `null`, 배열, 문자열 키를 가진 객체)예요.
 
-## HttpCommand
-
-요청 builder가 만든 opaque 명령이에요. `client.execute`에 넘기세요.
-
 ## UseRequestConfig
 
-선택 `onDownloadProgress`와 `onUploadProgress` 콜백에 `abort` 또는 `timeout`(둘 다는 안 됨)이 더해져요. `HttpExecuteOptions`는 `signal`을 더해요.
+`abort`와 선택 `onDownloadProgress`, `onUploadProgress`예요. `HttpExecuteOptions`가 이 조각이에요. `timeout`이나 `signal` 필드는 없어요.
 
 ## RequestSuccessData
 

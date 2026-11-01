@@ -86,6 +86,8 @@ test.each(packages)(
           )
           .map((entry) => [entry.name, entry.kind]),
       );
+    expect([...names]).not.toContain("ClientState");
+    expect([...catalog.keys()]).not.toContain("ClientState");
     expect(Object.keys(runtime).filter((name) => !names.has(name))).toEqual([]);
     expect([...names].filter((name) => !catalog.has(name))).toEqual([]);
     expect([...catalog.keys()].filter((name) => !names.has(name))).toEqual([]);

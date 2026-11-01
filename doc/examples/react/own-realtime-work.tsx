@@ -18,10 +18,9 @@ export function Notifications() {
     let closeActive: (() => void) | undefined;
 
     void (async () => {
-      const command = notifications();
-      const [error, session] = await client.execute(command, {
-        signal: controller.signal,
-      });
+      const [error, session] = await notifications(
+        client({ abort: controller.signal }),
+      );
       if (error) return;
 
       let closed = false;

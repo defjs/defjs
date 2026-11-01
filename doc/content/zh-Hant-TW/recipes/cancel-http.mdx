@@ -1,13 +1,13 @@
 ---
 title: "取消與逾時"
-description: Abort 或逾時一個 execute 呼叫，並讀取 NET_ABORTED / NET_TIMEOUT。
+description: Abort 或為一次呼叫設定期限，並讀取 NET_ABORTED / NET_TIMEOUT。
 ---
 
 # 取消 HTTP 呼叫
 
-傳 `signal`，再加上 `abort` 或 `timeout` 其中一個 — 不要同時傳 `abort` 跟 `timeout`。`timeout` 必須是 `1..2_147_483_647` 的正 safe integer。
+把呼叫端的 signal 與期限組合在 `abort` 上。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 是一個 signal。手動取消歸類為 `NET_ABORTED`。期限歸類為 `NET_TIMEOUT`。
 
-細節見 [HTTP](/zh-Hant-TW/docs/http#取消工作)。
+細節見 [HTTP](/zh-Hant-TW/docs/http#cancel-the-work)。
 
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example

@@ -40,7 +40,7 @@ async function post(schema: AnyStruct, input: unknown) {
     method: "POST",
     path: "/",
   });
-  const [fault] = await client.execute(endpoint(input as never));
+  const [fault] = await endpoint(client, input as never);
   return { body, builderCalls, fault, handleCalls, parsed };
 }
 

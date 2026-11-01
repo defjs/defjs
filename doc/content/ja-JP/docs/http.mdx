@@ -1,13 +1,13 @@
 ---
 title: "HTTP リクエスト"
-description: SDK の HTTP 契約と入力配置を定義し、アプリケーションの Client で実行結果とキャンセルを管理します。
+description: SDK の HTTP 操作を設計し、アプリケーションが所有する設定とキャンセルで呼び出します。
 ---
 
 # HTTP
 
-SDK の作成者は `defineRequest` に method、相対 path、入力・出力・エラーの Struct と `builder` をまとめて export します。利用アプリケーションは endpoint や認証を設定した Defjs Client で実行し、結果の分岐とキャンセルを管理します。
+SDK は各 HTTP 操作の method、相対 path、入力の配置、レスポンス、エラー契約を定義します。アプリケーションはその操作を import し、自分のクライアントを構成して呼び出し、結果を扱います。同じ定義を npm パッケージで配ることも、ローカルで共有することもできます。
 
-定義 → 実行 → タプルで分岐 → 画面が消えたらキャンセル。HTTP のループはこれだけです。
+サービスアドレスと認証情報はクライアント設定に置いてください。キャンセルと、書き込みをリトライする方針は呼び出し側が所有します。キャンセルされたリクエストは、すでにサービスへ届いていることがあります。
 
 ## 基本セットアップ
 
@@ -17,7 +17,7 @@ SDK の作成者は `defineRequest` に method、相対 path、入力・出力�
 
 ## URL を解決する
 
-`withEndpoint(...)` には有効な絶対 URL が要ります。エンドポイントの pathname はディレクトリとして残り、query と hash はコマンド解決の前に捨てられます。ベースエンドポイントの欠落、相対 URL、無効な URL は、インターセプターやトランスポートが実行される前のリクエスト組み立て中に `REQ_BUILD_FAILED` になります。インターセプターがリクエストをショートサーキットする場合でも同じです。HTTP、SSE、WebSocket で共通の規則です。
+`withEndpoint(...)` には有効な絶対 URL が要ります。エンドポイントの pathname はディレクトリとして残り、query と hash はリクエスト URL を解決する前に捨てられます。ベースエンドポイントの欠落、相対 URL、無効な URL は、インターセプターやトランスポートが実行される前のリクエスト組み立て中に `REQ_BUILD_FAILED` になります。インターセプターがリクエストをショートサーキットする場合でも同じです。HTTP、SSE、WebSocket で共通の規則です。
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
@@ -118,13 +118,15 @@ JSON は、ネストした値も含めて、すべて JSON データでなけれ
 
 成功したレスポンスは `DecodedResponse<T>` です。`url`、`status`、`statusText`、`headers`、`ok`、型付きの `body` を持ちます。何もデコードされなかった場所では `HttpMeta` になります — 同じフィールドから `body` を除いたものです。`ok` は `200 <= status < 300` だけを意味します。どちらもネイティブの `Response` ではありません。トランスポート失敗は fault なので、その代わりを務める status 0 のレスポンスはありません。
 
-## 作業をキャンセルする
+## 作業をキャンセルする [#cancel-the-work]
 
-実行 options では `{ signal }` を単独で指定でき、`abort` や `timeout` は不要です。**`abort` と `timeout` は同時に使えません。** `signal` はどちらとも組み合わせられます。
+派生したクライアントに `abort` を渡します。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` に分類されます。`timeout` フィールドも、`signal` フィールドも、クライアント単位の既定の期限もありません。あとの `abort` が前のシグナルを置き換えます。呼び出し側のシグナルと期限を合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+
+<include cwd>examples/http/deadline.ts#example</include>
 
 <include cwd>examples/http/cancel.ts#example</include>
 
-`timeout` は `1..2_147_483_647` の正の安全な整数である必要があります。`timeout` を省いた呼び出しには、クライアントの `withTimeout` のデフォルトが適用されます。認識されたキャンセル → `NET_ABORTED`。実行タイムアウト → `NET_TIMEOUT`。インターセプターの `throw` → `EXT_INTERCEPTOR_FAILED`（ただし `ERR_ABORTED` / `ERR_TIMEOUT` は `NET_ABORTED` / `NET_TIMEOUT` になります）。その他の Fetch 失敗 → `NET_UNREACHABLE`。サーバーが書き込みを受け入れたあとのキャンセルは、書き込みがロールバックしたことの**証明にはなりません**。
+認識されたキャンセル → `NET_ABORTED`。期限の abort → `NET_TIMEOUT`。インターセプターの `throw` → `EXT_INTERCEPTOR_FAILED`（ただし `ERR_ABORTED` / `ERR_TIMEOUT` は `NET_ABORTED` / `NET_TIMEOUT` になります）。その他の Fetch 失敗 → `NET_UNREACHABLE`。サーバーが書き込みを受け入れたあとのキャンセルは、書き込みがロールバックしたことの**証明にはなりません**。
 
 ## 資格情報と XSRF
 
@@ -138,17 +140,17 @@ JSON は、ネストした値も含めて、すべて JSON データでなけれ
 
 `onDownloadProgress` は、宣言されたレスポンスボディを読んでいるあいだ動きます。`loaded` はレスポンスストリームから読んだバイト数を数え、そのストリームは Fetch がすでに展開済みの場合があります。`lengthComputable` が true になるのは、正の `Content-Length` があり、`Content-Encoding` が無いか `identity` のときだけです。gzip や br を含むその他のエンコードでは `total: 0`、`lengthComputable: false` と報告するので、展開済みバイト数を圧縮されたワイヤ上の長さと比較することはありません。その側に struct が無い → ボディは読まれない → ボディ読み取りの進捗もありません。
 
-`onUploadProgress` は、Fetch が `ReadableStream<Uint8Array>` のボディを読む際の進捗を報告し、サーバーが受領を確認した時点の進捗ではありません。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます。Bun、Node では、Defjs は `Blob` / `File`、`ArrayBuffer`、`FormData` のボディもストリームに変換するので、それらも進捗を報告します。サーバーランタイムでは、`onUploadProgress` 付きの FormData はシリアライズされたストリームを直接使い、multipart boundary を保ち、ライブラリが生成した `Content-Length` なしで送られます（HTTP/1.1 では chunked）。そのため、ボディ全体をバッファせずに進捗、タイムアウト、中止が働きます。有効な明示的 `Content-Length` が無ければ、全体の長さは不明です。一部の事前署名アップロード先のように `Content-Length` を要求するエンドポイントでは、`onUploadProgress` を省いてください。その場合、プラットフォームの Fetch が FormData を長さ付きで送ります。キャンセルするとラップされたストリームを解放します。Chromium はリクエストボディを HTTP/2 以降でしかストリームせず、Firefox はまったくストリームできないため、Worker を含むブラウザーは除外されます。ブラウザーではそれらのボディはそのまま送られ、`onUploadProgress` は呼び出されません。JSON、テキスト、`URLSearchParams`、型付き配列のボディはまとめて送られ、イベントは出ません。長さが分からないストリームでは `total` は `0`（つまり `lengthComputable` は `false`）です。ストリームのリクエストを送れないランタイム（Firefox など）での `ReadableStream` ボディは、何も送られる前に `ENV_UNSUPPORTED` で失敗し、cause のメッセージは `ERR_STREAMING_REQUEST_UNSUPPORTED` です。Chromium では `ReadableStream` ボディに HTTP/2 以降が必要で、HTTP/1.1 では呼び出しが `NET_UNREACHABLE` で失敗します。`onDownloadProgress` はどのランタイムでも同じように振る舞います。
+`onUploadProgress` は、Fetch が `ReadableStream<Uint8Array>` のボディを読む際の進捗を報告し、サーバーが受領を確認した時点の進捗ではありません。アップロードの進捗が報告されるのは、リクエストボディのストリーミングに対応するランタイムに限られます。Bun、Node では、Defjs は `Blob` / `File`、`ArrayBuffer`、`FormData` のボディもストリームに変換するので、それらも進捗を報告します。サーバーランタイムでは、`onUploadProgress` 付きの FormData はシリアライズされたストリームを直接使い、multipart boundary を保ち、ライブラリが生成した `Content-Length` なしで送られます（HTTP/1.1 では chunked）。そのため、ボディ全体をバッファせずに進捗と abort が働きます。有効な明示的 `Content-Length` が無ければ、全体の長さは不明です。一部の事前署名アップロード先のように `Content-Length` を要求するエンドポイントでは、`onUploadProgress` を省いてください。その場合、プラットフォームの Fetch が FormData を長さ付きで送ります。キャンセルするとラップされたストリームを解放します。Chromium はリクエストボディを HTTP/2 以降でしかストリームせず、Firefox はまったくストリームできないため、Worker を含むブラウザーは除外されます。ブラウザーではそれらのボディはそのまま送られ、`onUploadProgress` は呼び出されません。JSON、テキスト、`URLSearchParams`、型付き配列のボディはまとめて送られ、イベントは出ません。長さが分からないストリームでは `total` は `0`（つまり `lengthComputable` は `false`）です。ストリームのリクエストを送れないランタイム（Firefox など）での `ReadableStream` ボディは、何も送られる前に `ENV_UNSUPPORTED` で失敗し、cause のメッセージは `ERR_STREAMING_REQUEST_UNSUPPORTED` です。Chromium では `ReadableStream` ボディに HTTP/2 以降が必要で、HTTP/1.1 では呼び出しが `NET_UNREACHABLE` で失敗します。`onDownloadProgress` はどのランタイムでも同じように振る舞います。
 
-進捗コールバックが例外を投げるか、返したプロミスが拒否されると、ダウンロードでもアップロードでも、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。呼び出し側のキャンセルと `timeout` は引き続き `NET_ABORTED` / `NET_TIMEOUT` を報告します。
+進捗コールバックが例外を投げるか、返したプロミスが拒否されると、ダウンロードでもアップロードでも、投げられた値を `cause` として呼び出しが `EXT_OBSERVER_FAILED` で失敗します。呼び出し側のキャンセルは引き続き `NET_ABORTED` を報告し、abort の理由がタイムアウトなら `NET_TIMEOUT` を報告します。
 
-`fetchHandler(httpRequest, fetchImpl?)` はより低レベルの Fetch 境界です。URL を解決し、Fetch を呼び、表現を読み、`HttpResponse` を返します。デフォルトの HTTP と SSE のハンドルは呼び出しごとに `globalThis.fetch` を解決するので、import 後に差し替えた Fetch も使われます。HTTP が `(url, init)` を使うのは、変更されていないプラットフォームの Fetch だけです。差し替えたグローバル Fetch やカスタムハンドルにはネイティブの `Request` が渡されます。Fetch が無くても Core の import は可能です。Fetch が無いままデフォルトの HTTP/SSE を実行すると `ENV_UNSUPPORTED` で失敗しますが、カスタムハンドルは使えます。この境界はコマンド入力の検証も、`output` の振り分けも、インターセプターの実行も**しません**。注入したトランスポートのテストには便利ですが、`client.execute` の代わりにはなりません。
+`fetchHandler(httpRequest, fetchImpl?)` はより低レベルの Fetch 境界です。URL を解決し、Fetch を呼び、表現を読み、`HttpResponse` を返します。デフォルトの HTTP と SSE のハンドルは呼び出しごとに `globalThis.fetch` を解決するので、import 後に差し替えた Fetch も使われます。HTTP が `(url, init)` を使うのは、変更されていないプラットフォームの Fetch だけです。差し替えたグローバル Fetch やカスタムハンドルにはネイティブの `Request` が渡されます。Fetch が無くても Core の import は可能です。Fetch が無いままデフォルトの HTTP/SSE を呼ぶと `ENV_UNSUPPORTED` で失敗しますが、カスタムハンドルは使えます。この境界は操作の入力検証も、`output` の振り分けも、インターセプターの実行も**しません**。注入したトランスポートのテストには便利ですが、操作を呼ぶ代わりにはなりません。
 
 ## 再送の限界
 
 Defjs は HTTP を**自動リトライしません**。読み取りのリトライにも、レビュー済みのタイムアウト/ネットワーク/重複方針が要ります。ミューテーションのリトライには、再送可能なバイト、サーバー側の対応、認証スコープとリクエストバイトに束縛された冪等キー、受信側の重複方針が要ります。
 
-クライアント/コマンド/Fetch 境界には、失敗した書き込みがコミットしたかどうかは分かりません。再送の判断はアプリか、レビュー済みインターセプターに置いてください。インターセプターは低レベルリクエストをショートサーキットしたり差し替えたりできます。最終的な status とボディは、それでもコマンドの契約を満たす必要があります。
+クライアントや Fetch 境界には、失敗した書き込みがコミットしたかどうかは分かりません。再送の判断はアプリか、レビュー済みインターセプターに置いてください。インターセプターは低レベルリクエストをショートサーキットしたり差し替えたりできます。最終的な status とボディは、それでも操作の契約を満たす必要があります。
 
 ## 関連レシピ
 

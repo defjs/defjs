@@ -1,22 +1,23 @@
 ---
 title: "ガイド"
-description: SDK の API 定義、契約の検証、パッケージ公開、利用アプリケーションでの実行を順に学びます。
+description: SDK の契約と操作を設計して公開し、利用するアプリケーションで実行を構成します。
 ---
 
-Defjs（define js）は、再利用できる API 定義から SDK を作るための仕組みです。SDK の作成者は契約を公開し、利用するアプリケーションは Defjs Client の設定と実行を担当します。
+Defjs は、チームが公開する API と、アプリケーションが使うクライアントを分けます。操作を定義してパッケージにする経路は SDK 作成が担当し、実行を構成して結果を扱う経路はアプリケーションが担当します。
 
-## SDK 開発 [#はじめに]
+## SDK 開発 [#getting-started]
 
-1. [プロジェクト概要](/ja-JP) で作成者とアプリケーションの責務を確認します。
-2. [クイックスタート](/ja-JP/docs/start) で定義を export し、別ファイルの Client で実行します。
-3. [ローカル HTTP テスト](/ja-JP/recipes/test-with-handle) で実行時の契約を検証します。
-4. [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) で定義と型宣言を配布します。
+- [プロジェクト概要](/ja-JP)
+- [クイックスタート](/ja-JP/docs/start)
+- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
+- [定義と実行を分ける理由](/ja-JP/docs/design-decisions)
 
-## 契約と実行 [#呼び出しと契約]
+## 契約と実行 [#calls-and-contracts]
 
-- [データ契約 / Struct](/ja-JP/docs/struct) — 入力・出力・エラーとワイヤ表現を定義します。
-- [定義と実行 / Command](/ja-JP/docs/commands) — 定義、エンドポイント、1 回の実行用のコマンドを区別します。
-- [クライアント設定 / Client](/ja-JP/docs/client) — アプリケーションの endpoint、認証、トランスポートを構成します。
+SDK の作成者は Struct とエンドポイント定義を所有します。アプリケーションは Client を用意し、それを渡して操作を呼びます。
+
+- [データ契約 / Struct](/ja-JP/docs/struct)
+- [クライアント設定 / Client](/ja-JP/docs/client)
 
 ## リクエストとリアルタイム通信
 
@@ -26,14 +27,21 @@ Defjs（define js）は、再利用できる API 定義から SDK を作るた�
 
 ## エラーとインターセプター
 
-- [エラー処理](/ja-JP/docs/errors) — 宣言されたエラーと実行時の失敗をアプリケーションで扱います。
-- [インターセプター](/ja-JP/docs/interceptors) — 認証やトレーシングなどの実行方針を合成します。
+- [エラー処理](/ja-JP/docs/errors)
+- [インターセプター](/ja-JP/docs/interceptors)
 
 ## プラグイン
+
+利用アプリケーションのクライアント向けの任意パッケージです。SDK の定義はそれらから独立したままです。
 
 - [プラグイン](/ja-JP/docs/integrations)
 - [React](/ja-JP/docs/integrations/react)
 - [Vue](/ja-JP/docs/integrations/vue)
 - [OpenTelemetry server](/ja-JP/docs/integrations/opentelemetry-server)
 
-[設計上の判断](/ja-JP/docs/design-decisions) では、SDK の定義とアプリケーションの実行設定を分ける理由を説明します。
+## AI
+
+- [AI を活用した開発](/ja-JP/docs/ai)
+- [AI API の呼び出し](/ja-JP/docs/ai-api)
+
+[設計上の判断](/ja-JP/docs/design-decisions)

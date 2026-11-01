@@ -1,10 +1,5 @@
-import {
-  COMMAND_EXECUTE,
-  COMMAND_TYPE,
-  HTTP_COMMAND,
-  type CommandExecutor,
-} from "../client/command";
-import type { BaseCommand } from "../client/command";
+import type { Client } from "../client/client";
+import { CLIENT } from "../client/client";
 import type { HttpClientConfig } from "../client/config";
 import { ERR_FETCH_UNSUPPORTED } from "../client/config";
 import type { AnyFault, Fault, FaultOf, PreflightFault } from "../error";
@@ -16,22 +11,16 @@ import {
   createUndecodedHttpStatusFault,
 } from "../error";
 import { makeChain, resolveHttpInterceptors } from "../interceptor/interceptor";
-import type { UseCancellationConfig } from "../internal/abort";
 import {
-  armTransportDeadline,
   awaitWithSignal,
-  createAbortTimeoutConflictFault,
-  hasAbortTimeoutConflict,
   mergeAbortSignals,
   releaseAbortSignal,
   resolveAbortedFault,
   resolveAbortCause,
-  resolveTransportCancellation,
-  snapshotCancellationConfig,
-  validateTransportTimeout,
+  resolveAbortFault,
 } from "../internal/abort";
 import { readBytesText } from "../internal/bytes";
-import type { EndpointCallable } from "../internal/endpoint_command";
+import type { EndpointArgs } from "../internal/endpoint_command";
 import { resolveInboundRepresentation } from "../internal/inbound_representation";
 import { createTransportOrigin } from "../internal/transport_origin";
 import { RequestUrlError, resolveRequestUrl } from "../internal/url";
@@ -61,75 +50,51 @@ import {
 import { getContentType, isJsonMediaType } from "./transport/utils";
 
 /**
- * Per-request options for HTTP execution: progress callbacks and cancellation.
+ * HTTP fields of {@link RequestOptions}: progress callbacks and `abort`.
  *
- * The HTTP-specific part of {@link HttpExecuteOptions}, which adds `signal`.
  * `onDownloadProgress` and `onUploadProgress` are {@link HttpProgressFn}
  * callbacks. They receive an {@link HttpProgressEvent} with `loaded`, `total`,
- * and `lengthComputable`.
- *
- * Cancellation is either `abort` or `timeout`, never both. The type rejects
- * both, and at runtime passing both fails with a `REQ_OPTIONS_INVALID` fault.
- * `timeout` must be a positive safe integer no greater than `2_147_483_647`.
- * It replaces the default set by {@link withTimeout} for that call. `abort`
- * combines with that default instead.
+ * and `lengthComputable`. Other request fields are ignored by HTTP.
  *
  * @group http
  */
 export type UseRequestConfig = {
+  /** Aborts the call. */
+  abort?: AbortSignal;
+  /** Observes download progress. */
   onDownloadProgress?: HttpProgressFn;
+  /** Observes upload progress. */
   onUploadProgress?: HttpProgressFn;
-} & UseCancellationConfig;
+};
 
 /**
- * Opaque executable HTTP command produced by a `defineRequest` endpoint.
+ * HTTP fields read from {@link RequestOptions} for one call.
  *
- * Created by calling a `RequestEndpoint` with input. It carries the request
- * definition and optional typed input for `client.execute`. Treat it as opaque
- * and pass it to `client.execute`.
+ * Progress callbacks and `abort`. There is no `timeout` or `signal`.
  *
  * @group http
  */
-export interface HttpCommand<
-  TInput extends AnyStruct | undefined,
-  TOutput extends AnyStruct | undefined,
-  TError extends AnyStruct | undefined = undefined,
-> extends BaseCommand<typeof HTTP_COMMAND> {
-  readonly definition: RequestDefinition<TInput, TOutput, TError>;
-  readonly input: EndpointInput<TInput> | undefined;
-}
+export type HttpExecuteOptions = UseRequestConfig;
 
 /**
- * Options passed to `client.execute` or `executeHttpCommand` for one HTTP call: progress, `abort` or `timeout`, and `signal`.
+ * Operation returned by `defineRequest`.
  *
- * Cancellation is `abort` or `timeout`, not both (`abort` XOR `timeout`).
- * `signal` combines with either; it is not an alias for `abort`. Valid shapes:
- * `{ timeout }`, `{ abort }`, `{ signal, timeout }`, `{ signal, abort }`.
- * `{ abort, timeout }` is invalid and makes the call resolve with a
- * `REQ_OPTIONS_INVALID` fault. `timeout` must be a positive safe integer in
- * `1..2_147_483_647`.
- *
- * When `timeout` is omitted, the client's `withTimeout` default applies;
- * `abort` combines with that default.
- *
- * @group http
- */
-export type HttpExecuteOptions = UseRequestConfig & { signal?: AbortSignal };
-
-/**
- * Callable endpoint returned by `defineRequest`.
- *
- * Call it to get an `HttpCommand`: with no arguments when the endpoint declares
- * no `input`, with an optional argument when the input struct accepts
- * `undefined`, and otherwise with the struct's input value.
+ * The first argument is a {@link Client}. Further arguments are the input, and only the input: none when the definition declares no `input`, optional when the input struct accepts `undefined`, and required otherwise. Calling it starts the request and returns the error-first tuple.
  *
  * @group http
  */
 export type RequestEndpoint<
-  TInput extends AnyStruct | undefined,
-  TOutput extends AnyStruct | undefined,
-  TError extends AnyStruct | undefined = undefined,
-> = EndpointCallable<TInput, HttpCommand<TInput, TOutput, TError>>;
+  Args extends unknown[],
+  Data,
+  ErrorData,
+  Response extends HttpMeta,
+> = (
+  client: Client,
+  ...args: Args
+) => Promise<
+  | [error: null, result: Data, response: Response]
+  | [error: FaultOf<ErrorData>, result: undefined, response: undefined]
+>;
 
 export type { BuilderInput, HttpRequestShape } from "../internal/builder_types";
 
@@ -222,8 +187,7 @@ type HttpExecuteAwaitResult<
  * Declares a typed HTTP request endpoint.
  *
  * Pass method, path, an optional input struct, and the single `output` and
- * `error` structs. Call the returned endpoint with input to get an `HttpCommand`
- * for `client.execute`.
+ * `error` structs. Call the returned operation with a client and, when declared, the input.
  *
  * The contract is `method`, `path`, an optional `input` struct, optional
  * `output` and `error` structs, and an optional `operation`. A declared `input`
@@ -239,7 +203,7 @@ type HttpExecuteAwaitResult<
  * omitting one means that body is never read.
  *
  * @param definition - Request contract (method, path, input, builder, output).
- * @returns An endpoint that creates `HttpCommand` values from input.
+ * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
  * The checked example file passes the whole input object as `path`. This snippet maps individual fields into `path` and `query` instead:
  *
@@ -269,7 +233,12 @@ export function defineRequest<
     operation?: string;
     path: P;
   } & BuilderField<NoInfer<TInput>, HttpRequestShape<NoInfer<P>, NoInfer<M>>>,
-): RequestEndpoint<TInput, TOutput, TError> {
+): RequestEndpoint<
+  EndpointArgs<TInput>,
+  RequestSuccessData<TOutput>,
+  RequestErrorData<TError>,
+  DeclaredResponse<TOutput>
+> {
   // Snapshot the top-level definition so a later mutation of the caller's object cannot retarget this endpoint.
   const endpoint = { ...definition } as RequestDefinition<
     TInput,
@@ -277,121 +246,50 @@ export function defineRequest<
     TError
   >;
 
-  function create(
-    input?: EndpointInput<TInput>,
-  ): HttpCommand<TInput, TOutput, TError> {
-    const command: HttpCommand<TInput, TOutput, TError> = {
-      [COMMAND_EXECUTE]: executeHttpCommand as CommandExecutor,
-      [COMMAND_TYPE]: HTTP_COMMAND,
-      definition: endpoint,
+  return (async (client: Client, input?: EndpointInput<TInput>) =>
+    executeHttpCommand(
+      client[CLIENT].config,
+      endpoint,
       input,
-    };
-
-    return command;
-  }
-
-  return ((input?: EndpointInput<TInput>) => create(input)) as RequestEndpoint<
-    TInput,
-    TOutput,
-    TError
+      client[CLIENT].options,
+    )) as RequestEndpoint<
+    EndpointArgs<TInput>,
+    RequestSuccessData<TOutput>,
+    RequestErrorData<TError>,
+    DeclaredResponse<TOutput>
   >;
 }
 
-/**
- * Runs an `HttpCommand` against client config: validate input, send the request, and parse the response.
- *
- * Low-level entry used by `client.execute`. Prefer `client.execute(command, options)`
- * in application code. `HttpClientConfig` is the HTTP part of `ClientConfig`, so
- * a `ClientConfig` is accepted. `HttpExecuteAwaitResult` is the internal result
- * tuple.
- *
- * The result is `[null, data, response]` or `[fault, undefined, undefined]`.
- * `data` is the decoded `output` body, or `undefined` when none is declared.
- * `response` is `DecodedResponse` when `output` is declared and `HttpMeta`
- * otherwise. The fault is `Fault<TError>`. A non-2xx status is `HTTP_STATUS`
- * when no `error` struct is declared (its `data` is `undefined`) or when the
- * declared body decodes (its `data` is that body). When a declared `error` body
- * cannot be read, the fault is a `RES_*` decode fault instead. On failure the
- * tuple's third slot is `undefined`; the fault carries the response metadata.
- * `options.timeout` falls back to the client's `withTimeout` default when omitted.
- *
- * @param clientConfig - Resolved HTTP client configuration (endpoint, interceptors, handler).
- * @param command - Command from a `defineRequest` endpoint.
- * @param options - Per-request progress and cancellation options.
- * @returns An await-result tuple of success body or typed request error.
- * @group http
- */
-export async function executeHttpCommand<
+async function executeHttpCommand<
   TInput extends AnyStruct | undefined,
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
 >(
   clientConfig: HttpClientConfig,
-  command: HttpCommand<TInput, TOutput, TError>,
-  options?: HttpExecuteOptions,
+  definition: RequestDefinition<TInput, TOutput, TError>,
+  input: EndpointInput<TInput> | undefined,
+  options: HttpExecuteOptions,
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
-  const { definition, input } = command;
-  const config = options ?? {};
+  const config = options;
 
   // Faults carry their own response metadata, so the tuple's third slot belongs to success only.
   const fail = (fault: AnyFault): HttpExecuteAwaitResult<TOutput, TError> => {
     return [fault as Fault<TError>, undefined, undefined];
   };
 
-  let cancellation;
-  try {
-    // Client `withTimeout` fills HTTP execute only when the call omits `timeout`.
-    // XOR still applies only to execute options that pass both `abort` and `timeout`.
-    cancellation = snapshotCancellationConfig({
-      abort: config.abort,
-      signal: config.signal,
-      timeout:
-        config.timeout !== undefined ? config.timeout : clientConfig.timeout,
-    });
-  } catch (error) {
-    return fail(createPreflightFault("REQ_OPTIONS_INVALID", error));
-  }
+  const callerAbort = config.abort;
 
-  if (hasAbortTimeoutConflict(config)) {
-    return fail(createAbortTimeoutConflictFault());
-  }
-
-  try {
-    validateTransportTimeout(cancellation.timeout);
-  } catch (error) {
-    return fail(createPreflightFault("REQ_OPTIONS_INVALID", error));
+  // Fast path: caller already aborted before we did any struct work — skip parseEndpointInput.
+  if (callerAbort?.aborted) {
+    return fail(resolveAbortedFault(callerAbort));
   }
 
   const controller = new AbortController();
-
-  // Fast path: caller already aborted before we did any struct work — skip parseEndpointInput.
-  const preAbortedSignal = [cancellation.abort, cancellation.signal].find(
-    (signal) => signal?.aborted,
-  );
-  if (preAbortedSignal) {
-    return fail(resolveAbortedFault(preAbortedSignal));
-  }
-
-  // The deadline covers parse, the builder, the transport, and declared-body conversion.
-  // release() only clears the timer, so a response that already arrived is not aborted by it.
-  const deadline = armTransportDeadline(cancellation.timeout);
-  // The deadline signal is ours and per request, so alone it is the request signal. A caller signal
-  // still goes through a composite: listeners must never be left on a signal the caller keeps.
-  const requestSignal =
-    cancellation.abort === undefined &&
-    cancellation.signal === undefined &&
-    deadline.signal
-      ? deadline.signal
-      : mergeAbortSignals(controller.signal, [
-          cancellation.abort,
-          cancellation.signal,
-          deadline.signal,
-        ]);
-  deadline.releaseOnAbort(requestSignal);
+  // A caller signal still goes through a composite: listeners must never be left on a signal the caller keeps.
+  const requestSignal = mergeAbortSignals(controller.signal, [callerAbort]);
   const stopBeforeTransport = (
     fault: PreflightFault,
   ): HttpExecuteAwaitResult<TOutput, TError> => {
-    deadline.release();
     releaseAbortSignal(requestSignal);
     return fail(fault);
   };
@@ -414,18 +312,12 @@ export async function executeHttpCommand<
     );
   } catch (error) {
     return stopBeforeTransport(
-      resolveTransportCancellation(
-        deadline,
-        requestSignal,
+      resolveAbortFault(requestSignal) ??
         createPreflightFault("REQ_INPUT_INVALID", error),
-      ),
     );
   }
 
-  const parsedCancellation = resolveTransportCancellation(
-    deadline,
-    requestSignal,
-  );
+  const parsedCancellation = resolveAbortFault(requestSignal);
   if (parsedCancellation) {
     return stopBeforeTransport(parsedCancellation);
   }
@@ -448,7 +340,6 @@ export async function executeHttpCommand<
         operation: definition.operation,
         querySerializer: clientConfig.querySerializer,
         responseType,
-        timeout: cancellation.timeout,
         uploadProgress: config.onUploadProgress,
         withCredentials: clientConfig.withCredentials,
         xsrf: clientConfig.xsrf,
@@ -456,23 +347,15 @@ export async function executeHttpCommand<
     );
   } catch (error) {
     return stopBeforeTransport(
-      resolveTransportCancellation(
-        deadline,
-        requestSignal,
+      resolveAbortFault(requestSignal) ??
         createPreflightFault("REQ_BUILD_FAILED", error),
-      ),
     );
   }
 
-  const builtCancellation = resolveTransportCancellation(
-    deadline,
-    requestSignal,
-  );
+  const builtCancellation = resolveAbortFault(requestSignal);
   if (builtCancellation) {
     return stopBeforeTransport(builtCancellation);
   }
-
-  const releaseRequestTimeout = deadline.release;
 
   const transportOrigin = createTransportOrigin();
   const transportController = new AbortController();
@@ -506,8 +389,7 @@ export async function executeHttpCommand<
       nextRequest.abort === undefined || nextRequest.abort === requestSignal
         ? transportController.signal
         : mergeAbortSignals(transportController.signal, [nextRequest.abort]);
-    // Interceptors run after the post-builder check. A deadline that expired there must not start the fetch.
-    const due = resolveTransportCancellation(deadline, transportAbort);
+    const due = resolveAbortFault(transportAbort);
     if (due) {
       // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
       const rejected = Promise.reject<HttpResponse<unknown>>(
@@ -558,7 +440,7 @@ export async function executeHttpCommand<
       void chainPromise.catch(() => undefined);
       const settled = await awaitWithSignal(() => chainPromise, requestSignal);
       // Interceptors are user code, and only an HttpResponse carries the `ok` fork the pipeline reads next.
-      // `response` stays unset on failure so the finally block still releases the deadline and the signal.
+      // `response` stays unset on failure so the finally block still releases the signal.
       if (!isHttpResponse(settled)) {
         throw new TypeError(
           "HTTP interceptor must resolve an HttpResponse from next() or makeResponse()",
@@ -567,7 +449,7 @@ export async function executeHttpCommand<
       response = settled;
     } catch (error) {
       const fromTransport = transportOrigin.has(error);
-      const cancelled = resolveTransportCancellation(deadline, requestSignal);
+      const cancelled = resolveAbortFault(requestSignal);
       if (cancelled) {
         abortTransport();
         if (inflightTransport) {
@@ -608,9 +490,8 @@ export async function executeHttpCommand<
     if (!transportController.signal.aborted) {
       transportController.abort(new Error("HTTP interceptor chain settled"));
     }
-    // Keep the deadline armed while a declared body is still being converted.
+    // Keep the caller signal armed while a declared body is still being converted.
     if (!response) {
-      releaseRequestTimeout();
       releaseAbortSignal(requestSignal);
     }
   }
@@ -623,14 +504,9 @@ export async function executeHttpCommand<
 
   // Philosophy 5: with nothing declared for this side, that body is never read — not even to
   // fail on. An unreadable representation on the side you opted out of is none of your business.
-  // Interceptor work can still cross the deadline. Check before release, which makes the gate a no-op.
+  // A caller abort during interceptor work is reported before this point. An undecoded status has no body to cancel.
   if (!struct) {
-    const cancelled = resolveTransportCancellation(deadline, requestSignal);
-    releaseRequestTimeout();
     releaseAbortSignal(requestSignal);
-    if (cancelled) {
-      return fail(cancelled);
-    }
     if (settledResponse.ok) {
       return [
         null,
@@ -644,15 +520,9 @@ export async function executeHttpCommand<
   let decoded: unknown;
   try {
     decoded = await decodeDeclaredBody(struct, settledResponse, requestSignal);
-    // Synchronous conversion can finish before the deadline timer runs.
-    // A declared error uses the same wall-clock gate as a success.
-    const cancelled = resolveTransportCancellation(deadline, requestSignal);
-    if (cancelled) {
-      return fail(cancelled);
-    }
   } catch (error) {
-    // Caller abort wins over an overdue deadline, which wins over a conversion fault.
-    const cancelled = resolveTransportCancellation(deadline, requestSignal);
+    // A caller abort wins over a conversion fault.
+    const cancelled = resolveAbortFault(requestSignal);
     if (cancelled) {
       return fail(cancelled);
     }
@@ -665,7 +535,6 @@ export async function executeHttpCommand<
     }
     return fail(createDecodeFault("RES_DECODE_FAILED", error, meta));
   } finally {
-    releaseRequestTimeout();
     releaseAbortSignal(requestSignal);
   }
 

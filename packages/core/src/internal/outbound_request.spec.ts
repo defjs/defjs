@@ -1434,8 +1434,9 @@ describe("outbound request builder", () => {
       ),
     );
 
-    expect(() => useBroken()).not.toThrow();
-    const [error] = await client.execute(useBroken());
+    const pending = useBroken(client);
+    expect(pending).toBeInstanceOf(Promise);
+    const [error] = await pending;
 
     expect(error?.code).toBe("REQ_BUILD_FAILED");
     expect(error?.cause).toBeInstanceOf(Error);
@@ -1476,9 +1477,10 @@ describe("outbound request builder", () => {
       path: "/users/:id",
     });
 
-    const [error, result] = await client.execute(
-      updateUser({ id: 7, profile: { displayName: "Ada" } }),
-    );
+    const [error, result] = await updateUser(client, {
+      id: 7,
+      profile: { displayName: "Ada" },
+    });
 
     expect(error).toBeNull();
     expect(captured?.endpoint).toBe("/users/7");
@@ -1502,7 +1504,7 @@ describe("outbound request builder", () => {
     );
     const health = defineRequest({ method: "GET", path: "/health" });
 
-    const [error] = await client.execute(health());
+    const [error] = await health(client);
 
     expect(error).toBeNull();
     expect(captured?.endpoint).toBe("/health");
@@ -1583,7 +1585,7 @@ describe("outbound request builder", () => {
       output: User,
       path: "/users/1",
     });
-    const [outputError, output] = await outputClient.execute(readUser());
+    const [outputError, output] = await readUser(outputClient);
 
     expect(outputError).toBeNull();
     expect(output).toEqual(decoded);
@@ -1608,7 +1610,7 @@ describe("outbound request builder", () => {
       method: "GET",
       path: "/users/missing",
     });
-    const [statusError] = await errorClient.execute(missingUser());
+    const [statusError] = await missingUser(errorClient);
 
     expect(statusError?.code).toBe("HTTP_STATUS");
     if (statusError?.code !== "HTTP_STATUS") {
@@ -1646,7 +1648,7 @@ describe("outbound request builder", () => {
       maxQueueSize: 4,
       path: "/events",
     });
-    const [sseError, stream] = await sseClient.execute(feed());
+    const [sseError, stream] = await feed(sseClient);
 
     expect(sseError).toBeNull();
     if (!stream) {
@@ -1708,7 +1710,7 @@ describe("outbound request builder", () => {
       path: "/rooms/:room/events",
     });
 
-    const [error] = await client.execute(feed({ room: "blue" }));
+    const [error] = await feed(client, { room: "blue" });
 
     expect(error).toBeNull();
     expect(seen?.url).toBe("https://example.com/rooms/blue/events");
@@ -1752,9 +1754,9 @@ describe("outbound request builder", () => {
       path: "/ws/basic",
     });
 
-    const [openError] = await client.execute(chat({ room: "blue" }));
-    const [buildError] = await client.execute(rejected());
-    const [bodyError] = await client.execute(rejectedBody());
+    const [openError] = await chat(client, { room: "blue" });
+    const [buildError] = await rejected(client);
+    const [bodyError] = await rejectedBody(client);
 
     expect(openError?.code.startsWith("NET_")).toBe(true);
     expect(url).toContain("/ws/rooms/blue?since=1");
@@ -1794,8 +1796,8 @@ describe("outbound request builder", () => {
       path: "/ws",
     });
 
-    await client.execute(objectQuery());
-    await client.execute(nativeQuery());
+    await objectQuery(client);
+    await nativeQuery(client);
 
     expect(urls[0]).toContain("serialized=1");
     expect(urls[1]).toContain("room=blue");

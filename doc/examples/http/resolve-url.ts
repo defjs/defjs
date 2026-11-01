@@ -15,11 +15,10 @@ const getUser = defineRequest({
   }),
 });
 
-const command = getUser({ id: "a/b", fields: "name" });
 // → https://api.example.com/v1/users/a%2Fb?fields=name
 
 async function main() {
-  const [error] = await client.execute(command);
+  const [error] = await getUser(client, { id: "a/b", fields: "name" });
   if (error) {
     console.error(error.code);
     return;

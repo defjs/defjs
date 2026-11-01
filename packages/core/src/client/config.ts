@@ -131,7 +131,7 @@ export interface ClientWebSocketOptions {
  * - **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.
  * - **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. Reconnect sends the latest ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it and an ID containing NUL is ignored.
  *
- * Reconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` at execute time.
+ * Reconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.
  *
  * Set these with `withSSEHandle`, `withSSEOnInvalidEvent`, and `withSSEReconnect`. Omitting `withSSEReconnect` disables retry.
  *
@@ -192,7 +192,7 @@ export interface ClientSSEConfig extends ClientSSEOptions {
 export interface HttpClientOptions {
   /** Base URL prepended to relative request paths. */
   endpoint: string;
-  /** Static default headers merged under command headers for HTTP/SSE. */
+  /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport overrides; the default resolves global `fetch` on each call. */
   http?: { handle?: FetchHandle };
@@ -200,8 +200,6 @@ export interface HttpClientOptions {
   interceptors?: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
   querySerializer?: QuerySerializer;
-  /** Default HTTP execute timeout in milliseconds (SSE/WebSocket ignore this). */
-  timeout?: number;
   /** XSRF cookie/header mapping and optional token provider. */
   xsrf?: {
     /** Cookie name that stores the XSRF token. */
@@ -220,7 +218,7 @@ export interface HttpClientOptions {
 /**
  * Input-shaped client options, including SSE and WebSocket, that mirror what the option helpers configure.
  *
- * The user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint` and `withTimeout`. {@link ClientConfig} is the resolved counterpart. The HTTP members come from the non-exported `HttpClientOptions` base and are shown inline.
+ * The user-facing shape of the settings before defaults are applied. `createClient` does not accept this object; configure a client with option helpers such as `withEndpoint`. {@link ClientConfig} is the resolved counterpart. The HTTP members come from the non-exported `HttpClientOptions` base and are shown inline.
  *
  * @group client
  */
@@ -235,7 +233,7 @@ export interface ClientOptions extends HttpClientOptions {
 export interface HttpClientConfig {
   /** Base URL prepended to relative request paths. */
   endpoint: string;
-  /** Static default headers merged under command headers for HTTP/SSE. */
+  /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport with a required fetch handle. */
   http: { handle: FetchHandle };
@@ -243,8 +241,6 @@ export interface HttpClientConfig {
   interceptors: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
   querySerializer?: QuerySerializer;
-  /** Default HTTP execute timeout in milliseconds (SSE/WebSocket ignore this). */
-  timeout?: number;
   /** Resolved XSRF settings when enabled. */
   xsrf?: {
     /** Cookie name that stores the XSRF token. */

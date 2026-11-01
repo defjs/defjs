@@ -26,12 +26,11 @@ describe("web socket runtime", () => {
   });
 
   async function run(
-    command: unknown,
-    options?: unknown,
+    operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
+    options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    return client.execute(command as never, options as never) as Promise<
-      SocketAwaitResult<unknown, unknown>
-    >;
+    const bound = options === undefined ? client : client(options);
+    return operation(bound);
   }
 
   test("should return transport error with invalid client", async () => {
@@ -52,59 +51,11 @@ describe("web socket runtime", () => {
       ),
     );
 
-    const [error, socket, connection] = await client.execute(useSocket());
+    const [error, socket, connection] = await useSocket(client);
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
     expect(error?.code.startsWith("NET_")).toBe(true);
-  });
-
-  test("should reject with abort and timeout before starting websocket transport", async () => {
-    const controller = new AbortController();
-    let beforeConnectCalls = 0;
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
-      incoming: struct.unknown(),
-      path: "/ws/basic",
-    });
-
-    const command = useSocket();
-    const [error, socket, connection] = await run(command, {
-      abort: controller.signal,
-      beforeConnect: () => {
-        beforeConnectCalls += 1;
-      },
-      timeout: 1,
-    });
-
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(error?.code.startsWith("REQ_")).toBe(true);
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error?.message).toBe("abort and timeout cannot be used together");
-    expect(beforeConnectCalls).toBe(0);
-  });
-
-  test("should prefer websocket cancellation config conflict over an already aborted signal", async () => {
-    const controller = new AbortController();
-    controller.abort(ERR_ABORTED);
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 16,
-      incoming: struct.unknown(),
-      path: "/ws/basic",
-    });
-
-    const command = useSocket();
-    const [error, socket, connection] = await run(command, {
-      abort: controller.signal,
-      timeout: 1,
-    });
-
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(error?.code.startsWith("REQ_")).toBe(true);
-    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error?.message).toBe("abort and timeout cannot be used together");
   });
 
   test.each([
@@ -138,10 +89,7 @@ describe("web socket runtime", () => {
         path: "/ws/basic",
       });
 
-      const [error, socket, connection] = await isolated.execute(
-        useSocket(),
-        options as never,
-      );
+      const [error, socket, connection] = await useSocket(isolated(options));
 
       expect(error?.code.startsWith("REQ_")).toBe(true);
       expect(error?.code).toBe("REQ_OPTIONS_INVALID");
@@ -178,8 +126,8 @@ describe("web socket runtime", () => {
       protocols: ["json"],
     });
 
-    const [error, socket, connection] = await run(
-      useChatSocket({ roomId: "room-1" }),
+    const [error, socket, connection] = await run((client) =>
+      useChatSocket(client, { roomId: "room-1" }),
     );
 
     expect(error).toBeNull();
@@ -220,7 +168,7 @@ describe("web socket runtime", () => {
       protocols: ["json"],
     });
 
-    const [error, socket, connection] = await run(useEchoSocket());
+    const [error, socket, connection] = await run(useEchoSocket);
 
     expect(error).toBeNull();
     expect(connection?.protocol).toBe("json");
@@ -266,7 +214,7 @@ describe("web socket runtime", () => {
       path: "/ws/echo",
       protocols: ["json"],
     });
-    const [error, session, connection] = await run(useEchoSocket());
+    const [error, session, connection] = await run(useEchoSocket);
 
     expect(error).toBeNull();
     expect(connection?.protocol).toBe("json");
@@ -309,13 +257,15 @@ describe("web socket runtime", () => {
         withWebSocketHandle(Socket as unknown as typeof WebSocket),
       );
       const [error, socket] = await openControllableSocket(
-        handled.execute(useHeartbeatSocket(), {
-          heartbeat: {
-            intervalMs: 10,
-            message: () => ({ type: "ping" as const }),
-            timeoutMs: 5,
-          },
-        }),
+        useHeartbeatSocket(
+          handled({
+            heartbeat: {
+              intervalMs: 10,
+              message: () => ({ type: "ping" as const }),
+              timeoutMs: 5,
+            },
+          }),
+        ),
         latest,
       );
 
@@ -364,14 +314,20 @@ describe("web socket runtime", () => {
         withWebSocketHandle(Socket as unknown as typeof WebSocket),
       );
       const [error, socket] = await openControllableSocket(
-        handled.execute(useHeartbeatSocket(), {
-          heartbeat: {
-            intervalMs: 10,
-            isAck: (message: { type: string }) => message.type === "pong",
-            message: () => ({ type: "ping" as const }),
-            timeoutMs: 1_000,
-          },
-        }),
+        useHeartbeatSocket(
+          handled({
+            heartbeat: {
+              intervalMs: 10,
+              isAck: (message: unknown) =>
+                typeof message === "object" &&
+                message !== null &&
+                "type" in message &&
+                message.type === "pong",
+              message: () => ({ type: "ping" as const }),
+              timeoutMs: 1_000,
+            },
+          }),
+        ),
         latest,
       );
       const native = latest();
@@ -423,7 +379,7 @@ describe("web socket runtime", () => {
       path: "/ws/invalid",
     });
 
-    const [error, socket] = await run(useSocket());
+    const [error, socket] = await run(useSocket);
 
     expect(error).toBeNull();
     if (!socket) {
@@ -457,7 +413,7 @@ describe("web socket runtime", () => {
       path: "/ws/error-before-close",
     });
 
-    const [error, socket] = await run(useSocket());
+    const [error, socket] = await run(useSocket);
 
     expect(error).toBeNull();
     if (!socket) {
@@ -486,7 +442,7 @@ describe("web socket runtime", () => {
       path: "/ws/unknown-message",
     });
 
-    const [error, socket] = await run(useSocket());
+    const [error, socket] = await run(useSocket);
 
     expect(error).toBeNull();
     if (!socket) {
@@ -515,7 +471,7 @@ describe("web socket runtime", () => {
       path: "/ws/echo",
     });
 
-    const [error, socket, connection] = await run(useSocket());
+    const [error, socket, connection] = await run(useSocket);
 
     expect(error).toBeNull();
     expect(connection?.url).toContain("/ws/echo");
@@ -557,8 +513,8 @@ describe("web socket runtime", () => {
     });
 
     const controller = new AbortController();
-    const [error, socket] = await run(useSocket(), {
-      signal: controller.signal,
+    const [error, socket] = await run(useSocket, {
+      abort: controller.signal,
     });
 
     expect(error).toBeNull();
@@ -581,7 +537,7 @@ describe("web socket runtime", () => {
     });
 
     const controller = new AbortController();
-    const executePromise = run(useSocket(), { signal: controller.signal });
+    const executePromise = run(useSocket, { abort: controller.signal });
     controller.abort(ERR_ABORTED);
 
     const [error, socket, connection] = await executePromise;
@@ -603,8 +559,8 @@ describe("web socket runtime", () => {
       path: "/ws/basic",
     });
 
-    const [error, socket, connection] = await run(
-      useSocket({ id: "bad" } as never),
+    const [error, socket, connection] = await run((client) =>
+      useSocket(client, { id: "bad" } as never),
     );
 
     expect(socket).toBeUndefined();
@@ -624,7 +580,9 @@ describe("web socket runtime", () => {
       path: "/ws/basic",
     });
 
-    const [error, socket, connection] = await run(useSocket({}));
+    const [error, socket, connection] = await run((client) =>
+      useSocket(client, {}),
+    );
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
@@ -640,7 +598,7 @@ describe("web socket runtime", () => {
     });
 
     const badClient = createClient(withEndpoint("not-a-valid-url"));
-    const [error, socket, connection] = await badClient.execute(useSocket());
+    const [error, socket, connection] = await useSocket(badClient);
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
@@ -655,8 +613,7 @@ describe("web socket runtime", () => {
       path: "/ws/basic",
     });
 
-    const command = useSocket();
-    const [error, socket, connection] = await run(command, {
+    const [error, socket, connection] = await run(useSocket, {
       beforeConnect: async () => {
         throw new Error("beforeConnect failed");
       },
@@ -692,11 +649,13 @@ describe("web socket runtime", () => {
 
     const controller = new AbortController();
     const testKey = `reconnect-queue-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const command = useSocket({ key: testKey });
-    const [error, socket] = await run(command, {
-      abort: controller.signal,
-      reconnect: { attempts: 2, delayMs: 20 },
-    });
+    const [error, socket] = await run(
+      (client) => useSocket(client, { key: testKey }),
+      {
+        abort: controller.signal,
+        reconnect: { attempts: 2, delayMs: 20 },
+      },
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -745,15 +704,18 @@ describe("web socket runtime", () => {
     });
 
     const controller = new AbortController();
-    const command = useSocket({
-      key: `abort-during-delay-${crypto.randomUUID()}`,
-    });
-    const [error, socket] = await run(command, {
-      abort: controller.signal,
-      // The delay is the clock under test: abort is joined to the reconnecting signal, so the
-      // delay only has to outlive that observation instead of a fixed sleep.
-      reconnect: { attempts: 2, delayMs: 60_000 },
-    });
+    const [error, socket] = await run(
+      (client) =>
+        useSocket(client, {
+          key: `abort-during-delay-${crypto.randomUUID()}`,
+        }),
+      {
+        abort: controller.signal,
+        // The delay is the clock under test: abort is joined to the reconnecting signal, so the
+        // delay only has to outlive that observation instead of a fixed sleep.
+        reconnect: { attempts: 2, delayMs: 60_000 },
+      },
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -790,12 +752,15 @@ describe("web socket runtime", () => {
       path: "/ws/reconnect",
     });
 
-    const command = useSocket({
-      key: `immediate-case-${crypto.randomUUID()}`,
-    });
-    const [error, socket] = await run(command, {
-      reconnect: { attempts: 1, delayMs: 0 },
-    });
+    const [error, socket] = await run(
+      (client) =>
+        useSocket(client, {
+          key: `immediate-case-${crypto.randomUUID()}`,
+        }),
+      {
+        reconnect: { attempts: 1, delayMs: 0 },
+      },
+    );
 
     expect(error).toBeNull();
     if (!socket) {
@@ -828,8 +793,7 @@ describe("web socket runtime", () => {
       ),
     );
 
-    const [error, socket, connection] =
-      await clientWithInterceptor.execute(useSocket());
+    const [error, socket, connection] = await useSocket(clientWithInterceptor);
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
@@ -854,7 +818,7 @@ describe("web socket runtime", () => {
       ),
     );
 
-    const [error, socket] = await clientWithInterceptor.execute(useSocket());
+    const [error, socket] = await useSocket(clientWithInterceptor);
 
     // The startup catch classifies an unclassified throw and keeps the original on `cause`.
     expect(error).toMatchObject({
@@ -892,7 +856,7 @@ describe("web socket runtime", () => {
       ),
     );
 
-    const [error, socket] = await clientWithInterceptor.execute(useSocket());
+    const [error, socket] = await useSocket(clientWithInterceptor);
 
     if (socket) {
       socket.close(1000, "unexpected second session");
@@ -945,7 +909,7 @@ describe("web socket runtime", () => {
       ),
     );
 
-    const [error, socket] = await clientWithInterceptor.execute(useSocket());
+    const [error, socket] = await useSocket(clientWithInterceptor);
 
     expect(error).toBeNull();
     expect(socket).toBe(shortCircuitSession);
@@ -974,7 +938,7 @@ describe("web socket runtime", () => {
       ),
     );
 
-    const [error, socket] = await clientWithInterceptor.execute(useSocket());
+    const [error, socket] = await useSocket(clientWithInterceptor);
 
     expect(error).toBeNull();
     expect(socket).toBeDefined();
@@ -1007,8 +971,7 @@ describe("web socket runtime", () => {
       ),
     );
 
-    const [error, socket, connection] =
-      await clientWithInterceptor.execute(useSocket());
+    const [error, socket, connection] = await useSocket(clientWithInterceptor);
 
     expect(error).toBeNull();
     expect(connection?.url).toContain("roomId=from-interceptor");
@@ -1069,11 +1032,9 @@ describe("web socket runtime", () => {
       path: "/ws/provider-envelopes",
     });
     const key = `provider-queue-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const [error, socket] = await client.execute(
-      useProviderSocket({ key, mode: "queue" }),
-      {
-        reconnect: { attempts: 1, delayMs: 0 },
-      },
+    const [error, socket] = await useProviderSocket(
+      client({ reconnect: { attempts: 1, delayMs: 0 } }),
+      { key, mode: "queue" },
     );
 
     expect(error).toBeNull();
@@ -1181,9 +1142,10 @@ describe("web socket runtime", () => {
       path: "/ws/provider-envelopes",
     });
     const key = `provider-throw-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const [error, socket] = await client.execute(
-      useProviderSocket({ key, mode: "throw" }),
-    );
+    const [error, socket] = await useProviderSocket(client, {
+      key,
+      mode: "throw",
+    });
 
     expect(error).toBeNull();
     if (!socket) {
@@ -1246,21 +1208,29 @@ describe("web socket runtime", () => {
         withWebSocketHandle(Socket as unknown as typeof WebSocket),
       );
       const [error, socket] = await openControllableSocket(
-        handled.execute(
-          useProviderSocket({ key: "provider-heartbeat", mode: "heartbeat" }),
-          {
+        useProviderSocket(
+          handled({
             heartbeat: {
               intervalMs: 20,
-              isAck(message) {
-                if ("method" in message && message.method === "pong") {
+              isAck(message: unknown) {
+                if (
+                  typeof message === "object" &&
+                  message !== null &&
+                  "method" in message &&
+                  message.method === "pong" &&
+                  "reqId" in message &&
+                  typeof message.reqId === "number"
+                ) {
                   acks.push({ method: "pong", reqId: message.reqId });
+                  return true;
                 }
-                return "method" in message && message.method === "pong";
+                return false;
               },
               message: () => ({ method: "ping" as const, reqId: 7 }),
               timeoutMs: 200,
             },
-          },
+          }),
+          { key: "provider-heartbeat", mode: "heartbeat" },
         ),
         latest,
       );
@@ -1331,6 +1301,38 @@ describe("web socket runtime", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test("should treat an abort inside the builder as NET_ABORTED before opening a socket", async () => {
+    const controller = new AbortController();
+    let constructed = 0;
+    const guardedClient = createClient(
+      withEndpoint("https://example.test"),
+      withWebSocketHandle(
+        class {
+          constructor() {
+            constructed += 1;
+          }
+        } as unknown as typeof WebSocket,
+      ),
+    );
+    const useSocket = defineWebSocket({
+      builder: () => {
+        controller.abort();
+        return {};
+      },
+      incoming: struct.unknown(),
+      maxIncomingQueueSize: 1,
+      path: "/socket",
+    });
+
+    const [error, session] = await useSocket(
+      guardedClient({ abort: controller.signal }),
+    );
+
+    expect(error?.code).toBe("NET_ABORTED");
+    expect(session).toBeUndefined();
+    expect(constructed).toBe(0);
   });
 });
 

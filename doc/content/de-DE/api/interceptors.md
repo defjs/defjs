@@ -5,7 +5,7 @@ description: HTTP-, SSE- und WebSocket-Interceptor-Constructors.
 
 # Interceptors
 
-Wrappe `next` für einen Transport. Registriere mit `withInterceptors`. Gemischte Listen werden zur Execute-Zeit nach kind gefiltert.
+Wrappe `next` für einen Transport. Registriere mit `withInterceptors`. Gemischte Listen werden nach kind gefiltert, wenn die Operation läuft.
 
 ## createHttpInterceptor()
 

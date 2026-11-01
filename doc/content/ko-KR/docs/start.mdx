@@ -1,15 +1,15 @@
 ---
 title: "빠른 시작"
-description: SDK의 API 정의를 export하고, 다른 파일에서 앱의 Client를 구성해 로컬과 실제 API에서 실행합니다.
+description: 첫 SDK 작업을 export하고, 별도 애플리케이션에서 호출한 뒤, 다른 클라이언트로 같은 정의를 다시 씁니다.
 ---
 
-# 시작하기: SDK 정의와 앱 실행 [#시작하기-http-요청-하나]
+# 시작하기: 첫 SDK 작업 [#getting-started-one-http-request]
 
 이 예제에서는 SDK 작성자로서 `GET /users/:id`의 타입이 있는 정의를 export하고, 사용하는 앱의 입장에서 별도 파일에 Defjs Client를 만듭니다. 먼저 로컬 Fetch 핸들로 `200`과 선언된 `404`를 확인합니다. 실제 API로 전환할 때는 앱의 Client 설정을 바꾸고 같은 정의를 사용합니다.
 
 ## 모범 사례
 
-정의는 client와 독립입니다. 정의를 호출하면 command만 만들어집니다. 그 command에 이름을 붙인 다음, 애플리케이션이 소유한 client의 `client.execute`에 넘깁니다. 서비스 주소와 자격 증명도 애플리케이션의 것입니다. error-first 튜플을 먼저 확인합니다. `error`가 있으면 `error.code`를 보고하고, 성공 값을 읽기 전에 함수에서 return 합니다.
+정의는 client와 독립입니다. 애플리케이션의 client로 작업을 호출합니다. `getUser(client, { id: 7 })`처럼요. 세 번째 옵션 인자는 없습니다. 작업을 호출하면 시작되고, `await`는 기다리기만 합니다. 서비스 주소와 자격 증명도 애플리케이션의 것입니다. error-first 튜플을 먼저 확인합니다. `error`가 있으면 `error.code`를 보고하고, 성공 값을 읽기 전에 함수에서 return 합니다.
 
 ## Step 1 — 설치
 
@@ -19,23 +19,23 @@ description: SDK의 API 정의를 export하고, 다른 파일에서 앱의 Clien
 bun add @defjs/core
 ```
 
-## Step 2 — SDK 정의 export하기 [#step-2--요청-정의하기]
+## Step 2 — 요청 정의하기
 
-`src/define-request.ts`를 만듭니다. SDK는 여기서 `getUser`를 export합니다. 입력 Struct는 호출자가 전달할 값을 선언하고, `builder`는 요청에서 그 값을 배치할 위치를 정합니다. 여기서는 입력 전체를 path 객체로 전달하므로 alias가 없는 스칼라 필드가 `:id`를 채웁니다. 정의에는 환경별 URL이나 인증 정보를 넣지 않습니다.
+`src/define-request.ts`를 만듭니다. 이 모듈은 SDK 작성자의 것이며, client를 만들지 않고 `getUser`를 export합니다. 입력 Struct는 호출자가 전달할 값을 선언하고, `builder`는 요청에서 그 값을 배치할 위치를 정합니다. 여기서는 입력 전체를 path 객체로 전달하므로 alias가 없는 스칼라 필드가 `:id`를 채웁니다. 정의에는 환경별 URL이나 인증 정보를 넣지 않습니다.
 
-<include cwd meta="src/define-request.ts">
+<include cwd meta="define-request.ts">
   examples/start/define-request.ts#example
 </include>
 
 `output`은 2xx body예요. `error`는 그 밖의 모든 status예요. 각각 struct 하나예요. body가 달라지면 `struct.or(...)`나 discriminated union을 쓰세요.
 
-`defineRequest(...)`는 엔드포인트를 돌려줘요. `getUser(...)`를 호출하면 `client.execute(...)`에 넘길 opaque 명령이 만들어져요. 위의 `builder`는 입력을 배치하는 함수이지, 엔드포인트가 아니에요.
+`defineRequest(...)`는 작업을 돌려줘요. `getUser(client, input)`을 호출하면 요청이 시작돼요. 위의 `builder`는 입력을 배치하는 함수이지, 작업이 아니에요. `input`을 선언했다면 `builder`는 필수이고, 동기적인 순수 함수예요.
 
-## Step 3 — 앱의 Client로 실행하기 [#step-3--로컬에서-실행하기]
+## Step 3 — 로컬에서 호출하기
 
 같은 디렉터리에 `src/execute-locally.ts`를 만들고 `./define-request.ts`에서 정의를 import합니다. 앱은 Client의 endpoint, 인증, 인터셉터, 전송 수단을 선택합니다. 이 예제에서는 로컬 Fetch 핸들을 설정해 네트워크 없이 입력 검증, `Request` 생성, status 분기, body 파싱을 실행합니다.
 
-<include cwd meta="src/execute-locally.ts">
+<include cwd meta="execute-locally.ts">
   examples/start/execute-locally.ts#example
 </include>
 
@@ -59,26 +59,29 @@ User not found
 
 ## Step 4 — 실제 API로 연결하기
 
-서비스가 같은 응답 계약으로 `GET /v1/users/:id`를 구현하면 앱에서 `withHTTPHandle(...)`을 제거하고 실제 base URL을 설정합니다. 다음 예제를 `src/real-api.ts`로 저장하면 동일한 `./define-request.ts` 정의를 사용합니다. 예제의 URL은 사용하는 서비스 주소로 바꾸세요.
+`src/real-api.ts`에서 같은 `getUser`를 import하고, 서비스의 base URL로 client를 만듭니다. 예제 주소를, 그 body 계약으로 `GET /v1/users/:id`를 구현한 서비스로 바꾼 뒤에만 이 버전을 실행하세요.
 
-<include cwd meta="src/real-api.ts">
-  examples/start/real-api.ts#example
-</include>
+<include cwd>examples/start/real-api.ts#example</include>
 
-SDK의 API 정의는 그대로이고 앱의 실행 설정만 달라집니다. 결과와 취소도 계속 앱이 관리합니다. 정의를 배포하는 과정은 [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)에서 이어집니다.
+API 정의는 SDK 모듈에 남습니다. 서비스 주소, 자격 증명, 인터셉터, 실행 수명은 애플리케이션이 가집니다. 두 client는 같은 Defjs 엔드포인트 계약을 사용합니다.
+
+## 정의 배포하기
+
+더 많은 애플리케이션이 이 정의를 필요로 하면 SDK 패키지로 옮깁니다. `getUser`를 export하고, TypeScript 선언을 넣으며, 호환되는 Core 버전을 선언합니다. 사용하는 쪽은 `./define-request.ts`가 아니라 패키지에서 import합니다. client 설정은 그대로 그쪽의 것입니다. 패키지 구성 전체는 [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)를 따르세요.
 
 ## 결과가 달라질 때
 
-- 잘못된 입력 → `REQ_INPUT_INVALID`. 충돌하는 취소 옵션 → `REQ_OPTIONS_INVALID`. 실패하는 `builder` → `REQ_BUILD_FAILED`
+- 잘못된 입력 → `REQ_INPUT_INVALID`. 실패하는 `builder` → `REQ_BUILD_FAILED`
 - non-2xx status → `HTTP_STATUS`. `error`를 선언했고 그 body가 디코딩되면 타입이 있는 `error.data`
 - 선언된 JSON body인데 다른 미디어 타입 → `RES_MEDIA_TYPE_INVALID`. body를 읽기 전에 보고돼요
 - 선언된 body (2xx는 `output`, 그 밖은 `error`)가 디코딩되지 않음 → status와 관계없이 `RES_DECODE_FAILED` 또는 `RES_STRUCT_MISMATCH`
-- Fetch 실패 / 취소 / 타임아웃 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+- Fetch 실패 / 취소 / 데드라인 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout`은 `1..2_147_483_647` 범위의 양의 안전 정수여야 해요. 유효한 취소 모양은 `{ signal }`, `{ timeout }`, `{ abort }`, 또는 `{ signal, timeout }` / `{ signal, abort }`예요. `{ abort, timeout }`을 함께 주는 건 유효하지 않아요. 취소는 호출자가 본 것을 알려 줄 뿐, 서버 쓰기가 커밋됐는지는 알려 주지 않아요.
+데드라인은 `client({ abort: AbortSignal.timeout(ms) })`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 클라이언트 기본 데드라인은 없어요. 호출 하나에 자기 `abort`가 필요하면 클라이언트를 파생하세요. [클라이언트](/ko-KR/docs/client)를 보세요. 취소는 호출자가 본 것을 알려 줄 뿐, 서버 쓰기가 커밋됐는지는 알려 주지 않아요.
 
 ## 다음 레시피
 
+- [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)
 - [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)
 - [POST JSON](/ko-KR/recipes/post-json)
 - [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)

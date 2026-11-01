@@ -52,7 +52,7 @@ test.each([200, 403])(
         output: struct.unknown(),
         error: struct.unknown(),
       });
-      const [fault, data] = await client.execute(endpoint());
+      const [fault, data] = await endpoint(client);
       expect({ kind, code: fault?.code ?? null }).toEqual({
         kind,
         code: status === 200 ? null : "HTTP_STATUS",
@@ -88,7 +88,7 @@ test.each([200, 403])(
         output: JsonError,
         error: JsonError,
       });
-      const [fault] = await client.execute(endpoint());
+      const [fault] = await endpoint(client);
       codes.push({ kind, code: fault?.code, status: fault?.response?.status });
     }
     expect(codes).toEqual(
@@ -131,7 +131,7 @@ test.each([200, 403])(
         output: JsonError,
         error: JsonError,
       });
-      const [fault] = await client.execute(endpoint());
+      const [fault] = await endpoint(client);
       observed.push({
         code: fault?.code ?? null,
         message:
@@ -174,12 +174,12 @@ test("native malformed JSON and wrong media provide response classification cont
       path: "/native",
       output: JsonError,
     });
-    const [fault] = await client.execute(endpoint());
+    const [fault] = await endpoint(client);
     expect(fault?.code).toBe(expected);
   }
 });
 
-test.each(["abort", "timeout"])(
+test.each(["abort", "timeout"] as const)(
   "synthetic HTTP Blob decoding remains cancellable by %s",
   async (mode) => {
     vi.useFakeTimers();
@@ -210,19 +210,20 @@ test.each(["abort", "timeout"])(
       output: struct.unknown(),
     });
     let settled = false;
-    const pending = client
-      .execute(endpoint(), {
-        signal: controller.signal,
-        ...(mode === "timeout" ? { timeout: 100 } : {}),
-      })
-      .then((result) => {
+    const pending = endpoint(client({ abort: controller.signal })).then(
+      (result) => {
         settled = true;
         return result;
-      });
+      },
+    );
     try {
       await started.promise;
-      if (mode === "abort") controller.abort("cancel decode");
-      await vi.advanceTimersByTimeAsync(101);
+      controller.abort(
+        mode === "timeout"
+          ? new DOMException("deadline", "TimeoutError")
+          : "cancel decode",
+      );
+      await vi.advanceTimersByTimeAsync(0);
       expect(settled).toBe(true);
       const [fault] = await pending;
       expect(fault?.code).toBe(
@@ -290,7 +291,7 @@ test.each([200, 403])(
         output: item.output,
         error: item.error,
       });
-      const [fault, data] = await client.execute(endpoint());
+      const [fault, data] = await endpoint(client);
       expect({
         body: item.body,
         code: fault?.code ?? null,
@@ -325,7 +326,7 @@ test.each([200, 403])(
       output: JsonError,
       error: JsonError,
     });
-    const [fault] = await client.execute(endpoint());
+    const [fault] = await endpoint(client);
     expect(fault?.code).toBe("RES_DECODE_FAILED");
     expect(fault?.response?.status).toBe(status);
   },
@@ -347,7 +348,7 @@ test("a bodiless declared string SSE error decodes to an empty string", async ()
       ...eventOptions,
       error: struct.string(),
     });
-    const [fault, stream] = await client.execute(endpoint());
+    const [fault, stream] = await endpoint(client);
     expect({ body, code: fault?.code, stream }).toEqual({
       body,
       code: "HTTP_STATUS",
@@ -366,7 +367,7 @@ test("a bodiless SSE response cannot return typed HTTP_STATUS with missing data"
     ),
   );
   const endpoint = defineEventStream({ ...eventOptions, error: JsonError });
-  const [fault, stream] = await client.execute(endpoint());
+  const [fault, stream] = await endpoint(client);
   const unsafeRead = () =>
     fault?.code === "HTTP_STATUS" ? fault.data.reason : undefined;
   expect(unsafeRead).not.toThrow();
@@ -378,7 +379,7 @@ test("a bodiless SSE response cannot return typed HTTP_STATUS with missing data"
 test.each(["json", "text", "blob", "arrayBuffer"] as const)(
   "SSE %s handshake readers cancel and release locks on abort and timeout",
   async (kind) => {
-    for (const mode of ["abort", "timeout"]) {
+    for (const mode of ["abort", "timeout"] as const) {
       vi.useFakeTimers();
       const started = Promise.withResolvers<void>();
       const cancelled = Promise.withResolvers<void>();
@@ -410,14 +411,14 @@ test.each(["json", "text", "blob", "arrayBuffer"] as const)(
         error: errors[kind],
       });
       const controller = new AbortController();
-      const pending = client.execute(endpoint(), {
-        signal: controller.signal,
-        ...(mode === "timeout" ? { timeout: 100 } : {}),
-      });
+      const pending = endpoint(client({ abort: controller.signal }));
       try {
         await started.promise;
-        if (mode === "abort") controller.abort("round7");
-        else await vi.advanceTimersByTimeAsync(101);
+        controller.abort(
+          mode === "timeout"
+            ? new DOMException("deadline", "TimeoutError")
+            : "round7",
+        );
         const [fault, stream] = await pending;
         await cancelled.promise;
         await vi.advanceTimersByTimeAsync(0);

@@ -1,18 +1,11 @@
 import type { AnyStruct } from "../struct";
-import type { EndpointInput } from "./endpoint_input";
+import type { StructInput } from "../struct/types";
 
-export type IsEndpointInputOptional<TInput extends AnyStruct | undefined> = [
-  TInput,
-] extends [undefined]
-  ? true
-  : undefined extends EndpointInput<TInput>
-    ? true
-    : false;
-
-export type EndpointCallable<TInput extends AnyStruct | undefined, TCommand> = [
-  TInput,
-] extends [undefined]
-  ? () => TCommand
-  : IsEndpointInputOptional<TInput> extends true
-    ? (input?: EndpointInput<TInput>) => TCommand
-    : (input: EndpointInput<TInput>) => TCommand;
+/** Argument list after the client, decided by the input struct. */
+export type EndpointArgs<S extends AnyStruct | undefined> = [S] extends [
+  undefined,
+]
+  ? []
+  : undefined extends StructInput<S>
+    ? [input?: StructInput<S>]
+    : [input: StructInput<S>];

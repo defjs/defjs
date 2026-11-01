@@ -1,11 +1,11 @@
 ---
 title: "@defjs/vue"
-description: إضافة Vue ومفاتيح الحقن الافتراضية أو المخصصة وinjectClient.
+description: إضافة Vue، ومفاتيح حقن افتراضية أو مخصصة، وinjectClient.
 ---
 
 # Vue
 
-وفّر عميل `@defjs/core` موجودًا لتطبيق Vue. هذه الحزمة لا تنشئ العميل ولا تخزّنه ولا تتخلّص منه. يلزم Vue 3 أو أحدث.
+قدّم عميل `@defjs/core` موجودًا إلى تطبيق Vue. لا تنشئ هذه الحزمة العميل ولا تخزّنه ولا تتخلص منه. يلزم Vue 3 أو أحدث.
 
 انظر [دليل Vue](/ar/docs/integrations/vue).
 
@@ -14,7 +14,7 @@ description: إضافة Vue ومفاتيح الحقن الافتراضية أو 
 <ApiSignature name="createClientPlugin" />
 
 - **client** — نسخة من `createClient`.
-- **يعيد** إضافة Vue لـ `app.use(...)`. يستدعي تثبيتها `app.provide(HTTP_CLIENT, client)`.
+- **يُرجع** إضافة Vue لـ `app.use(...)`. تثبيتها تستدعي `app.provide(HTTP_CLIENT, client)`.
 
 <include cwd>examples/api/create-client-plugin.ts#example</include>
 
@@ -22,15 +22,15 @@ description: إضافة Vue ومفاتيح الحقن الافتراضية أو 
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` يقرأ أقرب مزوّد لذلك المفتاح؛ عند حذف الوسيط أو تمرير `undefined` يستخدم `HTTP_CLIENT`. استدعِه داخل سياق حقن صالح في Vue: `setup()` متزامن أو `app.runWithContext()` (يتطلب Vue 3.3+). الأخير يوفّر سياقًا متزامنًا على مستوى التطبيق فقط، بلا تجاوزات الشجرة الفرعية أو حفظ للسياق عبر `await` عادي. يظل السياق الذي يعيده المترجم بعد `await` على المستوى الأعلى في `<script setup>` صالحًا.
+يقرأ `injectClient(key)` أقرب موفّر لذلك المفتاح؛ والقيمة المحذوفة أو `undefined` تستخدم `HTTP_CLIENT`. استدعها في سياق حقن Vue صالح: `setup()` متزامن أو `app.runWithContext()` (Vue 3.3+). يوفّر الأخير سياق التطبيق المتزامن فقط، لا تجاوزات الشجرة الفرعية ولا السياق عبر `await` عادي. تبقى السياقات التي يستعيدها المترجم بعد `await` في المستوى الأعلى داخل `<script setup>` صالحة. مرّر ذلك العميل إلى عملية. `Client` دالة: لا تستخدمه مصدرًا لـ `watch` أو `computed`، لأنهما يستدعيان الدالة.
 
-لمفتاح `InjectionKey<Client>` مخصص، استخدم `app.provide(key, client)` أو `provide(key, client)` في مكوّن سلف. يجب أن يشترك الطرفان في كائن `Symbol` نفسه؛ تطابق الأوصاف لا يجعل المفاتيح متساوية. ما زالت `createClientPlugin(client)` تقبل العميل فقط وتوفّر `HTTP_CLIENT` وحده.
+لمفتاح `InjectionKey<Client>` مخصص، استخدم `app.provide(key, client)` أو `provide(key, client)` من سلف. شارك كائن `Symbol` نفسه؛ والأوصاف المتطابقة لا تجعل المفاتيح متساوية. ما زال `createClientPlugin(client)` يأخذ العميل فقط ويوفّر `HTTP_CLIENT`.
 
-- **يعيد** العميل نفسه الذي تم توفيره للمفتاح المختار.
-- **يرمي** `Error` عند غياب سياق حقن نشط أو عميل للمفتاح المختار. غياب المفتاح المخصص لا يؤدي إلى الرجوع إلى `HTTP_CLIENT`؛ تثبيت الإضافة وحده لا ينشئ سياق حقن.
+- **يُرجع** العميل الموفَّر نفسه للمفتاح المختار.
+- **يرمي** `Error` دون سياق حقن نشط أو عميل للمفتاح المختار. المفتاح المخصص الغائب لا يعود أبدًا إلى `HTTP_CLIENT`؛ وتثبيت الإضافة وحدها لا ينشئ سياق حقن.
 
 ## HTTP_CLIENT
 
 <ApiSignature name="HTTP_CLIENT" />
 
-مفتاح حقن Vue. فضّل `injectClient()` على `inject(HTTP_CLIENT)`. استبدل العميل لشجرة فرعية باستخدام `provide(HTTP_CLIENT, childClient)`.
+مفتاح حقن Vue. فضّل `injectClient()` على `inject(HTTP_CLIENT)`. غلّب شجرة فرعية بـ `provide(HTTP_CLIENT, childClient)`.

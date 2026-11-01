@@ -41,9 +41,7 @@ describe("request http runtime with client config", () => {
       path: "/query",
     });
 
-    const [error] = await client.execute(
-      useSerializedQuery({ a: "1", b: "2" }),
-    );
+    const [error] = await useSerializedQuery(client, { a: "1", b: "2" });
 
     expect(error).toBeNull();
     expect(capturedRequestUrl).toBe("/query?A=1&B=2");
@@ -82,9 +80,7 @@ describe("request http runtime with client config", () => {
       path: "/query",
     });
 
-    const [error] = await client.execute(
-      useSerializedQuery({ a: "1", b: "2" }),
-    );
+    const [error] = await useSerializedQuery(client, { a: "1", b: "2" });
 
     expect(error).toBeNull();
     expect(interceptorCalls).toBe(1);
@@ -110,8 +106,8 @@ describe("request http runtime with client config", () => {
       ),
     );
 
-    expect((await client.execute(first()))[0]).toBeNull();
-    expect((await client.execute(second()))[0]).toBeNull();
+    expect((await first(client))[0]).toBeNull();
+    expect((await second(client))[0]).toBeNull();
     expect(paths).toEqual(["/first", "/second"]);
   });
 });

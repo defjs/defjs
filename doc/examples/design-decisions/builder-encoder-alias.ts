@@ -1,5 +1,5 @@
 // #region example
-import { defineRequest, struct } from "@defjs/core";
+import { defineRequest, struct, type Client } from "@defjs/core";
 
 const createBatch = defineRequest({
   method: "POST",
@@ -23,9 +23,14 @@ const createBatch = defineRequest({
   output: struct.object({ accepted: struct.number() }),
 });
 
-const command = createBatch({
-  accountId: 42,
-  users: [{ displayName: "Ada", email: "ada@example.com" }],
-});
-void command;
+async function submit(client: Client) {
+  const [error, result] = await createBatch(client, {
+    accountId: 42,
+    users: [{ displayName: "Ada", email: "ada@example.com" }],
+  });
+  if (error) return;
+  console.log(result.accepted);
+}
+
+void submit;
 // #endregion

@@ -65,12 +65,11 @@ describe("web socket single struct messages", () => {
   });
 
   async function run(
-    command: unknown,
-    options?: unknown,
+    operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
+    options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    return client.execute(command as never, options as never) as Promise<
-      SocketAwaitResult<unknown, unknown>
-    >;
+    const bound = options === undefined ? client : client(options);
+    return operation(bound);
   }
 
   test("decodes a discriminated incoming frame as the struct value", async () => {
@@ -89,7 +88,7 @@ describe("web socket single struct messages", () => {
       path: "/ws/basic",
     });
 
-    const [error, socket] = await run(useChat());
+    const [error, socket] = await run(useChat);
     expect(error).toBeNull();
     if (!socket) {
       throw new Error("Expected socket session");
@@ -115,7 +114,7 @@ describe("web socket single struct messages", () => {
       maxIncomingQueueSize: 4,
       path: "/ws/error-before-close",
     });
-    const [error, socket] = await run(useSocket());
+    const [error, socket] = await run(useSocket);
     expect(error).toBeNull();
     if (!socket) {
       throw new Error("Expected socket session");
@@ -168,7 +167,7 @@ describe("web socket single struct messages", () => {
       outgoing: ChatOutgoing,
       path: "/ws/echo",
     });
-    const [error, socket] = await run(useEcho());
+    const [error, socket] = await run(useEcho);
     expect(error).toBeNull();
     if (!socket) {
       throw new Error("Expected socket session");
@@ -204,17 +203,29 @@ describe("web socket single struct messages", () => {
         withEndpoint("https://example.test"),
         withWebSocketHandle(Socket as unknown as typeof WebSocket),
       );
-      const pending = client.execute(useHeartbeat(), {
-        heartbeat: {
-          intervalMs: 10,
-          isAck(message: { ok: boolean; type: "pong" }) {
-            acks.push(message);
-            return message.type === "pong" && message.ok;
+      const pending = useHeartbeat(
+        client({
+          heartbeat: {
+            intervalMs: 10,
+            isAck(message: unknown) {
+              if (
+                typeof message === "object" &&
+                message !== null &&
+                "type" in message &&
+                message.type === "pong" &&
+                "ok" in message &&
+                message.ok === true
+              ) {
+                acks.push({ ok: true, type: "pong" });
+                return true;
+              }
+              return false;
+            },
+            message: () => ({ at: 1, type: "ping" as const }),
+            timeoutMs: 1_000,
           },
-          message: () => ({ at: 1, type: "ping" as const }),
-          timeoutMs: 1_000,
-        },
-      });
+        }),
+      );
       const [error, socket] = await openControllableSocket(pending, latest);
       const native = latest();
 
@@ -276,7 +287,7 @@ describe("web socket single struct messages", () => {
       withWebSocketHandle(Socket as unknown as typeof WebSocket),
     );
     const [error, session] = await openControllableSocket(
-      client.execute(endpoint()),
+      endpoint(client),
       latest,
     );
     const native = latest();
@@ -306,7 +317,7 @@ describe("web socket single struct messages", () => {
       withWebSocketHandle(Socket as unknown as typeof WebSocket),
     );
     const [error, session] = await openControllableSocket(
-      client.execute(endpoint()),
+      endpoint(client),
       latest,
     );
     const native = latest();

@@ -21,7 +21,20 @@ test("exposes grouped navigation and the current reading area", async () => {
       .getByRole("heading", { name: "SDK 开发", exact: true })
       .count(),
   ).toBe(1);
-  expect(await navigation.getByRole("heading", { level: 2 }).count()).toBe(5);
+  expect(await navigation.getByRole("heading", { level: 2 }).count()).toBe(6);
+  expect(
+    await navigation.getByRole("heading", { name: "AI", exact: true }).count(),
+  ).toBe(1);
+  expect(
+    await navigation
+      .getByRole("link", { name: "AI 辅助开发", exact: true })
+      .getAttribute("href"),
+  ).toBe("/zh-Hans/docs/ai");
+  expect(
+    await navigation
+      .getByRole("link", { name: "调用 AI API", exact: true })
+      .getAttribute("href"),
+  ).toBe("/zh-Hans/docs/ai-api");
   expect(
     await navigation.locator('[aria-current="page"]').getAttribute("href"),
   ).toBe("/zh-Hans/docs/http");
@@ -49,6 +62,7 @@ test("exposes grouped navigation and the current reading area", async () => {
       .getByRole("link", { name: "API 参考", exact: true })
       .getAttribute("href"),
   ).toBe("/zh-Hans/api");
+  expect(await areas.getByRole("link").count()).toBe(3);
   await areas.getByRole("link", { name: "API 参考", exact: true }).click();
   await page.waitForURL("**/zh-Hans/api");
   await navigation

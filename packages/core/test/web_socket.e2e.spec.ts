@@ -40,12 +40,10 @@ test("sends builder path and query, decodes discriminated incoming frames, and t
     path: "/e2e/ws/:room",
   });
 
-  const [error, socket] = await client.execute(
-    useChat({
-      cursor: { since: "5" },
-      room: { roomId: "blue" },
-    }),
-  );
+  const [error, socket] = await useChat(client, {
+    cursor: { since: "5" },
+    room: { roomId: "blue" },
+  });
 
   expect(error).toBeNull();
   if (!socket) {

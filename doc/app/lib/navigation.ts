@@ -7,35 +7,69 @@ import {
 } from "fumadocs-core/page-tree";
 import type { LayoutTab } from "fumadocs-ui/layouts/shared";
 import { localePrefix } from "./i18n";
-import { getNav } from "./navigation-copy";
+import { getTranslator, type Translator } from "./translations";
+import type { MessageKey } from "./messages";
+
+interface NavigationGroup {
+  titleKey: MessageKey;
+  paths: readonly string[];
+}
 
 const guideGroups = [
-  ["", "/docs/start"],
-  ["/docs/struct", "/docs/commands", "/docs/client"],
-  ["/docs/http", "/docs/sse", "/docs/web-socket"],
-  ["/docs/errors", "/docs/interceptors"],
-  [
-    "/docs/integrations",
-    "/docs/integrations/react",
-    "/docs/integrations/vue",
-    "/docs/integrations/opentelemetry-server",
-  ],
-] as const;
+  { titleKey: "nav.guide.sdkDevelopment", paths: ["", "/docs/start"] },
+  {
+    titleKey: "nav.guide.contractsExecution",
+    paths: ["/docs/struct", "/docs/client"],
+  },
+  {
+    titleKey: "nav.guide.requestsRealtime",
+    paths: ["/docs/http", "/docs/sse", "/docs/web-socket"],
+  },
+  {
+    titleKey: "nav.guide.errorsInterception",
+    paths: ["/docs/errors", "/docs/interceptors"],
+  },
+  {
+    titleKey: "nav.guide.plugins",
+    paths: [
+      "/docs/integrations",
+      "/docs/integrations/react",
+      "/docs/integrations/vue",
+      "/docs/integrations/opentelemetry-server",
+    ],
+  },
+  { titleKey: "nav.guide.ai", paths: ["/docs/ai", "/docs/ai-api"] },
+] as const satisfies readonly NavigationGroup[];
 export const exampleGroups = [
-  [
-    "/recipes/post-json",
-    "/recipes/get-declared-404",
-    "/recipes/cancel-http",
-    "/recipes/etag-revalidate",
-    "/recipes/graphql-http-envelope",
-  ],
-  ["/recipes/refresh-bearer-once"],
-  ["/recipes/consume-sse", "/recipes/websocket-session"],
-  ["/recipes/test-with-handle", "/recipes/publish-http-sdk"],
-] as const;
+  {
+    titleKey: "nav.examples.http",
+    paths: [
+      "/recipes/post-json",
+      "/recipes/get-declared-404",
+      "/recipes/cancel-http",
+      "/recipes/etag-revalidate",
+      "/recipes/graphql-http-envelope",
+    ],
+  },
+  {
+    titleKey: "nav.examples.authentication",
+    paths: ["/recipes/refresh-bearer-once"],
+  },
+  {
+    titleKey: "nav.examples.realtime",
+    paths: ["/recipes/consume-sse", "/recipes/websocket-session"],
+  },
+  {
+    titleKey: "nav.examples.sdkTestingPublishing",
+    paths: ["/recipes/test-with-handle", "/recipes/publish-http-sdk"],
+  },
+] as const satisfies readonly NavigationGroup[];
 
-export function getNavigationTree(tree: Root, locale: string): Root {
-  const copy = getNav(locale);
+export function getNavigationTree(
+  tree: Root,
+  locale: string,
+  t: Translator = getTranslator(locale),
+): Root {
   const prefix = localePrefix(locale);
   const pages = new Map(
     flattenTree(tree.children).map((page) => [page.url, page]),
@@ -47,12 +81,11 @@ export function getNavigationTree(tree: Root, locale: string): Root {
     return name ? { ...item, name } : item;
   }
   function grouped(
-    groups: readonly (readonly string[])[],
-    headings: readonly string[],
+    groups: readonly NavigationGroup[],
     names: Record<string, string> = {},
   ): Node[] {
-    return groups.flatMap((paths, group): Node[] => [
-      { type: "separator", name: headings[group] },
+    return groups.flatMap(({ titleKey, paths }): Node[] => [
+      { type: "separator", name: t(titleKey) },
       ...paths.map((path) => page(path, names[path])),
     ]);
   }
@@ -65,7 +98,7 @@ export function getNavigationTree(tree: Root, locale: string): Root {
     );
     if (!folder) throw new Error(`Missing reading area: ${url}`);
     const root = page(`/${area}`);
-    const index = area === "api" ? { ...root, name: copy.apiIndex } : root;
+    const index = area === "api" ? { ...root, name: t("nav.apiIndex") } : root;
     const integrations = [
       "/api/react",
       "/api/vue",
@@ -85,7 +118,7 @@ export function getNavigationTree(tree: Root, locale: string): Root {
       area === "docs"
         ? [
             index,
-            ...grouped(guideGroups, copy.groups, { "": copy.home }),
+            ...grouped(guideGroups, { "": t("nav.home") }),
             {
               type: "separator" as const,
               $id: `${locale}:navigation:standalone`,
@@ -93,12 +126,12 @@ export function getNavigationTree(tree: Root, locale: string): Root {
             page("/docs/design-decisions"),
           ]
         : area === "recipes"
-          ? [index, ...grouped(exampleGroups, copy.exampleGroups)]
+          ? [index, ...grouped(exampleGroups)]
           : [
               index,
-              { type: "separator" as const, name: copy.coreModules },
+              { type: "separator" as const, name: t("nav.coreModules") },
               ...other.filter((node) => !isIntegration(node)),
-              { type: "separator" as const, name: copy.integrations },
+              { type: "separator" as const, name: t("nav.integrations") },
               ...other.filter(isIntegration),
             ];
     return { ...folder, name: root.name, children: chapters };
@@ -136,11 +169,10 @@ const relatedTopics = [
   [
     "/docs/start",
     "/docs/http",
-    "/docs/commands",
     "/api/http",
-    ...exampleGroups[0],
-    ...exampleGroups[1],
-    ...exampleGroups[3],
+    ...exampleGroups[0].paths,
+    ...exampleGroups[1].paths,
+    ...exampleGroups[3].paths,
   ],
   [
     "/docs/struct",
@@ -152,19 +184,13 @@ const relatedTopics = [
   ],
   [
     "/docs/client",
-    "/docs/commands",
     "/api/client",
     "/recipes/cancel-http",
     "/recipes/publish-http-sdk",
     "/recipes/test-with-handle",
   ],
-  ["/docs/sse", "/docs/commands", "/api/sse", "/recipes/consume-sse"],
-  [
-    "/docs/web-socket",
-    "/docs/commands",
-    "/api/web-socket",
-    "/recipes/websocket-session",
-  ],
+  ["/docs/sse", "/api/sse", "/recipes/consume-sse"],
+  ["/docs/web-socket", "/api/web-socket", "/recipes/websocket-session"],
   [
     "/docs/errors",
     "/api/errors",

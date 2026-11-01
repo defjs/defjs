@@ -53,7 +53,7 @@ describe("json content-type precheck", () => {
       headers: { "content-type": contentType },
       status: 200,
     });
-    const [fault, data] = await client.execute(useRequest());
+    const [fault, data] = await useRequest(client);
 
     expect(fault).toBeNull();
     expect(data).toEqual({ id: 1 });
@@ -70,7 +70,7 @@ describe("json content-type precheck", () => {
       headers: contentType ? { "content-type": contentType } : {},
       status: 200,
     });
-    const [fault, data, response] = await client.execute(useRequest());
+    const [fault, data, response] = await useRequest(client);
 
     expect(data).toBeUndefined();
     expect(response).toBeUndefined();
@@ -94,7 +94,7 @@ describe("json content-type precheck", () => {
         status: 504,
       },
     );
-    const [fault] = await client.execute(useRequest());
+    const [fault] = await useRequest(client);
 
     expect(fault?.code).toBe("RES_MEDIA_TYPE_INVALID");
     expect(cancelled()).toBe(true);
@@ -106,7 +106,7 @@ describe("json content-type precheck", () => {
       headers: { "content-type": "text/html" },
       status: 200,
     });
-    const [fault, data] = await client.execute(useUndeclared());
+    const [fault, data] = await useUndeclared(client);
 
     expect(fault).toBeNull();
     expect(data).toBeUndefined();
@@ -122,7 +122,7 @@ describe("json content-type precheck", () => {
       headers: { "content-type": "text/html" },
       status: 200,
     });
-    const [fault, data] = await client.execute(useText());
+    const [fault, data] = await useText(client);
 
     expect(fault).toBeNull();
     expect(data).toBe("plain body");
@@ -142,7 +142,7 @@ describe("json content-type precheck", () => {
         status: 504,
       },
     );
-    const [fault] = await client.execute(useRequest());
+    const [fault] = await useRequest(client);
 
     expect(fault?.code).toBe("RES_MEDIA_TYPE_INVALID");
     expect(cancelled()).toBe(true);

@@ -1,6 +1,6 @@
 ---
 title: "ローカル HTTP テスト"
-description: withHTTPHandle で 1 クライアント分の Fetch を差し替え、コマンドはそのままにします。
+description: withHTTPHandle で 1 クライアント分の Fetch を差し替え、操作はそのままにします。
 ---
 
 # ローカル Fetch ハンドルでテストする
@@ -17,4 +17,4 @@ description: withHTTPHandle で 1 クライアント分の Fetch を差し替え
 Ada 200
 ```
 
-本番では同じ `getUser` コマンドを、本物の `withEndpoint(...)` クライアントに対して使います — 変わるのはハンドルだけです。
+本番では同じ `getUser` 操作を、本物の `withEndpoint(...)` クライアントに対して使います — 変わるのはハンドルだけです。

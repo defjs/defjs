@@ -75,7 +75,7 @@ describe("web socket startup faults", () => {
         ),
       );
 
-      const [fault, session] = await client.execute(useRoom());
+      const [fault, session] = await useRoom(client);
 
       expect(constructed).toBe(0);
       expect(session).toBeUndefined();
@@ -96,7 +96,7 @@ describe("web socket startup faults", () => {
       ),
     );
 
-    const [fault, session] = await client.execute(useRoom());
+    const [fault, session] = await useRoom(client);
 
     expect(session).toBeUndefined();
     expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
@@ -112,7 +112,7 @@ describe("web socket startup faults", () => {
         ),
       );
 
-      const [fault, session] = await client.execute(useRoom());
+      const [fault, session] = await useRoom(client);
 
       expect(session).toBeUndefined();
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
@@ -122,7 +122,7 @@ describe("web socket startup faults", () => {
 
   test("should report a refused connection as a transport fault, not an interceptor fault", async () => {
     // The startup catch is the funnel for every failure, so it must not relabel this one.
-    const [fault, session] = await unreachableClient().execute(useRoom());
+    const [fault, session] = await useRoom(unreachableClient());
 
     expect(session).toBeUndefined();
     expect(fault?.code).not.toBe("EXT_INTERCEPTOR_FAILED");
@@ -137,7 +137,7 @@ describe("web socket startup faults", () => {
       }),
     );
 
-    const [fault] = await client.execute(useRoom());
+    const [fault] = await useRoom(client);
 
     expect(fault?.code).toBe("EXT_HOOK_FAILED");
     expect(fault?.cause).toBe(cause);
@@ -151,7 +151,7 @@ describe("web socket startup faults", () => {
       ),
     );
 
-    const [fault] = await client.execute(useRoom());
+    const [fault] = await useRoom(client);
 
     expect(fault?.code).toBe("ENV_UNSUPPORTED");
   });
@@ -168,9 +168,9 @@ describe("web socket startup faults", () => {
       path: "/ws/:room",
     });
 
-    const [fault] = await unreachableClient().execute(
-      useTyped({ room: "nope" } as never),
-    );
+    const [fault] = await useTyped(unreachableClient(), {
+      room: "nope",
+    } as never);
 
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
   });
@@ -185,7 +185,7 @@ describe("web socket startup faults", () => {
       path: "/ws",
     });
 
-    const [fault] = await unreachableClient().execute(useBadLimit());
+    const [fault] = await useBadLimit(unreachableClient());
 
     expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
   });
@@ -226,9 +226,9 @@ describe("web socket startup faults", () => {
       withEndpoint("https://example.test"),
       withWebSocketHandle(ReadOnlyBinaryTypeSocket),
     );
-    const [fault, session] = await client.execute(useRoom(), {
-      reconnect: { attempts: 2, delayMs: 0 },
-    });
+    const [fault, session] = await useRoom(
+      client({ reconnect: { attempts: 2, delayMs: 0 } }),
+    );
 
     expect(session).toBeUndefined();
     expect(fault?.code).toBe("NET_UNREACHABLE");

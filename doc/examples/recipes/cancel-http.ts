@@ -5,11 +5,11 @@ const client = createClient(withEndpoint("https://api.example.com"));
 const getReport = defineRequest({ method: "GET", path: "/report" });
 
 const controller = new AbortController();
-const command = getReport();
-const pending = client.execute(command, {
-  signal: controller.signal,
-  timeout: 5_000,
-});
+const pending = getReport(
+  client({
+    abort: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
+  }),
+);
 
 controller.abort("screen closed");
 

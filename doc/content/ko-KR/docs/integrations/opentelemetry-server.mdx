@@ -29,7 +29,7 @@ SDK는 다른 곳에서 초기화해요. API 객체를 넘겨요.
 
 SDK 초기화, provider, exporter, processor, context, sampling, 마스킹, flush, shutdown은 호출하는 쪽이 소유해요. 이 패키지는 넘긴 선택적 `Tracer`, 선택 `Meter`, 선택 `Logger`, 선택 `TextMapPropagator`를 소비해요. 내장 redactor나 민감 key 정책은 제공하지 않아요.
 
-캐시, 재시도, 메시지별 span, 애플리케이션 명령 결과 정책은 없어요. 선택한 SDK와 bridge가 지원하는 서버 런타임을 쓰세요. 여기서 실행 가능한 Winston 예제는 Bun을 써요. peer는 `@defjs/core`, `@opentelemetry/api` 1.x, `@opentelemetry/core` 2.x/3.x예요. `@opentelemetry/api-logs`는 일반 패키지 의존성이고, SDK와 bridge는 애플리케이션이 직접 설치해요.
+캐시, 재시도, 메시지별 span, 애플리케이션 결과 정책은 없어요. 선택한 SDK와 bridge가 지원하는 서버 런타임을 쓰세요. 여기서 실행 가능한 Winston 예제는 Bun을 써요. peer는 `@defjs/core`, `@opentelemetry/api` 1.x, `@opentelemetry/core` 2.x/3.x예요. `@opentelemetry/api-logs`는 일반 패키지 의존성이고, SDK와 bridge는 애플리케이션이 직접 설치해요.
 
 공개 API: `withOpenTelemetryServer`와 `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
 
@@ -54,7 +54,7 @@ span 훅은 `tracer`를 전달했을 때만 호출돼요. 훅은 바꾸는 전�
 
 ## operation 정체성과 전파
 
-명령에 안정적인 정체성이 있으면 `defineRequest`, `defineEventStream`, `defineWebSocket`에 정적 `operation`을 설정하세요. 플러그인은 span 이름과 `defjs.operation`에 써요. 해석된 path, identifier, 테넌트, query 문자열에서 정체성을 끌어내지 않아요.
+작업에 안정적인 정체성이 있으면 `defineRequest`, `defineEventStream`, `defineWebSocket`에 정적 `operation`을 설정하세요. 플러그인은 span 이름과 `defjs.operation`에 써요. 해석된 path, identifier, 테넌트, query 문자열에서 정체성을 끌어내지 않아요.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/operation-names.ts#example
@@ -72,13 +72,13 @@ HTTP와 SSE는 전파 필드를 요청 헤더에 주입해요. 주입에는 항�
 
 ## HTTP, SSE, WebSocket 의미
 
-플러그인은 명령 해석의 모든 단계가 아니라 전송 수명을 측정해요.
+플러그인은 작업의 모든 단계가 아니라 전송 수명을 측정해요.
 
-- **HTTP** — span은 HTTP 인터셉터에서 시작해 Defjs `HttpResponse`를 받는 시점에 끝나요. 선언된 `output`/`error` body는 그 응답이 반환되기 **전에**, interceptor 체인 안에서 JSON, 텍스트, `Blob`, 바이트로 읽혀요. JSON 미디어 타입 확인과 `JSON.parse`는 JSON 표현에만 적용되고, JSON이 아닌 텍스트, blob, 바이트는 유효해요. 어떤 표현이든 읽기 실패, 또는 JSON 미디어 타입/파싱 실패(`RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `NET_BODY_INCOMPLETE`)는 interceptor를 통해 reject돼요. span은 `error.type`이 `BodyFailure`이고 `http.response.status_code`가 없는 `ERROR`로 끝나고, 메트릭은 `BodyFailure`를 기록하고, WARN이 한 번 로그돼요. Struct 검증(`RES_STRUCT_MISMATCH`), 선언은 됐지만 본문이 없는 경우(예: 204), `HTTP_STATUS` 변환은 그 뒤에 일어나므로, 나중에 생긴 fault는 이미 끝난 span을 고칠 수 없어요. HTTP execute 타임아웃은 타임아웃 reject이 OTel interceptor의 `next()` / 전송 경계에 닿을 때만 로그돼요. 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 interceptor 작업, 체인 뒤 body 변환 중에 바깥 실행만 데드라인을 보면 LogRecord는 나오지 않아요. 바깥 명령 결과를 관찰하세요. span이 체인 안에서 살기 때문에, 전송 계층의 reject는 OTel 관례대로 예외 클래스로 기록되고, 실행이 나중에 배정하는 fault 코드로 기록되지 않아요.
+- **HTTP** — span은 HTTP 인터셉터에서 시작해 Defjs `HttpResponse`를 받는 시점에 끝나요. 선언된 `output`/`error` body는 그 응답이 반환되기 **전에**, interceptor 체인 안에서 JSON, 텍스트, `Blob`, 바이트로 읽혀요. JSON 미디어 타입 확인과 `JSON.parse`는 JSON 표현에만 적용되고, JSON이 아닌 텍스트, blob, 바이트는 유효해요. 어떤 표현이든 읽기 실패, 또는 JSON 미디어 타입/파싱 실패(`RES_MEDIA_TYPE_INVALID`, `RES_DECODE_FAILED`, `NET_BODY_INCOMPLETE`)는 interceptor를 통해 reject돼요. span은 `error.type`이 `BodyFailure`이고 `http.response.status_code`가 없는 `ERROR`로 끝나고, 메트릭은 `BodyFailure`를 기록하고, WARN이 한 번 로그돼요. Struct 검증(`RES_STRUCT_MISMATCH`), 선언은 됐지만 본문이 없는 경우(예: 204), `HTTP_STATUS` 변환은 그 뒤에 일어나므로, 나중에 생긴 fault는 이미 끝난 span을 고칠 수 없어요. 데드라인 abort는 타임아웃 reject이 OTel interceptor의 `next()` / 전송 경계에 닿을 때만 로그돼요. 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 interceptor 작업, 체인 뒤 body 변환 중에 작업 호출만 데드라인을 보면 LogRecord는 나오지 않아요. 작업 호출을 관찰하세요. span이 체인 안에서 살기 때문에, 전송 계층의 reject는 OTel 관례대로 예외 클래스로 기록되고, 작업이 나중에 배정하는 fault 코드로 기록되지 않아요.
 - **SSE** — span은 `stream.closed`가 settle할 때까지 열려 있어요. `sse.connected`, 그다음 `sse.closed` / `sse.aborted` / `sse.error`를 기록해요. `sse.aborted`는 `stream.close()`와 타임아웃이 아닌 호출자의 열린 스트림 abort를 덮고, span은 `OK`로 끝나요. 타임아웃 모양의 호출자 abort(`TimeoutError` 또는 `ERR_TIMEOUT`)는 대신 `stream.closed`를 `kind: 'error'`와 `code: 'NET_TIMEOUT'`으로 settle하고, span은 `sse.error`와 함께 `ERROR`로 끝나요. 재연결을 포함한 논리 스트림 하나 → span 하나. 이벤트별 span은 없어요.
 - **WebSocket** — span은 `session.closed`가 settle할 때까지 열려 있어요. 이벤트: `websocket.connected`, `websocket.closed`, `websocket.error`. 재연결하는 물리 소켓도 논리 세션의 일부예요. 호출자가 열린 세션을 abort하면 span은 `websocket.error`와 함께 `ERROR`로 끝나고 로그는 없어요. `error.type`은 abort 이유를 따라요(기본 `abort()`는 `AbortError`, `Error` 이유는 그 `Error.name`, 문자열 이유는 `string`). 서버가 보낸 close 프레임은 코드와 관계없이 `websocket.closed`와 함께 `OK`로 끝나요. close 프레임 없이 갑자기 끊기는 경우(1006)는 런타임에 따라 달라요. `close` 전에 소켓 `error`가 발생하지 않는 Bun에서는 `OK`로 끝나고, 발생하는 Node.js에서는 `ERROR`로 끝나며 로그가 한 번 남아요. 메시지별 span은 없어요.
 
-전송만이 아니라 최종 명령 결과가 필요하면 `client.execute(...)`를 애플리케이션 span으로 감싸세요.
+전송만이 아니라 최종 작업 결과가 필요하면 작업 호출을 애플리케이션 span으로 감싸세요.
 
 <include cwd lang="typescript">
   examples/opentelemetry-server/active-span.ts#example
@@ -112,7 +112,7 @@ WebSocket query 전파는 브라우저, 프록시, access log, 텔레메트리�
 
 플러그인은 SDK를 초기화/종료하지 않고, core 클라이언트나 전송 핸들을 dispose하지도 않아요. 텔레메트리를 flush하고 HTTP/SSE/WebSocket 작업을 닫는 건 호출하는 쪽이에요. [인터셉터](/ko-KR/docs/interceptors), [SSE](/ko-KR/docs/sse), [WebSocket](/ko-KR/docs/web-socket)을 보세요.
 
-## 로그와 서드파티 로거
+## 로그와 서드파티 로거 [#logs-and-third-party-loggers]
 
 `logger?: Logger`는 `@opentelemetry/api-logs`의 네이티브 인터페이스를 받아요. `tracer`, `meter`와 독립적이에요. 생략하면 Defjs LogRecord가 꺼지고, `logger`만 넘기면 로컬 span 없이 진단이 켜져요. Defjs는 전역 logger를 가져오지 않아요. Logs API는 패키지 의존성이고, SDK, exporter, 로깅 bridge는 애플리케이션 몫이에요.
 
@@ -174,7 +174,7 @@ Severity는 이벤트를 설명하고, 임계값은 목적지가 그 이벤트�
 | SSE 또는 WebSocket 종단 오류 또는 reject된 `closed`. 런타임이 소켓 `error`를 먼저 발생시키는 경우(Node.js)의 WebSocket 갑작스러운 끊김(1006) 포함 | 같은 전송 이벤트 이름으로 WARN 한 번, phase `connection`                                          |
 | 성공, 메시지, EOF, 정상 종료, 서버가 보낸 WebSocket close 프레임 (1011 포함 모든 코드), 또는 능동적 취소                                          | 없음                                                                                              |
 
-HTTP 예외 이벤트는 현재 Development로 표시된 시맨틱 컨벤션을 따라요. SSE/WS 이벤트 이름은 Defjs 고유예요. non-2xx로 거부된 SSE 핸드셰이크는 여기서 연결 실패로 관찰되고, 이후의 공개 HTTP_STATUS 변환은 이 interceptor 밖이에요. 선언된 body 읽기는 모든 표현에 대해 HTTP 핸들러 경계 안에 있고, JSON 미디어 타입 확인과 `JSON.parse`는 JSON 표현에만 적용돼요. 선언된 표현의 읽기 실패, 또는 선언된 JSON `output`(2xx)이나 `error`(그 밖의 status)에서 JSON이 깨졌거나 미디어 타입이 틀린 응답은 HTTP status와 관계없이 WARN을 한 번 내요. JSON이 아닌 텍스트, blob, 바이트는 미디어 타입이 JSON이 아니라는 이유만으로 실패하지 않아요. 선언하지 않은 body는 읽지 않으므로 로그할 수 없어요. Struct 검증(`RES_STRUCT_MISMATCH`), 204처럼 선언은 됐지만 본문이 없는 경우, `HTTP_STATUS` 변환은 interceptor 뒤에 일어나고 로그하지 않아요. HTTP execute 타임아웃은 타임아웃 reject이 OTel interceptor의 `next()` / 전송 경계에 닿을 때만 로그돼요. 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 interceptor 작업, 체인 뒤 body 변환 중에 바깥 실행만 데드라인을 보면 LogRecord는 나오지 않아요. 바깥 명령 경계에서 `client.execute(...)`를 관찰하세요. `exception.type`은 Defjs fault 코드가 아니라 interceptor가 관찰한 대상의 클래스 이름이에요. `BodyFailure`(HTTP body), `EventStreamFatalError`(SSE 핸드셰이크), `DefjsFault`(WebSocket 시작), 또는 `TypeError`(네트워크 실패)나 `Error`(타임아웃) 같은 플랫폼 클래스예요. 이유가 `TimeoutError`인 abort(예: `AbortSignal.timeout()`)는 취소가 아니라 타임아웃으로 취급되고, 그 reject이 이 경계에 닿을 때 로그해요. SSE의 non-2xx 핸드셰이크는 body와 관계없이 항상 한 번 로그해요. 서버가 보낸 WebSocket close 프레임은 코드(1011 포함)와 관계없이 절대 로그하지 않아요. close 프레임 없이 갑자기 끊기는 경우(1006)는 런타임에 따라 달라요. 플랫폼 WebSocket이 `close` 전에 `error`를 발생시키는 경우(Node.js)에는 세션이 오류로 끝나고 `websocket.close.code` `1006`과 함께 한 번 로그해요. 발생시키지 않는 경우(Bun)에는 정상 close이므로 아무것도 로그하지 않아요. 그 밖에는 오류로 끝난 세션(큐 오버플로, heartbeat 타임아웃)만 로그해요. Defjs는 모든 명령 검증/디코딩 fault, 모든 재연결 시도, 훅 실패를 독립 Logs로 기록하지 않아요.
+HTTP 예외 이벤트는 현재 Development로 표시된 시맨틱 컨벤션을 따라요. SSE/WS 이벤트 이름은 Defjs 고유예요. non-2xx로 거부된 SSE 핸드셰이크는 여기서 연결 실패로 관찰되고, 이후의 공개 HTTP_STATUS 변환은 이 interceptor 밖이에요. 선언된 body 읽기는 모든 표현에 대해 HTTP 핸들러 경계 안에 있고, JSON 미디어 타입 확인과 `JSON.parse`는 JSON 표현에만 적용돼요. 선언된 표현의 읽기 실패, 또는 선언된 JSON `output`(2xx)이나 `error`(그 밖의 status)에서 JSON이 깨졌거나 미디어 타입이 틀린 응답은 HTTP status와 관계없이 WARN을 한 번 내요. JSON이 아닌 텍스트, blob, 바이트는 미디어 타입이 JSON이 아니라는 이유만으로 실패하지 않아요. 선언하지 않은 body는 읽지 않으므로 로그할 수 없어요. Struct 검증(`RES_STRUCT_MISMATCH`), 204처럼 선언은 됐지만 본문이 없는 경우, `HTTP_STATUS` 변환은 interceptor 뒤에 일어나고 로그하지 않아요. HTTP 데드라인 abort는 타임아웃 reject이 OTel interceptor의 `next()` / 전송 경계에 닿을 때만 로그돼요. 입력 파싱, 빌드, `next()` 뒤의 애플리케이션 interceptor 작업, 체인 뒤 body 변환 중에 작업 호출만 데드라인을 보면 LogRecord는 나오지 않아요. 작업 호출을 관찰하세요. `exception.type`은 Defjs fault 코드가 아니라 interceptor가 관찰한 대상의 클래스 이름이에요. `BodyFailure`(HTTP body), `EventStreamFatalError`(SSE 핸드셰이크), `DefjsFault`(WebSocket 시작), 또는 `TypeError`(네트워크 실패)나 `Error`(타임아웃) 같은 플랫폼 클래스예요. 이유가 `TimeoutError`인 abort(예: `AbortSignal.timeout()`)는 취소가 아니라 타임아웃으로 취급되고, 그 reject이 이 경계에 닿을 때 로그해요. SSE의 non-2xx 핸드셰이크는 body와 관계없이 항상 한 번 로그해요. 서버가 보낸 WebSocket close 프레임은 코드(1011 포함)와 관계없이 절대 로그하지 않아요. close 프레임 없이 갑자기 끊기는 경우(1006)는 런타임에 따라 달라요. 플랫폼 WebSocket이 `close` 전에 `error`를 발생시키는 경우(Node.js)에는 세션이 오류로 끝나고 `websocket.close.code` `1006`과 함께 한 번 로그해요. 발생시키지 않는 경우(Bun)에는 정상 close이므로 아무것도 로그하지 않아요. 그 밖에는 오류로 끝난 세션(큐 오버플로, heartbeat 타임아웃)만 로그해요. Defjs는 모든 입력 검증이나 디코딩 fault, 모든 재연결 시도, 훅 실패를 독립 Logs로 기록하지 않아요.
 
 이 통합을 통해 각 요청이나 논리 연결은 종단 진단을 최대 한 번 내보내요. 새로운 바깥 재시도는 새 lifecycle이에요. 애플리케이션 로그와 다른 계측은 이 보장 밖이에요. 애플리케이션의 Logs 파이프라인이 거르지 않는 한, 로그는 span 기록/샘플링과 독립이에요. tracer를 넘긴 경우 `requireParentSpan: true`는 활성 부모가 없을 때 로그를 포함한 기존의 전체 우회를 유지해요. tracer가 없으면 로그도 메트릭도 막지 않아요.
 

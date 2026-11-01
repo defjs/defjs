@@ -137,7 +137,7 @@ describe("F031 SSE first successful handshake snapshot", () => {
       );
 
       try {
-        const [error, stream, open] = await client.execute(useStream());
+        const [error, stream, open] = await useStream(client);
 
         expect(error).toBeNull();
         expect(stream).toBe(delivered);
@@ -222,7 +222,7 @@ describe("F031 SSE first successful handshake snapshot", () => {
       const activeSource = reconnect ? second : first;
 
       try {
-        const [error, stream, startupOpen] = await client.execute(useStream());
+        const [error, stream, startupOpen] = await useStream(client);
 
         expect(error).toBeNull();
         expect(handle).toHaveBeenCalledTimes(reconnect ? 2 : 1);
@@ -288,7 +288,7 @@ describe("F031 SSE first successful handshake snapshot", () => {
       );
 
       try {
-        const [error, stream, snapshot] = await client.execute(useStream());
+        const [error, stream, snapshot] = await useStream(client);
 
         expect(error).toBeNull();
         expect(stream).toBe(shortCircuit);

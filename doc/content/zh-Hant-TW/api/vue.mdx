@@ -22,7 +22,7 @@ description: Vue plugin、預設或自訂 injection key，以及 injectClient。
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` 讀取所選 key 最近的 provider；省略參數或傳入 `undefined` 時使用 `HTTP_CLIENT`。必須處於有效的 Vue 注入上下文，例如同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。後者只提供同步 app 層級上下文，不攜帶元件子樹覆寫，也不跨一般 `await` 保留；`<script setup>` 頂層 `await` 後由編譯器還原的上下文仍然有效。
+`injectClient(key)` 讀取所選 key 最近的 provider；省略參數或傳入 `undefined` 時使用 `HTTP_CLIENT`。必須處於有效的 Vue 注入上下文，例如同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。後者只提供同步 app 層級上下文，不攜帶元件子樹覆寫，也不跨一般 `await` 保留；`<script setup>` 頂層 `await` 後由編譯器還原的上下文仍然有效。把那個 client 傳進操作。`Client` 是函式：不要把它當成 `watch` 或 `computed` 來源，因為那些會呼叫函式。
 
 自訂 `InjectionKey<Client>` 請用 `app.provide(key, client)` 或祖先的 `provide(key, client)` 設定。提供與取得雙方必須共用同一個 `Symbol` 物件，相同描述不代表相同 key。`createClientPlugin(client)` 仍只接受 Client，並只提供 `HTTP_CLIENT`。
 

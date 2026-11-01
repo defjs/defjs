@@ -56,7 +56,7 @@ function createBasicAuthModifier(
  * `encode`, calling `basicAuthHttpInterceptor` throws
  * `Error: BasicAuthInterceptor is not supported in this environment` when `btoa`
  * is not available in the runtime. Use {@link basicAuthSSEInterceptor} for SSE
- * commands.
+ * operations.
  *
  * @param fn - Factory returning username/password for each request.
  * @param options - Optional custom encoder (defaults to `btoa`).

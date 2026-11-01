@@ -5,7 +5,7 @@ description: HTTP, SSE, and WebSocket interceptor constructors.
 
 # Interceptors
 
-Wrap `next` for one transport. Register with `withInterceptors`. Mixed lists are filtered by kind at execute time.
+Wrap `next` for one transport. Register with `withInterceptors`. Mixed lists are filtered by kind when the operation runs.
 
 ## createHttpInterceptor()
 

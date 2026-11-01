@@ -70,7 +70,7 @@ test.each([
         new URL("../../../packages/core/src/index.ts", import.meta.url).href,
       ),
     )
-    .replace("getUser({ id: 7 })", `getUser({ id: ${id} })`);
+    .replace("getUser(client, { id: 7 })", `getUser(client, { id: ${id} })`);
   const directory = await mkdtemp(join(tmpdir(), "defjs-local-test-"));
   try {
     const filename = join(directory, "get-user.test.ts");

@@ -21,7 +21,7 @@ Context provider です。`createClient` で作ったクライアントを渡し
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` は明示的なクライアントを優先して返します。省略または `undefined` なら最も近い `ClientProvider` を読み、どちらからもクライアントを取得できない場合にのみ `Error` を throw します。引数なしの `useClient()` も引き続き有効です。
+`useClient(overrideClient)` は明示的なクライアントを優先して返します。省略または `undefined` なら最も近い `ClientProvider` を読み、どちらからもクライアントを取得できない場合にのみ `Error` を throw します。引数なしの `useClient()` も引き続き有効です。そのクライアントを操作に渡してください。`Client` は関数です。state setter に渡さないでください。`setState(client)` は updater としてそれを呼びます。
 
 明示的なクライアントがあっても、`useClient(explicitClient)` は必ずコンポーネントまたはカスタムフックのトップレベルで呼び、通常の関数やイベントコールバックでは呼ばないでください。`explicitClient ?? useClient()` はフックの条件付き呼び出しになるため無効です。明示的な値は Context に書き込まず、provider も作りません。フックは引き続き Context を購読します。
 

@@ -21,7 +21,7 @@ description: ClientProvider、支持显式 Client 覆盖的 useClient 和 provid
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` 优先返回显式 Client；省略参数或传入 `undefined` 时读取最近的 `ClientProvider`。两种来源都没有 Client 时才抛出 `Error`，原来的 `useClient()` 调用仍然有效。
+`useClient(overrideClient)` 优先返回显式 Client；省略参数或传入 `undefined` 时读取最近的 `ClientProvider`。两种来源都没有 Client 时才抛出 `Error`，原来的 `useClient()` 调用仍然有效。把这个 client 传进操作。`Client` 是函数：不要把它传给 state setter，因为 `setState(client)` 会把它当成 updater 来调用。
 
 始终在组件或自定义 Hook 顶层调用 `useClient(explicitClient)`，即使传了显式 Client，也不能在普通函数或事件回调里调用。不要写 `explicitClient ?? useClient()`，它会条件调用 Hook。显式值不写入 Context，也不建立 Provider；Hook 仍然订阅 Context。
 

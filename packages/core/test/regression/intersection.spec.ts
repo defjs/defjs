@@ -178,7 +178,7 @@ test.each([200, 403] as const)(
       withEndpoint("https://example.test"),
       withHTTPHandle(async () => Response.json(wire, { status })),
     );
-    const [fault, person] = await client.execute(endpoint());
+    const [fault, person] = await endpoint(client);
 
     expect(fault?.code ?? null).toBe(status === 200 ? null : "HTTP_STATUS");
     const data = fault?.code === "HTTP_STATUS" ? fault.data : person;
@@ -204,7 +204,7 @@ test("SSE event data preserves every mixed-intersection member", async () => {
       });
     }),
   );
-  const [fault, stream] = await client.execute(endpoint());
+  const [fault, stream] = await endpoint(client);
 
   expect(fault).toBeNull();
   if (!stream) {
@@ -436,9 +436,9 @@ test("tagged outbound encode deep-merges nested objects and reports wire conflic
       return new Response(null, { status: 204 });
     }),
   );
-  const [nestedFault] = await nestedClient.execute(
-    nestedEndpoint({ profile: { age: 1, name: "Ada" } }),
-  );
+  const [nestedFault] = await nestedEndpoint(nestedClient, {
+    profile: { age: 1, name: "Ada" },
+  });
   expect(nestedFault).toBeNull();
   expect(sent).toEqual({ profile: { full_name: "Ada", years: 1 } });
 
@@ -460,15 +460,13 @@ test("tagged outbound encode deep-merges nested objects and reports wire conflic
       return new Response(null, { status: 204 });
     }),
   );
-  const [equalFault] = await client.execute(
-    endpoint({ pair: { left: "same", right: "same" } }),
-  );
+  const [equalFault] = await endpoint(client, {
+    pair: { left: "same", right: "same" },
+  });
   expect(equalFault).toBeNull();
   expect(equalSent).toEqual({ shared: "same" });
 
-  const [fault] = await client.execute(
-    endpoint({ pair: { left: "L", right: "R" } }),
-  );
+  const [fault] = await endpoint(client, { pair: { left: "L", right: "R" } });
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
   expect(fault?.cause).toBeInstanceOf(TypeError);
   if (!(fault?.cause instanceof TypeError)) {

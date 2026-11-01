@@ -55,9 +55,9 @@ test("immediate clean close settles according to observed native events", async 
         maxIncomingQueueSize: 4,
         path: "/ws/close-immediately",
       });
-      const [fault, session] = await client.execute(connect(), {
-        signal: cancellation.signal,
-      });
+      const [fault, session] = await connect(
+        client({ abort: cancellation.signal }),
+      );
       const closed = session ? (await session.closed).kind : undefined;
       await nativeClosed;
       return { fault: fault?.code ?? null, closed };
@@ -171,9 +171,9 @@ test("original 10ms closes agree with native-only controls", async () => {
                 path,
                 protocols,
               });
-              const [error, session] = await client.execute(connect(), {
-                signal: cancellation.signal,
-              });
+              const [error, session] = await connect(
+                client({ abort: cancellation.signal }),
+              );
               fault = error?.code ?? null;
               if (session) {
                 session.onRuntimeError((error) =>
@@ -244,7 +244,7 @@ test("rejects an optional outgoing root that has no JSON representation", async 
     maxIncomingQueueSize: 4,
     path: "/ws/regression/capture",
   });
-  const [error, session] = await client.execute(connect(), { timeout: 2_000 });
+  const [error, session] = await connect(client);
   expect(error).toBeNull();
   if (!session) throw new Error("Expected an open session");
   const watchdog = setTimeout(() => session.close(), 2_000);

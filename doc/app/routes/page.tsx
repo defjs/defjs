@@ -9,7 +9,9 @@ import { use, useMemo, type ReactNode } from "react";
 import type { TOCItemType } from "fumadocs-core/toc";
 import { docs, source } from "../lib/source";
 import { locales, localePrefix } from "../lib/i18n";
-import { getUi } from "../lib/ui-copy";
+import { getTranslator } from "../lib/translations";
+import { useAppTranslations } from "../lib/use-app-translations";
+import { useI18n } from "fumadocs-ui/contexts/i18n";
 import { apiEntries } from "../data/api-catalog";
 import { getNavigationTree, getNavigationTabs } from "../lib/navigation";
 import { siteUrl, repository } from "../lib/site";
@@ -38,7 +40,12 @@ async function loadRenderedEntry(
   const overview = source.getPage(["api", view.group], locale);
   const overviewTitle = overview ? readPageTitle(overview.data) : view.group;
   return {
-    page: await renderApiEntry(view, getUi(locale), overviewTitle, locale),
+    page: await renderApiEntry(
+      view,
+      getTranslator(locale),
+      overviewTitle,
+      locale,
+    ),
     sourcePath: view.source,
   };
 }
@@ -84,7 +91,6 @@ function MdxDocument({
   path,
   home,
   slugs,
-  locale,
   canonical,
   hasContentTitle,
   editHref,
@@ -93,10 +99,9 @@ function MdxDocument({
   if (!page) throw new Error(`Missing content: ${path}`);
   const { toc } = use(page.load());
   const Content = page.body;
-  const components = useMemo(() => getMDXComponents(locale), [locale]);
+  const components = useMemo(() => getMDXComponents(), []);
   return (
     <DocumentFrame
-      locale={locale}
       canonical={canonical}
       editHref={editHref}
       hasContentTitle={hasContentTitle}
@@ -113,14 +118,13 @@ function MdxDocument({
 }
 function ApiDocument({
   slugs,
-  locale,
   canonical,
   editHref,
   view,
 }: Route.ComponentProps["loaderData"] & { view: RenderedApiEntry }) {
+  const { locale = "en-US" } = useI18n();
   return (
     <DocumentFrame
-      locale={locale}
       canonical={canonical}
       editHref={editHref}
       hasContentTitle={false}
@@ -130,12 +134,11 @@ function ApiDocument({
       documentTitle={`${apiTitle(view.name, slugs)} | Defjs`}
       toc={[]}
     >
-      <ApiEntryPage view={view} locale={locale} />
+      <ApiEntryPage view={view} />
     </DocumentFrame>
   );
 }
 function DocumentFrame({
-  locale,
   canonical,
   editHref,
   hasContentTitle,
@@ -146,7 +149,6 @@ function DocumentFrame({
   toc,
   children,
 }: {
-  locale: string;
   canonical: string;
   editHref: string;
   hasContentTitle: boolean;
@@ -157,13 +159,14 @@ function DocumentFrame({
   toc: TOCItemType[];
   children: ReactNode;
 }) {
+  const { locale = "en-US" } = useI18n();
+  const t = useAppTranslations();
   // The client already bundles every page's metadata, so deriving the tree here avoids serializing it into each page's HTML and .data.
   const pageTree = useMemo(
-    () => getNavigationTree(source.getPageTree(locale), locale),
-    [locale],
+    () => getNavigationTree(source.getPageTree(locale), locale, t),
+    [locale, t],
   );
   const prefix = localePrefix(locale);
-  const ui = getUi(locale);
   return (
     <DocsLayout
       tree={pageTree}
@@ -204,12 +207,12 @@ function DocumentFrame({
             description
           )}
         </DocsDescription>
-        <StaticNavigation tree={pageTree} locale={locale} />
+        <StaticNavigation tree={pageTree} />
         <DocsBody>{children}</DocsBody>
-        <RelatedNavigation tree={pageTree} locale={locale} />
-        <a href={editHref}>{ui.edit}</a>
+        <RelatedNavigation tree={pageTree} />
+        <a href={editHref}>{t("ui.edit")}</a>
         <footer className="mt-8 text-sm text-fd-muted-foreground">
-          {ui.message} · {ui.copyright}
+          {t("ui.message")} · {t("ui.copyright")}
         </footer>
       </DocsPage>
     </DocsLayout>

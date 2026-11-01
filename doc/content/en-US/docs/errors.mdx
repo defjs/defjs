@@ -149,17 +149,17 @@ cannot be read or parsed, or fails its Struct, produces `RES_DECODE_FAILED`; a S
 `StructError` as `cause`. Wrong media type → `RES_MEDIA_TYPE_INVALID`. A successful handshake with
 no body → `RES_DECODE_FAILED`. The opening snapshot can still land in the third tuple slot.
 
-WebSocket startup covers the handshake plus the first physical open. Constructor failure, pre-open
-close, timeout, or cancel all produce a startup tuple. A connection snapshot may exist even when
+WebSocket startup covers the handshake plus the first physical open. Constructor failure, a pre-open
+close, or an `abort` that fires before the session opens all produce a startup tuple. A connection snapshot may exist even when
 the socket never reached `open`.
 
-| Transport | After startup                                                                                                                                                                                                                          |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SSE       | The iterator rejects on a fatal error; `stream.closed` resolves with `kind: 'error'` and the fault `code`                                                                                                                              |
-| WebSocket | `onRuntimeError` for message/queue/heartbeat failures; `receive` fails on terminal errors; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                 |
-| HTTP      | The execute promise settles once, with the tuple. A throwing interceptor, an interceptor result that is not an `HttpResponse`, or a throwing progress callback becomes a fault in it (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
+| Transport | After startup                                                                                                                                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SSE       | The iterator rejects on a fatal error; `stream.closed` resolves with `kind: 'error'` and the fault `code`                                                                                                                                |
+| WebSocket | `onRuntimeError` for message/queue/heartbeat failures; `receive` fails on terminal errors; `session.closed` → `kind: 'closed' \| 'aborted' \| 'error'`                                                                                   |
+| HTTP      | The operation promise settles once, with the tuple. A throwing interceptor, an interceptor result that is not an `HttpResponse`, or a throwing progress callback becomes a fault in it (`EXT_INTERCEPTOR_FAILED`, `EXT_OBSERVER_FAILED`) |
 
-`NET_ABORTED` / `NET_TIMEOUT` describe what the caller saw at startup. You still close a returned
+`NET_ABORTED` and `NET_TIMEOUT` describe the caller's `abort` signal. For HTTP they settle the operation tuple. For SSE and WebSocket, `abort` covers the whole connection, including after it is open: a deadline that fires after startup settles `closed` rather than the operation tuple. You still close a returned
 stream or session and await its terminal promise.
 
 ## Native Error logging and cause

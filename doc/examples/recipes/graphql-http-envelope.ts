@@ -31,8 +31,7 @@ const runViewer = defineRequest({
 });
 
 async function loadViewer(client: Client) {
-  const command = runViewer();
-  const [error, result] = await client.execute(command);
+  const [error, result] = await runViewer(client);
   // A Defjs fault is outside the HTTP 200 envelope this helper returns.
   if (error) throw error;
   if (result.errors?.length) {

@@ -1,17 +1,21 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
+import { getEventListeners } from "node:events";
 import {
   createClient,
   withEndpoint,
   withInterceptors,
+  withQuerySerializer,
   withWebSocketHandle,
   withWebSocketReconnect,
   type Client,
+  type RequestOptions,
 } from "../client";
 import {
   createNetworkFault,
   createPreflightFault,
   createUndecodedHttpStatusFault,
   ERR_ABORTED,
+  ERR_TIMEOUT,
 } from "../error";
 import {
   createWebSocketInterceptor,
@@ -317,13 +321,59 @@ describe("web socket runtime environment edge cases", () => {
 
   async function run(
     client: Client,
-    command: unknown,
-    options?: unknown,
+    operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
+    options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    return client.execute(command as never, options as never) as Promise<
-      SocketAwaitResult<unknown, unknown>
-    >;
+    const bound = options === undefined ? client : client(options);
+    return operation(bound);
   }
+
+  test("should preserve a pre-aborted timeout without constructing a physical socket", async () => {
+    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const controller = new AbortController();
+    controller.abort(new DOMException("deadline expired", "TimeoutError"));
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+
+    const [error, socket, connection] = await run(
+      createClient(withEndpoint("http://localhost")),
+      useSocket,
+      { abort: controller.signal },
+    );
+
+    expect(error).toMatchObject({
+      code: "NET_TIMEOUT",
+      message: "Request timed out",
+    });
+    expect(socket).toBeUndefined();
+    expect(connection).toBeUndefined();
+    expect(mockInstances).toHaveLength(0);
+  });
+
+  test("should treat a plain timeout-message Error abort reason as an abort", async () => {
+    vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    const controller = new AbortController();
+    controller.abort(new Error("Request timed out"));
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+
+    const [error, socket, connection] = await run(
+      createClient(withEndpoint("http://localhost")),
+      useSocket,
+      { abort: controller.signal },
+    );
+
+    expect(error).toMatchObject({ code: "NET_ABORTED" });
+    expect(socket).toBeUndefined();
+    expect(connection).toBeUndefined();
+    expect(mockInstances).toHaveLength(0);
+  });
 
   test("should return transport error when WebSocket constructor throws", async () => {
     vi.stubGlobal(
@@ -340,7 +390,7 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const [error, socket, connection] = await run(client, useSocket());
+    const [error, socket, connection] = await run(client, useSocket);
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
@@ -360,7 +410,7 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const [error, socket] = await run(client, useSocket());
+    const [error, socket] = await run(client, useSocket);
     expect(error).toBeNull();
     if (!socket || !lastMockInstance) {
       throw new Error("Expected open session");
@@ -401,7 +451,7 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const [error, socket] = await run(client, useSocket());
+    const [error, socket] = await run(client, useSocket);
     expect(error).toBeNull();
     if (!socket || !lastMockInstance) {
       throw new Error("Expected open session");
@@ -443,7 +493,7 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const [error, socket, connection] = await run(client, useSocket());
+    const [error, socket, connection] = await run(client, useSocket);
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
@@ -473,8 +523,8 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const executePromise = run(client, useSocket(), {
-      signal: controller.signal,
+    const executePromise = run(client, useSocket, {
+      abort: controller.signal,
     });
 
     await listening.promise;
@@ -488,172 +538,34 @@ describe("web socket runtime environment edge cases", () => {
     expect(error?.code).toBe("NET_ABORTED");
   });
 
-  test("should preserve a pre-aborted timeout without constructing a physical socket", async () => {
+  test("should classify a TimeoutError abort after open as a timeout close", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const controller = new AbortController();
-    controller.abort(new DOMException("deadline expired", "TimeoutError"));
+    const reason = new DOMException("deadline", "TimeoutError");
     const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
       incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-
-    const [error, socket, connection] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      {
-        signal: controller.signal,
-      },
-    );
-
-    expect(error).toMatchObject({
-      code: "NET_TIMEOUT",
-      message: "Request timed out",
-    });
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
-  });
-
-  test("should prefer invalid timeout validation over an already aborted signal", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const controller = new AbortController();
-    controller.abort("caller stopped");
-    const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-
-    const [error, socket, connection] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      {
-        signal: controller.signal,
-        timeout: 0,
-      },
-    );
-
-    expect(error).toMatchObject({ code: "REQ_OPTIONS_INVALID" });
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
-  });
-
-  test("should treat a plain timeout-message Error abort reason as an abort", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const controller = new AbortController();
-    controller.abort(new Error("Request timed out"));
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-
-    const [error, socket, connection] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      {
-        signal: controller.signal,
-      },
-    );
-
-    expect(error).toMatchObject({ code: "NET_ABORTED" });
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
-  });
-
-  test("should read the timeout option once before any asynchronous work", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    let timeoutReads = 0;
-    const options = {
-      get timeout() {
-        timeoutReads += 1;
-        return timeoutReads === 1 ? undefined : Number.POSITIVE_INFINITY;
-      },
-    };
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
       path: "/ws/test",
     });
 
     const [error, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      options,
+      useSocket,
+      { abort: controller.signal },
     );
 
     expect(error).toBeNull();
-    expect(timeoutReads).toBe(1);
-    expect(mockInstances).toHaveLength(1);
-    socket?.close(1000, "done");
-    await socket?.closed;
-  });
+    if (!socket) {
+      throw new Error("Expected socket");
+    }
+    controller.abort(reason);
 
-  test("should return a definition error when snapshotting the abort option throws", async () => {
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const getterFailure = new Error("abort getter failed");
-    const options = {
-      get abort(): AbortSignal | undefined {
-        throw getterFailure;
-      },
-    };
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
-      path: "/ws/test",
+    await expect(socket.closed).resolves.toMatchObject({
+      cause: reason,
+      kind: "error",
     });
-
-    const result = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      options,
-    );
-
-    expect(result).toEqual([
-      expect.objectContaining({
-        cause: getterFailure,
-        code: "REQ_OPTIONS_INVALID",
-      }),
-      undefined,
-      undefined,
-    ]);
-    expect(mockInstances).toHaveLength(0);
+    expect(mockInstances[0]?.close).toHaveBeenCalledOnce();
   });
-
-  test.each(["heartbeat", "reconnect"] as const)(
-    "should return a definition error when reading the top-level %s option throws",
-    async (option) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
-      const getterFailure = new Error(`${option} getter failed`);
-      const options = Object.defineProperty({}, option, {
-        get() {
-          throw getterFailure;
-        },
-      });
-      const useSocket = defineWebSocket({
-        maxIncomingQueueSize: 1,
-        incoming: struct.unknown(),
-        path: "/ws/test",
-      });
-
-      const [error, socket, connection] = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket(),
-        options,
-      );
-
-      expect(error).toMatchObject({
-        cause: getterFailure,
-        code: "REQ_OPTIONS_INVALID",
-      });
-      expect(socket).toBeUndefined();
-      expect(connection).toBeUndefined();
-      expect(mockInstances).toHaveLength(0);
-    },
-  );
 
   test("should snapshot configured protocols before beforeConnect mutates their source", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
@@ -666,7 +578,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const [error, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         beforeConnect() {
           protocols[0] = "mutated-protocol";
@@ -680,31 +592,6 @@ describe("web socket runtime environment edge cases", () => {
     socket?.close(1000, "done");
     await socket?.closed;
   });
-
-  test.each([-1, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648])(
-    "should reject invalid websocket timeout %s before constructing a physical socket",
-    async (timeout) => {
-      vi.stubGlobal("WebSocket", createMockWebSocketClass());
-      const useSocket = defineWebSocket({
-        maxIncomingQueueSize: 1,
-        incoming: struct.unknown(),
-        path: "/ws/test",
-      });
-
-      const result = await run(
-        createClient(withEndpoint("http://localhost")),
-        useSocket(),
-        { timeout },
-      );
-
-      expect(result).toEqual([
-        expect.objectContaining({ code: "REQ_OPTIONS_INVALID" }),
-        undefined,
-        undefined,
-      ]);
-      expect(mockInstances).toHaveLength(0);
-    },
-  );
 
   test("should observe an abort issued by an interceptor before the transport handler starts", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
@@ -724,8 +611,8 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(abortingInterceptor),
       ),
-      useSocket(),
-      { signal: controller.signal },
+      useSocket,
+      { abort: controller.signal },
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -752,9 +639,9 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(hangingInterceptor),
       ),
-      useSocket(),
+      useSocket,
       {
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
 
@@ -762,45 +649,6 @@ describe("web socket runtime environment edge cases", () => {
     controller.abort(ERR_ABORTED);
     const [error, socket, connection] = await executePromise;
     expect(error).toMatchObject({ code: "NET_ABORTED" });
-    expect(socket).toBeUndefined();
-    expect(connection).toBeUndefined();
-    expect(mockInstances).toHaveLength(0);
-  });
-
-  test("should settle a hanging websocket interceptor on timeout", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const entered = createDeferred<void>();
-    let settled = false;
-    const hangingInterceptor = createWebSocketInterceptor(() => {
-      entered.resolve(undefined);
-      return new Promise<WebSocketSessionLike>(() => undefined);
-    });
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-    const executePromise = run(
-      createClient(
-        withEndpoint("http://localhost"),
-        withInterceptors(hangingInterceptor),
-      ),
-      useSocket(),
-      {
-        timeout: 5,
-      },
-    );
-    void executePromise.then(() => {
-      settled = true;
-    });
-
-    await entered.promise;
-    expect(settled).toBe(false);
-    await vi.advanceTimersByTimeAsync(5);
-    expect(settled).toBe(true);
-    const [error, socket, connection] = await executePromise;
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
     expect(mockInstances).toHaveLength(0);
@@ -825,8 +673,8 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(abortingInterceptor),
       ),
-      useSocket(),
-      { signal: controller.signal },
+      useSocket,
+      { abort: controller.signal },
     );
 
     expect(error).toMatchObject({ code: "NET_ABORTED" });
@@ -845,8 +693,8 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      { signal: controller.signal },
+      useSocket,
+      { abort: controller.signal },
     );
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -872,7 +720,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -891,36 +739,6 @@ describe("web socket runtime environment edge cases", () => {
     expect(connection).toMatchObject({ generation: 0 });
   });
 
-  test("should surface a startup timeout while waiting for the physical socket to open", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    vi.stubGlobal("WebSocket", createMockWebSocketClass({ autoOpen: false }));
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-    let settled = false;
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      { timeout: 10 },
-    );
-    void executePromise.then(() => {
-      settled = true;
-    });
-
-    await vi.advanceTimersByTimeAsync(0);
-    expect(lastMockInstance).toBeDefined();
-    expect(settled).toBe(false);
-    await vi.advanceTimersByTimeAsync(10);
-    expect(settled).toBe(true);
-
-    const [error, socket, connection] = await executePromise;
-    expect(error).toMatchObject({ code: "NET_TIMEOUT" });
-    expect(socket).toBeUndefined();
-    expect(connection).toMatchObject({ generation: 0 });
-  });
-
   test("should report a missing WebSocket constructor as an environment fault", async () => {
     const originalWebSocket = globalThis.WebSocket;
     vi.stubGlobal("WebSocket", undefined);
@@ -932,7 +750,7 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const [error, socket, connection] = await run(client, useSocket());
+    const [error, socket, connection] = await run(client, useSocket);
 
     expect(socket).toBeUndefined();
     expect(connection).toBeUndefined();
@@ -953,7 +771,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     const nativeSocket = lastMockInstance;
@@ -1002,7 +820,7 @@ describe("web socket runtime environment edge cases", () => {
       withWebSocketHandle(globalThis.WebSocket),
       withWebSocketReconnect({ attempts: 1, delayMs: 0 }),
     );
-    const executePromise = run(client, useSocket());
+    const executePromise = run(client, useSocket);
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     const firstSocket = lastMockInstance;
     firstSocket?.triggerOpen();
@@ -1059,7 +877,7 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const client = createClient(withEndpoint("http://localhost"));
-    const [, socket] = await run(client, useSocket());
+    const [, socket] = await run(client, useSocket);
 
     expect(socket).toBeDefined();
     expect(lastMockInstance?.binaryType).toBe("arraybuffer");
@@ -1082,7 +900,7 @@ describe("web socket runtime environment edge cases", () => {
       withEndpoint("http://localhost"),
       withWebSocketHandle(InjectedWebSocket),
     );
-    const executePromise = run(client, useSocket(), {
+    const executePromise = run(client, useSocket, {
       heartbeat: { intervalMs: 5, message: () => ({ type: "ping" }) },
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1121,7 +939,7 @@ describe("web socket runtime environment edge cases", () => {
       withEndpoint("http://localhost"),
       withWebSocketHandle(InjectedWebSocket),
     );
-    const executePromise = run(client, useSocket(), {
+    const executePromise = run(client, useSocket, {
       heartbeat: {
         intervalMs: 100,
         timeoutMs: 50,
@@ -1180,7 +998,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: {
           intervalMs: 20,
@@ -1240,7 +1058,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: {
           intervalMs: 10,
@@ -1250,7 +1068,7 @@ describe("web socket runtime environment edge cases", () => {
           },
           timeoutMs: 1_000,
         },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
 
@@ -1287,7 +1105,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: { intervalMs: 100 },
       },
@@ -1337,9 +1155,9 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -1382,7 +1200,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: {
           intervalMs: 1_000,
@@ -1391,7 +1209,7 @@ describe("web socket runtime environment edge cases", () => {
             return true;
           },
         },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
 
@@ -1436,7 +1254,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: {
           intervalMs: 1_000,
@@ -1445,7 +1263,7 @@ describe("web socket runtime environment edge cases", () => {
             throw new Error("late classifier failure");
           },
         },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
 
@@ -1500,7 +1318,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         beforeConnect() {
           socketExistedDuringHook = typeof lastMockInstance !== "undefined";
@@ -1572,8 +1390,8 @@ describe("web socket runtime environment edge cases", () => {
 
           const [error, socket, connection] = await run(
             createClient(withEndpoint("http://localhost")),
-            useSocket(),
-            { signal: controller.signal, heartbeat: { intervalMs: 20 } },
+            useSocket,
+            { abort: controller.signal, heartbeat: { intervalMs: 20 } },
           );
 
           expect(abortedDuringRegistration).toBe(true);
@@ -1623,8 +1441,8 @@ describe("web socket runtime environment edge cases", () => {
 
     const [error, session] = await run(
       createClient(withEndpoint("http://localhost")),
-      endpoint(),
-      { signal: controller.signal },
+      endpoint,
+      { abort: controller.signal },
     );
     const nativeSocket = lastMockInstance;
     if (!nativeSocket) throw new Error("Expected physical socket");
@@ -1653,7 +1471,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const [error, socket, connection] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       { heartbeat },
     );
 
@@ -1677,7 +1495,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     const nativeSocket = lastMockInstance;
@@ -1710,7 +1528,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
       },
@@ -1765,7 +1583,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
       },
@@ -1818,7 +1636,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       { reconnect: { attempts: 2, delayMs: 0 } },
     );
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1924,7 +1742,7 @@ describe("web socket runtime environment edge cases", () => {
       }),
       path: "/ws/test",
     });
-    const executePromise = run(client, useSocket(), {
+    const executePromise = run(client, useSocket, {
       reconnect: { attempts: 3, delayMs: 0 },
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -1998,9 +1816,9 @@ describe("web socket runtime environment edge cases", () => {
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(client, useSocket(), {
+    const executePromise = run(client, useSocket, {
       reconnect: { attempts: 1, delayMs: 0 },
-      signal: controller.signal,
+      abort: controller.signal,
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     lastMockInstance?.triggerOpen();
@@ -2037,7 +1855,7 @@ describe("web socket runtime environment edge cases", () => {
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const executePromise = run(client, useSocket(), {
+    const executePromise = run(client, useSocket, {
       reconnect: { attempts: 1, delayMs: 0 },
     });
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -2082,7 +1900,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: {
           attempts: 2,
@@ -2140,7 +1958,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 2, delayMs: 100, factor: 2, jitter: 0 },
       },
@@ -2189,7 +2007,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
       },
@@ -2237,7 +2055,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -2267,7 +2085,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
       },
@@ -2313,7 +2131,7 @@ describe("web socket runtime environment edge cases", () => {
 
       const [error, socket] = await run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
       );
 
       expect(socket).toBeUndefined();
@@ -2332,7 +2150,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const [, socket, connection] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -2369,7 +2187,7 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(delayedInterceptor),
       ),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
       },
@@ -2412,7 +2230,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const [error, socket, connection] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       { reconnect },
     );
     if (socket) {
@@ -2443,7 +2261,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         beforeConnect() {
           reconnect.shouldReconnect = () => true;
@@ -2503,7 +2321,7 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(interceptor),
       ),
-      useSocket(),
+      useSocket,
     );
     expect(error).toBeNull();
     expect(socket).toBe(replacementSession);
@@ -2533,7 +2351,7 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(interceptor),
       ),
-      useSocket(),
+      useSocket,
     );
 
     expect(error).toMatchObject({
@@ -2589,7 +2407,7 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(interceptor),
       ),
-      useSocket(),
+      useSocket,
     );
 
     expect(error).toBeNull();
@@ -2639,7 +2457,7 @@ describe("web socket runtime environment edge cases", () => {
         withEndpoint("http://localhost"),
         withInterceptors(interceptor),
       ),
-      useSocket(),
+      useSocket,
     );
     if (!invokeLateNext) {
       throw new Error("Expected the interceptor to capture next()");
@@ -2670,7 +2488,7 @@ describe("web socket runtime environment edge cases", () => {
       });
       const [, socket] = await run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
       );
       if (!socket || !lastMockInstance) {
         throw new Error("Expected socket");
@@ -2696,7 +2514,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -2723,7 +2541,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -2759,7 +2577,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -2798,7 +2616,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -2831,7 +2649,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -2858,7 +2676,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -2888,7 +2706,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -2932,7 +2750,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -2979,7 +2797,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: {
           intervalMs: 1_000,
@@ -3023,7 +2841,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: {
           intervalMs: 1_000,
@@ -3068,7 +2886,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -3101,7 +2919,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -3130,7 +2948,7 @@ describe("web socket runtime environment edge cases", () => {
       });
       const [, socket] = await run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
         {
           reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
         },
@@ -3179,10 +2997,10 @@ describe("web socket runtime environment edge cases", () => {
       });
       const [, socket] = await run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
         {
           reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
-          signal: controller.signal,
+          abort: controller.signal,
         },
       );
       if (!socket || !lastMockInstance) {
@@ -3223,7 +3041,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
       },
@@ -3261,7 +3079,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
       },
@@ -3297,10 +3115,10 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3333,7 +3151,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: {
           attempts: 1,
@@ -3381,7 +3199,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: {
           attempts: 1,
@@ -3389,7 +3207,7 @@ describe("web socket runtime environment edge cases", () => {
           jitter: 1,
           maxDelayMs: Number.MAX_VALUE,
         },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3425,7 +3243,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 1_000 },
       },
@@ -3470,7 +3288,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: {
           attempts: 1,
@@ -3532,7 +3350,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
       },
@@ -3573,7 +3391,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -3605,7 +3423,7 @@ describe("web socket runtime environment edge cases", () => {
 
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         beforeConnect(context: { attempt: number; signal: AbortSignal }) {
           contexts.push(context);
@@ -3613,7 +3431,7 @@ describe("web socket runtime environment edge cases", () => {
             rejectHook = reject;
           });
         },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
 
@@ -3646,10 +3464,10 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0, shouldReconnect },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -3674,10 +3492,10 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
 
@@ -3726,7 +3544,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -3763,7 +3581,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -3814,7 +3632,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -3837,7 +3655,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -3864,7 +3682,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -3895,8 +3713,8 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      { signal: controller.signal },
+      useSocket,
+      { abort: controller.signal },
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -3939,7 +3757,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket) {
       throw new Error("Expected socket");
@@ -3966,7 +3784,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0, shouldReconnect: () => false },
       },
@@ -4000,7 +3818,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 30 },
       },
@@ -4062,7 +3880,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 30 },
       },
@@ -4131,7 +3949,7 @@ describe("web socket runtime environment edge cases", () => {
       });
       const [, socket] = await run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
       );
       if (!socket || !lastMockInstance) {
         throw new Error("Expected socket");
@@ -4157,7 +3975,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 30 },
       },
@@ -4233,10 +4051,10 @@ describe("web socket runtime environment edge cases", () => {
       });
       const [, socket] = await run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
         {
           reconnect: { attempts: 1, delayMs: 0 },
-          signal: controller.signal,
+          abort: controller.signal,
         },
       );
       if (!socket || !lastMockInstance) {
@@ -4287,10 +4105,10 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 1_000 },
-        signal: controller.signal,
+        abort: controller.signal,
       },
     );
     if (!socket || !lastMockInstance) {
@@ -4338,7 +4156,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 30 },
       },
@@ -4375,7 +4193,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         beforeConnect({ attempt }: { attempt: number }) {
           attempts.push(attempt);
@@ -4414,7 +4232,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: {
           attempts: 1,
@@ -4457,7 +4275,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0, shouldReconnect: predicate },
       },
@@ -4490,7 +4308,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: {
           attempts: 1,
@@ -4549,7 +4367,7 @@ describe("web socket runtime environment edge cases", () => {
       });
       const [, socket] = await run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
         {
           reconnect: {
             attempts: 1,
@@ -4593,7 +4411,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         reconnect: { attempts: 1, delayMs: 0 },
       },
@@ -4633,7 +4451,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         beforeConnect({ attempt }: { attempt: number }) {
           attempts.push(attempt);
@@ -4683,7 +4501,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -4741,7 +4559,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
       {
         heartbeat: { intervalMs: 50, message: () => ({ type: "ping" }) },
         reconnect: { attempts: 1, delayMs: 1_000 },
@@ -4783,7 +4601,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -4823,7 +4641,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -4867,62 +4685,6 @@ describe("web socket runtime environment edge cases", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  test("should reject only disposal with TimeoutError when native close never arrives", async () => {
-    vi.useFakeTimers();
-    vi.stubGlobal(
-      "WebSocket",
-      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
-    );
-    const useSocket = defineWebSocket({
-      maxIncomingQueueSize: 1,
-      incoming: struct.unknown(),
-      path: "/ws/test",
-    });
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket(),
-    );
-
-    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
-    lastMockInstance?.triggerOpen();
-    const [, socket] = await executePromise;
-    if (!socket || !lastMockInstance) {
-      throw new Error("Expected socket");
-    }
-    const nativeSocket = lastMockInstance;
-    const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
-    const disposal = Promise.resolve(socket[Symbol.asyncDispose]()).then(
-      () => ({ error: undefined, status: "resolved" as const }),
-      (error: unknown) => ({ error, status: "rejected" as const }),
-    );
-    let outcome: Awaited<typeof disposal> | undefined;
-    void disposal.then((value) => {
-      outcome = value;
-    });
-    await Promise.resolve();
-
-    expect(nativeSocket.close).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(999);
-    expect(outcome).toBeUndefined();
-    await vi.advanceTimersByTimeAsync(1);
-    const result = await disposal;
-
-    expect(result.status).toBe("rejected");
-    expect(result.error).toBeInstanceOf(DOMException);
-    expect(result.error).toMatchObject({
-      message: "WebSocket close event was not observed before teardown timeout",
-      name: "TimeoutError",
-    });
-    await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
-    await expect(pendingReceive).resolves.toEqual({
-      done: true,
-      value: undefined,
-    });
-    expect(socket.state).toBe("closed");
-    expect(nativeSocket.listenerCount()).toBe(0);
-    expect(vi.getTimerCount()).toBe(0);
-  });
-
   test.each([
     ["Error", new Error("native close failed")],
     ["undefined", undefined],
@@ -4945,7 +4707,7 @@ describe("web socket runtime environment edge cases", () => {
       });
       const executePromise = run(
         createClient(withEndpoint("http://localhost")),
-        useSocket(),
+        useSocket,
       );
 
       await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -5002,7 +4764,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const executePromise = run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
@@ -5042,8 +4804,8 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
-      { signal: controller.signal },
+      useSocket,
+      { abort: controller.signal },
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -5077,7 +4839,7 @@ describe("web socket runtime environment edge cases", () => {
     });
     const [, socket] = await run(
       createClient(withEndpoint("http://localhost")),
-      useSocket(),
+      useSocket,
     );
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
@@ -5170,14 +4932,11 @@ describe("web socket incoming frame path", () => {
     return createView(buffer, padding, bytes.length);
   }
 
-  async function openSession(options?: { signal?: AbortSignal }) {
+  async function openSession(options?: { abort?: AbortSignal }) {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const [error, socket] = (await createClient(
-      withEndpoint("http://localhost"),
-    ).execute(useSocket(), options as never)) as SocketAwaitResult<
-      unknown,
-      unknown
-    >;
+    const [error, socket] = (await useSocket(
+      createClient(withEndpoint("http://localhost"))(options),
+    )) as SocketAwaitResult<unknown, unknown>;
     expect(error).toBeNull();
     const native = lastMockInstance;
     if (!socket || !native) {
@@ -5317,7 +5076,7 @@ describe("web socket incoming frame path", () => {
 
   test("should settle promptly when the session is aborted while a Blob frame is being read", async () => {
     const controller = new AbortController();
-    const { native, socket } = await openSession({ signal: controller.signal });
+    const { native, socket } = await openSession({ abort: controller.signal });
     const pendingReceive = socket.receive[Symbol.asyncIterator]()
       .next()
       .catch((error: unknown) => error);
@@ -5356,4 +5115,395 @@ describe("web socket incoming frame path", () => {
     });
     await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
   });
+
+  test("should reject only disposal with TimeoutError when native close never arrives", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "WebSocket",
+      createMockWebSocketClass({ autoOpen: false, emitCloseEvent: false }),
+    );
+    const useSocket = defineWebSocket({
+      maxIncomingQueueSize: 1,
+      incoming: struct.unknown(),
+      path: "/ws/test",
+    });
+    const executePromise = useSocket(
+      createClient(withEndpoint("http://localhost")),
+    );
+
+    await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
+    lastMockInstance?.triggerOpen();
+    const [, socket] = await executePromise;
+    if (!socket || !lastMockInstance) {
+      throw new Error("Expected socket");
+    }
+    const nativeSocket = lastMockInstance;
+    const pendingReceive = socket.receive[Symbol.asyncIterator]().next();
+    const disposal = Promise.resolve(socket[Symbol.asyncDispose]()).then(
+      () => ({ error: undefined, status: "resolved" as const }),
+      (error: unknown) => ({ error, status: "rejected" as const }),
+    );
+    let outcome: Awaited<typeof disposal> | undefined;
+    void disposal.then((value) => {
+      outcome = value;
+    });
+    await Promise.resolve();
+
+    expect(nativeSocket.close).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(outcome).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(1);
+    const result = await disposal;
+
+    expect(result.status).toBe("rejected");
+    expect(result.error).toBeInstanceOf(DOMException);
+    expect(result.error).toMatchObject({
+      message: "WebSocket close event was not observed before teardown timeout",
+      name: "TimeoutError",
+    });
+    await expect(socket.closed).resolves.toMatchObject({ kind: "closed" });
+    await expect(pendingReceive).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    expect(socket.state).toBe("closed");
+    expect(nativeSocket.listenerCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
+
+describe("web socket preflight precedence", () => {
+  test.each([
+    ["abort", "caller stopped", "NET_ABORTED", ERR_ABORTED],
+    [
+      "timeout",
+      new DOMException("deadline", "TimeoutError"),
+      "NET_TIMEOUT",
+      ERR_TIMEOUT,
+    ],
+  ] as const)(
+    "should prefer %s over REQ_INPUT_INVALID when input parsing aborts and throws",
+    async (_mode, reason, code, cause) => {
+      const controller = new AbortController();
+      const listeners = watchAbortListeners(controller.signal);
+      const failure = new Error("input exploded after abort");
+      let builderCalls = 0;
+      const opened = countingSocket();
+      const endpoint = defineWebSocket({
+        builder: () => {
+          builderCalls += 1;
+          return {};
+        },
+        incoming: struct.unknown(),
+        input: struct.object({ id: struct.string() }),
+        maxIncomingQueueSize: 1,
+        path: "/socket",
+      });
+
+      const [error, session, connection] = await endpoint(
+        guardedClient(opened, controller.signal),
+        {
+          get id(): string {
+            controller.abort(reason);
+            throw failure;
+          },
+        },
+      );
+
+      expect(builderCalls).toBe(0);
+      expect(opened.constructed()).toBe(0);
+      expect(session).toBeUndefined();
+      expect(connection).toBeUndefined();
+      expect(error).toMatchObject({ cause, code });
+      expect(error?.cause).not.toBe(failure);
+      expect(listeners.added()).toBeGreaterThan(0);
+      expect(listeners.removed()).toBe(listeners.added());
+      expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+    },
+  );
+
+  test.each([
+    ["abort", "caller stopped", "NET_ABORTED", ERR_ABORTED],
+    [
+      "timeout",
+      new DOMException("deadline", "TimeoutError"),
+      "NET_TIMEOUT",
+      ERR_TIMEOUT,
+    ],
+  ] as const)(
+    "should prefer %s over REQ_BUILD_FAILED when query serialization aborts and throws",
+    async (_mode, reason, code, cause) => {
+      const controller = new AbortController();
+      const listeners = watchAbortListeners(controller.signal);
+      const failure = new Error("query serializer failed after abort");
+      let builderCalls = 0;
+      const opened = countingSocket();
+      const endpoint = defineWebSocket({
+        builder: () => {
+          builderCalls += 1;
+          return { query: { room: "1" } };
+        },
+        incoming: struct.unknown(),
+        maxIncomingQueueSize: 1,
+        path: "/socket",
+      });
+      const client = createClient(
+        withEndpoint("https://example.test"),
+        withQuerySerializer(() => {
+          controller.abort(reason);
+          throw failure;
+        }),
+        withWebSocketHandle(opened.handle),
+      );
+
+      const [error, session, connection] = await endpoint(
+        client({ abort: controller.signal }),
+      );
+
+      expect(builderCalls).toBe(1);
+      expect(opened.constructed()).toBe(0);
+      expect(session).toBeUndefined();
+      expect(connection).toBeUndefined();
+      expect(error).toMatchObject({ cause, code });
+      expect(error?.cause).not.toBe(failure);
+      expect(listeners.added()).toBeGreaterThan(0);
+      expect(listeners.removed()).toBe(listeners.added());
+      expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+    },
+  );
+
+  test("should release caller abort listeners after a preflight build failure", async () => {
+    const controller = new AbortController();
+    const listeners = watchAbortListeners(controller.signal);
+    const failure = new Error("build failed");
+    const opened = countingSocket();
+    const endpoint = defineWebSocket({
+      builder: () => {
+        throw failure;
+      },
+      incoming: struct.unknown(),
+      maxIncomingQueueSize: 1,
+      path: "/socket",
+    });
+
+    const [error, session, connection] = await endpoint(
+      guardedClient(opened, controller.signal),
+    );
+
+    expect(opened.constructed()).toBe(0);
+    expect(session).toBeUndefined();
+    expect(connection).toBeUndefined();
+    expect(error).toMatchObject({ cause: failure, code: "REQ_BUILD_FAILED" });
+    expect(listeners.added()).toBeGreaterThan(0);
+    expect(listeners.removed()).toBe(listeners.added());
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+  });
+
+  test("should release caller abort listeners after invalid input", async () => {
+    const controller = new AbortController();
+    const listeners = watchAbortListeners(controller.signal);
+    const opened = countingSocket();
+    const endpoint = defineWebSocket({
+      builder: () => ({}),
+      incoming: struct.unknown(),
+      input: struct.object({ id: struct.number() }),
+      maxIncomingQueueSize: 1,
+      path: "/socket/:id",
+    });
+
+    const [error, session] = await endpoint(
+      guardedClient(opened, controller.signal),
+      { id: "nope" } as never,
+    );
+
+    expect(opened.constructed()).toBe(0);
+    expect(session).toBeUndefined();
+    expect(error?.code).toBe("REQ_INPUT_INVALID");
+    expect(listeners.added()).toBeGreaterThan(0);
+    expect(listeners.removed()).toBe(listeners.added());
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+  });
+
+  test("should release caller abort listeners when the WebSocket constructor is missing", async () => {
+    const controller = new AbortController();
+    const listeners = watchAbortListeners(controller.signal);
+    const endpoint = defineWebSocket({
+      incoming: struct.unknown(),
+      maxIncomingQueueSize: 1,
+      path: "/socket",
+    });
+    const client = createClient(
+      withEndpoint("https://example.test"),
+      withWebSocketHandle(
+        {} as unknown as Parameters<typeof withWebSocketHandle>[0],
+      ),
+    );
+
+    const [error, session, connection] = await endpoint(
+      client({ abort: controller.signal }),
+    );
+
+    expect(session).toBeUndefined();
+    expect(connection).toBeUndefined();
+    expect(error?.code).toBe("ENV_UNSUPPORTED");
+    expect(listeners.added()).toBeGreaterThan(0);
+    expect(listeners.removed()).toBe(listeners.added());
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+  });
+
+  test("should reject an invalid queue limit before reading options or attaching abort listeners", async () => {
+    const controller = new AbortController();
+    const listeners = watchAbortListeners(controller.signal);
+    let heartbeatReads = 0;
+    let reconnectReads = 0;
+    const endpoint = defineWebSocket({
+      incoming: struct.unknown(),
+      maxIncomingQueueSize: 0,
+      path: "/socket",
+    });
+
+    const [error, session, connection] = await endpoint(
+      createClient(withEndpoint("https://example.test"))({
+        abort: controller.signal,
+        heartbeat: {
+          get intervalMs(): number {
+            heartbeatReads += 1;
+            throw new Error("heartbeat should not be read");
+          },
+        },
+        reconnect: {
+          get attempts(): number {
+            reconnectReads += 1;
+            throw new Error("reconnect should not be read");
+          },
+        },
+      }),
+    );
+
+    expect(session).toBeUndefined();
+    expect(connection).toBeUndefined();
+    expect(error).toMatchObject({
+      cause: expect.objectContaining({
+        message: "maxIncomingQueueSize must be a positive safe integer",
+      }),
+      code: "REQ_OPTIONS_INVALID",
+    });
+    expect(heartbeatReads).toBe(0);
+    expect(reconnectReads).toBe(0);
+    expect(listeners.added()).toBe(0);
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+  });
+
+  test("should reject invalid heartbeat options before attaching abort listeners", async () => {
+    const controller = new AbortController();
+    const listeners = watchAbortListeners(controller.signal);
+    const failure = new Error("heartbeat getter failed");
+    const opened = countingSocket();
+    const endpoint = defineWebSocket({
+      incoming: struct.unknown(),
+      maxIncomingQueueSize: 1,
+      path: "/socket",
+    });
+
+    const [error, session] = await endpoint(
+      guardedClient(opened, controller.signal, {
+        heartbeat: {
+          intervalMs: 20,
+          get message(): () => never {
+            throw failure;
+          },
+        },
+      }),
+    );
+
+    expect(opened.constructed()).toBe(0);
+    expect(session).toBeUndefined();
+    expect(error).toMatchObject({
+      cause: failure,
+      code: "REQ_OPTIONS_INVALID",
+    });
+    expect(listeners.added()).toBe(0);
+    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+  });
+});
+
+type CountingSocket = {
+  constructed: () => number;
+  handle: Parameters<typeof withWebSocketHandle>[0];
+};
+
+function countingSocket(): CountingSocket {
+  let constructed = 0;
+  class Socket {
+    static readonly OPEN = 1;
+    bufferedAmount = 0;
+    binaryType = "blob";
+    extensions = "";
+    protocol = "";
+    readyState = 0;
+    readonly url: string;
+
+    constructor(url: string | URL) {
+      this.url = String(url);
+      constructed += 1;
+    }
+
+    close(): void {
+      this.readyState = 3;
+    }
+
+    send(_data: string): void {}
+  }
+
+  return {
+    constructed: () => constructed,
+    handle: Socket as unknown as CountingSocket["handle"],
+  };
+}
+
+function guardedClient(
+  opened: CountingSocket,
+  abort: AbortSignal,
+  options?: Omit<RequestOptions, "abort">,
+): Client {
+  return createClient(
+    withEndpoint("https://example.test"),
+    withWebSocketHandle(opened.handle),
+  )({ ...options, abort });
+}
+
+function watchAbortListeners(signal: AbortSignal): {
+  added: () => number;
+  removed: () => number;
+} {
+  let added = 0;
+  let removed = 0;
+  const add = signal.addEventListener.bind(signal);
+  const remove = signal.removeEventListener.bind(signal);
+  const watchedAdd = (
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | AddEventListenerOptions,
+  ): void => {
+    if (type === "abort") {
+      added += 1;
+    }
+    add(type, listener, options);
+  };
+  const watchedRemove = (
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+    options?: boolean | EventListenerOptions,
+  ): void => {
+    if (type === "abort") {
+      removed += 1;
+    }
+    remove(type, listener, options);
+  };
+  signal.addEventListener = watchedAdd;
+  signal.removeEventListener = watchedRemove;
+  return {
+    added: () => added,
+    removed: () => removed,
+  };
+}

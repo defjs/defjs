@@ -3,12 +3,7 @@ title: "実践例"
 description: SDK のテストと公開、HTTP・認証・リアルタイム通信の実装に使う実践例です。
 ---
 
-SDK の定義を設計・テスト・公開し、その定義をアプリケーションで使うための実践例です。SDK は API の契約を export し、アプリケーションは Client の設定、結果、キャンセル、ストリームのライフサイクルを管理します。
-
-## SDK のテストと公開 [#テストとパッケージ化]
-
-- [ローカル HTTP テスト](/ja-JP/recipes/test-with-handle)
-- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
+export した定義から npm パッケージと利用アプリケーションまでの全体は、[SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) から始めてください。以下の実践例は、その SDK の周りに組み合わせられる個々の操作の契約と、アプリケーション方針の設計です。
 
 ## HTTP
 
@@ -26,3 +21,8 @@ SDK の定義を設計・テスト・公開し、その定義をアプリケー�
 
 - [SSE イベントの受信](/ja-JP/recipes/consume-sse)
 - [WebSocket セッションの管理](/ja-JP/recipes/websocket-session)
+
+## SDK のテストと公開 [#testing-and-packaging]
+
+- [ローカル HTTP テスト](/ja-JP/recipes/test-with-handle)
+- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)

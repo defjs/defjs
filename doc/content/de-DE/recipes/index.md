@@ -1,9 +1,9 @@
 ---
 title: "Praxisbeispiele"
-description: SDKs lokal testen und veröffentlichen sowie HTTP, Authentifizierung und Echtzeit in Anwendungen integrieren.
+description: Ein wiederverwendbares SDK bauen und veröffentlichen, dann Authentifizierung, Aufrufe und Echtzeit in konsumierenden Anwendungen konfigurieren.
 ---
 
-Diese Rezepte bauen auf derselben Aufteilung auf: Das SDK exportiert typisierte Endpoints; die Anwendung führt sie mit ihrem Client aus und behandelt Ergebnisse und Lebenszyklen. Starte für ein eigenes SDK mit [lokalen HTTP-Tests](/de-DE/recipes/test-with-handle) und [Veröffentlichung](/de-DE/recipes/publish-http-sdk). Die weiteren Rezepte behandeln einzelne API-Verträge und Regeln der Anwendung.
+Starte mit [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk) für den ganzen Weg von der exportierten Definition zum npm-Paket und zur konsumierenden Anwendung. Die Rezepte unten zeigen einzelne Operationsverträge und Anwendungsregeln, die du um dieses SDK herum zusammensetzen kannst.
 
 ## HTTP
 
@@ -22,7 +22,7 @@ Diese Rezepte bauen auf derselben Aufteilung auf: Das SDK exportiert typisierte 
 - [SSE-Ereignisse verarbeiten](/de-DE/recipes/consume-sse)
 - [WebSocket-Sitzungen verwalten](/de-DE/recipes/websocket-session)
 
-## SDK-Tests und Veröffentlichung [#tests-und-paketierung]
+## SDK-Tests und Veröffentlichung [#testing-and-packaging]
 
 - [Lokale HTTP-Tests](/de-DE/recipes/test-with-handle)
 - [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk)

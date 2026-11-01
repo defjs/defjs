@@ -5,16 +5,16 @@ description: createClient、option ヘルパー、Client 型です。
 
 # Client
 
-クライアントを作り、options を左から右へ合成して、HTTP / SSE / WebSocket コマンドを `execute` します。
+`createClient(...)` は呼び出し可能な [`Client`](/ja-JP/api/core/client-type) を返します。クライアント options を左から右へ合成し、`client(options?)` でクライアントを派生させて操作に渡します。`getUser(client(options), input)` です。
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-options は順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。
+options は順に適用されます。インターセプターが認証情報やテナント情報をクロージャーで保持する場合は、クライアントをリクエスト境界の中で作ることを推奨します。返るクライアントは関数です。それを呼ぶと新しいクライアントが返り、I/O はしません。
 
 - **options** — `withEndpoint` のような option ヘルパーです。
-- **戻り値** `execute` がトランスポートごとにオーバーロードされたクライアントです。
+- **戻り値** 呼び出し可能なクライアントです。基底設定は派生したクライアントすべてが共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -32,7 +32,7 @@ options は順に適用されます。インターセプターが認証情報や
 
 <ApiSignature name="withInterceptors" />
 
-登録順でインターセプターを追記します。混在の kind は execute 時にトランスポートごとにフィルタされます。
+登録順でインターセプターを追記します。混在の kind は、操作が実行されるときにトランスポートごとにフィルタされます。
 
 ### withQuerySerializer()
 
@@ -55,20 +55,7 @@ HTTP と SSE のリクエストに使う静的なデフォルトヘッダーを�
 
 リクエストごとに変わる値には、インターセプターを使ってください。たとえば更新した Bearer トークンや、シリアライズ済みボディに対する HMAC です。
 
-### withTimeout()
-
-<ApiSignature name="withTimeout" />
-
-**HTTP** の `execute` に限って、デフォルトのタイムアウトをミリ秒でセットします。SSE と WebSocket はこれを無視します。それらの execute の `timeout` は、呼び出しごとの別個の開始期限です。`ms` は `2_147_483_647` 以下の正の安全な整数でなければならず、そうでない場合は `withTimeout` の呼び出し時に `RangeError` を投げます。`withTimeout` を 2 回呼ぶと 2 回目が 1 回目を置き換えます。
-
-期限は、入力のパース、ビルダー、インターセプター、トランスポート、宣言されたボディの読み取りまでを含みます。呼び出しごとの [`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) と次のように組み合わさります。
-
-| Execute options                 | 効果                                                                                           |
-| ------------------------------- | ---------------------------------------------------------------------------------------------- |
-| なし                            | クライアントのデフォルトが適用され、期限切れは `NET_TIMEOUT` になります。                      |
-| `{ timeout }`                   | この呼び出しに限り、クライアントのデフォルトを置き換えます。                                   |
-| `{ abort }` または `{ signal }` | デフォルトと組み合わさります。呼び出し側のシグナルは `NET_ABORTED`、タイマーは `NET_TIMEOUT`。 |
-| `{ abort, timeout }`            | 引き続き不正で、`REQ_OPTIONS_INVALID` になります。クライアントのデフォルトは競合に数えません。 |
+クライアント単位の既定の期限はありません。1 回の呼び出しに期限が要るときは、派生したクライアントに `abort: AbortSignal.timeout(ms)` を渡します。手動の abort は `NET_ABORTED` です。`AbortSignal.timeout` は `NET_TIMEOUT` に分類されます。
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -122,7 +109,27 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 <ApiSignature name="Client" />
 
-`execute` はコマンドの種類ごとにオーバーロードが一つあります（event stream、WebSocket、HTTP）。型パラメーターはコマンドから推論されます。
+`Client` は関数です。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、新しいクライアントが返ります。既知の 7 フィールドは引数からコピーされ、現在の options の上に重ねた新しいオブジェクトに入ります。あとのフィールドが勝ちます。値が `undefined` のフィールドは未指定として扱い、親の値を残します。派生したクライアントは、親が持つ設定を外せません。設定を無くすには、その設定を持っていなかったクライアントからもう一度派生します（ルートのクライアントは残します）。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされず、マージされずに親の値全体が置き換わります。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。元のクライアントは変更されません。`client()`、`client(undefined)`、`client({})` は現在の options をコピーします。派生は I/O をしません。同じクライアント値を多くの操作に渡せます。`abort` は合成されず置き換わります。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+
+クライアントを React の state setter に渡さないでください（`setState(client)` は updater としてそれを呼びます）。Vue の `watch` や `computed` のソースにも使わないでください（それらは関数を呼びます）。
+
+### RequestOptions
+
+<ApiSignature name="RequestOptions" />
+
+フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `abort` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `signal` フィールドもありません。
+
+| フィールド           | プロトコル           | 置き換え                                                                                |
+| -------------------- | -------------------- | --------------------------------------------------------------------------------------- |
+| `abort`              | HTTP、SSE、WebSocket | 前のシグナルを置き換えます。SSE と WebSocket では、開いたあとも含む接続全体を覆います。 |
+| `onUploadProgress`   | HTTP                 | 他のプロトコルは無視します。                                                            |
+| `onDownloadProgress` | HTTP                 | 他のプロトコルは無視します。                                                            |
+| `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                                    |
+| `protocols`          | WebSocket            | クライアントのリストを置き換えます。                                                    |
+| `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` は確認待ちであり、リクエストの期限ではありません。      |
+| `reconnect`          | WebSocket            | 全体を置き換えます。                                                                    |
+
+[`HttpExecuteOptions`](/ja-JP/api/core/httpexecuteoptions-type) は HTTP のスライスです（`abort` と進捗）。[`EventStreamExecuteOptions`](/ja-JP/api/core/eventstreamexecuteoptions-type) は `{ abort? }` です。[`WebSocketExecuteOptions`](/ja-JP/api/core/websocketexecuteoptions-type) は WebSocket のスライスに `abort` を足したものです。
 
 ### ClientOption
 
@@ -164,17 +171,17 @@ SSE では `delayMs` は開始時の基準の待ち時間にすぎず、数字�
 
 SSE の `onInvalidEvent` は、一致する struct がないイベント（`default` もない場合を含む。`missing-struct`）や、データが struct の検証に失敗したイベント（`validation-failed`）を扱います。イベントは常に破棄されます。ハンドラーの戻り値は無視され、ハンドラーが投げたエラーでストリームが閉じることはありません。
 
-WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を呼び出しごとに `execute` へ渡すこともできます。execute の値は、その呼び出しに限りクライアントの値を置き換えます。`heartbeat.message` が各 ping を作ります。省略した場合や `undefined` を返す場合は何も送りません。
+WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を派生したクライアントに渡すこともできます。それぞれがその呼び出しに限り、クライアントの値を全体として置き換えます。`heartbeat.message` が各 ping を作ります。省略した場合や `undefined` を返す場合は何も送りません。`heartbeat.timeoutMs` は確認を待ちます。リクエストの期限ではありません。
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-表示されるフィールドは `sse` と `webSocket` です。残りの八つ——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`timeout`、`xsrf`、`withCredentials`——はエクスポートされない HTTP の基底から継承され、`endpoint` は必須です。`createClient` はこのオブジェクトを受け取らず、option ヘルパーを受け取ります。
+表示されるフィールドは `sse` と `webSocket` です。残りの七つ——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf`、`withCredentials`——はエクスポートされない HTTP の基底から継承され、`endpoint` は必須です。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、option ヘルパーを受け取ります。
 
 ### ClientConfig
 
-option ヘルパーが変更し、`execute` が読み取る解決済みスナップショットです。デフォルト適用後の `ClientOptions` で、`http.handle`、`interceptors`、`sse`（`ClientSSEConfig`）、`webSocket` が常に存在します。
+option ヘルパーが変更し、操作が読み取る解決済みスナップショットです。デフォルト適用後の `ClientOptions` で、`http.handle`、`interceptors`、`sse`（`ClientSSEConfig`）、`webSocket` が常に存在します。
 
 ### ClientSSEConfig
 

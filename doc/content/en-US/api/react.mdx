@@ -21,7 +21,7 @@ Context provider. Pass a client from `createClient`. A nested `ClientProvider` o
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` prefers the explicit client; omitted or `undefined` reads the nearest `ClientProvider`. An `Error` is thrown only when neither source supplies a client. Zero-argument `useClient()` calls remain valid.
+`useClient(overrideClient)` prefers the explicit client; omitted or `undefined` reads the nearest `ClientProvider`. An `Error` is thrown only when neither source supplies a client. Zero-argument `useClient()` calls remain valid. Pass that client into an operation. A `Client` is a function: do not pass it to a state setter, because `setState(client)` would call it as an updater.
 
 Always call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.
 

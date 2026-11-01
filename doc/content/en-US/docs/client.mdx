@@ -1,15 +1,17 @@
 ---
 title: "Client configuration / Client"
-description: Configure how your application executes imported SDK operations, independently of their API definitions.
+description: Configure how your application calls imported SDK operations, independently of their API definitions.
 ---
 
 # Client
 
-A `Client` is the consuming application's execution configuration. Import endpoints from your SDK, choose the service address, credentials, interceptors, and transport, then pass commands to `client.execute(...)`.
+A `Client` is the consuming application's execution configuration, and it is a function. `createClient(...)` returns that function. Import operations from your SDK, choose the service address, credentials, interceptors, and transport, then call an operation with the client. `getUser(client({ abort }), { id: 1 })` starts a call that declares input. `health(client)` starts one that does not. When the whole input struct is optional, both `search(client)` and `search(client, input)` are valid. There is no third options argument. Calling the operation starts it. `await` only waits for the error-first tuple.
 
-The SDK's definitions do not bind this instance. A browser, a server request, and a local test can use the same exported operation with different clients. All still follow the same Defjs contract and compatible Core versions. Configure each client's service address for the definitions you execute through it.
+The SDK's definitions do not bind this instance. A browser, a server request, and a local test can use the same exported operation with different clients. All still follow the same Defjs contract and compatible Core versions. Configure each client's service address for the operations you call through it.
 
-The client dispatches HTTP, SSE, and WebSocket commands. Applications choose caching and retry policies and own the work they start; stream reconnection is opt-in.
+The same client value can be passed to many operations. Applications choose caching and retry policies and own the work they start. HTTP is not retried automatically. Stream reconnection is opt-in.
+
+Because a `Client` is a function, do not pass it to a React state setter: `setState(client)` would call it as an updater. Do not use it as a Vue `watch` or `computed` source: those call a function.
 
 ## Basic Setup
 
@@ -17,7 +19,7 @@ The client dispatches HTTP, SSE, and WebSocket commands. Applications choose cac
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` returns overloads for each command kind.
+`createClient(...)` returns one callable [`Client`](/api/core/client-type). It is not a set of transport overloads.
 
 ## Compose options
 
@@ -27,15 +29,45 @@ Options apply left to right. Setters replace; `withInterceptors(...items)` appen
   examples/client/compose-options.ts#example
 </include>
 
-Mixed interceptors are filtered by transport at execute time; relative order among the selected kind stays.
+Mixed interceptors are filtered by transport when the operation runs; relative order among the selected kind stays.
 
-## Execute by transport
+## Derive a client
+
+`client(options?)` returns a new client. The seven known fields are copied from the argument object when `client(options)` is called, a top-level snapshot into a fresh options object overlaid on the current options. A later field wins. A field whose value is `undefined` is treated as not provided and keeps the parent's value. A derived client cannot drop a setting its parent has; to go back to no setting, derive again from the client that did not have it (keep the root client). Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned, and replace the parent value as a whole, not merged. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. Deriving performs no I/O. The original client is never mutated. `client()`, `client(undefined)`, and `client({})` copy the current options.
+
+`abort` is not combined. A later `abort` replaces the previous signal. Combine signals with `AbortSignal.any` in application code.
+
+<include cwd lang="typescript">
+  examples/client/derive-client.ts#example
+</include>
+
+The base configuration from `createClient` is shared by every derived client and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. The [`RequestOptions`](/api/core/requestoptions-type) on a client are that top-level snapshot. Application code calls the client and passes it to an operation. It does not read that internal state.
+
+## Request options
+
+[`RequestOptions`](/api/core/requestoptions-type) has seven flat fields. Each protocol reads only the fields it knows and ignores the rest. Passing `heartbeat` to an HTTP operation is ignored, not a fault. SSE reads only `abort` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter.
+
+| Field                | Used by              | Rule                                                                                                                    |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP, SSE, WebSocket | Replaces the previous signal. A deadline is `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). A manual abort is `NET_ABORTED`. |
+| `onUploadProgress`   | HTTP                 | Ignored by SSE and WebSocket.                                                                                           |
+| `onDownloadProgress` | HTTP                 | Ignored by SSE and WebSocket.                                                                                           |
+| `beforeConnect`      | WebSocket            | Replaces the client setting for that call.                                                                              |
+| `protocols`          | WebSocket            | Replaces the client list. It is not appended.                                                                           |
+| `heartbeat`          | WebSocket            | Replaced whole. `timeoutMs` is the heartbeat acknowledgement wait, not a request deadline.                              |
+| `reconnect`          | WebSocket            | Replaced whole.                                                                                                         |
+
+There is no `timeout` field, no `signal` field, and no client-level default deadline. For SSE and WebSocket, `abort` covers the whole connection, including after it is open. There is no startup-only deadline. An application that wants one creates its own `AbortController`, aborts it with `new DOMException("...", "TimeoutError")` from a timer, and clears the timer after the await returns. See [SSE](/docs/sse#close-and-dispose).
+
+`HttpExecuteOptions` is the HTTP slice: `abort` plus the progress callbacks. `EventStreamExecuteOptions` is `{ abort? }`. `WebSocketExecuteOptions` is the WebSocket slice plus `abort`.
+
+## Results by transport
 
 - HTTP → `[error, data, response]`
 - SSE → `[error, stream, open]`. `open` is the returned connection's first successful handshake snapshot for native Defjs handles or wrappers forwarding the same live `open` object; custom handles or wrappers overriding `open` use their current public `open` even after reconnect, while `stream.open` stays live (see [SSE](/docs/sse)).
 - WebSocket → `[error, session, connection]`
 
-WebSocket execute can override `beforeConnect`, `heartbeat`, `protocols`, and `reconnect`. `timeout` must be a positive safe integer in `1..2_147_483_647`.
+Return before using the success value when `error` is set.
 
 You own cleanup: abort HTTP, close SSE + `await stream.closed`, close WebSocket + `await session.closed`.
 
@@ -49,13 +81,21 @@ You own cleanup: abort HTTP, close SSE + `await stream.closed`, close WebSocket 
 
 On a server, create the client inside the request boundary when options or interceptor closures capture auth, cookies, users, or tenants. Client identity isn’t a security boundary by itself.
 
+## Migration
+
+| Old                                       | New                                                       |
+| ----------------------------------------- | --------------------------------------------------------- |
+| `client.execute(getUser(input), options)` | `getUser(client(options), input)`                         |
+| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })`            |
+| `execute(cmd, { signal })`                | `client({ abort: signal })`                               |
+| `createClient(withTimeout(5000), ...)`    | pass `abort` at the call, or wrap an application function |
+
 ## Reference
 
 | Helper                                                                                                        | Effect                                                        |
 | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `withEndpoint(url)`                                                                                           | Absolute base endpoint for all transports                     |
-| `withHeaders(HeadersInit)`                                                                                    | Static default headers for HTTP/SSE; command headers override |
-| `withTimeout(ms)`                                                                                             | Default HTTP `execute` timeout only (SSE/WS ignore it)        |
+| `withHeaders(HeadersInit)`                                                                                    | Static default headers for HTTP/SSE; builder headers override |
 | `withHTTPHandle(fetch)`                                                                                       | Replace Fetch for HTTP                                        |
 | `withSSEHandle(fetch)`                                                                                        | Replace Fetch for SSE                                         |
 | `withWebSocketHandle(WebSocket)`                                                                              | Replace WebSocket constructor                                 |

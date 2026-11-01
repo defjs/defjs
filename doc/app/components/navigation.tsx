@@ -33,12 +33,8 @@ import {
   PopoverTrigger,
 } from "fumadocs-ui/components/ui/popover";
 import type { LayoutTab } from "fumadocs-ui/layouts/shared";
-import { getNav } from "../lib/navigation-copy";
+import { useAppTranslations } from "../lib/use-app-translations";
 import { getNavigationTabs, getRelatedNavigation } from "../lib/navigation";
-
-function useCopy() {
-  return getNav(useI18n().locale);
-}
 
 function NavigationState({ children }: { children: ReactNode }) {
   const { open, setOpen, mode } = useSidebar();
@@ -63,10 +59,13 @@ function NavigationTrigger(props: ComponentProps<"button">) {
   );
 }
 function NavigationSidebar(props: SidebarProps) {
-  const copy = useCopy();
+  const t = useAppTranslations();
   const { mode } = useSidebar();
   const content = (
-    <nav aria-label={copy.navigation} className="navigation-sidebar contents">
+    <nav
+      aria-label={t("nav.navigation")}
+      className="navigation-sidebar contents"
+    >
       <Sidebar {...props} />
     </nav>
   );
@@ -75,7 +74,7 @@ function NavigationSidebar(props: SidebarProps) {
     <PopoverContent
       asChild
       className="navigation-drawer"
-      aria-label={copy.navigation}
+      aria-label={t("nav.navigation")}
       onOpenAutoFocus={(event) => {
         event.preventDefault();
         document
@@ -90,7 +89,7 @@ function NavigationSidebar(props: SidebarProps) {
   );
 }
 function NavigationContainer({ children, ...props }: ComponentProps<"div">) {
-  const copy = useCopy();
+  const t = useAppTranslations();
   const { pathname } = useLocation();
   return (
     <Container {...props}>
@@ -99,7 +98,7 @@ function NavigationContainer({ children, ...props }: ComponentProps<"div">) {
           return child;
         return (
           <nav
-            aria-label={copy.readingAreas}
+            aria-label={t("nav.readingAreas")}
             style={{ gridArea: "tabs" }}
             className="z-10 flex items-end gap-6 overflow-auto border-b bg-fd-background px-6 pt-3 max-md:hidden xl:px-8"
           >
@@ -172,14 +171,8 @@ export const navigationComponents = {
   Separator: NavigationHeading,
 };
 
-export function StaticNavigation({
-  tree,
-  locale,
-}: {
-  tree: Root;
-  locale: string;
-}) {
-  const copy = getNav(locale);
+export function StaticNavigation({ tree }: { tree: Root }) {
+  const t = useAppTranslations();
   const { pathname: location } = useLocation();
   const pathname = location.replace(/\/$/, "") || "/";
   const tabs = getNavigationTabs(tree);
@@ -235,10 +228,10 @@ export function StaticNavigation({
     <noscript>
       <details className="mb-4 rounded-lg border p-3 md:hidden">
         <summary className="cursor-pointer font-medium">
-          {copy.navigation}
+          {t("nav.navigation")}
         </summary>
         <nav
-          aria-label={copy.readingAreas}
+          aria-label={t("nav.readingAreas")}
           className="my-3 flex flex-wrap gap-4"
         >
           {tabs.map((tab) => (
@@ -247,7 +240,7 @@ export function StaticNavigation({
             </a>
           ))}
         </nav>
-        <nav aria-label={copy.navigation}>
+        <nav aria-label={t("nav.navigation")}>
           {current?.type === "folder" && list(current.children)}
         </nav>
       </details>
@@ -255,20 +248,15 @@ export function StaticNavigation({
   );
 }
 
-export function RelatedNavigation({
-  tree,
-  locale,
-}: {
-  tree: Root;
-  locale: string;
-}) {
-  const copy = getNav(locale);
+export function RelatedNavigation({ tree }: { tree: Root }) {
+  const { locale = "en-US" } = useI18n();
+  const t = useAppTranslations();
   const { pathname } = useLocation();
   const groups = getRelatedNavigation(tree, locale, pathname);
   if (groups.length === 0) return null;
   return (
-    <nav aria-label={copy.related} className="mb-6 mt-8 border-t pt-6">
-      <h2 className="mb-4 text-lg font-semibold">{copy.related}</h2>
+    <nav aria-label={t("nav.related")} className="mb-6 mt-8 border-t pt-6">
+      <h2 className="mb-4 text-lg font-semibold">{t("nav.related")}</h2>
       <div className="grid gap-6 sm:grid-cols-3">
         {groups.map((group, i) => (
           <section key={i}>

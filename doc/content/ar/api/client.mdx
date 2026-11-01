@@ -5,70 +5,57 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 # العميل
 
-أنشئ عميلًا، ركّب الخيارات من اليسار إلى اليمين، ثم `execute` أوامر HTTP / SSE / WebSocket.
+تُرجع `createClient(...)` [`Client`](/ar/api/core/client-type) قابلًا للاستدعاء. ركّب خيارات العميل من اليسار إلى اليمين، ثم استدعِ `client(options?)` لاشتقاق عميل ومرّره إلى عملية: `getUser(client(options), input)`.
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-تُطبَّق الخيارات بالترتيب. يُفضَّل إنشاء العميل ضمن نطاق كل طلب عندما تحتفظ المعترضات ببيانات المصادقة أو المستأجرين في إغلاقاتها (closures).
+تُطبَّق الخيارات بالترتيب. فضّل إنشاء العميل داخل حدود الطلب عندما تغلق المعترضات على المصادقة أو المستأجرين. العميل المُرجَع دالة. استدعاؤه يُرجع عميلًا جديدًا ولا يؤدي أي إدخال/إخراج.
 
 - **options** — مساعدات خيارات مثل `withEndpoint`.
-- **يُرجع** عميلًا تكون لدالة `execute` فيه صيغ استدعاء متعددة حسب وسيلة النقل.
+- **يُرجع** عميلًا قابلًا للاستدعاء. الإعداد الأساسي مشترك بين كل عميل مشتق، وهو غير مُجمَّد وقت التشغيل. هو ثابت بالاصطلاح: لا شيء في المكتبة يغيّره، ولا ينبغي للتطبيقات أن تغيّره.
 
 <include cwd>examples/api/create-client.ts#example</include>
 
 ## مساعدات الخيارات
 
-كل المساعدات تُرجع `ClientOption`. استدعاء لاحق يستبدل سابقه لنفس الإعداد، باستثناء `withInterceptors` الذي يُلحق.
+تُرجع كل المساعدات `ClientOption`. استدعاء لاحق يستبدل استدعاءً سابقًا للإعداد نفسه، إلا `withInterceptors` الذي يُلحق.
 
 ### withEndpoint()
 
 <ApiSignature name="withEndpoint" />
 
-يعيّن URL الأساس الذي يُلحق أمام المسارات النسبية.
+يضبط عنوان URL الأساسي الذي يُسبَق به المسارات النسبية.
 
 ### withInterceptors()
 
 <ApiSignature name="withInterceptors" />
 
-يُلحق المعترضات بترتيب التسجيل. الأنواع المختلطة تُصفّى حسب وسيلة النقل عند التنفيذ.
+يُلحق المعترضات بترتيب التسجيل. تُصفَّى الأنواع المختلطة لكل وسيلة نقل عند تشغيل العملية.
 
 ### withQuerySerializer()
 
 <ApiSignature name="withQuerySerializer" />
 
-يستبدل ترميز الاستعلام لـ HTTP وSSE وWebSocket. `serializer(query)` يستقبل **الكائن المرمَّز بصيغة النقل** (الأسماء المستعارة مُطبَّقة، و`Date` بصيغة ISO، و`bigint` كسلسلة) ويجب أن يُرجع سلسلة الاستعلام دون `?` بادئة. لا يُستدعى عندما لا يملك الطلب استعلامًا. الـ `builder` الذي يُرجع `URLSearchParams` يتخطاه.
+يستبدل ترميز الاستعلام لـ HTTP وSSE وWebSocket. يتلقى `serializer(query)` **كائن السلك المرمَّز** (الأسماء المستعارة مطبَّقة، و`Date` بصيغة ISO، و`bigint` كسلسلة) ويجب أن يُرجع سلسلة الاستعلام دون `?` بادئة. لا يُستدعى عندما لا يكون للطلب استعلام. الـ builder الذي يُرجع `URLSearchParams` يتجاوزه.
 
 ### withHeaders()
 
 <ApiSignature name="withHeaders" />
 
-يعيّن رؤوسًا افتراضية ثابتة لطلبات HTTP وSSE. لا تستخدمها طلبات WebSocket. تُنسخ قيمة `headers` عند تطبيق الخيار، فلا تصل التغييرات اللاحقة على الكائن إلى العميل. استدعاء `withHeaders` ثانٍ يستبدل الأول ولا يدمج معه.
+يضبط رؤوسًا افتراضية ثابتة لطلبات HTTP وSSE. طلبات WebSocket لا تستخدمها. تُنسَخ `headers` عند تطبيق الخيار، فالتغييرات اللاحقة على الكائن لا تصل إلى العميل. `withHeaders` ثانٍ يستبدل الأول؛ وهو لا يدمج.
 
-الأسبقية لطلب واحد:
+أسبقية طلب واحد:
 
-1. الرؤوس الافتراضية هي مجموعة الرؤوس الابتدائية.
-2. الرؤوس `headers` التي يُرجعها `builder` الطلب لا تُلحق مصفوفة على الافتراضي الموجود بالاسم نفسه. القيمة الأولى لذلك الاسم تستبدل الافتراضي (`Headers.set`)، والقيم اللاحقة في المصفوفة نفسها (مدخل في سجل مثل `{ 'x-a': ['one', 'two'] }`، أو `HeadersInit` على شكل مصفوفة أزواج) تُلحق فقط بذلك البديل. القيمة المفردة (scalar) أو نسخة `Headers` تستبدل أيضًا. وتبقى أسماء الافتراضي الأخرى.
-3. تستقبل المعترضات الرؤوس المدموجة ويجوز لها تغييرها.
-4. مع نقل HTTP الافتراضي، يُضاف رأس XSRF أخيرًا، وفقط إذا كان لا يزال غائبًا (انظر `withXSRF`).
+1. القيم الافتراضية هي مجموعة الرؤوس الابتدائية.
+2. `headers` التي يُرجعها بانٍ الطلب تستبدل افتراضيًا بالاسم نفسه. القيمة الأولى لذلك الاسم تستبدل الافتراضي؛ والقيم اللاحقة في المصفوفة نفسها تُلحَق بذلك الاستبدال فقط. قيمة مفردة أو نسخة `Headers` تستبدل أيضًا. تبقى أسماء الافتراضيات الأخرى.
+3. يتلقى المعترضون الرؤوس المدمجة وقد يغيّرونها.
+4. مع نقل HTTP الافتراضي، يُضاف رأس XSRF أخيرًا، فقط عندما يكون ما زال غائبًا (انظر `withXSRF`).
 
-استخدم معترضًا للقيم التي تتغير من طلب لآخر: رمز Bearer مُجدَّد، أو HMAC على الجسم المُسلسَل.
+استخدم معترضًا للقيم التي تتغيّر لكل طلب: رمز Bearer محدَّث، أو HMAC على الجسم المسلسَل.
 
-### withTimeout()
-
-<ApiSignature name="withTimeout" />
-
-يعيّن المهلة الافتراضية، بالمللي ثانية، لـ `execute` في **HTTP** فقط. يتجاهلها SSE وWebSocket؛ فـ `timeout` في execute لديهما مهلة بدء مستقلة لكل استدعاء. يجب أن تكون `ms` عددًا صحيحًا آمنًا موجبًا لا يتجاوز `2_147_483_647`، وإلا رمى `withTimeout` الخطأ `RangeError` عند استدعائه. استدعاء `withTimeout` ثانٍ يستبدل الأول.
-
-يشمل الموعد النهائي تحليل المدخل، والـ `builder`، والمعترضات، ووسيلة النقل، وقراءة الجسم المصرَّح به. ويتحد مع [`HttpExecuteOptions`](/ar/api/core/httpexecuteoptions-type) في كل استدعاء:
-
-| خيارات execute              | الأثر                                                                                     |
-| --------------------------- | ----------------------------------------------------------------------------------------- |
-| لا شيء                      | تُطبَّق القيمة الافتراضية للعميل؛ والانتهاء هو `NET_TIMEOUT`.                             |
-| `{ timeout }`               | تستبدل القيمة الافتراضية للعميل في هذا الاستدعاء.                                         |
-| `{ abort }` أو `{ signal }` | تتحد مع الافتراضية: إشارة المستدعي هي `NET_ABORTED`، والمؤقت هو `NET_TIMEOUT`.            |
-| `{ abort, timeout }`        | لا يزال غير صالح: `REQ_OPTIONS_INVALID`. القيمة الافتراضية للعميل لا تُعدّ تعارضًا أبدًا. |
+لا توجد مهلة افتراضية على مستوى العميل. مرّر `abort: AbortSignal.timeout(ms)` على عميل مشتق عندما يحتاج استدعاء واحد إليها. الإجهاض اليدوي هو `NET_ABORTED`. يُصنَّف `AbortSignal.timeout` كـ `NET_TIMEOUT`.
 
 <include cwd>examples/api/client-defaults.ts#example</include>
 
@@ -80,23 +67,23 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="withHTTPHandle, withSSEHandle, withWebSocketHandle" />
 
-استبدل Fetch (HTTP/SSE) أو مُنشئ WebSocket.
+تستبدل Fetch (HTTP/SSE) أو منشئ WebSocket.
 
 ### withCredentials()
 
 <ApiSignature name="withCredentials" />
 
-عندما يكون `true`، يستخدم Fetch `credentials: 'include'` لـ HTTP وSSE. الافتراضي معطّل. اتصالات WebSocket غير متأثرة.
+عندما تكون `true`، يستخدم Fetch القيمة `credentials: 'include'` لـ HTTP وSSE. الافتراضي متوقف. اتصالات WebSocket لا تتأثر.
 
 ### withXSRF()
 
 <ApiSignature name="withXSRF" />
 
-يضيف رأس رمز XSRF إلى طلبات HTTP. `options` هو إعداد `xsrf`، بنفس شكل `xsrf` على [`ClientOptions`](/ar/api/core/clientoptions-type): `cookieName` (الافتراضي `XSRF-TOKEN`)، و`headerName` (الافتراضي `X-XSRF-TOKEN`)، و`tokenProvider({ request })`. استدعاء `withXSRF()` بلا وسيط يفعّل هذه القيم الافتراضية. طلبات SSE وWebSocket غير متأثرة.
+يضيف رأس رمز XSRF إلى طلبات HTTP. `options` هو إعداد `xsrf`، بالشكل نفسه لـ `xsrf` على [`ClientOptions`](/ar/api/core/clientoptions-type): `cookieName` (الافتراضي `XSRF-TOKEN`)، و`headerName` (الافتراضي `X-XSRF-TOKEN`)، و`tokenProvider({ request })`. استدعاء `withXSRF()` بلا وسيط يفعّل تلك الافتراضيات. طلبات SSE وWebSocket لا تتأثر.
 
-يضيف نقل HTTP الافتراضي الرأس عندما تتحقق كل الشروط التالية: الطريقة ليست `GET` ولا `HEAD` ولا `OPTIONS` ولا `TRACE`؛ ولا يحمل الطلب هذا الرأس أصلًا؛ والطلب من الأصل نفسه (same-origin)؛ ويوجد رمز غير فارغ. متى وُجد `location`، بما في ذلك داخل Worker، يجب أن يطابق أصل عنوان الطلب بعد حله `location.origin`؛ وفي غيابه يُعدّ الطلب الذي له `baseEndpoint` من الأصل نفسه. لا تستدعي الطلبات العابرة للأصل `tokenProvider`. يأتي الرمز من هذا المزوّد إن وُجد، وإلا من `document.cookie`، التي لا تُقرأ إلا عند وجود `document`.
+يضيف نقل HTTP الافتراضي الرأس عندما تتحقق كل هذه الشروط: الطريقة ليست `GET` أو `HEAD` أو `OPTIONS` أو `TRACE`؛ والطلب لا يملك ذلك الرأس أصلًا؛ والطلب من الأصل نفسه؛ ويُعثر على رمز غير فارغ. حيثما وُجد `location`، بما في ذلك Worker، يجب أن يطابق أصل الطلب المحلول `location.origin`؛ ودونه يُعدّ الطلب الذي له `baseEndpoint` من الأصل نفسه. الطلبات العابرة للأصل لا تستدعي `tokenProvider`. يأتي الرمز من ذلك الموفّر عند إعطائه، وإلا من `document.cookie`، الذي يُقرأ فقط عندما يوجد `document`.
 
-### ضبط SSE
+### مقابض SSE
 
 ### withSSEReconnect()
 
@@ -104,7 +91,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="withSSEReconnect, withSSEOnInvalidEvent" />
 
-### ضبط WebSocket
+### مقابض WebSocket
 
 ### withWebSocketBeforeConnect()
 
@@ -122,13 +109,33 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="Client" />
 
-لـ `execute` صيغة استدعاء واحدة لكل نوع أمر (event stream وWebSocket وHTTP)، وتُستنتج معاملات النوع من الأمر.
+`Client` دالة. استدعاؤها مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع عميلًا جديدًا. تُنسخ الحقول السبعة المعروفة من الوسيط إلى كائن جديد يُركَّب فوق الخيارات الحالية. الحقل اللاحق يغلب. الحقل الذي قيمته `undefined` يُعامل كأنه غير مُمرَّر ويُبقي قيمة الأصل. لا يستطيع العميل المشتق إسقاط إعداد يملكه الأصل. للعودة إلى غياب الإعداد، اشتق مرة أخرى من العميل الذي لم يملكه (أبقِ العميل الجذر). تُحفَظ قيم `heartbeat` و`protocols` و`reconnect` المتداخلة بالمرجع، دون استنساخ، وتستبدل قيمة الأصل كاملة، لا بالدمج. يقرأها WebSocket عند تشغيل العملية (ينسخ حينها حقول heartbeat وقائمة protocols)، لذا قد يؤثر تغيير تلك الكائنات بعد الاشتقاق في استدعاء لاحق. ينبغي للتطبيقات أن تعاملها كغير قابلة للتغيير بعد تمريرها. العميل الأصلي لا يُغيَّر. `client()` و`client(undefined)` و`client({})` تنسخ الخيارات الحالية. الاشتقاق لا يؤدي أي إدخال/إخراج. يمكن تمرير قيمة العميل نفسها إلى عمليات كثيرة. يُستبدل `abort` ولا يُجمَع؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق.
+
+لا تمرّر عميلًا إلى ضابط حالة في React (`setState(client)` سيستدعيه كمُحدِّث) ولا تستخدمه مصدرًا لـ `watch` أو `computed` في Vue (فهما يستدعيان الدالة).
+
+### RequestOptions
+
+<ApiSignature name="RequestOptions" />
+
+سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يفهمها ويتجاهل الباقي. تمرير `heartbeat` إلى HTTP يُتجاهل، وليس عطلًا. يقرأ SSE من خيارات الطلب `abort` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة ولا حقل `timeout` أو `signal`.
+
+| الحقل                | البروتوكول           | الاستبدال                                                                            |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------ |
+| `abort`              | HTTP وSSE وWebSocket | يستبدل الإشارة السابقة. في SSE وWebSocket يغطي الاتصال كاملًا، بما فيه ما بعد الفتح. |
+| `onUploadProgress`   | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                         |
+| `onDownloadProgress` | HTTP                 | تتجاهله البروتوكولات الأخرى.                                                         |
+| `beforeConnect`      | WebSocket            | يستبدل إعداد العميل لذلك الاستدعاء.                                                  |
+| `protocols`          | WebSocket            | يستبدل قائمة العميل.                                                                 |
+| `heartbeat`          | WebSocket            | يُستبدل كاملًا. `timeoutMs` هو انتظار الإقرار، وليس مهلة للطلب.                      |
+| `reconnect`          | WebSocket            | يُستبدل كاملًا.                                                                      |
+
+[`HttpExecuteOptions`](/ar/api/core/httpexecuteoptions-type) هو شريحة HTTP (`abort` مع التقدّم). [`EventStreamExecuteOptions`](/ar/api/core/eventstreamexecuteoptions-type) هو `{ abort? }`. [`WebSocketExecuteOptions`](/ar/api/core/websocketexecuteoptions-type) هو شريحة WebSocket مع `abort`.
 
 ### ClientOption
 
 <ApiSignature name="ClientOption" />
 
-يعدّل `ClientConfig` الذي يبنيه `createClient`. اكتب واحدًا عندما لا يناسبك أي مساعد `with*`.
+يعدّل `ClientConfig` الذي يبنيه `createClient`. اكتب واحدًا عندما لا يناسب أي مساعد `with*`.
 
 ### QuerySerializer
 
@@ -138,7 +145,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="FetchHandle" />
 
-توقيع الاستدعاء الذي تحتاجه Defjs من تنفيذ Fetch. وهو ليس `typeof fetch`، فلا يحتاج المحاكي (mock) إلى إضافات المضيف مثل `preconnect`. تحلّ معالجات HTTP/SSE الافتراضية `globalThis.fetch` عند كل استدعاء. يستخدم HTTP الوسيطين `(url, init)` فقط مع Fetch الأصلي للمنصة الذي لم يُستبدَل؛ أما البديل العام والمعالجات المخصصة فتستقبل `Request`. يمرّر SSE دائمًا `Request`. يمكن استيراد Core دون Fetch؛ وإذا ظل Fetch غائبًا عند التنفيذ الافتراضي، يُبلَّغ عن `ENV_UNSUPPORTED`، بينما تظل المعالجات المخصصة قابلة للاستخدام.
+توقيع الاستدعاء الذي يحتاجه Defjs من تنفيذ Fetch. وهو ليس `typeof fetch`، فلا يحتاج المحاكي إلى إضافات المضيف مثل `preconnect`. يحل معالجا HTTP/SSE الافتراضيان `globalThis.fetch` عند كل استدعاء. يستخدم HTTP الصيغة `(url, init)` فقط مع Fetch الأصلي للمنصة دون تعديل؛ وتتلقى الكائنات العامة المستبدلة والمعالجات المخصصة `Request`. يمرّر SSE دائمًا `Request`. استيراد Core دون Fetch صالح؛ ويبلّغ التنفيذ الافتراضي عن `ENV_UNSUPPORTED` إذا ظل Fetch غائبًا، بينما تبقى المعالجات المخصصة قابلة للاستخدام.
 
 ### ClientSSEOptions
 
@@ -146,7 +153,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="ClientSSEOptions, ClientWebSocketOptions" />
 
-إعادة الاتصال اختيارية في كلتا وسيلتي النقل: بدون `withSSEReconnect` / `withWebSocketReconnect` لا توجد إعادة محاولة. بمجرد ضبط `reconnect` تُطبَّق هذه القيم الافتراضية:
+إعادة الاتصال اختيارية لوسيلتي النقل: دون `withSSEReconnect` / `withWebSocketReconnect` لا توجد إعادة محاولة. بعد ضبط `reconnect`، تنطبق هذه الافتراضيات:
 
 | الحقل        | SSE            | WebSocket      |
 | ------------ | -------------- | -------------- |
@@ -156,40 +163,40 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 | `jitter`     | `0`            | `0`            |
 | `maxDelayMs` | بلا سقف        | `30000`        |
 
-في كلتا وسيلتي النقل، تعيد المصافحة الناجحة ضبط ميزانية إعادة المحاولة لكل انقطاع، ورقم المحاولة الممرَّر إلى ردّ النداء، وأُسّ التراجع. تعطّل `attempts: 0` إعادة المحاولة؛ ولا يعني حذف `attempts` السماح بمحاولات غير محدودة أثناء انقطاع واحد. تضع `maxDelayMs` سقفًا للتأخير النهائي بعد تطبيق `jitter` والتقريب؛ ويُطبَّق أيضًا حد مؤقت المنصة البالغ `2_147_483_647` مللي ثانية، حتى عندما لا يُضبط سقف لـ SSE. يبقى التأخير الأساسي الصفري صفرًا؛ وعند تجاوز نطاق الحساب بأعداد صالحة، تتوقف النتيجة عند هذه الحدود القصوى.
+في وسيلتي النقل، تعيد المصافحة الناجحة ضبط ميزانية إعادة المحاولة لكل انقطاع ومحاولة رد النداء وأُس التراجع. تعطّل `attempts: 0` إعادة المحاولة؛ وحذف `attempts` لا يمنح محاولات غير محدودة داخل انقطاع واحد. يحدّ `maxDelayMs` التأخير النهائي بعد الاهتزاز والتقريب؛ وينطبق أيضًا حد مؤقت المنصة `2_147_483_647` مللي ثانية، بما في ذلك عندما لا يكون لـ SSE سقف مضبوط. الأساس الصفري يبقى صفرًا؛ ويشبع فيضان الأعداد الصالحة عند السقوف.
 
-تُفحَص خيارات إعادة الاتصال قبل بدء النقل: يجب أن يكون `attempts` عددًا صحيحًا آمنًا غير سالب؛ وأن يكون `delayMs` عددًا منتهيًا غير سالب؛ وأن يكون `maxDelayMs` عددًا منتهيًا غير سالب أو `Infinity` الموجبة، التي تزيل السقف المضبوط دون أن تلغي حد المنصة البالغ `2_147_483_647` مللي ثانية للتأخير النهائي؛ وأن يكون `factor` عددًا منتهيًا وموجبًا؛ وأن يكون `jitter` عددًا منتهيًا بين 0 و1. تُرجع القيم غير الصالحة `REQ_OPTIONS_INVALID`. في WebSocket، تعطّل `attempts: 0` المحاولات اللاحقة، لكن جميع حقول إعادة الاتصال المقدّمة صراحةً تظل خاضعة للتحقق قبل الاتصال الأول، كما في SSE. يزيد `jitter` التأخير الأساسي المقيد بسقف أو ينقصه نسبيًا قبل تطبيق السقف النهائي.
+تُتحقق خيارات إعادة الاتصال قبل النقل: يجب أن تكون `attempts` عددًا صحيحًا آمنًا غير سالب؛ ويجب أن تكون `delayMs` محدودة وغير سالبة؛ ويجب أن تكون `maxDelayMs` عددًا محدودًا غير سالب أو `Infinity` موجبًا، ما يزيل السقف المضبوط لا حد المنصة `2_147_483_647` مللي ثانية؛ ويجب أن يكون `factor` محدودًا وموجبًا؛ ويجب أن يكون `jitter` محدودًا وضمن 0–1. القيم غير الصالحة تُرجع `REQ_OPTIONS_INVALID`. تعطّل `attempts: 0` في WebSocket إعادات المحاولة اللاحقة، لكن كل حقول إعادة الاتصال الممرَّرة صراحةً ما زالت تُتحقق قبل الاتصال الأولي، كما في SSE. يوسّع الاهتزاز الأساس المقيَّد في أي الاتجاهين قبل تطبيق السقف النهائي.
 
-في SSE، `delayMs` هو التأخير الأساسي الابتدائي فقط: يستبدله حقل `retry:` الذي يرسله الخادم ويتكوّن من أرقام فقط في المحاولات اللاحقة، بما في ذلك بعد استعادة الاتصال. إرجاع `shouldReconnect` القيمة `false` يوقف إعادة المحاولة. يستقبل ردّ النداء الخاص بـ SSE أيضًا `lastEventId` وطريقة الطلب `method` وأحدث معلومات `open`، ويمكن أن يكون غير متزامن. بدونه، تقتصر إعادة اتصال SSE على طلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`؛ وعند توفيره، تحدّد نتيجته قرار إعادة الاتصال لكل طريقة. يُرسل أحدث معرّف حدث كبايتات UTF-8 في `Last-Event-ID`؛ ويمسحه المعرّف الفارغ، ويُتجاهل المعرّف الذي يحتوي على NUL. أما ردّ النداء الخاص بـ WebSocket فيستقبل بدلًا من ذلك `code` و`reason` و`wasClean` للإغلاق.
+في SSE، `delayMs` هي تأخير الأساس الابتدائي فقط: حقل `retry:` من الخادم مكوّن من أرقام فقط يستبدلها للمحاولات اللاحقة، بما في ذلك بعد التعافي. إرجاع `shouldReconnect` للقيمة `false` يوقف إعادة المحاولة. يتلقى رد نداء SSE أيضًا `lastEventId` وطريقة الطلب `method` ومعلومات `open` الأخيرة، وقد يكون غير متزامن. دونه، تعيد SSE الاتصال فقط لطلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`؛ ومعه، تقرر نتيجته لكل طريقة. يُرسَل أحدث معرّف حدث كبايتات UTF-8 في `Last-Event-ID`؛ والمعرّف الفارغ يمسحه، والمعرّف الذي يحتوي NUL يُتجاهل. يتلقى رد نداء WebSocket بدل ذلك `code` و`reason` و`wasClean` للإغلاق.
 
-يعالج `onInvalidEvent` في SSE حدثًا لا يطابقه أي struct، بما في ذلك غياب `default` (`missing-struct`)، أو حدثًا تفشل بياناته في struct الخاص به (`validation-failed`). يُسقَط الحدث دائمًا؛ وتُتجاهل قيمة إرجاع المعالج، ولا يغلق الخطأ الذي يرميه التدفق.
+يعالج `onInvalidEvent` في SSE حدثًا بلا struct مطابق، بما في ذلك غياب `default` (`missing-struct`)، أو تفشل بياناته في struct (`validation-failed`). يُسقَط الحدث دائمًا؛ وتُتجاهل قيمة إرجاع المعالج، والخطأ الذي يرميه لا يغلق التدفق.
 
-في WebSocket يمكن أيضًا تمرير `beforeConnect` و`heartbeat` و`protocols` و`reconnect` لكل استدعاء `execute`؛ وقيمة execute تستبدل قيمة العميل لذلك الاستدعاء. يبني `heartbeat.message` كل ping؛ ولا يُرسل شيء عند حذفه أو عندما يُرجع `undefined`.
+في WebSocket، يمكن تمرير `beforeConnect` و`heartbeat` و`protocols` و`reconnect` أيضًا على عميل مشتق؛ وكل منها يستبدل قيمة العميل لذلك الاستدعاء كاملة. يبني `heartbeat.message` كل ping؛ ولا يُرسَل شيء عند حذفه أو إرجاعه `undefined`. ينتظر `heartbeat.timeoutMs` إقرارًا. وهو ليس مهلة للطلب.
 
 ### ClientOptions
 
 <ApiSignature name="ClientOptions" />
 
-الحقلان الظاهران هما `sse` و`webSocket`. والحقول الثمانية الأخرى — `endpoint` و`headers` و`http` و`interceptors` و`querySerializer` و`timeout` و`xsrf` و`withCredentials` — موروثة من قاعدة HTTP غير المصدَّرة، و`endpoint` مطلوب. لا يأخذ `createClient` هذا الكائن؛ فهو يأخذ مساعدات الخيارات.
+الحقلان الظاهران هما `sse` و`webSocket`. والحقول السبعة الأخرى — `endpoint` و`headers` و`http` و`interceptors` و`querySerializer` و`xsrf` و`withCredentials` — موروثة من قاعدة HTTP غير المصدَّرة، و`endpoint` مطلوب. لا يوجد `timeout` على مستوى العميل. لا يأخذ `createClient` هذا الكائن؛ فهو يأخذ مساعدات الخيارات.
 
 ### ClientConfig
 
-اللقطة المحلولة التي تعدّلها مساعدات الخيارات ويقرؤها `execute`: `ClientOptions` بعد تطبيق القيم الافتراضية، مع حضور `http.handle` و`interceptors` و`sse` (من نوع `ClientSSEConfig`) و`webSocket` دائمًا.
+اللقطة المحلولة التي تعدّلها مساعدات الخيارات وتقرأها العملية: `ClientOptions` بعد الافتراضيات، مع وجود `http.handle` و`interceptors` و`sse` (`ClientSSEConfig`) و`webSocket` دائمًا.
 
 ### ClientSSEConfig
 
 <ApiSignature name="ClientSSEConfig" />
 
-تهيئة SSE المحلولة على `ClientConfig.sse`: هي `ClientSSEOptions` مع `handle` مطلوب.
+إعداد SSE المحلول على `ClientConfig.sse`: `ClientSSEOptions` مع `handle` مطلوب.
 
 ### WebSocketHandle
 
-واجهة نسخة WebSocket التي تستخدمها وسيلة النقل: `WebSocket` من دون `binaryType` وثوابت حالة الجاهزية و`dispatchEvent` وخصائص المعالجات `on*`، ومع `readyState: number` للقراءة فقط.
+سطح نسخة WebSocket الذي يستخدمه النقل: `WebSocket` دون `binaryType`، وثوابت حالة الجاهزية، و`dispatchEvent` وخصائص المعالج `on*`، ومع `readyState: number` للقراءة فقط.
 
 ### WebSocketHandleConstructor
 
 <ApiSignature name="WebSocketHandleConstructor" />
 
-المُنشئ الممرَّر إلى `withWebSocketHandle`. يجب أن يكشف ثابت حالة الجاهزية `OPEN`.
+المنشئ الممرَّر إلى `withWebSocketHandle`. يجب أن يعرض ثابت حالة الجاهزية `OPEN`.
 
 انظر [دليل العميل](/ar/docs/client).

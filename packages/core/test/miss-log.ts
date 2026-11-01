@@ -16,7 +16,7 @@ export async function missHits(
     output: MissLog,
     path: "/e2e/miss-log",
   });
-  const [error, log] = await client.execute(readMissLog());
+  const [error, log] = await readMissLog(client);
   expect(error?.code ?? null).toBeNull();
   return (log?.hits ?? []).filter((hit) => hit.endsWith(` ${path}`));
 }

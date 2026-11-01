@@ -1,18 +1,12 @@
 import { expectTypeOf } from "vitest";
-import type { HTTP_COMMAND } from "../client/command";
-import { COMMAND_TYPE } from "../client/command";
 import { createClient } from "../client";
 import type { DecodedResponse, HttpMeta } from "../internal/http_response";
 // @ts-expect-error RequestCommandBuilder was renamed to RequestEndpoint
 import type { RequestCommandBuilder } from "./http";
 
-import type {
-  HttpAwaitResult,
-  HttpExecuteOptions,
-  RequestEndpoint,
-} from "./http";
+import type { HttpAwaitResult, RequestEndpoint } from "./http";
 import { defineRequest } from "./http";
-import { struct, type AnyStruct } from "../struct";
+import { struct } from "../struct";
 
 const User = struct.object({ id: struct.number(), name: struct.string() });
 const ApiError = struct.object({
@@ -29,12 +23,13 @@ const useGetUser = defineRequest({
 });
 
 function takesRequestEndpoint<
-  TInput extends AnyStruct | undefined,
-  TOutput extends AnyStruct | undefined,
-  TError extends AnyStruct | undefined,
+  Args extends unknown[],
+  Data,
+  ErrorData,
+  Response extends HttpMeta,
 >(
-  endpoint: RequestEndpoint<TInput, TOutput, TError>,
-): RequestEndpoint<TInput, TOutput, TError> {
+  endpoint: RequestEndpoint<Args, Data, ErrorData, Response>,
+): RequestEndpoint<Args, Data, ErrorData, Response> {
   return endpoint;
 }
 
@@ -43,29 +38,7 @@ expectTypeOf(takesRequestEndpoint(useGetUser)).toEqualTypeOf<
 >();
 void (undefined as unknown as RequestCommandBuilder);
 
-const command = useGetUser({ id: 1 });
-expectTypeOf(command[COMMAND_TYPE]).toEqualTypeOf<typeof HTTP_COMMAND>();
-
-const structuralExecuteOptions: { signal?: AbortSignal; timeout?: number } = {};
-const acceptedExecuteOptions: HttpExecuteOptions = structuralExecuteOptions;
-void acceptedExecuteOptions;
-
-async function assertStructuralExecuteOptions(): Promise<void> {
-  const [error, result] = await createClient().execute(
-    command,
-    structuralExecuteOptions,
-  );
-  void error;
-  void result;
-}
-
-void assertStructuralExecuteOptions;
-
-createClient().execute(command, {
-  abort: new AbortController().signal,
-  // @ts-expect-error execute rejects conflicting cancellation options instead of falling through to a catch-all overload.
-  timeout: 1,
-});
+useGetUser(createClient(), { id: 1 });
 
 // Optional input builder should allow no argument
 const useList = defineRequest({
@@ -73,7 +46,7 @@ const useList = defineRequest({
   path: "/users",
   output: struct.object({ items: struct.object({}) }),
 });
-expectTypeOf(useList).toBeCallableWith();
+expectTypeOf(useList).toBeCallableWith(createClient());
 
 // ---------------------------------------------------------------------------
 // Philosophy 1: `output` types the 2xx body, `error` types the non-2xx body.
@@ -86,7 +59,7 @@ const useBoth = defineRequest({
 });
 
 async function assertBothDeclared(): Promise<void> {
-  const [fault, data, response] = await createClient().execute(useBoth());
+  const [fault, data, response] = await useBoth(createClient());
 
   if (!fault) {
     expectTypeOf(data).toEqualTypeOf<{ id: number; name: string }>();
@@ -131,7 +104,7 @@ const useOutputOnly = defineRequest({
 });
 
 async function assertOutputOnly(): Promise<void> {
-  const [fault, data] = await createClient().execute(useOutputOnly());
+  const [fault, data] = await useOutputOnly(createClient());
 
   if (!fault) {
     expectTypeOf(data).toEqualTypeOf<{ id: number; name: string }>();
@@ -155,7 +128,7 @@ const useErrorOnly = defineRequest({
 });
 
 async function assertErrorOnly(): Promise<void> {
-  const [fault, data, response] = await createClient().execute(useErrorOnly());
+  const [fault, data, response] = await useErrorOnly(createClient());
 
   if (!fault) {
     expectTypeOf(data).toEqualTypeOf<undefined>();
@@ -175,7 +148,7 @@ void assertErrorOnly;
 const useNeither = defineRequest({ method: "DELETE", path: "/neither" });
 
 async function assertNeitherDeclared(): Promise<void> {
-  const [fault, data, response] = await createClient().execute(useNeither());
+  const [fault, data, response] = await useNeither(createClient());
 
   if (!fault) {
     expectTypeOf(data).toEqualTypeOf<undefined>();
@@ -212,6 +185,7 @@ defineRequest({
   responseType: "json",
 });
 
+const typeClient = createClient();
 const useEmptyObject = defineRequest({
   builder: () => ({}),
   method: "POST",
@@ -219,8 +193,8 @@ const useEmptyObject = defineRequest({
   input: struct.object({}),
 });
 // @ts-expect-error a required root Struct still requires an input argument even when {} is a valid value.
-useEmptyObject();
-useEmptyObject({});
+useEmptyObject(typeClient);
+useEmptyObject(typeClient, {});
 
 const useOptionalFields = defineRequest({
   builder: (input) => ({ query: { q: input.keyword } }),
@@ -229,8 +203,8 @@ const useOptionalFields = defineRequest({
   input: struct.object({ keyword: struct.string().optional() }),
 });
 // @ts-expect-error optional fields do not make the root object optional.
-useOptionalFields();
-useOptionalFields({});
+useOptionalFields(typeClient);
+useOptionalFields(typeClient, {});
 
 const useOptionalRoot = defineRequest({
   builder: () => ({}),
@@ -238,7 +212,7 @@ const useOptionalRoot = defineRequest({
   path: "/optional",
   input: struct.object({}).optional(),
 });
-useOptionalRoot();
+useOptionalRoot(typeClient);
 
 const useUnionInput = defineRequest({
   builder: (input) => ({ body: input }),
@@ -247,8 +221,8 @@ const useUnionInput = defineRequest({
   input: struct.or(struct.string(), struct.number()),
 });
 // @ts-expect-error a required union input cannot be omitted.
-useUnionInput();
-useUnionInput("value");
+useUnionInput(typeClient);
+useUnionInput(typeClient, "value");
 
 const useOptionalObjects = defineRequest({
   builder: (input) => ({ headers: input.trace, query: input.paging }),
@@ -260,10 +234,10 @@ const useOptionalObjects = defineRequest({
   method: "GET",
   path: "/optional-objects",
 });
-useOptionalObjects({});
-useOptionalObjects({ paging: { page: 1 } });
+useOptionalObjects(typeClient, {});
+useOptionalObjects(typeClient, { paging: { page: 1 } });
 // @ts-expect-error the input root remains required even when every declared field is optional.
-useOptionalObjects();
+useOptionalObjects(typeClient);
 
 const useMixedObject = defineRequest({
   builder: (input) => ({ query: input.search }),
@@ -276,9 +250,9 @@ const useMixedObject = defineRequest({
   method: "GET",
   path: "/mixed-object",
 });
-useMixedObject({ search: { q: "defjs" } });
+useMixedObject(typeClient, { search: { q: "defjs" } });
 // @ts-expect-error an object field with any required field cannot be omitted.
-useMixedObject({});
+useMixedObject(typeClient, {});
 
 const useOptionalInnerFields = defineRequest({
   builder: (input) => ({ body: input.note }),
@@ -288,9 +262,9 @@ const useOptionalInnerFields = defineRequest({
   method: "POST",
   path: "/body",
 });
-useOptionalInnerFields({ note: {} });
+useOptionalInnerFields(typeClient, { note: {} });
 // @ts-expect-error all-optional inner fields do not make a required object field optional.
-useOptionalInnerFields({});
+useOptionalInnerFields(typeClient, {});
 
 declare const result: HttpAwaitResult<{ name: string }, { code: string }>;
 const [error, data, response] = result;

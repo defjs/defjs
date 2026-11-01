@@ -1,13 +1,8 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { ERR_TIMEOUT } from "../error";
 import {
-  armTransportDeadline,
   awaitWithSignal,
-  createAbortTimeoutConflictFault,
-  hasAbortTimeoutConflict,
   mergeAbortSignals,
   releaseAbortSignal,
-  validateTransportTimeout,
 } from "./abort";
 
 describe("abort helpers", () => {
@@ -33,6 +28,22 @@ describe("abort helpers", () => {
     expect(merged.reason).toBe("stop");
   });
 
+  test("should skip undefined signals when another signal is present", () => {
+    const controller = new AbortController();
+    const another = new AbortController();
+    const merged = mergeAbortSignals(controller.signal, [
+      undefined,
+      another.signal,
+    ]);
+
+    another.abort("stop");
+
+    expect(merged).not.toBe(controller.signal);
+    expect(merged.aborted).toBe(true);
+    expect(merged.reason).toBe("stop");
+    releaseAbortSignal(merged);
+  });
+
   test("should release forwarding listeners and deduplicate identical sources", () => {
     const controller = new AbortController();
     const another = new AbortController();
@@ -50,142 +61,6 @@ describe("abort helpers", () => {
       "abort",
       add.mock.calls[0]?.[1],
     );
-  });
-
-  test("should merge timeout into abort signals", () => {
-    vi.useFakeTimers();
-    const controller = new AbortController();
-    const merged = mergeAbortSignals(controller.signal, [], 20);
-
-    vi.advanceTimersByTime(20);
-
-    expect(merged.aborted).toBe(true);
-    expect(merged.reason).toBe(ERR_TIMEOUT);
-  });
-
-  test("should use a platform timer instead of AbortSignal.timeout", () => {
-    vi.useFakeTimers();
-    const timeoutSpy = vi.spyOn(AbortSignal, "timeout");
-    const controller = new AbortController();
-    mergeAbortSignals(controller.signal, [], 50);
-
-    expect(timeoutSpy).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(1);
-    timeoutSpy.mockRestore();
-    controller.abort("stop");
-  });
-
-  test("should clear the timeout timer when another signal aborts first", () => {
-    vi.useFakeTimers();
-    const setSpy = vi.spyOn(globalThis, "setTimeout");
-    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
-    try {
-      const controller = new AbortController();
-      const merged = mergeAbortSignals(controller.signal, [], 60_000);
-      const armedTimer = setSpy.mock.results[0]?.value;
-      controller.abort("stop");
-
-      expect(merged.aborted).toBe(true);
-      expect(armedTimer).toBeDefined();
-      expect(clearSpy).toHaveBeenCalledWith(armedTimer);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      setSpy.mockRestore();
-      clearSpy.mockRestore();
-      vi.useRealTimers();
-    }
-  });
-
-  test("should clear the timeout timer when a merged signal is already aborted", () => {
-    vi.useFakeTimers();
-    const setSpy = vi.spyOn(globalThis, "setTimeout");
-    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
-    try {
-      const controller = new AbortController();
-      controller.abort("already stopped");
-      const merged = mergeAbortSignals(controller.signal, [], 60_000);
-      const armedTimer = setSpy.mock.results[0]?.value;
-
-      expect(merged.aborted).toBe(true);
-      expect(armedTimer).toBeDefined();
-      expect(clearSpy).toHaveBeenCalledWith(armedTimer);
-      expect(vi.getTimerCount()).toBe(0);
-    } finally {
-      setSpy.mockRestore();
-      clearSpy.mockRestore();
-      vi.useRealTimers();
-    }
-  });
-
-  test.each([-1, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 2_147_483_648])(
-    "should reject invalid transport timeout %s",
-    (timeout) => {
-      expect(() => validateTransportTimeout(timeout)).toThrow(
-        "Request timeout must be a positive safe integer no greater than 2147483647",
-      );
-    },
-  );
-
-  test("should accept the largest safe transport timer delay", () => {
-    expect(() => validateTransportTimeout(2_147_483_647)).not.toThrow();
-  });
-
-  test("should not listen on a signal when no deadline is armed", () => {
-    const signal = new AbortController().signal;
-    const add = vi.spyOn(signal, "addEventListener");
-
-    armTransportDeadline(undefined).releaseOnAbort(signal);
-
-    expect(add).not.toHaveBeenCalled();
-  });
-
-  test("should remove its release listener when the deadline is released", () => {
-    const signal = new AbortController().signal;
-    const add = vi.spyOn(signal, "addEventListener");
-    const remove = vi.spyOn(signal, "removeEventListener");
-    const deadline = armTransportDeadline(1_000);
-
-    deadline.releaseOnAbort(signal);
-    deadline.release();
-
-    expect(remove).toHaveBeenCalledExactlyOnceWith(
-      "abort",
-      add.mock.calls[0]?.[1],
-    );
-  });
-
-  test("should release the deadline when the watched signal aborts", () => {
-    vi.useFakeTimers();
-    const controller = new AbortController();
-    const deadline = armTransportDeadline(1_000);
-
-    deadline.releaseOnAbort(controller.signal);
-    controller.abort();
-    vi.advanceTimersByTime(1_000);
-
-    expect(deadline.signal?.aborted).toBe(false);
-  });
-
-  test("should detect abort and timeout field conflict", () => {
-    const signal = new AbortController().signal;
-
-    expect(hasAbortTimeoutConflict(undefined)).toBe(false);
-    expect(hasAbortTimeoutConflict({})).toBe(false);
-    expect(hasAbortTimeoutConflict({ abort: signal })).toBe(false);
-    expect(hasAbortTimeoutConflict({ timeout: 100 })).toBe(false);
-    expect(hasAbortTimeoutConflict({ abort: signal, timeout: 100 })).toBe(true);
-    expect(hasAbortTimeoutConflict({ abort: signal, timeout: 0 })).toBe(true);
-    expect(hasAbortTimeoutConflict({ abort: signal, timeout: undefined })).toBe(
-      false,
-    );
-  });
-
-  test("should create an options fault for an abort/timeout conflict", () => {
-    const error = createAbortTimeoutConflictFault();
-
-    expect(error.code).toBe("REQ_OPTIONS_INVALID");
-    expect(error.message).toBe("abort and timeout cannot be used together");
-    expect(error.cause).toBeInstanceOf(Error);
   });
 
   test("should resolve an asynchronous callback result", async () => {

@@ -37,14 +37,12 @@ test("sends builder path, query, headers, and body, and decodes string and JSON 
     path: "/e2e/sse/:room",
   });
 
-  const [error, stream] = await client.execute(
-    useFeed({
-      cursor: { since: "5" },
-      note: "hello note",
-      room: { roomId: "blue" },
-      trace: { traceId: "tid" },
-    }),
-  );
+  const [error, stream] = await useFeed(client, {
+    cursor: { since: "5" },
+    note: "hello note",
+    room: { roomId: "blue" },
+    trace: { traceId: "tid" },
+  });
 
   expect(error).toBeNull();
   if (!stream) {

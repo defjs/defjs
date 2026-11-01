@@ -15,8 +15,7 @@ const client = createClient(
   withHTTPHandle(handle),
 );
 async function main() {
-  const command = getUser({ id: 7 });
-  const [error, user] = await client.execute(command);
+  const [error, user] = await getUser(client, { id: 7 });
   if (error) {
     console.error(error.code);
     return;

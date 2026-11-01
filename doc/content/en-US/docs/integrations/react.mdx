@@ -9,7 +9,7 @@ Import operations from your SDK or shared definition module. The React applicati
 
 These plugins are optional helpers for providing and reading an existing `Client`. Import a fixed application-owned client, pass a `Client` explicitly to reusable logic, use framework injection for tree-level defaults and overrides, or choose your own organization. SDK definitions do not require these plugins.
 
-Wire an existing `@defjs/core` client into a React tree. You get Context and `useClient()`. The package does **not** create a client, add a cache, retry commands, or dispose transport resources. The component, effect, or data library that starts work owns it.
+Wire an existing `@defjs/core` client into a React tree. You get Context and `useClient()`. The package does **not** create a client, add a cache, retry operations, or dispose transport resources. The component, effect, or data library that starts work owns it. The client from `useClient()` is passed into the operation. A `Client` is a function: do not pass it to a state setter, because `setState(client)` would call it as an updater.
 
 ## Basic Setup
 
@@ -39,21 +39,21 @@ The hook only supplies the client. It doesn’t start work, subscribe to a trans
 
 ## Own query work
 
-A query library can own caching, retries, stale-result suppression, and cancellation. Give it the signal it provides. For list pages, wrap `client.execute(...)` with TanStack Query (or similar) — `@defjs/react` stays DI only and does **not** ship `useRequest`.
+A query library can own caching, retries, stale-result suppression, and cancellation. Pass the signal it provides as `abort` on a derived client. For list pages, call the operation from TanStack Query (or similar) — `@defjs/react` stays DI only and does **not** ship `useRequest`.
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
 `throw error` in this hook is the query function's rejection channel, not the default Defjs call. The tuple is inspected first; only this adapter rejects, so the query library can record the failure.
 
-Don’t wrap the same command in a second effect — two owners make cancel and stale-result handling ambiguous.
+Don’t start the same operation in a second effect — two owners make cancel and stale-result handling ambiguous.
 
 ## Own realtime work
 
-SSE and WebSocket handles outlive `client.execute(...)`. Register cleanup before awaiting startup, close a handle that arrives after disposal, consume its single iterator, await its terminal promise:
+SSE and WebSocket handles outlive the operation call. Register cleanup before awaiting startup, close a handle that arrives after disposal, consume its single iterator, await its terminal promise:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-The `signal` passed to `execute` keeps governing an opened session. Aborting it in the cleanup ends the session as `aborted` and rejects `receive` with `AbortError`, so the `catch` above ignores errors once the effect is disposed and reports only real failures (queue overflow, heartbeat timeout). An aborted SSE stream instead ends its iterator normally. Without the `catch`, a rejection from the loop would be an unhandled promise rejection.
+The `abort` signal passed to the operation keeps governing an opened session. Aborting it in the cleanup ends the session as `aborted` and rejects `receive` with `AbortError`, so the `catch` above ignores errors once the effect is disposed and reports only real failures (queue overflow, heartbeat acknowledgement timeout). An aborted SSE stream instead ends its iterator normally. Without the `catch`, a rejection from the loop would be an unhandled promise rejection.
 
 Same rule for `EventStreamHandle`: close in `finally`, await `stream.closed`. WebSocket consumers must also unsubscribe state/runtime-error listeners and keep reading `session.receive` — an unread bounded queue can overflow.
 

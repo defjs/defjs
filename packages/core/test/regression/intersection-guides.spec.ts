@@ -80,7 +80,7 @@ test("nullable intersection input reaches the HTTP handle", async () => {
     method: "POST",
     path: "/",
   });
-  const [fault] = await client.execute(request({ name: null }));
+  const [fault] = await request(client, { name: null });
   expect(fault).toBeNull();
   expect(calls).toBe(1);
 });
@@ -114,7 +114,7 @@ test("a union inside a guide set encodes every match and rejects a difference", 
     method: "POST",
     path: "/",
   });
-  const [fault] = await client.execute(request({ row: value }));
+  const [fault] = await request(client, { row: value });
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
   expect(calls).toBe(0);
 });
@@ -130,7 +130,7 @@ test("wire parsing keeps the union branch that actually matched", async () => {
     withEndpoint("https://example.test"),
     withHTTPHandle(async () => Response.json({ b_name: "N" })),
   );
-  const [fault, parsed] = await client.execute(request());
+  const [fault, parsed] = await request(client);
   expect(fault).toBeNull();
   expect(plain(parsed)).toEqual({ name: "N" });
 });

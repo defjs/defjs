@@ -1,11 +1,11 @@
 ---
 title: "HTTP requests"
-description: Design HTTP operations for your SDK and execute them with application-owned configuration and cancellation.
+description: Design HTTP operations for your SDK and call them with application-owned configuration and cancellation.
 ---
 
 # HTTP
 
-The SDK defines each HTTP operation's method, relative path, input mapping, response, and error contract. The application imports that endpoint, configures its own client, executes the command, and handles the result. The same definition can be shipped in an npm package or shared locally.
+The SDK defines each HTTP operation's method, relative path, input mapping, response, and error contract. The application imports that operation, configures its own client, calls it, and handles the result. The same definition can be shipped in an npm package or shared locally.
 
 Keep service addresses and credentials in client configuration. The caller owns cancellation and any policy for retrying a write; a cancelled request may already have reached the service.
 
@@ -17,7 +17,7 @@ Keep service addresses and credentials in client configuration. The caller owns 
 
 ## Resolve the URL
 
-`withEndpoint(...)` needs a valid absolute URL. Endpoint pathname stays as a directory; query and hash are discarded before command resolution. A missing, relative, or invalid base endpoint fails with `REQ_BUILD_FAILED` during request building, before any interceptor or transport runs, even if an interceptor would short-circuit the request. HTTP, SSE, and WebSocket share this rule.
+`withEndpoint(...)` needs a valid absolute URL. Endpoint pathname stays as a directory; query and hash are discarded before the request URL is resolved. A missing, relative, or invalid base endpoint fails with `REQ_BUILD_FAILED` during request building, before any interceptor or transport runs, even if an interceptor would short-circuit the request. HTTP, SSE, and WebSocket share this rule.
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
@@ -136,11 +136,13 @@ there is no status-0 response standing in for one.
 
 ## Cancel the work
 
-Execution options accept `{ signal }` on its own, without `abort` or `timeout`. **`abort` and `timeout` are mutually exclusive.** `signal` can combine with either.
+Pass `abort` on a derived client. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort classifies as `NET_ABORTED`. There is no `timeout` field, no `signal` field, and no client-level default deadline. A later `abort` replaces the previous signal. Combine a caller signal with a deadline using `AbortSignal.any` in application code.
+
+<include cwd>examples/http/deadline.ts#example</include>
 
 <include cwd>examples/http/cancel.ts#example</include>
 
-`timeout` must be a positive safe integer in `1..2_147_483_647`. A call that omits `timeout` gets the client's `withTimeout` default. Recognized cancel → `NET_ABORTED`; execution timeout → `NET_TIMEOUT`; interceptor `throw` → `EXT_INTERCEPTOR_FAILED`, except `ERR_ABORTED` / `ERR_TIMEOUT`, which give `NET_ABORTED` / `NET_TIMEOUT`; other Fetch failures → `NET_UNREACHABLE`. Cancel after the server accepted a write does **not** prove the write rolled back.
+Recognized cancel → `NET_ABORTED`; a deadline abort → `NET_TIMEOUT`; interceptor `throw` → `EXT_INTERCEPTOR_FAILED`, except `ERR_ABORTED` / `ERR_TIMEOUT`, which give `NET_ABORTED` / `NET_TIMEOUT`; other Fetch failures → `NET_UNREACHABLE`. Cancel after the server accepted a write does **not** prove the write rolled back.
 
 ## Credentials and XSRF
 
@@ -154,17 +156,17 @@ Keep credentials, XSRF tokens, and query strings out of routine logs. Don’t us
 
 `onDownloadProgress` runs while a declared response body is read. `loaded` counts bytes read from the response stream, which Fetch may already have decompressed. `lengthComputable` is true only with a positive `Content-Length` and an absent or `identity` `Content-Encoding`. Other encodings, including gzip and br, report `total: 0` and `lengthComputable: false`, so decoded bytes are never compared with a compressed wire length. No struct for that side → the body is not read → no body-read progress.
 
-`onUploadProgress` reports progress for a `ReadableStream<Uint8Array>` body as Fetch reads it, not when the server acknowledges it. Upload progress is reported only where the runtime can stream request bodies: in Bun and Node, Defjs also converts `Blob` / `File`, `ArrayBuffer`, and `FormData` bodies to a stream, so they report progress too. On server runtimes, FormData with `onUploadProgress` uses the serialized stream directly, preserves its multipart boundary, and is sent without a library-generated `Content-Length` (chunked over HTTP/1.1), so progress, timeout, and abort work without buffering the whole body. Its total is unknown unless a valid explicit `Content-Length` supplies it. For an endpoint that requires `Content-Length`, such as some presigned upload targets, omit `onUploadProgress`; platform Fetch then sends FormData with its length. Cancellation releases the wrapped stream. Browsers, including Workers, are excluded, because Chromium streams a request body only over HTTP/2 or later and Firefox cannot stream one at all; there those bodies are sent unchanged and `onUploadProgress` is not called. JSON, text, `URLSearchParams`, and typed-array bodies are sent whole and produce no events. `total` is `0` (so `lengthComputable` is `false`) for a stream without a known length. A `ReadableStream` body on a runtime that cannot stream requests, such as Firefox, fails with `ENV_UNSUPPORTED` before anything is sent; the cause message is `ERR_STREAMING_REQUEST_UNSUPPORTED`. In Chromium, a `ReadableStream` body needs HTTP/2 or later; over HTTP/1.1 the call fails with `NET_UNREACHABLE`. `onDownloadProgress` behaves the same in every runtime.
+`onUploadProgress` reports progress for a `ReadableStream<Uint8Array>` body as Fetch reads it, not when the server acknowledges it. Upload progress is reported only where the runtime can stream request bodies: in Bun and Node, Defjs also converts `Blob` / `File`, `ArrayBuffer`, and `FormData` bodies to a stream, so they report progress too. On server runtimes, FormData with `onUploadProgress` uses the serialized stream directly, preserves its multipart boundary, and is sent without a library-generated `Content-Length` (chunked over HTTP/1.1), so progress and abort work without buffering the whole body. Its total is unknown unless a valid explicit `Content-Length` supplies it. For an endpoint that requires `Content-Length`, such as some presigned upload targets, omit `onUploadProgress`; platform Fetch then sends FormData with its length. Cancellation releases the wrapped stream. Browsers, including Workers, are excluded, because Chromium streams a request body only over HTTP/2 or later and Firefox cannot stream one at all; there those bodies are sent unchanged and `onUploadProgress` is not called. JSON, text, `URLSearchParams`, and typed-array bodies are sent whole and produce no events. `total` is `0` (so `lengthComputable` is `false`) for a stream without a known length. A `ReadableStream` body on a runtime that cannot stream requests, such as Firefox, fails with `ENV_UNSUPPORTED` before anything is sent; the cause message is `ERR_STREAMING_REQUEST_UNSUPPORTED`. In Chromium, a `ReadableStream` body needs HTTP/2 or later; over HTTP/1.1 the call fails with `NET_UNREACHABLE`. `onDownloadProgress` behaves the same in every runtime.
 
-A progress callback that throws or rejects fails the call with `EXT_OBSERVER_FAILED` and the thrown value as `cause`, for downloads and uploads alike. Caller cancellation and `timeout` still report `NET_ABORTED` / `NET_TIMEOUT`.
+A progress callback that throws or rejects fails the call with `EXT_OBSERVER_FAILED` and the thrown value as `cause`, for downloads and uploads alike. Caller cancellation still reports `NET_ABORTED`, or `NET_TIMEOUT` when the abort reason is a timeout.
 
-`fetchHandler(httpRequest, fetchImpl?)` is the lower-level Fetch boundary: resolves the URL, calls Fetch, reads the representation, and returns `HttpResponse`. The default HTTP and SSE handles resolve `globalThis.fetch` on each call, so a replacement installed after import is used. HTTP uses `(url, init)` only for the untouched platform Fetch; a replaced global or custom handle receives a native `Request`. Importing Core without Fetch is valid; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if Fetch is still missing, while custom handles remain usable. This boundary does **not** validate command input, dispatch `output`, or run interceptors. Useful for injected transport tests — not a substitute for `client.execute`.
+`fetchHandler(httpRequest, fetchImpl?)` is the lower-level Fetch boundary: resolves the URL, calls Fetch, reads the representation, and returns `HttpResponse`. The default HTTP and SSE handles resolve `globalThis.fetch` on each call, so a replacement installed after import is used. HTTP uses `(url, init)` only for the untouched platform Fetch; a replaced global or custom handle receives a native `Request`. Importing Core without Fetch is valid; a default HTTP/SSE call fails with `ENV_UNSUPPORTED` if Fetch is still missing, while custom handles remain usable. This boundary does **not** validate operation input, dispatch `output`, or run interceptors. Useful for injected transport tests — not a substitute for calling the operation.
 
 ## Replay limits
 
 Defjs does **not** auto-retry HTTP. Retrying a read still needs a reviewed timeout/network/duplicate policy. Retrying a mutation needs replayable bytes, server support, an idempotency key bound to auth scope + request bytes, and a receiver duplicate policy.
 
-A client/command/Fetch boundary can’t know if a failed write committed. Keep replay decisions in the app or a reviewed interceptor. Interceptors can short-circuit or replace the low-level request; the final status and body must still satisfy the command’s contract.
+A client or Fetch boundary can’t know if a failed write committed. Keep replay decisions in the app or a reviewed interceptor. Interceptors can short-circuit or replace the low-level request; the final status and body must still satisfy the operation’s contract.
 
 ## Related recipes
 

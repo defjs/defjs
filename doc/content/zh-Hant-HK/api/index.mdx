@@ -5,7 +5,7 @@ description: 查閱 SDK 定義入口、應用程式執行入口，以及傳輸�
 
 # API 參考
 
-按職責選擇入口：SDK 作者使用 `defineRequest`、`defineEventStream`、`defineWebSocket` 及 `struct.*` 定義並匯出契約；應用程式使用 `createClient`、`with*` 設定及 `client.execute(...)` 執行這些定義建立的 command。
+按職責選擇入口：SDK 作者使用 `defineRequest`、`defineEventStream`、`defineWebSocket` 及 `struct.*` 定義並匯出契約；應用程式用 [Client 設定](/zh-Hant-HK/api/client) 呼叫這些操作，再用 [Errors](/zh-Hant-HK/api/errors) 處理結果。
 
 以下簽章描述 Defjs 的執行時契約。完整開發流程見[快速開始](/zh-Hant-HK/docs/start)及[建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)。
 
@@ -22,15 +22,15 @@ description: 查閱 SDK 定義入口、應用程式執行入口，以及傳輸�
 
 ## @defjs/core
 
-| 頁面                                         | 你嚟查咩                                                         |
-| -------------------------------------------- | ---------------------------------------------------------------- |
-| [Client](/zh-Hant-HK/api/client)             | `createClient`, `with*` options, `Client`                        |
-| [HTTP](/zh-Hant-HK/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
-| [Struct](/zh-Hant-HK/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
-| [Errors](/zh-Hant-HK/api/errors)             | `Fault` variants 同 factories                                    |
-| [Interceptors](/zh-Hant-HK/api/interceptors) | HTTP / SSE / WebSocket interceptor helpers                       |
-| [SSE](/zh-Hant-HK/api/sse)                   | `defineEventStream`, stream handle                               |
-| [WebSocket](/zh-Hant-HK/api/web-socket)      | `defineWebSocket`, session                                       |
+| 頁面                                         | 你嚟查咩                                                              |
+| -------------------------------------------- | --------------------------------------------------------------------- |
+| [Client](/zh-Hant-HK/api/client)             | `createClient`, `with*` options, `Client`                             |
+| [HTTP](/zh-Hant-HK/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
+| [Struct](/zh-Hant-HK/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
+| [Errors](/zh-Hant-HK/api/errors)             | `Fault` variants 同 factories                                         |
+| [Interceptors](/zh-Hant-HK/api/interceptors) | HTTP / SSE / WebSocket interceptor helpers                            |
+| [SSE](/zh-Hant-HK/api/sse)                   | `defineEventStream`, stream handle                                    |
+| [WebSocket](/zh-Hant-HK/api/web-socket)      | `defineWebSocket`, session                                            |
 
 ## 相關
 

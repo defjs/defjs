@@ -1,36 +1,28 @@
 ---
 title: SSE
-description: defineEventStream、execute options、stream handle です。
+description: defineEventStream、リクエスト options、stream handle です。
 ---
 
 # SSE
 
-イベントストリームを宣言し、実行し、イベントを反復してから閉じます。
+イベントストリームを宣言し、クライアントを渡して操作を呼び、イベントを反復してから閉じます。
 
 ## defineEventStream()
 
 <ApiSignature name="defineEventStream" />
 
 - **definition** — `path`、`events` マップ、必須で正の整数の上限 `maxBufferSize` と `maxQueueSize`、任意の `method`（デフォルト `'GET'`）、`operation`、`input`、`error` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`EventStreamDefinition`](/ja-JP/api/core/eventstreamdefinition-type) にあります。`error` が必須なのは error struct の型を渡したときだけで、`builder` が必須なのは `input` を宣言したときだけです。
-- **戻り値** エンドポイントです。入力を渡して呼ぶと `EventStreamCommand` になります。
+- **戻り値** 操作です。第一引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとストリームが始まります。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
 
-## executeEventStreamCommand()
-
-<ApiSignature name="executeEventStreamCommand" />
-
-`client.execute` の低レベル入口です。アプリコードではクライアントを使ってください。
-
-- **戻り値** `[null, stream, open]`、または `[error, undefined, open?]` です。`error` を宣言していれば fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。
-
-## 実行 options
+呼び出しは `[null, stream, open]` または `[error, undefined, open?]` を返します。`error` を宣言していれば fault はその struct の `Fault` で、していなければ `Fault<undefined>` です。`abort` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。SSE が読むのは `abort` だけで、進捗と WebSocket のフィールドは無視します。
 
 ## EventStreamExecuteOptions
 
 <ApiSignature name="EventStreamExecuteOptions" />
 
-`abort` か `timeout` の一方だけ（両方は不可）に加え、`signal` があります。進捗コールバックはありません。型は両方の指定を拒否し、実行時に両方を渡すと `REQ_OPTIONS_INVALID` で失敗します。`signal` はどちらとも組み合わせられます。`timeout` は開始の期限です。入力のパース、ビルダー、インターセプター、ハンドシェイクまでを含み、開いているストリームは中断しません。`withTimeout` は SSE には適用されません。
+`EventStreamExecuteOptions` は `{ abort? }` です。`timeout` フィールドも `signal` フィールドも、進捗コールバックもありません。`abort` は開いたあとも含むストリーム全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。起動時だけの期限が欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
 
 ## EventStreamHandle
 
@@ -57,8 +49,6 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 `kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) の一つで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。
 
-## イベント map
-
 ## EventStructs
 
 <ApiSignature name="EventStructs" />
@@ -79,15 +69,11 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 ## EventStreamEndpoint
 
-`defineEventStream` の戻り値です。入力を渡して呼ぶと `EventStreamCommand` になります。
+`defineEventStream` の戻り値です。第一引数はクライアントです。それ以降の引数は入力だけです。
 
 ## EventStreamRequestShape
 
 ストリームの method と path に対する、`HttpRequestShape` と同じフィールドです。
-
-## EventStreamCommand
-
-不透明な SSE コマンドです。`client.execute` に渡します。
 
 ## StreamAwaitResult
 

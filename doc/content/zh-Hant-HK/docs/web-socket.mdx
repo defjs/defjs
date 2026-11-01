@@ -5,7 +5,7 @@ description: SDK 定義收發訊息契約，應用程式開啟 WebSocket 會話�
 
 # WebSocket
 
-SDK 作者透過 `defineWebSocket` 描述連線輸入、接收和傳送訊息的 Struct 及傳輸限制。應用程式用自己的 Client 開啟 session，收發帶類型的訊息，並決定心跳、重連及工作生命週期。
+SDK 定義 WebSocket 操作嘅 path、input、收發訊息同 queue 上限。使用方應用程式設定自己嘅 client，呼叫操作，並喺派生 client 上揀該次連線嘅選項。將操作同 SDK 嘅 HTTP 或 SSE 操作一齊匯出。
 
 啟動、接收、傳送後，用 `await using` 釋放 session，或手動 `close()` 並等待 `closed`。取消訂閱及資源釋放屬於呼叫方；Client、provider、interceptor 不會自動關閉成功返回的 session。
 
@@ -25,7 +25,7 @@ SDK 作者透過 `defineWebSocket` 描述連線輸入、接收和傳送訊息的
 
 Incoming text、`ArrayBuffer`、typed-array 同 `Blob` frames 會當 UTF-8 讀、JSON-parsed，再對住 `incoming` 檢查。Malformed JSON 同 struct failures 去 `session.onRuntimeError`，而且唔會入 queue。Session 保持開住。唔係 text、bytes 或者 `Blob` 嘅 frames 會被 ignore。冇 `withWebSocketOnInvalidEvent`。
 
-`session.send(...)` 會 synchronous validate 同 serialize：struct encode，然後 `JSON.stringify`。Open 時即刻 send；`reconnecting` 期間如果有 outgoing queue 就 queue；唔 writable 就 throw `InvalidStateError`。冇 outgoing struct、payload 過唔到 struct、outgoing queue disabled 或者 full，或者 native send 失敗，都會 throw。Definition 上面嘅 static `protocols` list 係 endpoint contract（例如 `graphql-transport-ws`）。Execute options 同 `withWebSocketProtocols` 仍然可以 override。只有呢啲 options 先揀到 subprotocols：builder、`beforeConnect` 同 interceptors 改唔到，所以 token-in-subprotocol 要喺嗰次 call 用 execute 嘅 `protocols` option 傳入。Builder 只可以 return `path` 同 `query`。
+`session.send(...)` 會 synchronous validate 同 serialize：struct encode，然後 `JSON.stringify`。Open 時即刻 send；`reconnecting` 期間如果有 outgoing queue 就 queue；唔 writable 就 throw `InvalidStateError`。冇 outgoing struct、payload 過唔到 struct、outgoing queue disabled 或者 full，或者 native send 失敗，都會 throw。Definition 上面嘅 static `protocols` list 係 endpoint contract（例如 `graphql-transport-ws`）。派生 client 嘅 `protocols` 同 `withWebSocketProtocols` 仍然可以 override。只有呢啲 options 先揀到 subprotocols：builder、`beforeConnect` 同 interceptors 改唔到，所以 token-in-subprotocol 要喺該次呼叫嘅派生 client 上傳 `protocols`。Builder 只可以 return `path` 同 `query`。
 
 Struct 編碼之後，如果 JSON 無法忠實表示某個值，會喺傳送或者加入重連 queue 之前 throw `TypeError`：包括非有限數、functions、symbols、`Map`、`Set`、streams，同冇 JSON 表示方式嘅 class instances。巢狀值會跟 HTTP JSON bodies 同一個規則。`struct.number()` 仍然接受無限數，同時拒絕 `NaN`；struct 層接受某個值，唔代表佢係有效 JSON。Heartbeat 用同一個 serializer；佢序列化失敗會結束 logical session。
 
@@ -45,7 +45,7 @@ Struct 編碼之後，如果 JSON 無法忠實表示某個值，會喺傳送或�
 
 `open` = physical socket open。`reconnecting` 包括 replacement 之前嘅 preparation + delay。`connection.generation` 每逢一個 physical socket 到達 `open` 就 +1。`session.connection` 會喺重連後更新。只有 Defjs 原生 session，或者透傳同一個 live `connection` 物件嘅 wrapper，tuple 入面嘅 `startupConnection` 先會保留首次成功連線嘅 snapshot。Custom session 或者轉換 `connection` 嘅 wrapper，會以返回 session 目前公開嘅 `connection` 為準。共用 `closed` 唔可以繞過 URL 清理或者 metadata 過濾，Defjs 亦唔會由任意轉換重建首次連線嘅 metadata。
 
-Startup failure → `[error, undefined, connection?]`。Pre-open constructor failure 可能冇 connection；startup 期間嘅 timeout/close 仍然可能提供 snapshot。Session return 之後，runtime errors 經 observers、`receive` 同 `closed` 行 — 唔係第二次 execute tuple。
+Startup failure → `[error, undefined, connection?]`。Pre-open constructor failure 可能冇 connection；startup 期間嘅 abort 或 close 仍然可能提供 snapshot。Session return 之後，runtime errors 經 observers、`receive` 同 `closed` 行 — 唔係第二個結果 tuple。
 
 <include cwd lang="typescript">
   examples/web-socket/state-snapshots.ts#example
@@ -65,7 +65,7 @@ WebSocket backoff jitter 係 **乘數式**（`jitter: 0.2` 會喺四捨五入之
 
 ## 心跳
 
-喺 execute 或者 client scope opt-in。Interval 會經 outgoing struct send `message()`。Optional `isAck(message)` 認 ack — 嗰條 message 會清 timeout，而且 **唔會** deliver 去 `receive`。
+喺 client 或者派生 client 上 opt-in。Interval 會經 outgoing struct send `message()`。Optional `isAck(message)` 認 ack — 嗰條 message 會清走確認等待，而且 **唔會** deliver 去 `receive`。`heartbeat` 成個值換走。`timeoutMs` 係等嗰個確認幾耐。佢唔係請求 deadline。
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
@@ -84,7 +84,7 @@ Incoming overflow 會清 pending sequence、fail `receive`、停 session，再�
 
 ## Protocols 同 authentication
 
-Definition `protocols`、client `withWebSocketProtocols(...)`，同 execute `protocols` 設定 constructor subprotocol list。Precedence：execution → client → definition。第一個 defined list 會 copy 畀 logical session，reconnect 時 reuse。
+Definition `protocols`、client `withWebSocketProtocols(...)`，同派生 client 上嘅 `protocols` 設定 constructor subprotocol list。Precedence：派生 client → client → definition。派生出嚟嘅 list 取代 client list，唔會 append。第一個 defined list 會 copy 畀 logical session，reconnect 時 reuse。
 
 Browser WebSocket constructors 唔接受 arbitrary handshake headers，builder 亦唔可以 return `headers` 或者 `body`。Defjs 會將 `http:` → `ws:` 同 `https:` → `wss:`，path placeholders encode 一次，query rules 同 HTTP 一樣：預設係 scalars 同重複 keys，nested objects 用 `withQuerySerializer`，冇 query 就唔會 call serializer。
 
@@ -96,7 +96,7 @@ Browser WebSocket constructors 唔接受 arbitrary handshake headers，builder �
 
 `session.close(code?, reason?)` 要求 terminal closure 同停 heartbeat。Code 一定要係 `1000` 或者 `3000..4999`；reason ≤ 123 UTF-8 bytes。Invalid close args 會喺改 state 之前 throw。要 manual close reason 或 logical terminal result 時，同 `await session.closed` 一齊用。
 
-傳俾 `execute` 嘅 `signal` 或者 `abort` 會一直掛喺已經 open 嘅 session。Timeout 形狀嘅 abort（`TimeoutError` 或者 `ERR_TIMEOUT`）會以 `'error'`（`NET_TIMEOUT`）完結。其他 reason 會以 `'aborted'` 完結，而 `receive` 會以嗰個 reason 本身 reject，唔係新嘅 `AbortError`。`timeout` 只係 startup deadline。
+傳俾操作嘅 `abort` signal 會一直掛喺已經 open 嘅 session，並覆蓋成條連線，包括 open 之後。Timeout 形狀嘅 abort（`TimeoutError` 或者 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）會以 `'error'`（`NET_TIMEOUT`）完結。其他 reason 會以 `'aborted'` 完結，而 `receive` 會以嗰個 reason 本身 reject，唔係新嘅 `AbortError`。冇只限啟動嘅 deadline。應用程式想要一個，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer。睇 [SSE](/zh-Hant-HK/docs/sse#close-and-dispose)。
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example

@@ -1,7 +1,7 @@
 import { describeCause } from "../../error/cause";
 import type { HttpMeta } from "../../internal/http_response";
 
-/** Which fault a body-stage failure becomes once it reaches command execution. */
+/** Which fault a body-stage failure becomes once it reaches operation execution. */
 export type BodyFailureCode =
   | "EXT_OBSERVER_FAILED"
   | "NET_BODY_INCOMPLETE"
@@ -17,7 +17,7 @@ type BodyFailureMeta<C extends BodyFailureCode> =
  *
  * An upload observer can fail before any response exists, so `meta` is absent then. Download
  * observers, truncated reads, and representation checks already have a response. Those steps
- * are indistinguishable once they collapse into a bare cause, so command execution maps
+ * are indistinguishable once they collapse into a bare cause, so operation execution maps
  * `code` straight through.
  *
  * Caller cancellation is deliberately never tagged: it stays the raw abort reason so the

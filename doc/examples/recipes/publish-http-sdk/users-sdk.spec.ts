@@ -31,10 +31,9 @@ test("one exported SDK endpoint uses each application's client and preserves typ
     withHTTPHandle(handle),
   );
 
-  const command = getUser({ id: 7 });
   expect(requests).toEqual([]);
-  const [successError, user] = await first.execute(command);
-  const [missing, absent] = await second.execute(getUser({ id: 7 }));
+  const [successError, user] = await getUser(first, { id: 7 });
+  const [missing, absent] = await getUser(second, { id: 7 });
 
   expect(successError).toBeNull();
   expect(user).toEqual({ id: 7, name: "Ada" });

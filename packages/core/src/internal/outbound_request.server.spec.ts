@@ -52,7 +52,7 @@ describe("outbound request node bodies", () => {
       path: "/users",
     });
 
-    const [fault, result, response] = await client.execute(useRequest());
+    const [fault, result, response] = await useRequest(client);
 
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(result).toBeUndefined();
@@ -90,7 +90,7 @@ describe("outbound request node bodies", () => {
       path: "/events",
     });
 
-    const [fault, events, open] = await client.execute(useStream());
+    const [fault, events, open] = await useStream(client);
 
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(events).toBeUndefined();

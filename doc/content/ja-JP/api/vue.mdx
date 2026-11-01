@@ -22,7 +22,7 @@ description: Vue プラグイン、既定またはカスタムの injection key�
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` はそのキーの最も近い provider を読み、省略または `undefined` なら `HTTP_CLIENT` を使います。同期的な `setup()` や `app.runWithContext()`（Vue 3.3+）など、有効な Vue の注入コンテキストで呼んでください。後者は同期的なアプリレベルのコンテキストのみで、サブツリーの上書きを引き継がず、通常の `await` もまたぎません。`<script setup>` のトップレベル `await` 後にコンパイラが復元したコンテキストは引き続き有効です。
+`injectClient(key)` はそのキーの最も近い provider を読み、省略または `undefined` なら `HTTP_CLIENT` を使います。同期的な `setup()` や `app.runWithContext()`（Vue 3.3+）など、有効な Vue の注入コンテキストで呼んでください。後者は同期的なアプリレベルのコンテキストのみで、サブツリーの上書きを引き継がず、通常の `await` もまたぎません。`<script setup>` のトップレベル `await` 後にコンパイラが復元したコンテキストは引き続き有効です。そのクライアントを操作に渡してください。`Client` は関数です。`watch` や `computed` のソースに使わないでください。それらは関数を呼びます。
 
 カスタムの `InjectionKey<Client>` は `app.provide(key, client)` または祖先の `provide(key, client)` で設定します。提供側と取得側で同じ `Symbol` オブジェクトを共有してください。説明が同じでも別のキーです。`createClientPlugin(client)` は引き続きクライアントだけを受け取り、`HTTP_CLIENT` のみを提供します。
 

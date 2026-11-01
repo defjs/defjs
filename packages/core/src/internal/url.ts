@@ -147,7 +147,7 @@ export function appendRecordToHeaders(
 /**
  * Resolves a relative definition path under the base endpoint's origin and directory into a URL.
  *
- * During `client.execute`, a missing, relative, or invalid base or an illegal
+ * During an operation, a missing, relative, or invalid base or an illegal
  * path becomes `REQ_BUILD_FAILED` before any interceptor or transport runs,
  * including a short-circuiting interceptor, for HTTP, SSE, and WebSocket alike.
  * An interceptor's final `req.endpoint` is also validated against its final

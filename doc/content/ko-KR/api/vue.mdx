@@ -22,7 +22,7 @@ description: Vue 플러그인, 기본 또는 사용자 지정 injection key, inj
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)`는 해당 키의 가장 가까운 provider를 읽고, 생략하거나 `undefined`를 넘기면 `HTTP_CLIENT`를 써요. 동기 `setup()`이나 `app.runWithContext()`(Vue 3.3+)처럼 유효한 Vue 주입 컨텍스트에서 호출하세요. 후자는 동기 앱 수준 컨텍스트만 제공하며, 하위 트리 덮어쓰기를 가져오거나 일반 `await`를 넘어 컨텍스트를 유지하지 않아요. `<script setup>`의 최상위 `await` 이후 컴파일러가 복원한 컨텍스트는 여전히 유효해요.
+`injectClient(key)`는 해당 키의 가장 가까운 provider를 읽고, 생략하거나 `undefined`를 넘기면 `HTTP_CLIENT`를 써요. 동기 `setup()`이나 `app.runWithContext()`(Vue 3.3+)처럼 유효한 Vue 주입 컨텍스트에서 호출하세요. 후자는 동기 앱 수준 컨텍스트만 제공하며, 하위 트리 덮어쓰기를 가져오거나 일반 `await`를 넘어 컨텍스트를 유지하지 않아요. `<script setup>`의 최상위 `await` 이후 컴파일러가 복원한 컨텍스트는 여전히 유효해요. 그 클라이언트를 작업에 넘기세요. `Client`는 함수예요. `watch`나 `computed`의 소스로 쓰지 마세요. 그 API는 함수를 호출해요.
 
 사용자 지정 `InjectionKey<Client>`는 `app.provide(key, client)` 또는 상위 컴포넌트의 `provide(key, client)`로 설정하세요. 제공하는 쪽과 읽는 쪽은 동일한 `Symbol` 객체를 공유해야 해요. 설명이 같아도 같은 키가 아니에요. `createClientPlugin(client)`는 여전히 클라이언트만 받고 `HTTP_CLIENT`만 제공해요.
 

@@ -5,11 +5,11 @@ description: 在 React 中提供應用程式自己的 Client，並執行 SDK 定
 
 # React
 
-應用程式建立 `@defjs/core` Client，再透過 `@defjs/react` 框架插件的 Context 及 `useClient()` 將它接入 React 樹。組件或資料請求函式庫可以匯入 SDK 端點，並用這個 Client 執行 command；SDK 定義不依賴 React。
+應用程式建立 `@defjs/core` Client，再透過 `@defjs/react` 框架插件的 Context 及 `useClient()` 將它接入 React 樹。組件或資料請求函式庫可以匯入 SDK 操作，並用這個 Client 呼叫；SDK 定義不依賴 React。
 
 呢啲 plugins 只係設定同取得現有 `Client` 嘅可選輔助。你可以直接 import 應用固定嘅 Client、將明確 Client 傳俾可重用邏輯、用框架注入提供組件樹預設值同 subtree override，或者用應用自己嘅組織方式；SDK 定義唔要求經 plugin 執行。
 
-這個套件不會建立 Client、快取結果、重試 command 或釋放傳輸資源。啟動工作的組件、effect 或資料請求函式庫負責取消、關閉及其他生命週期處理。
+這個套件不會建立 Client、快取結果、重試操作或釋放傳輸資源。啟動工作的組件、effect 或資料請求函式庫負責取消、關閉及其他生命週期處理。`useClient()` 攞到嘅 client 要傳入操作。`Client` 係 function：唔好傳俾 state setter，因為 `setState(client)` 會將佢當 updater 嚟 call。
 
 ## 基本用法
 
@@ -39,21 +39,21 @@ Hook 淨係供應 client。佢唔會開始工作、subscribe transport，或者�
 
 ## 由 query library own 嘅工作
 
-Query library 可以 own caching、retries、stale-result suppression 同 cancellation。將佢提供嘅 signal 傳過去。List pages 用 TanStack Query（或者類似嘅）包住 `client.execute(...)`——`@defjs/react` 只做 DI，**唔會** ship `useRequest`。
+Query library 可以 own caching、retries、stale-result suppression 同 cancellation。將佢提供嘅 signal 做派生 client 上嘅 `abort` 傳過去。List pages 由 TanStack Query（或者類似嘅）呼叫操作——`@defjs/react` 只做 DI，**唔會** ship `useRequest`。
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
 呢度嘅 `throw error` 係 query function 嘅拒絕通道，唔係 Defjs 嘅預設呼叫方式。先檢查 tuple，只有呢個 adapter 先會 reject，等 query library 記錄呢次失敗。
 
-唔好將同一個 command wrap 入第二個 effect — 兩個 owners 會令 cancel 同 stale-result handling 變模糊。
+唔好喺第二個 effect 再開始同一個操作 — 兩個 owners 會令 cancel 同 stale-result handling 變模糊。
 
 ## 自己 own realtime 工作
 
-SSE 同 WebSocket handles 會 outlive `client.execute(...)`。Await startup 之前先 register cleanup，dispose 之後先到嘅 handle 要 close，consume 佢唯一個 iterator，await terminal promise：
+SSE 同 WebSocket handles 會 outlive 操作呼叫。Await startup 之前先 register cleanup，dispose 之後先到嘅 handle 要 close，consume 佢唯一個 iterator，await terminal promise：
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-傳俾 `execute` 嘅 `signal` 會繼續管住已經 open 嘅 session。喺 cleanup abort 佢，session 會以 `aborted` 完結，`receive` 以 `AbortError` reject，所以上面個 `catch` 喺 effect dispose 之後會忽略 errors，只報真正嘅失敗（queue overflow、heartbeat timeout）。Abort 咗嘅 SSE stream 就反過來，iterator 會正常完結。冇呢個 `catch` 嘅話，loop 嘅 rejection 就會變成 unhandled promise rejection。
+傳俾操作嘅 `abort` signal 會繼續管住已經 open 嘅 session。喺 cleanup abort 佢，session 會以 `aborted` 完結，`receive` 以 `AbortError` reject，所以上面個 `catch` 喺 effect dispose 之後會忽略 errors，只報真正嘅失敗（queue overflow、heartbeat 確認逾時）。Abort 咗嘅 SSE stream 就反過來，iterator 會正常完結。冇呢個 `catch` 嘅話，loop 嘅 rejection 就會變成 unhandled promise rejection。
 
 `EventStreamHandle` 同一條規則：喺 `finally` close，await `stream.closed`。WebSocket consumers 亦要 unsubscribe state/runtime-error listeners，同保持讀 `session.receive` — unread bounded queue 可以 overflow。
 

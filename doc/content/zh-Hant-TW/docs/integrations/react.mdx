@@ -5,11 +5,11 @@ description: 在 React 中提供應用程式自己的 Client，並執行 SDK 定
 
 # React
 
-應用程式建立 `@defjs/core` Client，再透過 `@defjs/react` 框架外掛的 Context 與 `useClient()` 將它接入 React 樹。元件或資料請求函式庫可以匯入 SDK 端點，並用這個 Client 執行 command；SDK 定義不依賴 React。
+從 SDK 或共用的定義模組匯入操作。React 應用程式設定並提供 client；SDK 套件可以不依賴 React。元件與資料請求函式庫呼叫那些操作，並擁有自己啟動的工作。`useClient()` 取出的 client 會傳進操作。
 
 這些外掛只是設定與取得既有 `Client` 的可選輔助。可以直接匯入應用程式固定的 Client、將明確的 Client 傳給可重用邏輯、透過框架注入提供元件樹預設值與子樹覆寫，或採用應用程式自己的組織方式；SDK 定義不要求透過外掛執行。
 
-這個套件不會建立 Client、快取結果、重試 command 或釋放傳輸資源。啟動工作的元件、effect 或資料請求函式庫負責取消、關閉與其他生命週期處理。
+把既有的 `@defjs/core` client 接進 React 樹。你拿到 Context 與 `useClient()`。這個套件**不會**建立 client、加上快取、重試操作，或釋放傳輸資源。啟動工作的元件、effect 或資料函式庫擁有它。`Client` 是函式：不要把它傳給 state setter，因為 `setState(client)` 會把它當成 updater 呼叫。
 
 ## 基本用法
 
@@ -39,21 +39,21 @@ Hook 只提供 client。它不會啟動工作、訂閱傳輸，或把 error-firs
 
 ## 自己擁有 query 工作
 
-Query library 可以擁有快取、重試、壓制過期結果、取消。把函式庫提供的 signal 傳進去。列表頁請把 `client.execute(...)` 包進 TanStack Query（或類似方案）——`@defjs/react` 只做 DI，**不會**附帶 `useRequest`。
+Query library 可以擁有快取、重試、壓制過期結果、取消。把函式庫提供的 signal 當成衍生 client 上的 `abort` 傳進去。列表頁請從 TanStack Query（或類似方案）呼叫操作——`@defjs/react` 只做 DI，**不會**附帶 `useRequest`。
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
 這裡的 `throw error` 是 query function 的拒絕通道，不是 Defjs 的預設呼叫方式。先檢查 tuple，只有這個轉接層會 reject，讓 query library 記下這次失敗。
 
-別把同一個 command 再包一層 effect — 兩個擁有者會讓取消與過期結果處理變模糊。
+別在第二個 effect 裡再啟動同一個操作 — 兩個擁有者會讓取消與過期結果處理變模糊。
 
 ## 自己擁有 realtime 工作
 
-SSE 與 WebSocket handles 比 `client.execute(...)` 活得更久。在 await 啟動前先註冊 cleanup；若 dispose 後才拿到 handle 就關閉它；消費它的單一 iterator；await 終端 promise：
+SSE 與 WebSocket handles 比操作呼叫活得更久。在 await 啟動前先註冊 cleanup；若 dispose 後才拿到 handle 就關閉它；消費它的單一 iterator；await 終端 promise：
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-傳給 `execute` 的 `signal` 會持續管轄已開啟的 session。在 cleanup 裡 abort 它，session 會以 `aborted` 結束，`receive` 會以 `AbortError` reject，所以上面的 `catch` 在 effect 被 dispose 之後會忽略錯誤，只回報真正的失敗（queue overflow、heartbeat 逾時）。被 abort 的 SSE 串流則是 iterator 正常結束。沒有 `catch` 的話，迴圈的 reject 會變成未處理的 promise rejection。
+傳給操作的 `abort` signal 會持續管轄已開啟的 session。在 cleanup 裡 abort 它，session 會以 `aborted` 結束，`receive` 會以 `AbortError` reject，所以上面的 `catch` 在 effect 被 dispose 之後會忽略錯誤，只回報真正的失敗（queue overflow、heartbeat 確認逾時）。被 abort 的 SSE 串流則是 iterator 正常結束。沒有 `catch` 的話，迴圈的 reject 會變成未處理的 promise rejection。
 
 `EventStreamHandle` 同規則：在 `finally` close，await `stream.closed`。WebSocket 消費者還要 unsubscribe state／runtime-error listeners，並持續讀 `session.receive` — 未讀的有界 queue 可能 overflow。
 

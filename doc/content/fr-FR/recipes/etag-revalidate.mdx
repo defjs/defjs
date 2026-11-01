@@ -1,9 +1,9 @@
 ---
 title: "Requêtes conditionnelles ETag"
-description: Traite 304 comme un fault de statut HTTP ; garde la Map de cache hors d’execute.
+description: Traite 304 comme un fault de statut HTTP ; garde la Map de cache hors de l’appel d’opération.
 ---
 
-# Revalider avec un ETag et un 304
+# Revalider avec ETag et un 304
 
 `ok` veut dire 2xx, donc un `304` arrive comme un fault `HTTP_STATUS`. Un statut de redirection n’est pas non plus un corps d’erreur, donc laisse `error` non déclaré : le corps n’est jamais lu, le fault porte le statut, et tu renvoies toi-même le produit en cache.
 
@@ -17,6 +17,6 @@ Voir [HTTP](/fr-FR/docs/http).
 Flask
 ```
 
-`throw error` après la branche 304 est la frontière de ce lecteur. La fonction renvoie toujours une `Promise<Product>` ; un fault autre que 304 ne sort pas de cette frontière comme un tuple Defjs.
+`throw error` après la branche 304 est la frontière de ce lecteur. La fonction renvoie toujours `Promise<Product>` ; un fault qui n’est pas un 304 n’est pas renvoyé comme tuple Defjs depuis cette frontière.
 
-Ne réécris pas `304` en faux `200` dans Core. La propriété du cache reste dans le code applicatif autour d’`execute`.
+Ne réécris pas `304` en faux `200` à l’intérieur de Core. La propriété du cache reste dans le code applicatif, autour de l’appel d’opération.

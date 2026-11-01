@@ -173,7 +173,7 @@ describe("upload progress observer failures", () => {
               markObserved();
               return new Promise<void>(() => undefined);
             },
-            timeout: 50,
+            abort: AbortSignal.timeout(50),
           },
           readingHandle(false),
         );
@@ -234,14 +234,16 @@ describe("upload progress observer failures", () => {
         path: "/",
       });
 
-      const [error, result, response] = await client.execute(endpoint(), {
-        onUploadProgress() {
-          progressCalls += 1;
-          if (progressCalls === 2) {
-            throw new Error("first chunk failed");
-          }
-        },
-      });
+      const [error, result, response] = await endpoint(
+        client({
+          onUploadProgress() {
+            progressCalls += 1;
+            if (progressCalls === 2) {
+              throw new Error("first chunk failed");
+            }
+          },
+        }),
+      );
 
       expect(error).toBeNull();
       expect(result).toBe("ok");
@@ -266,7 +268,7 @@ function executeUpload(
     // Platform uploads use a route that tolerates the client aborting the body mid-read.
     path: handle ? "/" : "/body/upload",
   });
-  return client.execute(endpoint(), options);
+  return endpoint(client(options));
 }
 
 function readingHandle(swallow: boolean): FetchHandle {

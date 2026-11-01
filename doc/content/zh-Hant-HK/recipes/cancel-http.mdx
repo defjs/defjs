@@ -1,11 +1,11 @@
 ---
 title: "取消與逾時"
-description: Abort 或者 time out 一次 execute，再讀 NET_ABORTED / NET_TIMEOUT。
+description: Abort 或者 time out 一次呼叫，再讀 NET_ABORTED / NET_TIMEOUT。
 ---
 
 # Cancel 一個 HTTP call
 
-傳 `signal`，再加 `abort` 或者 `timeout` 其中一個 — 唔好同時傳 `abort` 同 `timeout`。`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。
+將 caller 嘅 signal 同 deadline 合埋放喺 `abort`。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 係一條 signal。手動 abort 分類為 `NET_ABORTED`。Deadline 分類為 `NET_TIMEOUT`。
 
 詳情睇 [HTTP](/zh-Hant-HK/docs/http#cancel-the-work)。
 

@@ -4,7 +4,11 @@
     "name": "createClient",
     "kind": "function",
     "slug": "core/createclient",
-    "related": ["@defjs/core:Client", "@defjs/core:ClientOption"]
+    "related": [
+      "@defjs/core:Client",
+      "@defjs/core:ClientOption",
+      "@defjs/core:RequestOptions"
+    ]
   },
   {
     "package": "@defjs/core",
@@ -109,11 +113,14 @@
     "name": "Client",
     "kind": "type",
     "slug": "core/client-type",
-    "related": [
-      "@defjs/core:HttpAwaitResult",
-      "@defjs/core:StreamAwaitResult",
-      "@defjs/core:SocketAwaitResult"
-    ]
+    "related": ["@defjs/core:createClient", "@defjs/core:RequestOptions"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RequestOptions",
+    "kind": "type",
+    "slug": "core/requestoptions-type",
+    "related": []
   },
   {
     "package": "@defjs/core",
@@ -187,13 +194,6 @@
   },
   {
     "package": "@defjs/core",
-    "name": "executeHttpCommand",
-    "kind": "function",
-    "slug": "core/executehttpcommand",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
     "name": "fetchHandler",
     "kind": "function",
     "slug": "core/fetchhandler",
@@ -232,13 +232,6 @@
     "name": "HttpRequestShape",
     "kind": "type",
     "slug": "core/httprequestshape-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "HttpCommand",
-    "kind": "type",
-    "slug": "core/httpcommand-type",
     "related": []
   },
   {
@@ -845,13 +838,6 @@
   },
   {
     "package": "@defjs/core",
-    "name": "executeEventStreamCommand",
-    "kind": "function",
-    "slug": "core/executeeventstreamcommand",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
     "name": "EventStreamDefinition",
     "kind": "type",
     "slug": "core/eventstreamdefinition-type",
@@ -869,13 +855,6 @@
     "name": "EventStreamRequestShape",
     "kind": "type",
     "slug": "core/eventstreamrequestshape-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EventStreamCommand",
-    "kind": "type",
-    "slug": "core/eventstreamcommand-type",
     "related": []
   },
   {
@@ -936,13 +915,6 @@
   },
   {
     "package": "@defjs/core",
-    "name": "executeWebSocketCommand",
-    "kind": "function",
-    "slug": "core/executewebsocketcommand",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
     "name": "WebSocketDefinition",
     "kind": "type",
     "slug": "core/websocketdefinition-type",
@@ -964,17 +936,10 @@
   },
   {
     "package": "@defjs/core",
-    "name": "WebSocketCommand",
-    "kind": "type",
-    "slug": "core/websocketcommand-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
     "name": "WebSocketExecuteOptions",
     "kind": "type",
     "slug": "core/websocketexecuteoptions-type",
-    "related": []
+    "related": ["@defjs/core:WebSocketHeartbeatConfig"]
   },
   {
     "package": "@defjs/core",
@@ -1167,13 +1132,6 @@
     "name": "withHeaders",
     "kind": "function",
     "slug": "core/withheaders",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withTimeout",
-    "kind": "function",
-    "slug": "core/withtimeout",
     "related": []
   },
   {

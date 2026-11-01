@@ -1,13 +1,13 @@
 ---
 title: "HTTP 請求"
-description: SDK 定義 HTTP 契約，應用程式執行請求、處理狀態及結果，並控制取消或逾時。
+description: 為 SDK 設計 HTTP 操作，由應用程式自己嘅設定同取消去呼叫。
 ---
 
 # HTTP
 
-SDK 作者透過 `defineRequest` 聲明 method、path、輸入及回應契約，並匯出端點。應用程式匯入端點，用自己的 Client 執行 command，按 `[error, data, response]` 處理結果。
+SDK 定義每個 HTTP 操作嘅 method、相對 path、input 映射、response 同錯誤契約。應用程式匯入嗰個操作，設定自己嘅 client，呼叫佢，再處理結果。同一份定義可以放進 npm 套件，亦可以本地共用。
 
-本頁依定義、執行、狀態分支及取消說明。SDK 保留輸入、輸出及已聲明錯誤的類型；應用程式決定認證、逾時、取消，以及如何將結果呈現給用戶。
+服務地址同認證留喺 client 設定。呼叫方擁有取消，以及任何重試一次 write 嘅策略；取消咗嘅請求可能已經到達服務。
 
 ## 基本用法
 
@@ -17,7 +17,7 @@ SDK 作者透過 `defineRequest` 聲明 method、path、輸入及回應契約，
 
 ## 解出 URL
 
-`withEndpoint(...)` 需要有效嘅絕對 URL。Endpoint pathname 當目錄留住；query 同 hash 會喺 command resolution 之前丟棄。缺少、相對或無效嘅 base endpoint，都會喺 request building 時以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit request 嘅 interceptor。HTTP、SSE 同 WebSocket 共用呢個規則。
+`withEndpoint(...)` 需要有效嘅絕對 URL。Endpoint pathname 當目錄留住；query 同 hash 會喺 request URL 解析之前丟棄。缺少、相對或無效嘅 base endpoint，都會喺 request building 時以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit request 嘅 interceptor。HTTP、SSE 同 WebSocket 共用呢個規則。
 
 <include cwd>examples/http/resolve-url.ts#example</include>
 
@@ -120,11 +120,13 @@ Builder 可以按真實 input 分支，每個 case return 唔同 body（JSON rec
 
 ## 取消工作 [#cancel-the-work]
 
-Execution options 可以只傳 `{ signal }`，唔使同時傳 `abort` 或者 `timeout`。**`abort` 同 `timeout` 互斥。** `signal` 可以同其中一個一齊用。
+喺派生出嚟嘅 client 上傳 `abort`。Deadline 係 `AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 分類為 `NET_ABORTED`。冇 `timeout` field，冇 `signal` field，亦冇 client 層級嘅預設 deadline。後到嘅 `abort` 會取代之前嘅 signal。喺應用程式程式碼用 `AbortSignal.any` 將 caller signal 同 deadline 合埋。
+
+<include cwd>examples/http/deadline.ts#example</include>
 
 <include cwd>examples/http/cancel.ts#example</include>
 
-`timeout` 一定要係 `1..2_147_483_647` 入面嘅 positive safe integer。冇傳 `timeout` 嘅 call 會用 client 嘅 `withTimeout` 預設值。Recognized cancel → `NET_ABORTED`；execution timeout → `NET_TIMEOUT`；interceptor `throw` → `EXT_INTERCEPTOR_FAILED`，但 `ERR_ABORTED` / `ERR_TIMEOUT` 例外，會分別得出 `NET_ABORTED` / `NET_TIMEOUT`；其他 Fetch failures → `NET_UNREACHABLE`。Server 接受咗 write 之後再 cancel，**唔**證明 write 已經 rollback。
+認得出嘅取消 → `NET_ABORTED`；deadline abort → `NET_TIMEOUT`；interceptor `throw` → `EXT_INTERCEPTOR_FAILED`，但 `ERR_ABORTED` / `ERR_TIMEOUT` 例外，會分別得出 `NET_ABORTED` / `NET_TIMEOUT`；其他 Fetch failures → `NET_UNREACHABLE`。Server 接受咗 write 之後再 cancel，**唔**證明 write 已經 rollback。
 
 ## Credentials 同 XSRF
 
@@ -138,17 +140,17 @@ Execution options 可以只傳 `{ signal }`，唔使同時傳 `abort` 或者 `ti
 
 `onDownloadProgress` 會喺讀已聲明嘅 response body 時執行。`loaded` 計算由 response stream 讀取嘅 bytes，Fetch 可能已經將佢哋解壓。只有 `Content-Length` 係正數，而且冇 `Content-Encoding` 或者佢係 `identity`，`lengthComputable` 先係 true。其他 encoding（包括 gzip 同 br）會回報 `total: 0` 同 `lengthComputable: false`，避免將解碼後 bytes 同壓縮嘅 wire length 比較。嗰一邊冇 struct → body 唔會被讀 → 冇 body-read progress。
 
-`onUploadProgress` 會喺 Fetch 讀 `ReadableStream<Uint8Array>` body 嗰陣回報進度，唔係 server 確認收到資料嗰陣。只有 runtime 支援以 stream 方式送出 request body，先會回報 upload progress：喺 Bun 同 Node，Defjs 亦會將 `Blob` / `File`、`ArrayBuffer` 同 `FormData` body 轉成 stream，所以呢啲都會回報進度。喺 server runtime，帶 `onUploadProgress` 嘅 FormData 會直接用序列化後嘅 stream，保留 multipart boundary，而且送出時唔會帶 library 產生嘅 `Content-Length`（HTTP/1.1 上係 chunked），所以 progress、timeout 同 abort 都可以運作，唔使緩衝成個 body。除非明確設定有效嘅 `Content-Length`，否則 total 係未知。如果 endpoint 要求 `Content-Length`，例如某些預簽名上傳目標，就省略 `onUploadProgress`；嗰陣平台 Fetch 會帶住 FormData 嘅長度送出。取消操作會釋放被包裝嘅 stream。Browsers（包括 Workers）唔包括喺內，因為 Chromium 只支援喺 HTTP/2 或更新版本上以 stream 方式送出 request body，而 Firefox 完全唔支援；喺呢啲環境，body 會原樣送出，而且唔會呼叫 `onUploadProgress`。JSON、text、`URLSearchParams` 同 typed-array body 係成份一次過送出，唔會有 event。冇已知長度嘅 stream，`total` 係 `0`（即 `lengthComputable` 係 `false`）。如果 runtime 唔支援以 stream 方式送出 request body（例如 Firefox），用 `ReadableStream` 做 body 嘅 request 就會喺送出任何資料之前以 `ENV_UNSUPPORTED` 失敗；cause message 係 `ERR_STREAMING_REQUEST_UNSUPPORTED`。喺 Chromium，`ReadableStream` body 需要 HTTP/2 或更新版本；用 HTTP/1.1 嘅話，呢次 call 會以 `NET_UNREACHABLE` 失敗。`onDownloadProgress` 喺每個 runtime 嘅行為都一樣。
+`onUploadProgress` 會喺 Fetch 讀 `ReadableStream<Uint8Array>` body 嗰陣回報進度，唔係 server 確認收到資料嗰陣。只有 runtime 支援以 stream 方式送出 request body，先會回報 upload progress：喺 Bun 同 Node，Defjs 亦會將 `Blob` / `File`、`ArrayBuffer` 同 `FormData` body 轉成 stream，所以呢啲都會回報進度。喺 server runtime，帶 `onUploadProgress` 嘅 FormData 會直接用序列化後嘅 stream，保留 multipart boundary，而且送出時唔會帶 library 產生嘅 `Content-Length`（HTTP/1.1 上係 chunked），所以 progress 同 abort 都可以運作，唔使緩衝成個 body。除非明確設定有效嘅 `Content-Length`，否則 total 係未知。如果 endpoint 要求 `Content-Length`，例如某些預簽名上傳目標，就省略 `onUploadProgress`；嗰陣平台 Fetch 會帶住 FormData 嘅長度送出。取消操作會釋放被包裝嘅 stream。Browsers（包括 Workers）唔包括喺內，因為 Chromium 只支援喺 HTTP/2 或更新版本上以 stream 方式送出 request body，而 Firefox 完全唔支援；喺呢啲環境，body 會原樣送出，而且唔會呼叫 `onUploadProgress`。JSON、text、`URLSearchParams` 同 typed-array body 係成份一次過送出，唔會有 event。冇已知長度嘅 stream，`total` 係 `0`（即 `lengthComputable` 係 `false`）。如果 runtime 唔支援以 stream 方式送出 request body（例如 Firefox），用 `ReadableStream` 做 body 嘅 request 就會喺送出任何資料之前以 `ENV_UNSUPPORTED` 失敗；cause message 係 `ERR_STREAMING_REQUEST_UNSUPPORTED`。喺 Chromium，`ReadableStream` body 需要 HTTP/2 或更新版本；用 HTTP/1.1 嘅話，呢次 call 會以 `NET_UNREACHABLE` 失敗。`onDownloadProgress` 喺每個 runtime 嘅行為都一樣。
 
-如果 progress callback 拋出錯誤或者 reject，call 就會以 `EXT_OBSERVER_FAILED` 失敗，拋出嘅值會成為 `cause`，download 同 upload 都一樣。Caller 取消操作同 `timeout` 仍然會報 `NET_ABORTED` / `NET_TIMEOUT`。
+如果 progress callback 拋出錯誤或者 reject，call 就會以 `EXT_OBSERVER_FAILED` 失敗，拋出嘅值會成為 `cause`，download 同 upload 都一樣。Caller 取消仍然會報 `NET_ABORTED`；abort reason 係 timeout 時就報 `NET_TIMEOUT`。
 
-`fetchHandler(httpRequest, fetchImpl?)` 係更低層嘅 Fetch boundary：解析 URL、call Fetch、讀取 representation，再回傳 `HttpResponse`。預設 HTTP 同 SSE handles 每次 call 都會解析 `globalThis.fetch`，所以 import 之後安裝嘅替代實作亦會用到。HTTP 只有喺平台原生 Fetch 未被取代時先用 `(url, init)`；被取代嘅 global Fetch 或自訂 handle 都會收到原生 `Request`。冇 Fetch 亦可以 import Core；如果執行時仍然冇 Fetch，預設 HTTP/SSE 執行會以 `ENV_UNSUPPORTED` 失敗，自訂 handles 就仍然可用。呢條邊界 **唔會**驗證 command input、派發 `output`，或者執行 interceptors。對注入 transport 嘅測試有用，唔係 `client.execute` 嘅替代品。
+`fetchHandler(httpRequest, fetchImpl?)` 係更低層嘅 Fetch boundary：解析 URL、call Fetch、讀取 representation，再回傳 `HttpResponse`。預設 HTTP 同 SSE handles 每次 call 都會解析 `globalThis.fetch`，所以 import 之後安裝嘅替代實作亦會用到。HTTP 只有喺平台原生 Fetch 未被取代時先用 `(url, init)`；被取代嘅 global Fetch 或自訂 handle 都會收到原生 `Request`。冇 Fetch 亦可以 import Core；如果執行時仍然冇 Fetch，預設 HTTP/SSE 呼叫會以 `ENV_UNSUPPORTED` 失敗，自訂 handles 就仍然可用。呢條邊界 **唔會**驗證操作 input、派發 `output`，或者執行 interceptors。對注入 transport 嘅測試有用，唔係呼叫操作嘅替代品。
 
 ## 重送限制
 
 Defjs **唔會** auto-retry HTTP。Retry 一次 read 仍然要有 reviewed timeout/network/duplicate policy。Retry 一次 mutation 要 replayable bytes、server support、綁住 auth scope + request bytes 嘅 idempotency key，同 receiver duplicate policy。
 
-Client/command/Fetch boundary 唔知 failed write 有冇 commit。將 replay decisions 留喺 app 或者 reviewed interceptor。Interceptors 可以 short-circuit 或者 replace low-level request；最終 status 同 body 仍然要滿足 command 嘅 contract。
+Client 或者 Fetch boundary 唔知 failed write 有冇 commit。將 replay decisions 留喺 app 或者 reviewed interceptor。Interceptors 可以 short-circuit 或者 replace low-level request；最終 status 同 body 仍然要滿足操作嘅 contract。
 
 ## 相關配方
 

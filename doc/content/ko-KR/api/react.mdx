@@ -21,7 +21,7 @@ Context provider예요. `createClient`가 준 클라이언트를 넣어요. 중�
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)`는 명시적 클라이언트를 우선해 돌려줘요. 생략하거나 `undefined`를 넘기면 가장 가까운 `ClientProvider`를 읽고, 두 곳 모두 클라이언트가 없을 때만 `Error`를 던져요. 인자 없는 `useClient()`도 계속 유효해요.
+`useClient(overrideClient)`는 명시적 클라이언트를 우선해 돌려줘요. 생략하거나 `undefined`를 넘기면 가장 가까운 `ClientProvider`를 읽고, 두 곳 모두 클라이언트가 없을 때만 `Error`를 던져요. 인자 없는 `useClient()`도 계속 유효해요. 그 클라이언트를 작업에 넘기세요. `Client`는 함수예요. state setter에 넘기지 마세요. `setState(client)`는 updater로 호출해요.
 
 명시적 클라이언트가 있어도 `useClient(explicitClient)`는 항상 컴포넌트나 커스텀 훅의 최상위에서 호출하세요. 일반 함수나 이벤트 콜백에서 호출하면 안 돼요. `explicitClient ?? useClient()`는 훅을 조건부로 호출하므로 유효하지 않아요. 명시적 값은 Context에 쓰거나 provider를 만들지 않으며, 훅은 여전히 Context를 구독해요.
 

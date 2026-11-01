@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no Vue dependen
 bun add @defjs/core @defjs/vue vue
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.4.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.5.0` range.
 
 ## Quick start
 
@@ -46,17 +46,16 @@ watch(
     const abort = new AbortController();
     onCleanup(() => abort.abort());
 
-    const command = getUser({ id });
-    void client
-      .execute(command, { signal: abort.signal })
-      .then(([error, user]) => {
+    void getUser(client({ abort: abort.signal }), { id }).then(
+      ([error, user]) => {
         if (abort.signal.aborted) return;
         if (error) {
           name.value = error.message;
           return;
         }
         name.value = user.name;
-      });
+      },
+    );
   },
   { immediate: true },
 );
@@ -99,6 +98,7 @@ app.use(createClientPlugin(client));
 
 ## Notes
 
+- `Client` is a function. `injectClient()` returns that same function. Pass it straight to `createClientPlugin` or `provide`. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`; the plugin stores the function as-is.
 - Create request-specific clients (SSR data with credentials, cookies, or tenant state) at the application boundary.
 - The owner that creates a client also owns its requests, SSE streams, and WebSocket sessions. App unmount does not clean them up.
 - Import `createClient`, `withEndpoint`, `withInterceptors`, and other client options from `@defjs/core`.

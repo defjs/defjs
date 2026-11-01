@@ -1,14 +1,9 @@
 ---
 title: "실전 예제"
-description: SDK 테스트와 배포, HTTP, 인증, 실시간 통신 구현을 위한 실전 예제입니다.
+description: 재사용 가능한 SDK를 만들고 배포한 다음, 사용하는 애플리케이션에서 인증, 호출, 실시간 작업을 구성합니다.
 ---
 
-SDK 정의를 설계하고 테스트하고 배포한 뒤 앱에서 사용하는 실전 예제입니다. SDK는 API 계약을 export하고, 앱은 Client 설정과 결과, 취소, 스트림 수명을 관리합니다.
-
-## SDK 테스트와 배포 [#테스트와-패키징]
-
-- [로컬 HTTP 테스트](/ko-KR/recipes/test-with-handle)
-- [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)
+[SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)에서 export한 정의부터 npm 패키지와 사용하는 애플리케이션까지의 전체 경로를 시작하세요. 아래 예제는 그 SDK 주변에 조합할 수 있는 개별 작업 계약과 애플리케이션 정책을 보여 줍니다. 그 애플리케이션이 실시간 작업의 수명을 소유합니다.
 
 ## HTTP
 
@@ -26,3 +21,8 @@ SDK 정의를 설계하고 테스트하고 배포한 뒤 앱에서 사용하는 
 
 - [SSE 이벤트 소비](/ko-KR/recipes/consume-sse)
 - [WebSocket 세션 관리](/ko-KR/recipes/websocket-session)
+
+## SDK 테스트와 배포 [#testing-and-packaging]
+
+- [로컬 HTTP 테스트](/ko-KR/recipes/test-with-handle)
+- [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)

@@ -1,5 +1,5 @@
 // #region example
-import { defineRequest, struct } from "@defjs/core";
+import { defineRequest, struct, type Client } from "@defjs/core";
 
 const getUser = defineRequest({
   method: "GET",
@@ -10,5 +10,11 @@ const getUser = defineRequest({
   error: struct.object({ message: struct.string() }),
 });
 
-const command = getUser({ id: 7 });
+async function loadUser(client: Client) {
+  const [error, user] = await getUser(client, { id: 7 });
+  if (error) return;
+  console.log(user.name);
+}
+
+void loadUser;
 // #endregion

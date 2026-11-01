@@ -1,6 +1,6 @@
 ---
 title: "Локальные HTTP-тесты"
-description: Подмени Fetch для одного клиента через withHTTPHandle — команда та же.
+description: Подмени Fetch для одного клиента через withHTTPHandle и оставь операцию прежней.
 ---
 
 # Тест с локальным Fetch handle
@@ -17,4 +17,4 @@ description: Подмени Fetch для одного клиента через 
 Ada 200
 ```
 
-Ту же команду `getUser` гоняй против реального клиента с `withEndpoint(...)` в проде — меняется только handle.
+Ту же операцию `getUser` гоняй против реального клиента с `withEndpoint(...)` в проде — меняется только handle.

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import reference from "../app/data/api-reference.json";
 import { locales } from "../app/lib/i18n";
-import { uiCopy } from "../app/lib/ui-copy";
+import { getTranslator } from "../app/lib/translations";
 import { captureBrowserErrors } from "./helpers";
 import { openSite } from "./support/site";
 
@@ -33,12 +33,7 @@ test("connects HTTP guides, examples and module API without truncating related l
     ],
     [
       "/zh-Hans/recipes/post-json",
-      [
-        "/zh-Hans/docs/http",
-        "/zh-Hans/docs/commands",
-        "/zh-Hans/api/http",
-        "/zh-Hans/api/struct",
-      ],
+      ["/zh-Hans/docs/http", "/zh-Hans/api/http", "/zh-Hans/api/struct"],
     ],
     [
       "/zh-Hans/api/http",
@@ -176,7 +171,7 @@ test("translated entry pages keep English prose but localize their labels", asyn
   const chinese = page.locator("main");
   const chineseText = await chinese.textContent();
   expect(await chinese.innerHTML()).toContain(
-    `>${uiCopy["zh-Hans"].parameters}<`,
+    `>${getTranslator("zh-Hans")("api.parameters")}<`,
   );
   expect(chineseText).toContain(
     "function createClient(...options: ClientOption[]): Client;",
@@ -190,9 +185,11 @@ test("translated entry pages keep English prose but localize their labels", asyn
   expect(article).toContain('dir="ltr"');
   expect(article).toContain("Creates a Defjs client");
   expect(article).not.toMatch(
-    new RegExp(`<h2[^>]*lang="en"[^>]*>${uiCopy.ar.signature}`),
+    new RegExp(
+      `<h2[^>]*lang="en"[^>]*>${getTranslator("ar")("api.signature")}`,
+    ),
   );
-  expect(article).toContain(`>${uiCopy.ar.signature}<`);
+  expect(article).toContain(`>${getTranslator("ar")("api.signature")}<`);
   const arabicMarks = await page.evaluate(() => {
     const article = document.querySelector("article");
     const marked = article ? [...article.querySelectorAll("[lang='en']")] : [];
@@ -216,7 +213,7 @@ test("translated entry pages keep English prose but localize their labels", asyn
   expect(arabicMarks.headings).toEqual([]);
   const arabicCopy = page.locator("main button[data-api-copy]").first();
   expect(await arabicCopy.locator(".sr-only").textContent()).toBe(
-    uiCopy.ar.translations["Copy Text(code block)(aria-label)"],
+    getTranslator("ar")("Copy Text(code block)(aria-label)"),
   );
   expect(await errors.values()).toEqual([]);
 });

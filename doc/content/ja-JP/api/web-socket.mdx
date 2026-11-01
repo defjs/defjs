@@ -1,30 +1,24 @@
 ---
 title: WebSocket
-description: defineWebSocket、session、execute options です。
+description: defineWebSocket、session、リクエスト options です。
 ---
 
 # WebSocket
 
-ソケットを宣言し、実行し、型付きメッセージを送受信してから閉じます。
+ソケットを宣言し、クライアントを渡して操作を呼び、型付きメッセージを送受信してから閉じます。
 
 ## defineWebSocket()
 
 <ApiSignature name="defineWebSocket" />
 
 - **definition** — `path`、`incoming` struct 1 つ、必須で正の整数の `maxIncomingQueueSize`、任意の `outgoing` と `input` struct、`operation`、静的な `protocols`、0 以上の `maxOutgoingQueueSize` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`WebSocketDefinition`](/ja-JP/api/core/websocketdefinition-type) にあります。`builder` が必須なのは `input` を宣言したときだけです。
-- **戻り値** エンドポイントです。入力を渡して呼ぶと `WebSocketCommand` になります。
+- **戻り値** 操作です。第一引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとセッションが開きます。
 
 <include cwd>examples/api/define-web-socket.ts#example</include>
 
-## executeWebSocketCommand()
+呼び出しは `[null, session, connection]` または `[error, undefined, connection?]` を返します。呼び出しごとの options は、[`RequestOptions`](/ja-JP/api/core/requestoptions-type) からクライアントを派生させて渡します。WebSocket が読むのは `abort`、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` で、HTTP の進捗フィールドは無視します。
 
-<ApiSignature name="executeWebSocketCommand" />
-
-`client.execute` の低レベル入口です。アプリコードではクライアントを使ってください。
-
-- **戻り値** `[null, session, connection]`、または `[error, undefined, connection?]` です。
-
-WebSocket の execute は `beforeConnect`、`heartbeat`、`protocols`、`reconnect` を 1 回の呼び出しに限って上書きでき、それぞれクライアントの値を置き換えます。protocols の優先順位は、execute、`withWebSocketProtocols`、定義の `protocols` の順です。
+`beforeConnect`、`heartbeat`、`protocols`、`reconnect` は、それぞれがその呼び出しに限りクライアントの値を全体として置き換えます。protocols の優先順位は、派生したクライアント、`withWebSocketProtocols`、定義の `protocols` の順です。`heartbeat.timeoutMs` は確認待ちであり、リクエストの期限ではありません。
 
 ## WebSocketSession
 
@@ -57,15 +51,13 @@ async function consume(
 
 `kind` は `closed`、`aborted`、`error` のいずれかです。`cause` は `closed` にはなく、`aborted` では任意、`error` では必須です。`code`、`reason`、`wasClean` はどのバリアントにも現れ得ます。手動の `session.close()` は、close イベント側にそれらが無いとき、`{ kind: "closed" }` の `code` と `reason` を埋めます。
 
-## 実行 options
-
 ## WebSocketExecuteOptions
 
 <ApiSignature name="WebSocketExecuteOptions" />
 
-`WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、そして `abort` または `timeout`（両方は不可）に、`signal` が加わります。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。
+`WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`abort` です。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。`timeout` フィールドも `signal` フィールドもありません。
 
-`abort` と `timeout` は同時に使えません。型は両方の指定を拒否し、実行時に両方を渡すと `REQ_OPTIONS_INVALID` の fault で失敗します。`signal` はどちらとも組み合わせられます。`timeout` は接続の開始期限です。あとの再接続で再び設定されることはなく、`withTimeout` は WebSocket には適用されません。
+`abort` は開いたあとも含むセッション全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。あとの `abort` が前のシグナルを置き換えます。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
 
 `reconnect` を指定したとき、`attempts` のデフォルトは障害ごとに 3 です。`0` はリトライを無効にします。`open` に成功すると予算とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。デフォルトと検証規則は [Client](/ja-JP/api/client) を参照してください。
 
@@ -87,19 +79,15 @@ session.send({ type: "message", text: "Hello" });
 
 ## WebSocketEndpoint
 
-`defineWebSocket` の戻り値です。入力を渡して呼ぶと `WebSocketCommand` になります。
+`defineWebSocket` の戻り値です。第一引数はクライアントです。それ以降の引数は入力だけです。
 
 ## WebSocketRequestShape
 
 `path` と `query` だけです。`headers` と `body` は `never` です。
 
-## WebSocketCommand
-
-不透明な WebSocket コマンドです。`client.execute` に渡します。
-
 ## UseWebSocketConfig
 
-ハートビート、再接続、`beforeConnect`、protocols、それにキャンセルです。`WebSocketExecuteOptions` は `signal` を足します。
+`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`abort` です。`WebSocketExecuteOptions` はこのスライスです。`signal` フィールドはありません。
 
 ## SocketAwaitResult
 

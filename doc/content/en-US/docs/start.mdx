@@ -1,6 +1,6 @@
 ---
 title: "Quick start"
-description: Export your first SDK operation, execute it from a separate application, and reuse the definition with another client.
+description: Export your first SDK operation, call it from a separate application, and reuse the definition with another client.
 ---
 
 # Getting started: your first SDK operation [#getting-started-one-http-request]
@@ -9,7 +9,7 @@ You’ll write two files: an SDK module that exports `GET /users/:id`, and an ap
 
 ## Best practice
 
-A definition stays independent of the client. Calling it only creates a command. Give that command a name, then pass the name to `client.execute` on the client the application owns. The application also owns the service address and credentials. Inspect the error-first tuple first. When `error` is present, report `error.code` and return from the function before reading the success value.
+A definition stays independent of the client. Call the operation with the application's client, as in `getUser(client, { id: 7 })`. There is no third options argument. Calling the operation starts it; `await` only waits. The application also owns the service address and credentials. Inspect the error-first tuple first. When `error` is present, report `error.code` and return from the function before reading the success value.
 
 ## Step 1 — Install
 
@@ -29,9 +29,9 @@ Create `src/define-request.ts`. This is the SDK author's module: it exports `get
 
 `output` is the 2xx body. `error` is every other status. One struct each. Use `struct.or(...)` or a discriminated union when those bodies differ.
 
-`defineRequest(...)` returns an endpoint. Calling `getUser(...)` builds the opaque command you’ll pass to `client.execute(...)`. The `builder` above is the function that places input; it is not the endpoint.
+`defineRequest(...)` returns an operation. Calling `getUser(client, input)` starts the request. The `builder` above is the function that places input; it is not the operation. Where `input` is declared, `builder` is required, synchronous, and pure.
 
-## Step 3 — Execute it locally
+## Step 3 — Call it locally
 
 Create `src/execute-locally.ts` beside the definition. This is the consuming application: it imports `getUser`, creates its own client, and supplies a local Fetch handle. Defjs still validates input, builds the `Request`, dispatches by status, and parses the body.
 
@@ -71,14 +71,13 @@ Move the definition into an SDK package when more applications need it. Export `
 
 ## When the result differs
 
-- Bad input → `REQ_INPUT_INVALID`; conflicting cancel options → `REQ_OPTIONS_INVALID`; a failing
-  `builder` → `REQ_BUILD_FAILED`
+- Bad input → `REQ_INPUT_INVALID`; a failing `builder` → `REQ_BUILD_FAILED`
 - A non-2xx status → `HTTP_STATUS`, with typed `error.data` when `error` was declared and its body decodes
 - A declared JSON body with another media type → `RES_MEDIA_TYPE_INVALID`, reported before the body is read
 - A declared body (`output` for 2xx, `error` otherwise) that won't decode → `RES_DECODE_FAILED` or `RES_STRUCT_MISMATCH`, whatever the status
-- Fetch fail / cancel / timeout → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
+- Fetch fail / cancel / deadline → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
 
-`timeout` must be a positive safe integer in `1..2_147_483_647`. Valid cancel shapes: `{ signal }`, `{ timeout }`, `{ abort }`, or `{ signal, timeout }` / `{ signal, abort }`. `{ abort, timeout }` together is invalid. Cancellation tells you what the caller saw — not whether a server write committed.
+A deadline is `client({ abort: AbortSignal.timeout(ms) })` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no client-level default deadline. Derive a client when one call needs its own `abort`; see [Client](/docs/client). Cancellation tells you what the caller saw — not whether a server write committed.
 
 ## Next recipes
 

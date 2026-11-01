@@ -7,18 +7,9 @@ description: SDK の定義、データ契約、アプリケーションでの実
 
 <ApiIndex />
 
-ワークスペースパッケージの参照です。シグネチャが契約で、いつ使うかはガイドとレシピが説明します。
+Defjs SDK を作るとき、または使うときにこのリファレンスを引いてください。SDK の作成者は [`defineRequest`](/ja-JP/api/core/definerequest)、[`defineEventStream`](/ja-JP/api/core/defineeventstream)、[`defineWebSocket`](/ja-JP/api/core/definewebsocket)、[Struct](/ja-JP/api/struct) から始めます。アプリケーションは [Client 設定](/ja-JP/api/client) でそれらの操作を呼び、[Errors](/ja-JP/api/errors) で結果を扱います。
 
-## 定義と実行の入口
-
-| 目的                       | 参照先                                                                                                                                            |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SDK の API 定義を作る      | [HTTP](/ja-JP/api/http) の `defineRequest`、[SSE](/ja-JP/api/sse) の `defineEventStream`、[WebSocket](/ja-JP/api/web-socket) の `defineWebSocket` |
-| データ契約と型を作る       | [Struct](/ja-JP/api/struct) の `struct.*` と `Infer`                                                                                              |
-| アプリケーションで実行する | [Client](/ja-JP/api/client) の `createClient`、`with*`、`Client.execute`                                                                          |
-| 実行結果と方針を扱う       | [Errors](/ja-JP/api/errors)、[Interceptors](/ja-JP/api/interceptors)、各トランスポートの handle / session                                         |
-
-SDK の作成者は定義を export します。利用アプリケーションは互換性のある Defjs Client を構成し、結果、キャンセル、ストリームのライフサイクルを管理します。実装から配布までの流れは [クイックスタート](/ja-JP/docs/start) と [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) を参照してください。
+シグネチャが契約です。一連の流れは [クイックスタート](/ja-JP/docs/start) と [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) に従ってください。
 
 ## パッケージ
 
@@ -31,15 +22,15 @@ SDK の作成者は定義を export します。利用アプリケーション�
 
 ## @defjs/core
 
-| ページ                                  | ここで探すもの                                                   |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| [Client](/ja-JP/api/client)             | `createClient`, `with*` options, `Client`                        |
-| [HTTP](/ja-JP/api/http)                 | `defineRequest`, execute options, `HttpRequest` / `HttpResponse` |
-| [Struct](/ja-JP/api/struct)             | `struct.*`, `Infer`, `StructError`                               |
-| [Errors](/ja-JP/api/errors)             | `Fault` の種類とファクトリ                                       |
-| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket の interceptor ヘルパー                   |
-| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, stream handle                               |
-| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, session                                       |
+| ページ                                  | ここで探すもの                                                        |
+| --------------------------------------- | --------------------------------------------------------------------- |
+| [Client](/ja-JP/api/client)             | `createClient`, `with*` options, `Client`                             |
+| [HTTP](/ja-JP/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
+| [Struct](/ja-JP/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
+| [Errors](/ja-JP/api/errors)             | `Fault` の種類とファクトリ                                            |
+| [Interceptors](/ja-JP/api/interceptors) | HTTP / SSE / WebSocket の interceptor ヘルパー                        |
+| [SSE](/ja-JP/api/sse)                   | `defineEventStream`, stream handle                                    |
+| [WebSocket](/ja-JP/api/web-socket)      | `defineWebSocket`, session                                            |
 
 ## 関連
 

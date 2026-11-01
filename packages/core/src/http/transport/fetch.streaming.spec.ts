@@ -952,7 +952,7 @@ describe("unsupported streaming request body", () => {
       path: "/upload",
     });
 
-    const [error, result, response] = await client.execute(upload());
+    const [error, result, response] = await upload(client);
 
     expect(error?.code).toBe("ENV_UNSUPPORTED");
     expect(error?.cause).toBe(ERR_STREAMING_REQUEST_UNSUPPORTED);
@@ -980,9 +980,9 @@ describe("unsupported streaming request body", () => {
       path: "/upload",
     });
 
-    const [error, result, response] = await client.execute(upload(), {
-      onUploadProgress,
-    });
+    const [error, result, response] = await upload(
+      client({ onUploadProgress }),
+    );
 
     expect(error?.code).toBe("ENV_UNSUPPORTED");
     expect(error?.cause).toBe(ERR_STREAMING_REQUEST_UNSUPPORTED);
@@ -1040,7 +1040,7 @@ describe("unsupported streaming request body", () => {
       path: "/upload",
     });
 
-    const [error] = await client.execute(upload());
+    const [error] = await upload(client);
 
     expect(error).toBeNull();
     expect(handle).toHaveBeenCalledTimes(1);

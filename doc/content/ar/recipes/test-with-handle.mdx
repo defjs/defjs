@@ -1,11 +1,11 @@
 ---
 title: "اختبارات HTTP المحلية"
-description: استبدل Fetch لعميل واحد بـ withHTTPHandle واترك الأمر كما هو.
+description: استبدل Fetch لعميل واحد بـ withHTTPHandle وأبقِ العملية دون تغيير.
 ---
 
-# الاختبار بـ Fetch محلي
+# الاختبار بمعالج Fetch محلي
 
-`withHTTPHandle(...)` يستبدل Fetch لذلك العميل فقط. ما زلت تحصل على بناء URL والمعترضات وتوزيع الحالة وفك Struct — بلا DNS أو TLS أو خادم حقيقي.
+`withHTTPHandle(...)` يستبدل Fetch لذلك العميل فقط. ما زلت تحصل على بناء عنوان URL والمعترضات والتوزيع بحسب الحالة وفك Struct — دون DNS أو TLS أو خادم حقيقي.
 
 انظر [العميل](/ar/docs/client) للتفاصيل.
 
@@ -17,4 +17,4 @@ description: استبدل Fetch لعميل واحد بـ withHTTPHandle واتر
 Ada 200
 ```
 
-استخدم نفس أمر `getUser` ضد عميل `withEndpoint(...)` حقيقي في الإنتاج — المعالج وحده يتغيّر.
+استخدم عملية `getUser` نفسها مع عميل `withEndpoint(...)` حقيقي في الإنتاج — المعالج وحده يتغيّر.

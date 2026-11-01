@@ -24,7 +24,6 @@ export function createHttpRequest(
     errorResponseType?: HttpResponseType;
     querySerializer?: QuerySerializer;
     responseType?: HttpResponseType;
-    timeout?: number;
     uploadProgress?: HttpProgressFn;
     withCredentials?: boolean;
     xsrf?: {
@@ -44,7 +43,6 @@ export function createHttpRequest(
     inputGuides: options.inputGuides,
     operation: options.operation,
     querySerializer: options.querySerializer,
-    timeout: options.timeout,
     transport: "http",
     withCredentials: options.withCredentials,
   });

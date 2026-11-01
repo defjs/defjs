@@ -1,21 +1,22 @@
 ---
 title: "Leitfaden"
-description: SDK-Endpoints entwerfen, Verträge definieren und mit einem eigenen Anwendungsclient testen, integrieren und veröffentlichen.
+description: SDK-Verträge und Operationen entwerfen, sie veröffentlichen und die Ausführung in konsumierenden Anwendungen konfigurieren.
 ---
 
-Defjs begleitet dich vom API-Vertrag bis zum veröffentlichten SDK. Lies zuerst den [Schnellstart](/de-DE/docs/start), dann [Commands](/de-DE/docs/commands) und [Client](/de-DE/docs/client): Das SDK exportiert Endpoints, die Anwendung konfiguriert deren Ausführung. [Struct](/de-DE/docs/struct) beschreibt die gemeinsamen Datenverträge; die [Entwurfsentscheidungen](/de-DE/docs/design-decisions) erklären die Grenzen.
+Defjs trennt die API, die ein Team veröffentlicht, vom Client, den eine Anwendung nutzt. Folge dem Pfad für SDK-Autoren, um Operationen zu definieren und zu paketieren; folge dem Anwendungspfad, um die Ausführung zu konfigurieren und Ergebnisse zu behandeln.
 
-Wenn der erste Endpoint funktioniert, folgen [lokale Tests](/de-DE/recipes/test-with-handle) und die [Veröffentlichung als npm-Paket](/de-DE/recipes/publish-http-sdk). Die Transport- und Plugin-Leitfäden vertiefen jeweils den Vertrag des SDKs und die Verantwortung der Anwendung.
-
-## SDK-Entwicklung [#erste-schritte]
+## SDK-Entwicklung [#getting-started]
 
 - [Projektübersicht](/de-DE)
 - [Schnellstart](/de-DE/docs/start)
+- [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk)
+- [Warum Definitionen und Ausführung getrennt sind](/de-DE/docs/design-decisions)
 
-## Verträge und Ausführung [#aufrufe-und-verträge]
+## Verträge und Ausführung [#calls-and-contracts]
+
+SDK-Autoren besitzen Structs und Endpoint-Definitionen. Anwendungen stellen den Client bereit und rufen Operationen damit auf.
 
 - [Datenverträge / Struct](/de-DE/docs/struct)
-- [Definieren und ausführen / Command](/de-DE/docs/commands)
 - [Client-Konfiguration / Client](/de-DE/docs/client)
 
 ## Anfragen und Echtzeit
@@ -24,16 +25,23 @@ Wenn der erste Endpoint funktioniert, folgen [lokale Tests](/de-DE/recipes/test-
 - [SSE-Ereignisströme](/de-DE/docs/sse)
 - [WebSocket-Sitzungen](/de-DE/docs/web-socket)
 
-## Fehler und Interceptors
+## Fehler und Abfangen
 
 - [Fehlerbehandlung](/de-DE/docs/errors)
 - [Interceptors](/de-DE/docs/interceptors)
 
 ## Plugins
 
+Optionale Pakete für den Client der konsumierenden Anwendung. SDK-Definitionen bleiben davon unabhängig.
+
 - [Plugins](/de-DE/docs/integrations)
 - [React](/de-DE/docs/integrations/react)
 - [Vue](/de-DE/docs/integrations/vue)
 - [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server)
+
+## KI
+
+- [KI-gestützte Entwicklung](/de-DE/docs/ai)
+- [KI-APIs aufrufen](/de-DE/docs/ai-api)
 
 [Entwurfsentscheidungen](/de-DE/docs/design-decisions)

@@ -64,9 +64,9 @@ describe("recursive structs at transport boundaries", () => {
     );
 
     const results = [
-      await client.execute(http(cycle())),
-      await client.execute(sse(cycle())),
-      await client.execute(ws(cycle())),
+      await http(client, cycle()),
+      await sse(client, cycle()),
+      await ws(client, cycle()),
     ];
     for (const [error, value] of results) {
       expect(error?.code).toBe("REQ_INPUT_INVALID");
@@ -100,8 +100,9 @@ describe("recursive structs at transport boundaries", () => {
       withHTTPHandle(handle),
     );
 
-    const [error] = await client.execute(
-      useRequest(Object.assign(cycle(), { id: "root" })),
+    const [error] = await useRequest(
+      client,
+      Object.assign(cycle(), { id: "root" }),
     );
     expect(error).toBeNull();
     expect(handle).toHaveBeenCalledOnce();
@@ -127,7 +128,7 @@ describe("recursive structs at transport boundaries", () => {
       maxQueueSize: 4,
       path: "/deep",
     });
-    const [error, stream] = await client.execute(useStream());
+    const [error, stream] = await useStream(client);
     expect(error).toBeNull();
     if (!stream) throw new Error("Expected stream");
     expect(await Array.fromAsync(stream)).toEqual([
@@ -152,7 +153,7 @@ describe("recursive structs at transport boundaries", () => {
       path: "/deep",
     });
     const [error, session] = await openControllableSocket(
-      client.execute(useSocket()),
+      useSocket(client),
       latest,
     );
     expect(error).toBeNull();

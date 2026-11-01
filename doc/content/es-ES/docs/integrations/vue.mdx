@@ -1,15 +1,15 @@
 ---
 title: "Vue"
-description: Proporcionar un cliente en Vue y ejecutar endpoints importados del SDK con limpieza explícita.
+description: Consume un SDK independiente del framework con un cliente Vue que aporta la aplicación y una limpieza que posee quien llama.
 ---
 
 # Vue
 
-La aplicación Vue importa los endpoints de su SDK y los ejecuta con un cliente inyectado. El SDK permanece independiente de Vue. Crea y configura el cliente en el ámbito adecuado de aplicación o solicitud; el plugin de framework lo pone a disposición de los componentes.
+Importa operaciones de tu SDK o de un módulo de definición compartido. La aplicación Vue configura y proporciona el cliente; el paquete del SDK puede seguir siendo independiente de Vue. Los componentes y los composables llaman a esas operaciones y son dueños del trabajo que arrancan. El cliente de `injectClient()` se pasa a la operación.
 
-Estos plugins son ayudas opcionales para proporcionar y leer un `Client` existente. Puedes importar un cliente fijo de la aplicación, pasar un Client explícito a la lógica reutilizable, usar la inyección del framework para valores predeterminados del árbol y sustituciones en subárboles, o elegir tu propia organización. Las definiciones del SDK no requieren estos plugins.
+Estos plugins son ayudas opcionales para proporcionar y leer un `Client` existente. Importa un cliente fijo que posee la aplicación, pasa un `Client` de forma explícita a la lógica reutilizable, usa la inyección del framework para valores por defecto y sustituciones a nivel de árbol, o elige tu propia organización. Las definiciones del SDK no requieren estos plugins.
 
-Conecta un cliente `@defjs/core` existente a Vue. Obtienes un plugin, una injection key y `injectClient()`. El paquete **no** crea clientes, no cachea resultados, no reintenta comandos ni cierra recursos de transporte en el unmount.
+Conecta un cliente `@defjs/core` existente a Vue. Obtienes un plugin, una injection key y `injectClient()`. El paquete **no** crea clientes, no cachea resultados, no reintenta operaciones ni cierra recursos de transporte en el unmount. Un `Client` es una función: no lo uses como fuente de `watch` o `computed`, porque esos llaman a una función.
 
 ## Configuración básica
 
@@ -47,7 +47,7 @@ Gana el provider más cercano. Los descendientes obtienen `childClient`; los her
 
 ## Ser dueño del trabajo HTTP fuera de un watcher
 
-Para trabajo arrancado por un composable o componente fuera de un watcher, usa `AbortController` + `onScopeDispose`. Aborta el arranque y el trabajo activo; comprueba el signal antes de asignar estado reactivo. Un plugin o un ámbito de inyección no infiere quién es dueño de un comando. Para páginas de listas, envuelve `execute` con Vue Query (o similar): `@defjs/vue` se queda solo en DI y **no** incluye `useRequest`.
+Para trabajo arrancado por un composable o componente fuera de un watcher, usa `AbortController` + `onScopeDispose`. Aborta el arranque y el trabajo activo; comprueba el signal antes de asignar estado reactivo. Un plugin o un ámbito de inyección no infiere quién es dueño de una operación. Para páginas de listas, llama a la operación desde Vue Query (o similar): `@defjs/vue` se queda solo en DI y **no** incluye `useRequest`.
 
 Cuando un ámbito es dueño de un cliente, mantenlo independiente de la solicitud para reutilizarlo en todo el navegador. Si captura cabeceras, cookies, usuarios, tenants o credenciales, créalo en el límite de solicitud de la app/SSR relevante y proporciona esa instancia allí.
 
@@ -79,7 +79,7 @@ Exports públicos de `@defjs/vue`:
 - `createClientPlugin(client)` — `Plugin` de Vue que proporciona ese cliente
 - `injectClient` — cliente más cercano para la clave elegida (`HTTP_CLIENT` por defecto); lanza si falta
 
-Crea clientes y opciones en `@defjs/core`. Ver [Cliente](/es-ES/docs/client), [Comandos](/es-ES/docs/commands), [Interceptores](/es-ES/docs/interceptors), [SSE](/es-ES/docs/sse) y [WebSocket](/es-ES/docs/web-socket).
+Crea clientes y opciones en `@defjs/core`. Ver [Cliente](/es-ES/docs/client), [HTTP](/es-ES/docs/http), [Interceptores](/es-ES/docs/interceptors), [SSE](/es-ES/docs/sse) y [WebSocket](/es-ES/docs/web-socket).
 
 ## Recetas relacionadas
 

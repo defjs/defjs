@@ -87,7 +87,7 @@ describe("sse startup faults", () => {
       );
       const client = clientReturning(handle, withSSEReconnect(reconnect));
 
-      const [fault, stream, open] = await client.execute(useStream());
+      const [fault, stream, open] = await useStream(client);
 
       expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
       expect(stream).toBeUndefined();
@@ -102,7 +102,7 @@ describe("sse startup faults", () => {
       withSSEReconnect({ maxDelayMs: Infinity }),
     );
 
-    const [fault, stream] = await client.execute(useStream());
+    const [fault, stream] = await useStream(client);
 
     expect(fault).toBeNull();
     if (!stream) throw new Error("Expected an event stream");
@@ -134,7 +134,7 @@ describe("sse startup faults", () => {
       ),
     );
 
-    const [fault, stream] = await client.execute(useStream());
+    const [fault, stream] = await useStream(client);
 
     expect(fault).toBeNull();
     if (!stream) throw new Error("Expected an event stream");
@@ -158,7 +158,7 @@ describe("sse startup faults", () => {
       },
     );
 
-    const [fault, stream] = await client.execute(useStream());
+    const [fault, stream] = await useStream(client);
 
     expect(fault).toBeNull();
     if (!stream) throw new Error("Expected an event stream");
@@ -184,7 +184,7 @@ describe("sse startup faults", () => {
         }),
     );
 
-    const [fault] = await client.execute(useDeclared());
+    const [fault] = await useDeclared(client);
 
     expect(fault?.code).toBe("HTTP_STATUS");
     if (fault?.code !== "HTTP_STATUS")
@@ -201,7 +201,7 @@ describe("sse startup faults", () => {
         }),
     );
 
-    const [fault] = await client.execute(useStream());
+    const [fault] = await useStream(client);
 
     expect(fault?.code).toBe("RES_MEDIA_TYPE_INVALID");
   });
@@ -211,7 +211,7 @@ describe("sse startup faults", () => {
       async () => new Response(null, { headers: SSE_HEADERS }),
     );
 
-    const [fault] = await client.execute(useStream());
+    const [fault] = await useStream(client);
 
     expect(fault?.code).toBe("RES_DECODE_FAILED");
   });
@@ -222,7 +222,7 @@ describe("sse startup faults", () => {
       throw cause;
     });
 
-    const [fault] = await client.execute(useStream());
+    const [fault] = await useStream(client);
 
     expect(fault?.code).toBe("NET_UNREACHABLE");
     expect(fault?.cause).toBe(cause);
@@ -240,7 +240,7 @@ describe("sse startup faults", () => {
       ),
     );
 
-    const [fault] = await client.execute(useStream());
+    const [fault] = await useStream(client);
 
     expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
     expect(fault?.cause).toBe(cause);
@@ -257,7 +257,7 @@ describe("sse interceptor results", () => {
         withInterceptors(createSSEInterceptor(async () => resolved() as never)),
       );
 
-      const [fault, stream] = await client.execute(useStream());
+      const [fault, stream] = await useStream(client);
 
       expect(stream).toBeUndefined();
       expect(fault?.code).toBe("EXT_INTERCEPTOR_FAILED");
@@ -281,7 +281,7 @@ describe("sse runtime faults", () => {
         }),
     );
 
-    const [fault, stream] = await client.execute(useTiny());
+    const [fault, stream] = await useTiny(client);
 
     expect(fault).toBeNull();
     if (fault) throw new Error("Expected the stream to open");
@@ -306,7 +306,7 @@ describe("sse runtime faults", () => {
         }),
     );
 
-    const [fault, stream] = await client.execute(useTinyQueue());
+    const [fault, stream] = await useTinyQueue(client);
 
     expect(fault).toBeNull();
     if (fault) throw new Error("Expected the stream to open");
@@ -322,7 +322,7 @@ describe("sse runtime faults", () => {
         new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
     );
 
-    const [fault, stream] = await client.execute(useStream());
+    const [fault, stream] = await useStream(client);
 
     expect(fault).toBeNull();
     if (fault) throw new Error("Expected the stream to open");
@@ -358,7 +358,7 @@ describe("unsupported streaming request body", () => {
       path: "/events",
     });
 
-    const [error, events, open] = await client.execute(useStream());
+    const [error, events, open] = await useStream(client);
 
     expect(error?.code).toBe("ENV_UNSUPPORTED");
     expect(error?.cause).toBe(ERR_STREAMING_REQUEST_UNSUPPORTED);
@@ -390,7 +390,7 @@ describe("unsupported streaming request body", () => {
       path: "/events",
     });
 
-    const [error, events, open] = await client.execute(useStream());
+    const [error, events, open] = await useStream(client);
 
     expect(error?.code).toBe("ENV_UNSUPPORTED");
     expect(error?.cause).toBe(ERR_STREAMING_REQUEST_UNSUPPORTED);
@@ -419,7 +419,7 @@ test("should return REQ_BUILD_FAILED when the JSON body is a Map", async () => {
     path: "/events",
   });
 
-  const [fault, events, open] = await client.execute(useStream());
+  const [fault, events, open] = await useStream(client);
 
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
   expect(events).toBeUndefined();
@@ -454,7 +454,7 @@ test("should return REQ_BUILD_FAILED when the JSON body is an async iterable obj
     path: "/events",
   });
 
-  const [fault, events, open] = await client.execute(useStream());
+  const [fault, events, open] = await useStream(client);
 
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
   expect(events).toBeUndefined();
@@ -489,7 +489,7 @@ describe("ReadableStream body and reconnect", () => {
       path: "/events",
     });
 
-    const [fault, events, open] = await client.execute(useStream());
+    const [fault, events, open] = await useStream(client);
 
     expect(events).toBeUndefined();
     expect(open).toBeUndefined();
@@ -525,7 +525,7 @@ describe("ReadableStream body and reconnect", () => {
       path: "/events",
     });
 
-    const [fault, events, open] = await client.execute(useStream());
+    const [fault, events, open] = await useStream(client);
 
     expect(events).toBeUndefined();
     expect(open).toBeUndefined();
@@ -565,7 +565,7 @@ describe("ReadableStream body and reconnect", () => {
       path: "/events",
     });
 
-    const [fault, stream] = await client.execute(useStream());
+    const [fault, stream] = await useStream(client);
 
     expect(fault).toBeNull();
     if (!stream) {

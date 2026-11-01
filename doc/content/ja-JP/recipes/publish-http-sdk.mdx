@@ -3,9 +3,9 @@ title: "SDK を作成・公開する"
 description: API 定義と型宣言を npm パッケージとして公開し、利用するアプリケーションが独自に Client を構成します。
 ---
 
-# SDK を作成・公開する [#execute-を隠さずに-http-sdk-を公開する]
+# SDK を作成・公開する [#publish-an-http-sdk-without-hiding-execute]
 
-SDK は、チームが提供する API をパッケージにまとめたものです。Defjs ではエンドポイント定義とデータ契約を export し、利用するアプリケーションが Client の設定と実行のタイミングを決めます。このレシピでは HTTP を使いますが、SSE と WebSocket の定義も同じ責務の分け方でパッケージ化できます。
+SDK は、チームが提供する API をパッケージにまとめたものです。Defjs ではエンドポイント定義とデータ契約を export し、利用するアプリケーションが Client の設定と、いつ呼ぶかを決めます。このレシピでは HTTP を使いますが、SSE と WebSocket の定義も同じ責務の分け方でパッケージ化できます。
 
 ## 1. SDK の操作を定義する
 
@@ -24,6 +24,17 @@ export { getUser } from "./users";
 操作が増えたらモジュールを追加し、そのエンドポイントを同じ入口から再 export します。
 
 ## 2. JavaScript と型宣言をパッケージ化する
+
+SDK プロジェクトは、自分のパッケージ境界を持ちます。
+
+```txt
+users-sdk/
+  package.json
+  tsconfig.json
+  src/
+    index.ts
+    users.ts
+```
 
 次の `package.json` を用意し、例のパッケージ名を自身が管理する scope に置き換えます。
 
@@ -44,10 +55,10 @@ export { getUser } from "./users";
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.4.0"
+    "@defjs/core": "^0.5.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.4.0",
+    "@defjs/core": "^0.5.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
@@ -87,9 +98,9 @@ bun pm pack
 
 tarball に `dist/index.js`、`dist/index.d.ts` が含まれることを確認します。別のアプリケーションに tarball をインストールし、型と実行の両方を検証してから公開してください。SDK の README にはサービスの API、対応する Core バージョン、必要な認証、任意のデフォルト設定を記載します。
 
-## 3. 利用アプリケーションから実行する
+## 3. 利用アプリケーションから呼び出す
 
-ローカルで動かせる例では、定義を `users-sdk.ts` に保存し、`app.ts` と同じディレクトリに置きます。この import は Client を作りません。アプリケーションがローカル Fetch ハンドルを構成し、import した操作を実行します。
+ローカルで動かせる例では、定義を `users-sdk.ts` に保存し、`app.ts` と同じディレクトリに置きます。この import は Client を作りません。アプリケーションがローカル Fetch ハンドルを構成し、import した操作を呼びます。
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -102,7 +113,7 @@ Ada
 パッケージ化した SDK は、互換性のある Core と一緒にインストールします。
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.4.0
+bun add @company/users-sdk @defjs/core@^0.5.0
 ```
 
 例の相対 import を次のように置き換えます。
@@ -111,7 +122,7 @@ bun add @company/users-sdk @defjs/core@^0.4.0
 import { getUser } from "@company/users-sdk";
 ```
 
-サービスの URL と認証はアプリケーションの Client に設定します。ローカルテストでは `withHTTPHandle(...)` を使い、プラットフォームの Fetch を使う場合は外します。別のアプリケーションも同じエンドポイントを import し、SDK の定義を変えずに異なる Client 設定で実行できます。
+サービスの URL と認証はアプリケーションの Client に設定します。ローカルテストでは `withHTTPHandle(...)` を使い、プラットフォームの Fetch を使う場合は外します。別のアプリケーションも同じエンドポイントを import し、SDK の定義を変えずに異なるクライアント設定を選べます。
 
 ## 4. 検証して公開する
 
@@ -127,4 +138,4 @@ bun publish --access public
 
 Client のファクトリや便利なメソッドは、必要に応じて追加できます。呼び出し側の設定を受け取り、エンドポイントを直接 export したまま、サービスのデフォルト設定やドメインの振る舞いを提供できます。導入するエラー変換やライフサイクルの方針は文書化してください。再利用できる SDK を作るための必須要件ではありません。
 
-基になる契約は [Commands](/ja-JP/docs/commands)、[Client](/ja-JP/docs/client)、[設計上の判断](/ja-JP/docs/design-decisions) を参照してください。
+基になる契約は [HTTP](/ja-JP/docs/http)、[Client](/ja-JP/docs/client)、[設計上の判断](/ja-JP/docs/design-decisions) を参照してください。

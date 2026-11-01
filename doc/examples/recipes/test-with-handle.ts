@@ -27,8 +27,7 @@ const client = createClient(
   }),
 );
 async function main() {
-  const command = getUser({ id: 7 });
-  const [error, user, response] = await client.execute(command);
+  const [error, user, response] = await getUser(client, { id: 7 });
   if (error) {
     // The test boundary rejects failures so the test process cannot pass.
     throw error;

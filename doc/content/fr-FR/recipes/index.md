@@ -1,9 +1,9 @@
 ---
 title: "Exemples pratiques"
-description: Tester et publier des SDK, puis intégrer HTTP, authentification et temps réel dans les applications.
+description: Construire et publier un SDK réutilisable, puis configurer l’authentification, les appels et le travail temps réel dans les applications consommatrices.
 ---
 
-Ces recettes suivent la même répartition : le SDK exporte des endpoints typés ; l’application les exécute avec son client et gère les résultats et les cycles de vie. Pour créer ton SDK, commence par les [tests HTTP locaux](/fr-FR/recipes/test-with-handle) et la [publication](/fr-FR/recipes/publish-http-sdk). Les autres recettes couvrent des contrats d’API et des politiques de l’application.
+Commence par [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk) pour le parcours complet, de la définition exportée au paquet npm et à l’application consommatrice. Les recettes ci-dessous montrent des contrats d’opération et des politiques d’application que tu peux composer autour de ce SDK.
 
 ## HTTP
 
@@ -22,7 +22,7 @@ Ces recettes suivent la même répartition : le SDK exporte des endpoints typés
 - [Consommer les événements SSE](/fr-FR/recipes/consume-sse)
 - [Gérer les sessions WebSocket](/fr-FR/recipes/websocket-session)
 
-## Tests et publication de SDK [#tests-et-sdk]
+## Tests et publication de SDK [#testing-and-packaging]
 
 - [Tests HTTP locaux](/fr-FR/recipes/test-with-handle)
 - [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk)

@@ -66,7 +66,7 @@ async function closedPort(): Promise<number> {
 
 const TRACE_PARENT_REGEX = /^00-[a-f0-9]{32}-[a-f0-9]{16}-01$/;
 
-describe("client.execute diagnostic boundary", () => {
+describe("operation diagnostic boundary", () => {
   afterEach(() => vi.restoreAllMocks());
 
   test.each([false, true])(
@@ -87,7 +87,7 @@ describe("client.execute diagnostic boundary", () => {
         withOpenTelemetryServer({ logger }),
       );
       const request = defineRequest({ method: "GET", path: "/inventory" });
-      const [fault, data, response] = await client.execute(request());
+      const [fault, data, response] = await request(client);
       expect(fault).toMatchObject({ code: "NET_UNREACHABLE", cause });
       expect(fault?.cause).toBe(cause);
       expect(data).toBeUndefined();
@@ -115,9 +115,7 @@ describe("client.execute diagnostic boundary", () => {
       input: struct.object({ count: struct.number() }),
       builder: (input) => ({ body: input }),
     });
-    const [fault] = await client.execute(
-      request({ count: "invalid" } as never),
-    );
+    const [fault] = await request(client, { count: "invalid" } as never);
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
     expect(handle).not.toHaveBeenCalled();
     expect(records).toEqual([]);
@@ -152,7 +150,7 @@ describe("client.execute diagnostic boundary", () => {
         path: "/inventory",
         output: struct.object({ count: struct.number() }),
       });
-      const [fault] = await client.execute(request());
+      const [fault] = await request(client);
       expect(fault?.code).toBe(code);
       expect(records).toHaveLength(logCount);
       if (logCount > 0) {
@@ -228,7 +226,7 @@ describe("client.execute diagnostic boundary", () => {
         output: struct.object({ count: struct.number() }),
         error: struct.object({ message: struct.string() }),
       });
-      const [fault] = await client.execute(request());
+      const [fault] = await request(client);
       expect(fault?.code).toBe(code);
       expect(records).toHaveLength(logCount);
       if (logCount > 0) {
@@ -250,14 +248,12 @@ describe("client.execute diagnostic boundary", () => {
       withEndpoint(inject("testServerHost")),
       withOpenTelemetryServer({ logger }),
     );
-    const [fault] = await client.execute(
-      defineEventStream({
-        events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
-        path: "/sse/500",
-      })(),
-    );
+    const [fault] = await defineEventStream({
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 4,
+      path: "/sse/500",
+    })(client);
     expect(fault?.code).toBe("HTTP_STATUS");
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
@@ -279,14 +275,12 @@ describe("client.execute diagnostic boundary", () => {
       }),
       withOpenTelemetryServer({ logger }),
     );
-    const [fault] = await client.execute(
-      defineEventStream({
-        events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
-        path: "/stream",
-      })(),
-    );
+    const [fault] = await defineEventStream({
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 4,
+      path: "/stream",
+    })(client);
     expect(fault?.code).toBe("NET_UNREACHABLE");
     expect(records).toHaveLength(1);
     expect(records[0]).toMatchObject({
@@ -297,22 +291,29 @@ describe("client.execute diagnostic boundary", () => {
 
   test("SSE caller abort during the handshake does not log", async () => {
     const { logger, records } = createMockLogger();
+    let markStarted: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
     const client = createClient(
       withEndpoint("https://example.invalid"),
-      withSSEHandle(() => new Promise<Response>(() => undefined)),
+      withSSEHandle(() => {
+        markStarted();
+        return new Promise<Response>(() => undefined);
+      }),
       withOpenTelemetryServer({ logger }),
     );
     const abort = new AbortController();
-    setTimeout(() => abort.abort(), 10);
-    const [fault] = await client.execute(
-      defineEventStream({
-        events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
-        path: "/stream",
-      })(),
-      { abort: abort.signal },
-    );
+    const openStream = defineEventStream({
+      events: { message: struct.string() },
+      maxBufferSize: 1024,
+      maxQueueSize: 4,
+      path: "/stream",
+    });
+    const pending = openStream(client({ abort: abort.signal }));
+    await started;
+    abort.abort();
+    const [fault] = await pending;
     expect(fault?.code).toBe("NET_ABORTED");
     expect(records).toEqual([]);
   });
@@ -323,14 +324,12 @@ describe("client.execute diagnostic boundary", () => {
       withEndpoint(inject("testServerHost")),
       withOpenTelemetryServer({ logger }),
     );
-    const [fault, stream] = await client.execute(
-      defineEventStream({
-        events: { traceparent: struct.string() },
-        maxBufferSize: 64 * 1024,
-        maxQueueSize: 16,
-        path: "/sse",
-      })(),
-    );
+    const [fault, stream] = await defineEventStream({
+      events: { traceparent: struct.string() },
+      maxBufferSize: 64 * 1024,
+      maxQueueSize: 16,
+      path: "/sse",
+    })(client);
     expect(fault).toBeNull();
     for await (const event of stream ?? []) void event;
     await expect(stream?.closed).resolves.toMatchObject({ kind: "eof" });
@@ -351,13 +350,11 @@ describe("client.execute diagnostic boundary", () => {
         withEndpoint(host),
         withOpenTelemetryServer({ logger }),
       );
-      const [fault] = await client.execute(
-        defineWebSocket({
-          maxIncomingQueueSize: 4,
-          incoming: struct.unknown(),
-          path,
-        })(),
-      );
+      const [fault] = await defineWebSocket({
+        maxIncomingQueueSize: 4,
+        incoming: struct.unknown(),
+        path,
+      })(client);
       expect(fault?.code).toBe("NET_UNREACHABLE");
       expect(records).toHaveLength(1);
       expect(records[0]).toMatchObject({
@@ -378,16 +375,11 @@ describe("client.execute diagnostic boundary", () => {
       withOpenTelemetryServer({ logger }),
     );
     const abort = new AbortController();
-    const [fault, socket] = await client.execute(
-      defineWebSocket({
-        maxIncomingQueueSize: 4,
-        incoming: struct.unknown(),
-        path: "/ws",
-      })(),
-      {
-        abort: abort.signal,
-      },
-    );
+    const [fault, socket] = await defineWebSocket({
+      maxIncomingQueueSize: 4,
+      incoming: struct.unknown(),
+      path: "/ws",
+    })(client({ abort: abort.signal }));
     expect(fault).toBeNull();
     abort.abort();
     await expect(socket?.closed).resolves.toMatchObject({ kind: "aborted" });
@@ -403,13 +395,11 @@ describe("client.execute diagnostic boundary", () => {
       withEndpoint(inject("testServerHost").replace(/^http:/, "ws:")),
       withOpenTelemetryServer({ logger }),
     );
-    const [fault, socket] = await client.execute(
-      defineWebSocket({
-        maxIncomingQueueSize: 4,
-        incoming: struct.unknown(),
-        path,
-      })(),
-    );
+    const [fault, socket] = await defineWebSocket({
+      maxIncomingQueueSize: 4,
+      incoming: struct.unknown(),
+      path,
+    })(client);
     expect(fault).toBeNull();
     await expect(socket?.closed).resolves.toMatchObject({
       kind: "closed",
@@ -440,13 +430,11 @@ describe("client.execute diagnostic boundary", () => {
         withEndpoint(url),
         withOpenTelemetryServer({ logger }),
       );
-      const [fault, socket] = await client.execute(
-        defineWebSocket({
-          maxIncomingQueueSize: 4,
-          incoming: struct.unknown(),
-          path: "/",
-        })(),
-      );
+      const [fault, socket] = await defineWebSocket({
+        maxIncomingQueueSize: 4,
+        incoming: struct.unknown(),
+        path: "/",
+      })(client);
       expect(fault).toBeNull();
       await expect(socket?.closed).resolves.toMatchObject({
         kind: reportsErrorFirst ? "error" : "closed",
@@ -488,7 +476,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
       output: struct.object({ headers: struct.record(struct.string()) }),
     });
 
-    const [error, result] = await client.execute(useEchoHeaders({}));
+    const [error, result] = await useEchoHeaders(client, {});
 
     expect(error).toBeNull();
     expect(result).toBeDefined();
@@ -520,7 +508,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
       path: "/500",
     });
 
-    const [error] = await client.execute(useFail());
+    const [error] = await useFail(client);
 
     expect(error).not.toBeNull();
     const span = onlySpan(spans);
@@ -542,7 +530,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
       path: "/unavailable",
     });
 
-    const [error, result, response] = await client.execute(useUnavailable());
+    const [error, result, response] = await useUnavailable(client);
 
     expect(error).toMatchObject({ code: "NET_UNREACHABLE" });
     expect(result).toBeUndefined();
@@ -577,7 +565,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
       path: "/sse",
     });
 
-    const [error, stream, open] = await client.execute(useStream());
+    const [error, stream, open] = await useStream(client);
 
     expect(error).toBeNull();
     expect(open?.response?.ok).toBe(true);
@@ -619,7 +607,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
       path: "/sse/500",
     });
 
-    const [error] = await client.execute(useStream());
+    const [error] = await useStream(client);
 
     expect(error).not.toBeNull();
     const span = onlySpan(spans);
@@ -654,7 +642,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
       path: "/ws",
     });
 
-    const [error, socket, connection] = await client.execute(useSocket());
+    const [error, socket, connection] = await useSocket(client);
 
     expect(error).toBeNull();
     expect(socket).toBeDefined();
@@ -707,9 +695,9 @@ describe("e2e: opentelemetry-server with real test server", () => {
     const staleTraceparent =
       "00-11111111111111111111111111111111-2222222222222222-01";
 
-    const [error, socket, connection] = await client.execute(
-      useSocket({ traceparent: staleTraceparent }),
-    );
+    const [error, socket, connection] = await useSocket(client, {
+      traceparent: staleTraceparent,
+    });
 
     expect(error).toBeNull();
     if (!socket) {
@@ -751,7 +739,7 @@ describe("e2e: opentelemetry-server with real test server", () => {
       path: "/ws",
     });
 
-    const [error, socket, connection] = await client.execute(useSocket());
+    const [error, socket, connection] = await useSocket(client);
 
     expect(error).toBeNull();
     if (!socket) {

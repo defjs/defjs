@@ -66,12 +66,12 @@ Path、query、headers、body 是 builder 返回的字段，不是一种 request
   examples/struct/aliases.ts#example
 </include>
 
-| 边界                                       | 字段                              |
-| ------------------------------------------ | --------------------------------- |
-| `struct.parse(User, ...)` 和 command input | 逻辑名 `displayName`              |
-| builder 返回的带类型对象                   | 传输字段 `display_name`           |
-| JSON / SSE / WebSocket 解码                | 传输字段 → 逻辑字段 `displayName` |
-| builder 里手写的匿名对象                   | 你写下的那个 key                  |
+| 边界                                 | 字段                              |
+| ------------------------------------ | --------------------------------- |
+| `struct.parse(User, ...)` 和操作输入 | 逻辑名 `displayName`              |
+| builder 返回的带类型对象             | 传输字段 `display_name`           |
+| JSON / SSE / WebSocket 解码          | 传输字段 → 逻辑字段 `displayName` |
+| builder 里手写的匿名对象             | 你写下的那个 key                  |
 
 builder 本身读取的是逻辑名（`input.user.displayName`）；只有 serializer 编码 builder 返回的带类型对象时，才会出现传输字段名。
 
@@ -98,7 +98,7 @@ body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias
 
 `StructIssue` 有 `code`、`expected`、`message`、`path`、`received`。`code` 是 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或 `missing_key`。默认消息只描述收到的类型，不包含具体值，例如 `Expected number at id, received string`。问题路径是结构性的，会保留 record 的键：`struct.record(...)` 可能产生 `Expected number at alice@example.com, received string`，因此键在默认消息、`prettify()` 和 `String(fault)` 中仍可能敏感。因此 `message` 和 `prettify()` 不包含收到的数据；`received` 仍保留原始值，记录日志或返回前需要脱敏。`struct.parse(..., { errorMap })` 只改写本次调用的消息，也包括来自另一个 Core 副本的 struct 中的 bigint/date 转换失败。返回的任何字符串（包括 `''`）都会替换默认消息；只有 `undefined` 会保留默认消息。自定义文本会原样使用，如果映射中加入了具体值，就可能泄露这些值。
 
-Struct 校验只看结构。没有公开的范围、格式、细化、鉴权或状态迁移规则。这些检查放在打 command 之前。
+Struct 校验只看结构。没有公开的范围、格式、细化、鉴权或状态迁移规则。这些检查放在调用操作之前。
 
 ## 参考
 

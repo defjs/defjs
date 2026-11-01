@@ -1,15 +1,15 @@
 ---
 title: "React"
-description: Proporcionar un cliente en React y ejecutar endpoints importados del SDK con limpieza explícita.
+description: Consume un SDK independiente del framework con un cliente que aporta React y un tiempo de vida de la solicitud que posee el componente.
 ---
 
 # React
 
-La aplicación React importa los endpoints de su SDK y los ejecuta con el cliente proporcionado. El SDK no necesita depender de React. Crea y configura el cliente en el ámbito adecuado de aplicación o solicitud; este plugin de framework lo hace accesible desde el árbol de componentes mediante el provider y los hooks.
+Importa operaciones de tu SDK o de un módulo de definición compartido. La aplicación React es dueña del cliente y lo proporciona a través de este plugin de framework; el paquete del SDK puede seguir siendo independiente de React y reutilizarlo otras aplicaciones.
 
-Estos plugins son ayudas opcionales para proporcionar y leer un `Client` existente. Puedes importar un cliente fijo de la aplicación, pasar un Client explícito a la lógica reutilizable, usar la inyección del framework para valores predeterminados del árbol y sustituciones en subárboles, o elegir tu propia organización. Las definiciones del SDK no requieren estos plugins.
+Estos plugins son ayudas opcionales para proporcionar y leer un `Client` existente. Importa un cliente fijo que posee la aplicación, pasa un `Client` de forma explícita a la lógica reutilizable, usa la inyección del framework para valores por defecto y sustituciones a nivel de árbol, o elige tu propia organización. Las definiciones del SDK no requieren estos plugins.
 
-Conecta un cliente `@defjs/core` existente a un árbol React. Obtienes Context y `useClient()`. El paquete **no** crea un cliente, no añade caché, no reintenta comandos ni libera recursos de transporte. El componente, effect o librería de datos que arranca el trabajo es su dueño.
+Conecta un cliente `@defjs/core` existente a un árbol React. Obtienes Context y `useClient()`. El paquete **no** crea un cliente, no añade caché, no reintenta operaciones ni libera recursos de transporte. El componente, effect o librería de datos que arranca el trabajo es su dueño. El cliente de `useClient()` se pasa a la operación. Un `Client` es una función: no lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater.
 
 ## Configuración básica
 
@@ -39,21 +39,21 @@ El hook solo suministra el cliente. No arranca trabajo, no se suscribe a un tran
 
 ## Ser dueño del trabajo de query
 
-Una librería de queries puede ser dueña de la caché, los reintentos, la supresión de resultados obsoletos y la cancelación. Dale el signal que ella proporciona. Para páginas de listas, envuelve `client.execute(...)` con TanStack Query (o similar): `@defjs/react` se queda solo en DI y **no** incluye `useRequest`.
+Una librería de queries puede ser dueña de la caché, los reintentos, la supresión de resultados obsoletos y la cancelación. Pasa el signal que ella proporciona como `abort` en un cliente derivado. Para páginas de listas, llama a la operación desde TanStack Query (o similar): `@defjs/react` se queda solo en DI y **no** incluye `useRequest`.
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
 `throw error` aquí es el canal de rechazo de la función de query, no la llamada Defjs por defecto. La tupla se inspecciona primero; solo este adaptador rechaza, para que la librería de queries registre el fallo.
 
-No envuelvas el mismo comando en un segundo effect — dos dueños hacen ambigua la cancelación y el manejo de resultados obsoletos.
+No arranques la misma operación en un segundo effect — dos dueños hacen ambigua la cancelación y el manejo de resultados obsoletos.
 
 ## Ser dueño del trabajo realtime
 
-Los handles SSE y WebSocket sobreviven a `client.execute(...)`. Registra la limpieza antes de esperar el arranque, cierra un handle que llega tras la liberación, consume su único iterador, espera su promesa terminal:
+Los handles SSE y WebSocket sobreviven a la llamada a la operación. Registra la limpieza antes de esperar el arranque, cierra un handle que llega tras la liberación, consume su único iterador, espera su promesa terminal:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-El `signal` que pasas a `execute` sigue gobernando una sesión abierta. Abortarlo en la limpieza termina la sesión como `aborted` y rechaza `receive` con `AbortError`, así que el `catch` anterior ignora los errores una vez que el effect se libera y solo reporta fallos reales (desbordamiento de cola, timeout de heartbeat). Un stream SSE abortado, en cambio, termina su iterador con normalidad. Sin el `catch`, un rechazo del bucle sería un rechazo de promesa no manejado.
+El signal `abort` pasado a la operación sigue gobernando una sesión abierta. Abortarlo en la limpieza termina la sesión como `aborted` y rechaza `receive` con `AbortError`, así que el `catch` de arriba ignora los errores una vez que el effect se libera y solo reporta fallos reales (desbordamiento de cola, timeout del acuse del heartbeat). Un stream SSE abortado, en cambio, termina su iterador con normalidad. Sin el `catch`, un rechazo del bucle sería un rechazo de promesa no manejado.
 
 Misma regla para `EventStreamHandle`: cierra en `finally`, await `stream.closed`. Los consumidores WebSocket también deben hacer unsubscribe de listeners de estado/runtime-error y seguir leyendo `session.receive` — una cola acotada sin leer puede hacer overflow.
 

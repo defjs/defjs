@@ -72,7 +72,7 @@ describe("browser upload progress", () => {
       output: EchoReport,
       path: "/e2e/echo",
     });
-    return baseClient.execute(endpoint(), { onUploadProgress });
+    return endpoint(baseClient({ onUploadProgress }));
   }
 
   test.each(binaryUploads)(
@@ -95,7 +95,7 @@ describe("browser upload progress", () => {
       output: RawEcho,
       path: "/e2e/echo-raw",
     });
-    return baseClient.execute(endpoint(), { onUploadProgress });
+    return endpoint(baseClient({ onUploadProgress }));
   }
 
   test("should send FormData unchanged and not call onUploadProgress", async () => {
@@ -151,7 +151,7 @@ describe("browser upload progress", () => {
       output: EchoReport,
       path,
     });
-    const [error, result] = await baseClient.execute(endpoint());
+    const [error, result] = await endpoint(baseClient);
     const hits = await missHits(baseClient, path);
 
     expect(result).toBeUndefined();

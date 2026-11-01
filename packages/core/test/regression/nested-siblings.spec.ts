@@ -26,7 +26,7 @@ async function sendBody(body: BodyValue) {
     path: "/round6",
     builder: () => ({ body }),
   });
-  const [fault] = await client.execute(endpoint());
+  const [fault] = await endpoint(client);
   return { fault, sent };
 }
 
@@ -179,7 +179,7 @@ test("union arrays reject nested collisions before the public HTTP transport", a
       },
     }),
   });
-  const [fault] = await client.execute(endpoint({ rows: [{ id: "42" }] }));
+  const [fault] = await endpoint(client, { rows: [{ id: "42" }] });
   expect(fault?.code).toBe("REQ_BUILD_FAILED");
   expect(sends).toBe(0);
 });

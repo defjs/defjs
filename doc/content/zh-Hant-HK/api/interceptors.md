@@ -5,7 +5,7 @@ description: HTTP、SSE 同 WebSocket interceptor constructors。
 
 # Interceptors
 
-為一個 transport wrap `next`。用 `withInterceptors` register。Mixed lists 會喺 execute 時按 kind filter。
+為一個 transport wrap `next`。用 `withInterceptors` register。Mixed lists 會喺操作運行時按 kind filter。
 
 ## createHttpInterceptor()
 

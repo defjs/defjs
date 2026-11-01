@@ -24,30 +24,24 @@ function executeInput(
 ) {
   const definition = { builder, input: schema, path: "/input" };
   if (transport === "HTTP") {
-    return client.execute(
-      defineRequest({ ...definition, method: "GET" })(input),
-      options,
+    return defineRequest({ ...definition, method: "GET" })(
+      client(options),
+      input,
     );
   }
   if (transport === "SSE") {
-    return client.execute(
-      defineEventStream({
-        ...definition,
-        events: { message: struct.unknown() },
-        maxBufferSize: 1024,
-        maxQueueSize: 1,
-      })(input),
-      options,
-    );
-  }
-  return client.execute(
-    defineWebSocket({
+    return defineEventStream({
       ...definition,
-      incoming: struct.unknown(),
-      maxIncomingQueueSize: 1,
-    })(input),
-    options,
-  );
+      events: { message: struct.unknown() },
+      maxBufferSize: 1024,
+      maxQueueSize: 1,
+    })(client(options), input);
+  }
+  return defineWebSocket({
+    ...definition,
+    incoming: struct.unknown(),
+    maxIncomingQueueSize: 1,
+  })(client(options), input);
 }
 
 function transportHarness(transport: Transport, pending = false) {
@@ -157,7 +151,7 @@ describe.each(["HTTP", "SSE", "WebSocket"] as const)(
         },
       );
 
-      test.each(["abort", "signal", "timeout"] as const)(
+      test.each(["abort", "timeout"] as const)(
         "settles %s and releases resources without waiting for input then",
         async (mode) => {
           vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
@@ -171,10 +165,7 @@ describe.each(["HTTP", "SSE", "WebSocket"] as const)(
           const input = { then };
           const seen: unknown[] = [];
           const { client, fetch, sockets } = transportHarness(transport, true);
-          const options =
-            mode === "timeout"
-              ? { signal: caller.signal, timeout: 10 }
-              : { [mode]: caller.signal };
+          const options = { abort: caller.signal };
           let settled: Awaited<ReturnType<typeof executeInput>> | undefined;
           const pending = executeInput(
             client,
@@ -190,8 +181,15 @@ describe.each(["HTTP", "SSE", "WebSocket"] as const)(
             settled = result;
             return result;
           });
-          if (mode !== "timeout")
-            setTimeout(() => caller.abort("caller stopped"), 1);
+          setTimeout(
+            () =>
+              caller.abort(
+                mode === "timeout"
+                  ? new DOMException("deadline", "TimeoutError")
+                  : "caller stopped",
+              ),
+            1,
+          );
 
           try {
             await vi.advanceTimersByTimeAsync(10);

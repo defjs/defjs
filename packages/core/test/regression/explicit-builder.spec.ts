@@ -63,9 +63,9 @@ test.each([true, false])(
       ? { query: { token: "must-not-be-sent" } }
       : undefined;
     const results = await Promise.all([
-      client.execute(http(value)),
-      client.execute(sse(value)),
-      client.execute(socket(value)),
+      http(client, value),
+      sse(client, value),
+      socket(client, value),
     ]);
 
     try {
@@ -106,9 +106,9 @@ test("input field names never imply placement; the builder alone decides", async
   );
 
   expect(
-    (await client.execute(endpoint({ query: { token: "body-only" } })))[0],
+    (await endpoint(client, { query: { token: "body-only" } }))[0],
   ).toBeNull();
-  expect((await client.execute(endpoint()))[0]).toBeNull();
+  expect((await endpoint(client))[0]).toBeNull();
   expect(sent).toEqual([
     { body: { token: "body-only" }, url: "https://example.test/resource" },
     { body: { token: "default" }, url: "https://example.test/resource" },

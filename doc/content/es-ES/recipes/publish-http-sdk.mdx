@@ -1,33 +1,44 @@
 ---
 title: "Crear y publicar un SDK"
-description: Publica endpoints tipados como un paquete ESM con declaraciones; la aplicación configura y gestiona su propio cliente.
+description: Exporta definiciones de API como un paquete npm con tipos y deja que cada aplicación configure su propio cliente.
 ---
 
-# Crear y publicar un SDK [#publicar-un-sdk-http-sin-ocultar-execute]
+# Crear y publicar un SDK [#publish-an-http-sdk-without-hiding-execute]
 
-Un SDK de Defjs publica endpoints de API reutilizables. Su autor define entradas, colocación en las solicitudes y contratos de respuesta; la aplicación importa los endpoints, configura su cliente y trata los resultados. Esta receta va del módulo de endpoints a un archivo npm verificable y a su importación en una aplicación.
+Un SDK empaqueta la API que ofrece tu equipo. Con Defjs, exporta definiciones de endpoint y sus contratos de datos; las aplicaciones consumidoras aportan la configuración del cliente y deciden cuándo llamarlas. Esta receta usa HTTP, y el mismo límite de paquete vale para definiciones SSE y WebSocket.
 
-## 1. Exportar el endpoint
+## 1. Define las operaciones del SDK
 
-Crea un directorio de paquete `users-sdk` y guarda esta definición en `src/users.ts`. El módulo exporta `getUser`; no crea un cliente de aplicación preconfigurado ni inicia solicitudes.
+Crea `src/users.ts` en tu proyecto de SDK. Deja aquí los paths, el mapeo de la entrada, las respuestas y los errores del servicio. No hace falta una instancia de cliente, una dirección de despliegue ni una credencial actual para definir esta operación.
 
 <include cwd meta='title="src/users.ts"'>
   examples/recipes/publish-http-sdk/users-sdk.ts#example
 </include>
 
-`output` describe el cuerpo 2xx y `error` el de los demás estados. La aplicación puede tratar el `404` declarado mediante `error.code` y `error.status` y leer un `error.data` tipado. El resultado de `client.execute(...)` conserva esa información.
+Expónla desde `src/index.ts`:
 
-## 2. Definir la entrada del paquete y su compilación
-
-Exporta la API pública desde `src/index.ts`:
-
-```ts title="src/index.ts"
+```ts
 export { getUser } from "./users";
 ```
 
-Crea este `package.json` en el directorio del paquete. Sustituye `@company` por tu scope de npm antes de publicar. `@defjs/core` es una dependencia peer para que el SDK y la aplicación compartan una versión compatible del entorno de ejecución. Las dependencias de desarrollo permiten compilar y comprobar tipos en local.
+Añade otros módulos de operación y reexporta sus endpoints a medida que crece el SDK.
 
-```json title="package.json"
+## 2. Empaqueta JavaScript y declaraciones
+
+El proyecto del SDK tiene su propio límite de paquete:
+
+```txt
+users-sdk/
+  package.json
+  tsconfig.json
+  src/
+    index.ts
+    users.ts
+```
+
+Usa este `package.json`, sustituyendo el nombre de ejemplo por un scope de paquete que te pertenezca:
+
+```json
 {
   "name": "@company/users-sdk",
   "version": "0.1.0",
@@ -44,19 +55,21 @@ Crea este `package.json` en el directorio del paquete. Sustituye `@company` por 
     "build": "tsdown --platform neutral"
   },
   "peerDependencies": {
-    "@defjs/core": "^0.4.0"
+    "@defjs/core": "^0.5.0"
   },
   "devDependencies": {
-    "@defjs/core": "^0.4.0",
+    "@defjs/core": "^0.5.0",
     "tsdown": "^0.23.3",
     "typescript": "^7.0.2"
   }
 }
 ```
 
-`files` limita los archivos del SDK a `dist`; npm también puede incluir los metadatos del paquete, el README y la licencia. `exports` ofrece JavaScript y declaraciones de tipos en el mismo punto de entrada. `sideEffects: false` es adecuado porque el módulo solo exporta definiciones.
+Core sigue siendo una dependencia de runtime externa, compartida con la aplicación. El rango peer indica qué versiones de Core admite tu SDK; la dependencia de desarrollo te deja construir y probar contra ese rango. Este ejemplo coincide con el contrato actual `0.4.x`. Elige y prueba el rango de tu SDK antes de publicar; las declaraciones y el comportamiento en runtime dependen de él.
 
-```json title="tsconfig.json"
+Añade `tsconfig.json`:
+
+```json
 {
   "compilerOptions": {
     "target": "ES2022",
@@ -70,13 +83,11 @@ Crea este `package.json` en el directorio del paquete. Sustituye `@company` por 
 }
 ```
 
-Los tipos DOM cubren las API Web públicas de Defjs y `ESNext.Disposable` añade los tipos para liberar recursos. Estas entradas de `lib` no instalan polyfills de ejecución.
+Estas declaraciones de librería aportan tipos, no polyfills de runtime. La aplicación sigue necesitando las Web API que usan los transportes que elija.
 
-## 3. Compilar y comprobar el paquete
+`tsdown` empaqueta la entrada en `dist/index.js` y emite `dist/index.d.ts`.
 
-`tsdown` agrupa el punto de entrada en `dist/index.js` y genera `dist/index.d.ts`.
-
-Desde el directorio `users-sdk`, ejecuta:
+Construye e inspecciona el paquete:
 
 ```sh
 bun install
@@ -85,25 +96,11 @@ bun pm pack --dry-run
 bun pm pack
 ```
 
-Comprueba que la vista previa incluya `dist/index.js` y `dist/index.d.ts`. Con el nombre del ejemplo, el último comando genera `company-users-sdk-0.1.0.tgz`. Así puedes probar los archivos realmente empaquetados desde otra aplicación. Una [prueba con Fetch local](/es-ES/recipes/test-with-handle) debe cubrir los contratos de éxito y error antes de publicar.
+Comprueba que el tarball contenga `dist/index.js` y `dist/index.d.ts`. Instala ese tarball en una aplicación aparte y verifica tanto sus tipos como la ejecución antes de publicar. El README del SDK debe documentar la API del servicio, las versiones compatibles de Core, la autenticación esperada y cualquier valor por defecto opcional.
 
-Prueba también el mismo endpoint exportado con dos clientes que usen distintas direcciones de servicio y credenciales. En el proyecto consumidor separado, comprueba los tipos y la ejecución del archivo. Cubre la cancelación y el cierre de recursos en las API de streaming. Documenta en el README del SDK la API del servicio, las versiones compatibles de Core y la autenticación esperada.
+## 3. Llámalo desde la aplicación consumidora
 
-## 4. Consumir el SDK desde una aplicación
-
-Instala el archivo y una versión compatible de Defjs en una aplicación ESM separada. Ajusta la ruta relativa a tus directorios:
-
-```sh
-bun add ../users-sdk/company-users-sdk-0.1.0.tgz @defjs/core@^0.4.0
-```
-
-La aplicación importa el punto de entrada del paquete:
-
-```ts
-import { getUser } from "@company/users-sdk";
-```
-
-El siguiente ejemplo ejecutable de la documentación usa la importación relativa `./users-sdk.ts` porque ambos archivos están en el directorio del ejemplo. Para probar el paquete npm, sustituye solo esa importación por la anterior. El cliente y el handler Fetch local permanecen en el código de la aplicación.
+El ejemplo local deja la definición en `users-sdk.ts` junto a `app.ts` para poder ejecutarse sin red. Su import no crea un cliente; la aplicación configura un handle Fetch local y llama a la operación importada:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -113,18 +110,32 @@ El siguiente ejemplo ejecutable de la documentación usa la importación relativ
 Ada
 ```
 
-Guarda la aplicación como `app.ts` y ejecuta `bun app.ts`. El handler local permite probar sin un servicio en ejecución. Para la API real, la aplicación elimina `withHTTPHandle(...)` y configura URL base, autenticación e interceptores en su cliente. Sigue gestionando las tuplas de resultado y la cancelación.
+Para el SDK empaquetado, instálalo junto con una versión compatible de Core:
 
-## 5. Publicar en npm
+```sh
+bun add @company/users-sdk @defjs/core@^0.5.0
+```
 
-Tras comprobar scope, nombre, versión y archivo, y con una cuenta npm autorizada para publicar en ese scope, ejecuta desde el paquete:
+Sustituye el import relativo del ejemplo por:
+
+```ts
+import { getUser } from "@company/users-sdk";
+```
+
+Configura la dirección de tu servicio y la autenticación en el cliente de la aplicación. Conserva `withHTTPHandle(...)` para las pruebas locales; quítalo para usar la implementación Fetch de la plataforma. Una segunda aplicación puede importar el mismo endpoint y elegir ajustes de cliente distintos sin cambiar la definición del SDK.
+
+## 4. Verifica y publica
+
+Usa las [pruebas locales del cliente](/es-ES/recipes/test-with-handle) para ejercitar la definición exportada, el mapeo de la solicitud, la validación de la respuesta y los errores declarados. Verifica el mismo endpoint con dos clientes configurados para direcciones de servicio y credenciales distintas. Mantén disponible el manejo tipado de `HTTP_STATUS` en el punto de llamada, y prueba la cancelación y la limpieza de streams de los transportes que exporta tu SDK.
+
+Cuando el paquete haya pasado tus comprobaciones, publícalo desde el directorio del SDK con tu cuenta de npm:
 
 ```sh
 bun publish --access public
 ```
 
-Después, las aplicaciones pueden instalarlo con `bun add @company/users-sdk @defjs/core@^0.4.0`. Versiona los cambios de entradas, salidas, errores y colocación en la solicitud como cambios del contrato del SDK. Los endpoints de Defjs siguen ejecutándose mediante un cliente Defjs; exportar el paquete no altera ese contrato.
+Este comando publica un paquete público. Usa el registro y la política de acceso de tu organización para un SDK privado. Defjs no genera ni publica el paquete por ti.
 
-Las factorías de clientes y los métodos auxiliares son complementos opcionales. Pueden ofrecer valores predeterminados del servicio o comportamiento de dominio, admitir la configuración del consumidor y conservar los endpoints exportados directamente. Documenta las conversiones de errores y las reglas de ciclo de vida que introduzcan. Un SDK reutilizable no requiere una factoría.
+Las fábricas de cliente y los métodos de conveniencia son añadidos opcionales. Pueden aportar valores por defecto del servicio o comportamiento de dominio, aceptando la configuración de quien llama y conservando las exportaciones directas de endpoint. Documenta cualquier mapeo de errores o política de ciclo de vida que introduzcan. Ninguno de los dos es necesario para un SDK reutilizable.
 
-Consulta [comandos](/es-ES/docs/commands), [cliente](/es-ES/docs/client) y [decisiones de diseño](/es-ES/docs/design-decisions).
+Consulta [HTTP](/es-ES/docs/http), [Cliente](/es-ES/docs/client) y [Decisiones de diseño](/es-ES/docs/design-decisions) para los contratos de fondo.

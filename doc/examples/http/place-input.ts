@@ -24,12 +24,11 @@ const updateUser = defineRequest({
 });
 
 async function main() {
-  const command = updateUser({
+  const [error, user] = await updateUser(client, {
     id: 7,
     requestId: "request-42",
     profile: { displayName: "Ada" },
   });
-  const [error, user] = await client.execute(command);
   if (error) {
     console.error(error.code);
     return;

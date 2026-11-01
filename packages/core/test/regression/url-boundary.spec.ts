@@ -68,18 +68,18 @@ const invalidPaths = [
 
 function commands(path: string) {
   return {
-    http: defineRequest({ method: "GET", path })(),
+    http: defineRequest({ method: "GET", path }),
     sse: defineEventStream({
       path,
       events: { message: struct.string() },
       maxBufferSize: 1024,
       maxQueueSize: 4,
-    })(),
+    }),
     ws: defineWebSocket({
       path,
       incoming: struct.string(),
       maxIncomingQueueSize: 4,
-    })(),
+    }),
   };
 }
 
@@ -110,10 +110,10 @@ describe.each(["http", "sse", "ws"] as const)(
         );
         const command = commands(path);
         const [fault, delivered] = await (transport === "http"
-          ? client.execute(command.http)
+          ? command.http(client)
           : transport === "sse"
-            ? client.execute(command.sse)
-            : client.execute(command.ws));
+            ? command.sse(client)
+            : command.ws(client));
         delivered?.close();
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
@@ -139,10 +139,10 @@ describe.each(["http", "sse", "ws"] as const)(
         );
         const command = commands("/events");
         const [fault, delivered] = await (transport === "http"
-          ? client.execute(command.http)
+          ? command.http(client)
           : transport === "sse"
-            ? client.execute(command.sse)
-            : client.execute(command.ws));
+            ? command.sse(client)
+            : command.ws(client));
         delivered?.close();
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
@@ -178,10 +178,10 @@ describe.each(["http", "sse", "ws"] as const)(
         );
         const command = commands("/events");
         const [fault, delivered] = await (transport === "http"
-          ? client.execute(command.http)
+          ? command.http(client)
           : transport === "sse"
-            ? client.execute(command.sse)
-            : client.execute(command.ws));
+            ? command.sse(client)
+            : command.ws(client));
         delivered?.close();
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
@@ -217,10 +217,10 @@ describe.each(["http", "sse", "ws"] as const)(
         );
         const command = commands("/events");
         const [fault] = await (transport === "http"
-          ? client.execute(command.http)
+          ? command.http(client)
           : transport === "sse"
-            ? client.execute(command.sse)
-            : client.execute(command.ws));
+            ? command.sse(client)
+            : command.ws(client));
         expect(fault?.code).toBe("REQ_BUILD_FAILED");
         expect(handle).not.toHaveBeenCalled();
         expect(constructed).not.toHaveBeenCalled();
@@ -256,8 +256,8 @@ describe.each(["http", "sse"] as const)(
       );
       const command = commands("/events");
       const [fault, stream] = await (transport === "http"
-        ? client.execute(command.http)
-        : client.execute(command.sse));
+        ? command.http(client)
+        : command.sse(client));
       stream?.close();
       expect(fault).toBeNull();
     });
@@ -310,8 +310,8 @@ describe.each(["http", "sse"] as const)(
         );
         const command = commands("/events");
         const [fault, stream] = await (transport === "http"
-          ? client.execute(command.http)
-          : client.execute(command.sse));
+          ? command.http(client)
+          : command.sse(client));
         stream?.close();
         expect(recovered).toBe(true);
         expect(fault).toBeNull();
@@ -345,11 +345,11 @@ test.each([
       withWebSocketHandle(socketHandle((url) => urls.push(url))),
     );
     const command = commands(path);
-    expect((await client.execute(command.http))[0]).toBeNull();
-    const [streamFault, stream] = await client.execute(command.sse);
+    expect((await command.http(client))[0]).toBeNull();
+    const [streamFault, stream] = await command.sse(client);
     expect(streamFault).toBeNull();
     await stream?.[Symbol.asyncDispose]();
-    const [socketFault, socket] = await client.execute(command.ws);
+    const [socketFault, socket] = await command.ws(client);
     try {
       expect(socketFault).toBeNull();
       expect(urls).toEqual([
@@ -392,11 +392,11 @@ test("relative interceptor rewrites share HTTP, SSE and WebSocket URL rules", as
     ),
   );
   const command = commands("/events");
-  expect((await client.execute(command.http))[0]).toBeNull();
-  const [streamFault, stream] = await client.execute(command.sse);
+  expect((await command.http(client))[0]).toBeNull();
+  const [streamFault, stream] = await command.sse(client);
   expect(streamFault).toBeNull();
   await stream?.[Symbol.asyncDispose]();
-  const [socketFault, socket] = await client.execute(command.ws);
+  const [socketFault, socket] = await command.ws(client);
   try {
     expect(socketFault).toBeNull();
     expect(urls).toEqual([

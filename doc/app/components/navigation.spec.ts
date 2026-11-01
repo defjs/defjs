@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import { StaticNavigation } from "./navigation";
+import { TestI18nProvider } from "./test-i18n";
 import { expect, test } from "vitest";
 import { loader, type VirtualFile } from "fumadocs-core/source";
 import {
@@ -16,6 +17,7 @@ import {
   getNavigationTabs,
   getRelatedNavigation,
 } from "../lib/navigation";
+import { getTranslator } from "../lib/translations";
 import { i18n, locales } from "../lib/i18n";
 import { apiVirtualFiles } from "../lib/api-virtual";
 import summaries from "../data/api-summaries.json";
@@ -53,7 +55,6 @@ const guidePaths = [
   "",
   "/docs/start",
   "/docs/struct",
-  "/docs/commands",
   "/docs/client",
   "/docs/http",
   "/docs/sse",
@@ -64,6 +65,8 @@ const guidePaths = [
   "/docs/integrations/react",
   "/docs/integrations/vue",
   "/docs/integrations/opentelemetry-server",
+  "/docs/ai",
+  "/docs/ai-api",
   "/docs/design-decisions",
 ];
 const recipePaths = [
@@ -92,7 +95,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
         .map((p) => p.url)
         .sort(),
     );
-    expect(new Set(pages.map((p) => p.url)).size).toBe(208);
+    expect(new Set(pages.map((p) => p.url)).size).toBe(203);
     for (const page of pages) {
       expect(source.getPageByUrl(page.url, locale)?.path).toBe(
         `${locale}/${page.$ref}`,
@@ -110,7 +113,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
       throw new Error("Missing guide or example reading area");
     expect(
       guide.children.filter((n) => n.type === "separator" && n.name).length,
-    ).toBe(5);
+    ).toBe(6);
     expect(
       recipes.children.filter((n) => n.type === "separator" && n.name).length,
     ).toBe(4);
@@ -132,6 +135,90 @@ test("actual eleven-language content trees preserve every unique URL and page re
       ).toBe(1);
     expect(JSON.stringify(original)).toBe(snapshot);
   }
+});
+
+test("top tabs stay at three areas and the AI guide sits inside Guide", () => {
+  for (const locale of locales) {
+    const prefix = locale === "en-US" ? "" : `/${locale}`;
+    const tree = getNavigationTree(source.getPageTree(locale), locale);
+    const tabs = getNavigationTabs(tree);
+    expect(tabs.map((tab) => tab.url)).toEqual(
+      ["docs", "recipes", "api"].map((area) => `${prefix}/${area}`),
+    );
+    const guide = tree.children[0] as Folder;
+    const urls = flattenTree(guide.children).map((node) => node.url);
+    const ai = `${prefix}/docs/ai`;
+    const aiApi = `${prefix}/docs/ai-api`;
+    expect(urls.indexOf(ai)).toBe(
+      urls.indexOf(`${prefix}/docs/integrations/opentelemetry-server`) + 1,
+    );
+    expect(urls.indexOf(aiApi)).toBe(urls.indexOf(ai) + 1);
+    expect(urls.indexOf(`${prefix}/docs/design-decisions`)).toBe(
+      urls.indexOf(aiApi) + 1,
+    );
+    expect(
+      tabs.filter((tab) => isLayoutTabActive(tab, ai)).map((tab) => tab.url),
+    ).toEqual([`${prefix}/docs`]);
+    expect(
+      tabs.filter((tab) => isLayoutTabActive(tab, aiApi)).map((tab) => tab.url),
+    ).toEqual([`${prefix}/docs`]);
+  }
+});
+
+test("every locale names the Guide AI group and both of its pages", () => {
+  const labels = {
+    "en-US": ["AI", "AI-assisted development", "Calling AI APIs"],
+    "zh-Hans": ["AI", "AI 辅助开发", "调用 AI API"],
+    "zh-Hant-TW": ["AI", "AI 輔助開發", "呼叫 AI API"],
+    "zh-Hant-HK": ["AI", "AI 輔助開發", "呼叫 AI API"],
+    "ja-JP": ["AI", "AI を活用した開発", "AI API の呼び出し"],
+    "ko-KR": ["AI", "AI 지원 개발", "AI API 호출"],
+    "de-DE": ["KI", "KI-gestützte Entwicklung", "KI-APIs aufrufen"],
+    "fr-FR": ["IA", "Développement assisté par IA", "Appeler des API d’IA"],
+    "es-ES": ["IA", "Desarrollo asistido por IA", "Llamar a API de IA"],
+    "ru-RU": ["ИИ", "Разработка с помощью ИИ", "Вызов API ИИ"],
+    ar: [
+      "الذكاء الاصطناعي",
+      "التطوير بمساعدة الذكاء الاصطناعي",
+      "استدعاء واجهات الذكاء الاصطناعي",
+    ],
+  } as const;
+  for (const locale of locales) {
+    const prefix = locale === "en-US" ? "" : `/${locale}`;
+    const [group, assistedTitle, apiTitle] =
+      labels[locale as keyof typeof labels];
+    const tree = getNavigationTree(source.getPageTree(locale), locale);
+    const guide = tree.children[0] as Folder;
+    expect(
+      guide.children
+        .filter((node) => node.type === "separator" && node.name)
+        .map((node) => node.name)
+        .at(-1),
+    ).toBe(group);
+    const names = flattenTree(guide.children);
+    expect(names.find((node) => node.url === `${prefix}/docs/ai`)?.name).toBe(
+      assistedTitle,
+    );
+    expect(
+      names.find((node) => node.url === `${prefix}/docs/ai-api`)?.name,
+    ).toBe(apiTitle);
+  }
+});
+
+test("navigation uses the active translator rather than selecting another dictionary", () => {
+  const t = getTranslator("zh-Hans");
+  const tree = getNavigationTree(
+    source.getPageTree("zh-Hans"),
+    "zh-Hans",
+    (key, options) =>
+      key === "nav.guide.ai" ? "Provider AI heading" : t(key, options),
+  );
+  const guide = tree.children[0] as Folder;
+  expect(
+    guide.children
+      .filter((node) => node.type === "separator" && node.name)
+      .at(-1)?.name,
+  ).toBe("Provider AI heading");
 });
 
 test("reading-area and chapter labels come from page frontmatter, except the guide home and API index overrides", () => {
@@ -162,16 +249,22 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     guide.children
       .filter((n) => n.type === "separator" && n.name)
       .map((n) => n.name),
-  ).toEqual(["SDK 开发", "契约与执行", "请求与实时通信", "错误与拦截", "插件"]);
+  ).toEqual([
+    "SDK 开发",
+    "契约与执行",
+    "请求与实时通信",
+    "错误与拦截",
+    "插件",
+    "AI",
+  ]);
   expect(
     flattenTree(guide.children)
-      .slice(1, 6)
+      .slice(1, 5)
       .map((n) => n.name),
   ).toEqual([
     "项目概览",
     "快速开始",
     "数据契约 / Struct",
-    "定义与执行 / Command",
     "客户端配置 / Client",
   ]);
 });
@@ -182,7 +275,11 @@ test("SSR mobile directory resolves a trailing-slash article from the same navig
     createElement(
       MemoryRouter,
       { initialEntries: ["/zh-Hans/docs/http/"] },
-      createElement(StaticNavigation, { tree, locale: "zh-Hans" }),
+      createElement(
+        TestI18nProvider,
+        { locale: "zh-Hans" },
+        createElement(StaticNavigation, { tree }),
+      ),
     ),
   );
   expect(html).toContain('href="/zh-Hans/docs/start"');
@@ -242,14 +339,8 @@ test("related reading resolves real localized articles and preserves every API d
       "/recipes/publish-http-sdk",
     ])
       expect(http).toContain(prefix + path);
-    const command = flattenTree(
-      getRelatedNavigation(tree, locale, `${prefix}/docs/commands`),
-    ).filter((item) => item.url.startsWith(`${prefix}/api/`));
-    expect(command.map((item) => item.url).sort()).toEqual(
-      ["/api/client", "/api/http", "/api/sse", "/api/web-socket"]
-        .map((path) => prefix + path)
-        .sort(),
-    );
+    expect(http).not.toContain(`${prefix}/docs/ai`);
+    expect(http).not.toContain(`${prefix}/docs/commands`);
   }
 });
 
@@ -297,4 +388,34 @@ test("navigation tabs reject a reading area without any page", () => {
       children: [{ type: "folder", name: "Empty", children: [] }],
     }),
   ).toThrow("Reading area has no index page");
+});
+
+test("the SSR directory keeps one current AI page when the URL has a trailing slash", () => {
+  for (const locale of locales) {
+    const prefix = locale === "en-US" ? "" : `/${locale}`;
+    const tree = getNavigationTree(source.getPageTree(locale), locale);
+    const t = getTranslator(locale);
+    for (const path of ["/docs/ai", "/docs/ai-api"]) {
+      const html = renderToStaticMarkup(
+        createElement(
+          MemoryRouter,
+          { initialEntries: [`${prefix}${path}/`] },
+          createElement(
+            TestI18nProvider,
+            { locale },
+            createElement(StaticNavigation, { tree }),
+          ),
+        ),
+      );
+      expect(html).toContain(`aria-label="${t("nav.readingAreas")}"`);
+      expect(html).toContain(`aria-label="${t("nav.navigation")}"`);
+      expect(html).toContain(`>${t("nav.guide.ai")}</h2>`);
+      for (const area of ["docs", "recipes", "api"])
+        expect(html).toContain(`href="${prefix}/${area}"`);
+      expect(html.match(/aria-current="page"/g)).toEqual([
+        'aria-current="page"',
+      ]);
+      expect(html).toContain(`href="${prefix}${path}" aria-current="page"`);
+    }
+  }
 });

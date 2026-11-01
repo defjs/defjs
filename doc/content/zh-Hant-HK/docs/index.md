@@ -1,22 +1,22 @@
 ---
 title: "指南"
-description: 從 SDK 介面定義、測試及發佈，到應用程式 Client 設定、執行與生命週期管理。
+description: 設計 SDK 契約同操作、發佈出去，並喺使用方應用程式設定執行。
 ---
 
-Defjs 即 **define js**，其中 `def` 是 **define** 的縮寫。這組指南涵蓋完整流程：SDK 作者定義並發佈介面契約，應用程式設定自己的 Client 來執行。
+Defjs 分開兩樣嘢：團隊發佈嘅 API，同應用程式用嘅 client。跟 SDK 作者嗰條路，可以讀到點樣定義同封裝操作；跟應用程式嗰條路，設定執行同處理結果。
 
-SDK 作者可以從[快速開始](/zh-Hant-HK/docs/start)、[定義與執行](/zh-Hant-HK/docs/commands)讀到[建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)。應用程式開發者可以從 [Client](/zh-Hant-HK/docs/client)開始，再按使用的傳輸閱讀結果、取消及資源管理規則。
-
-## SDK 開發 [#開始使用]
+## SDK 開發 [#getting-started]
 
 - [項目概覽](/zh-Hant-HK)
 - [快速開始](/zh-Hant-HK/docs/start)
 - [建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)
+- [點解定義同執行要分開](/zh-Hant-HK/docs/design-decisions)
 
-## 契約與執行 [#呼叫與契約]
+## 契約與執行 [#calls-and-contracts]
+
+SDK 作者擁有 Struct 同端點定義。應用程式提供 Client，再用佢呼叫操作。
 
 - [資料契約 / Struct](/zh-Hant-HK/docs/struct)
-- [定義與執行 / Command](/zh-Hant-HK/docs/commands)
 - [客戶端設定 / Client](/zh-Hant-HK/docs/client)
 
 ## 請求與即時通訊
@@ -32,9 +32,16 @@ SDK 作者可以從[快速開始](/zh-Hant-HK/docs/start)、[定義與執行](/z
 
 ## 插件
 
+可選套件，用喺使用方應用程式嘅 client。SDK 定義唔依賴佢哋。
+
 - [插件](/zh-Hant-HK/docs/integrations)
 - [React](/zh-Hant-HK/docs/integrations/react)
 - [Vue](/zh-Hant-HK/docs/integrations/vue)
 - [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server)
+
+## AI
+
+- [AI 輔助開發](/zh-Hant-HK/docs/ai)
+- [呼叫 AI API](/zh-Hant-HK/docs/ai-api)
 
 [設計決策](/zh-Hant-HK/docs/design-decisions)

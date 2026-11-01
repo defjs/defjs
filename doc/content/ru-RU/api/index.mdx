@@ -1,17 +1,15 @@
 ---
 title: Справка API
-description: Публичные функции, опции и типы для разработки SDK и выполнения их эндпоинтов.
+description: Ищи API определений SDK, настройку клиента приложения и типизированные результаты выполнения.
 ---
 
 # Справка API
 
 <ApiIndex />
 
-Справочник описывает публичные компоненты для авторов SDK и приложений. Сигнатуры задают контракт; [руководство](/ru-RU/docs/start) и [рецепт публикации](/ru-RU/recipes/publish-http-sdk) показывают их совместное использование.
+Пользуйся этой справкой, пока собираешь или потребляешь SDK Defjs. Авторы SDK начинают с [`defineRequest`](/ru-RU/api/core/definerequest), [`defineEventStream`](/ru-RU/api/core/defineeventstream), [`defineWebSocket`](/ru-RU/api/core/definewebsocket) и [Structs](/ru-RU/api/struct). Приложения используют [настройку клиента](/ru-RU/api/client), чтобы вызывать эти операции, и [ошибки](/ru-RU/api/errors), чтобы обрабатывать результаты.
 
-- **Создание SDK:** начни со [`struct`](/ru-RU/api/struct), [`defineRequest`](/ru-RU/api/http), [`defineEventStream`](/ru-RU/api/sse) или [`defineWebSocket`](/ru-RU/api/web-socket) и экспортируй полученные эндпоинты.
-- **Использование SDK:** настрой [`createClient` и `with*`](/ru-RU/api/client), выполняй импортированные эндпоинты, обрабатывай [ошибки](/ru-RU/api/errors) и управляй транспортными ресурсами.
-- **Интеграция приложения:** подключи [перехватчики](/ru-RU/api/interceptors), [React](/ru-RU/api/react), [Vue](/ru-RU/api/vue) или [OpenTelemetry](/ru-RU/api/opentelemetry-server) к клиенту приложения.
+Сигнатуры — это контракт. Полный процесс смотри в [быстром старте](/ru-RU/docs/start) и [руководстве по публикации SDK](/ru-RU/recipes/publish-http-sdk).
 
 ## Пакеты
 
@@ -24,15 +22,15 @@ description: Публичные функции, опции и типы для р
 
 ## @defjs/core
 
-| Страница                                | Что ищешь                                                      |
-| --------------------------------------- | -------------------------------------------------------------- |
-| [Client](/ru-RU/api/client)             | `createClient`, опции `with*`, `Client`                        |
-| [HTTP](/ru-RU/api/http)                 | `defineRequest`, опции execute, `HttpRequest` / `HttpResponse` |
-| [Struct](/ru-RU/api/struct)             | `struct.*`, `Infer`, `StructError`                             |
-| [Errors](/ru-RU/api/errors)             | варианты и фабрики `Fault`                                     |
-| [Interceptors](/ru-RU/api/interceptors) | хелперы interceptor HTTP / SSE / WebSocket                     |
-| [SSE](/ru-RU/api/sse)                   | `defineEventStream`, дескриптор потока                         |
-| [WebSocket](/ru-RU/api/web-socket)      | `defineWebSocket`, сессия                                      |
+| Страница                                | Что ищешь                                                             |
+| --------------------------------------- | --------------------------------------------------------------------- |
+| [Client](/ru-RU/api/client)             | `createClient`, опции `with*`, `Client`                               |
+| [HTTP](/ru-RU/api/http)                 | `defineRequest`, `HttpExecuteOptions`, `HttpRequest` / `HttpResponse` |
+| [Struct](/ru-RU/api/struct)             | `struct.*`, `Infer`, `StructError`                                    |
+| [Errors](/ru-RU/api/errors)             | варианты и фабрики `Fault`                                            |
+| [Interceptors](/ru-RU/api/interceptors) | хелперы interceptor HTTP / SSE / WebSocket                            |
+| [SSE](/ru-RU/api/sse)                   | `defineEventStream`, дескриптор потока                                |
+| [WebSocket](/ru-RU/api/web-socket)      | `defineWebSocket`, сессия                                             |
 
 ## Связанное
 

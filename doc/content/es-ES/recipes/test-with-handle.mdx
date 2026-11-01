@@ -1,11 +1,11 @@
 ---
 title: "Pruebas HTTP locales"
-description: Sustituye Fetch en un cliente con withHTTPHandle y deja el comando igual.
+description: Sustituye Fetch en un cliente con withHTTPHandle y deja la operación igual.
 ---
 
-# Probar con un handle Fetch local
+# Prueba con un handle Fetch local
 
-`withHTTPHandle(...)` reemplaza Fetch solo para ese cliente. Sigues teniendo construcción de URL, interceptores, despacho por estado y decodificación Struct — sin DNS, TLS ni servidor real.
+`withHTTPHandle(...)` sustituye Fetch solo para ese cliente. Sigues teniendo construcción de URL, interceptores, despacho por estado y decodificación Struct — sin DNS, TLS ni un servidor real.
 
 Ver detalles en [Cliente](/es-ES/docs/client).
 
@@ -17,4 +17,4 @@ Ver detalles en [Cliente](/es-ES/docs/client).
 Ada 200
 ```
 
-Usa el mismo comando `getUser` contra un cliente real con `withEndpoint(...)` en producción — solo cambia el handle.
+Usa la misma operación `getUser` contra un cliente real con `withEndpoint(...)` en producción — solo cambia el handle.
