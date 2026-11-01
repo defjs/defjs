@@ -5,13 +5,13 @@ description: 애플리케이션이 import한 SDK 작업을 어떻게 호출할�
 
 # 클라이언트
 
-`Client`는 사용하는 앱의 실행 설정이고, 함수예요. `createClient(...)`가 그 함수를 돌려줘요. SDK에서 작업을 import하고, 서비스 주소, 자격 증명, 인터셉터, 전송 수단을 고른 다음, 클라이언트로 작업을 호출해요. `getUser(client({ abort }), { id: 1 })`는 입력을 선언한 호출을 시작해요. `health(client)`는 입력이 없는 호출을 시작해요. 입력 struct 전체가 선택이면 `search(client)`와 `search(client, input)`이 모두 유효해요. 세 번째 옵션 인자는 없어요. 작업을 호출하면 시작되고, `await`는 error-first 튜플만 기다려요.
+`Client`는 사용하는 앱의 실행 설정이에요. `createClient(...)`는 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 돌려줘요. 팩토리를 요청 옵션과 함께 호출하면 `Client` 값이 나오고, 작업이 받는 것은 `Client` 값이에요. 호출할 수는 없어요. SDK에서 작업을 import하고, 서비스 주소, 자격 증명, 인터셉터, 전송 수단을 고른 다음, 클라이언트로 작업을 호출해요. `getUser(client({ abort }), { id: 1 })`는 입력을 선언한 호출을 시작해요. `health(client)`는 입력이 없는 호출을 시작해요. 입력 struct 전체가 선택이면 `search(client)`와 `search(client, input)`이 모두 유효해요. 세 번째 옵션 인자는 없어요. 작업을 호출하면 시작되고, `await`는 error-first 튜플만 기다려요.
 
 SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요청, 로컬 테스트가 서로 다른 클라이언트로 같은 export된 작업을 쓸 수 있어요. 모두 같은 Defjs 계약과 호환되는 Core 버전을 따라요. 그 클라이언트로 호출하는 작업에 맞게 각 클라이언트의 서비스 주소를 구성해요.
 
 같은 클라이언트 값을 여러 작업에 넘길 수 있어요. 앱이 캐시와 재시도 정책을 고르고, 시작한 작업을 소유해요. HTTP는 자동으로 재시도하지 않아요. 스트림 재연결은 opt-in이에요.
 
-`Client`는 함수라서 React state setter에 넘기지 마세요. `setState(client)`는 updater로 호출해요. Vue `watch`나 `computed`의 소스로 쓰지 마세요. 그 API는 함수를 호출해요.
+팩토리는 함수이면서 요청 옵션이 없는 `Client`이기도 해요. 팩토리를 React state setter에 넘기지 마세요. `setState(factory)`는 updater로 호출해요. Vue `watch`나 `computed`의 소스로 쓰지 마세요. 그 API는 함수를 호출해요. 파생된 클라이언트 값은 평범한 객체예요.
 
 ## 기본 사용법
 
@@ -19,7 +19,7 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)`는 호출 가능한 [`Client`](/ko-KR/api/core/client-type) 하나를 돌려줘요. 전송별 오버로드 묶음이 아니에요.
+`createClient(...)`는 [`Client`](/ko-KR/api/core/client-type)이기도 한 호출 가능한 팩토리 하나를 돌려줘요. 전송별 오버로드 묶음이 아니에요.
 
 ## 옵션 조합하기
 
@@ -33,29 +33,29 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
 
 ## 클라이언트 파생하기
 
-`client(options?)`는 새 클라이언트를 돌려줘요. `client(options)`를 호출할 때 알려진 필드 일곱 개는 인자 객체에서 복사돼요. 현재 옵션 위에 덮는 새 options 객체로의 최상위 스냅샷이에요. 나중 필드가 이겨요. 필드 값이 `undefined`이면 제공되지 않은 것으로 보고, 부모의 값을 유지해요. 파생된 클라이언트는 부모가 가진 설정을 없앨 수 없어요. 설정이 없는 상태로 돌아가려면, 그 설정이 없던 클라이언트에서 다시 파생하세요 (루트 클라이언트는 남겨 두세요). 중첩된 `heartbeat`, `protocols`, `reconnect` 값은 참조로 유지되고, 복제되지 않으며, 병합하지 않고 부모 값 전체를 바꿔요. WebSocket은 작업이 실행될 때 그것들을 읽어요 (그때 heartbeat 필드와 protocols 목록을 복사해요). 그래서 파생한 뒤에 그 객체를 바꾸면 이후 호출에 여전히 영향을 줄 수 있어요. 넘긴 뒤에는 불변으로 다루세요. 파생은 I/O를 하지 않아요. 원래 클라이언트는 절대 바뀌지 않아요. `client()`, `client(undefined)`, `client({})`는 현재 옵션을 복사해요.
+`client(options?)`는 한 번의 호출에 쓸 `Client` 값을 돌려줘요. `client(options)`를 호출할 때 알려진 필드 일곱 개는 인자 객체에서 복사돼요. 새 options 객체로의 최상위 스냅샷이에요. 알 수 없는 필드는 무시하고, 값이 `undefined`인 필드는 빼요. 부모 덮어쓰기는 없어요. `client()`, `client(undefined)`, `client({})`는 요청 옵션이 없는 클라이언트를 돌려줘요. 중첩된 `heartbeat`, `protocols`, `reconnect` 값은 참조로 유지되고 복제되지 않아요. WebSocket은 작업이 실행될 때 그것들을 읽어요 (그때 heartbeat 필드와 protocols 목록을 복사해요). 그래서 파생한 뒤에 그 객체를 바꾸면 이후 호출에 여전히 영향을 줄 수 있어요. 넘긴 뒤에는 불변으로 다루세요. 파생은 I/O를 하지 않아요. getter가 던지면 `client(options)`에서 예외가 나오고, 팩토리는 계속 쓸 수 있어요. 클라이언트 값은 호출할 수 없으니 호출마다 하나씩 만드세요.
 
-`abort`는 합쳐지지 않아요. 나중 `abort`가 이전 신호를 바꿔요. 신호는 앱 코드에서 `AbortSignal.any`로 합치세요.
+`abort`는 합쳐지지 않아요. `abort`가 담긴 클라이언트 값을 재사용하면 호출 사이에 그 신호를 공유하므로, 호출마다 클라이언트 값을 만드세요. 신호는 앱 코드에서 `AbortSignal.any`로 합치세요.
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-`createClient`의 기본 설정은 파생된 클라이언트마다 공유되고, 런타임에 얼려지지 않아요. 관례로 고정돼요. 라이브러리는 그것을 바꾸지 않고, 애플리케이션도 바꾸면 안 돼요. 그 클라이언트의 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)는 그 최상위 스냅샷이에요. 앱 코드는 클라이언트를 호출해 작업에 넘길 뿐, 그 내부 상태를 읽지 않아요.
+`createClient`의 기본 설정은 모든 클라이언트 값이 공유하고, 런타임에 얼려지지 않아요. 관례로 고정돼요. 라이브러리는 그것을 바꾸지 않고, 애플리케이션도 바꾸면 안 돼요. 그 클라이언트의 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)는 그 최상위 스냅샷이에요. 앱 코드는 클라이언트를 작업에 넘길 뿐, 그 내부 상태를 읽지 않아요.
 
 ## 요청 옵션
 
 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)는 평평한 필드 일곱 개예요. 각 프로토콜은 아는 필드만 읽고 나머지는 무시해요. HTTP 작업에 `heartbeat`를 넘겨도 무시될 뿐, 오류가 아니에요. SSE는 요청 옵션에서 `abort`만 읽어요. SSE 재연결은 클라이언트 설정(`withSSEReconnect`)에서 오므로, `client({ reconnect })`는 WebSocket에만 영향을 줘요. 컴파일 타임 프로토콜 필터는 없어요.
 
-| 필드                 | 쓰는 쪽              | 규칙                                                                                                        |
-| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP, SSE, WebSocket | 이전 신호를 바꿔요. 데드라인은 `AbortSignal.timeout(ms)`(`NET_TIMEOUT`)예요. 수동 취소는 `NET_ABORTED`예요. |
-| `onUploadProgress`   | HTTP                 | SSE와 WebSocket은 무시해요.                                                                                 |
-| `onDownloadProgress` | HTTP                 | SSE와 WebSocket은 무시해요.                                                                                 |
-| `beforeConnect`      | WebSocket            | 그 호출에 한해 클라이언트 설정을 바꿔요.                                                                    |
-| `protocols`          | WebSocket            | 클라이언트 목록을 바꿔요. 추가되지 않아요.                                                                  |
-| `heartbeat`          | WebSocket            | 통째로 바뀌어요. `timeoutMs`는 heartbeat 확인 대기이지, 요청 데드라인이 아니에요.                           |
-| `reconnect`          | WebSocket            | 통째로 바뀌어요.                                                                                            |
+| 필드                 | 쓰는 쪽              | 규칙                                                                                                     |
+| -------------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP, SSE, WebSocket | 호출을 취소해요. 데드라인은 `AbortSignal.timeout(ms)`(`NET_TIMEOUT`)예요. 수동 취소는 `NET_ABORTED`예요. |
+| `onUploadProgress`   | HTTP                 | SSE와 WebSocket은 무시해요.                                                                              |
+| `onDownloadProgress` | HTTP                 | SSE와 WebSocket은 무시해요.                                                                              |
+| `beforeConnect`      | WebSocket            | 그 호출에 한해 클라이언트 설정을 바꿔요.                                                                 |
+| `protocols`          | WebSocket            | 클라이언트 목록을 바꿔요. 추가되지 않아요.                                                               |
+| `heartbeat`          | WebSocket            | 통째로 바뀌어요. `timeoutMs`는 heartbeat 확인 대기이지, 요청 데드라인이 아니에요.                        |
+| `reconnect`          | WebSocket            | 통째로 바뀌어요.                                                                                         |
 
 `timeout` 필드도, `signal` 필드도, 클라이언트 기본 데드라인도 없어요. SSE와 WebSocket에서 `abort`는 열린 뒤를 포함해 연결 전체를 덮어요. 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요. [SSE](/ko-KR/docs/sse#close-and-dispose)를 보세요.
 
@@ -83,12 +83,13 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
 
 ## 마이그레이션
 
-| 이전                                      | 이후                                                     |
-| ----------------------------------------- | -------------------------------------------------------- |
-| `client.execute(getUser(input), options)` | `getUser(client(options), input)`                        |
-| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })`           |
-| `execute(cmd, { signal })`                | `client({ abort: signal })`                              |
-| `createClient(withTimeout(5000), ...)`    | 호출할 때 `abort`를 넘기거나, 애플리케이션 함수로 감싸요 |
+| 이전                                        | 이후                                                     |
+| ------------------------------------------- | -------------------------------------------------------- |
+| `client.execute(getUser(input), options)`   | `getUser(client(options), input)`                        |
+| `execute(cmd, { timeout: 5000 })`           | `client({ abort: AbortSignal.timeout(5000) })`           |
+| `execute(cmd, { signal })`                  | `client({ abort: signal })`                              |
+| `client({ abort })({ onDownloadProgress })` | `client({ abort, onDownloadProgress })`                  |
+| `createClient(withTimeout(5000), ...)`      | 호출할 때 `abort`를 넘기거나, 애플리케이션 함수로 감싸요 |
 
 ## 참고
 

@@ -46,7 +46,7 @@ qu’une valeur venue du fil ; il n’y a pas de court-circuit de confiance.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `abort` plus `onDownloadProgress` et `onUploadProgress`. Il n’y a pas de champ `timeout` ou `signal`. Une échéance est `abort: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Un `abort` ultérieur remplace le signal précédent. Combine les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
+`HttpExecuteOptions` est la tranche HTTP de [`RequestOptions`](/fr-FR/api/core/requestoptions-type) : [`UseRequestConfig`](/fr-FR/api/core/userequestconfig-type), c’est-à-dire `abort` plus `onDownloadProgress` et `onUploadProgress`. Il n’y a pas de champ `timeout` ou `signal`. Une échéance est `abort: AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. `abort` est le signal de l’appel ; combine les signaux avec `AbortSignal.any` dans le code applicatif. Il n’y a pas d’échéance par défaut au niveau du client. Les autres champs de requête, comme `heartbeat`, sont ignorés.
 
 ## Types
 

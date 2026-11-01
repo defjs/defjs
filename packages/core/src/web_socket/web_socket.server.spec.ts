@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { getEventListeners } from "node:events";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withInterceptors,
   withQuerySerializer,
@@ -283,7 +284,7 @@ function expectListenerReleased(
 }
 
 function clientObservingAbortListeners(): {
-  client: Client;
+  client: DerivableClient;
   observed: {
     current: ReturnType<typeof instrumentAbortListeners> | undefined;
   };
@@ -320,7 +321,7 @@ describe("web socket runtime environment edge cases", () => {
   });
 
   async function run(
-    client: Client,
+    client: DerivableClient,
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {

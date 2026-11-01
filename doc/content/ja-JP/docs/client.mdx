@@ -5,13 +5,13 @@ description: import した SDK の操作を、API 定義とは独立してアプ
 
 # Client
 
-`Client` は、利用するアプリケーションの実行設定であり、関数です。`createClient(...)` がその関数を返します。SDK から操作を import し、サービスアドレス、認証情報、インターセプター、トランスポートを選んでから、クライアントを渡して操作を呼びます。入力を宣言した呼び出しは `getUser(client({ abort }), { id: 1 })` で始まります。入力を宣言していない呼び出しは `health(client)` で始まります。入力 struct 全体が任意なら、`search(client)` と `search(client, input)` の両方が有効です。第 3 の options 引数はありません。操作を呼ぶと処理が始まります。`await` が待つのは error-first タプルだけです。
+`Client` は、利用するアプリケーションの実行設定です。`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。ファクトリをリクエスト options 付きで呼ぶと `Client` 値が返り、操作が受け取るのはその `Client` 値です。`Client` 値は呼び出せません。SDK から操作を import し、サービスアドレス、認証情報、インターセプター、トランスポートを選んでから、クライアントを渡して操作を呼びます。入力を宣言した呼び出しは `getUser(client({ abort }), { id: 1 })` で始まります。入力を宣言していない呼び出しは `health(client)` で始まります。入力 struct 全体が任意なら、`search(client)` と `search(client, input)` の両方が有効です。第 3 の options 引数はありません。操作を呼ぶと処理が始まります。`await` が待つのは error-first タプルだけです。
 
 SDK の定義はこのインスタンスに束縛されません。ブラウザー、サーバーリクエスト、ローカルテストが、異なるクライアントで同じ export された操作を使えます。どれも同じ Defjs 契約と互換性のある Core の版に従います。そのクライアントを通して呼ぶ操作に合わせて、各クライアントのサービスアドレスを構成してください。
 
 同じクライアント値を多くの操作に渡せます。キャッシュとリトライの方針はアプリケーションが選び、始めた作業を所有します。HTTP は自動ではリトライされません。ストリームの再接続はオプトインです。
 
-`Client` は関数なので、React の state setter に渡さないでください。`setState(client)` は updater としてそれを呼びます。Vue の `watch` や `computed` のソースにも使わないでください。それらは関数を呼びます。
+ファクトリは関数であり、リクエスト options を持たない `Client` でもあります。ファクトリを React の state setter に渡さないでください。`setState(factory)` は updater としてそれを呼びます。Vue の `watch` や `computed` のソースにも使わないでください。それらは関数を呼びます。派生した client 値はプレーンなオブジェクトです。
 
 ## 基本セットアップ
 
@@ -19,7 +19,7 @@ SDK の定義はこのインスタンスに束縛されません。ブラウザ�
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` は呼び出し可能な [`Client`](/ja-JP/api/core/client-type) を 1 つ返します。トランスポートごとのオーバーロードの集合ではありません。
+`createClient(...)` は、[`Client`](/ja-JP/api/core/client-type) でもある呼び出し可能なファクトリを 1 つ返します。トランスポートごとのオーバーロードの集合ではありません。
 
 ## options を合成する
 
@@ -33,29 +33,29 @@ options は左から右へ適用されます。setter は置換、`withIntercept
 
 ## クライアントを派生する
 
-`client(options?)` は新しいクライアントを返します。`client(options)` を呼ぶとき、既知の 7 フィールドは引数オブジェクトからコピーされます。現在の options の上に重ねる、新しい options オブジェクトへのトップレベルのスナップショットです。あとのフィールドが勝ちます。値が `undefined` のフィールドは未指定として扱い、親の値を残します。派生したクライアントは、親が持つ設定を外せません。設定を無くすには、その設定を持っていなかったクライアントからもう一度派生します（ルートのクライアントは残します）。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされず、マージされずに親の値全体が置き換わります。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。元のクライアントは決して変更されません。`client()`、`client(undefined)`、`client({})` は現在の options をコピーします。
+`client(options?)` は 1 回の呼び出し用の `Client` 値を返します。`client(options)` を呼ぶとき、既知の 7 フィールドは引数オブジェクトからコピーされます。新しい options オブジェクトへのトップレベルのスナップショットです。未知のフィールドは無視され、値が `undefined` のフィールドは省かれます。親の options を重ねることはありません。`client()`、`client(undefined)`、`client({})` はリクエスト options を持たないクライアントを返します。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされません。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。throw する getter は `client(options)` から外へ伝わり、ファクトリは引き続き使えます。client 値は呼び出せないため、呼び出しごとに 1 つ作ってください。
 
-`abort` は合成されません。あとの `abort` が前のシグナルを置き換えます。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+`abort` は合成されません。`abort` を持つ client 値を再利用すると、呼び出し間でそのシグナルを共有するため、呼び出しごとに client 値を作ってください。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-`createClient` からの基底設定は、派生したクライアントすべてが共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。そのクライアントの [`RequestOptions`](/ja-JP/api/core/requestoptions-type) は、そのトップレベルのスナップショットです。アプリケーションコードはクライアントを呼び、操作に渡します。その内部状態は読みません。
+`createClient` からの基底設定は、すべての client 値が共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。そのクライアントの [`RequestOptions`](/ja-JP/api/core/requestoptions-type) は、そのトップレベルのスナップショットです。アプリケーションコードはクライアントを操作に渡します。その内部状態は読みません。
 
 ## リクエスト options
 
 [`RequestOptions`](/ja-JP/api/core/requestoptions-type) にはフラットなフィールドが 7 つあります。各プロトコルは自分が知るフィールドだけを読み、残りは無視します。HTTP の操作に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `abort` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはありません。
 
-| フィールド           | 使うもの             | 規則                                                                                                                    |
-| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP、SSE、WebSocket | 前のシグナルを置き換えます。期限は `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）です。手動の abort は `NET_ABORTED` です。 |
-| `onUploadProgress`   | HTTP                 | SSE と WebSocket は無視します。                                                                                         |
-| `onDownloadProgress` | HTTP                 | SSE と WebSocket は無視します。                                                                                         |
-| `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                                                                    |
-| `protocols`          | WebSocket            | クライアントのリストを置き換えます。追記はしません。                                                                    |
-| `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` はハートビートの確認待ちであり、リクエストの期限ではありません。                        |
-| `reconnect`          | WebSocket            | 全体を置き換えます。                                                                                                    |
+| フィールド           | 使うもの             | 規則                                                                                                              |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP、SSE、WebSocket | 呼び出しを中止します。期限は `AbortSignal.timeout(ms)`（`NET_TIMEOUT`）です。手動の abort は `NET_ABORTED` です。 |
+| `onUploadProgress`   | HTTP                 | SSE と WebSocket は無視します。                                                                                   |
+| `onDownloadProgress` | HTTP                 | SSE と WebSocket は無視します。                                                                                   |
+| `beforeConnect`      | WebSocket            | その呼び出しに限り、クライアント設定を置き換えます。                                                              |
+| `protocols`          | WebSocket            | クライアントのリストを置き換えます。追記はしません。                                                              |
+| `heartbeat`          | WebSocket            | 全体を置き換えます。`timeoutMs` はハートビートの確認待ちであり、リクエストの期限ではありません。                  |
+| `reconnect`          | WebSocket            | 全体を置き換えます。                                                                                              |
 
 `timeout` フィールドも、`signal` フィールドも、クライアント単位の既定の期限もありません。SSE と WebSocket では、`abort` は開いたあとも含む接続全体を覆います。起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。[SSE](/ja-JP/docs/sse#close-and-dispose) を参照してください。
 
@@ -83,12 +83,13 @@ options は左から右へ適用されます。setter は置換、`withIntercept
 
 ## 移行
 
-| 旧                                        | 新                                                        |
-| ----------------------------------------- | --------------------------------------------------------- |
-| `client.execute(getUser(input), options)` | `getUser(client(options), input)`                         |
-| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })`            |
-| `execute(cmd, { signal })`                | `client({ abort: signal })`                               |
-| `createClient(withTimeout(5000), ...)`    | 呼び出し時に `abort` を渡すか、アプリケーション関数で包む |
+| 旧                                          | 新                                                        |
+| ------------------------------------------- | --------------------------------------------------------- |
+| `client.execute(getUser(input), options)`   | `getUser(client(options), input)`                         |
+| `execute(cmd, { timeout: 5000 })`           | `client({ abort: AbortSignal.timeout(5000) })`            |
+| `execute(cmd, { signal })`                  | `client({ abort: signal })`                               |
+| `client({ abort })({ onDownloadProgress })` | `client({ abort, onDownloadProgress })`                   |
+| `createClient(withTimeout(5000), ...)`      | 呼び出し時に `abort` を渡すか、アプリケーション関数で包む |
 
 ## リファレンス
 

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withWebSocketHandle,
   type Client,
@@ -58,7 +59,7 @@ const BasicIncoming = struct.discriminatedUnion("type", [
 ]);
 
 describe("web socket single struct messages", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));

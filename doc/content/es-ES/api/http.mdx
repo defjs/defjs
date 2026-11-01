@@ -46,7 +46,7 @@ que uno del cable; no hay un cortocircuito de confianza.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `abort` más `onDownloadProgress` y `onUploadProgress`. No hay campo `timeout` ni `signal`. Un plazo es `abort: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. Un `abort` posterior sustituye al signal anterior. Combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
+`HttpExecuteOptions` es el recorte HTTP de [`RequestOptions`](/es-ES/api/core/requestoptions-type): [`UseRequestConfig`](/es-ES/api/core/userequestconfig-type), que es `abort` más `onDownloadProgress` y `onUploadProgress`. No hay campo `timeout` ni `signal`. Un plazo es `abort: AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. `abort` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. No hay un plazo por defecto a nivel de cliente. Los demás campos de la solicitud, como `heartbeat`, se ignoran.
 
 ## Tipos
 

@@ -11,13 +11,13 @@ const getUser = defineRequest({
 });
 
 async function main(abort: AbortSignal) {
-  const withAbort = client({ abort });
-  const withProgress = withAbort({
+  const requestClient = client({
+    abort,
     onDownloadProgress(event) {
       console.log(event.loaded);
     },
   });
-  const [error, user] = await getUser(withProgress, { id: 1 });
+  const [error, user] = await getUser(requestClient, { id: 1 });
   if (error) {
     console.error(error.code);
     return;

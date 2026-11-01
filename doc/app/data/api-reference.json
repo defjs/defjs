@@ -6,11 +6,12 @@
     "slug": "core/createclient",
     "source": "packages/core/src/client/client.ts",
     "group": "client",
-    "description": "Creates a Defjs client from option helpers.\n\nOptions apply in order: a later option overwrites an earlier one for the same setting, and interceptors accumulate. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. Default HTTP/SSE fetch availability is checked when an operation invokes transport.\n\nThe returned client is a function. Call it with {@link RequestOptions} to derive a client for one operation. The seven known fields are copied from that argument into a fresh options object. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference. The base configuration is shared by every derived client and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. A getter that throws escapes the call; it is not converted into a fault.",
+    "description": "Creates a Defjs {@link DerivableClient} from option helpers.\n\nOptions apply in order: a later option overwrites an earlier one for the same setting, and interceptors accumulate. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. Default HTTP/SSE fetch availability is checked when an operation invokes transport.\n\nThe returned factory is a function. Calling it with {@link RequestOptions} returns a {@link Client} value for one call and performs no I/O; see {@link DerivableClient} for the snapshot rules. The factory itself is also a `Client` and carries no request options, so it can be passed to an operation directly. The base configuration is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either.",
     "signatures": [
-      "function createClient(...options: ClientOption[]): Client;"
+      "function createClient(...options: ClientOption[]): DerivableClient;"
     ],
     "related": [
+      "@defjs/core:DerivableClient",
       "@defjs/core:Client",
       "@defjs/core:ClientOption",
       "@defjs/core:RequestOptions"
@@ -23,7 +24,7 @@
       }
     ],
     "returns": [
-      "A callable client that carries the resolved base configuration."
+      "A callable factory that carries the resolved base configuration."
     ],
     "throws": [],
     "tags": [],
@@ -41,7 +42,7 @@
     ],
     "overloads": [
       {
-        "signature": "function createClient(...options: ClientOption[]): Client;",
+        "signature": "function createClient(...options: ClientOption[]): DerivableClient;",
         "parameters": [
           {
             "name": "...options",
@@ -54,7 +55,7 @@
           }
         ],
         "returns": [
-          "A callable client that carries the resolved base configuration."
+          "A callable factory that carries the resolved base configuration."
         ]
       }
     ]
@@ -706,10 +707,8 @@
     "slug": "core/client-type",
     "source": "packages/core/src/client/client.ts",
     "group": "client",
-    "description": "Application client returned by `createClient`.\n\nCalling it returns a new client. The seven known fields are copied from the argument when `client(options)` is called, a top-level snapshot into a fresh options object overlaid on the current options. A later field wins. A field whose value is `undefined` is treated as not provided and keeps the parent's value. A derived client cannot drop a setting its parent has; to go back to no setting, derive again from the client that did not have it. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs, copying heartbeat fields and the protocols list at that time, so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. The original client is not mutated. `client()`, `client(undefined)`, and `client({})` copy the current options. Deriving a client performs no I/O. A getter that throws does so from the call and is not returned as a fault.",
-    "signatures": [
-      "interface Client {\n  (options?: RequestOptions): Client;\n  readonly [CLIENT]: ClientState;\n}"
-    ],
+    "description": "Client value that operations accept.\n\nA client value carries the base configuration and one call's request options. Operations accept it. It is not callable; create one by calling the factory returned by `createClient`. Calling a client value throws a `TypeError` at runtime and fails to compile.\n\nCreate a client value per call. Reusing a value that carries `abort` shares that signal between calls.",
+    "signatures": ["interface Client {\n  readonly [CLIENT]: ClientState;\n}"],
     "related": ["@defjs/core:createClient", "@defjs/core:RequestOptions"],
     "exampleFiles": [],
     "returns": [],
@@ -729,7 +728,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface Client {\n  (options?: RequestOptions): Client;\n  readonly [CLIENT]: ClientState;\n}",
+        "signature": "interface Client {\n  readonly [CLIENT]: ClientState;\n}",
         "parameters": [],
         "returns": []
       }
@@ -1670,7 +1669,7 @@
         "name": "client",
         "description": "",
         "type": "Client",
-        "simplifiedType": "function",
+        "simplifiedType": "object",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -1693,7 +1692,7 @@
             "name": "client",
             "description": "",
             "type": "Client",
-            "simplifiedType": "function",
+            "simplifiedType": "object",
             "required": true,
             "deprecated": false,
             "tags": []
@@ -6307,7 +6306,7 @@
         "name": "client",
         "description": "",
         "type": "Client",
-        "simplifiedType": "function",
+        "simplifiedType": "object",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -6330,7 +6329,7 @@
             "name": "client",
             "description": "",
             "type": "Client",
-            "simplifiedType": "function",
+            "simplifiedType": "object",
             "required": true,
             "deprecated": false,
             "tags": []
@@ -6807,7 +6806,7 @@
         "name": "client",
         "description": "",
         "type": "Client",
-        "simplifiedType": "function",
+        "simplifiedType": "object",
         "required": true,
         "deprecated": false,
         "tags": []
@@ -6830,7 +6829,7 @@
             "name": "client",
             "description": "",
             "type": "Client",
-            "simplifiedType": "function",
+            "simplifiedType": "object",
             "required": true,
             "deprecated": false,
             "tags": []
@@ -7507,9 +7506,11 @@
     "slug": "vue/createclientplugin",
     "source": "packages/vue/src/core.ts",
     "group": "vue",
-    "description": "Create a Vue plugin that provides an existing Defjs client via {@link HTTP_CLIENT}.\n\nDoes not create, cache, or dispose the client — pass the function from `createClient`. Installing it calls `app.provide(HTTP_CLIENT, client)`, so components read the client with `injectClient()`. The client is stored as that function: it is not wrapped in `ref`, `reactive`, or `markRaw`.",
-    "signatures": ["function createClientPlugin(client: Client): Plugin;"],
-    "related": ["@defjs/core:Client"],
+    "description": "Create a Vue plugin that provides an existing Defjs client via {@link HTTP_CLIENT}.\n\nDoes not create, cache, or dispose the client — pass the client returned by `createClient`. Installing it calls `app.provide(HTTP_CLIENT, client)`, so components read the client with `injectClient()`. The client is stored as given: it is not wrapped in `ref`, `reactive`, or `markRaw`.",
+    "signatures": [
+      "function createClientPlugin(client: DerivableClient): Plugin;"
+    ],
+    "related": ["@defjs/core:DerivableClient"],
     "exampleFiles": [
       {
         "path": "examples/api/create-client-plugin.ts",
@@ -7524,8 +7525,8 @@
     "parameters": [
       {
         "name": "client",
-        "description": "The client function to provide to the app.",
-        "type": "Client",
+        "description": "The client returned by `createClient` to provide to the app.",
+        "type": "DerivableClient",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -7534,12 +7535,12 @@
     ],
     "overloads": [
       {
-        "signature": "function createClientPlugin(client: Client): Plugin;",
+        "signature": "function createClientPlugin(client: DerivableClient): Plugin;",
         "parameters": [
           {
             "name": "client",
-            "description": "The client function to provide to the app.",
-            "type": "Client",
+            "description": "The client returned by `createClient` to provide to the app.",
+            "type": "DerivableClient",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
@@ -7557,13 +7558,13 @@
     "slug": "vue/injectclient",
     "source": "packages/vue/src/core.ts",
     "group": "vue",
-    "description": "Vue composable that injects the Defjs client for a key, defaulting to {@link HTTP_CLIENT}.\n\n`injectClient(key)` reads the nearest provider for that key; omitted or `undefined` uses `HTTP_CLIENT`. Call in a valid Vue injection context: synchronous `setup()`, compiler-restored `<script setup>` after top-level `await`, or a synchronous `app.runWithContext()` callback (Vue 3.3+). `app.runWithContext()` supplies only synchronous app-level context, not subtree overrides or context across ordinary `await`.\n\nFor a custom `InjectionKey<Client>`, use `app.provide(key, client)` or an ancestor’s `provide(key, client)`. Share the same `Symbol` object; matching descriptions do not make keys equal. `createClientPlugin(client)` still takes only the client and provides `HTTP_CLIENT`.\n\nIt returns the exact client function provided for the selected key, and throws an `Error` without an active injection context or a client for the selected key. Installing the plugin alone does not establish an injection context.\n\n`Client` is callable. Pass it to `provide` as-is. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`.",
+    "description": "Vue composable that injects the Defjs client for a key, defaulting to {@link HTTP_CLIENT}.\n\n`injectClient(key)` reads the nearest provider for that key; omitted or `undefined` uses `HTTP_CLIENT`. Call in a valid Vue injection context: synchronous `setup()`, compiler-restored `<script setup>` after top-level `await`, or a synchronous `app.runWithContext()` callback (Vue 3.3+). `app.runWithContext()` supplies only synchronous app-level context, not subtree overrides or context across ordinary `await`.\n\nFor a custom `InjectionKey<DerivableClient>`, use `app.provide(key, client)` or an ancestor’s `provide(key, client)`. Share the same `Symbol` object; matching descriptions do not make keys equal. `createClientPlugin(client)` still takes only the client and provides `HTTP_CLIENT`.\n\nIt returns the exact client value provided for the selected key, and throws an `Error` without an active injection context or a client for the selected key. Installing the plugin alone does not establish an injection context.\n\nThe injected `DerivableClient` is a function. Call it with request options at the call site to derive a `Client` value for one call: `getUser(client({ abort }), input)`. Do not pass it to `watch` or `computed` as the source: Vue calls a function source. Do not wrap it in `ref` or `reactive`. The provider holds only a root client; a derived `Client` value is not accepted, so create it where the operation is called.",
     "signatures": [
-      "function injectClient(key?: InjectionKey<Client>): Client;"
+      "function injectClient(\n  key?: InjectionKey<DerivableClient>,\n): DerivableClient;"
     ],
-    "related": ["@defjs/core:Client"],
+    "related": ["@defjs/core:DerivableClient"],
     "exampleFiles": [],
-    "returns": ["The injected client function."],
+    "returns": ["The injected derivable client."],
     "throws": [
       "If called outside a Vue injection context or no client was provided for\nthe requested key. A missing custom key does not fall back to `HTTP_CLIENT`."
     ],
@@ -7578,7 +7579,7 @@
       {
         "name": "key",
         "description": "Injection key; use the same object with `app.provide` or `provide`.\nDefaults to `HTTP_CLIENT`, as provided by createClientPlugin.",
-        "type": "InjectionKey<Client>",
+        "type": "InjectionKey<DerivableClient>",
         "simplifiedType": "InjectionKey<function>",
         "required": false,
         "deprecated": false,
@@ -7587,19 +7588,19 @@
     ],
     "overloads": [
       {
-        "signature": "function injectClient(key?: InjectionKey<Client>): Client;",
+        "signature": "function injectClient(\n  key?: InjectionKey<DerivableClient>,\n): DerivableClient;",
         "parameters": [
           {
             "name": "key",
             "description": "Injection key; use the same object with `app.provide` or `provide`.\nDefaults to `HTTP_CLIENT`, as provided by createClientPlugin.",
-            "type": "InjectionKey<Client>",
+            "type": "InjectionKey<DerivableClient>",
             "simplifiedType": "InjectionKey<function>",
             "required": false,
             "deprecated": false,
             "tags": []
           }
         ],
-        "returns": ["The injected client function."]
+        "returns": ["The injected derivable client."]
       }
     ]
   },
@@ -7610,9 +7611,9 @@
     "slug": "vue/http-client",
     "source": "packages/vue/src/core.ts",
     "group": "vue",
-    "description": "Vue injection key for the Defjs {@link Client} provided by {@link createClientPlugin}.\n\nPrefer {@link injectClient} over calling `inject(HTTP_CLIENT)` directly. `inject(HTTP_CLIENT)` returns `undefined` when nothing was provided. Override a subtree with `provide(HTTP_CLIENT, childClient)`.",
-    "signatures": ["const HTTP_CLIENT: InjectionKey<Client>;"],
-    "related": ["@defjs/core:Client", "@defjs/vue:injectClient"],
+    "description": "Vue injection key for the Defjs {@link DerivableClient} provided by {@link createClientPlugin}.\n\nPrefer {@link injectClient} over calling `inject(HTTP_CLIENT)` directly. `inject(HTTP_CLIENT)` returns `undefined` when nothing was provided. Override a subtree with `provide(HTTP_CLIENT, childClient)`.",
+    "signatures": ["const HTTP_CLIENT: InjectionKey<DerivableClient>;"],
+    "related": ["@defjs/core:DerivableClient", "@defjs/vue:injectClient"],
     "exampleFiles": [],
     "returns": [],
     "throws": [],
@@ -7621,7 +7622,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "const HTTP_CLIENT: InjectionKey<Client>;",
+        "signature": "const HTTP_CLIENT: InjectionKey<DerivableClient>;",
         "parameters": [],
         "returns": []
       }
@@ -7634,11 +7635,14 @@
     "slug": "react/clientprovider-type",
     "source": "packages/react/src/core.ts",
     "group": "react",
-    "description": "Provide a Defjs client to React descendants via context.\n\nPass an existing client from `createClient` as `client`; descendants read it with `useClient`. The component does not create, cache, or dispose the client. A nested `ClientProvider` overrides the client for its own subtree, and a different `client` prop changes the context value for descendants.",
+    "description": "Provide a Defjs client to React descendants via context.\n\nPass the client returned by `createClient` as `client`; descendants read it with `useClient`. The component does not create, cache, or dispose the client. A nested `ClientProvider` overrides the client for its own subtree, and a different `client` prop changes the context value for descendants.",
     "signatures": [
-      "function ClientProvider(props: ClientProviderProps): React.FunctionComponentElement<React.ProviderProps<Client | null>>;"
+      "function ClientProvider(props: ClientProviderProps): React.FunctionComponentElement<React.ProviderProps<DerivableClient | null>>;"
     ],
-    "related": ["@defjs/core:Client", "@defjs/react:ClientProviderProps"],
+    "related": [
+      "@defjs/core:DerivableClient",
+      "@defjs/react:ClientProviderProps"
+    ],
     "exampleFiles": [
       {
         "path": "examples/react/client-provider.tsx",
@@ -7653,8 +7657,8 @@
     "parameters": [
       {
         "name": "client",
-        "description": "Defjs client owned by the application.",
-        "type": "Client",
+        "description": "Derivable client returned by `createClient`, owned by the application.",
+        "type": "DerivableClient",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -7672,12 +7676,12 @@
     ],
     "overloads": [
       {
-        "signature": "function ClientProvider(props: ClientProviderProps): React.FunctionComponentElement<React.ProviderProps<Client | null>>;",
+        "signature": "function ClientProvider(props: ClientProviderProps): React.FunctionComponentElement<React.ProviderProps<DerivableClient | null>>;",
         "parameters": [
           {
             "name": "client",
-            "description": "Defjs client owned by the application.",
-            "type": "Client",
+            "description": "Derivable client returned by `createClient`, owned by the application.",
+            "type": "DerivableClient",
             "simplifiedType": "function",
             "required": true,
             "deprecated": false,
@@ -7704,11 +7708,13 @@
     "slug": "react/useclient",
     "source": "packages/react/src/core.ts",
     "group": "react",
-    "description": "React Hook that returns an explicit Defjs client or the nearest {@link ClientProvider}.\n\n`useClient(overrideClient)` prefers the exact explicit client; omitted or `undefined` reads the nearest `ClientProvider`. An `Error` is thrown only when neither source supplies a client. Zero-argument `useClient()` calls remain valid.\n\nAlways call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.\n\nThe returned value is that same function. `Client` is callable, so do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater.",
-    "signatures": ["function useClient(overrideClient?: Client): Client;"],
-    "related": ["@defjs/core:Client"],
+    "description": "React Hook that returns an explicit Defjs client or the nearest {@link ClientProvider}.\n\n`useClient(overrideClient)` prefers the exact explicit client; omitted or `undefined` reads the nearest `ClientProvider`. An `Error` is thrown only when neither source supplies a client. Zero-argument `useClient()` calls remain valid.\n\nAlways call `useClient(explicitClient)` at the top level of a component or custom Hook, even with an explicit client; not in an ordinary function or event callback. Do not write `explicitClient ?? useClient()`, which conditionally calls a Hook. The override does not write Context or create a provider, and the Hook still subscribes to Context.\n\nThe returned value is the exact `DerivableClient` that was supplied. Call it with request options at the call site to derive a `Client` value for one call: `getUser(client({ abort }), input)`. It is a function, so do not pass it to `useState` or a state setter: React calls a function argument as a lazy initializer or an updater. The provider holds only a root client; a derived `Client` value is not accepted, so create it where the operation is called.",
+    "signatures": [
+      "function useClient(overrideClient?: DerivableClient): DerivableClient;"
+    ],
+    "related": ["@defjs/core:DerivableClient"],
     "exampleFiles": [],
-    "returns": ["The selected client function."],
+    "returns": ["The selected derivable client."],
     "throws": [
       "If neither an explicit client nor a `ClientProvider` is available."
     ],
@@ -7722,8 +7728,8 @@
     "parameters": [
       {
         "name": "overrideClient",
-        "description": "Client to use before context; `undefined` uses the provider.",
-        "type": "Client",
+        "description": "Derivable client to use before context; `undefined` uses the provider.",
+        "type": "DerivableClient",
         "simplifiedType": "function",
         "required": false,
         "deprecated": false,
@@ -7732,19 +7738,19 @@
     ],
     "overloads": [
       {
-        "signature": "function useClient(overrideClient?: Client): Client;",
+        "signature": "function useClient(overrideClient?: DerivableClient): DerivableClient;",
         "parameters": [
           {
             "name": "overrideClient",
-            "description": "Client to use before context; `undefined` uses the provider.",
-            "type": "Client",
+            "description": "Derivable client to use before context; `undefined` uses the provider.",
+            "type": "DerivableClient",
             "simplifiedType": "function",
             "required": false,
             "deprecated": false,
             "tags": []
           }
         ],
-        "returns": ["The selected client function."]
+        "returns": ["The selected derivable client."]
       }
     ]
   },
@@ -7757,7 +7763,7 @@
     "group": "react",
     "description": "Props of {@link ClientProvider}: the required `client` and optional `children`.",
     "signatures": [
-      "interface ClientProviderProps {\n  client: Client;\n  children?: ReactNode;\n}"
+      "interface ClientProviderProps {\n  client: DerivableClient;\n  children?: ReactNode;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -7767,8 +7773,8 @@
     "typeTable": [
       {
         "name": "client",
-        "description": "Defjs client owned by the application.",
-        "type": "Client",
+        "description": "Derivable client returned by `createClient`, owned by the application.",
+        "type": "DerivableClient",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -7787,7 +7793,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientProviderProps {\n  client: Client;\n  children?: ReactNode;\n}",
+        "signature": "interface ClientProviderProps {\n  client: DerivableClient;\n  children?: ReactNode;\n}",
         "parameters": [],
         "returns": []
       }
@@ -8447,6 +8453,46 @@
     "overloads": [
       {
         "signature": "const STRUCT: unique symbol;",
+        "parameters": [],
+        "returns": []
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "DerivableClient",
+    "kind": "type",
+    "slug": "core/derivableclient-type",
+    "source": "packages/core/src/client/client.ts",
+    "group": "client",
+    "description": "Callable root client returned by `createClient`.\n\nA factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. The seven known fields are copied from the argument into a fresh options object, unknown fields are ignored, and fields whose value is `undefined` are omitted. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` all return a client with no request options. A getter that throws escapes the call and is not converted into a fault; the factory stays usable.",
+    "signatures": [
+      "interface DerivableClient extends Client {\n  (options?: RequestOptions): Client;\n}"
+    ],
+    "related": [
+      "@defjs/core:createClient",
+      "@defjs/core:Client",
+      "@defjs/core:RequestOptions"
+    ],
+    "exampleFiles": [],
+    "returns": [],
+    "throws": [],
+    "tags": [],
+    "typeTable": [
+      {
+        "name": "[CLIENT]",
+        "description": "Internal state. Not part of the call surface.",
+        "type": "ClientState",
+        "simplifiedType": "object",
+        "required": true,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "parameters": [],
+    "overloads": [
+      {
+        "signature": "interface DerivableClient extends Client {\n  (options?: RequestOptions): Client;\n}",
         "parameters": [],
         "returns": []
       }

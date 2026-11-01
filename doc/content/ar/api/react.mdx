@@ -13,7 +13,7 @@ description: ClientProvider، وuseClient مع تجاوز عميل اختيار�
 
 <ApiSignature name="ClientProvider" />
 
-موفّر سياق. مرّر عميلًا من `createClient`. يغلّب `ClientProvider` متداخل العميل لشجرته الفرعية؛ ويقرأ `useClient()` الأقرب. تمرير `client` مختلف يغيّر قيمة السياق للأحفاد.
+موفّر سياق. مرّر `DerivableClient` الذي تُرجعه `createClient`. يغلّب `ClientProvider` متداخل العميل لشجرته الفرعية؛ ويقرأ `useClient()` الأقرب. تمرير `client` مختلف يغيّر قيمة السياق للأحفاد.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,7 +21,7 @@ description: ClientProvider، وuseClient مع تجاوز عميل اختيار�
 
 <ApiSignature name="useClient" />
 
-يفضّل `useClient(overrideClient)` العميل الصريح؛ والقيمة المحذوفة أو `undefined` تقرأ أقرب `ClientProvider`. يُرمى `Error` فقط عندما لا يوفّر أي المصدرين عميلًا. تبقى استدعاءات `useClient()` بلا وسائط صالحة. مرّر ذلك العميل إلى عملية. `Client` دالة: لا تمرّره إلى ضابط حالة، لأن `setState(client)` سيستدعيه كمُحدِّث.
+يفضّل `useClient(overrideClient)` العميل الصريح؛ والقيمة المحذوفة أو `undefined` تقرأ أقرب `ClientProvider`. يُرمى `Error` فقط عندما لا يوفّر أي المصدرين عميلًا. تبقى استدعاءات `useClient()` بلا وسائط صالحة. مرّر ذلك العميل إلى عملية. يُرجع الـ Hook [`DerivableClient`](/ar/api/core/derivableclient-type) الذي جرى توفيره؛ استدعِه بخيارات الطلب حيث تعمل العملية لاشتقاق قيمة `Client`. لا تمرّره إلى ضابط حالة، لأن `setState(client)` سيستدعيه كمُحدِّث. قيمة `Client` المشتقة لا يقبلها `ClientProvider` ولا `useClient`.
 
 استدعِ `useClient(explicitClient)` دائمًا في المستوى الأعلى لمكوّن أو Hook مخصص، حتى مع عميل صريح؛ لا في دالة عادية أو ردّ نداء حدث. لا تكتب `explicitClient ?? useClient()`، فهذا يستدعي Hook شرطيًا. التجاوز لا يكتب السياق ولا ينشئ موفّرًا، ويظل Hook مشتركًا في السياق.
 

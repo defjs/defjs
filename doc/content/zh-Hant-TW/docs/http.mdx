@@ -120,7 +120,7 @@ Builder 可以依真實 input 分支，每個情況回傳不同 body（JSON reco
 
 ## 取消工作 [#cancel-the-work]
 
-在衍生的 client 上傳 `abort`。期限是 `AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動取消歸類為 `NET_ABORTED`。沒有 `timeout` 欄位，沒有 `signal` 欄位，也沒有 client 層級的預設期限。較後的 `abort` 會取代前一個 signal。在應用程式碼裡用 `AbortSignal.any` 把呼叫端的 signal 與期限組合起來。
+在衍生的 client 上傳 `abort`。期限是 `AbortSignal.timeout(ms)`，歸類為 `NET_TIMEOUT`。手動取消歸類為 `NET_ABORTED`。沒有 `timeout` 欄位，沒有 `signal` 欄位，也沒有 client 層級的預設期限。`abort` 是該次呼叫的 signal；在應用程式碼裡用 `AbortSignal.any` 組合 signals。在應用程式碼裡用 `AbortSignal.any` 把呼叫端的 signal 與期限組合起來。
 
 <include cwd>examples/http/deadline.ts#example</include>
 

@@ -9,7 +9,7 @@ Importe les opérations de ton SDK ou d’un module de définition partagé. L�
 
 Ces plugins sont des helpers facultatifs pour fournir et lire un `Client` existant. Importe un client fixe possédé par l’application, passe un `Client` explicitement à de la logique réutilisable, utilise l’injection du framework pour les défauts et les surcharges au niveau de l’arbre, ou choisis ta propre organisation. Les définitions de SDK n’exigent pas ces plugins.
 
-Branche un client `@defjs/core` existant dans Vue. Tu obtiens un plugin, une clé d’injection et `injectClient()`. Le package ne **crée pas** de clients, ne met pas les résultats en cache, ne réessaie pas les opérations et ne ferme pas les ressources de transport au unmount. Un `Client` est une fonction : ne l’utilise pas comme source d’un `watch` ou d’un `computed`, car ceux-ci appellent une fonction.
+Branche un client `@defjs/core` existant dans Vue. Tu obtiens un plugin, une clé d’injection et `injectClient()`. Le package ne **crée pas** de clients, ne met pas les résultats en cache, ne réessaie pas les opérations et ne ferme pas les ressources de transport au unmount. La valeur injectée est le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) fourni ; appelle-le avec des options de requête là où l’opération s’exécute pour dériver une valeur `Client`. Ne l’utilise pas comme source d’un `watch` ou d’un `computed`, car ceux-ci appellent une fonction. Une valeur `Client` dérivée n’est pas acceptée par le plugin ni par `injectClient`.
 
 ## Mise en place
 

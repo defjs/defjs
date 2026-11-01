@@ -4,9 +4,9 @@ import { createClientConfig } from "./config";
 import type { ClientOption } from "./option";
 
 /**
- * Internal symbol key for a client's base configuration and derived request options.
+ * Internal symbol key for a client's base configuration and request options.
  *
- * Application code calls the client and passes it to an operation. It does not read this property.
+ * Application code passes the client to an operation. It does not call the client or read this property.
  *
  * @group client
  */
@@ -45,68 +45,92 @@ interface ClientState {
 }
 
 /**
- * Application client returned by `createClient`.
+ * Client value that operations accept.
  *
- * Calling it returns a new client. The seven known fields are copied from the argument when `client(options)` is called, a top-level snapshot into a fresh options object overlaid on the current options. A later field wins. A field whose value is `undefined` is treated as not provided and keeps the parent's value. A derived client cannot drop a setting its parent has; to go back to no setting, derive again from the client that did not have it. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs, copying heartbeat fields and the protocols list at that time, so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. The original client is not mutated. `client()`, `client(undefined)`, and `client({})` copy the current options. Deriving a client performs no I/O. A getter that throws does so from the call and is not returned as a fault.
+ * A client value carries the base configuration and one call's request options. Operations accept it. It is not callable; create one by calling the factory returned by `createClient`. Calling a client value throws a `TypeError` at runtime and fails to compile.
+ *
+ * Create a client value per call. Reusing a value that carries `abort` shares that signal between calls.
  *
  * @group client
  * @see {@link createClient}
  * @see {@link RequestOptions}
  */
 export interface Client {
-  /** Returns a new client with `options` overlaid on this client's request options. */
-  (options?: RequestOptions): Client;
   /** Internal state. Not part of the call surface. */
   readonly [CLIENT]: ClientState;
 }
 
-function overlay(base: RequestOptions, patch?: RequestOptions): RequestOptions {
-  if (patch === undefined) {
-    return { ...base };
-  }
-  return {
-    abort: patch.abort ?? base.abort,
-    onUploadProgress: patch.onUploadProgress ?? base.onUploadProgress,
-    onDownloadProgress: patch.onDownloadProgress ?? base.onDownloadProgress,
-    beforeConnect: patch.beforeConnect ?? base.beforeConnect,
-    protocols: patch.protocols ?? base.protocols,
-    heartbeat: patch.heartbeat ?? base.heartbeat,
-    reconnect: patch.reconnect ?? base.reconnect,
-  };
+/**
+ * Callable root client returned by `createClient`.
+ *
+ * A factory is a {@link Client} that carries no request options, so it can be passed to an operation directly. Calling it with {@link RequestOptions} returns a plain, non-callable `Client` value for one call and performs no I/O. That value cannot be called again: `client()()` fails to compile and throws a `TypeError` at runtime. The seven known fields are copied from the argument into a fresh options object, unknown fields are ignored, and fields whose value is `undefined` are omitted. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` all return a client with no request options. A getter that throws escapes the call and is not converted into a fault; the factory stays usable.
+ *
+ * @group client
+ * @see {@link createClient}
+ * @see {@link Client}
+ * @see {@link RequestOptions}
+ */
+export interface DerivableClient extends Client {
+  /** Returns a client value that carries `options` for one call. */
+  (options?: RequestOptions): Client;
 }
 
-function createDerivedClient(
+const KNOWN_FIELDS = [
+  "abort",
+  "onUploadProgress",
+  "onDownloadProgress",
+  "beforeConnect",
+  "protocols",
+  "heartbeat",
+  "reconnect",
+] as const satisfies readonly (keyof RequestOptions)[];
+
+function snapshot(patch?: RequestOptions): RequestOptions {
+  const out: Record<string, unknown> = {};
+  if (patch === undefined) {
+    return out;
+  }
+  for (const key of KNOWN_FIELDS) {
+    const value = patch[key];
+    if (value !== undefined) {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
+function createClientValue(
   config: ClientConfig,
   options: RequestOptions,
 ): Client {
-  const state: ClientState = { config, options };
-  function derive(patch?: RequestOptions): Client {
-    return createDerivedClient(config, overlay(options, patch));
-  }
-  derive[CLIENT] = state;
-  return derive;
+  return { [CLIENT]: { config, options } };
 }
 
 /**
- * Creates a Defjs client from option helpers.
+ * Creates a Defjs {@link DerivableClient} from option helpers.
  *
  * Options apply in order: a later option overwrites an earlier one for the same setting, and interceptors accumulate. Prefer creating the client inside the request boundary when interceptors close over auth or tenants. Default HTTP/SSE fetch availability is checked when an operation invokes transport.
  *
- * The returned client is a function. Call it with {@link RequestOptions} to derive a client for one operation. The seven known fields are copied from that argument into a fresh options object. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference. The base configuration is shared by every derived client and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. A getter that throws escapes the call; it is not converted into a fault.
+ * The returned factory is a function. Calling it with {@link RequestOptions} returns a {@link Client} value for one call and performs no I/O; see {@link DerivableClient} for the snapshot rules. The factory itself is also a `Client` and carries no request options, so it can be passed to an operation directly. The base configuration is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either.
  *
  * @param options - Client option helpers such as `withEndpoint`.
- * @returns A callable client that carries the resolved base configuration.
+ * @returns A callable factory that carries the resolved base configuration.
  *
  * @group client
+ * @see {@link DerivableClient}
  * @see {@link Client}
  * @see {@link ClientOption}
  * @see {@link RequestOptions}
  * @exampleFile examples/api/create-client.ts#example
  */
-export function createClient(...options: ClientOption[]): Client {
+export function createClient(...options: ClientOption[]): DerivableClient {
   const config = createClientConfig();
   for (const option of options) {
     option(config);
   }
-  return createDerivedClient(config, {});
+  function factory(patch?: RequestOptions): Client {
+    return createClientValue(config, snapshot(patch));
+  }
+  factory[CLIENT] = { config, options: {} } satisfies ClientState;
+  return factory;
 }

@@ -9,7 +9,7 @@ description: 在 Vue 中提供應用程式自己的 Client，並執行 SDK 定�
 
 這些外掛只是設定與取得既有 `Client` 的可選輔助。可以直接匯入應用程式固定的 Client、將明確的 Client 傳給可重用邏輯、透過框架注入提供元件樹預設值與子樹覆寫，或採用應用程式自己的組織方式；SDK 定義不要求透過外掛執行。
 
-把既有的 `@defjs/core` client 接進 Vue。你拿到 plugin、injection key 與 `injectClient()`。這個套件**不會**建立 client、快取結果、重試操作，或在卸載時關閉傳輸資源。`Client` 是函式：不要把它當成 `watch` 或 `computed` 來源，因為那些會呼叫函式。
+把既有的 `@defjs/core` client 接進 Vue。你拿到 plugin、injection key 與 `injectClient()`。這個套件**不會**建立 client、快取結果、重試操作，或在卸載時關閉傳輸資源。注入的值是所提供的 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)；在操作執行處帶著 request options 呼叫它，即可衍生出 `Client` 值。不要把它當成 `watch` 或 `computed` 來源，因為那些會呼叫函式。衍生出的 `Client` 值不被 plugin 或 `injectClient` 接受。
 
 ## 基本用法
 

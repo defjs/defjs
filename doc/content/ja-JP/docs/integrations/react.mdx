@@ -9,7 +9,7 @@ React アプリケーションは SDK から API 定義を import し、自身�
 
 これらのプラグインは、既存の `Client` の提供と取得を補助する任意の仕組みです。アプリ所有の固定クライアントを直接 import する、再利用するロジックに明示的な Client を渡す、ツリーの既定値やサブツリーの上書きにフレームワークの注入を使う、独自の構成を選ぶ、どれも有効です。SDK の定義にプラグインは必須ではありません。
 
-既存の `@defjs/core` クライアントを React ツリーに繋ぎます。得られるのは Context と `useClient()` です。このパッケージはクライアントを**作らず**、キャッシュも足さず、操作をリトライせず、トランスポートリソースも破棄しません。作業を始めたコンポーネント、effect、データライブラリが所有します。`useClient()` のクライアントは操作に渡します。`Client` は関数です。state setter に渡さないでください。`setState(client)` は updater としてそれを呼びます。
+既存の `@defjs/core` クライアントを React ツリーに繋ぎます。得られるのは Context と `useClient()` です。このパッケージはクライアントを**作らず**、キャッシュも足さず、操作をリトライせず、トランスポートリソースも破棄しません。作業を始めたコンポーネント、effect、データライブラリが所有します。`useClient()` のクライアントは操作に渡します。フックは渡された[`DerivableClient`](/ja-JP/api/core/derivableclient-type)を返します。`abort` のような呼び出しごとの options は、操作を実行する場所で呼んで渡します。`getUser(client({ abort }), input)` です。state setter には渡さないでください。`setState(client)` は updater としてそれを呼びます。派生した `Client` 値は `ClientProvider` にも `useClient` にも渡せません。
 
 ## 基本セットアップ
 

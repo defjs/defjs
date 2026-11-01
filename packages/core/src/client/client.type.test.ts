@@ -5,6 +5,7 @@ import type { ClientWebSocketOptions } from "./config";
 import type {
   Client,
   ClientConfig,
+  DerivableClient,
   ClientOptions,
   QuerySerializer,
 } from "./index";
@@ -123,7 +124,10 @@ const client = createClient(
   }),
 );
 
-type ClientCases = Expect<Equal<typeof client, Client>>;
+type ClientCases = Expect<Equal<typeof client, DerivableClient>>;
+const derivedClient: Client = client();
+// @ts-expect-error A derived client is not callable.
+derivedClient();
 type ClientAsyncDisposeCase = Expect<
   typeof Symbol.asyncDispose extends keyof Client ? false : true
 >;

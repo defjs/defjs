@@ -88,10 +88,10 @@ test("an API entry shows its highlighted signature and copies it", async () => {
   const main = page.locator("main");
   const text = await main.textContent();
   expect(text).toContain(
-    "function createClient(...options: ClientOption[]): Client;",
+    "function createClient(...options: ClientOption[]): DerivableClient;",
   );
   expect(text).toContain("...options");
-  expect(text).toContain("Creates a Defjs client");
+  expect(text).toContain("Creates a Defjs DerivableClient");
   const copy = page.locator("main button[data-api-copy]").first();
   expect(await copy.isVisible()).toBe(true);
   expect(await copy.locator(".sr-only").textContent()).toBe("Copy Text");
@@ -104,7 +104,7 @@ test("an API entry shows its highlighted signature and copies it", async () => {
     }
   });
   expect(clipboard.replace(/\n$/u, "")).toBe(
-    "function createClient(...options: ClientOption[]): Client;",
+    "function createClient(...options: ClientOption[]): DerivableClient;",
   );
   expect(await errors.values()).toEqual([]);
 });
@@ -174,16 +174,16 @@ test("translated entry pages keep English prose but localize their labels", asyn
     `>${getTranslator("zh-Hans")("api.parameters")}<`,
   );
   expect(chineseText).toContain(
-    "function createClient(...options: ClientOption[]): Client;",
+    "function createClient(...options: ClientOption[]): DerivableClient;",
   );
-  expect(chineseText).toContain("Creates a Defjs client");
+  expect(chineseText).toContain("Creates a Defjs DerivableClient");
   await page.goto(site.url("/ar/api/core/createclient"), {
     waitUntil: "networkidle",
   });
   const article = await page.locator("article").innerHTML();
   expect(article).toContain('lang="en"');
   expect(article).toContain('dir="ltr"');
-  expect(article).toContain("Creates a Defjs client");
+  expect(article).toContain("Creates a Defjs DerivableClient");
   expect(article).not.toMatch(
     new RegExp(
       `<h2[^>]*lang="en"[^>]*>${getTranslator("ar")("api.signature")}`,
@@ -200,7 +200,7 @@ test("translated entry pages keep English prose but localize their labels", asyn
       : [];
     return {
       summary: marked.some((node) =>
-        (node.textContent ?? "").includes("Creates a Defjs client"),
+        (node.textContent ?? "").includes("Creates a Defjs DerivableClient"),
       ),
       parameter: marked.some((node) =>
         (node.textContent ?? "").includes("Client option helpers"),

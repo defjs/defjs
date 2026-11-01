@@ -22,7 +22,7 @@ description: Vue 插件、默认或自定义 injection key，以及 injectClient
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` 读取所选 key 最近的 provider；省略参数或传入 `undefined` 时使用 `HTTP_CLIENT`。必须处于有效的 Vue 注入上下文，例如同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。后者只提供同步 app 级上下文，不携带组件子树覆盖，也不跨普通 `await` 保持；`<script setup>` 顶层 `await` 后由编译器恢复的上下文仍然有效。把这个 client 传进操作。`Client` 是函数：不要把它当作 `watch` 或 `computed` 的源，因为那些 API 会调用函数。
+`injectClient(key)` 读取所选 key 最近的 provider；省略参数或传入 `undefined` 时使用 `HTTP_CLIENT`。必须处于有效的 Vue 注入上下文，例如同步 `setup()` 或 `app.runWithContext()`（Vue 3.3+）。后者只提供同步 app 级上下文，不携带组件子树覆盖，也不跨普通 `await` 保持；`<script setup>` 顶层 `await` 后由编译器恢复的上下文仍然有效。把这个 client 传进操作。注入的值就是提供的那个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)；在操作运行的地方带上请求选项调用它，即可派生出一个 `Client` 值。不要把它当作 `watch` 或 `computed` 的源，因为那些 API 会调用函数。派生出的 `Client` 值不被插件或 `injectClient` 接受。
 
 自定义 `InjectionKey<Client>` 用 `app.provide(key, client)` 或祖先的 `provide(key, client)` 设置。提供与获取方必须共享同一个 `Symbol` 对象，相同描述不代表相同 key。`createClientPlugin(client)` 仍只接受 Client，并只提供 `HTTP_CLIENT`。
 

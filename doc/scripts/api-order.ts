@@ -164,6 +164,7 @@ export const apiOrder = [
   "@defjs/core:createResolvedRequestUrl",
   "@defjs/core:EventStreamFaultCode",
   "@defjs/core:STRUCT",
+  "@defjs/core:DerivableClient",
 ] as const;
 
 const rank = new Map<string, number>(

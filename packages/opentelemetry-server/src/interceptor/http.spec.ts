@@ -203,7 +203,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     const readInventory = defineRequest({ method: "GET", path: "/inventory" });
 
     expect(typeof base).toBe("function");
-    expect(typeof derived).toBe("function");
+    expect(typeof derived).toBe("object");
     expect(derived).not.toBe(base);
 
     const [baseFault] = await readInventory(base);

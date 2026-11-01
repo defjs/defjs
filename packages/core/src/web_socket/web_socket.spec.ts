@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withInterceptors,
   withWebSocketHandle,
@@ -19,7 +20,7 @@ import {
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 
 describe("web socket runtime", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));

@@ -9,7 +9,7 @@ description: 在 React 中提供應用程式自己的 Client，並執行 SDK 定
 
 這些外掛只是設定與取得既有 `Client` 的可選輔助。可以直接匯入應用程式固定的 Client、將明確的 Client 傳給可重用邏輯、透過框架注入提供元件樹預設值與子樹覆寫，或採用應用程式自己的組織方式；SDK 定義不要求透過外掛執行。
 
-把既有的 `@defjs/core` client 接進 React 樹。你拿到 Context 與 `useClient()`。這個套件**不會**建立 client、加上快取、重試操作，或釋放傳輸資源。啟動工作的元件、effect 或資料函式庫擁有它。`Client` 是函式：不要把它傳給 state setter，因為 `setState(client)` 會把它當成 updater 呼叫。
+把既有的 `@defjs/core` client 接進 React 樹。你拿到 Context 與 `useClient()`。這個套件**不會**建立 client、加上快取、重試操作，或釋放傳輸資源。啟動工作的元件、effect 或資料函式庫擁有它。此 hook 回傳的是所提供的 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。需要 `abort` 這類每次呼叫的 options 時，在操作執行處呼叫它：`getUser(client({ abort }), input)`。不要把它傳給 state setter，因為 `setState(client)` 會把它當成 updater 呼叫。衍生出的 `Client` 值不被 `ClientProvider` 或 `useClient` 接受。
 
 ## 基本用法
 

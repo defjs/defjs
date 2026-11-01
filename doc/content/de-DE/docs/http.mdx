@@ -136,7 +136,7 @@ gibt es keine Status-0-Response, die dafür einsteht.
 
 ## Arbeit abbrechen [#cancel-the-work]
 
-Übergib `abort` an einem abgeleiteten Client. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch wird als `NET_ABORTED` klassifiziert. Es gibt kein `timeout`-Feld, kein `signal`-Feld und keine Default-Deadline auf Client-Ebene. Ein späteres `abort` ersetzt das vorherige Signal. Kombiniere ein Caller-Signal mit einer Deadline in Anwendungscode mit `AbortSignal.any`.
+Übergib `abort` an einem abgeleiteten Client. Eine Deadline ist `AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch wird als `NET_ABORTED` klassifiziert. Es gibt kein `timeout`-Feld, kein `signal`-Feld und keine Default-Deadline auf Client-Ebene. `abort` ist das Signal des Aufrufs; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. Kombiniere ein Caller-Signal mit einer Deadline in Anwendungscode mit `AbortSignal.any`.
 
 <include cwd>examples/http/deadline.ts#example</include>
 

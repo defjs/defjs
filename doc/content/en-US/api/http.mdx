@@ -46,7 +46,7 @@ struct as one off the wire; there is no trusted short-circuit.
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` is the HTTP slice of [`RequestOptions`](/api/core/requestoptions-type): [`UseRequestConfig`](/api/core/userequestconfig-type), which is `abort` plus `onDownloadProgress` and `onUploadProgress`. There is no `timeout` or `signal` field. A deadline is `abort: AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. A later `abort` replaces the previous signal. Combine signals with `AbortSignal.any` in application code. There is no client-level default deadline. Other request fields, such as `heartbeat`, are ignored.
+`HttpExecuteOptions` is the HTTP slice of [`RequestOptions`](/api/core/requestoptions-type): [`UseRequestConfig`](/api/core/userequestconfig-type), which is `abort` plus `onDownloadProgress` and `onUploadProgress`. There is no `timeout` or `signal` field. A deadline is `abort: AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. `abort` is the call's signal; combine signals with `AbortSignal.any` in application code. There is no client-level default deadline. Other request fields, such as `heartbeat`, are ignored.
 
 ## Types
 

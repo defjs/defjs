@@ -3,7 +3,7 @@ import {
   createHttpInterceptor,
   defineRequest,
   struct,
-  type Client,
+  type DerivableClient,
   withEndpoint,
   withInterceptors,
 } from "@defjs/core";
@@ -89,7 +89,7 @@ describe("vue browser runtime", () => {
 
   test("provides the exact client instance supplied by the caller", () => {
     const client = createClient(withEndpoint(testServerHost));
-    let injectedClient: Client | undefined;
+    let injectedClient: DerivableClient | undefined;
 
     const Consumer = defineComponent({
       name: "PluginClientConsumer",
@@ -111,8 +111,8 @@ describe("vue browser runtime", () => {
 
   test("shares one client through multiple Vue component layers", () => {
     const client = createClient(withEndpoint(testServerHost));
-    let middleClient: Client | undefined;
-    let leafClient: Client | undefined;
+    let middleClient: DerivableClient | undefined;
+    let leafClient: DerivableClient | undefined;
 
     const Leaf = defineComponent({
       name: "LeafClientConsumer",
@@ -141,8 +141,8 @@ describe("vue browser runtime", () => {
   test("provides to descendants while reading the ancestor in the provider", () => {
     const outer = createClient();
     const inner = createClient();
-    let ownClient: Client | undefined;
-    let childClient: Client | undefined;
+    let ownClient: DerivableClient | undefined;
+    let childClient: DerivableClient | undefined;
 
     const Child = defineComponent({
       setup() {
@@ -166,12 +166,12 @@ describe("vue browser runtime", () => {
     expect(childClient).toBe(inner);
   });
 
-  test("injects the identical function and overrides a subtree with a derived client", () => {
+  test("injects the identical client and passes a derived client value through at runtime", () => {
     const client = createClient();
     const abort = new AbortController();
     const childClient = client({ abort: abort.signal });
-    let injected: Client | undefined;
-    let overridden: Client | undefined;
+    let injected: DerivableClient | undefined;
+    let overridden: DerivableClient | undefined;
 
     const Child = defineComponent({
       setup() {
@@ -181,6 +181,7 @@ describe("vue browser runtime", () => {
     });
     const Boundary = defineComponent({
       setup() {
+        // @ts-expect-error A derived client value is not a DerivableClient.
         provide(HTTP_CLIENT, childClient);
         injected = injectClient();
         return () => h(Child);
@@ -193,7 +194,7 @@ describe("vue browser runtime", () => {
 
     expect(typeof injected).toBe("function");
     expect(injected).toBe(client);
-    expect(typeof overridden).toBe("function");
+    expect(typeof overridden).toBe("object");
     expect(overridden).toBe(childClient);
     expect(overridden).not.toBe(client);
   });
@@ -202,11 +203,11 @@ describe("vue browser runtime", () => {
     const normal = createClient();
     const outerBilling = createClient();
     const innerBilling = createClient();
-    const key: InjectionKey<Client> = Symbol("billing");
-    let boundaryClient: Client | undefined;
-    let childBilling: Client | undefined;
-    let childDefault: Client | undefined;
-    let siblingBilling: Client | undefined;
+    const key: InjectionKey<DerivableClient> = Symbol("billing");
+    let boundaryClient: DerivableClient | undefined;
+    let childBilling: DerivableClient | undefined;
+    let childDefault: DerivableClient | undefined;
+    let siblingBilling: DerivableClient | undefined;
 
     const Child = defineComponent({
       setup() {
@@ -309,10 +310,10 @@ describe("vue browser runtime", () => {
 
   test("resolves the nearest Vue provider and renders scoped request results", async () => {
     const seenScopes: string[] = [];
-    let outerClient: Client | undefined;
-    let outerSiblingClient: Client | undefined;
-    let innerMiddleClient: Client | undefined;
-    let innerLeafClient: Client | undefined;
+    let outerClient: DerivableClient | undefined;
+    let outerSiblingClient: DerivableClient | undefined;
+    let innerMiddleClient: DerivableClient | undefined;
+    let innerLeafClient: DerivableClient | undefined;
     let outerRequest: Promise<UsersResult> | undefined;
     let innerRequest: Promise<UsersResult> | undefined;
 

@@ -38,7 +38,7 @@ description: defineRequest、リクエスト options、HTTP の request/response
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `abort` に `onDownloadProgress` と `onUploadProgress` を足したものです。`timeout` フィールドも `signal` フィールドもありません。期限は `abort: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。あとの `abort` が前のシグナルを置き換えます。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位の既定の期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
+`HttpExecuteOptions` は [`RequestOptions`](/ja-JP/api/core/requestoptions-type) の HTTP スライスです。[`UseRequestConfig`](/ja-JP/api/core/userequestconfig-type)、つまり `abort` に `onDownloadProgress` と `onUploadProgress` を足したものです。`timeout` フィールドも `signal` フィールドもありません。期限は `abort: AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。`abort` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。クライアント単位の既定の期限はありません。`heartbeat` のような他のリクエストフィールドは無視されます。
 
 ## 型
 

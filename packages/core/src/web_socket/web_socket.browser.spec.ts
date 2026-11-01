@@ -9,6 +9,7 @@ import {
 
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   type Client,
   type RequestOptions,
@@ -33,7 +34,7 @@ const terminalWebSocketStates = {
 } as const satisfies Record<WebSocketState, boolean>;
 
 describe("web socket browser runtime", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));

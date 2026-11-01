@@ -13,7 +13,7 @@ Consulta la [guía de React](/es-ES/docs/integrations/react).
 
 <ApiSignature name="ClientProvider" />
 
-Provider de Context. Pasa un cliente de `createClient`. Un `ClientProvider` anidado sustituye el cliente de su subárbol; `useClient()` lee el más cercano. Pasar un `client` distinto cambia el valor de contexto para los descendientes.
+Provider de Context. Pasa el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que devuelve `createClient`. Un `ClientProvider` anidado sustituye el cliente de su subárbol; `useClient()` lee el más cercano. Pasar un `client` distinto cambia el valor de contexto para los descendientes.
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 
@@ -21,7 +21,7 @@ Provider de Context. Pasa un cliente de `createClient`. Un `ClientProvider` anid
 
 <ApiSignature name="useClient" />
 
-`useClient(overrideClient)` prefiere el cliente explícito; omitido o `undefined` lee el `ClientProvider` más cercano. Solo se lanza un `Error` cuando ninguna de las dos fuentes aporta un cliente. Las llamadas `useClient()` sin argumentos siguen siendo válidas. Pasa ese cliente a una operación. Un `Client` es una función: no lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater.
+`useClient(overrideClient)` prefiere el cliente explícito; omitido o `undefined` lee el `ClientProvider` más cercano. Solo se lanza un `Error` cuando ninguna de las dos fuentes aporta un cliente. Las llamadas `useClient()` sin argumentos siguen siendo válidas. Pasa ese cliente a una operación. El hook devuelve el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó; llámalo con opciones de solicitud donde se ejecuta la operación para derivar un valor `Client`. No lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater. `ClientProvider` y `useClient` no aceptan un valor `Client` derivado.
 
 Llama siempre a `useClient(explicitClient)` en el nivel superior de un componente o de un Hook personalizado, incluso con un cliente explícito; no en una función ordinaria ni en un callback de evento. No escribas `explicitClient ?? useClient()`, que llama a un Hook de forma condicional. La sustitución no escribe en el Context ni crea un provider, y el Hook sigue suscrito al Context.
 

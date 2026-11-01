@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   defineEventStream,
   defineRequest,
   defineWebSocket,
@@ -10,12 +11,12 @@ import {
   withSSEHandle,
   withWebSocketHandle,
 } from "../../src";
-import type { AnyStruct, Client, HttpExecuteOptions } from "../../src";
+import type { AnyStruct, HttpExecuteOptions } from "../../src";
 
 type Transport = "HTTP" | "SSE" | "WebSocket";
 
 function executeInput(
-  client: Client,
+  client: DerivableClient,
   transport: Transport,
   schema: AnyStruct | undefined,
   input: unknown,

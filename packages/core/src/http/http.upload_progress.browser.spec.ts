@@ -1,8 +1,7 @@
 import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 import { server } from "vitest/browser";
 
-import { createClient, withEndpoint } from "../client";
-import type { Client } from "../client";
+import { createClient, type DerivableClient, withEndpoint } from "../client";
 import { struct } from "../struct";
 import { defineRequest } from "./index";
 import type { HttpProgressFn } from "./index";
@@ -56,7 +55,7 @@ const binaryUploads = [
 ] as const;
 
 describe("browser upload progress", () => {
-  let baseClient: Client;
+  let baseClient: DerivableClient;
 
   beforeEach(() => {
     baseClient = createClient(withEndpoint(inject("testServerHost")));

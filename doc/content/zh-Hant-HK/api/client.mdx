@@ -5,16 +5,16 @@ description: createClient、option helpers，同 Client type。
 
 # Client
 
-`createClient(...)` return 一個可呼叫嘅 [`Client`](/zh-Hant-HK/api/core/client-type)。Client options 由左到右組合，之後 call `client(options?)` 派生一個 client，再傳俾操作：`getUser(client(options), input)`。
+`createClient(...)` return 一個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。Client options 由左到右組合，之後 call `client(options?)` 攞一個 [`Client`](/zh-Hant-HK/api/core/client-type) 值，再傳俾操作：`getUser(client(options), input)`。
 
 ## createClient()
 
 <ApiSignature name="createClient" />
 
-Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料，建議喺 request boundary 入面建立 client。返回嘅 client 係一個 function。Call 佢會 return 一個新 client，而且唔做 I/O。
+Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料，建議喺 request boundary 入面建立 client。返回嘅 factory 係一個 function。Call 佢會 return 一個 `Client` 值，而且唔做 I/O。Factory 本身亦係一個 `Client`，冇帶任何 request options。
 
 - **options** — Option helpers，例如 `withEndpoint`。
-- **Returns** 一個可呼叫嘅 client。Base 設定每個派生 client 共用，runtime 唔會 freeze。佢按慣例固定：個 library 唔會改佢，應用程式亦唔應該改。
+- **Returns** 一個可呼叫嘅 factory。Base 設定每個 client 值共用，runtime 唔會 freeze。佢按慣例固定：個 library 唔會改佢，應用程式亦唔應該改。
 
 <include cwd>examples/api/create-client.ts#example</include>
 
@@ -105,13 +105,19 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 ## 類型
 
+### DerivableClient
+
+<ApiSignature name="DerivableClient" />
+
+`createClient` 返回嘅根 client，有兩種形態。Factory 係一個 function，同時亦係一個冇 request options 嘅 `Client`，所以 `getUser(client, input)` 可以直接用。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) call 佢，會 return 一個只供單次呼叫用嘅普通 `Client` 值。嗰個值唔可以 call，所以 `client()()` 無法編譯，runtime 亦會 throw `TypeError`。派生只喺 factory 做一次，冇鏈式。寫類型時用 `DerivableClient`，唔好寫 `ReturnType<typeof createClient>`。
+
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` 係一個 function。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) call 佢，會 return 一個新 client。七個已知 field 從參數複製入一個新 object，再疊上而家嘅 options。後到嘅 field 贏。field 嘅值係 `undefined` 時，當冇提供，保留上一層嘅值。派生出嚟嘅 client 唔可以掉低上一層已有嘅設定；想返到冇呢項設定，要由當初冇佢嗰個 client 再派生一次（留住根 client）。巢狀嘅 `heartbeat`、`protocols` 同 `reconnect` 嘅值按 reference 留住，唔會 clone，並且成個值換走上一層嘅值，唔會合併。WebSocket 喺操作行嗰陣先讀佢哋（嗰陣會複製 heartbeat 嘅 field 同 protocols 列表），所以派生之後再改呢啲物件，仍然可以影響之後嘅呼叫。應用程式傳入之後應該當佢哋係 immutable。原本嗰個 client 唔會被改。`client()`、`client(undefined)` 同 `client({})` 複製而家嘅 options。派生唔做 I/O。同一個 client 值可以傳俾好多操作。`abort` 係換走，唔係合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。
+`Client` 係一個值，唔係 function。用 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) call [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type) 就會得到一個。七個已知 field 從參數複製入一個新 object。未知 field 會被忽略，值係 `undefined` 嘅 field 會被略過。冇上一層疊加：`client()`、`client(undefined)` 同 `client({})` 都 return 一個冇 request options 嘅 client。巢狀嘅 `heartbeat`、`protocols` 同 `reconnect` 嘅值按 reference 留住，唔會 clone。WebSocket 喺操作行嗰陣先讀佢哋（嗰陣會複製 heartbeat 嘅 field 同 protocols 列表），所以派生之後再改呢啲物件，仍然可以影響之後嘅呼叫。應用程式傳入之後應該當佢哋係 immutable。派生唔做 I/O。Client 值唔可以 call，call 佢無法編譯，runtime 亦會 throw `TypeError`。每次呼叫建立一個 client 值。同一個值可以傳俾好多操作，但重用帶有 `abort` 嘅值會共用嗰個 signal。`abort` 唔會合併；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。
 
-唔好將 client 傳俾 React state setter（`setState(client)` 會將佢當 updater 嚟 call），亦唔好將佢做 Vue `watch` 或者 `computed` 嘅 source（嗰啲會 call function）。
+唔好將 factory 傳俾 React state setter（`setState(factory)` 會將佢當 updater 嚟 call），亦唔好將佢做 Vue `watch` 或者 `computed` 嘅 source（嗰啲會 call function）。
 
 ### RequestOptions
 
@@ -119,15 +125,15 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 七個扁平 field。每種協定讀自己明白嘅 field，其餘忽略。傳 `heartbeat` 俾 HTTP 會被忽略，唔係 fault。SSE 只會由 request options 讀 `abort`。SSE reconnect 來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。冇 compile-time 嘅協定過濾，亦冇 `timeout` 或 `signal` field。
 
-| Field                | 協定                   | 取代方式                                                           |
-| -------------------- | ---------------------- | ------------------------------------------------------------------ |
-| `abort`              | HTTP、SSE 同 WebSocket | 取代之前嘅 signal。SSE 同 WebSocket 覆蓋成條連線，包括 open 之後。 |
-| `onUploadProgress`   | HTTP                   | 其他協定會忽略。                                                   |
-| `onDownloadProgress` | HTTP                   | 其他協定會忽略。                                                   |
-| `beforeConnect`      | WebSocket              | 喺該次呼叫取代 client 設定。                                       |
-| `protocols`          | WebSocket              | 取代 client 嘅 list。                                              |
-| `heartbeat`          | WebSocket              | 成個換走。`timeoutMs` 係等確認嘅時間，唔係請求 deadline。          |
-| `reconnect`          | WebSocket              | 成個換走。                                                         |
+| Field                | 協定                   | 取代方式                                                      |
+| -------------------- | ---------------------- | ------------------------------------------------------------- |
+| `abort`              | HTTP、SSE 同 WebSocket | 中止該次呼叫。SSE 同 WebSocket 覆蓋成條連線，包括 open 之後。 |
+| `onUploadProgress`   | HTTP                   | 其他協定會忽略。                                              |
+| `onDownloadProgress` | HTTP                   | 其他協定會忽略。                                              |
+| `beforeConnect`      | WebSocket              | 喺該次呼叫取代 client 設定。                                  |
+| `protocols`          | WebSocket              | 取代 client 嘅 list。                                         |
+| `heartbeat`          | WebSocket              | 成個換走。`timeoutMs` 係等確認嘅時間，唔係請求 deadline。     |
+| `reconnect`          | WebSocket              | 成個換走。                                                    |
 
 [`HttpExecuteOptions`](/zh-Hant-HK/api/core/httpexecuteoptions-type) 係 HTTP 嗰片（`abort` 加 progress）。[`EventStreamExecuteOptions`](/zh-Hant-HK/api/core/eventstreamexecuteoptions-type) 係 `{ abort? }`。[`WebSocketExecuteOptions`](/zh-Hant-HK/api/core/websocketexecuteoptions-type) 係 WebSocket 嗰片再加 `abort`。
 

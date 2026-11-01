@@ -39,7 +39,7 @@ description: defineRequest、request options，同 HTTP request/response types�
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` 係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 嘅 HTTP 切片：[`UseRequestConfig`](/zh-Hant-HK/api/core/userequestconfig-type)，即係 `abort` 加上 `onDownloadProgress` 同 `onUploadProgress`。冇 `timeout` 或 `signal` field。Deadline 係 `abort: AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。後到嘅 `abort` 取代之前嘅 signal。喺應用程式程式碼用 `AbortSignal.any` 合併 signal。冇 client 層級嘅預設 deadline。其他 request field，例如 `heartbeat`，會被忽略。
+`HttpExecuteOptions` 係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) 嘅 HTTP 切片：[`UseRequestConfig`](/zh-Hant-HK/api/core/userequestconfig-type)，即係 `abort` 加上 `onDownloadProgress` 同 `onUploadProgress`。冇 `timeout` 或 `signal` field。Deadline 係 `abort: AbortSignal.timeout(ms)`，分類為 `NET_TIMEOUT`。手動 abort 係 `NET_ABORTED`。`abort` 係該次呼叫嘅 signal；喺應用程式程式碼用 `AbortSignal.any` 合併 signal。冇 client 層級嘅預設 deadline。其他 request field，例如 `heartbeat`，會被忽略。
 
 ## 類型
 

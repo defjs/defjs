@@ -38,7 +38,7 @@ description: defineRequest, 요청 옵션, HTTP request/response 타입이에요
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)의 HTTP 조각인 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)예요. `abort`와 `onDownloadProgress`, `onUploadProgress`예요. `timeout`이나 `signal` 필드는 없어요. 데드라인은 `abort: AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. 나중 `abort`가 이전 신호를 바꿔요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 클라이언트 기본 데드라인은 없어요. `heartbeat` 같은 다른 요청 필드는 무시돼요.
+`HttpExecuteOptions`는 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)의 HTTP 조각인 [`UseRequestConfig`](/ko-KR/api/core/userequestconfig-type)예요. `abort`와 `onDownloadProgress`, `onUploadProgress`예요. `timeout`이나 `signal` 필드는 없어요. 데드라인은 `abort: AbortSignal.timeout(ms)`이고 `NET_TIMEOUT`으로 분류돼요. 수동 취소는 `NET_ABORTED`예요. `abort`는 그 호출의 신호예요. 신호는 애플리케이션 코드에서 `AbortSignal.any`로 합치세요. 클라이언트 기본 데드라인은 없어요. `heartbeat` 같은 다른 요청 필드는 무시돼요.
 
 ## 타입
 

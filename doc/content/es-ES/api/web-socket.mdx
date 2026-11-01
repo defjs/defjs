@@ -57,7 +57,7 @@ async function consume(
 
 `WebSocketExecuteOptions` es [`UseWebSocketConfig`](/es-ES/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` y `abort`. `WebSocketHeartbeatConfig`: `intervalMs`, `message` opcional, `isAck`, `timeoutMs`. No hay campo `timeout` ni `signal`.
 
-`abort` cubre toda la sesión, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. Un `abort` posterior sustituye al signal anterior. `heartbeat` se sustituye entero; su `timeoutMs` espera un acuse y no es un plazo de la solicitud.
+`abort` cubre toda la sesión, también después de abrirse. Un plazo es `AbortSignal.timeout(ms)` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo solo de arranque ni un plazo por defecto a nivel de cliente. `abort` es el signal de la llamada; combina signals con `AbortSignal.any` en el código de la aplicación. `heartbeat` se sustituye entero; su `timeoutMs` espera un acuse y no es un plazo de la solicitud.
 
 Cuando se define `reconnect`, `attempts` vale por defecto 3 por interrupción; `0` lo desactiva. Un `open` correcto reinicia el presupuesto y el exponente de backoff, así que cada interrupción nueva empieza en el reintento 1. Omitir `attempts` no da reintentos ilimitados dentro de una interrupción. Consulta [Cliente](/es-ES/api/client) para los valores por defecto y las reglas de validación.
 

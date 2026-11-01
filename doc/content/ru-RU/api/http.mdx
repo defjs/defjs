@@ -46,7 +46,7 @@ struct, что и ответ с провода; доверенного short-cir
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` — срез HTTP у [`RequestOptions`](/ru-RU/api/core/requestoptions-type): [`UseRequestConfig`](/ru-RU/api/core/userequestconfig-type), то есть `abort` плюс `onDownloadProgress` и `onUploadProgress`. Полей `timeout` или `signal` нет. Дедлайн — это `abort: AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Более поздний `abort` заменяет предыдущий сигнал. Объединяй сигналы через `AbortSignal.any` в коде приложения. Дедлайна по умолчанию на уровне клиента нет. Остальные поля запроса, например `heartbeat`, игнорируются.
+`HttpExecuteOptions` — срез HTTP у [`RequestOptions`](/ru-RU/api/core/requestoptions-type): [`UseRequestConfig`](/ru-RU/api/core/userequestconfig-type), то есть `abort` плюс `onDownloadProgress` и `onUploadProgress`. Полей `timeout` или `signal` нет. Дедлайн — это `abort: AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. `abort` — сигнал вызова; объединяй сигналы через `AbortSignal.any` в коде приложения. Дедлайна по умолчанию на уровне клиента нет. Остальные поля запроса, например `heartbeat`, игнорируются.
 
 ## Типы
 

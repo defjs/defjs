@@ -46,7 +46,7 @@ Struct wie eine Response von der Leitung; es gibt keinen Short-Circuit, der den 
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` ist der HTTP-Ausschnitt von [`RequestOptions`](/de-DE/api/core/requestoptions-type): [`UseRequestConfig`](/de-DE/api/core/userequestconfig-type), also `abort` plus `onDownloadProgress` und `onUploadProgress`. Es gibt kein `timeout`- oder `signal`-Feld. Eine Deadline ist `abort: AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. Ein späteres `abort` ersetzt das vorherige Signal. Kombiniere Signale in Anwendungscode mit `AbortSignal.any`. Es gibt keine Default-Deadline auf Client-Ebene. Andere Request-Felder, etwa `heartbeat`, werden ignoriert.
+`HttpExecuteOptions` ist der HTTP-Ausschnitt von [`RequestOptions`](/de-DE/api/core/requestoptions-type): [`UseRequestConfig`](/de-DE/api/core/userequestconfig-type), also `abort` plus `onDownloadProgress` und `onUploadProgress`. Es gibt kein `timeout`- oder `signal`-Feld. Eine Deadline ist `abort: AbortSignal.timeout(ms)` und wird als `NET_TIMEOUT` klassifiziert. Ein manueller Abbruch ist `NET_ABORTED`. `abort` ist das Signal des Aufrufs; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. Es gibt keine Default-Deadline auf Client-Ebene. Andere Request-Felder, etwa `heartbeat`, werden ignoriert.
 
 ## Typen
 

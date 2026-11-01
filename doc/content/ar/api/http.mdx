@@ -44,7 +44,7 @@ description: defineRequest، وخيارات الطلب، وأنواع طلب HTT
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `abort` مع `onDownloadProgress` و`onUploadProgress`. لا يوجد حقل `timeout` أو `signal`. المهلة هي `abort: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. `abort` لاحق يستبدل الإشارة السابقة. اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
+`HttpExecuteOptions` هو شريحة HTTP من [`RequestOptions`](/ar/api/core/requestoptions-type): [`UseRequestConfig`](/ar/api/core/userequestconfig-type)، وهو `abort` مع `onDownloadProgress` و`onUploadProgress`. لا يوجد حقل `timeout` أو `signal`. المهلة هي `abort: AbortSignal.timeout(ms)` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. `abort` هو إشارة الاستدعاء؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. لا توجد مهلة افتراضية على مستوى العميل. تُتجاهل حقول الطلب الأخرى، مثل `heartbeat`.
 
 ## الأنواع
 

@@ -5,13 +5,13 @@ description: Configura cómo llama tu aplicación a las operaciones importadas d
 
 # Cliente
 
-Un `Client` es la configuración de ejecución de la aplicación consumidora, y es una función. `createClient(...)` devuelve esa función. Importa operaciones de tu SDK, elige la dirección del servicio, las credenciales, los interceptores y el transporte, y llama a una operación con el cliente. `getUser(client({ abort }), { id: 1 })` arranca una llamada que declara entrada. `health(client)` arranca una que no la declara. Cuando todo el struct de entrada es opcional, tanto `search(client)` como `search(client, input)` son válidos. No hay un tercer argumento de opciones. Llamar a la operación la arranca. `await` solo espera la tupla error-first.
+Un `Client` es la configuración de ejecución de la aplicación consumidora. `createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Llamar a la fábrica con opciones de solicitud devuelve un valor `Client`, y un valor `Client` es lo que aceptan las operaciones. No es invocable. Importa operaciones de tu SDK, elige la dirección del servicio, las credenciales, los interceptores y el transporte, y llama a una operación con el cliente. `getUser(client({ abort }), { id: 1 })` arranca una llamada que declara entrada. `health(client)` arranca una que no la declara. Cuando todo el struct de entrada es opcional, tanto `search(client)` como `search(client, input)` son válidos. No hay un tercer argumento de opciones. Llamar a la operación la arranca. `await` solo espera la tupla error-first.
 
 Las definiciones del SDK no atan esta instancia. Un navegador, una solicitud de servidor y una prueba local pueden usar la misma operación exportada con clientes distintos. Todos siguen el mismo contrato de Defjs y versiones compatibles de Core. Configura la dirección de servicio de cada cliente para las operaciones que llames a través de él.
 
 El mismo valor de cliente puede pasarse a muchas operaciones. Las aplicaciones eligen las políticas de caché y de reintento y son dueñas del trabajo que arrancan. HTTP no se reintenta automáticamente. La reconexión de streams es opt-in.
 
-Como un `Client` es una función, no lo pases a un setter de estado de React: `setState(client)` lo llamaría como updater. No lo uses como fuente de `watch` o `computed` de Vue: esos llaman a una función.
+La fábrica es una función y también es un `Client` sin opciones de solicitud. No pases la fábrica a un setter de estado de React: `setState(factory)` la llamaría como updater. No la uses como fuente de `watch` o `computed` de Vue: esos llaman a una función. Un valor de cliente derivado es un objeto simple.
 
 ## Configuración básica
 
@@ -19,7 +19,7 @@ Como un `Client` es una función, no lo pases a un setter de estado de React: `s
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` devuelve un [`Client`](/es-ES/api/core/client-type) invocable. No es un conjunto de sobrecargas por transporte.
+`createClient(...)` devuelve una fábrica invocable que también es un [`Client`](/es-ES/api/core/client-type). No es un conjunto de sobrecargas por transporte.
 
 ## Componer opciones
 
@@ -33,29 +33,29 @@ Los interceptores mixtos se filtran por transporte cuando corre la operación; e
 
 ## Derivar un cliente
 
-`client(options?)` devuelve un cliente nuevo. Cuando se llama a `client(options)`, los siete campos conocidos se copian del objeto argumento: una instantánea de nivel superior en un objeto de opciones nuevo, superpuesta a las opciones actuales. Un campo posterior gana. Un campo cuyo valor es `undefined` se trata como no proporcionado y conserva el valor del padre. Un cliente derivado no puede quitar un ajuste que su padre tiene. Para volver a no tener ese ajuste, deriva otra vez desde el cliente que no lo tenía (conserva el cliente raíz). Los valores anidados `heartbeat`, `protocols` y `reconnect` se conservan por referencia, no se clonan, y sustituyen el valor del padre como un entero, no se fusionan. WebSocket los lee cuando se ejecuta la operación (entonces copia los campos de heartbeat y la lista protocols), así que mutar esos objetos después de derivar todavía puede afectar a una llamada posterior. Las aplicaciones deben tratarlos como inmutables después de pasarlos. Derivar no hace E/S. El cliente original nunca se muta. `client()`, `client(undefined)` y `client({})` copian las opciones actuales.
+`client(options?)` devuelve un valor `Client` para una sola llamada. Cuando se llama a `client(options)`, los siete campos conocidos se copian del objeto argumento: una instantánea de nivel superior en un objeto de opciones nuevo. Los campos desconocidos se ignoran y los campos cuyo valor es `undefined` se omiten. No hay superposición con un padre: `client()`, `client(undefined)` y `client({})` devuelven un cliente sin opciones de solicitud. Los valores anidados `heartbeat`, `protocols` y `reconnect` se conservan por referencia, no se clonan. WebSocket los lee cuando se ejecuta la operación (entonces copia los campos de heartbeat y la lista protocols), así que mutar esos objetos después de derivar todavía puede afectar a una llamada posterior. Las aplicaciones deben tratarlos como inmutables después de pasarlos. Derivar no hace E/S. Un getter que lanza escapa de `client(options)` y deja la fábrica utilizable. El valor de cliente no es invocable; crea uno por llamada.
 
-`abort` no se combina. Un `abort` posterior sustituye al signal anterior. Combina signals con `AbortSignal.any` en el código de la aplicación.
+`abort` no se combina. Reutilizar un valor de cliente que lleva `abort` comparte ese signal entre llamadas, así que crea un valor de cliente por llamada. Combina signals con `AbortSignal.any` en el código de la aplicación.
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-La configuración base de `createClient` la comparte cada cliente derivado y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían. Las [`RequestOptions`](/es-ES/api/core/requestoptions-type) de un cliente son esa instantánea de nivel superior. El código de la aplicación llama al cliente y lo pasa a una operación. No lee ese estado interno.
+La configuración base de `createClient` la comparte cada valor de cliente y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían. Las [`RequestOptions`](/es-ES/api/core/requestoptions-type) de un cliente son esa instantánea de nivel superior. El código de la aplicación pasa el cliente a una operación. No lee ese estado interno.
 
 ## Opciones de la solicitud
 
 [`RequestOptions`](/es-ES/api/core/requestoptions-type) tiene siete campos planos. Cada protocolo lee solo los campos que conoce e ignora el resto. Pasar `heartbeat` a una operación HTTP se ignora, no es un fault. SSE solo lee `abort` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación.
 
-| Campo                | Lo usa               | Regla                                                                                                                  |
-| -------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `abort`              | HTTP, SSE, WebSocket | Sustituye al signal anterior. Un plazo es `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). Un abort manual es `NET_ABORTED`. |
-| `onUploadProgress`   | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                            |
-| `onDownloadProgress` | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                            |
-| `beforeConnect`      | WebSocket            | Sustituye el ajuste del cliente para esa llamada.                                                                      |
-| `protocols`          | WebSocket            | Sustituye la lista del cliente. No se añade.                                                                           |
-| `heartbeat`          | WebSocket            | Se sustituye entero. `timeoutMs` es la espera del acuse del heartbeat, no un plazo de la solicitud.                    |
-| `reconnect`          | WebSocket            | Se sustituye entero.                                                                                                   |
+| Campo                | Lo usa               | Regla                                                                                                       |
+| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `abort`              | HTTP, SSE, WebSocket | Aborta la llamada. Un plazo es `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). Un abort manual es `NET_ABORTED`. |
+| `onUploadProgress`   | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                 |
+| `onDownloadProgress` | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                 |
+| `beforeConnect`      | WebSocket            | Sustituye el ajuste del cliente para esa llamada.                                                           |
+| `protocols`          | WebSocket            | Sustituye la lista del cliente. No se añade.                                                                |
+| `heartbeat`          | WebSocket            | Se sustituye entero. `timeoutMs` es la espera del acuse del heartbeat, no un plazo de la solicitud.         |
+| `reconnect`          | WebSocket            | Se sustituye entero.                                                                                        |
 
 No hay campo `timeout`, ni campo `signal`, ni un plazo por defecto a nivel de cliente. En SSE y WebSocket, `abort` cubre toda la conexión, también después de abrirse. No hay un plazo solo de arranque. Una aplicación que quiera uno crea su propio `AbortController`, lo aborta con `new DOMException("...", "TimeoutError")` desde un temporizador y limpia el temporizador cuando el await regresa. Consulta [SSE](/es-ES/docs/sse#close-and-dispose).
 
@@ -83,12 +83,13 @@ En un servidor, crea el cliente dentro del límite de la solicitud cuando las op
 
 ## Migración
 
-| Antes                                     | Ahora                                                               |
-| ----------------------------------------- | ------------------------------------------------------------------- |
-| `client.execute(getUser(input), options)` | `getUser(client(options), input)`                                   |
-| `execute(cmd, { timeout: 5000 })`         | `client({ abort: AbortSignal.timeout(5000) })`                      |
-| `execute(cmd, { signal })`                | `client({ abort: signal })`                                         |
-| `createClient(withTimeout(5000), ...)`    | pasa `abort` en la llamada, o envuelve una función de la aplicación |
+| Antes                                       | Ahora                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| `client.execute(getUser(input), options)`   | `getUser(client(options), input)`                                   |
+| `execute(cmd, { timeout: 5000 })`           | `client({ abort: AbortSignal.timeout(5000) })`                      |
+| `execute(cmd, { signal })`                  | `client({ abort: signal })`                                         |
+| `client({ abort })({ onDownloadProgress })` | `client({ abort, onDownloadProgress })`                             |
+| `createClient(withTimeout(5000), ...)`      | pasa `abort` en la llamada, o envuelve una función de la aplicación |
 
 ## Referencia
 

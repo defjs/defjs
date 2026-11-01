@@ -9,7 +9,7 @@ Importe les opérations de ton SDK ou d’un module de définition partagé. L�
 
 Ces plugins sont des helpers facultatifs pour fournir et lire un `Client` existant. Importe un client fixe possédé par l’application, passe un `Client` explicitement à de la logique réutilisable, utilise l’injection du framework pour les défauts et les surcharges au niveau de l’arbre, ou choisis ta propre organisation. Les définitions de SDK n’exigent pas ces plugins.
 
-Branche un client `@defjs/core` existant dans un arbre React. Tu obtiens Context et `useClient()`. Le package ne **crée pas** de client, n’ajoute pas de cache, ne réessaie pas les opérations et ne libère pas les ressources de transport. Le composant, l’effet ou la lib de data qui démarre le travail le possède. Le client issu de `useClient()` est passé à l’opération. Un `Client` est une fonction : ne le passe pas à un setter d’état, car `setState(client)` l’appellerait comme updater.
+Branche un client `@defjs/core` existant dans un arbre React. Tu obtiens Context et `useClient()`. Le package ne **crée pas** de client, n’ajoute pas de cache, ne réessaie pas les opérations et ne libère pas les ressources de transport. Le composant, l’effet ou la lib de data qui démarre le travail le possède. Le client issu de `useClient()` est passé à l’opération. Le hook renvoie le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) fourni. Pour des options par appel comme `abort`, appelle-le là où l’opération s’exécute : `getUser(client({ abort }), input)`. Ne le passe pas à un setter d’état, car `setState(client)` l’appellerait comme updater. Une valeur `Client` dérivée n’est pas acceptée par `ClientProvider` ni `useClient`.
 
 ## Mise en place
 

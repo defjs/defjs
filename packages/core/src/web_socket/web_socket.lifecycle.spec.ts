@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, inject, test } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withQuerySerializer,
   type Client,
@@ -9,7 +10,7 @@ import { struct } from "../struct";
 import { defineWebSocket, type SocketAwaitResult } from "./index";
 
 describe("web socket runtime lifecycle", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));

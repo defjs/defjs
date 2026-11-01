@@ -57,7 +57,7 @@ async function consume(
 
 `WebSocketExecuteOptions` — это [`UseWebSocketConfig`](/ru-RU/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect` и `abort`. `WebSocketHeartbeatConfig`: `intervalMs`, необязательные `message`, `isAck`, `timeoutMs`. Полей `timeout` или `signal` нет.
 
-`abort` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. Более поздний `abort` заменяет предыдущий сигнал. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
+`abort` покрывает всю сессию, в том числе после открытия. Дедлайн — `AbortSignal.timeout(ms)`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна только на старт нет, и дедлайна по умолчанию на уровне клиента нет. `abort` — сигнал вызова; объединяй сигналы через `AbortSignal.any` в коде приложения. `heartbeat` заменяется целиком; его `timeoutMs` ждёт подтверждения и не является дедлайном запроса.
 
 Когда задан `reconnect`, `attempts` по умолчанию равен 3 на каждый обрыв; `0` отключает повторы. Успешный `open` сбрасывает бюджет и показатель степени для задержки, поэтому после каждого нового обрыва отсчёт начинается с попытки 1. Отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. Значения по умолчанию и правила проверки см. в [Клиент](/ru-RU/api/client).
 

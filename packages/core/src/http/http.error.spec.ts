@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withHTTPHandle,
   withInterceptors,
 } from "../client";
-import type { Client } from "../client";
 import { ERR_ABORTED } from "../error";
 import { createHttpInterceptor } from "../interceptor";
 import type { HttpResponse } from "../internal/http_response";
@@ -16,7 +16,7 @@ import { MALFORMED_INTERCEPTOR_RESULTS } from "../../test/malformed_interceptor_
 import { defineRequest } from "./index";
 
 describe("request http runtime errors", () => {
-  let client: Client;
+  let client: DerivableClient;
 
   beforeEach(() => {
     client = createClient(withEndpoint(inject("testServerHost")));

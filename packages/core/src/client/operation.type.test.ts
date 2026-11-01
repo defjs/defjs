@@ -25,6 +25,7 @@ const abort = new AbortController().signal;
 const derived: Client = client({ abort });
 const noOptions: Client = client();
 void [derived, noOptions];
+// @ts-expect-error A derived client is not callable.
 client({ abort })({ protocols: ["chat.v1"] })();
 
 // @ts-expect-error timeout was removed from request options.

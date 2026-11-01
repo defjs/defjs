@@ -39,7 +39,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 <ApiSignature name="HttpExecuteOptions" />
 
-`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 切片：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `abort` 加上 `onDownloadProgress` 和 `onUploadProgress`。没有 `timeout` 或 `signal` 字段。期限是 `abort: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。后一次 `abort` 替换上一次的 signal。要组合 signal，在应用代码里用 `AbortSignal.any`。没有 client 级的默认期限。其他请求字段，例如 `heartbeat`，会被忽略。
+`HttpExecuteOptions` 是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 的 HTTP 切片：[`UseRequestConfig`](/zh-Hans/api/core/userequestconfig-type)，即 `abort` 加上 `onDownloadProgress` 和 `onUploadProgress`。没有 `timeout` 或 `signal` 字段。期限是 `abort: AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。`abort` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。没有 client 级的默认期限。其他请求字段，例如 `heartbeat`，会被忽略。
 
 ## 类型
 

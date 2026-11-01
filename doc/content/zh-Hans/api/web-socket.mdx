@@ -57,7 +57,7 @@ async function consume(
 
 `WebSocketExecuteOptions` 是 [`UseWebSocketConfig`](/zh-Hans/api/core/usewebsocketconfig-type)：`beforeConnect`、`heartbeat`、`protocols`、`reconnect` 和 `abort`。`WebSocketHeartbeatConfig`：`intervalMs`，可选 `message`、`isAck`、`timeoutMs`。没有 `timeout` 或 `signal` 字段。
 
-`abort` 覆盖整个 session，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。后一次 `abort` 替换上一次的 signal。`heartbeat` 整体替换；它的 `timeoutMs` 等待确认，不是请求期限。
+`abort` 覆盖整个 session，包括打开之后。期限是 `AbortSignal.timeout(ms)`，归类为 `NET_TIMEOUT`。手动中止是 `NET_ABORTED`。没有仅限启动期的期限，也没有 client 级的默认期限。`abort` 是这次调用的 signal；要组合 signal，在应用代码里用 `AbortSignal.any`。`heartbeat` 整体替换；它的 `timeoutMs` 等待确认，不是请求期限。
 
 设了 `reconnect` 时，每次连接中断的 `attempts` 默认 3；`0` 禁用。成功 `open` 后会重置预算和退避指数，因此每次新的中断都从第 1 次重试开始。省略 `attempts` 并不表示单次中断期间可以无限重试。默认值和校验规则见 [Client](/zh-Hans/api/client)。
 

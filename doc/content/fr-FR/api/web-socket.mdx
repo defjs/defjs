@@ -57,7 +57,7 @@ async function consume(
 
 `WebSocketExecuteOptions` est [`UseWebSocketConfig`](/fr-FR/api/core/usewebsocketconfig-type) : `beforeConnect`, `heartbeat`, `protocols`, `reconnect` et `abort`. `WebSocketHeartbeatConfig` : `intervalMs`, `message` facultatif, `isAck`, `timeoutMs`. Il n’y a pas de champ `timeout` ou `signal`.
 
-`abort` couvre toute la session, y compris après son ouverture. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance limitée au démarrage, ni d’échéance par défaut au niveau du client. Un `abort` ultérieur remplace le signal précédent. `heartbeat` est remplacé en entier ; son `timeoutMs` attend un acquittement et n’est pas une échéance de requête.
+`abort` couvre toute la session, y compris après son ouverture. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel est `NET_ABORTED`. Il n’y a pas d’échéance limitée au démarrage, ni d’échéance par défaut au niveau du client. `abort` est le signal de l’appel ; combine les signaux avec `AbortSignal.any` dans le code applicatif. `heartbeat` est remplacé en entier ; son `timeoutMs` attend un acquittement et n’est pas une échéance de requête.
 
 Quand `reconnect` est défini, `attempts` vaut 3 par défaut par coupure ; `0` désactive. Un `open` réussi réinitialise le budget et l’exposant de backoff, donc chaque nouvelle coupure repart à la tentative 1. Omettre `attempts` ne donne pas des tentatives illimitées dans une coupure. Voir [Client](/fr-FR/api/client) pour les défauts et les règles de validation.
 

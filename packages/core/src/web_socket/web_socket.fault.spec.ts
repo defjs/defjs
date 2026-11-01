@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   createClient,
+  type DerivableClient,
   withEndpoint,
   withInterceptors,
   withWebSocketBeforeConnect,
@@ -31,7 +32,7 @@ const useRoom = defineWebSocket({
 
 function unreachableClient(
   ...options: Parameters<typeof createClient>
-): ReturnType<typeof createClient> {
+): DerivableClient {
   return createClient(withEndpoint("http://127.0.0.1:1"), ...options);
 }
 

@@ -22,7 +22,7 @@ See the [Vue guide](/docs/integrations/vue).
 
 <ApiSignature name="injectClient" />
 
-`injectClient(key)` reads the nearest provider for that key; omitted or `undefined` uses `HTTP_CLIENT`. Call in a valid Vue injection context: synchronous `setup()` or `app.runWithContext()` (Vue 3.3+). The latter supplies only synchronous app-level context, not subtree overrides or context across ordinary `await`. Compiler-restored contexts after top-level `await` in `<script setup>` remain valid. Pass that client into an operation. A `Client` is a function: do not use it as a `watch` or `computed` source, because those call a function.
+`injectClient(key)` reads the nearest provider for that key; omitted or `undefined` uses `HTTP_CLIENT`. Call in a valid Vue injection context: synchronous `setup()` or `app.runWithContext()` (Vue 3.3+). The latter supplies only synchronous app-level context, not subtree overrides or context across ordinary `await`. Compiler-restored contexts after top-level `await` in `<script setup>` remain valid. Pass that client into an operation. The injected value is the [`DerivableClient`](/api/core/derivableclient-type) that was provided; call it with request options where the operation runs to derive a `Client` value. Do not use it as a `watch` or `computed` source, because those call a function. A derived `Client` value is not accepted by the plugin or `injectClient`.
 
 For a custom `InjectionKey<Client>`, use `app.provide(key, client)` or an ancestor’s `provide(key, client)`. Share the same `Symbol` object; matching descriptions do not make keys equal. `createClientPlugin(client)` still takes only the client and provides `HTTP_CLIENT`.
 

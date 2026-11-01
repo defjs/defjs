@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, inject, test, vi } from "vitest";
 
 import {
   createClient,
+  type DerivableClient,
   withCredentials,
   withEndpoint,
   withInterceptors,
@@ -98,7 +99,7 @@ function createShortCircuitStream(): EventStreamHandle<unknown> {
 }
 
 describe("request event stream runtime", () => {
-  let baseClient: Client;
+  let baseClient: DerivableClient;
 
   beforeEach(() => {
     baseClient = createClient(withEndpoint(inject("testServerHost")));

@@ -57,7 +57,7 @@ async function consume(
 
 `WebSocketExecuteOptions` は [`UseWebSocketConfig`](/ja-JP/api/core/usewebsocketconfig-type) です。`beforeConnect`、`heartbeat`、`protocols`、`reconnect`、`abort` です。`WebSocketHeartbeatConfig` は `intervalMs`、任意の `message`、`isAck`、`timeoutMs` です。`timeout` フィールドも `signal` フィールドもありません。
 
-`abort` は開いたあとも含むセッション全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。あとの `abort` が前のシグナルを置き換えます。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
+`abort` は開いたあとも含むセッション全体を覆います。期限は `AbortSignal.timeout(ms)` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。起動時だけの期限も、クライアント単位の既定の期限もありません。`abort` はその呼び出しのシグナルです。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。`heartbeat` は全体が置き換わり、その `timeoutMs` は確認を待ち、リクエストの期限ではありません。
 
 `reconnect` を指定したとき、`attempts` のデフォルトは障害ごとに 3 です。`0` はリトライを無効にします。`open` に成功すると予算とバックオフの指数がリセットされるため、新たな障害ではリトライ 1 から始まります。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。デフォルトと検証規則は [Client](/ja-JP/api/client) を参照してください。
 

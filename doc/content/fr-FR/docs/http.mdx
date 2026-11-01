@@ -136,7 +136,7 @@ il n’y a pas de réponse de statut 0 qui en tienne lieu.
 
 ## Annuler le travail [#cancel-the-work]
 
-Passe `abort` sur un client dérivé. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel se classe en `NET_ABORTED`. Il n’y a pas de champ `timeout`, pas de champ `signal`, et pas d’échéance par défaut au niveau du client. Un `abort` ultérieur remplace le signal précédent. Combine un signal d’appelant avec une échéance grâce à `AbortSignal.any` dans le code applicatif.
+Passe `abort` sur un client dérivé. Une échéance est `AbortSignal.timeout(ms)` et se classe en `NET_TIMEOUT`. Un abort manuel se classe en `NET_ABORTED`. Il n’y a pas de champ `timeout`, pas de champ `signal`, et pas d’échéance par défaut au niveau du client. `abort` est le signal de l’appel ; combine les signaux avec `AbortSignal.any` dans le code applicatif. Combine un signal d’appelant avec une échéance grâce à `AbortSignal.any` dans le code applicatif.
 
 <include cwd>examples/http/deadline.ts#example</include>
 

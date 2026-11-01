@@ -202,6 +202,7 @@ describe("Client", () => {
     );
 
     expect(typeof client).toBe("function");
+    expect(typeof client()).toBe("object");
     expect(client()[CLIENT]).toBeDefined();
   });
 

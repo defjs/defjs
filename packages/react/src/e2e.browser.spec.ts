@@ -3,7 +3,7 @@ import {
   createHttpInterceptor,
   defineRequest,
   struct,
-  type Client,
+  type DerivableClient,
   withEndpoint,
   withInterceptors,
 } from "@defjs/core";
@@ -50,7 +50,7 @@ function UserList() {
   );
 }
 
-function App({ client }: { client: Client }) {
+function App({ client }: { client: DerivableClient }) {
   return createElement(
     ClientProvider,
     { client },

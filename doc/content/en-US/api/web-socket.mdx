@@ -57,7 +57,7 @@ async function consume(
 
 `WebSocketExecuteOptions` is [`UseWebSocketConfig`](/api/core/usewebsocketconfig-type): `beforeConnect`, `heartbeat`, `protocols`, `reconnect`, and `abort`. `WebSocketHeartbeatConfig`: `intervalMs`, optional `message`, `isAck`, `timeoutMs`. There is no `timeout` or `signal` field.
 
-`abort` covers the whole session, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no startup-only deadline and no client-level default deadline. A later `abort` replaces the previous signal. `heartbeat` is replaced whole; its `timeoutMs` waits for an acknowledgement and is not a request deadline.
+`abort` covers the whole session, including after it opens. A deadline is `AbortSignal.timeout(ms)` and classifies as `NET_TIMEOUT`. A manual abort is `NET_ABORTED`. There is no startup-only deadline and no client-level default deadline. `abort` is the call's signal; combine signals with `AbortSignal.any` in application code. `heartbeat` is replaced whole; its `timeoutMs` waits for an acknowledgement and is not a request deadline.
 
 When `reconnect` is set, `attempts` defaults to 3 per outage; `0` disables. Successful `open` resets the budget and backoff exponent, so each new outage starts at retry 1. Omitting `attempts` does not give unlimited retries within one outage. See [Client](/api/client) for the defaults and validation rules.
 
