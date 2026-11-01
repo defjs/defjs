@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no React depend
 bun add @defjs/core @defjs/react react
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.5.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
 
 ## Quick start
 

@@ -10,7 +10,7 @@ Keeping SDK definitions in their own package means the SDK needs no Vue dependen
 bun add @defjs/core @defjs/vue vue
 ```
 
-The package is ESM and requires `@defjs/core` as a peer in the `^0.5.0` range.
+The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
 
 ## Quick start
 
