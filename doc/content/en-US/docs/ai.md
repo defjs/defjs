@@ -19,18 +19,18 @@ After publication, the skill instructions can be read at [skills/defjs/SKILL.md]
 
 ## Ask for one endpoint [#prompt]
 
-Give the assistant a task. This prompt asks for a typed `GET /users/:id` whose client stays in the application:
+Give the assistant a task. This prompt asks for a typed `GET /orders/:id` whose client stays in the application:
 
 ```txt
-Use @defjs/core to define GET /users/:id.
-The input is { id: number }; a successful response is { id: number, name: string }.
+Use @defjs/core to define GET /orders/:id.
+The input is { id: number }; a successful response is { id: number, status: string }.
 Keep the SDK definition and application client in separate modules,
 and verify the result with the project’s existing tests.
 ```
 
 ## Check the result [#verify]
 
-Read the definition and the application separately. The definition exports the operation and does not create the client. The application creates the client and calls the operation, for example `getUser(client, { id: 1 })`. Where `input` is declared, `builder` is an explicit synchronous pure function. The success value is used only after the error slot is empty.
+Read the definition and the application separately. The definition exports the operation and does not create the client. The application creates the client and calls the operation, for example `getOrder(client, { id: 1 })`. Where `input` is declared, `builder` is an explicit synchronous pure function. The success value is used only after the error slot is empty.
 
 Then run that project's typecheck and the tests that cover the contract. Dependency installation and CI rules stay with that project.
 

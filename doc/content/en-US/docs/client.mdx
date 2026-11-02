@@ -5,7 +5,7 @@ description: Configure how your application calls imported SDK operations, indep
 
 # Client
 
-A `Client` is the consuming application's execution configuration. `createClient(...)` returns a [`DerivableClient`](/api/core/derivableclient-type). Calling the factory with request options returns a `Client` value, and a `Client` value is what operations accept. It is not callable. Import operations from your SDK, choose the service address, credentials, interceptors, and transport, then call an operation with the client. `getUser(client({ signal }), { id: 1 })` starts a call that declares input. `health(client)` starts one that does not. When the whole input struct is optional, both `search(client)` and `search(client, input)` are valid. There is no third options argument. Calling the operation starts it. `await` only waits for the error-first tuple.
+A `Client` is the consuming application's execution configuration. `createClient(...)` returns a [`DerivableClient`](/api/core/derivableclient-type). Calling the factory with request options returns a `Client` value, and a `Client` value is what operations accept. It is not callable. Import operations from your SDK, choose the service address, credentials, interceptors, and transport, then call an operation with the client. `getOrder(client({ signal }), { id: 1 })` starts a call that declares input. `health(client)` starts one that does not. When the whole input struct is optional, both `search(client)` and `search(client, input)` are valid. There is no third options argument. Calling the operation starts it. `await` only waits for the error-first tuple.
 
 The SDK's definitions do not bind this instance. A browser, a server request, and a local test can use the same exported operation with different clients. All still follow the same Defjs contract and compatible Core versions. Configure each client's service address for the operations you call through it.
 
@@ -33,7 +33,7 @@ Mixed interceptors are filtered by transport when the operation runs; relative o
 
 ## Derive a client
 
-`client(options?)` returns a `Client` value for one call. The seven known fields are copied from the argument object when `client(options)` is called, a top-level snapshot into a fresh options object. Unknown fields are ignored and fields whose value is `undefined` are omitted. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. Deriving performs no I/O. A getter that throws escapes `client(options)` and leaves the factory usable. The client value is not callable; create one per call.
+`client(options?)` returns a `Client` value for one call. `client()` and `client(undefined)` store no request options. `client({})` keeps an empty snapshot; Defjs does not drop it by inspecting keys. Calling `client(options)` reads each top-level request field once onto a new options object. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `reconnect` copies `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect`. Missing nested blocks stay missing, so they do not turn heartbeat or retry on. `signal`, `beforeConnect`, and every callback keep their identity. The same option object can be passed again; each call captures its own containers. Deriving performs no I/O. A getter on these fixed fields runs during `client(options)`. If it throws, the exception escapes that call and leaves the factory usable. It is not turned into a fault. Out-of-range numbers are still checked when the operation runs and still return `REQ_OPTIONS_INVALID`. The client value is not callable; create one per call.
 
 `signal` is not combined. Reusing a client value that carries `signal` shares that signal between calls, so create a client value per call. Combine signals with `AbortSignal.any` in application code.
 
@@ -41,7 +41,7 @@ Mixed interceptors are filtered by transport when the operation runs; relative o
   examples/client/derive-client.ts#example
 </include>
 
-The base configuration from `createClient` is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. The [`RequestOptions`](/api/core/requestoptions-type) on a client are that top-level snapshot. Application code passes the client to an operation. It does not read that internal state.
+The base configuration from `createClient` is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. Standard helpers such as `withWebSocketHeartbeat`, `withWebSocketReconnect`, `withSSEReconnect`, and `withWebSocketProtocols` copy their fixed records when the helper is applied. A custom client option can still keep its own reference. `withInterceptors` appends a fresh `{ kind, fn }` record for each entry and keeps `fn` itself. A derived client carries a captured [`RequestOptions`](/api/core/requestoptions-type) object only when options were supplied. The factory, `client()`, and `client(undefined)` have none. Application code passes the client to an operation. It does not read that internal state.
 
 ## Request options
 
@@ -80,16 +80,6 @@ You own cleanup: abort HTTP, close SSE + `await stream.closed`, close WebSocket 
 ## Scope on server vs browser
 
 On a server, create the client inside the request boundary when options or interceptor closures capture auth, cookies, users, or tenants. Client identity isn’t a security boundary by itself.
-
-## Migration
-
-| Old                                          | New                                                        |
-| -------------------------------------------- | ---------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                          |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`            |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                       |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                   |
-| `createClient(withTimeout(5000), ...)`       | pass `signal` at the call, or wrap an application function |
 
 ## Reference
 

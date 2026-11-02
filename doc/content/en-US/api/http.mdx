@@ -12,7 +12,7 @@ Declare a typed request, then call the operation with a client and its input.
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, optional `input` struct, optional `output` and `error` structs, optional `operation`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`. These `definition` members are documented under [`RequestDefinition`](/api/core/requestdefinition-type). `builder` is required exactly when `input` is declared.
-- **Returns** an operation. Call it as `getUser(client, input)`, or `health(client)` when no input is declared. When the whole input struct is optional, the input argument may be omitted. Calling it starts the request. There is no third options argument.
+- **Returns** an operation. Call it as `getOrder(client, input)`, or `health(client)` when no input is declared. When the whole input struct is optional, the input argument may be omitted. Calling it starts the request. There is no third options argument.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -52,7 +52,7 @@ struct as one off the wire; there is no trusted short-circuit.
 
 ### RequestDefinition
 
-`method`, `path`, optional `input`, `output`, `error`, `operation`, and `builder`. There is no `responseType`: the struct kind selects how a declared body is read. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+`method`, `path`, optional `input`, `output`, `error`, `operation`, and `builder`. The struct kind selects how a declared body is read. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
 
 ### HttpAwaitResult
 

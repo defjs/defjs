@@ -52,6 +52,8 @@ Hook 簽名：
 
 空的傳輸物件會啟用該傳輸。舊的 boolean 傳輸開關（`http: false`）與舊的頂層 hooks 只會被 TypeScript 型別拒絕，執行階段沒有檢查：執行時 `http: false` 仍會讓該傳輸保持啟用，頂層 hook 則會被默默忽略。請使用傳輸 option 物件（`{ enabled: false }`）與傳輸範圍的 hooks。
 
+`withOpenTelemetryServer` 先讀 `http`，再讀 `sse`，再讀 `webSocket`，各一次。缺失的區塊維持缺失，該傳輸仍保持啟用。存在的區塊會逐欄複製：`enabled`、`startSpanHook`、`requestHook`、`responseHook`，WebSocket 另有 `queryPropagation`。之後改動或替換某個區塊，不會改變這份 option。`enabled` 最先讀。只有 `false` 會停用該傳輸，停用分支不讀 hooks 或 `queryPropagation`。被複製欄位的 getter 在 `withOpenTelemetryServer` 期間執行。若其中一個拋出，例外會立刻離開這次呼叫；後面的區塊不再讀取，錯誤也不會延到套用這份 option 時。`tracer`、`meter`、`logger`、`propagator` 與 hook 函式保持各自的身分。
+
 ## 操作身分與 propagation
 
 當操作有穩定身分時，在 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 設 static `operation`。Plugin 用它做 span names，並當成 `defjs.operation`。它絕不會從解析後的 path、identifier、tenant 或 query string 推身分：
@@ -88,7 +90,7 @@ Plugin 量的是傳輸生命週期，不是操作的每一階段。
 
 ## 參考
 
-有提供 `meter` 時：
+提供 `meter` 時，插件會在每次將 option 套用至 client 時呼叫它的指標建立方法，而不是在呼叫 `withOpenTelemetryServer` 時呼叫。回傳的指標物件或彙總狀態是否共用，由 Meter/SDK 決定。每個持續時間直方圖各自拿到一份邊界副本：0.005、0.01、0.025、0.05、0.075、0.1、0.25、0.5、0.75、1、2.5、5、7.5 與 10 秒。
 
 | Metric                                       | 意義                                            |
 | -------------------------------------------- | ----------------------------------------------- |

@@ -84,13 +84,9 @@ async function openStream(options: {
           headers: { "content-type": "text/event-stream" },
         })) as unknown as typeof fetch,
     ),
-    ...(options.onInvalidEvent
-      ? [withSSEOnInvalidEvent(options.onInvalidEvent)]
-      : []),
+    withSSEOnInvalidEvent(options.onInvalidEvent),
   );
-  const [error, stream] = await useStream(
-    options.signal ? client({ signal: options.signal }) : client,
-  );
+  const [error, stream] = await useStream(client({ signal: options.signal }));
   expect(error).toBeNull();
   if (!stream) {
     throw new Error("Expected stream");

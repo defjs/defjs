@@ -5,7 +5,7 @@ description: import した SDK の操作を、API 定義とは独立してアプ
 
 # Client
 
-`Client` は、利用するアプリケーションの実行設定です。`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。ファクトリをリクエスト options 付きで呼ぶと `Client` 値が返り、操作が受け取るのはその `Client` 値です。`Client` 値は呼び出せません。SDK から操作を import し、サービスアドレス、認証情報、インターセプター、トランスポートを選んでから、クライアントを渡して操作を呼びます。入力を宣言した呼び出しは `getUser(client({ signal }), { id: 1 })` で始まります。入力を宣言していない呼び出しは `health(client)` で始まります。入力 struct 全体が任意なら、`search(client)` と `search(client, input)` の両方が有効です。第 3 の options 引数はありません。操作を呼ぶと処理が始まります。`await` が待つのは error-first タプルだけです。
+`Client` は、利用するアプリケーションの実行設定です。`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。ファクトリをリクエスト options 付きで呼ぶと `Client` 値が返り、操作が受け取るのはその `Client` 値です。`Client` 値は呼び出せません。SDK から操作を import し、サービスアドレス、認証情報、インターセプター、トランスポートを選んでから、クライアントを渡して操作を呼びます。入力を宣言した呼び出しは `getOrder(client({ signal }), { id: 1 })` で始まります。入力を宣言していない呼び出しは `health(client)` で始まります。入力 struct 全体が任意なら、`search(client)` と `search(client, input)` の両方が有効です。第 3 の options 引数はありません。操作を呼ぶと処理が始まります。`await` が待つのは error-first タプルだけです。
 
 SDK の定義はこのインスタンスに束縛されません。ブラウザー、サーバーリクエスト、ローカルテストが、異なるクライアントで同じ export された操作を使えます。どれも同じ Defjs 契約と互換性のある Core の版に従います。そのクライアントを通して呼ぶ操作に合わせて、各クライアントのサービスアドレスを構成してください。
 
@@ -33,7 +33,7 @@ options は左から右へ適用されます。setter は置換、`withIntercept
 
 ## クライアントを派生する
 
-`client(options?)` は 1 回の呼び出し用の `Client` 値を返します。`client(options)` を呼ぶとき、既知の 7 フィールドは引数オブジェクトからコピーされます。新しい options オブジェクトへのトップレベルのスナップショットです。未知のフィールドは無視され、値が `undefined` のフィールドは省かれます。親の options を重ねることはありません。`client()`、`client(undefined)`、`client({})` はリクエスト options を持たないクライアントを返します。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされません。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。throw する getter は `client(options)` から外へ伝わり、ファクトリは引き続き使えます。client 値は呼び出せないため、呼び出しごとに 1 つ作ってください。
+`client(options?)` は 1 回の呼び出し用の `Client` 値を返します。`client()` と `client(undefined)` はリクエスト options を保存しません。`client({})` は空のスナップショットを残します。Defjs はキー検査によってそれを捨てません。`client(options)` を呼ぶとき、各トップレベルのリクエストフィールドを一度だけ読み、新しい options オブジェクトへ置きます。`protocols` 配列はコピーされます。`heartbeat` は `intervalMs`、`isAck`、`message`、`timeoutMs` をコピーします。`reconnect` は `attempts`、`delayMs`、`factor`、`jitter`、`maxDelayMs`、`shouldReconnect` をコピーします。欠けている入れ子ブロックは欠けたままで、ハートビートやリトライをオンにはしません。`signal`、`beforeConnect`、すべてのコールバックは同一性を保ちます。同じ option オブジェクトは再度渡せます。呼び出しごとに自分のコンテナをキャプチャします。派生は I/O をしません。これらの固定フィールドの getter は `client(options)` の間に実行されます。throw した場合、例外はその呼び出しから外へ伝わり、ファクトリは引き続き使えます。それは fault にはなりません。範囲外の数値は操作の実行時に引き続き検査され、引き続き `REQ_OPTIONS_INVALID` を返します。client 値は呼び出せないため、呼び出しごとに 1 つ作ってください。
 
 `signal` は合成されません。`signal` を持つ client 値を再利用すると、呼び出し間でそのシグナルを共有するため、呼び出しごとに client 値を作ってください。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
 
@@ -41,7 +41,7 @@ options は左から右へ適用されます。setter は置換、`withIntercept
   examples/client/derive-client.ts#example
 </include>
 
-`createClient` からの基底設定は、すべての client 値が共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。そのクライアントの [`RequestOptions`](/ja-JP/api/core/requestoptions-type) は、そのトップレベルのスナップショットです。アプリケーションコードはクライアントを操作に渡します。その内部状態は読みません。
+`createClient` からの基底設定は、すべての client 値が共有し、実行時には凍結されません。慣例として固定です。ライブラリはそれを変えず、アプリケーションも変えるべきではありません。`withWebSocketHeartbeat`、`withWebSocketReconnect`、`withSSEReconnect`、`withWebSocketProtocols` のような標準ヘルパーは、ヘルパーを適用するときに固定レコードをコピーします。カスタムの client option は、自分の参照を保持したままでいられます。`withInterceptors` は各エントリに新しい `{ kind, fn }` レコードを追加し、`fn` 自体はそのままです。派生したクライアントがキャプチャ済みの [`RequestOptions`](/ja-JP/api/core/requestoptions-type) オブジェクトを持つのは、options が渡されたときだけです。ファクトリ、`client()`、`client(undefined)` にはありません。アプリケーションコードはクライアントを操作に渡します。その内部状態は読みません。
 
 ## リクエスト options
 
@@ -80,16 +80,6 @@ options は左から右へ適用されます。setter は置換、`withIntercept
 ## サーバーとブラウザーでのスコープ
 
 サーバーでは、options やインターセプターのクロージャが認証・cookie・ユーザー・テナントを掴むなら、クライアントをリクエスト境界の中で作ります。クライアントの同一性そのものがセキュリティ境界ではありません。
-
-## 移行
-
-| 旧                                           | 新                                                         |
-| -------------------------------------------- | ---------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                          |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`            |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                       |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                   |
-| `createClient(withTimeout(5000), ...)`       | 呼び出し時に `signal` を渡すか、アプリケーション関数で包む |
 
 ## リファレンス
 

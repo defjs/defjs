@@ -9,12 +9,12 @@ description: 把带类型的 JSON body 交给 builder，并解码声明过的 20
 
 细节见 [HTTP](/zh-Hans/docs/http) 和 [Client](/zh-Hans/docs/client)。
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` 是占位地址。假设服务器返回 `201` 和 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`，这段代码会输出：
+`api.example.com` 是占位地址。假设服务器返回 `201` 和 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`，这段代码会输出：
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

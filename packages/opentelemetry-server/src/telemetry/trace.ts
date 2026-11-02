@@ -16,11 +16,8 @@ export function resolveStartSpanHook(
   hook: ((request: HttpRequest) => Attributes) | undefined,
   request: HttpRequest,
 ): StartSpanHookResult {
-  if (!hook) {
-    return { ok: true };
-  }
   try {
-    return { ok: true, attributes: hook(request) };
+    return { ok: true, attributes: hook?.(request) };
   } catch (error) {
     return { ok: false, error };
   }
@@ -181,11 +178,7 @@ export function addSpanEvent(
   eventName: string,
   attributes?: Attributes,
 ): void {
-  if (attributes) {
-    span.addEvent(eventName, attributes);
-    return;
-  }
-  span.addEvent(eventName);
+  span.addEvent(eventName, attributes);
 }
 
 function toError(error: unknown): Error {

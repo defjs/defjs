@@ -20,10 +20,10 @@ SDK 定義 WebSocket 操作嘅 path、input、收發訊息同 queue 上限。使
 `incoming` 係每條 text frame 嘅一個 struct。`outgoing` 係 `session.send(...)` 嘅一個 struct。幾種 kinds 用 `struct.discriminatedUnion` model。嗰啲 fields 上面嘅 alias 就係兩個方向嘅 wire name。冇獨立 type envelope，亦冇 normalizer。
 
 ```json
-{ "type": "message", "text": "Hello" }
+{ "type": "tick", "symbol": "ACME", "price": 142.5 }
 ```
 
-Incoming text、`ArrayBuffer`、typed-array 同 `Blob` frames 會當 UTF-8 讀、JSON-parsed，再對住 `incoming` 檢查。Malformed JSON 同 struct failures 去 `session.onRuntimeError`，而且唔會入 queue。Session 保持開住。唔係 text、bytes 或者 `Blob` 嘅 frames 會被 ignore。冇 `withWebSocketOnInvalidEvent`。
+Incoming text、`ArrayBuffer`、typed-array 同 `Blob` frames 會當 UTF-8 讀、JSON-parsed，再對住 `incoming` 檢查。Malformed JSON 同 struct failures 去 `session.onRuntimeError`，而且唔會入 queue。Session 保持開住。唔係 text、bytes 或者 `Blob` 嘅 frames 會被 ignore。
 
 `session.send(...)` 會 synchronous validate 同 serialize：struct encode，然後 `JSON.stringify`。Open 時即刻 send；`reconnecting` 期間如果有 outgoing queue 就 queue；唔 writable 就 throw `InvalidStateError`。冇 outgoing struct、payload 過唔到 struct、outgoing queue disabled 或者 full，或者 native send 失敗，都會 throw。Definition 上面嘅 static `protocols` list 係 endpoint contract（例如 `graphql-transport-ws`）。派生 client 嘅 `protocols` 同 `withWebSocketProtocols` 仍然可以 override。只有呢啲 options 先揀到 subprotocols：builder、`beforeConnect` 同 interceptors 改唔到，所以 token-in-subprotocol 要喺該次呼叫嘅派生 client 上傳 `protocols`。Builder 只可以 return `path` 同 `query`。
 
@@ -84,7 +84,7 @@ Incoming overflow 會清 pending sequence、fail `receive`、停 session，再�
 
 ## Protocols 同 authentication
 
-Definition `protocols`、client `withWebSocketProtocols(...)`，同派生 client 上嘅 `protocols` 設定 constructor subprotocol list。Precedence：派生 client → client → definition。派生出嚟嘅 list 取代 client list，唔會 append。第一個 defined list 會 copy 畀 logical session，reconnect 時 reuse。
+Definition `protocols`、client `withWebSocketProtocols(...)`，同派生 client 上嘅 `protocols` 設定 constructor subprotocol list。Precedence：派生 client → client → definition。派生出嚟嘅 list 取代 client list，唔會 append。`defineWebSocket` 喺建立 definition 時複製 protocols array。`withWebSocketProtocols` 喺應用該 option 時複製佢，`client({ protocols })` 喺建立 client 值時複製佢。之後再改原來嘅 array，唔會改到已捕獲嘅 container。為某次呼叫揀出嚟嘅 list 會再複製一份畀 logical session，reconnect 時 reuse。非 array 嘅值喺 capture boundary 唔會被 spread；執行時仍然會驗證佢。
 
 Browser WebSocket constructors 唔接受 arbitrary handshake headers，builder 亦唔可以 return `headers` 或者 `body`。Defjs 會將 `http:` → `ws:` 同 `https:` → `wss:`，path placeholders encode 一次，query rules 同 HTTP 一樣：預設係 scalars 同重複 keys，nested objects 用 `withQuerySerializer`，冇 query 就唔會 call serializer。
 

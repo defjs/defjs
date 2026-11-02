@@ -66,14 +66,14 @@ Path、query、headers、body 是 builder 回傳的欄位，不是一個 request
   examples/struct/aliases.ts#example
 </include>
 
-| 邊界                                   | 欄位                      |
-| -------------------------------------- | ------------------------- |
-| `struct.parse(User, ...)` 與操作 input | 邏輯 `displayName`        |
-| Builder 回傳的型別化物件               | Wire `display_name`       |
-| JSON／SSE／WebSocket 解碼              | Wire → 邏輯 `displayName` |
-| Builder 裡寫的匿名物件                 | 你寫下的那個 key          |
+| 邊界                                    | 欄位                       |
+| --------------------------------------- | -------------------------- |
+| `struct.parse(Order, ...)` 與操作 input | 邏輯 `customerName`        |
+| Builder 回傳的型別化物件                | Wire `customer_name`       |
+| JSON／SSE／WebSocket 解碼               | Wire → 邏輯 `customerName` |
+| Builder 裡寫的匿名物件                  | 你寫下的那個 key           |
 
-Builder 本身讀取的是邏輯名稱（`input.user.displayName`）；wire name 只會在 serializer 編碼 builder 回傳的型別化物件時出現。
+Builder 本身讀取的是邏輯名稱（`input.order.customerName`）；wire name 只會在 serializer 編碼 builder 回傳的型別化物件時出現。
 
 Aliases 可作用在巢狀欄位、arrays、objects、unions、discriminators。應用程式碼用邏輯名稱；外部名稱在 struct 上宣告一次。展開型別化物件會保留那套編碼。在同一個物件裡同時設定邏輯欄位和它的 wire key 是 `REQ_BUILD_FAILED`。自己對值做 `JSON.stringify` 就離開這條路徑：serializer 看到的是邏輯名稱。
 

@@ -325,8 +325,7 @@ describe("web socket runtime environment edge cases", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("should preserve a pre-aborted timeout without constructing a physical socket", async () => {
@@ -1317,17 +1316,17 @@ describe("web socket runtime environment edge cases", () => {
       path: "/ws/test",
     });
 
-    const executePromise = run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
-        beforeConnect() {
-          socketExistedDuringHook = typeof lastMockInstance !== "undefined";
-          configuredInterval = Number.POSITIVE_INFINITY;
-        },
-        heartbeat,
+    const client = createClient(withEndpoint("http://localhost"), (config) => {
+      // Keep the getter live to exercise the operation's own snapshot.
+      config.webSocket.heartbeat = heartbeat;
+    });
+    expect(intervalReads).toBe(0);
+    const executePromise = run(client, useSocket, {
+      beforeConnect() {
+        socketExistedDuringHook = typeof lastMockInstance !== "undefined";
+        configuredInterval = Number.POSITIVE_INFINITY;
       },
-    );
+    });
 
     await vi.waitFor(() => expect(lastMockInstance).toBeDefined());
     expect(socketExistedDuringHook).toBe(false);
@@ -1455,15 +1454,9 @@ describe("web socket runtime environment edge cases", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  test("should return a definition error when a heartbeat snapshot getter throws", async () => {
+  test("should return REQ_OPTIONS_INVALID when an execution-time heartbeat getter throws", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const snapshotFailure = new Error("heartbeat getter failed");
-    const heartbeat = {
-      intervalMs: 20,
-      get message(): () => never {
-        throw snapshotFailure;
-      },
-    };
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       incoming: struct.unknown(),
@@ -1471,9 +1464,15 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const [error, socket, connection] = await run(
-      createClient(withEndpoint("http://localhost")),
+      createClient(withEndpoint("http://localhost"), (config) => {
+        config.webSocket.heartbeat = {
+          intervalMs: 20,
+          get message(): () => never {
+            throw snapshotFailure;
+          },
+        };
+      }),
       useSocket,
-      { heartbeat },
     );
 
     expect(error).toMatchObject({
@@ -2215,14 +2214,9 @@ describe("web socket runtime environment edge cases", () => {
     await socket?.closed;
   });
 
-  test("should reject a reconnect predicate getter failure before constructing a physical socket", async () => {
+  test("should reject an execution-time reconnect predicate getter before constructing a physical socket", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
     const getterFailure = new Error("reconnect predicate getter failed");
-    const reconnect = {
-      get shouldReconnect(): undefined {
-        throw getterFailure;
-      },
-    };
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       incoming: struct.unknown(),
@@ -2230,9 +2224,14 @@ describe("web socket runtime environment edge cases", () => {
     });
 
     const [error, socket, connection] = await run(
-      createClient(withEndpoint("http://localhost")),
+      createClient(withEndpoint("http://localhost"), (config) => {
+        config.webSocket.reconnect = {
+          get shouldReconnect(): undefined {
+            throw getterFailure;
+          },
+        };
+      }),
       useSocket,
-      { reconnect },
     );
     if (socket) {
       socket.close(1000, "cleanup");
@@ -2250,26 +2249,31 @@ describe("web socket runtime environment edge cases", () => {
 
   test("should snapshot the reconnect predicate before beforeConnect can mutate it", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
+    let predicate = () => false;
+    let predicateReads = 0;
     const reconnect = {
       attempts: 1,
       delayMs: 0,
-      shouldReconnect: () => false,
+      get shouldReconnect() {
+        predicateReads += 1;
+        return predicate;
+      },
     };
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       incoming: struct.unknown(),
       path: "/ws/test",
     });
-    const [, socket] = await run(
-      createClient(withEndpoint("http://localhost")),
-      useSocket,
-      {
-        beforeConnect() {
-          reconnect.shouldReconnect = () => true;
-        },
-        reconnect,
+    const client = createClient(withEndpoint("http://localhost"), (config) => {
+      config.webSocket.reconnect = reconnect;
+    });
+    expect(predicateReads).toBe(0);
+    const [, socket] = await run(client, useSocket, {
+      beforeConnect() {
+        predicate = () => true;
       },
-    );
+    });
+    expect(predicateReads).toBe(1);
     if (!socket || !lastMockInstance) {
       throw new Error("Expected socket");
     }
@@ -5352,7 +5356,7 @@ describe("web socket preflight precedence", () => {
     expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
-  test("should reject an invalid queue limit before reading options or attaching abort listeners", async () => {
+  test("should reject an invalid queue limit before reading execution options or attaching abort listeners", async () => {
     const controller = new AbortController();
     const listeners = watchAbortListeners(controller.signal);
     let heartbeatReads = 0;
@@ -5364,21 +5368,20 @@ describe("web socket preflight precedence", () => {
     });
 
     const [error, session, connection] = await endpoint(
-      createClient(withEndpoint("https://example.test"))({
-        signal: controller.signal,
-        heartbeat: {
+      createClient(withEndpoint("https://example.test"), (config) => {
+        config.webSocket.heartbeat = {
           get intervalMs(): number {
             heartbeatReads += 1;
             throw new Error("heartbeat should not be read");
           },
-        },
-        reconnect: {
+        };
+        config.webSocket.reconnect = {
           get attempts(): number {
             reconnectReads += 1;
             throw new Error("reconnect should not be read");
           },
-        },
-      }),
+        };
+      })({ signal: controller.signal }),
     );
 
     expect(session).toBeUndefined();
@@ -5395,10 +5398,9 @@ describe("web socket preflight precedence", () => {
     expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
-  test("should reject invalid heartbeat options before attaching abort listeners", async () => {
+  test("should reject an invalid heartbeat interval before attaching abort listeners", async () => {
     const controller = new AbortController();
     const listeners = watchAbortListeners(controller.signal);
-    const failure = new Error("heartbeat getter failed");
     const opened = countingSocket();
     const endpoint = defineWebSocket({
       incoming: struct.unknown(),
@@ -5408,23 +5410,47 @@ describe("web socket preflight precedence", () => {
 
     const [error, session] = await endpoint(
       guardedClient(opened, controller.signal, {
-        heartbeat: {
-          intervalMs: 20,
-          get message(): () => never {
-            throw failure;
-          },
-        },
+        heartbeat: { intervalMs: 0 },
       }),
     );
 
     expect(opened.constructed()).toBe(0);
     expect(session).toBeUndefined();
-    expect(error).toMatchObject({
-      cause: failure,
-      code: "REQ_OPTIONS_INVALID",
-    });
+    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
     expect(listeners.added()).toBe(0);
     expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
+  });
+
+  test("should return an aborted call before reading an execution-time heartbeat getter", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    let reads = 0;
+    const opened = countingSocket();
+    const endpoint = defineWebSocket({
+      incoming: struct.unknown(),
+      maxIncomingQueueSize: 1,
+      path: "/socket",
+    });
+
+    const [error, session] = await endpoint(
+      createClient(
+        withEndpoint("https://example.test"),
+        withWebSocketHandle(opened.handle),
+        (config) => {
+          config.webSocket.heartbeat = {
+            get intervalMs(): number {
+              reads += 1;
+              throw new Error("heartbeat should not be read");
+            },
+          };
+        },
+      )({ signal: controller.signal }),
+    );
+
+    expect(opened.constructed()).toBe(0);
+    expect(session).toBeUndefined();
+    expect(error?.code).toBe("NET_ABORTED");
+    expect(reads).toBe(0);
   });
 });
 

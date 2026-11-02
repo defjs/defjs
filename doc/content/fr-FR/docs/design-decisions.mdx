@@ -85,7 +85,7 @@ La définition est le contrat stable : méthode, chemin, struct d’entrée, les
   examples/design-decisions/definitions.ts#example
 </include>
 
-Un job d’arrière-plan et un propriétaire UI peuvent appeler la même opération `getUser` avec des clients différents, donc chacun peut choisir sa propre politique d’annulation et de nouvelle tentative. Le code applicatif ne dépend pas des tags ou symboles de transport internes.
+Un job d’arrière-plan et un propriétaire UI peuvent appeler la même opération `getOrder` avec des clients différents, donc chacun peut choisir sa propre politique d’annulation et de nouvelle tentative. Le code applicatif ne dépend pas des tags ou symboles de transport internes.
 
 ## Résultats propres au transport
 
@@ -141,7 +141,7 @@ Un struct est le contrat de champs, dans les deux sens. `.alias(name)` est le no
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-Le chemin par défaut est de remettre la valeur typée. `body: { users: input.users }` garde l’alias de chaque utilisateur, donc le champ wire est `display_name`. Une clé que tu écris toi-même (`account_id`, `x-api-version`) est littérale. Étaler un objet typé garde son struct ; ajouter la clé wire à côté du champ logique est `REQ_BUILD_FAILED`.
+Le chemin par défaut est de remettre la valeur typée. `body: { orders: input.orders }` garde l’alias de chaque commande, donc le champ wire est `customer_name`. Une clé que tu écris toi-même (`account_id`, `x-api-version`) est littérale. Étaler un objet typé garde son struct ; ajouter la clé wire à côté du champ logique est `REQ_BUILD_FAILED`.
 
 L’imbrication de query est une propriété du backend, donc elle vit sur le client : `withQuerySerializer((query) => string)` voit l’objet wire encodé, aliases compris. Il n’est pas appelé quand il n’y a pas de query. Un `URLSearchParams` renvoyé par le builder le saute. Sans serializer, les tableaux répètent les clés et un objet imbriqué échoue. Les intercepteurs observent `queryParams` comme `new URLSearchParams(queryString)`.
 

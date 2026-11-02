@@ -27,7 +27,7 @@ Ruf `next(req)` auf (optional ein mutierter Request) oder short-circuite mit `ma
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Ein Wrapper oder eine Short-Circuit-Session muss denselben `[Symbol.asyncDispose]()`-Teardown wie ihren `close`- / `closed`-Lifecycle weiterleiten; ein fremdes, bereits aufgelöstes Promise reicht nicht. Dieses Member zu verlangen ist eine Compile-Time-Breaking-Änderung für strukturelle Implementierungen. Code, der nur von Defjs zurückgegebene Sessions akzeptiert, hat keine zusätzliche Runtime-Aufrufpflicht.
+Ein Wrapper oder eine Short-Circuit-Session muss denselben `[Symbol.asyncDispose]()`-Teardown wie ihren `close`- / `closed`-Lifecycle weiterleiten; ein fremdes, bereits aufgelöstes Promise reicht nicht.
 
 ## Getaggte Typen
 

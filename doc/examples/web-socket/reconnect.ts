@@ -8,7 +8,7 @@ import {
 } from "@defjs/core";
 
 const client = createClient(
-  withEndpoint("https://chat.example.com"),
+  withEndpoint("https://quotes.example.com"),
   withWebSocketReconnect({
     attempts: 3,
     delayMs: 500,
@@ -20,16 +20,16 @@ const client = createClient(
     },
   }),
 );
-const room = defineWebSocket({
+const quotes = defineWebSocket({
   maxIncomingQueueSize: 100,
-  path: "/chat",
+  path: "/quotes",
   incoming: struct.object({
     type: struct.literal("ready"),
     ok: struct.boolean(),
   }),
 });
 async function main() {
-  const [error, session] = await room(client);
+  const [error, session] = await quotes(client);
   if (error) {
     console.error(error.code);
     return;

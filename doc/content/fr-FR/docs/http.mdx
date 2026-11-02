@@ -25,7 +25,7 @@ Les placeholders de chemin sont des scalaires bruts, encodés exactement une foi
 
 Un nom de placeholder commence à `:` et court jusqu’au `/` suivant ou à la fin du chemin : `/files/:name.json` nomme le paramètre `name.json`, pas `name`. Un deux-points littéral dans un segment statique n’est pas pris en charge.
 
-Les chemins de définition ne peuvent pas ressembler à un scheme ni être protocol-relative (y compris avec des espaces initiaux), ni contenir des caractères de contrôle C0 (y compris tab, CR et LF), des antislashs, `?` ou `#`. Un espace intérieur simple est autorisé et envoyé comme `%20`. Après résolution, l’URL doit garder l’origine de base et rester sous son répertoire ; un chemin tel que `../users` ne peut pas s’en échapper. Les chemins illégaux échouent avec `REQ_BUILD_FAILED` pendant la construction, avant le transport. Le `req.endpoint` final d’un intercepteur est vérifié contre son `req.baseEndpoint` final avec la même règle ; un intercepteur peut délibérément remplacer la base par une autre URL absolue valide. Les erreurs d’URL déterministes ne sont jamais réessayées.
+Les chemins de définition ne peuvent pas ressembler à un scheme ni être protocol-relative (y compris avec des espaces initiaux), ni contenir des caractères de contrôle C0 (y compris tab, CR et LF), des antislashs, `?` ou `#`. Un espace intérieur simple est autorisé et envoyé comme `%20`. Après résolution, l’URL doit garder l’origine de base et rester sous son répertoire ; un chemin tel que `../orders` ne peut pas s’en échapper. Les chemins illégaux échouent avec `REQ_BUILD_FAILED` pendant la construction, avant le transport. Le `req.endpoint` final d’un intercepteur est vérifié contre son `req.baseEndpoint` final avec la même règle ; un intercepteur peut délibérément remplacer la base par une autre URL absolue valide. Les erreurs d’URL déterministes ne sont jamais réessayées.
 
 L’encodeur de query par défaut accepte les scalaires et les tableaux de scalaires (les tableaux répètent la clé). Un objet imbriqué échoue avec `REQ_BUILD_FAILED` sauf si le client a `withQuerySerializer(...)`. `null` dans `path`, `query` ou `headers` échoue de la même façon. Les valeurs `undefined` de query et d’en-tête sont omises. Un placeholder de chemin `undefined` ou manquant échoue avec `REQ_BUILD_FAILED`.
 
@@ -37,19 +37,19 @@ Le struct encode la valeur. Le builder la place. Un `input` déclaré exige touj
   examples/http/place-input.ts#example
 </include>
 
-Ce corps est `{"display_name":"Ada"}` avec `application/json`. Le nom wire de l’en-tête est `x-request-id`. Les appelants et les résultats parsés gardent `displayName`.
+Ce corps est `{"customer_name":"Ada"}` avec `application/json`. Le nom wire de l’en-tête est `x-request-id`. Les appelants et les résultats parsés gardent `customerName`.
 
-Préfère remettre la valeur typée plutôt que d’épeler les clés wire. L’alias est déclaré une fois sur le champ et s’applique dans les deux sens : `output` / `error` / événements / frames entrantes décodent `display_name` en `displayName`, et `body: input.order` réécrit tout l’arbre. Le même struct `User` peut être un corps de création et une sortie de lecture. Une clé écrite à la main est l’exception : l’objet parent est anonyme, donc l’alias ne tourne pas.
+Préfère remettre la valeur typée plutôt que d’épeler les clés wire. L’alias est déclaré une fois sur le champ et s’applique dans les deux sens : `output` / `error` / événements / frames entrantes décodent `customer_name` en `customerName`, et `body: input.order` réécrit tout l’arbre. Le même struct `Order` peut être un corps de création et une sortie de lecture. Une clé écrite à la main est l’exception : l’objet parent est anonyme, donc l’alias ne tourne pas.
 
 | Expression du builder                          | Sur le fil                                               |
 | ---------------------------------------------- | -------------------------------------------------------- |
 | `body: input.profile`                          | Objet typé : alias et encodage `Date` / `bigint`         |
 | `body: { profile: input.profile }`             | Clés extérieures littérales, objet intérieur encore typé |
 | `body: { ...input.profile, role: 'admin' }`    | Le spread garde le struct ; la clé en plus est littérale |
-| `body: { name: input.profile.displayName }`    | Parent anonyme : l’alias ne s’applique pas               |
+| `body: { name: input.profile.customerName }`   | Parent anonyme : l’alias ne s’applique pas               |
 | `query: input.filter` / `headers: input.trace` | Objets plats typés : l’alias devient la clé wire         |
 
-Étaler un objet typé et poser aussi sa clé wire (`display_name` à côté de `displayName`) est `REQ_BUILD_FAILED`. Un objet imbriqué dans `path` ou `headers` échoue de la même façon.
+Étaler un objet typé et poser aussi sa clé wire (`customer_name` à côté de `customerName`) est `REQ_BUILD_FAILED`. Un objet imbriqué dans `path` ou `headers` échoue de la même façon.
 
 Le guide est choisi à chaque nœud, pas seulement à la racine. Un nouvel objet sous un parent anonyme garde les clés que tu as écrites. Le même objet sous un parent typé utilise le struct de ce champ.
 

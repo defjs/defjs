@@ -65,7 +65,7 @@ Client 帶著設定。它不擁有進行中的工作。誰啟動 HTTP 請求、S
   examples/design-decisions/definitions.ts#example
 </include>
 
-背景工作與 UI 擁有者可以用不同的 client 呼叫同一個 `getUser` 操作，所以各自能選擇自己的取消與重試策略。應用程式碼不依賴內部傳輸 tags 或 symbols。
+背景工作與 UI 擁有者可以用不同的 client 呼叫同一個 `getOrder` 操作，所以各自能選擇自己的取消與重試策略。應用程式碼不依賴內部傳輸 tags 或 symbols。
 
 ## 依傳輸區分的結果
 
@@ -107,7 +107,7 @@ Struct 是雙向的欄位契約。`.alias(name)` 是 wire 名稱。Struct 決定
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-預設路徑是把型別化的值交出去。`body: { users: input.users }` 會保留每個使用者的 alias，所以 wire 欄位是 `display_name`。你自己寫的 key（`account_id`、`x-api-version`）是字面。展開型別化物件會保留它的 struct；在邏輯欄位旁邊再加 wire key 是 `REQ_BUILD_FAILED`。
+預設路徑是把型別化的值交出去。`body: { orders: input.orders }` 會保留每張訂單的 alias，所以 wire 欄位是 `customer_name`。你自己寫的 key（`account_id`、`x-api-version`）是字面。展開型別化物件會保留它的 struct；在邏輯欄位旁邊再加 wire key 是 `REQ_BUILD_FAILED`。
 
 Query 的巢狀形狀是後端的性質，所以放在 client 上：`withQuerySerializer((query) => string)` 看到的是已編碼的 wire 物件，aliases 已套用。沒有 query 時不會呼叫它。Builder 回傳的 `URLSearchParams` 會跳過它。沒有 serializer 時，陣列會重複 key，巢狀物件則失敗。Interceptors 看到的 `queryParams` 是 `new URLSearchParams(queryString)`。
 

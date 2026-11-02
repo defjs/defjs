@@ -12,21 +12,21 @@ description: واجهة struct، وInfer، وStructError.
 واجهة. فضّل هذه على المنشئات الداخلية.
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### البدائيات والحاويات
@@ -57,7 +57,7 @@ readUser();
 - **يُرجع** `[null, value]` أو `[StructError, undefined]`، ومشكلة واحدة. تتوقف حقول الكائن عند أول حقل فاسد. يجرّب `struct.or` كل فرع، ثم يبلّغ `invalid_union`، ولا يُبقي فشل الفرع الأول.
 - حقول الكائن مطلوبة ما لم تُوسَم بـ `.optional()` أو `.nullish()`. المفاتيح التي لا يصرّح بها الشكل تُحذف من النتيجة.
 - `options.errorMap` الاختياري يعيد كتابة رسائل المشاكل لهذا التحليل فقط.
-- الافتراضي يقرأ المفاتيح **المنطقية** (`displayName`). مرّر `{ aliases: true }` لتقرأ المفاتيح بصيغة النقل (`display_name`) بالطريقة نفسها التي تفعلها ترميزات HTTP/JSON.
+- الافتراضي يقرأ المفاتيح **المنطقية** (`customerName`). مرّر `{ aliases: true }` لتقرأ المفاتيح بصيغة النقل (`customer_name`) بالطريقة نفسها التي تفعلها ترميزات HTTP/JSON.
 
 ## ErrorMap
 

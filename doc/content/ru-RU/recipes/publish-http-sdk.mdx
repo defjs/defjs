@@ -9,16 +9,16 @@ SDK упаковывает API, который предлагает твоя г�
 
 ## 1. Опиши операции SDK
 
-Создай `src/users.ts` в проекте SDK. Пути, размещение входа, ответы и ошибки сервиса держи здесь. Чтобы описать эту операцию, не нужны экземпляр клиента, адрес развёртывания и текущие учётные данные.
+Создай `src/orders.ts` в проекте SDK. Пути, размещение входа, ответы и ошибки сервиса держи здесь. Чтобы описать эту операцию, не нужны экземпляр клиента, адрес развёртывания и текущие учётные данные.
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+<include cwd meta='title="src/orders.ts"'>
+  examples/recipes/publish-http-sdk/orders-sdk.ts#example
 </include>
 
 Открой её из `src/index.ts`:
 
 ```ts
-export { getUser } from "./users";
+export { getOrder } from "./orders";
 ```
 
 Добавляй другие модули операций и реэкспортируй их эндпоинты, когда SDK растёт.
@@ -28,19 +28,19 @@ export { getUser } from "./users";
 У проекта SDK своя граница пакета:
 
 ```txt
-users-sdk/
+orders-sdk/
   package.json
   tsconfig.json
   src/
     index.ts
-    users.ts
+    orders.ts
 ```
 
 Используй этот `package.json`, заменив имя из примера на scope пакета, которым владеешь:
 
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/orders-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -100,26 +100,26 @@ bun pm pack
 
 ## 3. Вызови из приложения-потребителя
 
-Локальный пример держит определение в `users-sdk.ts` рядом с `app.ts`, чтобы его можно было запустить без сети. Импорт не создаёт клиент; приложение настраивает локальный Fetch handle и вызывает импортированную операцию:
+Локальный пример держит определение в `orders-sdk.ts` рядом с `app.ts`, чтобы его можно было запустить без сети. Импорт не создаёт клиент; приложение настраивает локальный Fetch handle и вызывает импортированную операцию:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+paid
 ```
 
 Для упакованного SDK установи его вместе с совместимым выпуском Core:
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
+bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
 Замени относительный импорт из примера на:
 
 ```ts
-import { getUser } from "@company/users-sdk";
+import { getOrder } from "@company/orders-sdk";
 ```
 
 Настрой адрес сервиса и аутентификацию на клиенте приложения. Оставь `withHTTPHandle(...)` для локальных тестов; убери его, чтобы использовать платформенный Fetch. Второе приложение может импортировать тот же эндпоинт и выбрать другие настройки клиента, не меняя определение SDK.

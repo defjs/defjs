@@ -45,7 +45,7 @@ Un `endpoint` de cliente absoluto y válido es obligatorio en HTTP, SSE y WebSoc
 | ------------- | -------- | ------------------------------------------------------------- | ------------------------------------------ |
 | `HTTP_STATUS` | Siempre  | Siempre; tiene `body` solo si `error` se declaró y decodificó | Cuerpo `error` decodificado, o `undefined` |
 | `RES_*`       | Siempre  | Siempre, solo metadatos — **sin `body`**                      | Ausente                                    |
-| Todo lo demás | Ausente  | Solo donde el transporte ya tenía metadatos                   | Ausente                                    |
+| Todo lo demás | Ausente  | `undefined` hasta que el transporte tiene metadatos           | Ausente                                    |
 
 `cause` lleva el valor subyacente: un `StructError` para un desajuste de struct, el fallo del parser para una representación ilegible, lo que sea que lanzó una extensión.
 

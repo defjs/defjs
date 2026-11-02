@@ -5,7 +5,7 @@ description: Configura cómo llama tu aplicación a las operaciones importadas d
 
 # Cliente
 
-Un `Client` es la configuración de ejecución de la aplicación consumidora. `createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Llamar a la fábrica con opciones de solicitud devuelve un valor `Client`, y un valor `Client` es lo que aceptan las operaciones. No es invocable. Importa operaciones de tu SDK, elige la dirección del servicio, las credenciales, los interceptores y el transporte, y llama a una operación con el cliente. `getUser(client({ signal }), { id: 1 })` arranca una llamada que declara entrada. `health(client)` arranca una que no la declara. Cuando todo el struct de entrada es opcional, tanto `search(client)` como `search(client, input)` son válidos. No hay un tercer argumento de opciones. Llamar a la operación la arranca. `await` solo espera la tupla error-first.
+Un `Client` es la configuración de ejecución de la aplicación consumidora. `createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Llamar a la fábrica con opciones de solicitud devuelve un valor `Client`, y un valor `Client` es lo que aceptan las operaciones. No es invocable. Importa operaciones de tu SDK, elige la dirección del servicio, las credenciales, los interceptores y el transporte, y llama a una operación con el cliente. `getOrder(client({ signal }), { id: 1 })` arranca una llamada que declara entrada. `health(client)` arranca una que no la declara. Cuando todo el struct de entrada es opcional, tanto `search(client)` como `search(client, input)` son válidos. No hay un tercer argumento de opciones. Llamar a la operación la arranca. `await` solo espera la tupla error-first.
 
 Las definiciones del SDK no atan esta instancia. Un navegador, una solicitud de servidor y una prueba local pueden usar la misma operación exportada con clientes distintos. Todos siguen el mismo contrato de Defjs y versiones compatibles de Core. Configura la dirección de servicio de cada cliente para las operaciones que llames a través de él.
 
@@ -33,7 +33,7 @@ Los interceptores mixtos se filtran por transporte cuando corre la operación; e
 
 ## Derivar un cliente
 
-`client(options?)` devuelve un valor `Client` para una sola llamada. Cuando se llama a `client(options)`, los siete campos conocidos se copian del objeto argumento: una instantánea de nivel superior en un objeto de opciones nuevo. Los campos desconocidos se ignoran y los campos cuyo valor es `undefined` se omiten. No hay superposición con un padre: `client()`, `client(undefined)` y `client({})` devuelven un cliente sin opciones de solicitud. Los valores anidados `heartbeat`, `protocols` y `reconnect` se conservan por referencia, no se clonan. WebSocket los lee cuando se ejecuta la operación (entonces copia los campos de heartbeat y la lista protocols), así que mutar esos objetos después de derivar todavía puede afectar a una llamada posterior. Las aplicaciones deben tratarlos como inmutables después de pasarlos. Derivar no hace E/S. Un getter que lanza escapa de `client(options)` y deja la fábrica utilizable. El valor de cliente no es invocable; crea uno por llamada.
+`client(options?)` devuelve un valor `Client` para una sola llamada. `client()` y `client(undefined)` no guardan opciones de solicitud. `client({})` conserva una instantánea vacía; Defjs no la descarta mediante una inspección de claves. Al llamar a `client(options)`, cada campo de solicitud de nivel superior se lee una vez y se coloca en un objeto de opciones nuevo. Un array `protocols` se copia. `heartbeat` copia `intervalMs`, `isAck`, `message` y `timeoutMs`. `reconnect` copia `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs` y `shouldReconnect`. Los bloques anidados que faltan siguen faltando, así que no activan el heartbeat ni el reintento. `signal`, `beforeConnect` y cada callback conservan su identidad. El mismo objeto de opciones se puede volver a pasar; cada llamada captura sus propios contenedores. Derivar no hace E/S. Un getter de estos campos fijos se ejecuta durante `client(options)`. Si lanza, la excepción sale de esa llamada y deja la fábrica utilizable. No se convierte en un fault. Los números fuera de rango se siguen comprobando cuando se ejecuta la operación y siguen devolviendo `REQ_OPTIONS_INVALID`. El valor de cliente no es invocable; crea uno por llamada.
 
 `signal` no se combina. Reutilizar un valor de cliente que lleva `signal` comparte ese signal entre llamadas, así que crea un valor de cliente por llamada. Combina signals con `AbortSignal.any` en el código de la aplicación.
 
@@ -41,7 +41,7 @@ Los interceptores mixtos se filtran por transporte cuando corre la operación; e
   examples/client/derive-client.ts#example
 </include>
 
-La configuración base de `createClient` la comparte cada valor de cliente y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían. Las [`RequestOptions`](/es-ES/api/core/requestoptions-type) de un cliente son esa instantánea de nivel superior. El código de la aplicación pasa el cliente a una operación. No lee ese estado interno.
+La configuración base de `createClient` la comparte cada valor de cliente y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían. Los helpers estándar, como `withWebSocketHeartbeat`, `withWebSocketReconnect`, `withSSEReconnect` y `withWebSocketProtocols`, copian sus records fijos cuando se aplica el helper. Una opción de cliente personalizada puede seguir guardando su propia referencia. `withInterceptors` añade un record `{ kind, fn }` nuevo por cada entrada y conserva `fn` en sí. Un cliente derivado lleva un objeto [`RequestOptions`](/es-ES/api/core/requestoptions-type) capturado solo cuando se suministraron opciones. La fábrica, `client()` y `client(undefined)` no tienen ninguno. El código de la aplicación pasa el cliente a una operación. No lee ese estado interno.
 
 ## Opciones de la solicitud
 
@@ -80,16 +80,6 @@ Tú eres dueño de la limpieza: aborta HTTP, cierra SSE + `await stream.closed`,
 ## Ámbito en servidor frente a navegador
 
 En un servidor, crea el cliente dentro del límite de la solicitud cuando las opciones o los cierres de un interceptor capturan auth, cookies, usuarios o tenants. La identidad del cliente no es por sí sola un límite de seguridad.
-
-## Migración
-
-| Antes                                        | Ahora                                                                |
-| -------------------------------------------- | -------------------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                                    |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`                      |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                                 |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                             |
-| `createClient(withTimeout(5000), ...)`       | pasa `signal` en la llamada, o envuelve una función de la aplicación |
 
 ## Referencia
 

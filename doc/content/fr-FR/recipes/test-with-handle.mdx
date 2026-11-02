@@ -9,12 +9,12 @@ description: Remplace Fetch pour un client avec withHTTPHandle et garde l’opé
 
 Voir [Client](/fr-FR/docs/client) pour les détails.
 
-<include cwd meta="get-user.test.ts">
+<include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
 ```txt
-Ada 200
+paid 200
 ```
 
-Utilise la même opération `getUser` contre un vrai client `withEndpoint(...)` en production — seul le handle change.
+Utilise la même opération `getOrder` contre un vrai client `withEndpoint(...)` en production — seul le handle change.

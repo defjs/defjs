@@ -55,7 +55,7 @@ Execute 把一個可判別的 `Fault` 放在 tuple 第一項——宣告過的�
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-所有可能在回應存在之前就失敗的情況：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。只有傳輸層當時確實有 metadata 可報時才帶 `response`，例如下載中途被截斷的 body。
+所有可能在回應存在之前就失敗的情況：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。傳輸層有 metadata 可報之前，`response` 是 `undefined`，例如下載中途被截斷的 body。
 
 ### AnyFault
 

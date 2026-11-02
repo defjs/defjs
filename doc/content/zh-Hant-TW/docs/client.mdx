@@ -5,7 +5,7 @@ description: 設定應用程式如何呼叫匯入的 SDK 操作，與那些 API 
 
 # Client
 
-`Client` 是使用端應用程式的執行設定。`createClient(...)` 回傳 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。帶著 request options 呼叫這個 factory 會回傳 `Client` 值，操作接受的就是 `Client` 值，它不可呼叫。從 SDK 匯入操作，選擇服務位址、憑證、interceptors 與傳輸，再帶著 client 呼叫操作。`getUser(client({ signal }), { id: 1 })` 啟動一次有宣告 input 的呼叫。`health(client)` 啟動一次沒有 input 的呼叫。整個 input struct 可選時，`search(client)` 與 `search(client, input)` 都合法。沒有第三個 options 引數。呼叫操作就會啟動它。`await` 只等待 error-first tuple。
+`Client` 是使用端應用程式的執行設定。`createClient(...)` 回傳 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。帶著 request options 呼叫這個 factory 會回傳 `Client` 值，操作接受的就是 `Client` 值，它不可呼叫。從 SDK 匯入操作，選擇服務位址、憑證、interceptors 與傳輸，再帶著 client 呼叫操作。`getOrder(client({ signal }), { id: 1 })` 啟動一次有宣告 input 的呼叫。`health(client)` 啟動一次沒有 input 的呼叫。整個 input struct 可選時，`search(client)` 與 `search(client, input)` 都合法。沒有第三個 options 引數。呼叫操作就會啟動它。`await` 只等待 error-first tuple。
 
 SDK 的定義不會綁定這個實例。瀏覽器、伺服器請求與本機測試可以用不同的 client 使用同一個匯出的操作。兩邊仍遵循同一份 Defjs 契約與相容的 Core 版本。請為透過該 client 呼叫的操作設定服務位址。
 
@@ -33,7 +33,7 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 
 ## 衍生 client
 
-`client(options?)` 回傳供單次呼叫使用的 `Client` 值。呼叫 `client(options)` 時，七個已知欄位從引數物件複製出來：頂層快照進一個新的 options 物件。未知欄位會被忽略，值為 `undefined` 的欄位會被省略。沒有父層覆疊：`client()`、`client(undefined)` 與 `client({})` 回傳不帶任何 request options 的 client。巢狀的 `heartbeat`、`protocols` 與 `reconnect` 的值依參考保留，不複製。WebSocket 在操作執行時讀取它們（那時會複製 heartbeat 的欄位與 protocols 清單），所以衍生之後再改這些物件，仍可能影響之後的呼叫。應用程式在傳入之後應把它們視為不可變。衍生不會進行 I/O。會拋錯的 getter 會從 `client(options)` 逸出，factory 仍可繼續使用。Client 值不可呼叫；請為每次呼叫建立一個。
+`client(options?)` 回傳供單次呼叫使用的 `Client` 值。`client()` 與 `client(undefined)` 不存放 request options。`client({})` 保留一份空快照；Defjs 不會靠檢查鍵把它丟掉。呼叫 `client(options)` 時，每個頂層請求欄位只讀一次，寫到一個新的 options 物件上。`protocols` 陣列會被複製。`heartbeat` 複製 `intervalMs`、`isAck`、`message` 與 `timeoutMs`。`reconnect` 複製 `attempts`、`delayMs`、`factor`、`jitter`、`maxDelayMs` 與 `shouldReconnect`。缺失的巢狀區塊仍然缺失，因此不會開啟心跳或重試。`signal`、`beforeConnect` 與每個 callback 都保持原身份。同一個 option 物件可以再次傳入；每次呼叫捕獲自己的容器。衍生不會進行 I/O。這些固定欄位上的 getter 在 `client(options)` 期間執行。如果它拋錯，例外會離開這次呼叫，factory 仍可繼續使用。它不會被轉成 fault。超出範圍的數字仍在操作執行時檢查，並仍回傳 `REQ_OPTIONS_INVALID`。Client 值不可呼叫；請為每次呼叫建立一個。
 
 `signal` 不會合併。重複使用帶有 `signal` 的 client 值，會在多次呼叫之間共用該 signal，所以請為每次呼叫建立一個 client 值。在應用程式碼裡用 `AbortSignal.any` 組合 signals。
 
@@ -41,7 +41,7 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
   examples/client/derive-client.ts#example
 </include>
 
-`createClient` 的基礎設定由每個 client 值共用，執行期不會凍結。它依慣例固定：函式庫不會改它，應用程式也不應該改。該 client 上的 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 就是那份頂層快照。應用程式碼把 client 傳給操作。它不會讀取那份內部狀態。
+`createClient` 的基礎設定由每個 client 值共用，執行期不會凍結。它依慣例固定：函式庫不會改它，應用程式也不應該改。標準 helper，例如 `withWebSocketHeartbeat`、`withWebSocketReconnect`、`withSSEReconnect` 與 `withWebSocketProtocols`，在套用該 helper 時複製它們的固定 record。自訂 client option 仍可保留自己的參考。`withInterceptors` 為每個項目追加一份新的 `{ kind, fn }` record，並保留 `fn` 本身。衍生出的 client 只有在提供了 options 時，才會帶著已捕獲的 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 物件。Factory、`client()` 與 `client(undefined)` 都沒有。應用程式碼把 client 傳給操作。它不會讀取那份內部狀態。
 
 ## 請求 options
 
@@ -80,16 +80,6 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 ## 伺服器 vs 瀏覽器的範圍
 
 在伺服器上，若 options 或 interceptor closures 會捕捉 auth、cookies、users、tenants，請在請求邊界內建立 client。Client 身分本身不是安全邊界。
-
-## 遷移
-
-| 舊                                           | 新                                              |
-| -------------------------------------------- | ----------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`               |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })` |
-| `execute(cmd, { signal })`                   | `client({ signal })`                            |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`        |
-| `createClient(withTimeout(5000), ...)`       | 在呼叫處傳入 `signal`，或包一層應用程式函式     |
 
 ## 參考
 

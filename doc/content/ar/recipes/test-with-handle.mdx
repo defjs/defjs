@@ -9,12 +9,12 @@ description: استبدل Fetch لعميل واحد بـ withHTTPHandle وأبق
 
 انظر [العميل](/ar/docs/client) للتفاصيل.
 
-<include cwd meta="get-user.test.ts">
+<include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
 ```txt
-Ada 200
+paid 200
 ```
 
-استخدم عملية `getUser` نفسها مع عميل `withEndpoint(...)` حقيقي في الإنتاج — المعالج وحده يتغيّر.
+استخدم عملية `getOrder` نفسها مع عميل `withEndpoint(...)` حقيقي في الإنتاج — المعالج وحده يتغيّر.

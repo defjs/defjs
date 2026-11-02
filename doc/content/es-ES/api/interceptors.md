@@ -27,7 +27,7 @@ Llama a `next(req)` (opcionalmente una solicitud mutada) o cortocircuita con `ma
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Un wrapper o una sesión de cortocircuito debe reenviar el mismo teardown de `[Symbol.asyncDispose]()` que su ciclo de vida `close` / `closed`; devolver una promesa resuelta ajena no basta. Exigir este miembro es un cambio incompatible en tiempo de compilación para las implementaciones estructurales. El código que solo acepta sesiones devueltas por Defjs no tiene un requisito nuevo de llamada en runtime.
+Un wrapper o una sesión de cortocircuito debe reenviar el mismo teardown de `[Symbol.asyncDispose]()` que su ciclo de vida `close` / `closed`; devolver una promesa resuelta ajena no basta.
 
 ## Tipos etiquetados
 

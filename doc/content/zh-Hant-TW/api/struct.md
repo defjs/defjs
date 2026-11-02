@@ -12,21 +12,21 @@ description: struct facade、Infer，以及 StructError。
 Facade。請走這個，別用內部 constructors。
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### 純量與容器
@@ -57,7 +57,7 @@ readUser();
 - **回傳** `[null, value]` 或 `[StructError, undefined]`。error 只帶一個 issue。物件欄位在第一個壞欄位就停止。`struct.or` 會試每一個分支，然後回報 `invalid_union`，不會保留第一個分支的失敗。
 - 物件欄位必填，除非標了 `.optional()` 或 `.nullish()`。形狀沒有宣告的 key 會從結果中丟掉。
 - 選填的 `options.errorMap` 只改這一次 parse 的 issue 文案。
-- 預設讀**邏輯** keys（`displayName`）。傳 `{ aliases: true }` 會讀 wire keys（`display_name`），跟 HTTP／JSON codecs 一樣。
+- 預設讀**邏輯** keys（`customerName`）。傳 `{ aliases: true }` 會讀 wire keys（`customer_name`），跟 HTTP／JSON codecs 一樣。
 
 ## ErrorMap
 

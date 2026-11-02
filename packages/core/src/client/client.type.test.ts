@@ -19,6 +19,7 @@ import { withQueryParamsSerializer } from "./index";
 // @ts-expect-error QueryParamsSerializer was replaced by QuerySerializer
 import type { QueryParamsSerializer } from "./index";
 
+import type { CLIENT, RequestOptions } from "./client";
 import {
   createClient,
   withCredentials,
@@ -125,6 +126,9 @@ const client = createClient(
 );
 
 type ClientCases = Expect<Equal<typeof client, DerivableClient>>;
+type OptionalCallOptions = Expect<
+  Equal<Client[typeof CLIENT]["options"], RequestOptions | undefined>
+>;
 const derivedClient: Client = client();
 // @ts-expect-error A derived client is not callable.
 derivedClient();
@@ -280,6 +284,7 @@ createClient(
 export type Cases =
   | ClientAsyncDisposeCase
   | ClientCases
+  | OptionalCallOptions
   | OptionsCases
   | QueryConfigCases
   | QueryOptionCases

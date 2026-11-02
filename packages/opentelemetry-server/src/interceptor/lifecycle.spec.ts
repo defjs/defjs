@@ -484,15 +484,15 @@ describe("span hook recording lifecycle", () => {
     });
   });
 
+  const unnamedError = new Error("private detail");
+  unnamedError.name = "";
+
   test.each([
     { error: "private detail", type: "string" },
     { error: 42, type: "number" },
     { error: null, type: "_OTHER" },
     { error: undefined, type: "_OTHER" },
-    {
-      error: Object.assign(new Error("private detail"), { name: "" }),
-      type: "Error",
-    },
+    { error: unnamedError, type: "Error" },
   ])(
     "an ended span reports a synchronous $type failure without recording events",
     ({ error, type }) => {

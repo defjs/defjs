@@ -9,14 +9,14 @@ description: استدعِ GET واحدًا وتفرّع بين 200 محدَّد 
 
 انظر [HTTP](/ar/docs/http) و[الأخطاء](/ar/docs/errors) للتفاصيل.
 
-<include cwd meta="get-user.ts">
+<include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-`api.example.com` عنوان توضيحي. مع خادم يجيب على `GET /users/7` بـ `200` و`{ "id": 7, "name": "Ada" }`، تطبع الشيفرة:
+`api.example.com` عنوان توضيحي. مع خادم يجيب على `GET /orders/7` بـ `200` و`{ "id": 7, "status": "paid" }`، تطبع الشيفرة:
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
 الحالة غير-2xx هي `HTTP_STATUS`. إعلان `error` يعطي جسمه نوعًا؛ وحذف `error` يترك `error.data` بقيمة `undefined` والجسم غير مقروء. إذا تعذّرت قراءة جسم `error` معلَن (نوع وسائط خاطئ، أو JSON غير صالح، أو شكل خاطئ)، تكون النتيجة عطل `RES_*` بدل ذلك. struct `error` واحد يغطي كل حالة غير-2xx، فاستخدم `struct.or(...)` أو اتحادًا مميّزًا عندما تختلف الأشكال.

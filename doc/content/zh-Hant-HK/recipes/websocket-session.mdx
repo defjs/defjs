@@ -9,14 +9,14 @@ description: Connect，send 一個 typed envelope，receive 一次，之後 clos
 
 詳情睇 [WebSocket](/zh-Hant-HK/docs/web-socket)。
 
-<include cwd meta="chat.ts">
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` 係 placeholder。如果 server 用 `{ "type": "message", "text": "Hello" }` 回應 `{ "type": "send", "text": "Hello" }`，snippet 會 print：
+`quotes.example.com` 係 placeholder。如果 server 用 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` 回應 `{ "type": "subscribe", "symbol": "ACME" }`，snippet 會 print：
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
 Reconnect 係 opt-in（`withWebSocketReconnect`）。Heartbeat 都係 opt-in。Browser WebSockets 唔可以拎 arbitrary handshake headers — 用 cookies、subprotocols，或者 short-lived ticket。

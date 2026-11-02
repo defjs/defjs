@@ -56,7 +56,7 @@ explicitement à une autre base absolue valide est autorisé. Ces faults d’URL
 | ------------- | -------- | ------------------------------------------------------------------- | ------------------------------------ |
 | `HTTP_STATUS` | Toujours | Toujours ; a `body` seulement quand `error` a été déclaré et décodé | Corps `error` décodé, ou `undefined` |
 | `RES_*`       | Toujours | Toujours, métadonnées seules — **pas de `body`**                    | Absent                               |
-| Tout le reste | Absent   | Seulement là où le transport avait déjà des métadonnées             | Absent                               |
+| Tout le reste | Absent   | `undefined` tant que le transport n’a pas de métadonnées            | Absent                               |
 
 `cause` porte la valeur sous-jacente : un `StructError` pour un écart de struct, l’échec du parser pour
 une représentation illisible, quoi qu’une extension ait levé.

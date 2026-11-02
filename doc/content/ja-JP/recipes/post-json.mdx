@@ -9,12 +9,12 @@ description: 型付きの JSON ボディを送り、宣言済みの 201 をデ�
 
 詳細は [HTTP](/ja-JP/docs/http) と [Client](/ja-JP/docs/client) を見てください。
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` はプレースホルダーです。`201` と `{ "id": 1, "name": "Ada", "email": "ada@example.com" }` を返すサーバーに対して、このスニペットは次のように出力します。
+`api.example.com` はプレースホルダーです。`201` と `{ "id": 1, "status": "paid", "customer_name": "Ada" }` を返すサーバーに対して、このスニペットは次のように出力します。
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

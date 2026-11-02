@@ -45,7 +45,7 @@ Ein gültiger absoluter Client-`endpoint` ist für HTTP, SSE und WebSocket erfor
 | ------------- | -------- | -------------------------------------------------------------------- | ------------------------------------------ |
 | `HTTP_STATUS` | Immer    | Immer; hat `body` nur, wenn `error` deklariert war und dekodiert hat | Dekodierter `error`-Body, oder `undefined` |
 | `RES_*`       | Immer    | Immer, nur Metadaten — **kein `body`**                               | Fehlt                                      |
-| Alles andere  | Fehlt    | Nur dort, wo der Transport schon Metadaten hatte                     | Fehlt                                      |
+| Alles andere  | Fehlt    | `undefined`, bis der Transport Metadaten hat                         | Fehlt                                      |
 
 `cause` trägt den zugrundeliegenden Wert: ein `StructError` bei einem Struct-Mismatch, das Parser-Failure bei einer unlesbaren Representation, was auch immer eine Extension geworfen hat.
 

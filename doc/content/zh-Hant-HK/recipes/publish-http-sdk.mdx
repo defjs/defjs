@@ -9,27 +9,27 @@ SDK 將團隊提供的 API 打包交付。使用 Defjs 時，SDK 匯出端點定
 
 ## 1. 定義 SDK 操作
 
-在 SDK 項目中建立 `src/users.ts`，集中描述路徑、輸入映射、回應及服務錯誤。定義這項操作時，無需建立 Client、指定部署地址或持有目前的憑證。
+在 SDK 項目中建立 `src/orders.ts`，集中描述路徑、輸入映射、回應及服務錯誤。定義這項操作時，無需建立 Client、指定部署地址或持有目前的憑證。
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+<include cwd meta='title="src/orders.ts"'>
+  examples/recipes/publish-http-sdk/orders-sdk.ts#example
 </include>
 
 從 `src/index.ts` 匯出端點：
 
 ```ts
-export { getUser } from "./users";
+export { getOrder } from "./orders";
 ```
 
 SDK 擴展時，可以增加操作模組並從入口重新匯出端點。項目結構如下：
 
 ```txt
-users-sdk/
+orders-sdk/
   package.json
   tsconfig.json
   src/
     index.ts
-    users.ts
+    orders.ts
 ```
 
 ## 2. 打包 JavaScript 及類型聲明
@@ -38,7 +38,7 @@ users-sdk/
 
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/orders-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -98,26 +98,26 @@ bun pm pack
 
 ## 3. 由使用方應用程式呼叫
 
-以下本地例子把定義放在與 `app.ts` 同目錄的 `users-sdk.ts`，方便離線執行。匯入唔會建立 client；應用程式設定本地 Fetch handle，再呼叫匯入的操作：
+以下本地例子把定義放在與 `app.ts` 同目錄的 `orders-sdk.ts`，方便離線執行。匯入唔會建立 client；應用程式設定本地 Fetch handle，再呼叫匯入的操作：
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+paid
 ```
 
 使用發佈後的 SDK 時，同時安裝兼容的 Core：
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
+bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
 將例子中的相對匯入替換為 npm 套件匯入：
 
 ```ts
-import { getUser } from "@company/users-sdk";
+import { getOrder } from "@company/orders-sdk";
 ```
 
 在應用程式 Client 上設定實際服務地址及認證。本地測試可以保留 `withHTTPHandle(...)`；連接服務時移除它，使用平台 Fetch。第二個應用程式也可以匯入相同端點，使用不同 Client 設定，而無需更改 SDK 定義。

@@ -68,7 +68,7 @@ async function consume(
 `outgoing` 是一個 struct。`session.send` 接受該 struct 的 `StructInput`，編碼 aliases，再 `JSON.stringify`。編碼之後 JSON 無法忠實表示的值，會在送出或進入重新連線 queue 之前丟出 `TypeError`，包含非有限數字、函式、symbol、`Map`、`Set`、stream，以及沒有 JSON 表示的 class instance。巢狀值使用與 HTTP JSON body 相同的檢查。Heartbeat 也使用這項檢查；heartbeat 序列化失敗會結束 session。多種訊息用 `struct.discriminatedUnion`。
 
 ```ts
-session.send({ type: "message", text: "Hello" });
+session.send({ type: "subscribe", symbol: "ACME" });
 ```
 
 見 [WebSocket 指南](/zh-Hant-TW/docs/web-socket) 與 [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)。

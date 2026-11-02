@@ -9,16 +9,16 @@ An SDK packages the API your team offers. With Defjs, export endpoint definition
 
 ## 1. Define the SDK's operations
 
-Create `src/users.ts` in your SDK project. Keep paths, input mapping, responses, and service errors here. No client instance, deployment address, or current credential is needed to define this operation.
+Create `src/orders.ts` in your SDK project. Keep paths, input mapping, responses, and service errors here. No client instance, deployment address, or current credential is needed to define this operation.
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+<include cwd meta='title="src/orders.ts"'>
+  examples/recipes/publish-http-sdk/orders-sdk.ts#example
 </include>
 
 Expose it from `src/index.ts`:
 
 ```ts
-export { getUser } from "./users";
+export { getOrder } from "./orders";
 ```
 
 Add other operation modules and re-export their endpoints as your SDK grows.
@@ -28,19 +28,19 @@ Add other operation modules and re-export their endpoints as your SDK grows.
 The SDK project has its own package boundary:
 
 ```txt
-users-sdk/
+orders-sdk/
   package.json
   tsconfig.json
   src/
     index.ts
-    users.ts
+    orders.ts
 ```
 
 Use this `package.json`, replacing the example name with a package scope you own:
 
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/orders-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -100,26 +100,26 @@ Check that the tarball contains `dist/index.js` and `dist/index.d.ts`. Install t
 
 ## 3. Call it from the consuming application
 
-The local example keeps the definition in `users-sdk.ts` beside `app.ts` so it can run offline. Its import creates no client; the application configures a local Fetch handle and calls the imported operation:
+The local example keeps the definition in `orders-sdk.ts` beside `app.ts` so it can run offline. Its import creates no client; the application configures a local Fetch handle and calls the imported operation:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+paid
 ```
 
 For the packaged SDK, install it together with a compatible Core release:
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
+bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
 Replace the example's relative import with:
 
 ```ts
-import { getUser } from "@company/users-sdk";
+import { getOrder } from "@company/orders-sdk";
 ```
 
 Configure your service address and authentication on the application client. Keep `withHTTPHandle(...)` for local tests; remove it to use the platform Fetch implementation. A second application can import the same endpoint and choose different client settings without changing the SDK definition.

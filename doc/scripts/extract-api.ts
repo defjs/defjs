@@ -159,8 +159,8 @@ for (const job of payload.jobs) {
           required: Boolean(entry.required),
           deprecated: Boolean(entry.deprecated),
           tags: (entry.tags ?? []).map((tag) => ({ name: String(tag.name), text: String(tag.text ?? "") })),
+          typeHref: entry.typeHref ? String(entry.typeHref) : undefined,
         };
-        if (entry.typeHref) plain.typeHref = String(entry.typeHref);
         entries.push(plain);
       }
     }
@@ -851,8 +851,8 @@ export function fumadocsEntry(entry: DocEntry): WorkerEntry {
     required: entry.required,
     deprecated: entry.deprecated,
     tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: entry.typeHref || undefined,
   };
-  if (entry.typeHref) stored.typeHref = entry.typeHref;
   return stored;
 }
 

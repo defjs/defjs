@@ -52,6 +52,8 @@ Hook signatures：
 
 Empty transport object 會 enable 嗰個 transport。舊嘅 boolean transport switches（`http: false`）同舊 top-level hooks，只係俾 TypeScript types reject。Runtime 冇 check：runtime 時 `http: false` 會令 transport 照樣 enable，top-level hook 亦會被靜靜雞忽略。請用 transport option objects（`{ enabled: false }`）同 transport-scoped hooks。
 
+`withOpenTelemetryServer` 會先讀 `http`，再讀 `sse`，再讀 `webSocket`，每個一次。Missing 嘅 block 維持 missing，該 transport 維持 enabled。Present 嘅 block 會逐個 field copy：`enabled`、`startSpanHook`、`requestHook`、`responseHook`，WebSocket 仲有 `queryPropagation`。之後 change 或者 replace 一個 block，唔會改變呢份 option。`enabled` 會先讀。只有 `false` 先會 disable 嗰個 transport，disabled branch 唔會讀 hooks 或者 `queryPropagation`。被 copy 嘅 fields 嘅 getters 喺 `withOpenTelemetryServer` 期間執行。如果其中一個 throw，exception 會即刻離開呢次 call；後面嘅 blocks 唔再讀，error 亦唔會拖到 apply 呢份 option 先至出現。`tracer`、`meter`、`logger`、`propagator` 同 hook functions 保持自己嘅 identity。
+
 ## Operation identity 同 propagation
 
 當操作有穩定 identity 時，喺 `defineRequest`、`defineEventStream` 或者 `defineWebSocket` set static `operation`。Plugin 會用佢做 span names，同做 `defjs.operation`。佢永遠唔會由 resolved path、identifier、tenant 或者 query string derive identity：
@@ -88,7 +90,7 @@ Outer span 係你嘅。Plugin 仍然報告更低層嘅 transport span — 兩個
 
 ## 參考
 
-有提供 `meter` 時：
+有提供 `meter` 時，plugin 會喺每次將 option apply 到 client 嗰陣呼叫佢嘅 instrument 建立方法，而唔係喺 `withOpenTelemetryServer` 嗰次 call 入面呼叫。返回嘅 instruments 同 aggregation state 係咪共用，由 Meter/SDK 決定。每個 duration histogram 各自收到一份 boundaries 副本：0.005、0.01、0.025、0.05、0.075、0.1、0.25、0.5、0.75、1、2.5、5、7.5 同 10 秒。
 
 | 指標                                         | 意思                                              |
 | -------------------------------------------- | ------------------------------------------------- |

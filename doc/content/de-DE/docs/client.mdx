@@ -5,7 +5,7 @@ description: Lege fest, wie deine Anwendung importierte SDK-Operationen aufruft,
 
 # Client
 
-Ein `Client` ist die Ausführungskonfiguration der konsumierenden Anwendung. `createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Die Factory mit Request-Options aufzurufen gibt einen `Client`-Wert zurück, und einen `Client`-Wert akzeptieren Operationen. Er ist nicht aufrufbar. Importiere Operationen aus deinem SDK, wähle Service-Adresse, Zugangsdaten, Interceptors und Transport, und rufe eine Operation mit dem Client auf. `getUser(client({ signal }), { id: 1 })` startet einen Aufruf, der Input deklariert. `health(client)` startet einen ohne Input. Ist der ganze Input-Struct optional, sind sowohl `search(client)` als auch `search(client, input)` gültig. Es gibt kein drittes Options-Argument. Der Aufruf der Operation startet sie. `await` wartet nur auf das Error-first-Tupel.
+Ein `Client` ist die Ausführungskonfiguration der konsumierenden Anwendung. `createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Die Factory mit Request-Options aufzurufen gibt einen `Client`-Wert zurück, und einen `Client`-Wert akzeptieren Operationen. Er ist nicht aufrufbar. Importiere Operationen aus deinem SDK, wähle Service-Adresse, Zugangsdaten, Interceptors und Transport, und rufe eine Operation mit dem Client auf. `getOrder(client({ signal }), { id: 1 })` startet einen Aufruf, der Input deklariert. `health(client)` startet einen ohne Input. Ist der ganze Input-Struct optional, sind sowohl `search(client)` als auch `search(client, input)` gültig. Es gibt kein drittes Options-Argument. Der Aufruf der Operation startet sie. `await` wartet nur auf das Error-first-Tupel.
 
 Die Definitionen des SDKs binden diese Instanz nicht. Ein Browser, ein Server-Request und ein lokaler Test können dieselbe exportierte Operation mit unterschiedlichen Clients nutzen. Alle folgen weiterhin demselben Defjs-Vertrag und kompatiblen Core-Versionen. Konfiguriere die Service-Adresse jedes Clients für die Operationen, die du darüber aufrufst.
 
@@ -33,7 +33,7 @@ Gemischte Interceptors werden nach Transport gefiltert, wenn die Operation läuf
 
 ## Einen Client ableiten
 
-`client(options?)` gibt einen `Client`-Wert für einen Aufruf zurück. Beim Aufruf von `client(options)` werden die sieben bekannten Felder aus dem Argumentobjekt kopiert: ein Snapshot der obersten Ebene in ein frisches Options-Objekt. Unbekannte Felder werden ignoriert, und Felder mit dem Wert `undefined` werden weggelassen. Es gibt kein Überlagern über einen übergeordneten Client: `client()`, `client(undefined)` und `client({})` geben einen Client ohne Request-Options zurück. Verschachtelte Werte von `heartbeat`, `protocols` und `reconnect` werden per Referenz gehalten, nicht geklont. WebSocket liest sie, wenn die Operation läuft (es kopiert dann die Heartbeat-Felder und die Protocols-Liste), daher kann eine Änderung dieser Objekte nach dem Ableiten einen späteren Aufruf noch beeinflussen. Anwendungen sollten sie nach dem Übergeben als unveränderlich behandeln. Das Ableiten führt kein I/O aus. Ein Getter, der wirft, entweicht aus `client(options)` und lässt die Factory nutzbar. Der Client-Wert ist nicht aufrufbar; erzeuge pro Aufruf einen.
+`client(options?)` gibt einen `Client`-Wert für einen Aufruf zurück. `client()` und `client(undefined)` speichern keine Request-Options. `client({})` behält einen leeren Snapshot; Defjs verwirft ihn nicht durch eine Schlüsselprüfung. Beim Aufruf von `client(options)` wird jedes Request-Feld der obersten Ebene einmal gelesen und auf ein neues Options-Objekt gelegt. Ein `protocols`-Array wird kopiert. `heartbeat` kopiert `intervalMs`, `isAck`, `message` und `timeoutMs`. `reconnect` kopiert `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs` und `shouldReconnect`. Fehlende verschachtelte Blöcke bleiben fehlend, sie schalten also Heartbeat oder Retry nicht ein. `signal`, `beforeConnect` und jeder Callback behalten ihre Identität. Dasselbe Options-Objekt kann erneut übergeben werden; jeder Aufruf erfasst eigene Container. Das Ableiten führt kein I/O aus. Ein Getter auf diesen festen Feldern läuft während `client(options)`. Wirft er, verlässt die Ausnahme diesen Aufruf und lässt die Factory nutzbar. Sie wird nicht zu einem Fault. Zahlen außerhalb des Bereichs werden weiterhin geprüft, wenn die Operation läuft, und liefern weiterhin `REQ_OPTIONS_INVALID`. Der Client-Wert ist nicht aufrufbar; erzeuge pro Aufruf einen.
 
 `signal` wird nicht kombiniert. Ein Client-Wert mit `signal` teilt dieses Signal zwischen Aufrufen, wenn du ihn wiederverwendest; erzeuge also pro Aufruf einen Client-Wert. Kombiniere Signale in Anwendungscode mit `AbortSignal.any`.
 
@@ -41,7 +41,7 @@ Gemischte Interceptors werden nach Transport gefiltert, wenn die Operation läuf
   examples/client/derive-client.ts#example
 </include>
 
-Die Basiskonfiguration aus `createClient` teilt jeder Client-Wert, und sie ist zur Laufzeit nicht eingefroren. Sie ist per Konvention fest: nichts in der Bibliothek ändert sie, und Anwendungen sollten das auch nicht. Die [`RequestOptions`](/de-DE/api/core/requestoptions-type) auf einem Client sind dieser Snapshot der obersten Ebene. Anwendungscode übergibt den Client an eine Operation. Er liest diesen internen State nicht.
+Die Basiskonfiguration aus `createClient` teilt jeder Client-Wert, und sie ist zur Laufzeit nicht eingefroren. Sie ist per Konvention fest: nichts in der Bibliothek ändert sie, und Anwendungen sollten das auch nicht. Standard-Helfer wie `withWebSocketHeartbeat`, `withWebSocketReconnect`, `withSSEReconnect` und `withWebSocketProtocols` kopieren ihre festen Records, wenn der Helfer angewendet wird. Eine eigene Client-Option kann weiterhin ihre eigene Referenz behalten. `withInterceptors` hängt für jeden Eintrag einen frischen `{ kind, fn }`-Record an und behält `fn` selbst. Ein abgeleiteter Client trägt ein erfasstes [`RequestOptions`](/de-DE/api/core/requestoptions-type)-Objekt nur, wenn Options übergeben wurden. Die Factory, `client()` und `client(undefined)` haben keines. Anwendungscode übergibt den Client an eine Operation. Er liest diesen internen State nicht.
 
 ## Request-Optionen
 
@@ -80,16 +80,6 @@ Du besitzt Cleanup: HTTP abbrechen, SSE schließen + `await stream.closed`, WebS
 ## Scope auf Server vs Browser
 
 Auf einem Server erzeuge den Client innerhalb der Request-Grenze, wenn Options oder Interceptor-Closures Auth, Cookies, User oder Tenants erfassen. Client-Identität ist für sich keine Security-Grenze.
-
-## Migration
-
-| Alt                                          | Neu                                                                  |
-| -------------------------------------------- | -------------------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                                    |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`                      |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                                 |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                             |
-| `createClient(withTimeout(5000), ...)`       | `signal` am Aufruf übergeben oder eine Anwendungsfunktion darumlegen |
 
 ## Referenz
 

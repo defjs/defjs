@@ -17,7 +17,7 @@ SDK 匯出帶有 input、事件契約與緩衝上限的事件串流操作。應�
 
 ## 定義串流
 
-`defineEventStream(...)` 需要 `events`、正的 safe-integer `maxBufferSize`、正的 safe-integer `maxQueueSize`，以及相對 `path`。Method 預設是 `GET`。
+`defineEventStream(...)` 需要 `events`、正的 safe-integer `maxBufferSize`、正的 safe-integer `maxQueueSize`，以及相對 `path`。Method 預設是 `GET`。這次呼叫複製已知的定義欄位。`events` 字典容器會連同其自有屬性一起複製，包括不可列舉屬性，以及用計算屬性名稱宣告的 `__proto__` 屬性。繼承而來的名稱不會被複製。Struct 值仍是原來的物件。該字典上的 accessor 仍在訊息到達時執行，而且 `this` 是原來的字典。缺失的字典按傳入原樣保留，解析事件時仍會被回報。
 
 Request 形狀跟 HTTP 一樣：`builder` 回傳 `path`、`query`、`headers`、`body`。`GET`／`HEAD` 不能回傳 body。宣告的 `error` struct 會給啟動 fault 定型，並依 struct kind 解碼非 2xx 的握手 body（`string` 是文字，`blob`／`file` 是 blob，`arrayBuffer` 是 bytes，其餘是 JSON）。你沒設 `Accept` 時，Defjs 會送 `Accept: text/event-stream`。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。`ReadableStream` 主體遵循 HTTP 的規則：在無法串流請求主體的執行環境（例如 Firefox）中，啟動會在任何內容送出之前以 `ENV_UNSUPPORTED` 失敗。在 Chromium 中，這類主體需要 HTTP/2 或更新版本；透過 HTTP/1.1 時，啟動會以 `NET_UNREACHABLE` 失敗。串流主體只會送出一次，使用它的請求絕不會重新連線（見「重連」）。
 
@@ -106,7 +106,7 @@ Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，�
 
 `await using` 會呼叫同一條自有 close 路徑，並等待 Defjs 讀取／重連工作停止，以及 active reader lock 釋放。它刻意設有界限，不會無限等待永遠不 settle 的 provider-controlled `ReadableStream.cancel()` promise，因此不保證這類 provider promise 已完成。需要 reason 或終端結果時，仍可明確呼叫 `stream.close(reason)`，再 `await stream.closed`。
 
-結構化實作 `EventStreamHandle` 的程式碼現在必須提供 `[Symbol.asyncDispose](): PromiseLike<void>`，並接到同一個 lifecycle。對實作者而言，這是編譯期 breaking change；只接收 Defjs handle 的 consumer 不必新增執行期呼叫。
+結構化實作 `EventStreamHandle` 的程式碼必須提供 `[Symbol.asyncDispose](): PromiseLike<void>`，並接到同一個 lifecycle。
 
 支援的最低 lib 集合是 `ES2022`、`ESNext.Disposable`、`DOM` 與 `DOM.Iterable`。儲存庫的宣告工具使用 TypeScript 7，但沒有自動化的 packed-consumer 或 minimum-lib 驗證關卡，也不承諾較舊的 compiler。這組 lib 提供的是型別，不是執行階段的 Web API polyfill。`Client` 不是 `AsyncDisposable`；每個請求用它的 `AbortSignal` 管理。
 

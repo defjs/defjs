@@ -69,8 +69,7 @@ describe("web socket single struct messages", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("decodes a discriminated incoming frame as the struct value", async () => {

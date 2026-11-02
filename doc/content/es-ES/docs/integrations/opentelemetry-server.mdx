@@ -52,6 +52,8 @@ Firmas de hook:
 
 Un objeto de transporte vacío habilita ese transporte. Los switches booleanos antiguos de transporte (`http: false`) y los hooks top-level antiguos solo los rechazan los tipos de TypeScript. No hay comprobación en runtime: en runtime `http: false` deja el transporte habilitado y un hook top-level se ignora en silencio. Usa objetos de opción de transporte (`{ enabled: false }`) y hooks acotados al transporte.
 
+`withOpenTelemetryServer` lee `http`, luego `sse`, luego `webSocket`, una vez cada uno. Un bloque ausente sigue ausente y el transporte sigue habilitado. Un bloque presente se copia campo por campo: `enabled`, `startSpanHook`, `requestHook`, `responseHook` y, para WebSocket, `queryPropagation`. Cambiar o sustituir un bloque después no cambia la opción. `enabled` se lee primero. Solo `false` desactiva ese transporte, y la rama desactivada no lee hooks ni `queryPropagation`. Los getters de los campos copiados se ejecutan durante `withOpenTelemetryServer`. Si uno lanza, la excepción sale de esa llamada de inmediato; los bloques posteriores no se leen, y el error no se aplaza hasta que se aplica la opción. `tracer`, `meter`, `logger`, `propagator` y las funciones de hook conservan su identidad.
+
 ## Identidad de operación y propagación
 
 Pon un `operation` estático en `defineRequest`, `defineEventStream` o `defineWebSocket` cuando la operación tenga una identidad estable. El plugin lo usa en nombres de span y como `defjs.operation`. Nunca deriva identidad de un path resuelto, identificador, tenant o query string:
@@ -88,7 +90,7 @@ El span exterior es tuyo. El plugin sigue reportando el span de transporte de ni
 
 ## Referencia
 
-Cuando se suministra `meter`:
+Cuando se proporciona `meter`, el plugin llama a sus métodos de creación de instrumentos cada vez que se aplica la opción a un cliente, no durante `withOpenTelemetryServer`. El Meter/SDK determina si se comparten los instrumentos devueltos o el estado de agregación. Cada histograma de duración recibe su propia copia de los límites 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5 y 10 segundos.
 
 | Métrica                                      | Significado                                       |
 | -------------------------------------------- | ------------------------------------------------- |

@@ -136,7 +136,7 @@ export interface OpenTelemetryServerWebSocketOptions extends OpenTelemetryServer
  *
  * - `requireParentSpan` — Defaults to `false`. With a `tracer`, `true` bypasses all instrumentation, including logs, when no active parent span exists. Without a `tracer` it blocks neither metrics nor logs.
  *
- * - `http`, `sse`, `webSocket` — Per-transport options. Each defaults to `{}`; a transport is disabled only by `{ enabled: false }`.
+ * - `http`, `sse`, `webSocket` — Per-transport options. Omitting a block leaves it unset and the transport enabled. A transport is disabled only by `{ enabled: false }`. `withOpenTelemetryServer` reads each present block once and copies its fields.
  *
  * @group opentelemetry-server
  * @see {@link OpenTelemetryServerHttpOptions}
@@ -176,7 +176,13 @@ interface TransportSwitch {
  *
  * Each of `tracer`, `meter` and `logger` is optional and works without the others. Without `tracer`, the plugin creates no local spans, never calls `trace.getTracer(...)`, and skips `startSpanHook`, `requestHook` and `responseHook`. Propagation still forwards the extracted parent context.
  *
- * HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a transport to skip it.
+ * HTTP, SSE, and WebSocket are on by default. Pass `{ enabled: false }` on a transport to skip it. An out-of-type runtime value such as `http: false` is not that switch: the transport stays enabled.
+ *
+ * `http`, `sse`, and `webSocket` are read once, in that order, during this call. A missing block stays missing. `tracer`, `meter`, `logger`, `propagator`, and hook functions keep their identity. Replacing a block, or changing its fields, after this call does not affect the returned option.
+ *
+ * `enabled` is read next. Only `enabled: false` disables a block, and that branch does not read its hooks or `queryPropagation`. Otherwise the copy continues with `startSpanHook`, `requestHook`, and `responseHook`; a WebSocket block then copies `queryPropagation`. Those getters run here, once. If a getter throws, the exception leaves this call immediately and later blocks are not read. It is not caught or deferred until the option is applied.
+ *
+ * The supplied Meter's instrument creation methods are called each time the returned option is applied to a client config, not during this call. The Meter/SDK controls instrument identity and aggregation. Each duration histogram receives its own copy of the default bucket boundaries.
  *
  * @param options - Required settings object. Each of `tracer`, `meter`, `logger`, and `propagator` may be omitted; pass `{}` for propagation only.
  * @returns A `ClientOption` for `createClient(...)`.
@@ -201,9 +207,12 @@ export function withOpenTelemetryServer(
     }),
     requireParentSpan = false,
   } = options;
+  const http = snapshotTransport(options.http);
+  const sse = snapshotTransport(options.sse);
+  const webSocket = snapshotWebSocket(options.webSocket);
 
   return (config) => {
-    if (isTransportEnabled(options.http)) {
+    if (isTransportEnabled(http)) {
       config.interceptors.push(
         createOpenTelemetryHttpInterceptor({
           tracer,
@@ -211,14 +220,14 @@ export function withOpenTelemetryServer(
           propagator,
           metrics: meter ? createHttpClientMetrics(meter) : undefined,
           requireParentSpan,
-          startSpanHook: options.http?.startSpanHook,
-          requestHook: options.http?.requestHook,
-          responseHook: options.http?.responseHook,
+          startSpanHook: http?.startSpanHook,
+          requestHook: http?.requestHook,
+          responseHook: http?.responseHook,
         }),
       );
     }
 
-    if (isTransportEnabled(options.sse)) {
+    if (isTransportEnabled(sse)) {
       config.interceptors.push(
         createOpenTelemetrySSEInterceptor({
           tracer,
@@ -226,14 +235,14 @@ export function withOpenTelemetryServer(
           propagator,
           metrics: meter ? createSSEClientMetrics(meter) : undefined,
           requireParentSpan,
-          startSpanHook: options.sse?.startSpanHook,
-          requestHook: options.sse?.requestHook,
-          responseHook: options.sse?.responseHook,
+          startSpanHook: sse?.startSpanHook,
+          requestHook: sse?.requestHook,
+          responseHook: sse?.responseHook,
         }),
       );
     }
 
-    if (isTransportEnabled(options.webSocket)) {
+    if (isTransportEnabled(webSocket)) {
       config.interceptors.push(
         createOpenTelemetryWebSocketInterceptor({
           tracer,
@@ -241,13 +250,42 @@ export function withOpenTelemetryServer(
           propagator,
           metrics: meter ? createWebSocketClientMetrics(meter) : undefined,
           requireParentSpan,
-          queryPropagation: options.webSocket?.queryPropagation,
-          startSpanHook: options.webSocket?.startSpanHook,
-          requestHook: options.webSocket?.requestHook,
-          responseHook: options.webSocket?.responseHook,
+          queryPropagation: webSocket?.queryPropagation,
+          startSpanHook: webSocket?.startSpanHook,
+          requestHook: webSocket?.requestHook,
+          responseHook: webSocket?.responseHook,
         }),
       );
     }
+  };
+}
+
+function snapshotTransport<TResponse>(
+  block: OpenTelemetryServerTransportOptions<TResponse> | undefined,
+): OpenTelemetryServerTransportOptions<TResponse> | undefined {
+  if (block === undefined) return undefined;
+  const enabled = block.enabled;
+  if (enabled === false) return { enabled: false };
+  return {
+    enabled,
+    startSpanHook: block.startSpanHook,
+    requestHook: block.requestHook,
+    responseHook: block.responseHook,
+  };
+}
+
+function snapshotWebSocket(
+  block: OpenTelemetryServerWebSocketOptions | undefined,
+): OpenTelemetryServerWebSocketOptions | undefined {
+  if (block === undefined) return undefined;
+  const enabled = block.enabled;
+  if (enabled === false) return { enabled: false };
+  return {
+    enabled,
+    startSpanHook: block.startSpanHook,
+    requestHook: block.requestHook,
+    responseHook: block.responseHook,
+    queryPropagation: block.queryPropagation,
   };
 }
 

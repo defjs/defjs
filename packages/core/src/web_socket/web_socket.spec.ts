@@ -30,8 +30,7 @@ describe("web socket runtime", () => {
     operation: (client: Client) => Promise<SocketAwaitResult<unknown, unknown>>,
     options?: Record<string, unknown>,
   ): Promise<SocketAwaitResult<unknown, unknown>> {
-    const bound = options === undefined ? client : client(options);
-    return operation(bound);
+    return operation(client(options));
   }
 
   test("should return transport error with invalid client", async () => {

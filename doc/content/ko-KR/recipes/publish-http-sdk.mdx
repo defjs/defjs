@@ -9,16 +9,16 @@ SDK는 팀이 제공하는 API를 패키지로 묶습니다. Defjs에서는 엔�
 
 ## 1. SDK 작업 정의하기
 
-SDK 프로젝트에 `src/users.ts`를 만듭니다. path, 입력 배치, 응답, 서비스 오류 계약을 이곳에 둡니다. 작업을 정의하는 데 Client 인스턴스나 배포 주소, 현재 인증 정보를 넣을 필요는 없습니다.
+SDK 프로젝트에 `src/orders.ts`를 만듭니다. path, 입력 배치, 응답, 서비스 오류 계약을 이곳에 둡니다. 작업을 정의하는 데 Client 인스턴스나 배포 주소, 현재 인증 정보를 넣을 필요는 없습니다.
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+<include cwd meta='title="src/orders.ts"'>
+  examples/recipes/publish-http-sdk/orders-sdk.ts#example
 </include>
 
 `src/index.ts`에서 공개합니다.
 
 ```ts
-export { getUser } from "./users";
+export { getOrder } from "./orders";
 ```
 
 작업이 늘어나면 모듈을 추가하고 해당 엔드포인트를 같은 진입점에서 다시 export합니다.
@@ -28,19 +28,19 @@ export { getUser } from "./users";
 SDK 프로젝트는 자기 패키지 경계를 가집니다.
 
 ```txt
-users-sdk/
+orders-sdk/
   package.json
   tsconfig.json
   src/
     index.ts
-    users.ts
+    orders.ts
 ```
 
 다음 `package.json`을 사용하되, 예제 패키지 이름은 자신이 소유한 scope로 바꿉니다.
 
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/orders-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -100,26 +100,26 @@ tarball에 `dist/index.js`와 `dist/index.d.ts`가 들어 있는지 확인합니
 
 ## 3. 사용하는 애플리케이션에서 호출하기
 
-오프라인으로 돌릴 수 있는 로컬 예제는 정의를 `app.ts` 옆의 `users-sdk.ts`에 둡니다. 이 import는 클라이언트를 만들지 않습니다. 애플리케이션이 로컬 Fetch 핸들을 구성하고 import한 작업을 호출합니다.
+오프라인으로 돌릴 수 있는 로컬 예제는 정의를 `app.ts` 옆의 `orders-sdk.ts`에 둡니다. 이 import는 클라이언트를 만들지 않습니다. 애플리케이션이 로컬 Fetch 핸들을 구성하고 import한 작업을 호출합니다.
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+paid
 ```
 
 패키지로 배포한 SDK는 호환되는 Core와 함께 설치합니다.
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
+bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
 예제의 상대 import를 다음과 같이 바꿉니다.
 
 ```ts
-import { getUser } from "@company/users-sdk";
+import { getOrder } from "@company/orders-sdk";
 ```
 
 서비스 주소와 인증은 앱의 Client에 설정합니다. 로컬 테스트에서는 `withHTTPHandle(...)`을 유지하고, 플랫폼 Fetch를 사용하려면 제거합니다. 다른 앱도 같은 엔드포인트를 import하고 SDK 정의를 바꾸지 않은 채 다른 Client 설정으로 실행할 수 있습니다.

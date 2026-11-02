@@ -19,18 +19,18 @@ npx skills add defjs/defjs --skill defjs
 
 ## 提出一個端點 [#prompt]
 
-給助手一個任務。下面這段提示要求一個具型別的 `GET /users/:id`，並且 client 留在應用程式裡：
+給助手一個任務。下面這段提示要求一個具型別的 `GET /orders/:id`，並且 client 留在應用程式裡：
 
 ```txt
-Use @defjs/core to define GET /users/:id.
-The input is { id: number }; a successful response is { id: number, name: string }.
+Use @defjs/core to define GET /orders/:id.
+The input is { id: number }; a successful response is { id: number, status: string }.
 Keep the SDK definition and application client in separate modules,
 and verify the result with the project’s existing tests.
 ```
 
 ## 核對結果 [#verify]
 
-把定義和應用程式分開讀。定義匯出操作，不建立 client。應用程式建立 client 並呼叫操作，例如 `getUser(client, { id: 1 })`。宣告了 `input` 時，`builder` 是明確的同步純函數。只有 error 槽是空的時才使用成功值。
+把定義和應用程式分開讀。定義匯出操作，不建立 client。應用程式建立 client 並呼叫操作，例如 `getOrder(client, { id: 1 })`。宣告了 `input` 時，`builder` 是明確的同步純函數。只有 error 槽是空的時才使用成功值。
 
 然後執行該專案自己的型別檢查，以及真正執行這份契約的測試。相依套件安裝和 CI 規則留在那個專案裡。
 

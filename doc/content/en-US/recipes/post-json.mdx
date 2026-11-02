@@ -9,12 +9,12 @@ Hand the typed body to the builder. Logical field names stay in TypeScript; wire
 
 See [HTTP](/docs/http) and [Client](/docs/client) for details.
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` is a placeholder. With a server that answers `201` and `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, the snippet prints:
+`api.example.com` is a placeholder. With a server that answers `201` and `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, the snippet prints:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

@@ -9,7 +9,7 @@ description: 在 React 中提供應用程式自己的 Client，並執行 SDK 定
 
 呢啲 plugins 只係設定同取得現有 `Client` 嘅可選輔助。你可以直接 import 應用固定嘅 Client、將明確 Client 傳俾可重用邏輯、用框架注入提供組件樹預設值同 subtree override，或者用應用自己嘅組織方式；SDK 定義唔要求經 plugin 執行。
 
-這個套件不會建立 Client、快取結果、重試操作或釋放傳輸資源。啟動工作的組件、effect 或資料請求函式庫負責取消、關閉及其他生命週期處理。`useClient()` 攞到嘅 client 要傳入操作。Hook 返回嘅就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。逐次呼叫需要 `signal` 等 options 時，喺操作行嗰度 call 佢：`getUser(client({ signal }), input)`。唔好傳俾 state setter，因為 `setState(client)` 會將佢當 updater 嚟 call。派生出嚟嘅 `Client` 值唔會被 `ClientProvider` 或者 `useClient` 接受。
+這個套件不會建立 Client、快取結果、重試操作或釋放傳輸資源。啟動工作的組件、effect 或資料請求函式庫負責取消、關閉及其他生命週期處理。`useClient()` 攞到嘅 client 要傳入操作。Hook 返回嘅就係提供入去嗰個 [`DerivableClient`](/zh-Hant-HK/api/core/derivableclient-type)。逐次呼叫需要 `signal` 等 options 時，喺操作行嗰度 call 佢：`getOrder(client({ signal }), input)`。唔好傳俾 state setter，因為 `setState(client)` 會將佢當 updater 嚟 call。派生出嚟嘅 `Client` 值唔會被 `ClientProvider` 或者 `useClient` 接受。
 
 ## 基本用法
 
@@ -17,7 +17,7 @@ Install `@defjs/core`、`@defjs/react` 同 React 18+。ESM：
 
 `bun add @defjs/core @defjs/react react`
 
-提供 client，之後取得 user；相關值改變時取消請求：
+提供 client，之後取得 order；相關值改變時取消請求：
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 

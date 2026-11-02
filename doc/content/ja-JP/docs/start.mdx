@@ -5,11 +5,11 @@ description: 最初の SDK 操作を export し、別のアプリケーション
 
 # はじめに: 最初の SDK 操作 [#getting-started-one-http-request]
 
-書くファイルは二つです。`GET /users/:id` を export する SDK モジュールと、それを import してクライアントを所有するアプリケーションです。ローカル Fetch ハンドルが最初の実行をオフラインに保ちます。同じ API 定義は、そのあとサービスを向いたクライアントでも動きます。
+書くファイルは二つです。`GET /orders/:id` を export する SDK モジュールと、それを import してクライアントを所有するアプリケーションです。ローカル Fetch ハンドルが最初の実行をオフラインに保ちます。同じ API 定義は、そのあとサービスを向いたクライアントでも動きます。
 
 ## ベストプラクティス
 
-定義は client から独立しています。アプリケーションの client を渡して操作を呼びます。たとえば `getUser(client, { id: 7 })` です。第 3 の options 引数はありません。操作を呼ぶと処理が始まり、`await` は待つだけです。サービスアドレスと認証情報もアプリケーションのものです。先に error-first のタプルを確認します。`error` があるときは `error.code` を報告し、成功値を読む前に関数から return します。
+定義は client から独立しています。アプリケーションの client を渡して操作を呼びます。たとえば `getOrder(client, { id: 7 })` です。第 3 の options 引数はありません。操作を呼ぶと処理が始まり、`await` は待つだけです。サービスアドレスと認証情報もアプリケーションのものです。先に error-first のタプルを確認します。`error` があるときは `error.code` を報告し、成功値を読む前に関数から return します。
 
 ## Step 1 — インストール
 
@@ -21,7 +21,7 @@ bun add @defjs/core
 
 ## Step 2 — リクエストを定義する
 
-`src/define-request.ts` を作ります。これは SDK 作成者のモジュールです。クライアントを作らずに `getUser` を export します。入力 struct は呼び出し側の値です。`builder` はその値をリクエストに配置します。ここでは入力全体が path オブジェクトなので、エイリアスのないスカラーフィールドが `:id` を埋めます。
+`src/define-request.ts` を作ります。これは SDK 作成者のモジュールです。クライアントを作らずに `getOrder` を export します。入力 struct は呼び出し側の値です。`builder` はその値をリクエストに配置します。ここでは入力全体が path オブジェクトなので、エイリアスのないスカラーフィールドが `:id` を埋めます。
 
 <include cwd meta="define-request.ts">
   examples/start/define-request.ts#example
@@ -29,11 +29,11 @@ bun add @defjs/core
 
 `output` は 2xx のボディです。`error` はそれ以外のすべての status です。それぞれ struct は 1 つです。ボディの形が違うときは `struct.or(...)` か判別可能な union を使います。
 
-`defineRequest(...)` は操作を返します。`getUser(client, input)` を呼ぶとリクエストが始まります。上の `builder` は入力を配置する関数であり、操作そのものではありません。`input` を宣言したところでは、`builder` は必須で、同期的な純粋関数です。
+`defineRequest(...)` は操作を返します。`getOrder(client, input)` を呼ぶとリクエストが始まります。上の `builder` は入力を配置する関数であり、操作そのものではありません。`input` を宣言したところでは、`builder` は必須で、同期的な純粋関数です。
 
 ## Step 3 — ローカルで呼び出す
 
-定義の隣に `src/execute-locally.ts` を作ります。これは利用アプリケーションです。`getUser` を import し、自分のクライアントを作り、ローカル Fetch ハンドルを渡します。Defjs はそれでも入力を検証し、`Request` を組み立て、status で振り分け、ボディをパースします。
+定義の隣に `src/execute-locally.ts` を作ります。これは利用アプリケーションです。`getOrder` を import し、自分のクライアントを作り、ローカル Fetch ハンドルを渡します。Defjs はそれでも入力を検証し、`Request` を組み立て、status で振り分け、ボディをパースします。
 
 <include cwd meta="execute-locally.ts">
   examples/start/execute-locally.ts#example
@@ -46,20 +46,20 @@ bun src/execute-locally.ts
 ```
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-いないユーザーも試してみましょう — path の id を `8` にしてもう一度実行します。
+いない注文も試してみましょう — path の id を `8` にしてもう一度実行します。
 
 ```txt
-User not found
+Order not found
 ```
 
-成功時は `error` が `null`、`user` が `200` の Struct 出力、`response` が `DecodedResponse<User>` です。宣言済み `404` では `error.code` が `'HTTP_STATUS'`、`error.status` が `404`、`error.data` は型付きの `NotFound` です。失敗時、タプルの 2 番目は `undefined` です。
+成功時は `error` が `null`、`order` が `200` の Struct 出力、`response` が `DecodedResponse<Order>` です。宣言済み `404` では `error.code` が `'HTTP_STATUS'`、`error.status` が `404`、`error.data` は型付きの `NotFound` です。失敗時、タプルの 2 番目は `undefined` です。
 
 ## Step 4 — 実 API に向ける
 
-`src/real-api.ts` で同じ `getUser` を import し、サービスのベース URL でクライアントを作ります。例のアドレスを、それらのボディで `GET /v1/users/:id` を実装しているサービスに置き換えてから、この版を実行してください。
+`src/real-api.ts` で同じ `getOrder` を import し、サービスのベース URL でクライアントを作ります。例のアドレスを、それらのボディで `GET /v1/orders/:id` を実装しているサービスに置き換えてから、この版を実行してください。
 
 <include cwd>examples/start/real-api.ts#example</include>
 
@@ -67,7 +67,7 @@ API 定義は SDK モジュールに残ります。サービスアドレス、�
 
 ## 定義を公開する
 
-より多くのアプリケーションが必要になったら、定義を SDK パッケージへ移します。`getUser` を export し、その TypeScript 宣言を含め、互換性のある Core の版を宣言します。利用者はそのとき `./define-request.ts` ではなくパッケージから import します。クライアント設定は利用者自身のものです。パッケージ構成の全体は [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) に従ってください。
+より多くのアプリケーションが必要になったら、定義を SDK パッケージへ移します。`getOrder` を export し、その TypeScript 宣言を含め、互換性のある Core の版を宣言します。利用者はそのとき `./define-request.ts` ではなくパッケージから import します。クライアント設定は利用者自身のものです。パッケージ構成の全体は [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) に従ってください。
 
 ## 結果が違うとき
 

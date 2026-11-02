@@ -12,21 +12,21 @@ description: struct 门面、Infer，以及 StructError。
 门面。用这个，别直接碰内部构造函数。
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### 原语和容器
@@ -57,7 +57,7 @@ readUser();
 - **返回** `[null, value]` 或 `[StructError, undefined]`。错误只带一个 issue。对象字段停在第一个坏字段。`struct.or` 会试完每个分支，然后报告 `invalid_union`，不保留第一个分支的失败。
 - 对象字段默认必填，除非标了 `.optional()` 或 `.nullish()`。shape 没有声明的 key 会从结果中丢弃。
 - 可选 `options.errorMap` 只改这一次 parse 的 issue 文案。
-- 默认读**逻辑** key（`displayName`）。传 `{ aliases: true }` 则读传输 key（`display_name`），和 HTTP/JSON codec 一样。
+- 默认读**逻辑** key（`customerName`）。传 `{ aliases: true }` 则读传输 key（`customer_name`），和 HTTP/JSON codec 一样。
 
 ## ErrorMap
 

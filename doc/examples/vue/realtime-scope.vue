@@ -5,13 +5,13 @@ import { injectClient } from "@defjs/vue";
 import { onScopeDispose, ref } from "vue";
 
 const client = injectClient();
-const messages = ref<{ id: number; text: string }[]>([]);
+const lines = ref<{ id: number; text: string }[]>([]);
 let nextId = 0;
-const notifications = defineEventStream({
+const deployEvents = defineEventStream({
   maxBufferSize: 64 * 1024,
   maxQueueSize: 100,
-  path: "/notifications",
-  events: { message: struct.string() },
+  path: "/deployments/events",
+  events: { line: struct.string() },
 });
 
 const controller = new AbortController();
@@ -26,7 +26,7 @@ const stop = () => {
 onScopeDispose(stop);
 
 void (async () => {
-  const [error, nextStream] = await notifications(
+  const [error, nextStream] = await deployEvents(
     client({ signal: controller.signal }),
   );
   if (error) return;
@@ -40,11 +40,11 @@ void (async () => {
 
   try {
     for await (const event of nextStream) {
-      messages.value.push({ id: nextId++, text: event.data });
-      if (messages.value.length > 100) messages.value.shift();
+      lines.value.push({ id: nextId++, text: event.data });
+      if (lines.value.length > 100) lines.value.shift();
     }
   } catch (cause) {
-    if (!disposed) console.error("notifications failed", cause);
+    if (!disposed) console.error("deployEvents failed", cause);
   } finally {
     nextStream.close("scope-finished");
     await nextStream.closed;
@@ -54,7 +54,7 @@ void (async () => {
 
 <template>
   <ul>
-    <li v-for="message in messages" :key="message.id">{{ message.text }}</li>
+    <li v-for="line in lines" :key="line.id">{{ line.text }}</li>
   </ul>
 </template>
 <!-- #endregion -->

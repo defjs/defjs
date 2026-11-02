@@ -9,12 +9,12 @@ description: withHTTPHandle で 1 クライアント分の Fetch を差し替え
 
 詳細は [Client](/ja-JP/docs/client) を見てください。
 
-<include cwd meta="get-user.test.ts">
+<include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
 ```txt
-Ada 200
+paid 200
 ```
 
-本番では同じ `getUser` 操作を、本物の `withEndpoint(...)` クライアントに対して使います — 変わるのはハンドルだけです。
+本番では同じ `getOrder` 操作を、本物の `withEndpoint(...)` クライアントに対して使います — 変わるのはハンドルだけです。

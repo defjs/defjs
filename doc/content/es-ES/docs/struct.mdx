@@ -66,14 +66,14 @@ Path, query, headers y body son campos que devuelve el builder, no un struct de 
   examples/struct/aliases.ts#example
 </include>
 
-| Límite                                                 | Campo                        |
-| ------------------------------------------------------ | ---------------------------- |
-| `struct.parse(User, ...)` y la entrada de la operación | Lógico `displayName`         |
-| Objeto tipado devuelto por el builder                  | Cable `display_name`         |
-| Decodificación JSON / SSE / WebSocket                  | Cable → lógico `displayName` |
-| Objeto anónimo escrito en el builder                   | La clave que escribiste      |
+| Límite                                                  | Campo                         |
+| ------------------------------------------------------- | ----------------------------- |
+| `struct.parse(Order, ...)` y la entrada de la operación | Lógico `customerName`         |
+| Objeto tipado devuelto por el builder                   | Cable `customer_name`         |
+| Decodificación JSON / SSE / WebSocket                   | Cable → lógico `customerName` |
+| Objeto anónimo escrito en el builder                    | La clave que escribiste       |
 
-El propio builder lee nombres lógicos (`input.user.displayName`); el nombre de cable aparece solo cuando el serializador codifica el objeto tipado que devuelve el builder.
+El propio builder lee nombres lógicos (`input.order.customerName`); el nombre de cable aparece solo cuando el serializador codifica el objeto tipado que devuelve el builder.
 
 Los alias funcionan en campos anidados, arrays, objects, unions y discriminadores. Mantén los nombres lógicos en el código de la app; pon el nombre externo en el struct una sola vez. Hacer spread de un objeto tipado conserva esa codificación. Fijar a la vez el campo lógico y su clave de cable en el mismo objeto es `REQ_BUILD_FAILED`. Si haces `JSON.stringify` de un valor tú mismo, sales de este camino: el serializador ve nombres lógicos.
 

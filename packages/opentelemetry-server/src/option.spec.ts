@@ -9,7 +9,13 @@ import type { Context, Meter, TextMapPropagator } from "@opentelemetry/api";
 import { context, propagation, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { logs } from "@opentelemetry/api-logs";
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { withOpenTelemetryServer } from "./option";
+import {
+  type OpenTelemetryServerHttpOptions,
+  type OpenTelemetryServerOptions,
+  type OpenTelemetryServerSSEOptions,
+  type OpenTelemetryServerWebSocketOptions,
+  withOpenTelemetryServer,
+} from "./option";
 import {
   createMockTracer,
   createMockLogger,
@@ -652,5 +658,473 @@ describe("withOpenTelemetryServer", () => {
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(responseHook).toHaveBeenCalledTimes(1);
     expect(propagator.inject).toHaveBeenCalledTimes(1);
+  });
+});
+
+const DURATION_BUCKETS = [
+  0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10,
+];
+
+describe("withOpenTelemetryServer transport capture", () => {
+  test("uses the blocks captured at creation when one option is applied twice", async () => {
+    const { tracer, spans } = createMockTracer();
+    const httpStart = vi.fn(() => ({ "app.phase": "http-initial" }));
+    const sseStart = vi.fn(() => ({ "app.phase": "sse-initial" }));
+    const webSocketStart = vi.fn(() => ({ "app.phase": "ws-initial" }));
+    const httpRequest = vi.fn();
+    const httpResponse = vi.fn();
+    const sseRequest = vi.fn();
+    const sseResponse = vi.fn();
+    const webSocketRequest = vi.fn();
+    const webSocketResponse = vi.fn();
+    const lateHttpRequest = vi.fn();
+    const lateSseRequest = vi.fn();
+    const lateWebSocketRequest = vi.fn();
+    const seenQuery: string[] = [];
+    const propagator: TextMapPropagator = {
+      inject(_context, carrier, setter) {
+        expect(this).toBe(propagator);
+        setter.set(carrier, "traceparent", "captured-parent");
+      },
+      extract: (ctx) => ctx,
+      fields: () => ["traceparent"],
+    };
+    const http: OpenTelemetryServerHttpOptions = {
+      enabled: true,
+      startSpanHook: httpStart,
+      requestHook: httpRequest,
+      responseHook: httpResponse,
+    };
+    const sse: OpenTelemetryServerSSEOptions = {
+      enabled: true,
+      startSpanHook: sseStart,
+      requestHook: sseRequest,
+      responseHook: sseResponse,
+    };
+    const webSocket: OpenTelemetryServerWebSocketOptions = {
+      enabled: true,
+      queryPropagation: true,
+      startSpanHook: webSocketStart,
+      requestHook: webSocketRequest,
+      responseHook: webSocketResponse,
+    };
+    const options: OpenTelemetryServerOptions = {
+      tracer,
+      propagator,
+      http,
+      sse,
+      webSocket,
+    };
+
+    const option = withOpenTelemetryServer(options);
+    http.enabled = false;
+    http.startSpanHook = () => ({ "app.phase": "http-replaced" });
+    http.requestHook = lateHttpRequest;
+    http.responseHook = vi.fn();
+    sse.enabled = false;
+    sse.startSpanHook = () => ({ "app.phase": "sse-replaced" });
+    sse.requestHook = lateSseRequest;
+    sse.responseHook = vi.fn();
+    webSocket.enabled = false;
+    webSocket.queryPropagation = false;
+    webSocket.startSpanHook = () => ({ "app.phase": "ws-replaced" });
+    webSocket.requestHook = lateWebSocketRequest;
+    webSocket.responseHook = vi.fn();
+    options.http = { enabled: false };
+    options.sse = { enabled: false };
+    options.webSocket = { enabled: false, queryPropagation: false };
+    options.propagator = {
+      inject: () => {
+        throw new Error("replacement propagator");
+      },
+      extract: (ctx) => ctx,
+      fields: () => [],
+    };
+
+    for (let application = 0; application < 2; application += 1) {
+      const config = makeConfig();
+      option(config);
+      expect(config.interceptors.map((item) => item.kind)).toEqual([
+        "http",
+        "sse",
+        "web-socket",
+      ]);
+      const httpCall = makeHttpRequest();
+      const httpResult = makeHttpResponse();
+      await httpInterceptor(config).fn(httpCall, async () => httpResult);
+      expect(httpRequest).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        httpCall,
+      );
+      expect(httpResponse).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        httpResult,
+        httpCall,
+      );
+      const sseCall = makeSSERequest();
+      const stream = makeSSEStream();
+      await sseInterceptor(config).fn(sseCall, async () => stream);
+      expect(sseRequest).toHaveBeenLastCalledWith(expect.any(Object), sseCall);
+      expect(sseResponse).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        stream,
+        sseCall,
+      );
+      const webSocketCall = makeWsRequest(
+        new URLSearchParams({ room: "alpha" }),
+      );
+      const session = makeWsSession();
+      const next = vi.fn(async (request: HttpRequest) => {
+        seenQuery.push(request.queryString ?? "");
+        return session;
+      });
+      await webSocketInterceptor(config).fn(webSocketCall, next);
+      expect(webSocketRequest).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        webSocketCall,
+      );
+      expect(webSocketResponse).toHaveBeenLastCalledWith(
+        expect.any(Object),
+        session,
+        webSocketCall,
+      );
+    }
+
+    expect(httpStart).toHaveBeenCalledTimes(2);
+    expect(sseStart).toHaveBeenCalledTimes(2);
+    expect(webSocketStart).toHaveBeenCalledTimes(2);
+    expect(lateHttpRequest).not.toHaveBeenCalled();
+    expect(lateSseRequest).not.toHaveBeenCalled();
+    expect(lateWebSocketRequest).not.toHaveBeenCalled();
+    expect(spans.map((span) => span.attributes["app.phase"])).toEqual([
+      "http-initial",
+      "sse-initial",
+      "ws-initial",
+      "http-initial",
+      "sse-initial",
+      "ws-initial",
+    ]);
+    expect(seenQuery).toEqual([
+      "room=alpha&traceparent=captured-parent",
+      "room=alpha&traceparent=captured-parent",
+    ]);
+  });
+
+  test("reads each transport block once while building the option", () => {
+    let httpReads = 0;
+    let sseReads = 0;
+    let webSocketReads = 0;
+    const option = withOpenTelemetryServer({
+      get http() {
+        httpReads += 1;
+        return { requestHook: vi.fn() };
+      },
+      get sse() {
+        sseReads += 1;
+        return {};
+      },
+      get webSocket() {
+        webSocketReads += 1;
+        return { queryPropagation: false };
+      },
+    });
+
+    expect([httpReads, sseReads, webSocketReads]).toEqual([1, 1, 1]);
+    option(makeConfig());
+    option(makeConfig());
+    expect([httpReads, sseReads, webSocketReads]).toEqual([1, 1, 1]);
+  });
+
+  test("reads enabled once and keeps that captured value", async () => {
+    let reads = 0;
+    const requestHook = vi.fn();
+    const { tracer } = createMockTracer();
+    const option = withOpenTelemetryServer({
+      tracer,
+      http: {
+        get enabled() {
+          reads += 1;
+          return reads === 1;
+        },
+        requestHook,
+      },
+    });
+
+    expect(reads).toBe(1);
+    const first = makeConfig();
+    const second = makeConfig();
+    option(first);
+    option(second);
+    expect(reads).toBe(1);
+    await httpInterceptor(first).fn(makeHttpRequest(), async () =>
+      makeHttpResponse(),
+    );
+    await httpInterceptor(second).fn(makeHttpRequest(), async () =>
+      makeHttpResponse(),
+    );
+    expect(requestHook).toHaveBeenCalledTimes(2);
+  });
+
+  test("ignores hooks added to an empty transport block after capture", async () => {
+    const { tracer, spans } = createMockTracer();
+    const http: OpenTelemetryServerHttpOptions = {};
+    const option = withOpenTelemetryServer({ tracer, http });
+    http.startSpanHook = () => ({ "app.late": "too-late" });
+    const config = makeConfig();
+    option(config);
+
+    await httpInterceptor(config).fn(makeHttpRequest(), async () =>
+      makeHttpResponse(),
+    );
+
+    expect(spans[0]?.attributes["app.late"]).toBeUndefined();
+    expect(spans[0]?.attributes["url.full"]).toBe(
+      "https://api.example.com/test",
+    );
+  });
+
+  test("keeps a disabled transport disabled when the block is later enabled", () => {
+    const requestHook = vi.fn();
+    const http: OpenTelemetryServerHttpOptions = {
+      enabled: false,
+      requestHook,
+    };
+    const option = withOpenTelemetryServer({
+      tracer: createMockTracer().tracer,
+      http,
+    });
+    http.enabled = true;
+    http.requestHook = vi.fn();
+    const config = makeConfig();
+    option(config);
+
+    expect(config.interceptors.map((item) => item.kind)).toEqual([
+      "sse",
+      "web-socket",
+    ]);
+    expect(requestHook).not.toHaveBeenCalled();
+  });
+
+  test("keeps captured queryPropagation false when the block is later turned on", async () => {
+    const { tracer } = createMockTracer();
+    const propagator = makePropagator();
+    const requestHook = vi.fn();
+    const webSocket: OpenTelemetryServerWebSocketOptions = {
+      queryPropagation: false,
+      requestHook,
+    };
+    const options: OpenTelemetryServerOptions = {
+      tracer,
+      propagator,
+      http: { enabled: false },
+      sse: { enabled: false },
+      webSocket,
+    };
+    const option = withOpenTelemetryServer(options);
+    webSocket.queryPropagation = true;
+    options.webSocket = { queryPropagation: true, requestHook: vi.fn() };
+    const config = makeConfig();
+    option(config);
+    const request = makeWsRequest(new URLSearchParams({ room: "alpha" }));
+    const next = vi.fn(async (_request: HttpRequest) => makeWsSession());
+
+    await webSocketInterceptor(config).fn(request, next);
+
+    expect(requestHook).toHaveBeenCalledTimes(1);
+    expect(propagator.inject).not.toHaveBeenCalled();
+    expect(next.mock.calls[0]?.[0].queryString).toBe("room=alpha");
+    expect(next.mock.calls[0]?.[0].queryParams).toBe(request.queryParams);
+  });
+
+  test("throws an enabled getter failure from withOpenTelemetryServer without reading hooks", () => {
+    const error = new Error("enabled getter failed");
+    let hookReads = 0;
+    expect(() =>
+      withOpenTelemetryServer({
+        http: {
+          get enabled(): never {
+            throw error;
+          },
+          get requestHook(): never {
+            hookReads += 1;
+            throw new Error("request hook getter");
+          },
+        },
+      }),
+    ).toThrow(error);
+    expect(hookReads).toBe(0);
+  });
+
+  test("throws an active hook getter failure once from withOpenTelemetryServer", () => {
+    const error = new Error("request hook getter failed");
+    let reads = 0;
+    expect(() =>
+      withOpenTelemetryServer({
+        http: {
+          get startSpanHook() {
+            reads += 1;
+            return () => ({});
+          },
+          get requestHook(): never {
+            reads += 1;
+            throw error;
+          },
+          get responseHook() {
+            reads += 1;
+            return () => undefined;
+          },
+        },
+      }),
+    ).toThrow(error);
+    expect(reads).toBe(2);
+  });
+
+  test("does not read a later transport block when an earlier active getter throws", () => {
+    const error = new Error("http request hook getter failed");
+    let sseReads = 0;
+    expect(() =>
+      withOpenTelemetryServer({
+        http: {
+          get requestHook(): never {
+            throw error;
+          },
+        },
+        get sse() {
+          sseReads += 1;
+          return { enabled: true };
+        },
+      }),
+    ).toThrow(error);
+    expect(sseReads).toBe(0);
+  });
+
+  test("does not read disabled hooks or queryPropagation", () => {
+    let httpEnabledReads = 0;
+    let webSocketEnabledReads = 0;
+    let httpHookReads = 0;
+    let sseHookReads = 0;
+    let webSocketHookReads = 0;
+    let queryReads = 0;
+    const option = withOpenTelemetryServer({
+      http: {
+        get enabled() {
+          httpEnabledReads += 1;
+          return false;
+        },
+        get startSpanHook(): never {
+          httpHookReads += 1;
+          throw new Error("http start");
+        },
+        get requestHook(): never {
+          httpHookReads += 1;
+          throw new Error("http request");
+        },
+        get responseHook(): never {
+          httpHookReads += 1;
+          throw new Error("http response");
+        },
+      },
+      sse: {
+        enabled: false,
+        get requestHook(): never {
+          sseHookReads += 1;
+          throw new Error("sse request");
+        },
+      },
+      webSocket: {
+        get enabled() {
+          webSocketEnabledReads += 1;
+          return false;
+        },
+        get queryPropagation(): never {
+          queryReads += 1;
+          throw new Error("query propagation");
+        },
+        get startSpanHook(): never {
+          webSocketHookReads += 1;
+          throw new Error("ws start");
+        },
+        get requestHook(): never {
+          webSocketHookReads += 1;
+          throw new Error("ws request");
+        },
+        get responseHook(): never {
+          webSocketHookReads += 1;
+          throw new Error("ws response");
+        },
+      },
+    });
+
+    expect(httpEnabledReads).toBe(1);
+    expect(webSocketEnabledReads).toBe(1);
+    expect(httpHookReads).toBe(0);
+    expect(sseHookReads).toBe(0);
+    expect(webSocketHookReads).toBe(0);
+    expect(queryReads).toBe(0);
+    const config = makeConfig();
+    option(config);
+    expect(config.interceptors).toEqual([]);
+    expect(httpHookReads).toBe(0);
+    expect(queryReads).toBe(0);
+    expect(httpEnabledReads).toBe(1);
+    expect(webSocketEnabledReads).toBe(1);
+  });
+
+  test("keeps out-of-type boolean transport switches enabled at runtime", () => {
+    const config = makeConfig();
+    withOpenTelemetryServer({
+      tracer: createMockTracer().tracer,
+      http: false as never,
+      sse: false as never,
+      webSocket: false as never,
+    })(config);
+
+    expect(config.interceptors.map((item) => item.kind)).toEqual([
+      "http",
+      "sse",
+      "web-socket",
+    ]);
+  });
+
+  test("creates metrics at application and isolates bucket arrays across clients", async () => {
+    const received: number[][] = [];
+    const records: Array<ReturnType<typeof vi.fn>> = [];
+    const meter = makeMeter();
+    vi.mocked(meter.createHistogram).mockImplementation((_name, options) => {
+      const buckets = options?.advice?.explicitBucketBoundaries;
+      if (!buckets) throw new Error("expected explicitBucketBoundaries");
+      if (received.length === 0) {
+        buckets[0] = 999;
+        buckets.push(42);
+      }
+      received.push(buckets);
+      const record = vi.fn();
+      records.push(record);
+      return { record };
+    });
+    const option = withOpenTelemetryServer({ meter });
+
+    expect(meter.createHistogram).not.toHaveBeenCalled();
+    expect(meter.createUpDownCounter).not.toHaveBeenCalled();
+    const first = makeConfig();
+    option(first);
+    expect(meter.createHistogram).toHaveBeenCalledTimes(5);
+    expect(meter.createUpDownCounter).toHaveBeenCalledTimes(2);
+    const second = makeConfig();
+    option(second);
+
+    expect(received).toHaveLength(10);
+    expect(new Set(received).size).toBe(10);
+    expect(received[0]?.[0]).toBe(999);
+    expect(received[0]).toContain(42);
+    for (const buckets of received.slice(1)) {
+      expect(buckets).toEqual(DURATION_BUCKETS);
+    }
+    expect(new Set(records).size).toBe(10);
+    await httpInterceptor(first).fn(makeHttpRequest(), async () =>
+      makeHttpResponse(),
+    );
+    expect(records[0]).toHaveBeenCalledTimes(1);
+    expect(records[5]).not.toHaveBeenCalled();
   });
 });

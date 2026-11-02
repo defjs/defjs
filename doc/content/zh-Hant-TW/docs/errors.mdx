@@ -45,7 +45,7 @@ HTTP、SSE 與 WebSocket 都需要有效的絕對 client `endpoint`。URL 解析
 | ------------- | -------- | -------------------------------------------------- | ------------------------------------- |
 | `HTTP_STATUS` | 總是有   | 總是有；只有宣告過 `error` 且解碼成功時才帶 `body` | 解碼後的 `error` body，或 `undefined` |
 | `RES_*`       | 總是有   | 總是有，只有 metadata——**沒有 `body`**             | 沒有                                  |
-| 其餘一切      | 沒有     | 只有傳輸層當時已經拿到 metadata 時才有             | 沒有                                  |
+| 其餘一切      | 沒有     | 有 metadata 可報之前是 `undefined`                 | 沒有                                  |
 
 `cause` 帶著底層的值：struct 不匹配時是 `StructError`，表示讀不出來時是 parser 的失敗，擴充丟什麼就是什麼。
 

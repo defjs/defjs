@@ -1,3 +1,4 @@
+import type { Meter } from "@opentelemetry/api";
 import { describe, expect, test, vi } from "vitest";
 import { makeHttpRequest, makeHttpResponse } from "../test-utils";
 import {
@@ -213,7 +214,7 @@ describe("metrics helpers", () => {
 const histogram = { record: vi.fn() };
 const upDownCounter = { add: vi.fn() };
 
-function makeMeter() {
+function makeMeter(): Meter {
   return {
     createCounter: vi.fn(),
     createHistogram: vi.fn(() => histogram),
@@ -226,3 +227,111 @@ function makeMeter() {
     removeBatchObservableCallback: vi.fn(),
   };
 }
+
+const DURATION_BUCKETS = [
+  0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10,
+];
+
+describe("histogram bucket isolation", () => {
+  test("gives every histogram its own copy of the duration buckets", () => {
+    const received: number[][] = [];
+    const meter = makeMeter();
+    vi.mocked(meter.createHistogram).mockImplementation((_name, options) => {
+      const buckets = options?.advice?.explicitBucketBoundaries;
+      if (!buckets) throw new Error("expected explicitBucketBoundaries");
+      received.push(buckets);
+      return histogram;
+    });
+
+    const http = createHttpClientMetrics(meter);
+    const sse = createSSEClientMetrics(meter);
+    const webSocket = createWebSocketClientMetrics(meter);
+
+    expect(http.requestDuration).toBe(histogram);
+    expect(sse.connectDuration).toBe(histogram);
+    expect(sse.connectionDuration).toBe(histogram);
+    expect(sse.activeStreams).toBe(upDownCounter);
+    expect(webSocket.connectDuration).toBe(histogram);
+    expect(webSocket.connectionDuration).toBe(histogram);
+    expect(webSocket.activeConnections).toBe(upDownCounter);
+    expect(
+      vi.mocked(meter.createHistogram).mock.calls.map((call) => call[0]),
+    ).toEqual([
+      "http.client.request.duration",
+      "defjs.client.sse.connect.duration",
+      "defjs.client.sse.connection.duration",
+      "defjs.client.websocket.connect.duration",
+      "defjs.client.websocket.connection.duration",
+    ]);
+    expect(
+      vi.mocked(meter.createHistogram).mock.calls.map((call) => call[1]),
+    ).toEqual([
+      {
+        description: "Duration of HTTP client requests",
+        unit: "s",
+        advice: { explicitBucketBoundaries: received[0] },
+      },
+      {
+        description: "Duration of SSE connection attempts",
+        unit: "s",
+        advice: { explicitBucketBoundaries: received[1] },
+      },
+      {
+        description: "Duration of SSE stream connections",
+        unit: "s",
+        advice: { explicitBucketBoundaries: received[2] },
+      },
+      {
+        description: "Duration of WebSocket connection attempts",
+        unit: "s",
+        advice: { explicitBucketBoundaries: received[3] },
+      },
+      {
+        description: "Duration of WebSocket connections",
+        unit: "s",
+        advice: { explicitBucketBoundaries: received[4] },
+      },
+    ]);
+    expect(received).toHaveLength(5);
+    expect(new Set(received).size).toBe(5);
+    for (const buckets of received) expect(buckets).toEqual(DURATION_BUCKETS);
+
+    received[0]?.splice(0, 1, 999);
+    received[0]?.push(42);
+    for (const buckets of received.slice(1)) {
+      expect(buckets).toEqual(DURATION_BUCKETS);
+    }
+
+    received.length = 0;
+    createHttpClientMetrics(meter);
+    createSSEClientMetrics(meter);
+    createWebSocketClientMetrics(meter);
+    expect(received).toHaveLength(5);
+    expect(new Set(received).size).toBe(5);
+    for (const buckets of received) expect(buckets).toEqual(DURATION_BUCKETS);
+  });
+
+  test("keeps the next histogram on the default buckets when the meter mutates the first array", () => {
+    const received: number[][] = [];
+    const meter = makeMeter();
+    vi.mocked(meter.createHistogram).mockImplementation((_name, options) => {
+      const buckets = options?.advice?.explicitBucketBoundaries;
+      if (!buckets) throw new Error("expected explicitBucketBoundaries");
+      if (received.length === 0) {
+        buckets[0] = 999;
+        buckets.push(42);
+      }
+      received.push(buckets);
+      return histogram;
+    });
+
+    const sse = createSSEClientMetrics(meter);
+
+    expect(sse.connectDuration).toBe(histogram);
+    expect(sse.connectionDuration).toBe(histogram);
+    expect(received[0]?.[0]).toBe(999);
+    expect(received[0]).toContain(42);
+    expect(received[1]).toEqual(DURATION_BUCKETS);
+    expect(received[0]).not.toBe(received[1]);
+  });
+});

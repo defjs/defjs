@@ -66,14 +66,14 @@ Path, Query, Headers und Body sind Fields, die der Builder zurückgibt, kein Req
   examples/struct/aliases.ts#example
 </include>
 
-| Grenze                                         | Feld                             |
-| ---------------------------------------------- | -------------------------------- |
-| `struct.parse(User, ...)` und Operations-Input | Logisches `displayName`          |
-| Typisiertes Object, das der Builder zurückgibt | Wire `display_name`              |
-| JSON- / SSE- / WebSocket-Decoding              | Wire → logisches `displayName`   |
-| Anonymes Object, im Builder geschrieben        | Der Key, den du geschrieben hast |
+| Grenze                                          | Feld                             |
+| ----------------------------------------------- | -------------------------------- |
+| `struct.parse(Order, ...)` und Operations-Input | Logisches `customerName`         |
+| Typisiertes Object, das der Builder zurückgibt  | Wire `customer_name`             |
+| JSON- / SSE- / WebSocket-Decoding               | Wire → logisches `customerName`  |
+| Anonymes Object, im Builder geschrieben         | Der Key, den du geschrieben hast |
 
-Der Builder selbst liest logische Namen (`input.user.displayName`); der Wire-Name erscheint erst, wenn der Serializer das typisierte Object kodiert, das der Builder zurückgibt.
+Der Builder selbst liest logische Namen (`input.order.customerName`); der Wire-Name erscheint erst, wenn der Serializer das typisierte Object kodiert, das der Builder zurückgibt.
 
 Aliasse funktionieren auf nested Fields, Arrays, Objects, Unions und Discriminators. Halte logische Namen im App-Code; packe den externen Namen einmal auf den Struct. Ein typisiertes Object per Spread zu übernehmen behält dieses Encoding. Logisches Field und seinen Wire-Key im selben Object zu setzen ist `REQ_BUILD_FAILED`. `JSON.stringify` eines Werts, den du selbst serialisierst, verlässt diesen Pfad: der Serializer sieht logische Namen.
 

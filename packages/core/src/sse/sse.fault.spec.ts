@@ -116,16 +116,19 @@ describe("sse startup faults", () => {
     const reads = { delayMs: 0, maxDelayMs: 0 };
     const client = clientReturning(
       async () => new Response("data: ok\n\n", { headers: SSE_HEADERS }),
-      withSSEReconnect({
-        get delayMs() {
-          reads.delayMs += 1;
-          return reads.delayMs === 1 ? 0 : NaN;
-        },
-        get maxDelayMs() {
-          reads.maxDelayMs += 1;
-          return reads.maxDelayMs === 1 ? 1000 : NaN;
-        },
-      }),
+      (config) => {
+        // Bypass public option capture to exercise execution-time validation.
+        config.sse.reconnect = {
+          get delayMs() {
+            reads.delayMs += 1;
+            return reads.delayMs === 1 ? 0 : NaN;
+          },
+          get maxDelayMs() {
+            reads.maxDelayMs += 1;
+            return reads.maxDelayMs === 1 ? 1000 : NaN;
+          },
+        };
+      },
       withInterceptors(
         createSSEInterceptor((request, next) => {
           expect(reads).toEqual({ delayMs: 1, maxDelayMs: 1 });
@@ -134,6 +137,7 @@ describe("sse startup faults", () => {
       ),
     );
 
+    expect(reads).toEqual({ delayMs: 0, maxDelayMs: 0 });
     const [fault, stream] = await useStream(client);
 
     expect(fault).toBeNull();

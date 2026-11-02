@@ -19,18 +19,18 @@ Después de la publicación, las instrucciones del skill se leen en [skills/defj
 
 ## Pedir un endpoint [#prompt]
 
-Dale al asistente una tarea. Este prompt pide un `GET /users/:id` tipado cuyo cliente permanece en la aplicación:
+Dale al asistente una tarea. Este prompt pide un `GET /orders/:id` tipado cuyo cliente permanece en la aplicación:
 
 ```txt
-Use @defjs/core to define GET /users/:id.
-The input is { id: number }; a successful response is { id: number, name: string }.
+Use @defjs/core to define GET /orders/:id.
+The input is { id: number }; a successful response is { id: number, status: string }.
 Keep the SDK definition and application client in separate modules,
 and verify the result with the project’s existing tests.
 ```
 
 ## Comprobar el resultado [#verify]
 
-Lee la definición y la aplicación por separado. La definición exporta la operación y no crea el cliente. La aplicación crea el cliente y llama a la operación, por ejemplo `getUser(client, { id: 1 })`. Si `input` está declarado, `builder` es una función síncrona y pura escrita de forma explícita. El valor de éxito solo se usa cuando el hueco del error está vacío.
+Lee la definición y la aplicación por separado. La definición exporta la operación y no crea el cliente. La aplicación crea el cliente y llama a la operación, por ejemplo `getOrder(client, { id: 1 })`. Si `input` está declarado, `builder` es una función síncrona y pura escrita de forma explícita. El valor de éxito solo se usa cuando el hueco del error está vacío.
 
 Después ejecuta la comprobación de tipos de ese proyecto y las pruebas que cubren el contrato. La instalación de dependencias y las reglas de CI se quedan en ese proyecto.
 

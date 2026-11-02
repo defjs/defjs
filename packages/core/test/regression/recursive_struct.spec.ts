@@ -100,10 +100,14 @@ describe("recursive structs at transport boundaries", () => {
       withHTTPHandle(handle),
     );
 
-    const [error] = await useRequest(
-      client,
-      Object.assign(cycle(), { id: "root" }),
-    );
+    const value: { child: unknown; id: string } = {
+      child: null,
+      id: "root",
+    };
+    value.child = value;
+    expect(value.child).toBe(value);
+
+    const [error] = await useRequest(client, value);
     expect(error).toBeNull();
     expect(handle).toHaveBeenCalledOnce();
   });

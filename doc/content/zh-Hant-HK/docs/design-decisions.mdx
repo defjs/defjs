@@ -65,7 +65,7 @@ Definition 係穩定嘅 contract：method、path、input struct、decode `ok` �
   examples/design-decisions/definitions.ts#example
 </include>
 
-Background job 同 UI owner 可以用唔同 client 呼叫同一個 `getUser` 操作，各自揀自己嘅取消同重試策略。應用程式程式碼唔依賴 internal transport tags 或者 symbols。
+Background job 同 UI owner 可以用唔同 client 呼叫同一個 `getOrder` 操作，各自揀自己嘅取消同重試策略。應用程式程式碼唔依賴 internal transport tags 或者 symbols。
 
 ## 按 transport 而異嘅 result
 
@@ -107,7 +107,7 @@ Struct 係 field contract，兩個方向都係。`.alias(name)` 係 wire name。
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-Default 路徑係交 typed value 過去。`body: { users: input.users }` 會保留每個 user 嘅 alias，所以 wire field 係 `display_name`。你自己寫嘅 key（`account_id`、`x-api-version`）係 literal。Spread 一個 typed object 會保留佢嘅 struct；logical field 旁邊再加 wire key 就係 `REQ_BUILD_FAILED`。
+Default 路徑係交 typed value 過去。`body: { orders: input.orders }` 會保留每張訂單嘅 alias，所以 wire field 係 `customer_name`。你自己寫嘅 key（`account_id`、`x-api-version`）係 literal。Spread 一個 typed object 會保留佢嘅 struct；logical field 旁邊再加 wire key 就係 `REQ_BUILD_FAILED`。
 
 Query nesting 係 backend 嘅性質，所以住喺 client：`withQuerySerializer((query) => string)` 見到嘅係已經 encode 嘅 wire object，包括 aliases。冇 query 嘅時候唔會 call。Builder return 嘅 `URLSearchParams` 會 skip 佢。冇 serializer 嘅時候，arrays 會重複 keys，nested object 會失敗。Interceptors 見到嘅 `queryParams` 係 `new URLSearchParams(queryString)`。
 

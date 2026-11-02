@@ -5,7 +5,7 @@ description: createClient, option helpers, and the Client type.
 
 # Client
 
-`createClient(...)` returns a [`DerivableClient`](/api/core/derivableclient-type). Compose client options left to right, then call `client(options?)` to get a [`Client`](/api/core/client-type) value and pass it to an operation: `getUser(client(options), input)`.
+`createClient(...)` returns a [`DerivableClient`](/api/core/derivableclient-type). Compose client options left to right, then call `client(options?)` to get a [`Client`](/api/core/client-type) value and pass it to an operation: `getOrder(client(options), input)`.
 
 ## createClient()
 
@@ -109,13 +109,13 @@ The default HTTP transport adds the header when all of these hold: the method is
 
 <ApiSignature name="DerivableClient" />
 
-The root client returned by `createClient`, in two shapes. The factory is a function and is also a `Client` with no request options, so `getUser(client, input)` works directly. Calling it with [`RequestOptions`](/api/core/requestoptions-type) returns a plain `Client` value for one call. That value is not callable, so `client()()` fails to compile and throws a `TypeError` at runtime. Derivation happens once, from the factory; there is no chain. Write the type as `DerivableClient` rather than `ReturnType<typeof createClient>`.
+The root client returned by `createClient`, in two shapes. The factory is a function and is also a `Client` with no request options, so `getOrder(client, input)` works directly. Calling it with [`RequestOptions`](/api/core/requestoptions-type) returns a plain `Client` value for one call. That value is not callable, so `client()()` fails to compile and throws a `TypeError` at runtime. Derivation happens once, from the factory; there is no chain. Write the type as `DerivableClient` rather than `ReturnType<typeof createClient>`.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-A `Client` is a value, not a function. Calling the [`DerivableClient`](/api/core/derivableclient-type) with [`RequestOptions`](/api/core/requestoptions-type) returns one. The seven known fields are copied from the argument into a fresh object. Unknown fields are ignored and fields whose value is `undefined` are omitted. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. Nested `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. Deriving performs no I/O. A client value is not callable, and calling one fails to compile and throws a `TypeError` at runtime. Create a client value per call. The same value can be passed to many operations, but reusing a value that carries `signal` shares that signal. `signal` is not combined; combine signals with `AbortSignal.any` in application code.
+A `Client` is a value, not a function. Calling the [`DerivableClient`](/api/core/derivableclient-type) with [`RequestOptions`](/api/core/requestoptions-type) returns one. `client()` and `client(undefined)` store no request options. `client({})` keeps an empty snapshot. The call reads each top-level field once. A `protocols` array is copied. `heartbeat` and `reconnect` copy their known fields. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. A getter on a captured field runs during that call and, if it throws, escapes the call. Invalid numbers still fail later with `REQ_OPTIONS_INVALID`. Deriving performs no I/O. A client value is not callable, and calling one fails to compile and throws a `TypeError` at runtime. Create a client value per call. The same value can be passed to many operations, but reusing a value that carries `signal` shares that signal. `signal` is not combined; combine signals with `AbortSignal.any` in application code. The factory's base configuration stays shared and is not frozen. Standard `with*` helpers copy the fixed records they own when they are applied.
 
 Do not pass the factory to a React state setter (`setState(factory)` would call it as an updater) or use it as a Vue `watch` or `computed` source (those call a function).
 
@@ -123,7 +123,7 @@ Do not pass the factory to a React state setter (`setState(factory)` would call 
 
 <ApiSignature name="RequestOptions" />
 
-Seven flat fields. Each protocol reads the fields it understands and ignores the rest. Passing `heartbeat` to HTTP is ignored, not a fault. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter and no `timeout` or `abort` field.
+Seven flat fields. Each protocol reads the fields it understands and ignores the rest. Passing `heartbeat` to HTTP is ignored, not a fault. `client(options)` copies a `protocols` array and the known `heartbeat` and `reconnect` fields at that call. Missing nested blocks stay missing. `signal`, `beforeConnect`, and callbacks keep their identity. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only. There is no compile-time protocol filter and no `timeout` or `abort` field.
 
 | Field                | Protocol                 | Replacement                                                                                  |
 | -------------------- | ------------------------ | -------------------------------------------------------------------------------------------- |

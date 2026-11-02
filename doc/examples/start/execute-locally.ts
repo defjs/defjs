@@ -5,17 +5,17 @@ import {
   withHTTPHandle,
   type FetchHandle,
 } from "@defjs/core";
-import { getUser } from "./define-request.ts";
+import { getOrder } from "./define-request.ts";
 
 const handle: FetchHandle = async (input, init) => {
   const request = new Request(input, init);
   const id = new URL(request.url).pathname.split("/").at(-1);
 
   if (id === "7") {
-    return Response.json({ id: 7, name: "Ada" }, { status: 200 });
+    return Response.json({ id: 7, status: "paid" }, { status: 200 });
   }
 
-  return Response.json({ message: "User not found" }, { status: 404 });
+  return Response.json({ message: "Order not found" }, { status: 404 });
 };
 
 const client = createClient(
@@ -24,7 +24,7 @@ const client = createClient(
 );
 
 async function main() {
-  const [error, user, response] = await getUser(
+  const [error, order, response] = await getOrder(
     client({ signal: AbortSignal.timeout(5_000) }),
     { id: 7 },
   );
@@ -36,7 +36,7 @@ async function main() {
     console.error(error.code);
     return;
   }
-  console.log(`Loaded ${user.name} from ${response.status}`);
+  console.log(`Loaded ${order.status} from ${response.status}`);
 }
 
 void main();

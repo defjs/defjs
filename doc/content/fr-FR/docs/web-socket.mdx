@@ -20,10 +20,10 @@ Démarrage → recevoir → envoyer → relâcher avec `await using`. Tu possèd
 `incoming` est un struct pour chaque frame texte. `outgoing` est un struct pour `session.send(...)`. Modélise plusieurs kinds avec `struct.discriminatedUnion`. L’alias sur ces champs est le nom wire dans les deux sens. Il n’y a pas d’enveloppe de type séparée ni de normaliseur.
 
 ```json
-{ "type": "message", "text": "Hello" }
+{ "type": "tick", "symbol": "ACME", "price": 142.5 }
 ```
 
-Les frames entrantes texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UTF-8, parsées en JSON, puis vérifiées contre `incoming`. Le JSON malformé et les échecs de struct vont à `session.onRuntimeError` et ne sont pas mis en file. La session reste ouverte. Les frames qui ne sont ni du texte, ni des octets, ni un `Blob` sont ignorées. Il n’y a pas de `withWebSocketOnInvalidEvent`.
+Les frames entrantes texte, `ArrayBuffer`, typed-array et `Blob` sont lues en UTF-8, parsées en JSON, puis vérifiées contre `incoming`. Le JSON malformé et les échecs de struct vont à `session.onRuntimeError` et ne sont pas mis en file. La session reste ouverte. Les frames qui ne sont ni du texte, ni des octets, ni un `Blob` sont ignorées.
 
 `session.send(...)` valide et sérialise de façon synchrone : encodage struct, puis `JSON.stringify`. Il envoie immédiatement quand c’est ouvert, met en file pendant `reconnecting` quand une file sortante est activée, et lève `InvalidStateError` quand ce n’est pas inscriptible. Il lève aussi quand il n’y a pas de struct sortant, que le payload échoue le struct, que la file sortante est désactivée ou pleine, ou que l’envoi natif échoue. Une liste `protocols` statique sur la définition est le contrat de l’endpoint (par exemple `graphql-transport-ws`). Les `protocols` d’un client dérivé et `withWebSocketProtocols` peuvent encore la remplacer. Seules ces options choisissent les sous-protocoles : le builder, `beforeConnect` et les intercepteurs ne peuvent pas les changer, donc un jeton dans le sous-protocole est passé comme `protocols` sur le client dérivé pour cet appel. Le builder ne peut renvoyer que `path` et `query`.
 
@@ -84,7 +84,7 @@ Le dépassement entrant efface la séquence en attente, fait échouer `receive`,
 
 ## Protocoles et authentification
 
-Les `protocols` de la définition, `withWebSocketProtocols(...)` du client, et `protocols` sur le client dérivé définissent la liste de sous-protocoles du constructeur. Préséance : client dérivé → client → définition. La liste dérivée remplace la liste du client ; elle n’est pas ajoutée. La première liste définie est copiée pour la session logique et réutilisée à la reconnexion.
+Les `protocols` de la définition, `withWebSocketProtocols(...)` du client, et `protocols` sur le client dérivé définissent la liste de sous-protocoles du constructeur. Préséance : client dérivé → client → définition. La liste dérivée remplace la liste du client ; elle n’est pas ajoutée. `defineWebSocket` copie un tableau protocols quand la définition est créée. `withWebSocketProtocols` le copie quand l’option est appliquée, et `client({ protocols })` le copie quand la valeur de client est créée. Une modification ultérieure du tableau d’origine ne change pas ce conteneur. La liste choisie pour un appel est copiée de nouveau pour la session logique et réutilisée à la reconnexion. Une valeur qui n’est pas un tableau n’est pas spread à la frontière de capture ; l’exécution la valide encore.
 
 Les constructeurs WebSocket du navigateur n’acceptent pas d’en-têtes de handshake arbitraires, et le builder ne peut pas renvoyer `headers` ni `body`. Defjs convertit `http:` → `ws:` et `https:` → `wss:`, encode les placeholders de chemin une fois, et utilise les mêmes règles de query que HTTP : scalaires et clés répétées par défaut, `withQuerySerializer` pour les objets imbriqués, et pas d’appel de serializer quand il n’y a pas de query.
 

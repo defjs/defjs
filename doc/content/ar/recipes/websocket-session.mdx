@@ -9,14 +9,14 @@ description: اتصل، أرسل غلافًا محدَّد النوع واحدً
 
 انظر [WebSocket](/ar/docs/web-socket) للتفاصيل.
 
-<include cwd meta="chat.ts">
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` عنوان توضيحي. مع خادم يرد على `{ "type": "send", "text": "Hello" }` بالرسالة `{ "type": "message", "text": "Hello" }`، تطبع الشيفرة:
+`quotes.example.com` عنوان توضيحي. مع خادم يرد على `{ "type": "subscribe", "symbol": "ACME" }` بالرسالة `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`، تطبع الشيفرة:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
 إعادة الاتصال اختيارية (`withWebSocketReconnect`). نبض القلب اختياري أيضًا. WebSocket في المتصفح لا يقبل رؤوس مصافحة عشوائية — استخدم ملفات تعريف الارتباط أو البروتوكولات الفرعية أو تذكرة قصيرة العمر.

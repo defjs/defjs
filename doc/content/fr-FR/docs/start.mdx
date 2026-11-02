@@ -5,11 +5,11 @@ description: Exporte ta première opération de SDK, appelle-la depuis une appli
 
 # Bien démarrer : ta première opération de SDK [#getting-started-one-http-request]
 
-Tu écriras deux fichiers : un module de SDK qui exporte `GET /users/:id`, et une application qui l’importe et possède le client. Le handle Fetch local garde le premier essai hors ligne. La même définition d’API fonctionnera ensuite avec un client pointé vers ton service.
+Tu écriras deux fichiers : un module de SDK qui exporte `GET /orders/:id`, et une application qui l’importe et possède le client. Le handle Fetch local garde le premier essai hors ligne. La même définition d’API fonctionnera ensuite avec un client pointé vers ton service.
 
 ## Bonne pratique
 
-Une définition reste indépendante du client. Appelle l’opération avec le client de l’application, comme dans `getUser(client, { id: 7 })`. Il n’y a pas de troisième argument d’options. Appeler l’opération la démarre ; `await` ne fait qu’attendre. L’application possède aussi l’adresse du service et les identifiants. Inspecte d’abord le tuple error-first. Quand `error` est présent, signale `error.code` et sors de la fonction avant de lire la valeur de succès.
+Une définition reste indépendante du client. Appelle l’opération avec le client de l’application, comme dans `getOrder(client, { id: 7 })`. Il n’y a pas de troisième argument d’options. Appeler l’opération la démarre ; `await` ne fait qu’attendre. L’application possède aussi l’adresse du service et les identifiants. Inspecte d’abord le tuple error-first. Quand `error` est présent, signale `error.code` et sors de la fonction avant de lire la valeur de succès.
 
 ## Étape 1 — Installer
 
@@ -21,7 +21,7 @@ bun add @defjs/core
 
 ## Étape 2 — Définir la requête
 
-Crée `src/define-request.ts`. C’est le module de l’auteur du SDK : il exporte `getUser` sans créer de client. Le struct d’entrée est la valeur de l’appelant. `builder` place cette valeur sur la requête. Ici, toute l’entrée est l’objet de chemin, donc les champs scalaires sans alias remplissent `:id`.
+Crée `src/define-request.ts`. C’est le module de l’auteur du SDK : il exporte `getOrder` sans créer de client. Le struct d’entrée est la valeur de l’appelant. `builder` place cette valeur sur la requête. Ici, toute l’entrée est l’objet de chemin, donc les champs scalaires sans alias remplissent `:id`.
 
 <include cwd meta="define-request.ts">
   examples/start/define-request.ts#example
@@ -29,11 +29,11 @@ Crée `src/define-request.ts`. C’est le module de l’auteur du SDK : il expor
 
 `output` est le corps 2xx. `error` est tout autre statut. Un struct chacun. Utilise `struct.or(...)` ou une union discriminée quand ces corps diffèrent.
 
-`defineRequest(...)` renvoie une opération. Appeler `getUser(client, input)` démarre la requête. Le `builder` ci-dessus est la fonction qui place l’entrée ; ce n’est pas l’opération. Là où `input` est déclaré, `builder` est obligatoire, synchrone et pur.
+`defineRequest(...)` renvoie une opération. Appeler `getOrder(client, input)` démarre la requête. Le `builder` ci-dessus est la fonction qui place l’entrée ; ce n’est pas l’opération. Là où `input` est déclaré, `builder` est obligatoire, synchrone et pur.
 
 ## Étape 3 — L’appeler en local
 
-Crée `src/execute-locally.ts` à côté de la définition. C’est l’application consommatrice : elle importe `getUser`, crée son propre client et fournit un handle Fetch local. Defjs valide toujours l’entrée, construit la `Request`, dispatche selon le statut et parse le corps.
+Crée `src/execute-locally.ts` à côté de la définition. C’est l’application consommatrice : elle importe `getOrder`, crée son propre client et fournit un handle Fetch local. Defjs valide toujours l’entrée, construit la `Request`, dispatche selon le statut et parse le corps.
 
 <include cwd meta="execute-locally.ts">
   examples/start/execute-locally.ts#example
@@ -46,20 +46,20 @@ bun src/execute-locally.ts
 ```
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-Essaie un utilisateur manquant — change l’id de path en `8` et relance :
+Essaie une commande manquante — change l’id de path en `8` et relance :
 
 ```txt
-User not found
+Order not found
 ```
 
-En succès : `error` est `null`, `user` est la sortie Struct du `200`, `response` est un `DecodedResponse<User>`. Sur un `404` déclaré : `error.code` est `'HTTP_STATUS'`, `error.status` est `404`, et `error.data` est typé `NotFound`. Le deuxième élément du tuple est `undefined` en échec.
+En succès : `error` est `null`, `order` est la sortie Struct du `200`, `response` est un `DecodedResponse<Order>`. Sur un `404` déclaré : `error.code` est `'HTTP_STATUS'`, `error.status` est `404`, et `error.data` est typé `NotFound`. Le deuxième élément du tuple est `undefined` en échec.
 
 ## Étape 4 — Pointer vers une vraie API
 
-Dans `src/real-api.ts`, importe le même `getUser` et crée un client avec l’URL de base de ton service. N’exécute cette version qu’après avoir remplacé l’adresse d’exemple par un service qui implémente `GET /v1/users/:id` avec ces corps.
+Dans `src/real-api.ts`, importe le même `getOrder` et crée un client avec l’URL de base de ton service. N’exécute cette version qu’après avoir remplacé l’adresse d’exemple par un service qui implémente `GET /v1/orders/:id` avec ces corps.
 
 <include cwd>examples/start/real-api.ts#example</include>
 
@@ -67,7 +67,7 @@ La définition d’API reste dans le module SDK. Les adresses de service, les id
 
 ## Publier la définition
 
-Déplace la définition dans un paquet SDK quand d’autres applications en ont besoin. Exporte `getUser`, inclus ses déclarations TypeScript et déclare la version de Core compatible. Les consommateurs importent alors depuis le paquet au lieu de `./define-request.ts` ; la configuration de leur client reste la leur. Suis [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk) pour la mise en place complète du paquet.
+Déplace la définition dans un paquet SDK quand d’autres applications en ont besoin. Exporte `getOrder`, inclus ses déclarations TypeScript et déclare la version de Core compatible. Les consommateurs importent alors depuis le paquet au lieu de `./define-request.ts` ; la configuration de leur client reste la leur. Suis [Créer et publier un SDK](/fr-FR/recipes/publish-http-sdk) pour la mise en place complète du paquet.
 
 ## Quand le résultat change
 

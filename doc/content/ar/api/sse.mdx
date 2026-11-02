@@ -37,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-يجب أن تنفّذ التطبيقات الهيكلية لـ `EventStreamHandle` الآن `[Symbol.asyncDispose]()` وتُرجع مسار التفكيك المملوك نفسه. هذا تغيير كاسر وقت الترجمة للمقابض المخصصة؛ والشيفرة التي تتلقى فقط مقابض يُرجعها Defjs ليس لها متطلب استدعاء وقت تشغيل جديد.
+يجب أن تنفّذ التطبيقات الهيكلية لـ `EventStreamHandle` `[Symbol.asyncDispose]()` وتُرجع مسار التفكيك المملوك نفسه.
 
 ### EventStreamOpenInfo
 

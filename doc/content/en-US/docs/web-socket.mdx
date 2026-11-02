@@ -20,10 +20,10 @@ Start → receive → send → release with `await using`. You own unsubscribe a
 `incoming` is one struct for every text frame. `outgoing` is one struct for `session.send(...)`. Model several kinds with `struct.discriminatedUnion`. Alias on those fields is the wire name in both directions. There is no separate type envelope and no normalizer.
 
 ```json
-{ "type": "message", "text": "Hello" }
+{ "type": "tick", "symbol": "ACME", "price": 142.5 }
 ```
 
-Incoming text, `ArrayBuffer`, typed-array, and `Blob` frames are read as UTF-8, JSON-parsed, then checked against `incoming`. Malformed JSON and struct failures go to `session.onRuntimeError` and are not queued. The session stays up. Frames that are not text, bytes, or a `Blob` are ignored. There is no `withWebSocketOnInvalidEvent`.
+Incoming text, `ArrayBuffer`, typed-array, and `Blob` frames are read as UTF-8, JSON-parsed, then checked against `incoming`. Malformed JSON and struct failures go to `session.onRuntimeError` and are not queued. The session stays up. Frames that are not text, bytes, or a `Blob` are ignored.
 
 `session.send(...)` validates and serializes synchronously: struct encode, then `JSON.stringify`. It sends immediately when open, queues during `reconnecting` when an outgoing queue is enabled, and throws `InvalidStateError` when not writable. It also throws when there’s no outgoing struct, the payload fails the struct, the outgoing queue is disabled or full, or the native send fails. A static `protocols` list on the definition is the endpoint contract (for example `graphql-transport-ws`). A derived client's `protocols` and `withWebSocketProtocols` can still override it. Only those options choose subprotocols: the builder, `beforeConnect`, and interceptors cannot change them, so a token-in-subprotocol is passed as `protocols` on the derived client for that call. The builder may return only `path` and `query`.
 
@@ -84,7 +84,7 @@ Incoming overflow clears the pending sequence, fails `receive`, stops the sessio
 
 ## Protocols and authentication
 
-Definition `protocols`, client `withWebSocketProtocols(...)`, and `protocols` on the derived client set the constructor subprotocol list. Precedence: derived client → client → definition. The derived list replaces the client list; it is not appended. The first defined list is copied for the logical session and reused on reconnect.
+Definition `protocols`, client `withWebSocketProtocols(...)`, and `protocols` on the derived client set the constructor subprotocol list. Precedence: derived client → client → definition. The derived list replaces the client list; it is not appended. `defineWebSocket` copies a protocols array when the definition is created. `withWebSocketProtocols` copies it when the option is applied, and `client({ protocols })` copies it when the client value is created. A later edit of the original array does not retarget that container. The list selected for a call is copied again for the logical session and reused on reconnect. A non-array value is not spread at the capture boundary; execution still validates it.
 
 Browser WebSocket constructors don’t accept arbitrary handshake headers, and the builder cannot return `headers` or `body`. Defjs converts `http:` → `ws:` and `https:` → `wss:`, encodes path placeholders once, and uses the same query rules as HTTP: scalars and repeated keys by default, `withQuerySerializer` for nested objects, and no serializer call when there is no query.
 

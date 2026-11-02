@@ -2,9 +2,9 @@
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
 const client = createClient(withEndpoint("https://api.example.com/v1"));
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({
     id: struct.string(),
     fields: struct.string().optional(),
@@ -15,10 +15,10 @@ const getUser = defineRequest({
   }),
 });
 
-// → https://api.example.com/v1/users/a%2Fb?fields=name
+// → https://api.example.com/v1/orders/a%2Fb?fields=status
 
 async function main() {
-  const [error] = await getUser(client, { id: "a/b", fields: "name" });
+  const [error] = await getOrder(client, { id: "a/b", fields: "status" });
   if (error) {
     console.error(error.code);
     return;

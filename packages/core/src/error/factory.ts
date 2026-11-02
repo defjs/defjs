@@ -28,28 +28,19 @@ function createFault<TFault extends Error>(
   message: string,
   cause?: unknown,
 ): TFault {
-  const fault = (
-    cause === undefined ? new Error(message) : new Error(message, { cause })
-  ) as TFault;
+  // Variant fields are attached by the specific factory. Error has none of them.
+  const fault = new Error(message, { cause }) as TFault;
   Object.defineProperty(fault, "name", {
     configurable: true,
     enumerable: false,
     value: FAULT_NAME,
     writable: true,
   });
-  if (cause === undefined) {
-    Object.defineProperty(fault, "cause", {
-      configurable: true,
-      enumerable: false,
-      value: undefined,
-      writable: true,
-    });
-  }
   return fault;
 }
 
 function buildHttpStatusFault<TData>(
-  response: HttpMeta,
+  response: HttpStatusFaultOf<TData>["response"],
   data: TData,
 ): HttpStatusFaultOf<TData> {
   const fault = createFault<HttpStatusFaultOf<TData>>(
@@ -57,7 +48,7 @@ function buildHttpStatusFault<TData>(
   );
   fault.code = "HTTP_STATUS";
   fault.data = data;
-  fault.response = response as HttpStatusFaultOf<TData>["response"];
+  fault.response = response;
   fault.status = response.status;
   return fault;
 }
@@ -144,11 +135,11 @@ export function createDecodeFault(
  *
  * When `cause` is given, its message becomes the fault message; otherwise the
  * code is the message. The result is a native `Error` named `DefjsFault` with
- * `code`, plus `response` when one was given.
+ * `code`. `response` is `undefined` until transport metadata exists.
  *
  * @param code - The specific failure.
  * @param cause - Underlying value, when there is one; the code becomes the message otherwise.
- * @param response - Metadata, only where the transport already had some to report.
+ * @param response - Transport metadata. `undefined` until that metadata exists.
  * @returns A preflight fault.
  * @group errors
  */
@@ -162,17 +153,15 @@ export function createPreflightFault(
     cause,
   );
   fault.code = code;
-  if (response !== undefined) {
-    fault.response = response;
-  }
+  fault.response = response;
   return fault;
 }
 
 /**
  * Builds a `NET_*` `PreflightFault`, choosing the code from the shape of `cause`.
  *
- * Optional `response` metadata is attached when the transport already had some
- * to report. The cause is kept as `cause`.
+ * `response` is `undefined` until the transport has metadata to report. The
+ * cause is kept as `cause`.
  *
  * - `NET_ABORTED` when {@link isAbortCause} recognizes an abort-branded `Error`
  *   (including `ERR_ABORTED` from another Core copy) or a `DOMException` named
@@ -184,7 +173,7 @@ export function createPreflightFault(
  * - `NET_UNREACHABLE` for anything else, with the cause's message.
  *
  * @param cause - Underlying cancellation, timeout, or transport failure.
- * @param response - Metadata, only where the transport already had some to report.
+ * @param response - Transport metadata. `undefined` until that metadata exists.
  * @returns A `NET_ABORTED`, `NET_TIMEOUT`, or `NET_UNREACHABLE` fault.
  * @group errors
  */
@@ -225,8 +214,6 @@ function withResponse(
   response?: HttpMeta,
 ): PreflightFault {
   fault.code = code;
-  if (response !== undefined) {
-    fault.response = response;
-  }
+  fault.response = response;
   return fault;
 }

@@ -20,10 +20,10 @@ SDK 定義 WebSocket 操作的 path、inputs、進來與出去的訊息，以及
 `incoming` 是每一個文字 frame 的一個 struct。`outgoing` 是 `session.send(...)` 的一個 struct。多種訊息用 `struct.discriminatedUnion`。那些欄位上的 alias 就是雙向的 wire 名稱。沒有另外的 type envelope，也沒有 normalizer。
 
 ```json
-{ "type": "message", "text": "Hello" }
+{ "type": "tick", "symbol": "ACME", "price": 142.5 }
 ```
 
-進來的文字、`ArrayBuffer`、typed-array、`Blob` frames 會讀成 UTF-8，再 JSON parse，然後對 `incoming` 檢查。畸形 JSON 與 struct 失敗走 `session.onRuntimeError`，而且不會進 queue。Session 維持開著。不是文字、bytes 或 `Blob` 的 frames 會被忽略。沒有 `withWebSocketOnInvalidEvent`。
+進來的文字、`ArrayBuffer`、typed-array、`Blob` frames 會讀成 UTF-8，再 JSON parse，然後對 `incoming` 檢查。畸形 JSON 與 struct 失敗走 `session.onRuntimeError`，而且不會進 queue。Session 維持開著。不是文字、bytes 或 `Blob` 的 frames 會被忽略。
 
 `session.send(...)` 同步驗證並序列化：先 struct encode，再 `JSON.stringify`。Open 時立刻送；有啟用 outgoing queue 時，在 `reconnecting` 期間會排隊；不可寫時丟 `InvalidStateError`。沒有 outgoing struct、payload 驗證失敗、停用／滿的 outgoing queue，或原生 send 失敗時也會 throw。定義上的靜態 `protocols` list 是 endpoint 契約（例如 `graphql-transport-ws`）。衍生 client 的 `protocols` 與 `withWebSocketProtocols` 仍可覆寫它。只有這些 options 能選 subprotocols：builder、`beforeConnect` 與 interceptors 都改不了，所以把 token 放進 subprotocol 時，要在該次呼叫的衍生 client 上傳 `protocols`。Builder 只能回傳 `path` 與 `query`。
 
@@ -84,7 +84,7 @@ WebSocket backoff jitter 是**乘法**（`jitter: 0.2` 會在捨入前，把已�
 
 ## Protocols 與認證
 
-定義的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及衍生 client 上的 `protocols`，設定 constructor subprotocol list。優先序：衍生 client → client → definition。衍生的清單會取代 client 的清單，不會追加。第一個有定義的 list 會複製給邏輯 session，並在重連時重用。
+定義的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及衍生 client 上的 `protocols`，設定 constructor subprotocol list。優先序：衍生 client → client → definition。衍生的清單會取代 client 的清單，不會追加。`defineWebSocket` 在建立定義時複製 protocols 陣列。`withWebSocketProtocols` 在套用該選項時複製它，`client({ protocols })` 在建立 client 值時複製它。之後再改原來的陣列，不會改到已捕獲的容器。為某次呼叫選出的清單會再複製一份給邏輯 session，並在重連時重用。非陣列的值在捕獲邊界不會被 spread；執行時仍會驗證它。
 
 瀏覽器 WebSocket constructors 不接受任意 handshake headers，而且 builder 不能回傳 `headers` 或 `body`。Defjs 把 `http:` → `ws:`、`https:` → `wss:`，path placeholders encode 一次，並使用跟 HTTP 一樣的 query 規則：預設是 scalars 與重複的 keys，巢狀物件用 `withQuerySerializer`，沒有 query 時不呼叫 serializer。
 

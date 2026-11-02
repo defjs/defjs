@@ -26,38 +26,38 @@ import {
   withEndpoint,
 } from "@defjs/core";
 
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-type User = Infer<typeof User>;
+type Order = Infer<typeof Order>;
 
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: User,
+  output: Order,
 });
 
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, user] = await getUser(client, { id: 1 });
+  const [error, order] = await getOrder(client, { id: 1 });
   if (error) {
     console.error(error.code);
     return;
   }
-  console.log(user.id, user.displayName);
+  console.log(order.id, order.customerName);
 }
 
 void main();
 ```
 
-`Infer<typeof User>` is the parsed output type. `alias('display_name')` only changes the field name in the external protocol; it does not rename the TypeScript property `displayName` to `display_name`.
+`Infer<typeof Order>` is the parsed output type. `alias('customer_name')` only changes the field name in the external protocol; it does not rename the TypeScript property `customerName` to `customer_name`.
 
-A Struct instance itself has no `.parse()`, `validate`, `parseAsync`, or `encode` method. For standalone parsing, use `struct.parse(User, input)` on the facade; HTTP, SSE, and WebSocket endpoints use the same Struct metadata at their own boundaries. Outbound encoding is driven by the typed values the builder hands over; there is no public `struct.encode`.
+A Struct instance itself has no `.parse()`, `validate`, `parseAsync`, or `encode` method. For standalone parsing, use `struct.parse(Order, input)` on the facade; HTTP, SSE, and WebSocket endpoints use the same Struct metadata at their own boundaries. Outbound encoding is driven by the typed values the builder hands over; there is no public `struct.encode`.
 
 ## Public constructors
 
@@ -84,12 +84,12 @@ const Point = struct.object({
   y: struct.number(),
 });
 
-const UserId = struct.or(struct.string(), struct.number());
+const OrderId = struct.or(struct.string(), struct.number());
 const Coordinates = struct.tuple([struct.number(), struct.number()]);
 const Headers = struct.record(struct.string());
 const Combined = struct.intersection(
   struct.object({ id: struct.string() }),
-  struct.object({ displayName: struct.string() }),
+  struct.object({ customerName: struct.string() }),
 );
 ```
 
@@ -213,32 +213,32 @@ import {
   withHTTPHandle,
 } from "@defjs/core";
 
-const UserBody = struct.object({
-  id: struct.number().alias("user_id"),
-  displayName: struct.string().alias("display_name"),
+const OrderBody = struct.object({
+  id: struct.number().alias("order_id"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-const echoUser = defineRequest({
+const echoOrder = defineRequest({
   method: "POST",
-  path: "/users",
-  input: struct.object({ user: UserBody }),
-  builder: (input) => ({ body: input.user }),
-  output: UserBody,
+  path: "/orders",
+  input: struct.object({ order: OrderBody }),
+  builder: (input) => ({ body: input.order }),
+  output: OrderBody,
 });
 
 async function main() {
-  const [logicalError, logicalUser] = struct.parse(UserBody, {
+  const [logicalError, logicalOrder] = struct.parse(OrderBody, {
     id: 1,
-    displayName: "Ada",
+    customerName: "Ada",
   });
   if (logicalError) {
     console.error(logicalError.message);
     return;
   }
 
-  const [wireKeyError] = struct.parse(UserBody, {
-    user_id: 1,
-    display_name: "Ada",
+  const [wireKeyError] = struct.parse(OrderBody, {
+    order_id: 1,
+    customer_name: "Ada",
   });
   if (!wireKeyError) throw new Error("struct.parse must read logical keys");
 
@@ -247,19 +247,19 @@ async function main() {
     withEndpoint("https://example.test"),
     withHTTPHandle(async (input, init) => {
       requestWireBody = await new Request(input, init).json();
-      return Response.json({ user_id: 1, display_name: "Ada" });
+      return Response.json({ order_id: 1, customer_name: "Ada" });
     }),
   );
-  const [requestError, responseUser] = await echoUser(client, {
-    user: { id: 1, displayName: "Ada" },
+  const [requestError, responseOrder] = await echoOrder(client, {
+    order: { id: 1, customerName: "Ada" },
   });
   if (requestError) {
     console.error(requestError.code);
     return;
   }
   console.log(
-    logicalUser.displayName,
-    responseUser.displayName,
+    logicalOrder.customerName,
+    responseOrder.customerName,
     requestWireBody,
   );
 }
@@ -267,24 +267,24 @@ async function main() {
 void main();
 ```
 
-`logicalUser` and `responseUser` use `{ id, displayName }`; `wireKeyError` points at the missing logical `id`; `requestWireBody` is `{ user_id, display_name }`. The public `struct.parse` reads logical values unless `{ aliases: true }` is passed. Transport JSON encode/decode applies wire aliases on the wire.
+`logicalOrder` and `responseOrder` use `{ id, customerName }`; `wireKeyError` points at the missing logical `id`; `requestWireBody` is `{ order_id, customer_name }`. The public `struct.parse` reads logical values unless `{ aliases: true }` is passed. Transport JSON encode/decode applies wire aliases on the wire.
 
-| Concept                  | Example                   | Result                                                    |
-| ------------------------ | ------------------------- | --------------------------------------------------------- |
-| TypeScript property name | `displayName`             | Callers and parsed objects use `displayName`              |
-| wire key                 | `display_name`            | JSON/query/path/headers/form encoding uses `display_name` |
-| Parsed value             | `{ displayName: 'Ada' }`  | Does not become `{ display_name: 'Ada' }`                 |
-| Encoded value            | `{ display_name: 'Ada' }` | The key sent to the protocol boundary                     |
+| Concept                  | Example                    | Result                                                     |
+| ------------------------ | -------------------------- | ---------------------------------------------------------- |
+| TypeScript property name | `customerName`             | Callers and parsed objects use `customerName`              |
+| wire key                 | `customer_name`            | JSON/query/path/headers/form encoding uses `customer_name` |
+| Parsed value             | `{ customerName: 'Ada' }`  | Does not become `{ customer_name: 'Ada' }`                 |
+| Encoded value            | `{ customer_name: 'Ada' }` | The key sent to the protocol boundary                      |
 
 Wire keys within the same object shape must be unique; two fields cannot resolve through aliases to the same external key. path, query, headers, and body are different objects, so they may reuse the same wire key with each other.
 
 The builder receives the parsed real values, and object nodes carry the struct that produced them. Hand over a typed value and the alias takes effect; write a key by hand inside an anonymous object and that key is the on-the-wire name:
 
 ```typescript
-builder: (input) => ({ body: { name: input.user.displayName } });
+builder: (input) => ({ body: { name: input.order.customerName } });
 ```
 
-The `name` here will not have `display_name` applied again. Only `body: input.user` is encoded according to `UserBody`'s aliases. Spreading `{ ...input.user, role: 'admin' }` still keeps the type; writing both the logical name and its wire key at the same time becomes `REQ_BUILD_FAILED` during execution.
+The `name` here will not have `customer_name` applied again. Only `body: input.order` is encoded according to `OrderBody`'s aliases. Spreading `{ ...input.order, role: 'admin' }` still keeps the type; writing both the logical name and its wire key at the same time becomes `REQ_BUILD_FAILED` during execution.
 
 ## Unions and discriminated unions
 
@@ -340,31 +340,31 @@ path, query, headers, and body are returned by the endpoint's `builder`; they ar
 
 ```typescript
 const Profile = struct.object({
-  name: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-const updateUser = defineRequest({
+const updateOrder = defineRequest({
   method: "PATCH",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({
-    userId: struct.number(),
+    orderId: struct.number(),
     includeProfile: struct.boolean().optional(),
     traceId: struct.string(),
     profile: Profile,
   }),
   builder: (input) => ({
-    path: { id: input.userId },
+    path: { id: input.orderId },
     query: { include_profile: input.includeProfile },
     headers: { "x-trace-id": input.traceId },
     body: input.profile,
   }),
 });
 
-updateUser({
-  userId: 1,
+updateOrder({
+  orderId: 1,
   includeProfile: true,
   traceId: "trace-1",
-  profile: { name: "Miao" },
+  profile: { customerName: "Miao" },
 });
 ```
 
@@ -392,7 +392,7 @@ In the endpoint runtime, Struct errors are wrapped again by the corresponding tr
 ```typescript
 import { StructError } from "@defjs/core";
 
-const [error] = await getUser(client, { id: 1 });
+const [error] = await getOrder(client, { id: 1 });
 
 if (error?.code === "RES_STRUCT_MISMATCH") {
   if (error.cause instanceof StructError) {

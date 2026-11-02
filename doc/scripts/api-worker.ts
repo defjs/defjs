@@ -152,9 +152,8 @@ function asEntry(value: unknown): WorkerEntry {
       const item = asRecord(tag, "tag");
       return { name: textField(item, "name"), text: textField(item, "text") };
     }),
+    typeHref: textField(record, "typeHref") || undefined,
   };
-  const typeHref = textField(record, "typeHref");
-  if (typeHref) entry.typeHref = typeHref;
   return entry;
 }
 

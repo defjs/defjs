@@ -52,6 +52,8 @@ span 훅은 `tracer`를 전달했을 때만 호출돼요. 훅은 바꾸는 전�
 
 빈 전송 객체는 그 전송을 켜요. 예전 boolean 전송 스위치(`http: false`)와 예전 최상위 훅은 TypeScript 타입에서만 거부돼요. 런타임 검사는 없어요. 런타임에서 `http: false`는 전송을 켜진 채로 두고, 최상위 훅은 조용히 무시돼요. 전송 옵션 객체(`{ enabled: false }`)와 전송 범위 훅을 쓰세요.
 
+`withOpenTelemetryServer`는 `http`, 그다음 `sse`, 그다음 `webSocket`을 각각 한 번씩 읽어요. 없는 블록은 없는 채로 두고, 그 전송은 활성으로 남아요. 있는 블록은 필드마다 복사해요. 대상은 `enabled`, `startSpanHook`, `requestHook`, `responseHook`이고, WebSocket은 `queryPropagation`도 포함해요. 이후에 블록을 바꾸거나 교체해도 이 option은 변하지 않아요. `enabled`를 먼저 읽어요. `false`일 때만 그 전송을 끄고, 꺼진 분기에서는 hooks나 `queryPropagation`을 읽지 않아요. 복사되는 필드의 getter는 `withOpenTelemetryServer` 동안 실행돼요. 그중 하나가 던지면 예외는 그 호출을 즉시 빠져나가요. 이후 블록은 읽지 않고, 오류를 option이 적용될 때까지 미루지도 않아요. `tracer`, `meter`, `logger`, `propagator`와 hook 함수는 자신의 정체성을 유지해요.
+
 ## operation 정체성과 전파
 
 작업에 안정적인 정체성이 있으면 `defineRequest`, `defineEventStream`, `defineWebSocket`에 정적 `operation`을 설정하세요. 플러그인은 span 이름과 `defjs.operation`에 써요. 해석된 path, identifier, 테넌트, query 문자열에서 정체성을 끌어내지 않아요.
@@ -88,7 +90,7 @@ HTTP와 SSE는 전파 필드를 요청 헤더에 주입해요. 주입에는 항�
 
 ## 참고
 
-`meter`를 넘기면:
+`meter`를 넘기면 플러그인은 option을 client에 적용할 때마다 Meter의 계측기 생성 메서드를 호출해요. `withOpenTelemetryServer` 호출 중에는 실행하지 않아요. 반환된 계측기나 집계 상태의 공유 여부는 Meter/SDK가 결정해요. 각 기간 히스토그램은 경계 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, 10초의 자기 복사본을 받아요.
 
 | 지표                                         | 의미                                     |
 | -------------------------------------------- | ---------------------------------------- |

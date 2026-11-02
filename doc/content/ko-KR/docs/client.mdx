@@ -5,7 +5,7 @@ description: 애플리케이션이 import한 SDK 작업을 어떻게 호출할�
 
 # 클라이언트
 
-`Client`는 사용하는 앱의 실행 설정이에요. `createClient(...)`는 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 돌려줘요. 팩토리를 요청 옵션과 함께 호출하면 `Client` 값이 나오고, 작업이 받는 것은 `Client` 값이에요. 호출할 수는 없어요. SDK에서 작업을 import하고, 서비스 주소, 자격 증명, 인터셉터, 전송 수단을 고른 다음, 클라이언트로 작업을 호출해요. `getUser(client({ signal }), { id: 1 })`는 입력을 선언한 호출을 시작해요. `health(client)`는 입력이 없는 호출을 시작해요. 입력 struct 전체가 선택이면 `search(client)`와 `search(client, input)`이 모두 유효해요. 세 번째 옵션 인자는 없어요. 작업을 호출하면 시작되고, `await`는 error-first 튜플만 기다려요.
+`Client`는 사용하는 앱의 실행 설정이에요. `createClient(...)`는 [`DerivableClient`](/ko-KR/api/core/derivableclient-type)를 돌려줘요. 팩토리를 요청 옵션과 함께 호출하면 `Client` 값이 나오고, 작업이 받는 것은 `Client` 값이에요. 호출할 수는 없어요. SDK에서 작업을 import하고, 서비스 주소, 자격 증명, 인터셉터, 전송 수단을 고른 다음, 클라이언트로 작업을 호출해요. `getOrder(client({ signal }), { id: 1 })`는 입력을 선언한 호출을 시작해요. `health(client)`는 입력이 없는 호출을 시작해요. 입력 struct 전체가 선택이면 `search(client)`와 `search(client, input)`이 모두 유효해요. 세 번째 옵션 인자는 없어요. 작업을 호출하면 시작되고, `await`는 error-first 튜플만 기다려요.
 
 SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요청, 로컬 테스트가 서로 다른 클라이언트로 같은 export된 작업을 쓸 수 있어요. 모두 같은 Defjs 계약과 호환되는 Core 버전을 따라요. 그 클라이언트로 호출하는 작업에 맞게 각 클라이언트의 서비스 주소를 구성해요.
 
@@ -33,7 +33,7 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
 
 ## 클라이언트 파생하기
 
-`client(options?)`는 한 번의 호출에 쓸 `Client` 값을 돌려줘요. `client(options)`를 호출할 때 알려진 필드 일곱 개는 인자 객체에서 복사돼요. 새 options 객체로의 최상위 스냅샷이에요. 알 수 없는 필드는 무시하고, 값이 `undefined`인 필드는 빼요. 부모 덮어쓰기는 없어요. `client()`, `client(undefined)`, `client({})`는 요청 옵션이 없는 클라이언트를 돌려줘요. 중첩된 `heartbeat`, `protocols`, `reconnect` 값은 참조로 유지되고 복제되지 않아요. WebSocket은 작업이 실행될 때 그것들을 읽어요 (그때 heartbeat 필드와 protocols 목록을 복사해요). 그래서 파생한 뒤에 그 객체를 바꾸면 이후 호출에 여전히 영향을 줄 수 있어요. 넘긴 뒤에는 불변으로 다루세요. 파생은 I/O를 하지 않아요. getter가 던지면 `client(options)`에서 예외가 나오고, 팩토리는 계속 쓸 수 있어요. 클라이언트 값은 호출할 수 없으니 호출마다 하나씩 만드세요.
+`client(options?)`는 한 번의 호출에 쓸 `Client` 값을 돌려줘요. `client()`와 `client(undefined)`는 요청 옵션을 저장하지 않아요. `client({})`는 빈 스냅샷을 남겨요. Defjs는 키 검사로 그것을 버리지 않아요. `client(options)`를 호출하면 각 최상위 요청 필드를 한 번 읽어 새 options 객체에 놓아요. `protocols` 배열은 복사돼요. `heartbeat`는 `intervalMs`, `isAck`, `message`, `timeoutMs`를 복사해요. `reconnect`는 `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, `shouldReconnect`를 복사해요. 빠진 중첩 블록은 빠진 채로 남아서, `heartbeat`나 재시도를 켜지 않아요. `signal`, `beforeConnect`, 모든 콜백은 동일성을 유지해요. 같은 option 객체는 다시 넘길 수 있어요. 호출마다 자기 컨테이너를 캡처해요. 파생은 I/O를 하지 않아요. 이 고정 필드의 getter는 `client(options)` 동안 실행돼요. throw하면 예외는 그 호출 밖으로 나가고, 팩토리는 계속 쓸 수 있어요. 그것은 fault가 되지 않아요. 범위를 벗어난 숫자는 작업이 실행될 때 여전히 검사되고, 여전히 `REQ_OPTIONS_INVALID`를 돌려줘요. 클라이언트 값은 호출할 수 없으니 호출마다 하나씩 만드세요.
 
 `signal`은 합쳐지지 않아요. `signal`이 담긴 클라이언트 값을 재사용하면 호출 사이에 그 신호를 공유하므로, 호출마다 클라이언트 값을 만드세요. 신호는 앱 코드에서 `AbortSignal.any`로 합치세요.
 
@@ -41,7 +41,7 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
   examples/client/derive-client.ts#example
 </include>
 
-`createClient`의 기본 설정은 모든 클라이언트 값이 공유하고, 런타임에 얼려지지 않아요. 관례로 고정돼요. 라이브러리는 그것을 바꾸지 않고, 애플리케이션도 바꾸면 안 돼요. 그 클라이언트의 [`RequestOptions`](/ko-KR/api/core/requestoptions-type)는 그 최상위 스냅샷이에요. 앱 코드는 클라이언트를 작업에 넘길 뿐, 그 내부 상태를 읽지 않아요.
+`createClient`의 기본 설정은 모든 클라이언트 값이 공유하고, 런타임에 얼려지지 않아요. 관례로 고정돼요. 라이브러리는 그것을 바꾸지 않고, 애플리케이션도 바꾸면 안 돼요. `withWebSocketHeartbeat`, `withWebSocketReconnect`, `withSSEReconnect`, `withWebSocketProtocols` 같은 표준 헬퍼는 헬퍼가 적용될 때 고정 레코드를 복사해요. 사용자 지정 client option은 자기 참조를 계속 가질 수 있어요. `withInterceptors`는 각 항목마다 새 `{ kind, fn }` 레코드를 덧붙이고, `fn` 자체는 그대로 둬요. 파생된 클라이언트가 캡처된 [`RequestOptions`](/ko-KR/api/core/requestoptions-type) 객체를 가지는 것은 options가 전달된 때뿐이에요. 팩토리, `client()`, `client(undefined)`에는 없어요. 앱 코드는 클라이언트를 작업에 넘길 뿐, 그 내부 상태를 읽지 않아요.
 
 ## 요청 옵션
 
@@ -80,16 +80,6 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
 ## 서버 vs 브라우저 범위
 
 서버에서는 옵션이나 interceptor 클로저가 인증, 쿠키, 사용자, 테넌트를 잡을 때 요청 경계 안에서 클라이언트를 만들어요. 클라이언트 정체성 자체가 보안 경계는 아니에요.
-
-## 마이그레이션
-
-| 이전                                         | 이후                                                      |
-| -------------------------------------------- | --------------------------------------------------------- |
-| `client.execute(getUser(input), options)`    | `getUser(client(options), input)`                         |
-| `execute(cmd, { timeout: 5000 })`            | `client({ signal: AbortSignal.timeout(5000) })`           |
-| `execute(cmd, { signal })`                   | `client({ signal })`                                      |
-| `client({ signal })({ onDownloadProgress })` | `client({ signal, onDownloadProgress })`                  |
-| `createClient(withTimeout(5000), ...)`       | 호출할 때 `signal`을 넘기거나, 애플리케이션 함수로 감싸요 |
 
 ## 참고
 

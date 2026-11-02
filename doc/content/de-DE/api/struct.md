@@ -12,21 +12,21 @@ Baue Wire-Boundary-Shapes, parse Werte, inferiere TypeScript-Types.
 Facade. Lieber das als interne Constructors.
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### Primitive und Container
@@ -57,7 +57,7 @@ readUser();
 - **Returns** `[null, value]` oder `[StructError, undefined]`. Der Error trägt ein Issue. Object-Fields stoppen beim ersten fehlerhaften Field. `struct.or` versucht jeden Branch und meldet dann `invalid_union`; den Fehler des ersten Branches behält es nicht.
 - Object-Fields sind erforderlich, sofern sie nicht mit `.optional()` oder `.nullish()` markiert sind. Keys, die die Shape nicht deklariert, fallen aus dem Ergebnis.
 - Optionales `options.errorMap` schreibt Issue-Messages nur für dieses Parse um.
-- Default liest **logische** Keys (`displayName`). Gib `{ aliases: true }`, um Wire-Keys (`display_name`) zu lesen, so wie HTTP-/JSON-Codecs es tun.
+- Default liest **logische** Keys (`customerName`). Gib `{ aliases: true }`, um Wire-Keys (`customer_name`) zu lesen, so wie HTTP-/JSON-Codecs es tun.
 
 ## ErrorMap
 

@@ -5,11 +5,11 @@ description: Exportiere deine erste SDK-Operation, rufe sie aus einer getrennten
 
 # Erste Schritte: deine erste SDK-Operation [#getting-started-one-http-request]
 
-Du schreibst zwei Dateien: ein SDK-Modul, das `GET /users/:id` exportiert, und eine Anwendung, die es importiert und den Client besitzt. Der lokale Fetch-Handler hält den ersten Lauf offline. Dieselbe API-Definition funktioniert danach mit einem Client, der auf deinen Service zeigt.
+Du schreibst zwei Dateien: ein SDK-Modul, das `GET /orders/:id` exportiert, und eine Anwendung, die es importiert und den Client besitzt. Der lokale Fetch-Handler hält den ersten Lauf offline. Dieselbe API-Definition funktioniert danach mit einem Client, der auf deinen Service zeigt.
 
 ## Bewährte Praxis
 
-Eine Definition bleibt vom Client unabhängig. Rufe die Operation mit dem Client der Anwendung auf, etwa `getUser(client, { id: 7 })`. Es gibt kein drittes Options-Argument. Der Aufruf der Operation startet sie; `await` wartet nur. Die Anwendung besitzt außerdem die Service-Adresse und die Zugangsdaten. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
+Eine Definition bleibt vom Client unabhängig. Rufe die Operation mit dem Client der Anwendung auf, etwa `getOrder(client, { id: 7 })`. Es gibt kein drittes Options-Argument. Der Aufruf der Operation startet sie; `await` wartet nur. Die Anwendung besitzt außerdem die Service-Adresse und die Zugangsdaten. Lies zuerst das Error-first-Tupel. Wenn `error` gesetzt ist, melde `error.code` und kehre aus der Funktion zurück, bevor du den Erfolgswert liest.
 
 ## Schritt 1 — Installieren
 
@@ -21,7 +21,7 @@ bun add @defjs/core
 
 ## Schritt 2 — Request definieren
 
-Lege `src/define-request.ts` an. Das ist das Modul des SDK-Autors: Es exportiert `getUser`, ohne einen Client zu erzeugen. Der Input-Struct ist der Wert des Aufrufers. `builder` platziert diesen Wert auf dem Request. Hier ist die ganze Eingabe das Path-Objekt, also füllen skalare Felder ohne Alias `:id`.
+Lege `src/define-request.ts` an. Das ist das Modul des SDK-Autors: Es exportiert `getOrder`, ohne einen Client zu erzeugen. Der Input-Struct ist der Wert des Aufrufers. `builder` platziert diesen Wert auf dem Request. Hier ist die ganze Eingabe das Path-Objekt, also füllen skalare Felder ohne Alias `:id`.
 
 <include cwd meta="define-request.ts">
   examples/start/define-request.ts#example
@@ -29,11 +29,11 @@ Lege `src/define-request.ts` an. Das ist das Modul des SDK-Autors: Es exportiert
 
 `output` ist der 2xx-Body. `error` ist jeder andere Status. Je ein Struct. Nutze `struct.or(...)` oder eine Discriminated Union, wenn diese Bodies auseinanderlaufen.
 
-`defineRequest(...)` gibt eine Operation zurück. Der Aufruf `getUser(client, input)` startet den Request. Der `builder` oben ist die Funktion, die Input platziert; er ist nicht die Operation. Wo `input` deklariert ist, ist `builder` erforderlich, synchron und pure.
+`defineRequest(...)` gibt eine Operation zurück. Der Aufruf `getOrder(client, input)` startet den Request. Der `builder` oben ist die Funktion, die Input platziert; er ist nicht die Operation. Wo `input` deklariert ist, ist `builder` erforderlich, synchron und pure.
 
 ## Schritt 3 — Lokal aufrufen
 
-Lege `src/execute-locally.ts` neben die Definition. Das ist die konsumierende Anwendung: Sie importiert `getUser`, erzeugt ihren eigenen Client und stellt einen lokalen Fetch-Handler bereit. Defjs validiert weiterhin die Eingabe, baut den `Request`, wählt anhand des Status und parst den Body.
+Lege `src/execute-locally.ts` neben die Definition. Das ist die konsumierende Anwendung: Sie importiert `getOrder`, erzeugt ihren eigenen Client und stellt einen lokalen Fetch-Handler bereit. Defjs validiert weiterhin die Eingabe, baut den `Request`, wählt anhand des Status und parst den Body.
 
 <include cwd meta="execute-locally.ts">
   examples/start/execute-locally.ts#example
@@ -46,20 +46,20 @@ bun src/execute-locally.ts
 ```
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
-Probier einen fehlenden User — ändere die Path-id auf `8` und lauf nochmal:
+Probier eine fehlende Bestellung — ändere die Path-id auf `8` und lauf nochmal:
 
 ```txt
-User not found
+Order not found
 ```
 
-Bei Erfolg: `error` ist `null`, `user` ist der `200`-Struct-Output, `response` ist ein `DecodedResponse<User>`. Bei deklariertem `404`: `error.code` ist `'HTTP_STATUS'`, `error.status` ist `404`, und `error.data` ist typisiert als `NotFound`. Der zweite Tupel-Eintrag ist bei Fehler `undefined`.
+Bei Erfolg: `error` ist `null`, `order` ist der `200`-Struct-Output, `response` ist ein `DecodedResponse<Order>`. Bei deklariertem `404`: `error.code` ist `'HTTP_STATUS'`, `error.status` ist `404`, und `error.data` ist typisiert als `NotFound`. Der zweite Tupel-Eintrag ist bei Fehler `undefined`.
 
 ## Schritt 4 — Auf eine echte API zeigen
 
-Importiere in `src/real-api.ts` dasselbe `getUser` und erzeuge einen Client mit der Base-URL deines Services. Führe diese Version erst aus, nachdem du die Beispieladresse durch einen Service ersetzt hast, der `GET /v1/users/:id` mit diesen Bodies implementiert.
+Importiere in `src/real-api.ts` dasselbe `getOrder` und erzeuge einen Client mit der Base-URL deines Services. Führe diese Version erst aus, nachdem du die Beispieladresse durch einen Service ersetzt hast, der `GET /v1/orders/:id` mit diesen Bodies implementiert.
 
 <include cwd>examples/start/real-api.ts#example</include>
 
@@ -67,7 +67,7 @@ Die API-Definition bleibt im SDK-Modul. Service-Adressen, Zugangsdaten, Intercep
 
 ## Die Definition veröffentlichen
 
-Verschiebe die Definition in ein SDK-Paket, wenn weitere Anwendungen sie brauchen. Exportiere `getUser`, liefere die TypeScript-Deklarationen mit und deklariere die kompatible Core-Version. Nutzer importieren dann aus dem Paket statt aus `./define-request.ts`; ihre Client-Konfiguration bleibt ihre eigene. [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk) zeigt das vollständige Paket-Setup.
+Verschiebe die Definition in ein SDK-Paket, wenn weitere Anwendungen sie brauchen. Exportiere `getOrder`, liefere die TypeScript-Deklarationen mit und deklariere die kompatible Core-Version. Nutzer importieren dann aus dem Paket statt aus `./define-request.ts`; ihre Client-Konfiguration bleibt ihre eigene. [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk) zeigt das vollständige Paket-Setup.
 
 ## Wenn das Ergebnis abweicht
 

@@ -85,7 +85,7 @@ The definition is the stable contract: method, path, input struct, the structs t
   examples/design-decisions/definitions.ts#example
 </include>
 
-A background job and a UI owner can call the same `getUser` operation with different clients, so each can choose its own cancellation and retry policy. Application code does not depend on internal transport tags or symbols.
+A background job and a UI owner can call the same `getOrder` operation with different clients, so each can choose its own cancellation and retry policy. Application code does not depend on internal transport tags or symbols.
 
 ## Transport-specific results
 
@@ -141,7 +141,7 @@ A struct is the field contract, in both directions. `.alias(name)` is the wire n
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-The default path is to hand the typed value over. `body: { users: input.users }` keeps each user's alias, so the wire field is `display_name`. A key you write yourself (`account_id`, `x-api-version`) is literal. Spreading a typed object keeps its struct; adding the wire key beside the logical field is `REQ_BUILD_FAILED`.
+The default path is to hand the typed value over. `body: { orders: input.orders }` keeps each order's alias, so the wire field is `customer_name`. A key you write yourself (`account_id`, `x-api-version`) is literal. Spreading a typed object keeps its struct; adding the wire key beside the logical field is `REQ_BUILD_FAILED`.
 
 Query nesting is a property of the backend, so it lives on the client: `withQuerySerializer((query) => string)` sees the encoded wire object, aliases included. It is not called when there is no query. A `URLSearchParams` returned by the builder skips it. Without a serializer, arrays repeat keys and a nested object fails. Interceptors observe `queryParams` as `new URLSearchParams(queryString)`.
 

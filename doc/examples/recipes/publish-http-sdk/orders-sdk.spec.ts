@@ -6,7 +6,7 @@ import {
   withHTTPHandle,
   type FetchHandle,
 } from "@defjs/core";
-import { getUser } from "./users-sdk";
+import { getOrder } from "./orders-sdk";
 
 test("one exported SDK endpoint uses each application's client and preserves typed failures", async () => {
   const requests: { url: string; authorization: string | null }[] = [];
@@ -17,8 +17,8 @@ test("one exported SDK endpoint uses each application's client and preserves typ
       authorization: request.headers.get("authorization"),
     });
     return new URL(request.url).hostname === "first.example.test"
-      ? Response.json({ id: 7, name: "Ada" })
-      : Response.json({ message: "User not found" }, { status: 404 });
+      ? Response.json({ id: 7, status: "paid" })
+      : Response.json({ message: "Order not found" }, { status: 404 });
   };
   const first = createClient(
     withEndpoint("https://first.example.test/v1"),
@@ -32,24 +32,24 @@ test("one exported SDK endpoint uses each application's client and preserves typ
   );
 
   expect(requests).toEqual([]);
-  const [successError, user] = await getUser(first, { id: 7 });
-  const [missing, absent] = await getUser(second, { id: 7 });
+  const [successError, order] = await getOrder(first, { id: 7 });
+  const [missing, absent] = await getOrder(second, { id: 7 });
 
   expect(successError).toBeNull();
-  expect(user).toEqual({ id: 7, name: "Ada" });
+  expect(order).toEqual({ id: 7, status: "paid" });
   expect(absent).toBeUndefined();
   expect(missing?.code).toBe("HTTP_STATUS");
   if (missing?.code === "HTTP_STATUS") {
     expect(missing.status).toBe(404);
-    expect(missing.data?.message).toBe("User not found");
+    expect(missing.data?.message).toBe("Order not found");
   }
   expect(requests).toEqual([
     {
-      url: "https://first.example.test/v1/users/7",
+      url: "https://first.example.test/v1/orders/7",
       authorization: "Bearer first-fixture",
     },
     {
-      url: "https://second.example.test/v2/users/7",
+      url: "https://second.example.test/v2/orders/7",
       authorization: "Bearer second-fixture",
     },
   ]);

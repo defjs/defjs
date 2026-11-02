@@ -9,12 +9,12 @@ description: Подмени Fetch для одного клиента через 
 
 Подробности — в [Клиент](/ru-RU/docs/client).
 
-<include cwd meta="get-user.test.ts">
+<include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
 ```txt
-Ada 200
+paid 200
 ```
 
-Ту же операцию `getUser` гоняй против реального клиента с `withEndpoint(...)` в проде — меняется только handle.
+Ту же операцию `getOrder` гоняй против реального клиента с `withEndpoint(...)` в проде — меняется только handle.

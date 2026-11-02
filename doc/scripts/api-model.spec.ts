@@ -38,7 +38,7 @@ const row = (name: string, typeHref?: string): StoredEntry => ({
   required: true,
   deprecated: false,
   tags: [{ name: "example", text: "n" }],
-  ...(typeHref ? { typeHref } : {}),
+  typeHref,
 });
 
 test("model helpers keep stable names, kinds, and parameter rows", () => {

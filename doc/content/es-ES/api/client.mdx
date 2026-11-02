@@ -5,7 +5,7 @@ description: createClient, helpers de opción y el tipo Client.
 
 # Cliente
 
-`createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Compón las opciones del cliente de izquierda a derecha, luego llama a `client(options?)` para obtener un valor [`Client`](/es-ES/api/core/client-type) y pásalo a una operación: `getUser(client(options), input)`.
+`createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Compón las opciones del cliente de izquierda a derecha, luego llama a `client(options?)` para obtener un valor [`Client`](/es-ES/api/core/client-type) y pásalo a una operación: `getOrder(client(options), input)`.
 
 ## createClient()
 
@@ -109,13 +109,13 @@ El transporte HTTP por defecto añade la cabecera cuando se cumple todo esto: el
 
 <ApiSignature name="DerivableClient" />
 
-El cliente raíz que devuelve `createClient`, en dos formas. La fábrica es una función y también es un `Client` sin opciones de solicitud, así que `getUser(client, input)` funciona directamente. Llamarla con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve un valor `Client` simple para una sola llamada. Ese valor no es invocable, así que `client()()` no compila y lanza un `TypeError` en tiempo de ejecución. La derivación ocurre una vez, desde la fábrica; no hay encadenamiento. Escribe el tipo como `DerivableClient` en lugar de `ReturnType<typeof createClient>`.
+El cliente raíz que devuelve `createClient`, en dos formas. La fábrica es una función y también es un `Client` sin opciones de solicitud, así que `getOrder(client, input)` funciona directamente. Llamarla con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve un valor `Client` simple para una sola llamada. Ese valor no es invocable, así que `client()()` no compila y lanza un `TypeError` en tiempo de ejecución. La derivación ocurre una vez, desde la fábrica; no hay encadenamiento. Escribe el tipo como `DerivableClient` en lugar de `ReturnType<typeof createClient>`.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-Un `Client` es un valor, no una función. Llamar al [`DerivableClient`](/es-ES/api/core/derivableclient-type) con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve uno. Los siete campos conocidos se copian del argumento en un objeto nuevo. Los campos desconocidos se ignoran y los campos cuyo valor es `undefined` se omiten. No hay superposición con un padre: `client()`, `client(undefined)` y `client({})` devuelven un cliente sin opciones de solicitud. Los valores anidados `heartbeat`, `protocols` y `reconnect` se conservan por referencia, no se clonan. WebSocket los lee cuando se ejecuta la operación (entonces copia los campos de heartbeat y la lista protocols), así que mutar esos objetos después de derivar todavía puede afectar a una llamada posterior. Las aplicaciones deben tratarlos como inmutables después de pasarlos. Derivar no hace E/S. Un valor de cliente no es invocable; llamarlo no compila y lanza un `TypeError` en tiempo de ejecución. Crea un valor de cliente por llamada. El mismo valor puede pasarse a muchas operaciones, pero reutilizar un valor que lleva `signal` comparte ese signal. `signal` no se combina; combina signals con `AbortSignal.any` en el código de la aplicación.
+Un `Client` es un valor, no una función. Llamar al [`DerivableClient`](/es-ES/api/core/derivableclient-type) con [`RequestOptions`](/es-ES/api/core/requestoptions-type) devuelve uno. `client()` y `client(undefined)` no guardan opciones de solicitud. `client({})` conserva una instantánea vacía. La llamada lee cada campo de nivel superior una vez. Un array `protocols` se copia. `heartbeat` y `reconnect` copian sus campos conocidos. Los bloques anidados que faltan siguen faltando. `signal`, `beforeConnect` y los callbacks conservan su identidad. Un getter de un campo capturado se ejecuta durante esa llamada y, si lanza, sale de la llamada. Los números no válidos siguen fallando más tarde con `REQ_OPTIONS_INVALID`. Derivar no hace E/S. Un valor de cliente no es invocable; llamarlo no compila y lanza un `TypeError` en tiempo de ejecución. Crea un valor de cliente por llamada. El mismo valor puede pasarse a muchas operaciones, pero reutilizar un valor que lleva `signal` comparte ese signal. `signal` no se combina; combina signals con `AbortSignal.any` en el código de la aplicación. La configuración base de la fábrica sigue compartida y no está congelada. Los helpers `with*` estándar copian los records fijos que poseen cuando se aplican.
 
 No pases la fábrica a un setter de estado de React (`setState(factory)` la llamaría como updater) ni lo uses como fuente de `watch` o `computed` de Vue (esos llaman a una función).
 
@@ -123,7 +123,7 @@ No pases la fábrica a un setter de estado de React (`setState(factory)` la llam
 
 <ApiSignature name="RequestOptions" />
 
-Siete campos planos. Cada protocolo lee los campos que entiende e ignora el resto. Pasar `heartbeat` a HTTP se ignora, no es un fault. SSE solo lee `signal` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación ni un campo `timeout` o `abort`.
+Siete campos planos. Cada protocolo lee los campos que entiende e ignora el resto. Pasar `heartbeat` a HTTP se ignora, no es un fault. `client(options)` copia en esa llamada un array `protocols` y los campos conocidos de `heartbeat` y `reconnect`. Los bloques anidados que faltan siguen faltando. `signal`, `beforeConnect` y los callbacks conservan su identidad. SSE solo lee `signal` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación ni un campo `timeout` o `abort`.
 
 | Campo                | Protocolo             | Sustitución                                                                             |
 | -------------------- | --------------------- | --------------------------------------------------------------------------------------- |

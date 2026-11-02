@@ -83,7 +83,7 @@ test.each([
             if (!first) throw new Error("Expected the first physical socket");
             first.readyState = 3;
             first.dispatchEvent(
-              Object.assign(new Event("close"), {
+              new CloseEvent("close", {
                 code: 1012,
                 reason: "restart",
                 wasClean: true,

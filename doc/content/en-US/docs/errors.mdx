@@ -56,7 +56,7 @@ switching to another valid absolute base is allowed. These deterministic URL fau
 | --------------- | -------- | ------------------------------------------------------------- | ------------------------------------ |
 | `HTTP_STATUS`   | Always   | Always; has `body` only when `error` was declared and decoded | Decoded `error` body, or `undefined` |
 | `RES_*`         | Always   | Always, metadata only — **no `body`**                         | Absent                               |
-| Everything else | Absent   | Only where the transport already had metadata                 | Absent                               |
+| Everything else | Absent   | `undefined` until the transport has metadata                  | Absent                               |
 
 `cause` carries the underlying value: a `StructError` for a struct mismatch, the parser failure for
 an unreadable representation, whatever an extension threw.

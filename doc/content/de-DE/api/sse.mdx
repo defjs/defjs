@@ -37,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-Strukturelle Implementierungen von `EventStreamHandle` müssen jetzt `[Symbol.asyncDispose]()` implementieren und denselben eigenen Teardown-Pfad zurückgeben. Das ist eine Compile-Time-Breaking-Änderung für eigene Handles; Code, der nur von Defjs zurückgegebene Handles empfängt, hat keine neue Runtime-Aufrufpflicht.
+Strukturelle Implementierungen von `EventStreamHandle` müssen `[Symbol.asyncDispose]()` implementieren und denselben eigenen Teardown-Pfad zurückgeben.
 
 ### EventStreamOpenInfo
 

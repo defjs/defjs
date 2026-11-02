@@ -43,10 +43,8 @@ function createSSEClientFromText(
   return createClient(
     withEndpoint("https://api.example.com"),
     handle,
-    ...(options?.onInvalidEvent
-      ? [withSSEOnInvalidEvent(options.onInvalidEvent)]
-      : []),
-    ...(options?.reconnect ? [withSSEReconnect(options.reconnect)] : []),
+    withSSEOnInvalidEvent(options?.onInvalidEvent),
+    withSSEReconnect(options?.reconnect),
   );
 }
 

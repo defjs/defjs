@@ -68,7 +68,7 @@ Cuando se define `reconnect`, `attempts` vale por defecto 3 por interrupción; `
 `outgoing` es un struct. `session.send` acepta el `StructInput` de ese struct, codifica los alias y luego hace `JSON.stringify`. Los valores que JSON no puede representar con fidelidad después de la codificación lanzan `TypeError` antes de enviarse o de entrar en la cola de reconexión, incluidos números no finitos, funciones, símbolos, `Map`, `Set`, streams e instancias de clase sin representación JSON. Los valores anidados usan la misma guarda que los cuerpos JSON de HTTP. El heartbeat usa esa guarda también; un fallo de serialización del heartbeat termina la sesión. Varios kinds de mensaje son un `struct.discriminatedUnion`.
 
 ```ts
-session.send({ type: "message", text: "Hello" });
+session.send({ type: "subscribe", symbol: "ACME" });
 ```
 
 Consulta la [guía de WebSocket](/es-ES/docs/web-socket) y [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session).

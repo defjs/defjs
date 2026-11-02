@@ -67,7 +67,7 @@ unreadable representation.
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
 Everything that may have failed before a response existed: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`,
-`ENV_UNSUPPORTED`. `response` is present only where the transport already had metadata to report,
+`ENV_UNSUPPORTED`. `response` is `undefined` until the transport has metadata to report,
 such as a body that truncated mid-download.
 
 ### AnyFault

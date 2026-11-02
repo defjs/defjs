@@ -162,10 +162,7 @@ export function createSSEInterceptor(fn: SSEInterceptorFn): SSEInterceptor {
  *
  * A wrapper or short-circuit session must forward the same
  * `[Symbol.asyncDispose]()` teardown as its `close` / `closed` lifecycle;
- * returning an unrelated resolved promise is not sufficient. Requiring this
- * member is a compile-time breaking change for structural implementations. Code
- * that only accepts sessions returned by Defjs has no additional runtime call
- * requirement.
+ * returning an unrelated resolved promise is not sufficient.
  *
  * @group interceptors
  */

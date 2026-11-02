@@ -8,12 +8,12 @@ const props = defineProps<{ id: number }>();
 const client = injectClient();
 const name = ref("Loading...");
 
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ name: struct.string() }),
+  output: struct.object({ status: struct.string() }),
 });
 
 watch(
@@ -22,14 +22,14 @@ watch(
     const controller = new AbortController();
     onCleanup(() => controller.abort());
 
-    void getUser(client({ signal: controller.signal }), { id }).then(
-      ([error, user]) => {
+    void getOrder(client({ signal: controller.signal }), { id }).then(
+      ([error, order]) => {
         if (controller.signal.aborted) return;
         if (error) {
-          name.value = "Unable to load user.";
+          name.value = "Unable to load order.";
           return;
         }
-        name.value = user.name;
+        name.value = order.status;
       },
     );
   },

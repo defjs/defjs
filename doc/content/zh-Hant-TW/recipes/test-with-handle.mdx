@@ -9,12 +9,12 @@ description: 用 withHTTPHandle 替換單一 client 的 Fetch，操作維持不�
 
 細節見 [Client](/zh-Hant-TW/docs/client)。
 
-<include cwd meta="get-user.test.ts">
+<include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
 ```txt
-Ada 200
+paid 200
 ```
 
-正式環境用真實的 `withEndpoint(...)` client 跑同一個 `getUser` 操作 — 變的只有 handle。
+正式環境用真實的 `withEndpoint(...)` client 跑同一個 `getOrder` 操作 — 變的只有 handle。

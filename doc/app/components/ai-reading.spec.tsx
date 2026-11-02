@@ -116,14 +116,14 @@ test("every locale keeps assistant resources and the AI call-site guide on separ
     expect(links.filter((href) => /mcp/i.test(href))).toEqual([]);
     const prompt = [...guide.html.matchAll(/<pre[\s\S]*?<\/pre>/g)]
       .map((match) => match[0])
-      .find((block) => block.includes("/users/:id"));
+      .find((block) => block.includes("/orders/:id"));
     expect(prompt).toBeDefined();
-    expect(prompt).toContain("GET /users/:id");
+    expect(prompt).toContain("GET /orders/:id");
     expect(prompt).toContain("@defjs/core");
     expect(prompt).toContain("id: number");
-    expect(prompt).toContain("name: string");
+    expect(prompt).toContain("status: string");
     expect(prompt?.length).toBeLessThan(650);
-    expect(guide.html).toContain("getUser(client");
+    expect(guide.html).toContain("getOrder(client");
     expect(guide.html).not.toContain("client.execute");
     expect(guide.html).toContain("builder");
     expect(calling.html).toContain('id="call-an-api"');

@@ -53,7 +53,7 @@ HTTP 絕不會把推斷的 Content-Type 寫入 `request.headers`；interceptors 
   examples/interceptors/short-circuit.ts#example
 </include>
 
-操作仍會依 status 分派。呼叫端需要型別化 `error.data` 時，用單一 `error` struct 描述非 2xx 側。它也仍會檢查已宣告的那一側：JSON 的 `output` 或 `error` 要求合成回應帶有 JSON 的 `content-type` header，而 `body` 應該已經是剖析後的值，就像傳輸會交出來的那樣（`request.responseType` 與 `request.errorResponseType` 指明表示方式）。Short-circuit SSE 或 WebSocket 需要完整相容的 handle／session（closure promises、live state、ownership 與 `[Symbol.asyncDispose]`）。部分物件不算有效策略。結構化 `EventStreamHandle` 與 `WebSocketSessionLike` 實作現在編譯時必須提供標準 disposer；只接收 Defjs handle 的 consumer 不必新增執行期呼叫。
+操作仍會依 status 分派。呼叫端需要型別化 `error.data` 時，用單一 `error` struct 描述非 2xx 側。它也仍會檢查已宣告的那一側：JSON 的 `output` 或 `error` 要求合成回應帶有 JSON 的 `content-type` header，而 `body` 應該已經是剖析後的值，就像傳輸會交出來的那樣（`request.responseType` 與 `request.errorResponseType` 指明表示方式）。Short-circuit SSE 或 WebSocket 需要完整相容的 handle／session（closure promises、live state、ownership 與 `[Symbol.asyncDispose]`）。部分物件不算有效策略。
 
 ## 重試安全讀取
 

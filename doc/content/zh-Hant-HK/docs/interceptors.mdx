@@ -53,7 +53,7 @@ HTTP 永遠唔會將推斷出嚟嘅 Content-Type 寫入 `request.headers`；inte
   examples/interceptors/short-circuit.ts#example
 </include>
 
-操作仍然會按 status dispatch。Callers 需要 typed `error.data` 時，用單一 `error` struct 描述非 2xx side。佢亦照樣會檢查已聲明嗰一邊：JSON `output` 或者 `error` 需要 synthetic response 帶 JSON `content-type` header，而 `body` 應該已經係 parse 好嘅值，同 transport 交付嗰樣一樣（`request.responseType` 同 `request.errorResponseType` 指明 representation）。Short-circuit SSE 或者 WebSocket 需要完整 compatible handle/session（closure promises、live state、ownership 同 `[Symbol.asyncDispose]`）。Partial objects 唔係 valid policy。Structural `EventStreamHandle` 同 `WebSocketSessionLike` implementation 而家 compile 時必須有 standard disposer；淨係接收 Defjs handle 嘅 consumer 唔使加新 runtime call。
+操作仍然會按 status dispatch。Callers 需要 typed `error.data` 時，用單一 `error` struct 描述非 2xx side。佢亦照樣會檢查已聲明嗰一邊：JSON `output` 或者 `error` 需要 synthetic response 帶 JSON `content-type` header，而 `body` 應該已經係 parse 好嘅值，同 transport 交付嗰樣一樣（`request.responseType` 同 `request.errorResponseType` 指明 representation）。Short-circuit SSE 或者 WebSocket 需要完整 compatible handle/session（closure promises、live state、ownership 同 `[Symbol.asyncDispose]`）。Partial objects 唔係 valid policy。
 
 ## 重試安全嘅讀取
 

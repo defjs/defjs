@@ -55,7 +55,7 @@ Execute는 판별 가능한 `Fault`를 튜플 첫 자리에 돌려줘요. 선언
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-응답이 존재하기 전에 실패할 수 있었던 모든 것이에요. `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response`는 전송이 보고할 메타데이터를 이미 갖고 있던 경우에만 있어요. 예를 들어 다운로드 중간에 잘린 body 같은 경우요.
+응답이 존재하기 전에 실패할 수 있었던 모든 것이에요. `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. 전송이 보고할 메타데이터를 갖기 전까지 `response`는 `undefined`예요. 예를 들어 다운로드 중간에 잘린 body예요.
 
 ### AnyFault
 

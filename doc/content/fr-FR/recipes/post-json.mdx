@@ -9,12 +9,12 @@ Remets le corps typé au builder. Les noms de champs logiques restent dans TypeS
 
 Voir [HTTP](/fr-FR/docs/http) et [Client](/fr-FR/docs/client) pour les détails.
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` est un placeholder. Avec un serveur qui répond `201` et `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, le snippet affiche :
+`api.example.com` est un placeholder. Avec un serveur qui répond `201` et `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, le snippet affiche :
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

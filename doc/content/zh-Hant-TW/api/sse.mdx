@@ -37,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-結構化實作 `EventStreamHandle` 的程式碼現在必須實作 `[Symbol.asyncDispose]()`，並回傳同一條自有 teardown 路徑。對自訂 handle 實作者而言，這是編譯期 breaking change；只接收 Defjs 回傳 handle 的程式碼不必新增執行期呼叫。
+結構化實作 `EventStreamHandle` 的程式碼必須實作 `[Symbol.asyncDispose]()`，並回傳同一條自有 teardown 路徑。
 
 ### EventStreamOpenInfo
 

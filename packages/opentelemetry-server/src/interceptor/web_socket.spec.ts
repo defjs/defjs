@@ -516,6 +516,7 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
 
     expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
       "websocket.connected",
+      undefined,
     );
   });
 
@@ -551,7 +552,10 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close();
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.closed");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "websocket.closed",
+      undefined,
+    );
     expect(activeSpans[0]?.status?.code).toBe(1);
     expect(activeSpans[0]?.ended).toBe(true);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
@@ -581,7 +585,10 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     } as never);
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.closed");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "websocket.closed",
+      undefined,
+    );
     expect(activeSpans[0]?.recordException).not.toHaveBeenCalled();
     expect(activeSpans[0]?.status?.code).toBe(1);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(
@@ -604,7 +611,10 @@ describe("createOpenTelemetryWebSocketInterceptor", () => {
     ws.close(null as never);
     await waitForSettledPromises();
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("websocket.closed");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "websocket.closed",
+      undefined,
+    );
     expect(activeSpans[0]?.recordException).not.toHaveBeenCalled();
     expect(activeSpans[0]?.status?.code).toBe(1);
     expect(metrics.connectionDuration.record).toHaveBeenCalledWith(

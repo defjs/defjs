@@ -55,7 +55,7 @@ Une réponse est arrivée mais n’a pas pu être lue telle que déclarée. `res
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-Tout ce qui a pu échouer avant qu’une réponse existe : `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` n’est présent que là où le transport avait déjà des métadonnées à rapporter, comme un corps tronqué en pleine descente.
+Tout ce qui a pu échouer avant qu’une réponse existe : `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` vaut `undefined` tant que le transport n’a pas de métadonnées à rapporter, comme un corps tronqué en pleine descente.
 
 ### AnyFault
 

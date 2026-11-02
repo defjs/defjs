@@ -68,10 +68,8 @@ describe("web socket browser runtime", () => {
         controller.abort();
       }
     });
-    const callerSignal =
-      options && "signal" in options && options.signal instanceof AbortSignal
-        ? options.signal
-        : undefined;
+    const signal = options?.signal;
+    const callerSignal = signal instanceof AbortSignal ? signal : undefined;
     pending = operation(
       client({
         ...options,

@@ -12,7 +12,7 @@ description: defineRequest, опции запроса и типы HTTP request/r
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, необязательный `input` struct, необязательные `output` и `error` structs, необязательный `operation`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`RequestDefinition`](/ru-RU/api/core/requestdefinition-type). `builder` обязателен ровно тогда, когда объявлен `input`.
-- **Возвращает** операцию. Вызывай её как `getUser(client, input)` или `health(client)`, если input не объявлен. Когда весь входной struct необязателен, аргумент input можно опустить. Вызов начинает запрос. Третьего аргумента с опциями нет.
+- **Возвращает** операцию. Вызывай её как `getOrder(client, input)` или `health(client)`, если input не объявлен. Когда весь входной struct необязателен, аргумент input можно опустить. Вызов начинает запрос. Третьего аргумента с опциями нет.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -52,7 +52,7 @@ struct, что и ответ с провода; доверенного short-cir
 
 ### RequestDefinition
 
-`method`, `path`, необязательные `input`, `output`, `error`, `operation` и `builder`. `responseType` нет: kind struct выбирает, как читать объявленное тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+`method`, `path`, необязательные `input`, `output`, `error`, `operation` и `builder`. Kind struct выбирает, как читать объявленное тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
 
 ### HttpAwaitResult
 

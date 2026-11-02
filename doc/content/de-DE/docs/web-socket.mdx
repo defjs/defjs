@@ -20,10 +20,10 @@ Start → receive → send → mit `await using` freigeben. Du besitzt Unsubscri
 `incoming` ist ein Struct für jeden Text-Frame. `outgoing` ist ein Struct für `session.send(...)`. Modelle mehrere Kinds mit `struct.discriminatedUnion`. Alias auf diesen Fields ist der Wire-Name in beide Richtungen. Es gibt keinen separaten Type-Envelope und keinen Normalizer.
 
 ```json
-{ "type": "message", "text": "Hello" }
+{ "type": "tick", "symbol": "ACME", "price": 142.5 }
 ```
 
-Incoming Text-, `ArrayBuffer`-, Typed-Array- und `Blob`-Frames werden als UTF-8 gelesen, JSON-geparst und dann gegen `incoming` geprüft. Malformed JSON und Struct-Failures gehen an `session.onRuntimeError` und werden nicht gequeued. Die Session bleibt up. Frames, die weder Text noch Bytes noch ein `Blob` sind, werden ignoriert. Es gibt kein `withWebSocketOnInvalidEvent`.
+Incoming Text-, `ArrayBuffer`-, Typed-Array- und `Blob`-Frames werden als UTF-8 gelesen, JSON-geparst und dann gegen `incoming` geprüft. Malformed JSON und Struct-Failures gehen an `session.onRuntimeError` und werden nicht gequeued. Die Session bleibt up. Frames, die weder Text noch Bytes noch ein `Blob` sind, werden ignoriert.
 
 `session.send(...)` validiert und serialisiert synchron: Struct-Encode, dann `JSON.stringify`. Es sendet sofort, wenn die Session offen ist, puffert während `reconnecting`, wenn eine Outgoing-Queue aktiviert ist, und wirft `InvalidStateError`, wenn nicht geschrieben werden kann. Es wirft auch, wenn es keinen Outgoing-Struct gibt, das Payload den Struct nicht besteht, die Outgoing-Queue deaktiviert oder voll ist, oder der native Send scheitert. Eine statische `protocols`-Liste auf der Definition ist der Endpoint-Vertrag (zum Beispiel `graphql-transport-ws`). `protocols` eines abgeleiteten Clients und `withWebSocketProtocols` können sie trotzdem überschreiben. Nur diese Options wählen Subprotocols: Builder, `beforeConnect` und Interceptors können sie nicht ändern, ein Token-in-Subprotocol wird also als `protocols` am abgeleiteten Client für diesen Aufruf übergeben. Der Builder darf nur `path` und `query` zurückgeben.
 
@@ -84,7 +84,7 @@ Incoming-Overflow leert die Pending Sequence, lässt `receive` scheitern, stoppt
 
 ## Protocols und Authentication
 
-Definition-`protocols`, Client-`withWebSocketProtocols(...)` und `protocols` am abgeleiteten Client setzen die Constructor-Subprotocol-List. Precedence: abgeleiteter Client → Client → Definition. Die abgeleitete Liste ersetzt die Client-Liste; sie wird nicht angehängt. Die erste definierte List wird für die logische Session kopiert und auf Reconnect reused.
+Definition-`protocols`, Client-`withWebSocketProtocols(...)` und `protocols` am abgeleiteten Client setzen die Constructor-Subprotocol-List. Precedence: abgeleiteter Client → Client → Definition. Die abgeleitete Liste ersetzt die Client-Liste; sie wird nicht angehängt. `defineWebSocket` kopiert ein Protocols-Array, wenn die Definition erzeugt wird. `withWebSocketProtocols` kopiert es, wenn die Option angewendet wird, und `client({ protocols })` kopiert es, wenn der Client-Wert erzeugt wird. Eine spätere Änderung des ursprünglichen Arrays trifft diesen Container nicht. Die für einen Aufruf gewählte Liste wird für die logische Session erneut kopiert und auf Reconnect reused. Ein Wert, der kein Array ist, wird an der Capture-Grenze nicht per Spread kopiert; die Ausführung validiert ihn weiterhin.
 
 Browser-WebSocket-Constructors akzeptieren keine beliebigen Handshake-Headers, und der Builder kann weder `headers` noch `body` zurückgeben. Defjs konvertiert `http:` → `ws:` und `https:` → `wss:`, kodiert Path-Placeholder einmal und nutzt dieselben Query-Regeln wie HTTP: Scalars und wiederholte Keys per Default, `withQuerySerializer` für genestete Objects, und kein Serializer-Aufruf, wenn es keine Query gibt.
 

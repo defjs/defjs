@@ -68,7 +68,7 @@ async function consume(
 `outgoing` هو struct واحد. يقبل `session.send` القيمة `StructInput` لذلك الـ struct، ويرمّز الأسماء المستعارة، ثم `JSON.stringify`. القيم التي لا يستطيع JSON تمثيلها بأمانة بعد الترميز ترمي `TypeError` قبل الإرسال أو دخول طابور إعادة الاتصال، بما فيها الأعداد غير المحدودة والدوال والرموز و`Map` و`Set` والتدفقات ونسخ الأصناف بلا تمثيل JSON. تستخدم القيم المتداخلة الحارس نفسه لأجسام JSON في HTTP. يستخدم النبض ذلك الحارس أيضًا؛ وفشل تسلسل النبض ينهي الجلسة. عدة أنواع رسائل هي `struct.discriminatedUnion`.
 
 ```ts
-session.send({ type: "message", text: "Hello" });
+session.send({ type: "subscribe", symbol: "ACME" });
 ```
 
 انظر [دليل WebSocket](/ar/docs/web-socket) و[فتح جلسة WebSocket](/ar/recipes/websocket-session).

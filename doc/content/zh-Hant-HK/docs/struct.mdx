@@ -66,14 +66,14 @@ Path、query、headers 同 body 係 builder return 嘅 fields，唔係一個 req
   examples/struct/aliases.ts#example
 </include>
 
-| 邊界                                   | 欄位                         |
-| -------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)` 同操作 input | Logical `displayName`        |
-| Builder return 嘅 typed object         | Wire `display_name`          |
-| JSON / SSE / WebSocket decoding        | Wire → logical `displayName` |
-| Builder 入面手寫嘅 anonymous object    | 你寫嘅嗰個 key               |
+| 邊界                                    | 欄位                          |
+| --------------------------------------- | ----------------------------- |
+| `struct.parse(Order, ...)` 同操作 input | Logical `customerName`        |
+| Builder return 嘅 typed object          | Wire `customer_name`          |
+| JSON / SSE / WebSocket decoding         | Wire → logical `customerName` |
+| Builder 入面手寫嘅 anonymous object     | 你寫嘅嗰個 key                |
 
-Builder 本身讀嘅係 logical names（`input.user.displayName`）；wire name 只會喺 serializer encode builder return 嘅 typed object 嗰陣出現。
+Builder 本身讀嘅係 logical names（`input.order.customerName`）；wire name 只會喺 serializer encode builder return 嘅 typed object 嗰陣出現。
 
 Aliases 對 nested fields、arrays、objects、unions 同 discriminators 都有效。App code 用 logical names；external name 喺 struct 上面放一次。Spread 一個 typed object 會保留嗰種 encoding。同一個 object 同時 set logical field 同佢嘅 wire key 就係 `REQ_BUILD_FAILED`。你自己 `JSON.stringify` 一個 value 就離開呢條路：serializer 見到嘅係 logical names。
 

@@ -27,7 +27,7 @@ description: HTTP、SSE、WebSocket interceptor 的 constructors。
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Wrapper 或短接 session 必須轉發與其 `close` / `closed` lifecycle 相同的 `[Symbol.asyncDispose]()` teardown；回傳無關的 resolved promise 並不足夠。要求這個成員，對結構化實作而言是編譯期 breaking change。只接收 Defjs session 的程式碼不必新增執行期呼叫。
+Wrapper 或短接 session 必須轉發與其 `close` / `closed` lifecycle 相同的 `[Symbol.asyncDispose]()` teardown；回傳無關的 resolved promise 並不足夠。
 
 ## 帶 kind 的型別
 

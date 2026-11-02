@@ -25,7 +25,7 @@ Los placeholders de path son escalares en bruto, codificados exactamente una vez
 
 El nombre de un placeholder empieza en `:` y llega hasta la siguiente `/` o el final del path: `/files/:name.json` nombra el parámetro `name.json`, no `name`. No se admite un dos puntos literal en un segmento estático.
 
-Los paths de definición no pueden tener formas similares a un esquema ni relativas al protocolo (incluso con espacios iniciales), ni contener caracteres de control C0 (incluidos tab, CR y LF), barras invertidas, `?` o `#`. Se permite un espacio ordinario en el interior y se envía como `%20`. Tras la resolución, la URL debe conservar el origen base y permanecer bajo su directorio; un path como `../users` no puede escapar de él. Los paths ilegales fallan con `REQ_BUILD_FAILED` durante la construcción, antes del transporte. El `req.endpoint` final de un interceptor se comprueba contra su `req.baseEndpoint` final con la misma regla; un interceptor puede sustituir deliberadamente la base por otra URL absoluta válida. Los errores de URL deterministas nunca se reintentan.
+Los paths de definición no pueden tener formas similares a un esquema ni relativas al protocolo (incluso con espacios iniciales), ni contener caracteres de control C0 (incluidos tab, CR y LF), barras invertidas, `?` o `#`. Se permite un espacio ordinario en el interior y se envía como `%20`. Tras la resolución, la URL debe conservar el origen base y permanecer bajo su directorio; un path como `../orders` no puede escapar de él. Los paths ilegales fallan con `REQ_BUILD_FAILED` durante la construcción, antes del transporte. El `req.endpoint` final de un interceptor se comprueba contra su `req.baseEndpoint` final con la misma regla; un interceptor puede sustituir deliberadamente la base por otra URL absoluta válida. Los errores de URL deterministas nunca se reintentan.
 
 El encoder de query por defecto acepta escalares y arrays de escalares (los arrays repiten la clave). Un objeto anidado falla con `REQ_BUILD_FAILED` salvo que el cliente tenga `withQuerySerializer(...)`. `null` en `path`, `query` o `headers` falla igual. Los valores `undefined` de query y de headers se omiten. Un placeholder de path `undefined` o ausente falla con `REQ_BUILD_FAILED`.
 
@@ -37,19 +37,19 @@ El struct codifica el valor. El builder lo coloca. Un `input` declarado exige si
   examples/http/place-input.ts#example
 </include>
 
-Ese body es `{"display_name":"Ada"}` con `application/json`. El nombre de cable de la cabecera es `x-request-id`. Quien llama y los resultados parseados conservan `displayName`.
+Ese body es `{"customer_name":"Ada"}` con `application/json`. El nombre de cable de la cabecera es `x-request-id`. Quien llama y los resultados parseados conservan `customerName`.
 
-Prefiere pasar el valor tipado a escribir claves de cable. El alias se declara una vez en el campo y aplica en ambas direcciones: `output` / `error` / eventos / frames entrantes decodifican `display_name` a `displayName`, y `body: input.order` reescribe el árbol entero. El mismo struct `User` puede ser un body de create y un output de get. Una clave escrita a mano es la excepción: el objeto padre es anónimo, así que el alias no corre.
+Prefiere pasar el valor tipado a escribir claves de cable. El alias se declara una vez en el campo y aplica en ambas direcciones: `output` / `error` / eventos / frames entrantes decodifican `customer_name` a `customerName`, y `body: input.order` reescribe el árbol entero. El mismo struct `Order` puede ser un body de create y un output de get. Una clave escrita a mano es la excepción: el objeto padre es anónimo, así que el alias no corre.
 
 | Expresión del builder                          | En el cable                                                        |
 | ---------------------------------------------- | ------------------------------------------------------------------ |
 | `body: input.profile`                          | Objeto tipado: alias y codificación de `Date` / `bigint`           |
 | `body: { profile: input.profile }`             | Claves exteriores literales, el objeto interno sigue tipado        |
 | `body: { ...input.profile, role: 'admin' }`    | El spread conserva el struct; la clave extra es literal            |
-| `body: { name: input.profile.displayName }`    | Padre anónimo: el alias no aplica                                  |
+| `body: { name: input.profile.customerName }`   | Padre anónimo: el alias no aplica                                  |
 | `query: input.filter` / `headers: input.trace` | Objetos planos tipados: el alias se convierte en la clave de cable |
 
-Hacer spread de un objeto tipado y además fijar su clave de cable (`display_name` junto a `displayName`) es `REQ_BUILD_FAILED`. Un objeto anidado en `path` o `headers` falla igual.
+Hacer spread de un objeto tipado y además fijar su clave de cable (`customer_name` junto a `customerName`) es `REQ_BUILD_FAILED`. Un objeto anidado en `path` o `headers` falla igual.
 
 La guía se elige en cada nodo, no solo en la raíz. Un objeto nuevo bajo un padre anónimo conserva las claves que escribiste. El mismo objeto bajo un padre tipado usa el struct de ese campo.
 

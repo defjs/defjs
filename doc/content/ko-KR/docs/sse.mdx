@@ -17,7 +17,7 @@ SDK는 입력, 이벤트 계약, 버퍼 한도가 있는 이벤트 스트림 작
 
 ## 스트림 정의하기
 
-`defineEventStream(...)`에는 `events`, 양의 안전 정수 `maxBufferSize`, 양의 안전 정수 `maxQueueSize`, 상대 `path`가 필요해요. method 기본값은 `GET`이에요.
+`defineEventStream(...)`에는 `events`, 양의 안전 정수 `maxBufferSize`, 양의 안전 정수 `maxQueueSize`, 상대 `path`가 필요해요. method 기본값은 `GET`이에요. 호출은 알려진 정의 필드를 복사해요. `events` 사전 컨테이너는 자체 프로퍼티와 함께 복사돼요. 열거할 수 없는 프로퍼티와 계산된 프로퍼티 이름으로 정의한 `__proto__` 프로퍼티도 유지돼요. 상속된 이름은 복사되지 않아요. Struct 값은 같은 객체로 남아요. 그 사전의 접근자는 메시지가 도착할 때 원래 사전을 `this`로 해서 그대로 실행돼요. 빠진 사전은 주어진 그대로 남고, 이벤트를 해결할 때도 보고돼요.
 
 요청 모양은 HTTP와 같아요. `builder`가 `path`, `query`, `headers`, `body`를 돌려줘요. `GET` / `HEAD`는 body를 돌려줄 수 없어요. 선언된 `error` struct는 시작 fault의 타입을 정하고, non-2xx 핸드셰이크 body를 struct kind로 디코딩해요 (`string`은 텍스트, `blob` / `file`은 blob, `arrayBuffer`는 바이트, 그 밖은 JSON). `Accept`를 이미 두지 않았으면 Defjs가 `Accept: text/event-stream`을 보내요. `input`을 선언하면 명시적인 `builder`가 반드시 필요해요. `input`은 인자만 정의하고, 각 값을 어디에 둘지는 builder만 정해요. `input`이 없는 정의만 `builder`를 생략할 수 있어요. `ReadableStream` body는 HTTP 규칙을 따르고, 요청 body 스트리밍을 지원하지 않는 런타임(Firefox 등)에서는 아무것도 보내지기 전에 시작이 `ENV_UNSUPPORTED`로 실패해요. Chromium에서는 HTTP/2 이상이 필요하고, HTTP/1.1에서는 시작이 `NET_UNREACHABLE`로 실패해요. 스트림 body는 한 번만 보내지고 재연결되지 않아요(재연결 섹션 참고).
 
@@ -106,7 +106,7 @@ SSE `data`는 텍스트로 시작해요. `string` struct는 그 텍스트를 유
 
 `await using`은 같은 소유 close 경로를 호출하고, Defjs의 읽기/재연결 작업이 멈추고 활성 reader lock이 풀릴 때까지 기다려요. 끝나지 않는 provider 소유의 `ReadableStream.cancel()` promise 주변은 의도적으로 한도가 있어서, 그런 provider promise가 끝났다고 보장하지는 않아요. 이유나 종료 결과가 필요하면 명시적 `stream.close(reason)`과 `await stream.closed`도 유효해요.
 
-커스텀 구조적 `EventStreamHandle` 구현은 이제 `[Symbol.asyncDispose](): PromiseLike<void>`를 제공하고 같은 lifecycle에 연결해야 해요. 구현자에게는 컴파일 타임 breaking change예요. Defjs 핸들만 받는 소비자는 런타임에 새로 호출할 것이 없어요.
+커스텀 구조적 `EventStreamHandle` 구현은 `[Symbol.asyncDispose](): PromiseLike<void>`를 제공하고 같은 lifecycle에 연결해야 해요.
 
 지원하는 최소 lib 집합은 `ES2022`, `ESNext.Disposable`, `DOM`, `DOM.Iterable`이에요. 저장소 선언 도구는 TypeScript 7을 쓰지만, 패키징된 소비자나 최소 lib을 자동으로 검증하는 게이트는 없고, 더 오래된 컴파일러는 약속하지 않아요. 이 집합은 타입을 제공할 뿐 런타임 Web API 폴리필은 아니에요. `Client`는 `AsyncDisposable`이 아니에요. 각 요청은 `AbortSignal`로 관리하세요.
 

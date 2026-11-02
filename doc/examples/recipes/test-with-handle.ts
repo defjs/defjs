@@ -7,12 +7,12 @@ import {
   withHTTPHandle,
 } from "@defjs/core";
 
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: { id: input.id } }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
   error: struct.object({ message: struct.string() }),
 });
 
@@ -22,17 +22,17 @@ const client = createClient(
     const request = new Request(input, init);
     const id = new URL(request.url).pathname.split("/").at(-1);
     if (id === "7")
-      return Response.json({ id: 7, name: "Ada" }, { status: 200 });
-    return Response.json({ message: "User not found" }, { status: 404 });
+      return Response.json({ id: 7, status: "paid" }, { status: 200 });
+    return Response.json({ message: "Order not found" }, { status: 404 });
   }),
 );
 async function main() {
-  const [error, user, response] = await getUser(client, { id: 7 });
+  const [error, order, response] = await getOrder(client, { id: 7 });
   if (error) {
     // The test boundary rejects failures so the test process cannot pass.
     throw error;
   }
-  console.log(user.name, response.status);
+  console.log(order.status, response.status);
 }
 
 await main();

@@ -52,6 +52,8 @@ span フックは `tracer` が渡された場合にのみ呼び出されます�
 
 空のトランスポートオブジェクトはそのトランスポートを有効にします。古い boolean のトランスポートスイッチ（`http: false`）と古いトップレベルフックを拒否するのは、TypeScript の型だけです。実行時のチェックはありません。実行時には `http: false` でもトランスポートは有効のままで、トップレベルのフックは黙って無視されます。トランスポート options オブジェクト（`{ enabled: false }`）とトランスポートスコープのフックを使ってください。
 
+`withOpenTelemetryServer` は `http`、次に `sse`、次に `webSocket` を、それぞれ 1 回ずつ読みます。欠けているブロックは欠けたままで、そのトランスポートは有効のままです。渡されたブロックはフィールドごとにコピーされます。対象は `enabled`、`startSpanHook`、`requestHook`、`responseHook`、WebSocket では加えて `queryPropagation` です。その後にブロックを変更したり差し替えたりしても、この option は変わりません。`enabled` は最初に読まれます。`false` のときだけそのトランスポートが無効になり、無効な分岐では hooks も `queryPropagation` も読みません。コピーされるフィールドの getter は `withOpenTelemetryServer` の実行中に走ります。どれか 1 つが投げると、例外はその呼び出しから直ちに抜けます。後続のブロックは読まれず、エラーは option の適用時まで延期されません。`tracer`、`meter`、`logger`、`propagator`、および hook 関数は同一性を保ちます。
+
 ## operation の同一性と伝播
 
 操作に安定した同一性があるとき、`defineRequest`、`defineEventStream`、`defineWebSocket` に静的な `operation` を付けます。プラグインは span 名と `defjs.operation` に使います。解決済み path、識別子、テナント、query 文字列から同一性を導出しません。
@@ -88,7 +90,7 @@ HTTP と SSE は伝播フィールドをリクエストヘッダーに注入し�
 
 ## リファレンス
 
-`meter` を渡したとき:
+`meter` を渡すと、プラグインは option をクライアントに適用するたびに Meter の計測器作成メソッドを呼び出します。`withOpenTelemetryServer` の呼び出し時には実行しません。返される計測器や集約状態を共有するかどうかは Meter/SDK が決めます。各所要時間ヒストグラムは、境界 0.005、0.01、0.025、0.05、0.075、0.1、0.25、0.5、0.75、1、2.5、5、7.5、10 秒の自身のコピーを受け取ります。
 
 | メトリクス                                   | 意味                                              |
 | -------------------------------------------- | ------------------------------------------------- |

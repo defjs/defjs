@@ -9,7 +9,7 @@ Import operations from your SDK or shared definition module. The React applicati
 
 These plugins are optional helpers for providing and reading an existing `Client`. Import a fixed application-owned client, pass a `Client` explicitly to reusable logic, use framework injection for tree-level defaults and overrides, or choose your own organization. SDK definitions do not require these plugins.
 
-Wire an existing `@defjs/core` client into a React tree. You get Context and `useClient()`. The package does **not** create a client, add a cache, retry operations, or dispose transport resources. The component, effect, or data library that starts work owns it. The client from `useClient()` is passed into the operation. The hook returns the [`DerivableClient`](/api/core/derivableclient-type) that was supplied. For per-call options such as `signal`, call it where the operation runs: `getUser(client({ signal }), input)`. Do not pass it to a state setter, because `setState(client)` would call it as an updater. A derived `Client` value is not accepted by `ClientProvider` or `useClient`.
+Wire an existing `@defjs/core` client into a React tree. You get Context and `useClient()`. The package does **not** create a client, add a cache, retry operations, or dispose transport resources. The component, effect, or data library that starts work owns it. The client from `useClient()` is passed into the operation. The hook returns the [`DerivableClient`](/api/core/derivableclient-type) that was supplied. For per-call options such as `signal`, call it where the operation runs: `getOrder(client({ signal }), input)`. Do not pass it to a state setter, because `setState(client)` would call it as an updater. A derived `Client` value is not accepted by `ClientProvider` or `useClient`.
 
 ## Basic Setup
 
@@ -17,7 +17,7 @@ Install `@defjs/core`, `@defjs/react`, and React 18+. ESM:
 
 `bun add @defjs/core @defjs/react react`
 
-Provide the client, then fetch a user and abort on change:
+Provide the client, then fetch an order and abort on change:
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 

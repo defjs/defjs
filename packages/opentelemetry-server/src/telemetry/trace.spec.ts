@@ -116,6 +116,7 @@ describe("trace helpers", () => {
   test("resolveStartSpanHook returns no attributes when omitted", () => {
     expect(resolveStartSpanHook(undefined, makeHttpRequest())).toEqual({
       ok: true,
+      attributes: undefined,
     });
   });
 
@@ -401,7 +402,7 @@ describe("trace helpers", () => {
     const span = tracer.startSpan("test");
     addSpanEvent(span, "custom.event");
 
-    expect(spans[0]?.addEvent).toHaveBeenCalledWith("custom.event");
+    expect(spans[0]?.addEvent).toHaveBeenCalledWith("custom.event", undefined);
   });
 
   test("addSpanEvent calls span.addEvent with attributes", () => {

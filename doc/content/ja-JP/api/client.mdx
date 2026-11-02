@@ -5,7 +5,7 @@ description: createClient、option ヘルパー、Client 型です。
 
 # Client
 
-`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。クライアント options を左から右へ合成し、`client(options?)` を呼んで [`Client`](/ja-JP/api/core/client-type) 値を得て、操作に渡します。`getUser(client(options), input)` です。
+`createClient(...)` は [`DerivableClient`](/ja-JP/api/core/derivableclient-type) を返します。クライアント options を左から右へ合成し、`client(options?)` を呼んで [`Client`](/ja-JP/api/core/client-type) 値を得て、操作に渡します。`getOrder(client(options), input)` です。
 
 ## createClient()
 
@@ -109,13 +109,13 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` が返すルートのクライアントで、2 つの形を持ちます。ファクトリは関数であり、リクエスト options を持たない `Client` でもあるため、`getUser(client, input)` をそのまま呼べます。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、1 回の呼び出し用のプレーンな `Client` 値が返ります。その値は呼び出せないため、`client()()` はコンパイルに失敗し、実行時には `TypeError` を投げます。派生はファクトリから 1 回だけ行い、連鎖はありません。型は `ReturnType<typeof createClient>` ではなく `DerivableClient` と書いてください。
+`createClient` が返すルートのクライアントで、2 つの形を持ちます。ファクトリは関数であり、リクエスト options を持たない `Client` でもあるため、`getOrder(client, input)` をそのまま呼べます。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと、1 回の呼び出し用のプレーンな `Client` 値が返ります。その値は呼び出せないため、`client()()` はコンパイルに失敗し、実行時には `TypeError` を投げます。派生はファクトリから 1 回だけ行い、連鎖はありません。型は `ReturnType<typeof createClient>` ではなく `DerivableClient` と書いてください。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。既知の 7 フィールドは引数からコピーされ、新しいオブジェクトに入ります。未知のフィールドは無視され、値が `undefined` のフィールドは省かれます。親の options を重ねることはありません。`client()`、`client(undefined)`、`client({})` はリクエスト options を持たないクライアントを返します。入れ子の `heartbeat`、`protocols`、`reconnect` の値は参照のまま保持され、クローンされません。WebSocket は操作の実行時にそれらを読みます（そのとき heartbeat のフィールドと protocols のリストをコピーします）。そのため、派生したあとでそれらのオブジェクトを変更すると、その後の呼び出しにまだ影響することがあります。渡したあとは不変として扱ってください。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。
+`Client` は関数ではなく値です。[`DerivableClient`](/ja-JP/api/core/derivableclient-type) に [`RequestOptions`](/ja-JP/api/core/requestoptions-type) を渡して呼ぶと得られます。`client()` と `client(undefined)` はリクエスト options を保存しません。`client({})` は空のスナップショットを残します。呼び出しは各トップレベルフィールドを一度だけ読みます。`protocols` 配列はコピーされます。`heartbeat` と `reconnect` は既知のフィールドをコピーします。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。キャプチャしたフィールドの getter はこの呼び出しの間に実行され、throw した場合はその呼び出しから外へ伝わります。不正な数値は、あとから `REQ_OPTIONS_INVALID` で失敗します。派生は I/O をしません。`Client` 値は呼び出せず、呼ぶとコンパイルに失敗し、実行時には `TypeError` を投げます。呼び出しごとに `Client` 値を作ってください。同じ値を多くの操作に渡せますが、`signal` を持つ値を再利用するとそのシグナルを共有します。`signal` は合成されません。シグナルを合成するときは、アプリケーションコードで `AbortSignal.any` を使ってください。ファクトリの基底設定は共有されたままで、凍結されません。標準の `with*` ヘルパーは、適用されるときに自分が持つ固定レコードをコピーします。
 
 ファクトリを React の state setter に渡さないでください（`setState(factory)` は updater としてそれを呼びます）。Vue の `watch` や `computed` のソースにも使わないでください（それらは関数を呼びます）。
 
@@ -123,7 +123,7 @@ HTTP リクエストに XSRF トークンのヘッダーを追加します。`op
 
 <ApiSignature name="RequestOptions" />
 
-フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。SSE がリクエスト options から読むのは `signal` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `abort` フィールドもありません。
+フラットなフィールドは 7 つです。各プロトコルは理解するフィールドを読み、残りは無視します。HTTP に `heartbeat` を渡しても無視されるだけで、障害ではありません。`client(options)` はその呼び出しで `protocols` 配列と、`heartbeat` および `reconnect` の既知フィールドをコピーします。欠けている入れ子ブロックは欠けたままです。`signal`、`beforeConnect`、コールバックは同一性を保ちます。SSE がリクエスト options から読むのは `signal` だけです。SSE の再接続はクライアント設定（`withSSEReconnect`）から来るので、`client({ reconnect })` が影響するのは WebSocket だけです。コンパイル時のプロトコルフィルタはなく、`timeout` フィールドも `abort` フィールドもありません。
 
 | フィールド           | プロトコル           | 置き換え                                                                           |
 | -------------------- | -------------------- | ---------------------------------------------------------------------------------- |

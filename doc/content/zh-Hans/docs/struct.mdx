@@ -66,14 +66,14 @@ Path、query、headers、body 是 builder 返回的字段，不是一种 request
   examples/struct/aliases.ts#example
 </include>
 
-| 边界                                 | 字段                              |
-| ------------------------------------ | --------------------------------- |
-| `struct.parse(User, ...)` 和操作输入 | 逻辑名 `displayName`              |
-| builder 返回的带类型对象             | 传输字段 `display_name`           |
-| JSON / SSE / WebSocket 解码          | 传输字段 → 逻辑字段 `displayName` |
-| builder 里手写的匿名对象             | 你写下的那个 key                  |
+| 边界                                  | 字段                               |
+| ------------------------------------- | ---------------------------------- |
+| `struct.parse(Order, ...)` 和操作输入 | 逻辑名 `customerName`              |
+| builder 返回的带类型对象              | 传输字段 `customer_name`           |
+| JSON / SSE / WebSocket 解码           | 传输字段 → 逻辑字段 `customerName` |
+| builder 里手写的匿名对象              | 你写下的那个 key                   |
 
-builder 本身读取的是逻辑名（`input.user.displayName`）；只有 serializer 编码 builder 返回的带类型对象时，才会出现传输字段名。
+builder 本身读取的是逻辑名（`input.order.customerName`）；只有 serializer 编码 builder 返回的带类型对象时，才会出现传输字段名。
 
 Alias 对嵌套字段、数组、对象、联合、判别字段都有效。业务代码用逻辑名；外部名字在 struct 上写一次。展开带类型的对象会保住这套编码。同一个对象里既写逻辑字段又写它的传输字段名，就是 `REQ_BUILD_FAILED`。你自己 `JSON.stringify` 一个值就离开了这条路：serializer 看到的是逻辑名。
 

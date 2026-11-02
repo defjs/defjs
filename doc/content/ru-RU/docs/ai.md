@@ -19,18 +19,18 @@ npx skills add defjs/defjs --skill defjs
 
 ## Попросить один эндпоинт [#prompt]
 
-Дайте помощнику одну задачу. Этот запрос просит типизированный `GET /users/:id`, клиент которого остаётся в приложении:
+Дайте помощнику одну задачу. Этот запрос просит типизированный `GET /orders/:id`, клиент которого остаётся в приложении:
 
 ```txt
-Use @defjs/core to define GET /users/:id.
-The input is { id: number }; a successful response is { id: number, name: string }.
+Use @defjs/core to define GET /orders/:id.
+The input is { id: number }; a successful response is { id: number, status: string }.
 Keep the SDK definition and application client in separate modules,
 and verify the result with the project’s existing tests.
 ```
 
 ## Проверить результат [#verify]
 
-Читайте определение и приложение отдельно. Определение экспортирует операцию и не создаёт client. Приложение создаёт client и вызывает операцию, например `getUser(client, { id: 1 })`. Если объявлен `input`, `builder` — явная синхронная чистая функция. Успешное значение используется только когда слот ошибки пуст.
+Читайте определение и приложение отдельно. Определение экспортирует операцию и не создаёт client. Приложение создаёт client и вызывает операцию, например `getOrder(client, { id: 1 })`. Если объявлен `input`, `builder` — явная синхронная чистая функция. Успешное значение используется только когда слот ошибки пуст.
 
 Затем запустите проверку типов этого проекта и тесты, которые действительно выполняют контракт. Установка зависимостей и правила CI остаются в том проекте.
 

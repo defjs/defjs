@@ -6,22 +6,23 @@ import {
   withEndpoint,
 } from "@defjs/core";
 
-const client = createClient(withEndpoint("https://chat.example.com"));
-const room = defineWebSocket({
+const client = createClient(withEndpoint("https://quotes.example.com"));
+const quotes = defineWebSocket({
   maxIncomingQueueSize: 100,
-  path: "/chat",
+  path: "/quotes",
   incoming: struct.object({
-    type: struct.literal("message"),
-    text: struct.string(),
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
   }),
   outgoing: struct.object({
-    type: struct.literal("send"),
-    text: struct.string(),
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
   }),
 });
 
 async function main() {
-  const [error, session, startupConnection] = await room(client);
+  const [error, session, startupConnection] = await quotes(client);
   if (error) {
     console.error(error.code, startupConnection?.generation);
     return;
@@ -31,10 +32,10 @@ async function main() {
     console.error("runtime", cause),
   );
   try {
-    ownedSession.send({ type: "send", text: "Hello" });
-    // wire: {"type":"send","text":"Hello"}
+    ownedSession.send({ type: "subscribe", symbol: "ACME" });
+    // wire: {"type":"subscribe","symbol":"ACME"}
     for await (const message of ownedSession.receive) {
-      console.log(message.type, message.text);
+      console.log(message.symbol, message.price);
       break;
     }
   } finally {

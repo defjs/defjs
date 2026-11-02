@@ -12,21 +12,21 @@ description: struct facade、Infer，同 StructError。
 統一入口。優先用呢個，唔好用內部 constructors。
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### Primitives 同 containers
@@ -57,7 +57,7 @@ readUser();
 - **Returns** `[null, value]` 或者 `[StructError, undefined]`。Error 只帶一個 issue。Object fields 喺第一個壞 field 就停。`struct.or` 會試晒每個 branch，然後報 `invalid_union`，唔會保留第一個 branch 嘅失敗。
 - Object fields 必填，除非標記咗 `.optional()` 或者 `.nullish()`。Shape 冇聲明嘅 keys 會喺結果中被丟棄。
 - 可選 `options.errorMap` 只會改寫呢次 parse 嘅 issue messages。
-- Default 讀 **logical** keys（`displayName`）。傳 `{ aliases: true }` 就讀 wire keys（`display_name`），同 HTTP/JSON codecs 一樣。
+- Default 讀 **logical** keys（`customerName`）。傳 `{ aliases: true }` 就讀 wire keys（`customer_name`），同 HTTP/JSON codecs 一樣。
 
 ## ErrorMap
 

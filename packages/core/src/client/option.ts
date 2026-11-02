@@ -1,4 +1,9 @@
 import type { Interceptor } from "../interceptor/interceptor";
+import {
+  snapshotHeartbeat,
+  snapshotProtocols,
+  snapshotReconnect,
+} from "./capture";
 import type {
   ClientConfig,
   ClientSSEOptions,
@@ -58,7 +63,7 @@ export function withHeaders(headers: HeadersInit): ClientOption {
 /**
  * Appends interceptors to the client interceptor chain.
  *
- * Calling it again appends more; it never replaces earlier ones. The first registered interceptor is the outermost layer. HTTP, SSE, and WebSocket interceptors can be mixed in one call. When an operation runs, only the interceptors of that transport run, in their registration order.
+ * Calling it again appends more; it never replaces earlier ones. The first registered interceptor is the outermost layer. HTTP, SSE, and WebSocket interceptors can be mixed in one call. When an operation runs, only the interceptors of that transport run, in their registration order. Each `{ kind, fn }` record is copied when the option is applied. `fn` keeps its identity. Changing the original record later does not change clients already created.
  *
  * @param interceptors - Interceptors applied in registration order.
  * @returns An option that pushes onto `config.interceptors`.
@@ -66,7 +71,13 @@ export function withHeaders(headers: HeadersInit): ClientOption {
  */
 export function withInterceptors(...interceptors: Interceptor[]): ClientOption {
   return (config) => {
-    config.interceptors.push(...interceptors);
+    for (const interceptor of interceptors) {
+      // Both fields come from the same discriminated-union member.
+      config.interceptors.push({
+        kind: interceptor.kind,
+        fn: interceptor.fn,
+      } as Interceptor);
+    }
   };
 }
 
@@ -167,7 +178,7 @@ export function withWebSocketBeforeConnect(
  *
  * They are passed as the second argument to the `WebSocket` constructor only when the list is not empty, so the platform can run the RFC 6455 subprotocol negotiation. They matter only when the server requires a specific subprotocol, for example `['json']` or `['v1']`.
  *
- * Precedence, highest first: the `protocols` request option, this client option, then `protocols` on the endpoint definition.
+ * Precedence, highest first: the `protocols` request option, this client option, then `protocols` on the endpoint definition. The array is copied when this option is applied, so a later edit of the original array does not retarget the client. Applying the same option to another client copies the array again.
  *
  * @param protocols - Subprotocol list for the WebSocket constructor.
  * @returns An option that sets `config.webSocket.protocols`.
@@ -177,7 +188,7 @@ export function withWebSocketProtocols(
   protocols: readonly string[],
 ): ClientOption {
   return (config) => {
-    config.webSocket.protocols = protocols;
+    config.webSocket.protocols = snapshotProtocols(protocols);
   };
 }
 
@@ -201,6 +212,7 @@ export function withWebSocketProtocols(
  * - Heartbeat uses the same JSON guard as `session.send`: a value JSON cannot represent after struct encoding causes `TypeError` and ends the logical session.
  * - `intervalMs` and `timeoutMs` must be positive, finite, and at most `2_147_483_647`; otherwise the operation fails with `REQ_OPTIONS_INVALID`.
  * - A `heartbeat` in the request options replaces this one for that call.
+ * - `intervalMs`, `isAck`, `message`, and `timeoutMs` are copied when this option is applied. `message` and `isAck` keep their identity. A missing value stays missing; `undefined` clears an earlier heartbeat. A getter runs at that moment and its exception escapes `createClient`. Numeric checks still run when the operation starts.
  *
  * @param options - Heartbeat interval, payload, timeout, and ACK predicate.
  * @returns An option that sets `config.webSocket.heartbeat`.
@@ -210,7 +222,7 @@ export function withWebSocketHeartbeat(
   options: ClientWebSocketOptions["heartbeat"],
 ): ClientOption {
   return (config) => {
-    config.webSocket.heartbeat = options;
+    config.webSocket.heartbeat = snapshotHeartbeat(options);
   };
 }
 
@@ -235,6 +247,7 @@ export function withWebSocketHeartbeat(
  * - `shouldReconnect` can return `false` to end the session instead. Without it every close is retried while the budget lasts. It is not called for a manual `session.close()`.
  * - Reconnect options are validated before connecting: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values make the operation fail with `REQ_OPTIONS_INVALID` before connecting. `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection.
  * - A `reconnect` in the request options replaces this one for that call.
+ * - `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect` are copied when this option is applied. `shouldReconnect` keeps its identity and is not called. `undefined` clears an earlier policy. A getter runs at that moment and its exception escapes `createClient`. Invalid numbers still fail the operation with `REQ_OPTIONS_INVALID`.
  *
  * @param options - Retry budget, backoff, and `shouldReconnect` gate.
  * @returns An option that sets `config.webSocket.reconnect`.
@@ -244,7 +257,7 @@ export function withWebSocketReconnect(
   options: ClientWebSocketOptions["reconnect"],
 ): ClientOption {
   return (config) => {
-    config.webSocket.reconnect = options;
+    config.webSocket.reconnect = snapshotReconnect(options);
   };
 }
 
@@ -309,7 +322,7 @@ export function withSSEOnInvalidEvent(
  * - `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.
  * - `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.
  * - The last event id is sent again as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it; an ID containing NUL is ignored.
- * - Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.
+ * - Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The six fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.
  *
  * @param options - Retry budget, backoff, and `shouldReconnect` gate.
  * @returns An option that sets `config.sse.reconnect`.
@@ -319,7 +332,7 @@ export function withSSEReconnect(
   options: ClientSSEOptions["reconnect"],
 ): ClientOption {
   return (config) => {
-    config.sse.reconnect = options;
+    config.sse.reconnect = snapshotReconnect(options);
   };
 }
 

@@ -12,7 +12,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`、`path`，可选 `input` struct，可选 `output` 和 `error` struct，可选 `operation`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`RequestDefinition`](/zh-Hans/api/core/requestdefinition-type)。`builder` 恰好在声明了 `input` 时才必填。
-- **返回** 一个操作。调用方式是 `getUser(client, input)`；没有声明 input 时是 `health(client)`。整个 input struct 可选时，可以省略 input 参数。调用它即开始请求。没有第三个 options 参数。
+- **返回** 一个操作。调用方式是 `getOrder(client, input)`；没有声明 input 时是 `health(client)`。整个 input struct 可选时，可以省略 input 参数。调用它即开始请求。没有第三个 options 参数。
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -45,7 +45,7 @@ description: defineRequest、请求选项，以及 HTTP 请求/响应类型。
 
 ### RequestDefinition
 
-`method`、`path`，可选 `input`、`output`、`error`、`operation` 和 `builder`。没有 `responseType`：声明 body 怎么读，由 struct kind 决定。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
+`method`、`path`，可选 `input`、`output`、`error`、`operation` 和 `builder`。声明 body 怎么读，由 struct kind 决定。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ### HttpAwaitResult
 

@@ -53,7 +53,7 @@ You can skip `next`, but you must return the expected result type. For HTTP, `ma
   examples/interceptors/short-circuit.ts#example
 </include>
 
-The operation still dispatches by status. Declare one `error` struct for the non-2xx side when callers need typed `error.data`. It also still checks the declared side: a JSON `output` or `error` needs a JSON `content-type` header on the synthetic response, and `body` should already be the parsed value, the way the transport would deliver it (`request.responseType` and `request.errorResponseType` name the representation). Short-circuiting SSE or WebSocket needs a complete compatible handle/session (closure promises, live state, ownership, and `[Symbol.asyncDispose]`). Partial objects aren’t valid policy. Structural `EventStreamHandle` and `WebSocketSessionLike` implementations now need that standard disposer at compile time; consumers that only receive Defjs handles have no new runtime call requirement.
+The operation still dispatches by status. Declare one `error` struct for the non-2xx side when callers need typed `error.data`. It also still checks the declared side: a JSON `output` or `error` needs a JSON `content-type` header on the synthetic response, and `body` should already be the parsed value, the way the transport would deliver it (`request.responseType` and `request.errorResponseType` name the representation). Short-circuiting SSE or WebSocket needs a complete compatible handle/session (closure promises, live state, ownership, and `[Symbol.asyncDispose]`). Partial objects aren’t valid policy.
 
 ## Retry safe reads
 

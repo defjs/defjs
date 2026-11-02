@@ -20,10 +20,10 @@ SDK 定义 WebSocket 操作的 path、输入、收发消息和队列上限。消
 `incoming` 是每个文本 frame 的一个 struct。`outgoing` 是 `session.send(...)` 的一个 struct。好几种消息用 `struct.discriminatedUnion`。这些字段上的 alias 就是两个方向的传输字段名。没有单独的 type 信封，也没有 normalizer。
 
 ```json
-{ "type": "message", "text": "Hello" }
+{ "type": "tick", "symbol": "ACME", "price": 142.5 }
 ```
 
-入站的文本、`ArrayBuffer`、typed-array、`Blob` frame 按 UTF-8 读，JSON parse，再拿 `incoming` 校验。坏 JSON 和 struct 失败进 `session.onRuntimeError`，不进队列。session 继续活着。不是文本、字节或 `Blob` 的 frame 会被忽略。没有 `withWebSocketOnInvalidEvent`。
+入站的文本、`ArrayBuffer`、typed-array、`Blob` frame 按 UTF-8 读，JSON parse，再拿 `incoming` 校验。坏 JSON 和 struct 失败进 `session.onRuntimeError`，不进队列。session 继续活着。不是文本、字节或 `Blob` 的 frame 会被忽略。
 
 `session.send(...)` 同步校验并序列化：struct 编码，再 `JSON.stringify`。open 时立刻发；开了 outgoing 队列且处于 `reconnecting` 时入队；不可写时抛 `InvalidStateError`。没有 outgoing struct、payload 过不了 struct、outgoing 队列关掉或满了、原生 send 失败，也会抛。definition 上的静态 `protocols` 列表是 endpoint 契约（例如 `graphql-transport-ws`）。派生 client 的 `protocols` 和 `withWebSocketProtocols` 仍可覆盖。只有这些选项能选子协议：builder、`beforeConnect` 和 interceptor 都改不了，所以把 token 放在子协议里时，要作为这次调用的派生 client 上的 `protocols` 传入。builder 只能返回 `path` 和 `query`。
 
@@ -84,7 +84,7 @@ WebSocket 退避 jitter 是**乘性**的（`jitter: 0.2` 会在取整前，把�
 
 ## 协议与鉴权
 
-Definition 的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及派生 client 上的 `protocols`，设定构造函数的子协议列表。优先级：派生 client → client → definition。派生列表替换 client 列表，不是追加。逻辑 session 复制按上述优先级找到的第一份已定义列表，重连时复用。
+Definition 的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及派生 client 上的 `protocols`，设定构造函数的子协议列表。优先级：派生 client → client → definition。派生列表替换 client 列表，不是追加。`defineWebSocket` 在创建定义时复制 protocols 数组。`withWebSocketProtocols` 在应用该选项时复制它，`client({ protocols })` 在创建 client 值时复制它。之后再改原来的数组，不会改到已捕获的容器。为某次调用选出的列表会再复制一份给逻辑 session，并在重连时复用。非数组的值在捕获边界不会被 spread；执行时仍会校验它。
 
 浏览器 WebSocket 构造函数不接受任意握手 headers，builder 也不能返回 `headers` 或 `body`。Defjs 把 `http:` 转成 `ws:`、`https:` 转成 `wss:`，path 占位符编码一次，query 规则和 HTTP 一样：默认标量和重复 key，嵌套对象用 `withQuerySerializer`，没有 query 时不调用 serializer。
 

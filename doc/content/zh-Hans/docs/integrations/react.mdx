@@ -9,7 +9,7 @@ description: 在 React 中提供应用自己的 Client，并执行 SDK 定义、
 
 这些插件只是设置和获取已有 `Client` 的可选便利。可以直接导入应用固定的 Client、给可复用逻辑传入显式 Client、用框架注入提供组件树默认值与子树覆盖，或采用应用自己的组织方式；SDK 定义不要求通过插件执行。
 
-这个包**不会**创建 Client、加缓存、重试操作或释放传输资源。启动工作的组件、effect 或数据请求库负责取消、关闭及其他生命周期处理。`useClient()` 拿到的 client 要传进操作。该 Hook 返回传入的那个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)。需要 `signal` 等按次选项时，在操作运行的地方调用它：`getUser(client({ signal }), input)`。不要把它传给 state setter，因为 `setState(client)` 会把它当成 updater 来调用。派生出的 `Client` 值不被 `ClientProvider` 或 `useClient` 接受。
+这个包**不会**创建 Client、加缓存、重试操作或释放传输资源。启动工作的组件、effect 或数据请求库负责取消、关闭及其他生命周期处理。`useClient()` 拿到的 client 要传进操作。该 Hook 返回传入的那个 [`DerivableClient`](/zh-Hans/api/core/derivableclient-type)。需要 `signal` 等按次选项时，在操作运行的地方调用它：`getOrder(client({ signal }), input)`。不要把它传给 state setter，因为 `setState(client)` 会把它当成 updater 来调用。派生出的 `Client` 值不被 `ClientProvider` 或 `useClient` 接受。
 
 ## 基本用法
 
@@ -17,7 +17,7 @@ description: 在 React 中提供应用自己的 Client，并执行 SDK 定义、
 
 `bun add @defjs/core @defjs/react react`
 
-提供 Client，然后获取用户，并在相关值变化时取消请求：
+提供 Client，然后获取订单，并在相关值变化时取消请求：
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 

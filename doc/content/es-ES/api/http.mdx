@@ -12,7 +12,7 @@ Declara una solicitud tipada y llama a la operación con un cliente y su entrada
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, struct `input` opcional, structs `output` y `error` opcionales, `operation` opcional. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`. Estos miembros de `definition` están documentados en [`RequestDefinition`](/es-ES/api/core/requestdefinition-type). `builder` es obligatorio exactamente cuando se declara `input`.
-- **Devuelve** una operación. Llámalo como `getUser(client, input)`, o `health(client)` cuando no se declara entrada. Cuando todo el struct de entrada es opcional, el argumento de entrada puede omitirse. Llamarla arranca la solicitud. No hay un tercer argumento de opciones.
+- **Devuelve** una operación. Llámalo como `getOrder(client, input)`, o `health(client)` cuando no se declara entrada. Cuando todo el struct de entrada es opcional, el argumento de entrada puede omitirse. Llamarla arranca la solicitud. No hay un tercer argumento de opciones.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -52,7 +52,7 @@ que uno del cable; no hay un cortocircuito de confianza.
 
 ### RequestDefinition
 
-`method`, `path`, `input`, `output`, `error`, `operation` y `builder` opcionales. No hay `responseType`: el kind del struct elige cómo se lee un cuerpo declarado. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
+`method`, `path`, `input`, `output`, `error`, `operation` y `builder` opcionales.El kind del struct elige cómo se lee un cuerpo declarado. Un `input` declarado exige siempre un `builder` explícito. `input` solo define los parámetros; solo el builder decide dónde va cada valor. Solo las definiciones sin `input` pueden omitir `builder`.
 
 ### HttpAwaitResult
 

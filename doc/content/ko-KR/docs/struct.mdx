@@ -66,14 +66,14 @@ path, query, headers, body는 builder가 돌려주는 필드이지, 요청 struc
   examples/struct/aliases.ts#example
 </include>
 
-| 경계                                  | 필드                        |
-| ------------------------------------- | --------------------------- |
-| `struct.parse(User, ...)`와 작업 입력 | 논리 `displayName`          |
-| builder가 돌려준 타입이 있는 객체     | 와이어 `display_name`       |
-| JSON / SSE / WebSocket 디코딩         | 와이어 → 논리 `displayName` |
-| builder 안에 직접 쓴 익명 객체        | 직접 쓴 키                  |
+| 경계                                   | 필드                         |
+| -------------------------------------- | ---------------------------- |
+| `struct.parse(Order, ...)`와 작업 입력 | 논리 `customerName`          |
+| builder가 돌려준 타입이 있는 객체      | 와이어 `customer_name`       |
+| JSON / SSE / WebSocket 디코딩          | 와이어 → 논리 `customerName` |
+| builder 안에 직접 쓴 익명 객체         | 직접 쓴 키                   |
 
-builder 자체가 읽는 것은 논리 이름(`input.user.displayName`)이에요. 와이어 이름은 serializer가 builder가 돌려준 타입이 있는 객체를 인코딩할 때만 나타나요.
+builder 자체가 읽는 것은 논리 이름(`input.order.customerName`)이에요. 와이어 이름은 serializer가 builder가 돌려준 타입이 있는 객체를 인코딩할 때만 나타나요.
 
 alias는 중첩 필드, 배열, 객체, 유니언, discriminator에서 동작해요. 앱 코드는 논리 이름을 쓰고, 외부 이름은 struct에 한 번 두세요. 타입이 있는 객체를 spread하면 그 인코딩이 유지돼요. 같은 객체에 논리 필드와 와이어 키를 둘 다 두면 `REQ_BUILD_FAILED`예요. 값을 직접 `JSON.stringify`하면 이 경로를 떠나서, serializer는 논리 이름을 봐요.
 

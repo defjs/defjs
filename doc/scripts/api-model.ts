@@ -190,8 +190,8 @@ export function storedEntry(entry: WorkerEntry): StoredEntry {
     required: entry.required,
     deprecated: entry.deprecated,
     tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: entry.typeHref || undefined,
   };
-  if (entry.typeHref) stored.typeHref = entry.typeHref;
   return stored;
 }
 
@@ -269,8 +269,8 @@ function copyStored(row: StoredEntry): StoredEntry {
     required: row.required,
     deprecated: row.deprecated,
     tags: row.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: row.typeHref || undefined,
   };
-  if (row.typeHref) stored.typeHref = row.typeHref;
   return stored;
 }
 
@@ -336,8 +336,8 @@ function copyEntry(item: StoredEntry): StoredEntry {
     required: item.required,
     deprecated: item.deprecated,
     tags: item.tags.map((tag) => ({ name: tag.name, text: tag.text })),
+    typeHref: item.typeHref || undefined,
   };
-  if (item.typeHref) stored.typeHref = item.typeHref;
   return stored;
 }
 

@@ -37,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-自己 structural implement `EventStreamHandle` 嘅 code，而家必須 implement `[Symbol.asyncDispose]()`，並 return 同一條 owned teardown path。對 custom handle implementer 嚟講係 compile-time breaking change；淨係接收 Defjs handle 嘅 code 唔使加新 runtime call。
+自己 structural implement `EventStreamHandle` 嘅 code，必須 implement `[Symbol.asyncDispose]()`，並 return 同一條 owned teardown path。
 
 ### EventStreamOpenInfo
 

@@ -60,43 +60,49 @@ ${observations}
 test.each([
   { id: 7, exitCode: 0 },
   { id: 8, exitCode: 1 },
-])("local HTTP test exits $exitCode for user $id", async ({ id, exitCode }) => {
-  const source = (
-    await Bun.file(new URL("./test-with-handle.ts", import.meta.url)).text()
-  )
-    .replace(
-      '"@defjs/core"',
-      JSON.stringify(
-        new URL("../../../packages/core/src/index.ts", import.meta.url).href,
-      ),
+])(
+  "local HTTP test exits $exitCode for order $id",
+  async ({ id, exitCode }) => {
+    const source = (
+      await Bun.file(new URL("./test-with-handle.ts", import.meta.url)).text()
     )
-    .replace("getUser(client, { id: 7 })", `getUser(client, { id: ${id} })`);
-  const directory = await mkdtemp(join(tmpdir(), "defjs-local-test-"));
-  try {
-    const filename = join(directory, "get-user.test.ts");
-    await Bun.write(filename, source);
-    const child = Bun.spawn([process.execPath, filename], {
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
-    });
-    const [status, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect(status).toBe(exitCode);
-    if (exitCode === 0) {
-      expect(stdout).toContain("Ada 200");
-      expect(stderr).toBe("");
-    } else {
-      expect(stdout).not.toContain("Ada 200");
-      expect(stderr).toContain("HTTP_STATUS");
+      .replace(
+        '"@defjs/core"',
+        JSON.stringify(
+          new URL("../../../packages/core/src/index.ts", import.meta.url).href,
+        ),
+      )
+      .replace(
+        "getOrder(client, { id: 7 })",
+        `getOrder(client, { id: ${id} })`,
+      );
+    const directory = await mkdtemp(join(tmpdir(), "defjs-local-test-"));
+    try {
+      const filename = join(directory, "get-order.test.ts");
+      await Bun.write(filename, source);
+      const child = Bun.spawn([process.execPath, filename], {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+      });
+      const [status, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect(status).toBe(exitCode);
+      if (exitCode === 0) {
+        expect(stdout).toContain("paid 200");
+        expect(stderr).toBe("");
+      } else {
+        expect(stdout).not.toContain("paid 200");
+        expect(stderr).toContain("HTTP_STATUS");
+      }
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-});
+  },
+);
 
 test("ETag recipe reuses the cached product after a real 304", async () => {
   await executeRecipe("etag-revalidate", "export { product }");

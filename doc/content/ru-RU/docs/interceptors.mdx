@@ -53,7 +53,7 @@ HTTP никогда не записывает выведенный Content-Type 
   examples/interceptors/short-circuit.ts#example
 </include>
 
-Операция всё равно диспатчит по status. Объяви один struct `error` для стороны не-2xx, когда вызывающим нужен типизированный `error.data`. Он также по-прежнему проверяет объявленную сторону: JSON-`output` или `error` требует заголовок `content-type` JSON у синтетического ответа, а `body` должен быть уже разобранным значением — так, как его отдал бы транспорт (`request.responseType` и `request.errorResponseType` называют представление). Short-circuit SSE или WebSocket нуждается в полном совместимом handle/session (promise закрытия, живой state, владение и `[Symbol.asyncDispose]`). Частичные объекты — не валидная политика. Структурные реализации `EventStreamHandle` и `WebSocketSessionLike` теперь нуждаются в этом стандартном disposer на этапе компиляции; потребители, которые только получают handle Defjs, нового runtime-вызова не требуют.
+Операция всё равно диспатчит по status. Объяви один struct `error` для стороны не-2xx, когда вызывающим нужен типизированный `error.data`. Он также по-прежнему проверяет объявленную сторону: JSON-`output` или `error` требует заголовок `content-type` JSON у синтетического ответа, а `body` должен быть уже разобранным значением — так, как его отдал бы транспорт (`request.responseType` и `request.errorResponseType` называют представление). Short-circuit SSE или WebSocket нуждается в полном совместимом handle/session (promise закрытия, живой state, владение и `[Symbol.asyncDispose]`). Частичные объекты — не валидная политика.
 
 ## Ретрай безопасных reads
 

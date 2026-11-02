@@ -110,15 +110,15 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
       return source;
     },
   };
-  const signature = tag("withEndpoint");
+  const signature = {
+    ...tag("withEndpoint"),
+    position: { start: { offset: 0 }, end: { offset: source.length } },
+  };
   const root = {
     type: "root",
     position: { start: { offset: 0 }, end: { offset: source.length } },
     children: [signature],
   };
-  Object.assign(signature, {
-    position: { start: { offset: 0 }, end: { offset: source.length } },
-  });
   replaceApiSignatures(root, authored, catalog);
   const processed = createStringifier(authored as never).stringify(
     root as never,

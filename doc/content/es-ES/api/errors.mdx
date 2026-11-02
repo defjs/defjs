@@ -55,7 +55,7 @@ Llegó una respuesta, pero no se pudo leer como se declaró. `response` son solo
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-Todo lo que pudo fallar antes de que existiera una respuesta: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` está presente solo donde el transporte ya tenía metadatos que reportar, como un cuerpo que se truncó a mitad de la descarga.
+Todo lo que pudo fallar antes de que existiera una respuesta: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` es `undefined` hasta que el transporte tiene metadatos que reportar, como un cuerpo que se truncó a mitad de la descarga.
 
 ### AnyFault
 

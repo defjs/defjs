@@ -68,7 +68,7 @@ async function consume(
 `outgoing`은 struct 하나예요. `session.send`는 그 struct의 `StructInput`을 받고, alias를 인코딩한 뒤 `JSON.stringify`해요. 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거나 재연결 큐에 넣기 전에 `TypeError`를 throw해요. 유한하지 않은 수, 함수, symbol, `Map`, `Set`, 스트림, JSON 표현이 없는 클래스 인스턴스가 여기 포함돼요. 중첩 값도 HTTP JSON body와 같은 가드를 써요. heartbeat도 그 가드를 쓰고, heartbeat 직렬화 실패는 session을 끝내요. 메시지 종류가 여러 개면 `struct.discriminatedUnion`이에요.
 
 ```ts
-session.send({ type: "message", text: "Hello" });
+session.send({ type: "subscribe", symbol: "ACME" });
 ```
 
 [WebSocket 가이드](/ko-KR/docs/web-socket)와 [WebSocket 세션 열기](/ko-KR/recipes/websocket-session)를 보세요.

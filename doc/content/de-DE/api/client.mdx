@@ -5,7 +5,7 @@ description: createClient, Option-Helper und der Client-Type.
 
 # Client
 
-`createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Komponiere Client-Options von links nach rechts, dann rufe `client(options?)` auf, um einen [`Client`](/de-DE/api/core/client-type)-Wert zu erhalten, und übergib ihn an eine Operation: `getUser(client(options), input)`.
+`createClient(...)` gibt einen [`DerivableClient`](/de-DE/api/core/derivableclient-type) zurück. Komponiere Client-Options von links nach rechts, dann rufe `client(options?)` auf, um einen [`Client`](/de-DE/api/core/client-type)-Wert zu erhalten, und übergib ihn an eine Operation: `getOrder(client(options), input)`.
 
 ## createClient()
 
@@ -109,13 +109,13 @@ Der Default-HTTP-Transport setzt den Header, wenn alle Bedingungen zutreffen: Di
 
 <ApiSignature name="DerivableClient" />
 
-Der Root-Client, den `createClient` zurückgibt, in zwei Formen. Die Factory ist eine Funktion und zugleich ein `Client` ohne Request-Options, daher funktioniert `getUser(client, input)` direkt. Mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufgerufen gibt sie einen einfachen `Client`-Wert für einen Aufruf zurück. Dieser Wert ist nicht aufrufbar, daher lässt sich `client()()` nicht kompilieren und wirft zur Laufzeit einen `TypeError`. Das Ableiten geschieht einmal, von der Factory aus; es gibt keine Kette. Schreibe den Typ als `DerivableClient` statt als `ReturnType<typeof createClient>`.
+Der Root-Client, den `createClient` zurückgibt, in zwei Formen. Die Factory ist eine Funktion und zugleich ein `Client` ohne Request-Options, daher funktioniert `getOrder(client, input)` direkt. Mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufgerufen gibt sie einen einfachen `Client`-Wert für einen Aufruf zurück. Dieser Wert ist nicht aufrufbar, daher lässt sich `client()()` nicht kompilieren und wirft zur Laufzeit einen `TypeError`. Das Ableiten geschieht einmal, von der Factory aus; es gibt keine Kette. Schreibe den Typ als `DerivableClient` statt als `ReturnType<typeof createClient>`.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-Ein `Client` ist ein Wert, keine Funktion. Den [`DerivableClient`](/de-DE/api/core/derivableclient-type) mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufzurufen gibt einen zurück. Die sieben bekannten Felder werden aus dem Argument in ein frisches Objekt kopiert. Unbekannte Felder werden ignoriert, und Felder mit dem Wert `undefined` werden weggelassen. Es gibt kein Überlagern über einen übergeordneten Client: `client()`, `client(undefined)` und `client({})` geben einen Client ohne Request-Options zurück. Verschachtelte Werte von `heartbeat`, `protocols` und `reconnect` werden per Referenz gehalten, nicht geklont. WebSocket liest sie, wenn die Operation läuft (es kopiert dann die Heartbeat-Felder und die Protocols-Liste), daher kann eine Änderung dieser Objekte nach dem Ableiten einen späteren Aufruf noch beeinflussen. Anwendungen sollten sie nach dem Übergeben als unveränderlich behandeln. Das Ableiten führt kein I/O aus. Ein Client-Wert ist nicht aufrufbar; ein Aufruf lässt sich nicht kompilieren und wirft zur Laufzeit einen `TypeError`. Erzeuge pro Aufruf einen Client-Wert. Denselben Wert kannst du an viele Operationen übergeben, aber ein Wert mit `signal` teilt dieses Signal bei Wiederverwendung. `signal` wird nicht kombiniert; kombiniere Signale in Anwendungscode mit `AbortSignal.any`.
+Ein `Client` ist ein Wert, keine Funktion. Den [`DerivableClient`](/de-DE/api/core/derivableclient-type) mit [`RequestOptions`](/de-DE/api/core/requestoptions-type) aufzurufen gibt einen zurück. `client()` und `client(undefined)` speichern keine Request-Options. `client({})` behält einen leeren Snapshot. Der Aufruf liest jedes Feld der obersten Ebene einmal. Ein `protocols`-Array wird kopiert. `heartbeat` und `reconnect` kopieren ihre bekannten Felder. Fehlende verschachtelte Blöcke bleiben fehlend. `signal`, `beforeConnect` und Callbacks behalten ihre Identität. Ein Getter auf einem erfassten Feld läuft während dieses Aufrufs und verlässt den Aufruf, wenn er wirft. Ungültige Zahlen schlagen später weiterhin mit `REQ_OPTIONS_INVALID` fehl. Das Ableiten führt kein I/O aus. Ein Client-Wert ist nicht aufrufbar; ein Aufruf lässt sich nicht kompilieren und wirft zur Laufzeit einen `TypeError`. Erzeuge pro Aufruf einen Client-Wert. Denselben Wert kannst du an viele Operationen übergeben, aber ein Wert mit `signal` teilt dieses Signal bei Wiederverwendung. `signal` wird nicht kombiniert; kombiniere Signale in Anwendungscode mit `AbortSignal.any`. Die Basiskonfiguration der Factory bleibt gemeinsam und ist nicht eingefroren. Standard-`with*`-Helfer kopieren die festen Records, die sie besitzen, wenn sie angewendet werden.
 
 Übergib die Factory nicht an einen React-State-Setter (`setState(factory)` würde sie als Updater aufrufen) und nutze sie nicht als Quelle eines Vue-`watch` oder `computed` (die rufen eine Funktion auf).
 
@@ -123,7 +123,7 @@ Ein `Client` ist ein Wert, keine Funktion. Den [`DerivableClient`](/de-DE/api/co
 
 <ApiSignature name="RequestOptions" />
 
-Sieben flache Felder. Jedes Protokoll liest die Felder, die es versteht, und ignoriert den Rest. `heartbeat` an HTTP zu übergeben wird ignoriert, das ist kein Fault. SSE liest aus den Request-Optionen nur `signal`. SSE-Reconnect kommt aus der Client-Konfiguration (`withSSEReconnect`), daher betrifft `client({ reconnect })` nur WebSocket. Es gibt keinen Compile-Time-Filter nach Protokoll und kein `timeout`- oder `abort`-Feld.
+Sieben flache Felder. Jedes Protokoll liest die Felder, die es versteht, und ignoriert den Rest. `heartbeat` an HTTP zu übergeben wird ignoriert, das ist kein Fault. `client(options)` kopiert bei diesem Aufruf ein `protocols`-Array und die bekannten Felder von `heartbeat` und `reconnect`. Fehlende verschachtelte Blöcke bleiben fehlend. `signal`, `beforeConnect` und Callbacks behalten ihre Identität. SSE liest aus den Request-Optionen nur `signal`. SSE-Reconnect kommt aus der Client-Konfiguration (`withSSEReconnect`), daher betrifft `client({ reconnect })` nur WebSocket. Es gibt keinen Compile-Time-Filter nach Protokoll und kein `timeout`- oder `abort`-Feld.
 
 | Feld                 | Protokoll               | Ersetzung                                                                                         |
 | -------------------- | ----------------------- | ------------------------------------------------------------------------------------------------- |

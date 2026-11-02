@@ -37,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-结构化实现 `EventStreamHandle` 的代码现在必须实现 `[Symbol.asyncDispose]()`，并返回同一条自有 teardown 路径。对自定义 handle 实现者而言，这是编译期 breaking change；只接收 Defjs 返回 handle 的代码无需新增运行时调用。
+结构化实现 `EventStreamHandle` 的代码必须实现 `[Symbol.asyncDispose]()`，并返回同一条自有 teardown 路径。
 
 ### EventStreamOpenInfo
 

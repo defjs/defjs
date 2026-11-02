@@ -52,6 +52,8 @@ Hook signatures:
 
 An empty transport object enables that transport. Old boolean transport switches (`http: false`) and old top-level hooks are rejected by the TypeScript types only. There is no runtime check: at runtime `http: false` leaves the transport enabled and a top-level hook is silently ignored. Use transport option objects (`{ enabled: false }`) and transport-scoped hooks.
 
+`withOpenTelemetryServer` reads `http`, then `sse`, then `webSocket`, once each. A missing block stays missing and the transport stays enabled. A present block is copied field by field: `enabled`, `startSpanHook`, `requestHook`, `responseHook`, and, for WebSocket, `queryPropagation`. Changing or replacing a block afterwards does not change the option. `enabled` is read first. Only `false` disables that transport, and the disabled branch does not read hooks or `queryPropagation`. Getters for the copied fields run during `withOpenTelemetryServer`. If one throws, the exception leaves that call immediately; later blocks are not read, and the error is not deferred until the option is applied. `tracer`, `meter`, `logger`, `propagator`, and hook functions keep their identity.
+
 ## Operation identity and propagation
 
 Set a static `operation` on `defineRequest`, `defineEventStream`, or `defineWebSocket` when the operation has a stable identity. The plugin uses it in span names and as `defjs.operation`. It never derives identity from a resolved path, identifier, tenant, or query string:
@@ -88,7 +90,7 @@ Outer span is yours. The plugin still reports the lower-level transport span —
 
 ## Reference
 
-When `meter` is supplied:
+When `meter` is supplied, the plugin calls its instrument creation methods each time the option is applied to a client, not during `withOpenTelemetryServer`. The Meter/SDK controls whether returned instruments or aggregation state are shared. Each duration histogram receives its own copy of the boundaries 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5, and 10 seconds.
 
 | Metric                                       | Meaning                                          |
 | -------------------------------------------- | ------------------------------------------------ |

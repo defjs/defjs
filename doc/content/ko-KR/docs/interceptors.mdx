@@ -53,7 +53,7 @@ HTTP body를 바꿀 때는 복사한 요청의 `body`를 교체하고 `content-t
   examples/interceptors/short-circuit.ts#example
 </include>
 
-작업은 여전히 status로 디스패치해요. 호출자가 타입이 잡힌 `error.data`가 필요하면 비 2xx 쪽을 `error` struct 하나로 선언해요. 또한 선언된 쪽도 여전히 검사해요. JSON `output`이나 `error`에는 가짜 응답에 JSON `content-type` 헤더가 필요하고, `body`는 전송이 전달했을 방식대로 이미 파싱된 값이어야 해요 (`request.responseType`과 `request.errorResponseType`이 표현을 알려줘요). SSE나 WebSocket을 short-circuit하려면 완전한 호환 핸들/세션이 필요해요 (종료 프로미스, live 상태, 소유권, `[Symbol.asyncDispose]`). 부분 객체는 유효한 정책이 아니에요. 구조적인 `EventStreamHandle`과 `WebSocketSessionLike` 구현은 이제 컴파일 시 표준 disposer도 필요하고, Defjs 핸들을 받기만 하는 소비자에는 새 런타임 호출 요구가 없어요.
+작업은 여전히 status로 디스패치해요. 호출자가 타입이 잡힌 `error.data`가 필요하면 비 2xx 쪽을 `error` struct 하나로 선언해요. 또한 선언된 쪽도 여전히 검사해요. JSON `output`이나 `error`에는 가짜 응답에 JSON `content-type` 헤더가 필요하고, `body`는 전송이 전달했을 방식대로 이미 파싱된 값이어야 해요 (`request.responseType`과 `request.errorResponseType`이 표현을 알려줘요). SSE나 WebSocket을 short-circuit하려면 완전한 호환 핸들/세션이 필요해요 (종료 프로미스, live 상태, 소유권, `[Symbol.asyncDispose]`). 부분 객체는 유효한 정책이 아니에요.
 
 ## 안전한 읽기 재시도
 

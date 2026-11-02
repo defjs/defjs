@@ -7,7 +7,7 @@ Project-level guide for AI coding agents in this repository. Read it before chan
 Defjs separates the two sides of an SDK:
 
 - **Definition** — SDK authors declare operations with `defineRequest`, `defineEventStream`, and `defineWebSocket` from `@defjs/core`. A definition is data: importing it starts no request and binds no client.
-- **Execution** — an application creates its own client (`createClient(withEndpoint(...))`) and calls an operation: `getUser(client, input)` or `getUser(client(options), input)`. Calling the operation performs I/O.
+- **Execution** — an application creates its own client (`createClient(withEndpoint(...))`) and calls an operation: `getOrder(client, input)` or `getOrder(client(options), input)`. Calling the operation performs I/O.
 
 Definitions can be published on their own; the consuming application keeps ownership of endpoint, credentials, interceptors, and transports.
 
@@ -93,9 +93,11 @@ Documentation unit specs (`*.spec.ts`) sit beside the source in `app/`, `scripts
 
 - Do not skip inside a shared spec with `process.platform`-style checks. Put the test in the runtime-specific file. React and Vue run browser projects only, so their specs use `*.browser.spec.ts`; the OpenTelemetry package runs a server project only.
 - TypeScript is strict: `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`, `noPropertyAccessFromIndexSignature`, `verbatimModuleSyntax`, `allowImportingTsExtensions`. Use `import type` for type-only imports. The root catalog pins `typescript` to the exact `7.1.0-beta`; a caret range would resolve to nightly `7.1.0-dev` builds.
+- Prefer accurate parameter and return types, inference, narrowing, and `satisfies` over type assertions. Keep `as` only where a runtime, external, or generic boundary genuinely requires it, or a test deliberately supplies invalid input; explain non-obvious cases. Use `as const` only when literal or readonly inference is needed. Do not replace assertions with suppression comments or another assertion syntax merely to hide them.
 - Lint rules that commonly bite: no `any`, no non-null assertions, no namespace imports, `@ts-ignore` banned, `@ts-expect-error` requires a description of at least 10 characters.
 - Formatting is Bun's built-in formatter: 2 spaces, LF, UTF-8, final newline. Run `bun fmt`.
 - Write a comment only when the reason is non-obvious. Do not restate what the code does.
+- Capture fixed configuration records by assigning each field, including nested owned records, and copy array containers. Preserve functions, signals, schemas, SDK handles, and other identity-bearing values. Keep absent optional configuration blocks `undefined` rather than creating empty placeholders. Do not add runtime field registries or per-field missing-versus-undefined handling. Keep dynamic dictionaries, wire serialization, security checks, and allowlists where the keys are not fixed.
 - Commit messages follow the history: Conventional Commits with a package or area scope (`feat(core):`, `fix(doc):`, `docs:`, `refactor:`, `chore:`). Describe why, not a file tour.
 
 ## Working on a change
@@ -207,7 +209,8 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 ## Release and packaging
 
 - The **Release** workflow is manual and pick-what-you-want. Versions come from the committed package manifests; nothing bumps them and no changesets are involved.
-- Every published package gets its own tag on the revision it was published from: the package name without its `@defjs/` scope, `@`, then the version — `core@0.6.0`, `react@0.0.3`, `vue@0.0.3`, `opentelemetry-server@0.0.3`. One tag per package, not one per release, because the packages version independently. Tags are lightweight and pushed with explicit refs (`git push origin refs/tags/core@0.6.0`). The workflow neither reads nor creates them, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
+- **Release tags are mandatory.** After confirming that a package was published successfully, create its own lightweight Git tag on the exact commit used for publication. A package release is not complete until its tag has been pushed and verified on the remote to point to that commit.
+- Tag names are the package name without its `@defjs/` scope, `@`, then the published version: `core@0.6.0`, `react@0.0.3`, `vue@0.0.3`, `opentelemetry-server@0.0.3`. One tag per package, not one per release, because the packages version independently. Push explicit refs (`git push origin refs/tags/core@0.6.0`). The workflow neither reads nor creates tags, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
 - Each package builds with `tsdown`, publishes from `dist`, and uses `publishConfig.directory`. The build writes `dist/package.json`, copies `LICENSE` and the package `README.md`. The `build` scripts call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
 - The root `overrides` pins `rolldown-plugin-dts` to a 0.29 beta because 0.28 reads `ts.sys`, which TypeScript 7.1 does not expose. Drop the override once `tsdown` depends on a `rolldown-plugin-dts` release that supports TypeScript 7.1.
 - `bun test/assert-pack.ts <publish-dir>` must pass before publishing: it checks that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and every file referenced by the entry fields.

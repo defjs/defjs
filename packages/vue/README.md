@@ -34,7 +34,7 @@ Read the client with `injectClient()` and own cleanup in the watcher:
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import { injectClient } from "@defjs/vue";
-import { getUser } from "./api";
+import { getOrder } from "./api";
 
 const props = defineProps<{ id: number }>();
 const client = injectClient();
@@ -46,14 +46,14 @@ watch(
     const abort = new AbortController();
     onCleanup(() => abort.abort());
 
-    void getUser(client({ signal: abort.signal }), { id }).then(
-      ([error, user]) => {
+    void getOrder(client({ signal: abort.signal }), { id }).then(
+      ([error, order]) => {
         if (abort.signal.aborted) return;
         if (error) {
           name.value = error.message;
           return;
         }
-        name.value = user.name;
+        name.value = order.status;
       },
     );
   },

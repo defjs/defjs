@@ -27,7 +27,7 @@ Appelle `next(req)` (éventuellement une requête mutée) ou court-circuite avec
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Un wrapper ou une session de court-circuit doit transmettre le même teardown `[Symbol.asyncDispose]()` que son cycle de vie `close` / `closed` ; renvoyer une promesse résolue sans rapport ne suffit pas. Exiger ce membre est un breaking change à la compilation pour les implémentations structurelles. Le code qui n’accepte que des sessions renvoyées par Defjs n’a pas d’appel runtime supplémentaire à faire.
+Un wrapper ou une session de court-circuit doit transmettre le même teardown `[Symbol.asyncDispose]()` que son cycle de vie `close` / `closed` ; renvoyer une promesse résolue sans rapport ne suffit pas.
 
 ## Types marqués
 

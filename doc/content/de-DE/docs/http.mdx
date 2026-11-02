@@ -25,7 +25,7 @@ Path-Placeholder sind Raw-Scalars, genau einmal kodiert. Leere Werte und `.` / `
 
 Ein Placeholder-Name beginnt bei `:` und läuft bis zum nächsten `/` oder zum Ende des Pfads: `/files/:name.json` benennt den Parameter `name.json`, nicht `name`. Ein literaler Doppelpunkt in einem statischen Segment wird nicht unterstützt.
 
-Definitionspfade dürfen nicht schemaähnlich oder protokollrelativ sein (auch nicht mit führenden Leerzeichen) und keine C0-Steuerzeichen (einschließlich Tab, CR und LF), keine Backslashes, kein `?` und kein `#` enthalten. Ein normales Leerzeichen im Pfadinneren ist erlaubt und wird als `%20` gesendet. Nach der Auflösung muss die URL den Basis-Origin behalten und unter dessen Verzeichnis bleiben; ein Pfad wie `../users` kann dieses Verzeichnis nicht verlassen. Unzulässige Pfade scheitern mit `REQ_BUILD_FAILED` während des Bauens, vor dem Transport. Das endgültige `req.endpoint` eines Interceptors wird mit derselben Regel gegen sein endgültiges `req.baseEndpoint` geprüft; ein Interceptor darf die Basis absichtlich durch eine andere gültige absolute URL ersetzen. Deterministische URL-Fehler werden nie erneut versucht.
+Definitionspfade dürfen nicht schemaähnlich oder protokollrelativ sein (auch nicht mit führenden Leerzeichen) und keine C0-Steuerzeichen (einschließlich Tab, CR und LF), keine Backslashes, kein `?` und kein `#` enthalten. Ein normales Leerzeichen im Pfadinneren ist erlaubt und wird als `%20` gesendet. Nach der Auflösung muss die URL den Basis-Origin behalten und unter dessen Verzeichnis bleiben; ein Pfad wie `../orders` kann dieses Verzeichnis nicht verlassen. Unzulässige Pfade scheitern mit `REQ_BUILD_FAILED` während des Bauens, vor dem Transport. Das endgültige `req.endpoint` eines Interceptors wird mit derselben Regel gegen sein endgültiges `req.baseEndpoint` geprüft; ein Interceptor darf die Basis absichtlich durch eine andere gültige absolute URL ersetzen. Deterministische URL-Fehler werden nie erneut versucht.
 
 Der Default-Query-Encoder akzeptiert Scalars und Arrays von Scalars (Arrays wiederholen den Key). Ein genestetes Object scheitert mit `REQ_BUILD_FAILED`, außer der Client hat `withQuerySerializer(...)`. `null` in `path`, `query` oder `headers` scheitert genauso. `undefined` in Query und Headers wird weggelassen. Ein `undefined` oder fehlender Path-Placeholder scheitert mit `REQ_BUILD_FAILED`.
 
@@ -37,19 +37,19 @@ Der Struct encodet den Wert. Der Builder platziert ihn. Ein deklarierter `input`
   examples/http/place-input.ts#example
 </include>
 
-Dieser Body ist `{"display_name":"Ada"}` mit `application/json`. Der Header-Wire-Name ist `x-request-id`. Caller und geparste Results behalten `displayName`.
+Dieser Body ist `{"customer_name":"Ada"}` mit `application/json`. Der Header-Wire-Name ist `x-request-id`. Caller und geparste Results behalten `customerName`.
 
-Reich lieber den typisierten Wert durch, statt Wire-Keys auszuschreiben. Alias wird einmal auf dem Field deklariert und gilt in beide Richtungen: `output` / `error` / Events / Incoming-Frames dekodieren `display_name` zu `displayName`, und `body: input.order` schreibt den ganzen Baum um. Derselbe `User`-Struct kann Create-Body und Get-Output sein. Ein selbst geschriebener Key ist die Ausnahme: das Parent-Object ist anonym, also läuft der Alias nicht.
+Reich lieber den typisierten Wert durch, statt Wire-Keys auszuschreiben. Alias wird einmal auf dem Field deklariert und gilt in beide Richtungen: `output` / `error` / Events / Incoming-Frames dekodieren `customer_name` zu `customerName`, und `body: input.order` schreibt den ganzen Baum um. Derselbe `Order`-Struct kann Create-Body und Get-Output sein. Ein selbst geschriebener Key ist die Ausnahme: das Parent-Object ist anonym, also läuft der Alias nicht.
 
 | Builder-Ausdruck                               | Auf der Leitung                                           |
 | ---------------------------------------------- | --------------------------------------------------------- |
 | `body: input.profile`                          | Typisiertes Object: Alias und `Date`- / `bigint`-Encoding |
 | `body: { profile: input.profile }`             | Äußere Keys literal, inneres Object bleibt typisiert      |
 | `body: { ...input.profile, role: 'admin' }`    | Spread behält den Struct; der Extra-Key ist literal       |
-| `body: { name: input.profile.displayName }`    | Anonymes Parent: Alias gilt nicht                         |
+| `body: { name: input.profile.customerName }`   | Anonymes Parent: Alias gilt nicht                         |
 | `query: input.filter` / `headers: input.trace` | Typisierte flache Objects: Alias wird der Wire-Key        |
 
-Ein typisiertes Object per Spread zu übernehmen und gleichzeitig seinen Wire-Key zu setzen (`display_name` neben `displayName`) ist `REQ_BUILD_FAILED`. Ein genestetes Object in `path` oder `headers` scheitert genauso.
+Ein typisiertes Object per Spread zu übernehmen und gleichzeitig seinen Wire-Key zu setzen (`customer_name` neben `customerName`) ist `REQ_BUILD_FAILED`. Ein genestetes Object in `path` oder `headers` scheitert genauso.
 
 Der Guide wird an jedem Knoten gewählt, nicht nur an der Wurzel. Ein neues Object unter einem anonymen Parent behält die Keys, die du geschrieben hast. Dasselbe Object unter einem typisierten Parent nutzt den Struct dieses Fields.
 

@@ -9,12 +9,12 @@ Entrega el cuerpo tipado al builder. Los nombres lógicos de campo se quedan en 
 
 Ver detalles en [HTTP](/es-ES/docs/http) y [Cliente](/es-ES/docs/client).
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` es un placeholder. Con un servidor que responde `201` y `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, el snippet imprime:
+`api.example.com` es un placeholder. Con un servidor que responde `201` y `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, el snippet imprime:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

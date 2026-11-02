@@ -12,21 +12,21 @@ Build wire-boundary shapes, parse values, infer TypeScript types.
 Facade. Prefer this over internal constructors.
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### Primitives and containers
@@ -57,7 +57,7 @@ readUser();
 - **Returns** `[null, value]` or `[StructError, undefined]`. The error carries one issue. Object fields stop at the first bad field. `struct.or` tries every branch and then reports `invalid_union`; it does not keep the first branch failure.
 - Object fields are required unless marked `.optional()` or `.nullish()`. Keys the shape does not declare are dropped from the result.
 - Optional `options.errorMap` rewrites issue messages for this parse only.
-- Default reads **logical** keys (`displayName`). Pass `{ aliases: true }` to read wire keys (`display_name`) the same way HTTP/JSON codecs do.
+- Default reads **logical** keys (`customerName`). Pass `{ aliases: true }` to read wire keys (`customer_name`) the same way HTTP/JSON codecs do.
 
 ## ErrorMap
 

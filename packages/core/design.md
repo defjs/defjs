@@ -24,13 +24,13 @@ For example:
 
 ```ts
 endpoint = "https://api.example.com/v1";
-path = "/user/info";
+path = "/orders/info";
 ```
 
 The final request URL is:
 
 ```ts
-https://api.example.com/v1/user/info
+https://api.example.com/v1/orders/info
 ```
 
 ## Client rules
@@ -38,12 +38,12 @@ https://api.example.com/v1/user/info
 `client` is created by the application and passed to an operation:
 
 ```ts
-const [error, result] = await getUser(client({ signal }), { id: 7 });
+const [error, result] = await getOrder(client({ signal }), { id: 7 });
 ```
 
 `defineRequest` / `defineEventStream` / `defineWebSocket` return an operation. Calling it with a client starts the call and returns an error-first tuple. `createClient` returns a `DerivableClient`, a callable that is also a `Client`. Calling it with `RequestOptions` returns a non-callable `Client` value and does not perform I/O. The factory itself is a `Client` and carries no request options. There is no `.with({ client })` and no `client.execute`.
 
-`RequestOptions` has seven fields: `signal`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, and `reconnect`. `client(options)` copies those seven fields from the argument into a fresh options object, a top-level snapshot. Unknown fields are ignored and fields whose value is `undefined` are omitted. `heartbeat`, `protocols`, and `reconnect` values are kept by reference, not cloned. WebSocket reads them when the operation runs (it copies heartbeat fields and the protocols list at that time), so mutating those objects after deriving can still affect a later call. Applications should treat them as immutable after passing them. There is no parent overlay: `client()`, `client(undefined)`, and `client({})` return a client with no request options. A client value is not callable, so create one per call. `signal` is not combined; reusing a client value that carries `signal` shares the signal between calls. The base configuration from `createClient` is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. A getter that throws escapes `client(options)` and leaves the factory usable; argument-evaluation exceptions are not converted into faults. Illegal values, such as a reconnect policy, are still checked when the operation runs and still return `REQ_OPTIONS_INVALID`. Each protocol reads the fields it understands and ignores the rest. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
+`RequestOptions` has seven fields: `signal`, `onUploadProgress`, `onDownloadProgress`, `beforeConnect`, `protocols`, `heartbeat`, and `reconnect`. `client()` and `client(undefined)` store no request options. `client({})` keeps an empty snapshot and is not dropped by inspecting keys. `client(options)` reads each top-level field once. A `protocols` array is copied. `heartbeat` copies `intervalMs`, `isAck`, `message`, and `timeoutMs`. `reconnect` copies `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect`. Missing nested blocks stay missing and do not enable those features. `signal`, `beforeConnect`, and callbacks keep their identity. The same helpers copy those shapes when a `withWebSocketHeartbeat`, `withWebSocketReconnect`, `withWebSocketProtocols`, or `withSSEReconnect` option is applied. `withInterceptors` appends a fresh `{ kind, fn }` record and keeps `fn`. A client value is not callable, so create one per call. `signal` is not combined; reusing a client value that carries `signal` shares the signal between calls. The base configuration from `createClient` is shared by every client value and is not frozen at runtime. It is fixed by convention: nothing in the library changes it, and applications should not either. A custom client option may still hold a reference. A getter on a captured fixed field throws from `client(options)`, from applying that helper, or from `defineRequest` / `defineEventStream` / `defineWebSocket`; these configuration-call exceptions are not converted into faults. XSRF fields are captured while building each HTTP request. A getter failure there is handled by the existing request-building fault boundary, with cancellation retaining priority. `defineEventStream` copies the events dictionary container and leaves schema accessors lazy. `defineWebSocket` copies the `protocols` array. Illegal numbers, such as a reconnect policy, are still checked when the operation runs and still return `REQ_OPTIONS_INVALID`. Each protocol reads the fields it understands and ignores the rest. SSE reads only `signal` from request options. SSE reconnect comes from client configuration (`withSSEReconnect`), so `client({ reconnect })` affects WebSocket only.
 
 `createGlobalClient` / `getGlobalClient` / `setGlobalClient` / `resetGlobalClient` were removed in 0.4. When multiple external APIs are needed, create multiple `Client` instances separately.
 
@@ -104,31 +104,31 @@ The validation DSL, string lengths, and business rules belong in the application
 ```ts
 import { defineRequest, struct } from "@defjs/core";
 
-const UserBody = struct.object({
-  displayName: struct.string().alias("display_name"),
+const OrderBody = struct.object({
+  customerName: struct.string().alias("customer_name"),
 });
 
-const updateUser = defineRequest({
+const updateOrder = defineRequest({
   method: "PATCH",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({
     id: struct.number(),
-    user: UserBody,
+    order: OrderBody,
   }),
-  builder: (input) => ({ path: { id: input.id }, body: input.user }),
-  output: UserBody,
+  builder: (input) => ({ path: { id: input.id }, body: input.order }),
+  output: OrderBody,
 });
 
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: UserBody,
+  output: OrderBody,
 });
 ```
 
-The calls are `updateUser(client, { id: 7, user: { displayName: 'Ada' } })` and `getUser(client, { id: 7 })` respectively. Prefer handing over typed values: `body: input.user` applies aliases across the whole tree. Keys of an object you write yourself are literal wire keys, and aliases do not apply. A spread keeps the struct; a logical key and a wire key appearing at the same time is `REQ_BUILD_FAILED`.
+The calls are `updateOrder(client, { id: 7, order: { customerName: 'Ada' } })` and `getOrder(client, { id: 7 })` respectively. Prefer handing over typed values: `body: input.order` applies aliases across the whole tree. Keys of an object you write yourself are literal wire keys, and aliases do not apply. A spread keeps the struct; a logical key and a wire key appearing at the same time is `REQ_BUILD_FAILED`.
 
 `path` values must be scalars. A header value may be a scalar or an array of scalars. `null` in path, query, or headers is `REQ_BUILD_FAILED`. `undefined` query and header values are omitted; an `undefined` or missing path placeholder is `REQ_BUILD_FAILED`. A `nullable` `null` is sent. Path placeholders are raw scalars, and each segment is encoded only once; empty values and `.` / `..` are rejected.
 
@@ -181,14 +181,14 @@ HTTP interceptors see only explicit type headers; automatic types are applied ju
 ```ts
 import { createClient, defineRequest, struct, withEndpoint } from "@defjs/core";
 
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
   output: struct.object({
     id: struct.number(),
-    displayName: struct.string().alias("display_name"),
+    customerName: struct.string().alias("customer_name"),
   }),
   error: struct.object({ message: struct.string() }),
 });
@@ -196,7 +196,7 @@ const getUser = defineRequest({
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, data, response] = await getUser(
+  const [error, data, response] = await getOrder(
     client({ signal: AbortSignal.timeout(10_000) }),
     { id: 7 },
   );
@@ -204,7 +204,7 @@ async function main() {
     console.error(error.code);
     return;
   }
-  console.log(data.displayName, response.status);
+  console.log(data.customerName, response.status);
 }
 
 void main();
@@ -226,23 +226,24 @@ import {
   withEndpoint,
 } from "@defjs/core";
 
-const watchUser = defineEventStream({
+const followDeployLog = defineEventStream({
   method: "GET",
-  path: "/users/:id/events",
+  path: "/deployments/:id/log",
   maxBufferSize: 64 * 1024,
   maxQueueSize: 100,
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
   error: struct.object({ message: struct.string() }),
   events: {
-    message: struct.object({ text: struct.string() }),
+    line: struct.object({ text: struct.string() }),
+    done: struct.object({ status: struct.string() }),
   },
 });
 
 const client = createClient(withEndpoint("https://api.example.com"));
 
 async function main() {
-  const [error, stream, open] = await watchUser(client, { id: 7 });
+  const [error, stream, open] = await followDeployLog(client, { id: 7 });
   if (error) {
     console.error(error.code);
     return;
@@ -250,7 +251,7 @@ async function main() {
   console.log(open.response.status);
   await using ownedStream = stream;
   for await (const event of ownedStream) {
-    if (event.event === "message") console.log(event.data.text);
+    if (event.event === "line") console.log(event.data.text);
   }
 }
 
@@ -271,32 +272,33 @@ import {
   withEndpoint,
 } from "@defjs/core";
 
-const room = defineWebSocket({
-  path: "/chat/:roomId",
+const quoteFeed = defineWebSocket({
+  path: "/quotes/:market",
   maxIncomingQueueSize: 100,
-  protocols: ["chat.v1"],
-  input: struct.object({ roomId: struct.string() }),
+  protocols: ["quotes.v1"],
+  input: struct.object({ market: struct.string() }),
   builder: (input) => ({ path: input }),
   incoming: struct.object({
-    type: struct.literal("message"),
-    text: struct.string(),
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
   }),
   outgoing: struct.object({
-    type: struct.literal("send"),
-    text: struct.string(),
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
   }),
 });
 
-const client = createClient(withEndpoint("https://chat.example.com"));
+const client = createClient(withEndpoint("https://quotes.example.com"));
 
 async function main() {
-  const [error, session] = await room(client, { roomId: "1" });
+  const [error, session] = await quoteFeed(client, { market: "nasdaq" });
   if (error) {
     console.error(error.code);
     return;
   }
   await using ownedSession = session;
-  ownedSession.send({ type: "send", text: "Hello" });
+  ownedSession.send({ type: "subscribe", symbol: "ACME" });
 }
 
 void main();

@@ -5,7 +5,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 # العميل
 
-تُرجع `createClient(...)` [`DerivableClient`](/ar/api/core/derivableclient-type). ركّب خيارات العميل من اليسار إلى اليمين، ثم استدعِ `client(options?)` للحصول على قيمة [`Client`](/ar/api/core/client-type) ومرّرها إلى عملية: `getUser(client(options), input)`.
+تُرجع `createClient(...)` [`DerivableClient`](/ar/api/core/derivableclient-type). ركّب خيارات العميل من اليسار إلى اليمين، ثم استدعِ `client(options?)` للحصول على قيمة [`Client`](/ar/api/core/client-type) ومرّرها إلى عملية: `getOrder(client(options), input)`.
 
 ## createClient()
 
@@ -109,13 +109,13 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="DerivableClient" />
 
-العميل الجذر الذي تُرجعه `createClient`، بصيغتين. المصنع دالة وهو أيضًا `Client` بلا خيارات طلب، لذا يعمل `getUser(client, input)` مباشرة. استدعاؤه مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع قيمة `Client` عادية لاستدعاء واحد. هذه القيمة غير قابلة للاستدعاء، لذا يفشل `client()()` في الترجمة ويرمي `TypeError` وقت التشغيل. الاشتقاق يحدث مرة واحدة من المصنع؛ لا توجد سلسلة. اكتب النوع `DerivableClient` بدل `ReturnType<typeof createClient>`.
+العميل الجذر الذي تُرجعه `createClient`، بصيغتين. المصنع دالة وهو أيضًا `Client` بلا خيارات طلب، لذا يعمل `getOrder(client, input)` مباشرة. استدعاؤه مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع قيمة `Client` عادية لاستدعاء واحد. هذه القيمة غير قابلة للاستدعاء، لذا يفشل `client()()` في الترجمة ويرمي `TypeError` وقت التشغيل. الاشتقاق يحدث مرة واحدة من المصنع؛ لا توجد سلسلة. اكتب النوع `DerivableClient` بدل `ReturnType<typeof createClient>`.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` قيمة وليس دالة. استدعاء [`DerivableClient`](/ar/api/core/derivableclient-type) مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع واحدة. تُنسخ الحقول السبعة المعروفة من الوسيط إلى كائن جديد. تُتجاهل الحقول غير المعروفة وتُحذف الحقول التي قيمتها `undefined`. لا يوجد تركيب فوق الأصل: `client()` و`client(undefined)` و`client({})` تُرجع عميلًا بلا خيارات طلب. تُحفَظ قيم `heartbeat` و`protocols` و`reconnect` المتداخلة بالمرجع، دون استنساخ. يقرأها WebSocket عند تشغيل العملية (ينسخ حينها حقول heartbeat وقائمة protocols)، لذا قد يؤثر تغيير تلك الكائنات بعد الاشتقاق في استدعاء لاحق. ينبغي للتطبيقات أن تعاملها كغير قابلة للتغيير بعد تمريرها. الاشتقاق لا يؤدي أي إدخال/إخراج. قيمة العميل غير قابلة للاستدعاء، واستدعاؤها يفشل في الترجمة ويرمي `TypeError` وقت التشغيل. أنشئ قيمة عميل لكل استدعاء. يمكن تمرير القيمة نفسها إلى عمليات كثيرة، لكن إعادة استخدام قيمة تحمل `signal` تشارك تلك الإشارة. لا يُجمَع `signal`؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق.
+`Client` قيمة وليس دالة. استدعاء [`DerivableClient`](/ar/api/core/derivableclient-type) مع [`RequestOptions`](/ar/api/core/requestoptions-type) يُرجع واحدة. لا يخزّن `client()` ولا `client(undefined)` أي خيارات طلب. يُبقي `client({})` لقطة فارغة. يقرأ الاستدعاء كل حقل في المستوى الأعلى مرة واحدة. تُنسَخ مصفوفة `protocols`. ينسخ `heartbeat` و`reconnect` حقولهما المعروفة. تبقى الكتل المتداخلة الغائبة غائبة. يحتفظ `signal` و`beforeConnect` ودوال `callback` بهويتها. يعمل الـ getter على حقل مُلتقَط أثناء ذلك الاستدعاء، وإذا رمى يخرج من الاستدعاء. ما زالت الأعداد غير الصالحة تفشل لاحقًا بـ `REQ_OPTIONS_INVALID`. الاشتقاق لا يؤدي أي إدخال/إخراج. قيمة العميل غير قابلة للاستدعاء، واستدعاؤها يفشل في الترجمة ويرمي `TypeError` وقت التشغيل. أنشئ قيمة عميل لكل استدعاء. يمكن تمرير القيمة نفسها إلى عمليات كثيرة، لكن إعادة استخدام قيمة تحمل `signal` تشارك تلك الإشارة. لا يُجمَع `signal`؛ اجمع الإشارات بـ `AbortSignal.any` في شيفرة التطبيق. يبقى الإعداد الأساسي للمصنع مشتركًا وغير مُجمَّد. تنسخ مساعدات `with*` القياسية الـ records الثابتة التي تملكها عند تطبيقها.
 
 لا تمرّر المصنع إلى ضابط حالة في React (`setState(factory)` سيستدعيه كمُحدِّث) ولا تستخدمه مصدرًا لـ `watch` أو `computed` في Vue (فهما يستدعيان الدالة).
 
@@ -123,7 +123,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="RequestOptions" />
 
-سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يفهمها ويتجاهل الباقي. تمرير `heartbeat` إلى HTTP يُتجاهل، وليس عطلًا. يقرأ SSE من خيارات الطلب `signal` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة ولا حقل `timeout` أو `abort`.
+سبعة حقول مسطحة. يقرأ كل بروتوكول الحقول التي يفهمها ويتجاهل الباقي. تمرير `heartbeat` إلى HTTP يُتجاهل، وليس عطلًا. ينسخ `client(options)` عند ذلك الاستدعاء مصفوفة `protocols` والحقول المعروفة لـ `heartbeat` و`reconnect`. تبقى الكتل المتداخلة الغائبة غائبة. يحتفظ `signal` و`beforeConnect` ودوال `callback` بهويتها. يقرأ SSE من خيارات الطلب `signal` فقط. إعادة اتصال SSE تأتي من إعداد العميل (`withSSEReconnect`)، لذا `client({ reconnect })` يؤثر في WebSocket فقط. لا يوجد مرشح بروتوكول وقت الترجمة ولا حقل `timeout` أو `abort`.
 
 | الحقل                | البروتوكول           | الاستبدال                                                                     |
 | -------------------- | -------------------- | ----------------------------------------------------------------------------- |

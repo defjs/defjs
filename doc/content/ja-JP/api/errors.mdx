@@ -55,7 +55,7 @@ Execute は判別可能な `Fault` をタプルの第一要素に返します。
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-レスポンスが存在する前に失敗しえたものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。`response` が付くのは、トランスポートが報告できるメタデータを既に持っていた場合だけ — たとえばダウンロード途中で切れたボディなどです。
+レスポンスが存在する前に失敗しえたものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。トランスポートが報告できるメタデータを持つまで、`response` は `undefined` です。たとえばダウンロード途中で切れたボディです。
 
 ### AnyFault
 

@@ -9,12 +9,12 @@ description: 送 typed JSON body，再 decode declared 201。
 
 詳情睇 [HTTP](/zh-Hant-HK/docs/http) 同 [Client](/zh-Hant-HK/docs/client)。
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` 係 placeholder。如果 server 回應 `201` 同 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`，snippet 會 print：
+`api.example.com` 係 placeholder。如果 server 回應 `201` 同 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`，snippet 會 print：
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

@@ -25,7 +25,7 @@ Path placeholders are raw scalars, encoded exactly once. Empty values and `.` / 
 
 A placeholder name starts at `:` and runs to the next `/` or the end of the path: `/files/:name.json` names the parameter `name.json`, not `name`. A literal colon in a static segment is not supported.
 
-Definition paths cannot be scheme-like or protocol-relative (including with leading spaces), or contain C0 control characters (including tab, CR, and LF), backslashes, `?`, or `#`. A plain inner space is allowed and sent as `%20`. After resolution, the URL must keep the base origin and stay under its directory; a path such as `../users` cannot escape it. Illegal paths fail with `REQ_BUILD_FAILED` during building, before transport. An interceptor's final `req.endpoint` is checked against its final `req.baseEndpoint` with the same rule; an interceptor may deliberately replace the base with another valid absolute URL. Deterministic URL errors are never retried.
+Definition paths cannot be scheme-like or protocol-relative (including with leading spaces), or contain C0 control characters (including tab, CR, and LF), backslashes, `?`, or `#`. A plain inner space is allowed and sent as `%20`. After resolution, the URL must keep the base origin and stay under its directory; a path such as `../orders` cannot escape it. Illegal paths fail with `REQ_BUILD_FAILED` during building, before transport. An interceptor's final `req.endpoint` is checked against its final `req.baseEndpoint` with the same rule; an interceptor may deliberately replace the base with another valid absolute URL. Deterministic URL errors are never retried.
 
 The default query encoder accepts scalars and arrays of scalars (arrays repeat the key). A nested object fails with `REQ_BUILD_FAILED` unless the client has `withQuerySerializer(...)`. `null` in `path`, `query`, or `headers` fails the same way. `undefined` query and header values are omitted. An `undefined` or missing path placeholder fails with `REQ_BUILD_FAILED`.
 
@@ -37,19 +37,19 @@ The struct encodes the value. The builder places it. A declared `input` always r
   examples/http/place-input.ts#example
 </include>
 
-That body is `{"display_name":"Ada"}` with `application/json`. The header wire name is `x-request-id`. Callers and parsed results keep `displayName`.
+That body is `{"customer_name":"Ada"}` with `application/json`. The header wire name is `x-request-id`. Callers and parsed results keep `customerName`.
 
-Prefer handing the typed value over spelling wire keys. Alias is declared once on the field and applies in both directions: `output` / `error` / events / incoming frames decode `display_name` to `displayName`, and `body: input.order` rewrites the whole tree. The same `User` struct can be a create body and a get output. A hand-written key is the exception: the parent object is anonymous, so the alias does not run.
+Prefer handing the typed value over spelling wire keys. Alias is declared once on the field and applies in both directions: `output` / `error` / events / incoming frames decode `customer_name` to `customerName`, and `body: input.order` rewrites the whole tree. The same `Order` struct can be a create body and a get output. A hand-written key is the exception: the parent object is anonymous, so the alias does not run.
 
 | Builder expression                             | On the wire                                        |
 | ---------------------------------------------- | -------------------------------------------------- |
 | `body: input.profile`                          | Typed object: alias and `Date` / `bigint` encoding |
 | `body: { profile: input.profile }`             | Outer keys literal, inner object still typed       |
 | `body: { ...input.profile, role: 'admin' }`    | Spread keeps the struct; the extra key is literal  |
-| `body: { name: input.profile.displayName }`    | Anonymous parent: alias does not apply             |
+| `body: { name: input.profile.customerName }`   | Anonymous parent: alias does not apply             |
 | `query: input.filter` / `headers: input.trace` | Typed flat objects: alias becomes the wire key     |
 
-Spreading a typed object and also setting its wire key (`display_name` next to `displayName`) is `REQ_BUILD_FAILED`. A nested object in `path` or `headers` fails the same way.
+Spreading a typed object and also setting its wire key (`customer_name` next to `customerName`) is `REQ_BUILD_FAILED`. A nested object in `path` or `headers` fails the same way.
 
 The guide is chosen at every node, not only at the root. A new object under an anonymous parent keeps the keys you wrote. The same object under a typed parent uses that field's struct.
 

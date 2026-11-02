@@ -5,7 +5,7 @@ description: createClient, helpers d’options et le type Client.
 
 # Client
 
-`createClient(...)` renvoie un [`DerivableClient`](/fr-FR/api/core/derivableclient-type). Compose les options du client de gauche à droite, puis appelle `client(options?)` pour obtenir une valeur [`Client`](/fr-FR/api/core/client-type) et la passer à une opération : `getUser(client(options), input)`.
+`createClient(...)` renvoie un [`DerivableClient`](/fr-FR/api/core/derivableclient-type). Compose les options du client de gauche à droite, puis appelle `client(options?)` pour obtenir une valeur [`Client`](/fr-FR/api/core/client-type) et la passer à une opération : `getOrder(client(options), input)`.
 
 ## createClient()
 
@@ -109,13 +109,13 @@ Le transport HTTP par défaut ajoute l’en-tête quand tout ceci est vrai : la 
 
 <ApiSignature name="DerivableClient" />
 
-Le client racine renvoyé par `createClient`, sous deux formes. La factory est une fonction et aussi un `Client` sans options de requête, donc `getUser(client, input)` fonctionne directement. L’appeler avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) renvoie une simple valeur `Client` pour un seul appel. Cette valeur n’est pas appelable : `client()()` échoue à la compilation et lève une `TypeError` à l’exécution. La dérivation se fait une seule fois, depuis la factory ; il n’y a pas de chaîne. Écris le type `DerivableClient` plutôt que `ReturnType<typeof createClient>`.
+Le client racine renvoyé par `createClient`, sous deux formes. La factory est une fonction et aussi un `Client` sans options de requête, donc `getOrder(client, input)` fonctionne directement. L’appeler avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) renvoie une simple valeur `Client` pour un seul appel. Cette valeur n’est pas appelable : `client()()` échoue à la compilation et lève une `TypeError` à l’exécution. La dérivation se fait une seule fois, depuis la factory ; il n’y a pas de chaîne. Écris le type `DerivableClient` plutôt que `ReturnType<typeof createClient>`.
 
 ### Client
 
 <ApiSignature name="Client" />
 
-Un `Client` est une valeur, pas une fonction. Appeler le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) en renvoie une. Les sept champs connus sont copiés depuis l’argument dans un objet neuf. Les champs inconnus sont ignorés et les champs dont la valeur est `undefined` sont omis. Il n’y a pas de superposition au parent : `client()`, `client(undefined)` et `client({})` renvoient un client sans options de requête. Les valeurs imbriquées `heartbeat`, `protocols` et `reconnect` sont conservées par référence, pas clonées. WebSocket les lit quand l’opération s’exécute (il copie alors les champs de heartbeat et la liste protocols), donc modifier ces objets après la dérivation peut encore affecter un appel ultérieur. Les applications doivent les traiter comme immuables après les avoir passés. Dériver ne fait aucune I/O. Une valeur de client n’est pas appelable : l’appeler échoue à la compilation et lève une `TypeError` à l’exécution. Crée une valeur de client par appel. La même valeur peut être passée à beaucoup d’opérations, mais réutiliser une valeur qui porte `signal` partage ce signal. `signal` n’est pas combiné ; combine les signaux avec `AbortSignal.any` dans le code applicatif.
+Un `Client` est une valeur, pas une fonction. Appeler le [`DerivableClient`](/fr-FR/api/core/derivableclient-type) avec des [`RequestOptions`](/fr-FR/api/core/requestoptions-type) en renvoie une. `client()` et `client(undefined)` ne stockent aucune option de requête. `client({})` conserve un instantané vide. L’appel lit chaque champ de premier niveau une fois. Un tableau `protocols` est copié. `heartbeat` et `reconnect` copient leurs champs connus. Les blocs imbriqués absents restent absents. `signal`, `beforeConnect` et les callbacks gardent leur identité. Un getter sur un champ capturé s’exécute pendant cet appel et, s’il lève, sort de l’appel. Les nombres invalides échouent encore plus tard avec `REQ_OPTIONS_INVALID`. Dériver ne fait aucune I/O. Une valeur de client n’est pas appelable : l’appeler échoue à la compilation et lève une `TypeError` à l’exécution. Crée une valeur de client par appel. La même valeur peut être passée à beaucoup d’opérations, mais réutiliser une valeur qui porte `signal` partage ce signal. `signal` n’est pas combiné ; combine les signaux avec `AbortSignal.any` dans le code applicatif. La configuration de base de la factory reste partagée et n’est pas gelée. Les helpers `with*` standard copient les records fixes qu’ils possèdent lorsqu’ils sont appliqués.
 
 Ne passe pas la factory à un setter d’état React (`setState(factory)` l’appellerait comme updater) et ne l’utilise pas comme source d’un `watch` ou d’un `computed` Vue (ceux-ci appellent une fonction).
 
@@ -123,7 +123,7 @@ Ne passe pas la factory à un setter d’état React (`setState(factory)` l’ap
 
 <ApiSignature name="RequestOptions" />
 
-Sept champs plats. Chaque protocole lit les champs qu’il comprend et ignore le reste. Passer `heartbeat` à HTTP est ignoré, pas un fault. SSE ne lit que `signal` dans les options de requête. La reconnexion SSE vient de la configuration du client (`withSSEReconnect`), donc `client({ reconnect })` n’affecte que WebSocket. Il n’y a pas de filtre de protocole à la compilation, ni de champ `timeout` ou `abort`.
+Sept champs plats. Chaque protocole lit les champs qu’il comprend et ignore le reste. Passer `heartbeat` à HTTP est ignoré, pas un fault. `client(options)` copie lors de cet appel un tableau `protocols` et les champs connus de `heartbeat` et de `reconnect`. Les blocs imbriqués absents restent absents. `signal`, `beforeConnect` et les callbacks gardent leur identité. SSE ne lit que `signal` dans les options de requête. La reconnexion SSE vient de la configuration du client (`withSSEReconnect`), donc `client({ reconnect })` n’affecte que WebSocket. Il n’y a pas de filtre de protocole à la compilation, ni de champ `timeout` ou `abort`.
 
 | Champ                | Protocole              | Remplacement                                                                                         |
 | -------------------- | ---------------------- | ---------------------------------------------------------------------------------------------------- |

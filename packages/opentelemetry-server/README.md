@@ -79,9 +79,13 @@ withOpenTelemetryServer({
 | `logger`            | `Logger` from `@opentelemetry/api-logs` | `undefined`                | External native Logger; omitting disables diagnostic LogRecords             |
 | `propagator`        | `TextMapPropagator`                     | W3C TraceContext + Baggage | Custom context propagator                                                   |
 | `requireParentSpan` | `boolean`                               | `false`                    | With a tracer, bypass all instrumentation when no active parent span exists |
-| `http`              | `OpenTelemetryServerHttpOptions`        | `{}`                       | HTTP transport options                                                      |
-| `sse`               | `OpenTelemetryServerSSEOptions`         | `{}`                       | SSE transport options                                                       |
-| `webSocket`         | `OpenTelemetryServerWebSocketOptions`   | `{}`                       | WebSocket transport options                                                 |
+| `http`              | `OpenTelemetryServerHttpOptions`        | omitted                    | HTTP transport options; omitting leaves the transport enabled               |
+| `sse`               | `OpenTelemetryServerSSEOptions`         | omitted                    | SSE transport options; omitting leaves the transport enabled                |
+| `webSocket`         | `OpenTelemetryServerWebSocketOptions`   | omitted                    | WebSocket transport options; omitting leaves the transport enabled          |
+
+`withOpenTelemetryServer` reads `http`, `sse`, and `webSocket` once and keeps a field copy (`enabled`, the three span hooks, and WebSocket `queryPropagation`). A missing block stays missing, which leaves that transport enabled. Only `enabled: false` disables a transport, and that branch does not read the block's hooks or `queryPropagation`. Getters for the copied fields run during this call; a throw leaves the call and is not retried when the option is applied. Later changes to those blocks are ignored. `tracer`, `meter`, `logger`, `propagator`, and hook functions keep their identity. At runtime, `http: false` still leaves HTTP enabled.
+
+The plugin calls the supplied Meter's instrument creation methods each time the option is applied to a client, not when the option is built. Instrument identity and aggregation remain under Meter/SDK control. Each duration histogram receives its own copy of the default bucket boundaries.
 
 Span hooks run only with a `tracer`. `startSpanHook(request)` is synchronous and runs before span creation; a throw leaves the built-in attributes and the operation continues. `requestHook` and `responseHook` are not awaited, and their failures never block or fail the operation. Configure `diag.setLogger(...)` to see hook diagnostics.
 

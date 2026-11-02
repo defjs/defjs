@@ -27,7 +27,7 @@ Call `next(req)`（可以傳已 mutate 嘅 request），或者用 `makeResponse`
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Wrapper 或 short-circuit session 必須 forward 同佢 `close` / `closed` lifecycle 一樣嘅 `[Symbol.asyncDispose]()` teardown；return 一個無關嘅 resolved promise 並唔夠。要求呢個 member，對 structural implementation 嚟講係 compile-time breaking change。淨係接收 Defjs session 嘅 code 唔使加新 runtime call。
+Wrapper 或 short-circuit session 必須 forward 同佢 `close` / `closed` lifecycle 一樣嘅 `[Symbol.asyncDispose]()` teardown；return 一個無關嘅 resolved promise 並唔夠。
 
 ## 帶 kind 嘅類型
 

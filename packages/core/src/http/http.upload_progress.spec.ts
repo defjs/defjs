@@ -345,7 +345,7 @@ function expectObserverFault(
 ): void {
   expect(error?.code).toBe("EXT_OBSERVER_FAILED");
   expect(error?.cause).toBe(cause);
-  expect(error).not.toHaveProperty("response");
+  expect(error?.response).toBeUndefined();
   expect(result).toBeUndefined();
   expect(response).toBeUndefined();
 }

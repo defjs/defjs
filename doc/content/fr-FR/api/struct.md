@@ -12,21 +12,21 @@ Construis des formes à la frontière wire, parse des valeurs, infère les types
 Façade. Préfère-la aux constructeurs internes.
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### Primitives et conteneurs
@@ -57,7 +57,7 @@ readUser();
 - **Renvoie** `[null, value]` ou `[StructError, undefined]`. L’erreur porte une seule issue. Les champs d’un objet s’arrêtent au premier champ invalide. `struct.or` essaie chaque branche, puis signale `invalid_union` ; il ne garde pas l’échec de la première branche.
 - Les champs d’un objet sont obligatoires sauf s’ils sont marqués `.optional()` ou `.nullish()`. Les clés que la forme ne déclare pas sont retirées du résultat.
 - Un `options.errorMap` optionnel réécrit les messages d’issue pour ce parse seulement.
-- Par défaut, lecture des clés **logiques** (`displayName`). Passe `{ aliases: true }` pour lire les clés wire (`display_name`) comme le font les codecs HTTP/JSON.
+- Par défaut, lecture des clés **logiques** (`customerName`). Passe `{ aliases: true }` pour lire les clés wire (`customer_name`) comme le font les codecs HTTP/JSON.
 
 ## ErrorMap
 

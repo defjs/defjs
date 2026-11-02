@@ -9,14 +9,14 @@ description: 연결하고, 타입이 있는 envelope를 하나 보내고, 한 �
 
 자세한 내용은 [WebSocket](/ko-KR/docs/web-socket)을 보세요.
 
-<include cwd meta="chat.ts">
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com`은 placeholder예요. `{ "type": "send", "text": "Hello" }`에 `{ "type": "message", "text": "Hello" }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
+`quotes.example.com`은 placeholder예요. `{ "type": "subscribe", "symbol": "ACME" }`에 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
 재연결은 opt-in이에요 (`withWebSocketReconnect`). Heartbeat도 opt-in이에요. 브라우저 WebSocket은 임의 handshake 헤더를 받을 수 없어요. 쿠키, 서브프로토콜, 또는 짧은 수명의 티켓을 쓰세요.

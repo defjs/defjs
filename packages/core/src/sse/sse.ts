@@ -199,9 +199,26 @@ type ResolvedEventStreamDefinition<
   TInput extends AnyStruct | undefined = undefined,
   TEvents extends EventStructs = EventStructs,
   TError extends AnyStruct | undefined = undefined,
-> = EventStreamDefinition<TInput, TEvents, TError> & {
+> = EventStreamDefinitionBase<TEvents> & {
+  builder?: OutboundBuilder;
+  input?: TInput;
+  error?: TError;
   readonly method: string;
 };
+
+function snapshotEventDictionary<T>(events: T): T {
+  if (typeof events !== "object" || events === null) {
+    return events;
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(events);
+  for (const descriptor of Object.values(descriptors)) {
+    const get = descriptor.get;
+    if (get) {
+      descriptor.get = () => get.call(events);
+    }
+  }
+  return Object.create(null, descriptors) as T;
+}
 
 /**
  * Declare a typed Server-Sent Events endpoint.
@@ -212,6 +229,8 @@ type ResolvedEventStreamDefinition<
  * - **definition** — `path`, an `events` map, and the required `maxBufferSize` and `maxQueueSize` limits (positive safe integers). Optional `method` (default `'GET'`), `operation`, `input`, and `error`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
+ *
+ * Known fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A missing or non-object dictionary is left as given. A getter on a fixed definition field runs during `defineEventStream`.
  *
  * @param definition - SSE contract (path, events, buffer limits, optional input).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
@@ -236,14 +255,30 @@ export function defineEventStream<
       EventStreamRequestShape<NoInfer<P>, NoInfer<M>>
     >,
 ): EventStreamEndpoint<EndpointArgs<TInput>, EventStreamData<TEvents>, TError> {
-  // EventStreamErrorField is conditional, so this parameter is not directly the resolved endpoint.
+  // Copy known fields. The events container is copied; struct values and accessors stay lazy.
+  const builder = definition.builder;
+  const error = definition.error;
+  const events = snapshotEventDictionary(definition.events);
+  const input = definition.input;
+  const maxBufferSize = definition.maxBufferSize;
+  const maxQueueSize = definition.maxQueueSize;
+  const declaredMethod = definition.method;
+  const operation = definition.operation;
+  const path = definition.path;
   const endpoint = {
-    ...definition,
-    method: definition.method ?? "GET",
-  } as unknown as ResolvedEventStreamDefinition<TInput, TEvents, TError>;
+    builder,
+    error,
+    events,
+    input,
+    maxBufferSize,
+    maxQueueSize,
+    method: declaredMethod ?? "GET",
+    operation,
+    path,
+  };
 
   return (async (client: Client, input?: EndpointInput<TInput>) =>
-    runEventStreamCommand(
+    runEventStreamCommand<TInput, TEvents, TError>(
       client[CLIENT].config,
       endpoint,
       input,
@@ -264,10 +299,10 @@ async function runEventStreamCommand<
   clientConfig: ClientConfig,
   endpoint: ResolvedEventStreamDefinition<TInput, TEvents, TError>,
   input: EndpointInput<TInput> | undefined,
-  config: EventStreamExecuteOptions,
+  config: EventStreamExecuteOptions | undefined,
   controller: AbortController,
 ): Promise<StreamAwaitResult<EventStreamData<TEvents>, TError>> {
-  const callerAbort = config.signal;
+  const callerAbort = config?.signal;
 
   // Fast path: caller already aborted before we did any struct work.
   if (callerAbort?.aborted) {

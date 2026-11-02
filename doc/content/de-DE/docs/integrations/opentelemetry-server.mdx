@@ -52,6 +52,8 @@ Hook-Signatures:
 
 Ein leeres Transport-Objekt aktiviert diesen Transport. Alte boolesche Transport-Schalter (`http: false`) und alte Top-Level-Hooks werden nur von den TypeScript-Typen abgelehnt. Es gibt keinen Runtime-Check: Zur Laufzeit lässt `http: false` den Transport aktiviert, und ein Top-Level-Hook wird stillschweigend ignoriert. Nutze Transport-Optionsobjekte (`{ enabled: false }`) und transportbezogene Hooks.
 
+`withOpenTelemetryServer` liest `http`, dann `sse`, dann `webSocket`, jeweils einmal. Ein fehlender Block bleibt fehlend, und der Transport bleibt aktiviert. Ein vorhandener Block wird Feld für Feld kopiert: `enabled`, `startSpanHook`, `requestHook`, `responseHook` und bei WebSocket `queryPropagation`. Ein Block, den du danach änderst oder ersetzt, ändert die Option nicht. `enabled` wird zuerst gelesen. Nur `false` deaktiviert diesen Transport, und der deaktivierte Zweig liest weder Hooks noch `queryPropagation`. Getter der kopierten Felder laufen während `withOpenTelemetryServer`. Wirft einer, verlässt die Exception diesen Aufruf sofort; spätere Blöcke werden nicht gelesen, und der Fehler wird nicht bis zur Anwendung der Option aufgeschoben. `tracer`, `meter`, `logger`, `propagator` und Hook-Funktionen behalten ihre Identität.
+
 ## Operationsidentität und Propagation
 
 Setze eine statische `operation` auf `defineRequest`, `defineEventStream` oder `defineWebSocket`, wenn die Operation eine stabile Identität hat. Das Plugin nutzt sie in Span-Namen und als `defjs.operation`. Es leitet die Identität nie aus aufgelöstem Pfad, Identifier, Tenant oder Query-String ab:
@@ -88,7 +90,7 @@ Der äußere Span gehört dir. Das Plugin meldet weiterhin den niedrigeren Trans
 
 ## Referenz
 
-Wenn `meter` übergeben wird:
+Wenn `meter` übergeben wird, ruft das Plugin dessen Methoden zur Instrumenterzeugung jedes Mal auf, wenn die Option auf einen Client angewendet wird, nicht während `withOpenTelemetryServer`. Ob zurückgegebene Instrumente oder Aggregationszustände geteilt werden, entscheidet Meter/SDK. Jedes Dauer-Histogramm erhält seine eigene Kopie der Grenzen 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5 und 10 Sekunden.
 
 | Metrik                                       | Bedeutung                                             |
 | -------------------------------------------- | ----------------------------------------------------- |

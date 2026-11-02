@@ -9,16 +9,16 @@ description: صدّر تعريفات API كحزمة npm مع الأنواع، و
 
 ## 1. عرّف عمليات SDK
 
-أنشئ `src/users.ts` في مشروع SDK. أبقِ المسارات وربط المدخل والاستجابات وأخطاء الخدمة هنا. لا حاجة إلى نسخة عميل أو عنوان نشر أو بيانات اعتماد حالية لتعريف هذه العملية.
+أنشئ `src/orders.ts` في مشروع SDK. أبقِ المسارات وربط المدخل والاستجابات وأخطاء الخدمة هنا. لا حاجة إلى نسخة عميل أو عنوان نشر أو بيانات اعتماد حالية لتعريف هذه العملية.
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+<include cwd meta='title="src/orders.ts"'>
+  examples/recipes/publish-http-sdk/orders-sdk.ts#example
 </include>
 
 اعرضها من `src/index.ts`:
 
 ```ts
-export { getUser } from "./users";
+export { getOrder } from "./orders";
 ```
 
 أضف وحدات عمليات أخرى وأعد تصدير نقاط نهايتها مع نمو SDK.
@@ -28,19 +28,19 @@ export { getUser } from "./users";
 لمشروع SDK حد حزمة خاص به:
 
 ```txt
-users-sdk/
+orders-sdk/
   package.json
   tsconfig.json
   src/
     index.ts
-    users.ts
+    orders.ts
 ```
 
 استخدم `package.json` هذا، مع استبدال اسم المثال بنطاق حزمة تملكه:
 
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/orders-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -100,26 +100,26 @@ bun pm pack
 
 ## 3. استدعها من التطبيق المستهلك
 
-يبقي المثال المحلي التعريف في `users-sdk.ts` بجانب `app.ts` حتى يعمل دون شبكة. استيراده لا ينشئ عميلًا؛ يضبط التطبيق معالج Fetch محليًا ويستدعي العملية المستوردة:
+يبقي المثال المحلي التعريف في `orders-sdk.ts` بجانب `app.ts` حتى يعمل دون شبكة. استيراده لا ينشئ عميلًا؛ يضبط التطبيق معالج Fetch محليًا ويستدعي العملية المستوردة:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+paid
 ```
 
 لحزمة SDK المغلفة، ثبّتها مع إصدار Core متوافق:
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
+bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
 استبدل الاستيراد النسبي في المثال بـ:
 
 ```ts
-import { getUser } from "@company/users-sdk";
+import { getOrder } from "@company/orders-sdk";
 ```
 
 اضبط عنوان الخدمة والمصادقة على عميل التطبيق. أبقِ `withHTTPHandle(...)` للاختبارات المحلية؛ وأزله لاستخدام تنفيذ Fetch الخاص بالمنصة. يمكن لتطبيق ثانٍ استيراد نقطة النهاية نفسها واختيار إعدادات عميل مختلفة دون تغيير تعريف SDK.

@@ -19,18 +19,18 @@ Nach der Veröffentlichung stehen die Skill-Anweisungen unter [skills/defjs/SKIL
 
 ## Einen Endpunkt verlangen [#prompt]
 
-Gib dem Assistenten eine Aufgabe. Dieser Prompt verlangt ein typisiertes `GET /users/:id`, dessen Client in der Anwendung bleibt:
+Gib dem Assistenten eine Aufgabe. Dieser Prompt verlangt ein typisiertes `GET /orders/:id`, dessen Client in der Anwendung bleibt:
 
 ```txt
-Use @defjs/core to define GET /users/:id.
-The input is { id: number }; a successful response is { id: number, name: string }.
+Use @defjs/core to define GET /orders/:id.
+The input is { id: number }; a successful response is { id: number, status: string }.
 Keep the SDK definition and application client in separate modules,
 and verify the result with the project’s existing tests.
 ```
 
 ## Das Ergebnis prüfen [#verify]
 
-Lies Definition und Anwendung getrennt. Die Definition exportiert die Operation und erzeugt den Client nicht. Die Anwendung erzeugt den Client und ruft die Operation auf, zum Beispiel `getUser(client, { id: 1 })`. Ist `input` deklariert, ist `builder` eine explizite synchrone reine Funktion. Der Erfolgswert wird nur gelesen, wenn der Fehlerplatz leer ist.
+Lies Definition und Anwendung getrennt. Die Definition exportiert die Operation und erzeugt den Client nicht. Die Anwendung erzeugt den Client und ruft die Operation auf, zum Beispiel `getOrder(client, { id: 1 })`. Ist `input` deklariert, ist `builder` eine explizite synchrone reine Funktion. Der Erfolgswert wird nur gelesen, wenn der Fehlerplatz leer ist.
 
 Führe danach die Typprüfung dieses Projekts und die Tests aus, die den Vertrag wirklich ausführen. Installation von Abhängigkeiten und CI-Regeln bleiben bei diesem Projekt.
 

@@ -399,7 +399,10 @@ describe("createOpenTelemetrySSEInterceptor", () => {
 
     await interceptor.fn(makeSSERequest(), async () => makeSSEStream());
 
-    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith("sse.connected");
+    expect(activeSpans[0]?.addEvent).toHaveBeenCalledWith(
+      "sse.connected",
+      undefined,
+    );
   });
 
   test("should keep span open until stream.closed settles", async () => {

@@ -137,9 +137,9 @@ type ResponseDeclaration<
  * `output` declares the body for a 2xx response, `error` the body for anything
  * else. Only one of the two ever runs, and omitting one means that body is never
  * read. `ResponseDeclaration` is an internal helper type: `output` and `error`
- * are required only when the matching type parameter is a struct. There is no
- * `responseType`: the struct kind selects how a declared body is read. Pass to
- * `defineRequest` to get a typed endpoint.
+ * are required only when the matching type parameter is a struct. The struct
+ * kind selects how a declared body is read. Pass to `defineRequest` to get a
+ * typed endpoint.
  *
  * @group http
  */
@@ -202,6 +202,8 @@ type HttpExecuteAwaitResult<
  * non-2xx body. Neither is keyed by status. A declaration is an assertion:
  * omitting one means that body is never read.
  *
+ * Known fields are copied when the definition is created. `builder`, `input`, `output`, and `error` keep their identity. A getter on one of those fields runs during `defineRequest` and its exception escapes the call. Other properties on the definition object are not read.
+ *
  * @param definition - Request contract (method, path, input, builder, output).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
@@ -209,12 +211,12 @@ type HttpExecuteAwaitResult<
  *
  * @example
  * ```ts
- * const getUser = defineRequest({
+ * const getOrder = defineRequest({
  *   method: 'GET',
- *   path: '/users/:id',
+ *   path: '/orders/:id',
  *   input: struct.object({ id: struct.number(), verbose: struct.boolean() }),
  *   builder: (input) => ({ path: { id: input.id }, query: { verbose: input.verbose } }),
- *   output: struct.object({ id: struct.number(), name: struct.string() }),
+ *   output: struct.object({ id: struct.number(), status: struct.string() }),
  * })
  * ```
  * @group http
@@ -239,15 +241,26 @@ export function defineRequest<
   RequestErrorData<TError>,
   DeclaredResponse<TOutput>
 > {
-  // Snapshot the top-level definition so a later mutation of the caller's object cannot retarget this endpoint.
-  const endpoint = { ...definition } as RequestDefinition<
-    TInput,
-    TOutput,
-    TError
-  >;
+  // Copy known definition fields. Schemas and builder stay the same references.
+  const builder = definition.builder;
+  const input = definition.input;
+  const method = definition.method;
+  const operation = definition.operation;
+  const path = definition.path;
+  const output = definition.output;
+  const error = definition.error;
+  const endpoint = {
+    builder,
+    error,
+    input,
+    method,
+    operation,
+    output,
+    path,
+  };
 
   return (async (client: Client, input?: EndpointInput<TInput>) =>
-    executeHttpCommand(
+    executeHttpCommand<TInput, TOutput, TError>(
       client[CLIENT].config,
       endpoint,
       input,
@@ -260,15 +273,24 @@ export function defineRequest<
   >;
 }
 
+type HttpExecutionDefinition<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+> = Omit<RequestDefinition<TInput>, "output" | "error"> & {
+  output?: TOutput;
+  error?: TError;
+};
+
 async function executeHttpCommand<
   TInput extends AnyStruct | undefined,
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
 >(
   clientConfig: HttpClientConfig,
-  definition: RequestDefinition<TInput, TOutput, TError>,
+  definition: HttpExecutionDefinition<TInput, TOutput, TError>,
   input: EndpointInput<TInput> | undefined,
-  options: HttpExecuteOptions,
+  options: HttpExecuteOptions | undefined,
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
   const config = options;
 
@@ -277,7 +299,7 @@ async function executeHttpCommand<
     return [fault as Fault<TError>, undefined, undefined];
   };
 
-  const callerAbort = config.signal;
+  const callerAbort = config?.signal;
 
   // Fast path: caller already aborted before we did any struct work — skip parseEndpointInput.
   if (callerAbort?.aborted) {
@@ -333,14 +355,14 @@ async function executeHttpCommand<
         signal: requestSignal,
         baseEndpoint: clientConfig.endpoint,
         defaultHeaders: clientConfig.headers,
-        downloadProgress: config.onDownloadProgress,
+        downloadProgress: config?.onDownloadProgress,
         inputDeclared: definition.input !== undefined,
         inputGuides,
         errorResponseType,
         operation: definition.operation,
         querySerializer: clientConfig.querySerializer,
         responseType,
-        uploadProgress: config.onUploadProgress,
+        uploadProgress: config?.onUploadProgress,
         withCredentials: clientConfig.withCredentials,
         xsrf: clientConfig.xsrf,
       },

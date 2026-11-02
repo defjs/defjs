@@ -310,16 +310,30 @@ export const DEFAULT_SSE_OPTIONS: ClientSSEConfig = {
 export function createHttpClientConfig(): HttpClientConfig {
   return {
     endpoint: "",
-    http: { ...DEFAULT_HTTP_OPTIONS },
+    headers: undefined,
+    http: { handle: DEFAULT_HTTP_OPTIONS.handle },
     interceptors: [],
+    querySerializer: undefined,
     xsrf: undefined,
+    withCredentials: undefined,
   };
 }
 
 export function createClientConfig(): ClientConfig {
+  const http = createHttpClientConfig();
   return {
-    ...createHttpClientConfig(),
-    sse: { ...DEFAULT_SSE_OPTIONS },
+    endpoint: http.endpoint,
+    headers: http.headers,
+    http: http.http,
+    interceptors: http.interceptors,
+    querySerializer: http.querySerializer,
+    xsrf: http.xsrf,
+    withCredentials: http.withCredentials,
+    sse: {
+      handle: DEFAULT_SSE_OPTIONS.handle,
+      onInvalidEvent: DEFAULT_SSE_OPTIONS.onInvalidEvent,
+      reconnect: DEFAULT_SSE_OPTIONS.reconnect,
+    },
     webSocket: {
       handle: globalThis.WebSocket,
       beforeConnect: undefined,

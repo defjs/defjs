@@ -25,7 +25,7 @@ path placeholder는 raw 스칼라라서 정확히 한 번만 인코딩돼요. �
 
 placeholder 이름은 `:`에서 시작해 path의 다음 `/` 또는 끝까지예요. `/files/:name.json`의 매개변수 이름은 `name`이 아니라 `name.json`이에요. 정적 세그먼트의 리터럴 콜론은 지원하지 않아요.
 
-정의 path는 앞에 공백이 있더라도 스킴 형태나 프로토콜 상대 형식일 수 없고, C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`를 담을 수 없어요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. 해석 뒤 URL은 base origin을 유지하고 그 디렉터리 안에 머물러야 해요. `../users` 같은 path로 빠져나갈 수 없어요. 불법 path는 전송 전에, 만드는 동안 `REQ_BUILD_FAILED`로 실패해요. 인터셉터의 최종 `req.endpoint`는 최종 `req.baseEndpoint`에 같은 규칙으로 검사돼요. interceptor는 base를 다른 유효한 절대 URL로 일부러 바꿀 수 있어요. 결정적인 URL 오류는 재시도하지 않아요.
+정의 path는 앞에 공백이 있더라도 스킴 형태나 프로토콜 상대 형식일 수 없고, C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`를 담을 수 없어요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. 해석 뒤 URL은 base origin을 유지하고 그 디렉터리 안에 머물러야 해요. `../orders` 같은 path로 빠져나갈 수 없어요. 불법 path는 전송 전에, 만드는 동안 `REQ_BUILD_FAILED`로 실패해요. 인터셉터의 최종 `req.endpoint`는 최종 `req.baseEndpoint`에 같은 규칙으로 검사돼요. interceptor는 base를 다른 유효한 절대 URL로 일부러 바꿀 수 있어요. 결정적인 URL 오류는 재시도하지 않아요.
 
 기본 query 인코더는 스칼라와 스칼라 배열을 받아요 (배열은 키를 반복해요). 중첩 객체는 클라이언트에 `withQuerySerializer(...)`가 없으면 `REQ_BUILD_FAILED`예요. `path`, `query`, `headers`의 `null`도 같은 방식으로 실패해요. `undefined`인 query와 header 값은 빠져요. `undefined`이거나 없는 path placeholder는 빠지지 않고 `REQ_BUILD_FAILED`로 실패해요.
 
@@ -37,19 +37,19 @@ struct가 값을 인코딩하고, builder가 배치해요. `input`을 선언하�
   examples/http/place-input.ts#example
 </include>
 
-그 body는 `application/json`의 `{"display_name":"Ada"}`예요. 헤더 와이어 이름은 `x-request-id`예요. 호출자와 파싱 결과는 `displayName`을 유지해요.
+그 body는 `application/json`의 `{"customer_name":"Ada"}`예요. 헤더 와이어 이름은 `x-request-id`예요. 호출자와 파싱 결과는 `customerName`을 유지해요.
 
-와이어 키를 직접 적기보다 타입이 있는 값을 넘기는 편이 좋아요. alias는 필드에 한 번 선언되고 양방향으로 적용돼요. `output` / `error` / 이벤트 / 들어오는 프레임은 `display_name`을 `displayName`으로 디코딩하고, `body: input.order`는 트리 전체를 다시 써요. 같은 `User` struct가 create body이자 get output일 수 있어요. 손으로 쓴 키는 예외예요. 부모 객체가 익명이라 alias가 돌지 않아요.
+와이어 키를 직접 적기보다 타입이 있는 값을 넘기는 편이 좋아요. alias는 필드에 한 번 선언되고 양방향으로 적용돼요. `output` / `error` / 이벤트 / 들어오는 프레임은 `customer_name`을 `customerName`으로 디코딩하고, `body: input.order`는 트리 전체를 다시 써요. 같은 `Order` struct가 create body이자 get output일 수 있어요. 손으로 쓴 키는 예외예요. 부모 객체가 익명이라 alias가 돌지 않아요.
 
 | builder 식                                     | 와이어에서                                         |
 | ---------------------------------------------- | -------------------------------------------------- |
 | `body: input.profile`                          | 타입이 있는 객체. alias와 `Date` / `bigint` 인코딩 |
 | `body: { profile: input.profile }`             | 바깥 키는 리터럴, 안쪽 객체는 여전히 타입이 있어요 |
 | `body: { ...input.profile, role: 'admin' }`    | spread는 struct를 유지하고, 추가 키는 리터럴이에요 |
-| `body: { name: input.profile.displayName }`    | 익명 부모. alias가 적용되지 않아요                 |
+| `body: { name: input.profile.customerName }`   | 익명 부모. alias가 적용되지 않아요                 |
 | `query: input.filter` / `headers: input.trace` | 타입이 있는 평평한 객체. alias가 와이어 키가 돼요  |
 
-타입이 있는 객체를 spread하면서 그 와이어 키도 같이 쓰면 (`displayName` 옆의 `display_name`) `REQ_BUILD_FAILED`예요. `path`나 `headers`의 중첩 객체도 같은 방식으로 실패해요.
+타입이 있는 객체를 spread하면서 그 와이어 키도 같이 쓰면 (`customerName` 옆의 `customer_name`) `REQ_BUILD_FAILED`예요. `path`나 `headers`의 중첩 객체도 같은 방식으로 실패해요.
 
 가이드는 루트만이 아니라 각 노드에서 정해져요. 익명 부모 아래에 새로 쓴 객체는 직접 쓴 키를 유지해요. 타입이 있는 부모 아래에서는 같은 객체가 그 필드의 struct를 써요.
 

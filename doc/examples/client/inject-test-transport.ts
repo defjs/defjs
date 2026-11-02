@@ -7,25 +7,25 @@ import {
   withHTTPHandle,
 } from "@defjs/core";
 
-const getUser = defineRequest({
+const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
 });
 
 const client = createClient(
   withEndpoint("https://fixture.invalid"),
-  withHTTPHandle(async () => Response.json({ id: 7, name: "Ada" })),
+  withHTTPHandle(async () => Response.json({ id: 7, status: "paid" })),
 );
 async function main() {
-  const [error, user] = await getUser(client, { id: 7 });
+  const [error, order] = await getOrder(client, { id: 7 });
   if (error) {
     console.error(error.code);
     return;
   }
-  console.log(user.name);
+  console.log(order.status);
 }
 
 void main();

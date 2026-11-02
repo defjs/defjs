@@ -18,12 +18,12 @@ The package is ESM and requires `@defjs/core` as a peer in the `^0.6.0` range.
 // api.ts — reusable definition
 import { defineRequest, struct } from "@defjs/core";
 
-export const getUser = defineRequest({
+export const getOrder = defineRequest({
   method: "GET",
-  path: "/users/:id",
+  path: "/orders/:id",
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
-  output: struct.object({ id: struct.number(), name: struct.string() }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
 });
 ```
 
@@ -31,14 +31,14 @@ export const getUser = defineRequest({
 // app.tsx
 import { createClient, withEndpoint } from "@defjs/core";
 import { ClientProvider } from "@defjs/react";
-import { UserProfile } from "./user-profile";
+import { OrderProfile } from "./order-profile";
 
 const client = createClient(withEndpoint("https://api.example.com"));
 
 export function App() {
   return (
     <ClientProvider client={client}>
-      <UserProfile id={1} />
+      <OrderProfile id={1} />
     </ClientProvider>
   );
 }
@@ -49,23 +49,23 @@ Read the client with `useClient()` and own request cleanup where the work starts
 ```tsx
 import { useEffect, useState } from "react";
 import { useClient } from "@defjs/react";
-import { getUser } from "./api";
+import { getOrder } from "./api";
 
-export function UserProfile({ id }: { id: number }) {
+export function OrderProfile({ id }: { id: number }) {
   const client = useClient();
   const [name, setName] = useState("loading...");
 
   useEffect(() => {
     const abort = new AbortController();
 
-    void getUser(client({ signal: abort.signal }), { id }).then(
-      ([error, user]) => {
+    void getOrder(client({ signal: abort.signal }), { id }).then(
+      ([error, order]) => {
         if (abort.signal.aborted) return;
         if (error) {
           setName(error.message);
           return;
         }
-        setName(user.name);
+        setName(order.status);
       },
     );
 

@@ -12,21 +12,21 @@ Construye formas del límite de cable, parsea valores e infiere tipos TypeScript
 Fachada. Prefiere esto frente a los constructores internos.
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### Primitivos y contenedores
@@ -57,7 +57,7 @@ readUser();
 - **Devuelve** `[null, value]` o `[StructError, undefined]`. El error lleva un solo issue. Los campos de un objeto se detienen en el primer campo incorrecto. `struct.or` prueba todas las ramas y luego informa `invalid_union`; no conserva el fallo de la primera rama.
 - Los campos de un objeto son obligatorios salvo que se marquen con `.optional()` o `.nullish()`. Las claves que la forma no declara se descartan del resultado.
 - `options.errorMap` opcional reescribe los mensajes de issue solo para este parse.
-- Por defecto lee claves **lógicas** (`displayName`). Pasa `{ aliases: true }` para leer claves de cable (`display_name`) igual que los códecs HTTP/JSON.
+- Por defecto lee claves **lógicas** (`customerName`). Pasa `{ aliases: true }` para leer claves de cable (`customer_name`) igual que los códecs HTTP/JSON.
 
 ## ErrorMap
 

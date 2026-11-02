@@ -9,14 +9,14 @@ Declara los cuerpos de éxito y de 404. Ramifica por `error.code` y `error.statu
 
 Ver detalles en [HTTP](/es-ES/docs/http) y [Errores](/es-ES/docs/errors).
 
-<include cwd meta="get-user.ts">
+<include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-`api.example.com` es un placeholder. Con un servidor que responde a `GET /users/7` con `200` y `{ "id": 7, "name": "Ada" }`, el snippet imprime:
+`api.example.com` es un placeholder. Con un servidor que responde a `GET /orders/7` con `200` y `{ "id": 7, "status": "paid" }`, el snippet imprime:
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
 Un estado no-2xx es `HTTP_STATUS`. Declarar `error` da un tipo a su cuerpo; omitir `error` deja `error.data` como `undefined` y el cuerpo sin leer. Si un cuerpo `error` declarado no se puede leer (media type incorrecto, JSON inválido, forma incorrecta), el resultado es un fault `RES_*`. Un único Struct `error` cubre todos los estados no-2xx, así que usa `struct.or(...)` o una unión discriminada cuando las formas difieren.

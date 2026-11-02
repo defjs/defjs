@@ -85,7 +85,7 @@ La definición es el contrato estable: método, path, struct de entrada, los str
   examples/design-decisions/definitions.ts#example
 </include>
 
-Un trabajo en segundo plano y un dueño de UI pueden llamar a la misma operación `getUser` con clientes distintos, así que cada uno puede elegir su propia política de cancelación y de reintento. El código de la aplicación no depende de tags ni símbolos internos del transporte.
+Un trabajo en segundo plano y un dueño de UI pueden llamar a la misma operación `getOrder` con clientes distintos, así que cada uno puede elegir su propia política de cancelación y de reintento. El código de la aplicación no depende de tags ni símbolos internos del transporte.
 
 ## Resultados propios de cada transporte
 
@@ -141,7 +141,7 @@ Un struct es el contrato de campos, en las dos direcciones. `.alias(name)` es el
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-El camino por defecto es entregar el valor tipado. `body: { users: input.users }` conserva el alias de cada usuario, así que el campo de cable es `display_name`. Una clave que escribes tú (`account_id`, `x-api-version`) es literal. Hacer spread de un objeto tipado conserva su struct; añadir la clave de cable junto al campo lógico es `REQ_BUILD_FAILED`.
+El camino por defecto es entregar el valor tipado. `body: { orders: input.orders }` conserva el alias de cada pedido, así que el campo de cable es `customer_name`. Una clave que escribes tú (`account_id`, `x-api-version`) es literal. Hacer spread de un objeto tipado conserva su struct; añadir la clave de cable junto al campo lógico es `REQ_BUILD_FAILED`.
 
 El anidamiento de query es una propiedad del backend, así que vive en el cliente: `withQuerySerializer((query) => string)` ve el objeto de cable codificado, alias incluidos. No se llama cuando no hay query. Un `URLSearchParams` que devuelve el builder se lo salta. Sin serializador, los arrays repiten claves y un objeto anidado falla. Los interceptores observan `queryParams` como `new URLSearchParams(queryString)`.
 

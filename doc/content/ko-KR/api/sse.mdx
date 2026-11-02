@@ -37,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-`EventStreamHandle`의 구조적 구현은 이제 `[Symbol.asyncDispose]()`를 구현하고 같은 소유 teardown 경로를 돌려줘야 해요. 커스텀 handle에는 컴파일 타임 breaking change예요. Defjs가 돌려준 handle만 받는 코드는 런타임에 새 호출이 필요 없어요.
+`EventStreamHandle`의 구조적 구현은 `[Symbol.asyncDispose]()`를 구현하고 같은 소유 teardown 경로를 돌려줘야 해요.
 
 ### EventStreamOpenInfo
 

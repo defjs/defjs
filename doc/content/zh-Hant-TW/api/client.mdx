@@ -5,7 +5,7 @@ description: createClient、option helpers，以及 Client 型別。
 
 # Client
 
-`createClient(...)` 回傳 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。Options 由左到右組合，再呼叫 `client(options?)` 取得 [`Client`](/zh-Hant-TW/api/core/client-type) 值，並把它傳給操作：`getUser(client(options), input)`。
+`createClient(...)` 回傳 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。Options 由左到右組合，再呼叫 `client(options?)` 取得 [`Client`](/zh-Hant-TW/api/core/client-type) 值，並把它傳給操作：`getOrder(client(options), input)`。
 
 ## createClient()
 
@@ -109,13 +109,13 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 <ApiSignature name="DerivableClient" />
 
-`createClient` 回傳的根 client，有兩種形態。factory 是一個函式，同時也是不帶 request options 的 `Client`，所以 `getUser(client, input)` 可直接使用。帶著 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫它，會回傳供單次呼叫使用的一般 `Client` 值。該值不可呼叫，因此 `client()()` 無法編譯，執行期會拋出 `TypeError`。衍生只發生一次，從 factory 開始，沒有鏈式呼叫。請把型別寫成 `DerivableClient`，而不是 `ReturnType<typeof createClient>`。
+`createClient` 回傳的根 client，有兩種形態。factory 是一個函式，同時也是不帶 request options 的 `Client`，所以 `getOrder(client, input)` 可直接使用。帶著 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫它，會回傳供單次呼叫使用的一般 `Client` 值。該值不可呼叫，因此 `client()()` 無法編譯，執行期會拋出 `TypeError`。衍生只發生一次，從 factory 開始，沒有鏈式呼叫。請把型別寫成 `DerivableClient`，而不是 `ReturnType<typeof createClient>`。
 
 ### Client
 
 <ApiSignature name="Client" />
 
-`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 會回傳一個。七個已知欄位從引數複製進一個新物件。未知欄位會被忽略，值為 `undefined` 的欄位會被省略。沒有父層覆疊：`client()`、`client(undefined)` 與 `client({})` 回傳不帶任何 request options 的 client。巢狀的 `heartbeat`、`protocols` 與 `reconnect` 的值依參考保留，不複製。WebSocket 在操作執行時讀取它們（那時會複製 heartbeat 的欄位與 protocols 清單），所以衍生之後再改這些物件，仍可能影響之後的呼叫。應用程式在傳入之後應把它們視為不可變。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗，並在執行期拋出 `TypeError`。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `signal` 的值會共用該 signal。`signal` 不會合併；在應用程式碼裡用 `AbortSignal.any` 組合 signals。
+`Client` 是一個值，不是函式。以 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 呼叫 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type) 會回傳一個。`client()` 與 `client(undefined)` 不存放 request options。`client({})` 保留一份空快照。這次呼叫把每個頂層欄位讀一次。`protocols` 陣列會被複製。`heartbeat` 與 `reconnect` 複製各自的已知欄位。缺失的巢狀區塊仍然缺失。`signal`、`beforeConnect` 與 callback 保持原身份。被捕獲欄位上的 getter 在這次呼叫期間執行；如果它拋錯，例外會離開這次呼叫。無效數字仍會稍後以 `REQ_OPTIONS_INVALID` 失敗。衍生不會進行 I/O。Client 值不可呼叫，呼叫它會在編譯時失敗，並在執行期拋出 `TypeError`。請為每次呼叫建立一個 client 值。同一個值可以傳給許多操作，但重複使用帶有 `signal` 的值會共用該 signal。`signal` 不會合併；在應用程式碼裡用 `AbortSignal.any` 組合 signals。Factory 的基礎設定仍然共用，也不會凍結。標準 `with*` helper 在套用時複製它們擁有的固定 record。
 
 不要把 factory 傳給 React 的 state setter（`setState(factory)` 會把它當成 updater 呼叫），也不要把它當成 Vue 的 `watch` 或 `computed` 來源（那些會呼叫函式）。
 
@@ -123,7 +123,7 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 <ApiSignature name="RequestOptions" />
 
-七個扁平欄位。每種協定只讀自己看得懂的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 會被忽略，不是 fault。SSE 只從請求 options 讀取 `signal`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選，也沒有 `timeout` 或 `abort` 欄位。
+七個扁平欄位。每種協定只讀自己看得懂的欄位，其餘忽略。把 `heartbeat` 傳給 HTTP 會被忽略，不是 fault。`client(options)` 在這次呼叫複製 `protocols` 陣列，以及 `heartbeat` 與 `reconnect` 的已知欄位。缺失的巢狀區塊仍然缺失。`signal`、`beforeConnect` 與 callback 保持原身份。SSE 只從請求 options 讀取 `signal`。SSE 重連來自 client 設定（`withSSEReconnect`），所以 `client({ reconnect })` 只影響 WebSocket。沒有編譯期的協定篩選，也沒有 `timeout` 或 `abort` 欄位。
 
 | 欄位                 | 協定                   | 替換方式                                                          |
 | -------------------- | ---------------------- | ----------------------------------------------------------------- |

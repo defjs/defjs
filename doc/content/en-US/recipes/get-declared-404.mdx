@@ -9,14 +9,14 @@ Declare both success and 404 bodies. Branch on `error.code` and `error.status` â
 
 See [HTTP](/docs/http) and [Errors](/docs/errors) for details.
 
-<include cwd meta="get-user.ts">
+<include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
 
-`api.example.com` is a placeholder. With a server that answers `GET /users/7` with `200` and `{ "id": 7, "name": "Ada" }`, the snippet prints:
+`api.example.com` is a placeholder. With a server that answers `GET /orders/7` with `200` and `{ "id": 7, "status": "paid" }`, the snippet prints:
 
 ```txt
-Loaded Ada from 200
+Loaded paid from 200
 ```
 
 A non-2xx status is `HTTP_STATUS`. Declaring `error` gives its body a type; omitting `error`

@@ -25,7 +25,7 @@ Path placeholders 係 raw scalars，encode 剛好一次。Empty values 同 `.` /
 
 Placeholder 名由 `:` 開始，直到下一個 `/` 或 path 結尾：`/files/:name.json` 嘅參數名係 `name.json`，唔係 `name`。Static segment 唔支援字面上嘅冒號。
 
-Definition paths 唔可以係形似 scheme 或 protocol-relative（包括前面有空格嘅寫法），亦唔可以包含 C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?` 或 `#`。路徑入面嘅普通空格允許，並會以 `%20` 送出。解析之後，URL 必須保持 base origin，並留喺佢嘅目錄之下；`../users` 呢類 path 唔可以逃出目錄。非法 paths 會喺 building 時以 `REQ_BUILD_FAILED` 失敗，早於 transport 執行。Interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一個規則檢查；interceptor 可以刻意將 base 換成另一個有效嘅絕對 URL。確定嘅 URL 錯誤永遠唔會重試。
+Definition paths 唔可以係形似 scheme 或 protocol-relative（包括前面有空格嘅寫法），亦唔可以包含 C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?` 或 `#`。路徑入面嘅普通空格允許，並會以 `%20` 送出。解析之後，URL 必須保持 base origin，並留喺佢嘅目錄之下；`../orders` 呢類 path 唔可以逃出目錄。非法 paths 會喺 building 時以 `REQ_BUILD_FAILED` 失敗，早於 transport 執行。Interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一個規則檢查；interceptor 可以刻意將 base 換成另一個有效嘅絕對 URL。確定嘅 URL 錯誤永遠唔會重試。
 
 預設 query encoder 接受 scalars 同 scalar arrays（arrays 會重複 key）。巢狀 object 會以 `REQ_BUILD_FAILED` 失敗，除非 client 有 `withQuerySerializer(...)`。`path`、`query` 或者 `headers` 入面嘅 `null` 都係同一種失敗。`undefined` 嘅 query 同 header 值會被省略。`undefined` 或者缺少嘅 path placeholder 會以 `REQ_BUILD_FAILED` 失敗。
 
@@ -37,19 +37,19 @@ Struct encode 個 value。Builder 擺放佢。只要聲明咗 `input`，就必�
   examples/http/place-input.ts#example
 </include>
 
-嗰個 body 係 `{"display_name":"Ada"}`，content type 係 `application/json`。Header 嘅 wire name 係 `x-request-id`。Callers 同 parsed results 保留 `displayName`。
+嗰個 body 係 `{"customer_name":"Ada"}`，content type 係 `application/json`。Header 嘅 wire name 係 `x-request-id`。Callers 同 parsed results 保留 `customerName`。
 
-Prefer 交 typed value，唔好自己拼 wire keys。Alias 喺 field 上面 declare 一次，兩個方向都生效：`output` / `error` / events / incoming frames 會將 `display_name` decode 成 `displayName`，而 `body: input.order` 會 rewrite 成棵 tree。同一個 `User` struct 可以係 create body，亦可以係 get output。手寫 key 係例外：parent object 係 anonymous，所以 alias 唔會 run。
+Prefer 交 typed value，唔好自己拼 wire keys。Alias 喺 field 上面 declare 一次，兩個方向都生效：`output` / `error` / events / incoming frames 會將 `customer_name` decode 成 `customerName`，而 `body: input.order` 會 rewrite 成棵 tree。同一個 `Order` struct 可以係 create body，亦可以係 get output。手寫 key 係例外：parent object 係 anonymous，所以 alias 唔會 run。
 
 | Builder expression                             | 線上點樣                                          |
 | ---------------------------------------------- | ------------------------------------------------- |
 | `body: input.profile`                          | Typed object：alias 同 `Date` / `bigint` encoding |
 | `body: { profile: input.profile }`             | 外層 keys 係 literal，內層 object 仍然 typed      |
 | `body: { ...input.profile, role: 'admin' }`    | Spread 保留 struct；額外嗰個 key 係 literal       |
-| `body: { name: input.profile.displayName }`    | Anonymous parent：alias 唔會套用                  |
+| `body: { name: input.profile.customerName }`   | Anonymous parent：alias 唔會套用                  |
 | `query: input.filter` / `headers: input.trace` | Typed flat objects：alias 變成 wire key           |
 
-Spread 一個 typed object 同時又 set 佢嘅 wire key（`display_name` 同 `displayName` 一齊）就係 `REQ_BUILD_FAILED`。`path` 或者 `headers` 入面嘅 nested object 都係同一種失敗。
+Spread 一個 typed object 同時又 set 佢嘅 wire key（`customer_name` 同 `customerName` 一齊）就係 `REQ_BUILD_FAILED`。`path` 或者 `headers` 入面嘅 nested object 都係同一種失敗。
 
 引導喺每個節點決定，唔只喺 root。Anonymous parent 下面新寫嘅 object 保留你寫落嘅 key。Typed parent 下面，同一個 object 改用嗰個 field 嘅 struct。
 

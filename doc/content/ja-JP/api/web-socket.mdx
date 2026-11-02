@@ -68,7 +68,7 @@ async function consume(
 `outgoing` は struct 1 つです。`session.send` はその struct の `StructInput` を受け、エイリアスをエンコードしてから `JSON.stringify` します。エンコード後に JSON で忠実に表現できない値は、送信や再接続キューへの追加の前に `TypeError` を投げます。非有限数、関数、symbol、`Map`、`Set`、ストリーム、JSON 表現を持たないクラスインスタンスなどが該当します。入れ子の値にも HTTP の JSON ボディと同じチェックを使います。ハートビートにもこのチェックが適用され、ハートビートのシリアライズに失敗するとセッションが終了します。メッセージの種類が複数なら `struct.discriminatedUnion` です。
 
 ```ts
-session.send({ type: "message", text: "Hello" });
+session.send({ type: "subscribe", symbol: "ACME" });
 ```
 
 [WebSocket ガイド](/ja-JP/docs/web-socket) と [WebSocket セッションを開く](/ja-JP/recipes/websocket-session) を見てください。

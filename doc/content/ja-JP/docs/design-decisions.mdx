@@ -65,7 +65,7 @@ SDK の作成者は、操作、入力契約、リクエストの配置、レス�
   examples/design-decisions/definitions.ts#example
 </include>
 
-バックグラウンドジョブと UI の所有者は、異なるクライアントで同じ `getUser` 操作を呼べるので、それぞれが自分のキャンセルとリトライの方針を選べます。アプリケーションコードは内部のトランスポートタグや symbol に依存しません。
+バックグラウンドジョブと UI の所有者は、異なるクライアントで同じ `getOrder` 操作を呼べるので、それぞれが自分のキャンセルとリトライの方針を選べます。アプリケーションコードは内部のトランスポートタグや symbol に依存しません。
 
 ## トランスポート固有の結果
 
@@ -107,7 +107,7 @@ struct は両方向のフィールド契約です。`.alias(name)` がワイヤ�
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-既定の道は、型付きの値をそのまま渡すことです。`body: { users: input.users }` は各ユーザーのエイリアスを保つので、ワイヤのフィールドは `display_name` です。自分で書いたキー（`account_id`、`x-api-version`）はリテラルです。型付きオブジェクトをスプレッドするとその struct が保たれます。論理フィールドの横にワイヤキーを足すと `REQ_BUILD_FAILED` です。
+既定の道は、型付きの値をそのまま渡すことです。`body: { orders: input.orders }` は各注文のエイリアスを保つので、ワイヤのフィールドは `customer_name` です。自分で書いたキー（`account_id`、`x-api-version`）はリテラルです。型付きオブジェクトをスプレッドするとその struct が保たれます。論理フィールドの横にワイヤキーを足すと `REQ_BUILD_FAILED` です。
 
 query の入れ子はバックエンドの性質なので、クライアント側に置きます。`withQuerySerializer((query) => string)` はエンコード済みのワイヤオブジェクトを見ます。エイリアスも含まれます。query が無いときは呼ばれません。ビルダーが返した `URLSearchParams` はこれを飛ばします。シリアライザが無ければ、配列はキーを繰り返し、入れ子オブジェクトは失敗します。インターセプターが見る `queryParams` は `new URLSearchParams(queryString)` です。
 

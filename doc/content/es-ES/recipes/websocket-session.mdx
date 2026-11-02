@@ -9,14 +9,14 @@ Cada dirección es un struct. Tú gestionas el unsubscribe, `close` y `await ses
 
 Ver detalles en [WebSocket](/es-ES/docs/web-socket).
 
-<include cwd meta="chat.ts">
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` es un placeholder. Con un servidor que responde a `{ "type": "send", "text": "Hello" }` con `{ "type": "message", "text": "Hello" }`, el snippet imprime:
+`quotes.example.com` es un placeholder. Con un servidor que responde a `{ "type": "subscribe", "symbol": "ACME" }` con `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, el snippet imprime:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
 La reconexión es opt-in (`withWebSocketReconnect`). El heartbeat también. Los WebSockets del navegador no admiten cabeceras arbitrarias de handshake — usa cookies, subprotocolos o un ticket de corta duración.

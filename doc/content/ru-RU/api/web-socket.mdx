@@ -68,7 +68,7 @@ async function consume(
 `outgoing` — один struct. `session.send` принимает `StructInput` этого struct, кодирует алиасы, затем вызывает `JSON.stringify`. Значения, которые после кодирования невозможно без искажений представить в JSON, вызывают `TypeError` до отправки или попадания в очередь переподключения: в том числе неконечные числа, функции, символы, `Map`, `Set`, потоки и экземпляры классов без JSON-представления. Вложенные значения проходят ту же проверку, что и HTTP-тела JSON. Heartbeat также использует эту проверку; ошибка сериализации heartbeat завершает сессию. Несколько видов сообщений — это `struct.discriminatedUnion`.
 
 ```ts
-session.send({ type: "message", text: "Hello" });
+session.send({ type: "subscribe", symbol: "ACME" });
 ```
 
 См. [гайд WebSocket](/ru-RU/docs/web-socket) и [Открыть WebSocket-сессию](/ru-RU/recipes/websocket-session).

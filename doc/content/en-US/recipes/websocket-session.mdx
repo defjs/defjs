@@ -9,14 +9,14 @@ Each direction is one struct. You own unsubscribe, `close`, and `await session.c
 
 See [WebSocket](/docs/web-socket) for details.
 
-<include cwd meta="chat.ts">
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` is a placeholder. With a server that answers `{ "type": "send", "text": "Hello" }` with `{ "type": "message", "text": "Hello" }`, the snippet prints:
+`quotes.example.com` is a placeholder. With a server that answers `{ "type": "subscribe", "symbol": "ACME" }` with `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, the snippet prints:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
 Reconnect is opt-in (`withWebSocketReconnect`). Heartbeat is opt-in too. Browser WebSockets can’t take arbitrary handshake headers — use cookies, subprotocols, or a short-lived ticket.

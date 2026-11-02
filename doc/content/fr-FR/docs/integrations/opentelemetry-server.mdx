@@ -52,6 +52,8 @@ Signatures des hooks :
 
 Un objet de transport vide active ce transport. Les anciens interrupteurs booléens de transport (`http: false`) et les anciens hooks de premier niveau sont rejetés par les types TypeScript seulement. Il n’y a pas de contrôle au runtime : au runtime `http: false` laisse le transport activé et un hook de premier niveau est ignoré en silence. Utilise des objets d’options de transport (`{ enabled: false }`) et des hooks bornés au transport.
 
+`withOpenTelemetryServer` lit `http`, puis `sse`, puis `webSocket`, chacun une fois. Un bloc absent reste absent et le transport reste activé. Un bloc présent est copié champ par champ : `enabled`, `startSpanHook`, `requestHook`, `responseHook` et, pour WebSocket, `queryPropagation`. Modifier ou remplacer un bloc ensuite ne change pas l’option. `enabled` est lu en premier. Seul `false` désactive ce transport, et la branche désactivée ne lit ni les hooks ni `queryPropagation`. Les getters des champs copiés s’exécutent pendant `withOpenTelemetryServer`. Si l’un lève une exception, elle quitte cet appel immédiatement ; les blocs suivants ne sont pas lus, et l’erreur n’est pas différée jusqu’à l’application de l’option. `tracer`, `meter`, `logger`, `propagator` et les fonctions de hook gardent leur identité.
+
 ## Identité d’opération et propagation
 
 Pose un `operation` statique sur `defineRequest`, `defineEventStream` ou `defineWebSocket` quand l’opération a une identité stable. Le plugin l’utilise dans les noms de span et comme `defjs.operation`. Il ne dérive jamais l’identité d’un path résolu, d’un identifiant, d’un tenant ou d’une query string :
@@ -88,7 +90,7 @@ Le span extérieur est le tien. Le plugin rapporte toujours le span de transport
 
 ## Référence
 
-Quand `meter` est fourni :
+Quand `meter` est fourni, le plugin appelle ses méthodes de création d’instruments chaque fois que l’option est appliquée à un client, et non pendant l’appel à `withOpenTelemetryServer`. Le Meter/SDK décide si les instruments retournés ou l’état d’agrégation sont partagés. Chaque histogramme de durée reçoit sa propre copie des bornes 0.005, 0.01, 0.025, 0.05, 0.075, 0.1, 0.25, 0.5, 0.75, 1, 2.5, 5, 7.5 et 10 secondes.
 
 | Métrique                                     | Sens                                                     |
 | -------------------------------------------- | -------------------------------------------------------- |

@@ -17,7 +17,7 @@ SDK は、入力、イベント契約、バッファ上限を持つイベント�
 
 ## ストリームを定義する
 
-`defineEventStream(...)` には `events`、正の安全な整数の `maxBufferSize`、正の安全な整数の `maxQueueSize`、相対 `path` が要ります。method のデフォルトは `GET` です。
+`defineEventStream(...)` には `events`、正の安全な整数の `maxBufferSize`、正の安全な整数の `maxQueueSize`、相対 `path` が要ります。method のデフォルトは `GET` です。呼び出しは既知の定義フィールドをコピーします。`events` の辞書コンテナは自身のプロパティとともにコピーされます。列挙できないプロパティも、計算プロパティ名で定義された `__proto__` プロパティも保持されます。継承された名前はコピーされません。Struct の値は同じオブジェクトのままです。その辞書のアクセサは、メッセージが届いたときに、元の辞書を `this` として引き続き実行されます。欠けている辞書は渡されたまま残され、イベントを解決するときにも報告されます。
 
 リクエストの形は HTTP と同じです。`builder` が `path`、`query`、`headers`、`body` を返します。`GET` / `HEAD` はボディを返せません。宣言した `error` struct は起動時の fault に型を付け、non-2xx のハンドシェイクボディを struct の kind でデコードします（`string` はテキスト、`blob` / `file` は blob、`arrayBuffer` はバイト列、それ以外は JSON）。`Accept` をすでに立てていなければ、Defjs は `Accept: text/event-stream` を送ります。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。`ReadableStream` のボディは HTTP の規則に従い、リクエストボディをストリームできないランタイム（Firefox など）では、何も送られる前に起動が `ENV_UNSUPPORTED` で失敗します。Chromium では HTTP/2 以降が必要で、HTTP/1.1 では起動が `NET_UNREACHABLE` で失敗します。ストリームをボディに持つリクエストは一度だけ送られ、再接続されることはありません（「再接続」を参照）。
 
@@ -106,7 +106,7 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 `await using` は同じ所有クローズ経路を呼び、Defjs の読み取り/再接続処理が止まり、アクティブな reader lock が解放されるまで待ちます。provider が制御する、決して settle しない `ReadableStream.cancel()` の promise については意図的に上限付きなので、その provider promise が完了したことは保証しません。理由や終端結果が要るときは、明示的な `stream.close(reason)` と `await stream.closed` も有効です。
 
-構造的な独自 `EventStreamHandle` 実装は、今や `[Symbol.asyncDispose](): PromiseLike<void>` を提供し、同じライフサイクルへ繋ぐ必要があります。実装者にとってはコンパイル時の破壊的変更です。Defjs のハンドルを受け取るだけの利用者は、実行時に新しいものを呼ぶ必要はありません。
+構造的な独自 `EventStreamHandle` 実装は、`[Symbol.asyncDispose](): PromiseLike<void>` を提供し、同じライフサイクルへ繋ぐ必要があります。
 
 サポートされる最低 lib 集合は `ES2022`、`ESNext.Disposable`、`DOM`、`DOM.Iterable` です。リポジトリの宣言用ツールは TypeScript 7 を使いますが、自動の packed-consumer 検証や最低 lib の検証ゲートはなく、古いコンパイラの対応も保証しません。この集合が提供するのは型であり、実行時の Web API の polyfill ではありません。`Client` は `AsyncDisposable` ではありません。各リクエストは `AbortSignal` で管理してください。
 

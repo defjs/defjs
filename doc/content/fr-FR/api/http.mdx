@@ -12,7 +12,7 @@ Déclare une requête typée, puis appelle l’opération avec un client et son 
 <ApiSignature name="defineRequest" />
 
 - **definition** — `method`, `path`, struct `input` facultatif, structs `output` et `error` facultatifs, `operation` facultative. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`. Ces membres de `definition` sont documentés sous [`RequestDefinition`](/fr-FR/api/core/requestdefinition-type). `builder` est obligatoire exactement quand `input` est déclaré.
-- **Renvoie** une opération. Appelle-la comme `getUser(client, input)`, ou `health(client)` quand aucune entrée n’est déclarée. Quand tout le struct d’entrée est facultatif, l’argument d’entrée peut être omis. L’appeler démarre la requête. Il n’y a pas de troisième argument d’options.
+- **Renvoie** une opération. Appelle-la comme `getOrder(client, input)`, ou `health(client)` quand aucune entrée n’est déclarée. Quand tout le struct d’entrée est facultatif, l’argument d’entrée peut être omis. L’appeler démarre la requête. Il n’y a pas de troisième argument d’options.
 
 <include cwd>examples/api/define-request.ts#example</include>
 
@@ -52,7 +52,7 @@ qu’une valeur venue du fil ; il n’y a pas de court-circuit de confiance.
 
 ### RequestDefinition
 
-`method`, `path`, `input`, `output`, `error`, `operation` et `builder` facultatifs. Il n’y a pas de `responseType` : le kind du struct choisit comment un corps déclaré est lu. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
+`method`, `path`, `input`, `output`, `error`, `operation` et `builder` facultatifs.Le kind du struct choisit comment un corps déclaré est lu. Un `input` déclaré exige toujours un `builder` explicite. `input` ne fait que définir les paramètres ; seul le builder décide où va chaque valeur. Seules les définitions sans `input` peuvent omettre `builder`.
 
 ### HttpAwaitResult
 

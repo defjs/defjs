@@ -9,14 +9,14 @@ description: 接続し、型付きエンベロープを 1 つ送り、1 つ受�
 
 詳細は [WebSocket](/ja-JP/docs/web-socket) を見てください。
 
-<include cwd meta="chat.ts">
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` はプレースホルダーです。`{ "type": "send", "text": "Hello" }` に `{ "type": "message", "text": "Hello" }` で応答するサーバーに対して、このスニペットは次のように出力します。
+`quotes.example.com` はプレースホルダーです。`{ "type": "subscribe", "symbol": "ACME" }` に `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` で応答するサーバーに対して、このスニペットは次のように出力します。
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
 再接続はオプトインです（`withWebSocketReconnect`）。ハートビートもオプトインです。ブラウザーの WebSocket は任意のハンドシェイクヘッダーを取れません — cookie、サブプロトコル、短命チケットを使ってください。

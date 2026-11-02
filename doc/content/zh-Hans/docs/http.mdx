@@ -25,7 +25,7 @@ Path 占位符是原始标量，恰好编码一次。空值和 `.` / `..` 会被
 
 占位符名称从 `:` 开始，一直到下一个 `/` 或路径结尾：`/files/:name.json` 对应的参数名是 `name.json`，不是 `name`。静态路径段不支持字面冒号。
 
-定义中的路径不能是形似 scheme 或协议相对的路径（包括带前导空格的写法），也不能含 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?` 或 `#`。路径内部的普通空格允许，并按 `%20` 发送。解析后的 URL 必须与基础端点同源，并位于其目录内；`../users` 这样的路径不能越出该目录。非法路径在构建时、传输前以 `REQ_BUILD_FAILED` 失败。interceptor 的最终 `req.endpoint` 也会相对于最终 `req.baseEndpoint` 按相同规则检查；interceptor 可以有意把基础端点换成另一个有效的绝对 URL。确定性的 URL 错误不会重试。
+定义中的路径不能是形似 scheme 或协议相对的路径（包括带前导空格的写法），也不能含 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?` 或 `#`。路径内部的普通空格允许，并按 `%20` 发送。解析后的 URL 必须与基础端点同源，并位于其目录内；`../orders` 这样的路径不能越出该目录。非法路径在构建时、传输前以 `REQ_BUILD_FAILED` 失败。interceptor 的最终 `req.endpoint` 也会相对于最终 `req.baseEndpoint` 按相同规则检查；interceptor 可以有意把基础端点换成另一个有效的绝对 URL。确定性的 URL 错误不会重试。
 
 默认 query 编码器接受标量和标量数组（数组重复 key）。嵌套对象会以 `REQ_BUILD_FAILED` 失败，除非 client 配置了 `withQuerySerializer(...)`。`path`、`query`、`headers` 里的 `null` 同样以 `REQ_BUILD_FAILED` 失败。`undefined` 的 query 和 header 值会省略。`undefined` 或缺失的 path 占位符以 `REQ_BUILD_FAILED` 失败，不会省略。
 
@@ -37,19 +37,19 @@ Struct 编码值。`builder` 把它放上去。只要声明了 `input`，就必�
   examples/http/place-input.ts#example
 </include>
 
-这个 body 是 `{"display_name":"Ada"}`，`application/json`。Header 的传输字段名是 `x-request-id`。调用方和 parse 结果仍用 `displayName`。
+这个 body 是 `{"customer_name":"Ada"}`，`application/json`。Header 的传输字段名是 `x-request-id`。调用方和 parse 结果仍用 `customerName`。
 
-优先把带类型的值交过去，别手写传输字段名。Alias 在字段上声明一次，两个方向都生效：`output` / `error` / 事件 / incoming frame 把 `display_name` 解成 `displayName`，`body: input.order` 会改写整棵树。同一个 `User` struct 可以既是创建 body，也是 GET 的 output。手写 key 是例外：外层对象是匿名的，alias 不跑。
+优先把带类型的值交过去，别手写传输字段名。Alias 在字段上声明一次，两个方向都生效：`output` / `error` / 事件 / incoming frame 把 `customer_name` 解成 `customerName`，`body: input.order` 会改写整棵树。同一个 `Order` struct 可以既是创建 body，也是 GET 的 output。手写 key 是例外：外层对象是匿名的，alias 不跑。
 
 | Builder 表达式                                 | 传输结果                                         |
 | ---------------------------------------------- | ------------------------------------------------ |
 | `body: input.profile`                          | 带类型的对象：alias，以及 `Date` / `bigint` 编码 |
 | `body: { profile: input.profile }`             | 外层 key 是字面量，内层对象仍带类型              |
 | `body: { ...input.profile, role: 'admin' }`    | 展开保住 struct；多出来的 key 是字面量           |
-| `body: { name: input.profile.displayName }`    | 匿名父对象：alias 不生效                         |
+| `body: { name: input.profile.customerName }`   | 匿名父对象：alias 不生效                         |
 | `query: input.filter` / `headers: input.trace` | 带类型的扁平对象：alias 变成传输字段名           |
 
-展开带类型的对象，同时又写下它的传输字段名（`display_name` 挨着 `displayName`）就是 `REQ_BUILD_FAILED`。`path` 或 `headers` 里的嵌套对象同样失败。
+展开带类型的对象，同时又写下它的传输字段名（`customer_name` 挨着 `customerName`）就是 `REQ_BUILD_FAILED`。`path` 或 `headers` 里的嵌套对象同样失败。
 
 编码依据在每个节点上分别选择，而不只在根节点选择。匿名父对象下面新写的对象保留你写下的 key。带类型的父对象下面，同一个对象改用该字段的 struct。
 

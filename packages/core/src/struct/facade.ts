@@ -92,21 +92,21 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  * ```ts
  * import { struct } from "@defjs/core";
  *
- * const User = struct.object({
+ * const Order = struct.object({
  *   id: struct.number(),
- *   displayName: struct.string().alias("display_name"),
+ *   customerName: struct.string().alias("customer_name"),
  * });
  *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+ * function readOrder() {
+ *   const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
  *   if (error) {
  *     console.error(error.message);
  *     return;
  *   }
- *   console.log(user.displayName);
+ *   console.log(order.customerName);
  * }
  *
- * readUser();
+ * readOrder();
  * ```
  *
  * ### Primitives and containers
@@ -146,29 +146,29 @@ function structOr<const T extends readonly [StructLike, ...StructLike[]]>(
  *
  * @example
  * ```ts
- * const User = struct.object({
+ * const Order = struct.object({
  *   id: struct.number(),
- *   displayName: struct.string().alias('display_name'),
+ *   customerName: struct.string().alias('customer_name'),
  * })
  *
- * const getUser = defineRequest({
+ * const getOrder = defineRequest({
  *   method: 'GET',
- *   path: '/users/:id',
+ *   path: '/orders/:id',
  *   input: struct.object({ id: struct.number() }),
  *   builder: (input) => ({ path: input }),
- *   output: User,
+ *   output: Order,
  * })
  *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: 'Ada' })
+ * function readOrder() {
+ *   const [error, order] = struct.parse(Order, { id: 1, customerName: 'Ada' })
  *   if (error) {
  *     console.error(error.message)
  *     return
  *   }
- *   console.log(user.displayName)
+ *   console.log(order.customerName)
  * }
  *
- * readUser()
+ * readOrder()
  * ```
  * @group struct
  */

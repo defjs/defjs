@@ -27,7 +27,7 @@ description: HTTP, SSE, WebSocket 인터셉터 생성자예요.
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Wrapper나 short-circuit session은 `close` / `closed` lifecycle과 같은 `[Symbol.asyncDispose]()` teardown을 전달해야 해요. 관계없는 resolved promise를 반환하는 것만으로는 부족해요. 이 멤버 요구는 구조적인 구현에 컴파일 타임 breaking change예요. Defjs가 반환한 session을 받기만 하는 코드는 런타임에 새 호출을 추가할 필요가 없어요.
+Wrapper나 short-circuit session은 `close` / `closed` lifecycle과 같은 `[Symbol.asyncDispose]()` teardown을 전달해야 해요. 관계없는 resolved promise를 반환하는 것만으로는 부족해요.
 
 ## 태그가 있는 타입
 

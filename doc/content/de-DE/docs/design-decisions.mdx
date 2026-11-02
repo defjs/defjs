@@ -85,7 +85,7 @@ Die Definition ist der stabile Vertrag: Method, Path, Input-Struct, die Structs,
   examples/design-decisions/definitions.ts#example
 </include>
 
-Ein Background-Job und ein UI-Owner können dieselbe `getUser`-Operation mit unterschiedlichen Clients aufrufen, damit jeder seinen eigenen Abbruch und seine Retry-Regel wählen kann. Anwendungscode hängt nicht von internen Transport-Tags oder Symbolen ab.
+Ein Background-Job und ein UI-Owner können dieselbe `getOrder`-Operation mit unterschiedlichen Clients aufrufen, damit jeder seinen eigenen Abbruch und seine Retry-Regel wählen kann. Anwendungscode hängt nicht von internen Transport-Tags oder Symbolen ab.
 
 ## Transport-spezifische Ergebnisse
 
@@ -141,7 +141,7 @@ Ein Struct ist der Field-Vertrag, in beide Richtungen. `.alias(name)` ist der Wi
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-Der Default-Pfad ist, den typisierten Wert durchzureichen. `body: { users: input.users }` behält den Alias jedes Users, der Wire-Field ist also `display_name`. Ein Key, den du selbst schreibst (`account_id`, `x-api-version`), ist literal. Ein typisiertes Object per Spread zu übernehmen behält seinen Struct; den Wire-Key neben das logische Field zu setzen ist `REQ_BUILD_FAILED`.
+Der Default-Pfad ist, den typisierten Wert durchzureichen. `body: { orders: input.orders }` behält den Alias jeder Bestellung, der Wire-Field ist also `customer_name`. Ein Key, den du selbst schreibst (`account_id`, `x-api-version`), ist literal. Ein typisiertes Object per Spread zu übernehmen behält seinen Struct; den Wire-Key neben das logische Field zu setzen ist `REQ_BUILD_FAILED`.
 
 Query-Nesting ist eine Eigenschaft des Backends, also lebt es auf dem Client: `withQuerySerializer((query) => string)` sieht das encodierte Wire-Object, Aliasse inklusive. Ohne Query wird er nicht aufgerufen. `URLSearchParams` aus dem Builder überspringt ihn. Ohne Serializer wiederholen Arrays Keys, und ein genestetes Object schlägt fehl. Interceptors sehen `queryParams` als `new URLSearchParams(queryString)`.
 

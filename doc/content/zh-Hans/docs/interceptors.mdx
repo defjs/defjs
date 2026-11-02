@@ -53,7 +53,7 @@ HTTP 从不把推断出的 Content-Type 写入 `request.headers`；interceptor �
   examples/interceptors/short-circuit.ts#example
 </include>
 
-操作仍按状态分派。调用方要类型化 `error.data` 时，用一个 `error` struct 描述非 2xx 侧。它也仍会检查声明过的那一侧：JSON `output` 或 `error` 要求合成响应带 JSON `content-type` header，`body` 则应当已经是解析后的值，和传输会交付的一样（`request.responseType` 与 `request.errorResponseType` 指明表示方式）。短路 SSE 或 WebSocket 需要完整兼容的 handle/session（关闭 promise、实时状态、所有权和 `[Symbol.asyncDispose]`）。半截对象不是合法策略。结构化 `EventStreamHandle` 与 `WebSocketSessionLike` 实现现在编译时必须提供标准 disposer；只接收 Defjs handle 的消费者无需新增运行时调用。
+操作仍按状态分派。调用方要类型化 `error.data` 时，用一个 `error` struct 描述非 2xx 侧。它也仍会检查声明过的那一侧：JSON `output` 或 `error` 要求合成响应带 JSON `content-type` header，`body` 则应当已经是解析后的值，和传输会交付的一样（`request.responseType` 与 `request.errorResponseType` 指明表示方式）。短路 SSE 或 WebSocket 需要完整兼容的 handle/session（关闭 promise、实时状态、所有权和 `[Symbol.asyncDispose]`）。半截对象不是合法策略。
 
 ## 重试安全读
 

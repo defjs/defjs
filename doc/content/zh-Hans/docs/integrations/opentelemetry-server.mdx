@@ -52,6 +52,8 @@ Hook 签名：
 
 空的传输对象会启用该传输。旧的布尔传输开关（`http: false`）和旧的顶层 hooks 只会被 TypeScript 类型拒绝，没有运行时检查：运行时 `http: false` 仍让该传输保持启用，顶层 hook 则被静默忽略。请使用传输 option 对象（`{ enabled: false }`）和传输作用域 hooks。
 
+`withOpenTelemetryServer` 先读 `http`，再读 `sse`，再读 `webSocket`，各一次。缺失的块保持缺失，该传输仍保持启用。给出的块按字段复制：`enabled`、`startSpanHook`、`requestHook`、`responseHook`，WebSocket 另有 `queryPropagation`。之后改动或替换某个块，不会改变这份 option。`enabled` 最先读。只有 `false` 会禁用该传输，禁用分支不读 hooks 或 `queryPropagation`。被复制字段的 getter 在 `withOpenTelemetryServer` 期间运行。若其中一个抛出，异常立刻离开这次调用；后面的块不再读取，错误也不会推迟到应用这份 option 时。`tracer`、`meter`、`logger`、`propagator` 和 hook 函数保持各自的身份。
+
 ## 操作身份与传播
 
 操作有稳定身份时，在 `defineRequest`、`defineEventStream` 或 `defineWebSocket` 上设静态 `operation`。Plugin 把它用在 span 名和 `defjs.operation`。从不从解析后的 path、标识符、租户或 query 推导身份：
@@ -88,7 +90,7 @@ Plugin 量的是传输寿命，不是操作的每一阶段。
 
 ## 参考
 
-传了 `meter` 时：
+提供 `meter` 时，插件会在每次将 option 应用到 client 时调用它的指标创建方法，而不是在调用 `withOpenTelemetryServer` 时调用。返回的指标对象或聚合状态是否共享，由 Meter/SDK 决定。每个耗时直方图各自拿到一份边界副本：0.005、0.01、0.025、0.05、0.075、0.1、0.25、0.5、0.75、1、2.5、5、7.5 和 10 秒。
 
 | Metric                                       | 含义                                            |
 | -------------------------------------------- | ----------------------------------------------- |

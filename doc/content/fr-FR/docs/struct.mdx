@@ -66,14 +66,14 @@ Chemin, query, en-têtes et corps sont des champs que le builder renvoie, pas un
   examples/struct/aliases.ts#example
 </include>
 
-| Frontière                                       | Champ                        |
-| ----------------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)` et entrée d’opération | `displayName` logique        |
-| Objet typé renvoyé par le builder               | `display_name` wire          |
-| Décodage JSON / SSE / WebSocket                 | Wire → `displayName` logique |
-| Objet anonyme écrit dans le builder             | La clé que tu as écrite      |
+| Frontière                                        | Champ                         |
+| ------------------------------------------------ | ----------------------------- |
+| `struct.parse(Order, ...)` et entrée d’opération | `customerName` logique        |
+| Objet typé renvoyé par le builder                | `customer_name` wire          |
+| Décodage JSON / SSE / WebSocket                  | Wire → `customerName` logique |
+| Objet anonyme écrit dans le builder              | La clé que tu as écrite       |
 
-Le builder lui-même lit les noms logiques (`input.user.displayName`) ; le nom wire n’apparaît que quand le serializer encode l’objet typé que le builder renvoie.
+Le builder lui-même lit les noms logiques (`input.order.customerName`) ; le nom wire n’apparaît que quand le serializer encode l’objet typé que le builder renvoie.
 
 Les aliases fonctionnent sur les champs imbriqués, les tableaux, les objets, les unions et les discriminateurs. Garde les noms logiques dans le code app ; pose le nom externe sur le struct une fois. Étaler un objet typé garde cet encodage. Poser à la fois le champ logique et sa clé wire dans le même objet est `REQ_BUILD_FAILED`. `JSON.stringify` d’une valeur que tu fais toi-même quitte ce chemin : le serializer voit les noms logiques.
 

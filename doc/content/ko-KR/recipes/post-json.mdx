@@ -9,12 +9,12 @@ description: 타입이 있는 JSON body를 보내고 선언된 201을 디코딩�
 
 자세한 내용은 [HTTP](/ko-KR/docs/http)와 [클라이언트](/ko-KR/docs/client)를 보세요.
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com`은 placeholder예요. `201`과 `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
+`api.example.com`은 placeholder예요. `201`과 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

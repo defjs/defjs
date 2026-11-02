@@ -68,7 +68,7 @@ export function encodeStructValue(
  *
  * - **value** is the unknown input.
  *
- * - **options.aliases** defaults to `false`: object keys are read by their **logical** names (`displayName`). With `true` they are read by their wire names (`display_name`), the way HTTP/JSON codecs read them. The output always uses logical names.
+ * - **options.aliases** defaults to `false`: object keys are read by their **logical** names (`customerName`). With `true` they are read by their wire names (`customer_name`), the way HTTP/JSON codecs read them. The output always uses logical names.
  *
  * - **options.errorMap** is an {@link ErrorMap} that rewrites issue messages for this call only, including bigint/date conversion failures from a struct created by another Core copy. Any string, including `''`, replaces the message; only `undefined` keeps the default. Custom text is used verbatim.
  *
@@ -79,18 +79,18 @@ export function encodeStructValue(
  * ```ts
  * import { struct } from "@defjs/core";
  *
- * const User = struct.object({ id: struct.number(), displayName: struct.string() });
+ * const Order = struct.object({ id: struct.number(), customerName: struct.string() });
  *
- * function readUser() {
- *   const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+ * function readOrder() {
+ *   const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
  *   if (error) {
  *     console.error(error.prettify());
  *     return;
  *   }
- *   console.log(user.displayName);
+ *   console.log(order.customerName);
  * }
  *
- * readUser();
+ * readOrder();
  * ```
  *
  * `any` and `unknown` do not traverse their values, but an intersection may recursively merge two distinct object or array values returned by those leaves. This merge shares the same 256-container budget with its enclosing logical path. Exceeding it produces `invalid_intersection` at the rejected container's logical path. Identical references are retained without traversal, including a shared cyclic value.

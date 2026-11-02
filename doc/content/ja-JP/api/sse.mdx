@@ -37,7 +37,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 }
 ```
 
-`EventStreamHandle` の構造的実装は、今や `[Symbol.asyncDispose]()` を実装し、同じ所有 teardown 経路を返す必要があります。独自ハンドルにとってはコンパイル時の破壊的変更です。Defjs が返すハンドルを受け取るだけのコードには、新しい実行時呼び出しは要りません。
+`EventStreamHandle` の構造的実装は、`[Symbol.asyncDispose]()` を実装し、同じ所有 teardown 経路を返す必要があります。
 
 ### EventStreamOpenInfo
 

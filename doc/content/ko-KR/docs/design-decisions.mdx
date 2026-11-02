@@ -65,7 +65,7 @@ body란 디코딩된 값이에요. 디코딩이 실패하면 값이 없어요. �
   examples/design-decisions/definitions.ts#example
 </include>
 
-백그라운드 작업과 UI 소유자는 서로 다른 클라이언트로 같은 `getUser` 작업을 호출할 수 있어서, 각자 취소와 재시도 정책을 고를 수 있어요. 애플리케이션 코드는 내부 전송 태그나 심볼에 의존하지 않아요.
+백그라운드 작업과 UI 소유자는 서로 다른 클라이언트로 같은 `getOrder` 작업을 호출할 수 있어서, 각자 취소와 재시도 정책을 고를 수 있어요. 애플리케이션 코드는 내부 전송 태그나 심볼에 의존하지 않아요.
 
 ## 전송별 결과
 
@@ -107,7 +107,7 @@ struct는 양방향의 필드 계약이에요. `.alias(name)`이 와이어 이�
   examples/design-decisions/builder-encoder-alias.ts#example
 </include>
 
-기본 경로는 타입이 있는 값을 넘기는 거예요. `body: { users: input.users }`는 각 사용자의 alias를 유지해서 와이어 필드는 `display_name`이에요. 직접 쓴 키(`account_id`, `x-api-version`)는 리터럴이에요. 타입이 있는 객체를 spread하면 struct가 유지돼요. 논리 필드 옆에 와이어 키를 더하면 `REQ_BUILD_FAILED`예요.
+기본 경로는 타입이 있는 값을 넘기는 거예요. `body: { orders: input.orders }`는 각 주문의 alias를 유지해서 와이어 필드는 `customer_name`이에요. 직접 쓴 키(`account_id`, `x-api-version`)는 리터럴이에요. 타입이 있는 객체를 spread하면 struct가 유지돼요. 논리 필드 옆에 와이어 키를 더하면 `REQ_BUILD_FAILED`예요.
 
 query 중첩은 백엔드의 성질이라 클라이언트에 있어요. `withQuerySerializer((query) => string)`은 alias가 포함된 인코딩된 와이어 객체를 봐요. query가 없으면 호출되지 않아요. builder가 돌려준 `URLSearchParams`는 이걸 건너뛰어요. serializer가 없으면 배열은 키를 반복하고 중첩 객체는 실패해요. interceptor가 보는 `queryParams`는 `new URLSearchParams(queryString)`이에요.
 

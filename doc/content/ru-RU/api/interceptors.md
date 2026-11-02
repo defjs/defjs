@@ -27,7 +27,7 @@ description: Конструкторы interceptor’ов HTTP, SSE и WebSocket.
 
 <ApiSignature name="WebSocketSessionLike" />
 
-Wrapper или short-circuit session должен пересылать тот же teardown `[Symbol.asyncDispose]()`, что и его `close` / `closed` lifecycle; отдельного resolved promise недостаточно. Требование этого member — compile-time breaking change для структурных реализаций. Код, который только принимает session от Defjs, не обязан добавлять новый runtime-вызов.
+Wrapper или short-circuit session должен пересылать тот же teardown `[Symbol.asyncDispose]()`, что и его `close` / `closed` lifecycle; отдельного resolved promise недостаточно.
 
 ## Типы с тегом
 

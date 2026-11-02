@@ -9,12 +9,12 @@ description: Отправь типизированное JSON-тело и дек
 
 Подробности — в [HTTP](/ru-RU/docs/http) и [Клиент](/ru-RU/docs/client).
 
-<include cwd meta="create-user.ts">
+<include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` — placeholder. Если сервер отвечает `201` и `{ "id": 1, "name": "Ada", "email": "ada@example.com" }`, сниппет выведет:
+`api.example.com` — placeholder. Если сервер отвечает `201` и `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, сниппет выведет:
 
 ```txt
-Created Ada → 201
+Created paid → 201
 ```

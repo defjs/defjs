@@ -66,14 +66,14 @@ Path, query, headers, and body are fields the builder returns, not a request str
   examples/struct/aliases.ts#example
 </include>
 
-| Boundary                                      | Field                        |
-| --------------------------------------------- | ---------------------------- |
-| `struct.parse(User, ...)` and operation input | Logical `displayName`        |
-| Typed object returned from the builder        | Wire `display_name`          |
-| JSON / SSE / WebSocket decoding               | Wire → logical `displayName` |
-| Anonymous object written in the builder       | The key you wrote            |
+| Boundary                                       | Field                         |
+| ---------------------------------------------- | ----------------------------- |
+| `struct.parse(Order, ...)` and operation input | Logical `customerName`        |
+| Typed object returned from the builder         | Wire `customer_name`          |
+| JSON / SSE / WebSocket decoding                | Wire → logical `customerName` |
+| Anonymous object written in the builder        | The key you wrote             |
 
-The builder itself reads logical names (`input.user.displayName`); the wire name appears only when the serializer encodes the typed object the builder returns.
+The builder itself reads logical names (`input.order.customerName`); the wire name appears only when the serializer encodes the typed object the builder returns.
 
 Aliases work on nested fields, arrays, objects, unions, and discriminators. Keep logical names in app code; put the external name on the struct once. Spreading a typed object keeps that encoding. Setting both the logical field and its wire key in the same object is `REQ_BUILD_FAILED`. `JSON.stringify` of a value yourself leaves this path: the serializer sees logical names.
 

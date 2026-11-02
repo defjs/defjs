@@ -104,9 +104,7 @@ export function materializeOutboundRequest(
   if (shape["body"] !== undefined) {
     const body = materializeBody(shape["body"], guides);
     request.body = body.body;
-    if (body.defaultContentType) {
-      request.defaultContentType = body.defaultContentType;
-    }
+    request.defaultContentType = body.defaultContentType;
   }
   return request;
 }

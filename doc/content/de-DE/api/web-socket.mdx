@@ -68,7 +68,7 @@ Ist `reconnect` gesetzt, ist der Default für `attempts` 3 je Ausfall; `0` schal
 `outgoing` ist ein Struct. `session.send` akzeptiert `StructInput` dieses Structs, encodet Aliasse, dann `JSON.stringify`. Werte, die JSON nach der Kodierung nicht treu darstellen kann, werfen `TypeError`, bevor gesendet oder in die Reconnect-Queue eingereiht wird, darunter nicht endliche Zahlen, Funktionen, Symbols, `Map`, `Set`, Streams und Klasseninstanzen ohne JSON-Darstellung. Verschachtelte Werte nutzen dieselbe Prüfung wie HTTP-JSON-Bodys. Der Heartbeat nutzt diese Prüfung ebenfalls; ein Serialisierungsfehler des Heartbeats beendet die Session. Mehrere Message-Kinds sind ein `struct.discriminatedUnion`.
 
 ```ts
-session.send({ type: "message", text: "Hello" });
+session.send({ type: "subscribe", symbol: "ACME" });
 ```
 
 Siehe [WebSocket-Guide](/de-DE/docs/web-socket) und [WebSocket-Session öffnen](/de-DE/recipes/websocket-session).

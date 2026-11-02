@@ -9,7 +9,7 @@ Importa operaciones de tu SDK o de un módulo de definición compartido. La apli
 
 Estos plugins son ayudas opcionales para proporcionar y leer un `Client` existente. Importa un cliente fijo que posee la aplicación, pasa un `Client` de forma explícita a la lógica reutilizable, usa la inyección del framework para valores por defecto y sustituciones a nivel de árbol, o elige tu propia organización. Las definiciones del SDK no requieren estos plugins.
 
-Conecta un cliente `@defjs/core` existente a un árbol React. Obtienes Context y `useClient()`. El paquete **no** crea un cliente, no añade caché, no reintenta operaciones ni libera recursos de transporte. El componente, effect o librería de datos que arranca el trabajo es su dueño. El cliente de `useClient()` se pasa a la operación. El hook devuelve el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó. Para opciones por llamada como `signal`, llámalo donde se ejecuta la operación: `getUser(client({ signal }), input)`. No lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater. `ClientProvider` y `useClient` no aceptan un valor `Client` derivado.
+Conecta un cliente `@defjs/core` existente a un árbol React. Obtienes Context y `useClient()`. El paquete **no** crea un cliente, no añade caché, no reintenta operaciones ni libera recursos de transporte. El componente, effect o librería de datos que arranca el trabajo es su dueño. El cliente de `useClient()` se pasa a la operación. El hook devuelve el [`DerivableClient`](/es-ES/api/core/derivableclient-type) que se proporcionó. Para opciones por llamada como `signal`, llámalo donde se ejecuta la operación: `getOrder(client({ signal }), input)`. No lo pases a un setter de estado, porque `setState(client)` lo llamaría como updater. `ClientProvider` y `useClient` no aceptan un valor `Client` derivado.
 
 ## Configuración básica
 
@@ -17,7 +17,7 @@ Instala `@defjs/core`, `@defjs/react` y React 18+. ESM:
 
 `bun add @defjs/core @defjs/react react`
 
-Proporciona el cliente, luego carga un usuario y aborta al cambiar:
+Proporciona el cliente, luego carga un pedido y aborta al cambiar:
 
 <include cwd>examples/react/client-provider.tsx#example</include>
 

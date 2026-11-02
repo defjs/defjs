@@ -12,21 +12,21 @@ description: Фасад struct, Infer и StructError.
 Фасад. Бери его, а не внутренние конструкторы.
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### Примитивы и контейнеры
@@ -57,7 +57,7 @@ readUser();
 - **Возвращает** `[null, value]` или `[StructError, undefined]`. Ошибка несёт один issue. Поля объекта останавливаются на первом плохом поле. `struct.or` пробует каждую ветку, затем сообщает `invalid_union` и не сохраняет провал первой ветки.
 - Поля объекта обязательны, если не помечены `.optional()` или `.nullish()`. Ключи, которых нет в shape, отбрасываются из результата.
 - Опциональный `options.errorMap` переписывает сообщения issue только для этого parse.
-- По умолчанию читает **логические** ключи (`displayName`). Передай `{ aliases: true }`, чтобы читать wire-ключи (`display_name`) так же, как кодеки HTTP/JSON.
+- По умолчанию читает **логические** ключи (`customerName`). Передай `{ aliases: true }`, чтобы читать wire-ключи (`customer_name`) так же, как кодеки HTTP/JSON.
 
 ## ErrorMap
 

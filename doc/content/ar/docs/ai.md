@@ -19,18 +19,18 @@ npx skills add defjs/defjs --skill defjs
 
 ## اطلب نقطة نهاية واحدة [#prompt]
 
-أعطِ المساعد مهمة. يطلب هذا النص `GET /users/:id` محدَّد الأنواع يبقى عميله في التطبيق:
+أعطِ المساعد مهمة. يطلب هذا النص `GET /orders/:id` محدَّد الأنواع يبقى عميله في التطبيق:
 
 ```txt
-Use @defjs/core to define GET /users/:id.
-The input is { id: number }; a successful response is { id: number, name: string }.
+Use @defjs/core to define GET /orders/:id.
+The input is { id: number }; a successful response is { id: number, status: string }.
 Keep the SDK definition and application client in separate modules,
 and verify the result with the project’s existing tests.
 ```
 
 ## تحقق من النتيجة [#verify]
 
-اقرأ التعريف والتطبيق كلًا على حدة. يصدّر التعريف العملية ولا ينشئ العميل. ينشئ التطبيق العميل ويستدعي العملية، مثل `getUser(client, { id: 1 })`. حيث يُعلَن `input`، يكون `builder` دالة متزامنة نقية مكتوبة صراحة. تُستخدم قيمة النجاح فقط بعد أن يخلو موضع الخطأ.
+اقرأ التعريف والتطبيق كلًا على حدة. يصدّر التعريف العملية ولا ينشئ العميل. ينشئ التطبيق العميل ويستدعي العملية، مثل `getOrder(client, { id: 1 })`. حيث يُعلَن `input`، يكون `builder` دالة متزامنة نقية مكتوبة صراحة. تُستخدم قيمة النجاح فقط بعد أن يخلو موضع الخطأ.
 
 ثم شغّل فحص الأنواع في ذلك المشروع والاختبارات التي تغطي العقد. يبقى تثبيت الاعتماديات وقواعد CI مع ذلك المشروع.
 

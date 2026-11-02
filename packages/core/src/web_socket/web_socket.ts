@@ -1,5 +1,6 @@
 import type { Client, RequestOptions } from "../client/client";
 import { CLIENT } from "../client/client";
+import { snapshotProtocols } from "../client/capture";
 import type {
   ClientConfig,
   ClientWebSocketOptions,
@@ -388,6 +389,8 @@ export interface WebSocketHeartbeatConfig<
  *
  * A WebSocket `builder` may return `path` and `query` only; `headers` and `body` are rejected. `WebSocketDefinitionBase` and `BuilderField` are internal helper types.
  *
+ * Known fields are copied when the definition is created. Structs and `builder` keep their identity. A `protocols` array is copied, so a later edit of the original array does not retarget the endpoint. A getter on a fixed field runs during `defineWebSocket`.
+ *
  * @param definition - WebSocket contract (path, structs, queue limits, optional input).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
@@ -409,12 +412,27 @@ export function defineWebSocket<
   WebSocketIncomingData<TIncoming>,
   WebSocketOutgoingData<TOutgoing>
 > {
-  // Snapshot the top-level definition so a later mutation of the caller's object cannot retarget this endpoint.
-  const endpoint = { ...definition } as WebSocketDefinition<
-    TInput,
-    TIncoming,
-    TOutgoing
-  >;
+  // Copy known definition fields. Structs stay shared; the protocols array does not.
+  const builder = definition.builder;
+  const incoming = definition.incoming;
+  const input = definition.input;
+  const maxIncomingQueueSize = definition.maxIncomingQueueSize;
+  const maxOutgoingQueueSize = definition.maxOutgoingQueueSize;
+  const operation = definition.operation;
+  const outgoing = definition.outgoing;
+  const path = definition.path;
+  const protocols = snapshotProtocols(definition.protocols);
+  const endpoint = {
+    builder,
+    incoming,
+    input,
+    maxIncomingQueueSize,
+    maxOutgoingQueueSize,
+    operation,
+    outgoing,
+    path,
+    protocols,
+  };
 
   return (async (client: Client, input?: EndpointInput<TInput>) => {
     const requestOptions = client[CLIENT].options;
@@ -465,17 +483,17 @@ function readQueueLimits(
 }
 
 function readCallOptions<TIncoming, TOutgoing>(
-  config: RequestOptions,
+  config: RequestOptions | undefined,
   webSocket: ClientWebSocketOptions,
 ): StageOutcome<ResolvedCallOptions<TIncoming, TOutgoing>> {
   try {
-    const beforeConnect = config.beforeConnect;
-    const configuredProtocols = config.protocols;
+    const beforeConnect = config?.beforeConnect;
+    const configuredProtocols = config?.protocols;
     const protocols = configuredProtocols
       ? [...configuredProtocols]
       : undefined;
-    const reconnectOption = config.reconnect ?? webSocket.reconnect;
-    const heartbeatOption = (config.heartbeat ?? webSocket.heartbeat) as
+    const reconnectOption = config?.reconnect ?? webSocket.reconnect;
+    const heartbeatOption = (config?.heartbeat ?? webSocket.heartbeat) as
       // Type boundary: client config stores the heartbeat as a generic shape; the local type adds incoming/outgoing specificity.
       WebSocketHeartbeatConfig<TIncoming, TOutgoing> | undefined;
     const heartbeat = heartbeatOption
@@ -576,7 +594,7 @@ async function runWebSocketCommand<
   clientConfig: ClientConfig,
   endpoint: WebSocketDefinition<TInput, TIncoming, TOutgoing>,
   input: EndpointInput<TInput> | undefined,
-  config: RequestOptions,
+  config: RequestOptions | undefined,
   controller: AbortController,
   state: SocketRefState,
 ): Promise<
@@ -587,7 +605,7 @@ async function runWebSocketCommand<
 > {
   setSocketState(state, "connecting");
 
-  const callerAbort = config.signal;
+  const callerAbort = config?.signal;
 
   // Same fast path as HTTP/SSE: an already aborted call does not parse, build, or validate the socket.
   if (callerAbort?.aborted) {

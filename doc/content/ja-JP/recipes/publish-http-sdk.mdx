@@ -9,16 +9,16 @@ SDK は、チームが提供する API をパッケージにまとめたもの�
 
 ## 1. SDK の操作を定義する
 
-SDK プロジェクトに `src/users.ts` を作ります。path、入力の配置、レスポンス、サービスのエラー契約をここに置きます。操作を定義するために Client のインスタンス、デプロイ先の URL、現在の認証情報を持たせる必要はありません。
+SDK プロジェクトに `src/orders.ts` を作ります。path、入力の配置、レスポンス、サービスのエラー契約をここに置きます。操作を定義するために Client のインスタンス、デプロイ先の URL、現在の認証情報を持たせる必要はありません。
 
-<include cwd meta='title="src/users.ts"'>
-  examples/recipes/publish-http-sdk/users-sdk.ts#example
+<include cwd meta='title="src/orders.ts"'>
+  examples/recipes/publish-http-sdk/orders-sdk.ts#example
 </include>
 
 `src/index.ts` から公開します。
 
 ```ts
-export { getUser } from "./users";
+export { getOrder } from "./orders";
 ```
 
 操作が増えたらモジュールを追加し、そのエンドポイントを同じ入口から再 export します。
@@ -28,19 +28,19 @@ export { getUser } from "./users";
 SDK プロジェクトは、自分のパッケージ境界を持ちます。
 
 ```txt
-users-sdk/
+orders-sdk/
   package.json
   tsconfig.json
   src/
     index.ts
-    users.ts
+    orders.ts
 ```
 
 次の `package.json` を用意し、例のパッケージ名を自身が管理する scope に置き換えます。
 
 ```json
 {
-  "name": "@company/users-sdk",
+  "name": "@company/orders-sdk",
   "version": "0.1.0",
   "type": "module",
   "sideEffects": false,
@@ -100,26 +100,26 @@ tarball に `dist/index.js`、`dist/index.d.ts` が含まれることを確認�
 
 ## 3. 利用アプリケーションから呼び出す
 
-ローカルで動かせる例では、定義を `users-sdk.ts` に保存し、`app.ts` と同じディレクトリに置きます。この import は Client を作りません。アプリケーションがローカル Fetch ハンドルを構成し、import した操作を呼びます。
+ローカルで動かせる例では、定義を `orders-sdk.ts` に保存し、`app.ts` と同じディレクトリに置きます。この import は Client を作りません。アプリケーションがローカル Fetch ハンドルを構成し、import した操作を呼びます。
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
 </include>
 
 ```txt
-Ada
+paid
 ```
 
 パッケージ化した SDK は、互換性のある Core と一緒にインストールします。
 
 ```sh
-bun add @company/users-sdk @defjs/core@^0.6.0
+bun add @company/orders-sdk @defjs/core@^0.6.0
 ```
 
 例の相対 import を次のように置き換えます。
 
 ```ts
-import { getUser } from "@company/users-sdk";
+import { getOrder } from "@company/orders-sdk";
 ```
 
 サービスの URL と認証はアプリケーションの Client に設定します。ローカルテストでは `withHTTPHandle(...)` を使い、プラットフォームの Fetch を使う場合は外します。別のアプリケーションも同じエンドポイントを import し、SDK の定義を変えずに異なるクライアント設定を選べます。

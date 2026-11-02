@@ -9,14 +9,14 @@ Jede Richtung ist ein Struct. Du besitzt das Abmelden, `close` und `await sessio
 
 Details siehe [WebSocket](/de-DE/docs/web-socket).
 
-<include cwd meta="chat.ts">
+<include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`chat.example.com` ist ein Platzhalter. Bei einem Server, der `{ "type": "send", "text": "Hello" }` mit `{ "type": "message", "text": "Hello" }` beantwortet, gibt das Snippet aus:
+`quotes.example.com` ist ein Platzhalter. Bei einem Server, der `{ "type": "subscribe", "symbol": "ACME" }` mit `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` beantwortet, gibt das Snippet aus:
 
 ```txt
-message Hello
+ACME 142.5
 ```
 
 Reconnect ist opt-in (`withWebSocketReconnect`). Heartbeat ebenfalls. Browser-WebSockets können keine beliebigen Handshake-Headers nehmen — nutze Cookies, Subprotocols oder ein short-lived Ticket.

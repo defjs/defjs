@@ -55,7 +55,7 @@ Eine Response kam an, ließ sich aber nicht wie deklariert lesen. `response` sin
 
 <ApiSignature name="PreflightFaultCode, PreflightFault" />
 
-Alles, was fehlschlagen konnte, bevor eine Response existierte: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` ist nur dort vorhanden, wo der Transport schon Metadaten zu melden hatte — etwa bei einem Body, der mitten im Download abbrach.
+Alles, was fehlschlagen konnte, bevor eine Response existierte: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` ist `undefined`, bis der Transport Metadaten zu melden hat — etwa einen Body, der mitten im Download abbrach.
 
 ### AnyFault
 

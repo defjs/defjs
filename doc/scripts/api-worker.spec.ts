@@ -76,6 +76,7 @@ test("worker failures and JSON keep the last object", () => {
   );
   expect(defined(entries[0], "entry").typeHref).toBe("#id");
   expect(defined(entries[1], "blank").name).toBe("");
+  expect(defined(entries[2], "empty").typeHref).toBeUndefined();
   expect(() => parseWorkerJson("")).toThrow("invalid JSON: no output");
   expect(() => parseWorkerJson("{")).toThrow("invalid JSON");
   expect(() => parseWorkerJson("[]")).toThrow("invalid JSON: no output");

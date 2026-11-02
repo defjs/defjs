@@ -9,12 +9,12 @@ description: Swap Fetch for one client with withHTTPHandle and keep the operatio
 
 See [Client](/docs/client) for details.
 
-<include cwd meta="get-user.test.ts">
+<include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
 ```txt
-Ada 200
+paid 200
 ```
 
-Use the same `getUser` operation against a real `withEndpoint(...)` client in production — only the handle changes.
+Use the same `getOrder` operation against a real `withEndpoint(...)` client in production — only the handle changes.

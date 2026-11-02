@@ -12,21 +12,21 @@ description: struct 퍼사드, Infer, StructError예요.
 퍼사드예요. 내부 생성자보다 이걸 쓰세요.
 
 ```ts
-const User = struct.object({
+const Order = struct.object({
   id: struct.number(),
-  displayName: struct.string().alias("display_name"),
+  customerName: struct.string().alias("customer_name"),
 });
 
-function readUser() {
-  const [error, user] = struct.parse(User, { id: 1, displayName: "Ada" });
+function readOrder() {
+  const [error, order] = struct.parse(Order, { id: 1, customerName: "Ada" });
   if (error) {
     console.error(error.message);
     return;
   }
-  console.log(user.displayName);
+  console.log(order.customerName);
 }
 
-readUser();
+readOrder();
 ```
 
 ### 원시값과 컨테이너
@@ -57,7 +57,7 @@ readUser();
 - **반환** `[null, value]` 또는 `[StructError, undefined]`예요. 오류에는 issue가 하나만 담겨요. 객체 필드는 첫 번째 잘못된 필드에서 멈춰요. `struct.or`는 모든 분기를 시도한 뒤 `invalid_union`을 보고하고, 첫 분기 실패를 남기지 않아요.
 - 객체 필드는 `.optional()`이나 `.nullish()`로 표시하지 않으면 필수예요. shape에 선언하지 않은 키는 결과에서 빠져요.
 - 선택 `options.errorMap`은 이번 파싱의 issue 메시지만 다시 써요.
-- 기본은 **논리** 키(`displayName`)를 읽어요. HTTP/JSON 코덱처럼 와이어 키(`display_name`)를 읽으려면 `{ aliases: true }`를 넘기세요.
+- 기본은 **논리** 키(`customerName`)를 읽어요. HTTP/JSON 코덱처럼 와이어 키(`customer_name`)를 읽으려면 `{ aliases: true }`를 넘기세요.
 
 ## ErrorMap
 
