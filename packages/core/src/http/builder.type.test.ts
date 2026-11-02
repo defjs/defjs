@@ -192,16 +192,12 @@ defineEventStream({
   // @ts-expect-error SSE defaults to GET and cannot return a body
   builder: () => ({ body: "nope" }),
   events: { message: struct.string() },
-  maxBufferSize: 8,
-  maxQueueSize: 1,
   path: "/feed",
 });
 
 defineEventStream({
   builder: () => ({ body: "ok" }),
   events: { message: struct.string() },
-  maxBufferSize: 8,
-  maxQueueSize: 1,
   method: "POST",
   path: "/feed",
 });

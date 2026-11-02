@@ -34,8 +34,6 @@ function executeInput(
     return defineEventStream({
       ...definition,
       events: { message: struct.unknown() },
-      maxBufferSize: 1024,
-      maxQueueSize: 1,
     })(client(options), input);
   }
   return defineWebSocket({

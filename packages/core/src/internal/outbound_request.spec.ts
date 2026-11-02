@@ -1644,8 +1644,6 @@ describe("outbound request builder", () => {
     );
     const feed = defineEventStream({
       events: { profile: User },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     const [sseError, stream] = await feed(sseClient);
@@ -1705,8 +1703,6 @@ describe("outbound request builder", () => {
         room: struct.string(),
         since: struct.string().optional(),
       }),
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       path: "/rooms/:room/events",
     });
 

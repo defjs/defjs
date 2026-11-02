@@ -12,8 +12,6 @@ const readOrders = defineRequest({
   path: "/orders",
 });
 const orderEvents = defineEventStream({
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
   operation: "orders.watch",
   path: "/orders/events",
   events: { update: struct.object({ id: struct.number() }) },

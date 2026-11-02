@@ -66,8 +66,6 @@ test("SSE handshake errors use the same JSON media-type validation", async () =>
     path: "/media",
     events: { message: struct.string() },
     error: struct.null(),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   for (const [contentType, valid] of mediaTypes) {
     const client = createClient(

@@ -72,8 +72,6 @@ function commands(path: string) {
     sse: defineEventStream({
       path,
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
     }),
     ws: defineWebSocket({
       path,

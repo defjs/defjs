@@ -476,8 +476,6 @@ describe("builder refactor adversarial audit", () => {
       const endpoint = defineEventStream({
         builder: () => ({ body: "forbidden" }) as never,
         events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
         method: dynamicMethod,
         path: "/events",
       });
@@ -543,8 +541,6 @@ describe("builder refactor adversarial audit", () => {
       }),
       events: { message: struct.string() },
       input: struct.object({ room: struct.string(), since: struct.string() }),
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/rooms/:room/events",
     });
 
@@ -634,8 +630,6 @@ describe("builder refactor adversarial audit", () => {
             defineEventStream({
               builder,
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 4,
               path: "/items/:id",
             })(client),
           WebSocket: () =>
@@ -906,8 +900,6 @@ describe("builder fixes re-audit", () => {
         }),
         events: { message: Proto },
         input: Proto,
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
         method: "POST",
         path: "/events/:__proto__",
       });
@@ -1242,8 +1234,6 @@ describe("builder fixes re-audit", () => {
         throw new Error("builder must not run after cancellation");
       },
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -1276,8 +1266,6 @@ describe("builder fixes re-audit", () => {
       },
       events: { message: struct.string() },
       input: struct.object({ id: struct.string() }),
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -1309,8 +1297,6 @@ describe("builder fixes re-audit", () => {
         throw new Error("build failed after abort");
       },
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -1328,8 +1314,6 @@ describe("builder fixes re-audit", () => {
     controller.abort("caller stopped");
     const endpoint = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 0,
       path: "/events",
     });
 
@@ -1373,8 +1357,6 @@ describe("builder fixes re-audit", () => {
       events: {
         message: struct.object({ code: struct.string().alias("error_code") }),
       },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     const [error, stream] = await endpoint(client);
@@ -1573,8 +1555,6 @@ describe("builder fixes re-audit", () => {
     const endpoint = defineEventStream({
       error: struct.object({ code: struct.string().alias("error_code") }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     const [error] = await endpoint(client);

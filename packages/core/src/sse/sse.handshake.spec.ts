@@ -18,8 +18,6 @@ import type {
 
 const useStream = defineEventStream({
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 8,
   path: "/events",
 });
 

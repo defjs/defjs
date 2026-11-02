@@ -122,8 +122,6 @@ const stream = defineEventStream({
   builder: (input) => ({ query: { id: input.id } }),
   events: { message: struct.string() },
   input: struct.object({ id: struct.number() }),
-  maxBufferSize: 1,
-  maxQueueSize: 1,
   path: "/events",
 });
 void stream;
@@ -288,8 +286,6 @@ defineEventStream({
   // @ts-expect-error A Map is not JSON data.
   builder: () => ({ body: new Map() }),
   events: { message: struct.string() },
-  maxBufferSize: 1,
-  maxQueueSize: 1,
   method: "POST",
   path: "/events",
 });

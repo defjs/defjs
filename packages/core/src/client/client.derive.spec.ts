@@ -363,8 +363,6 @@ describe("request options ignored by other protocols", () => {
     );
     const stream = defineEventStream({
       path: "/events",
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       events: { message: struct.string() },
     });
 
@@ -465,8 +463,6 @@ describe("AbortSignal.timeout classification", () => {
     );
     const stream = defineEventStream({
       path: "/events",
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       events: { message: struct.string() },
     });
     const manual = new AbortController();

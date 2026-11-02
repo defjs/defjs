@@ -37,8 +37,6 @@ describe("operation dispatch", () => {
 
   test("an event-stream operation runs against the client", async () => {
     const useBasicSse = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },

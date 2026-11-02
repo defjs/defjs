@@ -4,7 +4,7 @@ Contents: [Define and consume](#define-and-consume) · [Buffer, queue, and event
 
 ## Define and consume
 
-`defineEventStream` declares a typed SSE endpoint. `maxBufferSize`, `maxQueueSize`, `path`, and the `events` map are required.
+`defineEventStream` declares a typed SSE endpoint with `path` and an `events` map.
 
 ```ts
 import {
@@ -18,8 +18,6 @@ export const followDeployLog = defineEventStream({
   method: "GET",
   operation: "deployments.followLog",
   path: "/deployments/:id/log",
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
   error: struct.object({ message: struct.string() }),
@@ -53,7 +51,7 @@ void main();
 
 ## Buffer, queue, and event decoding
 
-- `maxBufferSize` and `maxQueueSize` must be positive safe integers. Exceeding them terminates the stream with `CAP_BUFFER_EXCEEDED` or `CAP_QUEUE_OVERFLOW`.
+- `maxBufferSize` (default `64 * 1024` bytes) and `maxQueueSize` (default `1024` events) are optional positive safe-integer limits. Exceeding them terminates the stream with `CAP_BUFFER_EXCEEDED` or `CAP_QUEUE_OVERFLOW`.
 - Each key in `events` matches the SSE `event:` field (defaulting to `"message"` on the wire when `event:` is omitted by the server).
 - Decoding follows the event struct kind: `struct.string()` delivers the raw text payload; any other struct runs `JSON.parse` first and then validates against the struct.
 - Handshake errors (non-2xx responses) decode against `error` if declared. Note: if a declared handshake error body fails reading, JSON parsing, or struct validation, SSE reports `RES_DECODE_FAILED` (with `StructError` as `cause` on struct mismatch).
@@ -81,8 +79,6 @@ import {
 
 const client = createClient(withEndpoint("https://api.example.com"));
 const deployEvents = defineEventStream({
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
   path: "/deployments/events",
   events: { line: struct.string() },
 });

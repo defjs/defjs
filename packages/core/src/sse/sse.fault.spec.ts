@@ -52,8 +52,6 @@ function clientReturning(
 
 const useStream = defineEventStream({
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 8,
   path: "/events",
 });
 
@@ -176,8 +174,6 @@ describe("sse startup faults", () => {
     const useDeclared = defineEventStream({
       error: struct.object({ reason: struct.string() }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       path: "/events",
     });
     const client = clientReturning(
@@ -275,7 +271,6 @@ describe("sse runtime faults", () => {
     const useTiny = defineEventStream({
       events: { message: struct.string() },
       maxBufferSize: 4,
-      maxQueueSize: 8,
       path: "/events",
     });
     const client = clientReturning(
@@ -299,7 +294,6 @@ describe("sse runtime faults", () => {
   test("should report a queue overflow as CAP_QUEUE_OVERFLOW", async () => {
     const useTinyQueue = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
       maxQueueSize: 1,
       path: "/events",
     });
@@ -356,8 +350,6 @@ describe("unsupported streaming request body", () => {
     const useStream = defineEventStream({
       builder: () => ({ body }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path: "/events",
     });
@@ -388,8 +380,6 @@ describe("unsupported streaming request body", () => {
     const useStream = defineEventStream({
       builder: () => ({ body }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path: "/events",
     });
@@ -417,8 +407,6 @@ test("should return REQ_BUILD_FAILED when the JSON body is a Map", async () => {
   const useStream = defineEventStream({
     builder: () => ({ body: new Map() as never }),
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 8,
     method: "POST",
     path: "/events",
   });
@@ -452,8 +440,6 @@ test("should return REQ_BUILD_FAILED when the JSON body is an async iterable obj
       },
     }),
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 8,
     method: "POST",
     path: "/events",
   });
@@ -487,8 +473,6 @@ describe("ReadableStream body and reconnect", () => {
     const useStream = defineEventStream({
       builder: () => ({ body }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path: "/events",
     });
@@ -523,8 +507,6 @@ describe("ReadableStream body and reconnect", () => {
     const useStream = defineEventStream({
       builder: () => ({ body: "prompt" }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path: "/events",
     });
@@ -563,8 +545,6 @@ describe("ReadableStream body and reconnect", () => {
     const useStream = defineEventStream({
       builder: () => ({ body: byteStream() }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path: "/events",
     });

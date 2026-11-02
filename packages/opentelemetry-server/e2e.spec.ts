@@ -250,8 +250,6 @@ describe("operation diagnostic boundary", () => {
     );
     const [fault] = await defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/sse/500",
     })(client);
     expect(fault?.code).toBe("HTTP_STATUS");
@@ -277,8 +275,6 @@ describe("operation diagnostic boundary", () => {
     );
     const [fault] = await defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/stream",
     })(client);
     expect(fault?.code).toBe("NET_UNREACHABLE");
@@ -306,8 +302,6 @@ describe("operation diagnostic boundary", () => {
     const abort = new AbortController();
     const openStream = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/stream",
     });
     const pending = openStream(client({ signal: abort.signal }));
@@ -326,8 +320,6 @@ describe("operation diagnostic boundary", () => {
     );
     const [fault, stream] = await defineEventStream({
       events: { traceparent: struct.string() },
-      maxBufferSize: 64 * 1024,
-      maxQueueSize: 16,
       path: "/sse",
     })(client);
     expect(fault).toBeNull();
@@ -560,8 +552,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
       events: {
         traceparent: struct.string(),
       },
-      maxBufferSize: 64 * 1024,
-      maxQueueSize: 16,
       path: "/sse",
     });
 
@@ -602,8 +592,6 @@ describe("e2e: opentelemetry-server with real test server", () => {
       events: {
         traceparent: struct.string(),
       },
-      maxBufferSize: 64 * 1024,
-      maxQueueSize: 16,
       path: "/sse/500",
     });
 

@@ -43,8 +43,6 @@ describe("recursive structs at transport boundaries", () => {
       builder,
       input,
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/deep",
     });
     const ws = defineWebSocket({
@@ -129,7 +127,6 @@ describe("recursive structs at transport boundaries", () => {
     const useStream = defineEventStream({
       events: { message: Chain },
       maxBufferSize: 200_000,
-      maxQueueSize: 4,
       path: "/deep",
     });
     const [error, stream] = await useStream(client);

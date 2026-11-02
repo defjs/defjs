@@ -17,8 +17,6 @@ describe("sse browser runtime", () => {
 
   test("should consume event streams in real browsers", async () => {
     const useBasicStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -44,8 +42,6 @@ describe("sse browser runtime", () => {
 
   test("should return the fixed error tuple for non-2xx open responses in real browsers", async () => {
     const useFailedStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -61,8 +57,6 @@ describe("sse browser runtime", () => {
 
   test("should close an open stream when browser iteration stops early", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { tick: struct.string() },
       path: "/sse/infinite",
     });
@@ -86,8 +80,6 @@ describe("sse browser runtime", () => {
 
   test("should skip unexpected events in real browsers", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -124,8 +116,6 @@ describe("sse browser runtime", () => {
     const useStream = defineEventStream({
       builder: () => ({ body: stream }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path,
     });
@@ -170,8 +160,6 @@ describe("sse browser runtime", () => {
     const useStream = defineEventStream({
       builder: () => ({ body: stream }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path,
     });

@@ -105,8 +105,6 @@ describe("request event stream runtime", () => {
 
   test("should resolve event streams through thenable refs", async () => {
     const useBasicStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -137,8 +135,6 @@ describe("request event stream runtime", () => {
 
   test("should support withCredentials for SSE", async () => {
     const useBasicStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -190,8 +186,6 @@ describe("request event stream runtime", () => {
     );
     const chat = defineEventStream({
       builder: (input) => ({ body: input }),
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       method: "POST",
       path: "/v1/chat/completions",
       input: struct.object({
@@ -218,8 +212,6 @@ describe("request event stream runtime", () => {
 
   test("should handle SSE events without id", async () => {
     const useNoIdStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -246,8 +238,6 @@ describe("request event stream runtime", () => {
 
   test("should handle SSE events with empty id", async () => {
     const useEmptyIdStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -274,8 +264,6 @@ describe("request event stream runtime", () => {
 
   test("should support default event struct parsing after selecting the event struct", async () => {
     const useMixedStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         default: struct.object({
           note: struct.string(),
@@ -319,8 +307,6 @@ describe("request event stream runtime", () => {
       "event: constructor\ndata: prototype-safe\n\n",
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { default: struct.string() },
       path: "/events",
     });
@@ -341,8 +327,6 @@ describe("request event stream runtime", () => {
       "event: __proto__\ndata: fallback\n\n",
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { default: struct.string() },
       path: "/events",
     });
@@ -363,8 +347,6 @@ describe("request event stream runtime", () => {
     const events = { ["__proto__"]: struct.number() };
     expect(Object.hasOwn(events, "__proto__")).toBe(true);
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events,
       path: "/events",
     });
@@ -385,8 +367,6 @@ describe("request event stream runtime", () => {
     const events = { __proto__: struct.number(), default: struct.string() };
     expect(Object.hasOwn(events, "__proto__")).toBe(false);
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events,
       path: "/events",
     });
@@ -404,8 +384,6 @@ describe("request event stream runtime", () => {
 
   test("should decode object event payloads with struct key aliases", async () => {
     const useAliasStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -442,8 +420,6 @@ describe("request event stream runtime", () => {
       'event: profile\ndata: {"display_name":"Miao"}\n\n',
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -482,8 +458,6 @@ describe("request event stream runtime", () => {
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -515,8 +489,6 @@ describe("request event stream runtime", () => {
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         profile: struct.object({
           displayName: struct.string().alias("display_name"),
@@ -545,8 +517,6 @@ describe("request event stream runtime", () => {
   test("should decode array event data as JSON", async () => {
     const client = createSSEClientFromText('data: ["a","b"]\n\n');
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.array(struct.string()) },
       path: "/events",
     });
@@ -565,8 +535,6 @@ describe("request event stream runtime", () => {
   test("should decode record event data as JSON", async () => {
     const client = createSSEClientFromText('data: {"count":1}\n\n');
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.record(struct.number()) },
       path: "/events",
     });
@@ -596,8 +564,6 @@ describe("request event stream runtime", () => {
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         arrayBuffer: struct.arrayBuffer(),
         blob: struct.blob(),
@@ -624,8 +590,6 @@ describe("request event stream runtime", () => {
 
   test("should reject an already aborted stream before startup", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -670,8 +634,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -702,8 +664,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {},
       path: "/events",
     });
@@ -737,8 +697,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {},
       path: "/events",
     });
@@ -768,8 +726,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {},
       path: "/events",
     });
@@ -803,8 +759,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -856,8 +810,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -901,8 +853,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -950,8 +900,6 @@ describe("request event stream runtime", () => {
       ),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -977,8 +925,6 @@ describe("request event stream runtime", () => {
 
   test("should abort stream after connection via stream.close", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -998,8 +944,6 @@ describe("request event stream runtime", () => {
 
   test("should skip unexpected stream messages after startup", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -1024,8 +968,6 @@ describe("request event stream runtime", () => {
 
   test("should return startup error tuple when stream open response is invalid", async () => {
     const useInvalidStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1056,8 +998,6 @@ describe("request event stream runtime", () => {
       );
 
       const useStream = defineEventStream({
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
         events: {
           message: struct.string(),
         },
@@ -1097,8 +1037,6 @@ describe("request event stream runtime", () => {
     );
     const useStream = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       path: "/events",
     });
 
@@ -1126,8 +1064,6 @@ describe("request event stream runtime", () => {
     const controller = new AbortController();
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1144,8 +1080,6 @@ describe("request event stream runtime", () => {
 
   test("should handle stream error state", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1162,8 +1096,6 @@ describe("request event stream runtime", () => {
 
   test("should fill the fault data from a declared SSE handshake error struct", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1194,8 +1126,6 @@ describe("request event stream runtime", () => {
     // A single `error` struct applies to every non-2xx handshake; there is no status matching
     // to miss, so a body that decodes is always reported.
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
       path: "/sse/handshake-401",
@@ -1222,8 +1152,6 @@ describe("request event stream runtime", () => {
 
   test("should cancel an unread handshake body when no error struct is declared", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/sse/handshake-401",
     });
@@ -1261,8 +1189,6 @@ describe("request event stream runtime", () => {
 
   test("should report an unreadable declared handshake body as RES_DECODE_FAILED", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
       path: "/sse/handshake-401",
@@ -1290,8 +1216,6 @@ describe("request event stream runtime", () => {
 
   test("should report a declared handshake body that fails its struct as RES_DECODE_FAILED", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ code: struct.string() }),
       path: "/sse/handshake-401",
@@ -1319,8 +1243,6 @@ describe("request event stream runtime", () => {
 
   test("should read a string handshake error as raw text", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.string(),
       path: "/sse/handshake-401",
@@ -1348,8 +1270,6 @@ describe("request event stream runtime", () => {
 
   test("should read a blob handshake error as a Blob", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.blob(),
       path: "/sse/handshake-401",
@@ -1384,8 +1304,6 @@ describe("request event stream runtime", () => {
 
   test("should read an arrayBuffer handshake error as bytes", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.arrayBuffer(),
       path: "/sse/handshake-401",
@@ -1423,8 +1341,6 @@ describe("request event stream runtime", () => {
     "should reject %s before reading a JSON handshake error body",
     async (_label, headers) => {
       const useStream = defineEventStream({
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
         events: { message: struct.string() },
         error: struct.object({ reason: struct.string() }),
         path: "/sse/handshake-401",
@@ -1460,8 +1376,6 @@ describe("request event stream runtime", () => {
 
   test("should report a bodiless declared JSON handshake as a decode failure", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       error: struct.object({ reason: struct.string() }),
       path: "/sse/handshake-401",
@@ -1486,8 +1400,6 @@ describe("request event stream runtime", () => {
 
   test("should skip unknown event types without default struct", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1510,8 +1422,6 @@ describe("request event stream runtime", () => {
 
   test("should parse empty event data", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1537,8 +1447,6 @@ describe("request event stream runtime", () => {
       'data: {"ok":true}\n\ndata:   padded text  \n\n',
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -1560,8 +1468,6 @@ describe("request event stream runtime", () => {
       'event: payload\ndata: {"ok":true}\n\n',
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { payload: struct.any() },
       path: "/events",
     });
@@ -1580,8 +1486,6 @@ describe("request event stream runtime", () => {
   test("should decode unknown event data as JSON", async () => {
     const client = createSSEClientFromText("event: payload\ndata: [1,2,3]\n\n");
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { payload: struct.unknown() },
       path: "/events",
     });
@@ -1600,8 +1504,6 @@ describe("request event stream runtime", () => {
   test("should decode number event data from JSON", async () => {
     const client = createSSEClientFromText("data:  42  \n\ndata: -1.5\n\n");
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.number() },
       path: "/events",
     });
@@ -1632,8 +1534,6 @@ describe("request event stream runtime", () => {
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.number() },
       path: "/events",
     });
@@ -1668,8 +1568,6 @@ describe("request event stream runtime", () => {
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.boolean() },
       path: "/events",
     });
@@ -1692,8 +1590,6 @@ describe("request event stream runtime", () => {
 
   test("should parse message with empty event name", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
         default: struct.string(),
@@ -1720,8 +1616,6 @@ describe("request event stream runtime", () => {
     controller.abort(ERR_ABORTED);
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1740,8 +1634,6 @@ describe("request event stream runtime", () => {
 
   test("should return definition error when build throws", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       builder: () => {
         throw new Error("build failed");
       },
@@ -1761,8 +1653,6 @@ describe("request event stream runtime", () => {
 
   test("should return http error on non-ok response", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1779,8 +1669,6 @@ describe("request event stream runtime", () => {
 
   test("should use normalized HTTP status error message when SSE response has no error payload", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1816,8 +1704,6 @@ describe("request event stream runtime", () => {
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -1864,8 +1750,6 @@ describe("request event stream runtime", () => {
       },
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/events",
     });
@@ -1905,8 +1789,6 @@ describe("request event stream runtime", () => {
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -1965,8 +1847,6 @@ describe("request event stream runtime", () => {
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -2016,8 +1896,6 @@ describe("request event stream runtime", () => {
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -2069,8 +1947,6 @@ describe("request event stream runtime", () => {
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -2093,8 +1969,6 @@ describe("request event stream runtime", () => {
 
   test("should skip unexpected stream messages without onInvalidEvent", async () => {
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.number(),
       },
@@ -2154,8 +2028,6 @@ describe("request event stream runtime", () => {
       }),
     );
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: { message: struct.string() },
       path: "/stream",
     });
@@ -2206,8 +2078,6 @@ describe("request event stream runtime", () => {
     );
 
     const useStream = defineEventStream({
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       events: {
         message: struct.string(),
       },
@@ -2228,6 +2098,42 @@ describe("request event stream runtime", () => {
 
     expect(events).toEqual([]);
     await expect(stream.closed).resolves.toMatchObject({ kind: "eof" });
+  });
+
+  test("should use default maxBufferSize and maxQueueSize when omitted", async () => {
+    const encoder = new TextEncoder();
+    const client = createClient(
+      withEndpoint("https://api.example.com"),
+      withSSEHandle(
+        async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(encoder.encode("event: line\ndata: ok\n\n"));
+                controller.close();
+              },
+            }),
+            {
+              headers: { "Content-Type": "text/event-stream" },
+              status: 200,
+            },
+          ),
+      ),
+    );
+    const useStream = defineEventStream({
+      events: { line: struct.string() },
+      path: "/stream",
+    });
+
+    const [error, stream] = await useStream(client);
+    expect(error).toBeNull();
+    if (!stream) throw new Error("Expected stream");
+
+    const received: string[] = [];
+    for await (const event of stream) {
+      received.push(event.data);
+    }
+    expect(received).toEqual(["ok"]);
   });
 
   test.each([
@@ -2251,8 +2157,6 @@ describe("request event stream runtime", () => {
       );
       const useStream = defineEventStream({
         events: { message: struct.string() },
-        maxBufferSize: 1024,
-        maxQueueSize: 16,
         path: "/stream",
         [limitName]: limit,
       } as never);
@@ -2291,8 +2195,6 @@ describe("request event stream runtime", () => {
     );
     const useStream = defineEventStream({
       events: {},
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       path: "/snapshot",
     });
 
@@ -2307,8 +2209,6 @@ describe("request event stream runtime", () => {
   test("should handle request validation failure on invalid input", async () => {
     const useStream = defineEventStream({
       builder: () => ({}),
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       input: struct.object({
         id: struct.number(),
       }),
@@ -2352,8 +2252,6 @@ describe("sse reconnect method policy", () => {
   const usePost = defineEventStream({
     builder: () => ({ body: "prompt" }),
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 8,
     method: "POST",
     path: "/events",
   });
@@ -2450,8 +2348,6 @@ describe("sse reconnect method policy", () => {
     );
     const useGet = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "GET",
       path: "/events",
     });
@@ -2482,8 +2378,6 @@ describe("sse reconnect method policy", () => {
         return {};
       },
       events: { message: struct.string() },
-      maxBufferSize: 64,
-      maxQueueSize: 1,
       path: "/events",
     });
 

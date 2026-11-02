@@ -17,8 +17,6 @@ const JsonError = struct.object({ reason: struct.string() });
 const eventOptions = {
   path: "/events",
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 };
 
 function rawBody(kind: string, text: string): unknown {

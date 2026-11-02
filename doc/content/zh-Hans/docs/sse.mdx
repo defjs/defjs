@@ -17,7 +17,7 @@ SDK 导出一条带 input、事件契约和缓冲区上限的事件流操作。�
 
 ## 定义流
 
-`defineEventStream(...)` 要 `events`、正安全整数的 `maxBufferSize`、正安全整数的 `maxQueueSize`，以及相对 `path`。Method 默认 `GET`。这次调用复制已知的定义字段。`events` 字典容器会连同其自有属性一起复制，包括不可枚举属性，以及使用计算属性名声明的 `__proto__` 属性。继承来的名称不会被复制。Struct 值仍是原来的对象。该字典上的访问器仍在消息到达时运行，并且 `this` 是原来的字典。缺失的字典按传入原样保留，解析事件时仍会被报告。
+`defineEventStream(...)` 要 `events` 和相对 `path`。Method 默认 `GET`。这次调用复制已知的定义字段。`events` 字典容器会连同其自有属性一起复制，包括不可枚举属性，以及使用计算属性名声明的 `__proto__` 属性。继承来的名称不会被复制。Struct 值仍是原来的对象。该字典上的访问器仍在消息到达时运行，并且 `this` 是原来的字典。缺失的字典按传入原样保留，解析事件时仍会被报告。
 
 请求形状和 HTTP 一样：`builder`，返回 `path`、`query`、`headers`、`body`。`GET` / `HEAD` 的 builder 不能返回 body。声明了 `error` struct 时，启动 fault 带类型，非 2xx 握手 body 按 struct kind 解码（`string` 是文本，`blob` / `file` 是 blob，`arrayBuffer` 是字节，其余是 JSON）。你没设 `Accept` 时，Defjs 会发 `Accept: text/event-stream`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。`ReadableStream` 请求体遵循 HTTP 的规则：在不支持流式发送请求体的运行时（例如 Firefox）中，启动会在发送任何内容之前以 `ENV_UNSUPPORTED` 失败。在 Chromium 中，发送这种请求体需要 HTTP/2 或更高版本；使用 HTTP/1.1 时，启动会以 `NET_UNREACHABLE` 失败。流式请求体只发送一次，使用这种请求体的请求不会重连（见「重连」）。
 

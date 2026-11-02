@@ -84,8 +84,6 @@ describe("outbound request node bodies", () => {
     const useStream = defineEventStream({
       builder: () => ({ body: Readable.from(["x"]) as never }),
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 8,
       method: "POST",
       path: "/events",
     });

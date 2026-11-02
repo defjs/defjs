@@ -59,8 +59,6 @@ describe("request-time default fetch", () => {
         } else {
           const endpoint = defineEventStream({
             events: { message: struct.string() },
-            maxBufferSize: 1024,
-            maxQueueSize: 16,
             path: "/",
           });
           const [fault, stream] = await endpoint(client);
@@ -99,8 +97,6 @@ describe("request-time default fetch", () => {
           ? await defineRequest({ method: "GET", path: "/" })(client)
           : await defineEventStream({
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 16,
               path: "/",
             })(client);
 
@@ -128,8 +124,6 @@ describe("request-time default fetch", () => {
           ? await defineRequest({ method: "GET", path: "/" })(client)
           : await defineEventStream({
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 16,
               path: "/",
             })(client);
 
@@ -181,8 +175,6 @@ describe("request-time default fetch", () => {
     ).toBeNull();
     const [fault, stream] = await defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 16,
       path: "/",
     })(client);
     expect(fault).toBeNull();
@@ -225,7 +217,7 @@ describe("request-time default fetch", () => {
                   headers: { "content-type": "text/event-stream" },
                 }),
               maxBufferSize: 1024,
-              maxQueueSize: 16,
+              maxQueueSize: 4,
             }),
           ),
         ),
@@ -241,8 +233,6 @@ describe("request-time default fetch", () => {
       } else {
         const [fault, stream] = await defineEventStream({
           events: { message: struct.string() },
-          maxBufferSize: 1024,
-          maxQueueSize: 16,
           path: "/",
         })(client);
         expect(fault).toBeNull();
@@ -277,8 +267,6 @@ describe("request-time default fetch", () => {
           ? defineRequest({ method: "GET", path: "/" })(client)
           : defineEventStream({
               events: { message: struct.string() },
-              maxBufferSize: 1024,
-              maxQueueSize: 16,
               path: "/",
             })(client);
       expect(

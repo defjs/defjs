@@ -275,8 +275,6 @@ test("SSE keeps caller cancellation after an interceptor supplies its own signal
   const endpoint = defineEventStream({
     path: "/events",
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   const [fault, stream] = await endpoint(client({ signal: controller.signal }));
   try {

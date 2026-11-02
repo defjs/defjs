@@ -164,8 +164,6 @@ test("SSE rejects empty JSON but accepts encoded null and empty raw text", async
       path: "/events",
       events: { message: struct.string() },
       error: mode.endsWith("json") ? struct.null() : struct.string(),
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
     });
     const [fault] = await endpoint(client);
     expect(fault?.code).toBe(
@@ -204,8 +202,6 @@ test.each(["abort", "timeout"] as const)(
     const endpoint = defineEventStream({
       path: "/events",
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
     });
     const [fault, stream] = await endpoint(client);
     try {

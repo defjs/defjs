@@ -10,8 +10,6 @@ import {
 const completion = defineEventStream({
   method: "POST",
   path: "/complete",
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 8,
   input: struct.object({ prompt: struct.string() }),
   builder: (input) => ({ body: input }),
   events: {

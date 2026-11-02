@@ -120,8 +120,6 @@ describe("optional request options", () => {
     });
     const stream = defineEventStream({
       events: { message: struct.string() },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     const socket = defineWebSocket({
@@ -620,8 +618,6 @@ describe("definition and request snapshots", () => {
           return text;
         },
       },
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     expect(defineReads).toBe(0);
@@ -629,8 +625,6 @@ describe("definition and request snapshots", () => {
     const replaced: { message: AnyStruct } = { message: struct.string() };
     const stable = defineEventStream({
       events: replaced,
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     replaced.message = struct.number();
@@ -643,8 +637,6 @@ describe("definition and request snapshots", () => {
     };
     const endpoint = defineEventStream({
       events: box,
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
     box.schema = struct.number();
@@ -658,8 +650,6 @@ describe("definition and request snapshots", () => {
     });
     const reserved = defineEventStream({
       events: hidden,
-      maxBufferSize: 1024,
-      maxQueueSize: 4,
       path: "/events",
     });
 
@@ -715,8 +705,6 @@ describe("definition and request snapshots", () => {
     expect(() =>
       defineEventStream({
         events: undefined as never,
-        maxBufferSize: 1024,
-        maxQueueSize: 4,
         path: "/events",
       }),
     ).not.toThrow();

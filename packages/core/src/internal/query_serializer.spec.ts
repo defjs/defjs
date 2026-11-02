@@ -255,15 +255,11 @@ describe("query serializer contract", () => {
         roomId: struct.string().alias("room_id"),
         since: struct.date(),
       }),
-      maxBufferSize: 128,
-      maxQueueSize: 4,
       path: "/events",
     });
     const native = defineEventStream({
       builder: () => ({ query: new URLSearchParams({ room_id: "blue" }) }),
       events: { message: struct.string() },
-      maxBufferSize: 128,
-      maxQueueSize: 4,
       path: "/events",
     });
 

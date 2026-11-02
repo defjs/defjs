@@ -18,8 +18,6 @@ const request = defineRequest({ method: "GET", path: "/request" });
 const events = defineEventStream({
   path: "/events",
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 });
 
 test.each(["abort", "timeout"] as const)(
@@ -221,8 +219,6 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
     path: "/events",
     error: struct.object({ message: struct.string() }),
     events: { message: struct.string() },
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   const pending = declared(first({ signal: controller.signal }));
   await entered.promise;

@@ -11,7 +11,7 @@ description: defineEventStream、请求选项，以及 stream handle。
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`、`events` map，以及必填的正整数上限 `maxBufferSize` 和 `maxQueueSize`；可选 `method`（默认 `'GET'`）、`operation`、`input` 和 `error`。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`EventStreamDefinition`](/zh-Hans/api/core/eventstreamdefinition-type)。只有给出了 error struct 类型时 `error` 才必填，`builder` 恰好在声明了 `input` 时才必填。
+- **definition** — `path` 和 `events` map；可选 `method`（默认 `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（默认 `64 * 1024`）和 `maxQueueSize`（默认 `1024`）。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。这些 `definition` 成员写在 [`EventStreamDefinition`](/zh-Hans/api/core/eventstreamdefinition-type)。只有给出了 error struct 类型时 `error` 才必填，`builder` 恰好在声明了 `input` 时才必填。
 - **返回** 一个操作。第一个参数是 [`Client`](/zh-Hans/api/core/client-type)。其余参数只是 input。调用它即开始这条流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -65,7 +65,7 @@ key 是 SSE 事件名；没有 `event:` 字段的消息名为 `message`。没有
 
 ## EventStreamDefinition
 
-`path`、`events`，必填的 `maxBufferSize` 和 `maxQueueSize`，可选 `method` / `operation` / `input` / `error`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 的 builder 不能返回请求体。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
+`path`、`events`，可选 `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize`。请求形状和 HTTP 一样，包括 `body`。`GET` 和 `HEAD` 的 builder 不能返回请求体。只要声明了 `input`，就必须显式提供 `builder`。`input` 只定义入参，每个值放在哪里只由 builder 决定。只有没有 `input` 的定义可以省略 `builder`。
 
 ## EventStreamEndpoint
 

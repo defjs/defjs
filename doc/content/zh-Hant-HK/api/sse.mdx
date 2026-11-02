@@ -11,7 +11,7 @@ description: defineEventStream、request options，同 stream handle。
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`、`events` map，以及必填、為正整數嘅上限 `maxBufferSize` 同 `maxQueueSize`；可選 `method`（default `'GET'`）、`operation`、`input` 同 `error`。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` members 寫喺 [`EventStreamDefinition`](/zh-Hant-HK/api/core/eventstreamdefinition-type)。只有俾咗 error struct type 嗰陣 `error` 先必填，`builder` 恰好喺聲明咗 `input` 嗰陣先必填。
+- **definition** — `path` 同 `events` map；可選 `method`（default `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（default `64 * 1024`）同 `maxQueueSize`（default `1024`）。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。呢啲 `definition` members 寫喺 [`EventStreamDefinition`](/zh-Hant-HK/api/core/eventstreamdefinition-type)。只有俾咗 error struct type 嗰陣 `error` 先必填，`builder` 恰好喺聲明咗 `input` 嗰陣先必填。
 - **Returns** 一個操作。第一個參數係 [`Client`](/zh-Hant-HK/api/core/client-type)。之後嘅參數只係 input。呼叫就開始 stream。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -65,7 +65,7 @@ Parser 遵循 WHATWG SSE 嘅行同欄位規則，每條實體 stream 只會移�
 
 ## EventStreamDefinition
 
-`path`、`events`、必填嘅 `maxBufferSize` 同 `maxQueueSize`，可選 `method` / `operation` / `input` / `error`。Request shape 同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以 return body。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
+`path`、`events`，可選 `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize`。Request shape 同 HTTP 一樣，包括 `body`。`GET` 同 `HEAD` 唔可以 return body。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。
 
 ## EventStreamEndpoint
 

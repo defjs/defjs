@@ -11,7 +11,7 @@ description: defineEventStream, опции запроса и stream handle.
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`, карта `events` и обязательные лимиты `maxBufferSize` и `maxQueueSize` (положительные целые); необязательные `method` (по умолчанию `'GET'`), `operation`, `input` и `error`. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`EventStreamDefinition`](/ru-RU/api/core/eventstreamdefinition-type). `error` обязателен только когда задан тип error-struct, а `builder` — ровно тогда, когда объявлен `input`.
+- **definition** — `path` и карта `events`; необязательные `method` (по умолчанию `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (по умолчанию `64 * 1024`) и `maxQueueSize` (по умолчанию `1024`). При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`. Эти члены `definition` описаны в [`EventStreamDefinition`](/ru-RU/api/core/eventstreamdefinition-type). `error` обязателен только когда задан тип error-struct, а `builder` — ровно тогда, когда объявлен `input`.
 - **Возвращает** операцию. Первый аргумент — [`Client`](/ru-RU/api/core/client-type). Дальше идёт только input. Вызов начинает поток.
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -65,7 +65,7 @@ Reconnect живёт на клиенте (`withSSEReconnect`). SSE `jitter` — 
 
 ## EventStreamDefinition
 
-`path`, `events`, обязательные `maxBufferSize` и `maxQueueSize`, необязательные `method` / `operation` / `input` / `error`. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут вернуть тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
+`path`, `events`, необязательные `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize`. Форма запроса совпадает с HTTP, включая `body`. `GET` и `HEAD` не могут вернуть тело. При объявленном `input` всегда нужен явный `builder`. `input` только описывает параметры; куда пойдёт каждое значение, решает только builder. Опустить `builder` можно только в определениях без `input`.
 
 ## EventStreamEndpoint
 

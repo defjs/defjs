@@ -11,7 +11,7 @@ description: defineEventStream、request options，以及 stream handle。
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`、`events` map，以及必填的正整數上限 `maxBufferSize` 與 `maxQueueSize`；選填 `method`（預設 `'GET'`）、`operation`、`input` 與 `error`。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。這些 `definition` 成員寫在 [`EventStreamDefinition`](/zh-Hant-TW/api/core/eventstreamdefinition-type)。只有給了 error struct 型別時 `error` 才必填，`builder` 恰好在宣告了 `input` 時才必填。
+- **definition** — `path` 與 `events` map；選填 `method`（預設 `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（預設 `64 * 1024`）與 `maxQueueSize`（預設 `1024`）。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。這些 `definition` 成員寫在 [`EventStreamDefinition`](/zh-Hant-TW/api/core/eventstreamdefinition-type)。只有給了 error struct 型別時 `error` 才必填，`builder` 恰好在宣告了 `input` 時才必填。
 - **回傳** 操作。第一個引數是 [`Client`](/zh-Hant-TW/api/core/client-type)。其餘引數只有 input。呼叫它就會啟動串流。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -65,7 +65,7 @@ Key 是 SSE 事件名稱；沒有 `event:` 欄位的 message 名為 `message`。
 
 ## EventStreamDefinition
 
-`path`、`events`、必填的 `maxBufferSize` 與 `maxQueueSize`，可選 `method`／`operation`／`input`／`error`。Request 形狀跟 HTTP 一樣，包括 `body`。`GET` 與 `HEAD` 不能回傳 body。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。
+`path`、`events`，可選 `method`／`operation`／`input`／`error`／`maxBufferSize`／`maxQueueSize`。Request 形狀跟 HTTP 一樣，包括 `body`。`GET` 與 `HEAD` 不能回傳 body。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。
 
 ## EventStreamEndpoint
 

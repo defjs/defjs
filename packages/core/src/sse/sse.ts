@@ -100,12 +100,15 @@ export type EventStreamData<TEvents extends EventStructs> =
     ? KnownEventUnion<TEvents> | DefaultEventUnion<TEvents>
     : never;
 
+const DEFAULT_MAX_BUFFER_SIZE = 64 * 1024;
+const DEFAULT_MAX_QUEUE_SIZE = 1024;
+
 interface EventStreamDefinitionBase<
   TEvents extends EventStructs = EventStructs,
 > {
   events: TEvents;
-  maxBufferSize: number;
-  maxQueueSize: number;
+  maxBufferSize?: number;
+  maxQueueSize?: number;
   method?: string;
   operation?: string;
   path: string;
@@ -123,7 +126,7 @@ type EventStreamErrorField<TError extends AnyStruct | undefined> = [
  *
  * The composed members are:
  *
- * - `events`, `maxBufferSize`, and `maxQueueSize` (both limits are required positive safe integers), optional `method`, `operation`, and a required `path`.
+ * - `path` and `events`, plus optional `method` (default `'GET'`), `operation`, `maxBufferSize` (default `64 * 1024` bytes), and `maxQueueSize` (default `1024` events; both limits must be positive safe integers when provided).
  *
  * - `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.
  *
@@ -199,10 +202,15 @@ type ResolvedEventStreamDefinition<
   TInput extends AnyStruct | undefined = undefined,
   TEvents extends EventStructs = EventStructs,
   TError extends AnyStruct | undefined = undefined,
-> = EventStreamDefinitionBase<TEvents> & {
+> = Omit<
+  EventStreamDefinitionBase<TEvents>,
+  "maxBufferSize" | "maxQueueSize"
+> & {
   builder?: OutboundBuilder;
   input?: TInput;
   error?: TError;
+  readonly maxBufferSize: number;
+  readonly maxQueueSize: number;
   readonly method: string;
 };
 
@@ -223,16 +231,16 @@ function snapshotEventDictionary<T>(events: T): T {
 /**
  * Declare a typed Server-Sent Events endpoint.
  *
- * Pass path, event structs, and buffer/queue limits. Call the returned operation
+ * Pass path and event structs. Call the returned operation
  * with a client and, when declared, the input.
  *
- * - **definition** — `path`, an `events` map, and the required `maxBufferSize` and `maxQueueSize` limits (positive safe integers). Optional `method` (default `'GET'`), `operation`, `input`, and `error`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
+ * - **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (default `64 * 1024`), and `maxQueueSize` (default `1024`; both limits must be positive safe integers when provided). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.
  *
  * `EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.
  *
  * Known fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A missing or non-object dictionary is left as given. A getter on a fixed definition field runs during `defineEventStream`.
  *
- * @param definition - SSE contract (path, events, buffer limits, optional input).
+ * @param definition - SSE contract (path, events, optional input and limits).
  * @returns An operation `(client, ...input) => Promise<error-first tuple>`.
  *
  * @group sse
@@ -260,8 +268,8 @@ export function defineEventStream<
   const error = definition.error;
   const events = snapshotEventDictionary(definition.events);
   const input = definition.input;
-  const maxBufferSize = definition.maxBufferSize;
-  const maxQueueSize = definition.maxQueueSize;
+  const maxBufferSize = definition.maxBufferSize ?? DEFAULT_MAX_BUFFER_SIZE;
+  const maxQueueSize = definition.maxQueueSize ?? DEFAULT_MAX_QUEUE_SIZE;
   const declaredMethod = definition.method;
   const operation = definition.operation;
   const path = definition.path;

@@ -42,8 +42,6 @@ const httpEndpoint = defineRequest({
 });
 const sseEndpoint = defineEventStream({
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
   path: "/",
 });
 const socketEndpoint = defineWebSocket({

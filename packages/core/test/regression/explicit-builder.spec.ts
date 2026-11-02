@@ -23,8 +23,6 @@ const sse = defineEventStream({
   path: "/events",
   input: Input,
   events: {},
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 });
 // @ts-expect-error A WebSocket input field named `query` must not be implicitly placed in the URL.
 const socket = defineWebSocket({

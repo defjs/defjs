@@ -94,8 +94,6 @@ const lines = ref<{ id: number; text: string }[]>([]);
 let nextId = 0;
 
 const deployEvents = defineEventStream({
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
   path: "/deployments/events",
   events: { line: struct.string() },
 });

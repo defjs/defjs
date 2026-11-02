@@ -11,7 +11,7 @@ description: defineEventStream、リクエスト options、stream handle です�
 
 <ApiSignature name="defineEventStream" />
 
-- **definition** — `path`、`events` マップ、必須で正の整数の上限 `maxBufferSize` と `maxQueueSize`、任意の `method`（デフォルト `'GET'`）、`operation`、`input`、`error` です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`EventStreamDefinition`](/ja-JP/api/core/eventstreamdefinition-type) にあります。`error` が必須なのは error struct の型を渡したときだけで、`builder` が必須なのは `input` を宣言したときだけです。
+- **definition** — `path` と `events` マップ、任意の `method`（デフォルト `'GET'`）、`operation`、`input`、`error`、`maxBufferSize`（デフォルト `64 * 1024`）、`maxQueueSize`（デフォルト `1024`）です。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。これらの `definition` のメンバーは [`EventStreamDefinition`](/ja-JP/api/core/eventstreamdefinition-type) にあります。`error` が必須なのは error struct の型を渡したときだけで、`builder` が必須なのは `input` を宣言したときだけです。
 - **戻り値** 操作です。第一引数は [`Client`](/ja-JP/api/core/client-type) です。それ以降の引数は入力だけです。呼ぶとストリームが始まります。
 
 <include cwd>examples/api/define-event-stream.ts#example</include>
@@ -65,7 +65,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 ## EventStreamDefinition
 
-`path`、`events`、必須の `maxBufferSize` と `maxQueueSize`、任意の `method` / `operation` / `input` / `error` です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを返せません。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
+`path`、`events`、任意の `method` / `operation` / `input` / `error` / `maxBufferSize` / `maxQueueSize` です。リクエストの形は HTTP と同じで、`body` も含みます。`GET` と `HEAD` はボディを返せません。`input` を宣言した定義では、明示的な `builder` が必須です。`input` は引数を定義するだけで、各値をどこに置くかは builder だけが決めます。`builder` を省略できるのは `input` がない定義だけです。
 
 ## EventStreamEndpoint
 

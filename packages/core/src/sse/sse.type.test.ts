@@ -30,17 +30,20 @@ import type {
   EventStreamOpenInfo,
 } from "./transport/event_stream";
 
-// @ts-expect-error SSE definitions require an endpoint-owned queue limit.
 defineEventStream({
-  maxBufferSize: 1024,
-  path: "/missing-queue-limit",
+  path: "/default-limits",
   events: { message: struct.string() },
 });
 
-// @ts-expect-error SSE definitions require an endpoint-owned parser limit.
+defineEventStream({
+  maxBufferSize: 1024,
+  path: "/custom-buffer-limit-only",
+  events: { message: struct.string() },
+});
+
 defineEventStream({
   maxQueueSize: 16,
-  path: "/missing-buffer-limit",
+  path: "/custom-queue-limit-only",
   events: { message: struct.string() },
 });
 
@@ -55,16 +58,12 @@ const removedClientLimit: ClientSSEOptions = {
 void removedClientLimit;
 
 const useEvents = defineEventStream({
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/events",
   events: { message: struct.object({ text: struct.string() }) },
 });
 
 const chatStream = defineEventStream({
   builder: (input) => ({ body: input }),
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   method: "POST",
   path: "/v1/chat/completions",
   input: struct.object({
@@ -111,8 +110,6 @@ expectTypeOf<
 
 const catalogEvents = defineEventStream({
   events: catalogEventStructs,
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/catalog/events",
 });
 
@@ -253,8 +250,6 @@ const SseError = struct.object({ code: struct.string() });
 const streamWithError = defineEventStream({
   error: SseError,
   events: { message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/events",
 });
 

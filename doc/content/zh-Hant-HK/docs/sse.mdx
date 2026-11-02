@@ -17,7 +17,7 @@ SDK 匯出一條 event-stream 操作，帶 input、事件契約同 buffer 上限
 
 ## Define 條 stream
 
-`defineEventStream(...)` 要 `events`、positive safe-integer `maxBufferSize`、positive safe-integer `maxQueueSize`，同 relative `path`。Method 預設 `GET`。呢次 call 複製已知嘅 definition field。`events` dictionary container 會連同自有 property 一齊複製，包括不可枚舉嘅 property，同用計算 property name 定義嘅 `__proto__` property。繼承嚟嘅 name 唔會複製。Struct 值仍然係同一啲物件。嗰個 dictionary 上嘅 accessor 仍然喺 message 到達時運行，而且 `this` 係原來嗰個 dictionary。缺失嘅 dictionary 會按傳入原樣保留，解析 event 時仍然會被報告。
+`defineEventStream(...)` 要 `events` 同 relative `path`。Method 預設 `GET`。呢次 call 複製已知嘅 definition field。`events` dictionary container 會連同自有 property 一齊複製，包括不可枚舉嘅 property，同用計算 property name 定義嘅 `__proto__` property。繼承嚟嘅 name 唔會複製。Struct 值仍然係同一啲物件。嗰個 dictionary 上嘅 accessor 仍然喺 message 到達時運行，而且 `this` 係原來嗰個 dictionary。缺失嘅 dictionary 會按傳入原樣保留，解析 event 時仍然會被報告。
 
 Request shape 同 HTTP 一樣：`builder` return `path`、`query`、`headers` 同 `body`。`GET` / `HEAD` 唔可以 return body。聲明過嘅 `error` struct 會 type 住 startup fault，並按 struct kind decode 非 2xx handshake body（`string` 係 text，`blob` / `file` 係 blob，`arrayBuffer` 係 bytes，否則 JSON）。你未 set `Accept` 時，Defjs 會送 `Accept: text/event-stream`。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。`ReadableStream` body 跟 HTTP 嘅規則：如果 runtime 唔支援以 stream 方式送出 request body（例如 Firefox），啟動就會喺送出任何資料之前以 `ENV_UNSUPPORTED` 失敗。喺 Chromium 需要 HTTP/2 或更新版本；用 HTTP/1.1 嘅話，啟動就會以 `NET_UNREACHABLE` 失敗。用 stream 做 body 嘅 request 只會送一次，永遠唔會重連（見「重連」）。
 

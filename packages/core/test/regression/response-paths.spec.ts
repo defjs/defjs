@@ -101,8 +101,6 @@ test("preserves a decoded null SSE handshake error body", async () => {
     path: "/events",
     events: { message: struct.string() },
     error: struct.null(),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
 
   const [fault] = await endpoint(client);
@@ -129,8 +127,6 @@ test("reports an unreadable declared SSE handshake body as a decode fault", asyn
     path: "/events",
     events: { message: struct.string() },
     error: struct.object({ code: struct.string() }),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
 
   const [fault, stream] = await endpoint(client);
@@ -169,8 +165,6 @@ test("cancels an in-progress declared SSE handshake body when the caller aborts"
     path: "/events",
     events: { message: struct.string() },
     error: struct.object({ code: struct.string() }),
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
   });
   const controller = new AbortController();
   const pending = endpoint(client({ signal: controller.signal }));

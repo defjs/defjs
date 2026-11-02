@@ -92,8 +92,6 @@ describe("Client", () => {
                 headers: { "x-scope": ["first", "second"] },
               }),
               events: { message: struct.unknown() },
-              maxBufferSize: 1024,
-              maxQueueSize: 1,
               path: "/headers",
             })(client);
 

@@ -190,8 +190,6 @@ test.each([200, 403] as const)(
 test("SSE event data preserves every mixed-intersection member", async () => {
   const endpoint = defineEventStream({
     events: { person: Person },
-    maxBufferSize: 1024,
-    maxQueueSize: 4,
     path: "/person",
   });
   const client = createClient(

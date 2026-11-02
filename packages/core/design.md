@@ -229,8 +229,6 @@ import {
 const followDeployLog = defineEventStream({
   method: "GET",
   path: "/deployments/:id/log",
-  maxBufferSize: 64 * 1024,
-  maxQueueSize: 100,
   input: struct.object({ id: struct.number() }),
   builder: (input) => ({ path: input }),
   error: struct.object({ message: struct.string() }),

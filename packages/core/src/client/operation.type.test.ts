@@ -86,8 +86,6 @@ getUser(client({ protocols: ["chat.v1"] }), { id: 1 });
 
 export const updates = defineEventStream({
   path: "/events",
-  maxBufferSize: 1024,
-  maxQueueSize: 10,
   events: { message: struct.object({ text: struct.string() }) },
 });
 const Incoming = struct.object({
@@ -192,8 +190,6 @@ const StreamEvents = { message: struct.object({ text: struct.string() }) };
 const Problem = struct.object({ message: struct.string() }).optional();
 const optionalErrorStream = defineEventStream({
   path: "/error-stream",
-  maxBufferSize: 1024,
-  maxQueueSize: 10,
   events: StreamEvents,
   error: Problem,
 });

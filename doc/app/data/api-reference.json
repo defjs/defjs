@@ -6127,7 +6127,7 @@
     "slug": "core/defineeventstream",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "Declare a typed Server-Sent Events endpoint.\n\nPass path, event structs, and buffer/queue limits. Call the returned operation\nwith a client and, when declared, the input.\n\n- **definition** — `path`, an `events` map, and the required `maxBufferSize` and `maxQueueSize` limits (positive safe integers). Optional `method` (default `'GET'`), `operation`, `input`, and `error`. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.\n\nKnown fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A missing or non-object dictionary is left as given. A getter on a fixed definition field runs during `defineEventStream`.",
+    "description": "Declare a typed Server-Sent Events endpoint.\n\nPass path and event structs. Call the returned operation\nwith a client and, when declared, the input.\n\n- **definition** — `path` and an `events` map. Optional `method` (default `'GET'`), `operation`, `input`, `error`, `maxBufferSize` (default `64 * 1024`), and `maxQueueSize` (default `1024`; both limits must be positive safe integers when provided). A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase`, `EventStreamErrorField`, and `BuilderField` are internal helper types: `error` is required only when `TError` is a struct, and `builder` is `(input: BuilderInput<TInput>) => EventStreamRequestShape` when `input` is declared.\n\nKnown fields are copied when the definition is created. The `events` dictionary container is copied, including own non-enumerable keys, and inherited names are left behind. Struct values keep their identity. An accessor on that dictionary still runs when a message arrives, with the original dictionary as `this`. A missing or non-object dictionary is left as given. A getter on a fixed definition field runs during `defineEventStream`.",
     "signatures": [
       "function defineEventStream<\n  const P extends string,\n  const M extends string = \"GET\",\n  TInput extends AnyStruct | undefined = undefined,\n  TEvents extends EventStructs = EventStructs,\n  TError extends AnyStruct | undefined = undefined,\n>(\n  definition: Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >,\n): EventStreamEndpoint<EndpointArgs<TInput>, EventStreamData<TEvents>, TError>;"
     ],
@@ -6136,7 +6136,7 @@
       {
         "path": "examples/api/define-event-stream.ts",
         "region": "example",
-        "code": "import { defineEventStream, struct } from \"@defjs/core\";\n\nconst deployEvents = defineEventStream({\n  maxBufferSize: 64 * 1024,\n  maxQueueSize: 100,\n  path: \"/deployments/events\",\n  events: { line: struct.object({ text: struct.string() }) },\n});"
+        "code": "import { defineEventStream, struct } from \"@defjs/core\";\n\nconst deployEvents = defineEventStream({\n  path: \"/deployments/events\",\n  events: { line: struct.object({ text: struct.string() }) },\n});"
       }
     ],
     "returns": [
@@ -6148,7 +6148,7 @@
     "parameters": [
       {
         "name": "definition",
-        "description": "SSE contract (path, events, buffer limits, optional input).",
+        "description": "SSE contract (path, events, optional input and limits).",
         "type": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
         "simplifiedType": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
         "required": true,
@@ -6162,7 +6162,7 @@
         "parameters": [
           {
             "name": "definition",
-            "description": "SSE contract (path, events, buffer limits, optional input).",
+            "description": "SSE contract (path, events, optional input and limits).",
             "type": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
             "simplifiedType": "Omit<EventStreamDefinitionBase<TEvents>, \"method\" | \"path\"> &\n    EventStreamErrorField<TError> & {\n      input?: TInput;\n      method?: M;\n      path: P;\n    } & BuilderField<\n      NoInfer<TInput>,\n      EventStreamRequestShape<NoInfer<P>, NoInfer<M>>\n    >",
             "required": true,
@@ -6183,7 +6183,7 @@
     "slug": "core/eventstreamdefinition-type",
     "source": "packages/core/src/sse/sse.ts",
     "group": "sse",
-    "description": "Contract that describes an SSE endpoint for defineEventStream.\n\nThe composed members are:\n\n- `events`, `maxBufferSize`, and `maxQueueSize` (both limits are required positive safe integers), optional `method`, `operation`, and a required `path`.\n\n- `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.\n\n- `input` and `builder`. The request shape matches HTTP, including `body`; `GET` and `HEAD` cannot return a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase` and `EventStreamErrorField` are internal helper types.",
+    "description": "Contract that describes an SSE endpoint for defineEventStream.\n\nThe composed members are:\n\n- `path` and `events`, plus optional `method` (default `'GET'`), `operation`, `maxBufferSize` (default `64 * 1024` bytes), and `maxQueueSize` (default `1024` events; both limits must be positive safe integers when provided).\n\n- `error`, required only when `TError` is a struct. It decodes the body of a failed handshake (a non-2xx response). The kind rule is the same as for HTTP: `string` is text, `blob` and `file` are blobs, `arrayBuffer` is bytes, and everything else is JSON.\n\n- `input` and `builder`. The request shape matches HTTP, including `body`; `GET` and `HEAD` cannot return a body. A declared `input` always requires an explicit `builder`. `input` only defines the parameters; the builder alone decides where each value goes. Only definitions without `input` may omit `builder`.\n\n`EventStreamDefinitionBase` and `EventStreamErrorField` are internal helper types.",
     "signatures": [
       "type EventStreamDefinition<\n  TInput extends AnyStruct | undefined = undefined,\n  TEvents extends EventStructs = EventStructs,\n  TError extends AnyStruct | undefined = undefined,\n> = EventStreamDefinitionBase<TEvents> &\n  EventStreamErrorField<TError> & {\n    builder?: OutboundBuilder;\n    input?: TInput;\n  };"
     ],
@@ -6205,18 +6205,18 @@
       {
         "name": "maxBufferSize",
         "description": "",
-        "type": "number",
+        "type": "number | undefined",
         "simplifiedType": "number",
-        "required": true,
+        "required": false,
         "deprecated": false,
         "tags": []
       },
       {
         "name": "maxQueueSize",
         "description": "",
-        "type": "number",
+        "type": "number | undefined",
         "simplifiedType": "number",
-        "required": true,
+        "required": false,
         "deprecated": false,
         "tags": []
       },

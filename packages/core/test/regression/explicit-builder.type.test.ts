@@ -24,8 +24,6 @@ defineEventStream({
   path: "/events",
   input: Input,
   events: {},
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 });
 // @ts-expect-error WebSocket input never supplies an implicit builder.
 defineWebSocket({
@@ -50,8 +48,6 @@ defineRequest({
 defineEventStream({
   path: "/events",
   events: {},
-  maxBufferSize: 1024,
-  maxQueueSize: 4,
 });
 defineWebSocket({
   path: "/socket",

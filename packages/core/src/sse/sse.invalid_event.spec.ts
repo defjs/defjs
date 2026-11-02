@@ -15,8 +15,6 @@ const encoder = new TextEncoder();
 // `message` carries text, `count` a JSON number, and any other event name has no struct at all.
 const useStream = defineEventStream({
   events: { count: struct.number(), message: struct.string() },
-  maxBufferSize: 1024,
-  maxQueueSize: 16,
   path: "/events",
 });
 
