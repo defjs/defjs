@@ -5,6 +5,7 @@ const client = createClient(
   withEndpoint("https://api.example.com"),
   withSSEReconnect({
     attempts: 3,
+    connectTimeoutMs: 5_000,
     delayMs: 1_000,
     factor: 2,
     maxDelayMs: 30_000,

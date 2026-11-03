@@ -101,4 +101,12 @@ abort と timeout で共有される `Error` センチネルで、`cause` とし
 
 [`isAbortCause`](/ja-JP/api/core/isabortcause) は、中止のブランドを持つ `Error` または `AbortError` という名前の `DOMException` を認識します。[`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) は、タイムアウトのブランドを持つ `Error` または `TimeoutError` という名前の `DOMException` / `Error` を認識します。原因となった値を分類するには `fault.cause` を渡してください。これらの関数は fault の中身を取り出しません。別の Core のコピーから来たセンチネルでも使えます。
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`ERR_NO_ENDPOINT` は、候補のエンドポイントを選べないとき、`REQ_BUILD_FAILED` の `cause` としてだけ現れます。`FaultCode` は増えません。センチネルには、列挙されない `Symbol.for('defjs.cause.no-endpoint')` のブランドが付いています。[`isNoEndpointCause`](/ja-JP/api/core/isnoendpointcause) は、別の Core のコピーから来たそのブランドを認識します。[`isAbortCause`](/ja-JP/api/core/isabortcause) が中止を認識するのと同じです。`fault.cause` を渡してください。fault の中身は取り出しません。
+
 [Errors ガイド](/ja-JP/docs/errors) を参照してください。

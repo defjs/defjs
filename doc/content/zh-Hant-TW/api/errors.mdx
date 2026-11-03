@@ -101,4 +101,12 @@ abort 與 timeout 共享的 `Error` 哨兵物件，用作 `cause`。從 HTTP int
 
 [`isAbortCause`](/zh-Hant-TW/api/core/isabortcause) 會辨認帶有 abort 品牌的 `Error`，或名為 `AbortError` 的 `DOMException`。[`isTimeoutCause`](/zh-Hant-TW/api/core/istimeoutcause) 會辨認帶有 timeout 品牌的 `Error`，或名為 `TimeoutError` 的 `DOMException`／`Error`。請傳入 `fault.cause` 來分類底層的值；這些函式不會解開 fault。它們適用於另一份 Core 副本的哨兵。
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+沒有候選端點可以選擇時，`ERR_NO_ENDPOINT` 只作為 `REQ_BUILD_FAILED` 的 `cause` 出現。它不新增 `FaultCode`。這個哨兵帶有不可列舉的 `Symbol.for('defjs.cause.no-endpoint')` 品牌。[`isNoEndpointCause`](/zh-Hant-TW/api/core/isnoendpointcause) 會辨認另一份 Core 副本上的這個品牌，方式與 [`isAbortCause`](/zh-Hant-TW/api/core/isabortcause) 辨認 abort 相同。請傳入 `fault.cause`。它不會解開 fault。
+
 見 [Errors 指南](/zh-Hant-TW/docs/errors)。

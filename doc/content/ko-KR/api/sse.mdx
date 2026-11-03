@@ -47,7 +47,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind`는 `eof`, `aborted`, `error` 중 하나예요. 모든 변형은 `reason`과 `cause`를 가질 수 있어요. `code`는 `error`에만 있고, 값은 [`EventStreamFaultCode`](/ko-KR/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind`는 `eof`, `aborted`, `error` 중 하나예요. 모든 변형은 `reason`과 `cause`를 가질 수 있어요. `code`는 `error`에만 있고, 값은 [`EventStreamFaultCode`](/ko-KR/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED`와 `REQ_OPTIONS_INVALID`는 스트림이 열린 뒤 재연결 pick이 실패했다는 뜻이에요.
 
 ## EventStructs
 

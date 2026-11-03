@@ -26,7 +26,19 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="withEndpoint" />
 
-يضبط عنوان URL الأساسي الذي يُسبَق به المسارات النسبية.
+ينسخ عناوين URL الأساسية المرشحة بترتيب أول ظهور ويُسقط نسخة لاحقة من السلسلة نفسها. يستبدل `withEndpoint` لاحق القائمة. لا يفحص عناوين URL ولا يستبدل الموازن. القائمة الفارغة قانونية وتُفشل الاستدعاء بـ `REQ_BUILD_FAILED`.
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+يستبدل الموازن المستخدم للاستدعاءات اللاحقة. يُخزَّن الكائن بالمرجع. دون هذا الخيار، يحصل كل عميل على `pickFirstBalancer()` خاص به.
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+يتحكم في تجاوز فشل HTTP داخل استدعاء واحد. ميزانية إعادة محاولة Finagle/Linkerd المشتركة للعميل افتراضها 20% زائد احتياطي 10 إعادات في الثانية عبر TTL من 10 ثوانٍ؛ ويعطّل `retryBudget: false` ذلك الحد. تنتهي الأرصدة والخصوم كلاهما بكسل في عشر شرائح من TTL/10. الافتراضي محاولة إضافية واحدة عند فشل الاتصال لـ GET وHEAD وOPTIONS وTRACE. تعطّله `attempts: 0` أو `methods: []`. يستبدل خيار لاحق السياسة؛ وتستخدم الحقول المحذوفة الافتراضيات. لا تُعاد أجسام الطلب المتدفقة أبدًا. تغطي `attemptTimeoutMs` جلب Fetch وقراءة الجسم وفكه لمحاولة واحدة، بينما تغطي إشارة المستدعي كل المحاولات. انظر [نقاط نهاية متعددة](/ar/docs/client#multiple-endpoints).
 
 ### withInterceptors()
 
@@ -169,6 +181,8 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 | `jitter`     | `0`            | `0`            |
 | `maxDelayMs` | بلا سقف        | `30000`        |
 
+`connectTimeoutMs` اختياري ويجب أن يكون محدودًا وموجبًا. يحدّ الجلب حتى رؤوس الاستجابة في SSE، والبناء حتى `open` في WebSocket؛ ويُمسح بعد المصافحة. يبلّغ الانتهاء عن `NET_UNREACHABLE` للموازن حتى يستطيع إعادة الاتصال اختيار نقطة النهاية التالية. استنفاد إعادات المحاولة ينتهي بـ `NET_TIMEOUT`.
+
 في وسيلتي النقل، تعيد المصافحة الناجحة ضبط ميزانية إعادة المحاولة لكل انقطاع ومحاولة رد النداء وأُس التراجع. تعطّل `attempts: 0` إعادة المحاولة؛ وحذف `attempts` لا يمنح محاولات غير محدودة داخل انقطاع واحد. يحدّ `maxDelayMs` التأخير النهائي بعد الاهتزاز والتقريب؛ وينطبق أيضًا حد مؤقت المنصة `2_147_483_647` مللي ثانية، بما في ذلك عندما لا يكون لـ SSE سقف مضبوط. الأساس الصفري يبقى صفرًا؛ ويشبع فيضان الأعداد الصالحة عند السقوف.
 
 تُتحقق خيارات إعادة الاتصال قبل النقل: يجب أن تكون `attempts` عددًا صحيحًا آمنًا غير سالب؛ ويجب أن تكون `delayMs` محدودة وغير سالبة؛ ويجب أن تكون `maxDelayMs` عددًا محدودًا غير سالب أو `Infinity` موجبًا، ما يزيل السقف المضبوط لا حد المنصة `2_147_483_647` مللي ثانية؛ ويجب أن يكون `factor` محدودًا وموجبًا؛ ويجب أن يكون `jitter` محدودًا وضمن 0–1. القيم غير الصالحة تُرجع `REQ_OPTIONS_INVALID`. تعطّل `attempts: 0` في WebSocket إعادات المحاولة اللاحقة، لكن كل حقول إعادة الاتصال الممرَّرة صراحةً ما زالت تُتحقق قبل الاتصال الأولي، كما في SSE. يوسّع الاهتزاز الأساس المقيَّد في أي الاتجاهين قبل تطبيق السقف النهائي.
@@ -183,11 +197,11 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="ClientOptions" />
 
-الحقلان الظاهران هما `sse` و`webSocket`. والحقول السبعة الأخرى — `endpoint` و`headers` و`http` و`interceptors` و`querySerializer` و`xsrf` و`withCredentials` — موروثة من قاعدة HTTP غير المصدَّرة، و`endpoint` مطلوب. لا يوجد `timeout` على مستوى العميل. لا يأخذ `createClient` هذا الكائن؛ فهو يأخذ مساعدات الخيارات.
+الحقلان الظاهران هما `sse` و`webSocket`. والحقول السبعة الأخرى — `endpoints` و`headers` و`http` و`interceptors` و`querySerializer` و`xsrf` و`withCredentials` — موروثة من قاعدة HTTP غير المصدَّرة. `endpoints` هو `readonly string[]`. الافتراضي المحلول هو `[]`. المصفوفة الفارغة قيمة قانونية وتُفشل الاستدعاء بـ `REQ_BUILD_FAILED`. لا يوجد `timeout` على مستوى العميل. لا يأخذ `createClient` هذا الكائن؛ فهو يأخذ مساعدات الخيارات.
 
 ### ClientConfig
 
-اللقطة المحلولة التي تعدّلها مساعدات الخيارات وتقرأها العملية: `ClientOptions` بعد الافتراضيات، مع وجود `http.handle` و`interceptors` و`sse` (`ClientSSEConfig`) و`webSocket` دائمًا.
+اللقطة المحلولة التي تعدّلها مساعدات الخيارات وتقرأها العملية: `ClientOptions` بعد الافتراضيات، مع وجود `http.handle` و`interceptors` و`sse` (`ClientSSEConfig`) و`webSocket` و`endpointBalancer` و`endpointFailover` دائمًا. الافتراضي لـ `endpointBalancer` هو `pickFirstBalancer()` جديد لذلك العميل. وهو ليس حقل [`RequestOptions`](/ar/api/core/requestoptions-type).
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 <ApiSignature name="WebSocketHandleConstructor" />
 
 المنشئ الممرَّر إلى `withWebSocketHandle`. يجب أن يعرض ثابت حالة الجاهزية `OPEN`.
+
+## الموازنات
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+يتقدّم `pickFirstBalancer` عند `NET_UNREACHABLE` أو استجابة 502/503/504 بلا رمز عطل. يمكّن `failbackMs` الموجب المنتهي الاختياري سبرًا متزامنًا واحدًا لنقطة النهاية الأولى بعد الفترة. تتجاوز إخفاقات اتصال طرق HTTP الآمنة الفشل داخل الاستدعاء نفسه افتراضيًا. يمشي `roundRobinBalancer` على القائمة. `weights` اختياري. انظر [نقاط نهاية متعددة](/ar/docs/client#multiple-endpoints).
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+يأخذ عيّنة من مرشحين متمايزين دون استبدال (بخلاف Envoy/gRPC A48)، ويختار PeakEwma لدى tower أو حمل pending. افتراضيات Linkerd هي RTT بمقدار 30ms وتضاؤل 10 ثوانٍ. يبدأ `start` الـ pending، ويحرّره `end` عند الرؤوس أو فتح المقبس ويسجّل RTT الفعلي لكل نقل، بما فيه الإخفاقات. `done` بلا `end` يحرّر pending دون عيّنة RTT. لا مصنِّف إخفاق لـ p2c ولا عقوبة. `choiceCount` افتراضه 2 وسقفه 10.
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+يغلّف ابنًا بقطع دائرة للإخفاقات المتتالية على طراز Linkerd. يفعّله round robin وp2c افتراضيًا (كما في Finagle)؛ ويعطّله `false`. يفعّله pick-first بكائن. بعد خمسة إخفاقات تبدأ العقوبات عند 1000ms، وتتضاعف بعد السبر الفاشل، وتضيف jitter موجبًا حتى 0.5 من الأساس، وتُسقَف عند 60000ms. يقبل الانتهاء سبرًا واحدًا يُقرَّر عند `end`، أو عند `done` إن لم يصل `end`. النجاح يصفّر التراجع؛ والإلغاء يحرّر الفتحة فقط. لا مهلة تفترض النجاح، ولا حصة، ولا حماية لآخر مضيف، ولا شبكة تسوية، ولا معيار نسبة، ولا بدء بطيء. يقرأ `isHealthy` حالة مخزّنة يملكها التطبيق ولا يلغي عقوبة أبدًا. يجوز أن ينقطع كل المضيفين؛ والفشل المفتوح المحلي للقائمة على طراز Finagle يظل يرسل الطلبات. بخلاف Envoy/gRPC A50 لا توجد حصة طرد. انظر [تصفية الصحة وp2c](/ar/docs/client#health-filtering-and-p2c).
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+يُرجع `pick` tuple يضع الخطأ أولًا. يعمل `start` الاختياري بشكل متزامن مرة واحدة على الأكثر مباشرة قبل أن يبدأ النقل المختار؛ ويعمل `end` الاختياري مرة واحدة بعد `start` عند رؤوس Fetch أو `open` في WebSocket (أو إخفاق قبل الاستجابة)، ويعمل `done` الاختياري مرة واحدة عند الاكتمال. لا يستطيع Fetch كشف حد أول إطار جسم في Linkerd ولا حدود تدفق Envoy. الرمي ورفض الـ thenable من كل الخطافات محتويان. `ERR_NO_ENDPOINT` ليس إلا `cause` لـ `REQ_BUILD_FAILED`. وهو ليس `FaultCode`. تتعرف [`isNoEndpointCause`](/ar/api/core/isnoendpointcause) عليه عبر نسخ Core.
 
 انظر [دليل العميل](/ar/docs/client).

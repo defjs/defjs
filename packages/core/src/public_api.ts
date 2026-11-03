@@ -1,3 +1,4 @@
+export * from "./balancer";
 export * from "./client";
 export * from "./error";
 export * from "./http";

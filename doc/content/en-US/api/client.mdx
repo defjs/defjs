@@ -26,7 +26,19 @@ All helpers return `ClientOption`. A later call replaces an earlier one for the 
 
 <ApiSignature name="withEndpoint" />
 
-Sets the base URL prepended to relative paths.
+Copies candidate base URLs in first-seen order and drops a later copy of the same string. A later `withEndpoint` replaces the list. It does not check URLs and does not replace the balancer. An empty list is legal and fails the call with `REQ_BUILD_FAILED`.
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+Replaces the balancer used for later calls. The object is stored by reference. Without this option, each client gets its own `pickFirstBalancer()`.
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+Controls HTTP failover within one call. A client-shared Finagle/Linkerd retry budget defaults to 20% plus a reserve of 10 retries/second over a 10s TTL; `retryBudget: false` disables that limit. Both credits and debits expire lazily in ten TTL/10 slices. Defaults to one additional attempt on connection failure for GET, HEAD, OPTIONS, and TRACE. `attempts: 0` or `methods: []` disables it. A later option replaces the policy; omitted fields use defaults. Streaming request bodies are never replayed. `attemptTimeoutMs` covers Fetch, body reading, and decoding of one attempt, while the caller signal covers all attempts. See [Multiple endpoints](/docs/client#multiple-endpoints).
 
 ### withInterceptors()
 
@@ -169,6 +181,8 @@ Reconnect is opt-in for both transports: without `withSSEReconnect` / `withWebSo
 | `jitter`     | `0`            | `0`            |
 | `maxDelayMs` | no cap         | `30000`        |
 
+`connectTimeoutMs` is optional and must be finite and positive. It bounds Fetch to response headers for SSE, and construction to `open` for WebSocket; it is cleared after the handshake. Expiry reports `NET_UNREACHABLE` to the balancer so a reconnect can pick the next endpoint. Exhausting retries ends with `NET_TIMEOUT`.
+
 For both transports, a successful handshake resets the per-outage retry budget, callback attempt, and backoff exponent. `attempts: 0` disables retry; omitting `attempts` does not give unlimited retries within one outage. `maxDelayMs` caps the final delay after jitter and rounding; the platform timer limit of `2_147_483_647` ms also applies, including when SSE has no configured cap. A zero base stays zero; valid-number overflow saturates at the caps.
 
 Reconnect options are validated before transport: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID`. WebSocket `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection, just as in SSE. Jitter scales the capped base in either direction before the final cap is applied.
@@ -183,11 +197,11 @@ For WebSocket, `beforeConnect`, `heartbeat`, `protocols` and `reconnect` can als
 
 <ApiSignature name="ClientOptions" />
 
-The shown fields are `sse` and `webSocket`. The other seven — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, and `withCredentials` — are inherited from the non-exported HTTP base, and `endpoint` is required. There is no client-level `timeout`. `createClient` does not take this object; it takes option helpers.
+The shown fields are `sse` and `webSocket`. The other seven — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, and `withCredentials` — are inherited from the non-exported HTTP base. `endpoints` is `readonly string[]`. The resolved default is `[]`. An empty array is a legal value and fails the call with `REQ_BUILD_FAILED`. There is no client-level `timeout`. `createClient` does not take this object; it takes option helpers.
 
 ### ClientConfig
 
-The resolved snapshot that option helpers mutate and an operation reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`) and `webSocket` always present.
+The resolved snapshot that option helpers mutate and an operation reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`), `webSocket`, `endpointBalancer`, and `endpointFailover` always present. `endpointBalancer` defaults to a new `pickFirstBalancer()` for that client. It is not a [`RequestOptions`](/api/core/requestoptions-type) field.
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ The WebSocket instance surface the transport uses: `WebSocket` without `binaryTy
 <ApiSignature name="WebSocketHandleConstructor" />
 
 The constructor passed to `withWebSocketHandle`. It must expose the `OPEN` ready-state constant.
+
+## Balancers
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer` advances on `NET_UNREACHABLE` or an uncoded 502/503/504 response. Its optional positive finite `failbackMs` enables a single concurrent probe of the first endpoint after the interval. HTTP safe-method connection failures also fail over within the same call by default. `roundRobinBalancer` walks the list. `weights` is optional. See [Multiple endpoints](/docs/client#multiple-endpoints).
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+Samples distinct candidates without replacement (unlike Envoy/gRPC A48), choosing tower PeakEwma or pending load. Linkerd defaults are RTT 30ms and decay 10s. `start` begins pending, `end` releases it at headers or socket open and records the real RTT for every transport, including failures. A `done` without `end` releases pending without an RTT sample. There is no p2c failure classifier or penalty. `choiceCount` defaults to 2 and is capped at 10.
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+Wraps a child with Linkerd-style consecutive-failure circuit breaking. Round robin and p2c enable it by default (as in Finagle); `false` disables it. Pick-first enables it with an object. After five failures, penalties start at 1000ms, double after failed probes, add positive jitter up to 0.5 times the base, and cap at 60000ms. Expiry admits a single probe decided at `end`, or at `done` if no `end` arrived. Success resets backoff; cancellation only releases the slot. There is no assumed-success timeout, quota, last-host protection, settlement grid, percentage criterion, or slow start. `isHealthy` reads application-owned cached state and never cancels a penalty. All hosts may break; Finagle-style list-local fail-open still sends requests. Unlike Envoy/gRPC A50 there is no ejection quota. See [Health filtering and p2c](/docs/client#health-filtering-and-p2c).
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`pick` returns an error-first tuple. Optional `start` runs synchronously at most once immediately before the selected transport starts; optional `end` runs once after `start` at Fetch headers or WebSocket `open` (or pre-response failure), and optional `done` runs once at completion. Fetch cannot expose Linkerd first-body-frame or Envoy stream boundaries. Throws and thenable rejections from all hooks are contained. `ERR_NO_ENDPOINT` is only a `cause` of `REQ_BUILD_FAILED`. It is not a `FaultCode`. [`isNoEndpointCause`](/api/core/isnoendpointcause) recognizes it across Core copies.
 
 See [Client guide](/docs/client).

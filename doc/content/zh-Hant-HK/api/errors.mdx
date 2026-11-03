@@ -101,4 +101,12 @@ Sentinels 帶有不可枚舉嘅 `Symbol.for('defjs.cause.aborted')` 同 `Symbol.
 
 [`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 識別帶 abort brand 嘅 `Error`，或者名為 `AbortError` 嘅 `DOMException`。[`isTimeoutCause`](/zh-Hant-HK/api/core/istimeoutcause) 識別帶 timeout brand 嘅 `Error`，或者名為 `TimeoutError` 嘅 `DOMException` / `Error`。請傳入 `fault.cause` 去分類底層值；呢啲函數唔會解開 fault。佢哋亦適用於另一份 Core 嘅 sentinels。
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+冇候選 endpoint 可以揀嗰陣，`ERR_NO_ENDPOINT` 只會作為 `REQ_BUILD_FAILED` 嘅 `cause` 出現。佢唔會新增 `FaultCode`。呢個 sentinel 帶有不可枚舉嘅 `Symbol.for('defjs.cause.no-endpoint')` brand。[`isNoEndpointCause`](/zh-Hant-HK/api/core/isnoendpointcause) 會識別另一份 Core 副本上嘅呢個 brand，同 [`isAbortCause`](/zh-Hant-HK/api/core/isabortcause) 識別 abort 嘅方式一樣。請傳入 `fault.cause`。佢唔會解開 fault。
+
 睇 [Errors guide](/zh-Hant-HK/docs/errors)。

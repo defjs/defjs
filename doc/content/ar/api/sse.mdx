@@ -47,7 +47,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` هو `eof` أو `aborted` أو `error`. قد تحمل كل صيغة `reason` و`cause`. لـ `error` فقط `code`، واحد من [`EventStreamFaultCode`](/ar/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind` هو `eof` أو `aborted` أو `error`. قد تحمل كل صيغة `reason` و`cause`. لـ `error` فقط `code`، واحد من [`EventStreamFaultCode`](/ar/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. يعني `REQ_BUILD_FAILED` و`REQ_OPTIONS_INVALID` أن اختيار إعادة الاتصال فشل بعد فتح التدفق.
 
 ## EventStructs
 

@@ -53,6 +53,8 @@ Fallo de arranque → `[error, undefined, connection?]`. Un fallo del constructo
 
 ## Reconexión
 
+Pon `connectTimeoutMs` dentro de la política de reconexión para acotar cada handshake desde la construcción del socket hasta `open`. Debe ser finito y positivo; los valores no válidos devuelven `REQ_OPTIONS_INVALID`. No tiene valor por defecto y se borra después del handshake, así que las sesiones establecidas no se ven afectadas. Un handshake que expira informa `NET_UNREACHABLE` al balanceador y sigue el presupuesto de reconexión existente; los reintentos agotados terminan con `NET_TIMEOUT`.
+
 La reconexión es opt-in. Sin objeto `reconnect` → un cierre físico termina la sesión lógica. Cuando se configura, los valores por defecto son `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. `attempts` es el presupuesto de reintento de cada interrupción; un `open` correcto reinicia el presupuesto y el exponente de backoff. Cada interrupción posterior empieza otra vez en el reintento 1 y en la base `delayMs`. `attempts: 0` lo desactiva. El predicado por defecto acepta todo resultado de cierre no manual dentro del presupuesto de esa interrupción. Las aperturas correctas repetidas no tienen un límite de reintentos de por vida. Un socket que se abre con éxito y el servidor vuelve a cerrar de inmediato puede seguir reconectando al retraso base (sujeto a jitter y topes), porque cada open reinicia el presupuesto; usa `shouldReconnect` para detenerlo.
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>

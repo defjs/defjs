@@ -121,4 +121,12 @@ The sentinels carry non-enumerable `Symbol.for('defjs.cause.aborted')` and `Symb
 
 [`isAbortCause`](/api/core/isabortcause) recognizes an abort-branded `Error` or a `DOMException` named `AbortError`. [`isTimeoutCause`](/api/core/istimeoutcause) recognizes a timeout-branded `Error` or a `DOMException` / `Error` named `TimeoutError`. Pass `fault.cause` to classify the underlying value; these functions do not unwrap a fault. They work with sentinels from another Core copy.
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`ERR_NO_ENDPOINT` appears only as the `cause` of `REQ_BUILD_FAILED`, when no candidate endpoint can be selected. It does not add a `FaultCode`. The sentinel carries a non-enumerable `Symbol.for('defjs.cause.no-endpoint')` brand. [`isNoEndpointCause`](/api/core/isnoendpointcause) recognizes that brand from another Core copy, the same way [`isAbortCause`](/api/core/isabortcause) recognizes an abort. Pass `fault.cause`. It does not unwrap a fault.
+
 See [Errors guide](/docs/errors).

@@ -92,7 +92,7 @@ Factory 返回带标签的传输值：
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP 上的 Basic 凭证
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic 凭证
 
-`HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`signal` 和静态 `operation`。它是传输集成值——不是调用方解析后的输入。`queryParams` 是序列化之后的 `new URLSearchParams(queryString)`。builder 没产出 query 时，配好的 query serializer 不会被调用；builder 返回的 `URLSearchParams` 原样使用。输入校验、output 校验、领域错误映射留在各自层。
+`HttpRequest` 可含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`signal` 和静态 `operation`。`baseEndpoint` 是这次调用选中的端点。interceptor 看不到候选列表。它是传输集成值——不是调用方解析后的输入。`queryParams` 是序列化之后的 `new URLSearchParams(queryString)`。builder 没产出 query 时，配好的 query serializer 不会被调用；builder 返回的 `URLSearchParams` 原样使用。输入校验、output 校验、领域错误映射留在各自层。
 
 URL 校验从请求构建时开始：基础端点缺失、相对或无效，或者路径非法，都会在任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，短路 interceptor 也不例外。分派前，还会相对于最终 `req.baseEndpoint` 校验最终 `req.endpoint`：解析后的 URL 必须与该基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 可以有意把 `baseEndpoint` 换成另一个有效的绝对 URL。HTTP、SSE 和 WebSocket 共用这项规则，确定性的 URL 错误不会重试。
 

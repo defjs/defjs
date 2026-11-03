@@ -53,6 +53,8 @@ Après l’encodage struct, les valeurs que JSON ne peut pas représenter fidèl
 
 ## Reconnexion
 
+Pose `connectTimeoutMs` dans la politique de reconnexion pour borner chaque handshake de la construction du socket à `open`. Il doit être fini et positif ; des valeurs invalides renvoient `REQ_OPTIONS_INVALID`. Il n’a pas de défaut et est effacé après le handshake, donc les sessions établies ne sont pas affectées. Un handshake expiré signale `NET_UNREACHABLE` à l’équilibreur et suit le budget de reconnexion existant ; des tentatives épuisées finissent par `NET_TIMEOUT`.
+
 La reconnexion est opt-in. Pas d’objet `reconnect` → une fermeture physique termine la session logique. Quand elle est configurée, les défauts sont `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. `attempts` est le budget de nouvelles tentatives pour chaque coupure ; un `open` réussi réinitialise le budget et l’exposant de backoff. Chaque coupure suivante repart donc avec la tentative 1 et la base `delayMs`. `attempts: 0` désactive. Le prédicat par défaut accepte chaque issue de fermeture non manuelle dans le budget de cette coupure. Les ouvertures réussies répétées n’ont pas de limite de nouvelles tentatives à vie. Un socket qui s’ouvre avec succès et est immédiatement refermé par le serveur peut continuer à se reconnecter au délai de base (sous jitter et plafonds), parce que chaque ouverture réinitialise le budget ; utilise `shouldReconnect` pour l’arrêter.
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>

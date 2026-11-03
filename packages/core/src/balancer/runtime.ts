@@ -1,0 +1,180 @@
+import type { PreflightFault } from "../error/types";
+import { createPreflightFault } from "../error/factory";
+import {
+  type EndpointBalancer,
+  type EndpointDoneInfo,
+  type EndpointPickInfo,
+  type EndpointPickResult,
+  isBalancerOptionError,
+} from "./balancer";
+
+/**
+ * Endpoint selected for the transport, plus one-shot `start` and `done` wrappers.
+ *
+ * Transports call `done` on every exit after a successful pick, including
+ * build failures (`{ attempted: false }`). The wrapper, not the balancer, owns
+ * the once-only rule.
+ */
+export interface ResolvedEndpoint {
+  /** Endpoint string returned by `pick`. Not checked as a URL. */
+  readonly endpoint: string;
+  /** Starts the selected transport at most once; ignored after completion. Callback failures are contained. */
+  start(): void;
+  /** Reports the transport response once, only after start and before done. */
+  end(info: EndpointDoneInfo): void;
+  /**
+   * Reports the attempt outcome. The first call invokes the balancer's `done`
+   * synchronously and swallows a throw. `done` must be synchronous; a returned
+   * promise is not awaited and its rejection is ignored. Later calls do nothing.
+   * When `pick` omitted `done`, the first call only marks this attempt finished.
+   */
+  done(info: EndpointDoneInfo): void;
+  /** Whether `done` has already been entered. */
+  finished(): boolean;
+}
+
+/**
+ * Calls `balancer.pick` and normalizes the result. Never throws.
+ *
+ * - `[Error, undefined]` with the internal option-error brand becomes
+ *   `REQ_OPTIONS_INVALID`. Any other error, including `ERR_NO_ENDPOINT`,
+ *   becomes `REQ_BUILD_FAILED`. The original error is `cause`.
+ * - A throw from `pick` or outcome normalization becomes
+ *   `createPreflightFault("REQ_BUILD_FAILED", thrown)`. Result fields are read once.
+ * - Any other shape becomes `REQ_BUILD_FAILED` whose `cause` is the returned
+ *   value itself.
+ * - `pick`, `start`, and `done` must be synchronous. A returned promise is not awaited
+ *   and its rejection is ignored. A promise returned by `pick` is an invalid shape.
+ * - Those failures do not call `done`.
+ * - Success returns the selected endpoint and a `done` wrapper. Call that
+ *   wrapper, not the function on the raw pick result.
+ *
+ * @param balancer - Client balancer, built-in or custom.
+ * @param info - Candidates, transport, and the definition's `operation`.
+ * @returns An error-first tuple. The fault is a `PreflightFault`.
+ */
+export function pickEndpoint(
+  balancer: EndpointBalancer,
+  info: EndpointPickInfo,
+): readonly [PreflightFault, undefined] | readonly [null, ResolvedEndpoint] {
+  try {
+    const outcome: unknown = balancer.pick(info);
+    if (Array.isArray(outcome) && outcome.length === 2) {
+      const error: unknown = outcome[0];
+      const result: unknown = outcome[1];
+      if (
+        Object.prototype.toString.call(error) === "[object Error]" &&
+        result === undefined
+      ) {
+        // The tag check also accepts errors from another realm.
+        const code = isBalancerOptionError(error as Error)
+          ? "REQ_OPTIONS_INVALID"
+          : "REQ_BUILD_FAILED";
+        return [createPreflightFault(code, error), undefined];
+      }
+      if (error === null && result !== null && typeof result === "object") {
+        const endpoint = "endpoint" in result ? result.endpoint : undefined;
+        const done = "done" in result ? result.done : undefined;
+        const start = "start" in result ? result.start : undefined;
+        const end = "end" in result ? result.end : undefined;
+        if (
+          typeof endpoint === "string" &&
+          (done === undefined || typeof done === "function") &&
+          (start === undefined || typeof start === "function") &&
+          (end === undefined || typeof end === "function")
+        ) {
+          // The callable check is the runtime boundary for custom balancers.
+          return [
+            null,
+            resolve({
+              endpoint,
+              done: done as EndpointPickResult["done"],
+              start: start as EndpointPickResult["start"],
+              end: end as EndpointPickResult["end"],
+            }),
+          ];
+        }
+      }
+    }
+    ignoreRejection(outcome);
+    return [createPreflightFault("REQ_BUILD_FAILED", outcome), undefined];
+  } catch (cause) {
+    return [createPreflightFault("REQ_BUILD_FAILED", cause), undefined];
+  }
+}
+
+function resolve(result: EndpointPickResult): ResolvedEndpoint {
+  let settled = false;
+  let started = false;
+  let ended = false;
+  const start = result.start;
+  const done = result.done;
+  const end = result.end;
+  return {
+    endpoint: result.endpoint,
+    finished: () => settled,
+    start() {
+      if (settled || started) return;
+      started = true;
+      try {
+        ignoreRejection(start?.());
+      } catch {
+        // Callback failures must not change the transport attempt.
+      }
+    },
+    end(info) {
+      if (!started || ended || settled) return;
+      ended = true;
+      try {
+        ignoreRejection(end?.(attributed(info)));
+      } catch {
+        // Callback failures must not change the transport attempt.
+      }
+    },
+    done(info) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (done === undefined) {
+        return;
+      }
+      try {
+        ignoreRejection(done(attributed(info)));
+      } catch {
+        // A throwing done must not replace the operation tuple.
+      }
+    },
+  };
+}
+
+function ignoreRejection(value: unknown): void {
+  try {
+    if (
+      (typeof value === "object" && value !== null) ||
+      typeof value === "function"
+    ) {
+      const then = "then" in value ? value.then : undefined;
+      if (typeof then === "function") {
+        then.call(value, undefined, () => undefined);
+      }
+    }
+  } catch {
+    // Observing a non-conforming thenable must not replace the operation tuple.
+  }
+}
+
+/** Only an explicit browser offline signal suppresses endpoint attribution. */
+export function isOffline(): boolean {
+  try {
+    return globalThis.navigator?.onLine === false;
+  } catch {
+    return false;
+  }
+}
+
+function attributed(info: EndpointDoneInfo): EndpointDoneInfo {
+  return info.attempted && info.code === "NET_UNREACHABLE" && isOffline()
+    ? { attempted: false }
+    : info;
+}

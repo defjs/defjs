@@ -61,7 +61,9 @@ Observer 喺 transform boundary run。除非 active attempt signal aborted，否
 
 ## 重連
 
-**行為改變：** SSE reconnect 係 opt-in。冇 `withSSEReconnect(...)`，network 同 stream-read failures **唔會** retry（等同 `attempts: 0`）。要 retry 呢啲 failures，就傳 `withSSEReconnect({ attempts: 3 })`（或者其他 reviewed budget）。Normal EOF 唔會 retry。Status/content-type validation、parser limits、message transform failures、queue overflow，同 normal EOF 對 logical stream 仍然係 terminal。
+喺 reconnect policy 入面設定 `connectTimeoutMs`，限制每次 handshake 由呼叫 Fetch 到 response headers。佢必須係有限正數；無效值會回傳 `REQ_OPTIONS_INVALID`。佢冇預設值，handshake 之後會被清走，所以已經建立嘅 session 唔受影響。超時嘅 handshake 會向 balancer 報告 `NET_UNREACHABLE`，並跟現有嘅 reconnect budget；重試用盡就以 `NET_TIMEOUT` 結束。
+
+**行為改變：** SSE reconnect 係 opt-in。冇 `withSSEReconnect(...)`，network 同 stream-read failures **唔會** retry（等同 `attempts: 0`）。要 retry 呢啲 failures，就傳 `withSSEReconnect({ attempts: 3 })`（或者其他 reviewed budget）。Normal EOF 唔會 retry。持續訂閱要觀察 `stream.closed`，並用最後嘅 application cursor 開始一次新操作；reconnect 唔會將 EOF 變成無盡訂閱。Status/content-type validation、parser limits、message transform failures、queue overflow，同 normal EOF 對 logical stream 仍然係 terminal。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
@@ -69,7 +71,7 @@ Observer 喺 transform boundary run。除非 active attempt signal aborted，否
 
 重連選項會喺 interceptors 或 Fetch 執行之前檢查：`attempts` 必須係非負安全整數；`delayMs` 必須係有限非負數；`maxDelayMs` 可以係有限非負數或者正 `Infinity`，後者會移除設定上限，但最終等待仍然唔會超過 `2_147_483_647` ms；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`，唔會開啟 stream。
 
-最新解析到嘅 event ID 會喺之後嘅嘗試放喺 `Last-Event-ID`，在線上編碼為 UTF-8 bytes，非 ASCII IDs 亦一樣。空 `id:` 會清除 header；包含 NUL 嘅 ID 會被忽略。除咗呢個 header，之後嘅嘗試重送嘅係第一次嘗試建立嘅 request：`builder` 同 interceptors 每次呼叫只會執行一次，所以 method、URL、headers 同 body 都維持不變。如果某個 header 每次嘗試都必須更新，例如有效期短嘅 token，就要喺傳俾 `withSSEHandle` 嘅 Fetch 入面處理；呢個 Fetch 每次嘗試都會執行一次。如果 credential 仍然過期，stream 開啟之後嘅非 2xx 重連 handshake 會令佢以 `RES_DECODE_FAILED` 結束；status 請睇 `stream.open.response.status`。非 2xx 初始 handshake 就會喺已聲明嘅 error body 解碼成功時，回傳 startup `HTTP_STATUS` fault。
+`id:` 欄位只會更新 buffer；只有處理到結尾空行先會提交重連 cursor，即使個 frame 只有 ID、唔會派發 message 都一樣。如果 stream 喺嗰個空行之前結束，cursor 會維持不變。已提交嘅 ID 會喺之後嘅嘗試放喺 `Last-Event-ID`，在線上編碼為 UTF-8 bytes，非 ASCII IDs 亦一樣。空 `id:` 會喺嗰個空行清除 header；包含 NUL 嘅 ID 會被忽略。除咗呢個 header，之後嘅嘗試重送嘅係第一次嘗試建立嘅 request：`builder` 同 interceptors 每次呼叫只會執行一次，所以 method、URL、headers 同 body 都維持不變。如果某個 header 每次嘗試都必須更新，例如有效期短嘅 token，就要喺傳俾 `withSSEHandle` 嘅 Fetch 入面處理；呢個 Fetch 每次嘗試都會執行一次。如果 credential 仍然過期，stream 開啟之後嘅非 2xx 重連 handshake 會令佢以 `RES_DECODE_FAILED` 結束；status 請睇 `stream.open.response.status`。非 2xx 初始 handshake 就會喺已聲明嘅 error body 解碼成功時，回傳 startup `HTTP_STATUS` fault。
 
 重連只會喺安全嘅時候重送 request：
 
@@ -96,7 +98,7 @@ Fatal stream 亦會清 buffered events、cancel active body、reject iterator，
   examples/sse/close-and-dispose.ts#example
 </include>
 
-Terminal kinds（`closed.kind`）：`eof`、`aborted` 或者 `error`。`error` result 亦會帶 `closed.code`，即係 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或者 `RES_MEDIA_TYPE_INVALID`。
+Terminal kinds（`closed.kind`）：`eof`、`aborted` 或者 `error`。`error` result 亦會帶 `closed.code`，即係 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`REQ_BUILD_FAILED`、`REQ_OPTIONS_INVALID`、`RES_DECODE_FAILED` 或者 `RES_MEDIA_TYPE_INVALID`。`REQ_BUILD_FAILED` 同 `REQ_OPTIONS_INVALID` 表示 stream 打開之後，reconnect 嗰次 pick endpoint 失敗。佢哋唔會被改寫成 `NET_UNREACHABLE`。
 
 `close(reason)` 會 abort active attempt、關閉 queue，並以 `aborted` settle，即使 reason 係 `TimeoutError` 都一樣。傳俾操作嘅 `signal` 喺 stream open 之後仍然掛住，並覆蓋成條連線。Abort 佢通常會正常結束 iterator 並報告 `aborted`。如果 abort reason 係 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會 throw `ERR_TIMEOUT`，而 `closed` 會報告 `kind: 'error'` 同 `code: 'NET_TIMEOUT'`。Client 上面冇只限啟動嘅 deadline。應用程式想要一個，就自己建立 `AbortController`，用 timer 以 `new DOMException("...", "TimeoutError")` abort，並喺 await 返回之後清走 timer：
 

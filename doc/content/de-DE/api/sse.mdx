@@ -47,7 +47,7 @@ Strukturelle Implementierungen von `EventStreamHandle` müssen `[Symbol.asyncDis
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` ist `eof`, `aborted` oder `error`. Jede Variante kann `reason` und `cause` tragen. Nur `error` hat `code`, einen von [`EventStreamFaultCode`](/de-DE/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind` ist `eof`, `aborted` oder `error`. Jede Variante kann `reason` und `cause` tragen. Nur `error` hat `code`, einen von [`EventStreamFaultCode`](/de-DE/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` und `REQ_OPTIONS_INVALID` bedeuten, dass ein Pick beim Reconnect fehlgeschlagen ist, nachdem der Stream geöffnet wurde.
 
 ## EventStructs
 

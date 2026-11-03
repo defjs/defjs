@@ -1,9 +1,10 @@
-import type {
-  ClientConfig,
-  HttpInterceptor,
-  HttpRequest,
-  SSEInterceptor,
-  WebSocketInterceptor,
+import {
+  type ClientConfig,
+  type HttpInterceptor,
+  type HttpRequest,
+  pickFirstBalancer,
+  type SSEInterceptor,
+  type WebSocketInterceptor,
 } from "@defjs/core";
 import type { Context, Meter, TextMapPropagator } from "@opentelemetry/api";
 import { context, propagation, ROOT_CONTEXT, trace } from "@opentelemetry/api";
@@ -32,7 +33,9 @@ function makeConfig(): ClientConfig {
   const sharedFetch = globalThis.fetch.bind(globalThis) as typeof fetch;
 
   return {
-    endpoint: "https://api.example.com",
+    endpoints: ["https://api.example.com"],
+    endpointBalancer: pickFirstBalancer(),
+    endpointFailover: {},
     http: { handle: sharedFetch },
     interceptors: [],
     sse: { handle: sharedFetch },

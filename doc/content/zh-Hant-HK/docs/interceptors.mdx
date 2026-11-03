@@ -92,7 +92,7 @@ Spread session 會將 `state` / `connection` / `bufferedAmount` snapshot 一次�
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP 上嘅 Basic credentials
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上嘅 Basic credentials
 
-`HttpRequest` 可以包括 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`signal`，同 static `operation`。佢係 transport integration value — 唔係 caller 嘅 parsed input。Serialization 之後，`queryParams` 係 `new URLSearchParams(queryString)`。Builder 冇產生 query 嘅時候，configured query serializer 唔會被 call；builder 嘅 `URLSearchParams` 會原樣用。Input validation、output validation 同 domain error mapping 留喺各自嘅 layers。
+`HttpRequest` 可以包括 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`signal`，同 static `operation`。`baseEndpoint` 係呢次 call 揀中嘅 endpoint。Interceptor 睇唔到候選 list。佢係 transport integration value — 唔係 caller 嘅 parsed input。Serialization 之後，`queryParams` 係 `new URLSearchParams(queryString)`。Builder 冇產生 query 嘅時候，configured query serializer 唔會被 call；builder 嘅 `URLSearchParams` 會原樣用。Input validation、output validation 同 domain error mapping 留喺各自嘅 layers。
 
 URL 驗證喺 request building 時開始：缺少、相對或無效嘅 base endpoint，以及非法 path，都會以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit 嘅 interceptor。Dispatch 之前，最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 驗證：解析後嘅 URL 必須保持嗰個 base 嘅 origin，並留喺佢嘅目錄之下；path 入面嘅C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?`、`#`，以及逃出目錄嘅路徑都會被拒絕。形似 scheme 同 protocol-relative 嘅形式，就算前面有空格都會被拒絕；路徑入面嘅普通空格允許，並會以 `%20` 送出。Interceptor 可以刻意將 `baseEndpoint` 換成另一個有效嘅絕對 URL。HTTP、SSE 同 WebSocket 共用呢個規則，確定嘅 URL 錯誤永遠唔會重試。
 

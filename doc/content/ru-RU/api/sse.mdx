@@ -47,7 +47,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` — это `eof`, `aborted` или `error`. Каждый вариант может нести `reason` и `cause`. `code` есть только у `error`, одно из [`EventStreamFaultCode`](/ru-RU/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`.
+`kind` — это `eof`, `aborted` или `error`. Каждый вариант может нести `reason` и `cause`. `code` есть только у `error`, одно из [`EventStreamFaultCode`](/ru-RU/api/core/eventstreamfaultcode-type): `'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`. `REQ_BUILD_FAILED` и `REQ_OPTIONS_INVALID` значат, что pick при переподключении не удался после открытия стрима.
 
 ## EventStructs
 

@@ -7,7 +7,7 @@
   {
     "slug": "core/withendpoint",
     "name": "withEndpoint",
-    "description": "Sets the valid absolute base URL prepended to relative request paths."
+    "description": "Replaces the candidate base URLs prepended to relative request paths."
   },
   {
     "slug": "core/withinterceptors",
@@ -823,5 +823,95 @@
     "slug": "core/derivableclient-type",
     "name": "DerivableClient",
     "description": "Callable root client returned by createClient."
+  },
+  {
+    "slug": "core/endpointbalancer-type",
+    "name": "EndpointBalancer",
+    "description": "Chooses one endpoint for a call."
+  },
+  {
+    "slug": "core/endpointpickoutcome-type",
+    "name": "EndpointPickOutcome",
+    "description": "Error-first result of EndpointBalancer.pick."
+  },
+  {
+    "slug": "core/endpointtransport-type",
+    "name": "EndpointTransport",
+    "description": "Transport that is about to use the selected endpoint."
+  },
+  {
+    "slug": "core/endpointpickinfo-type",
+    "name": "EndpointPickInfo",
+    "description": "What the runtime tells pick about this call."
+  },
+  {
+    "slug": "core/endpointpickresult-type",
+    "name": "EndpointPickResult",
+    "description": "Endpoint selected for one call."
+  },
+  {
+    "slug": "core/endpointfaultcode-type",
+    "name": "EndpointFaultCode",
+    "description": "Transport failure codes a balancer can observe through end and done."
+  },
+  {
+    "slug": "core/endpointdoneinfo-type",
+    "name": "EndpointDoneInfo",
+    "description": "Outcome of the attempt that used the selected endpoint."
+  },
+  {
+    "slug": "core/err-no-endpoint",
+    "name": "ERR_NO_ENDPOINT",
+    "description": "Sentinel for an empty candidate list."
+  },
+  {
+    "slug": "core/isnoendpointcause",
+    "name": "isNoEndpointCause",
+    "description": "Whether cause is ERR_NO_ENDPOINT, including a copy from another Core build."
+  },
+  {
+    "slug": "core/pickfirstbalancer",
+    "name": "pickFirstBalancer",
+    "description": "Sticky failover balancer. The default when a client sets no balancer."
+  },
+  {
+    "slug": "core/roundrobinbalancer",
+    "name": "roundRobinBalancer",
+    "description": "Round-robin balancer, with nginx smooth weighting when weights is set."
+  },
+  {
+    "slug": "core/withendpointbalancer",
+    "name": "withEndpointBalancer",
+    "description": "Replaces the balancer that selects one candidate per call."
+  },
+  {
+    "slug": "core/endpointfailovercondition-type",
+    "name": "EndpointFailoverCondition",
+    "description": "Conditions that allow HTTP to try a different endpoint within one call."
+  },
+  {
+    "slug": "core/endpointfailoveroptions-type",
+    "name": "EndpointFailoverOptions",
+    "description": "HTTP failover policy. Omitted fields use the default policy."
+  },
+  {
+    "slug": "core/withendpointfailover",
+    "name": "withEndpointFailover",
+    "description": "Replaces HTTP endpoint failover settings; omitted fields use defaults."
+  },
+  {
+    "slug": "core/outlierdetectionoptions-type",
+    "name": "OutlierDetectionOptions",
+    "description": "Linkerd-style consecutive-failure circuit breaking and optional cached health checks. All endpoints may break; Finagle-style fail-open falls back to the current list. No timers, ejection quotas, settlement grid, or slow start are used."
+  },
+  {
+    "slug": "core/outlierdetection",
+    "name": "outlierDetection",
+    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking. Five attributed failures break an endpoint by default. Penalties start at 1s, double after failed probes, add uniform positive jitter of up to 0.5 times the base, and cap at 60s. A successful probe resets the backoff. Expiry admits one probe, decided at transport end (headers or socket open), as in Finagle. done without end decides the probe instead; later done is an ordinary sample. NET_UNREACHABLE and 5xx fail by default, not timeouts or incomplete bodies. Active true cannot cancel a penalty. Empty candidates first ignore active checks, then fall back to the original current list (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer is created. Configuration is captured at construction."
+  },
+  {
+    "slug": "core/p2cbalancer",
+    "name": "p2cBalancer",
+    "description": "Samples candidates without replacement and selects the least loaded draw."
   }
 ]

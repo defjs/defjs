@@ -175,7 +175,11 @@ async function assertAsyncDisposableEventStream(
 void assertAsyncDisposableEventStream;
 
 const closeFaultCode: EventStreamFaultCode = "CAP_QUEUE_OVERFLOW";
+const reconnectBuildFault: EventStreamFaultCode = "REQ_BUILD_FAILED";
+const reconnectOptionsFault: EventStreamFaultCode = "REQ_OPTIONS_INVALID";
 void closeFaultCode;
+void reconnectBuildFault;
+void reconnectOptionsFault;
 
 type CatalogEvent = EventStreamData<typeof catalogEventStructs>;
 declare const catalogEvent: CatalogEvent;

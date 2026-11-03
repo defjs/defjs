@@ -218,6 +218,114 @@ describe("fetchEventStream", () => {
     },
   );
 
+  test("should reconnect from the committed id after a partial id frame is cut", async () => {
+    const sockets = new Set<Socket>();
+    const headers: string[] = [];
+    let firstSocket: Socket | undefined;
+    const partial = "id: 1\ndata: first\n\nid: 2\n";
+    const server = createServer((socket) => {
+      sockets.add(socket);
+      socket.on("close", () => sockets.delete(socket));
+      let incoming = "";
+      socket.on("data", (chunk: Buffer) => {
+        incoming += chunk.toString("latin1");
+        if (!incoming.includes("\r\n\r\n")) return;
+        headers.push(incoming);
+        const first = headers.length === 1;
+        const cursor = /\r\nlast-event-id: ([^\r\n]*)\r\n/i.exec(incoming)?.[1];
+        const body = first
+          ? partial
+          : cursor === "1"
+            ? "id: 2\ndata: second\n\n"
+            : "id: 3\ndata: skipped\n\n";
+        const payload = Buffer.from(body);
+        const reply = Buffer.concat([
+          Buffer.from(
+            `HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n${payload.length.toString(16)}\r\n`,
+          ),
+          payload,
+          Buffer.from(first ? "\r\n" : "\r\n0\r\n\r\n"),
+        ]);
+        if (first) {
+          firstSocket = socket;
+          socket.write(reply);
+        } else {
+          socket.end(reply);
+        }
+      });
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Expected a loopback port");
+    let calls = 0;
+    try {
+      const stream = await fetchEventStream(
+        {
+          baseEndpoint: `http://127.0.0.1:${address.port}`,
+          endpoint: "/events",
+          method: "GET",
+        },
+        {
+          reconnect: { attempts: 1, delayMs: 0 },
+          async fetch(input, init) {
+            const response = await globalThis.fetch(input, init);
+            if (++calls !== 1) return response;
+            const reader = response.body?.getReader();
+            if (!reader) throw new Error("Expected response body");
+            let forwarded = false;
+            return new Response(
+              new ReadableStream<Uint8Array>(
+                {
+                  async pull(controller) {
+                    if (forwarded) {
+                      // Zero prefetch: this pull proves the parser consumed the partial id line.
+                      firstSocket?.destroy();
+                      await reader.read();
+                      return;
+                    }
+                    let bytes = Buffer.alloc(0);
+                    while (bytes.length < Buffer.byteLength(partial)) {
+                      const result = await reader.read();
+                      if (result.done)
+                        throw new Error("Expected partial frame");
+                      bytes = Buffer.concat([bytes, result.value]);
+                    }
+                    forwarded = true;
+                    controller.enqueue(bytes);
+                  },
+                  cancel(reason) {
+                    return reader.cancel(reason);
+                  },
+                },
+                { highWaterMark: 0 },
+              ),
+              { headers: response.headers },
+            );
+          },
+        },
+      );
+      const messages: EventStreamMessage[] = [];
+      for await (const message of stream) messages.push(message);
+
+      expect(headers).toHaveLength(2);
+      expect(headers[1]).toMatch(/\r\nlast-event-id: 1\r\n/i);
+      expect(messages.map((message) => message.id)).toEqual(["1", "2"]);
+      expect(messages.map((message) => message.data)).toEqual([
+        "first",
+        "second",
+      ]);
+      await expect(stream.closed).resolves.toEqual({ kind: "eof" });
+    } finally {
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
+    }
+  });
+
   test("should handle a platform Last-Event-ID header rejection through the per-attempt retry policy", async () => {
     const originalSet = Headers.prototype.set;
     const writeHeader = vi

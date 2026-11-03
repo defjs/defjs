@@ -445,12 +445,21 @@ export async function fetchHandler(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle = resolveGlobalFetch(),
 ): Promise<HttpResponse<unknown>> {
+  return fetchHandlerWithLifecycle(httpRequest, fetchImpl);
+}
+
+/** Internal raw Fetch boundary used for per-attempt timing. */
+export async function fetchHandlerWithLifecycle(
+  httpRequest: HttpRequest,
+  fetchImpl: FetchHandle,
+  lifecycle?: { start(): void; response(response: Response): void },
+): Promise<HttpResponse<unknown>> {
   if (fetchImpl === DEFAULT_FETCH) {
     fetchImpl = resolveGlobalFetch();
   }
   const uploadProgress = httpRequest.uploadProgress;
   if (!uploadProgress) {
-    return sendFetchRequest(httpRequest, fetchImpl);
+    return sendFetchRequest(httpRequest, fetchImpl, lifecycle);
   }
 
   let observerFailure: BodyFailure<"EXT_OBSERVER_FAILED"> | undefined;
@@ -472,7 +481,7 @@ export async function fetchHandler(
 
   let response: HttpResponse<unknown>;
   try {
-    response = await sendFetchRequest(observed, fetchImpl);
+    response = await sendFetchRequest(observed, fetchImpl, lifecycle);
   } catch (error) {
     // sendFetchRequest already turned cancellation into the abort cause, and cancellation outranks the observer.
     throw observerFailure !== undefined && !httpRequest.signal?.aborted
@@ -489,6 +498,7 @@ export async function fetchHandler(
 async function sendFetchRequest(
   httpRequest: HttpRequest,
   fetchImpl: FetchHandle,
+  lifecycle?: { start(): void; response(response: Response): void },
 ): Promise<HttpResponse<unknown>> {
   const abortSignal = httpRequest.signal;
   const platform = fetchImpl === PLATFORM_FETCH_HANDLE;
@@ -507,7 +517,10 @@ async function sendFetchRequest(
       platformBody = init.body;
       fallbackUrl = url.href;
       response = await fetchWithSignal(
-        () => fetchImpl(url, init),
+        () => {
+          lifecycle?.start();
+          return fetchImpl(url, init);
+        },
         abortSignal,
         cancelLateResponseBody,
       );
@@ -516,7 +529,10 @@ async function sendFetchRequest(
       request = built;
       fallbackUrl = built.url;
       response = await fetchWithSignal(
-        () => fetchImpl(built),
+        () => {
+          lifecycle?.start();
+          return fetchImpl(built);
+        },
         abortSignal,
         cancelLateResponseBody,
       );
@@ -526,6 +542,7 @@ async function sendFetchRequest(
     throw (abortSignal && resolveAbortCause(abortSignal)) ?? error;
   }
 
+  lifecycle?.response(response);
   try {
     return await parseFetchResponse(
       httpRequest,

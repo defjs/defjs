@@ -26,7 +26,19 @@ description: "createClient, option 헬퍼, Client 타입이에요."
 
 <ApiSignature name="withEndpoint" />
 
-상대 path 앞에 붙는 base URL을 설정해요.
+후보 base URL을 처음 나타난 순서로 복사하고, 같은 문자열의 나중 복사는 버려요. 나중 `withEndpoint`는 목록을 바꿔요. URL을 검사하지 않고 밸런서도 바꾸지 않아요. 빈 목록은 유효하고, 호출은 `REQ_BUILD_FAILED`로 실패해요.
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+이후 호출에 쓸 밸런서를 바꿔요. 객체는 참조로 저장돼요. 이 option이 없으면 클라이언트마다 자기 `pickFirstBalancer()`를 가져요.
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+한 호출 안의 HTTP failover를 제어해요. 클라이언트가 공유하는 Finagle/Linkerd 재시도 예산은 기본으로 20%에, 10초 TTL 동안 초당 10회의 예비를 더해요. `retryBudget: false`는 그 한도를 꺼요. 크레딧과 데빗은 모두 TTL/10 슬라이스 열 개에서 지연해서 만료돼요. 기본은 GET, HEAD, OPTIONS, TRACE의 연결 실패에 대한 추가 시도 한 번이에요. `attempts: 0` 또는 `methods: []`이면 꺼져요. 나중 option은 정책을 바꾸고, 생략한 필드는 기본값을 써요. 스트리밍 요청 body는 다시 보내지 않아요. `attemptTimeoutMs`는 한 시도의 Fetch, body 읽기, 디코딩을 덮고, 호출자 signal은 모든 시도를 덮어요. [여러 endpoint](/ko-KR/docs/client#multiple-endpoints)를 보세요.
 
 ### withInterceptors()
 
@@ -169,6 +181,8 @@ Defjs가 Fetch 구현에 요구하는 호출 시그니처예요. `typeof fetch`�
 | `jitter`     | `0`          | `0`          |
 | `maxDelayMs` | 상한 없음    | `30000`      |
 
+`connectTimeoutMs`는 선택이고, 유한한 양수여야 해요. SSE에서는 Fetch부터 응답 헤더까지, WebSocket에서는 생성부터 `open`까지를 제한하고, 핸드셰이크 뒤에 해제돼요. 만료되면 밸런서에 `NET_UNREACHABLE`을 보고해서, 재연결이 다음 endpoint를 고를 수 있어요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요.
+
 두 전송 모두, 핸드셰이크가 성공하면 단절마다의 재시도 예산, 콜백 attempt, 백오프 지수가 초기화돼요. `attempts: 0`은 재시도를 끄고, `attempts`를 생략해도 한 단절 안에서 무제한 재시도가 되지는 않아요. `maxDelayMs`는 jitter와 반올림 뒤의 최종 지연을 제한해요. SSE에 설정한 상한이 없어도 플랫폼 타이머 한계인 `2_147_483_647` ms가 적용돼요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 상한에서 포화돼요.
 
 재연결 옵션은 전송 전에 검증돼요. `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`는 유한하고 음이 아니어야 해요. `maxDelayMs`는 음이 아닌 유한한 수 또는 양의 `Infinity`일 수 있어요. `Infinity`는 설정한 상한만 없애며 최종 대기 시간에는 플랫폼의 `2_147_483_647` ms 한계가 그대로 적용돼요. `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. WebSocket `attempts: 0`은 이후 재시도를 끄지만, 명시적으로 제공한 모든 재연결 필드는 SSE와 마찬가지로 최초 연결 전에 검증돼요. jitter는 상한이 걸린 기준을 양쪽으로 늘리거나 줄인 뒤 최종 상한을 적용해요.
@@ -183,11 +197,11 @@ WebSocket은 `beforeConnect`, `heartbeat`, `protocols`, `reconnect`를 파생 �
 
 <ApiSignature name="ClientOptions" />
 
-보이는 필드는 `sse`와 `webSocket`이에요. 나머지 일곱 개——`endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, `withCredentials`——는 내보내지 않는 HTTP 기반에서 상속되고, `endpoint`는 필수예요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 option 헬퍼를 받아요.
+보이는 필드는 `sse`와 `webSocket`이에요. 나머지 일곱 개——`endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf`, `withCredentials`——는 내보내지 않는 HTTP 기반에서 상속돼요. `endpoints`는 `readonly string[]`예요. 해석된 기본값은 `[]`예요. 빈 배열은 유효한 값이고, 호출은 `REQ_BUILD_FAILED`로 실패해요. 클라이언트 수준의 `timeout`은 없어요. `createClient`는 이 객체를 받지 않고 option 헬퍼를 받아요.
 
 ### ClientConfig
 
-option 헬퍼가 변경하고 작업이 읽는, 해석된 스냅샷이에요. 기본값을 적용한 `ClientOptions`이며 `http.handle`, `interceptors`, `sse`(`ClientSSEConfig`), `webSocket`이 항상 있어요.
+option 헬퍼가 변경하고 작업이 읽는, 해석된 스냅샷이에요. 기본값을 적용한 `ClientOptions`이며 `http.handle`, `interceptors`, `sse`(`ClientSSEConfig`), `webSocket`, `endpointBalancer`, `endpointFailover`가 항상 있어요. `endpointBalancer`의 기본값은 그 클라이언트용 새 `pickFirstBalancer()`예요. [`RequestOptions`](/ko-KR/api/core/requestoptions-type) 필드는 아니에요.
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ option 헬퍼가 변경하고 작업이 읽는, 해석된 스냅샷이에요. �
 <ApiSignature name="WebSocketHandleConstructor" />
 
 `withWebSocketHandle`에 넘기는 생성자예요. `OPEN` ready-state 상수를 노출해야 해요.
+
+## 밸런서
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer`는 `NET_UNREACHABLE`이나 code가 없는 502/503/504 응답에서 진행해요. 선택인 양의 유한한 `failbackMs`는 그 간격 뒤에 첫 endpoint를 동시에 하나만 탐색해요. HTTP 안전 메서드의 연결 실패는 기본으로 같은 호출 안에서도 failover해요. `roundRobinBalancer`는 목록을 순서대로 돌아요. `weights`는 선택이에요. [여러 endpoint](/ko-KR/docs/client#multiple-endpoints)를 보세요.
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+비복원으로 서로 다른 후보를 표본 뽑고(Envoy/gRPC A48과 달라요), tower PeakEwma 또는 pending 부하를 골라요. Linkerd 기본은 RTT 30ms와 감쇠 10초예요. `start`가 pending을 시작하고, `end`는 헤더나 소켓 open에서 그것을 풀며, 실패를 포함한 모든 전송의 실제 RTT를 기록해요. `end`가 없는 `done`은 RTT 샘플 없이 pending을 풀어요. p2c 실패 분류자도 페널티도 없어요. `choiceCount` 기본은 2이고 상한은 10이에요.
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+자식을 Linkerd식 연속 실패 회로 차단으로 감싸요. 라운드 로빈과 p2c는 기본적으로 그것을 켜고(Finagle과 같아요), `false`는 꺼요. pick-first는 객체로 그것을 켜요. 실패가 다섯 번이면 페널티는 1000ms에서 시작하고, 실패한 탐색 뒤에 두 배가 되며, 기준의 0.5배까지의 양의 jitter를 더하고, 60000ms에서 막혀요. 만료는 `end`에서 결정되는 탐색 하나를 들이고, `end`가 없으면 `done`에서 결정해요. 성공은 백오프를 초기화하고, 취소는 칸만 풀어요. 성공으로 가정하는 타임아웃도, 할당량도, 마지막 호스트 보호도, 정산 격자도, 비율 기준도, 슬로 스타트도 없어요. `isHealthy`는 애플리케이션이 가진 캐시된 상태를 읽고, 페널티를 취소하지 않아요. 모든 호스트가 끊길 수 있어요. Finagle식의 목록 안 fail-open은 그래도 요청을 보내요. Envoy/gRPC A50과 달리 방출 할당량은 없어요. [헬스 필터링과 p2c](/ko-KR/docs/client#health-filtering-and-p2c)를 보세요.
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`pick`은 error-first 튜플을 돌려줘요. 선택인 `start`는 고른 전송이 시작하기 직전에 동기적으로 많아야 한 번 실행돼요. 선택인 `end`는 `start` 뒤에 한 번, Fetch 헤더나 WebSocket `open`(또는 응답 전 실패)에서 실행돼요. 선택인 `done`은 완료 때 한 번 실행돼요. Fetch는 Linkerd의 첫 body 프레임이나 Envoy의 스트림 경계를 드러낼 수 없어요. 모든 훅의 throw와 thenable rejection은 가둬져요. `ERR_NO_ENDPOINT`은 `REQ_BUILD_FAILED`의 `cause`로만 쓰여요. `FaultCode`는 아니에요. [`isNoEndpointCause`](/ko-KR/api/core/isnoendpointcause)는 Core 사본을 넘어서도 그것을 알아봐요.
 
 [클라이언트 가이드](/ko-KR/docs/client)를 보세요.

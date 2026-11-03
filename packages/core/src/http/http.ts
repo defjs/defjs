@@ -1,9 +1,17 @@
+import { retryBudgetFor } from "../balancer/retry_budget";
 import type { Client } from "../client/client";
 import { CLIENT } from "../client/client";
-import type { HttpClientConfig } from "../client/config";
+import type {
+  EndpointFailoverCondition,
+  EndpointFailoverOptions,
+} from "../client/option";
+import type { ClientConfig } from "../client/config";
 import { ERR_FETCH_UNSUPPORTED } from "../client/config";
+import type { EndpointDoneInfo } from "../balancer/balancer";
+import { isOffline, pickEndpoint } from "../balancer/runtime";
 import type { AnyFault, Fault, FaultOf, PreflightFault } from "../error";
 import {
+  ERR_TIMEOUT,
   createDecodeFault,
   createHttpStatusFault,
   createNetworkFault,
@@ -45,8 +53,9 @@ import type { AnyBodyFailure } from "./transport/body_failure";
 import { isBodyFailure } from "./transport/body_failure";
 import {
   ERR_STREAMING_REQUEST_UNSUPPORTED,
-  fetchHandler,
+  fetchHandlerWithLifecycle,
 } from "./transport/fetch";
+import { isReadableStreamBody } from "./transport/fetch_init";
 import { getContentType, isJsonMediaType } from "./transport/utils";
 
 /**
@@ -282,15 +291,137 @@ type HttpExecutionDefinition<
   error?: TError;
 };
 
+type FailoverAttempt = {
+  endpoint?: string;
+  info?: EndpointDoneInfo;
+  replayable: boolean;
+  timedOut: boolean;
+};
+
 async function executeHttpCommand<
   TInput extends AnyStruct | undefined,
   TOutput extends AnyStruct | undefined,
   TError extends AnyStruct | undefined,
 >(
-  clientConfig: HttpClientConfig,
+  clientConfig: ClientConfig,
   definition: HttpExecutionDefinition<TInput, TOutput, TError>,
   input: EndpointInput<TInput> | undefined,
   options: HttpExecuteOptions | undefined,
+): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
+  const policy = normalizeFailoverOptions(clientConfig.endpointFailover);
+  if (policy instanceof Error) {
+    return [
+      createPreflightFault("REQ_OPTIONS_INVALID", policy),
+      undefined,
+      undefined,
+    ];
+  }
+  const budget = retryBudgetFor(clientConfig);
+  if (budget instanceof Error)
+    return [
+      createPreflightFault("REQ_OPTIONS_INVALID", budget),
+      undefined,
+      undefined,
+    ];
+  budget.deposit();
+  const { attempts, retryOn, methods, attemptTimeoutMs } = policy;
+  let candidates = clientConfig.endpoints;
+  for (let index = 0; ; index++) {
+    const state: FailoverAttempt = { replayable: true, timedOut: false };
+    const result = await executeHttpAttempt(
+      clientConfig,
+      definition,
+      input,
+      options,
+      candidates,
+      state,
+      attemptTimeoutMs,
+    );
+    const condition = failoverCondition(state, result[0]);
+    candidates = candidates.filter((endpoint) => endpoint !== state.endpoint);
+    const allowed =
+      condition !== undefined &&
+      retryOn.includes(condition) &&
+      methods.some(
+        (method) => method.toUpperCase() === definition.method.toUpperCase(),
+      );
+    const stopped =
+      index >= attempts ||
+      !state.replayable ||
+      options?.signal?.aborted ||
+      isOffline();
+    if (
+      !allowed ||
+      stopped ||
+      state.endpoint === undefined ||
+      candidates.length === 0 ||
+      !budget.tryWithdraw()
+    )
+      return result;
+  }
+}
+
+function normalizeFailoverOptions(
+  policy: EndpointFailoverOptions,
+):
+  | (Required<
+      Omit<EndpointFailoverOptions, "attemptTimeoutMs" | "retryBudget">
+    > &
+      Pick<EndpointFailoverOptions, "attemptTimeoutMs">)
+  | Error {
+  const attempts = policy.attempts ?? 1;
+  const retryOn = policy.retryOn ?? ["connect-failure"];
+  const methods = policy.methods ?? ["GET", "HEAD", "OPTIONS", "TRACE"];
+  const attemptTimeoutMs = policy.attemptTimeoutMs;
+  if (
+    !Number.isSafeInteger(attempts) ||
+    attempts < 0 ||
+    !Array.isArray(retryOn) ||
+    retryOn.some(
+      (value) =>
+        !["connect-failure", "gateway-error", "attempt-timeout"].includes(
+          value,
+        ),
+    ) ||
+    !Array.isArray(methods) ||
+    methods.some((value) => typeof value !== "string" || value.length === 0) ||
+    (attemptTimeoutMs !== undefined &&
+      (!Number.isFinite(attemptTimeoutMs) || attemptTimeoutMs <= 0))
+  ) {
+    return new RangeError("Invalid endpoint failover options");
+  }
+  return { attempts, retryOn, methods, attemptTimeoutMs };
+}
+
+function failoverCondition(
+  state: FailoverAttempt,
+  fault: AnyFault | null,
+): EndpointFailoverCondition | undefined {
+  if (state.timedOut && fault?.code === "NET_TIMEOUT") return "attempt-timeout";
+  const info = state.info;
+  if (info?.code === "NET_UNREACHABLE" && fault?.code === "NET_UNREACHABLE")
+    return "connect-failure";
+  if (
+    (fault?.code === "HTTP_STATUS" || fault?.code.startsWith("RES_")) &&
+    info?.code === undefined &&
+    (info?.status === 502 || info?.status === 503 || info?.status === 504)
+  )
+    return "gateway-error";
+  return undefined;
+}
+
+async function executeHttpAttempt<
+  TInput extends AnyStruct | undefined,
+  TOutput extends AnyStruct | undefined,
+  TError extends AnyStruct | undefined,
+>(
+  clientConfig: ClientConfig,
+  definition: HttpExecutionDefinition<TInput, TOutput, TError>,
+  input: EndpointInput<TInput> | undefined,
+  options: HttpExecuteOptions | undefined,
+  candidates: readonly string[],
+  state: FailoverAttempt,
+  attemptTimeoutMs: number | undefined,
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
   const config = options;
 
@@ -344,232 +475,417 @@ async function executeHttpCommand<
     return stopBeforeTransport(parsedCancellation);
   }
 
-  let request;
-  try {
-    request = createHttpRequest(
-      definition.method,
-      definition.path,
-      parsedInput,
-      definition.builder,
-      {
-        signal: requestSignal,
-        baseEndpoint: clientConfig.endpoint,
-        defaultHeaders: clientConfig.headers,
-        downloadProgress: config?.onDownloadProgress,
-        inputDeclared: definition.input !== undefined,
-        inputGuides,
-        errorResponseType,
-        operation: definition.operation,
-        querySerializer: clientConfig.querySerializer,
-        responseType,
-        uploadProgress: config?.onUploadProgress,
-        withCredentials: clientConfig.withCredentials,
-        xsrf: clientConfig.xsrf,
-      },
-    );
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveAbortFault(requestSignal) ??
-        createPreflightFault("REQ_BUILD_FAILED", error),
-    );
+  const picked = pickEndpoint(clientConfig.endpointBalancer, {
+    endpoints: candidates,
+    operation: definition.operation,
+    transport: "http",
+  });
+  if (picked[0] !== null) {
+    return stopBeforeTransport(picked[0]);
   }
+  const resolved = picked[1];
+  let attemptTimer: ReturnType<typeof setTimeout> | undefined;
+  state.endpoint = resolved.endpoint;
 
-  const builtCancellation = resolveAbortFault(requestSignal);
-  if (builtCancellation) {
-    return stopBeforeTransport(builtCancellation);
-  }
-
-  const transportOrigin = createTransportOrigin();
-  const transportController = new AbortController();
-  let chainSettled = false;
-  let inflightTransport: Promise<HttpResponse<unknown>> | undefined;
-  let response: HttpResponse<unknown> | undefined;
-  const handler = (
-    nextRequest: typeof request,
-  ): Promise<HttpResponse<unknown>> => {
-    if (chainSettled) {
-      const rejected = Promise.reject<HttpResponse<unknown>>(
-        new Error(
-          "HTTP interceptor next() cannot be called after the chain has settled",
-        ),
-      );
-      void rejected.catch(() => undefined);
-      return rejected;
+  // One pick for every next(). The last matching attempt wins, even if an earlier one settles later.
+  let attempt: HttpAttempt | undefined;
+  let attemptSeq = 0;
+  let appliedSeq = 0;
+  let finalFault: AnyFault | null | undefined;
+  const finish = (fault: AnyFault | null) => {
+    finalFault = fault;
+  };
+  const remember = (seq: number, next: HttpAttempt) => {
+    if (seq < appliedSeq) {
+      return;
     }
+    appliedSeq = seq;
+    attempt = next;
+  };
 
+  try {
+    let request;
     try {
-      resolveRequestUrl(nextRequest);
+      request = createHttpRequest(
+        definition.method,
+        definition.path,
+        parsedInput,
+        definition.builder,
+        {
+          signal: requestSignal,
+          baseEndpoint: resolved.endpoint,
+          defaultHeaders: clientConfig.headers,
+          downloadProgress: config?.onDownloadProgress,
+          inputDeclared: definition.input !== undefined,
+          inputGuides,
+          errorResponseType,
+          operation: definition.operation,
+          querySerializer: clientConfig.querySerializer,
+          responseType,
+          uploadProgress: config?.onUploadProgress,
+          withCredentials: clientConfig.withCredentials,
+          xsrf: clientConfig.xsrf,
+        },
+      );
     } catch (error) {
-      const rejected = Promise.reject<HttpResponse<unknown>>(error);
-      void rejected.catch(() => undefined);
-      return rejected;
+      const fault =
+        resolveAbortFault(requestSignal) ??
+        createPreflightFault("REQ_BUILD_FAILED", error);
+      finish(fault);
+      return stopBeforeTransport(fault);
     }
 
-    // transportController already follows requestSignal through abortTransport. Only an interceptor that
-    // swapped the signal needs a composite, which is expensive to build and to listen on.
-    const transportAbort =
-      nextRequest.signal === undefined || nextRequest.signal === requestSignal
-        ? transportController.signal
-        : mergeAbortSignals(transportController.signal, [nextRequest.signal]);
-    const due = resolveAbortFault(transportAbort);
-    if (due) {
-      // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
-      const rejected = Promise.reject<HttpResponse<unknown>>(
-        transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
-      );
-      releaseAbortSignal(transportAbort);
-      void rejected.catch(() => undefined);
-      return rejected;
+    state.replayable = !isReadableStreamBody(request.body);
+    const builtCancellation = resolveAbortFault(requestSignal);
+    if (builtCancellation) {
+      finish(builtCancellation);
+      return stopBeforeTransport(builtCancellation);
     }
-    const pending = fetchHandler(
-      {
-        ...nextRequest,
-        signal: transportAbort,
-      },
-      clientConfig.http.handle,
-    )
-      .catch((error: unknown) => {
-        // Cancellation outranks whatever the transport was doing when it noticed. Tagging here is
-        // the only way to tell a dead server from an interceptor that threw the same value: both
-        // reach the chain's catch as one bare cause.
-        throw transportOrigin.mark(resolveAbortCause(transportAbort) ?? error);
-      })
-      .finally(() => {
-        releaseAbortSignal(transportAbort);
-      });
-    inflightTransport = pending;
-    return pending;
-  };
 
-  const abortTransport = () => {
-    if (!transportController.signal.aborted) {
-      transportController.abort(requestSignal.reason);
-    }
-  };
-  try {
-    try {
-      const httpInterceptors = resolveHttpInterceptors(
-        clientConfig.interceptors,
-      );
-      const chain = makeChain(httpInterceptors);
-      if (requestSignal.aborted) {
-        abortTransport();
-      } else {
-        requestSignal.addEventListener("abort", abortTransport, { once: true });
-      }
-
-      const chainPromise = chain(request, handler);
-      void chainPromise.catch(() => undefined);
-      const settled = await awaitWithSignal(() => chainPromise, requestSignal);
-      // Interceptors are user code, and only an HttpResponse carries the `ok` fork the pipeline reads next.
-      // `response` stays unset on failure so the finally block still releases the signal.
-      if (!isHttpResponse(settled)) {
-        throw new TypeError(
-          "HTTP interceptor must resolve an HttpResponse from next() or makeResponse()",
+    const transportOrigin = createTransportOrigin();
+    const transportController = new AbortController();
+    let chainSettled = false;
+    let inflightTransport: Promise<HttpResponse<unknown>> | undefined;
+    let response: HttpResponse<unknown> | undefined;
+    const handler = (
+      nextRequest: typeof request,
+    ): Promise<HttpResponse<unknown>> => {
+      if (chainSettled) {
+        const rejected = Promise.reject<HttpResponse<unknown>>(
+          new Error(
+            "HTTP interceptor next() cannot be called after the chain has settled",
+          ),
         );
+        void rejected.catch(() => undefined);
+        return rejected;
       }
-      response = settled;
+
+      const matches = nextRequest.baseEndpoint === resolved.endpoint;
+      const seq = matches ? ++attemptSeq : 0;
+      const note = (next: HttpAttempt) => {
+        if (matches) {
+          remember(seq, next);
+        }
+      };
+      const reject = (error: unknown): Promise<HttpResponse<unknown>> => {
+        const rejected = Promise.reject<HttpResponse<unknown>>(error);
+        void rejected.catch(() => undefined);
+        return rejected;
+      };
+
+      try {
+        resolveRequestUrl(nextRequest);
+      } catch (error) {
+        note({ landed: false });
+        return reject(error);
+      }
+
+      // transportController already follows requestSignal through abortTransport. Only an interceptor that
+      // swapped the signal needs a composite, which is expensive to build and to listen on.
+      const transportAbort =
+        nextRequest.signal === undefined || nextRequest.signal === requestSignal
+          ? transportController.signal
+          : mergeAbortSignals(transportController.signal, [nextRequest.signal]);
+      const due = resolveAbortFault(transportAbort);
+      if (due) {
+        // Already aborted: fetch never starts, so this next() did not reach the endpoint.
+        note({ landed: false });
+        const rejected = reject(
+          transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
+        );
+        releaseAbortSignal(transportAbort);
+        return rejected;
+      }
+      if (isReadableStreamBody(nextRequest.body)) state.replayable = false;
+      const pending = fetchHandlerWithLifecycle(
+        {
+          ...nextRequest,
+          signal: transportAbort,
+        },
+        clientConfig.http.handle,
+        {
+          start() {
+            if (matches) resolved.start();
+            if (attemptTimeoutMs !== undefined && attemptTimer === undefined)
+              attemptTimer = setTimeout(() => {
+                state.timedOut = true;
+                controller.abort(ERR_TIMEOUT);
+              }, attemptTimeoutMs);
+          },
+          response(response) {
+            if (matches)
+              resolved.end({ attempted: true, status: response.status });
+          },
+        },
+      )
+        .then(
+          (settled) => {
+            note({
+              landed: true,
+              info: { attempted: true, status: settled.status },
+            });
+            return settled;
+          },
+          (error: unknown) => {
+            const classified = classifyHttpAttempt(error);
+            if (matches)
+              resolved.end(
+                httpAttemptDone(
+                  classified,
+                  createNetworkFault(
+                    resolveAbortCause(transportAbort) ?? error,
+                  ),
+                ),
+              );
+            note(classified);
+            // Cancellation outranks whatever the transport was doing when it noticed. Tagging here is
+            // the only way to tell a dead server from an interceptor that threw the same value: both
+            // reach the chain's catch as one bare cause.
+            throw transportOrigin.mark(
+              resolveAbortCause(transportAbort) ?? error,
+            );
+          },
+        )
+        .finally(() => {
+          releaseAbortSignal(transportAbort);
+        });
+      inflightTransport = pending;
+      return pending;
+    };
+
+    const abortTransport = () => {
+      if (!transportController.signal.aborted) {
+        transportController.abort(requestSignal.reason);
+      }
+    };
+    try {
+      try {
+        const httpInterceptors = resolveHttpInterceptors(
+          clientConfig.interceptors,
+        );
+        const chain = makeChain(httpInterceptors);
+        if (requestSignal.aborted) {
+          abortTransport();
+        } else {
+          requestSignal.addEventListener("abort", abortTransport, {
+            once: true,
+          });
+        }
+
+        const chainPromise = chain(request, handler);
+        void chainPromise.catch(() => undefined);
+        const settled = await awaitWithSignal(
+          () => chainPromise,
+          requestSignal,
+        );
+        // Interceptors are user code, and only an HttpResponse carries the `ok` fork the pipeline reads next.
+        // `response` stays unset on failure so the finally block still releases the signal.
+        if (!isHttpResponse(settled)) {
+          throw new TypeError(
+            "HTTP interceptor must resolve an HttpResponse from next() or makeResponse()",
+          );
+        }
+        response = settled;
+      } catch (error) {
+        const fromTransport = transportOrigin.has(error);
+        const cancelled = resolveAbortFault(requestSignal);
+        if (cancelled) {
+          abortTransport();
+          if (inflightTransport) {
+            await Promise.allSettled([inflightTransport]);
+          }
+          finish(cancelled);
+          return fail(cancelled);
+        }
+        if (error instanceof RequestUrlError) {
+          const fault = createPreflightFault("REQ_BUILD_FAILED", error);
+          finish(fault);
+          return fail(fault);
+        }
+        // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
+        // An upload observer failure is also tagged, without response metadata.
+        if (isBodyFailure(error)) {
+          const fault = fromBodyFailure(error);
+          finish(fault);
+          return fail(fault);
+        }
+        if (
+          fromTransport &&
+          (error === ERR_STREAMING_REQUEST_UNSUPPORTED ||
+            error === ERR_FETCH_UNSUPPORTED)
+        ) {
+          const fault = createPreflightFault("ENV_UNSUPPORTED", error);
+          finish(fault);
+          return fail(fault);
+        }
+        // Recognized cancellation shapes stay cancellation wherever they came from; anything else
+        // belongs to whoever produced it.
+        const networkFault = createNetworkFault(error);
+        if (networkFault.code !== "NET_UNREACHABLE") {
+          finish(networkFault);
+          return fail(networkFault);
+        }
+        const fault = fromTransport
+          ? networkFault
+          : createPreflightFault("EXT_INTERCEPTOR_FAILED", error);
+        finish(fault);
+        return fail(fault);
+      }
+    } finally {
+      requestSignal.removeEventListener("abort", abortTransport);
+      chainSettled = true;
+      if (!transportController.signal.aborted) {
+        transportController.abort(new Error("HTTP interceptor chain settled"));
+      }
+      // Keep the caller signal armed while a declared body is still being converted.
+      if (!response) {
+        releaseAbortSignal(requestSignal);
+      }
+    }
+
+    const settledResponse = response as HttpResponse<unknown>;
+    const meta = toHttpMeta(settledResponse);
+
+    // Philosophy 2: `ok` is the only fork, and only one side ever decodes.
+    const struct = settledResponse.ok ? definition.output : definition.error;
+
+    // Philosophy 5: with nothing declared for this side, that body is never read — not even to
+    // fail on. An unreadable representation on the side you opted out of is none of your business.
+    // A caller abort during interceptor work is reported before this point. An undecoded status has no body to cancel.
+    if (!struct) {
+      releaseAbortSignal(requestSignal);
+      if (settledResponse.ok) {
+        finish(null);
+        return [
+          null,
+          undefined as RequestSuccessData<TOutput>,
+          meta as DeclaredResponse<TOutput>,
+        ];
+      }
+      const fault = createUndecodedHttpStatusFault(meta);
+      finish(fault);
+      return fail(fault);
+    }
+
+    let decoded: unknown;
+    try {
+      decoded = await decodeDeclaredBody(
+        struct,
+        settledResponse,
+        requestSignal,
+      );
     } catch (error) {
-      const fromTransport = transportOrigin.has(error);
+      // A caller abort wins over a conversion fault.
       const cancelled = resolveAbortFault(requestSignal);
       if (cancelled) {
-        abortTransport();
-        if (inflightTransport) {
-          await Promise.allSettled([inflightTransport]);
-        }
+        finish(cancelled);
         return fail(cancelled);
       }
-      if (error instanceof RequestUrlError) {
-        return fail(createPreflightFault("REQ_BUILD_FAILED", error));
-      }
-      // The transport only reads a side that declared a struct, so a tagged body failure belongs to that side.
-      // An upload observer failure is also tagged, without response metadata.
-      if (isBodyFailure(error)) {
-        return fail(fromBodyFailure(error));
-      }
-      if (
-        fromTransport &&
-        (error === ERR_STREAMING_REQUEST_UNSUPPORTED ||
-          error === ERR_FETCH_UNSUPPORTED)
-      ) {
-        return fail(createPreflightFault("ENV_UNSUPPORTED", error));
-      }
-      // Recognized cancellation shapes stay cancellation wherever they came from; anything else
-      // belongs to whoever produced it.
-      const networkFault = createNetworkFault(error);
-      if (networkFault.code !== "NET_UNREACHABLE") {
-        return fail(networkFault);
-      }
-      return fail(
-        fromTransport
-          ? networkFault
-          : createPreflightFault("EXT_INTERCEPTOR_FAILED", error),
-      );
-    }
-  } finally {
-    requestSignal.removeEventListener("abort", abortTransport);
-    chainSettled = true;
-    if (!transportController.signal.aborted) {
-      transportController.abort(new Error("HTTP interceptor chain settled"));
-    }
-    // Keep the caller signal armed while a declared body is still being converted.
-    if (!response) {
+      // Philosophy 3 + 4: representation failures are not struct mismatches, and a failed decode has no body.
+      const fault =
+        error instanceof JsonMediaTypeError
+          ? createDecodeFault("RES_MEDIA_TYPE_INVALID", error, meta)
+          : error instanceof StructError
+            ? createDecodeFault("RES_STRUCT_MISMATCH", error, meta)
+            : createDecodeFault("RES_DECODE_FAILED", error, meta);
+      finish(fault);
+      return fail(fault);
+    } finally {
       releaseAbortSignal(requestSignal);
     }
-  }
 
-  const settledResponse = response as HttpResponse<unknown>;
-  const meta = toHttpMeta(settledResponse);
-
-  // Philosophy 2: `ok` is the only fork, and only one side ever decodes.
-  const struct = settledResponse.ok ? definition.output : definition.error;
-
-  // Philosophy 5: with nothing declared for this side, that body is never read — not even to
-  // fail on. An unreadable representation on the side you opted out of is none of your business.
-  // A caller abort during interceptor work is reported before this point. An undecoded status has no body to cancel.
-  if (!struct) {
-    releaseAbortSignal(requestSignal);
+    const decodedResponse: DecodedResponse<unknown> = {
+      ...meta,
+      body: decoded,
+    };
     if (settledResponse.ok) {
+      finish(null);
       return [
         null,
-        undefined as RequestSuccessData<TOutput>,
-        meta as DeclaredResponse<TOutput>,
+        decoded as RequestSuccessData<TOutput>,
+        decodedResponse as DeclaredResponse<TOutput>,
       ];
     }
-    return fail(createUndecodedHttpStatusFault(meta));
-  }
 
-  let decoded: unknown;
-  try {
-    decoded = await decodeDeclaredBody(struct, settledResponse, requestSignal);
-  } catch (error) {
-    // A caller abort wins over a conversion fault.
-    const cancelled = resolveAbortFault(requestSignal);
-    if (cancelled) {
-      return fail(cancelled);
-    }
-    // Philosophy 3 + 4: representation failures are not struct mismatches, and a failed decode has no body.
-    if (error instanceof JsonMediaTypeError) {
-      return fail(createDecodeFault("RES_MEDIA_TYPE_INVALID", error, meta));
-    }
-    if (error instanceof StructError) {
-      return fail(createDecodeFault("RES_STRUCT_MISMATCH", error, meta));
-    }
-    return fail(createDecodeFault("RES_DECODE_FAILED", error, meta));
+    const fault = createHttpStatusFault(decodedResponse);
+    finish(fault);
+    return fail(fault);
   } finally {
-    releaseAbortSignal(requestSignal);
+    clearTimeout(attemptTimer);
+    state.info = httpAttemptDone(attempt, finalFault);
+    resolved.done(state.info);
   }
+}
 
-  const decodedResponse: DecodedResponse<unknown> = { ...meta, body: decoded };
-  if (settledResponse.ok) {
-    return [
-      null,
-      decoded as RequestSuccessData<TOutput>,
-      decodedResponse as DeclaredResponse<TOutput>,
-    ];
+type HttpAttempt = {
+  landed: boolean;
+  info?: EndpointDoneInfo;
+};
+
+/** Map a fetchHandler rejection onto the attempt that reached the selected endpoint. */
+function classifyHttpAttempt(error: unknown): HttpAttempt {
+  if (
+    error === ERR_FETCH_UNSUPPORTED ||
+    error === ERR_STREAMING_REQUEST_UNSUPPORTED
+  ) {
+    return { landed: false };
   }
+  if (isBodyFailure(error)) {
+    if (error.code === "NET_BODY_INCOMPLETE") {
+      return {
+        landed: true,
+        info: {
+          attempted: true,
+          code: "NET_BODY_INCOMPLETE",
+          status: error.meta.status,
+        },
+      };
+    }
+    if (
+      error.code === "RES_DECODE_FAILED" ||
+      error.code === "RES_MEDIA_TYPE_INVALID"
+    ) {
+      return {
+        landed: true,
+        info: { attempted: true, status: error.meta.status },
+      };
+    }
+    if (error.meta === undefined) {
+      return { landed: false };
+    }
+    return {
+      landed: true,
+      info: { attempted: true, status: error.meta.status },
+    };
+  }
+  if (createNetworkFault(error).code === "NET_UNREACHABLE") {
+    return {
+      landed: true,
+      info: { attempted: true, code: "NET_UNREACHABLE" },
+    };
+  }
+  // Timeout and abort are decided from the call's final fault, which can replace a status.
+  return { landed: true };
+}
 
-  return fail(createHttpStatusFault(decodedResponse));
+/**
+ * Fold the transport note and the call's final fault into the one `done` report.
+ *
+ * No landed attempt is `{ attempted: false }`, including a timeout that fired
+ * before fetch. A landed attempt whose call ends as `NET_TIMEOUT` drops any
+ * status already noted. `NET_ABORTED` is never an attempt.
+ */
+function httpAttemptDone(
+  attempt: HttpAttempt | undefined,
+  fault: AnyFault | null | undefined,
+): EndpointDoneInfo {
+  if (fault?.code === "NET_ABORTED") {
+    return { attempted: false };
+  }
+  if (attempt?.landed === true && fault?.code === "NET_TIMEOUT") {
+    return { attempted: true, code: "NET_TIMEOUT" };
+  }
+  return attempt?.info ?? { attempted: false };
 }
 
 function toHttpMeta(response: HttpResponse<unknown>): HttpMeta {

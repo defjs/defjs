@@ -101,4 +101,12 @@ abort와 timeout이 공유하는 `Error` 센티넬이며, `cause`로 써요. HTT
 
 [`isAbortCause`](/ko-KR/api/core/isabortcause)는 abort 브랜드를 가진 `Error` 또는 이름이 `AbortError`인 `DOMException`을 알아봐요. [`isTimeoutCause`](/ko-KR/api/core/istimeoutcause)는 timeout 브랜드를 가진 `Error` 또는 이름이 `TimeoutError`인 `DOMException` / `Error`를 알아봐요. 밑바탕 값을 분류하려면 `fault.cause`를 넘기세요. 이 함수들은 fault를 풀지 않아요. 다른 Core 사본의 센티넬과도 동작해요.
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`ERR_NO_ENDPOINT`은 후보 endpoint를 고를 수 없을 때 `REQ_BUILD_FAILED`의 `cause`로만 나타나요. `FaultCode`는 늘리지 않아요. 센티넬은 열거되지 않는 `Symbol.for('defjs.cause.no-endpoint')` 브랜드를 가져요. [`isNoEndpointCause`](/ko-KR/api/core/isnoendpointcause)는 다른 Core 사본의 그 브랜드를 알아봐요. [`isAbortCause`](/ko-KR/api/core/isabortcause)가 abort를 알아보는 것과 같아요. `fault.cause`를 넘기세요. fault는 풀지 않아요.
+
 [오류 가이드](/ko-KR/docs/errors)를 보세요.

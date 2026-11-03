@@ -1,0 +1,161 @@
+import type { EndpointBalancer } from "./balancer";
+import { ERR_NO_ENDPOINT, balancerOptionError } from "./balancer";
+import {
+  isBalancerOptionRecord,
+  positiveOption,
+  withHealthFilter,
+} from "./outlier_detection";
+import type { OutlierDetectionOptions } from "./outlier_detection";
+interface P2cOptions {
+  readonly load?: "peakEwma" | "pending";
+  readonly choiceCount?: number;
+  readonly defaultRttMs?: number;
+  readonly decayMs?: number;
+  readonly outlierDetection?: OutlierDetectionOptions | false;
+}
+interface LoadState {
+  pending: number;
+  rttMs: number;
+  updatedAt: number;
+}
+
+/**
+ * Samples candidates without replacement and selects the least loaded draw.
+ *
+ * Defaults to two choices and PeakEwma load: decaying RTT times (pending + 1).
+ * `load: "pending"` selects the fewest in-flight attempts in the sample. Ties
+ * favor the first draw. `choiceCount` is an integer at least 2, capped at 10.
+ * `defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be
+ * positive and finite. Pending starts at transport `start` and releases at `end`,
+ * the response-header or socket-open boundary (tower CompleteOnResponse).
+ * RTT is the real start-to-end duration for every transport, including failures.
+ * Higher samples replace the estimate; lower samples blend exponentially, as in
+ * tower PeakEwma. Idle estimates decay toward zero. A done without end releases
+ * pending without creating a sample. Health filtering, enabled by default, breaks
+ * quickly failing endpoints; there is no synthetic failure penalty.
+ * Unlike Envoy and gRPC A48, draws are without replacement.
+ *
+ * @param options - Captured load settings and optional health filtering.
+ * @returns A new independent balancer; invalid options are returned by every pick.
+ * @group client
+ * @see {@link outlierDetection}
+ * @see {@link roundRobinBalancer}
+ */
+export function p2cBalancer(options?: P2cOptions): EndpointBalancer {
+  const invalid = invalidP2c(options);
+  if (invalid !== undefined) return { pick: () => [invalid, undefined] };
+  const load = options?.load ?? "peakEwma";
+  const choiceCount = Math.min(options?.choiceCount ?? 2, 10);
+  const defaultRttMs = options?.defaultRttMs ?? 30;
+  const decayMs = options?.decayMs ?? 10000;
+  const states = new Map<string, LoadState>();
+  function stateFor(endpoint: string, now: number): LoadState {
+    let state = states.get(endpoint);
+    if (state === undefined) {
+      state = { pending: 0, rttMs: defaultRttMs, updatedAt: now };
+      states.set(endpoint, state);
+    }
+    return state;
+  }
+  function cost(state: LoadState, now: number): number {
+    if (load === "pending") return state.pending;
+    state.rttMs *= Math.exp(-(now - state.updatedAt) / decayMs);
+    state.updatedAt = now;
+    return state.rttMs * (state.pending + 1);
+  }
+  const child: EndpointBalancer = {
+    pick(info) {
+      if (info.endpoints.length === 0) return [ERR_NO_ENDPOINT, undefined];
+      const now = Date.now();
+      for (const endpoint of info.endpoints) stateFor(endpoint, now);
+      if (states.size > 256) {
+        const present = new Set(info.endpoints);
+        for (const [endpoint, state] of states) {
+          if (!present.has(endpoint) && state.pending === 0)
+            states.delete(endpoint);
+        }
+      }
+      const remaining = info.endpoints.slice();
+      let chosen:
+        { endpoint: string; state: LoadState; cost: number } | undefined;
+      const count = Math.min(choiceCount, remaining.length);
+      for (let i = 0; i < count; i += 1) {
+        const index =
+          remaining.length === 1
+            ? 0
+            : Math.floor(Math.random() * remaining.length);
+        const endpoint = remaining.splice(index, 1)[0];
+        if (endpoint === undefined) continue;
+        const state = stateFor(endpoint, now);
+        const value = cost(state, now);
+        if (chosen === undefined || value < chosen.cost)
+          chosen = { endpoint, state, cost: value };
+      }
+      if (chosen === undefined) return [ERR_NO_ENDPOINT, undefined];
+      const state = chosen.state;
+      let startedAt: number | undefined;
+      let ended = false;
+      let finished = false;
+      return [
+        null,
+        {
+          endpoint: chosen.endpoint,
+          start() {
+            if (startedAt === undefined && !finished) {
+              startedAt = Date.now();
+              state.pending += 1;
+            }
+          },
+          end() {
+            if (startedAt === undefined || ended || finished) return;
+            ended = true;
+            state.pending = Math.max(0, state.pending - 1);
+            const at = Date.now();
+            const sample = Math.max(0, at - startedAt);
+            const d = Math.exp(-Math.max(0, at - state.updatedAt) / decayMs);
+            state.rttMs =
+              sample > state.rttMs
+                ? sample
+                : state.rttMs * d + sample * (1 - d);
+            state.updatedAt = at;
+          },
+          done() {
+            if (finished) return;
+            finished = true;
+            if (startedAt !== undefined && !ended)
+              state.pending = Math.max(0, state.pending - 1);
+          },
+        },
+      ];
+    },
+  };
+  return withHealthFilter(child, options?.outlierDetection, true);
+}
+
+function invalidP2c(options: unknown): Error | undefined {
+  if (options === undefined) return undefined;
+  if (!isBalancerOptionRecord(options))
+    return balancerOptionError(
+      new TypeError("p2cBalancer options must be an object"),
+    );
+  if ("isFailure" in options)
+    return balancerOptionError(new TypeError("p2c isFailure was removed"));
+  const load = options["load"];
+  if (load !== undefined && load !== "pending" && load !== "peakEwma")
+    return balancerOptionError(
+      new TypeError("load must be peakEwma or pending"),
+    );
+  const count = options["choiceCount"];
+  if (count !== undefined) {
+    if (typeof count !== "number")
+      return balancerOptionError(new TypeError("choiceCount must be a number"));
+    if (!Number.isInteger(count) || count < 2)
+      return balancerOptionError(
+        new RangeError("choiceCount must be an integer at least 2"),
+      );
+  }
+  return (
+    positiveOption(options["defaultRttMs"], "defaultRttMs") ??
+    positiveOption(options["decayMs"], "decayMs")
+  );
+}

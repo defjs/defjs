@@ -26,7 +26,19 @@ options は順に適用されます。インターセプターが認証情報や
 
 <ApiSignature name="withEndpoint" />
 
-相対 path の前に付けるベース URL をセットします。
+候補のベース URL を最初に現れた順でコピーし、同じ文字列の後のコピーは捨てます。後の `withEndpoint` はリストを置き換えます。URL は検査せず、バランサーも置き換えません。空のリストは正当で、呼び出しは `REQ_BUILD_FAILED` で失敗します。
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+以降の呼び出しに使うバランサーを置き換えます。オブジェクトは参照のまま保存されます。この option がなければ、各クライアントは自分の `pickFirstBalancer()` を持ちます。
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+1 回の呼び出しの中の HTTP フェイルオーバーを制御します。クライアントで共有する Finagle/Linkerd のリトライ予算は、既定で 20% に、10 秒の TTL にわたる毎秒 10 回の予約を加えたものです。`retryBudget: false` はその上限を無効にします。クレジットとデビットはどちらも、TTL/10 の 10 スライスで遅延して期限切れになります。既定は、GET、HEAD、OPTIONS、TRACE の接続失敗に対する追加の試行 1 回です。`attempts: 0` または `methods: []` で無効になります。後の option は方針を置き換え、省いたフィールドは既定を使います。ストリーミングのリクエストボディは再送されません。`attemptTimeoutMs` は 1 回の試行の Fetch、ボディ読み取り、デコードを覆い、呼び出し側の signal はすべての試行を覆います。[複数のエンドポイント](/ja-JP/docs/client#multiple-endpoints) を参照してください。
 
 ### withInterceptors()
 
@@ -169,6 +181,8 @@ Defjs が Fetch 実装に求める呼び出しシグネチャです。`typeof fe
 | `jitter`     | `0`            | `0`            |
 | `maxDelayMs` | 上限なし       | `30000`        |
 
+`connectTimeoutMs` は任意で、有限の正の数でなければなりません。SSE では Fetch からレスポンスヘッダーまで、WebSocket では構築から `open` までを区切り、ハンドシェイクのあとで解除されます。期限が切れるとバランサーへ `NET_UNREACHABLE` を報告するので、再接続は次のエンドポイントを選べます。リトライを使い切ると `NET_TIMEOUT` で終わります。
+
 どちらのトランスポートでも、ハンドシェイクに成功すると、障害ごとのリトライ予算、コールバックの試行番号、バックオフの指数がリセットされます。`attempts: 0` はリトライを無効にします。`attempts` を省いても、1 回の障害に対するリトライが無制限になるわけではありません。`maxDelayMs` は、ジッターと丸め処理の後の最終的な待ち時間に上限を設けます。SSE に設定上の上限がない場合も含め、プラットフォームのタイマー上限である `2_147_483_647` ms も適用されます。基準値がゼロならゼロのままで、有効な数値からの計算でオーバーフローした場合は上限で飽和します。
 
 再接続オプションはトランスポートの呼び出し前に検証されます。`attempts` は非負の安全な整数、`delayMs` は非負の有限値、`maxDelayMs` は非負の有限値または正の `Infinity`（設定上の上限を解除しますが、最終遅延は引き続き `2_147_483_647` ms 以下に制限されます）、`factor` は有限の正数、`jitter` は有限で 0–1 の範囲でなければなりません。不正な値は `REQ_OPTIONS_INVALID` を返します。WebSocket の `attempts: 0` は以降のリトライを無効にしますが、明示的に指定したすべての再接続フィールドは SSE と同様に初回接続前に検証されます。ジッターは上限適用済みの基準値を増減させ、その後に最終的な上限が適用されます。
@@ -183,11 +197,11 @@ WebSocket では、`beforeConnect`、`heartbeat`、`protocols`、`reconnect` を
 
 <ApiSignature name="ClientOptions" />
 
-表示されるフィールドは `sse` と `webSocket` です。残りの七つ——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf`、`withCredentials`——はエクスポートされない HTTP の基底から継承され、`endpoint` は必須です。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、option ヘルパーを受け取ります。
+表示されるフィールドは `sse` と `webSocket` です。残りの七つ——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf`、`withCredentials`——はエクスポートされない HTTP の基底から継承されます。`endpoints` は `readonly string[]` です。解決後の既定は `[]` です。空の配列は正当な値で、呼び出しは `REQ_BUILD_FAILED` で失敗します。クライアント単位の `timeout` はありません。`createClient` はこのオブジェクトを受け取らず、option ヘルパーを受け取ります。
 
 ### ClientConfig
 
-option ヘルパーが変更し、操作が読み取る解決済みスナップショットです。デフォルト適用後の `ClientOptions` で、`http.handle`、`interceptors`、`sse`（`ClientSSEConfig`）、`webSocket` が常に存在します。
+option ヘルパーが変更し、操作が読み取る解決済みスナップショットです。デフォルト適用後の `ClientOptions` で、`http.handle`、`interceptors`、`sse`（`ClientSSEConfig`）、`webSocket`、`endpointBalancer`、`endpointFailover` が常に存在します。`endpointBalancer` の既定は、そのクライアント用の新しい `pickFirstBalancer()` です。[`RequestOptions`](/ja-JP/api/core/requestoptions-type) のフィールドではありません。
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ option ヘルパーが変更し、操作が読み取る解決済みスナップ�
 <ApiSignature name="WebSocketHandleConstructor" />
 
 `withWebSocketHandle` に渡すコンストラクタです。ready state の定数 `OPEN` を公開している必要があります。
+
+## バランサー
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer` は `NET_UNREACHABLE`、または code の付いていない 502/503/504 レスポンスで進みます。任意の正の有限な `failbackMs` は、その間隔のあと最初のエンドポイントを同時に 1 つだけ探します。HTTP の安全なメソッドの接続失敗は、既定で同じ呼び出しの中でもフェイルオーバーします。`roundRobinBalancer` はリストを順に歩きます。`weights` は任意です。[複数のエンドポイント](/ja-JP/docs/client#multiple-endpoints) を参照してください。
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+非復元で相異なる候補を標本し（Envoy/gRPC A48 とは違います）、tower の PeakEwma か pending の負荷を選びます。Linkerd の既定は RTT 30ms と減衰 10s です。`start` が pending を始め、`end` はヘッダーまたはソケットの open でそれを解放し、失敗を含むすべてのトランスポートについて実際の RTT を記録します。`end` の無い `done` は、RTT のサンプルなしで pending を解放します。p2c の失敗分類子もペナルティもありません。`choiceCount` の既定は 2 で、上限は 10 です。
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+子を Linkerd 流の連続失敗のサーキットブレーカーで包みます。ラウンドロビンと p2c は既定でそれを有効にし（Finagle と同じです）、`false` は無効にします。pick-first はオブジェクトでそれを有効にします。失敗が 5 回あると、ペナルティは 1000ms から始まり、失敗した探りのあと倍になり、ベースの 0.5 倍までの正のジッターを加え、60000ms を上限とします。期限は `end` で決まる探りを 1 つ入れ、`end` が来なければ `done` で決めます。成功はバックオフをリセットし、キャンセルは枠を解放するだけです。成功したとみなすタイムアウトも、排出枠も、最後のホストの保護も、精算の格子も、割合の基準も、スロースタートもありません。`isHealthy` はアプリケーションが所有するキャッシュされた状態を読み、ペナルティを取り消すことはありません。すべてのホストが遮断され得ます。Finagle 流の、リスト内だけのフェイルオープンは、それでもリクエストを送ります。Envoy/gRPC A50 と違い、排出枠はありません。[ヘルスフィルタリングと p2c](/ja-JP/docs/client#health-filtering-and-p2c) を参照してください。
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`pick` は error-first タプルを返します。任意の `start` は、選ばれたトランスポートが始まる直前に、同期的に多くて 1 回実行されます。任意の `end` は `start` のあと 1 回、Fetch のヘッダーまたは WebSocket の `open`（またはレスポンス前の失敗）で実行されます。任意の `done` は完了時に 1 回実行されます。Fetch は Linkerd の最初のボディフレームの境界も、Envoy のストリームの境界も公開できません。すべてのフックからの throw と thenable の rejection は封じ込められます。`ERR_NO_ENDPOINT` は `REQ_BUILD_FAILED` の `cause` でしかありません。`FaultCode` ではありません。[`isNoEndpointCause`](/ja-JP/api/core/isnoendpointcause) は、別の Core のコピーをまたいでもそれを認識します。
 
 [Client ガイド](/ja-JP/docs/client) を見てください。

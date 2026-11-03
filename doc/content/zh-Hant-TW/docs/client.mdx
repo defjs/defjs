@@ -7,9 +7,9 @@ description: 設定應用程式如何呼叫匯入的 SDK 操作，與那些 API 
 
 `Client` 是使用端應用程式的執行設定。`createClient(...)` 回傳 [`DerivableClient`](/zh-Hant-TW/api/core/derivableclient-type)。帶著 request options 呼叫這個 factory 會回傳 `Client` 值，操作接受的就是 `Client` 值，它不可呼叫。從 SDK 匯入操作，選擇服務位址、憑證、interceptors 與傳輸，再帶著 client 呼叫操作。`getOrder(client({ signal }), { id: 1 })` 啟動一次有宣告 input 的呼叫。`health(client)` 啟動一次沒有 input 的呼叫。整個 input struct 可選時，`search(client)` 與 `search(client, input)` 都合法。沒有第三個 options 引數。呼叫操作就會啟動它。`await` 只等待 error-first tuple。
 
-SDK 的定義不會綁定這個實例。瀏覽器、伺服器請求與本機測試可以用不同的 client 使用同一個匯出的操作。兩邊仍遵循同一份 Defjs 契約與相容的 Core 版本。請為透過該 client 呼叫的操作設定服務位址。
+SDK 的定義不會綁定這個實例。瀏覽器、伺服器請求與本機測試可以用不同的 client 使用同一個匯出的操作。它們仍遵循同一份 Defjs 契約與相容的 Core 版本。請為透過該 client 呼叫的操作設定服務位址。
 
-同一個 client 值可以傳給許多操作。應用程式選擇快取與重試策略，並擁有自己啟動的工作。HTTP 不會自動重試。串流重連需要明確啟用。
+同一個 client 值可以傳給許多操作。應用程式選擇快取與重試策略，並擁有自己啟動的工作。HTTP 連線失敗會做有限的安全方法容錯移轉，見下文。串流重連需要明確啟用。
 
 factory 是一個函式，同時也是不帶 request options 的 `Client`。不要把 factory 傳給 React 的 state setter：`setState(factory)` 會把它當成 updater 呼叫。不要把它當成 Vue 的 `watch` 或 `computed` 來源：那些會呼叫函式。衍生出的 client 值是一般物件。
 
@@ -30,6 +30,86 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 </include>
 
 混合的 interceptors 在操作執行時依傳輸篩選；被選中的同一種類內，相對順序會保留。
+
+## 多個端點 [#multiple-endpoints]
+
+`withEndpoint` 接受一個或多個 base URL。引數依序複製，同一字串之後的重複會被丟掉。後面的 `withEndpoint` 會取代整份清單，不會合併。這裡不檢查 URL。無效的 base 會讓這次呼叫以 `REQ_BUILD_FAILED` 失敗。空清單是合法值，並以同樣的方式失敗，`cause` 為 [`ERR_NO_ENDPOINT`](/zh-Hant-TW/api/core/err-no-endpoint)。
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+省略 `withEndpointBalancer` 時，每個 client 各自擁有一個 [`pickFirstBalancer`](/zh-Hant-TW/api/core/pickfirstbalancer)。它停在第一個端點，直到連線失敗（`NET_UNREACHABLE`），或收到狀態為 502、503 或 504 的回應，然後前進，並繞回已設定的清單。帶有 fault `code` 的結果會忽略自身狀態：帶 503 的 `NET_BODY_INCOMPLETE` 不會前進。其他回應、逾時與取消也不會讓它前進。
+
+HTTP 也會**預設做同一次呼叫內的容錯移轉**：`GET`、`HEAD`、`OPTIONS` 或 `TRACE` 上的連線失敗，可以在回傳最後一次嘗試的 tuple 之前，再試一個尚未試過的端點。方法名稱的比較不區分大小寫。每一次嘗試都會重新執行 `pick`、builder、整條 interceptor 鏈與傳輸；因此隨端點而變的認證會看到新的 `baseEndpoint`。每次 pick 都有自己的、只呼叫一次的 `done`，之後的 pick 會排除這次呼叫裡已經試過的端點。
+
+[`withEndpointFailover`](/zh-Hant-TW/api/core/withendpointfailover) 會取代這份策略，不會合併。省略的欄位採用預設值。設 `attempts: 0` 或 `methods: []` 即關閉容錯移轉。`ReadableStream` 請求 body 從不容錯移轉。只有應用程式可以安全地送出兩次時，才把非安全方法加進 `methods`：連線失敗並不能證明伺服器沒有處理第一次請求。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+`retryOn: ["connect-failure", "gateway-error", "attempt-timeout"]` 也允許在 502/503/504 之後，以及所設定的 `attemptTimeoutMs` 之後，做同一次呼叫內的容錯移轉。502/503/504 回應在解碼已宣告的錯誤 body 時以 `RES_*` fault 失敗，閘道容錯移轉同樣適用，例如對著 JSON struct 的 HTML 錯誤頁。恢復為成功、或以 `EXT_*` 失敗的 interceptor，不會觸發閘道容錯移轉。被丟棄的閘道回應會先排空或取消，再繼續。沒有 `gateway-error` 時，那次失敗的 HTTP 呼叫會被回傳，並且 `pickFirstBalancer` 為下一次呼叫前進。HTTP 500 既不會在同一次呼叫內容錯移轉，也不會讓 `pickFirstBalancer` 前進。
+
+同一次呼叫內的重試，在一個 client 的全部呼叫及其衍生值之間共享一份 **Finagle/Linkerd 重試額度**：`percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`。每次原始呼叫存入額度；每一次額外的端點嘗試取出額度。額度耗盡時回傳目前這次嘗試的結果，不再 pick。`retryBudget: false` 只去掉這一道額度限制。比例是 `[0, 1000]` 內的有限數，最小值是非負安全整數，TTL 是 `[1000, 60000]` ms 內的有限數。Finagle 的 token 縮放存入 1000 個 token，每次重試收取 `min(2147483647, floor(1000 / ratio))`（比例為零時不存入，並收取一個）。儲備是 `minimum × floor(ttlMs / 1000) × charge`；與 Finagle 一樣，TTL 按整秒計算。存入和取出都在十個固定的 `ttlMs / 10` 切片上惰性過期，最多早一個切片；沒有計時器，按請求保存的歷史也不會無界成長。大範圍故障時，額度會讓部分原本可以換台成功的呼叫直接失敗，這正是它的用途：把重試控制在流量的約 20%。如果後端能承受全部重試，可以調高 `percentCanRetry`，或設定 `retryBudget: false`。
+
+Defjs 預設開啟安全方法的連線容錯移轉；Linkerd/Envoy 通常要求明確重試，而 gRPC 的透明重試取決於尚未開始處理的證據。Defjs 的 `gateway-error` **只表示不帶 fault code 的 502/503/504**；Envoy 的同名條件還包括沒有回應的斷線和重置。
+
+沒有預設期限，也沒有每次嘗試的逾時。`attemptTimeoutMs` 是有限正數，從呼叫 Fetch 起，一直量到該次嘗試讀完 body 並完成解碼；到期回報 `NET_TIMEOUT`。呼叫方的 `signal: AbortSignal.timeout(ms)` 涵蓋**整次呼叫**、橫跨所有嘗試，到期之後不能引起容錯移轉。只有 `retryOn` 包含 `attempt-timeout` 時，嘗試逾時才允許容錯移轉；它本身不會讓 `pickFirstBalancer` 前進。
+
+`navigator.onLine === false` 時，連線失敗會以 `{ attempted: false }` 回報給平衡器，HTTP 也不會容錯移轉。只有嚴格的 `false` 才會抑制歸因；沒有 navigator，或 getter 拋錯，都當作線上。這是離線提示，不是健康檢查。
+
+設定 `pickFirstBalancer({ failbackMs: 30_000 })`，在離開第一個端點這麼久之後探測它。第一個符合條件的 pick 去探測；同時進行的 pick 繼續使用黏住的回退端點。有回應、但不滿足前進條件的探測會恢復第一個端點，失敗的探測重新開始這段間隔，未歸因的探測不改變狀態。沒有背景計時器。`shuffle: true` 時，「第一個」指打亂後的順序。
+
+[`roundRobinBalancer`](/zh-Hant-TW/api/core/roundrobinbalancer) 從隨機起始索引沿著清單走。可選的 `weights` 對應使用有限正數；未列出的候選權重為 1，不屬於候選端點的權重會被忽略。權重 2 與 1 以較重、較輕、較重這樣重複。瀏覽器依序列出的區域主要端點與備援用預設值；伺服器的對等節點用 round robin。
+
+### 健康過濾與 p2c [#health-filtering-and-p2c]
+
+`roundRobinBalancer()` 與 [`p2cBalancer`](/zh-Hant-TW/api/core/p2cbalancer) 預設啟用被動健康過濾。與黏住的 pick-first 不同，它們在對等端點之間分配流量，因此已停止或持續失敗的複本不能繼續拿到平時的份額。`pickFirstBalancer()` 預設關閉健康過濾，除非傳入一個 `outlierDetection` 物件。端點發現仍歸應用程式所有。
+
+設 `outlierDetection: false` 即關閉過濾。物件（包括 `{}`）會啟用它，省略的欄位取預設值。其他值會使呼叫以 `REQ_OPTIONS_INVALID` 失敗。未過濾的 round robin 省略 `done`；預設的 round robin 對每一次成功的 pick 都回傳它。[`outlierDetection(child, options)`](/zh-Hant-TW/api/core/outlierdetection) 用同一套實作包裝自訂策略。明確包裝內層工廠時，關掉該工廠自己的過濾。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+被動判據是**連續失敗**，預設五次（與 Finagle 相同）。一次非失敗會清掉這段連續計數；`attempted: false` 既不增加也不清零。設 `consecutiveFailures: 0` 即關閉被動熔斷。健康過濾預設開啟，與 Finagle 相同；Linkerd、Envoy 與 gRPC 的設定並不相同。
+
+預設 `NET_UNREACHABLE` 以及狀態碼大於等於 500 算作失敗。作為 fault code 的 `NET_TIMEOUT` 與 `NET_BODY_INCOMPLETE` 優先於狀態碼，不算失敗。健康過濾的 `isFailure` 可以自訂這套分類。拋出或非布林結果會丟掉該樣本。每一次容錯移轉嘗試分別記帳；離線造成的連線失敗已經是未歸因的。離線提示與 `failbackMs` 是 Defjs 面向瀏覽器的適配。
+
+懲罰沿用 Linkerd 的連續失敗熔斷器：`minPenaltyMs: 1000`、`maxPenaltyMs: 60000`、`jitterRatio: 0.5`。基數是 `min(minPenaltyMs × 2^level, maxPenaltyMs)`，從第 0 級開始。再加上一段均勻的正抖動，上限為 `base × jitterRatio`，結果再封頂在 `maxPenaltyMs`。與 Envoy 和 gRPC A50 不同，**沒有驅逐配額，也沒有最後一台主機的保護**：每個端點都可以熔斷。沒有結算網格、百分比判據、慢啟動，也沒有背景計時器。
+
+到期接納**一次探測**。內層策略若改選另一台主機，這個名額仍然空著。探測在傳輸的 `end` 上判定：HTTP/SSE 的回應標頭，或 WebSocket 的 `open`，對應 Finagle 以 response future 恢復，以及 tower 的回應完成邊界。一次非失敗會恢復正常流量，並把懲罰重置到第一級；失敗則把下一次懲罰加倍。未歸因的結果只釋放名額。如果沒有 `end` 到達，改由 `done` 判定。之後的 `done` 是普通樣本。熔斷或探測期間的其他樣本不改變計數器。無效的終態分類器只釋放名額，不判定健康。沒有把未完成探測視為成功的探測逾時；一次成功的長連線握手會立刻恢復流量。pick-first 的 `failbackMs` 探測仍然獨立。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+**主動檢查**由應用程式探測並快取結果；`isHealthy` 在 `pick` 時對每個端點同步讀一次這份快取。它必須開銷很小，且不得執行 I/O。拋出或非布林結果只拒絕這一次 pick，故障為 `REQ_OPTIONS_INVALID`。回傳 true 從不會取消被動驅逐。若只用主動檢查，設 `consecutiveFailures: 0`。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+如果過濾去掉了全部候選，平衡器先忽略主動檢查、保留被動驅逐；若仍然為空，就使用目前這份原始清單。這是 Finagle 式 panic mode 的失敗時放行，不是 Linkerd 的等待/503 策略。它絕不會引入另一個 client 清單裡的端點。
+
+對等的伺服器複本用 round robin；負載或延遲不一時用 p2c。p2c 預設抽取兩個不同的候選，比較 tower PeakEwma 衰減後的 RTT ×（pending + 1），平手時偏向先抽到的那個。與 Envoy 和 gRPC A48 不同，抽樣**不放回**。`choiceCount` 是不小於 2 的整數，上限為 10。預設值 `defaultRttMs: 30` 與 `decayMs: 10000` 來自 Linkerd。兩者都是有限正數。閒置估計會向零衰減，以便探索。`load: "pending"` 比較進行中的嘗試；只有抽到每一個候選時，才是全域最少連線。
+
+pending 在 Fetch 或 socket 建構之前立刻於 `start` 開始，並在 `end` 結束，而不是在後置 interceptor 之後，也不是在工作階段關閉之後。該邊界上的 RTT 是 `Date.now() - startTime`，**所有傳輸和所有結果**都算，包括快速失敗。沒有合成懲罰，也沒有 p2c 的 `isFailure`；快速失敗的端點交給健康過濾。更大的樣本會立刻替換估計；否則按 tower 的更新式 `old × exp(-Δt/decayMs) + sample × (1-exp(-Δt/decayMs))`。沒有 `end` 的 `done` 只釋放 pending，不產生 RTT 樣本。從未 start 的嘗試不改變 pending。
+
+這遵循 tower 的 `CompleteOnResponse`，並保留 Linkerd 把負載完成和最終健康分類分開的做法。Fetch 暴露回應標頭，WebSocket 暴露 `open`；Defjs 觀察不到 Linkerd 的首個 body 幀邊界，也觀察不到 Envoy 的流級完成。回應標頭之後的 body 失敗影響 `done`，不影響已經發出的 `end`。p2c 偏向抽到的較輕候選，不一定是全域最快的主機。
+
+SSE 與 WebSocket 在重連時重新選擇，而不是在已經建立的連線裡面。它們選擇性開啟的重連策略接受 `connectTimeoutMs`，用來限制握手。健康的長連線不會在部署之後重新平衡。在伺服器上設定連線的最長存活時間，促使用戶端重連並再次 pick。SSE 的正常 EOF 是終端；持續的訂閱應觀察 `closed`，並發起一次帶著應用程式游標的新呼叫。
+
+自訂平衡器是帶有 `pick` 的物件。回傳 error-first tuple。不要因為清單是空的就拋出。
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+`pick`、可選的 `start`、可選的 `end` 與可選的 `done` 都同步執行。`start` 至多在 Fetch 或 socket 建構之前立刻執行一次。建構失敗、interceptor 短路（包括 `makeResponse`）、被替換的 base，以及傳輸開始前的取消，都不會呼叫 `start` 或 `end`。`end(info)` 在 `start` 之後至多執行一次，在 Fetch 回傳回應標頭或 socket 打開時同步執行，或者在傳輸於該邊界之前失敗時執行。HTTP/SSE 的回應標頭收到 `{ attempted: true, status }`，socket 打開收到 `{ attempted: true }`，回應前的失敗收到該階段的 fault，呼叫方取消收到 `{ attempted: false }`。健康過濾把這兩個訊號都轉發給子策略。用它們做進行中的記帳，而不是在 pick 時計數。攔截器在同一次嘗試中多次呼叫 `next()` 時，多出的 Fetch 共用這次選台，所以 `start`、`end` 和 `done` 仍各至多執行一次；要換到別的端點，請用 `withEndpointFailover`。
+
+每一次成功的 pick，`done` 恰好執行一次，時機是 HTTP 呼叫結束之後，或實體上的串流/socket 嘗試結束之後。它與 `end` 共用 `EndpointDoneInfo` 的形狀（沒有 duration 欄位），並保留最終的健康分類，包括回應標頭之後讀取 body 失敗或取消。所有鉤子拋出的例外，以及被拒絕的 thenable，都會被接住。`pick` 回傳的 promise 仍然無效；畸形的結果和拋出會變成 `REQ_BUILD_FAILED`，無效的內建設定會變成 `REQ_OPTIONS_INVALID`，在操作的呼叫點都不會拋出。不需要記帳時就省略這些鉤子。interceptor 看到的是選中的 `baseEndpoint`，而不是候選清單。
 
 ## 衍生 client
 
@@ -83,19 +163,25 @@ Options 由左到右套用。Setter 會取代；`withInterceptors(...items)` 會
 
 ## 參考
 
-| Helper                                                                                                        | 效果                                                       |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | 所有傳輸共用的絕對 base endpoint                           |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP／SSE 的靜態預設 headers；builder headers 會覆寫       |
-| `withHTTPHandle(fetch)`                                                                                       | 替換 HTTP 的 Fetch                                         |
-| `withSSEHandle(fetch)`                                                                                        | 替換 SSE 的 Fetch                                          |
-| `withWebSocketHandle(WebSocket)`                                                                              | 替換 WebSocket constructor                                 |
-| `withInterceptors(...items)`                                                                                  | 追加混合 interceptors                                      |
-| `withQuerySerializer(fn)`                                                                                     | 把已經套過 alias 的 query 物件編成 query string            |
-| `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP／SSE 的 Fetch 用 `credentials: 'include'` |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF：cookie 寫入 header                              |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 旋鈕                                                   |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 旋鈕                                             |
+| Helper                                                                                                        | 效果                                                                 |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | 候選 base URL；後面的呼叫會取代整份清單                              |
+| `withEndpointBalancer(balancer)`                                                                              | 取代平衡器；預設是 pick-first                                        |
+| `roundRobinBalancer(options?)`                                                                                | Round robin，可選權重，並預設做健康過濾                              |
+| `p2cBalancer(options?)`                                                                                       | tower 在回應邊界上的 PeakEwma 或 pending 負載，並預設做健康過濾      |
+| `outlierDetection(child, options?)`                                                                           | Linkerd 熔斷器，帶 Finagle 的單次探測恢復和失敗時放行                |
+| `OutlierDetectionOptions`                                                                                     | 被動閾值與同步的健康回呼                                             |
+| `withEndpointFailover(options?)`                                                                              | 同一次呼叫內的 HTTP 容錯移轉；預設對安全方法在連線失敗時多試一個端點 |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP／SSE 的靜態預設 headers；builder headers 會覆寫                 |
+| `withHTTPHandle(fetch)`                                                                                       | 替換 HTTP 的 Fetch                                                   |
+| `withSSEHandle(fetch)`                                                                                        | 替換 SSE 的 Fetch                                                    |
+| `withWebSocketHandle(WebSocket)`                                                                              | 替換 WebSocket constructor                                           |
+| `withInterceptors(...items)`                                                                                  | 追加混合 interceptors                                                |
+| `withQuerySerializer(fn)`                                                                                     | 把已經套過 alias 的 query 物件編成 query string                      |
+| `withCredentials(boolean)`                                                                                    | 為 true 時，HTTP／SSE 的 Fetch 用 `credentials: 'include'`           |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF：cookie 寫入 header                                        |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 旋鈕                                                             |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 旋鈕                                                       |
 
 ## 相關操作範例
 

@@ -53,6 +53,8 @@ Struct 編碼之後，JSON 無法忠實表示的值會在送出或進入重連�
 
 ## 重連
 
+在重連策略裡設定 `connectTimeoutMs`，把每次握手限制在從建構 socket 到 `open`。它必須是有限正數；無效值會回傳 `REQ_OPTIONS_INVALID`。它沒有預設值，握手之後會被清掉，所以已經建立的 session 不受影響。逾時的握手會向平衡器回報 `NET_UNREACHABLE`，並沿用現有的重連預算；重試耗盡時以 `NET_TIMEOUT` 結束。
+
 重連是選擇性開啟。沒有 `reconnect` 物件 → 實體 close 結束邏輯 session。設定後，預設是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 是每次斷線的重試預算；成功的 `open` 會重設預算與 backoff 指數。因此之後每一次斷線都從 retry 1 與 `delayMs` 基底重新開始。`attempts: 0` 關掉。預設 predicate 接受該次斷線預算內的每一個非手動 close 結果。反覆成功的 open 沒有終身重試上限。socket 若成功開啟後立刻又被伺服器關閉，可能持續以基底延遲重新連線（仍受 jitter 與上限約束），因為每次開啟都會重設預算；請用 `shouldReconnect` 停止這種情況。
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>

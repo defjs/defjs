@@ -93,7 +93,7 @@ Factories 回傳帶 tag 的傳輸值：
 - `basicAuthHttpInterceptor(provider, options?)` — HTTP 上的 Basic credentials
 - `basicAuthSSEInterceptor(provider, options?)` — SSE 上的 Basic credentials
 
-`HttpRequest` 可能包含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`signal` 與 static `operation`。它是傳輸整合值 — 不是呼叫端已剖析的 input。序列化之後，`queryParams` 是 `new URLSearchParams(queryString)`。Builder 沒產出 query 時，不會呼叫設定好的 query serializer；builder 的 `URLSearchParams` 會原樣使用。輸入驗證、output 驗證、領域錯誤對應留在各自的層。
+`HttpRequest` 可能包含 `endpoint`、`baseEndpoint`、`method`、`headers`、`body`、`queryParams`、`queryString`、`signal` 與 static `operation`。`baseEndpoint` 是這次呼叫選中的端點。Interceptor 看不到候選清單。它是傳輸整合值 — 不是呼叫端已剖析的 input。序列化之後，`queryParams` 是 `new URLSearchParams(queryString)`。Builder 沒產出 query 時，不會呼叫設定好的 query serializer；builder 的 `URLSearchParams` 會原樣使用。輸入驗證、output 驗證、領域錯誤對應留在各自的層。
 
 URL 驗證從建構請求時就開始：缺少、相對或無效的 base endpoint，或非法 path，會在任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，包括會 short-circuit 的 interceptor。分派之前，最終的 `req.endpoint` 會對最終的 `req.baseEndpoint` 驗證：解析後的 URL 必須維持該 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 可以刻意把 `baseEndpoint` 換成另一個有效的絕對 URL。HTTP、SSE 與 WebSocket 共用這條規則，確定性的 URL 錯誤絕不會重試。
 

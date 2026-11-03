@@ -53,6 +53,8 @@ Startup-Failure → `[error, undefined, connection?]`. Pre-Open-Constructor-Fail
 
 ## Reconnect
 
+Setze `connectTimeoutMs` in der Reconnect-Policy, um jeden Handshake von der Socket-Konstruktion bis `open` zu begrenzen. Es muss endlich und positiv sein; ungültige Werte liefern `REQ_OPTIONS_INVALID`. Es hat keinen Default und wird nach dem Handshake gelöscht, bestehende Sessions bleiben also unberührt. Ein abgelaufener Handshake meldet dem Balancer `NET_UNREACHABLE` und folgt dem bestehenden Reconnect-Budget; erschöpfte Retries enden mit `NET_TIMEOUT`.
+
 Reconnect ist opt-in. Kein `reconnect`-Object → physisches Close endet die logische Session. Wenn konfiguriert, sind Defaults `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`. `attempts` ist das Retry-Budget je Ausfall; ein erfolgreiches `open` setzt Budget und Backoff-Exponenten zurück. Jeder spätere Ausfall beginnt daher wieder bei Retry 1 und der Basis `delayMs`. `attempts: 0` schaltet Retry aus. Das Default-Predicate akzeptiert jedes nicht manuelle Close-Outcome innerhalb des Budgets dieses Ausfalls. Wiederholte erfolgreiche Opens haben kein Lebenszeit-Retry-Limit. Ein Socket, der sich erfolgreich öffnet und sofort wieder vom Server geschlossen wird, kann sich fortlaufend mit der Basisverzögerung neu verbinden (unter Berücksichtigung von Jitter und Caps), weil jedes Open das Budget zurücksetzt; nutze `shouldReconnect`, um dies zu stoppen.
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>

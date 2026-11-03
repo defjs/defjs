@@ -61,7 +61,9 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 ## 再接続
 
-**振る舞いの変更:** SSE の再接続はオプトインです。`withSSEReconnect(...)` が無ければ、ネットワーク失敗とストリーム読み取り失敗は**リトライされません**（`attempts: 0` と同じです）。そうした失敗をリトライするには `withSSEReconnect({ attempts: 3 })`（または別のレビュー済み予算）を渡します。通常の EOF はリトライしません。status/content-type 検証、パーサ上限、メッセージ変換失敗、キューオーバーフロー、通常 EOF は論理ストリームにとって終端のままです。
+再接続方針の中に `connectTimeoutMs` を設定すると、各ハンドシェイクを Fetch の呼び出しからレスポンスヘッダーまでに区切ります。有限の正の数でなければならず、無効な値は `REQ_OPTIONS_INVALID` を返します。既定値はなく、ハンドシェイクのあとで解除されるので、確立済みのセッションには影響しません。時間切れのハンドシェイクはバランサーへ `NET_UNREACHABLE` を報告し、既存の再接続予算に従います。リトライを使い切ると `NET_TIMEOUT` で終わります。
+
+**振る舞いの変更:** SSE の再接続はオプトインです。`withSSEReconnect(...)` が無ければ、ネットワーク失敗とストリーム読み取り失敗は**リトライされません**（`attempts: 0` と同じです）。そうした失敗をリトライするには `withSSEReconnect({ attempts: 3 })`（または別のレビュー済み予算）を渡します。通常の EOF はリトライしません。継続中のサブスクリプションでは `stream.closed` を観測し、最後のアプリケーションカーソルで新しい操作を始めてください。再接続は EOF を終わりのないサブスクリプションにはしません。status/content-type 検証、パーサ上限、メッセージ変換失敗、キューオーバーフロー、通常 EOF は論理ストリームにとって終端のままです。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
@@ -69,7 +71,7 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
 
 再接続 options はインターセプターや Fetch の前に検証されます。`attempts` は非負の安全な整数、`delayMs` は非負の有限値、`maxDelayMs` は非負の有限値または正の `Infinity`（設定上の上限を解除しますが、最終遅延は引き続き `2_147_483_647` ms 以下に制限されます）、`factor` は有限で正、`jitter` は有限で 0–1 の範囲である必要があります。無効な値では、ストリームを開かずに `REQ_OPTIONS_INVALID` が返ります。
 
-最後にパースしたイベント ID は、後の試行で `Last-Event-ID` になり、非 ASCII の ID も含め、ワイヤ上では UTF-8 バイトとしてエンコードされます。空の `id:` はヘッダーを消し、NUL を含む ID は無視されます。そのヘッダーを除けば、後の試行が送り直すのは最初の一回のために組み立てたリクエストです。`builder` とインターセプターは呼び出しごとに一度だけ実行されるので、メソッド、URL、ヘッダー、ボディは変わりません。有効期間の短いトークンなど、試行のたびに最新の値が必要なヘッダーは、`withSSEHandle` に渡す Fetch で設定します。その Fetch は試行ごとに一度実行されます。それでも資格情報が期限切れになった場合、ストリームが開いたあとの再接続ハンドシェイクが non-2xx だと、ストリームは `RES_DECODE_FAILED` で終了します。status は `stream.open.response.status` で確認してください。一方、最初のハンドシェイクが non-2xx なら、宣言したエラーボディがデコードできた場合は起動時の `HTTP_STATUS` フォールトを返します。
+`id:` フィールドはバッファだけを更新します。再接続カーソルは終端の空行を処理したときに確定し、ID のみでメッセージを配信しないフレームでも同様です。その空行より前にストリームが終了した場合、カーソルは変わりません。確定した ID は後の試行で `Last-Event-ID` になり、非 ASCII の ID も含め、ワイヤ上では UTF-8 バイトとしてエンコードされます。空の `id:` はその空行でヘッダーを消し、NUL を含む ID は無視されます。そのヘッダーを除けば、後の試行が送り直すのは最初の一回のために組み立てたリクエストです。`builder` とインターセプターは呼び出しごとに一度だけ実行されるので、メソッド、URL、ヘッダー、ボディは変わりません。有効期間の短いトークンなど、試行のたびに最新の値が必要なヘッダーは、`withSSEHandle` に渡す Fetch で設定します。その Fetch は試行ごとに一度実行されます。それでも資格情報が期限切れになった場合、ストリームが開いたあとの再接続ハンドシェイクが non-2xx だと、ストリームは `RES_DECODE_FAILED` で終了します。status は `stream.open.response.status` で確認してください。一方、最初のハンドシェイクが non-2xx なら、宣言したエラーボディがデコードできた場合は起動時の `HTTP_STATUS` フォールトを返します。
 
 再接続がリクエストを送り直すのは、それが安全なときだけです。
 
@@ -96,7 +98,7 @@ SSE の `data` はまずテキストです。`string` の struct はそのテキ
   examples/sse/close-and-dispose.ts#example
 </include>
 
-終端の種別（`closed.kind`）は `eof`、`aborted`、`error` のいずれかです。`error` 結果は `closed.code` も持ち、これは `EventStreamFaultCode` です。`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED`、または `RES_MEDIA_TYPE_INVALID` です。
+終端の種別（`closed.kind`）は `eof`、`aborted`、`error` のいずれかです。`error` 結果は `closed.code` も持ち、これは `EventStreamFaultCode` です。`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`REQ_BUILD_FAILED`、`REQ_OPTIONS_INVALID`、`RES_DECODE_FAILED`、または `RES_MEDIA_TYPE_INVALID` です。`REQ_BUILD_FAILED` と `REQ_OPTIONS_INVALID` は、ストリームが開いたあとの再接続の pick が失敗したことを意味します。`NET_UNREACHABLE` には書き換えられません。
 
 `close(reason)` はアクティブな試行を abort し、キューを閉じ、理由が `TimeoutError` でも `aborted` として確定します。操作に渡した `signal`は、ストリームが開いたあとも付いたままで、接続全体を覆います。それを abort すると、通常はイテレータが終了し、`aborted` を報告します。abort の理由が `TimeoutError` または `ERR_TIMEOUT`（たとえば `AbortSignal.timeout(...)`）なら、イテレータは `ERR_TIMEOUT` を throw し、`closed` は `kind: 'error'` と `code: 'NET_TIMEOUT'` を報告します。クライアントに起動時だけの期限はありません。それが欲しいアプリケーションは自分の `AbortController` を作り、タイマーから `new DOMException("...", "TimeoutError")` で abort し、await が戻ったあとにタイマーを消します。
 

@@ -101,4 +101,12 @@ Les sentinelles portent des marques non énumérables `Symbol.for('defjs.cause.a
 
 [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît une `Error` marquée abort ou une `DOMException` nommée `AbortError`. [`isTimeoutCause`](/fr-FR/api/core/istimeoutcause) reconnaît une `Error` marquée timeout ou une `DOMException` / `Error` nommée `TimeoutError`. Passe `fault.cause` pour classer la valeur sous-jacente ; ces fonctions ne déballent pas un fault. Elles fonctionnent avec les sentinelles d’une autre copie de Core.
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`ERR_NO_ENDPOINT` n’apparaît que comme `cause` de `REQ_BUILD_FAILED`, quand aucun endpoint candidat ne peut être sélectionné. Il n’ajoute pas de `FaultCode`. La sentinelle porte une marque non énumérable `Symbol.for('defjs.cause.no-endpoint')`. [`isNoEndpointCause`](/fr-FR/api/core/isnoendpointcause) reconnaît cette marque depuis une autre copie de Core, de la même façon que [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît un abort. Passe `fault.cause`. La fonction ne déballe pas un fault.
+
 Voir le [guide Gestion des erreurs](/fr-FR/docs/errors).

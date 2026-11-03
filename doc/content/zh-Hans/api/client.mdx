@@ -26,7 +26,19 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 
 <ApiSignature name="withEndpoint" />
 
-设置拼在相对路径前面的 base URL。
+按首次出现的顺序复制候选 base URL，并丢掉同一字符串的后续重复。后一次 `withEndpoint` 会替换整份列表。它不检查 URL，也不替换均衡器。空列表是合法值，调用会以 `REQ_BUILD_FAILED` 失败。
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+替换此后调用所用的均衡器。对象按引用保存。没有这个选项时，每个 client 各自得到一个 `pickFirstBalancer()`。
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+控制一次调用内的 HTTP 故障转移。同一 client 共享的 Finagle/Linkerd 重试预算默认为 20%，外加每秒 10 次的储备，TTL 为 10 秒；`retryBudget: false` 去掉这一限制。存入和取出都在十个 TTL/10 切片上惰性过期。默认是连接失败时，对 GET、HEAD、OPTIONS 和 TRACE 再多试一次。`attempts: 0` 或 `methods: []` 会关掉它。后一次选项替换整份策略；省略的字段用默认值。流式请求 body 从不重放。`attemptTimeoutMs` 覆盖单次尝试的 Fetch、读取 body 和解码，调用方的 signal 则覆盖所有尝试。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
 
 ### withInterceptors()
 
@@ -49,7 +61,7 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 单个请求的优先级：
 
 1. 默认 header 是起始的 header 集合。
-2. request builder 返回的 `headers` 会替换同名的默认值。该名称的第一个值替换默认值（`Headers.set`）；同一数组里后面的值只追加到这次替换上。标量或 `Headers` 实例同样是替换。其他默认名称保留。
+2. request builder 返回的 `headers` 会替换同名的默认值。该名称的第一个值替换默认值；同一数组里后面的值只追加到这次替换上。标量或 `Headers` 实例同样是替换。其他默认名称保留。
 3. interceptor 收到的是合并后的 header，并且可以修改它们。
 4. 使用默认 HTTP transport 时，XSRF header 最后才加，且仅在仍然缺失时添加（见 `withXSRF`）。
 
@@ -169,9 +181,11 @@ Defjs 对 Fetch 实现所要求的调用签名。它不是 `typeof fetch`，所�
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | 无上限          | `30000`         |
 
+`connectTimeoutMs` 可选，且必须是有限正数。对 SSE，它把从 Fetch 到响应头的时间加上限；对 WebSocket，它把从构造到 `open` 的时间加上限；握手之后会被清掉。到期会向均衡器报告 `NET_UNREACHABLE`，这样重连可以 pick 下一个端点。重试耗尽后以 `NET_TIMEOUT` 结束。
+
 两种传输在成功握手后，都会重置每次连接中断的重试预算、回调中的尝试次数和退避指数。`attempts: 0` 禁用重试；省略 `attempts` 并不表示单次中断期间可以无限重试。`maxDelayMs` 限制抖动和取整后的最终延迟；平台计时器上限 `2_147_483_647` 毫秒也始终生效，包括 SSE 未配置上限时。基础延迟为零时始终为零；有效数字在计算中溢出时会被限制在这些上限。
 
-重连选项在传输层运行前校验：`attempts` 必须是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 可以是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 必须是正的有限数；`jitter` 必须是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 禁用后续重试，但所有显式提供的重连字段仍会在首次连接前校验，与 SSE 一样。抖动会在最终上限应用前，让已经受限的基础延迟向任一方向按比例浮动。
+重连选项在传输层运行前校验：`attempts` 必须是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 必须是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 必须是正的有限数；`jitter` 必须是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 禁用后续重试，但所有显式提供的重连字段仍会在首次连接前校验，与 SSE 一样。抖动会在最终上限应用前，让已经受限的基础延迟向任一方向按比例浮动。
 
 对 SSE，`delayMs` 只是起始的基础延迟：服务器发来的 `retry:` 字段只有包含纯数字时，才会在之后的尝试中取代它，恢复连接后也继续生效。`shouldReconnect` 返回 `false` 即停止重试。SSE 的回调还会收到 `lastEventId`、请求的 `method` 和最近一次的 `open` 信息，并且可以是异步的。未提供该回调时，SSE 只对 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求进行重连；提供后，所有请求方法是否重连都由回调的返回结果决定。最新的事件 ID 以 UTF-8 字节写入 `Last-Event-ID`；空 ID 会清除它，包含 NUL 的 ID 会被忽略。WebSocket 的回调则收到 close 的 `code`、`reason` 和 `wasClean`。
 
@@ -183,11 +197,11 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 <ApiSignature name="ClientOptions" />
 
-签名里出现的字段是 `sse` 和 `webSocket`。另外七个——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 和 `withCredentials`——继承自未导出的 HTTP 基类型，其中 `endpoint` 必填。没有 client 级的 `timeout`。`createClient` 不接收这个对象，它接收的是 option helpers。
+签名里出现的字段是 `sse` 和 `webSocket`。另外七个——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 和 `withCredentials`——继承自未导出的 HTTP 基类型。`endpoints` 是 `readonly string[]`。解析后的默认值是 `[]`。空数组是合法值，调用会以 `REQ_BUILD_FAILED` 失败。没有 client 级的 `timeout`。`createClient` 不接收这个对象，它接收的是 option helpers。
 
 ### ClientConfig
 
-option helpers 修改、操作读取的解析后快照：应用默认值之后的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一个 `ClientSSEConfig`）和 `webSocket` 始终存在。
+option helpers 修改、操作读取的解析后快照：应用默认值之后的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一个 `ClientSSEConfig`）、`webSocket`、`endpointBalancer` 和 `endpointFailover` 始终存在。`endpointBalancer` 默认为该 client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 字段。
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ option helpers 修改、操作读取的解析后快照：应用默认值之后�
 <ApiSignature name="WebSocketHandleConstructor" />
 
 传给 `withWebSocketHandle` 的构造函数。它必须暴露 `OPEN` ready-state 常量。
+
+## 均衡器
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer` 会在 `NET_UNREACHABLE`，或未带 fault code 的 502/503/504 响应上前进。可选的有限正数 `failbackMs` 在离开这段间隔之后，对第一个端点做至多一个同时进行的探测。HTTP 安全方法的连接失败，默认也会在同一次调用内故障转移。`roundRobinBalancer` 沿列表走。`weights` 可选。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+不放回地抽取不同候选（与 Envoy/gRPC A48 不同），选择 tower 的 PeakEwma 或 pending 负载。Linkerd 的默认值是 RTT 30 ms、衰减 10 秒。`start` 开始计入 pending，`end` 在响应头或 socket 打开时释放它，并对每种传输记录真实 RTT，包括失败。没有 `end` 的 `done` 只释放 pending，不产生 RTT 样本。没有 p2c 的失败分类器，也没有惩罚。`choiceCount` 默认是 2，上限为 10。
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+用 Linkerd 式的连续失败熔断包装子策略。Round robin 和 p2c 默认启用（与 Finagle 相同）；`false` 关闭它。Pick-first 在传入对象时启用。五次失败之后，惩罚从 1000 ms 起，探测失败后再加倍，并加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。到期接纳一次探测，在 `end` 上判定；若没有 `end` 到达，则在 `done` 上判定。成功会重置退避；取消只释放名额。没有假定成功的超时、配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 读取应用自己持有的缓存状态，从不会取消一次惩罚。所有主机都可以熔断；Finagle 式、仅限当前列表的失败时放行仍会发出请求。与 Envoy/gRPC A50 不同，没有驱逐配额。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`pick` 返回 error-first tuple。可选的 `start` 在所选传输开始之前至多同步运行一次；可选的 `end` 在 `start` 之后运行一次，时机是 Fetch 的响应头或 WebSocket 的 `open`（或响应之前的失败）；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有钩子的抛出，以及 thenable 的 rejection，都会被接住。`ERR_NO_ENDPOINT` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoEndpointCause`](/zh-Hans/api/core/isnoendpointcause) 也能识别另一份 Core 副本中的它。
 
 见 [Client 指南](/zh-Hans/docs/client)。

@@ -35,6 +35,7 @@ import type {
 import type { OutboundBuilder } from "../internal/outbound_request";
 import { ERR_STREAMING_REQUEST_UNSUPPORTED } from "../http/transport/fetch_init";
 import { createBaseTransportRequest } from "../internal/transport_request";
+import { pickEndpoint } from "../balancer/runtime";
 import type { AnyStruct, Infer } from "../struct";
 import { decodeJson } from "../struct/codec/json";
 import { parseStructValue } from "../struct/introspection";
@@ -50,6 +51,7 @@ import {
   fetchEventStream,
   getEventStreamFatalCode,
   handshakeDecodeCause,
+  isEventStreamPickFault,
   isHandshakeStatusSignal,
 } from "./transport/event_stream";
 import type { EventStreamMessage } from "./transport/parser";
@@ -368,219 +370,275 @@ async function runEventStreamCommand<
     return stopBeforeTransport(parsedCancellation);
   }
 
-  let request;
-  try {
-    request = createBaseTransportRequest(
-      endpoint.method,
-      endpoint.path,
-      parsedInput,
-      endpoint.builder,
-      {
-        signal: requestSignal,
-        baseEndpoint: clientConfig.endpoint,
-        defaultHeaders: clientConfig.headers,
-        inputDeclared: endpoint.input !== undefined,
-        inputGuides,
-        operation: endpoint.operation,
-        querySerializer: clientConfig.querySerializer,
-        transport: "sse",
-        withCredentials: clientConfig.withCredentials,
-      },
-    );
-  } catch (error) {
-    return stopBeforeTransport(
-      resolveAbortFault(requestSignal) ??
-        createPreflightFault("REQ_BUILD_FAILED", error),
-    );
+  const picked = pickEndpoint(clientConfig.endpointBalancer, {
+    endpoints: clientConfig.endpoints,
+    transport: "sse",
+    operation: endpoint.operation,
+  });
+  if (picked[0] !== null) {
+    return stopBeforeTransport(picked[0]);
   }
+  const resolved = picked[1];
 
-  const builtCancellation = resolveAbortFault(requestSignal);
-  if (builtCancellation) {
-    return stopBeforeTransport(builtCancellation);
-  }
-
-  type OwnedStream = {
-    controller: AbortController;
-    initialOpen?: EventStreamOpenInfo;
-    release?: () => void;
-    stream?: EventStreamHandle<unknown>;
-  };
-  let chainSettled = false;
-  let streamDelivered = false;
-  const ownedStreams = new Set<OwnedStream>();
-  const transportOrigin = createTransportOrigin();
-  const errorOpenInfo = new Map<unknown, EventStreamOpenInfo | undefined>();
+  // Exits before the first sseHandler entry belong to this call. The handler
+  // takes the one `done` as soon as it is entered.
+  let handedOff = false;
   try {
-    const sseInterceptors = resolveSSEInterceptors(clientConfig.interceptors);
-    const sseHandler: SSEHandler = (req) => {
-      if (chainSettled) {
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(
-          new Error(
-            "SSE interceptor next() cannot be called after the chain has settled",
-          ),
-        );
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      try {
-        resolveRequestUrl(req);
-      } catch (error) {
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      const transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
-      const due = resolveAbortFault(transportAbort);
-      if (due) {
-        // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
-        // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(
-          transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
-        );
-        releaseAbortSignal(transportAbort);
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      if (
-        clientConfig.sse.handle === DEFAULT_FETCH &&
-        typeof globalThis.fetch !== "function"
-      ) {
-        const rejected = Promise.reject<EventStreamHandle<unknown>>(
-          transportOrigin.mark(ERR_FETCH_UNSUPPORTED),
-        );
-        releaseAbortSignal(transportAbort);
-        void rejected.catch(() => undefined);
-        return rejected;
-      }
-      const ownerController = new AbortController();
-      const owned: OwnedStream = {
-        controller: ownerController,
-      };
-      ownedStreams.add(owned);
-      const streamAbort = mergeAbortSignals(ownerController.signal, [
-        transportAbort,
-      ]);
-      owned.release = () => {
-        releaseAbortSignal(streamAbort);
-        releaseAbortSignal(transportAbort);
-      };
-      // Type boundary: SSEHandler returns EventStreamHandle<unknown>; the concrete type is narrowed by the interceptor chain.
-      const failure: EventStreamFailureInfo = {};
-      const promise = fetchEventStream(
-        { ...req, signal: streamAbort },
+    let request;
+    try {
+      request = createBaseTransportRequest(
+        endpoint.method,
+        endpoint.path,
+        parsedInput,
+        endpoint.builder,
         {
-          fetch: clientConfig.sse.handle,
-          failure,
-          handshakeError: endpoint.error,
-          onopen(open) {
-            owned.initialOpen ??= open;
-          },
-          transformMessage(message, signal) {
-            return transformStreamMessage(
-              endpoint.events,
-              message,
-              clientConfig.sse.onInvalidEvent,
-              signal,
-            );
-          },
-          reconnect,
-          maxBufferSize: endpoint.maxBufferSize,
-          maxQueueSize: endpoint.maxQueueSize,
-        },
-      ).then(
-        (stream) => {
-          owned.stream = stream;
-          void stream.closed.then(owned.release, owned.release);
-          return stream;
-        },
-        (cause: unknown) => {
-          owned.release?.();
-          errorOpenInfo.set(cause, failure.open);
-          throw transportOrigin.mark(cause);
+          signal: requestSignal,
+          baseEndpoint: resolved.endpoint,
+          defaultHeaders: clientConfig.headers,
+          inputDeclared: endpoint.input !== undefined,
+          inputGuides,
+          operation: endpoint.operation,
+          querySerializer: clientConfig.querySerializer,
+          transport: "sse",
+          withCredentials: clientConfig.withCredentials,
         },
       );
-      void promise.catch(() => undefined);
-      return promise;
+    } catch (error) {
+      return stopBeforeTransport(
+        resolveAbortFault(requestSignal) ??
+          createPreflightFault("REQ_BUILD_FAILED", error),
+      );
+    }
+
+    const builtCancellation = resolveAbortFault(requestSignal);
+    if (builtCancellation) {
+      return stopBeforeTransport(builtCancellation);
+    }
+
+    type OwnedStream = {
+      controller: AbortController;
+      initialOpen?: EventStreamOpenInfo;
+      release?: () => void;
+      stream?: EventStreamHandle<unknown>;
     };
-    const sseChain = makeChain(sseInterceptors);
-    // Type boundary: interceptor chain returns EventStreamHandle<unknown>; runtime message transform narrows it to the endpoint's event types.
-    const stream = (await awaitWithSignal(
-      () => sseChain(request, sseHandler),
-      requestSignal,
-    )) as EventStreamHandle<EventStreamData<TEvents>>;
-    const publicOpen = stream?.open;
-    if (
-      typeof stream?.closed?.then !== "function" ||
-      typeof stream.close !== "function" ||
-      typeof stream[Symbol.asyncIterator] !== "function" ||
-      typeof stream[Symbol.asyncDispose] !== "function" ||
-      typeof publicOpen?.url !== "string"
-    ) {
-      throw new TypeError(
-        "SSE interceptor must resolve an event stream handle",
+    let chainSettled = false;
+    let streamDelivered = false;
+    const ownedStreams = new Set<OwnedStream>();
+    const transportOrigin = createTransportOrigin();
+    const errorOpenInfo = new Map<unknown, EventStreamOpenInfo | undefined>();
+    try {
+      const sseInterceptors = resolveSSEInterceptors(clientConfig.interceptors);
+      const sseHandler: SSEHandler = (req) => {
+        if (chainSettled) {
+          const rejected = Promise.reject<EventStreamHandle<unknown>>(
+            new Error(
+              "SSE interceptor next() cannot be called after the chain has settled",
+            ),
+          );
+          void rejected.catch(() => undefined);
+          return rejected;
+        }
+        const attributed = !handedOff;
+        if (attributed) {
+          handedOff = true;
+        }
+        let settled = !attributed;
+        const settleUnattempted = (): void => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          resolved.done({ attempted: false });
+        };
+        if (attributed && req.baseEndpoint !== resolved.endpoint) {
+          settleUnattempted();
+        }
+        try {
+          resolveRequestUrl(req);
+        } catch (error) {
+          settleUnattempted();
+          const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
+          void rejected.catch(() => undefined);
+          return rejected;
+        }
+        const transportAbort = mergeAbortSignals(requestSignal, [req.signal]);
+        const due = resolveAbortFault(transportAbort);
+        if (due) {
+          settleUnattempted();
+          // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
+          // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
+          const rejected = Promise.reject<EventStreamHandle<unknown>>(
+            transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
+          );
+          releaseAbortSignal(transportAbort);
+          void rejected.catch(() => undefined);
+          return rejected;
+        }
+        if (
+          clientConfig.sse.handle === DEFAULT_FETCH &&
+          typeof globalThis.fetch !== "function"
+        ) {
+          settleUnattempted();
+          const rejected = Promise.reject<EventStreamHandle<unknown>>(
+            transportOrigin.mark(ERR_FETCH_UNSUPPORTED),
+          );
+          releaseAbortSignal(transportAbort);
+          void rejected.catch(() => undefined);
+          return rejected;
+        }
+        const ownerController = new AbortController();
+        const owned: OwnedStream = {
+          controller: ownerController,
+        };
+        ownedStreams.add(owned);
+        const streamAbort = mergeAbortSignals(ownerController.signal, [
+          transportAbort,
+        ]);
+        owned.release = () => {
+          releaseAbortSignal(streamAbort);
+          releaseAbortSignal(transportAbort);
+        };
+        // Type boundary: SSEHandler returns EventStreamHandle<unknown>; the concrete type is narrowed by the interceptor chain.
+        const failure: EventStreamFailureInfo = {};
+        const endpointAttempt =
+          attributed && !settled
+            ? {
+                start: resolved.start,
+                end: resolved.end,
+                done: resolved.done,
+                pickNext: () =>
+                  pickEndpoint(clientConfig.endpointBalancer, {
+                    endpoints: clientConfig.endpoints,
+                    transport: "sse",
+                    operation: endpoint.operation,
+                  }),
+              }
+            : undefined;
+        if (endpointAttempt) {
+          settled = true;
+        }
+        const promise = fetchEventStream(
+          { ...req, signal: streamAbort },
+          {
+            endpointAttempt,
+            fetch: clientConfig.sse.handle,
+            failure,
+            handshakeError: endpoint.error,
+            onopen(open) {
+              owned.initialOpen ??= open;
+            },
+            transformMessage(message, signal) {
+              return transformStreamMessage(
+                endpoint.events,
+                message,
+                clientConfig.sse.onInvalidEvent,
+                signal,
+              );
+            },
+            reconnect,
+            maxBufferSize: endpoint.maxBufferSize,
+            maxQueueSize: endpoint.maxQueueSize,
+          },
+        ).then(
+          (stream) => {
+            owned.stream = stream;
+            void stream.closed.then(owned.release, owned.release);
+            return stream;
+          },
+          (cause: unknown) => {
+            owned.release?.();
+            errorOpenInfo.set(cause, failure.open);
+            throw transportOrigin.mark(cause);
+          },
+        );
+        void promise.catch(() => undefined);
+        return promise;
+      };
+      const sseChain = makeChain(sseInterceptors);
+      // Type boundary: interceptor chain returns EventStreamHandle<unknown>; runtime message transform narrows it to the endpoint's event types.
+      const stream = (await awaitWithSignal(
+        () => sseChain(request, sseHandler),
+        requestSignal,
+      )) as EventStreamHandle<EventStreamData<TEvents>>;
+      const publicOpen = stream?.open;
+      if (
+        typeof stream?.closed?.then !== "function" ||
+        typeof stream.close !== "function" ||
+        typeof stream[Symbol.asyncIterator] !== "function" ||
+        typeof stream[Symbol.asyncDispose] !== "function" ||
+        typeof publicOpen?.url !== "string"
+      ) {
+        throw new TypeError(
+          "SSE interceptor must resolve an event stream handle",
+        );
+      }
+      chainSettled = true;
+      const release = () => releaseAbortSignal(requestSignal);
+      void stream.closed.then(release, release);
+
+      let open: EventStreamOpenInfo | undefined;
+      for (const owned of ownedStreams) {
+        if (
+          owned.stream &&
+          (owned.stream === stream ||
+            (owned.stream.closed === stream.closed &&
+              publicOpen === owned.stream.open))
+        ) {
+          open = owned.initialOpen;
+          break;
+        }
+      }
+      open ??= publicOpen;
+
+      discardOwnedStreams(
+        new Error("SSE interceptor discarded an opened stream"),
+        stream,
       );
-    }
-    chainSettled = true;
-    const release = () => releaseAbortSignal(requestSignal);
-    void stream.closed.then(release, release);
+      // Only transfer listener ownership after every startup operation has succeeded.
+      streamDelivered = true;
+      return [null, stream, open];
+    } catch (error) {
+      chainSettled = true;
+      discardOwnedStreams(error);
 
-    let open: EventStreamOpenInfo | undefined;
-    for (const owned of ownedStreams) {
-      if (
-        owned.stream &&
-        (owned.stream === stream ||
-          (owned.stream.closed === stream.closed &&
-            publicOpen === owned.stream.open))
-      ) {
-        open = owned.initialOpen;
-        break;
+      const fromTransport = transportOrigin.has(error);
+      const cause = error;
+      const openInfo = errorOpenInfo.get(cause);
+      const fault = requestSignal.aborted
+        ? resolveAbortedFault(requestSignal)
+        : error instanceof RequestUrlError
+          ? createPreflightFault("REQ_BUILD_FAILED", error)
+          : createEventStreamFault(cause, fromTransport, openInfo?.response);
+      return [fault as Fault<TError>, undefined, openInfo];
+    } finally {
+      if (!streamDelivered) {
+        releaseAbortSignal(requestSignal);
       }
     }
-    open ??= publicOpen;
 
-    discardOwnedStreams(
-      new Error("SSE interceptor discarded an opened stream"),
-      stream,
-    );
-    // Only transfer listener ownership after every startup operation has succeeded.
-    streamDelivered = true;
-    return [null, stream, open];
-  } catch (error) {
-    chainSettled = true;
-    discardOwnedStreams(error);
-
-    const fromTransport = transportOrigin.has(error);
-    const cause = error;
-    const openInfo = errorOpenInfo.get(cause);
-    const fault = requestSignal.aborted
-      ? resolveAbortedFault(requestSignal)
-      : error instanceof RequestUrlError
-        ? createPreflightFault("REQ_BUILD_FAILED", error)
-        : createEventStreamFault(cause, fromTransport, openInfo?.response);
-    return [fault as Fault<TError>, undefined, openInfo];
+    function discardOwnedStreams(
+      reason: unknown,
+      delivered?: EventStreamHandle<unknown>,
+    ): void {
+      for (const owned of ownedStreams) {
+        if (
+          owned.stream &&
+          delivered &&
+          (owned.stream === delivered ||
+            owned.stream.closed === delivered.closed)
+        ) {
+          continue;
+        }
+        owned.controller.abort(reason);
+        owned.stream?.close(reason);
+        owned.release?.();
+      }
+      ownedStreams.clear();
+    }
   } finally {
-    if (!streamDelivered) {
-      releaseAbortSignal(requestSignal);
+    if (!handedOff) {
+      resolved.done({ attempted: false });
     }
-  }
-
-  function discardOwnedStreams(
-    reason: unknown,
-    delivered?: EventStreamHandle<unknown>,
-  ): void {
-    for (const owned of ownedStreams) {
-      if (
-        owned.stream &&
-        delivered &&
-        (owned.stream === delivered || owned.stream.closed === delivered.closed)
-      ) {
-        continue;
-      }
-      owned.controller.abort(reason);
-      owned.stream?.close(reason);
-      owned.release?.();
-    }
-    ownedStreams.clear();
   }
 }
 
@@ -702,6 +760,11 @@ function createEventStreamFault(
   fromTransport: boolean,
   response?: HttpResponse<unknown>,
 ): AnyFault {
+  // Only a reconnect pick inside the transport produces these; an interceptor-thrown fault keeps its old mapping.
+  if (fromTransport && isEventStreamPickFault(cause)) {
+    return cause;
+  }
+
   const fatal = getEventStreamFatalCode(cause);
   // The JSON media-type precheck is a decode fault on every status.
   if (response && fatal === "RES_MEDIA_TYPE_INVALID") {

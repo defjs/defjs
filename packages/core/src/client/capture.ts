@@ -8,6 +8,7 @@ function isShapeRecord(value: unknown): value is Record<string, unknown> {
 
 type ReconnectSnapshot<TCallback> = Partial<BackoffConfig> & {
   attempts?: number;
+  connectTimeoutMs?: number;
   shouldReconnect?: TCallback;
 };
 
@@ -38,6 +39,7 @@ export function snapshotReconnect<TCallback>(
   }
   return {
     attempts: value.attempts,
+    connectTimeoutMs: value.connectTimeoutMs,
     delayMs: value.delayMs,
     factor: value.factor,
     jitter: value.jitter,

@@ -1,6 +1,12 @@
 import type { ClientSSEOptions, FetchHandle } from "../../client/config";
-import type { FaultCode } from "../../error";
-import { ERR_TIMEOUT } from "../../error";
+import type { FaultCode, PreflightFault } from "../../error";
+import {
+  createNetworkFault,
+  createPreflightFault,
+  ERR_TIMEOUT,
+  isTimeoutCause,
+} from "../../error";
+import type { EndpointDoneInfo } from "../../balancer/balancer";
 import {
   createFetchInitBase,
   isReadableStreamBody,
@@ -72,6 +78,7 @@ export interface EventStreamOpenInfo {
  * Fault codes an event stream can end with, drawn from the one shared `FaultCode` namespace.
  *
  * A subset of the shared `FaultCode` set. It is the `code` of an `EventStreamCloseInfo` with `kind: 'error'`.
+ * `REQ_BUILD_FAILED` and `REQ_OPTIONS_INVALID` mean a reconnect pick failed after the stream opened. They stay those codes; they are not rewritten to `NET_UNREACHABLE`.
  *
  * @group sse
  */
@@ -83,6 +90,8 @@ export type EventStreamFaultCode = Extract<
   | "EXT_OBSERVER_FAILED"
   | "NET_TIMEOUT"
   | "NET_UNREACHABLE"
+  | "REQ_BUILD_FAILED"
+  | "REQ_OPTIONS_INVALID"
   | "RES_DECODE_FAILED"
   | "RES_MEDIA_TYPE_INVALID"
 >;
@@ -97,7 +106,7 @@ interface EventStreamCloseInfoBase {
  *
  * The discriminant is `kind` so that `code` can mean the same thing it means on a fault.
  *
- * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`.
+ * The value of `EventStreamHandle.closed`. `eof` means the response ended normally. `aborted` means the stream was closed with `close()` or disposal, or its caller signal aborted with a non-timeout reason; `reason` and `cause` carry the value passed to `close`. If the caller signal aborts after open with a `TimeoutError` or `ERR_TIMEOUT`, the iterator throws `ERR_TIMEOUT` and `closed` is `{ kind: 'error', code: 'NET_TIMEOUT', ... }`. Explicit `close(timeoutError)` still reports `aborted`. `error` carries the fault `code` (see `EventStreamFaultCode`) and the failure as `cause`. A reconnect pick that fails after open uses `REQ_BUILD_FAILED`, or `REQ_OPTIONS_INVALID` when the failure is a balancer option error.
  *
  * @group sse
  */
@@ -159,6 +168,27 @@ export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
   reconnect?: ClientSSEOptions["reconnect"];
   maxBufferSize: number;
   maxQueueSize: number;
+  /**
+   * @internal First-`next()` attribution. Absent when this stream must not
+   * pick or call `done`. `done` runs once when the current attempt ends.
+   * `pickNext` runs after a reconnect wait, before the next `Request`.
+   */
+  endpointAttempt?: {
+    start?(): void;
+    end?(info: EndpointDoneInfo): void;
+    done(info: EndpointDoneInfo): void;
+    pickNext():
+      | readonly [PreflightFault, undefined]
+      | readonly [
+          null,
+          {
+            endpoint: string;
+            start?(): void;
+            end?(info: EndpointDoneInfo): void;
+            done(info: EndpointDoneInfo): void;
+          },
+        ];
+  };
 }
 
 export interface FetchEventStreamErrorContext {
@@ -170,7 +200,7 @@ export interface FetchEventStreamErrorContext {
 
 type EventStreamFatalCode = Exclude<
   EventStreamFaultCode,
-  "NET_TIMEOUT" | "NET_UNREACHABLE"
+  "NET_TIMEOUT" | "NET_UNREACHABLE" | "REQ_BUILD_FAILED" | "REQ_OPTIONS_INVALID"
 >;
 
 class EventStreamFatalError extends Error {
@@ -232,7 +262,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     SSE_RECONNECT_DEFAULTS,
     "SSE",
   );
-  const url = resolveRequestUrl(request);
+  let url = resolveRequestUrl(request);
   const failure: EventStreamFailureInfo = options.failure ?? {};
   const queue = new AsyncQueue<TEvent>({ maxSize: options.maxQueueSize });
   const closedDeferred = Promise.withResolvers<EventStreamCloseInfo>();
@@ -289,6 +319,62 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     },
   };
 
+  // Cleared after the one report for this attempt. Absent when the stream is not attributed.
+  let reportAttempt: ((info: EndpointDoneInfo) => void) | undefined;
+  let startAttempt: (() => void) | undefined;
+  let endAttempt: ((info: EndpointDoneInfo) => void) | undefined;
+  let fetchStarted = false;
+  let handshake: EndpointDoneInfo | undefined;
+  let reconnectPick = false;
+
+  function beginAttempt(
+    done: ((info: EndpointDoneInfo) => void) | undefined,
+    start?: () => void,
+    end?: (info: EndpointDoneInfo) => void,
+  ): void {
+    reportAttempt = done;
+    startAttempt = start;
+    endAttempt = end;
+    fetchStarted = false;
+    handshake = undefined;
+  }
+
+  function currentAttemptInfo(): EndpointDoneInfo {
+    if (closeController.signal.aborted) {
+      return { attempted: false };
+    }
+    const caller = request.signal;
+    if (caller?.aborted) {
+      if (fetchStarted && isTimeoutCause(caller.reason)) {
+        return { attempted: true, code: "NET_TIMEOUT" };
+      }
+      return { attempted: false };
+    }
+    return handshake ?? { attempted: false };
+  }
+
+  function finishAttempt(): void {
+    const report = reportAttempt;
+    reportAttempt = undefined;
+    if (report === undefined) {
+      return;
+    }
+    report(currentAttemptInfo());
+  }
+
+  function noteFetchError(error: unknown): void {
+    const code = createNetworkFault(error).code;
+    if (code === "NET_TIMEOUT") {
+      handshake = { attempted: true, code: "NET_TIMEOUT" };
+      return;
+    }
+    if (code === "NET_ABORTED") {
+      handshake = { attempted: false };
+      return;
+    }
+    handshake = { attempted: true, code: "NET_UNREACHABLE" };
+  }
+
   // start() contains its terminal catch; this fallback only guards a type-invariant failure outside that catch.
   const lifecycleTask = start().catch(
     /* istanbul ignore next -- @preserve */
@@ -334,9 +420,43 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   }
 
   async function start(): Promise<void> {
+    beginAttempt(
+      options.endpointAttempt?.done,
+      options.endpointAttempt?.start,
+      options.endpointAttempt?.end,
+    );
     while (!closeController.signal.aborted) {
-      const attemptAbort = mergeAbortSignals(closeController.signal, [
+      if (reconnectPick) {
+        reconnectPick = false;
+        const pickNext = options.endpointAttempt?.pickNext;
+        if (pickNext) {
+          const picked = pickNext();
+          if (picked[0]) {
+            finishError(picked[0]);
+            return;
+          }
+          const next = picked[1];
+          try {
+            url = resolveRequestUrl({
+              ...request,
+              baseEndpoint: next.endpoint,
+            });
+          } catch (error) {
+            next.done({ attempted: false });
+            finishError(createPreflightFault("REQ_BUILD_FAILED", error));
+            return;
+          }
+          beginAttempt(next.done, next.start, next.end);
+        }
+      }
+      const connectController = new AbortController();
+      let connectTimer: ReturnType<typeof setTimeout> | undefined;
+      let connectTimedOut = false;
+      const retryAbort = mergeAbortSignals(closeController.signal, [
         request.signal,
+      ]);
+      const attemptAbort = mergeAbortSignals(retryAbort, [
+        connectController.signal,
       ]);
       let response: Response | undefined;
       let readerStarted = false;
@@ -358,10 +478,22 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           createEventStreamRequestInit(request, headers, attemptAbort),
         );
         response = await fetchWithSignal(
-          () => fetchImpl(eventRequest),
+          () => {
+            startAttempt?.();
+            fetchStarted = true;
+            if (reconnect?.connectTimeoutMs !== undefined)
+              connectTimer = setTimeout(() => {
+                connectTimedOut = true;
+                connectController.abort(ERR_TIMEOUT);
+              }, reconnect.connectTimeoutMs);
+            return fetchImpl(eventRequest);
+          },
           attemptAbort,
           cancelLateResponseBody,
         );
+        clearTimeout(connectTimer);
+        handshake = { attempted: true, status: response.status };
+        endAttempt?.(handshake);
         // The JSON media-type precheck throws before an open info exists. Attach the response
         // first so the startup fault can still report that status.
         const handshakeResponse = response;
@@ -405,9 +537,11 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         );
 
         queue.close();
+        finishAttempt();
         settleClosed({ kind: "eof" });
         return;
       } catch (error) {
+        clearTimeout(connectTimer);
         if (response?.body && !readerStarted) {
           void response.body.cancel(error).catch(() => undefined);
         }
@@ -418,8 +552,20 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           closeController.signal,
         );
 
+        if (
+          !handshake &&
+          fetchStarted &&
+          !closeController.signal.aborted &&
+          !request.signal?.aborted
+        ) {
+          if (connectTimedOut)
+            handshake = { attempted: true, code: "NET_UNREACHABLE" };
+          else noteFetchError(error);
+        }
+
+        endAttempt?.(currentAttemptInfo());
         if (closeController.signal.aborted || request.signal?.aborted) {
-          finishAborted(attemptAbort);
+          finishAborted(retryAbort);
           return;
         }
 
@@ -428,7 +574,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
         if (fatalError) {
           await observeFatalError(fatalError, attemptAbort);
           if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(attemptAbort);
+            finishAborted(retryAbort);
           } else {
             finishError(fatalError);
           }
@@ -445,10 +591,10 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
 
         let retryDelay: number | null;
         try {
-          retryDelay = await resolveRetryDelay(retryError, attemptAbort);
+          retryDelay = await resolveRetryDelay(retryError, retryAbort);
         } catch (policyError) {
           if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(attemptAbort);
+            finishAborted(retryAbort);
           } else {
             finishError(policyError);
           }
@@ -460,20 +606,25 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           return;
         }
 
+        // Release this attempt before the backoff so it is not in flight while waiting.
+        finishAttempt();
         try {
-          await wait(retryDelay, attemptAbort);
+          await wait(retryDelay, retryAbort);
         } catch (waitError) {
           // wait() rejects only from the merged close/request abort signal.
           /* istanbul ignore else -- @preserve */
           if (closeController.signal.aborted || request.signal?.aborted) {
-            finishAborted(attemptAbort);
+            finishAborted(retryAbort);
           } else {
             finishError(waitError);
           }
           return;
         }
+        reconnectPick = true;
       } finally {
+        clearTimeout(connectTimer);
         releaseAbortSignal(attemptAbort);
+        releaseAbortSignal(retryAbort);
       }
     }
   }
@@ -659,6 +810,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
       finishError(ERR_TIMEOUT);
       return;
     }
+    finishAttempt();
     const closeCause = signal.reason;
     failure.open = latestOpen;
 
@@ -677,6 +829,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   }
 
   function finishError(error: unknown): void {
+    finishAttempt();
     failure.open = latestOpen;
     if (settledOpen) {
       queue.fail(error);
@@ -713,11 +866,27 @@ function toTransformFailure(error: unknown, signal: AbortSignal): unknown {
       );
 }
 
+export function isEventStreamPickFault(
+  error: unknown,
+): error is PreflightFault {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+  const code = error.code;
+  return code === "REQ_BUILD_FAILED" || code === "REQ_OPTIONS_INVALID";
+}
+
 function getEventStreamFaultCode(error: unknown): EventStreamFaultCode {
-  return (
-    getEventStreamFatalCode(error) ??
-    (error === ERR_TIMEOUT ? "NET_TIMEOUT" : "NET_UNREACHABLE")
-  );
+  const fatal = getEventStreamFatalCode(error);
+  if (fatal) {
+    return fatal;
+  }
+  if (isEventStreamPickFault(error)) {
+    return error.code === "REQ_OPTIONS_INVALID"
+      ? "REQ_OPTIONS_INVALID"
+      : "REQ_BUILD_FAILED";
+  }
+  return error === ERR_TIMEOUT ? "NET_TIMEOUT" : "NET_UNREACHABLE";
 }
 
 function cancelLateResponseBody(

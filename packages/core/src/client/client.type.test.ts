@@ -152,7 +152,7 @@ createClient(
 );
 
 const options = {
-  endpoint: "https://api.example.com",
+  endpoints: ["https://api.example.com"],
   http: {
     handle: customFetch,
   },
@@ -185,7 +185,10 @@ const options = {
   withCredentials: true,
 } satisfies ClientOptions;
 
-type OptionsCases = Expect<Equal<typeof options.endpoint, string>>;
+type OptionsCases = Expect<
+  Equal<ClientOptions["endpoints"], readonly string[]>
+>;
+void options;
 
 type XsrfOptionsCases = Expect<
   Equal<

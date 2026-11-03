@@ -1183,5 +1183,138 @@
       "@defjs/core:Client",
       "@defjs/core:RequestOptions"
     ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointBalancer",
+    "kind": "type",
+    "slug": "core/endpointbalancer-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointPickOutcome",
+    "kind": "type",
+    "slug": "core/endpointpickoutcome-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointTransport",
+    "kind": "type",
+    "slug": "core/endpointtransport-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointPickInfo",
+    "kind": "type",
+    "slug": "core/endpointpickinfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointPickResult",
+    "kind": "type",
+    "slug": "core/endpointpickresult-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointFaultCode",
+    "kind": "type",
+    "slug": "core/endpointfaultcode-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointDoneInfo",
+    "kind": "type",
+    "slug": "core/endpointdoneinfo-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "ERR_NO_ENDPOINT",
+    "kind": "constant",
+    "slug": "core/err-no-endpoint",
+    "related": ["@defjs/core:isNoEndpointCause"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "isNoEndpointCause",
+    "kind": "function",
+    "slug": "core/isnoendpointcause",
+    "related": ["@defjs/core:ERR_NO_ENDPOINT"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "pickFirstBalancer",
+    "kind": "function",
+    "slug": "core/pickfirstbalancer",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "roundRobinBalancer",
+    "kind": "function",
+    "slug": "core/roundrobinbalancer",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withEndpointBalancer",
+    "kind": "function",
+    "slug": "core/withendpointbalancer",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointFailoverCondition",
+    "kind": "type",
+    "slug": "core/endpointfailovercondition-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "EndpointFailoverOptions",
+    "kind": "type",
+    "slug": "core/endpointfailoveroptions-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "withEndpointFailover",
+    "kind": "function",
+    "slug": "core/withendpointfailover",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "OutlierDetectionOptions",
+    "kind": "type",
+    "slug": "core/outlierdetectionoptions-type",
+    "related": ["@defjs/core:outlierDetection"]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "outlierDetection",
+    "kind": "function",
+    "slug": "core/outlierdetection",
+    "related": [
+      "@defjs/core:OutlierDetectionOptions",
+      "@defjs/core:roundRobinBalancer",
+      "@defjs/core:p2cBalancer"
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "p2cBalancer",
+    "kind": "function",
+    "slug": "core/p2cbalancer",
+    "related": [
+      "@defjs/core:outlierDetection",
+      "@defjs/core:roundRobinBalancer"
+    ]
   }
 ]

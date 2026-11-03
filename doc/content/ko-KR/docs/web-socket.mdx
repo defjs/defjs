@@ -53,6 +53,8 @@ struct 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거�
 
 ## 재연결
 
+재연결 정책 안에 `connectTimeoutMs`를 두면 각 핸드셰이크를 소켓 생성부터 `open`까지로 제한해요. 유한한 양수여야 하고, 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. 기본값은 없고 핸드셰이크 뒤에 해제되므로, 이미 열린 세션에는 영향이 없어요. 시간이 다 된 핸드셰이크는 밸런서에 `NET_UNREACHABLE`을 보고하고 기존 재연결 예산을 따라요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요.
+
 재연결은 opt-in이에요. `reconnect` 객체가 없으면 물리 close가 논리 세션을 끝내요. 설정하면 기본값은 `attempts: 3`, `delayMs: 1000`, `factor: 2`, `maxDelayMs: 30000`, `jitter: 0`이에요. `attempts`는 단절마다의 재시도 예산이고, `open`이 성공하면 예산과 백오프 지수가 초기화돼요. 그래서 다음 단절은 다시 재시도 1과 `delayMs` 기준에서 시작해요. `attempts: 0`은 꺼요. 기본 predicate는 그 단절의 예산 안에서 수동이 아닌 모든 close 결과를 받아요. 성공한 open이 반복돼도 평생 재시도 한도는 없어요. 소켓이 열리는 데 성공한 직후 서버에 의해 다시 닫히면, 매번 열릴 때 예산이 초기화되므로 기준 지연(jitter와 상한 적용)으로 계속 재연결할 수 있어요. 이를 중단하려면 `shouldReconnect`를 쓰세요.
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>

@@ -1,6 +1,7 @@
 import type { Socket } from "node:net";
-import type { ServerType } from "@hono/node-server";
+import type { HttpBindings, ServerType } from "@hono/node-server";
 import { createAdaptorServer, upgradeWebSocket } from "@hono/node-server";
+import { RESPONSE_ALREADY_SENT } from "@hono/node-server/utils/response";
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
@@ -22,6 +23,16 @@ let webSocketServer: WebSocketServer | undefined;
 let testServerAddr: string;
 const testServerSockets = new Set<Socket>();
 const providerEnvelopeAttempts = new Map<string, number>();
+const sseDropSockets = new Map<string, Socket>();
+
+function releaseSseDropSockets(): void {
+  for (const socket of sseDropSockets.values()) {
+    if (!socket.destroyed) {
+      socket.destroy();
+    }
+  }
+  sseDropSockets.clear();
+}
 
 type ServerConnectionCleanup = {
   closeAllConnections?: () => void;
@@ -29,6 +40,7 @@ type ServerConnectionCleanup = {
 };
 
 export async function setup({ provide }: TestProject) {
+  releaseSseDropSockets();
   const app = new Hono();
   registerE2eProbe(app);
   registerXsrfRoutes(app);
@@ -122,6 +134,8 @@ export async function setup({ provide }: TestProject) {
 
   app.get("/text", (c) => c.text("Hello World!"));
   app.get("/json", (c) => c.json({ id: 1 }));
+  app.get("/balancer/bad/replica", (c) => c.body(null, 503));
+  app.get("/balancer/good/replica", (c) => c.body(null, 200));
   app.get("/json/malformed-error", (c) =>
     c.body("{not-json}", {
       headers: { "content-type": "application/json" },
@@ -206,7 +220,50 @@ export async function setup({ provide }: TestProject) {
     return c.body(null, 500);
   });
 
+  const sseDropAttempts = new Map<string, number>();
   const sseRetryAttempts = new Map<string, number>();
+
+  // The first attempt stays open until the test has read "partial" and calls the
+  // cut route. Half-close sends FIN without the chunked terminator, so the client
+  // sees a read failure. Cutting earlier races the unread stream queue under load.
+  app.get("/sse/drop", (c) => {
+    const key = c.req.query("key") ?? "default";
+    const attempt = (sseDropAttempts.get(key) ?? 0) + 1;
+    sseDropAttempts.set(key, attempt);
+    if (attempt > 1) {
+      return streamSSE(c, async (stream) => {
+        await stream.writeSSE({ data: "resumed", event: "message", id: "2" });
+      });
+    }
+
+    const { outgoing } = c.env as HttpBindings;
+    const socket = outgoing.socket;
+    if (socket === null) {
+      throw new Error("expected a TCP socket");
+    }
+    outgoing.writeHead(200, {
+      "cache-control": "no-cache",
+      "content-type": "text/event-stream",
+    });
+    outgoing.write("event: message\ndata: partial\nid: 1\n\n");
+    sseDropSockets.set(key, socket);
+    socket.on("close", () => {
+      if (sseDropSockets.get(key) === socket) {
+        sseDropSockets.delete(key);
+      }
+    });
+    return RESPONSE_ALREADY_SENT;
+  });
+
+  app.post("/sse/drop/cut", (c) => {
+    const key = c.req.query("key") ?? "default";
+    const socket = sseDropSockets.get(key);
+    sseDropSockets.delete(key);
+    if (socket !== undefined && !socket.destroyed) {
+      socket.end();
+    }
+    return c.body(null, 204);
+  });
 
   app.get("/sse/500-once", (c) => {
     const key = c.req.query("key") ?? "default";
@@ -660,6 +717,7 @@ export async function setup({ provide }: TestProject) {
 }
 
 export async function teardown() {
+  releaseSseDropSockets();
   const failures: Error[] = [];
 
   try {

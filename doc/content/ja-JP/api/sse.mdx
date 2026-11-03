@@ -47,7 +47,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) の一つで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。
+`kind` は `eof`、`aborted`、`error` のいずれかです。どのバリアントも `reason` と `cause` を持てます。`code` を持つのは `error` だけで、値は [`EventStreamFaultCode`](/ja-JP/api/core/eventstreamfaultcode-type) の一つで、`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'` です。`REQ_BUILD_FAILED` と `REQ_OPTIONS_INVALID` は、ストリームが開いたあとの再接続の pick が失敗したことを意味します。
 
 ## EventStructs
 

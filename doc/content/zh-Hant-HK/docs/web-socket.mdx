@@ -53,6 +53,8 @@ Startup failure → `[error, undefined, connection?]`。Pre-open constructor fai
 
 ## 重連
 
+喺 reconnect policy 入面設定 `connectTimeoutMs`，限制每次 handshake 由構造 socket 到 `open`。佢必須係有限正數；無效值會回傳 `REQ_OPTIONS_INVALID`。佢冇預設值，handshake 之後會被清走，所以已經建立嘅 session 唔受影響。超時嘅 handshake 會向 balancer 報告 `NET_UNREACHABLE`，並跟現有嘅 reconnect budget；重試用盡就以 `NET_TIMEOUT` 結束。
+
 重連係 opt-in。冇 `reconnect` object → 實體關閉會結束 logical session。設定之後，預設值係 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 係每次斷線嘅重試預算；成功 `open` 會重設預算同退避指數。所以之後每次斷線都由第 1 次重試同 `delayMs` base 重新開始。`attempts: 0` 停用重試。預設 predicate 會接受該次斷線預算內每個非手動 close 結果。反覆成功 open 唔會有 session 生命週期嘅總重試上限。成功 open 之後立刻被 server 再關閉嘅 socket，會按 base delay 持續重連（受 jitter 同上限約束），因為每次 open 都會重設預算；用 `shouldReconnect` 停低佢。
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>

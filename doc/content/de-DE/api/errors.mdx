@@ -101,4 +101,12 @@ Die Sentinels tragen nicht enumerierbare Brands `Symbol.for('defjs.cause.aborted
 
 [`isAbortCause`](/de-DE/api/core/isabortcause) erkennt einen mit Abort gebrandeten `Error` oder eine `DOMException` namens `AbortError`. [`isTimeoutCause`](/de-DE/api/core/istimeoutcause) erkennt einen mit Timeout gebrandeten `Error` oder eine `DOMException` / einen `Error` namens `TimeoutError`. Übergib `fault.cause`, um den zugrunde liegenden Wert zu klassifizieren; diese Funktionen packen einen Fault nicht aus. Sie funktionieren mit Sentinels aus einer anderen Core-Kopie.
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`ERR_NO_ENDPOINT` erscheint nur als `cause` von `REQ_BUILD_FAILED`, wenn kein Kandidaten-Endpoint ausgewählt werden kann. Es fügt keinen `FaultCode` hinzu. Der Sentinel trägt ein nicht enumerierbares Brand `Symbol.for('defjs.cause.no-endpoint')`. [`isNoEndpointCause`](/de-DE/api/core/isnoendpointcause) erkennt dieses Brand aus einer anderen Core-Kopie, so wie [`isAbortCause`](/de-DE/api/core/isabortcause) einen Abort erkennt. Übergib `fault.cause`. Die Funktion packt einen Fault nicht aus.
+
 Siehe [Errors-Guide](/de-DE/docs/errors).

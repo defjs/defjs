@@ -1,3 +1,4 @@
+import type { EndpointBalancer } from "../balancer/balancer";
 import type { Interceptor } from "../interceptor/interceptor";
 import {
   snapshotHeartbeat,
@@ -25,19 +26,133 @@ import type {
 export type ClientOption = (config: ClientConfig) => void;
 
 /**
- * Sets the valid absolute base URL prepended to relative request paths.
+ * Replaces the candidate base URLs prepended to relative request paths.
  *
- * The default is an empty string, so execution requires an explicit endpoint. Its pathname is kept as a directory; its query and hash are discarded. For WebSocket operations, an `http:` base becomes `ws:` and `https:` becomes `wss:`.
+ * The arguments are copied in order and later duplicates of the same string are
+ * dropped. This does not validate URLs and does not change `endpointBalancer`.
+ * A later `withEndpoint` replaces the list; it does not merge. Zero arguments
+ * are legal and store `[]`. The default list is empty.
+ *
+ * The selected endpoint's pathname is kept as a directory; its query and hash are discarded. For WebSocket operations, an `http:` base becomes `ws:` and `https:` becomes `wss:`.
  *
  * A missing, relative, or invalid endpoint, or an illegal request path, fails with `REQ_BUILD_FAILED` during building, before any interceptor or transport runs, even when an interceptor would short-circuit. HTTP, SSE, and WebSocket share this rule. The resolved request must keep the base origin and stay under its directory; C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes in a path are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. An interceptor's final `req.endpoint` is checked against its final `req.baseEndpoint` with the same rule, but it may deliberately replace the base with another valid absolute URL. Deterministic URL errors are never retried.
  *
- * @param endpoint - Absolute base endpoint. Missing or invalid endpoints fail request building.
- * @returns An option that writes `config.endpoint`.
+ * @param endpoints - Candidate base URLs. Invalid values fail when a call builds a request.
+ * @returns An option that writes `config.endpoints`.
  * @group client
  */
-export function withEndpoint(endpoint: string): ClientOption {
+export function withEndpoint(...endpoints: string[]): ClientOption {
   return (config) => {
-    config.endpoint = endpoint;
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const endpoint of endpoints) {
+      if (!seen.has(endpoint)) {
+        seen.add(endpoint);
+        unique.push(endpoint);
+      }
+    }
+    config.endpoints = unique;
+  };
+}
+
+/**
+ * Replaces the balancer that selects one candidate per call.
+ *
+ * The object is stored by reference and is not copied. A later
+ * `withEndpointBalancer` replaces it. `withEndpoint` does not. Without this
+ * option, each client gets its own `pickFirstBalancer()`.
+ *
+ * @param balancer - Balancer whose `pick` chooses one endpoint per call.
+ * @returns An option that writes `config.endpointBalancer`.
+ * @group client
+ */
+export function withEndpointBalancer(balancer: EndpointBalancer): ClientOption {
+  return (config) => {
+    config.endpointBalancer = balancer;
+  };
+}
+
+/** Conditions that allow HTTP to try a different endpoint within one call.
+ * @group client
+ */
+export type EndpointFailoverCondition =
+  "connect-failure" | "gateway-error" | "attempt-timeout";
+
+/** HTTP failover policy. Omitted fields use the default policy.
+ * @group client
+ */
+export interface EndpointFailoverOptions {
+  /** Additional attempts. Defaults to 1; 0 disables failover. */
+  readonly attempts?: number;
+  /**
+   * Retryable outcomes. Defaults to connection failures only. Gateway errors
+   * include uncoded 502/503/504 responses whose declared error body fails with
+   * a response-side RES_* fault. Successful or extension-failed interceptor
+   * results never trigger gateway failover.
+   */
+  readonly retryOn?: readonly EndpointFailoverCondition[];
+  /** Allowed methods, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE. */
+  readonly methods?: readonly string[];
+  /** Positive finite timeout from Fetch invocation through body reading and decoding, per attempt. */
+  readonly attemptTimeoutMs?: number;
+  /**
+   * Client-shared Finagle retry budget; false disables it. Credits and debits
+   * expire lazily in ten TTL/10 slices (at most one slice early).
+   * Defaults: 20% plus 10 retries/second of reserve over a 10000 ms TTL.
+   */
+  readonly retryBudget?:
+    | false
+    | {
+        /** Finite ratio in [0, 1000]; defaults to 0.2. Finagle integer token scaling (including Int cost saturation) applies. */
+        readonly percentCanRetry?: number;
+        /** Nonnegative safe integer; defaults to 10. */
+        readonly minRetriesPerSecond?: number;
+        /** Finite TTL in [1000, 60000] ms; defaults to 10000. */
+        readonly ttlMs?: number;
+      };
+}
+
+/** Replaces HTTP endpoint failover settings; omitted fields use defaults.
+ *
+ * By default one additional endpoint is tried for connection failures on
+ * GET, HEAD, OPTIONS, and TRACE. Streaming request bodies never fail over.
+ * Set `attempts: 0` or `methods: []` to disable failover. Invalid fields
+ * return `REQ_OPTIONS_INVALID` when an HTTP operation runs.
+ * @exampleFile examples/client/endpoint-failover.ts#example
+ * @param options - Additional attempt budget, conditions, methods, and per-attempt timeout.
+ * @returns An option that replaces the previous failover policy, without merging.
+ * @group client
+ */
+export function withEndpointFailover(
+  options?: EndpointFailoverOptions,
+): ClientOption {
+  return (config) => {
+    const attempts = options?.attempts;
+    const retryOn = options?.retryOn;
+    const methods = options?.methods;
+    const attemptTimeoutMs = options?.attemptTimeoutMs;
+    const retryBudget = options?.retryBudget;
+    config.endpointFailover = {
+      attempts: attempts ?? 1,
+      retryOn: retryOn === undefined ? ["connect-failure"] : [...retryOn],
+      methods:
+        methods === undefined
+          ? ["GET", "HEAD", "OPTIONS", "TRACE"]
+          : [...methods],
+      attemptTimeoutMs,
+      retryBudget:
+        retryBudget !== undefined &&
+        retryBudget !== false &&
+        retryBudget !== null &&
+        typeof retryBudget === "object" &&
+        !Array.isArray(retryBudget)
+          ? {
+              percentCanRetry: retryBudget.percentCanRetry,
+              minRetriesPerSecond: retryBudget.minRetriesPerSecond,
+              ttlMs: retryBudget.ttlMs,
+            }
+          : retryBudget,
+    };
   };
 }
 
@@ -234,6 +349,7 @@ export function withWebSocketHeartbeat(
  * ```ts
  * {
  *   attempts?: number
+ *   connectTimeoutMs?: number
  *   delayMs?: number
  *   factor?: number
  *   jitter?: number
@@ -245,9 +361,10 @@ export function withWebSocketHeartbeat(
  * - `attempts` is the retry budget for each outage. It defaults to `3`, and `0` disables reconnection. Successful `open` resets the budget and backoff exponent; the next outage starts at retry 1. Omitting it does not give unlimited retries within one outage. A socket that successfully opens and is immediately closed again by the server can keep reconnecting at the base delay (subject to jitter and caps), because every open resets the budget; use `shouldReconnect` to stop it.
  * - `delayMs` defaults to `1000`, `factor` to `2`, `maxDelayMs` to `30000`, and `jitter` (0 to 1) to `0`. Retry _n_ starts with `delayMs * factor^(n-1)`, capped at `maxDelayMs`; jitter and rounding follow, then the final delay is capped again at `maxDelayMs` and `2_147_483_647` ms. A zero base stays zero; valid-number overflow saturates at those caps.
  * - `shouldReconnect` can return `false` to end the session instead. Without it every close is retried while the budget lasts. It is not called for a manual `session.close()`.
+ * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
  * - Reconnect options are validated before connecting: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values make the operation fail with `REQ_OPTIONS_INVALID` before connecting. `attempts: 0` disables subsequent retries, but all explicitly supplied reconnect fields are still validated before the initial connection.
  * - A `reconnect` in the request options replaces this one for that call.
- * - `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect` are copied when this option is applied. `shouldReconnect` keeps its identity and is not called. `undefined` clears an earlier policy. A getter runs at that moment and its exception escapes `createClient`. Invalid numbers still fail the operation with `REQ_OPTIONS_INVALID`.
+ * - `attempts`, `connectTimeoutMs`, `delayMs`, `factor`, `jitter`, `maxDelayMs`, and `shouldReconnect` are copied when this option is applied. `shouldReconnect` keeps its identity and is not called. `undefined` clears an earlier policy. A getter runs at that moment and its exception escapes `createClient`. Invalid numbers still fail the operation with `REQ_OPTIONS_INVALID`.
  *
  * @param options - Retry budget, backoff, and `shouldReconnect` gate.
  * @returns An option that sets `config.webSocket.reconnect`.
@@ -321,8 +438,9 @@ export function withSSEOnInvalidEvent(
  * - A request with a `ReadableStream` body never reconnects, and `shouldReconnect` is not called for it.
  * - `delayMs`, `factor`, `jitter` (0 to 1), and `maxDelayMs` shape the backoff. `factor` defaults to `1` and `jitter` to `0`. `maxDelayMs` caps the final delay after jitter and rounding. Without a configured cap, the platform timer limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps.
  * - `delayMs` is only the starting base delay (`1000` by default). A server `retry:` field (digits only, in milliseconds) replaces it for later attempts.
- * - The last event id is sent again as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it; an ID containing NUL is ignored.
- * - Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The six fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.
+ * - An `id:` field updates a buffer. The reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message; a stream ending before that blank line leaves it unchanged. The committed ID is sent as UTF-8 bytes in `Last-Event-ID` on the next attempt. An empty `id:` clears it at that blank line; an ID containing NUL is ignored.
+ * - `connectTimeoutMs` optionally bounds each handshake, is finite and positive, and is cleared after response headers (SSE) or open (WebSocket). Expiry reports `NET_UNREACHABLE` to the balancer; exhausting reconnect attempts ends with `NET_TIMEOUT`.
+ * - Reconnect options are validated before interceptors or Fetch: `attempts` must be a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` must be finite and positive; `jitter` must be finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs. The seven fields are copied when this option is applied, and `shouldReconnect` keeps its identity. `undefined` clears an earlier policy. A getter runs then, once, and its exception escapes `createClient`.
  *
  * @param options - Retry budget, backoff, and `shouldReconnect` gate.
  * @returns An option that sets `config.sse.reconnect`.

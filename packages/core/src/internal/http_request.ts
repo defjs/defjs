@@ -72,7 +72,7 @@ export type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void;
  *
  * - `bodyContentType` holds the inferred type of the builder's body. `null` suppresses that header. FormData owns its multipart boundary. HTTP inference follows a direct write to `body` and is not copied by object spread; an explicit `bodyContentType` assignment is copied. A replacement body is detected again, so declare its type with a `content-type` header. For the unchanged body, `null` suppresses library inference when there is no explicit header, but native Fetch may add its own string type.
  * - HTTP never writes inferred Content-Type into `headers`; interceptors see only declared headers. An explicit `content-type` header always wins over `bodyContentType` and detection, whether set by the builder, client defaults, an interceptor, or a raw `fetchHandler` request. `body: undefined` has no library-inferred Content-Type. Signers should read `headers.get('content-type') ?? request.bodyContentType`; do not configure internal fields.
- * - `endpoint` is the path with path parameters filled in; `baseEndpoint` is the client endpoint.
+ * - `endpoint` is the path with path parameters filled in; `baseEndpoint` is the endpoint selected for this call.
  * - Interceptors see `queryParams` as `new URLSearchParams(queryString)`. A builder that returns `URLSearchParams` passes that instance through.
  * - `operation` is a static, low-cardinality endpoint identity for telemetry and diagnostics.
  * - `downloadProgress` and `uploadProgress` are the `onDownloadProgress` and `onUploadProgress` hooks of `HttpExecuteOptions`.
@@ -82,7 +82,7 @@ export type HttpProgressFn = (event: HttpProgressEvent) => Promise<void> | void;
  */
 export interface HttpRequest {
   signal?: AbortSignal;
-  /** Trusted absolute base; its origin and directory bound the resolved endpoint path. */
+  /** Endpoint selected for this call; its origin and directory bound the resolved path. */
   baseEndpoint?: string;
   body?:
     | Blob

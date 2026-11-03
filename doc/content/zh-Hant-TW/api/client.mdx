@@ -26,7 +26,19 @@ Options 依序套用。若 interceptors 會捕捉 auth 或 tenants，請在請�
 
 <ApiSignature name="withEndpoint" />
 
-設定會接到相對 path 前面的 base URL。
+依首次出現的順序複製候選 base URL，並丟掉同一字串的後續重複。後面的 `withEndpoint` 會取代整份清單。它不檢查 URL，也不取代平衡器。空清單是合法值，呼叫會以 `REQ_BUILD_FAILED` 失敗。
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+取代此後呼叫所用的平衡器。物件按參考儲存。沒有這個選項時，每個 client 各自得到一個 `pickFirstBalancer()`。
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+控制單次呼叫內的 HTTP 容錯移轉。同一 client 共享的 Finagle/Linkerd 重試額度預設為 20%，外加每秒 10 次的儲備，TTL 為 10 秒；`retryBudget: false` 去掉這一限制。存入和取出都在十個 TTL/10 切片上惰性過期。預設是連線失敗時，對 GET、HEAD、OPTIONS 與 TRACE 再多試一次。`attempts: 0` 或 `methods: []` 會關掉它。後面的選項會取代整份策略；省略的欄位使用預設值。串流請求 body 不會被重放。`attemptTimeoutMs` 涵蓋單次嘗試的 Fetch、讀取 body 與解碼，呼叫方的 signal 則涵蓋所有嘗試。見 [多個端點](/zh-Hant-TW/docs/client#multiple-endpoints)。
 
 ### withInterceptors()
 
@@ -169,9 +181,11 @@ Defjs 對 Fetch 實作所需的呼叫簽章。它不是 `typeof fetch`，因此 
 | `jitter`     | `0`            | `0`            |
 | `maxDelayMs` | 無上限         | `30000`        |
 
+`connectTimeoutMs` 可選，而且必須是有限正數。對 SSE，它把從 Fetch 到回應標頭的時間加上限；對 WebSocket，它把從建構到 `open` 的時間加上限；握手之後會被清掉。到期會向平衡器回報 `NET_UNREACHABLE`，讓重連可以 pick 下一個端點。重試耗盡時以 `NET_TIMEOUT` 結束。
+
 兩種傳輸在握手成功後，都會重設每一次中斷的重試額度、回呼的 attempt，以及 backoff 指數。`attempts: 0` 停用重試；省略 `attempts` 並不會在同一次中斷內給予無限次重試。`maxDelayMs` 會在 jitter 與捨入之後，為最終延遲加上上限；平台計時器上限 `2_147_483_647` ms 同樣適用，包含 SSE 沒有設定上限的情況。base 為零時維持零；有效數值溢位時會飽和在這些上限。
 
-重新連線選項會在傳輸之前驗證：`attempts` 必須是非負安全整數；`delayMs` 必須是非負有限數；`maxDelayMs` 可以是非負有限數或正 `Infinity`，後者移除設定上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 必須有限且為正；`jitter` 必須有限且在 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 停用後續重試，但所有明確提供的重連欄位仍會在首次連線前驗證，與 SSE 一樣。Jitter 會在套用最終上限之前，把已加上限的 base 往正負兩個方向縮放。
+重新連線選項會在傳輸之前驗證：`attempts` 必須是非負安全整數；`delayMs` 必須是非負有限數；`maxDelayMs` 必須是非負有限數或正 `Infinity`，後者移除設定上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 必須有限且為正；`jitter` 必須有限且在 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 停用後續重試，但所有明確提供的重連欄位仍會在首次連線前驗證，與 SSE 一樣。Jitter 會在套用最終上限之前，把已加上限的 base 往正負兩個方向縮放。
 
 對 SSE 而言，`delayMs` 只是起始的 base delay：只含數字的伺服器 `retry:` field 會取代它，用於之後的嘗試，包含恢復之後。`shouldReconnect` 回傳 `false` 就停止重試。SSE 的回呼另外會收到 `lastEventId`、請求的 `method` 與最新的 `open` 資訊，也可以採用非同步形式。未提供此回呼時，SSE 只會對 `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 請求重新連線；提供後，所有請求方法是否重新連線都由它的回傳值決定。最新的事件 ID 會以 UTF-8 位元組放進 `Last-Event-ID` 送出；空的 ID 會清除它，含有 NUL 的 ID 則會被忽略。WebSocket 的回呼則會收到關閉時的 `code`、`reason` 與 `wasClean`。
 
@@ -183,11 +197,11 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：沒有對應 struct 的事件�
 
 <ApiSignature name="ClientOptions" />
 
-簽名裡出現的欄位是 `sse` 與 `webSocket`。另外七個——`endpoint`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別，其中 `endpoint` 必填。沒有 client 層級的 `timeout`。`createClient` 不接收這個物件，而是接收 option helpers。
+簽名裡出現的欄位是 `sse` 與 `webSocket`。另外七個——`endpoints`、`headers`、`http`、`interceptors`、`querySerializer`、`xsrf` 與 `withCredentials`——繼承自未匯出的 HTTP 基底型別。`endpoints` 是 `readonly string[]`。解析後的預設值是 `[]`。空陣列是合法值，呼叫會以 `REQ_BUILD_FAILED` 失敗。沒有 client 層級的 `timeout`。`createClient` 不接收這個物件，而是接收 option helpers。
 
 ### ClientConfig
 
-解析後的快照，由 option helpers 修改、由操作讀取：套用預設值之後的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）與 `webSocket` 一定存在。
+解析後的快照，由 option helpers 修改、由操作讀取：套用預設值之後的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）、`webSocket`、`endpointBalancer` 與 `endpointFailover` 一定存在。`endpointBalancer` 預設為該 client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hant-TW/api/core/requestoptions-type) 欄位。
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ SSE 的 `onInvalidEvent` 會處理兩種事件：沒有對應 struct 的事件�
 <ApiSignature name="WebSocketHandleConstructor" />
 
 傳給 `withWebSocketHandle` 的建構函式。它必須提供 `OPEN` ready-state 常數。
+
+## 平衡器
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer` 會在 `NET_UNREACHABLE`，或未帶 fault code 的 502/503/504 回應上前進。可選的有限正數 `failbackMs` 在離開這段間隔之後，對第一個端點做至多一個同時進行的探測。HTTP 安全方法的連線失敗，預設也會在同一次呼叫內做容錯移轉。`roundRobinBalancer` 沿著清單走。`weights` 可選。見 [多個端點](/zh-Hant-TW/docs/client#multiple-endpoints)。
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+不放回地抽取不同候選（與 Envoy/gRPC A48 不同），選擇 tower 的 PeakEwma 或 pending 負載。Linkerd 的預設值是 RTT 30 ms、衰減 10 秒。`start` 開始計入 pending，`end` 在回應標頭或 socket 打開時釋放它，並對每種傳輸記錄真實 RTT，包括失敗。沒有 `end` 的 `done` 只釋放 pending，不產生 RTT 樣本。沒有 p2c 的失敗分類器，也沒有懲罰。`choiceCount` 預設是 2，上限為 10。
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+用 Linkerd 式的連續失敗熔斷包裝子策略。Round robin 與 p2c 預設啟用（與 Finagle 相同）；`false` 關閉它。Pick-first 在傳入物件時啟用。五次失敗之後，懲罰從 1000 ms 起，探測失敗後再加倍，並加上不超過基數 0.5 倍的正抖動，上限為 60000 ms。到期接納一次探測，在 `end` 上判定；若沒有 `end` 到達，則在 `done` 上判定。成功會重置退避；取消只釋放名額。沒有假定成功的逾時、配額、最後一台主機保護、結算網格、百分比判據或慢啟動。`isHealthy` 讀取應用程式自己持有的快取狀態，從不會取消一次懲罰。所有主機都可以熔斷；Finagle 式、僅限目前清單的失敗時放行仍會發出請求。與 Envoy/gRPC A50 不同，沒有驅逐配額。見 [健康過濾與 p2c](/zh-Hant-TW/docs/client#health-filtering-and-p2c)。
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`pick` 回傳 error-first tuple。可選的 `start` 在所選傳輸開始之前至多同步執行一次；可選的 `end` 在 `start` 之後執行一次，時機是 Fetch 的回應標頭或 WebSocket 的 `open`（或回應之前的失敗）；可選的 `done` 在完成時執行一次。Fetch 暴露不了 Linkerd 的首個 body 幀，也暴露不了 Envoy 的流邊界。所有鉤子的拋出，以及 thenable 的 rejection，都會被接住。`ERR_NO_ENDPOINT` 只作為 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoEndpointCause`](/zh-Hant-TW/api/core/isnoendpointcause) 也能辨認另一份 Core 副本中的它。
 
 見 [Client 指南](/zh-Hant-TW/docs/client)。

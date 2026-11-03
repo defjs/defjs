@@ -101,4 +101,12 @@ Los centinelas llevan marcas no enumerables `Symbol.for('defjs.cause.aborted')` 
 
 [`isAbortCause`](/es-ES/api/core/isabortcause) reconoce un `Error` con marca de aborto o un `DOMException` llamado `AbortError`. [`isTimeoutCause`](/es-ES/api/core/istimeoutcause) reconoce un `Error` con marca de timeout o un `DOMException` / `Error` llamado `TimeoutError`. Pasa `fault.cause` para clasificar el valor subyacente; estas funciones no desenvuelven un fault. Funcionan con centinelas de otra copia de Core.
 
+## ERR_NO_ENDPOINT
+
+## isNoEndpointCause
+
+<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`ERR_NO_ENDPOINT` aparece solo como `cause` de `REQ_BUILD_FAILED`, cuando no se puede seleccionar ningún endpoint candidato. No añade un `FaultCode`. El centinela lleva una marca no enumerable `Symbol.for('defjs.cause.no-endpoint')`. [`isNoEndpointCause`](/es-ES/api/core/isnoendpointcause) reconoce esa marca de otra copia de Core, del mismo modo que [`isAbortCause`](/es-ES/api/core/isabortcause) reconoce un aborto. Pasa `fault.cause`. No desenvuelve un fault.
+
 Mira la [guía de Errores](/es-ES/docs/errors).

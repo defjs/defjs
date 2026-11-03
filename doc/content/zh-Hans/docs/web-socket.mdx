@@ -53,6 +53,8 @@ Struct 编码之后，JSON 无法忠实表示的值会在发送或进入重连�
 
 ## 重连
 
+在重连策略里设置 `connectTimeoutMs`，把每次握手限制在从构造 socket 到 `open`。它必须是有限正数；无效值返回 `REQ_OPTIONS_INVALID`。它没有默认值，握手之后会被清掉，所以已经建立的会话不受影响。超时的握手会向均衡器报告 `NET_UNREACHABLE`，并沿用现有的重连预算；重试耗尽时以 `NET_TIMEOUT` 结束。
+
 重连需显式开启。没有 `reconnect` 对象 → 物理关闭就结束逻辑会话。配置后，默认是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 是每次中断的重试预算；成功 `open` 会重置预算和退避指数，因此后续每次中断都重新从重试 1 和 `delayMs` 基数开始。`attempts: 0` 禁用重试。默认谓词接受本次中断预算内的每一种非手动关闭结果。多次成功打开后，不存在整个生命周期的重试次数上限。成功打开后立刻被服务端再次关闭的 socket，会按基础延迟持续重连（受 jitter 和上限约束），因为每次打开都会重置预算；用 `shouldReconnect` 停止它。
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>

@@ -26,7 +26,19 @@ description: createClient, хелперы опций и тип Client.
 
 <ApiSignature name="withEndpoint" />
 
-Задаёт базовый URL, который добавляется перед относительными путями.
+Копирует базовые URL-кандидаты в порядке первого появления и отбрасывает более позднюю копию той же строки. Более поздний `withEndpoint` заменяет список. Он не проверяет URL и не заменяет балансировщик. Пустой список допустим и завершает вызов с `REQ_BUILD_FAILED`.
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+Заменяет балансировщик для последующих вызовов. Объект хранится по ссылке. Без этой опции каждый клиент получает свой `pickFirstBalancer()`.
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+Управляет HTTP failover внутри одного вызова. Общий для клиента retry budget Finagle/Linkerd по умолчанию — 20 % плюс резерв 10 retry в секунду на TTL 10 с; `retryBudget: false` отключает только этот лимит. И кредиты, и списания лениво истекают в десяти долях TTL/10. По умолчанию — одна дополнительная попытка при сбое соединения для GET, HEAD, OPTIONS и TRACE. `attempts: 0` или `methods: []` отключает это. Более поздняя опция заменяет политику; пропущенные поля берут значения по умолчанию. Потоковые тела запроса никогда не проигрываются снова. `attemptTimeoutMs` покрывает Fetch, чтение тела и декодирование одной попытки, а сигнал вызывающего покрывает все попытки. См. [Несколько эндпоинтов](/ru-RU/docs/client#multiple-endpoints).
 
 ### withInterceptors()
 
@@ -169,6 +181,8 @@ Reconnect включается явно для обоих транспортов
 | `jitter`     | `0`                 | `0`                 |
 | `maxDelayMs` | без лимита          | `30000`             |
 
+`connectTimeoutMs` необязателен и должен быть конечным и положительным. Он ограничивает Fetch до заголовков ответа у SSE и конструирование до `open` у WebSocket; после handshake он сбрасывается. Истечение сообщает балансировщику `NET_UNREACHABLE`, чтобы reconnect мог выбрать следующий эндпоинт. Исчерпанные ретраи заканчиваются `NET_TIMEOUT`.
+
 Для обоих транспортов успешное установление соединения сбрасывает бюджет повторов для текущего обрыва, номер попытки в колбэке и показатель степени для задержки. `attempts: 0` отключает повторы; отсутствие `attempts` не означает неограниченные повторы в пределах одного обрыва. `maxDelayMs` ограничивает итоговую задержку после случайного отклонения и округления; действует также предел платформенного таймера `2_147_483_647` мс, даже если для SSE не задан собственный предел. Нулевая базовая задержка остаётся нулевой; при переполнении вычисления из допустимых чисел задержка ограничивается указанными пределами.
 
 Настройки переподключения проверяются до обращения к транспорту: `attempts` должен быть неотрицательным безопасным целым числом; `delayMs` — конечным неотрицательным числом; `maxDelayMs` — конечным неотрицательным числом или положительной `Infinity`, которая снимает настроенный предел, но не платформенный предел `2_147_483_647` мс для итоговой задержки; `factor` — конечным и положительным; `jitter` — конечным и в пределах 0–1. Недопустимые значения возвращают `REQ_OPTIONS_INVALID`. Для WebSocket `attempts: 0` отключает последующие повторы, но все явно переданные поля переподключения всё равно проверяются до первого подключения, как и в SSE. Jitter масштабирует уже ограниченную базовую задержку в обе стороны, после чего применяется итоговый предел.
@@ -183,11 +197,11 @@ SSE `onInvalidEvent` обрабатывает событие, для котор�
 
 <ApiSignature name="ClientOptions" />
 
-Показанные поля — `sse` и `webSocket`. Остальные семь — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` и `withCredentials` — наследуются от неэкспортируемой HTTP-базы, и `endpoint` обязателен. `timeout` на уровне клиента нет. `createClient` этот объект не принимает; он принимает хелперы option.
+Показанные поля — `sse` и `webSocket`. Остальные семь — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` и `withCredentials` — наследуются от неэкспортируемой HTTP-базы. `endpoints` — это `readonly string[]`. Готовый default — `[]`. Пустой массив допустим и завершает вызов с `REQ_BUILD_FAILED`. `timeout` на уровне клиента нет. `createClient` этот объект не принимает; он принимает хелперы option.
 
 ### ClientConfig
 
-Готовый снимок, который мутируют хелперы option и читает операция: `ClientOptions` после применения значений по умолчанию, где `http.handle`, `interceptors`, `sse` (`ClientSSEConfig`) и `webSocket` присутствуют всегда.
+Готовый снимок, который мутируют хелперы option и читает операция: `ClientOptions` после применения значений по умолчанию, где `http.handle`, `interceptors`, `sse` (`ClientSSEConfig`), `webSocket`, `endpointBalancer` и `endpointFailover` присутствуют всегда. `endpointBalancer` по умолчанию — новый `pickFirstBalancer()` для этого клиента. Это не поле [`RequestOptions`](/ru-RU/api/core/requestoptions-type).
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ SSE `onInvalidEvent` обрабатывает событие, для котор�
 <ApiSignature name="WebSocketHandleConstructor" />
 
 Конструктор, который отдаёшь в `withWebSocketHandle`. Он должен предоставлять константу состояния готовности `OPEN`.
+
+## Балансировщики
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer` сдвигается на `NET_UNREACHABLE` или на ответ 502/503/504 без fault-`code`. Его необязательный положительный конечный `failbackMs` включает одну одновременную пробу первого эндпоинта после интервала. Сбои соединения безопасных HTTP-методов также делают failover в том же вызове по умолчанию. `roundRobinBalancer` идёт по списку. `weights` необязателен. См. [Несколько эндпоинтов](/ru-RU/docs/client#multiple-endpoints).
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+Сэмплирует разных кандидатов без возвращения (в отличие от Envoy/gRPC A48) и выбирает PeakEwma tower или pending-нагрузку. Значения по умолчанию Linkerd — RTT 30 мс и decay 10 с. `start` начинает pending, `end` отпускает его на заголовках или при открытии сокета и записывает настоящий RTT для каждого транспорта, включая ошибки. `done` без `end` отпускает pending без сэмпла RTT. Нет классификатора ошибок p2c и штрафа. `choiceCount` по умолчанию 2 и ограничен 10.
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+Оборачивает потомка circuit breaking подряд идущих ошибок в стиле Linkerd. Round robin и p2c включают его по умолчанию (как в Finagle); `false` выключает. Pick-first включает его объектом. После пяти ошибок штрафы начинаются с 1000 мс, удваиваются после неудачной пробы, добавляют положительный jitter до 0,5 базы и ограничены 60000 мс. Истечение допускает одну пробу, решение на `end` или на `done`, если `end` не пришёл. Успех сбрасывает backoff; отмена только освобождает слот. Нет таймаута, который считает успех, квоты, защиты последнего хоста, сетки расчёта, процентного критерия и slow start. `isHealthy` читает кэш приложения и никогда не отменяет штраф. Разорваться может любой хост; локальный для списка fail-open в стиле Finagle всё равно отправляет запросы. В отличие от Envoy/gRPC A50 квоты выброса нет. См. [Фильтрация здоровья и p2c](/ru-RU/docs/client#health-filtering-and-p2c).
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`pick` возвращает кортеж error-first. Необязательный `start` выполняется синхронно не больше одного раза непосредственно перед стартом выбранного транспорта; необязательный `end` выполняется один раз после `start` на заголовках Fetch или WebSocket `open` (или при сбое до ответа), а необязательный `done` — один раз при завершении. Fetch не может показать первый body-frame Linkerd или границы стрима Envoy. Броски и отклонения thenable всех хуков сдерживаются. `ERR_NO_ENDPOINT` — только `cause` у `REQ_BUILD_FAILED`. Это не `FaultCode`. [`isNoEndpointCause`](/ru-RU/api/core/isnoendpointcause) распознаёт его и из другой копии Core.
 
 См. [гайд Client](/ru-RU/docs/client).

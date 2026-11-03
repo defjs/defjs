@@ -47,7 +47,7 @@ async function consume(handle: EventStreamHandle<unknown>): Promise<void> {
 
 <ApiSignature name="EventStreamCloseInfo" />
 
-`kind` 係 `eof`、`aborted` 或者 `error`。每個 variant 都可以帶 `reason` 同 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-HK/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。
+`kind` 係 `eof`、`aborted` 或者 `error`。每個 variant 都可以帶 `reason` 同 `cause`。只有 `error` 有 `code`，取自 [`EventStreamFaultCode`](/zh-Hant-HK/api/core/eventstreamfaultcode-type)：`'CAP_BUFFER_EXCEEDED' | 'CAP_QUEUE_OVERFLOW' | 'EXT_HOOK_FAILED' | 'EXT_OBSERVER_FAILED' | 'NET_TIMEOUT' | 'NET_UNREACHABLE' | 'REQ_BUILD_FAILED' | 'REQ_OPTIONS_INVALID' | 'RES_DECODE_FAILED' | 'RES_MEDIA_TYPE_INVALID'`。`REQ_BUILD_FAILED` 同 `REQ_OPTIONS_INVALID` 表示 stream 打開之後，reconnect 嗰次 pick endpoint 失敗。
 
 ## EventStructs
 

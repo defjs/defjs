@@ -282,6 +282,47 @@ describe("sse parser", () => {
     ]);
   });
 
+  test("should commit an id only at the blank line before dispatch", async () => {
+    const onId = vi.fn();
+    const onMessage = vi.fn(() => expect(onId).toHaveBeenCalledWith("2"));
+    const parseLine = createLineParser(
+      createMessageParser(onId, noop, onMessage),
+    );
+
+    await parseLine(encoder.encode("id: 1\nid: 2\ndata: pending\n"));
+    expect(onId).not.toHaveBeenCalled();
+    expect(onMessage).not.toHaveBeenCalled();
+
+    await parseLine(encoder.encode("\n"));
+    expect(onId).toHaveBeenCalledExactlyOnceWith("2");
+    expect(onMessage).toHaveBeenCalledExactlyOnceWith({
+      id: "2",
+      event: "",
+      data: "pending",
+    });
+  });
+
+  test("should commit an id-only frame at its blank line without dispatch", async () => {
+    const onId = vi.fn();
+    const onMessage = vi.fn();
+    const parseLine = createLineParser(
+      createMessageParser(onId, noop, onMessage),
+    );
+
+    await parseLine(encoder.encode("id: 1\n"));
+    expect(onId).not.toHaveBeenCalled();
+    await parseLine(encoder.encode("\n"));
+    expect(onId).toHaveBeenCalledExactlyOnceWith("1");
+    expect(onMessage).not.toHaveBeenCalled();
+  });
+
+  test("should discard an id when the stream ends before the blank line", async () => {
+    const { ids, messages } = await parseEvents("id: 1\ndata: incomplete\n");
+
+    expect(ids).toEqual([]);
+    expect(messages).toEqual([]);
+  });
+
   test("should keep json-looking data as raw string at parser boundary", async () => {
     const messages: EventStreamMessage[] = [];
     const parseMessage = createMessageParser(noop, noop, async (message) => {

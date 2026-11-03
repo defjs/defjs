@@ -61,7 +61,9 @@ Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，�
 
 ## 重連
 
-**行為變更：** SSE 重連是選擇性開啟。沒有 `withSSEReconnect(...)` 時，網路與串流讀取失敗**不會**重試（等同 `attempts: 0`）。傳 `withSSEReconnect({ attempts: 3 })`（或另一個審過的預算）才會重試那些失敗。正常 EOF 不會重試。Status／content-type 驗證、parser 限制、message transform 失敗、queue overflow、正常 EOF，對邏輯串流都是終端。
+在重連策略裡設定 `connectTimeoutMs`，把每次握手限制在從呼叫 Fetch 到回應標頭。它必須是有限正數；無效值會回傳 `REQ_OPTIONS_INVALID`。它沒有預設值，握手之後會被清掉，所以已經建立的 session 不受影響。逾時的握手會向平衡器回報 `NET_UNREACHABLE`，並沿用現有的重連預算；重試耗盡時以 `NET_TIMEOUT` 結束。
+
+**行為變更：** SSE 重連是選擇性開啟。沒有 `withSSEReconnect(...)` 時，網路與串流讀取失敗**不會**重試（等同 `attempts: 0`）。傳 `withSSEReconnect({ attempts: 3 })`（或另一個審過的預算）才會重試那些失敗。正常 EOF 不會重試。對於持續訂閱，觀察 `stream.closed`，並用最後的應用程式游標開始一次新操作；重連不會把 EOF 變成沒有盡頭的訂閱。Status／content-type 驗證、parser 限制、message transform 失敗、queue overflow、正常 EOF，對邏輯串流都是終端。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
@@ -69,7 +71,7 @@ Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，�
 
 重連選項會在 interceptor 或 Fetch 之前檢查：`attempts` 必須是非負的 safe integer；`delayMs` 必須是非負有限數；`maxDelayMs` 可以是非負有限數或正 `Infinity`，後者移除設定上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 必須是有限且為正；`jitter` 必須是有限且落在 0–1。無效的值會回傳 `REQ_OPTIONS_INVALID`，且不會開啟串流。
 
-最新剖析到的事件 ID 會在後續嘗試中成為 `Last-Event-ID`，在線上以 UTF-8 位元組編碼，包括非 ASCII 的 ID。空的 `id:` 會清掉這個標頭；含有 NUL 的 ID 會被忽略。除了這個標頭，後續嘗試重送的都是第一次嘗試時建好的請求：builder 與攔截器在每次呼叫中只會執行一次，因此請求方法、URL、標頭與主體維持不變。如果某個標頭的值在每次嘗試時都必須更新，例如短效權杖，請在傳給 `withSSEHandle` 的 Fetch 實作中處理；這個 Fetch 實作會在每次嘗試時執行一次。如果憑證仍然過期，串流已經開啟之後的非 2xx 重連握手會以 `RES_DECODE_FAILED` 結束它；狀態請看 `stream.open.response.status`。非 2xx 的初始握手則會在已宣告的錯誤 body 解碼成功時，回傳啟動期的 `HTTP_STATUS` fault。
+`id:` 欄位只更新緩衝區；只有處理到結尾空白行時才提交重連游標，即使該框架只有 ID、不會派送訊息也一樣。如果串流在該空白行之前結束，游標維持不變。已提交的 ID 會在後續嘗試中成為 `Last-Event-ID`，在線上以 UTF-8 位元組編碼，包括非 ASCII 的 ID。空的 `id:` 會在該空白行處清掉標頭；含有 NUL 的 ID 會被忽略。除了這個標頭，後續嘗試重送的都是第一次嘗試時建好的請求：builder 與攔截器在每次呼叫中只會執行一次，因此請求方法、URL、標頭與主體維持不變。如果某個標頭的值在每次嘗試時都必須更新，例如短效權杖，請在傳給 `withSSEHandle` 的 Fetch 實作中處理；這個 Fetch 實作會在每次嘗試時執行一次。如果憑證仍然過期，串流已經開啟之後的非 2xx 重連握手會以 `RES_DECODE_FAILED` 結束它；狀態請看 `stream.open.response.status`。非 2xx 的初始握手則會在已宣告的錯誤 body 解碼成功時，回傳啟動期的 `HTTP_STATUS` fault。
 
 重連只在安全時重送請求：
 
@@ -96,7 +98,7 @@ Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，�
   examples/sse/close-and-dispose.ts#example
 </include>
 
-終端 kinds（`closed.kind`）：`eof`、`aborted` 或 `error`。`error` 結果還帶 `closed.code`，也就是 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`RES_DECODE_FAILED` 或 `RES_MEDIA_TYPE_INVALID`。
+終端 kinds（`closed.kind`）：`eof`、`aborted` 或 `error`。`error` 結果還帶 `closed.code`，也就是 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`REQ_BUILD_FAILED`、`REQ_OPTIONS_INVALID`、`RES_DECODE_FAILED` 或 `RES_MEDIA_TYPE_INVALID`。`REQ_BUILD_FAILED` 與 `REQ_OPTIONS_INVALID` 表示串流已經打開之後，重連時挑選端點失敗。它們不會被改寫成 `NET_UNREACHABLE`。
 
 `close(reason)` 會 abort active attempt、關閉 queue、以 `aborted` settle，即使 reason 是 `TimeoutError` 也一樣。傳給操作的 `signal` 在串流開啟之後仍附著，並涵蓋整條連線。Abort 它通常會讓 iterator 結束並回報 `aborted`。若 abort reason 是 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會丟出 `ERR_TIMEOUT`，`closed` 則回報 `kind: 'error'` 且 `code: 'NET_TIMEOUT'`。Client 上沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器：
 

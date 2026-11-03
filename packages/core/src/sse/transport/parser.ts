@@ -107,6 +107,7 @@ export function createMessageParser(
   const decoder = new TextDecoder("utf-8", { ignoreBOM: true });
   let firstLine = true;
   let id = "";
+  let idPending = false;
   let event = "";
   let data = "";
   let dataBytes = 0;
@@ -119,6 +120,10 @@ export function createMessageParser(
         content = line.subarray(3);
     }
     if (content.length === 0) {
+      if (idPending) {
+        onId(id);
+        idPending = false;
+      }
       const message =
         data === "" ? undefined : { id, event, data: data.slice(0, -1) };
       event = "";
@@ -148,7 +153,7 @@ export function createMessageParser(
       case "id":
         if (!value.includes("\0")) {
           id = value;
-          onId(value);
+          idPending = true;
         }
         break;
       case "retry":

@@ -61,7 +61,9 @@ SSE `data`는 텍스트로 시작해요. `string` struct는 그 텍스트를 유
 
 ## 재연결
 
-**동작 변경:** SSE 재연결은 opt-in이에요. `withSSEReconnect(...)`가 없으면 네트워크와 스트림 읽기 실패는 재시도되지 **않아요** (`attempts: 0`과 같아요). 그런 실패를 재시도하려면 `withSSEReconnect({ attempts: 3 })`(또는 검토된 다른 예산)를 넘기세요. 정상 EOF는 재시도하지 않아요. status/content-type 검증, 파서 한도, 메시지 transform 실패, 큐 오버플로, 정상 EOF는 논리 스트림의 종료로 남아요.
+재연결 정책 안에 `connectTimeoutMs`를 두면 각 핸드셰이크를 Fetch 호출부터 응답 헤더까지로 제한해요. 유한한 양수여야 하고, 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. 기본값은 없고 핸드셰이크 뒤에 해제되므로, 이미 열린 세션에는 영향이 없어요. 시간이 다 된 핸드셰이크는 밸런서에 `NET_UNREACHABLE`을 보고하고 기존 재연결 예산을 따라요. 재시도를 모두 쓰면 `NET_TIMEOUT`으로 끝나요.
+
+**동작 변경:** SSE 재연결은 opt-in이에요. `withSSEReconnect(...)`가 없으면 네트워크와 스트림 읽기 실패는 재시도되지 **않아요** (`attempts: 0`과 같아요). 그런 실패를 재시도하려면 `withSSEReconnect({ attempts: 3 })`(또는 검토된 다른 예산)를 넘기세요. 정상 EOF는 재시도하지 않아요. 진행 중인 구독은 `stream.closed`를 관찰하고, 마지막 애플리케이션 커서로 새 작업을 시작하세요. 재연결은 EOF를 끝없는 구독으로 바꾸지 않아요. status/content-type 검증, 파서 한도, 메시지 transform 실패, 큐 오버플로, 정상 EOF는 논리 스트림의 종료로 남아요.
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
@@ -69,7 +71,7 @@ SSE `data`는 텍스트로 시작해요. `string` struct는 그 텍스트를 유
 
 재연결 옵션은 인터셉터나 Fetch보다 먼저 검사돼요. `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`는 유한하고 음이 아니어야 해요. `maxDelayMs`는 음이 아닌 유한한 수 또는 양의 `Infinity`일 수 있어요. `Infinity`는 설정한 상한만 없애며 최종 대기 시간에는 플랫폼의 `2_147_483_647` ms 한계가 그대로 적용돼요. `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 스트림을 열지 않고 `REQ_OPTIONS_INVALID`를 반환해요.
 
-마지막으로 파싱된 이벤트 ID는 다음 시도의 `Last-Event-ID`가 되고, ASCII가 아닌 ID를 포함해 와이어에서는 UTF-8 바이트로 인코딩돼요. 빈 `id:`는 헤더를 지우고, NUL이 들어 있는 ID는 무시해요. 그 헤더를 제외하면, 다음 시도에서는 첫 시도를 위해 만든 요청을 그대로 다시 보내요. builder와 인터셉터는 호출마다 한 번만 실행되므로 메서드, URL, 헤더, 본문은 그대로예요. 유효 기간이 짧은 토큰처럼 시도마다 갱신해야 하는 헤더는 `withSSEHandle`에 넘기는 Fetch에서 설정하세요. 이 Fetch는 시도마다 한 번 실행돼요. 그런데도 자격 증명이 만료되면, 스트림이 열린 뒤의 non-2xx 재연결 핸드셰이크는 `RES_DECODE_FAILED`로 끝내요. status는 `stream.open.response.status`를 보세요. 처음 핸드셰이크가 non-2xx이고 선언된 error body가 디코딩되면 시작 `HTTP_STATUS` fault를 반환해요.
+`id:` 필드는 버퍼만 갱신해요. 재연결 커서는 종료 빈 줄을 처리할 때만 확정되며, ID만 있고 메시지를 전달하지 않는 프레임도 같아요. 그 빈 줄 전에 스트림이 끝나면 커서는 바뀌지 않아요. 확정된 ID는 다음 시도의 `Last-Event-ID`가 되고, ASCII가 아닌 ID를 포함해 와이어에서는 UTF-8 바이트로 인코딩돼요. 빈 `id:`는 그 빈 줄에서 헤더를 지우고, NUL이 들어 있는 ID는 무시해요. 그 헤더를 제외하면, 다음 시도에서는 첫 시도를 위해 만든 요청을 그대로 다시 보내요. builder와 인터셉터는 호출마다 한 번만 실행되므로 메서드, URL, 헤더, 본문은 그대로예요. 유효 기간이 짧은 토큰처럼 시도마다 갱신해야 하는 헤더는 `withSSEHandle`에 넘기는 Fetch에서 설정하세요. 이 Fetch는 시도마다 한 번 실행돼요. 그런데도 자격 증명이 만료되면, 스트림이 열린 뒤의 non-2xx 재연결 핸드셰이크는 `RES_DECODE_FAILED`로 끝내요. status는 `stream.open.response.status`를 보세요. 처음 핸드셰이크가 non-2xx이고 선언된 error body가 디코딩되면 시작 `HTTP_STATUS` fault를 반환해요.
 
 재연결은 안전할 때만 요청을 다시 보내요.
 
@@ -96,7 +98,7 @@ SSE `data`는 텍스트로 시작해요. `string` struct는 그 텍스트를 유
   examples/sse/close-and-dispose.ts#example
 </include>
 
-종료 종류(`closed.kind`)는 `eof`, `aborted`, `error`예요. `error` 결과는 `closed.code`도 가지며, 이는 `EventStreamFaultCode`예요. `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID`예요.
+종료 종류(`closed.kind`)는 `eof`, `aborted`, `error`예요. `error` 결과는 `closed.code`도 가지며, 이는 `EventStreamFaultCode`예요. `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `REQ_BUILD_FAILED`, `REQ_OPTIONS_INVALID`, `RES_DECODE_FAILED`, `RES_MEDIA_TYPE_INVALID`예요. `REQ_BUILD_FAILED`와 `REQ_OPTIONS_INVALID`는 스트림이 열린 뒤 재연결 pick이 실패했다는 뜻이에요. `NET_UNREACHABLE`로 다시 쓰이지 않아요.
 
 `close(reason)`은 이유가 `TimeoutError`여도 활성 시도를 abort하고, 큐를 닫고, `aborted`로 정해요. 작업에 넘긴 `signal`은 스트림이 열린 뒤에도 붙어 있고 연결 전체를 덮어요. 그걸 abort하면 보통 이터레이터가 끝나고 `aborted`를 보고해요. abort 이유가 `TimeoutError`나 `ERR_TIMEOUT`이면(예를 들어 `AbortSignal.timeout(...)`) 이터레이터는 `ERR_TIMEOUT`을 던지고 `closed`는 `kind: 'error'`와 `code: 'NET_TIMEOUT'`을 보고해요. 클라이언트에 시작 전용 데드라인은 없어요. 그게 필요하면 앱이 `AbortController`를 만들고, 타이머에서 `new DOMException("...", "TimeoutError")`로 abort한 뒤, await가 돌아온 다음 타이머를 지워요.
 

@@ -9,7 +9,7 @@ description: 配置应用如何调用导入的 SDK 操作，与它们的 API 定
 
 SDK 的定义不绑定这个实例。浏览器、服务端请求和本地测试可以用不同的 client 调用同一个导出的操作。它们仍遵循同一份 Defjs 契约和兼容的 Core 版本。为你通过该 client 调用的操作配置它的服务地址。
 
-同一个 client 值可以传给多次操作。应用选择缓存和重试策略，并拥有自己启动的工作。HTTP 不会自动重试。流的重连需要显式启用。
+同一个 client 值可以传给多次操作。应用选择缓存和重试策略，并拥有自己启动的工作。HTTP 连接失败会做有限的安全方法故障转移，见下文。流的重连需要显式启用。
 
 工厂是一个函数，同时也是不带请求选项的 `Client`。不要把工厂传给 React 的 state setter：`setState(factory)` 会把它当成 updater 来调用。不要把它当作 Vue 的 `watch` 或 `computed` 源：那些 API 会调用函数。派生出的 client 值是普通对象。
 
@@ -30,6 +30,86 @@ Options 从左到右生效。Setter 会替换；`withInterceptors(...items)` 是
 </include>
 
 混着注册的 interceptor 在操作运行时按传输过滤；同类之间的相对顺序保留。
+
+## 多个端点 [#multiple-endpoints]
+
+`withEndpoint` 接受一个或多个 base URL。参数按顺序复制，同一字符串之后的重复会被丢掉。后一次 `withEndpoint` 替换整份列表，不会合并。这里不检查 URL。无效的 base 会使这次调用以 `REQ_BUILD_FAILED` 失败。空列表是合法值，并以同样方式失败，`cause` 为 [`ERR_NO_ENDPOINT`](/zh-Hans/api/core/err-no-endpoint)。
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+省略 `withEndpointBalancer` 时，每个 client 各自拥有一个 [`pickFirstBalancer`](/zh-Hans/api/core/pickfirstbalancer)。它停在第一个端点，直到连接失败（`NET_UNREACHABLE`），或收到状态为 502、503 或 504 的响应，然后前进，并绕回已配置的列表。带有 fault `code` 的结果会忽略自身状态：带 503 的 `NET_BODY_INCOMPLETE` 不会前进。其他响应、超时和取消也不会让它前进。
+
+HTTP 还会**默认做同一次调用内的故障转移**：`GET`、`HEAD`、`OPTIONS` 或 `TRACE` 上的连接失败，可以在返回最后一次尝试的 tuple 之前，再试一个尚未试过的端点。方法名比较不区分大小写。每一次尝试都会重新运行 `pick`、builder、整条 interceptor 链和传输；因此随端点变化的鉴权会看到新的 `baseEndpoint`。每次 pick 都有自己的、只调用一次的 `done`，之后的 pick 会排除这次调用里已经试过的端点。
+
+[`withEndpointFailover`](/zh-Hans/api/core/withendpointfailover) 替换这份策略，不会合并。省略的字段采用默认值。设 `attempts: 0` 或 `methods: []` 即关闭故障转移。`ReadableStream` 请求 body 从不故障转移。只有应用可以安全地发送两次时，才把非安全方法加进 `methods`：连接失败并不能证明服务器没有处理第一次请求。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+`retryOn: ["connect-failure", "gateway-error", "attempt-timeout"]` 还允许在 502/503/504 之后，以及所配置的 `attemptTimeoutMs` 之后，做同一次调用内的故障转移。502/503/504 响应在解码已声明的错误 body 时以 `RES_*` fault 失败，网关故障转移同样适用，例如对着 JSON struct 的 HTML 错误页。恢复为成功、或以 `EXT_*` 失败的 interceptor，不会触发网关故障转移。被丢弃的网关响应会先排空或取消，再继续。没有 `gateway-error` 时，那次失败的 HTTP 调用会被返回，并且 `pickFirstBalancer` 为下一次调用前进。HTTP 500 既不会在同一次调用内故障转移，也不会让 `pickFirstBalancer` 前进。
+
+同一次调用内的重试，在一个 client 的全部调用及其派生值之间共享一份 **Finagle/Linkerd 重试预算**：`percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`。每次原始调用存入额度；每一次额外的端点尝试取出额度。额度耗尽时返回当前这次尝试的结果，不再 pick。`retryBudget: false` 只去掉这一道预算限制。比例是 `[0, 1000]` 内的有限数，最小值是非负安全整数，TTL 是 `[1000, 60000]` ms 内的有限数。Finagle 的 token 缩放存入 1000 个 token，每次重试收取 `min(2147483647, floor(1000 / ratio))`（比例为零时不存入，并收取一个）。储备是 `minimum × floor(ttlMs / 1000) × charge`；与 Finagle 一样，TTL 按整秒计算。存入和取出都在十个固定的 `ttlMs / 10` 切片上惰性过期，最多早一个切片；没有定时器，按请求保存的历史也不会无界增长。大面积故障时，预算会让一部分本可以换台成功的调用直接失败，这正是它的用途：把重试控制在流量的约 20%。如果后端能承受全部重试，可以调高 `percentCanRetry`，或者设置 `retryBudget: false`。
+
+Defjs 默认开启安全方法的连接故障转移；Linkerd/Envoy 通常要求显式重试，而 gRPC 的透明重试取决于尚未开始处理的证据。Defjs 的 `gateway-error` **只表示不带 fault code 的 502/503/504**；Envoy 的同名条件还包括没有响应的断开和重置。
+
+没有默认期限，也没有每次尝试的超时。`attemptTimeoutMs` 是有限正数，从调用 Fetch 起，一直量到该次尝试读完 body 并完成解码；到期报告 `NET_TIMEOUT`。调用方的 `signal: AbortSignal.timeout(ms)` 覆盖**整次调用**、横跨所有尝试，到期之后不能引起故障转移。只有 `retryOn` 包含 `attempt-timeout` 时，尝试超时才允许故障转移；它本身不会让 `pickFirstBalancer` 前进。
+
+`navigator.onLine === false` 时，连接失败会以 `{ attempted: false }` 报告给均衡器，HTTP 也不会故障转移。只有严格的 `false` 才会抑制归因；没有 navigator，或 getter 抛错，都当作在线。这是离线提示，不是健康检查。
+
+配置 `pickFirstBalancer({ failbackMs: 30_000 })`，在离开第一个端点这么久之后探测它。第一个符合条件的 pick 去探测；同时进行的 pick 继续使用粘滞的回退端点。有响应、但不满足前进条件的探测会恢复第一个端点，失败的探测重新开始这段间隔，未归因的探测不改变状态。没有后台定时器。`shuffle: true` 时，「第一个」指打乱后的顺序。
+
+[`roundRobinBalancer`](/zh-Hans/api/core/roundrobinbalancer) 从随机起始下标沿列表走。可选的 `weights` 映射使用有限正数；未列出的候选权重为 1，不属于候选端点的权重会被忽略。权重 2 和 1 按较重、较轻、较重这样重复。浏览器按顺序列出的区域主端点和备份用默认值；服务器的对等节点用 round robin。
+
+### 健康过滤与 p2c [#health-filtering-and-p2c]
+
+`roundRobinBalancer()` 和 [`p2cBalancer`](/zh-Hans/api/core/p2cbalancer) 默认启用被动健康过滤。与粘滞的 pick-first 不同，它们在对等端点之间分配流量，因此已停止或持续失败的副本不能继续拿到平时的份额。`pickFirstBalancer()` 默认关闭健康过滤，除非传入一个 `outlierDetection` 对象。端点发现仍归应用所有。
+
+设 `outlierDetection: false` 即关闭过滤。对象（包括 `{}`）会启用它，省略的字段取默认值。其他值会使调用以 `REQ_OPTIONS_INVALID` 失败。未过滤的 round robin 省略 `done`；默认的 round robin 对每一次成功的 pick 都返回它。[`outlierDetection(child, options)`](/zh-Hans/api/core/outlierdetection) 用同一套实现包装自定义策略。显式包装内层工厂时，关掉该工厂自己的过滤。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+被动判据是**连续失败**，默认五次（与 Finagle 相同）。一次非失败会清掉这段连续计数；`attempted: false` 既不增加也不清零。设 `consecutiveFailures: 0` 即关闭被动熔断。健康过滤默认开启，与 Finagle 相同；Linkerd、Envoy 和 gRPC 的配置并不相同。
+
+默认 `NET_UNREACHABLE` 以及状态码大于等于 500 算作失败。作为 fault code 的 `NET_TIMEOUT` 和 `NET_BODY_INCOMPLETE` 优先于状态码，不算失败。健康过滤的 `isFailure` 可以自定义这套分类。抛出或非布尔结果会丢掉该样本。每一次故障转移尝试分别记账；离线造成的连接失败已经是未归因的。离线提示和 `failbackMs` 是 Defjs 面向浏览器的适配。
+
+惩罚沿用 Linkerd 的连续失败熔断器：`minPenaltyMs: 1000`、`maxPenaltyMs: 60000`、`jitterRatio: 0.5`。基数是 `min(minPenaltyMs × 2^level, maxPenaltyMs)`，从第 0 级开始。再加上一段均匀的正抖动，上限为 `base × jitterRatio`，结果再封顶在 `maxPenaltyMs`。与 Envoy 和 gRPC A50 不同，**没有驱逐配额，也没有最后一台主机的保护**：每个端点都可以熔断。没有结算网格、百分比判据、慢启动，也没有后台定时器。
+
+到期接纳**一次探测**。内层策略若改选另一台主机，这个名额仍然空着。探测在传输的 `end` 上判定：HTTP/SSE 的响应头，或 WebSocket 的 `open`，对应 Finagle 用 response future 恢复，以及 tower 的响应完成边界。一次非失败会恢复正常流量，并把惩罚重置到第一级；失败则把下一次惩罚加倍。未归因的结果只释放名额。如果没有 `end` 到达，改由 `done` 判定。之后的 `done` 是普通样本。熔断或探测期间的其他样本不改变计数器。无效的终态分类器只释放名额，不判定健康。没有把未完成探测视为成功的探测超时；一次成功的长连接握手会立刻恢复流量。pick-first 的 `failbackMs` 探测仍然独立。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+**主动检查**由应用探测并缓存结果；`isHealthy` 在 `pick` 时对每个端点同步读一次这份缓存。它必须开销很小，且不得执行 I/O。抛出或非布尔结果只拒绝这一次 pick，故障为 `REQ_OPTIONS_INVALID`。返回 true 从不会取消被动驱逐。若只用主动检查，设 `consecutiveFailures: 0`。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+如果过滤去掉了全部候选，均衡器先忽略主动检查、保留被动驱逐；若仍然为空，就使用当前这份原始列表。这是 Finagle 式 panic mode 的失败时放行，不是 Linkerd 的等待/503 策略。它绝不会引入另一个 client 列表里的端点。
+
+对等的服务器副本用 round robin；负载或延迟不一时用 p2c。p2c 默认抽取两个不同的候选，比较 tower PeakEwma 衰减后的 RTT ×（pending + 1），平局时偏向先抽到的那个。与 Envoy 和 gRPC A48 不同，抽样**不放回**。`choiceCount` 是不小于 2 的整数，上限为 10。默认值 `defaultRttMs: 30` 和 `decayMs: 10000` 来自 Linkerd。两者都是有限正数。空闲估计会向零衰减，以便探索。`load: "pending"` 比较进行中的尝试；只有抽到每一个候选时，才是全局最少连接。
+
+pending 在 Fetch 或 socket 构造之前立刻于 `start` 开始，并在 `end` 结束，而不是在后置 interceptor 之后，也不是在会话关闭之后。该边界上的 RTT 是 `Date.now() - startTime`，**所有传输和所有结果**都算，包括快速失败。没有合成惩罚，也没有 p2c 的 `isFailure`；快速失败的端点交给健康过滤。更大的样本会立刻替换估计；否则按 tower 的更新式 `old × exp(-Δt/decayMs) + sample × (1-exp(-Δt/decayMs))`。没有 `end` 的 `done` 只释放 pending，不产生 RTT 样本。从未 start 的尝试不改变 pending。
+
+这遵循 tower 的 `CompleteOnResponse`，并保留 Linkerd 把负载完成和最终健康分类分开的做法。Fetch 暴露响应头，WebSocket 暴露 `open`；Defjs 观察不到 Linkerd 的首个 body 帧边界，也观察不到 Envoy 的流级完成。响应头之后的 body 失败影响 `done`，不影响已经发出的 `end`。p2c 偏向抽到的较轻候选，不一定是全局最快的主机。
+
+SSE 和 WebSocket 在重连时重新选择，而不是在已经建立的连接里面。它们需要显式启用的重连策略接受 `connectTimeoutMs`，用来限制握手。健康的长连接不会在部署之后重新均衡。在服务器上设置连接的最大存活时间，促使客户端重连并再次 pick。SSE 的正常 EOF 是终止性的；持续的订阅应观察 `closed`，并发起一次带着应用游标的新调用。
+
+自定义均衡器是带有 `pick` 的对象。返回 error-first tuple。不要因为列表为空就抛出。
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+`pick`、可选的 `start`、可选的 `end` 和可选的 `done` 都同步运行。`start` 至多在 Fetch 或 socket 构造之前立刻运行一次。构建失败、interceptor 短路（包括 `makeResponse`）、被替换的 base，以及传输开始前的取消，都不会调用 `start` 或 `end`。`end(info)` 在 `start` 之后至多运行一次，在 Fetch 返回响应头或 socket 打开时同步运行，或者在传输于该边界之前失败时运行。HTTP/SSE 的响应头收到 `{ attempted: true, status }`，socket 打开收到 `{ attempted: true }`，响应前的失败收到该阶段的 fault，调用方取消收到 `{ attempted: false }`。健康过滤把这两个信号都转发给子策略。用它们做进行中的记账，而不是在 pick 时计数。拦截器在同一次尝试里多次调用 `next()` 时，多出的 Fetch 共用这次选台，所以 `start`、`end` 和 `done` 仍各至多运行一次；要换到别的端点，请用 `withEndpointFailover`。
+
+每一次成功的 pick，`done` 恰好运行一次，时机是 HTTP 调用结束之后，或物理上的流/socket 尝试结束之后。它与 `end` 共用 `EndpointDoneInfo` 的形状（没有 duration 字段），并保留最终的健康分类，包括响应头之后读取 body 失败或取消。所有钩子抛出的异常，以及被拒绝的 thenable，都会被接住。`pick` 返回的 promise 仍然无效；畸形的结果和抛出会变成 `REQ_BUILD_FAILED`，无效的内置配置会变成 `REQ_OPTIONS_INVALID`，在操作的调用点都不会抛出。不需要记账时就省略这些钩子。interceptor 看到的是选中的 `baseEndpoint`，而不是候选列表。
 
 ## 派生 client
 
@@ -83,19 +163,25 @@ Options 从左到右生效。Setter 会替换；`withInterceptors(...items)` 是
 
 ## 参考
 
-| Helper                                                                                                        | 作用                                                  |
-| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | 所有传输的绝对 base endpoint                          |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE 的静态默认 headers；builder headers 覆盖     |
-| `withHTTPHandle(fetch)`                                                                                       | 替换 HTTP 的 Fetch                                    |
-| `withSSEHandle(fetch)`                                                                                        | 替换 SSE 的 Fetch                                     |
-| `withWebSocketHandle(WebSocket)`                                                                              | 替换 WebSocket 构造函数                               |
-| `withInterceptors(...items)`                                                                                  | 追加混合 interceptor                                  |
-| `withQuerySerializer(fn)`                                                                                     | 把已经 alias 过的 query 对象编成 query string         |
-| `withCredentials(boolean)`                                                                                    | 为 true 时 HTTP/SSE 用 Fetch `credentials: 'include'` |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                             |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 配置项                                            |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 配置项                                      |
+| Helper                                                                                                        | 作用                                                                 |
+| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | 候选 base URL；后一次调用替换整份列表                                |
+| `withEndpointBalancer(balancer)`                                                                              | 替换均衡器；默认是 pick-first                                        |
+| `roundRobinBalancer(options?)`                                                                                | Round robin，可选权重，并默认做健康过滤                              |
+| `p2cBalancer(options?)`                                                                                       | tower 在响应边界上的 PeakEwma 或 pending 负载，并默认做健康过滤      |
+| `outlierDetection(child, options?)`                                                                           | Linkerd 熔断器，带 Finagle 的单次探测恢复和失败时放行                |
+| `OutlierDetectionOptions`                                                                                     | 被动阈值和同步的健康回调                                             |
+| `withEndpointFailover(options?)`                                                                              | 同一次调用内的 HTTP 故障转移；默认对安全方法在连接失败时多试一个端点 |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE 的静态默认 headers；builder headers 覆盖                    |
+| `withHTTPHandle(fetch)`                                                                                       | 替换 HTTP 的 Fetch                                                   |
+| `withSSEHandle(fetch)`                                                                                        | 替换 SSE 的 Fetch                                                    |
+| `withWebSocketHandle(WebSocket)`                                                                              | 替换 WebSocket 构造函数                                              |
+| `withInterceptors(...items)`                                                                                  | 追加混合 interceptor                                                 |
+| `withQuerySerializer(fn)`                                                                                     | 把已经 alias 过的 query 对象编成 query string                        |
+| `withCredentials(boolean)`                                                                                    | 为 true 时 HTTP/SSE 用 Fetch `credentials: 'include'`                |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF cookie → header                                            |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 配置项                                                           |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 配置项                                                     |
 
 ## 相关操作示例
 

@@ -11,10 +11,16 @@ export type {
   WebSocketHandle,
   WebSocketHandleConstructor,
 } from "./config";
-export type { ClientOption } from "./option";
+export type {
+  EndpointFailoverCondition,
+  EndpointFailoverOptions,
+  ClientOption,
+} from "./option";
 export {
   withCredentials,
   withEndpoint,
+  withEndpointBalancer,
+  withEndpointFailover,
   withHeaders,
   withHTTPHandle,
   withInterceptors,

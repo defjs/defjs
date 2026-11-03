@@ -1,12 +1,17 @@
 import type { BackoffConfig } from "./backoff";
 
-type ReconnectOptions = Partial<BackoffConfig> & { attempts?: number };
+type ReconnectOptions = Partial<BackoffConfig> & {
+  attempts?: number;
+  connectTimeoutMs?: number;
+};
 
 export function normalizeReconnectOptions(
   config: ReconnectOptions | undefined,
   defaults: BackoffConfig,
   transport: "SSE" | "WebSocket",
-): (BackoffConfig & { attempts: number }) | undefined {
+):
+  | (BackoffConfig & { attempts: number; connectTimeoutMs?: number })
+  | undefined {
   if (!config) return undefined;
 
   const attempts = config.attempts ?? 3;
@@ -25,7 +30,10 @@ export function normalizeReconnectOptions(
   if (maxDelayMs !== Number.POSITIVE_INFINITY)
     assertFiniteRange("maxDelayMs", maxDelayMs, 0);
 
-  return { attempts, delayMs, factor, jitter, maxDelayMs };
+  const connectTimeoutMs = config.connectTimeoutMs;
+  if (connectTimeoutMs !== undefined)
+    assertFiniteRange("connectTimeoutMs", connectTimeoutMs, Number.MIN_VALUE);
+  return { attempts, delayMs, factor, jitter, maxDelayMs, connectTimeoutMs };
 
   function assertFiniteRange(
     field: string,

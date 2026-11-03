@@ -9,7 +9,7 @@ description: 애플리케이션이 import한 SDK 작업을 어떻게 호출할�
 
 SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요청, 로컬 테스트가 서로 다른 클라이언트로 같은 export된 작업을 쓸 수 있어요. 모두 같은 Defjs 계약과 호환되는 Core 버전을 따라요. 그 클라이언트로 호출하는 작업에 맞게 각 클라이언트의 서비스 주소를 구성해요.
 
-같은 클라이언트 값을 여러 작업에 넘길 수 있어요. 앱이 캐시와 재시도 정책을 고르고, 시작한 작업을 소유해요. HTTP는 자동으로 재시도하지 않아요. 스트림 재연결은 opt-in이에요.
+같은 클라이언트 값을 여러 작업에 넘길 수 있어요. 앱이 캐시와 재시도 정책을 고르고, 시작한 작업을 소유해요. HTTP 연결 실패에는 아래에서 설명하는, 안전한 메서드로 제한된 failover가 있어요. 스트림 재연결은 opt-in이에요.
 
 팩토리는 함수이면서 요청 옵션이 없는 `Client`이기도 해요. 팩토리를 React state setter에 넘기지 마세요. `setState(factory)`는 updater로 호출해요. Vue `watch`나 `computed`의 소스로 쓰지 마세요. 그 API는 함수를 호출해요. 파생된 클라이언트 값은 평범한 객체예요.
 
@@ -30,6 +30,86 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
 </include>
 
 섞인 interceptor는 작업이 돌 때 전송별로 걸러지고, 선택된 kind 사이의 상대 순서는 유지돼요.
+
+## 여러 endpoint [#multiple-endpoints]
+
+`withEndpoint`는 base URL을 하나 이상 받아요. 인자는 순서대로 복사되고, 같은 문자열의 나중 복사는 버려져요. 나중 `withEndpoint`는 목록을 바꾸고, 합치지 않아요. 여기서는 URL을 검사하지 않아요. 잘못된 base는 호출을 `REQ_BUILD_FAILED`로 실패시켜요. 빈 목록은 유효한 값이고, 같은 방식으로 실패하며 `cause`는 [`ERR_NO_ENDPOINT`](/ko-KR/api/core/err-no-endpoint)예요.
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+`withEndpointBalancer`를 생략하면 클라이언트마다 자기 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 가져요. 연결 실패(`NET_UNREACHABLE`)나 상태 502, 503, 504 응답이 나올 때까지 첫 endpoint에 머물고, 그다음 진행해서 설정된 목록을 한 바퀴 돌아요. fault `code`가 있는 결과는 status를 무시해요. 503이 붙은 `NET_BODY_INCOMPLETE`는 진행하지 않아요. 그 밖의 응답, 타임아웃, 취소는 진행하지 않아요.
+
+HTTP는 **같은 호출 안의 failover**도 기본으로 켜요. `GET`, `HEAD`, `OPTIONS`, `TRACE`의 연결 실패는 마지막 시도의 튜플을 돌려주기 전에, 아직 시도하지 않은 endpoint를 하나 더 시도할 수 있어요. 메서드 비교는 대소문자를 가리지 않아요. 모든 시도는 `pick`, builder, interceptor 체인 전체, 전송을 다시 실행해요. 그래서 endpoint별 인증은 새 `baseEndpoint`를 봐요. pick마다 한 번만 호출되는 `done`이 있고, 나중 pick은 이 호출에서 이미 시도한 endpoint를 빼요.
+
+[`withEndpointFailover`](/ko-KR/api/core/withendpointfailover)는 그 정책을 바꾸며, 합치지 않아요. 생략한 필드는 기본값을 써요. `attempts: 0` 또는 `methods: []`로 failover를 꺼요. `ReadableStream` 요청 body는 failover하지 않아요. 안전하지 않은 메서드를 `methods`에 넣는 것은, 애플리케이션이 그것을 두 번 보내도 안전할 때뿐이에요. 연결 실패는 서버가 첫 요청에 따라 동작하지 않았음을 증명할 수 없어요.
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+`retryOn: ["connect-failure", "gateway-error", "attempt-timeout"]`은 502/503/504 뒤와, 설정한 `attemptTimeoutMs` 뒤에도 같은 호출의 failover를 허용해요. 게이트웨이 failover는 502/503/504 응답이 선언된 error body 디코딩에 실패해 `RES_*` fault가 될 때도 적용돼요. 예를 들어 JSON struct에 대한 HTML 오류 페이지예요. 성공으로 회복한 interceptor나 `EXT_*`로 실패한 interceptor는 게이트웨이 failover를 일으키지 않아요. 버리는 게이트웨이 응답은 진행하기 전에 drain하거나 취소해요. `gateway-error`가 없으면 그 실패한 HTTP 호출을 돌려주고, `pickFirstBalancer`는 다음 호출에서 진행해요. HTTP 500은 같은 호출 안에서 failover하지도 않고 `pickFirstBalancer`를 다음으로 넘기지도 않아요.
+
+같은 호출의 재시도는 한 클라이언트의 모든 호출과 파생 값에 걸쳐 **Finagle/Linkerd 재시도 예산**을 공유해요. `percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`이에요. 원래 호출은 크레딧을 넣고, 추가 endpoint 시도는 그것을 꺼내요. 다 쓰면 다른 pick 없이 현재 시도의 결과를 돌려줘요. `retryBudget: false`는 이 예산 한도만 없애요. 비율은 `[0, 1000]`의 유한한 값이고, 최솟값은 음이 아닌 안전한 정수이며, TTL은 `[1000, 60000]` ms의 유한한 값이에요. Finagle 토큰 환산은 1000 토큰을 넣고, 재시도마다 `min(2147483647, floor(1000 / ratio))`를 청구해요(비율 0은 아무것도 넣지 않고 1을 청구해요). 예비는 `minimum × floor(ttlMs / 1000) × charge`예요. Finagle처럼 TTL은 정수 초로 세요. 크레딧과 데빗은 모두 고정된 `ttlMs / 10` 슬라이스 열 개에서 지연해서 만료되고, 최대 한 슬라이스 일찍 만료돼요. 타이머도, 한계 없이 자라는 요청별 기록도 없어요. 넓은 장애에서는 다른 엔드포인트라면 성공했을 호출도 예산 때문에 실패할 수 있어요. 재시도를 트래픽의 약 20%로 묶는 것이 예산의 목적이에요. 백엔드가 모든 재시도를 감당할 수 있다면 `percentCanRetry`를 높이거나 `retryBudget: false`를 지정하세요.
+
+Defjs는 안전한 메서드의 연결 failover를 기본으로 켜 둬요. Linkerd/Envoy는 보통 명시적 재시도를 요구하고, gRPC의 투명 재시도는 처리되지 않았다는 증거에 의존해요. Defjs의 `gateway-error`는 **code가 없는 502/503/504만**을 뜻해요. 같은 이름의 Envoy 조건은 응답 없는 끊김과 리셋도 포함해요.
+
+기본 데드라인도 시도마다의 타임아웃도 없어요. `attemptTimeoutMs`는 유한한 양수이고, Fetch 호출부터 그 시도의 body 읽기와 디코딩까지를 재요. 만료되면 `NET_TIMEOUT`을 보고해요. 호출자의 `signal: AbortSignal.timeout(ms)`는 모든 시도를 가로지르는 **호출 전체**를 덮고, 만료된 뒤에 failover를 일으킬 수 없어요. 시도 타임아웃이 failover를 허용하는 것은 `retryOn`에 `attempt-timeout`이 있을 때뿐이에요. 그 자체로 `pickFirstBalancer`를 진행시키지는 않아요.
+
+`navigator.onLine === false`이면 연결 실패는 밸런서에 `{ attempted: false }`로 보고되고 HTTP는 failover하지 않아요. 엄격한 `false`만 시도했다는 귀속을 막아요. navigator가 없거나 getter가 throw하면 온라인으로 봐요. 이것은 오프라인 힌트이지, 헬스 체크가 아니에요.
+
+`pickFirstBalancer({ failbackMs: 30_000 })`를 설정하면 첫 endpoint에서 그만큼 떠나 있는 뒤 첫 endpoint를 탐색해요. 첫 번째 대상이 되는 pick이 탐색하고, 동시에 일어나는 pick은 붙어 있는 fallback을 계속 써요. 응답한 탐색이 진행 조건을 만족하지 않으면 첫 endpoint로 되돌리고, 실패한 탐색은 간격을 다시 시작하고, 귀속되지 않은 탐색은 상태를 그대로 둬요. 백그라운드 타이머는 돌지 않아요. `shuffle: true`이면 “첫”은 섞인 순서를 말해요.
+
+[`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer)는 무작위 시작 인덱스에서 목록을 돌아요. 선택인 `weights` 맵은 유한한 양수를 써요. 목록에 없는 후보의 가중치는 1이고, 후보가 아닌 가중치는 무시돼요. 가중치 2와 1은 더 무거운 쪽, 더 가벼운 쪽, 더 무거운 쪽으로 반복돼요. 순서가 있는 리전 primary/백업을 쓰는 브라우저는 기본을 쓰고, 동등한 peer를 쓰는 서버는 라운드 로빈을 쓰세요.
+
+### 헬스 필터링과 p2c [#health-filtering-and-p2c]
+
+`roundRobinBalancer()`와 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)는 기본적으로 수동 헬스 필터링을 켜요. 붙어 있는 pick-first와 달리 피어 사이에 트래픽을 나누므로, 멈췄거나 계속 실패하는 레플리카가 원래 몫을 계속 받으면 안 돼요. `pickFirstBalancer()`는 `outlierDetection` 객체를 넘기지 않으면 헬스 필터링을 꺼 둬요. endpoint 발견은 여전히 애플리케이션이 소유해요.
+
+`outlierDetection: false`로 필터링을 꺼요. `{}`를 포함한 객체는 생략한 필드에 기본값을 써서 켜요. 그 밖의 값은 호출을 `REQ_OPTIONS_INVALID`로 실패시켜요. 필터하지 않는 라운드 로빈은 `done`을 생략하고, 기본 라운드 로빈은 성공한 pick마다 그것을 돌려줘요. [`outlierDetection(child, options)`](/ko-KR/api/core/outlierdetection)는 같은 구현으로 사용자 지정 전략을 감싸요. 명시적으로 감쌀 때는 안쪽 팩토리의 필터를 끄세요.
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+수동 기준은 **연속 실패**이고, 기본은 다섯이에요(Finagle과 같아요). 실패가 아닌 결과는 연속을 초기화해요. `attempted: false`는 올리지도 초기화하지도 않아요. 수동 차단을 끄려면 `consecutiveFailures: 0`을 설정하세요. 헬스 필터링은 Finagle처럼 기본으로 켜져 있어요. Linkerd, Envoy, gRPC 구성은 이와 달라요.
+
+기본으로 `NET_UNREACHABLE`과 500 이상 status가 실패로 집계돼요. code가 있는 `NET_TIMEOUT`과 `NET_BODY_INCOMPLETE`는 status보다 우선하고 실패로 세지 않아요. 헬스 필터링의 `isFailure`로 이 분류를 바꿀 수 있어요. throw되거나 boolean이 아닌 결과는 그 샘플을 버려요. failover 시도는 각각 따로 집계돼요. 오프라인 연결 실패는 이미 귀속이 없어요. 오프라인 힌트와 `failbackMs`는 브라우저를 향한 Defjs의 적응이에요.
+
+페널티는 Linkerd의 연속 실패 breaker를 따라요. `minPenaltyMs: 1000`, `maxPenaltyMs: 60000`, `jitterRatio: 0.5`예요. 기준값은 `min(minPenaltyMs × 2^level, maxPenaltyMs)`이고, 레벨 0에서 시작해요. `base × jitterRatio`까지의 균등한 양의 jitter를 더하고, `maxPenaltyMs`로 막아요. Envoy와 gRPC A50과 달리 **방출 할당량도 마지막 호스트 보호도 없어요**. 모든 endpoint가 차단될 수 있어요. 정산 격자도, 비율 기준도, 슬로 스타트도, 백그라운드 타이머도 없어요.
+
+만료는 **탐색 하나**를 들여요. 다른 호스트를 고르는 안쪽 전략은 그 칸을 비워 둬요. 탐색은 전송 `end`에서 결정돼요. HTTP/SSE 응답 헤더 또는 WebSocket `open`이고, Finagle의 response future 회복과 tower의 응답 완료 경계를 따라요. 실패가 아닌 결과는 보통 트래픽으로 되돌리고 페널티를 첫 레벨로 초기화해요. 실패는 다음 페널티를 두 배로 해요. 귀속되지 않은 결과는 칸을 풀어요. `end`가 오지 않으면 대신 `done`이 결정해요. 그 뒤의 `done`은 보통 샘플이에요. 차단된 동안이나 탐색 중의 다른 샘플은 카운터를 바꾸지 않아요. 잘못된 종료 분류자는 헬스를 결정하지 않고 칸을 풀어요. 성공으로 가정하는 탐색 타임아웃은 없어요. 오래 유지되는 성공한 핸드셰이크는 즉시 트래픽을 되돌려요. pick-first의 `failbackMs` 탐색은 그대로 독립이에요.
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+**능동 검사**에서는 애플리케이션이 탐색하고 결과를 캐시해요. `isHealthy`는 `pick` 때 endpoint마다 그 캐시를 동기적으로 한 번 읽어요. 싸야 하고 I/O를 하면 안 돼요. throw되거나 boolean이 아닌 결과는 그 pick만 `REQ_OPTIONS_INVALID`로 거부해요. true를 돌려도 수동 방출을 덮지 않아요. 능동 검사만 쓰려면 `consecutiveFailures: 0`을 설정하세요.
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+필터링이 모든 후보를 빼면, 밸런서는 먼저 수동 방출은 유지한 채 능동 검사를 무시해요. 그래도 비어 있으면 원래의 현재 목록을 써요. 이것은 Finagle식 panic mode의 fail-open이고, Linkerd의 대기/503 정책이 아니에요. 다른 클라이언트의 목록에서 endpoint를 들여오지 않아요.
+
+같은 서버 레플리카에는 라운드 로빈을, 부하나 지연이 달라질 때는 p2c를 고르세요. p2c는 기본적으로 서로 다른 후보 둘을 표본으로 뽑고, tower PeakEwma의 감쇠하는 RTT × (pending + 1)을 비교하며, 동점이면 먼저 뽑힌 쪽을 택해요. Envoy와 gRPC A48과 달리 **비복원 추출**이에요. `choiceCount`는 2 이상의 정수이고 상한은 10이에요. 기본 `defaultRttMs: 30`과 `decayMs: 10000`은 Linkerd에서 왔어요. 둘 다 유한하고 양수예요. 유휴 추정은 탐색을 위해 0으로 감쇠해요. `load: "pending"`은 진행 중인 시도를 비교하고, 모든 후보를 표본할 때만 전역 최소 연결이에요.
+
+pending은 Fetch나 소켓 생성 직전의 `start`에서 시작하고, post-interceptor 뒤나 세션이 닫힌 뒤가 아니라 `end`에서 끝나요. RTT는 그 경계의 `Date.now() - startTime`이고, 빠른 실패를 포함해 **모든 전송과 결과**에 적용돼요. 합성 페널티도 p2c `isFailure`도 없어요. 빨리 실패하는 endpoint는 헬스 필터링이 다뤄요. 더 큰 샘플은 추정을 즉시 바꿔요. 그렇지 않으면 tower의 갱신은 `old × exp(-Δt/decayMs) + sample × (1-exp(-Δt/decayMs))`예요. `end`가 없는 `done`은 RTT 샘플 없이 pending을 풀어요. 시작하지 않은 시도는 pending을 바꾸지 않아요.
+
+이것은 tower `CompleteOnResponse`를 따르고, 부하 완료와 최종 헬스 분류를 나누는 Linkerd의 분리를 함께 써요. Fetch는 헤더를 드러내고 WebSocket은 `open`을 드러내요. Defjs는 Linkerd의 첫 body 프레임 경계나 Envoy의 스트림 단위 완료를 관찰할 수 없어요. 헤더 뒤의 응답 body 실패는 `done`에 영향을 주고, 이미 낸 `end`에는 영향을 주지 않아요. p2c는 더 가벼운 표본 후보를 택할 뿐, 반드시 전역에서 가장 빠른 호스트는 아니에요.
+
+SSE와 WebSocket은 이미 열린 연결 안이 아니라 재연결할 때 다시 골라요. opt-in 재연결 정책은 핸드셰이크를 제한하는 `connectTimeoutMs`를 받아요. 건강한 장기 연결은 배포 뒤에 다시 균형을 맞추지 않아요. 클라이언트가 재연결해서 다시 고르도록 서버에 최대 연결 수명을 두세요. SSE의 정상 EOF는 종료예요. 진행 중인 구독은 `closed`를 관찰하고, 애플리케이션 커서를 담은 새 호출을 만드세요.
+
+사용자 지정 밸런서는 `pick`이 있는 객체예요. error-first 튜플을 돌려주세요. 목록이 비었다고 throw하지 마세요.
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+`pick`, 선택인 `start`, 선택인 `end`, 선택인 `done`은 동기적이에요. `start`는 Fetch나 소켓 생성 직전에 많아야 한 번 실행돼요. 빌드 실패, interceptor short-circuit(`makeResponse` 포함), 바뀐 base, 전송 전 취소는 `start`도 `end`도 호출하지 않아요. `end(info)`는 `start` 뒤에 많아야 한 번, Fetch가 헤더를 돌려주거나 소켓이 열릴 때, 또는 그 경계 전에 전송이 실패할 때 동기적으로 실행돼요. HTTP/SSE 헤더에는 `{ attempted: true, status }`, 소켓 open에는 `{ attempted: true }`, 응답 전 실패에는 그 단계의 fault, 호출자 취소에는 `{ attempted: false }`를 받아요. 헬스 필터링은 두 신호를 자식에게 전달해요. 선택할 때 세지 말고, 진행 중인 집계에 쓰세요. 인터셉터가 한 시도 안에서 `next()`를 여러 번 호출해도 추가 Fetch는 같은 선택을 함께 쓰므로 `start`, `end`, `done`은 각각 많아야 한 번이에요. 다른 엔드포인트를 시도하려면 `withEndpointFailover`를 쓰세요.
+
+`done`은 성공한 pick마다 정확히 한 번, HTTP 호출이나 물리적 스트림/소켓 시도가 끝난 뒤에 실행돼요. `end`와 `EndpointDoneInfo` 모양을 공유하고(duration 필드는 없어요), 헤더 뒤의 body 읽기 실패나 취소를 포함한 최종 헬스 분류를 유지해요. 모든 훅의 throw와 thenable rejection은 가둬져요. `pick`이 돌려준 promise는 그래도 잘못됐어요. 잘못된 결과와 throw는 `REQ_BUILD_FAILED`가 되고, 잘못된 내장 구성은 `REQ_OPTIONS_INVALID`가 되며, 어느 쪽도 작업 호출 지점에서는 throw하지 않아요. 집계가 필요 없으면 훅을 생략하세요. interceptor는 고른 `baseEndpoint`만 보고, 후보 목록은 보지 않아요.
 
 ## 클라이언트 파생하기
 
@@ -83,19 +163,25 @@ SDK 정의는 이 인스턴스에 묶이지 않아요. 브라우저, 서버 요�
 
 ## 참고
 
-| Helper                                                                                                        | 효과                                                       |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `withEndpoint(url)`                                                                                           | 모든 전송의 절대 base endpoint                             |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE의 정적 기본 헤더. builder 헤더가 덮어써요         |
-| `withHTTPHandle(fetch)`                                                                                       | HTTP의 Fetch를 바꿔요                                      |
-| `withSSEHandle(fetch)`                                                                                        | SSE의 Fetch를 바꿔요                                       |
-| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket 생성자를 바꿔요                                  |
-| `withInterceptors(...items)`                                                                                  | 섞인 interceptor를 추가해요                                |
-| `withQuerySerializer(fn)`                                                                                     | 이미 alias가 적용된 query 객체를 query 문자열로 인코딩해요 |
-| `withCredentials(boolean)`                                                                                    | true이면 HTTP/SSE에서 Fetch `credentials: 'include'`       |
-| `withXSRF(options?)`                                                                                          | HTTP XSRF 쿠키 → 헤더                                      |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 설정                                                   |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 설정                                             |
+| Helper                                                                                                        | 효과                                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | 후보 base URL. 나중 호출이 목록을 바꿔요                                                            |
+| `withEndpointBalancer(balancer)`                                                                              | 밸런서를 바꿔요. 기본은 pick-first예요                                                              |
+| `roundRobinBalancer(options?)`                                                                                | 선택 가중치와 기본 헬스 필터링이 있는 라운드 로빈                                                   |
+| `p2cBalancer(options?)`                                                                                       | tower 응답 경계의 PeakEwma 또는 pending 부하. 기본 헬스 필터링이 있어요                             |
+| `outlierDetection(child, options?)`                                                                           | Finagle 단일 탐색 회복과 fail-open이 있는 Linkerd breaker                                           |
+| `OutlierDetectionOptions`                                                                                     | 수동 임계값과 동기 헬스 콜백                                                                        |
+| `withEndpointFailover(options?)`                                                                              | 같은 호출 안의 HTTP failover예요. 기본은 안전한 메서드의 연결 실패 때 엔드포인트를 하나 더 시도해요 |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP/SSE의 정적 기본 헤더. builder 헤더가 덮어써요                                                  |
+| `withHTTPHandle(fetch)`                                                                                       | HTTP의 Fetch를 바꿔요                                                                               |
+| `withSSEHandle(fetch)`                                                                                        | SSE의 Fetch를 바꿔요                                                                                |
+| `withWebSocketHandle(WebSocket)`                                                                              | WebSocket 생성자를 바꿔요                                                                           |
+| `withInterceptors(...items)`                                                                                  | 섞인 interceptor를 추가해요                                                                         |
+| `withQuerySerializer(fn)`                                                                                     | 이미 alias가 적용된 query 객체를 query 문자열로 인코딩해요                                          |
+| `withCredentials(boolean)`                                                                                    | true이면 HTTP/SSE에서 Fetch `credentials: 'include'`                                                |
+| `withXSRF(options?)`                                                                                          | HTTP XSRF 쿠키 → 헤더                                                                               |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 설정                                                                                            |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 설정                                                                                      |
 
 ## 관련 레시피
 

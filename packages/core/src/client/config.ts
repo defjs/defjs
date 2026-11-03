@@ -1,3 +1,6 @@
+import type { EndpointFailoverOptions } from "./option";
+import type { EndpointBalancer } from "../balancer/balancer";
+import { pickFirstBalancer } from "../balancer/balancer";
 import type { Interceptor } from "../interceptor/interceptor";
 import type { HttpRequest } from "../internal/http_request";
 
@@ -103,6 +106,8 @@ export interface ClientWebSocketOptions {
   protocols?: readonly string[];
   /** Automatic reconnect policy after unexpected closes. */
   reconnect?: {
+    /** Positive finite handshake timeout in milliseconds; unset by default. Stops at response headers (SSE) or open (WebSocket). */
+    connectTimeoutMs?: number;
     /** Retries per outage; a successful open resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
     attempts?: number;
     /** Initial backoff delay in milliseconds. */
@@ -129,7 +134,7 @@ export interface ClientWebSocketOptions {
  *
  * - **handle** — Fetch implementation that opens the stream. The default resolves `globalThis.fetch` on each attempt, including replacements installed after import. Every SSE handle receives a `Request`. Missing global Fetch fails default execution with `ENV_UNSUPPORTED`; a custom handle remains usable.
  * - **onInvalidEvent** — Called when an event has no matching struct and no `default` struct (`'missing-struct'`), or its data fails validation (`'validation-failed'`). The event is skipped. An error thrown by the hook does not close the stream.
- * - **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. Reconnect sends the latest ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it and an ID containing NUL is ignored.
+ * - **reconnect** — Opt-in. Without it the stream never reconnects. `attempts` defaults to **3** per outage; `attempts: 0` disables retry. A successful handshake resets the budget, callback `attempt`, and backoff exponent. `delayMs` is the first base delay, 1000 by default, and a server-sent `retry:` value replaces it. `factor` defaults to 1. `jitter` is a 0–1 multiplicative factor and defaults to 0. `maxDelayMs` caps the final delay after jitter and rounding; without a configured cap, the platform limit of `2_147_483_647` ms still applies. A zero base stays zero; valid-number overflow saturates at the caps. Without `shouldReconnect` only `GET`, `HEAD`, `OPTIONS`, `PUT`, and `DELETE` reconnect; with it, its result decides for every method and its context carries `method`. A `ReadableStream` request body never reconnects. An `id:` field updates a buffer; the reconnect cursor is committed only at the terminating blank line, even for an ID-only frame with no dispatched message. A stream ending before that blank line leaves the cursor unchanged. Reconnect sends the committed ID as UTF-8 bytes in `Last-Event-ID`; an empty ID clears it at that blank line and an ID containing NUL is ignored.
  *
  * Reconnect options are validated before interceptors or Fetch: `attempts` is a non-negative safe integer; `delayMs` must be finite and non-negative; `maxDelayMs` must be a non-negative finite number or positive `Infinity`, which removes the configured cap but not the platform limit of `2_147_483_647` ms; `factor` is finite and positive; `jitter` is finite and within 0–1. Invalid values return `REQ_OPTIONS_INVALID` when the operation runs.
  *
@@ -149,6 +154,8 @@ export interface ClientSSEOptions {
   }) => unknown;
   /** Automatic reconnect policy after stream failures. */
   reconnect?: {
+    /** Positive finite handshake timeout in milliseconds; unset by default. Stops at response headers (SSE) or open (WebSocket). */
+    connectTimeoutMs?: number;
     /** Retries per outage; a successful handshake resets the budget. Non-negative safe integer; defaults to 3. `0` disables. */
     attempts?: number;
     /** Initial backoff delay in milliseconds, finite and non-negative. Defaults to 1000. */
@@ -190,8 +197,11 @@ export interface ClientSSEConfig extends ClientSSEOptions {
 
 /** User-facing HTTP client options before defaults are applied. */
 export interface HttpClientOptions {
-  /** Base URL prepended to relative request paths. */
-  endpoint: string;
+  /**
+   * Candidate base URLs. `withEndpoint` copies them and drops later duplicates.
+   * An empty list is legal and fails at execution with `REQ_BUILD_FAILED`.
+   */
+  endpoints: readonly string[];
   /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport overrides; the default resolves global `fetch` on each call. */
@@ -231,8 +241,11 @@ export interface ClientOptions extends HttpClientOptions {
 
 /** Resolved HTTP client config after defaults and options are applied. */
 export interface HttpClientConfig {
-  /** Base URL prepended to relative request paths. */
-  endpoint: string;
+  /**
+   * Candidate base URLs in first-seen order. Empty until `withEndpoint` runs.
+   * The balancer picks one per call.
+   */
+  endpoints: readonly string[];
   /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport with a required fetch handle. */
@@ -261,11 +274,15 @@ export interface HttpClientConfig {
  *
  * The snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.
  *
- * Before any option applies, `endpoint` is `''`, `interceptors` is empty, and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.
+ * Before any option applies, `endpoints` is `[]`, `endpointBalancer` is a new `pickFirstBalancer()`, `interceptors` is empty, and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.
  *
  * @group client
  */
 export interface ClientConfig extends HttpClientConfig {
+  /** Selects one candidate per call. Defaults to a fresh {@link pickFirstBalancer}. */
+  endpointBalancer: EndpointBalancer;
+  /** HTTP same-call failover settings. Defaults to one connection-failure retry for safe methods. */
+  endpointFailover: EndpointFailoverOptions;
   /** Resolved SSE configuration. */
   sse: ClientSSEConfig;
   /** Resolved WebSocket configuration. */
@@ -309,7 +326,7 @@ export const DEFAULT_SSE_OPTIONS: ClientSSEConfig = {
 
 export function createHttpClientConfig(): HttpClientConfig {
   return {
-    endpoint: "",
+    endpoints: [],
     headers: undefined,
     http: { handle: DEFAULT_HTTP_OPTIONS.handle },
     interceptors: [],
@@ -322,7 +339,13 @@ export function createHttpClientConfig(): HttpClientConfig {
 export function createClientConfig(): ClientConfig {
   const http = createHttpClientConfig();
   return {
-    endpoint: http.endpoint,
+    endpoints: http.endpoints,
+    endpointBalancer: pickFirstBalancer(),
+    endpointFailover: {
+      attempts: 1,
+      retryOn: ["connect-failure"],
+      methods: ["GET", "HEAD", "OPTIONS", "TRACE"],
+    },
     headers: http.headers,
     http: http.http,
     interceptors: http.interceptors,

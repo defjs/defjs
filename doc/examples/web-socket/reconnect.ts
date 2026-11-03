@@ -11,6 +11,7 @@ const client = createClient(
   withEndpoint("https://quotes.example.com"),
   withWebSocketReconnect({
     attempts: 3,
+    connectTimeoutMs: 5_000,
     delayMs: 500,
     factor: 2,
     maxDelayMs: 10_000,

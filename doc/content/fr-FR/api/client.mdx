@@ -26,7 +26,19 @@ Tous les helpers renvoient `ClientOption`. Un appel ultérieur remplace un appel
 
 <ApiSignature name="withEndpoint" />
 
-Définit l’URL de base préfixée aux chemins relatifs.
+Copie les URLs de base candidates dans l’ordre de première apparition et écarte une copie ultérieure de la même chaîne. Un `withEndpoint` ultérieur remplace la liste. Il ne vérifie pas les URLs et ne remplace pas l’équilibreur. Une liste vide est admise et fait échouer l’appel avec `REQ_BUILD_FAILED`.
+
+### withEndpointBalancer()
+
+<ApiSignature name="withEndpointBalancer" />
+
+Remplace l’équilibreur utilisé pour les appels suivants. L’objet est conservé par référence. Sans cette option, chaque client reçoit son propre `pickFirstBalancer()`.
+
+### withEndpointFailover()
+
+<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
+
+Contrôle le basculement HTTP au sein d’un appel. Un budget de retry Finagle/Linkerd partagé par le client vaut par défaut 20 % plus une réserve de 10 retries par seconde sur un TTL de 10 s ; `retryBudget: false` désactive cette limite. Les crédits et les débits expirent paresseusement en dix tranches de TTL/10. Le défaut est une tentative supplémentaire en cas d’échec de connexion pour GET, HEAD, OPTIONS et TRACE. `attempts: 0` ou `methods: []` le désactive. Une option ultérieure remplace la politique ; les champs omis utilisent les défauts. Les corps de requête en flux ne sont jamais rejoués. `attemptTimeoutMs` couvre Fetch, la lecture du corps et le décodage d’une tentative, tandis que le signal de l’appelant couvre toutes les tentatives. Voir [Plusieurs endpoints](/fr-FR/docs/client#multiple-endpoints).
 
 ### withInterceptors()
 
@@ -169,6 +181,8 @@ La reconnexion est opt-in pour les deux transports : sans `withSSEReconnect` / `
 | `jitter`     | `0`             | `0`             |
 | `maxDelayMs` | pas de plafond  | `30000`         |
 
+`connectTimeoutMs` est facultatif et doit être fini et positif. Il borne Fetch jusqu’aux en-têtes de réponse pour SSE, et la construction jusqu’à `open` pour WebSocket ; il est effacé après le handshake. L’expiration signale `NET_UNREACHABLE` à l’équilibreur pour qu’une reconnexion puisse choisir l’endpoint suivant. Des tentatives épuisées finissent par `NET_TIMEOUT`.
+
 Pour les deux transports, un handshake réussi réinitialise le budget de nouvelles tentatives par coupure, la tentative du callback et l’exposant de backoff. `attempts: 0` désactive les nouvelles tentatives ; omettre `attempts` ne donne pas des tentatives illimitées dans une coupure. `maxDelayMs` plafonne le délai final après jitter et arrondi ; la limite de timer de la plateforme, `2_147_483_647` ms, s’applique aussi, y compris quand SSE n’a pas de plafond configuré. Une base nulle reste nulle ; un dépassement de nombres valides sature aux plafonds.
 
 Les options de reconnexion sont validées avant le transport : `attempts` doit être un entier sûr non négatif ; `delayMs` doit être fini et non négatif ; `maxDelayMs` doit être un nombre fini non négatif ou `Infinity` positif, ce qui retire le plafond configuré mais pas la limite de plateforme de `2_147_483_647` ms ; `factor` doit être fini et positif ; `jitter` doit être fini et dans 0–1. Les valeurs invalides renvoient `REQ_OPTIONS_INVALID`. WebSocket `attempts: 0` désactive les nouvelles tentatives suivantes, mais tous les champs de reconnexion explicitement fournis sont encore validés avant la connexion initiale, comme pour SSE. Le jitter met à l’échelle la base plafonnée dans les deux sens avant que le plafond final soit appliqué.
@@ -183,11 +197,11 @@ Pour WebSocket, `beforeConnect`, `heartbeat`, `protocols` et `reconnect` peuvent
 
 <ApiSignature name="ClientOptions" />
 
-Les champs affichés sont `sse` et `webSocket`. Les sept autres — `endpoint`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` et `withCredentials` — sont hérités de la base HTTP non exportée, et `endpoint` est obligatoire. Il n’y a pas de `timeout` au niveau du client. `createClient` ne prend pas cet objet ; il prend des helpers d’options.
+Les champs affichés sont `sse` et `webSocket`. Les sept autres — `endpoints`, `headers`, `http`, `interceptors`, `querySerializer`, `xsrf` et `withCredentials` — sont hérités de la base HTTP non exportée. `endpoints` est `readonly string[]`. Le défaut résolu est `[]`. Un tableau vide est une valeur admise et fait échouer l’appel avec `REQ_BUILD_FAILED`. Il n’y a pas de `timeout` au niveau du client. `createClient` ne prend pas cet objet ; il prend des helpers d’options.
 
 ### ClientConfig
 
-L’instantané résolu que les helpers d’options mutent et qu’une opération lit : `ClientOptions` après les défauts, avec `http.handle`, `interceptors`, `sse` (un `ClientSSEConfig`) et `webSocket` toujours présents.
+L’instantané résolu que les helpers d’options mutent et qu’une opération lit : `ClientOptions` après les défauts, avec `http.handle`, `interceptors`, `sse` (un `ClientSSEConfig`), `webSocket`, `endpointBalancer` et `endpointFailover` toujours présents. `endpointBalancer` vaut par défaut un nouveau `pickFirstBalancer()` pour ce client. Ce n’est pas un champ de [`RequestOptions`](/fr-FR/api/core/requestoptions-type).
 
 ### ClientSSEConfig
 
@@ -204,5 +218,33 @@ La surface d’instance WebSocket que le transport utilise : `WebSocket` sans `b
 <ApiSignature name="WebSocketHandleConstructor" />
 
 Le constructeur passé à `withWebSocketHandle`. Il doit exposer la constante de ready-state `OPEN`.
+
+## Équilibreurs
+
+### pickFirstBalancer()
+
+### roundRobinBalancer()
+
+<ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
+
+`pickFirstBalancer` avance sur `NET_UNREACHABLE` ou une réponse 502/503/504 sans `code` de fault. Son `failbackMs` facultatif, positif et fini, permet une seule sonde concurrente du premier endpoint après l’intervalle. Les échecs de connexion des méthodes HTTP sûres basculent aussi dans le même appel par défaut. `roundRobinBalancer` parcourt la liste. `weights` est facultatif. Voir [Plusieurs endpoints](/fr-FR/docs/client#multiple-endpoints).
+
+### p2cBalancer()
+
+<ApiSignature name="p2cBalancer" />
+
+Échantillonne des candidats distincts sans remise (contrairement à Envoy/gRPC A48) et choisit le PeakEwma de tower ou la charge pending. Les défauts Linkerd sont une RTT de 30 ms et un decay de 10 s. `start` commence pending, `end` le libère aux en-têtes ou à l’ouverture du socket et enregistre la RTT réelle de chaque transport, y compris les échecs. Un `done` sans `end` libère pending sans échantillon de RTT. Il n’y a ni classificateur d’échec p2c ni pénalité. `choiceCount` vaut 2 par défaut et est plafonné à 10.
+
+### outlierDetection()
+
+<ApiSignature name="outlierDetection, OutlierDetectionOptions" />
+
+Enveloppe un child avec un circuit breaking d’échecs consécutifs à la Linkerd. Le round robin et p2c l’activent par défaut (comme dans Finagle) ; `false` le désactive. Le pick-first l’active avec un objet. Après cinq échecs, les pénalités partent de 1000 ms, doublent après une sonde échouée, ajoutent un jitter positif jusqu’à 0,5 fois la base et plafonnent à 60000 ms. L’expiration admet une seule sonde, décidée à `end`, ou à `done` si aucun `end` n’est arrivé. Le succès remet le backoff à zéro ; l’annulation ne fait que libérer la place. Il n’y a pas de timeout qui suppose le succès, ni de quota, ni de protection du dernier hôte, ni de grille d’évaluation, ni de critère de pourcentage, ni de slow start. `isHealthy` lit l’état mis en cache par l’application et n’annule jamais une pénalité. Tous les hôtes peuvent couper ; le fail-open local à la liste, à la Finagle, envoie quand même les requêtes. Contrairement à Envoy/gRPC A50, il n’y a pas de quota d’éjection. Voir [Filtrage de santé et p2c](/fr-FR/docs/client#health-filtering-and-p2c).
+
+### EndpointBalancer
+
+<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+
+`pick` renvoie un tuple error-first. `start` facultatif s’exécute de façon synchrone au plus une fois, immédiatement avant le démarrage du transport sélectionné ; `end` facultatif s’exécute une fois après `start`, aux en-têtes de Fetch ou à l’`open` du WebSocket (ou en cas d’échec avant la réponse), et `done` facultatif s’exécute une fois à l’achèvement. Fetch ne peut exposer ni le premier frame de corps de Linkerd ni les frontières de stream d’Envoy. Les exceptions et les rejets de thenable de tous les hooks sont contenus. `ERR_NO_ENDPOINT` n’est qu’une `cause` de `REQ_BUILD_FAILED`. Ce n’est pas un `FaultCode`. [`isNoEndpointCause`](/fr-FR/api/core/isnoendpointcause) le reconnaît d’une copie de Core à l’autre.
 
 Voir le [guide Client](/fr-FR/docs/client).
