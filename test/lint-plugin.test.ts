@@ -5,8 +5,8 @@ import { join } from "node:path";
 
 const plugin = join(import.meta.dir, "..", "lint", "plugin.ts");
 
-// `bun lint` prints XML-ish diagnostics on macOS and a human-readable block on
-// Linux, so this test matches the rule name and the quoted subject, never a format.
+// The pretty reporter differs per platform (XML-ish on macOS, a block of text on
+// Linux), so this reads the JSON reporter instead.
 const source = `declare function next(): unknown;
 export function chain(x: unknown) {
   if (typeof x !== "string" && typeof x !== "number") throw new TypeError("x");
@@ -19,6 +19,20 @@ export function positive(y: unknown) {
 }
 `;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function lintMessages(report: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(report)) throw new TypeError("expected a lint report");
+  return report.flatMap((file) => {
+    if (!isRecord(file) || !Array.isArray(file["messages"])) {
+      throw new TypeError("expected a file result");
+    }
+    return file["messages"].filter(isRecord);
+  });
+}
+
 test("prefer-typeof-switch reports a stable subject chain and nothing else", async () => {
   const dir = mkdtempSync(join(tmpdir(), "defjs-lint-"));
   writeFileSync(
@@ -26,17 +40,17 @@ test("prefer-typeof-switch reports a stable subject chain and nothing else", asy
     `[lint]\nplugins = ["${plugin}"]\n[lint.rules]\n"defjs/prefer-typeof-switch" = "error"\n`,
   );
   writeFileSync(join(dir, "a.ts"), source);
-  const run = Bun.spawn(["bun", "lint", "--no-script"], {
+  const run = Bun.spawn(["bun", "lint", "--no-script", "--format", "json"], {
     cwd: dir,
     stdout: "pipe",
     stderr: "pipe",
   });
-  const output = `${await new Response(run.stdout).text()}${await new Response(run.stderr).text()}`;
-  const exitCode = await run.exited;
+  const stdout = await new Response(run.stdout).text();
+  expect(await run.exited).toBe(1);
 
-  expect(exitCode).toBe(1);
-  expect(output.split("defjs/prefer-typeof-switch")).toHaveLength(2);
-  expect(output).toContain("typeof x");
-  expect(output).not.toContain("typeof next()");
-  expect(output).not.toContain("typeof y");
+  const report: unknown = JSON.parse(stdout);
+  const messages = lintMessages(report);
+  expect(messages).toHaveLength(1);
+  expect(messages[0]?.["ruleId"]).toBe("defjs/prefer-typeof-switch");
+  expect(messages[0]?.["line"]).toBe(3);
 });
