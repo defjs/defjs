@@ -124,7 +124,7 @@ export function isIntersectionIdentity(struct: RuntimeStruct): boolean {
     return false;
   }
   for (const option of definition.options) {
-    if (!isIntersectionIdentity(option as RuntimeStruct)) {
+    if (!isIntersectionIdentity(option)) {
       return false;
     }
   }
@@ -138,9 +138,11 @@ export function matchesEnum(
   // One-shot schemas avoid allocating a Set. A second lookup pays for the reusable index.
   if (definition.valueSet === undefined) {
     definition.valueSet = null;
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: original enum membership can match unchecked non-string/number members and performs the same lazy Set creation on every probe
     return definition.values.includes(value as string | number);
   }
   return (definition.valueSet ??= new Set(definition.values)).has(
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: original enum membership can match unchecked non-string/number members and performs the same lazy Set creation on every probe
     value as string | number,
   );
 }
@@ -156,7 +158,7 @@ export function expectedType(definition: StructDefinition): string {
       return "any";
 
     case "array":
-      return `array<${expectedType((definition.item as RuntimeStruct)[DEFINITION])}>`;
+      return `array<${expectedType(definition.item[DEFINITION])}>`;
 
     case "arrayBuffer":
       return "ArrayBuffer";
@@ -186,7 +188,7 @@ export function expectedType(definition: StructDefinition): string {
       return "object";
 
     case "record":
-      return `record<${expectedType((definition.value as RuntimeStruct)[DEFINITION])}>`;
+      return `record<${expectedType(definition.value[DEFINITION])}>`;
 
     case "tuple":
       return "tuple";
@@ -222,9 +224,9 @@ export function formatPath(path: Path): string {
  * Records keep `Object.create(null)`: arbitrary keys are what dictionary mode is for.
  */
 export function nullObject(): { [key: string]: unknown } {
-  const value = {};
+  const value: { [key: string]: unknown } = {};
   Object.setPrototypeOf(value, null);
-  return value as { [key: string]: unknown };
+  return value;
 }
 
 export function hasOwnKey(
@@ -241,7 +243,7 @@ export function isPlainObject(
     return false;
   }
 
-  const prototype = Object.getPrototypeOf(value);
+  const prototype: unknown = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
 }
 

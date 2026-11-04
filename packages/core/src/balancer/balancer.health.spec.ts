@@ -68,7 +68,8 @@ test("active true never cancels passive ejection and invalid active results only
   let active: unknown = true;
   const h = setup({
     consecutiveFailures: 1,
-    isHealthy: () => active as boolean,
+    // @ts-expect-error active results are not always booleans
+    isHealthy: () => active,
   });
   h.report("a");
   h.pick();
@@ -87,9 +88,10 @@ test("throwing and nonboolean failure callbacks neither count nor reset and alwa
   let mode = 0;
   const h = setup({
     consecutiveFailures: 2,
+    // @ts-expect-error undefined is not a boolean failure result
     isFailure: () => {
       if (mode === 1) throw new Error("callback");
-      return mode === 2 ? (undefined as never) : true;
+      return mode === 2 ? undefined : true;
     },
   });
   h.report("a");
@@ -229,9 +231,12 @@ test("invalid health option types and ranges become persistent REQ_OPTIONS_INVAL
   ];
   for (const options of cases) {
     for (const balancer of [
-      outlierDetection(pickFirstBalancer(), options as never),
-      roundRobinBalancer({ outlierDetection: options as never }),
-      pickFirstBalancer({ outlierDetection: options as never }),
+      // @ts-expect-error invalid health options are rejected at runtime
+      outlierDetection(pickFirstBalancer(), options),
+      // @ts-expect-error invalid health options are rejected at runtime
+      roundRobinBalancer({ outlierDetection: options }),
+      // @ts-expect-error invalid health options are rejected at runtime
+      pickFirstBalancer({ outlierDetection: options }),
     ]) {
       const [first] = balancer.pick({ endpoints: ["a"], transport: "http" });
       expect(first).toBeInstanceOf(Error);

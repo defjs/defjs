@@ -36,6 +36,7 @@ const servers = new Map(
 );
 export async function loader({ params }: Route.LoaderArgs) {
   const server = servers.get(params["locale"] ?? "");
+  // eslint-disable-next-line @typescript-eslint/only-throw-error -- React Router signals a 404 by throwing a Response
   if (!server) throw new Response("Not Found", { status: 404 });
   return server.staticGET();
 }

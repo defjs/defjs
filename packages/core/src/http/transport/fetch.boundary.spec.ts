@@ -21,6 +21,11 @@ import {
   fetchHandler,
 } from "./fetch";
 
+function requireRequest(input: RequestInfo | URL): Request {
+  if (input instanceof Request) return input;
+  throw new Error("expected Request");
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -68,7 +73,8 @@ describe("HTTP transport boundary regressions", () => {
         headers: { "content-type": data?.contentType ?? "" },
       },
     );
-    const uploaded = (await received.formData()).get("file") as File;
+    const uploaded = (await received.formData()).get("file");
+    if (!(uploaded instanceof File)) throw new Error("expected File");
     expect(uploaded.name).toBe("notes.txt");
     expect(await uploaded.text()).toBe("streamed file");
     expect(events.length).toBeGreaterThanOrEqual(2);
@@ -122,7 +128,7 @@ describe("HTTP transport boundary regressions", () => {
       const client = createClient(
         withEndpoint("https://example.com"),
         withHTTPHandle(async (input) => {
-          await (input as Request).arrayBuffer();
+          await requireRequest(input).arrayBuffer();
           return new Response(null, { status: 204 });
         }),
       );
@@ -183,6 +189,7 @@ describe("HTTP transport boundary regressions", () => {
 
   test("should preserve a start observer failure even when converted stream cancellation rejects", async () => {
     const body = new Blob(["bytes"]);
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     const cancel = vi.fn(async () => {
       throw new Error("cancel refused");
     });
@@ -200,7 +207,7 @@ describe("HTTP transport boundary regressions", () => {
             throw cause;
           },
         },
-        async () => new Response(null),
+        () => Promise.resolve(new Response(null)),
       ),
     ).rejects.toMatchObject({ code: "EXT_OBSERVER_FAILED", cause });
     expect(cancel).toHaveBeenCalledExactlyOnceWith(cause);
@@ -252,8 +259,8 @@ describe("HTTP transport boundary regressions", () => {
         let contentType: string | null = null;
         let sent = "";
         await fetchHandler(request, async (input) => {
-          contentType = (input as Request).headers.get("content-type");
-          sent = await (input as Request).text();
+          contentType = requireRequest(input).headers.get("content-type");
+          sent = await requireRequest(input).text();
           return new Response("ok");
         });
         expect(contentType).toBe(
@@ -308,8 +315,8 @@ describe("HTTP transport boundary regressions", () => {
           }),
         ),
         withHTTPHandle(async (input) => {
-          contentType = (input as Request).headers.get("content-type");
-          sent = await (input as Request).text();
+          contentType = requireRequest(input).headers.get("content-type");
+          sent = await requireRequest(input).text();
           return new Response(null, { status: 204 });
         }),
       );
@@ -348,10 +355,10 @@ describe("HTTP transport boundary regressions", () => {
           return next(request);
         }),
       ),
-      withHTTPHandle(async (input) => {
-        signedType = (input as Request).headers.get("x-signed-content-type");
-        contentType = (input as Request).headers.get("content-type");
-        return new Response(null, { status: 204 });
+      withHTTPHandle((input) => {
+        signedType = requireRequest(input).headers.get("x-signed-content-type");
+        contentType = requireRequest(input).headers.get("content-type");
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const endpoint = defineRequest({
@@ -398,12 +405,12 @@ describe("HTTP transport boundary regressions", () => {
             return next(request);
           }),
         ),
-        withHTTPHandle(async (input) => {
-          const headers = (input as Request).headers;
+        withHTTPHandle((input) => {
+          const headers = requireRequest(input).headers;
           signedType = headers.get("x-signed-content-type");
           contentType = headers.get("content-type");
           authorization = headers.get("authorization");
-          return new Response(null, { status: 204 });
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
       );
       const endpoint = defineRequest({
@@ -441,9 +448,9 @@ describe("HTTP transport boundary regressions", () => {
             return next(request);
           }),
         ),
-        withHTTPHandle(async (input) => {
-          contentType = (input as Request).headers.get("content-type");
-          return new Response(null, { status: 204 });
+        withHTTPHandle((input) => {
+          contentType = requireRequest(input).headers.get("content-type");
+          return Promise.resolve(new Response(null, { status: 204 }));
         }),
       );
       const endpoint = defineRequest({
@@ -473,10 +480,10 @@ describe("HTTP transport boundary regressions", () => {
           return next(copy);
         }),
       ),
-      withHTTPHandle(async (input) => {
-        signedType = (input as Request).headers.get("x-signed-content-type");
-        contentType = (input as Request).headers.get("content-type");
-        return new Response(null, { status: 204 });
+      withHTTPHandle((input) => {
+        signedType = requireRequest(input).headers.get("x-signed-content-type");
+        contentType = requireRequest(input).headers.get("content-type");
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const endpoint = defineRequest({
@@ -489,7 +496,7 @@ describe("HTTP transport boundary regressions", () => {
     expect(contentType).toBe("application/json");
   });
 
-  test("should retain a declared header when an interceptor removes the body", async () => {
+  test("should retain a declared header when an interceptor removes the body", () => {
     const request = createHttpRequest(
       "POST",
       "/",
@@ -508,6 +515,7 @@ describe("HTTP transport boundary regressions", () => {
         createFetchRequestInit({ ...request, body: undefined }).headers,
       ).get("content-type"),
     ).toBe("application/custom");
+    return Promise.resolve();
   });
 
   test.each([
@@ -531,15 +539,17 @@ describe("HTTP transport boundary regressions", () => {
             events.push(event);
           },
         },
-        async () =>
-          new Response("hello", {
-            headers: {
-              "content-length": "5",
-              ...(encoding === undefined
-                ? {}
-                : { "content-encoding": encoding }),
-            },
-          }),
+        () =>
+          Promise.resolve(
+            new Response("hello", {
+              headers: {
+                "content-length": "5",
+                ...(encoding === undefined
+                  ? {}
+                  : { "content-encoding": encoding }),
+              },
+            }),
+          ),
       );
       expect(response.body).toBe("hello");
       expect(events.at(-1)).toEqual({
@@ -571,7 +581,10 @@ describe("HTTP transport boundary regressions", () => {
           events.push(event);
         },
       },
-      async () => new Response(body, { headers: { "content-length": "3" } }),
+      () =>
+        Promise.resolve(
+          new Response(body, { headers: { "content-length": "3" } }),
+        ),
     );
     expect(response.body).toBe("abcdefgh");
     expect(events).toEqual([
@@ -652,8 +665,9 @@ describe("HTTP transport boundary regressions", () => {
             tokenProvider,
           };
         },
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the transport assertions must fail through a rejected promise
         withHTTPHandle(async (input) => {
-          expect((input as Request).headers.get("x-xsrf-token")).toBe(
+          expect(requireRequest(input).headers.get("x-xsrf-token")).toBe(
             baseEndpoint === "https://example.com" ? "worker-token" : null,
           );
           return new Response(null, { status: 204 });
@@ -723,7 +737,7 @@ async function expectCancelledStalledFormData(
     withEndpoint("https://example.com"),
     withHTTPHandle(async (input) => {
       entered();
-      await (input as Request).arrayBuffer();
+      await requireRequest(input).arrayBuffer();
       return new Response(null, { status: 204 });
     }),
   );

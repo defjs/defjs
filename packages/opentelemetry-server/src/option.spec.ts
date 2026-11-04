@@ -28,9 +28,10 @@ import {
   makeWsSession,
   waitForSettledPromises,
 } from "./test-utils";
+import { method } from "../test/method";
 
 function makeConfig(): ClientConfig {
-  const sharedFetch = globalThis.fetch.bind(globalThis) as typeof fetch;
+  const sharedFetch = globalThis.fetch.bind(globalThis);
 
   return {
     endpoints: ["https://api.example.com"],
@@ -114,6 +115,7 @@ describe("withOpenTelemetryServer logger", () => {
       const config = makeConfig();
       withOpenTelemetryServer({ logger, requireParentSpan })(config);
       const cause = new TypeError("offline");
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       const reject = async () => {
         throw cause;
       };
@@ -148,6 +150,7 @@ describe("withOpenTelemetryServer logger", () => {
       requireParentSpan: true,
     })(config);
     const cause = new Error("offline");
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     const reject = async () => {
       throw cause;
     };
@@ -173,8 +176,8 @@ describe("withOpenTelemetryServer without a tracer", () => {
       const record = vi.fn();
       const add = vi.fn();
       const meter = makeMeter();
-      vi.mocked(meter.createHistogram).mockReturnValue({ record });
-      vi.mocked(meter.createUpDownCounter).mockReturnValue({ add });
+      vi.mocked(method(meter, "createHistogram")).mockReturnValue({ record });
+      vi.mocked(method(meter, "createUpDownCounter")).mockReturnValue({ add });
       vi.spyOn(context, "active").mockReturnValue(ROOT_CONTEXT);
       const config = makeConfig();
       withOpenTelemetryServer({ meter, requireParentSpan })(config);
@@ -183,13 +186,19 @@ describe("withOpenTelemetryServer without a tracer", () => {
       const session = makeWsSession();
 
       await expect(
-        httpInterceptor(config).fn(makeHttpRequest(), async () => response),
+        httpInterceptor(config).fn(makeHttpRequest(), () =>
+          Promise.resolve(response),
+        ),
       ).resolves.toBe(response);
       await expect(
-        sseInterceptor(config).fn(makeSSERequest(), async () => stream),
+        sseInterceptor(config).fn(makeSSERequest(), () =>
+          Promise.resolve(stream),
+        ),
       ).resolves.toBe(stream);
       await expect(
-        webSocketInterceptor(config).fn(makeWsRequest(), async () => session),
+        webSocketInterceptor(config).fn(makeWsRequest(), () =>
+          Promise.resolve(session),
+        ),
       ).resolves.toBe(session);
       await waitForSettledPromises();
 
@@ -217,13 +226,19 @@ describe("withOpenTelemetryServer without a tracer", () => {
     const session = makeWsSession();
 
     await expect(
-      httpInterceptor(config).fn(makeHttpRequest(), async () => response),
+      httpInterceptor(config).fn(makeHttpRequest(), () =>
+        Promise.resolve(response),
+      ),
     ).resolves.toBe(response);
     await expect(
-      sseInterceptor(config).fn(makeSSERequest(), async () => stream),
+      sseInterceptor(config).fn(makeSSERequest(), () =>
+        Promise.resolve(stream),
+      ),
     ).resolves.toBe(stream);
     await expect(
-      webSocketInterceptor(config).fn(makeWsRequest(), async () => session),
+      webSocketInterceptor(config).fn(makeWsRequest(), () =>
+        Promise.resolve(session),
+      ),
     ).resolves.toBe(session);
     await waitForSettledPromises();
 
@@ -285,9 +300,15 @@ describe("withOpenTelemetryServer without a tracer", () => {
         headers.set("tracestate", "vendor=value");
         headers.set("baggage", "tenant=acme");
       }
-      const httpNext = vi.fn(async (_req: HttpRequest) => makeHttpResponse());
-      const sseNext = vi.fn(async (_req: HttpRequest) => makeSSEStream());
-      const wsNext = vi.fn(async (_req: HttpRequest) => makeWsSession());
+      const httpNext = vi.fn((_req: HttpRequest) =>
+        Promise.resolve(makeHttpResponse()),
+      );
+      const sseNext = vi.fn((_req: HttpRequest) =>
+        Promise.resolve(makeSSEStream()),
+      );
+      const wsNext = vi.fn((_req: HttpRequest) =>
+        Promise.resolve(makeWsSession()),
+      );
 
       await httpInterceptor(config).fn(
         makeHttpRequest(new Headers(headers)),
@@ -327,7 +348,7 @@ describe("withOpenTelemetryServer without a tracer", () => {
       expect(sent?.queryParams?.get("tracestate")).toBe(
         source === "headers" ? "vendor=value" : null,
       );
-      expect(tracer.startSpan).toHaveBeenCalledTimes(1);
+      expect(method(tracer, "startSpan")).toHaveBeenCalledTimes(1);
       expect(getTracer).not.toHaveBeenCalled();
       expect(startSpanHook).not.toHaveBeenCalled();
       expect(requestHook).not.toHaveBeenCalled();
@@ -353,7 +374,7 @@ describe("withOpenTelemetryServer without a tracer", () => {
       ),
       queryString: "room=a%20b",
     };
-    const next = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const next = vi.fn((_req: HttpRequest) => Promise.resolve(makeWsSession()));
     await webSocketInterceptor(config).fn(req, next);
     expect(next.mock.calls[0]?.[0].queryString).toBe("room=a%20b");
     expect(next.mock.calls[0]?.[0].queryParams).toBe(req.queryParams);
@@ -366,8 +387,8 @@ describe("withOpenTelemetryServer without a tracer", () => {
     const meter = makeMeter();
     const record = vi.fn();
     const add = vi.fn();
-    vi.mocked(meter.createHistogram).mockReturnValue({ record });
-    vi.mocked(meter.createUpDownCounter).mockReturnValue({ add });
+    vi.mocked(method(meter, "createHistogram")).mockReturnValue({ record });
+    vi.mocked(method(meter, "createUpDownCounter")).mockReturnValue({ add });
     const propagator = makePropagator();
     const config = makeConfig();
     withOpenTelemetryServer({
@@ -379,9 +400,15 @@ describe("withOpenTelemetryServer without a tracer", () => {
     const httpRequest = makeHttpRequest();
     const sseRequest = makeSSERequest();
     const wsRequest = makeWsRequest();
-    const httpNext = vi.fn(async (_req: HttpRequest) => makeHttpResponse());
-    const sseNext = vi.fn(async (_req: HttpRequest) => makeSSEStream());
-    const wsNext = vi.fn(async (_req: HttpRequest) => makeWsSession());
+    const httpNext = vi.fn((_req: HttpRequest) =>
+      Promise.resolve(makeHttpResponse()),
+    );
+    const sseNext = vi.fn((_req: HttpRequest) =>
+      Promise.resolve(makeSSEStream()),
+    );
+    const wsNext = vi.fn((_req: HttpRequest) =>
+      Promise.resolve(makeWsSession()),
+    );
     await httpInterceptor(config).fn(httpRequest, httpNext);
     await sseInterceptor(config).fn(sseRequest, sseNext);
     await webSocketInterceptor(config).fn(wsRequest, wsNext);
@@ -389,9 +416,9 @@ describe("withOpenTelemetryServer without a tracer", () => {
     expect(httpNext.mock.calls[0]?.[0]).toBe(httpRequest);
     expect(sseNext.mock.calls[0]?.[0]).toBe(sseRequest);
     expect(wsNext.mock.calls[0]?.[0]).toBe(wsRequest);
-    expect(tracer.startSpan).not.toHaveBeenCalled();
-    expect(propagator.extract).not.toHaveBeenCalled();
-    expect(propagator.inject).not.toHaveBeenCalled();
+    expect(method(tracer, "startSpan")).not.toHaveBeenCalled();
+    expect(method(propagator, "extract")).not.toHaveBeenCalled();
+    expect(method(propagator, "inject")).not.toHaveBeenCalled();
     expect(record).not.toHaveBeenCalled();
     expect(add).not.toHaveBeenCalled();
   });
@@ -485,21 +512,23 @@ describe("withOpenTelemetryServer", () => {
     })(config);
 
     const httpRequest = makeHttpRequest();
-    await httpInterceptor(config).fn(httpRequest, async () =>
-      makeHttpResponse(),
+    await httpInterceptor(config).fn(httpRequest, () =>
+      Promise.resolve(makeHttpResponse()),
     );
     expect(httpStartSpanHook).toHaveBeenCalledWith(httpRequest);
     expect(sseStartSpanHook).not.toHaveBeenCalled();
     expect(webSocketStartSpanHook).not.toHaveBeenCalled();
 
     const sseRequest = makeSSERequest();
-    await sseInterceptor(config).fn(sseRequest, async () => makeSSEStream());
+    await sseInterceptor(config).fn(sseRequest, () =>
+      Promise.resolve(makeSSEStream()),
+    );
     expect(sseStartSpanHook).toHaveBeenCalledWith(sseRequest);
     expect(webSocketStartSpanHook).not.toHaveBeenCalled();
 
     const webSocketRequest = makeWsRequest();
-    await webSocketInterceptor(config).fn(webSocketRequest, async () =>
-      makeWsSession(),
+    await webSocketInterceptor(config).fn(webSocketRequest, () =>
+      Promise.resolve(makeWsSession()),
     );
     expect(webSocketStartSpanHook).toHaveBeenCalledWith(webSocketRequest);
   });
@@ -509,19 +538,19 @@ describe("withOpenTelemetryServer", () => {
     const config = makeConfig();
     withOpenTelemetryServer({ tracer })(config);
 
-    await httpInterceptor(config).fn(makeHttpRequest(), async () =>
-      makeHttpResponse(),
+    await httpInterceptor(config).fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
     );
-    await sseInterceptor(config).fn(makeSSERequest(), async () =>
-      makeSSEStream(),
+    await sseInterceptor(config).fn(makeSSERequest(), () =>
+      Promise.resolve(makeSSEStream()),
     );
-    await webSocketInterceptor(config).fn(makeWsRequest(), async () =>
-      makeWsSession(),
+    await webSocketInterceptor(config).fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
     );
 
     expect(
       vi
-        .mocked(tracer.startSpan)
+        .mocked(method(tracer, "startSpan"))
         .mock.calls.map((call) => call[1]?.attributes?.["url.full"]),
     ).toEqual([
       "https://api.example.com/test",
@@ -587,10 +616,10 @@ describe("withOpenTelemetryServer", () => {
     })(config);
 
     const req = makeWsRequest(new URLSearchParams({ room: "alpha" }));
-    const next = vi.fn(async () => makeWsSession());
+    const next = vi.fn(() => Promise.resolve(makeWsSession()));
     await webSocketInterceptor(config).fn(req, next);
 
-    expect(propagator.inject).not.toHaveBeenCalled();
+    expect(method(propagator, "inject")).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalledWith(
       expect.objectContaining({
         queryParams: req.queryParams,
@@ -613,7 +642,9 @@ describe("withOpenTelemetryServer", () => {
     })(config);
 
     const res = makeHttpResponse();
-    await httpInterceptor(config).fn(makeHttpRequest(), async () => res);
+    await httpInterceptor(config).fn(makeHttpRequest(), () =>
+      Promise.resolve(res),
+    );
 
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(responseHook).toHaveBeenCalledTimes(1);
@@ -633,7 +664,9 @@ describe("withOpenTelemetryServer", () => {
     })(config);
 
     const stream = makeSSEStream();
-    await sseInterceptor(config).fn(makeSSERequest(), async () => stream);
+    await sseInterceptor(config).fn(makeSSERequest(), () =>
+      Promise.resolve(stream),
+    );
 
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(responseHook).toHaveBeenCalledTimes(1);
@@ -654,13 +687,13 @@ describe("withOpenTelemetryServer", () => {
       webSocket: { queryPropagation: true, requestHook, responseHook },
     })(config);
 
-    await webSocketInterceptor(config).fn(makeWsRequest(), async () =>
-      makeWsSession(),
+    await webSocketInterceptor(config).fn(makeWsRequest(), () =>
+      Promise.resolve(makeWsSession()),
     );
 
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(responseHook).toHaveBeenCalledTimes(1);
-    expect(propagator.inject).toHaveBeenCalledTimes(1);
+    expect(method(propagator, "inject")).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -754,7 +787,9 @@ describe("withOpenTelemetryServer transport capture", () => {
       ]);
       const httpCall = makeHttpRequest();
       const httpResult = makeHttpResponse();
-      await httpInterceptor(config).fn(httpCall, async () => httpResult);
+      await httpInterceptor(config).fn(httpCall, () =>
+        Promise.resolve(httpResult),
+      );
       expect(httpRequest).toHaveBeenLastCalledWith(
         expect.any(Object),
         httpCall,
@@ -766,7 +801,7 @@ describe("withOpenTelemetryServer transport capture", () => {
       );
       const sseCall = makeSSERequest();
       const stream = makeSSEStream();
-      await sseInterceptor(config).fn(sseCall, async () => stream);
+      await sseInterceptor(config).fn(sseCall, () => Promise.resolve(stream));
       expect(sseRequest).toHaveBeenLastCalledWith(expect.any(Object), sseCall);
       expect(sseResponse).toHaveBeenLastCalledWith(
         expect.any(Object),
@@ -777,9 +812,9 @@ describe("withOpenTelemetryServer transport capture", () => {
         new URLSearchParams({ room: "alpha" }),
       );
       const session = makeWsSession();
-      const next = vi.fn(async (request: HttpRequest) => {
+      const next = vi.fn((request: HttpRequest) => {
         seenQuery.push(request.queryString ?? "");
-        return session;
+        return Promise.resolve(session);
       });
       await webSocketInterceptor(config).fn(webSocketCall, next);
       expect(webSocketRequest).toHaveBeenLastCalledWith(
@@ -859,11 +894,11 @@ describe("withOpenTelemetryServer transport capture", () => {
     option(first);
     option(second);
     expect(reads).toBe(1);
-    await httpInterceptor(first).fn(makeHttpRequest(), async () =>
-      makeHttpResponse(),
+    await httpInterceptor(first).fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
     );
-    await httpInterceptor(second).fn(makeHttpRequest(), async () =>
-      makeHttpResponse(),
+    await httpInterceptor(second).fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
     );
     expect(requestHook).toHaveBeenCalledTimes(2);
   });
@@ -876,8 +911,8 @@ describe("withOpenTelemetryServer transport capture", () => {
     const config = makeConfig();
     option(config);
 
-    await httpInterceptor(config).fn(makeHttpRequest(), async () =>
-      makeHttpResponse(),
+    await httpInterceptor(config).fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
     );
 
     expect(spans[0]?.attributes["app.late"]).toBeUndefined();
@@ -929,12 +964,14 @@ describe("withOpenTelemetryServer transport capture", () => {
     const config = makeConfig();
     option(config);
     const request = makeWsRequest(new URLSearchParams({ room: "alpha" }));
-    const next = vi.fn(async (_request: HttpRequest) => makeWsSession());
+    const next = vi.fn((_request: HttpRequest) =>
+      Promise.resolve(makeWsSession()),
+    );
 
     await webSocketInterceptor(config).fn(request, next);
 
     expect(requestHook).toHaveBeenCalledTimes(1);
-    expect(propagator.inject).not.toHaveBeenCalled();
+    expect(method(propagator, "inject")).not.toHaveBeenCalled();
     expect(next.mock.calls[0]?.[0].queryString).toBe("room=alpha");
     expect(next.mock.calls[0]?.[0].queryParams).toBe(request.queryParams);
   });
@@ -1077,9 +1114,12 @@ describe("withOpenTelemetryServer transport capture", () => {
     const config = makeConfig();
     withOpenTelemetryServer({
       tracer: createMockTracer().tracer,
-      http: false as never,
-      sse: false as never,
-      webSocket: false as never,
+      // @ts-expect-error false is not an HTTP transport option
+      http: false,
+      // @ts-expect-error false is not an SSE transport option
+      sse: false,
+      // @ts-expect-error false is not a WebSocket transport option
+      webSocket: false,
     })(config);
 
     expect(config.interceptors.map((item) => item.kind)).toEqual([
@@ -1093,26 +1133,28 @@ describe("withOpenTelemetryServer transport capture", () => {
     const received: number[][] = [];
     const records: Array<ReturnType<typeof vi.fn>> = [];
     const meter = makeMeter();
-    vi.mocked(meter.createHistogram).mockImplementation((_name, options) => {
-      const buckets = options?.advice?.explicitBucketBoundaries;
-      if (!buckets) throw new Error("expected explicitBucketBoundaries");
-      if (received.length === 0) {
-        buckets[0] = 999;
-        buckets.push(42);
-      }
-      received.push(buckets);
-      const record = vi.fn();
-      records.push(record);
-      return { record };
-    });
+    vi.mocked(method(meter, "createHistogram")).mockImplementation(
+      (_name, options) => {
+        const buckets = options?.advice?.explicitBucketBoundaries;
+        if (!buckets) throw new Error("expected explicitBucketBoundaries");
+        if (received.length === 0) {
+          buckets[0] = 999;
+          buckets.push(42);
+        }
+        received.push(buckets);
+        const record = vi.fn();
+        records.push(record);
+        return { record };
+      },
+    );
     const option = withOpenTelemetryServer({ meter });
 
-    expect(meter.createHistogram).not.toHaveBeenCalled();
-    expect(meter.createUpDownCounter).not.toHaveBeenCalled();
+    expect(method(meter, "createHistogram")).not.toHaveBeenCalled();
+    expect(method(meter, "createUpDownCounter")).not.toHaveBeenCalled();
     const first = makeConfig();
     option(first);
-    expect(meter.createHistogram).toHaveBeenCalledTimes(5);
-    expect(meter.createUpDownCounter).toHaveBeenCalledTimes(2);
+    expect(method(meter, "createHistogram")).toHaveBeenCalledTimes(5);
+    expect(method(meter, "createUpDownCounter")).toHaveBeenCalledTimes(2);
     const second = makeConfig();
     option(second);
 
@@ -1124,8 +1166,8 @@ describe("withOpenTelemetryServer transport capture", () => {
       expect(buckets).toEqual(DURATION_BUCKETS);
     }
     expect(new Set(records).size).toBe(10);
-    await httpInterceptor(first).fn(makeHttpRequest(), async () =>
-      makeHttpResponse(),
+    await httpInterceptor(first).fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
     );
     expect(records[0]).toHaveBeenCalledTimes(1);
     expect(records[5]).not.toHaveBeenCalled();

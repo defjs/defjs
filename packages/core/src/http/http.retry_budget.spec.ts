@@ -25,7 +25,11 @@ function fixture(retryBudget: unknown, attempts = 1) {
     withEndpointBalancer({
       pick: (info) => [null, { endpoint: info.endpoints[0] ?? "" }],
     }),
-    withEndpointFailover({ retryBudget, attempts } as never),
+    withEndpointFailover(
+      // @ts-expect-error invalid retry budget is rejected at execution
+      { retryBudget, attempts },
+    ),
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withHTTPHandle(async () => {
       calls++;
       throw new TypeError("refused");

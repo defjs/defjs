@@ -48,6 +48,7 @@ function transportHarness(transport: Transport, pending = false) {
     if (pending) {
       return new Promise<Response>((_resolve, reject) => {
         const signal = new Request(_input, init).signal;
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
         signal.addEventListener("abort", () => reject(signal.reason), {
           once: true,
         });

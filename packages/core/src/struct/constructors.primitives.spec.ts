@@ -3,10 +3,11 @@ import { encodeJson } from "./codec/json";
 import { encodeValue } from "./encode";
 import { StructError, struct } from "./index";
 import { parseStructTuple as parse } from "./introspection";
-import type { RuntimeStruct } from "./types";
+import { assertStruct } from "./shape";
 
 function encode(struct: unknown, value: unknown): unknown {
-  return encodeValue(struct as RuntimeStruct, value);
+  assertStruct(struct, "struct");
+  return encodeValue(struct, value);
 }
 
 describe("constructors.ts bigint and date primitives", () => {
@@ -48,7 +49,7 @@ describe("constructors.ts bigint and date primitives", () => {
     if (err) {
       throw err;
     }
-    expect(encode(struct.bigint(), parsed as bigint)).toBe("9007199254740993");
+    expect(encode(struct.bigint(), parsed)).toBe("9007199254740993");
   });
 
   test("date accepts Date instance, ISO string, and epoch number", () => {
@@ -63,13 +64,13 @@ describe("constructors.ts bigint and date primitives", () => {
     if (e2) {
       throw e2;
     }
-    expect((v2 as Date).getTime()).toBe(d.getTime());
+    expect(v2.getTime()).toBe(d.getTime());
 
     const [e3, v3] = parse(struct.date(), d.getTime());
     if (e3) {
       throw e3;
     }
-    expect((v3 as Date).getTime()).toBe(d.getTime());
+    expect(v3.getTime()).toBe(d.getTime());
 
     const [e4, value] = parse(struct.date(), undefined);
     expect(e4).toBeInstanceOf(StructError);
@@ -99,17 +100,16 @@ describe("constructors.ts bigint and date primitives", () => {
     if (err) {
       throw err;
     }
-    expect(encode(struct.date(), parsed as Date)).toBe(
-      "2026-05-12T10:00:00.000Z",
-    );
+    expect(encode(struct.date(), parsed)).toBe("2026-05-12T10:00:00.000Z");
   });
 });
 
 describe("constructors.ts intersection", () => {
   test("intersection rejects empty struct list at runtime", () => {
-    expect(() =>
-      (struct.intersection as unknown as (...structs: unknown[]) => unknown)(),
-    ).toThrow(new TypeError("intersection requires at least one struct"));
+    expect(() => {
+      // @ts-expect-error intersection requires at least one struct
+      struct.intersection();
+    }).toThrow(new TypeError("intersection requires at least one struct"));
   });
 
   test("intersection of one struct is the struct itself", () => {
@@ -427,7 +427,11 @@ describe("constructors.ts intersection", () => {
     const node = struct.object({
       name: struct.string().alias("name_wire"),
       get self() {
-        return shape.self as ReturnType<typeof struct.object>;
+        const self = shape.self;
+        if (self === undefined) {
+          throw new Error("recursive field is unset");
+        }
+        return self;
       },
     });
     shape.self = node;

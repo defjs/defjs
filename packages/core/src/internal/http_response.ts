@@ -113,6 +113,7 @@ export function makeResponse<R>(
  */
 export function isHttpResponse(value: unknown): value is HttpResponse<unknown> {
   return (
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve direct symbol lookup on branded functions and proxies without an object-only guard or a new has trap
     (value as Partial<HttpResponse<unknown>> | null | undefined)?.[
       HTTP_RESPONSE
     ] === true

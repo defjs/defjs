@@ -15,11 +15,7 @@ import {
   struct,
   ERR_TIMEOUT,
 } from "../src";
-import type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  WebSocketHandleConstructor,
-} from "../src";
+import type { EndpointBalancer, EndpointDoneInfo } from "../src";
 import { createControllableSocketClass } from "./regression/controllable_socket";
 import { makeResponse } from "../src/internal/http_response";
 afterEach(() => {
@@ -58,8 +54,8 @@ test("HTTP end is synchronous at response headers before body decoding or post-i
   const client = createClient(
     withEndpoint("https://test.invalid"),
     withEndpointBalancer(h.b),
-    withHTTPHandle(
-      async () =>
+    withHTTPHandle(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream({
             start(c) {
@@ -70,6 +66,7 @@ test("HTTP end is synchronous at response headers before body decoding or post-i
             },
           }),
         ),
+      ),
     ),
     withInterceptors({
       kind: "http",
@@ -117,6 +114,7 @@ test.each(["failure", "cancel", "timeout"])(
       withEndpoint("https://test.invalid"),
       withEndpointBalancer(h.b),
       withEndpointFailover({ attempts: 0 }),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withHTTPHandle(async () => {
         if (mode === "failure") throw new TypeError("refused");
         controller.abort(mode === "timeout" ? ERR_TIMEOUT : undefined);
@@ -194,6 +192,7 @@ test.each(["failure", "cancel", "timeout"])(
     const client = createClient(
       withEndpoint("https://test.invalid"),
       withEndpointBalancer(h.b),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         if (mode === "failure") throw new TypeError("refused");
         controller.abort(mode === "timeout" ? ERR_TIMEOUT : undefined);
@@ -264,6 +263,7 @@ test("a replaced base failing before headers never ends the selected endpoint", 
   const client = createClient(
     withEndpoint("https://first.test"),
     withEndpointBalancer(h.b),
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withHTTPHandle(async () => {
       throw new TypeError("refused");
     }),
@@ -290,8 +290,7 @@ test.each(["failure", "cancel", "caller-timeout", "handshake-timeout"])(
     const client = createClient(
       withEndpoint("https://socket.test"),
       withEndpointBalancer(h.b),
-      // The controllable fixture implements listeners; its narrow interface omits them.
-      withWebSocketHandle(Socket as unknown as WebSocketHandleConstructor),
+      withWebSocketHandle(Socket),
     );
     const pending = defineWebSocket({
       path: "/",

@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+bun lint --staged --fix
+bun fmt --staged
+bun run typecheck

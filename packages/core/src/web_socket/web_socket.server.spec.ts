@@ -227,6 +227,7 @@ function instrumentAbortListeners(signal: AbortSignal): {
   const removed = new Set<AbortListener>();
   const add = signal.addEventListener.bind(signal);
   const remove = signal.removeEventListener.bind(signal);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the exact supplied listener argument tuple and arity while instrumenting the overloaded AbortSignal method
   signal.addEventListener = ((
     ...args: Parameters<AbortSignal["addEventListener"]>
   ) => {
@@ -236,6 +237,7 @@ function instrumentAbortListeners(signal: AbortSignal): {
     }
     add(...args);
   }) as AbortSignal["addEventListener"];
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the exact supplied listener argument tuple and arity while instrumenting the overloaded AbortSignal method
   signal.removeEventListener = ((
     ...args: Parameters<AbortSignal["removeEventListener"]>
   ) => {
@@ -309,7 +311,7 @@ function clientObservingAbortListeners(): {
 }
 
 function encodeMessage(value: unknown): ArrayBuffer {
-  return new TextEncoder().encode(JSON.stringify(value)).buffer as ArrayBuffer;
+  return new TextEncoder().encode(JSON.stringify(value)).buffer;
 }
 
 describe("web socket runtime environment edge cases", () => {
@@ -1509,10 +1511,14 @@ describe("web socket runtime environment edge cases", () => {
 
     nativeSocket.triggerError();
 
-    await expect(socket.closed).resolves.toMatchObject({
-      cause: expect.objectContaining({ message: "WebSocket connection error" }),
-      kind: "error",
-    });
+    const closed = await socket.closed;
+    expect(closed.kind).toBe("error");
+    if (closed.kind !== "error") {
+      throw new Error("expected an error close");
+    }
+    expect(closed.cause).toEqual(
+      expect.objectContaining({ message: "WebSocket connection error" }),
+    );
   });
 
   test("should wait for the errored physical socket close before constructing its replacement", async () => {
@@ -2030,10 +2036,12 @@ describe("web socket runtime environment edge cases", () => {
     expect(vi.getTimerCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(1_000);
 
-    await expect(socket.closed).resolves.toMatchObject({
-      cause: expect.any(Error),
-      kind: "error",
-    });
+    const closed = await socket.closed;
+    expect(closed.kind).toBe("error");
+    if (closed.kind !== "error") {
+      throw new Error("expected an error close");
+    }
+    expect(closed.cause).toBeInstanceOf(Error);
     await expect(pendingReceive).resolves.toMatchObject({
       message: "WebSocket connection error",
     });
@@ -2127,7 +2135,7 @@ describe("web socket runtime environment edge cases", () => {
         maxOutgoingQueueSize: kind === "outgoing" ? value : 0,
         path: "/ws/test",
       };
-      const useSocket = defineWebSocket(definition as never);
+      const useSocket = defineWebSocket(definition);
 
       const [error, socket] = await run(
         createClient(withEndpoint("http://localhost")),
@@ -2445,11 +2453,11 @@ describe("web socket runtime environment edge cases", () => {
       },
     };
     let invokeLateNext: (() => void) | undefined;
-    const interceptor = createWebSocketInterceptor(async (request, next) => {
+    const interceptor = createWebSocketInterceptor((request, next) => {
       invokeLateNext = () => {
         void next(request).then(lateCall.resolve, lateCall.resolve);
       };
-      return replacementSession;
+      return Promise.resolve(replacementSession);
     });
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
@@ -2590,6 +2598,7 @@ describe("web socket runtime environment edge cases", () => {
     const stateFailure = new Error("async state observer failed");
     const runtimeErrors: unknown[] = [];
     socket.onRuntimeError((error) => runtimeErrors.push(error));
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/require-await -- async observers are under test; the session consumes their promise results
     socket.onStateChange(async () => {
       throw stateFailure;
     });
@@ -2606,6 +2615,7 @@ describe("web socket runtime environment edge cases", () => {
 
   test("should report async runtime observer and reporter rejections without unhandled rejection", async () => {
     const reported: unknown[] = [];
+    // eslint-disable-next-line @typescript-eslint/require-await -- async reporter rejections are under test
     vi.stubGlobal("reportError", async (error: unknown) => {
       reported.push(error);
       throw new Error("async reporter failed");
@@ -2627,6 +2637,7 @@ describe("web socket runtime environment edge cases", () => {
       throw new Error("Expected socket");
     }
     const runtimeFailure = new Error("async runtime observer failed");
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises, @typescript-eslint/require-await -- async observers are under test; the session consumes their promise results
     socket.onRuntimeError(async () => {
       throw runtimeFailure;
     });
@@ -3949,7 +3960,7 @@ describe("web socket runtime environment edge cases", () => {
       const useSocket = defineWebSocket({
         incoming: struct.unknown(),
         maxIncomingQueueSize: 1,
-        outgoing: outgoing as never,
+        outgoing,
         path: "/ws/test",
       });
       const [, socket] = await run(
@@ -3960,8 +3971,8 @@ describe("web socket runtime environment edge cases", () => {
         throw new Error("Expected socket");
       }
 
-      expect(() => socket.send(message as never)).toThrow(TypeError);
-      expect(() => socket.send(message as never)).toThrow(fragment);
+      expect(() => socket.send(message)).toThrow(TypeError);
+      expect(() => socket.send(message)).toThrow(fragment);
       expect(lastMockInstance.send).not.toHaveBeenCalled();
 
       socket.close(1000, "done");
@@ -4012,12 +4023,11 @@ describe("web socket runtime environment edge cases", () => {
     }
 
     expect(sendError).toBeInstanceOf(TypeError);
-    expect(sendError).toEqual(
-      expect.objectContaining({
-        message: expect.stringContaining(
-          'Outgoing WebSocket message field "n" is not JSON data: -Infinity',
-        ),
-      }),
+    if (!(sendError instanceof TypeError)) {
+      throw new Error("expected a TypeError");
+    }
+    expect(sendError.message).toContain(
+      'Outgoing WebSocket message field "n" is not JSON data: -Infinity',
     );
     expect(replacement.send).not.toHaveBeenCalled();
     socket.close(1000, "done");
@@ -4319,6 +4329,7 @@ describe("web socket runtime environment edge cases", () => {
           attempts: 1,
           delayMs: 0,
           shouldReconnect() {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
             throw undefined;
           },
         },
@@ -4865,7 +4876,11 @@ describe("web socket runtime environment edge cases", () => {
       Promise.resolve(socket[Symbol.asyncDispose]()),
     ).resolves.toBeUndefined();
     await expect(socket.closed).resolves.toBe(terminal);
-    expect(terminal).toMatchObject({ cause: expect.any(Error), kind: "error" });
+    expect(terminal.kind).toBe("error");
+    if (terminal.kind !== "error") {
+      throw new Error("expected an error close");
+    }
+    expect(terminal.cause).toBeInstanceOf(Error);
     expect(socket.state).toBe("error");
     expect(nativeSocket.close).toHaveBeenCalledTimes(closeCalls);
     expect(nativeSocket.listenerCount()).toBe(0);
@@ -4893,7 +4908,19 @@ describe("web socket incoming frame path", () => {
   }
 
   function textOf(message: unknown): string {
-    return (message as { text: string }).text;
+    if (!isTextMessage(message)) {
+      throw new Error("expected a text message");
+    }
+    return message.text;
+  }
+
+  function isTextMessage(message: unknown): message is { text: string } {
+    return (
+      typeof message === "object" &&
+      message !== null &&
+      "text" in message &&
+      typeof message.text === "string"
+    );
   }
 
   function nextTurn(): Promise<void> {
@@ -4939,9 +4966,9 @@ describe("web socket incoming frame path", () => {
 
   async function openSession(options?: { signal?: AbortSignal }) {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const [error, socket] = (await useSocket(
+    const [error, socket] = await useSocket(
       createClient(withEndpoint("http://localhost"))(options),
-    )) as SocketAwaitResult<unknown, unknown>;
+    );
     expect(error).toBeNull();
     const native = lastMockInstance;
     if (!socket || !native) {
@@ -5227,6 +5254,32 @@ describe("web socket preflight precedence", () => {
     },
   );
 
+  test("should report an abort that lands after a successful input read and before endpoint selection", async () => {
+    const controller = new AbortController();
+    const opened = countingSocket();
+    const endpoint = defineWebSocket({
+      builder: () => ({}),
+      incoming: struct.unknown(),
+      input: struct.object({ id: struct.string() }),
+      maxIncomingQueueSize: 1,
+      path: "/socket",
+    });
+
+    const [error, session] = await endpoint(
+      guardedClient(opened, controller.signal),
+      {
+        get id(): string {
+          controller.abort();
+          return "room";
+        },
+      },
+    );
+
+    expect(opened.constructed()).toBe(0);
+    expect(session).toBeUndefined();
+    expect(error?.code).toBe("NET_ABORTED");
+  });
+
   test.each([
     ["abort", "caller stopped", "NET_ABORTED", ERR_ABORTED],
     [
@@ -5318,7 +5371,8 @@ describe("web socket preflight precedence", () => {
 
     const [error, session] = await endpoint(
       guardedClient(opened, controller.signal),
-      { id: "nope" } as never,
+      // @ts-expect-error id must be a number
+      { id: "nope" },
     );
 
     expect(opened.constructed()).toBe(0);
@@ -5340,7 +5394,8 @@ describe("web socket preflight precedence", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(
-        {} as unknown as Parameters<typeof withWebSocketHandle>[0],
+        // @ts-expect-error a non-constructor proves ENV_UNSUPPORTED
+        {},
       ),
     );
 
@@ -5386,12 +5441,12 @@ describe("web socket preflight precedence", () => {
 
     expect(session).toBeUndefined();
     expect(connection).toBeUndefined();
-    expect(error).toMatchObject({
-      cause: expect.objectContaining({
+    expect(error?.code).toBe("REQ_OPTIONS_INVALID");
+    expect(error?.cause).toEqual(
+      expect.objectContaining({
         message: "maxIncomingQueueSize must be a positive safe integer",
       }),
-      code: "REQ_OPTIONS_INVALID",
-    });
+    );
     expect(heartbeatReads).toBe(0);
     expect(reconnectReads).toBe(0);
     expect(listeners.added()).toBe(0);
@@ -5475,16 +5530,20 @@ function countingSocket(): CountingSocket {
       constructed += 1;
     }
 
+    addEventListener(): void {}
+
     close(): void {
       this.readyState = 3;
     }
 
-    send(_data: string): void {}
+    removeEventListener(): void {}
+
+    send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
   }
 
   return {
     constructed: () => constructed,
-    handle: Socket as unknown as CountingSocket["handle"],
+    handle: Socket,
   };
 }
 

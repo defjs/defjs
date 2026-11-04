@@ -26,6 +26,7 @@ export function ApiEntryPage({ view }: { view: RenderedApiEntry }) {
         event.preventDefault();
         const pre = button.closest("figure")?.querySelector("pre");
         if (!pre) return;
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve copying from any pre clone without a realm-dependent instanceof rejection
         const clone = pre.cloneNode(true) as HTMLElement;
         for (const ignored of clone.querySelectorAll(".nd-copy-ignore"))
           ignored.replaceWith("\n");

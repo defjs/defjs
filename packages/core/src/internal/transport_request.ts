@@ -69,6 +69,7 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
 
   appendRecordToHeaders(
     headers,
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: hand the materialized headers to the original application path without copying iterable entries or pre-coercing their values
     built.headers as
       HeadersInit | { [key: string]: RequestBuildValue } | undefined,
   );
@@ -84,6 +85,7 @@ export function createBaseTransportRequest<TTransport extends BaseTransport>(
   const request: BaseTransportRequest = {
     signal: options.signal,
     baseEndpoint: options.baseEndpoint,
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the already materialized body value and original request handoff without another runtime conversion
     body: built.body as HttpRequest["body"],
     bodyContentTypeSource: built.body,
     endpoint: fillUrl(path, built.params),

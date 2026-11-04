@@ -5,7 +5,7 @@ test("page readers accept fumadocs page data and reject a page that cannot be in
   const data = {
     title: "createClient",
     description: " Creates. ",
-    getText: async (type: string) => `${type} text`,
+    getText: (type: string) => Promise.resolve(`${type} text`),
   };
   expect(readPageTitle(data)).toBe("createClient");
   expect(await readProcessedText(data)).toBe("processed text");
@@ -13,9 +13,9 @@ test("page readers accept fumadocs page data and reject a page that cannot be in
   expect(() => readPageTitle({ title: "" })).toThrow("title");
   expect(() => readPageTitle({ title: 1 })).toThrow("title");
   await expect(readProcessedText({})).rejects.toThrow("processed text");
-  await expect(readProcessedText({ getText: async () => 1 })).rejects.toThrow(
-    "not a string",
-  );
+  await expect(
+    readProcessedText({ getText: () => Promise.resolve(1) }),
+  ).rejects.toThrow("not a string");
   await expect(readProcessedText({ getText: "nope" })).rejects.toThrow(
     "processed text",
   );

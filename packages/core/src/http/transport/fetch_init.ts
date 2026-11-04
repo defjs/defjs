@@ -8,7 +8,7 @@ export const ERR_STREAMING_REQUEST_UNSUPPORTED = new Error(
 );
 
 export function isReadableStreamBody(
-  body: HttpRequest["body"] | unknown,
+  body: unknown,
 ): body is ReadableStream<Uint8Array> {
   return isReadableStream(body);
 }
@@ -39,11 +39,12 @@ export function supportsStreamingRequestBody(): boolean {
         controller.close();
       },
     });
-    const request = new Request("https://example.com", {
+    const init: RequestInit & { duplex?: "half" } = {
       body: stream,
       duplex: "half",
       method: "POST",
-    } as RequestInit & { duplex?: "half" });
+    };
+    const request = new Request("https://example.com", init);
 
     streamingRequestBodySupport =
       request.body !== null && !request.headers.has("Content-Type");

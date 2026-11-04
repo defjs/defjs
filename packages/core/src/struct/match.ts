@@ -18,6 +18,7 @@ export function selectUnionOptions(
 ): RuntimeStruct[] {
   const matches: RuntimeStruct[] = [];
   for (const option of options) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep original live field and metadata reads without new validation or cached key/value snapshots
     const runtime = option as unknown as RuntimeStruct;
     if (matchesRuntimeValue(runtime, value, depth)) {
       matches.push(runtime);
@@ -71,11 +72,7 @@ export function matchesDefinition(
         depth < MAX_DEPTH &&
         Array.isArray(value) &&
         value.every((item) =>
-          matchesRuntimeValue(
-            definition.item as unknown as RuntimeStruct,
-            item,
-            depth + 1,
-          ),
+          matchesRuntimeValue(definition.item, item, depth + 1),
         )
       );
     case "tuple":
@@ -84,11 +81,7 @@ export function matchesDefinition(
         Array.isArray(value) &&
         value.length === definition.items.length &&
         definition.items.every((item, index) =>
-          matchesRuntimeValue(
-            item as unknown as RuntimeStruct,
-            value[index],
-            depth + 1,
-          ),
+          matchesRuntimeValue(item, value[index], depth + 1),
         )
       );
     case "object":
@@ -102,16 +95,12 @@ export function matchesDefinition(
         depth < MAX_DEPTH &&
         isPlainObject(value) &&
         Object.keys(value).every((key) =>
-          matchesRuntimeValue(
-            definition.value as unknown as RuntimeStruct,
-            value[key],
-            depth + 1,
-          ),
+          matchesRuntimeValue(definition.value, value[key], depth + 1),
         )
       );
     case "or":
       return definition.options.some((option) =>
-        matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth),
+        matchesRuntimeValue(option, value, depth),
       );
     case "discriminatedUnion": {
       if (
@@ -120,13 +109,12 @@ export function matchesDefinition(
       ) {
         return false;
       }
-      const target = definition.map.get(value[definition.discriminator]) as
-        RuntimeStruct | undefined;
+      const target = definition.map.get(value[definition.discriminator]);
       return target ? matchesRuntimeValue(target, value, depth) : false;
     }
     case "intersection":
       return definition.options.every((option) =>
-        matchesRuntimeValue(option as unknown as RuntimeStruct, value, depth),
+        matchesRuntimeValue(option, value, depth),
       );
   }
 }
@@ -144,6 +132,7 @@ function matchesObjectValue(
   const shape = resolveObjectShape(struct, definition);
   for (const key in shape) {
     const fieldStruct = shape[key];
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep original live field and metadata reads without new validation or cached key/value snapshots
     const field = fieldStruct as unknown as RuntimeStruct;
     const fieldDefinition = field[DEFINITION];
     if (!hasOwnKey(value, key)) {

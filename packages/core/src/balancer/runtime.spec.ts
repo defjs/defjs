@@ -36,8 +36,10 @@ describe("pick outcome normalization", () => {
         pick: () => [
           null,
           {
-            get endpoint() {
-              return ++endpointReads === 1 ? "https://a" : (42 as never);
+            get endpoint(): string {
+              if (++endpointReads === 1) return "https://a";
+              // @ts-expect-error a second read is intentionally not a string
+              return 42;
             },
             get done() {
               return ++doneReads === 1 ? done : undefined;
@@ -65,11 +67,18 @@ describe("pick outcome normalization", () => {
           if (property === key) {
             throw cause;
           }
-          return Reflect.get(target, property, receiver);
+          const value: unknown = Reflect.get(target, property, receiver);
+          return value;
         },
       });
 
-      const [fault] = pickEndpoint({ pick: () => outcome as never }, info);
+      const [fault] = pickEndpoint(
+        {
+          // @ts-expect-error a trapping outcome is not a pick tuple
+          pick: () => outcome,
+        },
+        info,
+      );
 
       expect(fault?.code).toBe("REQ_BUILD_FAILED");
       expect(fault?.cause).toBe(cause);
@@ -109,7 +118,13 @@ describe("synchronous balancer callbacks", () => {
     };
     process.on("unhandledRejection", onUnhandled);
     try {
-      const [fault] = pickEndpoint({ pick: () => returned as never }, info);
+      const [fault] = pickEndpoint(
+        {
+          // @ts-expect-error a promise is not a pick tuple
+          pick: () => returned,
+        },
+        info,
+      );
       expect(fault?.code).toBe("REQ_BUILD_FAILED");
       expect(fault?.cause).toBe(returned);
       await setImmediate();
@@ -133,6 +148,7 @@ describe("synchronous balancer callbacks", () => {
             null,
             {
               endpoint: "https://a",
+              // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-misused-promises -- INTENT: done must return a rejected promise to exercise asynchronous completion failure
               async done() {
                 calls += 1;
                 throw new Error("async done rejection");
@@ -166,7 +182,13 @@ describe("synchronous balancer callbacks", () => {
         rejected(new Error("custom rejection"));
       },
     };
-    const [fault] = pickEndpoint({ pick: () => thenable as never }, info);
+    const [fault] = pickEndpoint(
+      {
+        // @ts-expect-error a thenable is not a pick tuple
+        pick: () => thenable,
+      },
+      info,
+    );
     expect(fault?.cause).toBe(thenable);
     const [, selected] = pickEndpoint(
       {
@@ -195,7 +217,13 @@ describe("synchronous balancer callbacks", () => {
         rejected("ignored");
       },
     });
-    const [fault] = pickEndpoint({ pick: () => thenable as never }, info);
+    const [fault] = pickEndpoint(
+      {
+        // @ts-expect-error a callable thenable is not a pick tuple
+        pick: () => thenable,
+      },
+      info,
+    );
     expect(fault?.cause).toBe(thenable);
     expect(observations).toBe(1);
     for (const returned of [null, 42, { then: 42 }]) {

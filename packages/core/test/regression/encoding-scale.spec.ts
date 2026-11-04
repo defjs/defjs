@@ -20,6 +20,7 @@ test.each([10_000, 100_000])(
     const samples: { parseMs: number; encodeMs: number }[] = [];
     for (let run = 0; run < 3; run += 1) {
       const start = performance.now();
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
       const parsed = await parseEndpointInput(Schema, input);
       const parsedAt = performance.now();
       const encoded = encodeOutbound(parsed);

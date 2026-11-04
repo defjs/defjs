@@ -12,8 +12,10 @@ export function parseMediaTypeEssence(value: string): string | undefined {
     return undefined;
   }
   return (
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep the original regex capture path without allocating a token-parser result or changing match dispatch
     (match as [string, string, string])[1].toLowerCase() +
     "/" +
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the successful regex supplies both captures; retain the original direct capture lookup
     (match as [string, string, string])[2].toLowerCase()
   );
 }

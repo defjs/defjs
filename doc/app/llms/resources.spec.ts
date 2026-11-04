@@ -4,8 +4,8 @@ import { loader as full } from "./full";
 
 vi.mock("../lib/source", () => ({
   docsLlms: {
-    index: async (locale: string) => `${locale} · index`,
-    full: async (locale: string) => `${locale} · full`,
+    index: (locale: string) => Promise.resolve(`${locale} · index`),
+    full: (locale: string) => Promise.resolve(`${locale} · full`),
   },
 }));
 

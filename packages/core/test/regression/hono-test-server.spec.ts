@@ -1,4 +1,4 @@
-import type { Server } from "node:http";
+import { Server } from "node:http";
 import type { createAdaptorServer } from "@hono/node-server";
 import { upgradeWebSocket } from "@hono/node-server";
 import { Hono } from "hono";
@@ -6,7 +6,10 @@ import { expect, test, vi } from "vitest";
 import { WebSocketServer } from "ws";
 import { startHonoTestServer } from "../../../../test/hono-test-server";
 
-const adaptor = vi.hoisted(() => ({ servers: [] as Server[] }));
+const adaptor = vi.hoisted(() => {
+  const servers: Server[] = [];
+  return { servers };
+});
 
 // Records the real server the helper creates while still delegating to the original adapter.
 vi.mock("@hono/node-server", async (importOriginal) => {
@@ -17,7 +20,10 @@ vi.mock("@hono/node-server", async (importOriginal) => {
     ...original,
     createAdaptorServer(options: Parameters<typeof createAdaptorServer>[0]) {
       const server = original.createAdaptorServer(options);
-      adaptor.servers.push(server as Server);
+      if (!(server instanceof Server)) {
+        throw new Error("Expected an HTTP server");
+      }
+      adaptor.servers.push(server);
       return server;
     },
   };
@@ -29,7 +35,7 @@ test("the test server exchanges WebSocket messages and closes active connections
     "/ws",
     upgradeWebSocket(() => ({
       onMessage(event, socket) {
-        socket.send(String(event.data));
+        socket.send(typeof event.data === "string" ? event.data : "");
       },
     })),
   );

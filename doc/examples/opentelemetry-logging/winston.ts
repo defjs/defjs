@@ -37,6 +37,7 @@ export async function runWinstonLoggingExample(
 
     const client = createClient(
       withEndpoint("https://example.invalid"),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
       withHTTPHandle(async () => {
         throw new TypeError("Local transport is unavailable");
       }),

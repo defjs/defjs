@@ -188,6 +188,7 @@ export function withInterceptors(...interceptors: Interceptor[]): ClientOption {
   return (config) => {
     for (const interceptor of interceptors) {
       // Both fields come from the same discriminated-union member.
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original kind/fn snapshot for every runtime discriminator, including unknown kinds
       config.interceptors.push({
         kind: interceptor.kind,
         fn: interceptor.fn,

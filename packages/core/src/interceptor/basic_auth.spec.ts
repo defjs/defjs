@@ -123,9 +123,12 @@ describe("Basic Auth Interceptor", () => {
     const chain = makeChain([interceptor.fn]);
 
     let capturedRequest: HttpRequest | undefined;
-    const fakeSSEHandler = async (req: HttpRequest) => {
+    const fakeSSEHandler = (
+      req: HttpRequest,
+    ): Promise<EventStreamHandle<unknown>> => {
       capturedRequest = req;
-      return {} as EventStreamHandle<unknown>;
+      // @ts-expect-error the returned handle is unused by this test
+      return Promise.resolve({});
     };
 
     await chain(hq, fakeSSEHandler);

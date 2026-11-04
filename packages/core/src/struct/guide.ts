@@ -20,10 +20,15 @@ export function isGuideSet(value: unknown): value is GuideSet {
   return (
     typeof value === "object" &&
     value !== null &&
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve direct symbol gets even when a Proxy has trap disagrees; do not insert an in check before the original read
     (value as { [GUIDE_SET]?: unknown })[GUIDE_SET] === true
   );
 }
 
+export function guideTag(
+  members: readonly [RuntimeStruct, ...RuntimeStruct[]],
+): Guide;
+export function guideTag(members: readonly RuntimeStruct[]): Guide | undefined;
 export function guideTag(members: readonly RuntimeStruct[]): Guide | undefined {
   const unique: RuntimeStruct[] = [];
   for (const member of members) {
@@ -61,6 +66,7 @@ export function readOwnGuide(
   value: object,
   guides?: WeakMap<object, Guide>,
 ): Guide | undefined {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve direct symbol gets even when a Proxy has trap disagrees; do not insert an in check before the original read
   const tag = guides?.get(value) ?? (value as { [STRUCT]?: unknown })[STRUCT];
   if (isGuideSet(tag)) {
     return tag;
@@ -69,17 +75,17 @@ export function readOwnGuide(
     return undefined;
   }
   // Arrays and tuples are not tagged. A foreign struct on the symbol is not a guide.
-  const kind = (tag as RuntimeStruct)[DEFINITION].kind;
+  const kind = tag[DEFINITION].kind;
   if (kind === "object" || kind === "record") {
-    return tag as RuntimeStruct;
+    return tag;
   }
   return undefined;
 }
 
 /** Tag a null-prototype node this parse just created. Enumerable so object spread keeps its guide. */
 export function tagOwnNode(
-  value: { [key: string]: unknown },
+  value: { [STRUCT]?: Guide; [key: string]: unknown },
   tag: Guide,
 ): void {
-  (value as { [STRUCT]?: Guide })[STRUCT] = tag;
+  value[STRUCT] = tag;
 }

@@ -10,15 +10,17 @@ import { getOrder } from "./orders-sdk";
 
 test("one exported SDK endpoint uses each application's client and preserves typed failures", async () => {
   const requests: { url: string; authorization: string | null }[] = [];
-  const handle: FetchHandle = async (input, init) => {
+  const handle: FetchHandle = (input, init) => {
     const request = new Request(input, init);
     requests.push({
       url: request.url,
       authorization: request.headers.get("authorization"),
     });
-    return new URL(request.url).hostname === "first.example.test"
-      ? Response.json({ id: 7, status: "paid" })
-      : Response.json({ message: "Order not found" }, { status: 404 });
+    return Promise.resolve(
+      new URL(request.url).hostname === "first.example.test"
+        ? Response.json({ id: 7, status: "paid" })
+        : Response.json({ message: "Order not found" }, { status: 404 }),
+    );
   };
   const first = createClient(
     withEndpoint("https://first.example.test/v1"),

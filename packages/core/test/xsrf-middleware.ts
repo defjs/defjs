@@ -16,6 +16,7 @@ export function registerXsrfRoutes(app: Hono): void {
     return c.json({ token });
   });
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- Hono's handler overloads require the async form here
   app.post("/xsrf-validate", async (c) => {
     const cookieName = c.req.query("cookieName") ?? "XSRF-TOKEN";
     const headerName = c.req.query("headerName") ?? "X-XSRF-TOKEN";

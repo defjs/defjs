@@ -10,6 +10,7 @@ import {
   findPath,
   findNeighbour,
   type Folder,
+  type Node,
 } from "fumadocs-core/page-tree";
 import { isLayoutTabActive } from "fumadocs-ui/layouts/shared";
 import {
@@ -22,6 +23,63 @@ import { i18n, locales } from "../lib/i18n";
 import { apiVirtualFiles } from "../lib/api-virtual";
 import summaries from "../data/api-summaries.json";
 
+function metaData(value: unknown): {
+  title?: string;
+  root?: boolean | string;
+  pages?: string[];
+} {
+  if (typeof value !== "object" || value === null || Array.isArray(value))
+    throw new Error("meta file is not an object");
+  const data: { title?: string; root?: boolean | string; pages?: string[] } =
+    {};
+  if ("title" in value && typeof value.title === "string")
+    data.title = value.title;
+  if (
+    "root" in value &&
+    (typeof value.root === "boolean" || typeof value.root === "string")
+  )
+    data.root = value.root;
+  if ("pages" in value && Array.isArray(value.pages)) {
+    const pages: string[] = [];
+    for (const item of value.pages)
+      if (typeof item === "string") pages.push(item);
+      else throw new Error("meta pages must be strings");
+    data.pages = pages;
+  }
+  return data;
+}
+
+function localeRow(
+  table: object,
+  locale: string,
+): readonly [string, string, string] {
+  if (!Object.hasOwn(table, locale))
+    throw new Error(`missing locale ${locale}`);
+  const value: unknown = Reflect.get(table, locale);
+  if (!Array.isArray(value)) throw new Error(`missing locale ${locale}`);
+  const row: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") throw new Error(`missing locale ${locale}`);
+    row.push(item);
+  }
+  const group = row[0];
+  const assistedTitle = row[1];
+  const apiTitle = row[2];
+  if (
+    group === undefined ||
+    assistedTitle === undefined ||
+    apiTitle === undefined
+  )
+    throw new Error(`missing locale ${locale}`);
+  return [group, assistedTitle, apiTitle];
+}
+
+function guideFolder(children: readonly Node[]): Folder {
+  const guide = children[0];
+  if (guide?.type !== "folder") throw new Error("expected a guide folder");
+  return guide;
+}
+
 const files: VirtualFile[] = [];
 for await (const path of new Bun.Glob("**/*.{md,mdx,json}").scan(
   new URL("../../content/", import.meta.url).pathname,
@@ -31,7 +89,11 @@ for await (const path of new Bun.Glob("**/*.{md,mdx,json}").scan(
   ).text();
   files.push(
     path.endsWith(".json")
-      ? { type: "meta", path, data: JSON.parse(text) }
+      ? {
+          type: "meta",
+          path,
+          data: metaData(JSON.parse(text)),
+        }
       : {
           type: "page",
           path,
@@ -47,7 +109,9 @@ const existingPages = new Set(
   files.filter((file) => file.type === "page").map((file) => file.path),
 );
 files.push(
-  ...apiVirtualFiles(summaries, locales, existingPages, async () => ""),
+  ...apiVirtualFiles(summaries, locales, existingPages, () =>
+    Promise.resolve(""),
+  ),
 );
 const source = loader({ source: { files }, baseUrl: "/", i18n });
 
@@ -106,16 +170,17 @@ test("actual eleven-language content trees preserve every unique URL and page re
         ).length,
       ).toBe(1);
     }
-    const areas = tree.children as Folder[];
-    const guide = areas[0];
-    const recipes = areas[1];
-    if (!guide || !recipes)
+    const guide = tree.children[0];
+    const recipes = tree.children[1];
+    if (guide?.type !== "folder" || recipes?.type !== "folder")
       throw new Error("Missing guide or example reading area");
     expect(
-      guide.children.filter((n) => n.type === "separator" && n.name).length,
+      guide.children.filter((n) => n.type === "separator" && Boolean(n.name))
+        .length,
     ).toBe(6);
     expect(
-      recipes.children.filter((n) => n.type === "separator" && n.name).length,
+      recipes.children.filter((n) => n.type === "separator" && Boolean(n.name))
+        .length,
     ).toBe(4);
     expect(flattenTree(guide.children).map((n) => n.url)).toEqual([
       `${prefix}/docs`,
@@ -145,7 +210,7 @@ test("top tabs stay at three areas and the AI guide sits inside Guide", () => {
     expect(tabs.map((tab) => tab.url)).toEqual(
       ["docs", "recipes", "api"].map((area) => `${prefix}/${area}`),
     );
-    const guide = tree.children[0] as Folder;
+    const guide = guideFolder(tree.children);
     const urls = flattenTree(guide.children).map((node) => node.url);
     const ai = `${prefix}/docs/ai`;
     const aiApi = `${prefix}/docs/ai-api`;
@@ -185,13 +250,12 @@ test("every locale names the Guide AI group and both of its pages", () => {
   } as const;
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
-    const [group, assistedTitle, apiTitle] =
-      labels[locale as keyof typeof labels];
+    const [group, assistedTitle, apiTitle] = localeRow(labels, locale);
     const tree = getNavigationTree(source.getPageTree(locale), locale);
-    const guide = tree.children[0] as Folder;
+    const guide = guideFolder(tree.children);
     expect(
       guide.children
-        .filter((node) => node.type === "separator" && node.name)
+        .filter((node) => node.type === "separator" && Boolean(node.name))
         .map((node) => node.name)
         .at(-1),
     ).toBe(group);
@@ -213,10 +277,10 @@ test("navigation uses the active translator rather than selecting another dictio
     (key, options) =>
       key === "nav.guide.ai" ? "Provider AI heading" : t(key, options),
   );
-  const guide = tree.children[0] as Folder;
+  const guide = guideFolder(tree.children);
   expect(
     guide.children
-      .filter((node) => node.type === "separator" && node.name)
+      .filter((node) => node.type === "separator" && Boolean(node.name))
       .at(-1)?.name,
   ).toBe("Provider AI heading");
 });
@@ -244,10 +308,10 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     "操作示例",
     "API 参考",
   ]);
-  const guide = tree.children[0] as Folder;
+  const guide = guideFolder(tree.children);
   expect(
     guide.children
-      .filter((n) => n.type === "separator" && n.name)
+      .filter((n) => n.type === "separator" && Boolean(n.name))
       .map((n) => n.name),
   ).toEqual([
     "SDK 开发",
@@ -296,7 +360,8 @@ test("design decisions stand outside the framework group and native previous/nex
         node.type === "page" && node.url === `${prefix}/docs/design-decisions`,
     );
     expect(
-      path?.filter((node) => node.type === "separator" && node.name).length,
+      path?.filter((node) => node.type === "separator" && Boolean(node.name))
+        .length,
     ).toBe(0);
     expect(findNeighbour(tree, `${prefix}/docs/start`).previous?.url).toBe(
       prefix || "/",

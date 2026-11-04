@@ -126,10 +126,13 @@ export function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function asRecord(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new Error(`expected ${label} object`);
-  return value as Record<string, unknown>;
+  if (!isRecord(value)) throw new Error(`expected ${label} object`);
+  return value;
 }
 
 function textField(record: Record<string, unknown>, key: string): string {

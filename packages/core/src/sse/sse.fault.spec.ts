@@ -30,6 +30,13 @@ import { defineEventStream } from "./index";
 
 const SSE_HEADERS = { "content-type": "text/event-stream" };
 
+function requireRequest(input: RequestInfo | URL): Request {
+  if (!(input instanceof Request)) {
+    throw new TypeError("SSE handle received a non-Request");
+  }
+  return input;
+}
+
 function streamOf(text: string): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
     start(controller) {
@@ -45,7 +52,7 @@ function clientReturning(
 ): Client {
   return createClient(
     withEndpoint("https://api.example.test"),
-    withSSEHandle(response as unknown as typeof fetch),
+    withSSEHandle(() => Promise.resolve(response())),
     ...options,
   );
 }
@@ -80,8 +87,8 @@ describe("sse startup faults", () => {
   ])(
     "should reject invalid reconnect options %j before making a request",
     async (reconnect) => {
-      const handle = vi.fn(
-        async () => new Response("data: ok\n\n", { headers: SSE_HEADERS }),
+      const handle = vi.fn(() =>
+        Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
       );
       const client = clientReturning(handle, withSSEReconnect(reconnect));
 
@@ -96,7 +103,8 @@ describe("sse startup faults", () => {
 
   test("should accept an unbounded positive infinite reconnect cap", async () => {
     const client = clientReturning(
-      async () => new Response("data: ok\n\n", { headers: SSE_HEADERS }),
+      () =>
+        Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
       withSSEReconnect({ maxDelayMs: Infinity }),
     );
 
@@ -113,7 +121,8 @@ describe("sse startup faults", () => {
   test("should use the reconnect values validated before the interceptor runs", async () => {
     const reads = { delayMs: 0, maxDelayMs: 0 };
     const client = clientReturning(
-      async () => new Response("data: ok\n\n", { headers: SSE_HEADERS }),
+      () =>
+        Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
       (config) => {
         // Bypass public option capture to exercise execution-time validation.
         config.sse.reconnect = {
@@ -149,7 +158,8 @@ describe("sse startup faults", () => {
 
   test("should preserve the disabled reconnect snapshot if an interceptor adds options", async () => {
     const client = clientReturning(
-      async () => new Response("data: ok\n\n", { headers: SSE_HEADERS }),
+      () =>
+        Promise.resolve(new Response("data: ok\n\n", { headers: SSE_HEADERS })),
       (config) => {
         config.interceptors = [
           createSSEInterceptor((request, next) => {
@@ -176,12 +186,13 @@ describe("sse startup faults", () => {
       events: { message: struct.string() },
       path: "/events",
     });
-    const client = clientReturning(
-      async () =>
+    const client = clientReturning(() =>
+      Promise.resolve(
         new Response('{"reason":"forbidden"}', {
           headers: { "content-type": "application/json" },
           status: 403,
         }),
+      ),
     );
 
     const [fault] = await useDeclared(client);
@@ -194,11 +205,12 @@ describe("sse startup faults", () => {
   });
 
   test("should report a wrong handshake media type as RES_MEDIA_TYPE_INVALID", async () => {
-    const client = clientReturning(
-      async () =>
+    const client = clientReturning(() =>
+      Promise.resolve(
         new Response("not a stream", {
           headers: { "content-type": "text/plain" },
         }),
+      ),
     );
 
     const [fault] = await useStream(client);
@@ -207,8 +219,8 @@ describe("sse startup faults", () => {
   });
 
   test("should report a missing handshake body as RES_DECODE_FAILED", async () => {
-    const client = clientReturning(
-      async () => new Response(null, { headers: SSE_HEADERS }),
+    const client = clientReturning(() =>
+      Promise.resolve(new Response(null, { headers: SSE_HEADERS })),
     );
 
     const [fault] = await useStream(client);
@@ -218,6 +230,7 @@ describe("sse startup faults", () => {
 
   test("should report an unreachable transport as NET_UNREACHABLE", async () => {
     const cause = new TypeError("fetch failed");
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     const client = clientReturning(async () => {
       throw cause;
     });
@@ -231,9 +244,12 @@ describe("sse startup faults", () => {
   test("should report an interceptor throw as EXT_INTERCEPTOR_FAILED", async () => {
     const cause = new Error("interceptor exploded");
     const client = clientReturning(
-      async () =>
-        new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
+      () =>
+        Promise.resolve(
+          new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
+        ),
       withInterceptors(
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         createSSEInterceptor(async () => {
           throw cause;
         }),
@@ -252,9 +268,16 @@ describe("sse interceptor results", () => {
     "should report %s as the interceptor result with EXT_INTERCEPTOR_FAILED",
     async (_name, resolved) => {
       const client = clientReturning(
-        async () =>
-          new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
-        withInterceptors(createSSEInterceptor(async () => resolved() as never)),
+        () =>
+          Promise.resolve(
+            new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
+          ),
+        withInterceptors(
+          createSSEInterceptor(() =>
+            // @ts-expect-error malformed interceptor results are not stream handles
+            Promise.resolve(resolved()),
+          ),
+        ),
       );
 
       const [fault, stream] = await useStream(client);
@@ -273,11 +296,12 @@ describe("sse runtime faults", () => {
       maxBufferSize: 4,
       path: "/events",
     });
-    const client = clientReturning(
-      async () =>
+    const client = clientReturning(() =>
+      Promise.resolve(
         new Response(streamOf(`data: ${"x".repeat(64)}\n\n`), {
           headers: SSE_HEADERS,
         }),
+      ),
     );
 
     const [fault, stream] = await useTiny(client);
@@ -297,11 +321,12 @@ describe("sse runtime faults", () => {
       maxQueueSize: 1,
       path: "/events",
     });
-    const client = clientReturning(
-      async () =>
+    const client = clientReturning(() =>
+      Promise.resolve(
         new Response(streamOf("data: a\n\ndata: b\n\ndata: c\n\n"), {
           headers: SSE_HEADERS,
         }),
+      ),
     );
 
     const [fault, stream] = await useTinyQueue(client);
@@ -315,9 +340,10 @@ describe("sse runtime faults", () => {
   });
 
   test("should report a clean end of stream with kind eof and no code", async () => {
-    const client = clientReturning(
-      async () =>
+    const client = clientReturning(() =>
+      Promise.resolve(
         new Response(streamOf("data: hi\n\n"), { headers: SSE_HEADERS }),
+      ),
     );
 
     const [fault, stream] = await useStream(client);
@@ -342,7 +368,9 @@ describe("unsupported streaming request body", () => {
   test("should report ENV_UNSUPPORTED for a ReadableStream body before calling the handle", async () => {
     simulateUnsupportedStreaming();
     const body = byteStream();
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
@@ -370,7 +398,9 @@ describe("unsupported streaming request body", () => {
   test("should report ENV_UNSUPPORTED without consulting reconnect", async () => {
     simulateUnsupportedStreaming();
     const body = byteStream();
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const shouldReconnect = vi.fn(() => false);
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -397,15 +427,20 @@ describe("unsupported streaming request body", () => {
 });
 
 test("should return REQ_BUILD_FAILED when the JSON body is a Map", async () => {
-  const handle = vi.fn(
-    async () => new Response(streamOf("data: a\n\n"), { headers: SSE_HEADERS }),
+  const handle = vi.fn(() =>
+    Promise.resolve(
+      new Response(streamOf("data: a\n\n"), { headers: SSE_HEADERS }),
+    ),
   );
   const client = createClient(
     withEndpoint("https://example.com"),
     withSSEHandle(handle),
   );
   const useStream = defineEventStream({
-    builder: () => ({ body: new Map() as never }),
+    // @ts-expect-error Map is not a legal event-stream request body
+    builder: () => ({
+      body: new Map(),
+    }),
     events: { message: struct.string() },
     method: "POST",
     path: "/events",
@@ -424,8 +459,10 @@ test("should return REQ_BUILD_FAILED when the JSON body is a Map", async () => {
 });
 
 test("should return REQ_BUILD_FAILED when the JSON body is an async iterable object", async () => {
-  const handle = vi.fn(
-    async () => new Response(streamOf("data: a\n\n"), { headers: SSE_HEADERS }),
+  const handle = vi.fn(() =>
+    Promise.resolve(
+      new Response(streamOf("data: a\n\n"), { headers: SSE_HEADERS }),
+    ),
   );
   const client = createClient(
     withEndpoint("https://example.com"),
@@ -434,6 +471,7 @@ test("should return REQ_BUILD_FAILED when the JSON body is an async iterable obj
   const useStream = defineEventStream({
     builder: () => ({
       body: {
+        // eslint-disable-next-line @typescript-eslint/require-await -- an async generator yields asynchronously without awaiting
         async *[Symbol.asyncIterator]() {
           yield new TextEncoder().encode("chunk");
         },
@@ -461,10 +499,11 @@ describe("ReadableStream body and reconnect", () => {
     const failure = new TypeError("network down");
     const body = byteStream();
     const shouldReconnect = vi.fn(() => true);
-    const handle = vi.fn(async (request: Request) => {
+    const handle = vi.fn(async (input: RequestInfo | URL) => {
+      const request = requireRequest(input);
       await request.arrayBuffer();
       throw failure;
-    }) as unknown as typeof globalThis.fetch;
+    });
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
@@ -490,10 +529,11 @@ describe("ReadableStream body and reconnect", () => {
   test("should not reconnect when an interceptor replaces the body with a stream", async () => {
     const failure = new TypeError("network down");
     const shouldReconnect = vi.fn(() => true);
-    const handle = vi.fn(async (request: Request) => {
+    const handle = vi.fn(async (input: RequestInfo | URL) => {
+      const request = requireRequest(input);
       await request.arrayBuffer();
       throw failure;
-    }) as unknown as typeof globalThis.fetch;
+    });
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
@@ -525,6 +565,7 @@ describe("ReadableStream body and reconnect", () => {
     const failure = new TypeError("network down");
     const shouldReconnect = vi.fn(() => true);
     let attempt = 0;
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     const handle = vi.fn(async () => {
       attempt += 1;
       if (attempt === 1) {

@@ -18,8 +18,8 @@ import { makeResponse } from "../internal/http_response";
 
 const endpoints = ["https://first.test", "https://second.test"];
 // Some cases deliberately supply invalid runtime values at this typed boundary.
-const policy = (options: object): ClientOption =>
-  withEndpointFailover(options as EndpointFailoverOptions);
+const policy = (options: EndpointFailoverOptions): ClientOption =>
+  withEndpointFailover(options);
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -43,6 +43,7 @@ function fixture(...options: ClientOption[]) {
         ];
       },
     }),
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withHTTPHandle(async (input) => {
       const request = new Request(input);
       requests.push(request);
@@ -137,18 +138,20 @@ test("gateway-error retries a released 503 response but 500 does not retry", asy
     const client = createClient(
       withEndpoint(...endpoints),
       policy({ attempts: 1, methods: ["GET"], retryOn: ["gateway-error"] }),
-      withHTTPHandle(async () => {
+      withHTTPHandle(() => {
         calls++;
-        return calls === 1
-          ? new Response(
-              new ReadableStream({
-                cancel() {
-                  cancelled = true;
-                },
-              }),
-              { status },
-            )
-          : new Response("ok");
+        return Promise.resolve(
+          calls === 1
+            ? new Response(
+                new ReadableStream({
+                  cancel() {
+                    cancelled = true;
+                  },
+                }),
+                { status },
+              )
+            : new Response("ok"),
+        );
       }),
     );
     const result = await defineRequest({ method: "GET", path: "/" })(client);
@@ -162,9 +165,11 @@ test("without gateway-error the next call, not this call, advances after 503", a
   const urls: string[] = [];
   const client = createClient(
     withEndpoint(...endpoints),
-    withHTTPHandle(async (input) => {
+    withHTTPHandle((input) => {
       urls.push(new Request(input).url);
-      return new Response(null, { status: urls.length === 1 ? 503 : 200 });
+      return Promise.resolve(
+        new Response(null, { status: urls.length === 1 ? 503 : 200 }),
+      );
     }),
   );
   expect(
@@ -223,9 +228,7 @@ test.each([
   { attempts: -1 },
   { attempts: 0.5 },
   { attempts: Infinity },
-  { retryOn: ["bad"] },
   { methods: [""] },
-  { methods: [1] },
   { attemptTimeoutMs: 0 },
   { attemptTimeoutMs: -1 },
   { attemptTimeoutMs: Infinity },
@@ -236,6 +239,19 @@ test.each([
   ).toBe("REQ_OPTIONS_INVALID");
 });
 
+test.each([{ retryOn: ["bad"] }, { methods: [1] }])(
+  "invalid typed failover option %j fails at execution",
+  async (options) => {
+    const { client } = fixture(
+      // @ts-expect-error invalid failover fields are rejected at execution
+      policy(options),
+    );
+    expect(
+      (await defineRequest({ method: "GET", path: "/" })(client))[0]?.code,
+    ).toBe("REQ_OPTIONS_INVALID");
+  },
+);
+
 test("attempt timeout covers headers followed by a stalled declared body", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   let calls = 0;
@@ -245,9 +261,11 @@ test("attempt timeout covers headers followed by a stalled declared body", async
       retryOn: ["attempt-timeout"],
       attemptTimeoutMs: 100,
     }),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls++;
-      return new Response(calls === 1 ? new ReadableStream() : "ok");
+      return Promise.resolve(
+        new Response(calls === 1 ? new ReadableStream() : "ok"),
+      );
     }),
   );
   const pending = defineRequest({
@@ -333,23 +351,25 @@ test("gateway failover accepts a 503 HTML response rejected by its JSON error st
   let released = false;
   const { client } = fixture(
     withEndpointFailover({ retryOn: ["gateway-error"] }),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls++;
       if (calls === 1)
-        return new Response(
-          new ReadableStream({
-            start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode("<html>unavailable</html>"),
-              );
-            },
-            cancel() {
-              released = true;
-            },
-          }),
-          { status: 503, headers: { "Content-Type": "text/html" } },
+        return Promise.resolve(
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode("<html>unavailable</html>"),
+                );
+              },
+              cancel() {
+                released = true;
+              },
+            }),
+            { status: 503, headers: { "Content-Type": "text/html" } },
+          ),
         );
-      return new Response("ok");
+      return Promise.resolve(new Response("ok"));
     }),
   );
   const [error, body] = await defineRequest({
@@ -369,7 +389,9 @@ test.each(["recover", "throw"])(
   async (mode) => {
     const { client, picks } = fixture(
       withEndpointFailover({ retryOn: ["gateway-error"] }),
-      withHTTPHandle(async () => new Response(null, { status: 503 })),
+      withHTTPHandle(() =>
+        Promise.resolve(new Response(null, { status: 503 })),
+      ),
       withInterceptors({
         kind: "http",
         async fn(request, next) {
@@ -391,6 +413,7 @@ test("non-stream failover does not require a global ReadableStream constructor",
   const response = new Response(null, { status: 204 });
   vi.stubGlobal("ReadableStream", undefined);
   const { client } = fixture(
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withHTTPHandle(async (input) => {
       if (new Request(input).url.startsWith(endpoints[0] ?? ""))
         throw new Error("connection refused");

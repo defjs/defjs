@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { isRecord, isUnknownArray } from "../narrow";
 import {
   createClient,
   defineRequest,
@@ -55,6 +56,7 @@ test("nested nullable and explicit undefined containers stay leaves", async () =
     { row: null },
   ]);
   expect(plain(encodeJson(schema, { row: undefined }))).toEqual({});
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const tagged = await parseEndpointInput(schema, {});
   expect(plain(encodeOutbound({ ...tagged, row: undefined }))).toEqual({});
 
@@ -69,9 +71,9 @@ test("nullable intersection input reaches the HTTP handle", async () => {
   let calls = 0;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls += 1;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const request = defineRequest({
@@ -90,7 +92,7 @@ test("a union inside a guide set encodes every match and rejects a difference", 
   expect(() => encodeJson(UnionGuide, { row: value })).toThrow(
     /ambiguous union encode/,
   );
-  const tagged = await parseEndpointInput(UnionGuide, { row: value });
+  const tagged = parseEndpointInput(UnionGuide, { row: value });
   expect(() => encodeOutbound({ ...tagged, row: value })).toThrow(
     /ambiguous union encode/,
   );
@@ -98,9 +100,9 @@ test("a union inside a guide set encodes every match and rejects a difference", 
   let calls = 0;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       calls += 1;
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const request = defineRequest({
@@ -128,7 +130,7 @@ test("wire parsing keeps the union branch that actually matched", async () => {
   const request = defineRequest({ method: "GET", path: "/", output: schema });
   const client = createClient(
     withEndpoint("https://example.test"),
-    withHTTPHandle(async () => Response.json({ b_name: "N" })),
+    withHTTPHandle(() => Promise.resolve(Response.json({ b_name: "N" }))),
   );
   const [fault, parsed] = await request(client);
   expect(fault).toBeNull();
@@ -140,7 +142,9 @@ test("a child tag replaces parent field guides for the whole subtree", async () 
     struct.object({ row: A.optional() }),
     struct.object({ row: B.optional() }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const tagged = await parseEndpointInput(schema, {});
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const own = await parseEndpointInput(
     struct.object({ name: struct.string().alias("own_name") }),
     { name: "N" },
@@ -153,6 +157,7 @@ test("a child tag replaces parent field guides for the whole subtree", async () 
     struct.object({ note: struct.string(), row: Left.optional() }),
     struct.object({ note: struct.string() }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const singleRoot = await parseEndpointInput(single, { note: "hi" });
   expect(plain(encodeOutbound({ ...singleRoot, row: own }))).toEqual({
     note: "hi",
@@ -166,6 +171,7 @@ test("a record beside an object guides every fresh key at that node", async () =
     struct.object({ rows: struct.object({ one: Right }) }),
   );
   const rows = { extra: { firstName: "Grace" }, one: logical };
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const tagged = await parseEndpointInput(schema, { rows });
   const expected = { rows: { extra: { first_name: "Grace" }, one: wire } };
   expect(plain(encodeOutbound(tagged))).toEqual(expected);
@@ -181,6 +187,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     name: null,
     wire_name: null,
   });
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const nullTagged = await parseEndpointInput(nullWire, { name: null });
   expect(plain(encodeOutbound(nullTagged))).toEqual({
     name: null,
@@ -191,6 +198,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ row: Left.optional() }),
     struct.object({ row: Right.optional() }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const empty = await parseEndpointInput(containers, {});
   expect(encodeOutbound({ ...empty, row: null })).toEqual({ row: null });
 
@@ -204,6 +212,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const agreedRoot = await parseEndpointInput(agreed, {});
   expect(
     plain(encodeOutbound({ ...agreedRoot, row: { id: "1", title: "T" } })),
@@ -221,6 +230,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const unmatchedRoot = await parseEndpointInput(unmatched, {});
   expect(
     plain(encodeOutbound({ ...unmatchedRoot, row: { extra: 1, title: "T" } })),
@@ -240,6 +250,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
         .optional(),
     }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const missedRoot = await parseEndpointInput(missed, {});
   expect(
     plain(encodeOutbound({ ...missedRoot, pet: { kind: "bird", title: "T" } })),
@@ -253,6 +264,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
       box: struct.object({ name: struct.string().alias("display_name") }),
     }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const boxedRoot = await parseEndpointInput(boxed, {
     box: { extra: "x", name: "Ada" },
   });
@@ -271,6 +283,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
       }),
     }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const partialRoot = await parseEndpointInput(partial, {
     box: { note: "hi" },
   });
@@ -284,6 +297,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ rows: struct.array(Left).optional() }),
     struct.object({ rows: struct.array(Right).optional() }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const listsRoot = await parseEndpointInput(lists, {});
   expect(
     plain(encodeOutbound({ ...listsRoot, rows: { extra: logical } })),
@@ -293,6 +307,7 @@ test("guide-set edges encode null, agreeing unions, records, and non-object memb
     struct.object({ rows: struct.array(struct.string().optional()) }),
     struct.object({ rows: struct.array(struct.number().optional()) }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const holesRoot = await parseEndpointInput(holes, { rows: [] });
   expect(encodeOutbound({ ...holesRoot, rows: [undefined] })).toEqual({
     rows: [undefined],
@@ -371,7 +386,9 @@ test("outbound encoding of a parsed value matches encodeJson", async () => {
     },
   ];
   for (const { input, schema } of cases) {
-    const tagged = await parseEndpointInput(schema, input as never);
+    // @ts-expect-error each case pairs a schema with its own input
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
+    const tagged = await parseEndpointInput(schema, input);
     const encoded = plain(encodeJson(schema, input));
     expectOutboundMatchesEncode(plain(encodeOutbound(tagged)), encoded);
   }
@@ -390,9 +407,7 @@ function collectWireKeys(value: unknown, keys: Set<string>): void {
     return;
   }
   if (value !== null && typeof value === "object") {
-    for (const [key, child] of Object.entries(
-      value as { [key: string]: unknown },
-    )) {
+    for (const [key, child] of Object.entries(value)) {
       keys.add(key);
       collectWireKeys(child, keys);
     }
@@ -406,7 +421,8 @@ function expectSameWire(
 ): void {
   if (Array.isArray(encoded)) {
     expect(actual).toEqual(expect.any(Array));
-    const items = actual as unknown[];
+    if (!isUnknownArray(actual)) throw new Error("Expected an array");
+    const items = actual;
     expect(items).toHaveLength(encoded.length);
     for (let index = 0; index < encoded.length; index += 1) {
       expectSameWire(items[index], encoded[index], wireKeys);
@@ -417,8 +433,11 @@ function expectSameWire(
     expect(
       actual !== null && typeof actual === "object" && !Array.isArray(actual),
     ).toBe(true);
-    const actualObject = actual as { [key: string]: unknown };
-    const encodedObject = encoded as { [key: string]: unknown };
+    if (!isRecord(actual) || !isRecord(encoded)) {
+      throw new Error("Expected wire objects");
+    }
+    const actualObject = actual;
+    const encodedObject = encoded;
     for (const key of Object.keys(encodedObject)) {
       expect(actualObject).toHaveProperty(key);
       expectSameWire(actualObject[key], encodedObject[key], wireKeys);

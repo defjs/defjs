@@ -1,7 +1,7 @@
 import { DEFINITION } from "./symbols";
-import type { AnyStruct, StructDefinition } from "./types";
+import type { RuntimeStruct, StructDefinition } from "./types";
 
-const KNOWN_KINDS = new Set<StructDefinition["kind"]>([
+const KNOWN_KINDS = new Set<unknown>([
   "any",
   "array",
   "arrayBuffer",
@@ -24,7 +24,7 @@ const KNOWN_KINDS = new Set<StructDefinition["kind"]>([
   "unknown",
 ]);
 
-export function isStruct(value: unknown): value is AnyStruct {
+export function isStruct(value: unknown): value is RuntimeStruct {
   if (
     typeof value !== "object" ||
     value === null ||
@@ -33,6 +33,7 @@ export function isStruct(value: unknown): value is AnyStruct {
     return false;
   }
 
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep direct metadata gets; added in checks invoke Proxy has traps and reject values the original guard accepted
   const definition = (value as { [DEFINITION]?: Partial<StructDefinition> })[
     DEFINITION
   ];
@@ -40,12 +41,11 @@ export function isStruct(value: unknown): value is AnyStruct {
     return false;
   }
 
-  if (!KNOWN_KINDS.has(definition.kind as StructDefinition["kind"])) {
+  if (!KNOWN_KINDS.has(definition.kind)) {
     return false;
   }
 
-  const flags = definition.flags as
-    { nullable?: unknown; optional?: unknown } | undefined;
+  const flags = definition.flags;
   return (
     typeof flags === "object" &&
     flags !== null &&

@@ -1,5 +1,4 @@
 import { createServer } from "node:net";
-import type { AddressInfo } from "node:net";
 import {
   createClient,
   defineEventStream,
@@ -59,7 +58,10 @@ function onlySpan(spans: readonly MockSpan[]): MockSpan {
 async function closedPort(): Promise<number> {
   const server = createServer();
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  const address = server.address();
+  if (address === null || typeof address === "string")
+    throw new Error("expected a TCP port");
+  const { port } = address;
   await new Promise((resolve) => server.close(resolve));
   return port;
 }
@@ -81,6 +83,7 @@ describe("operation diagnostic boundary", () => {
       const cause = new TypeError("local transport unavailable");
       const client = createClient(
         withEndpoint("https://example.invalid"),
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         withHTTPHandle(async () => {
           throw cause;
         }),
@@ -103,7 +106,7 @@ describe("operation diagnostic boundary", () => {
 
   test("does not log input validation faults that never reach an interceptor", async () => {
     const { logger, records } = createMockLogger();
-    const handle = vi.fn(async () => new Response());
+    const handle = vi.fn(() => Promise.resolve(new Response()));
     const client = createClient(
       withEndpoint("https://example.invalid"),
       withHTTPHandle(handle),
@@ -115,7 +118,10 @@ describe("operation diagnostic boundary", () => {
       input: struct.object({ count: struct.number() }),
       builder: (input) => ({ body: input }),
     });
-    const [fault] = await request(client, { count: "invalid" } as never);
+    const [fault] = await request(client, {
+      // @ts-expect-error count must be a number to prove input validation
+      count: "invalid",
+    });
     expect(fault?.code).toBe("REQ_INPUT_INVALID");
     expect(handle).not.toHaveBeenCalled();
     expect(records).toEqual([]);
@@ -136,12 +142,13 @@ describe("operation diagnostic boundary", () => {
       const { logger, records } = createMockLogger();
       const client = createClient(
         withEndpoint("https://example.invalid"),
-        withHTTPHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(
             new Response(body, {
               status,
               headers: { "content-type": "application/json" },
             }),
+          ),
         ),
         withOpenTelemetryServer({ logger }),
       );
@@ -211,12 +218,13 @@ describe("operation diagnostic boundary", () => {
       const { logger, records } = createMockLogger();
       const client = createClient(
         withEndpoint("https://example.invalid"),
-        withHTTPHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(
             new Response(body, {
               status,
               headers: { "content-type": contentType },
             }),
+          ),
         ),
         withOpenTelemetryServer({ logger }),
       );
@@ -268,6 +276,7 @@ describe("operation diagnostic boundary", () => {
     const { logger, records } = createMockLogger();
     const client = createClient(
       withEndpoint("https://example.invalid"),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw new TypeError("local transport unavailable");
       }),
@@ -407,7 +416,10 @@ describe("operation diagnostic boundary", () => {
     wss.on("connection", (socket) => setTimeout(() => socket.terminate(), 20));
     await new Promise((resolve) => wss.once("listening", resolve));
     try {
-      const url = `ws://127.0.0.1:${(wss.address() as AddressInfo).port}`;
+      const address = wss.address();
+      if (address === null || typeof address === "string")
+        throw new Error("expected a TCP port");
+      const url = `ws://127.0.0.1:${address.port}`;
       const reportsErrorFirst = await new Promise<boolean>((resolve) => {
         const events: string[] = [];
         const probe = new WebSocket(url);

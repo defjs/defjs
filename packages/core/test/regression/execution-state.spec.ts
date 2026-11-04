@@ -36,6 +36,7 @@ test.each(["abort", "timeout"] as const)(
     const second = createClient(
       withEndpoint("https://second.example"),
       withInterceptors(
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         createSSEInterceptor(async () => {
           throw cause;
         }),
@@ -71,9 +72,11 @@ test.each(["http", "sse"] as const)(
     const seen: unknown[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withHTTPHandle(async () => {
         throw cause;
       }),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw cause;
       }),
@@ -117,14 +120,15 @@ test.each(["abort", "timeout"] as const)(
     const cause = mode === "abort" ? ERR_ABORTED : ERR_TIMEOUT;
     const first = createClient(
       withEndpoint("https://first.example"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>(), {
             headers: {
               "content-type": "text/event-stream",
               "x-tenant": "first",
             },
           }),
+        ),
       ),
     );
     try {
@@ -146,6 +150,7 @@ test.each(["abort", "timeout"] as const)(
       await stream?.[Symbol.asyncDispose]();
       const second = createClient(
         withEndpoint("https://second.example"),
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         withSSEHandle(async () => {
           throw cause;
         }),
@@ -184,8 +189,8 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
   const rejected = Promise.withResolvers<unknown>();
   const first = createClient(
     withEndpoint("https://first.example"),
-    withSSEHandle(
-      async () =>
+    withSSEHandle(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>(
             {
@@ -203,6 +208,7 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
             },
           },
         ),
+      ),
     ),
     withInterceptors(
       createSSEInterceptor(async (req, next) => {
@@ -228,6 +234,7 @@ test("a cancelled 401 handshake cannot classify a later sentinel as HTTP_STATUS"
   expect(await rejected.promise).toBe(ERR_ABORTED);
   const second = createClient(
     withEndpoint("https://second.example"),
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withSSEHandle(async () => {
       throw ERR_ABORTED;
     }),

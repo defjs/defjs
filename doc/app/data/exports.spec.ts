@@ -72,10 +72,16 @@ function runtimeKind(value: unknown): string {
     : "function";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 test.each(packages)(
   "@defjs/%s catalog matches its public exports, in both directions, with the right kind",
   async (pkg) => {
-    const runtime: Record<string, unknown> = await import(entryOf(pkg)),
+    const loaded: unknown = await import(entryOf(pkg));
+    if (!isRecord(loaded)) throw new Error(`missing exports for ${pkg}`);
+    const runtime = loaded,
       names = await sourceExports(entryOf(pkg)),
       catalog = new Map(
         apiEntries
@@ -100,7 +106,10 @@ test.each(packages)(
 );
 
 test("struct.* catalog entries are exactly the struct facade members", async () => {
-  const { struct } = await import(entryOf("core")),
+  const loadedCore: unknown = await import(entryOf("core"));
+  if (!isRecord(loadedCore) || !isRecord(loadedCore["struct"]))
+    throw new Error("core struct export is missing");
+  const struct = loadedCore["struct"],
     members = apiEntries.filter(
       (entry) =>
         entry.package === "@defjs/core" && entry.name.startsWith("struct."),

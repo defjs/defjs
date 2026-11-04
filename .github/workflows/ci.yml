@@ -14,11 +14,13 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       - name: Install Playwright browsers
         run: bunx --bun playwright install --with-deps chromium firefox
       - name: Lint
-        run: bun run lint
+        run: bun lint
       - name: Format check
         run: bun fmt --check
       - name: Typecheck
@@ -42,6 +44,8 @@ jobs:
           node-version: 26
           package-manager-cache: false
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
       - run: bun ci
       - name: core-server on Node
         working-directory: packages/core

@@ -62,12 +62,9 @@ export function pickEndpoint(
     if (Array.isArray(outcome) && outcome.length === 2) {
       const error: unknown = outcome[0];
       const result: unknown = outcome[1];
-      if (
-        Object.prototype.toString.call(error) === "[object Error]" &&
-        result === undefined
-      ) {
+      if (isCrossRealmError(error) && result === undefined) {
         // The tag check also accepts errors from another realm.
-        const code = isBalancerOptionError(error as Error)
+        const code = isBalancerOptionError(error)
           ? "REQ_OPTIONS_INVALID"
           : "REQ_BUILD_FAILED";
         return [createPreflightFault(code, error), undefined];
@@ -79,20 +76,12 @@ export function pickEndpoint(
         const end = "end" in result ? result.end : undefined;
         if (
           typeof endpoint === "string" &&
-          (done === undefined || typeof done === "function") &&
-          (start === undefined || typeof start === "function") &&
-          (end === undefined || typeof end === "function")
+          isOptionalCallback<(info: EndpointDoneInfo) => void>(done) &&
+          isOptionalCallback<() => void>(start) &&
+          isOptionalCallback<(info: EndpointDoneInfo) => void>(end)
         ) {
           // The callable check is the runtime boundary for custom balancers.
-          return [
-            null,
-            resolve({
-              endpoint,
-              done: done as EndpointPickResult["done"],
-              start: start as EndpointPickResult["start"],
-              end: end as EndpointPickResult["end"],
-            }),
-          ];
+          return [null, resolve({ endpoint, done, start, end })];
         }
       }
     }
@@ -146,6 +135,17 @@ function resolve(result: EndpointPickResult): ResolvedEndpoint {
       }
     },
   };
+}
+
+/** `[object Error]` also matches errors constructed in another realm. */
+function isCrossRealmError(value: unknown): value is Error {
+  return Object.prototype.toString.call(value) === "[object Error]";
+}
+
+function isOptionalCallback<T extends (...args: never[]) => void>(
+  value: unknown,
+): value is T | undefined {
+  return value === undefined || typeof value === "function";
 }
 
 function ignoreRejection(value: unknown): void {

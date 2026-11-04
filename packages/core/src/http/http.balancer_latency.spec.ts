@@ -34,9 +34,9 @@ test("80 ms of interceptor work on either side does not contaminate p2c HTTP lat
   const client = createClient(
     withEndpoint("https://fast.test"),
     withEndpointBalancer(balancer),
-    withHTTPHandle(async () => {
+    withHTTPHandle(() => {
       vi.setSystemTime(Date.now() + 10);
-      return new Response(null);
+      return Promise.resolve(new Response(null));
     }),
     withInterceptors({
       kind: "http",
@@ -69,11 +69,11 @@ test("p2c slow-host traffic stays close to baseline with 80ms before and after i
     const client = createClient(
       withEndpoint("https://slow.test", "https://fast.test"),
       withEndpointBalancer(b),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         const isSlow = new Request(input).url.startsWith("https://slow.test");
         if (isSlow) slow++;
         vi.setSystemTime(Date.now() + (isSlow ? 30 : 10));
-        return new Response(null);
+        return Promise.resolve(new Response(null));
       }),
       withInterceptors({
         kind: "http",

@@ -51,6 +51,7 @@ export function readableMarkdown(text: string, locale: string): string {
           .join("\n"),
       )
       .replace(/<TypeTable type=\{(\{.*\})\}\s*\/>/g, (_match, data: string) =>
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- INTENT: render the original JSON field values and truthy required flags without copying or introducing validation errors
         table(JSON.parse(data)),
       );
     // `\<Type>` is an escaped type argument, not an MDX component.

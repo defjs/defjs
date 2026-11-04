@@ -73,6 +73,7 @@ export function readSignatureCatalog(path: string): SignatureCatalog {
   }
   if (!Array.isArray(parsed))
     throw new Error(`API reference is not a list: ${path}`);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original catalog errors and accepted entries instead of validating every field first
   const catalog = signatureCatalog(parsed as SignatureEntry[]);
   catalogCache = { path, mtimeMs, catalog };
   return catalog;
@@ -151,6 +152,7 @@ export function replaceApiSignatures(
     }
     const value = signatureText(catalog, attribute, signatureFile(file));
     // Processed Markdown is sliced from the authored source, so the fence has to be recorded on the original node.
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve lightweight Markdown nodes and optional file metadata accepted by the original walker
     replaceSource(file as never, child as never, "```ts\n" + value + "\n```");
     children[index] = { type: "code", lang: "ts", value };
   }

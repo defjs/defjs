@@ -505,7 +505,7 @@ async function sendFetchRequest(
   let prepared = httpRequest;
   let request: Request | undefined;
   let platformBody: RequestInit["body"];
-  let fallbackUrl = "";
+  let fallbackUrl: string;
   let response: Response;
 
   try {
@@ -654,6 +654,7 @@ function convertBodyToUploadStream(body: HttpRequest["body"]):
     const contentType = serialized.headers.get("Content-Type");
     return {
       contentType,
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: forward the original FormData response body unchanged, including a custom Response returning null
       stream: serialized.body as ReadableStream<Uint8Array>,
       total: 0,
     };

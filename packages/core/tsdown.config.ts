@@ -5,6 +5,7 @@ const entries = {
 };
 
 async function writeDistPackageJson(): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original JSON values, property writes and native failures instead of adding an object-validation error
   const packageJson = (await Bun.file(
     new URL("./package.json", import.meta.url),
   ).json()) as Record<string, unknown>;

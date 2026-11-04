@@ -66,6 +66,7 @@ test.each(["throw", "reject"])(
         null,
         {
           endpoint: inject("testServerHost"),
+          // eslint-disable-next-line @typescript-eslint/no-misused-promises -- the mock deliberately returns a rejected promise
           start() {
             calls++;
             if (mode === "throw") throw new Error("start");

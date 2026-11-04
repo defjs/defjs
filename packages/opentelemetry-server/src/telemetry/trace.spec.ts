@@ -12,6 +12,7 @@ import {
   setSpanError,
   setSpanHttpResponse,
 } from "./trace";
+import { method } from "../../test/method";
 
 describe("trace helpers", () => {
   test("createHttpSpan", () => {
@@ -90,7 +91,9 @@ describe("trace helpers", () => {
     );
 
     expect(
-      vi.mocked(tracer.startSpan).mock.calls.map((call) => call[1]?.attributes),
+      vi
+        .mocked(method(tracer, "startSpan"))
+        .mock.calls.map((call) => call[1]?.attributes),
     ).toEqual([
       {
         "app.tenant": "http",
@@ -123,6 +126,7 @@ describe("trace helpers", () => {
   test("resolveStartSpanHook preserves throw undefined with an explicit failure discriminator", () => {
     expect(
       resolveStartSpanHook(() => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
         throw undefined;
       }, makeHttpRequest()),
     ).toEqual({ ok: false, error: undefined });
@@ -279,7 +283,9 @@ describe("trace helpers", () => {
       process.on("unhandledRejection", onUnhandled);
 
       try {
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
         runSpanHook(span, "requestHook", async () => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
           throw error;
         });
         await Promise.resolve();
@@ -327,6 +333,7 @@ describe("trace helpers", () => {
     process.on("unhandledRejection", onUnhandled);
 
     try {
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
       runSpanHook(span, "requestHook", async () => {
         throw new Error("async hook failed");
       });
@@ -377,6 +384,7 @@ describe("trace helpers", () => {
     const { tracer, spans } = createMockTracer();
     const span = tracer.startSpan("test");
     runSpanHook(span, "requestHook", () => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
       throw 42;
     });
 

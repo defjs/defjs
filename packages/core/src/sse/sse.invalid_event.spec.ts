@@ -35,6 +35,7 @@ function settleWithin<T>(promise: Promise<T>): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timeout);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
         reject(error);
       },
     );
@@ -76,11 +77,12 @@ async function openStream(options: {
 }) {
   const client = createClient(
     withEndpoint("https://api.example.com"),
-    withSSEHandle(
-      (async () =>
+    withSSEHandle(() =>
+      Promise.resolve(
         new Response(options.body, {
           headers: { "content-type": "text/event-stream" },
-        })) as unknown as typeof fetch,
+        }),
+      ),
     ),
     withSSEOnInvalidEvent(options.onInvalidEvent),
   );

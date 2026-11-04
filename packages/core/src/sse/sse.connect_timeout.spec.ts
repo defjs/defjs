@@ -43,7 +43,7 @@ test.each([false, true])(
         attempts: 1,
         delayMs: 10,
         connectTimeoutMs: 100,
-        shouldReconnect: customPolicy ? async () => true : undefined,
+        shouldReconnect: customPolicy ? () => Promise.resolve(true) : undefined,
       }),
       withSSEHandle(async (input) => {
         urls.push(new Request(input).url);
@@ -119,6 +119,7 @@ test("SSE clears handshake timeout before waiting for reconnect backoff", async 
   const client = createClient(
     withEndpoint(...endpoints),
     withSSEReconnect({ attempts: 1, delayMs: 1000, connectTimeoutMs: 100 }),
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withSSEHandle(async () => {
       calls++;
       if (calls === 1) throw new Error("connection refused");

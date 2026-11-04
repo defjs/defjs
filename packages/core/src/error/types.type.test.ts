@@ -1,5 +1,13 @@
 import type { DecodedResponse, HttpMeta } from "../internal/http_response";
-import type { Fault, FaultClass, FaultCode } from "./types";
+import type {
+  Fault,
+  FaultClass,
+  FaultCode,
+  FaultOf,
+  HttpStatusFault,
+  HttpStatusFaultOf,
+} from "./types";
+import type { Infer } from "../struct";
 import { struct } from "../struct";
 
 type IsAny<T> = 0 extends 1 & T ? true : false;
@@ -147,6 +155,23 @@ type DecodedBody = Expect<
   StrictEqual<DecodedResponse<typeof User>["body"], typeof User>
 >;
 
+type DefaultFault = Expect<StrictEqual<Fault, FaultOf<undefined>>>;
+type DeclaredFault = Expect<
+  StrictEqual<Fault<typeof ApiError>, FaultOf<Infer<typeof ApiError>>>
+>;
+type OptionalDeclarationFault = Expect<
+  StrictEqual<Fault<typeof ApiError | undefined>, Fault<typeof ApiError>>
+>;
+type DefaultStatus = Expect<
+  StrictEqual<HttpStatusFault, HttpStatusFaultOf<undefined>>
+>;
+type DeclaredStatus = Expect<
+  StrictEqual<
+    HttpStatusFault<typeof ApiError>,
+    HttpStatusFaultOf<Infer<typeof ApiError>>
+  >
+>;
+
 // ---------------------------------------------------------------------------
 // Negative cases.
 // ---------------------------------------------------------------------------
@@ -175,5 +200,15 @@ void (declaredFault.code === "NET_TIMEOUT" ? declaredFault.status : null);
 const customCode: FaultCode = "X_MY_OWN_CODE";
 void customCode;
 
-export type Cases =
-  ClassCases | DecodedBody | DecodedKeys | MetaKeys | NetworkClass;
+export type Cases = [
+  DefaultFault,
+  DeclaredFault,
+  OptionalDeclarationFault,
+  DefaultStatus,
+  DeclaredStatus,
+  ClassCases,
+  DecodedBody,
+  DecodedKeys,
+  MetaKeys,
+  NetworkClass,
+];

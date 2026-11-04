@@ -1,4 +1,5 @@
 import { expect, test } from "vitest";
+import { isRecord, isUnknownArray } from "../narrow";
 import { struct, type AnyStruct } from "../../src/struct";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/internal/outbound_request";
@@ -199,7 +200,8 @@ function plain(value: unknown): unknown {
 function compare(actual: unknown, expected: unknown, path = "$"): void {
   if (Array.isArray(expected)) {
     expect(actual, `${path}: expected array`).toBeInstanceOf(Array);
-    const list = actual as unknown[];
+    if (!isUnknownArray(actual)) throw new Error(`${path}: expected array`);
+    const list = actual;
     expect(list.length, `${path}: length`).toBe(expected.length);
     expected.forEach((item, index) =>
       compare(list[index], item, `${path}[${index}]`),
@@ -209,7 +211,8 @@ function compare(actual: unknown, expected: unknown, path = "$"): void {
   if (expected !== null && typeof expected === "object") {
     expect(actual, `${path}: expected object`).toEqual(expect.any(Object));
     expect(Array.isArray(actual), `${path}: expected object`).toBe(false);
-    const output = actual as { [key: string]: unknown };
+    if (!isRecord(actual)) throw new Error(`${path}: expected object`);
+    const output = actual;
     for (const [key, child] of Object.entries(expected)) {
       expect(
         Object.hasOwn(output, key),
@@ -264,7 +267,8 @@ async function runAttempts(
     let expected: unknown;
     let actual: unknown;
     try {
-      const parsed = await parseEndpointInput(schema, input as never);
+      // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
+      const parsed = await parseEndpointInput(schema, input);
       expected = plain(encodeJson(schema, parsed));
       actual = plain(encodeOutbound(parsed));
       compare(actual, expected);

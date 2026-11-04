@@ -50,6 +50,7 @@ const responses = [
 ];
 const client = createClient(
   withEndpoint("https://api.example.test"),
+  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
   withHTTPHandle(async () => {
     calls += 1;
     return Response.json(responses[calls - 1], { status: 200 });

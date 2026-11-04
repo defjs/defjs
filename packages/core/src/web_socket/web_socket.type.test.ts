@@ -40,11 +40,10 @@ function takesWebSocketEndpoint<Args extends unknown[], Incoming, Outgoing>(
 }
 
 expectTypeOf(takesWebSocketEndpoint(useChat)).toEqualTypeOf<typeof useChat>();
-void (undefined as unknown as WebSocketCommandBuilder<
-  undefined,
-  AnyStruct,
-  undefined
->);
+function retiredCommandBuilder(
+  _builder: WebSocketCommandBuilder<undefined, AnyStruct, undefined>,
+): void {}
+void retiredCommandBuilder;
 void withWebSocketOnInvalidEvent;
 
 expectTypeOf<WebSocketIncomingData<typeof Incoming>>().toEqualTypeOf<{

@@ -265,7 +265,7 @@ describe("vue browser runtime", () => {
             return;
           }
 
-          users.value = result as Users;
+          users.value = result;
         });
 
         return () =>
@@ -343,7 +343,7 @@ describe("vue browser runtime", () => {
           const [error, users] = result;
           userNames.value = error
             ? "error"
-            : (users as Users).map((user) => user.name).join(", ");
+            : users.map((user) => user.name).join(", ");
           return result;
         });
 
@@ -371,7 +371,7 @@ describe("vue browser runtime", () => {
           const [error, users] = result;
           userNames.value = error
             ? "error"
-            : (users as Users).map((user) => user.name).join(", ");
+            : users.map((user) => user.name).join(", ");
           return result;
         });
 

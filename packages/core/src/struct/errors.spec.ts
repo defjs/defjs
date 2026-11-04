@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vitest";
+
+function parsed(text: string): unknown {
+  return JSON.parse(text);
+}
 import type { ErrorMap } from "./index";
 import { StructError, struct } from "./index";
 import { parseStructTuple as parse } from "./introspection";
+import { method } from "../../test/method";
 
 describe("StructError format / flatten / prettify", () => {
   const userStruct = struct.object({
@@ -51,6 +56,46 @@ describe("StructError format / flatten / prettify", () => {
     ]);
     expect(flat.fieldErrors["profile"]).toBeUndefined();
     expect(flat.fieldErrors["tags"]).toBeUndefined();
+  });
+
+  test("flatten appends multiple issues under the same top-level key", () => {
+    const error = new StructError([
+      {
+        code: "custom",
+        expected: "email",
+        message: "email is missing",
+        path: ["profile", "email"],
+        received: undefined,
+      },
+      {
+        code: "custom",
+        expected: "name",
+        message: "name is missing",
+        path: ["profile", "name"],
+        received: undefined,
+      },
+      {
+        code: "custom",
+        expected: "string",
+        message: "first item is invalid",
+        path: [0, "first"],
+        received: 1,
+      },
+      {
+        code: "custom",
+        expected: "string",
+        message: "second item is invalid",
+        path: [0, "second"],
+        received: 2,
+      },
+    ]);
+    expect(error.flatten()).toEqual({
+      formErrors: [],
+      fieldErrors: {
+        profile: ["email is missing", "name is missing"],
+        0: ["first item is invalid", "second item is invalid"],
+      },
+    });
   });
 
   test("flatten places empty-path issues in formErrors", () => {
@@ -106,23 +151,21 @@ describe("StructError format / flatten / prettify", () => {
     const pollutionKey = "defjsStructErrorPolluted";
     const cases = [
       {
-        input: JSON.parse(`{"__proto__":{"${pollutionKey}":7}}`),
+        input: parsed(`{"__proto__":{"${pollutionKey}":7}}`),
         schema: struct.record(struct.record(struct.string())),
         target: Object.prototype,
         topLevelKey: "__proto__",
       },
       {
-        input: JSON.parse(
-          `{"constructor":{"prototype":{"${pollutionKey}":7}}}`,
-        ),
+        input: parsed(`{"constructor":{"prototype":{"${pollutionKey}":7}}}`),
         schema: struct.record(struct.record(struct.record(struct.string()))),
         target: Object.prototype,
         topLevelKey: "constructor",
       },
       {
-        input: JSON.parse(`{"toString":{"${pollutionKey}":7}}`),
+        input: parsed(`{"toString":{"${pollutionKey}":7}}`),
         schema: struct.record(struct.record(struct.string())),
-        target: Object.prototype.toString,
+        target: method(Object.prototype, "toString"),
         topLevelKey: "toString",
       },
     ];
@@ -145,10 +188,11 @@ describe("StructError format / flatten / prettify", () => {
         expect(Object.hasOwn(target, pollutionKey)).toBe(false);
       }
     } finally {
-      delete (Object.prototype as Record<string, unknown>)[pollutionKey];
-      delete (Object.prototype.toString as unknown as Record<string, unknown>)[
-        pollutionKey
-      ];
+      Reflect.deleteProperty(Object.prototype, pollutionKey);
+      Reflect.deleteProperty(
+        method(Object.prototype, "toString"),
+        pollutionKey,
+      );
     }
   });
 

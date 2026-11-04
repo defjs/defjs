@@ -1,3 +1,9 @@
+declare global {
+  interface Window {
+    __apiMarker?: string;
+  }
+}
+
 import { expect, test } from "vitest";
 import reference from "../app/data/api-reference.json";
 import { locales } from "../app/lib/i18n";
@@ -117,7 +123,7 @@ test("API links inside an entry navigate without a full page load", async () => 
     waitUntil: "networkidle",
   });
   await page.evaluate(() => {
-    (window as unknown as { __apiMarker?: string }).__apiMarker = "client-nav";
+    window.__apiMarker = "client-nav";
   });
   await page
     .locator("main")
@@ -125,11 +131,7 @@ test("API links inside an entry navigate without a full page load", async () => 
     .first()
     .click();
   await page.waitForURL("**/api/core/fetchhandle-type");
-  expect(
-    await page.evaluate(
-      () => (window as unknown as { __apiMarker?: string }).__apiMarker,
-    ),
-  ).toBe("client-nav");
+  expect(await page.evaluate(() => window.__apiMarker)).toBe("client-nav");
   expect(await errors.values()).toEqual([]);
 });
 

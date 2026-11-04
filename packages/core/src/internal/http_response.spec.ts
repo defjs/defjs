@@ -20,7 +20,9 @@ describe("Response", () => {
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () => other.makeResponse({ status: 200 })),
+        createHttpInterceptor(() =>
+          Promise.resolve(other.makeResponse({ status: 200 })),
+        ),
       ),
     );
     const request = defineRequest({ method: "GET", path: "/cached" });
@@ -35,7 +37,15 @@ describe("Response", () => {
 
     expect(isHttpResponse(made)).toBe(true);
     expect(isHttpResponse({ ...made, status: 201 })).toBe(true);
-    for (const value of [undefined, null, "ok", 200, {}, new Response()]) {
+    for (const value of [
+      undefined,
+      null,
+      "ok",
+      200,
+      {},
+      new Response(),
+      { [Symbol.for("defjs.http.response")]: false },
+    ]) {
       expect(isHttpResponse(value)).toBe(false);
     }
   });
@@ -141,5 +151,24 @@ describe("Response", () => {
 
     expect(res).not.toHaveProperty("error");
     expect(res.ok).toBe(false);
+  });
+
+  test("recognises symbol-branded functions without a proxy has lookup", () => {
+    const marker = Symbol.for("defjs.http.response");
+    const branded = Object.defineProperty(() => undefined, marker, {
+      value: true,
+    });
+    expect(isHttpResponse(branded)).toBe(true);
+    const has = () => {
+      throw new Error("response recognition must not call has");
+    };
+    const proxy = new Proxy(
+      {},
+      {
+        has,
+        get: (_target, key) => key === marker,
+      },
+    );
+    expect(isHttpResponse(proxy)).toBe(true);
   });
 });

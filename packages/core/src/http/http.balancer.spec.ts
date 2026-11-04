@@ -10,7 +10,6 @@ import type {
   EndpointBalancer,
   EndpointDoneInfo,
   EndpointPickInfo,
-  EndpointPickOutcome,
 } from "../balancer";
 import { ERR_NO_ENDPOINT, pickFirstBalancer } from "../balancer";
 import {
@@ -267,6 +266,7 @@ describe("HTTP endpoint balancer", () => {
       withEndpoint("https://example.com"),
       withEndpointBalancer({
         pick() {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
           throw reason;
         },
       }),
@@ -285,7 +285,9 @@ describe("HTTP endpoint balancer", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withEndpointBalancer({
-        pick: () => illegal as unknown as EndpointPickOutcome,
+        pick: () =>
+          // @ts-expect-error pick must return an error-first outcome
+          illegal,
       }),
     );
 
@@ -297,9 +299,10 @@ describe("HTTP endpoint balancer", () => {
 
   test("returns REQ_OPTIONS_INVALID when the balancer reports an option error", async () => {
     const watched = watch(
-      pickFirstBalancer({
-        shuffle: "yes",
-      } as unknown as { readonly shuffle?: boolean }),
+      pickFirstBalancer(
+        // @ts-expect-error shuffle must be a boolean
+        { shuffle: "yes" },
+      ),
     );
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -447,6 +450,7 @@ describe("HTTP endpoint balancer", () => {
     const watched = watch(pickFirstBalancer());
     const read = defineRequest({
       builder: () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
         throw reason;
       },
       input: struct.object({}),
@@ -605,6 +609,27 @@ describe("HTTP endpoint balancer", () => {
     const [fault] = await get(client);
 
     expect(fault).toBeNull();
+    expect(watched.dones).toEqual([{ attempted: false }]);
+  });
+
+  test("does not attribute a rewritten endpoint's transport rejection to the selected endpoint", async () => {
+    const cause = new Error("rewritten endpoint unavailable");
+    const watched = watch(pickFirstBalancer());
+    const client = createClient(
+      withEndpoint("https://primary.example"),
+      withEndpointBalancer(watched.balancer),
+      withHTTPHandle(() => Promise.reject(cause)),
+      withInterceptors(
+        createHttpInterceptor((request, next) =>
+          next({ ...request, baseEndpoint: "https://rewritten.example" }),
+        ),
+      ),
+    );
+
+    const [fault] = await get(client);
+
+    expect(fault?.code).toBe("NET_UNREACHABLE");
+    expect(fault?.cause).toBe(cause);
     expect(watched.dones).toEqual([{ attempted: false }]);
   });
 
@@ -899,6 +924,7 @@ describe("HTTP endpoint balancer", () => {
             null,
             {
               endpoint: live.url,
+              // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-misused-promises -- INTENT: done must return a rejected promise to exercise asynchronous completion failure
               async done(report) {
                 reports.push(report);
                 throw new Error("HTTP async done rejection");

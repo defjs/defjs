@@ -15,6 +15,7 @@ import {
   createControllableSocketClass,
   openControllableSocket,
 } from "./controllable_socket";
+import { isRecord } from "../narrow";
 
 const Chain = struct.object({
   get child(): StructLike {
@@ -53,12 +54,14 @@ describe("recursive structs at transport boundaries", () => {
       path: "/deep",
     });
     const { Socket, latest } = createControllableSocketClass();
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const client = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
       withSSEHandle(handle),
-      withWebSocketHandle(Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(Socket),
     );
 
     const results = [
@@ -92,7 +95,9 @@ describe("recursive structs at transport boundaries", () => {
       method: "GET",
       path: "/ignored-input",
     });
-    const handle = vi.fn(async () => new Response(null, { status: 204 }));
+    const handle = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 204 })),
+    );
     const client = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
@@ -114,11 +119,12 @@ describe("recursive structs at transport boundaries", () => {
     const invalid: unknown[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(`data: ${deepJson}\n\ndata: {"child":null}\n\n`, {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withSSEOnInvalidEvent((context) => {
         invalid.push({ cause: context.cause, reason: context.reason });
@@ -135,9 +141,12 @@ describe("recursive structs at transport boundaries", () => {
     expect(await Array.fromAsync(stream)).toEqual([
       { data: { child: null }, event: "message", id: undefined },
     ]);
-    expect(invalid).toEqual([
-      { cause: expect.any(StructError), reason: "validation-failed" },
-    ]);
+    expect(invalid).toHaveLength(1);
+    const issue = invalid[0];
+    if (!isRecord(issue)) throw new Error("Expected an invalid event");
+    expect(issue["reason"]).toBe("validation-failed");
+    expect(issue["cause"]).toBeInstanceOf(StructError);
+    expect(Object.keys(issue).sort()).toEqual(["cause", "reason"]);
     expect(await stream.closed).toMatchObject({ kind: "eof" });
   });
 
@@ -145,7 +154,7 @@ describe("recursive structs at transport boundaries", () => {
     const { Socket, latest } = createControllableSocketClass();
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(Socket),
     );
     const useSocket = defineWebSocket({
       incoming: Chain,

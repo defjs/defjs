@@ -7,6 +7,7 @@ import {
   createSSEInterceptor,
   createWebSocketInterceptor,
 } from "../interceptor";
+import type { SSEInterceptorFn, WebSocketInterceptorFn } from "../interceptor";
 import { struct, type AnyStruct } from "../struct";
 import { defineEventStream } from "../sse";
 import {
@@ -28,21 +29,27 @@ import {
   withXSRF,
 } from "./option";
 
+function isEventDictionary(value: unknown): value is { tick?: AnyStruct } {
+  return typeof value === "object" && value !== null;
+}
+
 const textEncoder = new TextEncoder();
 
 function sseHandle(text: string) {
-  return withSSEHandle(async () => {
-    return new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(textEncoder.encode(text));
-          controller.close();
+  return withSSEHandle(() => {
+    return Promise.resolve(
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(textEncoder.encode(text));
+            controller.close();
+          },
+        }),
+        {
+          headers: { "content-type": "text/event-stream" },
+          status: 200,
         },
-      }),
-      {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      },
+      ),
     );
   });
 }
@@ -58,17 +65,8 @@ function recordingSocket() {
       protocols.push(list === undefined ? undefined : [...list]);
     }
   }
-  return {
-    // Type boundary: ControllableSocket listeners are not the DOM EventTarget
-    // signatures on WebSocketHandle. The two construct signatures do not overlap,
-    // so a direct assertion is rejected and unknown is required.
-    Socket: RecordingSocket as unknown as Parameters<
-      typeof withWebSocketHandle
-    >[0],
-    instances,
-    latest,
-    protocols,
-  };
+  const handle: Parameters<typeof withWebSocketHandle>[0] = RecordingSocket;
+  return { Socket: handle, instances, latest, protocols };
 }
 
 async function openRecordedSocket<T>(
@@ -109,7 +107,7 @@ describe("optional request options", () => {
     const { Socket } = opened;
     const base = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => Response.json({ ok: true })),
+      withHTTPHandle(() => Promise.resolve(Response.json({ ok: true }))),
       sseHandle("data: hi\n\n"),
       withWebSocketHandle(Socket),
     );
@@ -232,12 +230,12 @@ describe("request option snapshots", () => {
       await vi.advanceTimersByTimeAsync(10);
       expect(JSON.parse(native.sent[0] ?? "")).toEqual({ type: "ping" });
       await vi.advanceTimersByTimeAsync(30);
-      await expect(session.closed).resolves.toMatchObject({
-        cause: expect.objectContaining({
-          message: "WebSocket heartbeat timeout",
-        }),
-        kind: "error",
-      });
+      const closed = await session.closed;
+      expect(closed.kind).toBe("error");
+      if (closed.kind !== "error") throw new Error("expected an error close");
+      expect(closed.cause).toEqual(
+        expect.objectContaining({ message: "WebSocket heartbeat timeout" }),
+      );
       expect(opened.protocols).toHaveLength(1);
     } finally {
       vi.useRealTimers();
@@ -292,8 +290,10 @@ describe("request option snapshots", () => {
     const base = createClient(withEndpoint("https://example.test"));
     for (const value of [false, 0, Number.NaN, "", null]) {
       const stored = base({
-        heartbeat: value as never,
-        reconnect: value as never,
+        // @ts-expect-error heartbeat must be an object; falsy values are kept
+        heartbeat: value,
+        // @ts-expect-error reconnect must be an object; falsy values are kept
+        reconnect: value,
       })[CLIENT].options;
       expect(stored?.heartbeat).toBe(value);
       expect(stored?.reconnect).toBe(value);
@@ -310,7 +310,10 @@ describe("request option snapshots", () => {
     const derived = createClient(
       withEndpoint("https://example.test"),
       withWebSocketHandle(opened.Socket),
-    )({ protocols: {} as never });
+    )({
+      // @ts-expect-error protocols must be an array; a record reaches execution
+      protocols: {},
+    });
 
     expect(derived[CLIENT].options?.protocols).toEqual({});
     const [error, session] = await endpoint(derived);
@@ -321,7 +324,7 @@ describe("request option snapshots", () => {
   });
 
   test("throws a nested getter from client(options) before transport or abort listeners", async () => {
-    const handle = vi.fn(async () => Response.json({ ok: true }));
+    const handle = vi.fn(() => Promise.resolve(Response.json({ ok: true })));
     const signal = new AbortController().signal;
     const add = vi.spyOn(signal, "addEventListener");
     const boom = new Error("heartbeat getter failed");
@@ -478,11 +481,14 @@ describe("client option snapshots", () => {
     (value) => {
       const client = createClient(
         withWebSocketReconnect({ attempts: 7 }),
-        withWebSocketReconnect(value as never),
+        // @ts-expect-error falsy reconnect values are stored unchanged
+        withWebSocketReconnect(value),
         withSSEReconnect({ attempts: 7 }),
-        withSSEReconnect(value as never),
+        // @ts-expect-error falsy reconnect values are stored unchanged
+        withSSEReconnect(value),
         withWebSocketHeartbeat({ intervalMs: 5 }),
-        withWebSocketHeartbeat(value as never),
+        // @ts-expect-error falsy heartbeat values are stored unchanged
+        withWebSocketHeartbeat(value),
       );
 
       expect(client[CLIENT].config.webSocket.reconnect).toBe(value);
@@ -509,23 +515,57 @@ describe("client option snapshots", () => {
     expect(reads).toBe(2);
   });
 
+  test("snapshots unknown interceptor kinds in the original getter order", () => {
+    const reads: string[] = [];
+    const fn = createHttpInterceptor(() =>
+      Promise.resolve(makeResponse({ status: 204 })),
+    ).fn;
+    const interceptor = {
+      get kind() {
+        reads.push("kind");
+        return "unknown-kind";
+      },
+      get fn() {
+        reads.push("fn");
+        return fn;
+      },
+    };
+    // @ts-expect-error Invalid runtime kinds must retain the original snapshot behavior.
+    const option = withInterceptors(interceptor);
+    const client = createClient(option);
+
+    expect(reads).toEqual(["kind", "fn"]);
+    expect(client[CLIENT].config.interceptors[0]).toEqual({
+      kind: "unknown-kind",
+      fn,
+    });
+    expect(client[CLIENT].config.interceptors[0]).not.toBe(interceptor);
+  });
+
   test("copies interceptor records without copying their functions", async () => {
     let token = "first";
     const seenTokens: string[] = [];
-    const httpFn = vi.fn(async () => {
+    const httpFn = vi.fn(() => {
       seenTokens.push(token);
-      return makeResponse({ status: 204 });
+      return Promise.resolve(makeResponse({ status: 204 }));
     });
-    const sseFn = vi.fn(async (_request, next) => next(_request));
-    const socketFn = vi.fn(async (_request, next) => next(_request));
+    // INTENT: preserve promise adoption microtask timing for next(request)
+    const sseFn = vi.fn<SSEInterceptorFn>(async (request, next) =>
+      next(request),
+    );
+    // INTENT: preserve promise adoption microtask timing for next(request)
+    const socketFn = vi.fn<WebSocketInterceptorFn>(async (request, next) =>
+      next(request),
+    );
     const http = createHttpInterceptor(httpFn);
     const sse = createSSEInterceptor(sseFn);
     const socket = createWebSocketInterceptor(socketFn);
     const option = withInterceptors(http, sse, socket);
     const client = createClient(withEndpoint("https://example.test"), option);
     const again = createClient(withEndpoint("https://example.test"), option);
-    http.fn = async () => makeResponse({ status: 503 });
-    (http as { kind: string }).kind = "sse";
+    http.fn = () => Promise.resolve(makeResponse({ status: 503 }));
+    // @ts-expect-error kind is fixed; mutating it proves the snapshot copied it
+    http.kind = "sse";
 
     const [error] = await defineRequest({
       method: "GET",
@@ -595,9 +635,9 @@ describe("definition and request snapshots", () => {
     definition.method = "POST";
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async (input) => {
+      withHTTPHandle((input) => {
         path = input instanceof Request ? new URL(input.url).pathname : "";
-        return Response.json({ ok: true });
+        return Promise.resolve(Response.json({ ok: true }));
       }),
     );
 
@@ -641,9 +681,11 @@ describe("definition and request snapshots", () => {
     });
     box.schema = struct.number();
 
-    const hidden: { tick?: ReturnType<typeof struct.string> } = Object.create({
-      message: struct.string(),
-    });
+    const created: unknown = Object.create({ message: struct.string() });
+    if (!isEventDictionary(created)) {
+      throw new Error("expected an event dictionary");
+    }
+    const hidden = created;
     Object.defineProperty(hidden, "tick", {
       enumerable: false,
       value: struct.string(),
@@ -704,7 +746,8 @@ describe("definition and request snapshots", () => {
   test("does not throw while declaring an event stream with a missing dictionary", () => {
     expect(() =>
       defineEventStream({
-        events: undefined as never,
+        // @ts-expect-error events are required; absence is checked at execution
+        events: undefined,
         path: "/events",
       }),
     ).not.toThrow();
@@ -755,14 +798,14 @@ describe("definition and request snapshots", () => {
       withEndpoint("https://example.test"),
       withXSRF(source),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           seen.push(request.xsrf?.headerName ?? "");
           if (first && request.xsrf) {
             first = false;
             request.xsrf.headerName = "changed";
             request.xsrf.tokenProvider = () => "other";
           }
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );

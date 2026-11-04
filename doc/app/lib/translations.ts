@@ -6,6 +6,7 @@ import { messages, type MessageKey, type Messages } from "./messages";
 const registry = i18n
   .translations()
   .extend(uiTranslations())
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the exact key array without an additional filtering pass or property checks
   .extend({ keys: Object.keys(messages["en-US"]) as MessageKey[] })
   .add(messages);
 

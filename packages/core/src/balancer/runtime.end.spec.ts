@@ -32,7 +32,10 @@ test("end is snapshotted once and runs synchronously once only after start and b
 test.each([1, null, "end"])("invalid end %j rejects a pick", (end) => {
   expect(
     pickEndpoint(
-      { pick: () => [null, { endpoint: "a", end }] as never },
+      {
+        // @ts-expect-error end must be a function or absent
+        pick: () => [null, { endpoint: "a", end }],
+      },
       info,
     )[0]?.code,
   ).toBe("REQ_BUILD_FAILED");

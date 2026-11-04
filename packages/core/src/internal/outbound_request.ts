@@ -69,6 +69,7 @@ export function runOutboundBuilder(
     return {};
   }
 
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original erased builder contract and definition getter order; PERF: 9/9 interleaved runs slower +0.5..2.9% when the builder is captured typed
   const result = builder(input as never);
   return result === undefined ? {} : result;
 }
@@ -214,6 +215,7 @@ function narrowToParent(
     return own;
   }
   // shared is non-empty, so guideTag returns the one struct or a conjunction.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the existing non-empty shared-guide branch without an additional hot-path predicate call
   return guideTag(shared) as Guide;
 }
 
@@ -235,14 +237,10 @@ function encodeIntersectionGuide(
   path: Path,
   guides?: WeakMap<object, Guide>,
 ): unknown {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the caller already selected an intersection; preserve the original encoder arguments and definition reads
   const definition = guide[DEFINITION] as IntersectionDefinition;
   if (definition.objectSides && isPlainObject(value)) {
-    return encodeMembers(
-      value,
-      definition.options as unknown as readonly RuntimeStruct[],
-      path,
-      guides,
-    );
+    return encodeMembers(value, definition.options, path, guides);
   }
   // Array/tuple intersections are not object sides, but their items still have to be guided.
   if (Array.isArray(value)) {
@@ -300,11 +298,8 @@ function appendResolved(
   const definition = struct[DEFINITION];
   switch (definition.kind) {
     case "or": {
-      const matches = selectUnionOptions(
-        (definition as UnionDefinition).options,
-        value,
-      );
-      const first = matches[0] as RuntimeStruct | undefined;
+      const matches = selectUnionOptions(definition.options, value);
+      const first = matches[0];
       if (!first) {
         return;
       }
@@ -315,12 +310,7 @@ function appendResolved(
           if (
             !sameWireValue(
               encoded,
-              encodeGuided(
-                value,
-                matches[index] as RuntimeStruct,
-                path,
-                guides,
-              ),
+              encodeGuided(value, matches[index], path, guides),
             )
           ) {
             throw new TypeError(
@@ -336,8 +326,7 @@ function appendResolved(
       if (!isPlainObject(value)) {
         return;
       }
-      const matched = definition.map.get(value[definition.discriminator]) as
-        RuntimeStruct | undefined;
+      const matched = definition.map.get(value[definition.discriminator]);
       if (matched) {
         appendResolved(matched, value, path, out, unwrapIntersections, guides);
       }
@@ -348,7 +337,7 @@ function appendResolved(
       // intersect the member that actually parsed the node, including `T & unknown`.
       if (definition.objectSides || unwrapIntersections) {
         for (const option of definition.options) {
-          const runtime = option as RuntimeStruct;
+          const runtime = option;
           if (unwrapIntersections && isIntersectionIdentity(runtime)) {
             continue;
           }
@@ -407,6 +396,7 @@ function materializePath(
   }
 
   // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: create the original null-prototype path dictionary directly rather than changing its prototype or adding a factory call
   const params: { [key: string]: string } = Object.create(null);
   for (const [key, item] of Object.entries(encoded)) {
     if (item === null) {
@@ -415,6 +405,7 @@ function materializePath(
     if (typeof item === "object") {
       throw new TypeError(`path value for "${key}" must be a scalar`);
     }
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve String conversion of all original non-null non-object values instead of rejecting functions, symbols, or undefined
     params[key] = String(item);
   }
   return params;
@@ -444,6 +435,7 @@ function materializeHeaders(
     return value;
   }
   if (Array.isArray(value)) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: return the original header-pair array by identity without copying or normalising its entries
     return value as HeadersInit;
   }
 
@@ -510,7 +502,8 @@ export function rejectNonJson(
       typeof value === "number"
         ? String(value)
         : typeof value === "object"
-          ? (value as { constructor?: { name?: string } }).constructor?.name ||
+          ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original constructor.name lookup including non-function constructors and proxy/getter side effects
+            (value as { constructor?: { name?: string } }).constructor?.name ||
             Object.prototype.toString.call(value).slice(8, -1)
           : typeof value;
     const advice =
@@ -529,6 +522,7 @@ function encodeCodecBody(
   codec: FormCodec,
   guides?: WeakMap<object, Guide>,
 ): FormData | URLSearchParams {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: use the original shared outbound encoder without replacing its guide traversal or allocating codec wrappers
   const encoded = encodeOutbound(body, guides) as { [key: string]: unknown };
   if (codec === "formData") {
     const form = new FormData();
@@ -565,6 +559,7 @@ function appendFormValue(
     typeof Blob !== "undefined" &&
     value instanceof Blob
   ) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: append Blob values to the original FormData target without extra per-field callback wrappers
     (target as FormData).append(key, value);
     return;
   }
@@ -633,6 +628,7 @@ function encodeSingleObject(
 ): { [key: string]: unknown } {
   const fields = resolveStructFields(
     struct,
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the object encoder is selected by its caller; preserve the original definition lookup without another guard
     struct[DEFINITION] as ObjectDefinition,
   );
   const output = nullObject();
@@ -677,8 +673,10 @@ function encodeObjectNode(
 ): { [key: string]: unknown } {
   if (
     members.length === 1 &&
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the length-one branch uses its sole member directly without extra wrapper state or an indexed-read guard
     (members[0] as RuntimeStruct)[DEFINITION].kind === "object"
   ) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original sole-member encoder call without a new allocation or validation branch
     return encodeSingleObject(value, members[0] as RuntimeStruct, path, guides);
   }
   const objects: RuntimeStruct[] = [];
@@ -704,6 +702,7 @@ function encodeObjectNode(
   for (const member of objects) {
     for (const field of resolveStructFields(
       member,
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: objects contains the members selected by kind; preserve the original field-plan traversal and reads
       member[DEFINITION] as ObjectDefinition,
     )) {
       fieldKeys.add(field.key);
@@ -713,7 +712,8 @@ function encodeObjectNode(
   }
 
   const recordValues = records.map(
-    (record) => (record[DEFINITION] as RecordDefinition).value as RuntimeStruct,
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: records contains the members selected by kind; retain the original map traversal without side arrays
+    (record) => (record[DEFINITION] as RecordDefinition).value,
   );
   // A record declares every key at this node, so there is no separate literal pass.
   const keys = records.length > 0 ? declaredRecordKeys(value, order) : order;
@@ -736,6 +736,7 @@ function encodeObjectNode(
     writeWireGroups(
       output,
       fieldValue,
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: every traversed key was inserted into plans; retain the original lookup without an extra entries array
       plans.get(key) as WireGroup[],
       [...path, key],
       guides,
@@ -785,6 +786,7 @@ function applyPassthrough(
     }
     merged = result.value;
   }
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the value produced by the original guided shared merge rather than reimplementing its semantics
   return merged as { [key: string]: unknown };
 }
 
@@ -917,12 +919,12 @@ function encodeArrayMembers(
       const definition = member[DEFINITION];
       let child: RuntimeStruct | undefined;
       if (definition.kind === "array") {
-        child = definition.item as RuntimeStruct;
+        child = definition.item;
       } else if (
         definition.kind === "tuple" &&
         index < definition.items.length
       ) {
-        child = definition.items[index] as RuntimeStruct;
+        child = definition.items[index];
       }
       if (!child) {
         continue;
@@ -1006,20 +1008,19 @@ function containerOf(
     case "object":
       return { kind: "object", struct: guide };
     case "record":
-      return { kind: "record", valueStruct: definition.value as RuntimeStruct };
+      return { kind: "record", valueStruct: definition.value };
     case "array":
-      return { kind: "array", item: definition.item as RuntimeStruct };
+      return { kind: "array", item: definition.item };
     case "tuple":
       return {
         kind: "tuple",
-        items: definition.items as unknown as readonly RuntimeStruct[],
+        items: definition.items,
       };
     case "discriminatedUnion": {
       if (!isPlainObject(value)) {
         return undefined;
       }
-      const matched = definition.map.get(value[definition.discriminator]) as
-        RuntimeStruct | undefined;
+      const matched = definition.map.get(value[definition.discriminator]);
       return matched ? { kind: "object", struct: matched } : undefined;
     }
     default:
@@ -1034,6 +1035,7 @@ function encodeMatchingUnion(
   guides?: WeakMap<object, Guide>,
 ): unknown {
   const matches = selectUnionOptions(
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the caller selected a union; retain its original definition lookup and encoder signature
     (guide[DEFINITION] as UnionDefinition).options,
     value,
   );
@@ -1045,10 +1047,7 @@ function encodeMatchingUnion(
   const encoded = encodeGuided(value, first, path, guides);
   for (let index = 1; index < matches.length; index += 1) {
     if (
-      !sameWireValue(
-        encoded,
-        encodeGuided(value, matches[index] as RuntimeStruct, path, guides),
-      )
+      !sameWireValue(encoded, encodeGuided(value, matches[index], path, guides))
     ) {
       throw new TypeError(
         "ambiguous union encode: multiple union branches match with different wire output",
@@ -1065,6 +1064,7 @@ function encodeRecord(
   guides?: WeakMap<object, Guide>,
 ): { [key: string]: unknown } {
   // Ordinary `{}` assignment treats "__proto__" as the prototype setter and drops the key.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: create the original null-prototype record directly without an additional hot-path factory call
   const output: { [key: string]: unknown } = Object.create(null);
   for (const [key, entry] of Object.entries(value)) {
     output[key] = encodeGuided(entry, valueStruct, [...path, key], guides);
@@ -1145,7 +1145,7 @@ function codecOf(
   if (!isStruct(tag)) {
     return undefined;
   }
-  const definition = (tag as RuntimeStruct)[DEFINITION];
+  const definition = tag[DEFINITION];
   if (definition.kind !== "object") {
     return undefined;
   }
@@ -1153,5 +1153,6 @@ function codecOf(
 }
 
 function structTag(value: { [key: string]: unknown }): unknown {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the symbol directly without adding a proxy has trap before the original property get
   return (value as { [STRUCT]?: unknown })[STRUCT];
 }

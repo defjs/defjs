@@ -39,7 +39,7 @@ interface ClientExceptionLog {
  * `AbortError`, on the rejection or on `request.signal.reason`. There is no `timeout` option.
  */
 function isCallerCancellation(request: HttpRequest, error: unknown): boolean {
-  const reason = request.signal?.reason;
+  const reason: unknown = request.signal?.reason;
   if (isTimeoutCause(error) || isTimeoutCause(reason)) return false;
   return isAbortCause(error) || isAbortCause(reason);
 }

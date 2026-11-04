@@ -36,9 +36,9 @@ async function assertReceiveAndSend(): Promise<void> {
     return;
   }
 
-  expectTypeOf(socket.send)
-    .parameter(0)
-    .toEqualTypeOf<StructInput<typeof Outgoing>>();
+  expectTypeOf<Parameters<typeof socket.send>[0]>().toEqualTypeOf<
+    StructInput<typeof Outgoing>
+  >();
   socket.send({ text: "hi", type: "say" });
 
   for await (const message of socket.receive) {

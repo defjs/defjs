@@ -40,7 +40,13 @@ test.each([1, null, "start"])(
   "invalid start %j rejects the pick outcome",
   (start) => {
     const result = { endpoint: "a", start };
-    const [fault] = pickEndpoint({ pick: () => [null, result] as never }, info);
+    const [fault] = pickEndpoint(
+      {
+        // @ts-expect-error start must be a function or absent
+        pick: () => [null, result],
+      },
+      info,
+    );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(fault?.cause).toEqual([null, result]);
   },

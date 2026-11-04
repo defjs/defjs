@@ -19,12 +19,14 @@ describe("operation dispatch", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: { ok: true },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: { ok: true },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          ),
         ),
       ),
     );

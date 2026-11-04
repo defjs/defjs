@@ -3,7 +3,14 @@ import { encodeJson } from "./codec/json";
 import { encodeValue } from "./encode";
 import { struct } from "./index";
 import { parseStructTuple } from "./introspection";
+import { assertStruct } from "./shape";
 import type { RuntimeStruct, StructLike } from "./types";
+import { method } from "../../test/method";
+
+function runtimeOf(value: unknown): RuntimeStruct {
+  assertStruct(value, "struct");
+  return value;
+}
 
 describe("performance optimization contracts", () => {
   test("JSON union preserves getter reads and rejects changing wire values", () => {
@@ -94,7 +101,7 @@ describe("performance optimization contracts", () => {
       {
         errorMap(issue) {
           events.push(
-            `${issue.path.join(".")}:${issue.expected}:${issue.received}`,
+            `${issue.path.join(".")}:${String(issue.expected)}:${String(issue.received)}`,
           );
           return "custom";
         },
@@ -146,7 +153,9 @@ describe("performance optimization contracts", () => {
 
   test("detached modifiers preserve their source schema and remain independent", () => {
     const source = struct.string();
-    const { optional, alias, nullish } = source;
+    const optional = method(source, "optional");
+    const alias = method(source, "alias");
+    const nullish = method(source, "nullish");
     expect(struct.parse(optional(), undefined)).toEqual([null, undefined]);
     expect(struct.parse(nullish(), null)).toEqual([null, null]);
     expect(
@@ -280,7 +289,7 @@ describe("performance optimization contracts", () => {
     );
     let calls = 0;
     const output = encodeValue(
-      objects as unknown as RuntimeStruct,
+      runtimeOf(objects),
       { value: "x" },
       {
         encodeObject() {

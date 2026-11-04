@@ -54,7 +54,9 @@ describe("reconnect config", () => {
       jitter: 0,
       maxDelayMs: 30000,
     });
-    expect(config?.shouldReconnect({} as SocketLifecycleOutcome, 1)).toBe(true);
+    expect(config?.shouldReconnect({ closeInfo: {}, opened: false }, 1)).toBe(
+      true,
+    );
   });
 
   test("normalizeReconnectConfig accepts custom values", () => {
@@ -115,12 +117,9 @@ describe("reconnect config", () => {
       },
     });
 
-    expect(
-      config?.shouldReconnect(
-        { closeInfo: {}, opened: true } as SocketLifecycleOutcome,
-        1,
-      ),
-    ).toBe(false);
+    expect(config?.shouldReconnect({ closeInfo: {}, opened: true }, 1)).toBe(
+      false,
+    );
     expect(config?.hasShouldReconnect).toBe(true);
     expect(reads).toBe(1);
     expect(firstPredicate).toHaveBeenCalledTimes(1);
@@ -130,23 +129,23 @@ describe("reconnect config", () => {
 
 describe("shouldReconnect", () => {
   test("returns false when config is undefined", () => {
-    expect(shouldReconnect(undefined, {} as SocketLifecycleOutcome, 1)).toBe(
-      false,
-    );
+    expect(
+      shouldReconnect(undefined, { closeInfo: {}, opened: false }, 1),
+    ).toBe(false);
   });
 
   test("returns false when not opened and attempts <= 0", () => {
     const config = normalizeReconnectConfig({ attempts: 0 });
-    expect(
-      shouldReconnect(config, { opened: false } as SocketLifecycleOutcome, 1),
-    ).toBe(false);
+    expect(shouldReconnect(config, { closeInfo: {}, opened: false }, 1)).toBe(
+      false,
+    );
   });
 
   test("returns true with default config", () => {
     const config = normalizeReconnectConfig({});
-    expect(
-      shouldReconnect(config, { opened: true } as SocketLifecycleOutcome, 1),
-    ).toBe(true);
+    expect(shouldReconnect(config, { closeInfo: {}, opened: true }, 1)).toBe(
+      true,
+    );
   });
 
   test("returns false when opened is false and attempts is zero on normalized config", () => {
@@ -159,9 +158,9 @@ describe("shouldReconnect", () => {
       maxDelayMs: 30000,
       shouldReconnect: () => true,
     };
-    expect(
-      shouldReconnect(config, { opened: false } as SocketLifecycleOutcome, 1),
-    ).toBe(false);
+    expect(shouldReconnect(config, { closeInfo: {}, opened: false }, 1)).toBe(
+      false,
+    );
   });
 });
 

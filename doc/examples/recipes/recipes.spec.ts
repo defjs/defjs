@@ -3,11 +3,64 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+type BunApi = {
+  file(path: URL | string): { text(): Promise<string> };
+  write(path: string, data: string): Promise<number>;
+  spawn(
+    cmd: string[],
+    options: {
+      stdout: "pipe";
+      stderr: "pipe";
+      env?: Record<string, string | undefined>;
+    },
+  ): {
+    exited: Promise<number>;
+    stdout: ReadableStream<Uint8Array>;
+    stderr: ReadableStream<Uint8Array>;
+  };
+};
+
+declare const Bun: BunApi;
+const bun = Bun;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function recordField(value: unknown, label: string): Record<string, unknown> {
+  if (!isRecord(value)) throw new Error(`expected ${label}`);
+  return value;
+}
+
+function textField(record: Record<string, unknown>, key: string): string {
+  const value = record[key];
+  if (typeof value !== "string") throw new Error(`expected ${key}`);
+  return value;
+}
+
+function numberField(record: Record<string, unknown>, key: string): number {
+  const value = record[key];
+  if (typeof value !== "number") throw new Error(`expected ${key}`);
+  return value;
+}
+
+function numberList(value: unknown): number[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "number"))
+    throw new Error("expected a number list");
+  return value.filter((item): item is number => typeof item === "number");
+}
+
+function stringList(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== "string"))
+    throw new Error("expected a string list");
+  return value.filter((item): item is string => typeof item === "string");
+}
+
 async function executeRecipe(
   name: string,
   observations: string,
 ): Promise<void> {
-  const code = await Bun.file(new URL(`./${name}.ts`, import.meta.url)).text();
+  const code = await bun.file(new URL(`./${name}.ts`, import.meta.url)).text();
 
   // Run the example file that the recipe page includes and observe the responses produced by its mock.
   const source = code
@@ -33,27 +86,39 @@ ${observations}
 `;
   const directory = await mkdtemp(join(tmpdir(), "defjs-recipe-"));
   const filename = join(directory, "recipe.ts");
-  await Bun.write(filename, observed);
-  const result = await import(filename).finally(() =>
+  await bun.write(filename, observed);
+  const loaded: unknown = await import(filename).finally(() =>
     rm(directory, { recursive: true, force: true }),
   );
+  if (!isRecord(loaded))
+    throw new Error(`recipe ${name} did not export a module`);
+  const statuses = numberList(loaded["statuses"]);
   if (name === "etag-revalidate") {
-    expect(result.statuses).toEqual([200, 304]);
-    expect(result.product.name).toBe("Flask");
+    expect(statuses).toEqual([200, 304]);
+    expect(textField(recordField(loaded["product"], "product"), "name")).toBe(
+      "Flask",
+    );
   } else if (name === "graphql-http-envelope") {
-    expect(result.viewer.login).toBe("ada");
-    expect(result.statuses).toEqual([200, 200, 200, 200]);
-    expect(result.graphQlErrors).toEqual([
+    expect(textField(recordField(loaded["viewer"], "viewer"), "login")).toBe(
+      "ada",
+    );
+    expect(statuses).toEqual([200, 200, 200, 200]);
+    expect(stringList(loaded["graphQlErrors"])).toEqual([
       "viewer unavailable",
       "viewer unavailable",
     ]);
-    expect(result.nullableError.message).toBe("viewer unavailable");
-    expect(result.nullableError.code).toBeUndefined();
+    const nullableError = recordField(loaded["nullableError"], "nullableError");
+    expect(textField(nullableError, "message")).toBe("viewer unavailable");
+    expect(nullableError["code"]).toBeUndefined();
   } else {
-    expect(result.statuses).toEqual([401, 200]);
-    expect(result.credential.accessToken).toBe("v2");
-    expect(result.error).toBeNull();
-    expect(result.invoice.total).toBe(42);
+    expect(statuses).toEqual([401, 200]);
+    expect(
+      textField(recordField(loaded["credential"], "credential"), "accessToken"),
+    ).toBe("v2");
+    expect(loaded["error"]).toBeNull();
+    expect(
+      numberField(recordField(loaded["invoice"], "invoice"), "total"),
+    ).toBe(42);
   }
 }
 
@@ -64,7 +129,7 @@ test.each([
   "local HTTP test exits $exitCode for order $id",
   async ({ id, exitCode }) => {
     const source = (
-      await Bun.file(new URL("./test-with-handle.ts", import.meta.url)).text()
+      await bun.file(new URL("./test-with-handle.ts", import.meta.url)).text()
     )
       .replace(
         '"@defjs/core"',
@@ -79,8 +144,8 @@ test.each([
     const directory = await mkdtemp(join(tmpdir(), "defjs-local-test-"));
     try {
       const filename = join(directory, "get-order.test.ts");
-      await Bun.write(filename, source);
-      const child = Bun.spawn([process.execPath, filename], {
+      await bun.write(filename, source);
+      const child = bun.spawn([process.execPath, filename], {
         stdout: "pipe",
         stderr: "pipe",
         env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },

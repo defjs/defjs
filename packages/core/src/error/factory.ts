@@ -29,6 +29,7 @@ function createFault<TFault extends Error>(
   cause?: unknown,
 ): TFault {
   // Variant fields are attached by the specific factory. Error has none of them.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: 13-pair A/B x3, direct 5.834/5.710/5.807ms vs Object.assign 9.575/9.259/9.382ms (+63.226/+58.752/+60.029% paired medians)
   const fault = new Error(message, { cause }) as TFault;
   Object.defineProperty(fault, "name", {
     configurable: true,

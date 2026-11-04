@@ -145,7 +145,7 @@ void typedHeartbeat;
 
 defineRequest({
   // @ts-expect-error An async builder is not a synchronous request shape.
-  builder: async () => ({ body: {} }),
+  builder: () => Promise.resolve({ body: {} }),
   method: "POST",
   path: "/async",
 });

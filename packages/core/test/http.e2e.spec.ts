@@ -81,11 +81,12 @@ function runtimeSupportsStreamingRequestBody(): boolean {
         controller.close();
       },
     });
-    const request = new Request("https://example.com/", {
+    const init = {
       body: stream,
-      duplex: "half",
+      duplex: "half" as const,
       method: "POST",
-    } as RequestInit & { duplex?: "half" });
+    };
+    const request = new Request("https://example.com/", init);
     return request.body !== null;
   } catch {
     return false;
@@ -98,6 +99,24 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 function isRecord(value: unknown): value is { [key: string]: unknown } {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function queryScalar(value: unknown): string | undefined {
+  switch (typeof value) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "bigint":
+      return String(value);
+    case "function":
+      return value.toString();
+    case "symbol":
+      throw new TypeError("Cannot convert a Symbol value to a string");
+    case "object":
+      return value === null ? "null" : undefined;
+    default:
+      return undefined;
+  }
 }
 
 function stringifyQuery(
@@ -120,9 +139,8 @@ function stringifyQuery(
       }
       continue;
     }
-    if (typeof value !== "undefined") {
-      parts.push(`${name}=${String(value)}`);
-    }
+    const scalar = queryScalar(value);
+    if (scalar !== undefined) parts.push(`${name}=${scalar}`);
   }
   return parts.join("&");
 }
@@ -769,9 +787,11 @@ describe("request builder through the real server", () => {
       path: missPath,
     });
 
-    const [error, result, response] = await create(client, {
-      name: 1,
-    } as never);
+    const [error, result, response] = await create(
+      client,
+      // @ts-expect-error name must be a string to prove runtime rejection
+      { name: 1 },
+    );
     await pingMiss(controlPath);
 
     expect(error).toMatchObject({ code: "REQ_INPUT_INVALID" });

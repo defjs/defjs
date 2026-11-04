@@ -161,6 +161,7 @@ export function nestedExpression(
 ): { kind: number } | undefined {
   let current = node;
   while (current && wrappers.includes(current.kind)) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve one expression getter read and pass nested values through without additional kind validation
     const inner = (current as { expression?: { kind: number } | undefined })
       .expression;
     if (!inner) return undefined;

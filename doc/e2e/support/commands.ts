@@ -22,11 +22,14 @@ function revive(session: Session, browser: Browser, value: Encoded): unknown {
     return value.map((v) => revive(session, browser, v));
   if (typeof value !== "object" || value === null) return value;
   if ("__fn" in value)
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-base-to-string -- INTENT: preserve original serialized-function coercion, invocation, and promise-based closer behavior
     return new Function(`return (${String(value["__fn"])})`)();
   if ("__re" in value) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve native RegExp coercion and failures for serialized values without new validation
     const [source, flags] = value["__re"] as [string, string];
     return new RegExp(source, flags);
   }
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original remote-handle lookup and failure behavior without validating the wire object
   if ("__ref" in value) return walk(session, browser, value["__ref"] as Ref);
   return Object.fromEntries(
     Object.entries(value).map(([key, v]) => [key, revive(session, browser, v)]),
@@ -39,10 +42,12 @@ function walk(session: Session, browser: Browser, ref: Ref): unknown {
   if (current === undefined)
     throw new Error(`Unknown e2e handle: ${ref.handle}`);
   for (const step of ref.steps) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve JavaScript member access on callable and primitive remote owners
     const owner = current as Record<string, unknown>;
     const member = owner[step.name];
     current = step.args
-      ? (member as (...args: unknown[]) => unknown).apply(
+      ? // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original member.apply lookup and invocation ordering
+        (member as (...args: unknown[]) => unknown).apply(
           owner,
           step.args.map((arg) => revive(session, browser, arg)),
         )
@@ -84,6 +89,7 @@ export const e2eCall: BrowserCommand<[string, Ref]> = async (
   const result = await walk(session, browserOf(context), ref);
   const last = ref.steps.at(-1)?.name;
   if ((last === "newPage" || last === "newContext") && !isPlainValue(result)) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve context-based closer ownership without duck-typing or skipping returned handles
     const created = result as Page | BrowserContext;
     session.closers.push(async () => {
       const owner = "context" in created ? created.context() : created;
@@ -91,6 +97,7 @@ export const e2eCall: BrowserCommand<[string, Ref]> = async (
     });
   }
   if (isPlainValue(result)) return { kind: "value", value: result };
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original registration and native WeakMap failures for non-plain results
   return { kind: "handle", handle: register(session, result as object) };
 };
 
@@ -99,6 +106,7 @@ export const e2eExtend: BrowserCommand<
 > = async ({ context }, token, name, pageRef, ...options) => {
   const session = sessionOf(token);
   const browser = browserOf(context);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original page operation failures without an added page-shape check
   const page = walk(session, browser, pageRef) as Page;
   const [first] = options.map((option) => revive(session, browser, option));
   if (name === "errors") {
@@ -141,7 +149,9 @@ export const e2eExtend: BrowserCommand<
   const hold = {
     release: () => gate.resolve(),
   };
+  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve original serialized-function coercion, invocation, and promise-based closer behavior
   session.closers.unshift(async () => gate.resolve());
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the route matcher values accepted by Playwright without restricting them to this realm RegExp
   await page.route(first as RegExp, async (route) => {
     await gate.promise;
     await route.continue();

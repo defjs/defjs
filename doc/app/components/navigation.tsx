@@ -64,7 +64,8 @@ function NavigationSidebar(props: SidebarProps) {
   const content = (
     <nav
       aria-label={t("nav.navigation")}
-      className="navigation-sidebar contents"
+      // The layout sets the sidebar width through a utility on its direct child; this nav is that child.
+      className="navigation-sidebar contents md:layout:[--fd-sidebar-width:268px]"
     >
       <Sidebar {...props} />
     </nav>
@@ -136,6 +137,7 @@ function NavigationItem({ item }: { item: Item }) {
       aria-current={active ? "page" : undefined}
       icon={item.icon}
       data-navigation-standalone={standalone || undefined}
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep the local CSS custom property without globally augmenting accepted React style properties
       style={{ "--navigation-depth": depth } as CSSProperties}
       className={`navigation-item relative flex flex-wrap items-center gap-x-1 rounded-lg p-2 text-start text-fd-muted-foreground hover:bg-fd-accent/50 hover:text-fd-accent-foreground data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary ${standalone ? "mt-4" : ""}`}
     >

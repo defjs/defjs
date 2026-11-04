@@ -158,17 +158,9 @@ test("model helpers keep stable names, kinds, and parameter rows", () => {
   ).toThrow("binding parameter type has no member table: Empty");
   expect(nestedExpression(undefined, [1])).toBeUndefined();
   expect(nestedExpression({ kind: 2 }, [1])).toEqual({ kind: 2 });
-  expect(
-    nestedExpression(
-      { kind: 1, expression: { kind: 2 } } as { kind: number },
-      [1],
-    ),
-  ).toEqual({
-    kind: 2,
-  });
-  expect(
-    nestedExpression({ kind: 1 } as { kind: number }, [1]),
-  ).toBeUndefined();
+  const wrapped = { kind: 1, expression: { kind: 2 } };
+  expect(nestedExpression(wrapped, [1])).toEqual({ kind: 2 });
+  expect(nestedExpression({ kind: 1 }, [1])).toBeUndefined();
   expect(objectPropertyName("any", "identifier")).toBe("any");
   expect(() => objectPropertyName("['any']", "other")).toThrow(
     "unsupported struct property name",
@@ -290,7 +282,8 @@ test("serialized reference JSON uses a fixed field order", () => {
       },
     ],
   });
-  const table = withTable.typeTable as StoredEntry[];
+  const table = withTable.typeTable;
+  if (!table) throw new Error("expected a type table");
   expect(defined(table[0], "id").typeHref).toBe("#id");
   expect(defined(table[1], "name").typeHref).toBeUndefined();
   expect(serializeReference([entry]).endsWith("\n")).toBe(true);

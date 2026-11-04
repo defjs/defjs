@@ -9,6 +9,13 @@ const { MarkdownServer } = createMarkdownRenderer({
   remarkPlugins: [remarkGfm, remarkHeading],
 });
 
+function localeText(table: object, locale: string): string {
+  if (!Object.hasOwn(table, locale)) throw new Error(`missing ${locale}`);
+  const value: unknown = Reflect.get(table, locale);
+  if (typeof value !== "string") throw new Error(`missing ${locale}`);
+  return value;
+}
+
 const assisted = {
   "en-US": "AI-assisted development",
   "zh-Hans": "AI 辅助开发",
@@ -88,11 +95,11 @@ test("every locale keeps assistant resources and the AI call-site guide on separ
   let englishDescription = "";
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
-    const copy = locale as keyof typeof assisted;
+    const copy = locale;
     const guide = await page(locale, "ai.md");
     const calling = await page(locale, "ai-api.mdx");
-    expect(guide.title).toBe(assisted[copy]);
-    expect(calling.title).toBe(api[copy]);
+    expect(guide.title).toBe(localeText(assisted, copy));
+    expect(calling.title).toBe(localeText(api, copy));
     expect(guide.description.length).toBeGreaterThan(20);
     expect(calling.description.length).toBeGreaterThan(20);
     expect(guide.html).toContain('id="install"');
@@ -128,7 +135,7 @@ test("every locale keeps assistant resources and the AI call-site guide on separ
     expect(guide.html).toContain("builder");
     expect(calling.html).toContain('id="call-an-api"');
     expect(calling.html).toContain('id="fictional-stream"');
-    expect(calling.html).toContain(secretMarker[copy]);
+    expect(calling.html).toContain(localeText(secretMarker, copy));
     expect(calling.html).toContain("withSSEHandle");
     expect(calling.body).toContain(
       "examples/ai/fictional-completion.ts#example",

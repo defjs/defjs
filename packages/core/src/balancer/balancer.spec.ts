@@ -145,13 +145,13 @@ describe("pickFirstBalancer", () => {
     });
     expect(endpointOf(balancer, ["a", "b"])).toBe("a");
 
-    const empty = [] as string[];
+    const empty: string[] = [];
     empty.length = 1;
     expect(balancer.pick(info(empty))[0]).toBe(ERR_NO_ENDPOINT);
   });
 
   test("returns ERR_NO_ENDPOINT for an empty list without modifying it", () => {
-    const endpoints = Object.freeze([] as string[]);
+    const endpoints = Object.freeze<string[]>([]);
     const balancer = pickFirstBalancer({ shuffle: false });
     expect(balancer.pick(info(endpoints))[0]).toBe(ERR_NO_ENDPOINT);
     expect(endpoints).toEqual([]);
@@ -182,26 +182,30 @@ describe("pickFirstBalancer", () => {
   test("skips an empty shuffle slot", () => {
     vi.spyOn(Math, "random").mockReturnValueOnce(0.2).mockReturnValueOnce(0.8);
     const endpoints = ["b", "a"];
-    endpoints.splice(1, 0, undefined as unknown as string);
+    // @ts-expect-error a hole is not a string endpoint
+    endpoints.splice(1, 0, undefined);
     const balancer = pickFirstBalancer({ shuffle: true });
     expect(endpointOf(balancer, endpoints)).toBe("b");
   });
 
   test("remembers an invalid option and does not throw", () => {
-    expect(() => pickFirstBalancer(null as never)).not.toThrow();
-    const balancer = pickFirstBalancer({ shuffle: "yes" } as never);
+    // @ts-expect-error null is not pick-first options
+    expect(() => pickFirstBalancer(null)).not.toThrow();
+    // @ts-expect-error shuffle must be a boolean
+    const balancer = pickFirstBalancer({ shuffle: "yes" });
     const [first] = balancer.pick(info([]));
     const [second] = balancer.pick(info(["a"]));
     expect(first).toBeInstanceOf(TypeError);
     expect(first).toBe(second);
-    expect(pickFirstBalancer(1 as never).pick(info(["a"]))[0]).toBeInstanceOf(
-      TypeError,
-    );
+    expect(
+      // @ts-expect-error a number is not pick-first options
+      pickFirstBalancer(1).pick(info(["a"]))[0],
+    ).toBeInstanceOf(TypeError);
   });
 
   test("rejects an array as options", () => {
-    // The option type forbids arrays; the assertion supplies one anyway.
-    const error = pickFirstBalancer([] as never).pick(info(["a"]))[0];
+    // @ts-expect-error an array is not pick-first options
+    const error = pickFirstBalancer([]).pick(info(["a"]))[0];
     expect(error).toBeInstanceOf(TypeError);
     expect(error?.message).toBe("pickFirstBalancer options must be an object");
   });
@@ -291,15 +295,20 @@ describe("roundRobinBalancer", () => {
 
   test("remembers invalid options and does not throw", () => {
     const random = vi.spyOn(Math, "random");
-    expect(() => roundRobinBalancer(null as never)).not.toThrow();
+    // @ts-expect-error null is not round-robin options
+    expect(() => roundRobinBalancer(null)).not.toThrow();
     const cases = [
-      roundRobinBalancer(1 as never),
-      roundRobinBalancer({ weights: {} } as never),
+      // @ts-expect-error a number is not round-robin options
+      roundRobinBalancer(1),
+      // @ts-expect-error weights must be a map of finite numbers
+      roundRobinBalancer({ weights: {} }),
       roundRobinBalancer({
-        weights: new Map([[1, 1]]) as never,
+        // @ts-expect-error weight keys must be endpoint strings
+        weights: new Map([[1, 1]]),
       }),
       roundRobinBalancer({
-        weights: new Map([["a", "1"]]) as never,
+        // @ts-expect-error weight values must be finite numbers
+        weights: new Map([["a", "1"]]),
       }),
       roundRobinBalancer({ weights: new Map([["a", Number.NaN]]) }),
       roundRobinBalancer({
@@ -323,8 +332,8 @@ describe("roundRobinBalancer", () => {
   });
 
   test("rejects an array as options", () => {
-    // The option type forbids arrays; the assertion supplies one anyway.
-    const error = roundRobinBalancer([] as never).pick(info(["a"]))[0];
+    // @ts-expect-error an array is not round-robin options
+    const error = roundRobinBalancer([]).pick(info(["a"]))[0];
     expect(error).toBeInstanceOf(TypeError);
     expect(error?.message).toBe("roundRobinBalancer options must be an object");
   });
@@ -404,7 +413,8 @@ describe("pickEndpoint", () => {
   const base = info(["https://a", "https://b"]);
 
   test("maps option errors, empty lists, and thrown or malformed picks", () => {
-    const invalid = pickFirstBalancer({ shuffle: 1 } as never);
+    // @ts-expect-error shuffle must be a boolean
+    const invalid = pickFirstBalancer({ shuffle: 1 });
     const [optionsFault] = pickEndpoint(invalid, base);
     expect(optionsFault?.code).toBe("REQ_OPTIONS_INVALID");
     expect(optionsFault?.cause).toBe(invalid.pick(base)[0]);
@@ -433,6 +443,7 @@ describe("pickEndpoint", () => {
       pickEndpoint(
         {
           pick() {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
             throw "boom";
           },
         },
@@ -466,19 +477,36 @@ describe("pickEndpoint", () => {
       returned,
     ];
     for (const outcome of malformed) {
-      const [fault] = pickEndpoint({ pick: () => outcome as never }, base);
+      const [fault] = pickEndpoint(
+        {
+          // @ts-expect-error malformed pick results are rejected at runtime
+          pick: () => outcome,
+        },
+        base,
+      );
       expect(fault?.code).toBe("REQ_BUILD_FAILED");
     }
-    const [shapeFault] = pickEndpoint({ pick: () => returned as never }, base);
+    const [shapeFault] = pickEndpoint(
+      {
+        // @ts-expect-error a non-tuple pick result is rejected at runtime
+        pick: () => returned,
+      },
+      base,
+    );
     expect(shapeFault?.cause).toBe(returned);
     expect(called).toBe(false);
   });
 
   test("keeps a cross-realm error as the build-failure cause", () => {
-    // runInNewContext is untyped; the expression is an Error from another realm.
-    const foreign = runInNewContext("new Error('x')") as Error;
+    const foreign: unknown = runInNewContext("new Error('x')");
     expect(foreign).not.toBeInstanceOf(Error);
-    const [fault] = pickEndpoint({ pick: () => [foreign, undefined] }, base);
+    const [fault] = pickEndpoint(
+      {
+        // @ts-expect-error a cross-realm error is not this realm's Error
+        pick: () => [foreign, undefined],
+      },
+      base,
+    );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(fault?.cause).toBe(foreign);
   });

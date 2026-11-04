@@ -19,7 +19,6 @@ Definitions can be published on their own; the consuming application keeps owner
 | `packages/opentelemetry-server` | `@defjs/opentelemetry-server` | Server-side outbound OpenTelemetry for core clients                     | Does not initialize the OTel SDK; no bodies or full headers captured by default |
 | `doc`                           | private                       | Fumadocs + React Router + Vite documentation site and its E2E suite     | Content and site code only                                                      |
 | `test`                          | root                          | Shared test infrastructure: `assert-pack.ts`, test servers, Firefox env | Not a package                                                                   |
-| `docs`                          | root                          | Internal audit / design / perf / research records                       | Not published, not user documentation                                           |
 
 Read the reference that matches your change before editing:
 
@@ -46,7 +45,7 @@ Authentication, tracing, and cross-request header changes belong in an intercept
 
 ## Example best practice
 
-Examples, READMEs, and guides follow the minimal example in `doc/examples/http/basic-setup.ts`. LLM resources use Fumadocs output directly; keep guidance in the documentation source, without handwritten preambles, duplicated examples, or post-generation Markdown rewriting. A definition does not capture a client. Calling an operation runs it; do not bind that call to a command name. `client(options)` returns a client value for one call and does not perform I/O; the value is not callable. `input` declares the value and a synchronous pure `builder` places it. The application owns the endpoint, credentials, and client. Read the error-first tuple and return from the surrounding function before using a success value. Complete scripts wrap that call in a function so the return stays legal in ESM, and leave definitions and exports outside it. Ordinary Defjs faults stay on the tuple; exception-based adapters must be explicitly identified as integration-specific policies, not the default calling style. Preserve cancellation, retries, ETag handling, SSE/WebSocket runtime errors, and close or dispose ownership. Do not rewrite historical design, audit, or performance records to match current example style.
+Examples, READMEs, and guides follow the minimal example in `doc/examples/http/basic-setup.ts`. LLM resources use Fumadocs output directly; keep guidance in the documentation source, without handwritten preambles, duplicated examples, or post-generation Markdown rewriting. A definition does not capture a client. Calling an operation runs it; do not bind that call to a command name. `client(options)` returns a client value for one call and does not perform I/O; the value is not callable. `input` declares the value and a synchronous pure `builder` places it. The application owns the endpoint, credentials, and client. Read the error-first tuple and return from the surrounding function before using a success value. Complete scripts wrap that call in a function so the return stays legal in ESM, and leave definitions and exports outside it. Ordinary Defjs faults stay on the tuple; exception-based adapters must be explicitly identified as integration-specific policies, not the default calling style. Preserve cancellation, retries, ETag handling, SSE/WebSocket runtime errors, and close or dispose ownership.
 
 ## Repository map
 
@@ -93,8 +92,10 @@ Documentation unit specs (`*.spec.ts`) sit beside the source in `app/`, `scripts
 
 - Do not skip inside a shared spec with `process.platform`-style checks. Put the test in the runtime-specific file. React and Vue run browser projects only, so their specs use `*.browser.spec.ts`; the OpenTelemetry package runs a server project only.
 - TypeScript is strict: `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`, `noPropertyAccessFromIndexSignature`, `verbatimModuleSyntax`, `allowImportingTsExtensions`. Use `import type` for type-only imports. The root catalog pins `typescript` to the exact `7.1.0-beta`; a caret range would resolve to nightly `7.1.0-dev` builds.
-- Prefer accurate parameter and return types, inference, narrowing, and `satisfies` over type assertions. Keep `as` only where a runtime, external, or generic boundary genuinely requires it, or a test deliberately supplies invalid input; explain non-obvious cases. Use `as const` only when literal or readonly inference is needed. Do not replace assertions with suppression comments or another assertion syntax merely to hide them.
-- Lint rules that commonly bite: no `any`, no non-null assertions, no namespace imports, `@ts-ignore` banned, `@ts-expect-error` requires a description of at least 10 characters.
+- Type assertions are banned by lint: `x as T`, `<T>x`, and `as unknown as T` all fail (`@typescript-eslint/consistent-type-assertions` with `assertionStyle = "never"`). `as const`, `satisfies`, and import/export aliases are allowed. Fix the type at its source with annotations, generics, `satisfies`, or real narrowing; an overload whose implementation is wider than its signature without a real check is an assertion in disguise. A test that passes invalid input on purpose uses `@ts-expect-error` with a description. Keep an assertion only in a test that must violate types, where removing it measurably costs performance, or where the typed alternative would change runtime behaviour or what users can compile. Put `// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- PERF: <numbers>` or `-- INTENT: <the behaviour that would change>` on the line above. Do not hide an assertion behind a helper that casts.
+- Lint rules that commonly bite: no `any`, and no `any` flowing in unnarrowed from an external API (bind `JSON.parse` and `.json()` results to `unknown` and narrow), no non-null assertions, no namespace imports, `@ts-ignore` banned, `@ts-expect-error` requires a description of at least 10 characters.
+- Lint configuration lives in `bunfig.toml` `[lint]`: `bun lint`'s recommended rules plus those project rules. `bun lint` needs a Bun build that ships the built-in linter, so CI installs the `canary` channel until the next stable release includes it.
+- Project-specific lint rules live in `lint/plugin.ts` and load through `[lint] plugins`. `defjs/prefer-typeof-switch` reports a rejecting chain of `typeof x !== "…" && …` comparisons on one plain identifier or `this` and asks for a `switch`; it does not report positive `||` / `===` chains or subjects that contain a call or property read, because a `switch` would change how often those run. The repository contains no JavaScript files; plugins and scripts are TypeScript.
 - Formatting is Bun's built-in formatter: 2 spaces, LF, UTF-8, final newline. Run `bun fmt`.
 - Write a comment only when the reason is non-obvious. Do not restate what the code does.
 - Capture fixed configuration records by assigning each field, including nested owned records, and copy array containers. Preserve functions, signals, schemas, SDK handles, and other identity-bearing values. Keep absent optional configuration blocks `undefined` rather than creating empty placeholders. Do not add runtime field registries or per-field missing-versus-undefined handling. Keep dynamic dictionaries, wire serialization, security checks, and allowlists where the keys are not fixed.
@@ -125,15 +126,16 @@ Setup, once per checkout:
 ```bash
 bun install
 bunx --bun playwright install --with-deps chromium firefox
+git config core.hooksPath .githooks
 ```
 
-Playwright browsers are only needed by the Core browser projects and the documentation E2E suite.
+Playwright browsers are only needed by the Core browser projects and the documentation E2E suite. The pre-commit hook lints and formats the staged files and runs the type check.
 
 Run these in order from the repository root and stop at the first failure. This is the same sequence as `.github/workflows/ci.yml`.
 
 | #   | Command             | Covers                                                  |
 | --- | ------------------- | ------------------------------------------------------- |
-| 1   | `bun run lint`      | oxlint over the whole repository                        |
+| 1   | `bun lint`          | `bun lint` over the whole repository                    |
 | 2   | `bun fmt --check`   | formatting for every file                               |
 | 3   | `bun run typecheck` | library project, documentation app, TS/TSX examples     |
 | 4   | `bun run test:unit` | every workspace plus the root `test/` directory         |
@@ -142,9 +144,10 @@ Run these in order from the repository root and stop at the first failure. This 
 
 A change is verified only when all six pass on the same revision.
 
-`bun fmt` is a Bun built-in, deliberately not wrapped in a script. There is no `fmt` or `fmt:check` script and `bun run fmt` does not exist:
+`bun lint` and `bun fmt` are Bun built-ins, deliberately not wrapped in scripts. There are no `lint` or `fmt` scripts and `bun run lint` does not exist:
 
 ```bash
+bun lint          # verify, with --fix to write
 bun fmt           # write
 bun fmt --check   # verify
 ```
@@ -212,7 +215,6 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 - **Release tags are mandatory.** After confirming that a package was published successfully, create its own lightweight Git tag on the exact commit used for publication. A package release is not complete until its tag has been pushed and verified on the remote to point to that commit.
 - Tag names are the package name without its `@defjs/` scope, `@`, then the published version: `core@0.6.0`, `react@0.0.3`, `vue@0.0.3`, `opentelemetry-server@0.0.3`. One tag per package, not one per release, because the packages version independently. Push explicit refs (`git push origin refs/tags/core@0.6.0`). The workflow neither reads nor creates tags, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
 - Each package builds with `tsdown`, publishes from `dist`, and uses `publishConfig.directory`. The build writes `dist/package.json`, copies `LICENSE` and the package `README.md`. The `build` scripts call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
-- The root `overrides` pins `rolldown-plugin-dts` to a 0.29 beta because 0.28 reads `ts.sys`, which TypeScript 7.1 does not expose. Drop the override once `tsdown` depends on a `rolldown-plugin-dts` release that supports TypeScript 7.1.
 - `bun test/assert-pack.ts <publish-dir>` must pass before publishing: it checks that `npm pack --dry-run` includes `LICENSE`, `README.md`, `package.json`, and every file referenced by the entry fields.
 - Packages that depend on Core build Core first. A Core patch within the plugins' `^0.6.0` peer range does not require a plugin release.
 - CI runs the six gates on pull requests and `main`. The release workflow does not wait for CI; verify the intended revision first.
@@ -222,6 +224,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 - Run `bun run fmt`; the formatter is `bun fmt`.
 - Edit generated output: `dist/`, `coverage/`, `doc/build/`, `doc/.react-router/`, `test-out/`.
 - Reintroduce removed APIs: global client, `client.execute`, command objects, `executeHttpCommand` and the other `execute*Command` exports, `withTimeout`, the `timeout` and `abort` request options, `executeRaw`, `responseType`, `struct.request` / `struct.json` / `struct.text`, WebSocket custom handshake headers, OpenAPI generation.
+- Add a `.js`, `.mjs`, or `.cjs` file anywhere in the repository.
 - Put authentication or tracing into `builder`, or infer request placement from `input` field names.
 - Add a runtime dependency to `@defjs/core`, or import Node-only modules into shared code.
 - Leave a new public export without TSDoc, or skip regenerating the API data.

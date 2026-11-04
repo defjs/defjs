@@ -9,7 +9,6 @@ import {
 import { createControllableSocketClass } from "../../test/regression/controllable_socket";
 import type { EndpointDoneInfo } from "../balancer/balancer";
 import { struct } from "../struct";
-import type { WebSocketHandleConstructor } from "../client/config";
 import { defineWebSocket } from "./web_socket";
 
 const endpoints = ["https://first.test", "https://second.test"];
@@ -21,7 +20,7 @@ test("WebSocket handshake timeout picks next endpoint after nonzero backoff and 
   const { Socket, latest } = createControllableSocketClass();
   const client = createClient(
     withEndpoint(...endpoints),
-    withWebSocketHandle(Socket as unknown as WebSocketHandleConstructor),
+    withWebSocketHandle(Socket),
     withWebSocketReconnect({ attempts: 1, delayMs: 10, connectTimeoutMs: 100 }),
   );
   const pending = defineWebSocket({
@@ -57,7 +56,7 @@ test("WebSocket handshake timeout exhausted ends as NET_TIMEOUT", async () => {
   const { Socket, latest } = createControllableSocketClass();
   const client = createClient(
     withEndpoint(...endpoints),
-    withWebSocketHandle(Socket as unknown as WebSocketHandleConstructor),
+    withWebSocketHandle(Socket),
     withWebSocketReconnect({ attempts: 0, connectTimeoutMs: 100 }),
   );
   const pending = defineWebSocket({
@@ -116,9 +115,7 @@ test("caller cancellation during timed-out socket teardown remains unattributed"
         ];
       },
     }),
-    withWebSocketHandle(
-      CancellingSocket as unknown as WebSocketHandleConstructor,
-    ),
+    withWebSocketHandle(CancellingSocket),
     withWebSocketReconnect({ attempts: 0, connectTimeoutMs: 100 }),
   );
   const pending = defineWebSocket({

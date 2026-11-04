@@ -15,7 +15,16 @@ import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createSSEInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineEventStream } from "./index";
+import type { FetchHandle } from "../client/config";
+import { makeResponse } from "../internal/http_response";
 import type { EventStreamHandle } from "./transport/event_stream";
+
+function requireRequest(input: RequestInfo | URL): Request {
+  if (!(input instanceof Request)) {
+    throw new TypeError("SSE handle received a non-Request");
+  }
+  return input;
+}
 
 function createSSEClientFromText(
   text: string,
@@ -24,8 +33,8 @@ function createSSEClientFromText(
     reconnect?: Parameters<typeof withSSEReconnect>[0];
   },
 ): Client {
-  const handle = withSSEHandle(
-    (async () =>
+  const handle = withSSEHandle(() =>
+    Promise.resolve(
       new Response(
         new ReadableStream<Uint8Array>({
           start(controller) {
@@ -37,7 +46,8 @@ function createSSEClientFromText(
           headers: { "content-type": "text/event-stream" },
           status: 200,
         },
-      )) as unknown as typeof fetch,
+      ),
+    ),
   );
 
   return createClient(
@@ -68,7 +78,10 @@ function createShortCircuitStream(): EventStreamHandle<unknown> {
 
   const handle: EventStreamHandle<unknown> = {
     open: {
-      response: {} as never,
+      response: makeResponse({
+        status: 200,
+        url: "https://short-circuit.example/events",
+      }),
       url: "https://short-circuit.example/events",
     },
     closed,
@@ -86,8 +99,8 @@ function createShortCircuitStream(): EventStreamHandle<unknown> {
     },
     [Symbol.asyncIterator]() {
       return {
-        async next() {
-          return { done: true as const, value: undefined };
+        next() {
+          return Promise.resolve({ done: true as const, value: undefined });
         },
       };
     },
@@ -448,12 +461,13 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "event: profile\ndata: {not-json}\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             hasCause: context.cause !== undefined,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
@@ -483,8 +497,9 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       'event: profile\ndata: {"display_name":123}\n\n',
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           causes.push(context.cause);
+          return Promise.resolve();
         },
       },
     );
@@ -555,11 +570,12 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "event: form\ndata: title=Miao\n\nevent: urlencoded\ndata: title=Miao\n\nevent: blob\ndata: bytes\n\nevent: arrayBuffer\ndata: bytes\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             event: context.message.event,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
@@ -620,11 +636,12 @@ describe("request event stream runtime", () => {
     let hiddenStream: EventStreamHandle<unknown> | undefined;
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -652,10 +669,12 @@ describe("request event stream runtime", () => {
 
   test("should stop before fetch when an interceptor aborts before next", async () => {
     const controller = new AbortController();
-    const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(new Response(null, { status: 200 })),
+    );
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(fetchMock as unknown as typeof fetch),
+      withSSEHandle(fetchMock),
       withInterceptors(
         createSSEInterceptor((req, next) => {
           controller.abort(ERR_ABORTED);
@@ -682,11 +701,12 @@ describe("request event stream runtime", () => {
     const cancel = vi.fn();
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -745,11 +765,13 @@ describe("request event stream runtime", () => {
     let discardedStream: EventStreamHandle<unknown> | undefined;
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         const cancel = cancels[fetchIndex++];
-        return new Response(new ReadableStream<Uint8Array>({ cancel }), {
-          headers: { "content-type": "text/event-stream" },
-        });
+        return Promise.resolve(
+          new Response(new ReadableStream<Uint8Array>({ cancel }), {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -782,11 +804,12 @@ describe("request event stream runtime", () => {
     const cancel = vi.fn();
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream<Uint8Array>({ cancel }), {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -846,9 +869,9 @@ describe("request event stream runtime", () => {
         });
       }),
       withInterceptors(
-        createSSEInterceptor(async (req, next) => {
+        createSSEInterceptor((req, next) => {
           void next(req);
-          return shortCircuit;
+          return Promise.resolve(shortCircuit);
         }),
       ),
     );
@@ -873,8 +896,8 @@ describe("request event stream runtime", () => {
   test("should reject interceptor next calls after the chain settles", async () => {
     let sourceController:
       ReadableStreamDefaultController<Uint8Array> | undefined;
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>({
             start(controller) {
@@ -883,6 +906,7 @@ describe("request event stream runtime", () => {
           }),
           { headers: { "content-type": "text/event-stream" } },
         ),
+      ),
     );
     const shortCircuit = createShortCircuitStream();
     const lateCall = Promise.withResolvers<unknown>();
@@ -891,11 +915,11 @@ describe("request event stream runtime", () => {
       withEndpoint("https://api.example.com"),
       withSSEHandle(fetchMock),
       withInterceptors(
-        createSSEInterceptor(async (req, next) => {
+        createSSEInterceptor((req, next) => {
           invokeLateNext = () => {
             void next(req).then(lateCall.resolve, lateCall.resolve);
           };
-          return shortCircuit;
+          return Promise.resolve(shortCircuit);
         }),
       ),
     );
@@ -991,10 +1015,12 @@ describe("request event stream runtime", () => {
     async (reason, expectedCode) => {
       const controller = new AbortController();
       controller.abort(reason);
-      const fetchMock = vi.fn(async () => new Response(null, { status: 200 }));
+      const fetchMock = vi.fn(() =>
+        Promise.resolve(new Response(null, { status: 200 })),
+      );
       const guardedClient = createClient(
         withEndpoint("https://api.example.com"),
-        withSSEHandle(fetchMock as unknown as typeof fetch),
+        withSSEHandle(fetchMock),
       );
 
       const useStream = defineEventStream({
@@ -1017,8 +1043,8 @@ describe("request event stream runtime", () => {
 
   test("should classify a TimeoutError abort after open as NET_TIMEOUT", async () => {
     const controller = new AbortController();
-    const handle = vi.fn(
-      async () =>
+    const handle = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>(
             {
@@ -1030,10 +1056,11 @@ describe("request event stream runtime", () => {
           ),
           { headers: { "content-type": "text/event-stream" } },
         ),
+      ),
     );
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(handle as unknown as typeof fetch),
+      withSSEHandle(handle),
     );
     const useStream = defineEventStream({
       events: { message: struct.string() },
@@ -1103,10 +1130,12 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      Response.json(
-        { code: "unauthorized" },
-        { status: 401, headers: { "content-type": "application/json" } },
+    const handle = () =>
+      Promise.resolve(
+        Response.json(
+          { code: "unauthorized" },
+          { status: 401, headers: { "content-type": "application/json" } },
+        ),
       );
 
     const client = createClient(
@@ -1131,11 +1160,13 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(JSON.stringify({ code: "unauthorized" }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ code: "unauthorized" }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1157,20 +1188,22 @@ describe("request event stream runtime", () => {
     });
 
     let cancelled = false;
-    const handle = async () =>
-      new Response(
-        new ReadableStream<Uint8Array>({
-          cancel() {
-            cancelled = true;
-          },
-          start(controller) {
-            controller.enqueue(
-              new TextEncoder().encode('{"code":"unauthorized"}'),
-            );
-            controller.close();
-          },
-        }),
-        { status: 401, headers: { "content-type": "application/json" } },
+    const handle = () =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream<Uint8Array>({
+            cancel() {
+              cancelled = true;
+            },
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode('{"code":"unauthorized"}'),
+              );
+              controller.close();
+            },
+          }),
+          { status: 401, headers: { "content-type": "application/json" } },
+        ),
       );
 
     const client = createClient(
@@ -1194,11 +1227,13 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response("not-json", {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response("not-json", {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1221,11 +1256,13 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(JSON.stringify({ code: 1 }), {
-        status: 401,
-        headers: { "content-type": "application/json" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ code: 1 }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1248,11 +1285,13 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response("forbidden", {
-        status: 403,
-        headers: { "content-type": "text/plain" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response("forbidden", {
+          status: 403,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1275,11 +1314,13 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(new Uint8Array([1, 2, 3]), {
-        status: 404,
-        headers: { "content-type": "application/octet-stream" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(new Uint8Array([1, 2, 3]), {
+          status: 404,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1309,11 +1350,13 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(new Uint8Array([4, 5]), {
-        status: 404,
-        headers: { "content-type": "application/octet-stream" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(new Uint8Array([4, 5]), {
+          status: 404,
+          headers: { "content-type": "application/octet-stream" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1347,20 +1390,22 @@ describe("request event stream runtime", () => {
       });
 
       let cancelled = false;
-      const handle = async () =>
-        new Response(
-          new ReadableStream<Uint8Array>({
-            cancel() {
-              cancelled = true;
-            },
-            start(controller) {
-              controller.enqueue(
-                new TextEncoder().encode('{"reason":"forbidden"}'),
-              );
-              controller.close();
-            },
-          }),
-          { status: 403, headers },
+      const handle = () =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              cancel() {
+                cancelled = true;
+              },
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode('{"reason":"forbidden"}'),
+                );
+                controller.close();
+              },
+            }),
+            { status: 403, headers },
+          ),
         );
 
       const client = createClient(
@@ -1381,11 +1426,13 @@ describe("request event stream runtime", () => {
       path: "/sse/handshake-401",
     });
 
-    const handle = async () =>
-      new Response(null, {
-        status: 401,
-        headers: { "content-type": "text/plain" },
-      });
+    const handle = () =>
+      Promise.resolve(
+        new Response(null, {
+          status: 401,
+          headers: { "content-type": "text/plain" },
+        }),
+      );
 
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -1525,11 +1572,12 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "data:\n\ndata: NaN\n\ndata: Infinity\n\ndata: -Infinity\n\ndata: 01\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
@@ -1559,11 +1607,12 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       "data: true\n\ndata: false\n\ndata: TRUE\n\ndata: 1\n\n",
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
@@ -1676,10 +1725,7 @@ describe("request event stream runtime", () => {
     });
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
-          new Response(null, { status: 503 })) as unknown as typeof fetch,
-      ),
+      withSSEHandle(() => Promise.resolve(new Response(null, { status: 503 }))),
     );
 
     const [error, stream, open] = await useStream(client);
@@ -1695,11 +1741,12 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         invalidEvents.push({
           reason: context.reason,
           event: context.message.event,
         });
+        return Promise.resolve();
       }),
     );
 
@@ -1740,12 +1787,13 @@ describe("request event stream runtime", () => {
     const client = createSSEClientFromText(
       'event: unknown\ndata: {"display_name":"Miao"}\n\n',
       {
-        onInvalidEvent: async (context) => {
+        onInvalidEvent: (context) => {
           invalidEvents.push({
             data: context.message.data,
             event: context.message.event,
             reason: context.reason,
           });
+          return Promise.resolve();
         },
       },
     );
@@ -1779,12 +1827,13 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         invalidEvents.push({
           reason: context.reason,
           event: context.message.event,
           hasCause: context.cause !== undefined,
         });
+        return Promise.resolve();
       }),
     );
 
@@ -1822,8 +1871,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -1839,7 +1888,8 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
       withSSEOnInvalidEvent((context) =>
         captured.push({ id: context.message.id, reason: context.reason }),
@@ -1872,8 +1922,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -1888,10 +1938,12 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         captured.push({ id: context.message.id, reason: context.reason });
+        return Promise.resolve();
       }),
     );
 
@@ -1921,8 +1973,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -1939,10 +1991,12 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
-      withSSEOnInvalidEvent(async (context) => {
+      withSSEOnInvalidEvent((context) => {
         captured.push({ id: context.message.id, reason: context.reason });
+        return Promise.resolve();
       }),
     );
 
@@ -2002,8 +2056,8 @@ describe("request event stream runtime", () => {
 
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -2019,7 +2073,8 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
       withSSEOnInvalidEvent((context) => {
         observerSignal = context.signal;
@@ -2055,8 +2110,8 @@ describe("request event stream runtime", () => {
   test("should keep stream alive when onInvalidEvent throws", async () => {
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        (async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -2070,8 +2125,10 @@ describe("request event stream runtime", () => {
               headers: { "content-type": "text/event-stream" },
               status: 200,
             },
-          )) as unknown as typeof fetch,
+          ),
+        ),
       ),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEOnInvalidEvent(async () => {
         throw new Error("observer failed");
       }),
@@ -2104,8 +2161,8 @@ describe("request event stream runtime", () => {
     const encoder = new TextEncoder();
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(
             new ReadableStream<Uint8Array>({
               start(controller) {
@@ -2118,6 +2175,7 @@ describe("request event stream runtime", () => {
               status: 200,
             },
           ),
+        ),
       ),
     );
     const useStream = defineEventStream({
@@ -2150,7 +2208,7 @@ describe("request event stream runtime", () => {
   ] as const)(
     "should reject invalid endpoint %s value %s before fetching",
     async (limitName, limit) => {
-      const handle = vi.fn() as unknown as typeof fetch;
+      const handle = vi.fn<FetchHandle>();
       const client = createClient(
         withEndpoint("https://api.example.com"),
         withSSEHandle(handle),
@@ -2159,7 +2217,7 @@ describe("request event stream runtime", () => {
         events: { message: struct.string() },
         path: "/stream",
         [limitName]: limit,
-      } as never);
+      });
 
       const [error, stream, open] = await useStream(client);
 
@@ -2178,8 +2236,8 @@ describe("request event stream runtime", () => {
         return undefined;
       },
     };
-    const handle = vi.fn(
-      async () =>
+    const handle = vi.fn(() =>
+      Promise.resolve(
         new Response(
           new ReadableStream<Uint8Array>({
             start: (controller) => controller.close(),
@@ -2188,10 +2246,11 @@ describe("request event stream runtime", () => {
             headers: { "content-type": "text/event-stream" },
           },
         ),
+      ),
     );
     const client = createClient(
       withEndpoint("https://api.example.com"),
-      withSSEHandle(handle as unknown as typeof fetch),
+      withSSEHandle(handle),
     );
     const useStream = defineEventStream({
       events: {},
@@ -2258,11 +2317,13 @@ describe("sse reconnect method policy", () => {
 
   test("should not reconnect a POST body without shouldReconnect", async () => {
     const failure = new TypeError("network down");
-    const handle = vi.fn(async () => {
-      return new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      });
+    const handle = vi.fn(() => {
+      return Promise.resolve(
+        new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
+          headers: { "content-type": "text/event-stream" },
+          status: 200,
+        }),
+      );
     });
     const client = createClient(
       withEndpoint("https://example.com"),
@@ -2286,7 +2347,8 @@ describe("sse reconnect method policy", () => {
     const failure = new TypeError("network down");
     const bodies: string[] = [];
     const lastEventIds: Array<string | null> = [];
-    const handle = vi.fn(async (request: Request) => {
+    const handle = vi.fn<FetchHandle>(async (input) => {
+      const request = requireRequest(input);
       bodies.push(await request.text());
       lastEventIds.push(request.headers.get("last-event-id"));
       if (bodies.length === 1) {
@@ -2299,7 +2361,7 @@ describe("sse reconnect method policy", () => {
         headers: { "content-type": "text/event-stream" },
         status: 200,
       });
-    }) as unknown as typeof globalThis.fetch;
+    });
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
@@ -2327,20 +2389,25 @@ describe("sse reconnect method policy", () => {
     const failure = new TypeError("network down");
     const recorded: string[] = [];
     let n = 0;
-    const handle = vi.fn(async (request: Request) => {
+    const handle = vi.fn<FetchHandle>((input) => {
+      const request = requireRequest(input);
       request.headers.set("x-attempt", String(++n));
       recorded.push(request.headers.get("x-attempt") ?? "");
       if (n === 1) {
-        return new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
+        return Promise.resolve(
+          new Response(eventBytes("id: 1\ndata: a\n\n", failure), {
+            headers: { "content-type": "text/event-stream" },
+            status: 200,
+          }),
+        );
+      }
+      return Promise.resolve(
+        new Response(eventBytes("data: b\n\n"), {
           headers: { "content-type": "text/event-stream" },
           status: 200,
-        });
-      }
-      return new Response(eventBytes("data: b\n\n"), {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      });
-    }) as unknown as typeof globalThis.fetch;
+        }),
+      );
+    });
     const client = createClient(
       withEndpoint("https://example.com"),
       withSSEHandle(handle),
@@ -2367,9 +2434,9 @@ describe("sse reconnect method policy", () => {
     let fetched = 0;
     const guardedClient = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         fetched += 1;
-        return new Response(null, { status: 200 });
+        return Promise.resolve(new Response(null, { status: 200 }));
       }),
     );
     const useEvents = defineEventStream({
@@ -2389,4 +2456,32 @@ describe("sse reconnect method policy", () => {
     expect(stream).toBeUndefined();
     expect(fetched).toBe(0);
   });
+});
+
+test("preserves an event getter's own call dispatch", async () => {
+  const events = { message: struct.string() };
+  const get = () => struct.number();
+  const call = vi.fn((receiver: unknown) => {
+    expect(receiver).toBe(events);
+    return struct.string();
+  });
+  Object.defineProperty(get, "call", { value: call });
+  Object.defineProperty(events, "message", { get });
+  const operation = defineEventStream({ path: "/events", events });
+  const client = createClient(
+    withEndpoint("https://example.test"),
+    withSSEHandle(() =>
+      Promise.resolve(
+        new Response("data: text\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      ),
+    ),
+  );
+  const [error, stream] = await operation(client);
+  if (error) throw error;
+  expect(await Array.fromAsync(stream)).toEqual([
+    { event: "message", data: "text", id: undefined },
+  ]);
+  expect(call).toHaveBeenCalledOnce();
 });

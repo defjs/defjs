@@ -178,9 +178,11 @@ describe("intersection merge depth", () => {
         struct.object({ right: struct.any().alias("value") }),
       ),
     });
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
     const accepted = await parseEndpointInput(Schema, {
       wrapper: { left: nest(254, true), right: nest(254, true) },
     });
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
     const rejected = await parseEndpointInput(Schema, {
       wrapper: { left: nest(255, true), right: nest(255, true) },
     });

@@ -39,6 +39,7 @@ test("API search ignores case and combines package and category filters", () => 
   expect(() => validateApiEntries(entries)).not.toThrow();
 });
 test("API search matches ASCII identifiers independently of Turkish locale folding", () => {
+  // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: capture the native method before replacing it with the locale spy
   const localeLowerCase = String.prototype.toLocaleLowerCase;
   const turkishFold = vi
     .spyOn(String.prototype, "toLocaleLowerCase")
@@ -46,6 +47,7 @@ test("API search matches ASCII identifiers independently of Turkish locale foldi
       return localeLowerCase.call(this, "tr-TR");
     });
   try {
+    expect("I".toLocaleLowerCase()).toBe("ı");
     expect(
       filterApiEntries(
         apiEntries,

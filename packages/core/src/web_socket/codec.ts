@@ -1,4 +1,5 @@
-import type { AnyStruct } from "../struct";
+import type { AnyStruct, Infer } from "../struct";
+import type { AnyStructLike } from "../struct/types";
 import { decodeBytes, readBytesText } from "../internal/bytes";
 import { rejectNonJson } from "../internal/outbound_request";
 import { decodeJson, encodeJson } from "../struct/codec/json";
@@ -29,18 +30,18 @@ export function serializeOutgoingWebSocketMessage(
   return wire;
 }
 
-export async function transformWebSocketMessage(
-  incoming: AnyStruct,
+export async function transformWebSocketMessage<S extends AnyStructLike>(
+  incoming: S,
   raw: unknown,
-): Promise<unknown> {
+): Promise<Infer<S> | undefined> {
   return await decodeWebSocketMessage(incoming, raw);
 }
 
 /** Synchronous for text and bytes. Only a Blob frame has to be read first. */
-export function decodeWebSocketMessage(
-  incoming: AnyStruct,
+export function decodeWebSocketMessage<S extends AnyStructLike>(
+  incoming: S,
   raw: unknown,
-): unknown {
+): Infer<S> | undefined | Promise<Infer<S> | undefined> {
   if (typeof Blob !== "undefined" && raw instanceof Blob) {
     return raw
       .arrayBuffer()
@@ -49,10 +50,10 @@ export function decodeWebSocketMessage(
   return decodeWebSocketText(incoming, readBytesText(raw));
 }
 
-function decodeWebSocketText(
-  incoming: AnyStruct,
+function decodeWebSocketText<S extends AnyStructLike>(
+  incoming: S,
   text: string | undefined,
-): unknown {
+): Infer<S> | undefined {
   return text === undefined
     ? undefined
     : decodeJson(incoming, JSON.parse(text));
@@ -66,7 +67,11 @@ export interface WebSocketCloseSnapshot {
 }
 
 export function extractCloseInfo(
-  event?: CloseEvent,
+  event?: {
+    code?: number;
+    reason?: string;
+    wasClean?: boolean;
+  },
   cause?: unknown,
 ): WebSocketCloseSnapshot {
   return {

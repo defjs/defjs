@@ -2,6 +2,7 @@ import type { ApiReferenceEntry } from "../../scripts/api-model";
 import { linkTargets } from "../lib/api-text";
 import reference from "./api-reference.json";
 
+// eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve imported array and entry identities and pass unknown kinds through without validation
 export const apiReference = reference as ApiReferenceEntry[];
 
 const bySlug = new Map(apiReference.map((entry) => [entry.slug, entry]));

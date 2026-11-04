@@ -28,6 +28,13 @@ function decoded<TBody>(
   return { ...meta(overrides), body };
 }
 
+function faultRecordKeys(value: unknown): string[] {
+  if (typeof value !== "object" || value === null) {
+    throw new Error("expected a fault record");
+  }
+  return Object.keys(value);
+}
+
 function expectNativeFault(
   fault: Error,
   expectedKeys: string[],
@@ -48,7 +55,8 @@ function expectNativeFault(
     value: cause,
     writable: true,
   });
-  expect(Object.keys(JSON.parse(JSON.stringify(fault)))).toEqual(expectedKeys);
+  const parsed: unknown = JSON.parse(JSON.stringify(fault));
+  expect(faultRecordKeys(parsed)).toEqual(expectedKeys);
   expect(JSON.parse(JSON.stringify(fault))).not.toHaveProperty("cause");
   expect(JSON.parse(JSON.stringify(fault))).not.toHaveProperty("name");
 }
@@ -191,7 +199,7 @@ describe("fault factories", () => {
     ] as const)(
       "should recognize the %s brand on an error from another realm",
       (brand, code) => {
-        const cause = runInNewContext(
+        const cause: unknown = runInNewContext(
           `Object.defineProperty(new Error('foreign cause'), Symbol.for('defjs.cause.${brand}'), { value: true })`,
         );
 

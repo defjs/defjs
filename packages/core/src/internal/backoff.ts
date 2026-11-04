@@ -55,6 +55,7 @@ export async function wait(ms: number, signal: AbortSignal): Promise<void> {
     const onAbort = () => {
       clearTimeout(timeout);
       signal.removeEventListener("abort", onAbort);
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: reject the caller abort reason unchanged
       reject(signal.reason);
     };
 

@@ -23,7 +23,7 @@ export async function startHonoTestServer(
     websocket: options.websocket,
   });
 
-  server.on("connection", (socket) => {
+  server.on("connection", (socket: Socket) => {
     sockets.add(socket);
     socket.on("close", () => {
       sockets.delete(socket);
@@ -56,6 +56,7 @@ export async function startHonoTestServer(
         server.close((error) => {
           if (
             !error ||
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the single original error-code property read and native failure behavior
             (error as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING"
           ) {
             resolve();

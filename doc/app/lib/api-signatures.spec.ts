@@ -87,7 +87,8 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     ],
   };
   replaceApiSignatures(
-    tree as never,
+    // @ts-expect-error the sparse fixture deliberately tests a missing child node
+    tree,
     { path: "doc/content/en-US/api/http.mdx" },
     catalog,
   );
@@ -120,8 +121,12 @@ test("the remark plugin replaces signature tags and leaves other nodes", () => {
     children: [signature],
   };
   replaceApiSignatures(root, authored, catalog);
-  const processed = createStringifier(authored as never).stringify(
-    root as never,
+  const processed = createStringifier(
+    // @ts-expect-error the fixture implements only the VFile fields used by the stringifier
+    authored,
+  ).stringify(
+    // @ts-expect-error the fixture implements only the mdast fields used by the stringifier
+    root,
   );
   expect(processed).toContain(
     "function withEndpoint(endpoint: string): ClientOption;",
@@ -217,9 +222,10 @@ test("the documentation catalog loads from disk and renders a real signature", (
   transform({ type: "root" });
   const tree = { type: "root", children: [tag("createClient")] };
   transform(tree, { path: "overview.mdx" });
-  expect((tree.children[0] as { value?: string } | undefined)?.value).toContain(
-    "function createClient",
-  );
+  const rendered = tree.children[0];
+  if (!rendered || !("value" in rendered) || typeof rendered.value !== "string")
+    throw new Error("expected a rendered signature");
+  expect(rendered.value).toContain("function createClient");
   expect(() =>
     transform(
       { type: "root", children: [tag("NotAnExport")] },

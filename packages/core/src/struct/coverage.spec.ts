@@ -30,7 +30,16 @@ import type {
 import { describeValue, expectedType, success } from "./utils";
 
 function runtime(value: unknown): RuntimeStruct {
-  return value as RuntimeStruct;
+  assertStruct(value, "struct");
+  return value;
+}
+
+function objectDefinition(value: RuntimeStruct): ObjectDefinition {
+  const definition = value[DEFINITION];
+  if (definition.kind !== "object") {
+    throw new Error("expected object definition");
+  }
+  return definition;
 }
 
 function definition(value: unknown): StructDefinition {
@@ -38,7 +47,7 @@ function definition(value: unknown): StructDefinition {
 }
 
 describe("struct coverage boundary cases", () => {
-  test("direct runtime exports stay wired", async () => {
+  test("direct runtime exports stay wired", () => {
     const testStruct = directStruct.object({ id: directStruct.string() });
 
     expect(isStruct(testStruct)).toBe(true);
@@ -55,15 +64,17 @@ describe("struct coverage boundary cases", () => {
     });
     expect(encodeJson(testStruct, { id: "u_1" })).toEqual({ id: "u_1" });
     expect(decodeJson(testStruct, { id: "u_1" })).toEqual({ id: "u_1" });
+    return Promise.resolve();
   });
 
   test("constructor guards reject invalid enum and object definitions", () => {
-    expect(() => struct.enum({} as { [key: string]: never })).toThrow(
+    expect(() => struct.enum({})).toThrow(
       "enum struct requires at least one string or number value",
     );
-    expect(() => struct.object(null as never)).toThrow(
-      "object struct requires a plain object",
-    );
+    expect(() => {
+      // @ts-expect-error object structs are built from a plain object
+      struct.object(null);
+    }).toThrow("object struct requires a plain object");
     const urlencoded = definition(struct.urlencoded({ name: struct.string() }));
     const formData = definition(struct.formData({ name: struct.string() }));
     expect(urlencoded.kind).toBe("object");
@@ -234,15 +245,16 @@ describe("struct coverage boundary cases", () => {
     expect(() => assertStruct({}, "value")).toThrow("value must be a struct");
 
     const objectStruct = runtime(struct.object({ id: struct.string() }));
-    const objectDefinition = objectStruct[DEFINITION] as ObjectDefinition;
-    const first = resolveObjectShape(objectStruct, objectDefinition);
-    expect(resolveObjectShape(objectStruct, objectDefinition)).toBe(first);
+    const fields = objectDefinition(objectStruct);
+    const first = resolveObjectShape(objectStruct, fields);
+    expect(resolveObjectShape(objectStruct, fields)).toBe(first);
   });
 
   test("runtime alias guard rejects non-string names", () => {
-    expect(() => struct.string().alias(null as never)).toThrow(
-      "alias() requires a string name",
-    );
+    expect(() => {
+      // @ts-expect-error alias requires a string name
+      struct.string().alias(null);
+    }).toThrow("alias() requires a string name");
   });
 
   test("strict parsing keeps no zero-value construction path", () => {
@@ -635,7 +647,7 @@ describe("struct coverage boundary cases", () => {
         second: struct.string().alias("same"),
       }),
     );
-    const duplicateDefinition = duplicate[DEFINITION] as ObjectDefinition;
+    const duplicateDefinition = objectDefinition(duplicate);
     const duplicateShape = resolveObjectShape(duplicate, duplicateDefinition);
     expect(resolveObjectShape(duplicate, duplicateDefinition)).toBe(
       duplicateShape,
@@ -654,18 +666,20 @@ describe("struct coverage boundary cases", () => {
   });
 
   test("coverage guards cover defensive branches without changing public semantics", () => {
-    const duplicateDefinition = {
+    const shape: { [key: string]: unknown } = {};
+    Object.setPrototypeOf(shape, null);
+    const duplicateDefinition: ObjectDefinition = {
       cache: {
         declaredDescriptors: {},
         resolvedShape: {
-          first: struct.string().alias("same"),
-          second: struct.string().alias("same"),
+          first: runtime(struct.string().alias("same")),
+          second: runtime(struct.string().alias("same")),
         },
       },
       flags: DEFAULT_FLAGS,
       kind: "object",
-      shape: Object.create(null),
-    } as ObjectDefinition;
+      shape,
+    };
     expect(() =>
       resolveStructFields(runtime(struct.object({})), duplicateDefinition),
     ).toThrow('duplicate wire key "same"');
@@ -676,9 +690,9 @@ describe("struct coverage boundary cases", () => {
       is: (value): value is Date => value instanceof Date,
       kind: "date",
     });
-    expect(matchesRuntimeValue(dateWithoutRuntimeGuard, new Date(0))).toBe(
-      true,
-    );
+    expect(
+      matchesRuntimeValue(runtime(dateWithoutRuntimeGuard), new Date(0)),
+    ).toBe(true);
     expect(
       matchesRuntimeValue(
         runtime(struct.object({ query: struct.object({}) })),
@@ -703,8 +717,10 @@ describe("struct coverage boundary cases", () => {
       expected: '"text"',
       flags: DEFAULT_FLAGS,
       kind: "discriminatedUnion",
-      map: new Map([["text", struct.object({ type: struct.literal("text") })]]),
-      options: [struct.string() as never],
+      map: new Map<unknown, RuntimeStruct>([
+        ["text", runtime(struct.object({ type: struct.literal("text") }))],
+      ]),
+      options: [runtime(struct.string())],
     });
     expect(() =>
       decodeObjectByAlias(nonObjectDiscriminator, { type: "text" }),
@@ -718,8 +734,10 @@ describe("struct coverage boundary cases", () => {
       expected: '"text"',
       flags: DEFAULT_FLAGS,
       kind: "discriminatedUnion",
-      map: new Map([["text", bodyAliasOption]]),
-      options: [bodyAliasOption],
+      map: new Map<unknown, RuntimeStruct>([
+        ["text", runtime(bodyAliasOption)],
+      ]),
+      options: [runtime(bodyAliasOption)],
     });
     expect(() =>
       decodeObjectByAlias(rawDiscriminator, { body: "hello", type: "text" }),
@@ -749,8 +767,9 @@ describe("struct coverage boundary cases", () => {
         };
       },
     };
-    expect(() =>
-      decodeObjectByAlias(unstableObjectStruct as never, {}),
-    ).toThrow();
+    expect(() => {
+      // @ts-expect-error the getter object is not a struct
+      decodeObjectByAlias(unstableObjectStruct, {});
+    }).toThrow();
   });
 });

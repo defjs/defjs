@@ -122,7 +122,11 @@ function parseEntry(
     succeeded = value !== FAILED;
     // This parse reports, so every FAILED it returns has an issue parked right behind it.
     return value === FAILED
-      ? { issue: parkedFailure() as StructIssue, ok: false }
+      ? {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: an unreported decoder failure keeps the original error-first StructError tuple; do not introduce a new TypeError
+          issue: parkedFailure() as StructIssue,
+          ok: false,
+        }
       : { ok: true, value };
   } finally {
     if (!succeeded && context) {
@@ -134,6 +138,7 @@ function parseEntry(
 
 function restoreGuides(context: ParseContext, checkpoint: number): void {
   while (context.changes.length > checkpoint) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: pop one rollback entry immediately before each WeakMap write; do not eagerly splice and reverse the whole rollback
     const [value, previous] = context.changes.pop() as [
       object,
       Guide | undefined,
@@ -209,7 +214,7 @@ function parseNode(
         context,
       );
       if (provenance && value !== FAILED) {
-        const item = definition.item as RuntimeStruct;
+        const item = definition.item;
         const kind = item[DEFINITION].kind;
         if (kind === "any" || kind === "unknown") {
           provenance.passthrough = item;
@@ -375,7 +380,7 @@ function parseArrayValue(
     return nestingExceeded(input, path, reportIssues);
   }
 
-  const item = definition.item as RuntimeStruct;
+  const item = definition.item;
   const output: unknown[] = [];
   for (let index = 0; index < input.length; index += 1) {
     path.push(index);
@@ -420,8 +425,8 @@ function parseObjectValue(
 
   const output: { [key: string]: unknown } = target ?? nullObject();
   const fields = resolveStructFields(struct, definition);
-  // Indexed on purpose: for...of over this frozen array costs several times more in JavaScriptCore.
   for (let index = 0; index < fields.length; index += 1) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- MEASURED: same-process alternating 15 rounds x 1e6 parses/variant x 8 fixtures; for-of/index aggregate median 1.76349x (IQR 1.74673-1.76996x, range 1.63984-1.96549x; 15/15 > 1.05x), depth-8 median 1.96922x (min 1.89534x); index < fields.length
     const field = fields[index] as ResolvedStructField;
     const inputKey = useAliases ? field.wireKey : field.key;
     const inputValue =
@@ -497,7 +502,8 @@ function parseRecordValue(
     return nestingExceeded(input, path, reportIssues);
   }
 
-  const item = definition.value as RuntimeStruct;
+  const item = definition.value;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: literal/setPrototypeOf record allocation ratios were 2.058/2.122/2.052x at four keys and 1.044/1.051/1.024x at 64 keys, 3 runs x 13 alternating pairs x 100000 iterations
   const output: { [key: string]: unknown } = Object.create(null);
   for (const key of Object.keys(input)) {
     path.push(key);
@@ -554,6 +560,7 @@ function parseTupleValue(
   for (let index = 0; index < definition.items.length; index += 1) {
     path.push(index);
     const value = parseNode(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve bounded tuple-index reads without invoking a new entries method or iterator on caller-supplied metadata
       definition.items[index] as RuntimeStruct,
       input[index],
       path,
@@ -585,7 +592,7 @@ function parseUnionValue(
   for (const option of definition.options) {
     const checkpoint = context?.changes.length ?? 0;
     const value = parseNode(
-      option as RuntimeStruct,
+      option,
       input,
       path,
       "value",
@@ -651,9 +658,10 @@ function parseDiscriminatedUnionValue(
           )
         : FAILED;
     }
-    const runtime = target as RuntimeStruct;
+    const runtime = target;
     return parseObjectValue(
       runtime,
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original selected-object parse without a new kind check or extra metadata reads
       runtime[DEFINITION] as ObjectDefinition,
       input,
       path,
@@ -683,7 +691,7 @@ function parseDiscriminatedUnionValue(
           )
         : FAILED;
     }
-    const target = definition.map.get(value) as RuntimeStruct | undefined;
+    const target = definition.map.get(value);
     if (!target || definition.wireKeyByValue?.get(value) !== wireKey) {
       return reportIssues
         ? failure(
@@ -698,6 +706,7 @@ function parseDiscriminatedUnionValue(
     }
     return parseObjectValue(
       target,
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original selected-object parse without a new kind check or extra metadata reads
       target[DEFINITION] as ObjectDefinition,
       input,
       path,
@@ -731,9 +740,10 @@ function parseIntersectionValue(
   if (definition.objectSides && isPlainObject(input)) {
     const merged = nullObject();
     for (const option of definition.options) {
-      const runtime = option as RuntimeStruct;
+      const runtime = option;
       const value = parseObjectValue(
         runtime,
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original selected-object parse without a new kind check or extra metadata reads
         runtime[DEFINITION] as ObjectDefinition,
         input,
         path,
@@ -751,12 +761,8 @@ function parseIntersectionValue(
     if (context) {
       context.owned.add(merged);
       // An object intersection always has at least one member struct, so the guide exists.
-      tagOwnNode(
-        merged,
-        guideTag(
-          definition.options as unknown as readonly RuntimeStruct[],
-        ) as Guide,
-      );
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original full guide-member scan and tag result, including unchecked empty-member behaviour, without a new guard or rest snapshot
+      tagOwnNode(merged, guideTag(definition.options) as Guide);
     }
     return merged;
   }
@@ -765,7 +771,7 @@ function parseIntersectionValue(
   const contributed: unknown[] = [];
   const passthroughs: RuntimeStruct[] = [];
   for (const option of definition.options) {
-    const runtime = option as RuntimeStruct;
+    const runtime = option;
     const provenance: Provenance | undefined = context ? {} : undefined;
     const value = parseNode(
       runtime,
@@ -835,6 +841,7 @@ function attachPassthroughGuides(
   context: ParseContext,
 ): void {
   const current = readOwnGuide(value, context.guides);
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original full guide-member scan and tag result, including unchecked empty-member behaviour, without a new guard or rest snapshot
   const next = guideTag([
     ...(current ? guideMembers(current) : []),
     ...guides,

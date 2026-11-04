@@ -47,9 +47,13 @@ defineEventStream({
   events: { message: struct.string() },
 });
 
+function useType<T>(_probe?: T): T | undefined {
+  return _probe;
+}
+
 void withSSEQueue;
-void (undefined as unknown as FetchEventStreamOptions);
-void (undefined as unknown as FetchEventStreamErrorContext);
+useType<FetchEventStreamOptions>();
+useType<FetchEventStreamErrorContext>();
 
 const removedClientLimit: ClientSSEOptions = {
   // @ts-expect-error maxBufferSize belongs to each event-stream definition.
@@ -88,10 +92,7 @@ expectTypeOf(takesEventStreamEndpoint(useEvents)).toEqualTypeOf<
   typeof useEvents
 >();
 
-void (undefined as unknown as EventStreamCommandBuilder<
-  undefined,
-  EventStructs
->);
+useType<EventStreamCommandBuilder<undefined, EventStructs>>();
 
 const catalogEventStructs = {
   "price-updated": struct.object({

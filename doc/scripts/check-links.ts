@@ -14,21 +14,27 @@ export async function checkLinks(directory: string): Promise<void> {
   const pages = new Map<string, { ids: Set<string>; links: string[] }>();
   for await (const filename of new Bun.Glob("**/*.html").scan(root)) {
     if (filename === "__spa-fallback.html") continue;
-    const page = { ids: new Set<string>(), links: [] as string[] };
+    const page: { ids: Set<string>; links: string[] } = {
+      ids: new Set<string>(),
+      links: [],
+    };
     await new HTMLRewriter()
       .on("[id]", {
         element(element) {
           // The selector guarantees the attribute exists, so getAttribute never returns null here.
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve selector-provided attributes and native URL coercion without introducing extra conversion
           page.ids.add(element.getAttribute("id") as string);
         },
       })
       .on("[href]", {
         element(element) {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve selector-provided attributes and native URL coercion without introducing extra conversion
           page.links.push(element.getAttribute("href") as string);
         },
       })
       .on("[src]", {
         element(element) {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve selector-provided attributes and native URL coercion without introducing extra conversion
           page.links.push(element.getAttribute("src") as string);
         },
       })

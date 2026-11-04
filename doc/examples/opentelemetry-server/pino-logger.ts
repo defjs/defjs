@@ -21,6 +21,7 @@ sdk.start();
 
 try {
   const require = createRequire(import.meta.url);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: preserve the original pino load and invocation without added validation errors or getter reads
   const createPino: typeof pino = require("pino");
   const appLogger = createPino({ level: "info" });
   const client = createClient(

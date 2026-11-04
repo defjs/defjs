@@ -7,7 +7,9 @@ function toRequest(req: IncomingMessage, body: Buffer): Request {
   const host = req.headers.host ?? "localhost";
   return new Request(`http://${host}${req.url}`, {
     method: req.method,
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve native header-record coercion and duplicate-header serialization instead of append semantics
     headers: req.headers as unknown as { [key: string]: string },
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: pass the original Buffer through without copying it or changing request-body identity
     body: body.length > 0 ? (body as unknown as BodyInit) : undefined,
   });
 }
@@ -29,6 +31,7 @@ async function forward(
 ): Promise<void> {
   const chunks: Buffer[] = [];
   for await (const chunk of req) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- INTENT: preserve Buffer.from accepted inputs and original native chunk failures without new validation
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   const request = toRequest(req, Buffer.concat(chunks));

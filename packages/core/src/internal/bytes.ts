@@ -11,7 +11,7 @@ export function readBytesText(value: unknown): string | undefined {
     return value;
   }
   if (value instanceof ArrayBuffer || ArrayBuffer.isView(value)) {
-    return decodeBytes(value as ArrayBuffer | ArrayBufferView);
+    return decodeBytes(value);
   }
   return undefined;
 }
@@ -25,6 +25,7 @@ export function toArrayBuffer(content: Uint8Array): ArrayBuffer {
   ) {
     return buffer;
   }
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: slice the original backing buffer; a SharedArrayBuffer slice must remain shared instead of being copied into ArrayBuffer
   return buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer;
 }
 

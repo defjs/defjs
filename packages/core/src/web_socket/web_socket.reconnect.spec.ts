@@ -52,11 +52,6 @@ describe("web socket runtime reconnect", () => {
     });
 
     const states: string[] = [];
-    let session:
-      | {
-          send(message: { text: string; type: "message" }): void;
-        }
-      | undefined;
 
     const executePromise = run(
       (client) =>
@@ -75,12 +70,10 @@ describe("web socket runtime reconnect", () => {
       throw new Error("Expected socket session");
     }
 
-    session = socket;
-
     socket.onStateChange((state: string) => {
       states.push(state);
-      if (state === "reconnecting" && session) {
-        session.send({
+      if (state === "reconnecting") {
+        socket.send({
           text: "after-reconnect",
           type: "message",
         });

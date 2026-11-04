@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import type { WebSocketHandle } from "../client/config";
 import { struct } from "../struct";
 import type { HeartbeatSession } from "./heartbeat";
 import {
@@ -6,6 +7,7 @@ import {
   stopHeartbeat,
   validateHeartbeatConfig,
 } from "./heartbeat";
+import { method } from "../../test/method";
 
 describe("heartbeat", () => {
   let sessions: HeartbeatSession<unknown>[];
@@ -49,16 +51,24 @@ describe("heartbeat", () => {
     }
   });
 
-  function createMockSocket(readyState: number = WebSocket.OPEN) {
+  function createMockSocket(
+    readyState: number = WebSocket.OPEN,
+  ): WebSocketHandle {
     return {
+      addEventListener: vi.fn(),
       bufferedAmount: 0,
+      close: vi.fn(),
+      extensions: "",
+      protocol: "",
       readyState,
+      removeEventListener: vi.fn(),
       send: vi.fn(),
-    } as unknown as WebSocket;
+      url: "",
+    };
   }
 
   function createMockSession(
-    currentSocket?: WebSocket,
+    currentSocket?: WebSocketHandle,
   ): HeartbeatSession<unknown> {
     const session: HeartbeatSession<unknown> = {
       currentSocket,
@@ -148,7 +158,7 @@ describe("heartbeat", () => {
 
     vi.advanceTimersByTime(200);
     expect(message).toHaveBeenCalledTimes(2);
-    expect(socket.send).toHaveBeenCalledTimes(2);
+    expect(method(socket, "send")).toHaveBeenCalledTimes(2);
   });
 
   test("should call the heartbeat message factory without a receiver", () => {
@@ -181,14 +191,18 @@ describe("heartbeat", () => {
     startHeartbeat(
       socket,
       session,
-      { intervalMs: 100, message: false as never },
+      {
+        intervalMs: 100,
+        // @ts-expect-error non-function message is ignored at runtime
+        message: false,
+      },
       undefined,
       onFatal,
       WebSocket.OPEN,
     );
 
     vi.advanceTimersByTime(100);
-    expect(socket.send).not.toHaveBeenCalled();
+    expect(method(socket, "send")).not.toHaveBeenCalled();
     expect(onFatal).not.toHaveBeenCalled();
   });
 
@@ -213,7 +227,7 @@ describe("heartbeat", () => {
     );
 
     vi.advanceTimersByTime(100);
-    expect(socket.send).not.toHaveBeenCalled();
+    expect(method(socket, "send")).not.toHaveBeenCalled();
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -237,11 +251,11 @@ describe("heartbeat", () => {
     );
 
     vi.advanceTimersByTime(100);
-    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(method(socket, "send")).toHaveBeenCalledTimes(1);
     expect(session.heartbeat).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(1_000);
-    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(method(socket, "send")).toHaveBeenCalledTimes(1);
     expect(onFatal).not.toHaveBeenCalled();
   });
 
@@ -268,8 +282,8 @@ describe("heartbeat", () => {
     vi.advanceTimersByTime(450);
 
     expect(onFatal).not.toHaveBeenCalled();
-    expect(socket.send).toHaveBeenCalledTimes(4);
-    expect(socket.send).toHaveBeenLastCalledWith('{"type":"ping"}');
+    expect(method(socket, "send")).toHaveBeenCalledTimes(4);
+    expect(method(socket, "send")).toHaveBeenLastCalledWith('{"type":"ping"}');
     expect(session.heartbeat).toBe(runtime);
     expect(vi.getTimerCount()).toBe(1);
     stopHeartbeat(session);
@@ -306,7 +320,7 @@ describe("heartbeat", () => {
       expect(session.heartbeat).toBeUndefined();
       expect(vi.getTimerCount()).toBe(0);
       vi.advanceTimersByTime(1_000);
-      expect(socket.send).toHaveBeenCalledOnce();
+      expect(method(socket, "send")).toHaveBeenCalledOnce();
       expect(onFatal).toHaveBeenCalledTimes(action === "ack" ? 1 : 0);
       if (action === "ack") expect(onFatal).toHaveBeenCalledWith(failure);
     },
@@ -351,12 +365,12 @@ describe("heartbeat", () => {
       expect(runtime).toBeDefined();
       expect(runtime).not.toBe(previousRuntime);
       expect(session.currentSocket).toBe(socket);
-      expect(socket.send).toHaveBeenCalledOnce();
+      expect(method(socket, "send")).toHaveBeenCalledOnce();
       expect(vi.getTimerCount()).toBe(1);
 
       for (let count = 1; count <= 3; count += 1) {
         vi.advanceTimersByTime(100);
-        expect(socket.send).toHaveBeenCalledTimes(count + 1);
+        expect(method(socket, "send")).toHaveBeenCalledTimes(count + 1);
         expect(vi.getTimerCount()).toBe(2);
         runtime?.markAck();
         expect(vi.getTimerCount()).toBe(1);
@@ -378,7 +392,7 @@ describe("heartbeat", () => {
     startHeartbeat(
       closedSocket,
       closedSession,
-      { intervalMs: 100, message: () => ({ type: "ping" }) as never },
+      { intervalMs: 100, message: () => ({ type: "ping" }) },
       undefined,
       vi.fn(),
       WebSocket.OPEN,
@@ -393,8 +407,8 @@ describe("heartbeat", () => {
     );
 
     vi.advanceTimersByTime(100);
-    expect(closedSocket.send).not.toHaveBeenCalled();
-    expect(openSocket.send).not.toHaveBeenCalled();
+    expect(method(closedSocket, "send")).not.toHaveBeenCalled();
+    expect(method(openSocket, "send")).not.toHaveBeenCalled();
   });
 
   test("should report message factory, serialization, and native send failures as fatal", () => {
@@ -407,7 +421,7 @@ describe("heartbeat", () => {
         socket: createMockSocket(),
       }),
       () => ({
-        message: () => ({ type: "unknown" }) as unknown as { type: "ping" },
+        message: () => ({ type: "unknown" }),
         outgoing: struct.object({ type: struct.literal("ping") }),
         socket: createMockSocket(),
       }),
@@ -445,23 +459,24 @@ describe("heartbeat", () => {
 
   test("should reject a non-JSON heartbeat payload before the socket send", () => {
     const socket = createMockSocket();
-    const onFatal = vi.fn();
+    const onFatal = vi.fn<(error: unknown) => void>();
 
     startHeartbeat(
       socket,
       createMockSession(socket),
-      { intervalMs: 100, message: () => Number.POSITIVE_INFINITY as never },
+      { intervalMs: 100, message: () => Number.POSITIVE_INFINITY },
       struct.number(),
       onFatal,
       WebSocket.OPEN,
     );
 
     vi.advanceTimersByTime(100);
-    expect(socket.send).not.toHaveBeenCalled();
+    expect(method(socket, "send")).not.toHaveBeenCalled();
     expect(onFatal).toHaveBeenCalledTimes(1);
     expect(onFatal.mock.calls[0]?.[0]).toBeInstanceOf(TypeError);
     expect(onFatal.mock.calls[0]?.[0]).toEqual(
       expect.objectContaining({
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: preserve the original asymmetric matcher for the fatal observer argument
         message: expect.stringContaining("is not JSON data: Infinity"),
       }),
     );
@@ -510,7 +525,7 @@ describe("heartbeat", () => {
     );
 
     vi.advanceTimersByTime(24);
-    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(method(socket, "send")).toHaveBeenCalledTimes(1);
     expect(onFatal).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(1);
@@ -520,7 +535,7 @@ describe("heartbeat", () => {
     );
 
     vi.advanceTimersByTime(100);
-    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(method(socket, "send")).toHaveBeenCalledTimes(1);
     expect(onFatal).toHaveBeenCalledOnce();
   });
 
@@ -549,7 +564,7 @@ describe("heartbeat", () => {
     session.heartbeat?.markAck();
     vi.advanceTimersByTime(200);
     expect(onFatal).not.toHaveBeenCalled();
-    expect(socket.send).toHaveBeenCalledTimes(2);
+    expect(method(socket, "send")).toHaveBeenCalledTimes(2);
     expect(isAck).toHaveBeenCalledWith("pong");
   });
 
@@ -560,7 +575,7 @@ describe("heartbeat", () => {
     startHeartbeat(
       socket,
       session,
-      { intervalMs: 100, message: () => ({ type: "ping" }) as never },
+      { intervalMs: 100, message: () => ({ type: "ping" }) },
       undefined,
       vi.fn(),
       WebSocket.OPEN,
@@ -569,7 +584,7 @@ describe("heartbeat", () => {
 
     expect(session.heartbeat).toBeUndefined();
     vi.advanceTimersByTime(100);
-    expect(socket.send).not.toHaveBeenCalled();
+    expect(method(socket, "send")).not.toHaveBeenCalled();
   });
 
   test("should use the injected constructor open state when global WebSocket is unavailable", () => {
@@ -587,7 +602,7 @@ describe("heartbeat", () => {
     );
     vi.advanceTimersByTime(100);
 
-    expect(socket.send).toHaveBeenCalledTimes(1);
+    expect(method(socket, "send")).toHaveBeenCalledTimes(1);
     expect(onFatal).not.toHaveBeenCalled();
   });
 });

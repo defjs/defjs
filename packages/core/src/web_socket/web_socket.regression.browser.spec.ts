@@ -132,11 +132,16 @@ test("original 10ms closes agree with native-only controls", async () => {
               this.addEventListener("error", () => events.push("error"));
               this.addEventListener("message", (event) => {
                 events.push("message");
-                frames.push(
-                  typeof event.data === "string"
-                    ? event.data
-                    : new TextDecoder().decode(event.data),
-                );
+                frames.push(frameText(event.data));
+                function frameText(data: unknown): string {
+                  if (typeof data === "string") {
+                    return data;
+                  }
+                  if (data instanceof ArrayBuffer || ArrayBuffer.isView(data)) {
+                    return new TextDecoder().decode(data);
+                  }
+                  throw new Error("expected a websocket frame");
+                }
               });
               this.addEventListener("close", (event) => {
                 events.push(`close:${event.code}:${event.wasClean}`);

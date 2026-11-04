@@ -1,10 +1,12 @@
-import { createServer, type Server } from "node:http";
+import { createServer, Server } from "node:http";
 import type { createAdaptorServer } from "@hono/node-server";
 import { expect, inject, onTestFinished, test, vi } from "vitest";
-import type { TestProject } from "vitest/node";
 import { setup, teardown } from "../setup";
 
-const adaptor = vi.hoisted(() => ({ servers: [] as Server[] }));
+const adaptor = vi.hoisted(() => {
+  const servers: Server[] = [];
+  return { servers };
+});
 
 // Records the real server that `setup` creates while still delegating to the original adapter.
 vi.mock("@hono/node-server", async (importOriginal) => {
@@ -15,7 +17,10 @@ vi.mock("@hono/node-server", async (importOriginal) => {
     ...original,
     createAdaptorServer(options: Parameters<typeof createAdaptorServer>[0]) {
       const server = original.createAdaptorServer(options);
-      adaptor.servers.push(server as Server);
+      if (!(server instanceof Server)) {
+        throw new Error("Expected an HTTP server");
+      }
+      adaptor.servers.push(server);
       return server;
     },
   };
@@ -57,7 +62,7 @@ async function withSetupServer(
   onTestFinished(cleanup);
 
   try {
-    await setup({ provide } as unknown as TestProject);
+    await setup({ provide });
     if (cleanupPromise) {
       return;
     }
@@ -207,7 +212,7 @@ test("teardown reports a failed HTTP server close with its labeled original caus
     expect(messages(failure)).toEqual([
       "HTTP server close failed: injected close failure",
     ]);
-    expect(failure?.errors[0].cause).toBe(injected);
+    expect(aggregateCause(failure)).toBe(injected);
     expect(server.listening).toBe(false);
 
     expect(await failedTeardown()).toBeUndefined();
@@ -238,7 +243,7 @@ test("teardown reports an HTTP server close that never completes as a labeled ti
     expect(messages(failure)).toEqual([
       "HTTP server close failed: HTTP server close timed out",
     ]);
-    expect(failure?.errors[0].cause).toMatchObject({
+    expect(aggregateCause(failure)).toMatchObject({
       message: "HTTP server close timed out",
     });
 
@@ -246,3 +251,12 @@ test("teardown reports an HTTP server close that never completes as a labeled ti
     expect(await failedTeardown()).toBeUndefined();
   });
 });
+
+function aggregateCause(error: unknown): unknown {
+  if (!(error instanceof AggregateError)) return undefined;
+  const first: unknown = error.errors[0];
+  if (typeof first !== "object" || first === null || !("cause" in first)) {
+    return undefined;
+  }
+  return first.cause;
+}

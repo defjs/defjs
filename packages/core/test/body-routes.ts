@@ -96,6 +96,7 @@ export function registerBodyRoutes(app: Hono): void {
 
   // Drops the socket after the first chunk: no terminating chunk, so the client sees a transport failure.
   app.get("/body/truncated", (c) => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: pass the original Node binding through without realm-sensitive validation or extra property reads
     const { outgoing } = c.env as unknown as { outgoing: ServerResponse };
     c.header("content-type", "application/json");
     return stream(c, async (body) => {

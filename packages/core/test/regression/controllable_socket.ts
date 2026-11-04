@@ -19,18 +19,7 @@ export interface ControllableSocket {
   triggerOpen(): void;
 }
 
-export interface ControllableSocketClass {
-  new (url: string, protocols?: string | string[]): ControllableSocket;
-  readonly CLOSED: number;
-  readonly CLOSING: number;
-  readonly CONNECTING: number;
-  readonly OPEN: number;
-}
-
-export function createControllableSocketClass(): {
-  Socket: ControllableSocketClass;
-  latest: () => ControllableSocket | undefined;
-} {
+export function createControllableSocketClass() {
   let latest: ControllableSocket | undefined;
 
   class Socket implements ControllableSocket {
@@ -47,9 +36,10 @@ export function createControllableSocketClass(): {
     readonly sent: string[] = [];
     url: string;
 
-    private readonly listeners: {
-      [type: string]: Array<(event: unknown) => void>;
-    } = Object.create(null);
+    private readonly listeners = new Map<
+      string,
+      Array<(event: unknown) => void>
+    >();
 
     constructor(url: string, protocols?: string | string[]) {
       this.url = url;
@@ -60,15 +50,19 @@ export function createControllableSocketClass(): {
     }
 
     addEventListener(type: string, listener: (event: unknown) => void): void {
-      (this.listeners[type] ??= []).push(listener);
+      const current = this.listeners.get(type);
+      if (current) current.push(listener);
+      else this.listeners.set(type, [listener]);
     }
 
     removeEventListener(
       type: string,
       listener: (event: unknown) => void,
     ): void {
-      this.listeners[type] = (this.listeners[type] ?? []).filter(
-        (item) => item !== listener,
+      const current = this.listeners.get(type) ?? [];
+      this.listeners.set(
+        type,
+        current.filter((item) => item !== listener),
       );
     }
 
@@ -99,7 +93,7 @@ export function createControllableSocketClass(): {
     }
 
     private emit(type: string, event: unknown): void {
-      for (const listener of [...(this.listeners[type] ?? [])]) {
+      for (const listener of [...(this.listeners.get(type) ?? [])]) {
         listener(event);
       }
     }

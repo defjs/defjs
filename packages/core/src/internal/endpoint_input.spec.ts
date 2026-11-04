@@ -25,7 +25,7 @@ describe("endpoint input helpers", () => {
             ? Promise.resolve("replacement")
             : Object.defineProperty({}, "then", { get: getter });
 
-        const parsed = parseEndpointInput(schema, input);
+        const parsed: unknown = parseEndpointInput(schema, input);
         // Observe a rejected wrapper from the broken async implementation without awaiting input data.
         if (parsed !== input && parsed instanceof Promise)
           void parsed.catch(() => undefined);
@@ -46,9 +46,10 @@ describe("endpoint input helpers", () => {
     });
 
     expect(await parseEndpointInput(undefined, input)).toBe(input);
+    // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
     const parsed = await parseEndpointInput(User, { id: 1 });
     expect(parsed.id).toBe(1);
     expect(Object.keys(parsed)).toEqual(["id"]);
-    expect((parsed as { [STRUCT]?: unknown })[STRUCT]).toBe(User);
+    expect(STRUCT in parsed ? parsed[STRUCT] : undefined).toBe(User);
   });
 });

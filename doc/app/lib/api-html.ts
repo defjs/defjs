@@ -82,6 +82,7 @@ export async function highlightCode(
   lang: string,
   labels: CopyLabels,
 ): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: pass the highlighted node through unchanged without introducing an element-validation error
   const node = (await highlight(code, {
     lang,
     themes,

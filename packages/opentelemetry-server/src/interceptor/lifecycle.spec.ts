@@ -3,8 +3,12 @@ import { createHttpInterceptor, createSSEInterceptor } from "@defjs/core";
 import type {
   Attributes,
   Context,
+  Exception,
   Span,
+  SpanAttributeValue,
+  SpanAttributes,
   SpanOptions,
+  SpanStatus,
 } from "@opentelemetry/api";
 import { context, diag, ROOT_CONTEXT, trace } from "@opentelemetry/api";
 import { W3CTraceContextPropagator } from "@opentelemetry/core";
@@ -48,7 +52,7 @@ function createLifecycleTracer() {
   const records: RecordedSpan[] = [];
   tracer.startSpan = vi.fn(
     (name: string, options?: SpanOptions, parentContext?: Context) => {
-      const span = startSpan(name, options, parentContext);
+      const span: MockSpan = startSpan(name, options, parentContext);
       const events: RecordedSpan["events"] = [];
       const spanContext = {
         ...span.spanContext(),
@@ -58,11 +62,13 @@ function createLifecycleTracer() {
         spanId: (records.length + 1).toString(16).padStart(16, "0"),
       };
       span.spanContext = () => spanContext;
-      span.setAttribute.mockImplementation((key, value) => {
-        if (!span.ended) span.attributes[key] = value;
-        return span;
-      });
-      span.setAttributes.mockImplementation((attributes) => {
+      span.setAttribute.mockImplementation(
+        (key: string, value: SpanAttributeValue) => {
+          if (!span.ended) span.attributes[key] = value;
+          return span;
+        },
+      );
+      span.setAttributes.mockImplementation((attributes: SpanAttributes) => {
         if (!span.ended) {
           for (const [key, value] of Object.entries(attributes)) {
             if (value !== undefined) span.attributes[key] = value;
@@ -70,21 +76,23 @@ function createLifecycleTracer() {
         }
         return span;
       });
-      span.addEvent.mockImplementation((name, attributes) => {
-        if (!span.ended) {
-          events.push({
-            name,
-            attributes:
-              typeof attributes === "object" &&
-              !Array.isArray(attributes) &&
-              !(attributes instanceof Date)
-                ? { ...attributes }
-                : {},
-          });
-        }
-        return span;
-      });
-      span.recordException.mockImplementation((error) => {
+      span.addEvent.mockImplementation(
+        (name: string, attributes?: SpanAttributes) => {
+          if (!span.ended) {
+            events.push({
+              name,
+              attributes:
+                typeof attributes === "object" &&
+                !Array.isArray(attributes) &&
+                !(attributes instanceof Date)
+                  ? { ...attributes }
+                  : {},
+            });
+          }
+          return span;
+        },
+      );
+      span.recordException.mockImplementation((error: Exception) => {
         if (!span.ended) {
           events.push({
             name: "exception",
@@ -97,11 +105,11 @@ function createLifecycleTracer() {
           });
         }
       });
-      span.setStatus.mockImplementation((status) => {
+      span.setStatus.mockImplementation((status: SpanStatus) => {
         if (!span.ended) span.status = status;
         return span;
       });
-      span.updateName.mockImplementation((name) => {
+      span.updateName.mockImplementation((name: string) => {
         if (!span.ended) span.name = name;
         return span;
       });
@@ -182,13 +190,13 @@ describe("retry propagation lifecycle", () => {
         throw new Error("Retry exhausted");
       });
       const result = await retry.fn(req, (request) =>
-        telemetry.fn(request, async (outgoing) => {
+        telemetry.fn(request, (outgoing) => {
           sent.push(outgoing);
-          return {
+          return Promise.resolve({
             ...makeHttpResponse(),
             status: sent.length < 3 ? 503 : 200,
             ok: sent.length === 3,
-          };
+          });
         }),
       );
       expect(result.status).toBe(200);
@@ -232,6 +240,7 @@ describe("retry propagation lifecycle", () => {
         }
       });
       const result = await retry.fn(req, (request) =>
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         telemetry.fn(request, async (outgoing) => {
           sent.push(outgoing);
           if (sent.length === 1) throw failure;
@@ -275,16 +284,16 @@ describe("retry propagation lifecycle", () => {
           transport === "HTTP"
             ? await createOpenTelemetryHttpInterceptor(options).fn(
                 req,
-                async (outgoing) => {
+                (outgoing) => {
                   sent.push(outgoing);
-                  return response;
+                  return Promise.resolve(response);
                 },
               )
             : await createOpenTelemetrySSEInterceptor(options).fn(
                 req,
-                async (outgoing) => {
+                (outgoing) => {
                   sent.push(outgoing);
-                  return stream.stream;
+                  return Promise.resolve(stream.stream);
                 },
               );
 
@@ -344,7 +353,9 @@ describe("span hook recording lifecycle", () => {
       });
 
       expect(
-        await interceptor.fn(makeHttpRequest(), async () => response),
+        await interceptor.fn(makeHttpRequest(), () =>
+          Promise.resolve(response),
+        ),
       ).toBe(response);
       const record = records[0];
       if (!record) throw new Error("Expected a recorded HTTP span");
@@ -396,9 +407,9 @@ describe("span hook recording lifecycle", () => {
         throw new TypeError("sync failure");
       },
     });
-    expect(await interceptor.fn(makeHttpRequest(), async () => response)).toBe(
-      response,
-    );
+    expect(
+      await interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
+    ).toBe(response);
     expect(records[0]?.span.attributes).toMatchObject({
       "hook.sync": "kept",
       "http.response.status_code": 200,
@@ -444,7 +455,7 @@ describe("span hook recording lifecycle", () => {
       },
     });
     const result = await Promise.race([
-      interceptor.fn(makeHttpRequest(), async () => response),
+      interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
       drainMicrotasks().then(() => "still waiting for hook"),
     ]);
     expect(result).toBe(response);
@@ -504,6 +515,7 @@ describe("span hook recording lifecycle", () => {
       span.end();
       expect(() =>
         runSpanHook(span, "requestHook", () => {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
           throw error;
         }),
       ).not.toThrow();
@@ -528,11 +540,12 @@ describe("span hook recording lifecycle", () => {
       tracer,
       propagator,
       metrics,
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: the hook must isolate a deliberate string rejection
       responseHook: () => Promise.reject("private hook detail"),
     });
-    expect(await interceptor.fn(makeHttpRequest(), async () => response)).toBe(
-      response,
-    );
+    expect(
+      await interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
+    ).toBe(response);
     await drainMicrotasks();
     expect(diagnostic).toHaveBeenCalledTimes(1);
     expect(records[0]?.events).toEqual([]);
@@ -542,6 +555,7 @@ describe("span hook recording lifecycle", () => {
     if (!record) throw new Error("Expected a recorded HTTP span");
     expect(() =>
       runSpanHook(record.span, "requestHook", () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the hook must tolerate a thrown null
         throw null;
       }),
     ).not.toThrow();
@@ -567,14 +581,14 @@ describe("span hook recording lifecycle", () => {
         expect(
           await createOpenTelemetrySSEInterceptor(options).fn(
             makeSSERequest(),
-            async () => stream.stream,
+            () => Promise.resolve(stream.stream),
           ),
         ).toBe(stream.stream);
       } else {
         expect(
           await createOpenTelemetryWebSocketInterceptor(options).fn(
             makeWsRequest(),
-            async () => session.session,
+            () => Promise.resolve(session.session),
           ),
         ).toBe(session.session);
       }

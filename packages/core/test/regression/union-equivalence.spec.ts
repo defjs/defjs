@@ -62,6 +62,7 @@ test.each([
 );
 
 test("own child tags disambiguate the wire encoding of overlapping array branches", async () => {
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const input = await parseEndpointInput(
     struct.object({
       rows: struct.or(struct.array(Item), struct.array(OtherItem)),
@@ -75,6 +76,7 @@ test("own child tags disambiguate the wire encoding of overlapping array branche
 
 test("equivalent untagged object branches keep literal extras", async () => {
   const Plain = struct.object({ id: struct.string() });
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const input = await parseEndpointInput(
     struct.object({ row: struct.or(Plain, struct.unknown()) }),
     { row: { id: "42" } },
@@ -85,6 +87,7 @@ test("equivalent untagged object branches keep literal extras", async () => {
 });
 
 test("different untagged union wire encodings still fail loudly", async () => {
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const input = await parseEndpointInput(
     struct.object({ row: struct.or(Item, OtherItem) }),
     { row: { id: "42" } },
@@ -103,6 +106,7 @@ test("unique discriminated and union guides recurse through records and tuples a
     kind: struct.literal("dog"),
     age: struct.number(),
   });
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const input = await parseEndpointInput(
     struct.object({ pet: struct.discriminatedUnion("kind", [Cat, Dog]) }),
     {
@@ -142,6 +146,7 @@ test("nested mixed intersections retain all object-side tags and hostile keys", 
     struct.intersection(First, struct.or(Second, struct.number())),
     struct.or(Third, struct.string()),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const input = await parseEndpointInput(Schema, {
     first: "A",
     second: "B",
@@ -158,6 +163,7 @@ test("nested mixed intersections retain all object-side tags and hostile keys", 
 test("object intersections keep literal extras and reject a key that shadows a wire alias", async () => {
   const Left = struct.object({ id: struct.string().alias("wire_id") });
   const Right = struct.object({ n: struct.number() });
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const input = await parseEndpointInput(struct.intersection(Left, Right), {
     id: "42",
     n: 1,

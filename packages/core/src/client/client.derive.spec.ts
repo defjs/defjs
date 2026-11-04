@@ -34,7 +34,10 @@ describe("client factory and client values", () => {
   test("calling a derived client value throws a TypeError", () => {
     const derived = createClient(withEndpoint("https://example.test"))();
 
-    expect(() => (derived as unknown as () => void)()).toThrow(TypeError);
+    expect(() => {
+      // @ts-expect-error a derived client value is not callable
+      derived();
+    }).toThrow(TypeError);
   });
 
   test("client() and client(undefined) store no request options", () => {
@@ -131,7 +134,7 @@ describe("client factory and client values", () => {
   });
 
   test("does not perform I/O or listen for abort while deriving", () => {
-    const handle = vi.fn(async () => json({ ok: true }));
+    const handle = vi.fn(() => Promise.resolve(json({ ok: true })));
     const signal = new AbortController().signal;
     const add = vi.spyOn(signal, "addEventListener");
     const client = createClient(
@@ -147,13 +150,14 @@ describe("client factory and client values", () => {
   });
 
   test("keeps an already aborted signal aborted", async () => {
-    const handle = vi.fn(async () => json({ ok: true }));
+    const handle = vi.fn(() => Promise.resolve(json({ ok: true })));
     const controller = new AbortController();
     controller.abort();
     const client = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
       withInterceptors(
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         createHttpInterceptor(async () => {
           throw new Error("transport must not run");
         }),
@@ -287,7 +291,7 @@ describe("client factory and client values", () => {
   });
 
   test("throws from client(patch) when a patch getter throws and leaves the factory usable", async () => {
-    const handle = vi.fn(async () => json({ ok: true }));
+    const handle = vi.fn(() => Promise.resolve(json({ ok: true })));
     const parent = createClient(
       withEndpoint("https://example.test"),
       withHTTPHandle(handle),
@@ -318,15 +322,17 @@ describe("request options ignored by other protocols", () => {
     const seen: string[] = [];
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => json({ ok: true })),
+      withHTTPHandle(() => Promise.resolve(json({ ok: true }))),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           seen.push(request.method);
-          return makeResponse({
-            body: { ok: true },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
+          return Promise.resolve(
+            makeResponse({
+              body: { ok: true },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          );
         }),
       ),
     );
@@ -355,10 +361,12 @@ describe("request options ignored by other protocols", () => {
   test("SSE ignores HTTP progress and WebSocket fields", async () => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
-        return new Response("data: hi\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        });
+      withSSEHandle(() => {
+        return Promise.resolve(
+          new Response("data: hi\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
     );
     const stream = defineEventStream({
@@ -385,8 +393,15 @@ describe("request options ignored by other protocols", () => {
       withEndpoint("https://example.test"),
       withWebSocketHandle(
         class extends EventTarget {
+          static readonly OPEN = 1;
+          readonly bufferedAmount = 0;
+          readonly extensions = "";
+          readonly protocol = "";
+          readonly readyState = 0;
+          readonly url: string;
           constructor(url: string) {
             super();
+            this.url = url;
             constructed.push(url);
             queueMicrotask(() => {
               this.dispatchEvent(new Event("open"));
@@ -398,7 +413,7 @@ describe("request options ignored by other protocols", () => {
           send() {
             return undefined;
           }
-        } as unknown as typeof WebSocket,
+        },
       ),
     );
     const socket = defineWebSocket({
@@ -429,6 +444,7 @@ describe("AbortSignal.timeout classification", () => {
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener(
               "abort",
+              // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
               () => reject(init.signal?.reason),
               { once: true },
             );
@@ -455,6 +471,7 @@ describe("AbortSignal.timeout classification", () => {
           new Promise<Response>((_resolve, reject) => {
             init?.signal?.addEventListener(
               "abort",
+              // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
               () => reject(init.signal?.reason),
               { once: true },
             );
@@ -483,6 +500,12 @@ describe("AbortSignal.timeout classification", () => {
       withEndpoint("https://example.test"),
       withWebSocketHandle(
         class extends EventTarget {
+          static readonly OPEN = 1;
+          readonly bufferedAmount = 0;
+          readonly extensions = "";
+          readonly protocol = "";
+          readonly readyState = 0;
+          readonly url = "";
           constructor(_url: string) {
             super();
           }
@@ -492,7 +515,7 @@ describe("AbortSignal.timeout classification", () => {
           send() {
             return undefined;
           }
-        } as unknown as typeof WebSocket,
+        },
       ),
     );
     const socket = defineWebSocket({

@@ -103,29 +103,33 @@ test("SSE releases caller abort listeners after a reconnecting stream closes", a
   const client = createClient(
     withEndpoint("https://example.test"),
     withSSEReconnect({ attempts: 1, delayMs: 0 }),
-    withSSEHandle(async () => {
+    withSSEHandle(() => {
       attempt += 1;
       if (attempt === 1) {
         let sent = false;
-        return new Response(
-          new ReadableStream<Uint8Array>({
-            pull(controller) {
-              if (!sent) {
-                sent = true;
-                controller.enqueue(
-                  new TextEncoder().encode("id: 1\ndata: first\n\n"),
-                );
-              } else {
-                controller.error(new Error("connection lost"));
-              }
-            },
-          }),
-          { headers: { "content-type": "text/event-stream" } },
+        return Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                if (!sent) {
+                  sent = true;
+                  controller.enqueue(
+                    new TextEncoder().encode("id: 1\ndata: first\n\n"),
+                  );
+                } else {
+                  controller.error(new Error("connection lost"));
+                }
+              },
+            }),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
         );
       }
-      return new Response("data: second\n\n", {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response("data: second\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     }),
   );
   const caller = new AbortController();
@@ -187,7 +191,12 @@ test.each(MALFORMED_INTERCEPTOR_RESULTS)(
   async (_name, resolved) => {
     const client = createClient(
       withEndpoint("https://example.test"),
-      withInterceptors(createSSEInterceptor(async () => resolved() as never)),
+      withInterceptors(
+        createSSEInterceptor(() =>
+          // @ts-expect-error interceptor result is intentionally not a stream result
+          Promise.resolve(resolved()),
+        ),
+      ),
     );
     const caller = new AbortController();
     const signal = watch(caller.signal);
@@ -204,16 +213,18 @@ test("SSE closes an opened stream and releases caller listeners when the interce
   let opened: EventStreamHandle<unknown> | undefined;
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEHandle(
-      async () =>
+    withSSEHandle(() =>
+      Promise.resolve(
         new Response(new ReadableStream(), {
           headers: { "content-type": "text/event-stream" },
         }),
+      ),
     ),
     withInterceptors(
+      // @ts-expect-error dropping the stream result is the interceptor failure under test
       createSSEInterceptor(async (request, next) => {
         opened = await next(request);
-        return undefined as never;
+        return undefined;
       }),
     ),
   );
@@ -241,16 +252,17 @@ test.each([
     const signal = watch(caller.signal);
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () =>
+      withSSEHandle(() =>
+        Promise.resolve(
           new Response(new ReadableStream(), {
             headers: { "content-type": "text/event-stream" },
           }),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (request, next) => {
           opened = await next(request);
-          return { ...opened, [key]: undefined } as never;
+          return { ...opened, [key]: undefined };
         }),
       ),
     );
@@ -304,9 +316,10 @@ test("WebSocket closes an opened session and releases caller listeners when the 
     withEndpoint("https://example.test"),
     withWebSocketHandle(TestSocket),
     withInterceptors(
+      // @ts-expect-error dropping the session result is the interceptor failure under test
       createWebSocketInterceptor(async (request, next) => {
         opened = await next(request);
-        return undefined as never;
+        return undefined;
       }),
     ),
   );
@@ -345,7 +358,7 @@ test.each([
       withInterceptors(
         createWebSocketInterceptor(async (request, next) => {
           opened = await next(request);
-          return { ...opened, [key]: undefined } as never;
+          return { ...opened, [key]: undefined };
         }),
       ),
     );

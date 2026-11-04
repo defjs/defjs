@@ -147,7 +147,8 @@ test("invalid p2c options are remembered, branded, and never throw", () => {
     { outlierDetection: true },
   ];
   for (const options of cases) {
-    const b = p2cBalancer(options as never);
+    // @ts-expect-error invalid p2c options are rejected at runtime
+    const b = p2cBalancer(options);
     const first = b.pick({ endpoints: ["a"], transport: "http" })[0];
     expect(first).toBeInstanceOf(Error);
     expect(b.pick({ endpoints: [], transport: "http" })[0]).toBe(first);

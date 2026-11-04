@@ -10,12 +10,12 @@ describe("shape.ts getter-recursive structures", () => {
       id: string;
     };
 
-    const category = struct.object({
+    const category: StructLike<unknown, unknown, boolean> = struct.object({
       get children() {
         return struct.array(category);
       },
       id: struct.string(),
-    }) as unknown as StructLike<unknown, unknown, boolean>;
+    });
 
     const [err, value] = parse(category, {
       children: [{ children: [], id: "child" }],
@@ -32,12 +32,12 @@ describe("shape.ts getter-recursive structures", () => {
   });
 
   test("reports getter-recursive errors with nested paths", () => {
-    const comment = struct.object({
+    const comment: StructLike<unknown, unknown, boolean> = struct.object({
       id: struct.string(),
       get replies() {
         return struct.array(comment);
       },
-    }) as unknown as StructLike<unknown, unknown, boolean>;
+    });
 
     const [err] = parse(comment, {
       id: "root",

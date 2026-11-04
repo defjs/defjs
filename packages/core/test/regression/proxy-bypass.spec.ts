@@ -46,11 +46,26 @@ test("test configuration bypasses loopback proxies while preserving external pro
         timeout: 5000,
       },
     );
-    const result = JSON.parse(stdout);
-    expect(result.local).toBe("loopback");
-    expect(result.external).toBe("proxy");
+    const parsed: unknown = JSON.parse(stdout);
+    if (!isProbe(parsed)) {
+      throw new Error("Expected the proxy probe to print an object");
+    }
+    const local = parsed["local"];
+    const external = parsed["external"];
+    const upper = parsed["upper"];
+    const lower = parsed["lower"];
+    if (
+      typeof local !== "string" ||
+      typeof external !== "string" ||
+      typeof upper !== "string" ||
+      typeof lower !== "string"
+    ) {
+      throw new Error("Expected the proxy probe fields to be strings");
+    }
+    expect(local).toBe("loopback");
+    expect(external).toBe("proxy");
     expect(requests).toEqual(["/", "http://proxy-target.invalid/"]);
-    for (const value of [result.upper, result.lower]) {
+    for (const value of [upper, lower]) {
       expect(value.split(",")).toEqual(
         expect.arrayContaining(["upper.example", "lower.example"]),
       );
@@ -61,3 +76,7 @@ test("test configuration bypasses loopback proxies while preserving external pro
     );
   }
 });
+
+function isProbe(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

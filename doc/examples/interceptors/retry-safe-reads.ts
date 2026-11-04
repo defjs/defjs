@@ -36,6 +36,7 @@ function waitForRetryAfter(
   const delay = retryAfterMs(response);
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
       reject(signal.reason);
       return;
     }
@@ -44,6 +45,7 @@ function waitForRetryAfter(
     const onAbort = () => {
       clearTimeout(timer);
       signal?.removeEventListener("abort", onAbort);
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
       reject(signal?.reason);
     };
 

@@ -45,7 +45,7 @@ describe("http utils", () => {
   test("should return null for unsupported serialized bodies", () => {
     expect(serializeHttpBody(undefined)).toBeNull();
     expect(serializeHttpBody(null)).toBe("null");
-    expect(serializeHttpBody((() => "noop") as never)).toBeNull();
+    expect(serializeHttpBody(() => "noop")).toBeNull();
   });
 
   test("should detect content type for supported body types", () => {
@@ -94,7 +94,7 @@ describe("http utils", () => {
 
   test("should return null content type for unsupported bodies", () => {
     expect(resolveHttpBodyContentType(undefined)).toBeNull();
-    expect(resolveHttpBodyContentType((() => "noop") as never)).toBeNull();
+    expect(resolveHttpBodyContentType(() => "noop")).toBeNull();
   });
 
   test("should keep a header when builder source metadata matches the body", () => {
@@ -159,10 +159,7 @@ describe("http utils", () => {
 
   test("should skip content type header when body has no detectable type", () => {
     const headers = new Headers();
-    applyRequestContentType(
-      makeRequest({ body: (() => "noop") as never }),
-      headers,
-    );
+    applyRequestContentType(makeRequest({ body: () => "noop" }), headers);
 
     expect(headers.has("content-type")).toBe(false);
   });

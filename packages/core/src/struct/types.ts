@@ -1,6 +1,6 @@
 import type { StructError } from "./errors";
 import type { ResolvedStructField } from "./fields";
-import type { DEFINITION, FAILED } from "./symbols";
+import type { DEFINITION, FAILED, STRUCT } from "./symbols";
 
 export type Path = Array<number | string>;
 export type ParseMode = "field" | "value";
@@ -613,6 +613,58 @@ export interface IntersectionStruct<
   >;
 }
 
+type TaggedObject = { readonly [STRUCT]: AnyStruct };
+type NullishTagged<S, Inner> =
+  null extends Infer<S>
+    ? undefined extends Infer<S>
+      ? TaggedStructOutput<Inner> | null | undefined
+      : TaggedStructOutput<Inner> | null
+    : undefined extends Infer<S>
+      ? TaggedStructOutput<Inner> | undefined
+      : TaggedStructOutput<Inner>;
+type IntersectTagged<T extends readonly StructLike[]> = T extends readonly [
+  infer H extends StructLike,
+  ...infer Tail extends readonly StructLike[],
+]
+  ? TaggedStructOutput<H> &
+      (Tail["length"] extends 0 ? unknown : IntersectTagged<Tail>)
+  : unknown;
+/** Runtime-tagged output of an internal endpoint-input parse. Not part of the package root. */
+export type TaggedStructOutput<S> =
+  S extends CarriedStruct<infer Inner>
+    ? NullishTagged<S, Inner>
+    : S extends UnionStruct<infer Options>
+      ? TaggedStructOutput<Options[number]>
+      : S extends DiscriminatedUnionStruct<infer Options>
+        ? TaggedStructOutput<Options[number]>
+        : S extends IntersectionStruct<infer Options>
+          ? IntersectTagged<Options>
+          : S extends RecordStruct<infer Value>
+            ? { [key: string]: TaggedStructOutput<Value> }
+            : S extends TupleStruct<infer Items>
+              ? {
+                  [K in keyof Items]: Items[K] extends StructLike
+                    ? TaggedStructOutput<Items[K]>
+                    : Items[K];
+                }
+              : S extends ArrayStruct<infer Item>
+                ? TaggedStructOutput<Item>[]
+                : S extends ObjectStruct<infer Shape>
+                  ? {
+                      [K in keyof Shape]: TaggedStructOutput<Shape[K]>;
+                    } & TaggedObject
+                  : Infer<S>;
+type ParsedSchema<
+  S extends AnyStructLike,
+  Tag extends boolean,
+> = Tag extends true
+  ? StructLike<unknown, TaggedStructOutput<S>, boolean>
+  : StructLike<unknown, Infer<S>, boolean>;
+export type ParsedStructOutput<
+  S extends AnyStructLike,
+  Tag extends boolean,
+> = ParsedSchema<S, Tag>["_struct"]["output"];
+
 export type StructFlags = {
   nullable: boolean;
   optional: boolean;
@@ -681,19 +733,21 @@ export type LiteralDefinition<T extends LiteralValue> = BaseDefinition & {
 export type EnumDefinition<T extends number | string> = BaseDefinition & {
   expected: string;
   kind: "enum";
-  values: readonly [T, ...T[]];
+  values: readonly T[];
   valueSet?: ReadonlySet<T> | null;
 };
 
 export type ArrayDefinition = BaseDefinition & {
   kind: "array";
-  item: StructLike<unknown, unknown, boolean>;
+  item: RuntimeStruct;
 };
+
+export type RuntimeObjectShape = { [key: string]: RuntimeStruct };
 
 export type ObjectDefinitionCache = {
   declaredDescriptors: PropertyDescriptorMap;
   fields?: readonly ResolvedStructField[];
-  resolvedShape?: ObjectShape;
+  resolvedShape?: RuntimeObjectShape;
 };
 
 export type ObjectDefinition = BaseDefinition & {
@@ -705,24 +759,18 @@ export type ObjectDefinition = BaseDefinition & {
 
 export type RecordDefinition = BaseDefinition & {
   kind: "record";
-  value: StructLike<unknown, unknown, boolean>;
+  value: RuntimeStruct;
 };
 
 export type TupleDefinition = BaseDefinition & {
   kind: "tuple";
-  items: readonly [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ];
+  items: readonly RuntimeStruct[];
 };
 
 export type UnionDefinition = BaseDefinition & {
   expected: string;
   kind: "or";
-  options: readonly [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ];
+  options: readonly RuntimeStruct[];
   uniformIdentityEncode?: boolean;
 };
 
@@ -731,11 +779,8 @@ export type DiscriminatedUnionDefinition = BaseDefinition & {
   discriminator: string;
   discriminatorWireKeys?: readonly string[];
   expected: string;
-  map: Map<unknown, StructLike<unknown, unknown, boolean>>;
-  options: readonly [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ];
+  map: Map<unknown, RuntimeStruct>;
+  options: readonly RuntimeStruct[];
   wireKeyByValue?: Map<unknown, string>;
 };
 
@@ -743,10 +788,7 @@ export type IntersectionDefinition = BaseDefinition & {
   expected: string;
   kind: "intersection";
   objectSides: boolean;
-  options: readonly [
-    StructLike<unknown, unknown, boolean>,
-    ...StructLike<unknown, unknown, boolean>[],
-  ];
+  options: readonly RuntimeStruct[];
 };
 
 export type StructDefinition =
@@ -775,12 +817,12 @@ export type ParseSuccess<T> = {
 
 export type InternalParseResult<T> = ParseFailure | ParseSuccess<T>;
 
-export type RuntimeStruct = {
-  readonly [DEFINITION]: StructDefinition;
+export interface RuntimeStruct<D extends StructDefinition = StructDefinition> {
+  readonly [DEFINITION]: D;
   readonly _struct: StructTypes<unknown, unknown, boolean>;
   alias(name: string): RuntimeStruct;
   null(): RuntimeStruct;
   nullable(): RuntimeStruct;
   nullish(): RuntimeStruct;
   optional(): RuntimeStruct;
-};
+}

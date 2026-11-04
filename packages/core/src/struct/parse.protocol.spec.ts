@@ -7,6 +7,7 @@ import { struct } from "./index";
 import { parseStructTuple as parse, parseStructValue } from "./introspection";
 import { parseValue } from "./parse";
 import { createPrimitiveStruct } from "./runtime";
+import { assertStruct } from "./shape";
 import { OMIT } from "./symbols";
 import type {
   ParseResult,
@@ -18,7 +19,19 @@ import type {
 import { success } from "./utils";
 
 function runtime(value: unknown): RuntimeStruct {
-  return value as RuntimeStruct;
+  assertStruct(value, "struct");
+  return value;
+}
+
+function nestedResult(
+  results: readonly ParseResult<unknown>[],
+  index: number,
+): ParseResult<unknown> {
+  const result = results[index];
+  if (result === undefined) {
+    throw new Error("expected nested parse result");
+  }
+  return result;
 }
 
 function firstIssue(result: ParseResult<unknown>): StructIssue {
@@ -680,12 +693,12 @@ describe("parse re-entrancy", () => {
       },
     ]);
     expect(nested[0]).toEqual([null, { ok: true }]);
-    expect(firstIssue(nested[1] as ParseResult<unknown>)).toMatchObject({
+    expect(firstIssue(nestedResult(nested, 1))).toMatchObject({
       message: "inner message",
       path: ["ok"],
       received: "no",
     });
-    expect(firstIssue(nested[2] as ParseResult<unknown>)).toMatchObject({
+    expect(firstIssue(nestedResult(nested, 2))).toMatchObject({
       message: "Expected number at rows[1].id, received string",
       path: ["rows", 1, "id"],
     });
@@ -830,7 +843,7 @@ describe("parse re-entrancy", () => {
     );
     // Two hook calls per parse of the valid input and two for the failing one, two nested parses each.
     expect(nested).toHaveLength(8);
-    expect(firstIssue(nested[0] as ParseResult<unknown>).path).toEqual(["n"]);
+    expect(firstIssue(nestedResult(nested, 0)).path).toEqual(["n"]);
   });
 
   test("an exception from errorMap, a getter, or a hook leaves nothing behind for the next parse", () => {
@@ -1020,21 +1033,24 @@ describe("parse outputs and quiet candidates", () => {
     const [error, value] = parse(Schema, input);
 
     expect(error).toBeNull();
-    expect(Object.keys(value ?? {})).toEqual(["z", "y", "x"]);
-    const out = value as unknown as {
-      x: { [key: string]: unknown }[];
-      y: { [key: string]: { [key: string]: unknown } };
-      z: { [key: string]: unknown }[];
-    };
-    const row = out.z[0] as { [key: string]: unknown };
+    if (error !== null || value === undefined) {
+      throw new Error("expected value");
+    }
+    expect(Object.keys(value)).toEqual(["z", "y", "x"]);
+    const row = value.z[0];
+    const record = value.y["r"];
+    const tupleObject = value.x[0];
+    if (row === undefined || record === undefined) {
+      throw new Error("expected nested nodes");
+    }
     expect(Object.keys(row)).toEqual(["b", "a"]);
-    for (const node of [out, row, out.y, out.y["r"], out.x[0]]) {
+    for (const node of [value, row, value.y, record, tupleObject]) {
       expect(Object.getPrototypeOf(node)).toBeNull();
     }
-    expect(out.z).not.toBe(input.z);
-    expect(out.x).not.toBe(input.x);
+    expect(value.z).not.toBe(input.z);
+    expect(value.x).not.toBe(input.x);
     expect(row).not.toBe(input.z[0]);
-    expect(out.y["r"]).not.toBe(input.y.r);
+    expect(record).not.toBe(input.y.r);
   });
 
   test("candidates that fail without an errorMap never build an issue message", async () => {

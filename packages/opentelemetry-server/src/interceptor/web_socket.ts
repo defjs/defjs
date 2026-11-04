@@ -43,6 +43,14 @@ export interface WebSocketInterceptorOptions {
   ) => Promise<void> | void;
 }
 
+function isRuntimeCloseInfo(value: unknown): value is {
+  cause?: unknown;
+  kind?: unknown;
+  code?: unknown;
+} {
+  return typeof value === "object" && value !== null;
+}
+
 export function createOpenTelemetryWebSocketInterceptor(
   options: WebSocketInterceptorOptions,
 ): ReturnType<typeof createWebSocketInterceptor> {
@@ -130,14 +138,9 @@ export function createOpenTelemetryWebSocketInterceptor(
       session.closed.then(
         (closeInfo: unknown) => {
           closeActiveConnection();
-          const runtimeCloseInfo =
-            typeof closeInfo === "object" && closeInfo !== null
-              ? (closeInfo as {
-                  cause?: unknown;
-                  kind?: unknown;
-                  code?: unknown;
-                })
-              : {};
+          const runtimeCloseInfo = isRuntimeCloseInfo(closeInfo)
+            ? closeInfo
+            : {};
           const closeKind = runtimeCloseInfo.kind;
           const closeCause = runtimeCloseInfo.cause;
           const failed =

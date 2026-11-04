@@ -32,6 +32,12 @@ type EnumValue<T> = T extends readonly (infer U extends string)[]
     ? U
     : never;
 
+function isStringEnumList(
+  value: { [key: string]: number | string } | readonly [string, ...string[]],
+): value is readonly [string, ...string[]] {
+  return Array.isArray(value);
+}
+
 /**
  * Struct that accepts one value from a list of strings or from the values of an object.
  *
@@ -54,11 +60,11 @@ function structEnum<const T extends { [key: string]: number | string }>(
 function structEnum(
   value: { [key: string]: number | string } | readonly [string, ...string[]],
 ) {
-  if (Array.isArray(value)) {
-    return createEnumStruct(value as readonly [string, ...string[]]);
+  if (isStringEnumList(value)) {
+    return createEnumStruct(value);
   }
 
-  return createObjectEnumStruct(value as { [key: string]: number | string });
+  return createObjectEnumStruct(value);
 }
 
 /**

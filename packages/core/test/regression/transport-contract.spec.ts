@@ -32,8 +32,10 @@ test.each([200, 403])(
     for (const mode of ["identity", "spread", "makeResponse"]) {
       const client = createClient(
         withEndpoint("https://example.test"),
-        withHTTPHandle(
-          async () => new Response("null", { status, headers: jsonHeaders }),
+        withHTTPHandle(() =>
+          Promise.resolve(
+            new Response("null", { status, headers: jsonHeaders }),
+          ),
         ),
         withInterceptors(
           createHttpInterceptor(async (request, next) => {
@@ -67,12 +69,14 @@ test.each([200, 403])(
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            status,
-            headers: new Headers(jsonHeaders),
-            body: null,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              status,
+              headers: new Headers(jsonHeaders),
+              body: null,
+            }),
+          ),
         ),
       ),
     );
@@ -89,12 +93,14 @@ test.each([200, 403])(
       const client = createClient(
         withEndpoint("https://example.test"),
         withInterceptors(
-          createHttpInterceptor(async () =>
-            makeResponse({
-              status,
-              headers: new Headers(jsonHeaders),
-              ...(present ? { body: new TextEncoder().encode("null") } : {}),
-            }),
+          createHttpInterceptor(() =>
+            Promise.resolve(
+              makeResponse({
+                status,
+                headers: new Headers(jsonHeaders),
+                ...(present ? { body: new TextEncoder().encode("null") } : {}),
+              }),
+            ),
           ),
         ),
       );
@@ -117,18 +123,22 @@ test.each([200, 403])(
         withEndpoint("https://example.test"),
         ...(mode === "native"
           ? [
-              withHTTPHandle(
-                async () => new Response("", { status, headers: jsonHeaders }),
+              withHTTPHandle(() =>
+                Promise.resolve(
+                  new Response("", { status, headers: jsonHeaders }),
+                ),
               ),
             ]
           : [
               withInterceptors(
-                createHttpInterceptor(async () =>
-                  makeResponse({
-                    status,
-                    headers: new Headers(jsonHeaders),
-                    body: new Uint8Array(),
-                  }),
+                createHttpInterceptor(() =>
+                  Promise.resolve(
+                    makeResponse({
+                      status,
+                      headers: new Headers(jsonHeaders),
+                      body: new Uint8Array(),
+                    }),
+                  ),
                 ),
               ),
             ]),
@@ -156,8 +166,10 @@ test("SSE rejects empty JSON but accepts encoded null and empty raw text", async
       mode === "null-json" ? "null" : mode === "absent-text" ? null : "";
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(
-        async () => new Response(text, { status: 403, headers: jsonHeaders }),
+      withSSEHandle(() =>
+        Promise.resolve(
+          new Response(text, { status: 403, headers: jsonHeaders }),
+        ),
       ),
     );
     const endpoint = defineEventStream({
@@ -180,11 +192,13 @@ test.each(["abort", "timeout"] as const)(
     let fetches = 0;
     const client = createClient(
       withEndpoint("https://example.test"),
-      withSSEHandle(async () => {
+      withSSEHandle(() => {
         fetches += 1;
-        return new Response("data: test\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        });
+        return Promise.resolve(
+          new Response("data: test\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
       withInterceptors(
         createSSEInterceptor((request, next) =>
@@ -291,8 +305,8 @@ test.each(["abort", "timeout"] as const)(
     const client = createClient(
       withEndpoint("https://example.test"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({ status: 403, body: new SlowBlob() }),
+        createHttpInterceptor(() =>
+          Promise.resolve(makeResponse({ status: 403, body: new SlowBlob() })),
         ),
       ),
     );
@@ -368,9 +382,9 @@ test("union agreement must preserve numeric differences seen by a custom query s
       serialized.push(wire);
       return `filter=${encodeURIComponent(wire)}`;
     }),
-    withHTTPHandle(async (request) => {
+    withHTTPHandle((request) => {
       requests.push(new Request(request).url);
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
   );
   const endpoint = defineRequest({
@@ -395,13 +409,15 @@ test("the documented maintenance response supplies a decoded declared error", as
   const client = createClient(
     withEndpoint("https://example.test"),
     withInterceptors(
-      createHttpInterceptor(async () =>
-        makeResponse({
-          status: 503,
-          statusText: "Service Unavailable",
-          headers: new Headers({ "content-type": "application/json" }),
-          body: { message: "Temporarily unavailable" },
-        }),
+      createHttpInterceptor(() =>
+        Promise.resolve(
+          makeResponse({
+            status: 503,
+            statusText: "Service Unavailable",
+            headers: new Headers({ "content-type": "application/json" }),
+            body: { message: "Temporarily unavailable" },
+          }),
+        ),
       ),
     ),
   );
@@ -430,6 +446,7 @@ test("a WebSocket endpoint retains its definition when the configuration object 
   const client = createClient(
     withEndpoint("https://example.test"),
     withInterceptors(
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       createWebSocketInterceptor(async (request) => {
         paths.push(request.endpoint);
         throw new Error("Audit capture before constructing a socket");

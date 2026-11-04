@@ -6,6 +6,7 @@
 export function parsePackedFiles(stdout: string): Set<string> {
   const start = stdout.search(/[[{]/);
   const end = Math.max(stdout.lastIndexOf("]"), stdout.lastIndexOf("}"));
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve native malformed-pack failures and path processing instead of silently returning an empty set
   const parsed = JSON.parse(stdout.slice(start, end + 1)) as
     | { files: { path: string }[] }[]
     | Record<string, { files: { path: string }[] }>;

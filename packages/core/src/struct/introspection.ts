@@ -9,8 +9,8 @@ import { DEFINITION } from "./symbols";
 import type {
   ObjectStruct,
   ObjectShape,
+  ParsedStructOutput,
   ParseResult,
-  RuntimeStruct,
   StructLike,
 } from "./types";
 
@@ -23,31 +23,24 @@ export interface StructField {
 export function isObjectStruct(
   value: unknown,
 ): value is ObjectStruct<ObjectShape> {
-  return (
-    isStruct(value) && (value as RuntimeStruct)[DEFINITION].kind === "object"
-  );
+  return isStruct(value) && value[DEFINITION].kind === "object";
 }
 
 export function getStructFields(
   struct: StructLike<unknown, unknown, boolean>,
 ): readonly StructField[] {
   assertStruct(struct, "struct");
-  const runtime = struct as unknown as RuntimeStruct;
-  const definition = runtime[DEFINITION];
+  const definition = struct[DEFINITION];
   if (definition.kind !== "object") {
     throw new TypeError("object struct is required");
   }
 
   return Object.freeze(
-    resolveStructFields(runtime, definition).map((field) =>
+    resolveStructFields(struct, definition).map((field) =>
       Object.freeze({
         alias: field.alias,
         key: field.key,
-        struct: field.struct as unknown as StructLike<
-          unknown,
-          unknown,
-          boolean
-        >,
+        struct: field.struct,
       }),
     ),
   );
@@ -58,7 +51,7 @@ export function encodeStructValue(
   value: unknown,
 ): unknown {
   assertStruct(struct, "struct");
-  return encodeValue(struct as unknown as RuntimeStruct, value);
+  return encodeValue(struct, value);
 }
 
 /**
@@ -108,33 +101,35 @@ export function parseStructTuple<
   options?: { aliases?: boolean; errorMap?: ErrorMap },
 ): ParseResult<S["_struct"]["output"]> {
   assertStruct(struct, "struct");
-  const runtime = struct as unknown as RuntimeStruct;
   return runWithErrorMap(options?.errorMap, () => {
     const result = parseRootValue(
-      runtime,
+      struct,
       value,
       "value",
       options?.aliases === true,
     );
     if (result.ok) {
-      return [null, result.value as unknown as S["_struct"]["output"]];
+      return [null, result.value];
     }
     return [new StructError([result.issue]), undefined];
   });
 }
 
-export function parseStructValue(
-  struct: StructLike<unknown, unknown, boolean>,
+export function parseStructValue<
+  S extends StructLike<unknown, unknown, boolean>,
+  Tagged extends boolean = false,
+>(
+  struct: S,
   value: unknown,
   options?: {
-    tagObjects?: boolean;
+    tagObjects?: Tagged;
     useAliases?: boolean;
     guides?: WeakMap<object, Guide>;
   },
-): unknown {
+): ParsedStructOutput<S, Tagged> {
   assertStruct(struct, "struct");
   const result = parseRootValue(
-    struct as unknown as RuntimeStruct,
+    struct,
     value,
     "value",
     options?.useAliases,
@@ -144,5 +139,6 @@ export function parseStructValue(
   if (!result.ok) {
     throw new StructError([result.issue]);
   }
-  return result.value;
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original public Infer conditional and the already checked parse result, rather than relaxing generic user programs or adding runtime validation
+  return result.value as ParsedStructOutput<S, Tagged>;
 }

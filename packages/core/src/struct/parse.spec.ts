@@ -364,9 +364,9 @@ describe("parse.ts object and composite values", () => {
   });
 
   test("treats null-prototype objects as plain objects", () => {
-    const input = Object.assign(Object.create(null), {
-      "x-request-id": "trace-2",
-    }) as unknown as { [key: string]: string };
+    const input: { [key: string]: string } = {};
+    Object.setPrototypeOf(input, null);
+    input["x-request-id"] = "trace-2";
 
     const [err, val] = parse(struct.record(struct.string()), input);
     if (err) {

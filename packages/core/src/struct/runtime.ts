@@ -33,6 +33,7 @@ export function createPrimitiveStruct<TInput, TOutput = TInput>(
   definition: PrimitiveDefinitionInput<PrimitiveKind, TInput, TOutput>,
 ): Struct<TInput, TOutput> {
   return castStruct<Struct<TInput, TOutput>>(
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original phantom-branded literal and modifiers capturing its definition; class fields reread replaced metadata and change derived flags
     makeStruct({
       ...definition,
       flags: DEFAULT_FLAGS,
@@ -47,6 +48,7 @@ export function castStruct<TStruct extends StructLike>(
 ): TStruct {
   // Type boundary: all struct runtime objects are created by makeStruct/createPrimitiveStruct; the branded generic surface
   // exists only for compile-time input/output inference and has no distinct runtime representation.
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original phantom-branded literal and modifiers capturing its definition; class fields reread replaced metadata and change derived flags
   return struct as TStruct;
 }
 
@@ -60,6 +62,7 @@ export function makeStruct(definition: StructDefinition): RuntimeStruct {
       },
     });
 
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original phantom-branded literal and modifiers capturing its definition; class fields reread replaced metadata and change derived flags
   return {
     [DEFINITION]: definition,
     alias(name: string) {

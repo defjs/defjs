@@ -45,8 +45,8 @@ export function createMockLogger() {
 
 function emptyAsyncIterable(): AsyncIterable<unknown> {
   const iterator: AsyncIterator<unknown> = {
-    async next() {
-      return { done: true, value: undefined };
+    next() {
+      return Promise.resolve({ done: true, value: undefined });
     },
   };
 

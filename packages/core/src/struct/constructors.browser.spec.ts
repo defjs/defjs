@@ -49,6 +49,7 @@ describe("constructors.ts browser primitives", () => {
     expect(buffer).toBeUndefined();
   });
 
+  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
   test("upload object struct integrates web types end-to-end", async () => {
     const uploadStruct = struct.object({
       attachment: struct.file(),

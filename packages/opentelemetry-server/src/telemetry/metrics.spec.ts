@@ -11,6 +11,7 @@ import {
   createWebSocketClientMetrics,
   durationSeconds,
 } from "./metrics";
+import { method } from "../../test/method";
 
 describe("metrics helpers", () => {
   test("createHttpClientMetrics creates stable HTTP duration metric", () => {
@@ -18,15 +19,13 @@ describe("metrics helpers", () => {
 
     const metrics = createHttpClientMetrics(meter);
 
-    expect(meter.createHistogram).toHaveBeenCalledWith(
-      "http.client.request.duration",
-      expect.objectContaining({
-        unit: "s",
-        advice: expect.objectContaining({
-          explicitBucketBoundaries: expect.any(Array),
-        }),
-      }),
-    );
+    const [histogramName, histogramOptions] =
+      vi.mocked(method(meter, "createHistogram")).mock.calls[0] ?? [];
+    expect(histogramName).toBe("http.client.request.duration");
+    expect(histogramOptions?.unit).toBe("s");
+    expect(
+      Array.isArray(histogramOptions?.advice?.explicitBucketBoundaries),
+    ).toBe(true);
     expect(metrics.requestDuration).toBe(histogram);
   });
 
@@ -35,15 +34,15 @@ describe("metrics helpers", () => {
 
     const metrics = createSSEClientMetrics(meter);
 
-    expect(meter.createHistogram).toHaveBeenCalledWith(
+    expect(method(meter, "createHistogram")).toHaveBeenCalledWith(
       "defjs.client.sse.connect.duration",
       expect.objectContaining({ unit: "s" }),
     );
-    expect(meter.createHistogram).toHaveBeenCalledWith(
+    expect(method(meter, "createHistogram")).toHaveBeenCalledWith(
       "defjs.client.sse.connection.duration",
       expect.objectContaining({ unit: "s" }),
     );
-    expect(meter.createUpDownCounter).toHaveBeenCalledWith(
+    expect(method(meter, "createUpDownCounter")).toHaveBeenCalledWith(
       "defjs.client.sse.active_streams",
       expect.objectContaining({ unit: "{stream}" }),
     );
@@ -57,15 +56,15 @@ describe("metrics helpers", () => {
 
     const metrics = createWebSocketClientMetrics(meter);
 
-    expect(meter.createHistogram).toHaveBeenCalledWith(
+    expect(method(meter, "createHistogram")).toHaveBeenCalledWith(
       "defjs.client.websocket.connect.duration",
       expect.objectContaining({ unit: "s" }),
     );
-    expect(meter.createHistogram).toHaveBeenCalledWith(
+    expect(method(meter, "createHistogram")).toHaveBeenCalledWith(
       "defjs.client.websocket.connection.duration",
       expect.objectContaining({ unit: "s" }),
     );
-    expect(meter.createUpDownCounter).toHaveBeenCalledWith(
+    expect(method(meter, "createUpDownCounter")).toHaveBeenCalledWith(
       "defjs.client.websocket.active_connections",
       expect.objectContaining({ unit: "{connection}" }),
     );
@@ -236,12 +235,14 @@ describe("histogram bucket isolation", () => {
   test("gives every histogram its own copy of the duration buckets", () => {
     const received: number[][] = [];
     const meter = makeMeter();
-    vi.mocked(meter.createHistogram).mockImplementation((_name, options) => {
-      const buckets = options?.advice?.explicitBucketBoundaries;
-      if (!buckets) throw new Error("expected explicitBucketBoundaries");
-      received.push(buckets);
-      return histogram;
-    });
+    vi.mocked(method(meter, "createHistogram")).mockImplementation(
+      (_name, options) => {
+        const buckets = options?.advice?.explicitBucketBoundaries;
+        if (!buckets) throw new Error("expected explicitBucketBoundaries");
+        received.push(buckets);
+        return histogram;
+      },
+    );
 
     const http = createHttpClientMetrics(meter);
     const sse = createSSEClientMetrics(meter);
@@ -255,7 +256,9 @@ describe("histogram bucket isolation", () => {
     expect(webSocket.connectionDuration).toBe(histogram);
     expect(webSocket.activeConnections).toBe(upDownCounter);
     expect(
-      vi.mocked(meter.createHistogram).mock.calls.map((call) => call[0]),
+      vi
+        .mocked(method(meter, "createHistogram"))
+        .mock.calls.map((call) => call[0]),
     ).toEqual([
       "http.client.request.duration",
       "defjs.client.sse.connect.duration",
@@ -264,7 +267,9 @@ describe("histogram bucket isolation", () => {
       "defjs.client.websocket.connection.duration",
     ]);
     expect(
-      vi.mocked(meter.createHistogram).mock.calls.map((call) => call[1]),
+      vi
+        .mocked(method(meter, "createHistogram"))
+        .mock.calls.map((call) => call[1]),
     ).toEqual([
       {
         description: "Duration of HTTP client requests",
@@ -314,16 +319,18 @@ describe("histogram bucket isolation", () => {
   test("keeps the next histogram on the default buckets when the meter mutates the first array", () => {
     const received: number[][] = [];
     const meter = makeMeter();
-    vi.mocked(meter.createHistogram).mockImplementation((_name, options) => {
-      const buckets = options?.advice?.explicitBucketBoundaries;
-      if (!buckets) throw new Error("expected explicitBucketBoundaries");
-      if (received.length === 0) {
-        buckets[0] = 999;
-        buckets.push(42);
-      }
-      received.push(buckets);
-      return histogram;
-    });
+    vi.mocked(method(meter, "createHistogram")).mockImplementation(
+      (_name, options) => {
+        const buckets = options?.advice?.explicitBucketBoundaries;
+        if (!buckets) throw new Error("expected explicitBucketBoundaries");
+        if (received.length === 0) {
+          buckets[0] = 999;
+          buckets.push(42);
+        }
+        received.push(buckets);
+        return histogram;
+      },
+    );
 
     const sse = createSSEClientMetrics(meter);
 

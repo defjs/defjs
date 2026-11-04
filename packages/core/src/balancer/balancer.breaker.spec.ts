@@ -219,10 +219,14 @@ test.each([
   "invalid or removed health option %j is rejected by every factory",
   (options) => {
     for (const b of [
-      outlierDetection(pickFirstBalancer(), options as never),
-      pickFirstBalancer({ outlierDetection: options as never }),
-      roundRobinBalancer({ outlierDetection: options as never }),
-      p2cBalancer({ outlierDetection: options as never }),
+      // @ts-expect-error invalid health options are rejected at runtime
+      outlierDetection(pickFirstBalancer(), options),
+      // @ts-expect-error invalid health options are rejected at runtime
+      pickFirstBalancer({ outlierDetection: options }),
+      // @ts-expect-error invalid health options are rejected at runtime
+      roundRobinBalancer({ outlierDetection: options }),
+      // @ts-expect-error invalid health options are rejected at runtime
+      p2cBalancer({ outlierDetection: options }),
     ])
       expect(
         pickEndpoint(b, { endpoints: list, transport: "http" })[0]?.code,

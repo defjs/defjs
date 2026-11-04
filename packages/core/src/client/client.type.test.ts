@@ -39,6 +39,10 @@ import {
 type Equal<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Expect<T extends true> = T;
 
+declare const heartbeatConfig: ClientWebSocketOptions;
+const heartbeatPayload = heartbeatConfig.heartbeat?.message?.<string>();
+type GenericHeartbeatCall = Expect<Equal<typeof heartbeatPayload, unknown>>;
+
 const serializer: QuerySerializer = (query) => {
   void query["page"];
   return "ok";
@@ -75,20 +79,15 @@ type XsrfTokenProviderCases = Expect<
   >
 >;
 
-const customFetch = async (_input: RequestInfo | URL, _init?: RequestInit) =>
-  new Response(JSON.stringify({ ok: true }), {
-    headers: {
-      "content-type": "application/json",
-    },
-    status: 200,
-  });
-
-class MockWebSocket extends EventTarget {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
-}
+const customFetch = (_input: RequestInfo | URL, _init?: RequestInit) =>
+  Promise.resolve(
+    new Response(JSON.stringify({ ok: true }), {
+      headers: {
+        "content-type": "application/json",
+      },
+      status: 200,
+    }),
+  );
 
 declare const NodeWebSocket: {
   readonly OPEN: 1;
@@ -103,10 +102,11 @@ const client = createClient(
   withCredentials(true),
   withHTTPHandle(customFetch),
   withSSEHandle(customFetch),
-  withWebSocketHandle(MockWebSocket as unknown as typeof WebSocket),
-  withWebSocketBeforeConnect(async ({ attempt, signal }) => {
+  withWebSocketHandle(NodeWebSocket),
+  withWebSocketBeforeConnect(({ attempt, signal }) => {
     void attempt;
     void signal;
+    return Promise.resolve();
   }),
   withWebSocketProtocols(["json"]),
   withWebSocketHeartbeat({
@@ -162,10 +162,11 @@ const options = {
     handle: customFetch,
   },
   webSocket: {
-    handle: MockWebSocket as unknown as typeof WebSocket,
-    beforeConnect: async ({ attempt, signal }) => {
+    handle: NodeWebSocket,
+    beforeConnect: ({ attempt, signal }) => {
       void attempt;
       void signal;
+      return Promise.resolve();
     },
     heartbeat: {
       intervalMs: 1_000,
@@ -257,8 +258,10 @@ createClient(
 
 void withWebSocketQueue;
 void withQueryParamsSerializer;
-void (undefined as unknown as QueryParamsSerializer);
-void (undefined as unknown as RemovedQueryField);
+const removedSerializer: QueryParamsSerializer = undefined;
+const removedField: RemovedQueryField = undefined;
+void removedSerializer;
+void removedField;
 
 const removedQueue: ClientWebSocketOptions = {
   // @ts-expect-error client-level WebSocket queue configuration was removed
@@ -281,18 +284,20 @@ createClient(
 createClient(
   withEndpoint("https://api.example.com"),
   // @ts-expect-error withXSRF tokenProvider must be synchronous and return a token or nullish value
-  withXSRF({ tokenProvider: async () => "token" }),
+  withXSRF({ tokenProvider: () => Promise.resolve("token") }),
 );
 
-export type Cases =
-  | ClientAsyncDisposeCase
-  | ClientCases
-  | OptionalCallOptions
-  | OptionsCases
-  | QueryConfigCases
-  | QueryOptionCases
-  | SerializerArity
-  | SerializerCases
-  | XsrfTokenProviderCases
-  | XsrfOptionsCases
-  | XsrfConfigCases;
+export type Cases = [
+  GenericHeartbeatCall,
+  ClientAsyncDisposeCase,
+  ClientCases,
+  OptionalCallOptions,
+  OptionsCases,
+  QueryConfigCases,
+  QueryOptionCases,
+  SerializerArity,
+  SerializerCases,
+  XsrfTokenProviderCases,
+  XsrfOptionsCases,
+  XsrfConfigCases,
+];

@@ -369,6 +369,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     operation: "orders",
     path: "/events",
   });
+  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
   const handle = vi.fn(async () => {
     throw new TypeError("down");
   });
@@ -469,12 +470,14 @@ test("default health filtering receives read failures and breaks only after five
   const client = createClient(
     withEndpoint(primary, secondary),
     withEndpointBalancer(outlierDetection(recorded.balancer)),
-    withSSEHandle(async (input) => {
+    withSSEHandle((input) => {
       const origin = new URL(new Request(input).url).origin;
       seen.push(origin);
-      return origin === primary
-        ? readFailureResponse()
-        : sseResponse("data: healthy\n\n");
+      return Promise.resolve(
+        origin === primary
+          ? readFailureResponse()
+          : sseResponse("data: healthy\n\n"),
+      );
     }),
   );
   for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -515,7 +518,7 @@ test("invalid event validation and a throwing observer do not become endpoint fa
     createClient(
       withEndpoint("https://example.com"),
       withEndpointBalancer(recorded.balancer),
-      withSSEHandle(async () => sseResponse("data: not-json\n\n")),
+      withSSEHandle(() => Promise.resolve(sseResponse("data: not-json\n\n"))),
       withSSEOnInvalidEvent(observer),
     ),
   );
@@ -534,7 +537,7 @@ test("does not attribute a post-handshake read rejection while offline", async (
     createClient(
       withEndpoint("https://example.com"),
       withEndpointBalancer(recorded.balancer),
-      withSSEHandle(async () => readFailureResponse()),
+      withSSEHandle(() => Promise.resolve(readFailureResponse())),
     ),
   );
   expect(error).toBeNull();
@@ -561,11 +564,13 @@ test("keeps read failures on a replaced base and a second next unattributed", as
       withEndpoint(primary),
       withEndpointBalancer(replaced.balancer),
       withSSEReconnect(RECONNECT),
-      withSSEHandle(async (input) => {
+      withSSEHandle((input) => {
         seen.push(new Request(input).url);
-        return seen.length === 1
-          ? readFailureResponse()
-          : sseResponse("data: recovered\n\n");
+        return Promise.resolve(
+          seen.length === 1
+            ? readFailureResponse()
+            : sseResponse("data: recovered\n\n"),
+        );
       }),
       withInterceptors(
         createSSEInterceptor((req, next) =>
@@ -589,10 +594,12 @@ test("keeps read failures on a replaced base and a second next unattributed", as
     createClient(
       withEndpoint(primary),
       withEndpointBalancer(extra.balancer),
-      withSSEHandle(async () =>
-        ++fetches === 1
-          ? sseResponse("data: first\n\n")
-          : readFailureResponse(),
+      withSSEHandle(() =>
+        Promise.resolve(
+          ++fetches === 1
+            ? sseResponse("data: first\n\n")
+            : readFailureResponse(),
+        ),
       ),
       withInterceptors(
         createSSEInterceptor(async (req, next) => {
@@ -668,7 +675,10 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
   ]);
   expect(recorded.pending()).toBe(0);
 
-  const broken = pickFirstBalancer({ shuffle: 1 as unknown as boolean });
+  const broken = pickFirstBalancer({
+    // @ts-expect-error shuffle rejects every non-boolean at runtime
+    shuffle: 1,
+  });
   const options = track((index, info) =>
     index === 1 ? down.url : broken.pick(info),
   );
@@ -704,13 +714,24 @@ test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open"
   expect(error).toBeNull();
   const closed = await stream?.closed;
   expect(closed).toMatchObject({
-    cause: expect.objectContaining({ cause, code: "REQ_BUILD_FAILED" }),
     code: "REQ_BUILD_FAILED",
     kind: "error",
   });
+  if (closed?.kind !== "error") {
+    throw new Error("expected the reconnect pick to close as an error");
+  }
+  expect(closed.cause).toEqual(
+    expect.objectContaining({
+      cause,
+      code: "REQ_BUILD_FAILED",
+    }),
+  );
   expect(recorded.pending()).toBe(0);
 
-  const broken = pickFirstBalancer({ shuffle: 1 as unknown as boolean });
+  const broken = pickFirstBalancer({
+    // @ts-expect-error shuffle rejects every non-boolean at runtime
+    shuffle: 1,
+  });
   const options = track((index, info) =>
     index === 1 ? dropped.url : broken.pick(info),
   );
@@ -775,7 +796,7 @@ test("calls done once when a reconnect url fails and releases the in-flight coun
 });
 
 test("attributes timeouts and cancellations before fetch, before headers, and after handshake", async () => {
-  const handle = vi.fn(async () => sseResponse("data: hi\n\n"));
+  const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
   const beforeTimeout = new AbortController();
   const beforeTimeoutRecord = track(() => "https://example.com");
   const [timeoutBefore] = await orders(
@@ -905,6 +926,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
     createClient(
       withEndpoint("https://example.com"),
       withEndpointBalancer(thrownTimeout.balancer),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw ERR_TIMEOUT;
       }),
@@ -923,6 +945,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
     createClient(
       withEndpoint("https://example.com"),
       withEndpointBalancer(thrownAbort.balancer),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw ERR_ABORTED;
       }),
@@ -939,6 +962,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
     createClient(
       withEndpoint("https://example.com"),
       withEndpointBalancer(thrownCoded.balancer),
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw coded;
       }),
@@ -1021,6 +1045,7 @@ test("does not pick or call done for a second next, and repicks the first stream
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   let fetches = 0;
   const recorded = track(() => "https://example.com");
+  // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
   const handle = vi.fn(async () => {
     fetches += 1;
     if (fetches === 1) {
@@ -1074,7 +1099,7 @@ test("does not pick or call done for a second next, and repicks the first stream
 });
 
 test("calls done once for each sseHandler exit before fetchEventStream", async () => {
-  const handle = vi.fn(async () => sseResponse("data: hi\n\n"));
+  const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
   const urlRecord = track(() => "https://example.com");
   const [urlError] = await orders(
     createClient(
@@ -1159,7 +1184,7 @@ test("calls done once for each sseHandler exit before fetchEventStream", async (
 test("calls done once when the base was replaced and the signal is aborted or the url is invalid", async () => {
   const cancel = new AbortController();
   const cancelRecord = track(() => "https://example.com");
-  const handle = vi.fn(async () => sseResponse("data: hi\n\n"));
+  const handle = vi.fn(() => Promise.resolve(sseResponse("data: hi\n\n")));
   const [cancelError] = await orders(
     createClient(
       withEndpoint("https://example.com"),

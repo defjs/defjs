@@ -106,18 +106,22 @@ test("worker failures and JSON keep the last object", () => {
 
 test("the node worker reports a bad exit, invalid JSON, and a live process", async () => {
   await expect(
-    requestTypeTables("script", {}, "/tmp", async () => ({
-      code: 2,
-      stdout: "",
-      stderr: "bad",
-    })),
+    requestTypeTables("script", {}, "/tmp", () =>
+      Promise.resolve({
+        code: 2,
+        stdout: "",
+        stderr: "bad",
+      }),
+    ),
   ).rejects.toThrow("exited 2: bad");
   await expect(
-    requestTypeTables("script", {}, "/tmp", async () => ({
-      code: 0,
-      stdout: "nope",
-      stderr: "",
-    })),
+    requestTypeTables("script", {}, "/tmp", () =>
+      Promise.resolve({
+        code: 0,
+        stdout: "nope",
+        stderr: "",
+      }),
+    ),
   ).rejects.toThrow("invalid JSON");
   const echoed = await collectProcess(
     "node",

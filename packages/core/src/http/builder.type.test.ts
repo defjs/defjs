@@ -10,9 +10,9 @@ import { defineRequest } from "./http";
 
 const client = createClient();
 const health = defineRequest({ method: "GET", path: "/health" });
-health(client);
+void health(client);
 // @ts-expect-error an operation with no input does not accept a second argument
-health(client, {});
+void health(client, {});
 
 const scalarInput = struct.object({ userId: struct.number().alias("user_id") });
 const getUser = defineRequest({
@@ -22,8 +22,8 @@ const getUser = defineRequest({
   path: "/users/:user_id",
 });
 // @ts-expect-error a required input cannot be omitted
-getUser(client);
-getUser(client, { userId: 7 });
+void getUser(client);
+void getUser(client, { userId: 7 });
 defineRequest({
   // @ts-expect-error path keys must match the template
   builder: (input) => ({ path: { usr_id: input.userId } }),
@@ -135,9 +135,9 @@ const search = defineRequest({
   method: "GET",
   path: "/search",
 });
-search(client);
-search(client, {});
-search(client, { q: "ada" });
+void search(client);
+void search(client, {});
+void search(client, { q: "ada" });
 
 const nullableUser = struct.object({ id: struct.number() }).nullable();
 defineRequest({

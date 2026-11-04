@@ -48,11 +48,17 @@ export function snapshotReconnect<TCallback>(
   };
 }
 
+function isProtocolList(
+  value: readonly string[] | undefined,
+): value is readonly string[] {
+  return Array.isArray(value);
+}
+
 /** Copies a protocols array. Any other runtime value is left for execution. */
 export function snapshotProtocols(
   value: readonly string[] | undefined,
 ): readonly string[] | undefined {
-  if (Array.isArray(value)) {
+  if (isProtocolList(value)) {
     return value.slice();
   }
   return value;

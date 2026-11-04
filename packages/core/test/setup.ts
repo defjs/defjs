@@ -39,7 +39,7 @@ type ServerConnectionCleanup = {
   closeIdleConnections?: () => void;
 };
 
-export async function setup({ provide }: TestProject) {
+export async function setup({ provide }: Pick<TestProject, "provide">) {
   releaseSseDropSockets();
   const app = new Hono();
   registerE2eProbe(app);
@@ -187,6 +187,7 @@ export async function setup({ provide }: TestProject) {
   app.get("/sse/basic", basicSSEHandler);
   app.post("/sse/basic", basicSSEHandler);
   app.post("/sse/redirect/:status", (c) =>
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve numeric redirect parsing and accepted statuses instead of a new allowlist error
     c.redirect("/sse/basic", Number(c.req.param("status")) as 303 | 307),
   );
 
@@ -236,6 +237,7 @@ export async function setup({ provide }: TestProject) {
       });
     }
 
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: pass Node bindings through unchanged without instanceof or env validation
     const { outgoing } = c.env as HttpBindings;
     const socket = outgoing.socket;
     if (socket === null) {
@@ -503,7 +505,9 @@ export async function setup({ provide }: TestProject) {
           providerEnvelopeAttempts.delete(key);
         },
         onMessage(event, ws) {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original socket JSON values and JavaScript string conversion without a new object guard
           const decoded = JSON.parse(
+            // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve original socket string coercion and JSON access without new validation or altered getter reads
             typeof event.data === "string" ? event.data : String(event.data),
           ) as Record<string, unknown>;
           ws.send(
@@ -561,7 +565,9 @@ export async function setup({ provide }: TestProject) {
     upgradeWebSocket(() => ({
       onMessage(event, ws) {
         try {
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original socket JSON values and JavaScript string conversion without a new object guard
           const decoded = JSON.parse(
+            // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve original socket string coercion and JSON access without new validation or altered getter reads
             typeof event.data === "string" ? event.data : String(event.data),
           ) as { type?: string };
           if (decoded.type === "ping") {
@@ -679,6 +685,7 @@ export async function setup({ provide }: TestProject) {
     "/ws/regression/capture",
     upgradeWebSocket(() => ({
       onMessage(event, socket) {
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve original socket string coercion and JSON access without new validation or altered getter reads
         socket.send(JSON.stringify({ received: String(event.data) }));
       },
     })),
@@ -693,7 +700,7 @@ export async function setup({ provide }: TestProject) {
   });
   testServer = server;
 
-  server.on("connection", (socket) => {
+  server.on("connection", (socket: Socket) => {
     testServerSockets.add(socket);
     socket.on("close", () => {
       testServerSockets.delete(socket);
@@ -755,6 +762,7 @@ export async function teardown() {
 
     const currentServer = testServer;
     if (currentServer?.listening) {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve optional cleanup calls and native failures without extra has and typeof checks
       const serverWithCleanup = currentServer as ServerType &
         ServerConnectionCleanup;
       serverWithCleanup.closeIdleConnections?.();
@@ -766,6 +774,7 @@ export async function teardown() {
             currentServer.close((error) => {
               if (
                 error &&
+                // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the error code once without a new validation path or changed getter order
                 (error as NodeJS.ErrnoException).code !==
                   "ERR_SERVER_NOT_RUNNING"
               ) {

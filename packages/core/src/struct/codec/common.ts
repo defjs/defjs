@@ -3,7 +3,7 @@ import { mapAliasedObjectFields } from "../fields";
 
 import { isObjectStruct, parseStructValue } from "../introspection";
 import { DEFINITION } from "../symbols";
-import type { AnyStructLike, RuntimeStruct } from "../types";
+import type { AnyStructLike, Infer, RuntimeStruct } from "../types";
 
 export { mapAliasedObjectFields } from "../fields";
 
@@ -15,6 +15,7 @@ export function encodeObjectByAlias(
   label = "json",
   depth = 0,
 ): unknown {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original metadata reads, object-guard sequence and native invalid-input errors; do not add an early struct validator
   const definition = (struct as RuntimeStruct)[DEFINITION];
   // `.nullable()` and `.optional()` keep kind `object`, so nullish has to win before the object assertion.
   if (value === null && definition.flags.nullable) {
@@ -31,6 +32,7 @@ export function encodeObjectByAlias(
   assertPlainObject(value, `${label} encode expects object value`);
 
   return mapAliasedObjectFields(
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original metadata reads, object-guard sequence and native invalid-input errors; do not add an early struct validator
     struct as unknown as RuntimeStruct,
     value,
     (fieldStruct, fieldValue) =>
@@ -38,10 +40,10 @@ export function encodeObjectByAlias(
   );
 }
 
-export function decodeObjectByAlias(
-  struct: AnyStructLike,
+export function decodeObjectByAlias<S extends AnyStructLike>(
+  struct: S,
   value: unknown,
-): unknown {
+): Infer<S> {
   return parseStructValue(struct, value, { useAliases: true });
 }
 
@@ -65,6 +67,7 @@ function encodeAliasedField(
   }
 
   return encodeValue(
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original metadata reads, object-guard sequence and native invalid-input errors; do not add an early struct validator
     struct as unknown as RuntimeStruct,
     value,
     ALIAS_ENCODE_OPTIONS,

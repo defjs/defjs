@@ -87,7 +87,9 @@ describe.each(["http", "sse", "ws"] as const)(
     test.each(invalidPaths)(
       "rejects definition path %j before interceptors or transport",
       async (path) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
         const interceptor = vi.fn(() => {
@@ -124,7 +126,9 @@ describe.each(["http", "sse", "ws"] as const)(
     test.each(["", "/api", "not a url"])(
       "rejects client endpoint %j as a build failure",
       async (endpoint) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
         const shouldReconnect = vi.fn(() => true);
@@ -152,7 +156,9 @@ describe.each(["http", "sse", "ws"] as const)(
     test.each(invalidPaths)(
       "rejects interceptor path %j before transport or reconnect",
       async (path) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
         const shouldReconnect = vi.fn(() => true);
@@ -191,7 +197,9 @@ describe.each(["http", "sse", "ws"] as const)(
     test.each(["", "/api", "not a url"])(
       "rejects interceptor base %j as a build failure",
       async (baseEndpoint) => {
-        const handle = vi.fn(async () => new Response(null, { status: 204 }));
+        const handle = vi.fn(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        );
         const constructed = vi.fn();
         const Socket = socketHandle(constructed);
         const shouldReconnect = vi.fn(() => true);
@@ -234,12 +242,15 @@ describe.each(["http", "sse"] as const)(
     test("allows an invalid next promise to be discarded without an unhandled rejection", async () => {
       const client = createClient(
         withEndpoint("https://trusted.example/api"),
-        withHTTPHandle(async () => new Response(null, { status: 204 })),
-        withSSEHandle(
-          async () =>
+        withHTTPHandle(() =>
+          Promise.resolve(new Response(null, { status: 204 })),
+        ),
+        withSSEHandle(() =>
+          Promise.resolve(
             new Response("data: hi\n\n", {
               headers: { "content-type": "text/event-stream" },
             }),
+          ),
         ),
         withInterceptors(
           createHttpInterceptor((request, next) => {
@@ -266,12 +277,15 @@ describe.each(["http", "sse"] as const)(
         let recovered = false;
         const client = createClient(
           withEndpoint("https://trusted.example/api"),
-          withHTTPHandle(async () => new Response(null, { status: 204 })),
-          withSSEHandle(
-            async () =>
+          withHTTPHandle(() =>
+            Promise.resolve(new Response(null, { status: 204 })),
+          ),
+          withSSEHandle(() =>
+            Promise.resolve(
               new Response("data: hi\n\n", {
                 headers: { "content-type": "text/event-stream" },
               }),
+            ),
           ),
           withInterceptors(
             createHttpInterceptor((request, next) => {
@@ -330,15 +344,17 @@ test.each([
     const urls: string[] = [];
     const client = createClient(
       withEndpoint("https://trusted.example/api"),
-      withHTTPHandle(async (request) => {
+      withHTTPHandle((request) => {
         urls.push(new Request(request).url);
-        return new Response(null, { status: 204 });
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
-      withSSEHandle(async (request) => {
+      withSSEHandle((request) => {
         urls.push(new Request(request).url);
-        return new Response("data: hi\n\n", {
-          headers: { "content-type": "text/event-stream" },
-        });
+        return Promise.resolve(
+          new Response("data: hi\n\n", {
+            headers: { "content-type": "text/event-stream" },
+          }),
+        );
       }),
       withWebSocketHandle(socketHandle((url) => urls.push(url))),
     );
@@ -366,15 +382,17 @@ test("relative interceptor rewrites share HTTP, SSE and WebSocket URL rules", as
   const Socket = socketHandle((url) => urls.push(url));
   const client = createClient(
     withEndpoint("https://trusted.example/api?discard=1#discard"),
-    withHTTPHandle(async (request) => {
+    withHTTPHandle((request) => {
       urls.push(new Request(request).url);
-      return new Response(null, { status: 204 });
+      return Promise.resolve(new Response(null, { status: 204 }));
     }),
-    withSSEHandle(async (request) => {
+    withSSEHandle((request) => {
       urls.push(new Request(request).url);
-      return new Response("data: hi\n\n", {
-        headers: { "content-type": "text/event-stream" },
-      });
+      return Promise.resolve(
+        new Response("data: hi\n\n", {
+          headers: { "content-type": "text/event-stream" },
+        }),
+      );
     }),
     withWebSocketHandle(Socket),
     withInterceptors(

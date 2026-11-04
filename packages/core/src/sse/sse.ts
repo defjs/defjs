@@ -222,12 +222,16 @@ function snapshotEventDictionary<T>(events: T): T {
   }
   const descriptors = Object.getOwnPropertyDescriptors(events);
   for (const descriptor of Object.values(descriptors)) {
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: capture the original getter once and dispatch its own call property with events as receiver
     const get = descriptor.get;
     if (get) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return -- INTENT: forward the getter's exact return through its own call property without binding or transforming it
       descriptor.get = () => get.call(events);
     }
   }
-  return Object.create(null, descriptors) as T;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- PERF: typed setPrototypeOf/defineProperties clone was +3.68%, +5.15%, +6.46% slower in three interleaved 21-pair runs; preserve Object.create(null, descriptors)
+  const snapshot: T = Object.create(null, descriptors);
+  return snapshot;
 }
 
 /**
@@ -287,18 +291,14 @@ export function defineEventStream<
     path,
   };
 
-  return (async (client: Client, input?: EndpointInput<TInput>) =>
+  return async (client: Client, input?: EndpointInput<TInput>) =>
     runEventStreamCommand<TInput, TEvents, TError>(
       client[CLIENT].config,
       endpoint,
       input,
       client[CLIENT].options,
       new AbortController(),
-    )) as EventStreamEndpoint<
-    EndpointArgs<TInput>,
-    EventStreamData<TEvents>,
-    TError
-  >;
+    );
 }
 
 async function runEventStreamCommand<
@@ -457,6 +457,7 @@ async function runEventStreamCommand<
           resolveRequestUrl(req);
         } catch (error) {
           settleUnattempted();
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- rejects the library fault value unchanged
           const rejected = Promise.reject<EventStreamHandle<unknown>>(error);
           void rejected.catch(() => undefined);
           return rejected;
@@ -468,6 +469,7 @@ async function runEventStreamCommand<
           // `due` exists only after this signal has aborted, so the cause is the abort sentinel.
           // Reject with that sentinel, not the fault: the startup catch classifies sentinels.
           const rejected = Promise.reject<EventStreamHandle<unknown>>(
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: this rejection follows the already-aborted check; preserve HEAD's cancellation helper and sentinel path
             transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
           );
           releaseAbortSignal(transportAbort);
@@ -498,13 +500,15 @@ async function runEventStreamCommand<
           releaseAbortSignal(streamAbort);
           releaseAbortSignal(transportAbort);
         };
-        // Type boundary: SSEHandler returns EventStreamHandle<unknown>; the concrete type is narrowed by the interceptor chain.
         const failure: EventStreamFailureInfo = {};
         const endpointAttempt =
           attributed && !settled
             ? {
+                // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve callback identity and bare invocation; undefined passes through unchanged
                 start: resolved.start,
+                // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve callback identity and bare invocation; undefined passes through unchanged
                 end: resolved.end,
+                // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve callback identity and bare invocation; undefined passes through unchanged
                 done: resolved.done,
                 pickNext: () =>
                   pickEndpoint(clientConfig.endpointBalancer, {
@@ -555,11 +559,10 @@ async function runEventStreamCommand<
         return promise;
       };
       const sseChain = makeChain(sseInterceptors);
-      // Type boundary: interceptor chain returns EventStreamHandle<unknown>; runtime message transform narrows it to the endpoint's event types.
-      const stream = (await awaitWithSignal(
+      const stream = await awaitWithSignal(
         () => sseChain(request, sseHandler),
         requestSignal,
-      )) as EventStreamHandle<EventStreamData<TEvents>>;
+      );
       const publicOpen = stream?.open;
       if (
         typeof stream?.closed?.then !== "function" ||
@@ -596,7 +599,9 @@ async function runEventStreamCommand<
       );
       // Only transfer listener ownership after every startup operation has succeeded.
       streamDelivered = true;
-      return [null, stream, open];
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: an interceptor-returned handle is delivered as is (identity, no per-event validation); the typed alternative replaces it with a validating adapter
+      const delivered = stream as EventStreamHandle<EventStreamData<TEvents>>;
+      return [null, delivered, open];
     } catch (error) {
       chainSettled = true;
       discardOwnedStreams(error);
@@ -609,6 +614,7 @@ async function runEventStreamCommand<
         : error instanceof RequestUrlError
           ? createPreflightFault("REQ_BUILD_FAILED", error)
           : createEventStreamFault(cause, fromTransport, openInfo?.response);
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: handshake bodies decode inside the transport and faults are classified after chain rejection; the typed channel moves fault construction and response getter reads earlier
       return [fault as Fault<TError>, undefined, openInfo];
     } finally {
       if (!streamDelivered) {
@@ -665,12 +671,13 @@ function transformStreamMessage<TEvents extends EventStructs>(
   }
 
   try {
-    return {
+    const decoded = {
       data: decodeSSEEventData(eventStruct, message.data),
       event: eventName,
       id: message.id || undefined,
-      // Type boundary: decodeSSEEventData validates against the resolved event struct; the shape matches EventStreamData<TEvents>.
-    } as EventStreamData<TEvents>;
+    };
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- IRREDUCIBLE: runtime event key cannot select the correlated default/numeric mapped union member after schema decoding; repro: sse.event_union.type.test.ts
+    return decoded as EventStreamData<TEvents>;
   } catch (error) {
     return notifyInvalidEvent(onInvalidEvent, {
       reason: "validation-failed",
@@ -742,7 +749,7 @@ function decodeSSEEventData(struct: AnyStruct, data: string): unknown {
     return parseStructValue(struct, data);
   }
 
-  return decodeJson(struct, JSON.parse(data) as unknown);
+  return decodeJson(struct, JSON.parse(data));
 }
 
 function toEventStreamMeta(response: HttpResponse<unknown>): HttpMeta {

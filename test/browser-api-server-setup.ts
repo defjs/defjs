@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import { startHonoTestServer } from "./hono-test-server";
 
 type TestProject = {
-  provide(key: string, value: unknown): void;
+  provide: (key: string, value: unknown) => void;
 };
 
 export async function setup({ provide }: TestProject) {

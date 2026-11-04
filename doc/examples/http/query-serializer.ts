@@ -16,6 +16,7 @@ const client = createClient(
         }
         return;
       }
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- INTENT: preserve stringification of every non-undefined query value instead of silently dropping objects
       if (value !== undefined) params.append(key, String(value));
     };
     for (const [key, value] of Object.entries(query)) append(key, value);

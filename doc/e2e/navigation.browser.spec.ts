@@ -57,6 +57,14 @@ const guideTitle = {
   ar: "الدليل",
 } as const;
 
+function titleFor(table: object, locale: string): string {
+  if (!Object.hasOwn(table, locale))
+    throw new Error(`missing locale ${locale}`);
+  const value: unknown = Reflect.get(table, locale);
+  if (typeof value !== "string") throw new Error(`missing locale ${locale}`);
+  return value;
+}
+
 test("makes the current reading area and starting point visible", async () => {
   const site = await openSite();
   const page = await site.browser.newPage({
@@ -233,8 +241,8 @@ test("every locale shows both AI guides under Guide", async () => {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     const t = getTranslator(locale);
     const pages = [
-      ["/docs/ai", aiPageTitle[locale as keyof typeof aiPageTitle]],
-      ["/docs/ai-api", aiApiTitle[locale as keyof typeof aiApiTitle]],
+      ["/docs/ai", titleFor(aiPageTitle, locale)],
+      ["/docs/ai-api", titleFor(aiApiTitle, locale)],
     ] as const;
     for (const [path, title] of pages) {
       await page.goto(site.url(`${prefix}${path}`), {
@@ -249,14 +257,12 @@ test("every locale shows both AI guides under Guide", async () => {
       const selected = areas.locator('[aria-current="location"]');
       expect(await selected.count()).toBe(1);
       expect(await selected.getAttribute("href")).toBe(`${prefix}/docs`);
-      expect(await selected.textContent()).toBe(
-        guideTitle[locale as keyof typeof guideTitle],
-      );
+      expect(await selected.textContent()).toBe(titleFor(guideTitle, locale));
       const sidebar = page.locator("#nd-sidebar");
       expect(
         await sidebar
           .getByRole("heading", {
-            name: aiGroup[locale as keyof typeof aiGroup],
+            name: titleFor(aiGroup, locale),
             exact: true,
           })
           .count(),

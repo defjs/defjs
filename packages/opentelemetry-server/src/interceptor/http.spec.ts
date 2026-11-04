@@ -29,6 +29,7 @@ import {
 } from "../test-utils";
 import { withOpenTelemetryServer } from "../option";
 import { createOpenTelemetryHttpInterceptor } from "./http";
+import { method } from "../../test/method";
 
 let mockPropagator: ReturnType<typeof createMockPropagator>;
 
@@ -53,6 +54,7 @@ describe("HTTP client diagnostic logs", () => {
       });
       const cause = new TypeError("private network detail");
       await expect(
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         interceptor.fn(makeHttpRequest(), async () => {
           active.mockReturnValue(ROOT_CONTEXT);
           throw cause;
@@ -84,6 +86,7 @@ describe("HTTP client diagnostic logs", () => {
       propagator: createMockPropagator(),
     });
     await expect(
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       interceptor.fn(makeHttpRequest(), async () => {
         throw cause;
       }),
@@ -100,6 +103,7 @@ describe("HTTP client diagnostic logs", () => {
     await expect(
       interceptor.fn(
         { ...makeHttpRequest(), signal: AbortSignal.abort(ERR_TIMEOUT) },
+        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
         async () => {
           throw ERR_TIMEOUT;
         },
@@ -119,7 +123,7 @@ describe("HTTP client diagnostic logs", () => {
       });
       const response = { ...makeHttpResponse(), status };
       await expect(
-        interceptor.fn(makeHttpRequest(), async () => response),
+        interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
       ).resolves.toBe(response);
       expect(records).toEqual([]);
     },
@@ -141,6 +145,7 @@ describe("HTTP client diagnostic logs", () => {
       propagator: createMockPropagator(),
     });
     await expect(
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       interceptor.fn(makeHttpRequest(), async () => {
         throw cause;
       }),
@@ -172,10 +177,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
           return next(request);
         }),
       ),
-      withHTTPHandle(async (input) => {
-        signedType = (input as Request).headers.get("x-signed-content-type");
-        contentType = (input as Request).headers.get("content-type");
-        return new Response(null, { status: 204 });
+      withHTTPHandle((input) => {
+        if (!(input instanceof Request))
+          throw new TypeError("expected a Request");
+        signedType = input.headers.get("x-signed-content-type");
+        contentType = input.headers.get("content-type");
+        return Promise.resolve(new Response(null, { status: 204 }));
       }),
     );
     const request = defineRequest({
@@ -186,7 +193,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     const [fault] = await request(client);
 
     expect(fault).toBeNull();
-    expect(mockPropagator.inject).toHaveBeenCalled();
+    expect(method(mockPropagator, "inject")).toHaveBeenCalled();
     expect(signedType).toBe("application/json");
     expect(contentType).toBe(signedType);
   });
@@ -196,7 +203,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     const requestHook = vi.fn();
     const base = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => new Response(null, { status: 204 })),
+      withHTTPHandle(() =>
+        Promise.resolve(new Response(null, { status: 204 })),
+      ),
       withOpenTelemetryServer({ tracer, http: { requestHook } }),
     );
     const derived = base({ signal: new AbortController().signal });
@@ -225,11 +234,13 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     const req = makeHttpRequest();
-    const next = vi.fn(async (_req: HttpRequest) => makeHttpResponse());
+    const next = vi.fn((_req: HttpRequest) =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     await interceptor.fn(req, next);
 
-    expect(mockPropagator.inject).toHaveBeenCalled();
+    expect(method(mockPropagator, "inject")).toHaveBeenCalled();
     const calls = vi.mocked(next).mock.calls;
     expect(calls[0]?.[0].headers?.get("traceparent")).toBe("mock-trace-id");
   });
@@ -245,7 +256,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       });
 
       await expect(
-        interceptor.fn(makeHttpRequest(), async () => response),
+        interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
       ).resolves.toBe(response);
 
       expect(metrics.requestDuration.record).toHaveBeenCalledTimes(1);
@@ -270,6 +281,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     await expect(
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       interceptor.fn(makeHttpRequest(), async () => {
         throw error;
       }),
@@ -293,7 +305,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => makeHttpResponse());
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     expect(activeSpans).toHaveLength(1);
     expect(activeSpans[0]?.name).toBe("GET");
@@ -306,7 +320,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => makeHttpResponse());
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     expect(activeSpans[0]?.attributes["http.request.method"]).toBe("GET");
     expect(activeSpans[0]?.attributes["url.full"]).toBe(
@@ -332,10 +348,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       startSpanHook,
     });
 
-    await interceptor.fn(req, async () => makeHttpResponse());
+    await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
     expect(startSpanHook).toHaveBeenCalledWith(req);
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "app.tenant": "acme",
       "http.request.method": "GET",
       "server.address": "tenant.example.com",
@@ -352,9 +370,11 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
     const req = { ...makeHttpRequest(), queryString: "tenant=acme" };
 
-    await interceptor.fn(req, async () => makeHttpResponse());
+    await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "http.request.method": "GET",
       "server.address": "api.example.com",
       "url.full": "https://api.example.com/test",
@@ -370,11 +390,13 @@ describe("createOpenTelemetryHttpInterceptor", () => {
 
     await interceptor.fn(
       { ...makeHttpRequest(), endpoint: "/test?literal=kept" },
-      async () => makeHttpResponse(),
+      () => Promise.resolve(makeHttpResponse()),
     );
 
     expect(
-      vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes?.["url.full"],
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes?.[
+        "url.full"
+      ],
     ).toBe("/test?literal=kept");
   });
 
@@ -389,16 +411,18 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       }),
     });
 
-    await interceptor.fn(req, async () => makeHttpResponse());
+    await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
     expect(
-      vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes?.["url.full"],
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes?.[
+        "url.full"
+      ],
     ).toBe("https://api.example.com/test?tenant=acme");
   });
 
   test("should continue HTTP and record a hook error when startSpanHook throws", async () => {
     const { tracer } = createMockTracer();
-    const next = vi.fn(async () => makeHttpResponse());
+    const next = vi.fn(() => Promise.resolve(makeHttpResponse()));
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
@@ -410,7 +434,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     await interceptor.fn(makeHttpRequest(), next);
 
     expect(next).toHaveBeenCalledTimes(1);
-    expect(vi.mocked(tracer.startSpan).mock.calls[0]?.[1]?.attributes).toEqual({
+    expect(
+      vi.mocked(method(tracer, "startSpan")).mock.calls[0]?.[1]?.attributes,
+    ).toEqual({
       "http.request.method": "GET",
       "server.address": "api.example.com",
       "url.full": "https://api.example.com/test",
@@ -426,11 +452,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
 
   test("should continue HTTP when startSpanHook throws undefined", async () => {
     const { tracer } = createMockTracer();
-    const next = vi.fn(async () => makeHttpResponse());
+    const next = vi.fn(() => Promise.resolve(makeHttpResponse()));
     const interceptor = createOpenTelemetryHttpInterceptor({
       tracer,
       propagator: mockPropagator,
       startSpanHook: () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
         throw undefined;
       },
     });
@@ -454,7 +481,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => makeHttpResponse());
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     expect(activeSpans[0]?.ended).toBe(true);
     expect(activeSpans[0]?.status).toBeUndefined();
@@ -467,10 +496,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => ({
-      ...makeHttpResponse(),
-      status: 500,
-    }));
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve({
+        ...makeHttpResponse(),
+        status: 500,
+      }),
+    );
 
     expect(activeSpans[0]?.ended).toBe(true);
     expect(activeSpans[0]?.attributes["error.type"]).toBe("500");
@@ -484,10 +515,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => ({
-      ...makeHttpResponse(),
-      status: 404,
-    }));
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve({
+        ...makeHttpResponse(),
+        status: 404,
+      }),
+    );
 
     expect(activeSpans[0]?.ended).toBe(true);
     expect(activeSpans[0]?.attributes["error.type"]).toBe("404");
@@ -507,7 +540,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     const response = { ...makeHttpResponse(), status: 0 };
 
     await expect(
-      interceptor.fn(makeHttpRequest(), async () => response),
+      interceptor.fn(makeHttpRequest(), () => Promise.resolve(response)),
     ).resolves.toBe(response);
 
     expect(
@@ -533,6 +566,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     await expect(
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       interceptor.fn(makeHttpRequest(), async () => {
         throw new Error("network error");
       }),
@@ -552,7 +586,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     const req = makeHttpRequest();
-    const next = vi.fn(async (_req: HttpRequest) => makeHttpResponse());
+    const next = vi.fn((_req: HttpRequest) =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     await interceptor.fn(req, next);
 
@@ -571,7 +607,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       requireParentSpan: true,
     });
 
-    const next = vi.fn(async (_req: HttpRequest) => makeHttpResponse());
+    const next = vi.fn((_req: HttpRequest) =>
+      Promise.resolve(makeHttpResponse()),
+    );
     await interceptor.fn(makeHttpRequest(), next);
 
     expect(activeSpans).toHaveLength(0);
@@ -588,7 +626,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     const req = makeHttpRequest();
-    await interceptor.fn(req, async () => makeHttpResponse());
+    await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
     expect(requestHook).toHaveBeenCalledTimes(1);
     expect(requestHook).toHaveBeenCalledWith(activeSpans[0], req);
@@ -608,7 +646,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
 
     const res = makeHttpResponse();
     const req = makeHttpRequest();
-    await interceptor.fn(req, async () => res);
+    await interceptor.fn(req, () => Promise.resolve(res));
 
     expect(responseHook).toHaveBeenCalledTimes(1);
     expect(responseHook).toHaveBeenCalledWith(activeSpans[0], res, req);
@@ -628,9 +666,8 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     const response = makeHttpResponse();
-    const result = await interceptor.fn(
-      makeHttpRequest(),
-      async () => response,
+    const result = await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(response),
     );
 
     expect(result).toBe(response);
@@ -657,9 +694,8 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     const response = makeHttpResponse();
-    const result = await interceptor.fn(
-      makeHttpRequest(),
-      async () => response,
+    const result = await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(response),
     );
 
     expect(result).toBe(response);
@@ -681,7 +717,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => makeHttpResponse());
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     expect(metrics.requestDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
@@ -702,10 +740,12 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       metrics,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => ({
-      ...makeHttpResponse(),
-      status: 500,
-    }));
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve({
+        ...makeHttpResponse(),
+        status: 500,
+      }),
+    );
 
     expect(metrics.requestDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
@@ -726,6 +766,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     await expect(
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       interceptor.fn(makeHttpRequest(), async () => {
         throw new TypeError("fail");
       }),
@@ -747,7 +788,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       propagator: mockPropagator,
     });
 
-    await interceptor.fn(makeHttpRequest(), async () => makeHttpResponse());
+    await interceptor.fn(makeHttpRequest(), () =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     expect(activeSpans[0]?.attributes["server.address"]).toBe(
       "api.example.com",
@@ -765,7 +808,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
       ...makeHttpRequest(),
       baseEndpoint: "https://api.example.com:8443",
     };
-    await interceptor.fn(req, async () => makeHttpResponse());
+    await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
     expect(activeSpans[0]?.attributes["server.address"]).toBe(
       "api.example.com",
@@ -781,7 +824,7 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     const req = { ...makeHttpRequest(), baseEndpoint: "not-a-url" };
-    await interceptor.fn(req, async () => makeHttpResponse());
+    await interceptor.fn(req, () => Promise.resolve(makeHttpResponse()));
 
     expect(activeSpans[0]?.attributes["url.full"]).toBe("/test");
   });
@@ -797,7 +840,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
 
       const existingHeaders = new Headers({ "x-custom": "value" });
       const req = { ...makeHttpRequest(), headers: existingHeaders };
-      const next = vi.fn(async (_req: HttpRequest) => makeHttpResponse());
+      const next = vi.fn((_req: HttpRequest) =>
+        Promise.resolve(makeHttpResponse()),
+      );
 
       await interceptor.fn(req, next);
 
@@ -818,7 +863,9 @@ describe("createOpenTelemetryHttpInterceptor", () => {
     });
 
     const req = { ...makeHttpRequest(), headers: undefined };
-    const next = vi.fn(async (_req: HttpRequest) => makeHttpResponse());
+    const next = vi.fn((_req: HttpRequest) =>
+      Promise.resolve(makeHttpResponse()),
+    );
 
     await interceptor.fn(req, next);
 

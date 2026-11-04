@@ -191,33 +191,36 @@ basicAuthHttpInterceptor(() => ({ password: "secret", username: "miao" }), {
   encode: () => 1,
 });
 
-// @ts-expect-error HTTP interceptors must return internal HttpResponse values, not native Response.
-createHttpInterceptor(async () => new Response("ok", { status: 200 }));
+createHttpInterceptor(() =>
+  // @ts-expect-error HTTP interceptors must return internal HttpResponse values, not native Response.
+  Promise.resolve(new Response("ok", { status: 200 })),
+);
 
 // @ts-expect-error password is required
 basicAuthSSEInterceptor(() => ({
   username: "miao",
 }));
 
-export type Cases =
-  | HttpChainNextCase
-  | HttpChainParametersCase
-  | HttpChainResultCase
-  | HttpInterceptorCase
-  | MakeHttpChainCase
-  | MakeSSEChainCase
-  | MakeWebSocketChainCase
-  | SSEChainNextCase
-  | SSEChainParametersCase
-  | SSEChainResultCase
-  | SSEInterceptorCase
-  | WebSocketChainNextCase
-  | WebSocketChainParametersCase
-  | WebSocketChainResultCase
-  | WebSocketBufferedAmountCase
-  | WebSocketClosedCase
-  | WebSocketConnectionCase
-  | WebSocketDisposableCase
-  | WebSocketDisposeResultCase
-  | WebSocketStateCase
-  | WebSocketStateListenerCase;
+export type Cases = [
+  HttpChainNextCase,
+  HttpChainParametersCase,
+  HttpChainResultCase,
+  HttpInterceptorCase,
+  MakeHttpChainCase,
+  MakeSSEChainCase,
+  MakeWebSocketChainCase,
+  SSEChainNextCase,
+  SSEChainParametersCase,
+  SSEChainResultCase,
+  SSEInterceptorCase,
+  WebSocketChainNextCase,
+  WebSocketChainParametersCase,
+  WebSocketChainResultCase,
+  WebSocketBufferedAmountCase,
+  WebSocketClosedCase,
+  WebSocketConnectionCase,
+  WebSocketDisposableCase,
+  WebSocketDisposeResultCase,
+  WebSocketStateCase,
+  WebSocketStateListenerCase,
+];

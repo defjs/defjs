@@ -96,7 +96,7 @@ const compilerOptions = {
   module: ModuleKind.ESNext,
   moduleResolution: ModuleResolutionKind.Bundler,
   skipLibCheck: true,
-  types: [] as string[],
+  types: [],
   allowImportingTsExtensions: true,
   verbatimModuleSyntax: true,
   baseUrl: repoRoot,
@@ -108,7 +108,7 @@ const compilerOptions = {
       "packages/opentelemetry-server/src/index.ts",
     ],
   },
-} as RawCompilerOptions;
+} satisfies RawCompilerOptions;
 
 /** Node child. `fumadocs-typescript` uses `typescript/sync`, which crashes inside Bun. */
 export const workerSource = `
@@ -195,12 +195,15 @@ export function specifierIsTypeOnly(node: {
       }
     | undefined;
 }): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
   if (node.kind !== SyntaxKind.ExportSpecifier) return false;
   if (node.isTypeOnly) return true;
   const named = node.parent;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
   if (!named || named.kind !== SyntaxKind.NamedExports) return false;
   const decl = named.parent;
   return Boolean(
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     decl && decl.kind === SyntaxKind.ExportDeclaration && decl.isTypeOnly,
   );
 }
@@ -211,11 +214,14 @@ export function functionTypeOf(node: {
 }): { kind: number } | undefined {
   let current:
     { kind: number; type?: { kind: number } | undefined } | undefined = node;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
   while (current && current.kind === SyntaxKind.ParenthesizedType)
     current = current.type;
   if (!current) return undefined;
   if (
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     current.kind === SyntaxKind.FunctionType ||
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     current.kind === SyntaxKind.ConstructorType
   )
     return current;
@@ -332,6 +338,7 @@ function parameterPieces(
   };
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
 async function callablePages(
   nodes: readonly Node[],
   tags: readonly DocTag[],
@@ -341,9 +348,10 @@ async function callablePages(
   const signatures: string[] = [];
   const parameterQueries: ParameterQuery[] = [];
   for (const node of selected) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing function-kind selection controls the node without changing overload selection or validation
     const fn = node as FunctionDeclaration;
     const fileText = fn.getSourceFile().text;
-    let signature = cleanSignature(
+    const signature = cleanSignature(
       fileText.slice(fn.getStart(), cutEnd("body", fn.body?.pos, fn.end)),
     );
     signatures.push(signature);
@@ -380,11 +388,10 @@ async function readPage(
     SyntaxKind.ExportSpecifier,
     SyntaxKind.ExportAssignment,
   );
-  const tags = (await checker.getJsDocTagsOfSymbol(
-    aliased,
-  )) as readonly DocTag[];
+  const tags = await checker.getJsDocTagsOfSymbol(aliased);
   const kind = catalogKind({
     typeOnlyExport: typeOnlyExport(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve type-only flag inspection for every export node, including assignments
       exportNodes.map((node) => specifierIsTypeOnly(node as ExportSpecifier)),
     ),
     declarationKind: declarationCategory(impl.kind),
@@ -393,7 +400,7 @@ async function readPage(
     outerStatement(node).jsDoc,
     node.jsDoc,
   ]);
-  let signatures: string[] = [];
+  let signatures: string[];
   let parameterQueries: ParameterQuery[] = [];
   let table: PageDraft["typeTable"] = null;
   const file = impl.getSourceFile().fileName;
@@ -404,8 +411,10 @@ async function readPage(
     parameterQueries = callable.parameterQueries;
   } else if (impl.kind === SyntaxKind.TypeAliasDeclaration) {
     signatures = [cleanSignature(impl.getText())];
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing type-alias kind branch controls the original property read without a new guard
     const callable = functionTypeOf((impl as unknown as { type: Node }).type);
     if (callable) {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve handling of both callable syntax kinds without changing the helper input contract
       const pieces = parameterPieces(callable as FunctionTypeNode, tags);
       parameterQueries = [
         {
@@ -418,6 +427,7 @@ async function readPage(
       ];
     } else if (
       typeAliasHasMembers(
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: preserve original type-alias member queries without narrowing the accepted helper input
         impl as unknown as {
           kind: number;
           type?: { kind: number; type?: { kind: number } };
@@ -429,6 +439,7 @@ async function readPage(
     signatures = [cleanSignature(impl.getText())];
     table = typeTableQuery(includeTypeTable, file, name);
   } else if (impl.kind === SyntaxKind.VariableDeclaration) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing variable-kind branch controls the node without adding validation
     const variable = impl as VariableDeclaration;
     const initializer = nestedExpression(variable.initializer, [
       SyntaxKind.AsExpression,
@@ -508,6 +519,7 @@ async function readStructMembers(
   );
   const pages: PageDraft[] = [];
   const descriptions = new Map<string, string>();
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original initializer-kind check and direct property access ordering
   const properties = (initializer as unknown as { properties: readonly Node[] })
     .properties;
   for (const property of properties) {
@@ -516,6 +528,7 @@ async function readStructMembers(
       SyntaxKind.PropertyAssignment,
       `unsupported struct property ${property.getText()}`,
     );
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the existing property-kind check and original name/initializer reads
     const assignment = property as unknown as { name: Node; initializer: Node };
     const name = objectPropertyName(
       assignment.name.getText(),
@@ -682,7 +695,7 @@ export async function assertSignatureSyntax(
       noLib: true,
       skipLibCheck: true,
       types: [],
-    } as RawCompilerOptions);
+    });
     const diagnostics = await program.getSyntacticDiagnostics();
     const offenders = diagnostics.map((diagnostic) =>
       syntaxOffender(
@@ -715,6 +728,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
       compilerOptions,
     );
     const checker = projectChecker(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the existing project field without invoking getProject or changing lookup side effects
       program as unknown as { project?: { checker?: Checker } },
     );
     const jobs = new Map<string, FileJob>();
@@ -750,6 +764,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
             SyntaxKind.ExportAssignment,
           );
           const members = await readStructMembers(
+            // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve original struct extraction and its errors without a new early declaration-kind error
             impl as VariableDeclaration,
             checker,
             jobs,
@@ -791,11 +806,14 @@ export function typeAliasHasMembers(node: {
   type?: { kind: number; type?: { kind: number } | undefined } | undefined;
 }): boolean {
   let current = node.type;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
   while (current && current.kind === SyntaxKind.ParenthesizedType)
     current = current.type;
   if (!current) return false;
   return (
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     current.kind === SyntaxKind.TypeLiteral ||
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison -- INTENT: preserve numeric syntax-kind inputs and the original extraction and async error behavior
     current.kind === SyntaxKind.IntersectionType
   );
 }

@@ -34,6 +34,7 @@ const wire = [
 const client = createClient(
   withEndpoint("https://fiction.example"),
   withSSEHandle(
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: preserve async rejection behavior for construction errors instead of introducing synchronous throws
     async () =>
       new Response(wire, {
         headers: { "content-type": "text/event-stream" },

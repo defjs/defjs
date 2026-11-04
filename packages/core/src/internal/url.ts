@@ -254,6 +254,7 @@ let lastBase: URL | undefined;
 
 function createEndpointDirectoryBase(baseEndpoint: string): URL {
   if (baseEndpoint === lastEndpoint) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: retain the original last-endpoint cache lookup without a second per-request guard or changed invalid-input behavior
     return lastBase as URL;
   }
   let base: URL;

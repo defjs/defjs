@@ -143,9 +143,8 @@ export function validateReference(
   const badSlug: string[] = [];
   for (const entry of entries) {
     const identity = `${entry.package}:${entry.name}`;
-    if (
-      !overviewGroups.includes(entry.group as (typeof overviewGroups)[number])
-    )
+    const groups: readonly string[] = overviewGroups;
+    if (!groups.includes(entry.group))
       badGroup.push(`${identity} @group ${entry.group || "(missing)"}`);
     for (const target of entry.related)
       if (!identities.has(target)) badSee.push(`${identity} -> ${target}`);

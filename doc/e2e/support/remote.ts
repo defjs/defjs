@@ -99,6 +99,7 @@ function encode(value: unknown): Encoded {
     return Object.fromEntries(
       Object.entries(value).map(([key, v]) => [key, encode(v)]),
     );
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: pass remaining encoded values through unchanged rather than rejecting symbols or bigints
   return value as Encoded;
 }
 
@@ -117,7 +118,7 @@ function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
           });
         };
       if (typeof name === "symbol") return undefined;
-      return proxy(token, handle, [...steps, { name }]);
+      return proxy<unknown>(token, handle, [...steps, { name }]);
     },
     apply(_target, _this, args: unknown[]) {
       const last = steps.at(-1);
@@ -126,7 +127,8 @@ function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
         ...steps.slice(0, -1),
         { name: last.name, args: args.map(encode) },
       ];
-      if (locatorBuilders.has(last.name)) return proxy(token, handle, call);
+      if (locatorBuilders.has(last.name))
+        return proxy<unknown>(token, handle, call);
       return commands
         .e2eCall(token, { handle, steps: call })
         .then((reply) =>
@@ -137,6 +139,7 @@ function proxy<T>(token: string, handle: Handle, steps: Step[]): T {
     },
   });
   origins.set(instance, { token, ref });
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the callable proxy identity and dynamic remote contract rather than validating or wrapping returned handles
   return instance as T;
 }
 

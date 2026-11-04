@@ -55,6 +55,7 @@ if (!publishDirArg || process.argv.length > 3) {
 const publishDir = resolve(publishDirArg);
 let manifest: Record<string, unknown>;
 try {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: preserve accepted manifest values and original native failure text instead of adding an object-validation error
   manifest = JSON.parse(
     readFileSync(resolve(publishDir, "package.json"), "utf8"),
   );

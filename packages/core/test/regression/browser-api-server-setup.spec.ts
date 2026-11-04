@@ -34,14 +34,16 @@ test.each([
     vi.mocked(startHonoTestServer)
       .mockResolvedValueOnce({
         host: "http://127.0.0.1:31001",
-        async close() {
+        close() {
           closed.push("first");
+          return Promise.resolve();
         },
       })
       .mockResolvedValueOnce({
         host: "http://127.0.0.1:31002",
-        async close() {
+        close() {
           closed.push("second");
+          return Promise.resolve();
         },
       });
 
@@ -54,7 +56,7 @@ test.each([
       // Vitest prefers an exported teardown over a cleanup returned by setup.
       const cleanup: unknown =
         Reflect.get(globalSetup, "teardown") ?? returnedCleanup;
-      if (typeof cleanup !== "function") {
+      if (!isCleanup(cleanup)) {
         throw new TypeError("Expected a global setup cleanup function");
       }
       return cleanup;
@@ -74,3 +76,7 @@ test.each([
     expect([afterFirst, closed]).toEqual([[firstClosed], allClosed]);
   },
 );
+
+function isCleanup(value: unknown): value is () => Promise<void> | void {
+  return typeof value === "function";
+}

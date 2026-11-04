@@ -201,7 +201,7 @@ describe("web socket single struct messages", () => {
       const acks: Array<{ ok: boolean; type: "pong" }> = [];
       const client = createClient(
         withEndpoint("https://example.test"),
-        withWebSocketHandle(Socket as unknown as typeof WebSocket),
+        withWebSocketHandle(Socket),
       );
       const pending = useHeartbeat(
         client({
@@ -284,7 +284,7 @@ describe("web socket single struct messages", () => {
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(Socket),
     );
     const [error, session] = await openControllableSocket(
       endpoint(client),
@@ -314,7 +314,7 @@ describe("web socket single struct messages", () => {
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withWebSocketHandle(Socket as unknown as typeof WebSocket),
+      withWebSocketHandle(Socket),
     );
     const [error, session] = await openControllableSocket(
       endpoint(client),

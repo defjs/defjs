@@ -57,6 +57,10 @@ function expectGroupedArticles(
   }
 }
 
+function markdownType(headers: Record<string, string>): string | undefined {
+  return headers["content-type"];
+}
+
 test("grouped overview articles stay visible and clickable in every language", async () => {
   const site = await openSite();
   await using context = await site.browser.newContext({
@@ -101,9 +105,9 @@ test("grouped overview articles export as Markdown", async () => {
       site.url(`/llms.mdx/${area}/content.md`),
     );
     expect(await exported.status()).toBe(200);
-    expect(await exported.headers()).toMatchObject({
-      "content-type": expect.stringContaining("text/markdown"),
-    });
+    expect(markdownType(await exported.headers())).toEqual(
+      expect.stringContaining("text/markdown"),
+    );
     expectGroupedArticles(await exported.text(), "", paths, groups);
   }
   for (const [path, names] of [
@@ -115,9 +119,9 @@ test("grouped overview articles export as Markdown", async () => {
   ] as const) {
     const exported = await page.request.get(site.url(path));
     expect(await exported.status()).toBe(200);
-    expect(await exported.headers()).toMatchObject({
-      "content-type": expect.stringContaining("text/markdown"),
-    });
+    expect(markdownType(await exported.headers())).toEqual(
+      expect.stringContaining("text/markdown"),
+    );
     expect(await exported.text()).toContain(
       "```ts\n" + catalogSignature(names) + "\n```",
     );

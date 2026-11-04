@@ -27,6 +27,7 @@ test("three rolling two-second outages recover at the next one-second probe with
   const client = createClient(
     withEndpoint(...endpoints),
     withEndpointBalancer(roundRobinBalancer()),
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withHTTPHandle(async (input) => {
       const req = new Request(input);
       const index = endpoints.findIndex((endpoint) =>

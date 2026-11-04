@@ -16,6 +16,7 @@ export function ApiIndex() {
     [kind, setKind] = useState("");
   const t = useAppTranslations();
   const kindLabel = (name: string) =>
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: unknown kinds must still use the original translation key, not return a different label
     t(`api.kind.${name}` as Extract<MessageKey, `api.kind.${string}`>);
   const entries = filterApiEntries(apiEntries, query, packageName, kind);
   const prefix = localePrefix(locale);

@@ -103,8 +103,9 @@ describe("web socket runtime lifecycle", () => {
 
     const [error, socket, connection] = await useBeforeConnectSocket(
       clientWithSerializer({
-        beforeConnect: async () => {
+        beforeConnect: () => {
           callCount += 1;
+          return Promise.resolve();
         },
       }),
       { token: "secret-0" },

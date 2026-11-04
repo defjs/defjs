@@ -106,14 +106,14 @@ describe("url helpers", () => {
     );
     expect(() =>
       createSearchParams({
-        filters: [{ active: true }] as never,
+        filters: [{ active: true }],
       }),
     ).toThrow(
       'a query serializer is required for nested query value "filters"',
     );
     expect(() =>
       createSearchParams({
-        tags: ["a", { active: true } as never],
+        tags: ["a", { active: true }],
       }),
     ).toThrow('a query serializer is required for nested query value "tags"');
 
@@ -138,7 +138,7 @@ describe("url helpers", () => {
     ).toThrow('query value for "tags" must not be null');
 
     const paramsWithUndefinedArray = createSearchParams({
-      tags: [undefined as never],
+      tags: [undefined],
     });
     expect(paramsWithUndefinedArray.toString()).toBe("");
   });
@@ -173,7 +173,7 @@ describe("url helpers", () => {
     ).toThrow('header value for "x-object" requires a scalar value');
     expect(() =>
       appendRecordToHeaders(new Headers(), {
-        "x-object": [{ nested: true }] as never,
+        "x-object": [{ nested: true }],
       }),
     ).toThrow('header value for "x-object" requires a scalar value');
   });
@@ -235,8 +235,19 @@ describe("url helpers", () => {
     },
   );
 
+  test("applies header entries the way Headers coerces them", () => {
+    const headers = new Headers();
+    // @ts-expect-error Exercise the original runtime coercion of an invalid typed header pair.
+    appendRecordToHeaders(headers, [["a", 1]]);
+    expect(headers.get("a")).toBe("1");
+    expect(() =>
+      // @ts-expect-error A non-iterable header entry intentionally violates HeadersInit.
+      appendRecordToHeaders(new Headers(), [1]),
+    ).toThrow(TypeError);
+  });
+
   test("keeps an own __proto__ key in path, query, and header application", () => {
-    const record: { [key: string]: string } = Object.create(null);
+    const record: { [key: string]: string } = {};
     Object.defineProperty(record, "__proto__", {
       configurable: true,
       enumerable: true,
@@ -251,6 +262,7 @@ describe("url helpers", () => {
     expect(createSearchParams(record).get("__proto__")).toBe("safe");
     expect(headers.get("__proto__")).toBe("safe");
     expect(
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the property itself so accessor-based prototype pollution remains observable
       (Object.prototype as { [key: string]: unknown })["polluted"],
     ).toBeUndefined();
   });

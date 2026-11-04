@@ -6,6 +6,39 @@ import type {
 } from "./interceptor";
 import { createWebSocketInterceptor, makeChain } from "./interceptor";
 
+function probeSession(url = "ws://test"): WebSocketSessionLike {
+  return {
+    bufferedAmount: 0,
+    connection: { generation: 0, url },
+    closed: Promise.resolve({ kind: "closed" }),
+    receive: {
+      [Symbol.asyncIterator]() {
+        return {
+          next(): Promise<IteratorResult<unknown>> {
+            return Promise.resolve({ done: true, value: undefined });
+          },
+        };
+      },
+    },
+    state: "open",
+    close() {
+      return undefined;
+    },
+    [Symbol.asyncDispose]() {
+      return Promise.resolve();
+    },
+    onRuntimeError() {
+      return () => undefined;
+    },
+    onStateChange() {
+      return () => undefined;
+    },
+    send() {
+      return undefined;
+    },
+  };
+}
+
 describe("WebSocket interceptor chain", () => {
   test("should apply WebSocket interceptors and pass modified request to handler", async () => {
     const callOrder: string[] = [];
@@ -31,12 +64,9 @@ describe("WebSocket interceptor chain", () => {
     ];
 
     let capturedRequest: HttpRequest | undefined;
-    const fakeWsHandler = async (req: HttpRequest) => {
+    const fakeWsHandler = (req: HttpRequest) => {
       capturedRequest = req;
-      return {
-        connection: {},
-        state: "open",
-      } as unknown as ReturnType<WebSocketInterceptorFn>;
+      return Promise.resolve(probeSession());
     };
 
     const chain = makeChain(interceptors);
@@ -48,23 +78,18 @@ describe("WebSocket interceptor chain", () => {
   });
 
   test("WebSocket interceptor can wrap the returned session", async () => {
-    const fakeSession = {
-      connection: { url: "ws://test" },
-      wrapped: false,
-    } as unknown as WebSocketSessionLike;
-
+    const fakeSession = probeSession();
     const interceptor: WebSocketInterceptorFn = async (req, next) => {
       const session = await next(req);
-      return { ...session, wrapped: true };
+      return Object.assign(session, { wrapped: true });
     };
 
     const chain = makeChain([interceptor]);
-    const result = await chain(
-      { endpoint: "/ws", method: "GET" },
-      async () => fakeSession,
+    const result = await chain({ endpoint: "/ws", method: "GET" }, () =>
+      Promise.resolve(fakeSession),
     );
 
-    expect((result as unknown as { wrapped: boolean }).wrapped).toBe(true);
+    expect("wrapped" in result && result.wrapped).toBe(true);
   });
 
   test("createWebSocketInterceptor should return kind web-socket", () => {

@@ -9,7 +9,13 @@ import type { ClientConfig } from "../client/config";
 import { ERR_FETCH_UNSUPPORTED } from "../client/config";
 import type { EndpointDoneInfo } from "../balancer/balancer";
 import { isOffline, pickEndpoint } from "../balancer/runtime";
-import type { AnyFault, Fault, FaultOf, PreflightFault } from "../error";
+import type {
+  AnyFault,
+  DecodeFault,
+  Fault,
+  FaultOf,
+  PreflightFault,
+} from "../error";
 import {
   ERR_TIMEOUT,
   createDecodeFault,
@@ -268,18 +274,13 @@ export function defineRequest<
     path,
   };
 
-  return (async (client: Client, input?: EndpointInput<TInput>) =>
+  return async (client: Client, input?: EndpointInput<TInput>) =>
     executeHttpCommand<TInput, TOutput, TError>(
       client[CLIENT].config,
       endpoint,
       input,
       client[CLIENT].options,
-    )) as RequestEndpoint<
-    EndpointArgs<TInput>,
-    RequestSuccessData<TOutput>,
-    RequestErrorData<TError>,
-    DeclaredResponse<TOutput>
-  >;
+    );
 }
 
 type HttpExecutionDefinition<
@@ -380,6 +381,7 @@ function normalizeFailoverOptions(
     retryOn.some(
       (value) =>
         !["connect-failure", "gateway-error", "attempt-timeout"].includes(
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- INTENT: preserve original includes dispatch and validation of arbitrary runtime failover entries
           value,
         ),
     ) ||
@@ -427,6 +429,7 @@ async function executeHttpAttempt<
 
   // Faults carry their own response metadata, so the tuple's third slot belongs to success only.
   const fail = (fault: AnyFault): HttpExecuteAwaitResult<TOutput, TError> => {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original declared-error tuple without re-decoding or changing the fault identity
     return [fault as Fault<TError>, undefined, undefined];
   };
 
@@ -568,6 +571,7 @@ async function executeHttpAttempt<
         }
       };
       const reject = (error: unknown): Promise<HttpResponse<unknown>> => {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- INTENT: preserve original interceptor and transport rejection values unchanged
         const rejected = Promise.reject<HttpResponse<unknown>>(error);
         void rejected.catch(() => undefined);
         return rejected;
@@ -591,6 +595,7 @@ async function executeHttpAttempt<
         // Already aborted: fetch never starts, so this next() did not reach the endpoint.
         note({ landed: false });
         const rejected = reject(
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original second aborted-state read before forwarding its cause unchanged
           transportOrigin.mark(resolveAbortCause(transportAbort) as Error),
         );
         releaseAbortSignal(transportAbort);
@@ -743,7 +748,7 @@ async function executeHttpAttempt<
       }
     }
 
-    const settledResponse = response as HttpResponse<unknown>;
+    const settledResponse = response;
     const meta = toHttpMeta(settledResponse);
 
     // Philosophy 2: `ok` is the only fork, and only one side ever decodes.
@@ -758,7 +763,9 @@ async function executeHttpAttempt<
         finish(null);
         return [
           null,
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: preserve the original undefined return while the compiler keeps its generic success conditional deferred
           undefined as RequestSuccessData<TOutput>,
+          // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: undeclared output keeps metadata identity and the original conditional response contract
           meta as DeclaredResponse<TOutput>,
         ];
       }
@@ -802,7 +809,9 @@ async function executeHttpAttempt<
       finish(null);
       return [
         null,
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep the already-decoded success value without a second schema parse
         decoded as RequestSuccessData<TOutput>,
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve the original decoded response object while its generic declared-response conditional stays deferred
         decodedResponse as DeclaredResponse<TOutput>,
       ];
     }
@@ -909,11 +918,11 @@ function isAbsentDeclaredBody(response: HttpResponse<unknown>): boolean {
   return response.body === undefined;
 }
 
-async function decodeDeclaredBody(
-  struct: AnyStruct,
+async function decodeDeclaredBody<S extends AnyStruct>(
+  struct: S,
   response: HttpResponse<unknown>,
   signal: AbortSignal,
-): Promise<unknown> {
+): Promise<Infer<S>> {
   const representation = resolveInboundRepresentation(struct);
   const absent = isAbsentDeclaredBody(response);
   const contentType = getContentType(response.headers);
@@ -940,7 +949,9 @@ async function decodeDeclaredBody(
 }
 
 /** Map a transport-tagged body failure onto the fault it was classified as. */
-function fromBodyFailure(failure: AnyBodyFailure): AnyFault {
+function fromBodyFailure(
+  failure: AnyBodyFailure,
+): DecodeFault | PreflightFault {
   const { cause, code, meta } = failure;
 
   if (code === "RES_DECODE_FAILED" || code === "RES_MEDIA_TYPE_INVALID") {
@@ -950,10 +961,10 @@ function fromBodyFailure(failure: AnyBodyFailure): AnyFault {
   return createPreflightFault(code, cause, meta);
 }
 
-async function parseStructResponse(
-  struct: AnyStruct,
+async function parseStructResponse<S extends AnyStruct>(
+  struct: S,
   body: unknown,
-): Promise<unknown> {
+): Promise<Infer<S>> {
   // Interceptor bodies may already be text, bytes, or a parsed value. The struct kind decides.
   // A JSON string is a string root: the transport already parsed bytes, so do not parse again.
   const responseType = resolveInboundRepresentation(struct);
@@ -962,7 +973,8 @@ async function parseStructResponse(
       return decodeJson(struct, body);
     }
     const text = await readBodyText(body);
-    return decodeJson(struct, text === undefined ? body : JSON.parse(text));
+    const value: unknown = text === undefined ? body : JSON.parse(text);
+    return decodeJson(struct, value);
   }
   if (responseType === "text") {
     const text = await readBodyText(body);

@@ -13,6 +13,7 @@ import {
   withEndpointBalancer,
   withInterceptors,
   withWebSocketHandle,
+  type WebSocketHandleConstructor,
 } from "../client";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createWebSocketInterceptor } from "../interceptor";
@@ -167,11 +168,24 @@ class ControllableSocket {
 
 class ThrowingSocket {
   static readonly OPEN = 1;
+  bufferedAmount = 0;
+  extensions = "";
+  protocol = "";
+  readyState = 0;
+  url = "";
 
   constructor(_url?: string | URL) {
     constructCalls += 1;
     throw constructError;
   }
+
+  addEventListener(): void {}
+
+  close(): void {}
+
+  removeEventListener(): void {}
+
+  send(_data: string | ArrayBufferLike | Blob | ArrayBufferView): void {}
 }
 
 let sockets: ControllableSocket[] = [];
@@ -192,12 +206,12 @@ function resetSockets(): void {
 
 function clientFor(
   balancer: EndpointBalancer,
-  handle: unknown = ControllableSocket,
+  handle: WebSocketHandleConstructor = ControllableSocket,
 ) {
   return createClient(
     withEndpoint(PRIMARY, SECONDARY),
     withEndpointBalancer(balancer),
-    withWebSocketHandle(handle as never),
+    withWebSocketHandle(handle),
   );
 }
 
@@ -256,7 +270,7 @@ describe("web socket endpoint balancer", () => {
     const switched = createClient(
       withEndpoint(PRIMARY),
       withEndpointBalancer(replaced.balancer),
-      withWebSocketHandle(ControllableSocket as never),
+      withWebSocketHandle(ControllableSocket),
       withInterceptors(
         createWebSocketInterceptor((request, next) => {
           const pending = next({ ...request, baseEndpoint: REPLACED });
@@ -470,7 +484,7 @@ describe("web socket endpoint balancer", () => {
     const illegalClient = createClient(
       withEndpoint(PRIMARY),
       withEndpointBalancer(illegal.balancer),
-      withWebSocketHandle(ControllableSocket as never),
+      withWebSocketHandle(ControllableSocket),
       withInterceptors(
         createWebSocketInterceptor((request, next) => {
           const pending = next({ ...request, baseEndpoint: "not a url" });
@@ -491,7 +505,7 @@ describe("web socket endpoint balancer", () => {
     const cleanClient = createClient(
       withEndpoint(PRIMARY),
       withEndpointBalancer(clean.balancer),
-      withWebSocketHandle(ControllableSocket as never),
+      withWebSocketHandle(ControllableSocket),
       withInterceptors(
         createWebSocketInterceptor((request, next) =>
           next({ ...request, baseEndpoint: REPLACED }),
@@ -635,7 +649,8 @@ describe("web socket endpoint balancer", () => {
     expect(beforeOpen.pending()).toBe(0);
 
     resetSockets();
-    const invalid = pickFirstBalancer({ shuffle: "no" } as never);
+    // @ts-expect-error shuffle is a boolean, not a string
+    const invalid = pickFirstBalancer({ shuffle: "no" });
     let picks = 0;
     const afterOpen: EndpointBalancer = {
       pick(info) {
@@ -695,9 +710,11 @@ describe("web socket endpoint balancer", () => {
       throw new Error("expected error close");
     }
     expect(openedClosed.cause).toMatchObject({ code: "REQ_BUILD_FAILED" });
-    expect((openedClosed.cause as { cause?: unknown }).cause).toBe(
-      ERR_NO_ENDPOINT,
-    );
+    const nested = openedClosed.cause;
+    if (typeof nested !== "object" || nested === null || !("cause" in nested)) {
+      throw new Error("expected a nested cause");
+    }
+    expect(nested.cause).toBe(ERR_NO_ENDPOINT);
     expect(opened.dones).toEqual([{ attempted: true }]);
     expect(opened.pending()).toBe(0);
   });
@@ -947,7 +964,7 @@ describe("web socket endpoint balancer", () => {
       const client = createClient(
         withEndpoint(PRIMARY),
         withEndpointBalancer(record.balancer),
-        withWebSocketHandle(ControllableSocket as never),
+        withWebSocketHandle(ControllableSocket),
         ...(mode === "replaced"
           ? [
               withInterceptors(

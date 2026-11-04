@@ -52,6 +52,7 @@ self.onmessage = (event: MessageEvent<string>) => {
 
 async function reportUpload(host: string): Promise<ModuleWorkerReport> {
   const client = createClient(withEndpoint(host));
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve direct property access without an added has trap and Reflect lookup
   const importScriptsValue = (globalThis as { importScripts?: unknown })
     .importScripts;
   return {

@@ -1,5 +1,22 @@
 import { expect, test } from "vitest";
 
+type BunApi = {
+  spawn(
+    cmd: string[],
+    options: {
+      stdout: "pipe";
+      stderr: "pipe";
+    },
+  ): {
+    exited: Promise<number>;
+    stdout: ReadableStream<Uint8Array>;
+    stderr: ReadableStream<Uint8Array>;
+  };
+};
+
+declare const Bun: BunApi;
+const bun = Bun;
+
 async function runExample(omitCompletion = false) {
   const example = new URL("./fictional-completion.ts", import.meta.url).href;
   const program = `
@@ -15,7 +32,7 @@ async function runExample(omitCompletion = false) {
     globalThis.fetch = async () => { throw new Error("Unexpected network request"); };
     await import(${JSON.stringify(example)});
   `;
-  const child = Bun.spawn([process.execPath, "-e", program], {
+  const child = bun.spawn([process.execPath, "-e", program], {
     stdout: "pipe",
     stderr: "pipe",
   });

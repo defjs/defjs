@@ -108,9 +108,9 @@ describe("request http runtime", () => {
     const optionalClient = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           capturedRequest = request;
-          return makeResponse({ status: 200 });
+          return Promise.resolve(makeResponse({ status: 200 }));
         }),
       ),
     );
@@ -144,16 +144,18 @@ describe("request http runtime", () => {
     const client = createClient(
       withEndpoint("https://example.com/api"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           callCount += 1;
-          capturedRequest = request as typeof capturedRequest;
-          return makeResponse({
-            body: {
-              ok: true,
-            },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
+          capturedRequest = request;
+          return Promise.resolve(
+            makeResponse({
+              body: {
+                ok: true,
+              },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          );
         }),
       ),
     );
@@ -224,9 +226,9 @@ describe("request http runtime", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
+        createHttpInterceptor((request) => {
           endpoint = request.endpoint;
-          return makeResponse({ status: 204 });
+          return Promise.resolve(makeResponse({ status: 204 }));
         }),
       ),
     );
@@ -255,15 +257,17 @@ describe("request http runtime", () => {
         tokenProvider,
       }),
       withInterceptors(
-        createHttpInterceptor(async (request) => {
-          capturedRequest = request as typeof capturedRequest;
-          return makeResponse({
-            body: {
-              ok: true,
-            },
-            headers: new Headers({ "content-type": "application/json" }),
-            status: 200,
-          });
+        createHttpInterceptor((request) => {
+          capturedRequest = request;
+          return Promise.resolve(
+            makeResponse({
+              body: {
+                ok: true,
+              },
+              headers: new Headers({ "content-type": "application/json" }),
+              status: 200,
+            }),
+          );
         }),
       ),
     );
@@ -307,13 +311,15 @@ describe("request http runtime", () => {
     const client = createClient(
       withEndpoint("https://example.com"),
       withInterceptors(
-        createHttpInterceptor(async () =>
-          makeResponse({
-            body: {
-              ignored: true,
-            },
-            status: 200,
-          }),
+        createHttpInterceptor(() =>
+          Promise.resolve(
+            makeResponse({
+              body: {
+                ignored: true,
+              },
+              status: 200,
+            }),
+          ),
         ),
       ),
     );

@@ -30,8 +30,7 @@ function clientFor(
   status: number,
   headers: Record<string, string>,
 ): DerivableClient {
-  const handle = (async () =>
-    new Response(body, { headers, status })) as unknown as typeof fetch;
+  const handle = () => Promise.resolve(new Response(body, { headers, status }));
 
   return createClient(
     withEndpoint("https://api.example.test"),
@@ -154,21 +153,23 @@ describe("declaration routing", () => {
       "cancels the HTTP %s body when only %s is declared",
       async (status, declared) => {
         let cancelled = false;
-        const handle = (async () =>
-          new Response(
-            new ReadableStream<Uint8Array>({
-              cancel() {
-                cancelled = true;
-              },
-              start(controller) {
-                controller.enqueue(
-                  new TextEncoder().encode('{"id":1,"message":"nope"}'),
-                );
-                controller.close();
-              },
-            }),
-            { headers: JSON_HEADERS, status },
-          )) as unknown as typeof fetch;
+        const handle = () =>
+          Promise.resolve(
+            new Response(
+              new ReadableStream<Uint8Array>({
+                cancel() {
+                  cancelled = true;
+                },
+                start(controller) {
+                  controller.enqueue(
+                    new TextEncoder().encode('{"id":1,"message":"nope"}'),
+                  );
+                  controller.close();
+                },
+              }),
+              { headers: JSON_HEADERS, status },
+            ),
+          );
         const endpoint =
           declared === "error"
             ? defineRequest({ error: ApiError, method: "GET", path: "/x" })
@@ -220,15 +221,17 @@ describe("declaration routing", () => {
     const observerError = new Error("observer exploded");
 
     function clientStreaming(): DerivableClient {
-      const handle = (async () => {
+      const handle = () => {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             controller.enqueue(new TextEncoder().encode('{"id":1}'));
             controller.close();
           },
         });
-        return new Response(stream, { headers: JSON_HEADERS, status: 200 });
-      }) as unknown as typeof fetch;
+        return Promise.resolve(
+          new Response(stream, { headers: JSON_HEADERS, status: 200 }),
+        );
+      };
 
       return createClient(
         withEndpoint("https://api.example.test"),
@@ -278,9 +281,10 @@ describe("declaration routing", () => {
       // Both a dead server and a throwing interceptor arrive at the chain's catch as one bare
       // cause. Only the transport boundary knows which happened, so it tags its own rejections.
       const networkError = new TypeError("fetch failed");
-      const handle = (async () => {
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
+      const handle = async () => {
         throw networkError;
-      }) as unknown as typeof fetch;
+      };
 
       const useRequest = defineRequest({
         method: "GET",
@@ -302,9 +306,11 @@ describe("declaration routing", () => {
       // The transport-origin mark is kept beside the value, which a primitive cannot carry. A
       // transport that rejects with a string is broken in a way we cannot distinguish, and the
       // documented consequence is that it is attributed to the extension.
-      const handle = (async () => {
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
+      const handle = async () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
         throw "offline";
-      }) as unknown as typeof fetch;
+      };
 
       const useRequest = defineRequest({
         method: "GET",
@@ -324,14 +330,16 @@ describe("declaration routing", () => {
 
     test("should still report a truncated body with nothing declared", async () => {
       const readError = new Error("read failed");
-      const handle = (async () => {
+      const handle = () => {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             controller.error(readError);
           },
         });
-        return new Response(stream, { headers: JSON_HEADERS, status: 200 });
-      }) as unknown as typeof fetch;
+        return Promise.resolve(
+          new Response(stream, { headers: JSON_HEADERS, status: 200 }),
+        );
+      };
 
       const useRequest = defineRequest({
         method: "GET",

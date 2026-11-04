@@ -14,6 +14,7 @@ import type { HttpResponseType } from "./http_request";
 export function resolveInboundRepresentation(
   struct: AnyStruct,
 ): HttpResponseType {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: preserve inherited DEFINITION lookup and the original native error for missing definitions instead of adding a new own-property guard and throw
   const kind = (struct as RuntimeStruct)[DEFINITION].kind;
   if (kind === "string") {
     return "text";

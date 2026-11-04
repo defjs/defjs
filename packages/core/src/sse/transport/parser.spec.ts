@@ -25,6 +25,7 @@ function settleWithin<T>(promise: Promise<T>): Promise<T> {
       },
       (error: unknown) => {
         clearTimeout(timeout);
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the value under test is thrown or rejected unchanged
         reject(error);
       },
     );
@@ -74,8 +75,9 @@ describe("sse parser", () => {
     });
 
     const seen: string[] = [];
-    await readStreamBytes(stream, async (chunk) => {
+    await readStreamBytes(stream, (chunk) => {
       seen.push(decoder.decode(chunk));
+      return Promise.resolve();
     });
 
     expect(seen).toEqual(["first", "second", "third"]);
@@ -318,8 +320,9 @@ describe("sse parser", () => {
 
   test("should parse split lines and crlf correctly", async () => {
     const lines: string[] = [];
-    const parseLine = createLineParser(async (line) => {
+    const parseLine = createLineParser((line) => {
       lines.push(decoder.decode(line));
+      return Promise.resolve();
     });
 
     await parseLine(encoder.encode("data: hel"));
@@ -340,8 +343,9 @@ describe("sse parser", () => {
       (retry) => {
         retries.push(retry);
       },
-      async (message) => {
+      (message) => {
         messages.push(message);
+        return Promise.resolve();
       },
     );
     const parseLine = createLineParser(parseMessage);
@@ -406,8 +410,9 @@ describe("sse parser", () => {
 
   test("should keep json-looking data as raw string at parser boundary", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -435,8 +440,9 @@ describe("sse parser", () => {
       (retry) => {
         retries.push(retry);
       },
-      async (message) => {
+      (message) => {
         messages.push(message);
+        return Promise.resolve();
       },
     );
     const parseLine = createLineParser(parseMessage);
@@ -535,8 +541,9 @@ describe("sse parser", () => {
       (retry) => {
         retries.push(retry);
       },
-      async (message) => {
+      (message) => {
         messages.push(message);
+        return Promise.resolve();
       },
     );
     const parseLine = createLineParser(parseMessage);
@@ -553,8 +560,9 @@ describe("sse parser", () => {
 
   test("should handle partial line across chunks with non-zero line start", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -574,8 +582,9 @@ describe("sse parser", () => {
 
   test("should handle crlf line endings and discard trailing newlines", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -593,8 +602,9 @@ describe("sse parser", () => {
 
   test("should handle field with space after colon", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -612,8 +622,9 @@ describe("sse parser", () => {
 
   test("should handle field without space after colon", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage);
 
@@ -631,8 +642,9 @@ describe("sse parser", () => {
 
   test("should handle crlf followed by non-newline char", async () => {
     const lines: string[] = [];
-    const parseLine = createLineParser(async (line) => {
+    const parseLine = createLineParser((line) => {
       lines.push(decoder.decode(line));
+      return Promise.resolve();
     });
 
     // \r\n triggers discardTrailingNewline, next char is 'i' not \n
@@ -643,8 +655,9 @@ describe("sse parser", () => {
 
   test("should handle bare cr without following lf", async () => {
     const lines: string[] = [];
-    const parseLine = createLineParser(async (line) => {
+    const parseLine = createLineParser((line) => {
       lines.push(decoder.decode(line));
+      return Promise.resolve();
     });
 
     // Bare \r (not \r\n) — discardTrailingNewline is true but next char is not \n
@@ -674,8 +687,9 @@ describe("sse parser", () => {
 
   test("should not throw maxBufferSize for short messages", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage, { maxBufferSize: 100 });
 
@@ -692,8 +706,9 @@ describe("sse parser", () => {
 
   test("should allow one chunk with multiple short messages over maxBufferSize", async () => {
     const messages: EventStreamMessage[] = [];
-    const parseMessage = createMessageParser(noop, noop, async (message) => {
+    const parseMessage = createMessageParser(noop, noop, (message) => {
       messages.push(message);
+      return Promise.resolve();
     });
     const parseLine = createLineParser(parseMessage, { maxBufferSize: 20 });
 
@@ -1063,7 +1078,7 @@ describe("sse message parser hand-off", () => {
   test("should return nothing when a synchronous consumer takes the message", () => {
     const parse = createMessageParser(noop, noop, noop);
 
-    parse(encoder.encode("data: x"));
+    void parse(encoder.encode("data: x"));
 
     expect(parse(new Uint8Array(0))).toBeUndefined();
   });

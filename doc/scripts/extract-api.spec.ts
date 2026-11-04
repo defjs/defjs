@@ -148,9 +148,10 @@ test("empty parameter lists, hidden tables, and non-aliases stay inert", async (
     query: "Client",
   });
   const plain = { flags: 0 };
-  const resolve = async (symbol: { flags: number }) => ({
-    flags: symbol.flags + 1,
-  });
+  const resolve = (symbol: { flags: number }) =>
+    Promise.resolve({
+      flags: symbol.flags + 1,
+    });
   expect(await resolveAlias(plain, 1, resolve)).toBe(plain);
   expect(await resolveAlias({ flags: 1 }, 1, resolve)).toEqual({ flags: 2 });
   expect(outputDirectory(undefined, "fallback")).toBe("fallback");

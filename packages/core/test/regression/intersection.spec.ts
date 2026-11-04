@@ -14,7 +14,7 @@ import { encodeStructValue } from "../../src/struct/introspection";
 import { parseEndpointInput } from "../../src/internal/endpoint_input";
 import { encodeOutbound } from "../../src/internal/outbound_request";
 import { DEFINITION, STRUCT } from "../../src/struct/symbols";
-import type { RuntimeStruct } from "../../src/struct/types";
+import { assertObject, isRuntimeStruct, symbolValue } from "../narrow";
 import {
   serializeOutgoingWebSocketMessage,
   transformWebSocketMessage,
@@ -176,7 +176,7 @@ test.each([200, 403] as const)(
     });
     const client = createClient(
       withEndpoint("https://example.test"),
-      withHTTPHandle(async () => Response.json(wire, { status })),
+      withHTTPHandle(() => Promise.resolve(Response.json(wire, { status }))),
     );
     const [fault, person] = await endpoint(client);
 
@@ -194,12 +194,14 @@ test("SSE event data preserves every mixed-intersection member", async () => {
   });
   const client = createClient(
     withEndpoint("https://example.test"),
-    withSSEHandle(async () => {
+    withSSEHandle(() => {
       const body = `event: person\ndata: ${JSON.stringify(wire)}\n\n`;
-      return new Response(body, {
-        headers: { "content-type": "text/event-stream" },
-        status: 200,
-      });
+      return Promise.resolve(
+        new Response(body, {
+          headers: { "content-type": "text/event-stream" },
+          status: 200,
+        }),
+      );
     }),
   );
   const [fault, stream] = await endpoint(client);
@@ -336,7 +338,8 @@ test("nested objects and equal-length arrays merge element-wise", () => {
   );
   expect(dateError).toBeNull();
   expect(date).toBeInstanceOf(Date);
-  expect((date as Date).toISOString()).toBe("2020-01-01T00:00:00.000Z");
+  if (!(date instanceof Date)) throw new Error("Expected a date");
+  expect(date.toISOString()).toBe("2020-01-01T00:00:00.000Z");
 });
 
 test("array length mismatch and unequal dates are intersection conflicts", () => {
@@ -347,7 +350,7 @@ test("array length mismatch and unequal dates are intersection conflicts", () =>
   let calls = 0;
   expect(() =>
     encodeValue(
-      objects as unknown as RuntimeStruct,
+      runtimeStruct(objects),
       { value: "x" },
       {
         encodeObject() {
@@ -478,13 +481,12 @@ test("record intersections tag every record container and emit each wire key", a
     struct.record(struct.string()),
     struct.record(struct.string()),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const rows = await parseEndpointInput(Rows, { name: "Ada" });
-  expect(
-    Object.fromEntries(Object.entries(rows as { [key: string]: unknown })),
-  ).toEqual({ name: "Ada" });
-  const rowsTag = (rows as { [STRUCT]?: object })[STRUCT];
+  expect(Object.fromEntries(Object.entries(rows))).toEqual({ name: "Ada" });
+  const rowsTag = structTag(rows);
   expect(rowsTag).toBeDefined();
-  expect(Object.hasOwn(rowsTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(rowsTag, DEFINITION)).toBe(false);
   expect(JSON.parse(JSON.stringify(encodeOutbound(rows)))).toEqual(
     encodeJson(Rows, { name: "Ada" }),
   );
@@ -493,13 +495,15 @@ test("record intersections tag every record container and emit each wire key", a
     struct.record(struct.string()),
     struct.object({ name: struct.string().alias("display_name") }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const mixed = await parseEndpointInput(Mixed, { extra: "kept", name: "Ada" });
-  expect(
-    Object.fromEntries(Object.entries(mixed as { [key: string]: unknown })),
-  ).toEqual({ extra: "kept", name: "Ada" });
-  const mixedTag = (mixed as { [STRUCT]?: object })[STRUCT];
+  expect(Object.fromEntries(Object.entries(mixed))).toEqual({
+    extra: "kept",
+    name: "Ada",
+  });
+  const mixedTag = structTag(mixed);
   expect(mixedTag).toBeDefined();
-  expect(Object.hasOwn(mixedTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(mixedTag, DEFINITION)).toBe(false);
   expect(JSON.parse(JSON.stringify(encodeOutbound(mixed)))).toEqual(
     encodeJson(Mixed, { extra: "kept", name: "Ada" }),
   );
@@ -510,13 +514,15 @@ test("tagged object intersections keep a guide set for equal shared fields and a
     struct.object({ id: struct.string() }),
     struct.object({ id: struct.string(), name: struct.string() }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const shared = await parseEndpointInput(SharedId, { id: "1", name: "Ada" });
-  expect(
-    Object.fromEntries(Object.entries(shared as { [key: string]: unknown })),
-  ).toEqual({ id: "1", name: "Ada" });
-  const sharedTag = (shared as { [STRUCT]?: object })[STRUCT];
+  expect(Object.fromEntries(Object.entries(shared))).toEqual({
+    id: "1",
+    name: "Ada",
+  });
+  const sharedTag = structTag(shared);
   expect(sharedTag).toBeDefined();
-  expect(Object.hasOwn(sharedTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(sharedTag, DEFINITION)).toBe(false);
 
   const MixedField = struct.intersection(
     struct.object({
@@ -524,13 +530,12 @@ test("tagged object intersections keep a guide set for equal shared fields and a
     }),
     struct.object({ profile: struct.string().optional() }),
   );
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const mixed = await parseEndpointInput(MixedField, {});
-  expect(
-    Object.fromEntries(Object.entries(mixed as { [key: string]: unknown })),
-  ).toEqual({});
-  const mixedTag = (mixed as { [STRUCT]?: object })[STRUCT];
+  expect(Object.fromEntries(Object.entries(mixed))).toEqual({});
+  const mixedTag = structTag(mixed);
   expect(mixedTag).toBeDefined();
-  expect(Object.hasOwn(mixedTag as object, DEFINITION)).toBe(false);
+  expect(Object.hasOwn(mixedTag, DEFINITION)).toBe(false);
 });
 
 test("object-side encode skips an explicit undefined alias and an omitted logical key", () => {
@@ -553,8 +558,18 @@ test("object-side encode skips an explicit undefined alias and an omitted logica
 
 test("tagged date intersections keep the equal date and do not attach an object tag", async () => {
   const Both = struct.intersection(struct.date(), struct.date());
+  // eslint-disable-next-line @typescript-eslint/await-thenable -- INTENT: retain the original await boundary and its microtask timing after input parsing
   const value = await parseEndpointInput(Both, "2020-01-01T00:00:00.000Z");
   expect(value).toBeInstanceOf(Date);
-  expect((value as Date).toISOString()).toBe("2020-01-01T00:00:00.000Z");
-  expect((value as { [STRUCT]?: unknown })[STRUCT]).toBeUndefined();
+  expect(value.toISOString()).toBe("2020-01-01T00:00:00.000Z");
+  expect(symbolValue(value, STRUCT)).toBeUndefined();
 });
+
+function structTag(value: unknown): object {
+  return assertObject(symbolValue(value, STRUCT), "struct tag");
+}
+
+function runtimeStruct(value: unknown) {
+  if (!isRuntimeStruct(value)) throw new Error("Expected a runtime struct");
+  return value;
+}

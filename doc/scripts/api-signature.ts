@@ -43,6 +43,7 @@ export function omitInternalMembers(text: string): string {
   const kept: string[] = [];
   let index = 0;
   while (index < lines.length) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing loop bound controls indexing; a line helper adds new checks and a new error contract
     const line = lines[index] as string;
     if (!/^\s*\/\*\*/.test(line)) {
       kept.push(line);
@@ -53,6 +54,7 @@ export function omitInternalMembers(text: string): string {
     let comment = "";
     let trailing = "";
     while (index < lines.length) {
+      // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing loop bound controls indexing; a line helper adds new checks and a new error contract
       const current = lines[index] as string;
       const close = current.indexOf("*/");
       if (close === -1) {
@@ -67,6 +69,7 @@ export function omitInternalMembers(text: string): string {
     }
     if (!/@internal\b/i.test(comment)) {
       for (let cursor = start; cursor < index; cursor += 1)
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing loop bound controls indexing; a line helper adds new checks and a new error contract
         kept.push(lines[cursor] as string);
       continue;
     }
@@ -83,6 +86,7 @@ function skipMember(lines: readonly string[], start: number): number {
   let depth = 0;
   let seen = false;
   for (let index = start; index < lines.length; index += 1) {
+    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: the existing loop bound controls indexing; a line helper adds new checks and a new error contract
     const line = lines[index] as string;
     for (const char of line) {
       if (char === "{") {

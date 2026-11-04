@@ -30,9 +30,9 @@ function UserList() {
   const [users, setUsers] = useState<Array<{ id: number; name: string }>>([]);
 
   useEffect(() => {
-    getUsers(client).then(([, result]) => {
+    void getUsers(client).then(([, result]) => {
       if (result) {
-        setUsers(result as Array<{ id: number; name: string }>);
+        setUsers(result);
       }
     });
   }, [client]);
@@ -121,15 +121,13 @@ describe("React wrapper e2e", () => {
       outerClient = client;
 
       useEffect(() => {
-        getUsers(client).then(([error, users]) => {
+        void getUsers(client).then(([error, users]) => {
           if (error) {
             setCount("error");
             return;
           }
 
-          setCount(
-            String((users as Array<{ id: number; name: string }>).length),
-          );
+          setCount(String(users.length));
         });
       }, [client]);
 
@@ -152,15 +150,13 @@ describe("React wrapper e2e", () => {
       innerLeafClient = client;
 
       useEffect(() => {
-        getUsers(client).then(([error, users]) => {
+        void getUsers(client).then(([error, users]) => {
           if (error) {
             setCount("error");
             return;
           }
 
-          setCount(
-            String((users as Array<{ id: number; name: string }>).length),
-          );
+          setCount(String(users.length));
         });
       }, [client]);
 
