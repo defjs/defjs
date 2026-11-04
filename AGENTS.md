@@ -79,14 +79,14 @@ Documentation unit specs (`*.spec.ts`) sit beside the source in `app/`, `scripts
 - One directory per capability, with `index.ts` and `public_api.ts`. Extend the public API chain deliberately; adding a file under `internal/` does not make it public.
 - Test file names select the Vitest project. For `@defjs/core`:
 
-  | Pattern             | Runs in                                | Use for                       |
-  | ------------------- | -------------------------------------- | ----------------------------- |
-  | `*.spec.ts`         | Vitest `core-server` (and Node 26 job) | server / Bun behavior         |
-  | `*.browser.spec.ts` | Chromium and Firefox                   | shared browser behavior       |
-  | `*.server.spec.ts`  | server only                            | Node-specific server behavior |
-  | `*.chrome.spec.ts`  | Chromium only                          | engine-specific behavior      |
-  | `*.firefox.spec.ts` | Firefox only                           | engine-specific behavior      |
-  | `*.type.test.ts`    | type checking, not runtime             | type-level contracts          |
+  | Pattern             | Runs in                    | Use for                  |
+  | ------------------- | -------------------------- | ------------------------ |
+  | `*.spec.ts`         | Vitest `core-server`       | server / Bun behavior    |
+  | `*.browser.spec.ts` | Chromium and Firefox       | shared browser behavior  |
+  | `*.server.spec.ts`  | server only                | Bun server behavior      |
+  | `*.chrome.spec.ts`  | Chromium only              | engine-specific behavior |
+  | `*.firefox.spec.ts` | Firefox only               | engine-specific behavior |
+  | `*.type.test.ts`    | type checking, not runtime | type-level contracts     |
 
 - Do not skip inside a shared spec with `process.platform`-style checks. Put the test in the runtime-specific file. React and Vue run browser projects only, so their specs use `*.browser.spec.ts`; the OpenTelemetry package runs a server project only.
 - TypeScript is strict: `noUncheckedIndexedAccess`, `noUnusedLocals`, `noUnusedParameters`, `noPropertyAccessFromIndexSignature`, `verbatimModuleSyntax`, `allowImportingTsExtensions`. Use `import type` for type-only imports. The root catalog pins `typescript` to the exact `7.1.0-beta`; a caret range would resolve to nightly `7.1.0-dev` builds.
@@ -164,13 +164,13 @@ bun run --cwd doc typecheck
 
 `bun run typecheck` at the root already includes the documentation type check.
 
-### Node 26
+### Bun runtime
 
-CI runs a second job on Node 26 because Vitest's binary is `#!/usr/bin/env node`. `bun run` from the repository root follows `bunfig.toml` `[run] bun = true` and stays on Bun (Bun reads `bunfig.toml` only from the current directory), so the Node job invokes `bunx --no-install vitest` directly. Reproduce it with:
+Every gate runs on Bun. `bun run` follows `bunfig.toml` `[run] bun = true`; the root and each workspace have one, so scripts such as `vitest run` execute with Bun rather than the Node shebang in Vitest's binary. Run package tests from their workspace directory with `bun run` when iterating:
 
 ```bash
-cd packages/core && bunx --no-install vitest run --config vitest.config.ts --project core-server --coverage.enabled=false
-cd packages/opentelemetry-server && bunx --no-install vitest run --config vitest.config.ts --coverage.enabled=false
+bun run --cwd packages/core test:unit
+bun run --cwd packages/opentelemetry-server test:unit
 ```
 
 ### Build and E2E freshness
@@ -187,7 +187,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 
 - Fix a flaky test at its race. Do not add retries, sleeps, a longer global timeout, `.skip`, or lowered coverage. Do not narrow a test selection to make a gate pass.
 - Time-dependent tests follow the clock they actually need:
-  - **Unit-level timing** (request timeouts, backoff, heartbeat, dispose grace, reconnect delay) uses fake timers: `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })`, or only `'Date'` when a synchronous phase must outlast a real timer. Advance time only after the awaited event has happened (`advanceTimersByTimeAsync`; `vi.waitFor` advances fake timers on its own) and assert the code path that should have run — a call count or a state change — not elapsed wall time. Node's test runner is the same idea: `context.mock.timers.enable` plus `tick`.
+  - **Unit-level timing** (request timeouts, backoff, heartbeat, dispose grace, reconnect delay) uses fake timers: `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })`, or only `'Date'` when a synchronous phase must outlast a real timer. Advance time only after the awaited event has happened (`advanceTimersByTimeAsync`; `vi.waitFor` advances fake timers on its own) and assert the code path that should have run — a call count or a state change — not elapsed wall time. `bun test` follows the same idea with `jest.useFakeTimers` and `jest.advanceTimersByTime`.
   - **Integration over a real socket or server** waits for the concrete event (`socket.closed`, the first frame, `open`) or a condition (`vi.waitFor` on observable state). Never assert on elapsed time. A liveness guard may race a promise that has no observable event, such as an execute expected to fail without a socket ever opening, but it is a safety net, not an assertion: name it in one short comment, use a budget that does not depend on machine speed (10s, not 2s), keep `timeout.unref?.()`, and still prove the behavior with the event wait and the code-path assertions.
   - **Real browser engines** run on real time. Wait for events and give a generous budget. Never use a tight window.
 - Assert the bytes that were sent, not a runtime's re-parse of them. Bun's multipart parser drops a file part's `Content-Type`, so multipart tests compare the raw body (`packages/core/test/multipart-fixture.ts` and the `/e2e/echo-raw` route).
@@ -204,7 +204,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 - The documentation unit tests execute the ETag, Bearer, and GraphQL recipes and assert their HTTP statuses and application outcomes.
 - After rendering, the build checks local page links and anchors, including generated navigation and locale links.
 - Run `bun run --cwd doc extract-api` after changing public exports or their TSDoc, and commit the three files it writes: `api-entries.json`, `api-reference.json`, and `api-summaries.json`. A public export needs an English, neutral TSDoc description. Use `@group` for its overview, `@see` for related exports, and `@exampleFile` for a type-checked example. Do not put site-relative links in comments; comments are the only input to generation. An export with no description fails extraction. Generation also fails when a signature is not syntactically valid TypeScript. `exports.spec.ts` still checks the catalog against the public exports in both directions, including kind.
-- Extraction builds the program with `typescript/async` under Bun. Parameter and member tables come from `fumadocs-typescript`, which calls `typescript/sync`. That sync entry crashes under Bun, so `doc/scripts/extract-api.ts` runs those queries in a Node child process.
+- Extraction builds the program with `typescript/async` under Bun. Parameter and member tables come from `fumadocs-typescript`, which calls `typescript/sync`. That sync entry needs a real Node binary's fd-based channel, so `doc/scripts/extract-api.ts` runs those queries in a Node child process. This is the only Node process the repository starts; everything else runs on Bun.
 - Set the repository variable `SITE_URL` to the confirmed HTTPS origin before deploying. Local builds default to localhost; the release job rejects a missing or local origin.
 
 ## Release and packaging

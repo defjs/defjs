@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 
 type BunApi = {
+  argv: readonly string[];
   spawn(
     cmd: string[],
     options: {
@@ -32,7 +33,7 @@ async function runExample(omitCompletion = false) {
     globalThis.fetch = async () => { throw new Error("Unexpected network request"); };
     await import(${JSON.stringify(example)});
   `;
-  const child = bun.spawn([process.execPath, "-e", program], {
+  const child = bun.spawn([Bun.argv[0] ?? "bun", "-e", program], {
     stdout: "pipe",
     stderr: "pipe",
   });

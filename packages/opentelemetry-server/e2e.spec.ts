@@ -1,4 +1,3 @@
-import { createServer } from "node:net";
 import {
   createClient,
   defineEventStream,
@@ -16,7 +15,6 @@ import {
   W3CTraceContextPropagator,
 } from "@opentelemetry/core";
 import { afterEach, describe, expect, inject, test, vi } from "vitest";
-import { WebSocketServer } from "ws";
 import { withOpenTelemetryServer } from "./src/option";
 import type { MockSpan } from "./src/test-utils";
 import { createMockLogger, createMockTracer } from "./src/test-utils";
@@ -56,13 +54,14 @@ function onlySpan(spans: readonly MockSpan[]): MockSpan {
 }
 
 async function closedPort(): Promise<number> {
-  const server = createServer();
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address();
-  if (address === null || typeof address === "string")
-    throw new Error("expected a TCP port");
-  const { port } = address;
-  await new Promise((resolve) => server.close(resolve));
+  const server = Bun.serve({
+    fetch: () => new Response(null),
+    hostname: "127.0.0.1",
+    port: 0,
+  });
+  const { port } = server;
+  if (port === undefined) throw new Error("expected a TCP port");
+  await server.stop(true);
   return port;
 }
 
@@ -412,14 +411,21 @@ describe("operation diagnostic boundary", () => {
   // An abrupt drop (1006) has no close frame. Whether the platform WebSocket fires `error` before `close` depends on the
   // runtime (Node/undici does, Bun does not), and the session ends in `error` and logs once only when it does.
   test("WebSocket abrupt drop 1006 logs once only when the runtime reports an error first", async () => {
-    const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
-    wss.on("connection", (socket) => setTimeout(() => socket.terminate(), 20));
-    await new Promise((resolve) => wss.once("listening", resolve));
+    const server = Bun.serve({
+      fetch(request, bunServer) {
+        bunServer.upgrade(request);
+        return undefined;
+      },
+      hostname: "127.0.0.1",
+      port: 0,
+      websocket: {
+        open(socket) {
+          setTimeout(() => socket.terminate(), 20);
+        },
+      },
+    });
     try {
-      const address = wss.address();
-      if (address === null || typeof address === "string")
-        throw new Error("expected a TCP port");
-      const url = `ws://127.0.0.1:${address.port}`;
+      const url = `ws://127.0.0.1:${server.port}`;
       const reportsErrorFirst = await new Promise<boolean>((resolve) => {
         const events: string[] = [];
         const probe = new WebSocket(url);
@@ -456,7 +462,7 @@ describe("operation diagnostic boundary", () => {
           : [],
       );
     } finally {
-      wss.close();
+      await server.stop(true);
     }
   });
 });

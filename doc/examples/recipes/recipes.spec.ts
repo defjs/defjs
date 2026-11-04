@@ -1,9 +1,10 @@
 import { expect, test } from "vitest";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { joinPath } from "../../scripts/paths";
+import { removeDirectory, tempDirectory } from "../../scripts/tmp";
 
 type BunApi = {
+  argv: readonly string[];
+  env: Record<string, string | undefined>;
   file(path: URL | string): { text(): Promise<string> };
   write(path: string, data: string): Promise<number>;
   spawn(
@@ -84,12 +85,12 @@ ${source}
 export { statuses }
 ${observations}
 `;
-  const directory = await mkdtemp(join(tmpdir(), "defjs-recipe-"));
-  const filename = join(directory, "recipe.ts");
+  const directory = tempDirectory("defjs-recipe");
+  const filename = joinPath(directory, "recipe.ts");
   await bun.write(filename, observed);
-  const loaded: unknown = await import(filename).finally(() =>
-    rm(directory, { recursive: true, force: true }),
-  );
+  const loaded: unknown = await import(filename).finally(() => {
+    removeDirectory(directory);
+  });
   if (!isRecord(loaded))
     throw new Error(`recipe ${name} did not export a module`);
   const statuses = numberList(loaded["statuses"]);
@@ -141,14 +142,14 @@ test.each([
         "getOrder(client, { id: 7 })",
         `getOrder(client, { id: ${id} })`,
       );
-    const directory = await mkdtemp(join(tmpdir(), "defjs-local-test-"));
+    const directory = tempDirectory("defjs-local-test");
     try {
-      const filename = join(directory, "get-order.test.ts");
+      const filename = joinPath(directory, "get-order.test.ts");
       await bun.write(filename, source);
-      const child = bun.spawn([process.execPath, filename], {
+      const child = bun.spawn([Bun.argv[0] ?? "bun", filename], {
         stdout: "pipe",
         stderr: "pipe",
-        env: { ...process.env, NO_COLOR: "1", FORCE_COLOR: "0" },
+        env: { ...Bun.env, NO_COLOR: "1", FORCE_COLOR: "0" },
       });
       const [status, stdout, stderr] = await Promise.all([
         child.exited,
@@ -164,7 +165,7 @@ test.each([
         expect(stderr).toContain("HTTP_STATUS");
       }
     } finally {
-      await rm(directory, { recursive: true, force: true });
+      removeDirectory(directory);
     }
   },
 );

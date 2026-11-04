@@ -1,5 +1,4 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { setImmediate } from "node:timers/promises";
 import { pickEndpoint } from "./runtime";
 import type { EndpointPickResult } from "./balancer";
 const info = { endpoints: ["a"], transport: "http" as const };
@@ -88,7 +87,7 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
     p.start();
     p.end({ attempted: true });
     p.done({ attempted: true });
-    await setImmediate();
+    await Bun.sleep(0);
     expect(done).toHaveBeenCalledOnce();
   },
 );

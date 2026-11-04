@@ -1,8 +1,3 @@
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { expect, test } from "vitest";
 import { createStringifier } from "fumadocs-core/mdx-plugins/stringifier";
 import {
@@ -235,15 +230,15 @@ test("the documentation catalog loads from disk and renders a real signature", (
 });
 
 test("catalog lookup follows the documentation workspace or the repository root", async () => {
-  const workspace = await mkdtemp(join(tmpdir(), "defjs-signatures-"));
+  const workspace = `${Bun.env["TMPDIR"] ?? "/tmp"}/defjs-signatures-${crypto.randomUUID()}`;
   try {
     expect(() => apiReferenceFile(workspace)).toThrow(
       `Cannot find api-reference.json from ${workspace}`,
     );
-    const nested = join(workspace, "doc/app/data");
-    mkdirSync(nested, { recursive: true });
-    writeFileSync(
-      join(nested, "api-reference.json"),
+    const nested = `${workspace}/doc/app/data`;
+    await Bun.write(`${nested}/.keep`, "");
+    await Bun.write(
+      `${nested}/api-reference.json`,
       JSON.stringify([
         { name: "FromRoot", signatures: ["type FromRoot = 1;"] },
       ]),
@@ -251,30 +246,30 @@ test("catalog lookup follows the documentation workspace or the repository root"
     expect(
       readSignatureCatalog(apiReferenceFile(workspace)).get("FromRoot"),
     ).toEqual(["type FromRoot = 1;"]);
-    const docRoot = join(workspace, "doc");
-    mkdirSync(join(docRoot, "app/data"), { recursive: true });
-    writeFileSync(
-      join(docRoot, "app/data/api-reference.json"),
+    const docRoot = `${workspace}/doc`;
+    await Bun.write(`${docRoot}/app/data/.keep`, "");
+    await Bun.write(
+      `${docRoot}/app/data/api-reference.json`,
       JSON.stringify([{ name: "FromDoc", signatures: ["type FromDoc = 2;"] }]),
     );
     const fromDoc = apiReferenceFile(docRoot);
     expect(readSignatureCatalog(fromDoc).get("FromDoc")).toEqual([
       "type FromDoc = 2;",
     ]);
-    writeFileSync(fromDoc, "{}");
+    await Bun.write(fromDoc, "{}");
     expect(() => readSignatureCatalog(fromDoc)).toThrow(
       "API reference is not a list",
     );
-    writeFileSync(fromDoc, "not json");
+    await Bun.write(fromDoc, "not json");
     expect(() => readSignatureCatalog(fromDoc)).toThrow(
       `Cannot read API signatures from ${fromDoc}`,
     );
   } finally {
-    await rm(workspace, { recursive: true, force: true });
+    Bun.spawnSync(["rm", "-rf", workspace]);
   }
 });
 
-test("fences keep example code and reject a hand-copied generated entry", () => {
+test("fences keep example code and reject a hand-copied generated entry", async () => {
   const names = new Set(["createClient", "ERR_ABORTED"]);
   expect(
     handCopiedGeneratedNames(
@@ -285,18 +280,18 @@ test("fences keep example code and reject a hand-copied generated entry", () => 
     { name: "ERR_ABORTED", line: 9 },
     { name: "createClient", line: 13 },
   ]);
-  const root = fileURLToPath(new URL("../../content", import.meta.url));
+  const root = `${import.meta.dirname}/../../content`;
   const hits: string[] = [];
   const generatedNames = new Set(
     readSignatureCatalog(apiReferenceFile()).keys(),
   );
-  for (const locale of readdirSync(root)) {
-    const dir = join(root, locale, "api");
-    for (const file of readdirSync(dir)) {
+  for (const locale of new Bun.Glob("*").scanSync(root)) {
+    const dir = `${root}/${locale}/api`;
+    for (const file of new Bun.Glob("*").scanSync(dir)) {
       if (!file.endsWith(".md") && !file.endsWith(".mdx")) continue;
-      const path = join(dir, file);
+      const path = `${dir}/${file}`;
       for (const hit of handCopiedGeneratedNames(
-        readFileSync(path, "utf8"),
+        await Bun.file(path).text(),
         generatedNames,
       ))
         hits.push(

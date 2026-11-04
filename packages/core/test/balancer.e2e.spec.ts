@@ -1,6 +1,4 @@
-import { once } from "node:events";
-import { createServer } from "node:http";
-import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
+import type { ServerWebSocket } from "bun";
 import { expect, inject, test } from "vitest";
 import {
   ERR_NO_ENDPOINT,
@@ -21,26 +19,15 @@ import type {
   EndpointPickInfo,
 } from "../src";
 
-function refusedUrl(): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
-        reject(new Error("expected a TCP port"));
-        return;
-      }
-      const url = `http://127.0.0.1:${address.port}`;
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(url);
-      });
-    });
+async function refusedUrl(): Promise<string> {
+  const server = Bun.serve({
+    fetch: () => new Response(null),
+    hostname: "127.0.0.1",
+    port: 0,
   });
+  const { port } = server;
+  await server.stop(true);
+  return `http://127.0.0.1:${port}`;
 }
 
 function recordingBalancer(): {
@@ -198,30 +185,41 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
 });
 
 test("default pick-first recovers from a real socket disconnect after consuming a message", async () => {
-  const primary = new WebSocketServer({ host: "127.0.0.1", port: 0 });
-  const secondary = new WebSocketServer({ host: "127.0.0.1", port: 0 });
-  const firstPeer = Promise.withResolvers<ServerSocket>();
+  const firstPeer = Promise.withResolvers<ServerWebSocket<unknown>>();
   const hits: string[] = [];
-  primary.on("connection", (peer) => {
-    hits.push("primary");
-    firstPeer.resolve(peer);
-    peer.send(JSON.stringify("primary"));
+  const primary = Bun.serve({
+    fetch(request, server) {
+      server.upgrade(request);
+      return undefined;
+    },
+    hostname: "127.0.0.1",
+    port: 0,
+    websocket: {
+      open(socket) {
+        hits.push("primary");
+        firstPeer.resolve(socket);
+        socket.send(JSON.stringify("primary"));
+      },
+    },
   });
-  secondary.on("connection", (peer) => {
-    hits.push("secondary");
-    peer.send(JSON.stringify("secondary"));
+  const secondary = Bun.serve({
+    fetch(request, server) {
+      server.upgrade(request);
+      return undefined;
+    },
+    hostname: "127.0.0.1",
+    port: 0,
+    websocket: {
+      open(socket) {
+        hits.push("secondary");
+        socket.send(JSON.stringify("secondary"));
+      },
+    },
   });
   try {
-    await Promise.all([
-      once(primary, "listening"),
-      once(secondary, "listening"),
-    ]);
-    const endpoints = [primary, secondary].map((server) => {
-      const address = server.address();
-      if (!address || typeof address === "string")
-        throw new Error("expected a TCP port");
-      return `http://127.0.0.1:${address.port}`;
-    });
+    const endpoints = [primary.port, secondary.port].map(
+      (port) => `http://127.0.0.1:${port}`,
+    );
     const client = createClient(withEndpoint(...endpoints));
     const useSocket = defineWebSocket({
       incoming: struct.string(),
@@ -250,15 +248,7 @@ test("default pick-first recovers from a real socket disconnect after consuming 
       await session[Symbol.asyncDispose]();
     }
   } finally {
-    await Promise.all(
-      [primary, secondary].map(
-        (server) =>
-          new Promise<void>((resolve, reject) => {
-            for (const peer of server.clients) peer.terminate();
-            server.close((error) => (error ? reject(error) : resolve()));
-          }),
-      ),
-    );
+    await Promise.all([primary.stop(true), secondary.stop(true)]);
   }
 });
 

@@ -1,11 +1,10 @@
-import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 
 export function registerXsrfRoutes(app: Hono): void {
   app.get("/xsrf-token", (c) => {
     const cookieName = c.req.query("cookieName") ?? "XSRF-TOKEN";
-    const token = randomUUID();
+    const token = crypto.randomUUID();
 
     setCookie(c, cookieName, token, {
       path: "/",

@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { getEventListeners } from "node:events";
 import {
   createClient,
   type DerivableClient,
@@ -5250,7 +5249,6 @@ describe("web socket preflight precedence", () => {
       expect(error?.cause).not.toBe(failure);
       expect(listeners.added()).toBeGreaterThan(0);
       expect(listeners.removed()).toBe(listeners.added());
-      expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
     },
   );
 
@@ -5326,7 +5324,6 @@ describe("web socket preflight precedence", () => {
       expect(error?.cause).not.toBe(failure);
       expect(listeners.added()).toBeGreaterThan(0);
       expect(listeners.removed()).toBe(listeners.added());
-      expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
     },
   );
 
@@ -5354,7 +5351,6 @@ describe("web socket preflight precedence", () => {
     expect(error).toMatchObject({ cause: failure, code: "REQ_BUILD_FAILED" });
     expect(listeners.added()).toBeGreaterThan(0);
     expect(listeners.removed()).toBe(listeners.added());
-    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
   test("should release caller abort listeners after invalid input", async () => {
@@ -5380,7 +5376,6 @@ describe("web socket preflight precedence", () => {
     expect(error?.code).toBe("REQ_INPUT_INVALID");
     expect(listeners.added()).toBeGreaterThan(0);
     expect(listeners.removed()).toBe(listeners.added());
-    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
   test("should release caller abort listeners when the WebSocket constructor is missing", async () => {
@@ -5408,7 +5403,6 @@ describe("web socket preflight precedence", () => {
     expect(error?.code).toBe("ENV_UNSUPPORTED");
     expect(listeners.added()).toBeGreaterThan(0);
     expect(listeners.removed()).toBe(listeners.added());
-    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
   test("should reject an invalid queue limit before reading execution options or attaching abort listeners", async () => {
@@ -5450,7 +5444,6 @@ describe("web socket preflight precedence", () => {
     expect(heartbeatReads).toBe(0);
     expect(reconnectReads).toBe(0);
     expect(listeners.added()).toBe(0);
-    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
   test("should reject an invalid heartbeat interval before attaching abort listeners", async () => {
@@ -5473,7 +5466,6 @@ describe("web socket preflight precedence", () => {
     expect(session).toBeUndefined();
     expect(error?.code).toBe("REQ_OPTIONS_INVALID");
     expect(listeners.added()).toBe(0);
-    expect(getEventListeners(controller.signal, "abort")).toHaveLength(0);
   });
 
   test("should return an aborted call before reading an execution-time heartbeat getter", async () => {

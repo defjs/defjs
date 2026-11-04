@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { firstParagraph } from "../app/lib/api-text";
 
 export type ApiKind = "function" | "type" | "constant";
@@ -379,14 +378,16 @@ export interface FormatResult {
 }
 
 function defaultFormat(source: string, filename: string): FormatResult {
-  const result = spawnSync("bun", ["fmt", `--stdin-filepath=${filename}`], {
-    input: source,
-    encoding: "utf8",
+  const result = Bun.spawnSync({
+    cmd: ["bun", "fmt", `--stdin-filepath=${filename}`],
+    stdin: new TextEncoder().encode(source),
+    stderr: "pipe",
+    stdout: "pipe",
   });
   return {
-    status: result.status,
-    stdout: result.stdout,
-    stderr: result.stderr,
+    status: result.exitCode,
+    stdout: result.stdout.toString(),
+    stderr: result.stderr.toString(),
   };
 }
 

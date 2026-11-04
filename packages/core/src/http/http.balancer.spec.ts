@@ -1,10 +1,3 @@
-import { setImmediate } from "node:timers/promises";
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
-import type { Socket } from "node:net";
 import { describe, expect, test } from "vitest";
 import type {
   EndpointBalancer,
@@ -34,42 +27,43 @@ type Probe = {
   close: () => Promise<void>;
 };
 
+type ProbeResponse = {
+  writeHead(status: number, headers?: Record<string, string>): void;
+  end(body?: string): void;
+};
+
 function serve(
-  respond: (req: IncomingMessage, res: ServerResponse) => void,
+  respond: (req: Request, res: ProbeResponse) => void,
 ): Promise<Probe> {
   const hits: string[] = [];
-  const sockets = new Set<Socket>();
-  const server = createServer((req, res) => {
-    hits.push(req.url ?? "");
-    respond(req, res);
-  });
-  server.on("connection", (socket) => {
-    sockets.add(socket);
-    socket.on("close", () => {
-      sockets.delete(socket);
-    });
+  const server = Bun.serve({
+    fetch(request) {
+      const url = new URL(request.url);
+      hits.push(`${url.pathname}${url.search}`);
+      const settled = Promise.withResolvers<Response>();
+      let status = 200;
+      let headers: Record<string, string> = {};
+      respond(request, {
+        writeHead(nextStatus, nextHeaders) {
+          status = nextStatus;
+          headers = nextHeaders ?? {};
+        },
+        end(body) {
+          settled.resolve(new Response(body ?? null, { status, headers }));
+        },
+      });
+      return settled.promise;
+    },
+    hostname: "127.0.0.1",
+    port: 0,
   });
 
-  return new Promise((resolve, reject) => {
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
-        reject(new Error("expected a TCP port"));
-        return;
-      }
-      resolve({
-        hits,
-        url: `http://127.0.0.1:${address.port}`,
-        close: () =>
-          new Promise((done, fail) => {
-            for (const socket of sockets) {
-              socket.destroy();
-            }
-            server.close((error) => (error ? fail(error) : done()));
-          }),
-      });
-    });
+  return Promise.resolve({
+    hits,
+    url: `http://127.0.0.1:${server.port}`,
+    close: async () => {
+      await server.stop(true);
+    },
   });
 }
 
@@ -939,7 +933,7 @@ describe("HTTP endpoint balancer", () => {
       expect(live.hits).toHaveLength(1);
       expect(reports).toEqual([{ attempted: true, status: 204 }]);
       // Give unhandled rejections a turn to reach Vitest's process listener.
-      await setImmediate();
+      await Bun.sleep(0);
     });
   });
 

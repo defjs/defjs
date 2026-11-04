@@ -1,4 +1,3 @@
-import { resolve } from "node:path";
 import { playwright } from "@vitest/browser-playwright";
 import { defineConfig } from "vitest/config";
 import { browserLaunchEnv } from "../../test/firefox-app-data.ts";
@@ -13,13 +12,13 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      "@defjs/core": resolve(packageRoot, "../core/src"),
+      "@defjs/core": `${packageRoot}/../core/src`,
     },
   },
   test: {
     api: { host: "127.0.0.1" },
     name: "vue-browser",
-    globalSetup: resolve(packageRoot, "../../test/browser-api-server-setup.ts"),
+    globalSetup: `${packageRoot}/../../test/browser-api-server-setup.ts`,
     browser: {
       enabled: true,
       provider: playwright(),

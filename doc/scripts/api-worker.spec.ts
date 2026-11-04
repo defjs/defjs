@@ -1,20 +1,20 @@
 import { expect, test } from "vitest";
 import { defined } from "./api-model";
-import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import {
   collectProcess,
   defaultRun,
   errorMessage,
   isRealNode,
   nodeBinary,
+  nodeCandidatesFromPath,
   nodeCandidates,
   parseWorkerJson,
   requestTypeTables,
   selectNodeBinary,
   workerFailure,
 } from "./api-worker";
+import { joinPath } from "./paths";
+import { tempDirectory } from "./tmp";
 
 const doc = {
   file: "client.ts",
@@ -35,7 +35,7 @@ const doc = {
   ],
 };
 
-test("the worker uses real Node, not Bun's node shim", () => {
+test("the worker uses real Node, not Bun's node shim", async () => {
   expect(nodeCandidates(" /bin/node \n\n /tmp/bun-node/node \n")).toEqual([
     "/bin/node",
     "/tmp/bun-node/node",
@@ -46,14 +46,20 @@ test("the worker uses real Node, not Bun's node shim", () => {
   expect(() => selectNodeBinary(["/shim"], () => false)).toThrow(
     "node binary not found on PATH",
   );
-  const directory = mkdtempSync(join(tmpdir(), "node-probe-"));
-  const fake = join(directory, "node");
-  writeFileSync(fake, "#!/bin/sh\necho object\n");
-  chmodSync(fake, 0o755);
+  const directory = tempDirectory("node-probe");
+  const fake = joinPath(directory, "node");
+  await Bun.write(fake, "#!/bin/sh\necho object\n");
+  Bun.spawnSync(["chmod", "+x", fake]);
   expect(isRealNode(fake)).toBe(false);
-  expect(isRealNode(join(directory, "missing"))).toBe(false);
+  expect(isRealNode(joinPath(directory, "missing"))).toBe(false);
   expect(isRealNode(nodeBinary())).toBe(true);
   expect(nodeBinary()).toBe(nodeBinary());
+});
+
+test("node candidates scan non-empty PATH entries", () => {
+  expect(nodeCandidatesFromPath(undefined)).toEqual([]);
+  expect(nodeCandidatesFromPath(":/definitely-missing::")).toEqual([]);
+  expect(nodeCandidatesFromPath(Bun.env["PATH"]).length).toBeGreaterThan(0);
 });
 
 test("worker failures and JSON keep the last object", () => {

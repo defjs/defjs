@@ -1,5 +1,4 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { setImmediate } from "node:timers/promises";
 import { pickEndpoint } from "./runtime";
 import { p2cBalancer } from "./p2c";
 import type { EndpointBalancer } from "./balancer";
@@ -109,7 +108,7 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
     p?.start();
     p?.start();
     p?.done({ attempted: true });
-    await setImmediate();
+    await Bun.sleep(0);
     expect(calls).toBe(1);
     expect(done).toHaveBeenCalledWith({ attempted: true });
   },

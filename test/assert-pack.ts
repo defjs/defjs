@@ -5,9 +5,6 @@
  * Run it in the publish directory (the directory `npm publish` uses):
  *   bun test/assert-pack.ts packages/core/dist
  */
-import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { posix, resolve } from "node:path";
 import { parsePackedFiles } from "./pack-output";
 
 const ENTRY_FIELDS = [
@@ -21,13 +18,16 @@ const ENTRY_FIELDS = [
 ];
 const REQUIRED_ROOT_FILES = ["LICENSE", "README.md", "package.json"];
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Collect relative file paths from entry fields, skipping URLs and bare package names. */
 function collectPaths(value: unknown, into: Set<string>): void {
   if (typeof value === "string") {
     const path = value.replace(/^\.\//, "");
     if (path && !path.includes("://") && !path.startsWith("#")) {
-      if (path.includes(".") || path.includes("/"))
-        into.add(posix.normalize(path));
+      if (path.includes(".") || path.includes("/")) into.add(path);
     }
     return;
   }
@@ -37,28 +37,28 @@ function collectPaths(value: unknown, into: Set<string>): void {
     return;
   }
 
-  if (typeof value === "object" && value !== null) {
+  if (isRecord(value)) {
     for (const entry of Object.values(value)) collectPaths(entry, into);
   }
 }
 
 function fail(message: string): never {
-  console.error(message);
-  process.exit(1);
+  throw new Error(message);
 }
 
-const publishDirArg = process.argv[2];
-if (!publishDirArg || process.argv.length > 3) {
+const publishDirArg = Bun.argv[2];
+if (!publishDirArg || Bun.argv.length > 3) {
   fail("usage: bun test/assert-pack.ts <publish-directory>");
 }
 
-const publishDir = resolve(publishDirArg);
+const publishDir = publishDirArg;
 let manifest: Record<string, unknown>;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- INTENT: preserve accepted manifest values and original native failure text instead of adding an object-validation error
-  manifest = JSON.parse(
-    readFileSync(resolve(publishDir, "package.json"), "utf8"),
+  const parsed: unknown = JSON.parse(
+    await Bun.file(`${publishDir}/package.json`).text(),
   );
+  if (!isRecord(parsed)) throw new TypeError("package.json is not an object");
+  manifest = parsed;
 } catch (error) {
   fail(
     `assert-pack: cannot read package.json in ${publishDir}\n${String(error)}`,
@@ -72,12 +72,16 @@ for (const field of ENTRY_FIELDS) {
 
 let packed: Set<string>;
 try {
-  const stdout = execFileSync(
-    "npm",
-    ["pack", "--dry-run", "--json", "--silent"],
-    { cwd: publishDir, encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
-  );
-  packed = parsePackedFiles(stdout);
+  const result = Bun.spawnSync({
+    cmd: ["npm", "pack", "--dry-run", "--json", "--silent"],
+    cwd: publishDir,
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr.toString() || "npm pack failed");
+  }
+  packed = parsePackedFiles(result.stdout.toString());
 } catch (error) {
   fail(
     `assert-pack: npm pack --dry-run failed in ${publishDir}\n${String(error)}`,

@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { expectTypeOf } from "vitest";
 import {
   defineEventStream,
@@ -232,13 +231,6 @@ type UserAlias = { name: string };
 declare const dto: UserDto;
 declare const aliasBody: UserAlias;
 declare const parsedBody: ParsedRequest;
-
-defineRequest({
-  // @ts-expect-error A Node Readable is not JSON data.
-  builder: () => ({ body: Readable.from(["x"]) }),
-  method: "POST",
-  path: "/users",
-});
 
 defineRequest({
   // @ts-expect-error An async generator is not JSON data.

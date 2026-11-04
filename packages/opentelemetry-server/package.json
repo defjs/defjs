@@ -26,17 +26,14 @@
   },
   "devDependencies": {
     "@defjs/core": "workspace:^",
-    "@hono/node-server": "catalog:",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/core": "3.0.0",
-    "@types/ws": "catalog:",
     "@vitest/coverage-istanbul": "catalog:",
     "hono": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "ws": "catalog:"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@defjs/core": "^0.6.0",

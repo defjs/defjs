@@ -1,3 +1,4 @@
+import type { Socket } from "bun";
 import {
   afterEach,
   describe,
@@ -8,7 +9,6 @@ import {
   vi,
 } from "vitest";
 import { method } from "../../../test/method";
-import { createServer, type Socket } from "node:net";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
 import { struct } from "../../struct";
 import type { HttpRequest } from "../../http";
@@ -25,6 +25,30 @@ import { fetchEventStream as fetchEventStreamInternal } from "./event_stream";
 import type { EventStreamMessage } from "./parser";
 
 const backoff = await import("../../internal/backoff");
+
+const SSE_RESPONSE_HEADERS =
+  "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n";
+
+function concatBytes(
+  left: Uint8Array,
+  right: Uint8Array,
+): Uint8Array<ArrayBuffer> {
+  const joined = new Uint8Array(left.byteLength + right.byteLength);
+  joined.set(left);
+  joined.set(right, left.byteLength);
+  return joined;
+}
+
+function chunkedBody(body: string, terminate: boolean): string {
+  const length = new TextEncoder().encode(body).byteLength.toString(16);
+  return `${length}\r\n${body}\r\n${terminate ? "0\r\n\r\n" : ""}`;
+}
+
+function latin1(bytes: Uint8Array): string {
+  let text = "";
+  for (const byte of bytes) text += String.fromCharCode(byte);
+  return text;
+}
 
 type TestOptions<T> = Omit<
   FetchEventStreamOptions<T>,
@@ -151,46 +175,50 @@ describe("fetchEventStream", () => {
     "should send UTF-8 Last-Event-ID bytes on the wire for %s",
     async (id, expectedBytes) => {
       const sockets = new Set<Socket>();
-      const headers: Buffer[] = [];
+      const incomingBySocket = new Map<Socket, Uint8Array>();
+      const headers: string[] = [];
       const firstSeen = Promise.withResolvers<void>();
-      const server = createServer((socket) => {
-        sockets.add(socket);
-        socket.on("close", () => sockets.delete(socket));
-        let incoming = Buffer.alloc(0);
-        socket.on("data", (chunk: Buffer) => {
-          incoming = Buffer.concat([incoming, chunk]);
-          if (!incoming.includes("\r\n\r\n")) return;
-          headers.push(incoming);
-          const body =
-            headers.length === 1
-              ? `id: ${id}\ndata: first\n\n`
-              : "data: second\n\n";
-          const payload = Buffer.from(body);
-          const reply = Buffer.concat([
-            Buffer.from(
-              `HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n${payload.length.toString(16)}\r\n`,
-            ),
-            payload,
-            Buffer.from(headers.length === 1 ? "\r\n" : "\r\n0\r\n\r\n"),
-          ]);
-          if (headers.length === 1) {
-            socket.write(reply);
-            void firstSeen.promise.then(() => socket.end());
-          } else {
-            socket.end(reply);
-          }
-        });
+      const listener = Bun.listen({
+        hostname: "127.0.0.1",
+        port: 0,
+        socket: {
+          open(socket) {
+            sockets.add(socket);
+          },
+          close(socket) {
+            sockets.delete(socket);
+            incomingBySocket.delete(socket);
+          },
+          data(socket, chunk) {
+            const incoming = concatBytes(
+              incomingBySocket.get(socket) ?? new Uint8Array(),
+              chunk,
+            );
+            if (!latin1(incoming).includes("\r\n\r\n")) {
+              incomingBySocket.set(socket, incoming);
+              return;
+            }
+            headers.push(latin1(incoming));
+            const body =
+              headers.length === 1
+                ? `id: ${id}\ndata: first\n\n`
+                : "data: second\n\n";
+            const reply =
+              SSE_RESPONSE_HEADERS + chunkedBody(body, headers.length > 1);
+            if (headers.length === 1) {
+              socket.write(reply);
+              void firstSeen.promise.then(() => socket.end());
+            } else {
+              socket.write(reply);
+              socket.end();
+            }
+          },
+        },
       });
-      await new Promise<void>((resolve) =>
-        server.listen(0, "127.0.0.1", resolve),
-      );
-      const address = server.address();
-      if (!address || typeof address === "string")
-        throw new Error("Expected a loopback port");
       try {
         const stream = await fetchEventStream(
           {
-            baseEndpoint: `http://127.0.0.1:${address.port}`,
+            baseEndpoint: `http://127.0.0.1:${listener.port}`,
             endpoint: "/events",
             method: "GET",
           },
@@ -208,69 +236,71 @@ describe("fetchEventStream", () => {
         expect(messages).toEqual(["first", "second"]);
         expect(headers).toHaveLength(2);
         const header = /\r\nlast-event-id: ([^\r\n]*)\r\n/i.exec(
-          headers[1]?.toString("latin1") ?? "",
+          headers[1] ?? "",
         )?.[1];
         expect(header).toBeDefined();
         if (header === undefined)
           throw new Error("Expected Last-Event-ID on the wire");
-        expect([...Buffer.from(header, "latin1")]).toEqual(expectedBytes);
+        expect([...header].map((character) => character.charCodeAt(0))).toEqual(
+          expectedBytes,
+        );
         await expect(stream.closed).resolves.toEqual({ kind: "eof" });
       } finally {
-        for (const socket of sockets) socket.destroy();
-        await new Promise<void>((resolve, reject) =>
-          server.close((error) => (error ? reject(error) : resolve())),
-        );
+        for (const socket of sockets) socket.terminate();
+        listener.stop(true);
       }
     },
   );
 
   test("should reconnect from the committed id after a partial id frame is cut", async () => {
     const sockets = new Set<Socket>();
+    const incomingBySocket = new Map<Socket, string>();
     const headers: string[] = [];
     let firstSocket: Socket | undefined;
     const partial = "id: 1\ndata: first\n\nid: 2\n";
-    const server = createServer((socket) => {
-      sockets.add(socket);
-      socket.on("close", () => sockets.delete(socket));
-      let incoming = "";
-      socket.on("data", (chunk: Buffer) => {
-        incoming += chunk.toString("latin1");
-        if (!incoming.includes("\r\n\r\n")) return;
-        headers.push(incoming);
-        const first = headers.length === 1;
-        const cursor = /\r\nlast-event-id: ([^\r\n]*)\r\n/i.exec(incoming)?.[1];
-        const body = first
-          ? partial
-          : cursor === "1"
-            ? "id: 2\ndata: second\n\n"
-            : "id: 3\ndata: skipped\n\n";
-        const payload = Buffer.from(body);
-        const reply = Buffer.concat([
-          Buffer.from(
-            `HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n${payload.length.toString(16)}\r\n`,
-          ),
-          payload,
-          Buffer.from(first ? "\r\n" : "\r\n0\r\n\r\n"),
-        ]);
-        if (first) {
-          firstSocket = socket;
-          socket.write(reply);
-        } else {
-          socket.end(reply);
-        }
-      });
+    const listener = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: {
+        open(socket) {
+          sockets.add(socket);
+        },
+        close(socket) {
+          sockets.delete(socket);
+          incomingBySocket.delete(socket);
+        },
+        data(socket, chunk) {
+          const incoming = (incomingBySocket.get(socket) ?? "") + latin1(chunk);
+          if (!incoming.includes("\r\n\r\n")) {
+            incomingBySocket.set(socket, incoming);
+            return;
+          }
+          headers.push(incoming);
+          const first = headers.length === 1;
+          const cursor = /\r\nlast-event-id: ([^\r\n]*)\r\n/i.exec(
+            incoming,
+          )?.[1];
+          const body = first
+            ? partial
+            : cursor === "1"
+              ? "id: 2\ndata: second\n\n"
+              : "id: 3\ndata: skipped\n\n";
+          const reply = SSE_RESPONSE_HEADERS + chunkedBody(body, !first);
+          if (first) {
+            firstSocket = socket;
+            socket.write(reply);
+          } else {
+            socket.write(reply);
+            socket.end();
+          }
+        },
+      },
     });
-    await new Promise<void>((resolve) =>
-      server.listen(0, "127.0.0.1", resolve),
-    );
-    const address = server.address();
-    if (!address || typeof address === "string")
-      throw new Error("Expected a loopback port");
     let calls = 0;
     try {
       const stream = await fetchEventStream(
         {
-          baseEndpoint: `http://127.0.0.1:${address.port}`,
+          baseEndpoint: `http://127.0.0.1:${listener.port}`,
           endpoint: "/events",
           method: "GET",
         },
@@ -281,6 +311,7 @@ describe("fetchEventStream", () => {
             if (++calls !== 1) return response;
             const reader = response.body?.getReader();
             if (!reader) throw new Error("Expected response body");
+            const partialBytes = new TextEncoder().encode(partial);
             let forwarded = false;
             return new Response(
               new ReadableStream<Uint8Array>(
@@ -288,16 +319,16 @@ describe("fetchEventStream", () => {
                   async pull(controller) {
                     if (forwarded) {
                       // Zero prefetch: this pull proves the parser consumed the partial id line.
-                      firstSocket?.destroy();
+                      firstSocket?.terminate();
                       await reader.read();
                       return;
                     }
-                    let bytes = Buffer.alloc(0);
-                    while (bytes.length < Buffer.byteLength(partial)) {
+                    let bytes = new Uint8Array();
+                    while (bytes.byteLength < partialBytes.byteLength) {
                       const result = await reader.read();
                       if (result.done)
                         throw new Error("Expected partial frame");
-                      bytes = Buffer.concat([bytes, result.value]);
+                      bytes = concatBytes(bytes, result.value);
                     }
                     forwarded = true;
                     controller.enqueue(bytes);
@@ -325,10 +356,8 @@ describe("fetchEventStream", () => {
       ]);
       await expect(stream.closed).resolves.toEqual({ kind: "eof" });
     } finally {
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((resolve, reject) =>
-        server.close((error) => (error ? reject(error) : resolve())),
-      );
+      for (const socket of sockets) socket.terminate();
+      listener.stop(true);
     }
   });
 

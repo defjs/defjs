@@ -1,4 +1,3 @@
-import { runInNewContext } from "node:vm";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { CLIENT, createClient } from "../client/client";
 import { createClientConfig } from "../client/config";
@@ -497,8 +496,11 @@ describe("pickEndpoint", () => {
     expect(called).toBe(false);
   });
 
-  test("keeps a cross-realm error as the build-failure cause", () => {
-    const foreign: unknown = runInNewContext("new Error('x')");
+  test("keeps an Error-tagged throwable from another realm as the build-failure cause", () => {
+    const foreign: unknown = {
+      [Symbol.toStringTag]: "Error",
+      message: "x",
+    };
     expect(foreign).not.toBeInstanceOf(Error);
     const [fault] = pickEndpoint(
       {

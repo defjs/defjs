@@ -1,4 +1,3 @@
-import { execFileSync, spawn } from "node:child_process";
 import { defined } from "./api-model";
 import type { WorkerEntry } from "./api-model";
 
@@ -27,43 +26,32 @@ export function workerFailure(
   return `fumadocs-typescript worker exited ${code ?? "null"}: ${detail}`;
 }
 
-export async function collectProcess(
+export function collectProcess(
   command: string,
   args: readonly string[],
   input: string,
   cwd: string,
 ): Promise<ProcessResult> {
-  const child = spawn(command, [...args], {
-    cwd,
-    stdio: ["pipe", "pipe", "pipe"],
-  });
-  const stdout = defined(child.stdout, "stdout");
-  const stderr = defined(child.stderr, "stderr");
-  const stdin = defined(child.stdin, "stdin");
-  const out: Buffer[] = [];
-  const err: Buffer[] = [];
-  stdout.on("data", (chunk: Buffer) => out.push(chunk));
-  stderr.on("data", (chunk: Buffer) => err.push(chunk));
-  const closed = new Promise<ProcessResult>((resolve) => {
-    let settled = false;
-    const finish = (result: ProcessResult) => {
-      if (settled) return;
-      settled = true;
-      resolve(result);
-    };
-    child.on("error", (error) =>
-      finish({ code: null, stdout: "", stderr: error.message }),
-    );
-    child.on("close", (code) =>
-      finish({
-        code,
-        stdout: Buffer.concat(out).toString("utf8"),
-        stderr: Buffer.concat(err).toString("utf8"),
-      }),
-    );
-  });
-  stdin.end(input);
-  return closed;
+  try {
+    const result = Bun.spawnSync({
+      cmd: [command, ...args],
+      cwd,
+      stdin: new TextEncoder().encode(input),
+      stderr: "pipe",
+      stdout: "pipe",
+    });
+    return Promise.resolve({
+      code: result.exitCode,
+      stdout: result.stdout.toString(),
+      stderr: result.stderr.toString(),
+    });
+  } catch (error) {
+    return Promise.resolve({
+      code: null,
+      stdout: "",
+      stderr: String(error),
+    });
+  }
 }
 
 export function nodeCandidates(listed: string): string[] {
@@ -77,9 +65,8 @@ export function nodeCandidates(listed: string): string[] {
 export function isRealNode(binary: string): boolean {
   try {
     return (
-      execFileSync(binary, ["-p", "typeof Bun"], {
-        encoding: "utf8",
-      }).trim() === "undefined"
+      Bun.spawnSync([binary, "-p", "typeof Bun"]).stdout.toString().trim() ===
+      "undefined"
     );
   } catch {
     return false;
@@ -98,13 +85,20 @@ export function selectNodeBinary(
 
 let cachedNode: string | undefined;
 
+export function nodeCandidatesFromPath(path: string | undefined): string[] {
+  if (path === undefined) return [];
+  const found: string[] = [];
+  for (const directory of path.split(":")) {
+    if (directory.length === 0) continue;
+    const candidate = `${directory}/node`;
+    if (Bun.file(candidate).size > 0) found.push(candidate);
+  }
+  return found;
+}
+
 export function nodeBinary(): string {
   if (cachedNode === undefined) {
-    cachedNode = selectNodeBinary(
-      nodeCandidates(
-        execFileSync("/usr/bin/which", ["-a", "node"], { encoding: "utf8" }),
-      ),
-    );
+    cachedNode = selectNodeBinary(nodeCandidatesFromPath(Bun.env["PATH"]));
   }
   return cachedNode;
 }

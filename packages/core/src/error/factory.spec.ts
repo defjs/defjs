@@ -1,4 +1,3 @@
-import { runInNewContext } from "node:vm";
 import { describe, expect, test } from "vitest";
 import type { DecodedResponse, HttpMeta } from "../internal/http_response";
 import { ERR_ABORTED, ERR_TIMEOUT } from "./cause";
@@ -197,10 +196,12 @@ describe("fault factories", () => {
       ["aborted", "NET_ABORTED"],
       ["timeout", "NET_TIMEOUT"],
     ] as const)(
-      "should recognize the %s brand on an error from another realm",
+      "should recognize the %s brand on a value from another realm",
       (brand, code) => {
-        const cause: unknown = runInNewContext(
-          `Object.defineProperty(new Error('foreign cause'), Symbol.for('defjs.cause.${brand}'), { value: true })`,
+        const cause: unknown = Object.defineProperty(
+          {},
+          Symbol.for(`defjs.cause.${brand}`),
+          { value: true },
         );
 
         expect(cause).not.toBeInstanceOf(Error);

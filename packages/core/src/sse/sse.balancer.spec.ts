@@ -1,8 +1,3 @@
-import {
-  createServer,
-  type IncomingMessage,
-  type ServerResponse,
-} from "node:http";
 import { afterEach, expect, test, vi } from "vitest";
 import type {
   EndpointBalancer,
@@ -47,44 +42,115 @@ interface Running {
   dropHeld(): void;
 }
 
+type ProbeRequest = {
+  method: string;
+  url: string;
+  socket: { destroy(): void };
+};
+
+type ProbeResponse = {
+  writeHead(status: number, headers?: Record<string, string>): void;
+  write(chunk: string): void;
+  end(body?: string): void;
+  destroy(): void;
+};
+
 function listen(
-  handle: (req: IncomingMessage, res: ServerResponse) => void,
+  handle: (req: ProbeRequest, res: ProbeResponse) => void,
 ): Promise<Running> {
   const requests: string[] = [];
-  let held: ServerResponse | undefined;
-  const server = createServer((req, res) => {
-    requests.push(req.url ?? "");
-    held = res;
-    handle(req, res);
-  });
-  return new Promise((resolve) => {
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
-        throw new Error("expected a TCP port");
+  let held: ProbeResponse | undefined;
+  const server = Bun.serve({
+    fetch(request) {
+      const url = new URL(request.url);
+      requests.push(`${url.pathname}${url.search}`);
+      let status = 200;
+      let headers: Record<string, string> = {};
+      let controllerRef:
+        ReadableStreamDefaultController<Uint8Array> | undefined;
+      const encoder = new TextEncoder();
+      const settle = Promise.withResolvers<Response>();
+      let settled = false;
+
+      function streamResponse(): Response {
+        settled = true;
+        return new Response(stream, { status, headers });
       }
-      const running: Running = {
-        url: `http://127.0.0.1:${address.port}`,
-        requests,
-        endHeld() {
-          held?.end();
+
+      function finish(body: string | null): Response {
+        settled = true;
+        return new Response(body, { status, headers });
+      }
+
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controllerRef = controller;
         },
-        dropHeld() {
-          held?.socket?.end();
+      });
+
+      function controller(): ReadableStreamDefaultController<Uint8Array> {
+        if (!controllerRef) throw new Error("stream controller unavailable");
+        return controllerRef;
+      }
+
+      const response: ProbeResponse = {
+        writeHead(nextStatus, nextHeaders) {
+          status = nextStatus;
+          headers = nextHeaders ?? {};
         },
-        close: () =>
-          new Promise((done) => {
-            server.closeAllConnections();
-            server.close(() => done());
-          }),
+        write(chunk) {
+          controller().enqueue(encoder.encode(chunk));
+          if (!settled) settle.resolve(streamResponse());
+        },
+        end(body) {
+          if (settled) {
+            if (body !== undefined) {
+              controller().enqueue(encoder.encode(body));
+            }
+            controller().close();
+            return;
+          }
+          settle.resolve(finish(body ?? null));
+        },
+        destroy() {
+          controller().error(new Error("test server destroyed the connection"));
+          if (!settled) settle.resolve(streamResponse());
+        },
       };
-      closers.push(() => running.close());
-      resolve(running);
-    });
+
+      held = response;
+      handle(
+        {
+          method: request.method,
+          url: `${url.pathname}${url.search}`,
+          socket: { destroy: () => response.destroy() },
+        },
+        response,
+      );
+      return settle.promise;
+    },
+    hostname: "127.0.0.1",
+    port: 0,
   });
+
+  const running: Running = {
+    url: `http://127.0.0.1:${server.port}`,
+    requests,
+    endHeld() {
+      held?.end();
+    },
+    dropHeld() {
+      held?.destroy();
+    },
+    close: async () => {
+      await server.stop(true);
+    },
+  };
+  closers.push(() => running.close());
+  return Promise.resolve(running);
 }
 
-function writeEvent(res: ServerResponse): void {
+function writeEvent(res: ProbeResponse): void {
   res.writeHead(200, SSE_HEADERS);
   res.write("data: hi\n\n");
 }
@@ -296,7 +362,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
 
   const dropped = await listen((_req, res) => {
     writeEvent(res);
-    setImmediate(() => res.destroy());
+    setTimeout(() => res.destroy(), 0);
   });
   const quiet = track(() => dropped.url);
   const [quietError, quietStream] = await orders(
@@ -312,7 +378,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
 
   const postServer = await listen((_req, res) => {
     writeEvent(res);
-    setImmediate(() => res.destroy());
+    setTimeout(() => res.destroy(), 0);
   });
   const post = defineEventStream({
     events: { message: struct.string() },
@@ -336,7 +402,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const allowed = await listen((req, res) => {
     writeEvent(res);
     if (req.method === "POST" && allowed.requests.length === 1) {
-      setImmediate(() => res.destroy());
+      setTimeout(() => res.destroy(), 0);
       return;
     }
     res.end();
@@ -698,7 +764,7 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
 test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open", async () => {
   const dropped = await listen((_req, res) => {
     writeEvent(res);
-    setImmediate(() => res.destroy());
+    setTimeout(() => res.destroy(), 0);
   });
   const cause = new Error("no endpoint");
   const recorded = track((index) =>
@@ -775,7 +841,7 @@ test("calls done once when a reconnect url fails and releases the in-flight coun
 
   const opened = await listen((_req, res) => {
     writeEvent(res);
-    setImmediate(() => res.destroy());
+    setTimeout(() => res.destroy(), 0);
   });
   const afterOpen = track((index) => (index === 1 ? opened.url : bad));
   const [openError, stream] = await orders(

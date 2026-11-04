@@ -39,10 +39,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
@@ -66,10 +62,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
@@ -96,10 +88,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
@@ -126,10 +114,6 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 26
-          package-manager-cache: false
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2

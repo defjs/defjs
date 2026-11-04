@@ -1,4 +1,3 @@
-import type { ServerResponse } from "node:http";
 import type { Hono } from "hono";
 import { stream } from "hono/streaming";
 
@@ -33,7 +32,7 @@ function isClientUploadAbort(error: unknown): boolean {
 }
 
 /** Response bodies for the platform-fetch read paths: several chunks, empty, stalled mid-flight, cut short. */
-export function registerBodyRoutes(app: Hono): void {
+export function registerBodyRoutes(app: Hono, truncatedUrl: string): void {
   const stalls = new Map<string, StallState>();
   const stallOf = (key: string): StallState => {
     const existing = stalls.get(key);
@@ -94,15 +93,6 @@ export function registerBodyRoutes(app: Hono): void {
     return c.body(null, 204);
   });
 
-  // Drops the socket after the first chunk: no terminating chunk, so the client sees a transport failure.
-  app.get("/body/truncated", (c) => {
-    // eslint-disable-next-line @typescript-eslint/consistent-type-assertions, @typescript-eslint/no-unnecessary-type-assertion -- INTENT: pass the original Node binding through without realm-sensitive validation or extra property reads
-    const { outgoing } = c.env as unknown as { outgoing: ServerResponse };
-    c.header("content-type", "application/json");
-    return stream(c, async (body) => {
-      await body.write('{"partial":');
-      await body.sleep(30);
-      outgoing.destroy();
-    });
-  });
+  // The raw listener sends one chunk without its terminator; see truncated-server.ts.
+  app.get("/body/truncated", (c) => c.redirect(truncatedUrl, 307));
 }

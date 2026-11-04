@@ -1,5 +1,3 @@
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
 import { replaceSource } from "fumadocs-core/mdx-plugins/stringifier";
 
 export interface SignatureEntry {
@@ -48,24 +46,26 @@ export function signatureCatalog(
   return catalog;
 }
 
-export function apiReferenceFile(cwd = process.cwd()): string {
+export function apiReferenceFile(cwd = `${import.meta.dirname}/../..`): string {
   const candidates = [
-    join(cwd, "app/data/api-reference.json"),
-    join(cwd, "doc/app/data/api-reference.json"),
+    `${cwd}/app/data/api-reference.json`,
+    `${cwd}/doc/app/data/api-reference.json`,
   ];
   for (const candidate of candidates)
-    if (existsSync(candidate)) return candidate;
+    if (Bun.file(candidate).size > 0) return candidate;
   throw new Error(`Cannot find api-reference.json from ${cwd}`);
 }
 
 /** Reads the catalog from disk so a rebuilt page sees a changed reference file. */
 export function readSignatureCatalog(path: string): SignatureCatalog {
-  const mtimeMs = statSync(path).mtimeMs;
+  const file = Bun.file(path);
+  const mtimeMs = file.lastModified;
   if (catalogCache?.path === path && catalogCache.mtimeMs === mtimeMs)
     return catalogCache.catalog;
   let parsed: unknown;
   try {
-    parsed = JSON.parse(readFileSync(path, "utf8"));
+    // The remark transform is synchronous; Bun exposes no synchronous file read.
+    parsed = JSON.parse(Bun.spawnSync(["cat", path]).stdout.toString());
   } catch (error) {
     throw new Error(`Cannot read API signatures from ${path}`, {
       cause: error,

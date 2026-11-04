@@ -73,7 +73,7 @@ type Evaluators<T> = T extends Locator
     : object;
 
 /**
- * A Playwright object that lives in the Node process. Every call is forwarded through a Vitest
+ * A Playwright object that lives in the Vitest host process. Every call is forwarded through a
  * browser command, so synchronous Playwright methods such as `page.url()` become promises.
  */
 export type Remote<T> = Omit<Mapped<T>, keyof Evaluators<T>> &

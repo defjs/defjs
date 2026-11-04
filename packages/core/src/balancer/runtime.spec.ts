@@ -1,4 +1,3 @@
-import { setImmediate } from "node:timers/promises";
 import { describe, expect, test, vi } from "vitest";
 import type { EndpointPickInfo } from "./balancer";
 import { pickEndpoint } from "./runtime";
@@ -127,7 +126,7 @@ describe("synchronous balancer callbacks", () => {
       );
       expect(fault?.code).toBe("REQ_BUILD_FAILED");
       expect(fault?.cause).toBe(returned);
-      await setImmediate();
+      await Bun.sleep(0);
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", onUnhandled);
@@ -163,7 +162,7 @@ describe("synchronous balancer callbacks", () => {
       selected?.done({ attempted: false });
       expect(selected?.finished()).toBe(true);
       expect(calls).toBe(1);
-      await setImmediate();
+      await Bun.sleep(0);
       expect(unhandled).toEqual([]);
     } finally {
       process.off("unhandledRejection", onUnhandled);

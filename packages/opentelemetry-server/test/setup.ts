@@ -1,8 +1,7 @@
-import { upgradeWebSocket } from "@hono/node-server";
 import { Hono } from "hono";
+import { upgradeWebSocket } from "hono/bun";
 import { streamSSE } from "hono/streaming";
 import type { TestProject } from "vitest/node";
-import { WebSocketServer } from "ws";
 import {
   startHonoTestServer,
   type HonoTestServer,
@@ -77,8 +76,7 @@ export async function setup({ provide }: TestProject) {
     })),
   );
 
-  const wss = new WebSocketServer({ noServer: true });
-  testServer = await startHonoTestServer(app, { websocket: { server: wss } });
+  testServer = await startHonoTestServer(app);
   provide("testServerHost", testServer.host);
 }
 

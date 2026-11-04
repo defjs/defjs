@@ -1,4 +1,3 @@
-import { Readable } from "node:stream";
 import { describe, expect, test, vi } from "vitest";
 import {
   createClient,
@@ -10,6 +9,10 @@ import { defineRequest } from "../http";
 import { defineEventStream } from "../sse";
 import { struct } from "../struct";
 import { materializeOutboundRequest } from "./outbound_request";
+
+class NonJsonBody {
+  readonly value = "x";
+}
 
 function readUnknown(value: unknown): unknown {
   return value;
@@ -27,17 +30,16 @@ function streamFrom(source: AsyncIterable<Uint8Array>): ReadableStream {
   return stream;
 }
 
-describe("outbound request node bodies", () => {
-  test("rejects a Node Readable json body", () => {
+describe("outbound request non-JSON bodies", () => {
+  test("rejects a class instance json body", () => {
     const send = () =>
-      materializeOutboundRequest({ body: Readable.from(["x"]) }, "http");
+      materializeOutboundRequest({ body: new NonJsonBody() }, "http");
 
     expect(send).toThrow(TypeError);
-    expect(send).toThrow("body is not JSON data: Readable.");
+    expect(send).toThrow("body is not JSON data: NonJsonBody.");
   });
 
   test("passes a web ReadableStream body through unchanged", () => {
-    const fromNode = Readable.toWeb(Readable.from([Buffer.from("x")]));
     const fromAsync = streamFrom(
       // eslint-disable-next-line @typescript-eslint/require-await -- an async generator yields asynchronously without awaiting
       (async function* () {
@@ -45,15 +47,12 @@ describe("outbound request node bodies", () => {
       })(),
     );
 
-    expect(materializeOutboundRequest({ body: fromNode }, "http").body).toBe(
-      fromNode,
-    );
     expect(materializeOutboundRequest({ body: fromAsync }, "http").body).toBe(
       fromAsync,
     );
   });
 
-  test("returns REQ_BUILD_FAILED for an HTTP Readable body without calling the handle", async () => {
+  test("returns REQ_BUILD_FAILED for an HTTP class-instance body without calling the handle", async () => {
     const handle = vi.fn(() =>
       Promise.resolve(new Response(null, { status: 204 })),
     );
@@ -62,9 +61,9 @@ describe("outbound request node bodies", () => {
       withHTTPHandle(handle),
     );
     const useRequest = defineRequest({
-      // @ts-expect-error Node Readable is not a fetch body
+      // @ts-expect-error a class instance is not a fetch body
       builder: () => ({
-        body: Readable.from(["x"]),
+        body: new NonJsonBody(),
       }),
       method: "POST",
       path: "/users",
@@ -78,11 +77,11 @@ describe("outbound request node bodies", () => {
     expect(fault?.cause).toBeInstanceOf(TypeError);
     expect(
       fault?.cause instanceof TypeError ? fault.cause.message : "",
-    ).toMatch(/Readable/);
+    ).toMatch(/NonJsonBody/);
     expect(handle).toHaveBeenCalledTimes(0);
   });
 
-  test("returns REQ_BUILD_FAILED for an SSE Readable body without calling the handle", async () => {
+  test("returns REQ_BUILD_FAILED for an SSE class-instance body without calling the handle", async () => {
     const handle = vi.fn(() =>
       Promise.resolve(
         new Response(
@@ -101,9 +100,9 @@ describe("outbound request node bodies", () => {
       withSSEHandle(handle),
     );
     const useStream = defineEventStream({
-      // @ts-expect-error Node Readable is not a fetch body
+      // @ts-expect-error a class instance is not a fetch body
       builder: () => ({
-        body: Readable.from(["x"]),
+        body: new NonJsonBody(),
       }),
       events: { message: struct.string() },
       method: "POST",
@@ -118,7 +117,7 @@ describe("outbound request node bodies", () => {
     expect(fault?.cause).toBeInstanceOf(TypeError);
     expect(
       fault?.cause instanceof TypeError ? fault.cause.message : "",
-    ).toMatch(/Readable/);
+    ).toMatch(/NonJsonBody/);
     expect(handle).toHaveBeenCalledTimes(0);
   });
 });

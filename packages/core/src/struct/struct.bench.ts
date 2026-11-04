@@ -1,4 +1,3 @@
-import assert from "node:assert/strict";
 import { afterAll, describe, test, type BenchRunOptions } from "vitest";
 import { materializeOutboundRequest } from "../internal/outbound_request";
 import { decodeJson, encodeJson } from "./codec/json";
@@ -6,6 +5,32 @@ import { encodeStructValue } from "./introspection";
 import { StructError, struct } from "./index";
 import type { StructLike } from "./types";
 import { isPlainObject } from "./utils";
+
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+type Assert = {
+  deepEqual(actual: unknown, expected: unknown): void;
+  equal(actual: unknown, expected: unknown): void;
+  notEqual(actual: unknown, expected: unknown): void;
+  ok(value: unknown): asserts value;
+};
+
+const assert: Assert = {
+  deepEqual(actual: unknown, expected: unknown): void {
+    if (!Bun.deepEquals(actual, expected)) fail("values are not deeply equal");
+  },
+  equal(actual: unknown, expected: unknown): void {
+    if (!Object.is(actual, expected)) fail("values are not equal");
+  },
+  notEqual(actual: unknown, expected: unknown): void {
+    if (Object.is(actual, expected)) fail("values are equal");
+  },
+  ok(value: unknown): asserts value {
+    if (!value) fail("expected a truthy value");
+  },
+};
 
 function nonEmpty<T>(values: readonly T[]): [T, ...T[]] {
   const first = values[0];

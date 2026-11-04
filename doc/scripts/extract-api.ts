@@ -1,6 +1,5 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { joinPath } from "./paths";
+import { removeDirectory, tempDirectory } from "./tmp";
 import {
   API,
   ModuleKind,
@@ -77,8 +76,8 @@ import {
 import { requestTypeTables } from "./api-worker";
 import type { WorkerDoc } from "./api-worker";
 
-const repoRoot = join(import.meta.dirname, "../..");
-const docRoot = join(import.meta.dirname, "..");
+const repoRoot = Bun.fileURLToPath(new URL("../..", import.meta.url));
+const docRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
 const packages = [
   { name: "@defjs/core", entry: "packages/core/src/index.ts" },
   { name: "@defjs/react", entry: "packages/react/src/index.ts" },
@@ -492,7 +491,7 @@ async function readPage(
     throws: textsFor(tags, ["throws", "throw"]),
     tags: storedTags(tags),
     group: singleGroup(textsFor(tags, ["group"])),
-    source: relative(repoRoot, file).split("\\").join("/"),
+    source: file.replace(repoRoot, "").split("\\").join("/"),
     typeTable: table,
     parameterQueries,
     memberDescriptions: null,
@@ -680,14 +679,14 @@ export async function assertSignatureSyntax(
   );
   if (pending.length === 0) return;
   const api = new API();
-  const directory = await mkdtemp(join(tmpdir(), "zen-signature-"));
+  const directory = tempDirectory("zen-signature");
   try {
     const files: string[] = [];
     await Promise.all(
       pending.map((item, index) => {
-        const file = join(directory, `${index}.d.ts`);
+        const file = joinPath(directory, `${index}.d.ts`);
         files[index] = file;
-        return writeFile(file, `${ambientDeclaration(item.signature)}\n`);
+        return Bun.write(file, `${ambientDeclaration(item.signature)}\n`);
       }),
     );
     const program = await api.createProgram(files, {
@@ -710,7 +709,7 @@ export async function assertSignatureSyntax(
       );
   } finally {
     await api.close();
-    await rm(directory, { recursive: true, force: true });
+    removeDirectory(directory);
   }
 }
 
@@ -724,7 +723,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
   const api = new API();
   try {
     const program: Program = await api.createProgram(
-      packages.map((pkg) => join(repoRoot, pkg.entry)),
+      packages.map((pkg) => joinPath(repoRoot, pkg.entry)),
       compilerOptions,
     );
     const checker = projectChecker(
@@ -735,7 +734,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
     const drafts: PageDraft[] = [];
     for (const pkg of packages) {
       const source = defined(
-        await program.getSourceFile(join(repoRoot, pkg.entry)),
+        await program.getSourceFile(joinPath(repoRoot, pkg.entry)),
         pkg.entry,
       );
       const moduleSymbol = defined(
@@ -777,7 +776,7 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
     const tables = await requestTypeTables(
       workerSource,
       {
-        tsconfigPath: join(docRoot, "tsconfig.json"),
+        tsconfigPath: joinPath(docRoot, "tsconfig.json"),
         jobs: [...jobs.values()].map((job) => ({
           file: job.file,
           suffix: job.suffix.join("\n"),
@@ -847,14 +846,17 @@ export async function writeExtractedApi(
   entries: readonly ApiReferenceEntry[],
   directory?: string,
 ): Promise<void> {
-  const target = outputDirectory(directory, join(docRoot, "app/data"));
-  await Bun.write(join(target, "api-entries.json"), serializeCatalog(entries));
+  const target = outputDirectory(directory, joinPath(docRoot, "app/data"));
   await Bun.write(
-    join(target, "api-reference.json"),
+    joinPath(target, "api-entries.json"),
+    serializeCatalog(entries),
+  );
+  await Bun.write(
+    joinPath(target, "api-reference.json"),
     serializeReference(entries),
   );
   await Bun.write(
-    join(target, "api-summaries.json"),
+    joinPath(target, "api-summaries.json"),
     serializeSummaries(entries),
   );
 }

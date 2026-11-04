@@ -130,18 +130,18 @@ const [error, summary] = struct.parse(DailySummary, {
 
 `intersection` deep-merges each member's output: values equal under `Object.is`, and `Date`s with the same time, keep that value; ordinary objects are merged recursively by own keys; equal-length arrays are merged by element; every other conflict is recorded as `invalid_intersection`, with path pointing at the conflicting key or index. `unknown` and `any` still run, but they contribute no fields to the merge result; when every member is `unknown` / `any`, the result is the input itself.
 
-Node's strict deep equality compares prototypes, so a Struct parse result is not deep-equal to an object literal with the same fields. Tests should assert this boundary explicitly, or shallow-copy only at the assertion:
+A strict deep-equality matcher compares prototypes, so a Struct parse result is not deep-equal to an object literal with the same fields. Tests should assert this boundary explicitly, or shallow-copy only at the assertion:
 
 ```typescript
-import assert from "node:assert/strict";
-
 const [profileError, profile] = struct.parse(
   struct.object({ name: struct.string() }),
   { name: "Ada" },
 );
-assert.equal(profileError, null);
-assert.equal(Object.getPrototypeOf(profile), null);
-assert.deepEqual({ ...profile }, { name: "Ada" });
+if (profileError) throw profileError;
+if (Object.getPrototypeOf(profile) !== null)
+  throw new Error("expected a null prototype");
+if (JSON.stringify({ ...profile }) !== JSON.stringify({ name: "Ada" }))
+  throw new Error("unexpected value");
 ```
 
 Spread applies only to the shallow assertion here; nested Struct objects still use a null prototype. Do not add a global normalize or clone on the production path merely to satisfy a test matcher.

@@ -1,5 +1,3 @@
-import { createServer } from "node:http";
-import { gzipSync } from "node:zlib";
 import { afterEach, describe, expect, inject, test, vi } from "vitest";
 import {
   createClient,
@@ -24,6 +22,13 @@ import {
 function requireRequest(input: RequestInfo | URL): Request {
   if (input instanceof Request) return input;
   throw new Error("expected Request");
+}
+
+async function gzip(text: string): Promise<Uint8Array<ArrayBuffer>> {
+  const stream = new Blob([text])
+    .stream()
+    .pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 afterEach(() => {
@@ -598,29 +603,26 @@ describe("HTTP transport boundary regressions", () => {
     "should report unknown total for a real gzip response via %s fetch",
     async (handle) => {
       const text = "decoded ".repeat(1000);
-      const compressed = gzipSync(text);
-      const server = createServer((_request, response) => {
-        response.writeHead(200, {
-          "content-type": "text/plain",
-          "content-encoding": "gzip",
-          "content-length": compressed.byteLength,
-        });
-        response.end(compressed);
-      });
-      await new Promise<void>((resolve) => {
-        server.listen(0, "127.0.0.1", resolve);
+      const compressed = await gzip(text);
+      const server = Bun.serve({
+        fetch: () =>
+          new Response(compressed, {
+            headers: {
+              "content-type": "text/plain",
+              "content-encoding": "gzip",
+              "content-length": String(compressed.byteLength),
+            },
+          }),
+        hostname: "127.0.0.1",
+        port: 0,
       });
       try {
-        const address = server.address();
-        if (!address || typeof address === "string") {
-          throw new Error("expected a loopback server");
-        }
         const events: HttpProgressEvent[] = [];
         const client =
           handle === "default"
-            ? createClient(withEndpoint(`http://127.0.0.1:${address.port}`))
+            ? createClient(withEndpoint(`http://127.0.0.1:${server.port}`))
             : createClient(
-                withEndpoint(`http://127.0.0.1:${address.port}`),
+                withEndpoint(`http://127.0.0.1:${server.port}`),
                 withHTTPHandle((input, init) => fetch(input, init)),
               );
         const [fault, data] = await defineRequest({
@@ -642,10 +644,7 @@ describe("HTTP transport boundary regressions", () => {
           total: 0,
         });
       } finally {
-        server.closeAllConnections();
-        await new Promise<void>((resolve, reject) => {
-          server.close((error) => (error ? reject(error) : resolve()));
-        });
+        await server.stop(true);
       }
     },
   );

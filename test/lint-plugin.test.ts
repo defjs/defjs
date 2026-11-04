@@ -1,9 +1,6 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
-const plugin = join(import.meta.dir, "..", "lint", "plugin.ts");
+const plugin = `${import.meta.dir}/../lint/plugin.ts`;
 
 // The pretty reporter differs per platform (XML-ish on macOS, a block of text on
 // Linux), so this reads the JSON reporter instead.
@@ -34,12 +31,12 @@ function lintMessages(report: unknown): Record<string, unknown>[] {
 }
 
 test("prefer-typeof-switch reports a stable subject chain and nothing else", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "defjs-lint-"));
-  writeFileSync(
-    join(dir, "bunfig.toml"),
+  const dir = `${Bun.env["TMPDIR"] ?? "/tmp"}/defjs-lint-${crypto.randomUUID()}`;
+  await Bun.write(
+    `${dir}/bunfig.toml`,
     `[lint]\nplugins = ["${plugin}"]\n[lint.rules]\n"defjs/prefer-typeof-switch" = "error"\n`,
   );
-  writeFileSync(join(dir, "a.ts"), source);
+  await Bun.write(`${dir}/a.ts`, source);
   const run = Bun.spawn(["bun", "lint", "--no-script", "--format", "json"], {
     cwd: dir,
     stdout: "pipe",

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, inject, test } from "vitest";
 import {
   StructError,
@@ -94,7 +93,7 @@ function runtimeSupportsStreamingRequestBody(): boolean {
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64");
+  return bytes.toBase64();
 }
 
 function isRecord(value: unknown): value is { [key: string]: unknown } {
@@ -741,7 +740,7 @@ describe("request builder through the real server", () => {
 
   test("returns REQ_BUILD_FAILED when the builder throws and does not reach the server", async () => {
     // The miss log lives in the globalSetup process, so every execution needs paths no earlier run has used.
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     const missPath = `/e2e/miss/build-failed-${runId}`;
     const controlPath = `/e2e/miss/build-failed-control-${runId}`;
     const explode = defineRequest({
@@ -774,7 +773,7 @@ describe("request builder through the real server", () => {
   });
 
   test("returns REQ_INPUT_INVALID for invalid input and does not reach the server", async () => {
-    const runId = randomUUID();
+    const runId = crypto.randomUUID();
     const missPath = `/e2e/miss/input-invalid-${runId}`;
     const controlPath = `/e2e/miss/input-invalid-control-${runId}`;
     const create = defineRequest({

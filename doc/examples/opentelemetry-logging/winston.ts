@@ -1,4 +1,3 @@
-import { once } from "node:events";
 import {
   createClient,
   defineRequest,
@@ -55,7 +54,9 @@ export async function runWinstonLoggingExample(
       throw new Error("Expected the local transport to return NET_UNREACHABLE");
     }
   } finally {
-    const finished = once(appLogger, "finish");
+    const finished = new Promise<void>((resolve) => {
+      appLogger.once("finish", resolve);
+    });
     appLogger.end();
     try {
       await finished;

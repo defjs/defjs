@@ -287,7 +287,7 @@ async function runAttempts(
 }
 
 function readCount(name: string, fallback: number): number {
-  const raw = process.env[name];
+  const raw = Bun.env[name];
   if (raw === undefined || raw === "") {
     return fallback;
   }
@@ -302,7 +302,7 @@ test("parsed outbound encoding matches encodeJson except literal extras", async 
   const seed = readCount("ROUND13_SEED", 0x13c0ffee);
   const attempts = readCount("ROUND13_ATTEMPTS", 1_000);
   const maxDepth = readCount("ROUND13_DEPTH", 4);
-  const exotic = process.env["ROUND13_EXOTIC"] === "1";
+  const exotic = Bun.env["ROUND13_EXOTIC"] === "1";
   const result = await runAttempts(seed, attempts, maxDepth, exotic);
   const summary = {
     attempts,

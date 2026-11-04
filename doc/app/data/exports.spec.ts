@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { dirname, resolve } from "node:path";
+import { joinPath } from "../../scripts/paths";
 import { apiEntries } from "./api-catalog";
 import { extractApiData } from "../../scripts/extract-api";
 import {
@@ -11,7 +11,7 @@ import { assertDescribed } from "../../scripts/api-validate";
 
 const packages = ["core", "react", "vue", "opentelemetry-server"];
 const entryOf = (pkg: string) =>
-  resolve(import.meta.dirname, `../../../packages/${pkg}/src/index.ts`);
+  `${import.meta.dirname}/../../../packages/${pkg}/src/index.ts`;
 
 const understoodExport =
   /^export\s+(?:type\s+)?\{[^}]*\}(?:\s+from\s+['"][^'"]+['"])?|^export\s+\*\s+from\s+['"][^'"]+['"]|^export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:type|interface|class|enum|function|const)\s+\w+/;
@@ -55,10 +55,10 @@ async function sourceExports(
   ))
     if (match[1]) names.add(match[1]);
   for (const match of text.matchAll(/export\s+\*\s+from\s+['"]([^'"]+)['"]/g)) {
-    const base = resolve(dirname(file), match[1] ?? "");
+    const base = joinPath(file.replace(/\/[^/]*$/, ""), match[1] ?? "");
     const target = (await Bun.file(base + ".ts").exists())
       ? base + ".ts"
-      : resolve(base, "index.ts");
+      : joinPath(base, "index.ts");
     for (const name of await sourceExports(target, visited)) names.add(name);
   }
   return names;
@@ -124,13 +124,13 @@ test("regenerating the API data matches the committed JSON", async () => {
   const entries = await extractApiData();
   const directory = import.meta.dirname;
   expect(serializeCatalog(entries)).toBe(
-    await Bun.file(resolve(directory, "api-entries.json")).text(),
+    await Bun.file(joinPath(directory, "api-entries.json")).text(),
   );
   expect(serializeReference(entries)).toBe(
-    await Bun.file(resolve(directory, "api-reference.json")).text(),
+    await Bun.file(joinPath(directory, "api-reference.json")).text(),
   );
   expect(serializeSummaries(entries)).toBe(
-    await Bun.file(resolve(directory, "api-summaries.json")).text(),
+    await Bun.file(joinPath(directory, "api-summaries.json")).text(),
   );
 }, 180_000);
 

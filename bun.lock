@@ -5,7 +5,6 @@
     "": {
       "name": "defjs",
       "devDependencies": {
-        "@hono/node-server": "catalog:",
         "@types/bun": "catalog:",
         "@types/eslint": "^9.6.1",
         "@types/estree": "^1.0.10",
@@ -61,8 +60,6 @@
       "name": "@defjs/core",
       "version": "0.6.0",
       "devDependencies": {
-        "@hono/node-server": "catalog:",
-        "@types/ws": "catalog:",
         "@vitest/browser-playwright": "catalog:",
         "@vitest/coverage-istanbul": "catalog:",
         "hono": "catalog:",
@@ -71,7 +68,6 @@
         "typescript": "catalog:",
         "vite": "catalog:",
         "vitest": "catalog:",
-        "ws": "catalog:",
       },
     },
     "packages/opentelemetry-server": {
@@ -82,17 +78,14 @@
       },
       "devDependencies": {
         "@defjs/core": "workspace:^",
-        "@hono/node-server": "catalog:",
         "@opentelemetry/api": "1.10.0",
         "@opentelemetry/core": "3.0.0",
-        "@types/ws": "catalog:",
         "@vitest/coverage-istanbul": "catalog:",
         "hono": "catalog:",
         "tsdown": "catalog:",
         "typescript": "catalog:",
         "vite": "catalog:",
         "vitest": "catalog:",
-        "ws": "catalog:",
       },
       "peerDependencies": {
         "@defjs/core": "^0.6.0",
@@ -145,14 +138,12 @@
     },
   },
   "catalog": {
-    "@hono/node-server": "^2.1.6",
     "@react-router/dev": "8.5.1",
     "@tailwindcss/vite": "4.3.4",
     "@types/bun": "1.4.4",
     "@types/mdx": "2.0.14",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "@types/ws": "^8.18.2",
     "@vitest/browser": "^5.1.0",
     "@vitest/browser-playwright": "^5.1.0",
     "@vitest/coverage-istanbul": "^5.1.0",
@@ -170,7 +161,6 @@
     "typescript": "7.1.0-beta",
     "vite": "^8.3.5",
     "vitest": "^5.1.0",
-    "ws": "^8.22.1",
   },
   "packages": {
     "@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
@@ -290,8 +280,6 @@
     "@grpc/grpc-js": ["@grpc/grpc-js@1.14.6", "", { "dependencies": { "@grpc/proto-loader": "^0.8.0", "@js-sdsl/ordered-map": "^4.4.2" } }, "sha512-SgC/B3/VZ8lTyOZ4Cwk6f1skWhmkNAaVfiX90qd5u1rRXGKk1//8FTUEN9GvOUq7rfWIqAYkA3CoyumYVpOS6g=="],
 
     "@grpc/proto-loader": ["@grpc/proto-loader@0.8.1", "", { "dependencies": { "lodash.camelcase": "^4.3.0", "long": "^5.0.0", "protobufjs": "^7.5.5", "yargs": "^17.7.2" }, "bin": { "proto-loader-gen-types": "build/bin/proto-loader-gen-types.js" } }, "sha512-wtF6h+DY6M3YaDBPAmvuuA6jV8Sif9MjtOI5euKFWRgCDl5PeDpPsHR9u2l6St5ceY8AZgoNDww5+HvEsXFsGg=="],
-
-    "@hono/node-server": ["@hono/node-server@2.1.6", "", { "peerDependencies": { "hono": "^4 || ^5.0.0-0" } }, "sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ=="],
 
     "@istanbuljs/schema": ["@istanbuljs/schema@0.1.6", "", {}, "sha512-+Sg6GCR/wy1oSmQDFq4LQDAhm3ETKnorxN+y5nbLULOR3P0c14f2Wurzj3/xqPXtasLFfHd5iRFQ7AJt4KH2cw=="],
 
@@ -590,8 +578,6 @@
     "@types/triple-beam": ["@types/triple-beam@1.3.5", "", {}, "sha512-6WaYesThRMCl19iryMYP7/x2OVgCtbIVflDGFpWnb9irXI3UjYE4AzmYuiUKY1AJstGijoY+MgUszMgRxIYTYw=="],
 
     "@types/unist": ["@types/unist@3.0.3", "", {}, "sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q=="],
-
-    "@types/ws": ["@types/ws@8.18.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-67MQl+fpWKVTT1NYdnmo3U4sc/xPo/zQBncVnI74qmQa0z/b+1g6iYqNmGCPbxO+zz2aklb08a0oHfegiVd0/w=="],
 
     "@typescript/typescript-aix-ppc64": ["@typescript/typescript-aix-ppc64@7.1.0-beta", "", { "os": "aix", "cpu": "ppc64" }, "sha512-DXDG+jIWxBHGdoO70tcHON33rCnSzsEZj9P13oyf/r/KEGIo6awsdSNVNjAw0uMwEpqRu75IrgCcW58YcVkZHg=="],
 

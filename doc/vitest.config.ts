@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 import { docRoot } from "./vitest.config.unit.ts";
-import { resolve } from "node:path";
 
 /**
  * Documentation test aggregator: `doc-unit` runs in the Bun process and carries the coverage gate;
@@ -13,7 +12,7 @@ export default defineConfig({
       enabled: false,
       provider: "istanbul",
       reporter: ["lcov", "json", "html", "text"],
-      reportsDirectory: resolve(docRoot, "coverage"),
+      reportsDirectory: `${docRoot}/coverage`,
       include: ["app/lib/**/*.ts", "app/data/**/*.ts", "scripts/**/*.ts"],
       exclude: [
         // Evaluated only by the fumadocs-mdx build: `defineDocs` and the content loader need generated sources.

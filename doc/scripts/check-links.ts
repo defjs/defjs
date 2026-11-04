@@ -1,16 +1,11 @@
-import { statSync } from "node:fs";
-import { resolve } from "node:path";
+import { joinPath } from "./paths";
 
-function isRegularFile(path: string): boolean {
-  try {
-    return statSync(path).isFile();
-  } catch {
-    return false;
-  }
+async function isRegularFile(path: string): Promise<boolean> {
+  return Bun.file(path).exists();
 }
 
 export async function checkLinks(directory: string): Promise<void> {
-  const root = resolve(directory);
+  const root = directory.replace(/\/+$/, "");
   const pages = new Map<string, { ids: Set<string>; links: string[] }>();
   for await (const filename of new Bun.Glob("**/*.html").scan(root)) {
     if (filename === "__spa-fallback.html") continue;
@@ -38,9 +33,9 @@ export async function checkLinks(directory: string): Promise<void> {
           page.links.push(element.getAttribute("src") as string);
         },
       })
-      .transform(new Response(Bun.file(resolve(root, filename))))
+      .transform(new Response(Bun.file(joinPath(root, filename))))
       .text();
-    pages.set(resolve(root, filename), page);
+    pages.set(joinPath(root, filename), page);
   }
   if (!pages.size) throw new Error("No generated documentation pages found");
   const failures = new Set<string>();
@@ -55,13 +50,13 @@ export async function checkLinks(directory: string): Promise<void> {
         !["http:", "https:"].includes(url.protocol)
       )
         continue;
-      const path = resolve(root, "." + decodeURIComponent(url.pathname));
-      const target = [path, resolve(path, "index.html")].find((candidate) =>
+      const path = joinPath(root, decodeURIComponent(url.pathname));
+      const target = [path, joinPath(path, "index.html")].find((candidate) =>
         pages.has(candidate),
       );
       // A directory is a page only when index.html was emitted; every other non-file is missing.
       if (!target) {
-        if (!isRegularFile(path))
+        if (!(await isRegularFile(path)))
           failures.add(`${base.pathname}: missing page ${href}`);
         continue;
       }
@@ -82,4 +77,4 @@ export async function checkLinks(directory: string): Promise<void> {
 }
 /* istanbul ignore next -- @preserve: command-line entry point */
 if (import.meta.main)
-  await checkLinks(new URL("../build/client/", import.meta.url).pathname);
+  await checkLinks(`${import.meta.dirname}/../build/client`);
