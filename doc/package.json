@@ -10,6 +10,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "bun --bun react-router dev",
+    "typegen": "bun --bun react-router typegen",
     "typecheck": "bun --bun react-router typegen && bun check --project tsconfig.json && bun check --project examples/tsconfig.json",
     "build": "bun scripts/build.ts",
     "extract-api": "bun scripts/extract-api.ts",

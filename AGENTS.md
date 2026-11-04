@@ -127,7 +127,7 @@ bunx --bun playwright install --with-deps chromium firefox
 git config core.hooksPath .githooks
 ```
 
-Playwright browsers are only needed by the Core browser projects and the documentation E2E suite. The pre-commit hook lints and formats the staged files and runs the type check.
+Playwright browsers are only needed by the Core browser projects and the documentation E2E suite. The pre-commit hook lints and formats the staged files and runs the type check. Type-aware lint reads the route types that `react-router typegen` writes to the ignored `doc/.react-router/` directory, so on a fresh checkout run `bun run --cwd doc typegen` before `bun lint` (the hook and CI do).
 
 Run these in order from the repository root and stop at the first failure. This is the same sequence as `.github/workflows/ci.yml`.
 

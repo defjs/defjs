@@ -19,6 +19,9 @@ jobs:
       - run: bun ci
       - name: Install Playwright browsers
         run: bunx --bun playwright install --with-deps chromium firefox
+      # Type-aware lint reads the generated route types in doc/.react-router, which are not committed.
+      - name: Generate route types
+        run: bun run --cwd doc typegen
       - name: Lint
         run: bun lint
       - name: Format check
