@@ -97,9 +97,11 @@ Defjs 預設開啟安全方法的連線容錯移轉；Linkerd/Envoy 通常要求
 
 pending 在 Fetch 或 socket 建構之前立刻於 `start` 開始，並在 `end` 結束，而不是在後置 interceptor 之後，也不是在工作階段關閉之後。該邊界上的 RTT 是 `Date.now() - startTime`，**所有傳輸和所有結果**都算，包括快速失敗。沒有合成懲罰，也沒有 p2c 的 `isFailure`；快速失敗的端點交給健康過濾。更大的樣本會立刻替換估計；否則按 tower 的更新式 `old × exp(-Δt/decayMs) + sample × (1-exp(-Δt/decayMs))`。沒有 `end` 的 `done` 只釋放 pending，不產生 RTT 樣本。從未 start 的嘗試不改變 pending。
 
-這遵循 tower 的 `CompleteOnResponse`，並保留 Linkerd 把負載完成和最終健康分類分開的做法。Fetch 暴露回應標頭，WebSocket 暴露 `open`；Defjs 觀察不到 Linkerd 的首個 body 幀邊界，也觀察不到 Envoy 的流級完成。回應標頭之後的 body 失敗影響 `done`，不影響已經發出的 `end`。p2c 偏向抽到的較輕候選，不一定是全域最快的主機。
+這遵循 tower 的 `CompleteOnResponse`，並保留 Linkerd 把負載完成和最終健康分類分開的做法。Fetch 暴露回應標頭，WebSocket 暴露 `open`；Defjs 觀察不到 Linkerd 的首個 body 幀邊界，也觀察不到 Envoy 的流級完成。回應標頭之後的 HTTP body 讀取失敗，以及 SSE 回應 body 的 read 拒絕，影響 `done`，不影響已經發出的 `end`。`open` 之後的 WebSocket 傳輸失敗同樣只影響 `done`。p2c 偏向抽到的較輕候選，不一定是全域最快的主機。
 
 SSE 與 WebSocket 在重連時重新選擇，而不是在已經建立的連線裡面。它們選擇性開啟的重連策略接受 `connectTimeoutMs`，用來限制握手。健康的長連線不會在部署之後重新平衡。在伺服器上設定連線的最長存活時間，促使用戶端重連並再次 pick。SSE 的正常 EOF 是終端；持續的訂閱應觀察 `closed`，並發起一次帶著應用程式游標的新呼叫。
+
+與 HTTP 容錯移轉不同，串流重連不會再次執行 builder 或 interceptor。它們重用已建好的請求，而被歸因的重連可能改選另一個基礎 URL/origin。綁定端點的憑證必須對**每一次實體嘗試**都有效，或在每次嘗試時刷新，不能只為第一個 base 擷取一次：用 [SSE 的 Fetch 邊界](/zh-Hant-TW/docs/sse#重連) 或 [WebSocket 的傳輸/認證邊界](/zh-Hant-TW/docs/web-socket#protocols-與認證)。
 
 自訂平衡器是帶有 `pick` 的物件。回傳 error-first tuple。不要因為清單是空的就拋出。
 
@@ -110,6 +112,22 @@ SSE 與 WebSocket 在重連時重新選擇，而不是在已經建立的連線�
 `pick`、可選的 `start`、可選的 `end` 與可選的 `done` 都同步執行。`start` 至多在 Fetch 或 socket 建構之前立刻執行一次。建構失敗、interceptor 短路（包括 `makeResponse`）、被替換的 base，以及傳輸開始前的取消，都不會呼叫 `start` 或 `end`。`end(info)` 在 `start` 之後至多執行一次，在 Fetch 回傳回應標頭或 socket 打開時同步執行，或者在傳輸於該邊界之前失敗時執行。HTTP/SSE 的回應標頭收到 `{ attempted: true, status }`，socket 打開收到 `{ attempted: true }`，回應前的失敗收到該階段的 fault，呼叫方取消收到 `{ attempted: false }`。健康過濾把這兩個訊號都轉發給子策略。用它們做進行中的記帳，而不是在 pick 時計數。攔截器在同一次嘗試中多次呼叫 `next()` 時，多出的 Fetch 共用這次選台，所以 `start`、`end` 和 `done` 仍各至多執行一次；要換到別的端點，請用 `withEndpointFailover`。
 
 每一次成功的 pick，`done` 恰好執行一次，時機是 HTTP 呼叫結束之後，或實體上的串流/socket 嘗試結束之後。它與 `end` 共用 `EndpointDoneInfo` 的形狀（沒有 duration 欄位），並保留最終的健康分類，包括回應標頭之後讀取 body 失敗或取消。所有鉤子拋出的例外，以及被拒絕的 thenable，都會被接住。`pick` 回傳的 promise 仍然無效；畸形的結果和拋出會變成 `REQ_BUILD_FAILED`，無效的內建設定會變成 `REQ_OPTIONS_INVALID`，在操作的呼叫點都不會拋出。不需要記帳時就省略這些鉤子。interceptor 看到的是選中的 `baseEndpoint`，而不是候選清單。
+
+最終的傳輸樣本與邏輯 session 結果是分開的：
+
+| 實體結果                                                                                                           | `done` 樣本                                                             |
+| ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------- |
+| HTTP 回應 body 提前結束                                                                                            | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }`              |
+| SSE 握手成功，隨後一次普通的回應 body `read` 被拒絕                                                                | `{ attempted: true, code: "NET_UNREACHABLE" }`，沒有 `status`           |
+| SSE 正常 EOF、媒體或已宣告握手 body 的解碼失敗、parser/佇列上限、transform/hook/observer 錯誤，或 `getReader` 失敗 | 收到的 `{ attempted: true, status }`；不新增網路 code                   |
+| 已開啟的 WebSocket，沒有原生 cause，觀察到 code 1006 或 `wasClean === false`                                       | `{ attempted: true, code: "NET_UNREACHABLE" }`，即使沒有原生 error 事件 |
+| 已開啟的 WebSocket，沒有原生 cause，也沒有異常關閉證據                                                             | `{ attempted: true }`                                                   |
+| 呼叫方取消，或手動關閉串流/socket                                                                                  | `{ attempted: false }`                                                  |
+| 嘗試已經開始之後的呼叫方期限                                                                                       | `{ attempted: true, code: "NET_TIMEOUT" }`，沒有 `status`               |
+
+既有的逾時／中止 cause 對應優先於新的讀取／關閉訊號，離線提示仍會抑制已歸因的 `NET_UNREACHABLE`。缺失的 `wasClean` 不是 false；乾淨的 1000/1001/1005/1011/1012/1013 以及私有 4xxx 關閉不會自動算作失敗。應用程式錯誤和重連策略錯誤本身不會產生網路失敗樣本。如果策略稍後拒絕或拋出，一次真實的實體失敗仍然只是一個樣本。SSE 讀取失敗樣本會有意替換原先只有握手狀態的樣本；正常 EOF 和應用程式失敗保留該狀態。注入的 SSE Fetch provider 擁有自己的讀取錯誤：這是健康訊號，不是遠端端點造成該故障的證明。
+
+這些樣本會推進預設的 pick-first，或餵給既有的健康閾值；它們**不會**開啟重連、改變其預算、授權業務重放、合成原生 error 事件，或改寫 WebSocket 邏輯上的 `closed.kind`/`cause`。沒有重連時，新的端點選擇要到下一次明確呼叫才生效。
 
 ## 衍生 client
 

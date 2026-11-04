@@ -10,13 +10,14 @@ import type {
   EndpointPickInfo,
   EndpointPickOutcome,
 } from "../balancer";
-import { pickFirstBalancer } from "../balancer";
+import { outlierDetection, pickFirstBalancer } from "../balancer";
 import {
   createClient,
   withEndpoint,
   withEndpointBalancer,
   withInterceptors,
   withSSEHandle,
+  withSSEOnInvalidEvent,
   withSSEReconnect,
 } from "../client";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
@@ -43,6 +44,7 @@ interface Running {
   requests: string[];
   close(): Promise<void>;
   endHeld(): void;
+  dropHeld(): void;
 }
 
 function listen(
@@ -67,6 +69,9 @@ function listen(
         endHeld() {
           held?.end();
         },
+        dropHeld() {
+          held?.socket?.end();
+        },
         close: () =>
           new Promise((done) => {
             server.closeAllConnections();
@@ -88,6 +93,7 @@ interface Recorded {
   balancer: EndpointBalancer;
   picks: EndpointPickInfo[];
   dones: Array<{ endpoint: string; info: EndpointDoneInfo }>;
+  ends: Array<{ endpoint: string; info: EndpointDoneInfo }>;
   pending(): number;
 }
 
@@ -99,10 +105,12 @@ function track(
 ): Recorded {
   const picks: EndpointPickInfo[] = [];
   const dones: Array<{ endpoint: string; info: EndpointDoneInfo }> = [];
+  const ends: Array<{ endpoint: string; info: EndpointDoneInfo }> = [];
   let pending = 0;
   return {
     picks,
     dones,
+    ends,
     pending: () => pending,
     balancer: {
       pick(info) {
@@ -116,6 +124,9 @@ function track(
           null,
           {
             endpoint: choice,
+            end(info) {
+              ends.push({ endpoint: choice, info });
+            },
             done(doneInfo) {
               pending -= 1;
               dones.push({ endpoint: choice, info: doneInfo });
@@ -145,10 +156,20 @@ function sseResponse(body: string, status = 200): Response {
   return new Response(body, { headers: SSE_HEADERS, status });
 }
 
+function readFailureResponse(): Response {
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      pull(controller) {
+        controller.error(new TypeError("response stream lost"));
+      },
+    }),
+    { headers: SSE_HEADERS },
+  );
+}
+
 test("repicks after a read failure when reconnect is on, and does not pick on terminal paths", async () => {
   const primary = await listen((_req, res) => {
     writeEvent(res);
-    setImmediate(() => res.destroy());
   });
   const secondary = await listen((_req, res) => {
     writeEvent(res);
@@ -167,11 +188,23 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   if (!stream) {
     throw new Error("expected a stream");
   }
+  await expect(stream[Symbol.asyncIterator]().next()).resolves.toMatchObject({
+    done: false,
+    value: { data: "hi" },
+  });
+  primary.dropHeld();
   await stream.closed;
   expect(recorded.picks).toHaveLength(2);
   expect(primary.requests).toHaveLength(1);
   expect(secondary.requests).toHaveLength(1);
-  expect(recorded.dones[0]?.info).toEqual({ attempted: true, status: 200 });
+  expect(recorded.ends).toEqual([
+    { endpoint: primary.url, info: { attempted: true, status: 200 } },
+    { endpoint: secondary.url, info: { attempted: true, status: 200 } },
+  ]);
+  expect(recorded.dones[0]?.info).toEqual({
+    attempted: true,
+    code: "NET_UNREACHABLE",
+  });
   expect(recorded.dones[1]?.info).toEqual({ attempted: true, status: 200 });
   expect(recorded.pending()).toBe(0);
   expectPicks(recorded);
@@ -372,6 +405,216 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     { endpoint: held.url, info: { attempted: false } },
   ]);
   expect(cancelRecord.pending()).toBe(0);
+});
+
+test.each([false, true])(
+  "default pick-first leaves a read-failed endpoint with reconnect enabled: %s",
+  async (reconnect) => {
+    const primary = await listen((_req, res) => writeEvent(res));
+    const secondary = await listen((_req, res) => {
+      res.writeHead(200, SSE_HEADERS);
+      res.end("data: recovered\n\n");
+    });
+    const client = createClient(
+      withEndpoint(primary.url, secondary.url),
+      ...(reconnect ? [withSSEReconnect(RECONNECT)] : []),
+    );
+    const [error, stream, open] = await orders(client);
+    expect(error).toBeNull();
+    if (!stream) throw new Error("expected a stream");
+    try {
+      const iterator = stream[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { data: "hi" },
+      });
+      expect(open?.response.status).toBe(200);
+      primary.dropHeld();
+      if (reconnect) {
+        await expect(iterator.next()).resolves.toMatchObject({
+          value: { data: "recovered" },
+        });
+        expect(await stream.closed).toEqual({ kind: "eof" });
+        expect(secondary.requests).toHaveLength(1);
+      } else {
+        expect(await stream.closed).toMatchObject({
+          code: "NET_UNREACHABLE",
+          kind: "error",
+        });
+        expect(secondary.requests).toHaveLength(0);
+      }
+      expect(primary.requests).toHaveLength(1);
+      const [nextError, nextStream] = await orders(client);
+      expect(nextError).toBeNull();
+      if (!nextStream) throw new Error("expected the next stream");
+      try {
+        expect(primary.requests).toHaveLength(1);
+        expect(await nextStream.closed).toEqual({ kind: "eof" });
+        expect(secondary.requests).toHaveLength(reconnect ? 2 : 1);
+      } finally {
+        await nextStream[Symbol.asyncDispose]();
+      }
+    } finally {
+      await stream[Symbol.asyncDispose]();
+    }
+  },
+);
+
+test("default health filtering receives read failures and breaks only after five samples", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(0);
+  const primary = "https://primary.example";
+  const secondary = "https://secondary.example";
+  const recorded = track((_index, info) => info.endpoints[0] ?? "");
+  const seen: string[] = [];
+  const client = createClient(
+    withEndpoint(primary, secondary),
+    withEndpointBalancer(outlierDetection(recorded.balancer)),
+    withSSEHandle(async (input) => {
+      const origin = new URL(new Request(input).url).origin;
+      seen.push(origin);
+      return origin === primary
+        ? readFailureResponse()
+        : sseResponse("data: healthy\n\n");
+    }),
+  );
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const [error, stream] = await orders(client);
+    expect(error).toBeNull();
+    expect(await stream?.closed).toMatchObject({
+      kind: attempt < 5 ? "error" : "eof",
+    });
+  }
+  expect(seen).toEqual([
+    primary,
+    primary,
+    primary,
+    primary,
+    primary,
+    secondary,
+  ]);
+  expect(recorded.dones.map(({ info }) => info)).toEqual([
+    ...Array.from({ length: 5 }, () => ({
+      attempted: true,
+      code: "NET_UNREACHABLE",
+    })),
+    { attempted: true, status: 200 },
+  ]);
+  expect(recorded.pending()).toBe(0);
+});
+
+test("invalid event validation and a throwing observer do not become endpoint failures", async () => {
+  const recorded = track(() => "https://example.com");
+  const observer = vi.fn(() => {
+    throw new TypeError("application observer");
+  });
+  const events = defineEventStream({
+    events: { message: struct.number() },
+    path: "/events",
+  });
+  const [error, stream] = await events(
+    createClient(
+      withEndpoint("https://example.com"),
+      withEndpointBalancer(recorded.balancer),
+      withSSEHandle(async () => sseResponse("data: not-json\n\n")),
+      withSSEOnInvalidEvent(observer),
+    ),
+  );
+  expect(error).toBeNull();
+  expect(await stream?.closed).toEqual({ kind: "eof" });
+  expect(observer).toHaveBeenCalledOnce();
+  expect(recorded.dones).toEqual([
+    { endpoint: "https://example.com", info: { attempted: true, status: 200 } },
+  ]);
+});
+
+test("does not attribute a post-handshake read rejection while offline", async () => {
+  vi.stubGlobal("navigator", { onLine: false });
+  const recorded = track(() => "https://example.com");
+  const [error, stream] = await orders(
+    createClient(
+      withEndpoint("https://example.com"),
+      withEndpointBalancer(recorded.balancer),
+      withSSEHandle(async () => readFailureResponse()),
+    ),
+  );
+  expect(error).toBeNull();
+  expect(await stream?.closed).toMatchObject({
+    kind: "error",
+    code: "NET_UNREACHABLE",
+  });
+  expect(recorded.ends).toEqual([
+    { endpoint: "https://example.com", info: { attempted: true, status: 200 } },
+  ]);
+  expect(recorded.dones).toEqual([
+    { endpoint: "https://example.com", info: { attempted: false } },
+  ]);
+  expect(recorded.pending()).toBe(0);
+});
+
+test("keeps read failures on a replaced base and a second next unattributed", async () => {
+  const primary = "https://primary.example";
+  const replacement = "https://replacement.example";
+  const replaced = track(() => primary);
+  const seen: string[] = [];
+  const [error, stream] = await orders(
+    createClient(
+      withEndpoint(primary),
+      withEndpointBalancer(replaced.balancer),
+      withSSEReconnect(RECONNECT),
+      withSSEHandle(async (input) => {
+        seen.push(new Request(input).url);
+        return seen.length === 1
+          ? readFailureResponse()
+          : sseResponse("data: recovered\n\n");
+      }),
+      withInterceptors(
+        createSSEInterceptor((req, next) =>
+          next({ ...req, baseEndpoint: replacement }),
+        ),
+      ),
+    ),
+  );
+  expect(error).toBeNull();
+  expect(await stream?.closed).toEqual({ kind: "eof" });
+  expect(seen).toEqual([`${replacement}/events`, `${replacement}/events`]);
+  expect(replaced.picks).toHaveLength(1);
+  expect(replaced.ends).toEqual([]);
+  expect(replaced.dones).toEqual([
+    { endpoint: primary, info: { attempted: false } },
+  ]);
+
+  const extra = track(() => primary);
+  let fetches = 0;
+  const [extraError, first] = await orders(
+    createClient(
+      withEndpoint(primary),
+      withEndpointBalancer(extra.balancer),
+      withSSEHandle(async () =>
+        ++fetches === 1
+          ? sseResponse("data: first\n\n")
+          : readFailureResponse(),
+      ),
+      withInterceptors(
+        createSSEInterceptor(async (req, next) => {
+          const owned = await next(req);
+          const other = await next(req);
+          expect(await other.closed).toMatchObject({
+            kind: "error",
+            code: "NET_UNREACHABLE",
+          });
+          return owned;
+        }),
+      ),
+    ),
+  );
+  expect(extraError).toBeNull();
+  expect(await first?.closed).toEqual({ kind: "eof" });
+  expect(fetches).toBe(2);
+  expect(extra.picks).toHaveLength(1);
+  expect(extra.dones).toEqual([
+    { endpoint: primary, info: { attempted: true, status: 200 } },
+  ]);
+  expect(extra.pending()).toBe(0);
 });
 
 test("calls done when the connection ends, not when the handshake succeeds", async () => {

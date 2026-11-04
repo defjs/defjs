@@ -1,4 +1,6 @@
+import { once } from "node:events";
 import { createServer } from "node:http";
+import { WebSocketServer, type WebSocket as ServerSocket } from "ws";
 import { expect, inject, test } from "vitest";
 import {
   ERR_NO_ENDPOINT,
@@ -145,6 +147,11 @@ test("re-picks after an event-stream read failure and the next attempt hits the 
       value: undefined,
     });
     expect(recorded.picks).toEqual([fixture, fixture]);
+    expect(await stream.closed).toEqual({ kind: "eof" });
+    expect(recorded.dones).toEqual([
+      { attempted: true, code: "NET_UNREACHABLE" },
+      { attempted: true, status: 200 },
+    ]);
   } finally {
     await iterator.return?.();
   }
@@ -188,6 +195,71 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
 
   socket.close(1000, "done");
   await socket.closed;
+});
+
+test("default pick-first recovers from a real socket disconnect after consuming a message", async () => {
+  const primary = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  const secondary = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+  const firstPeer = Promise.withResolvers<ServerSocket>();
+  const hits: string[] = [];
+  primary.on("connection", (peer) => {
+    hits.push("primary");
+    firstPeer.resolve(peer);
+    peer.send(JSON.stringify("primary"));
+  });
+  secondary.on("connection", (peer) => {
+    hits.push("secondary");
+    peer.send(JSON.stringify("secondary"));
+  });
+  try {
+    await Promise.all([
+      once(primary, "listening"),
+      once(secondary, "listening"),
+    ]);
+    const endpoints = [primary, secondary].map((server) => {
+      const address = server.address();
+      if (!address || typeof address === "string")
+        throw new Error("expected a TCP port");
+      return `http://127.0.0.1:${address.port}`;
+    });
+    const client = createClient(withEndpoint(...endpoints));
+    const useSocket = defineWebSocket({
+      incoming: struct.string(),
+      maxIncomingQueueSize: 4,
+      path: "/ws",
+    });
+    const [error, session] = await useSocket(
+      client({ reconnect: { attempts: 1, delayMs: 0 } }),
+    );
+    expect(error).toBeNull();
+    if (!session) throw new Error("expected a socket session");
+    try {
+      const iterator = session.receive[Symbol.asyncIterator]();
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: "primary",
+      });
+      (await firstPeer.promise).terminate();
+      await expect(iterator.next()).resolves.toEqual({
+        done: false,
+        value: "secondary",
+      });
+      expect(hits).toEqual(["primary", "secondary"]);
+      expect(session.connection?.generation).toBe(2);
+    } finally {
+      await session[Symbol.asyncDispose]();
+    }
+  } finally {
+    await Promise.all(
+      [primary, secondary].map(
+        (server) =>
+          new Promise<void>((resolve, reject) => {
+            for (const peer of server.clients) peer.terminate();
+            server.close((error) => (error ? reject(error) : resolve()));
+          }),
+      ),
+    );
+  }
 });
 
 test("health filtering attributes each same-call failover attempt to its own endpoint", async () => {

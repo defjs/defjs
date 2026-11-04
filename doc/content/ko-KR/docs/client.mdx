@@ -97,9 +97,11 @@ Defjs는 안전한 메서드의 연결 failover를 기본으로 켜 둬요. Link
 
 pending은 Fetch나 소켓 생성 직전의 `start`에서 시작하고, post-interceptor 뒤나 세션이 닫힌 뒤가 아니라 `end`에서 끝나요. RTT는 그 경계의 `Date.now() - startTime`이고, 빠른 실패를 포함해 **모든 전송과 결과**에 적용돼요. 합성 페널티도 p2c `isFailure`도 없어요. 빨리 실패하는 endpoint는 헬스 필터링이 다뤄요. 더 큰 샘플은 추정을 즉시 바꿔요. 그렇지 않으면 tower의 갱신은 `old × exp(-Δt/decayMs) + sample × (1-exp(-Δt/decayMs))`예요. `end`가 없는 `done`은 RTT 샘플 없이 pending을 풀어요. 시작하지 않은 시도는 pending을 바꾸지 않아요.
 
-이것은 tower `CompleteOnResponse`를 따르고, 부하 완료와 최종 헬스 분류를 나누는 Linkerd의 분리를 함께 써요. Fetch는 헤더를 드러내고 WebSocket은 `open`을 드러내요. Defjs는 Linkerd의 첫 body 프레임 경계나 Envoy의 스트림 단위 완료를 관찰할 수 없어요. 헤더 뒤의 응답 body 실패는 `done`에 영향을 주고, 이미 낸 `end`에는 영향을 주지 않아요. p2c는 더 가벼운 표본 후보를 택할 뿐, 반드시 전역에서 가장 빠른 호스트는 아니에요.
+이것은 tower `CompleteOnResponse`를 따르고, 부하 완료와 최종 헬스 분류를 나누는 Linkerd의 분리를 함께 써요. Fetch는 헤더를 드러내고 WebSocket은 `open`을 드러내요. Defjs는 Linkerd의 첫 body 프레임 경계나 Envoy의 스트림 단위 완료를 관찰할 수 없어요. 헤더 뒤의 HTTP body 읽기 실패와 SSE 응답 body의 read 거부는 `done`에 영향을 주고, 이미 낸 `end`에는 영향을 주지 않아요. `open` 뒤의 WebSocket 전송 실패도 마찬가지로 `done`에만 영향을 줘요. p2c는 더 가벼운 표본 후보를 택할 뿐, 반드시 전역에서 가장 빠른 호스트는 아니에요.
 
 SSE와 WebSocket은 이미 열린 연결 안이 아니라 재연결할 때 다시 골라요. opt-in 재연결 정책은 핸드셰이크를 제한하는 `connectTimeoutMs`를 받아요. 건강한 장기 연결은 배포 뒤에 다시 균형을 맞추지 않아요. 클라이언트가 재연결해서 다시 고르도록 서버에 최대 연결 수명을 두세요. SSE의 정상 EOF는 종료예요. 진행 중인 구독은 `closed`를 관찰하고, 애플리케이션 커서를 담은 새 호출을 만드세요.
+
+HTTP failover와 달리, 스트림 재연결은 builder나 interceptor를 다시 실행하지 않아요. 만들어진 요청을 다시 쓰고, 귀속된 재연결은 다른 base URL/origin을 고를 수 있어요. endpoint에 묶인 자격 증명은 첫 base만을 위해 잡아 두지 말고, **물리적 시도마다** 유효하거나 그 시도에서 갱신되어야 해요. [SSE Fetch 경계](/ko-KR/docs/sse#재연결)나 [WebSocket 전송/인증 경계](/ko-KR/docs/web-socket#프로토콜과-인증)를 쓰세요.
 
 사용자 지정 밸런서는 `pick`이 있는 객체예요. error-first 튜플을 돌려주세요. 목록이 비었다고 throw하지 마세요.
 
@@ -110,6 +112,22 @@ SSE와 WebSocket은 이미 열린 연결 안이 아니라 재연결할 때 다�
 `pick`, 선택인 `start`, 선택인 `end`, 선택인 `done`은 동기적이에요. `start`는 Fetch나 소켓 생성 직전에 많아야 한 번 실행돼요. 빌드 실패, interceptor short-circuit(`makeResponse` 포함), 바뀐 base, 전송 전 취소는 `start`도 `end`도 호출하지 않아요. `end(info)`는 `start` 뒤에 많아야 한 번, Fetch가 헤더를 돌려주거나 소켓이 열릴 때, 또는 그 경계 전에 전송이 실패할 때 동기적으로 실행돼요. HTTP/SSE 헤더에는 `{ attempted: true, status }`, 소켓 open에는 `{ attempted: true }`, 응답 전 실패에는 그 단계의 fault, 호출자 취소에는 `{ attempted: false }`를 받아요. 헬스 필터링은 두 신호를 자식에게 전달해요. 선택할 때 세지 말고, 진행 중인 집계에 쓰세요. 인터셉터가 한 시도 안에서 `next()`를 여러 번 호출해도 추가 Fetch는 같은 선택을 함께 쓰므로 `start`, `end`, `done`은 각각 많아야 한 번이에요. 다른 엔드포인트를 시도하려면 `withEndpointFailover`를 쓰세요.
 
 `done`은 성공한 pick마다 정확히 한 번, HTTP 호출이나 물리적 스트림/소켓 시도가 끝난 뒤에 실행돼요. `end`와 `EndpointDoneInfo` 모양을 공유하고(duration 필드는 없어요), 헤더 뒤의 body 읽기 실패나 취소를 포함한 최종 헬스 분류를 유지해요. 모든 훅의 throw와 thenable rejection은 가둬져요. `pick`이 돌려준 promise는 그래도 잘못됐어요. 잘못된 결과와 throw는 `REQ_BUILD_FAILED`가 되고, 잘못된 내장 구성은 `REQ_OPTIONS_INVALID`가 되며, 어느 쪽도 작업 호출 지점에서는 throw하지 않아요. 집계가 필요 없으면 훅을 생략하세요. interceptor는 고른 `baseEndpoint`만 보고, 후보 목록은 보지 않아요.
+
+최종 전송 샘플은 논리 세션 결과와 별개예요.
+
+| 물리적 결과                                                                                                                | `done` 샘플                                                                    |
+| -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| HTTP 응답 body가 일찍 멈춤                                                                                                 | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }`                     |
+| SSE 핸드셰이크 성공 뒤, 평범한 응답 body `read`가 거부됨                                                                   | `{ attempted: true, code: "NET_UNREACHABLE" }`, `status` 없음                  |
+| SSE 정상 EOF, 미디어/선언된 핸드셰이크 body 디코드 실패, 파서/큐 한도, transform/hook/observer 오류, 또는 `getReader` 실패 | 받은 `{ attempted: true, status }`. 새 네트워크 code는 없음                    |
+| 열린 WebSocket, 네이티브 cause 없음, 관찰된 code 1006 또는 `wasClean === false`                                            | `{ attempted: true, code: "NET_UNREACHABLE" }`, 네이티브 error 이벤트가 없어도 |
+| 열린 WebSocket, 네이티브 cause도 비정상 close 증거도 없음                                                                  | `{ attempted: true }`                                                          |
+| 호출자 취소 또는 스트림/소켓을 수동으로 닫음                                                                               | `{ attempted: false }`                                                         |
+| 시도가 시작된 뒤의 호출자 데드라인                                                                                         | `{ attempted: true, code: "NET_TIMEOUT" }`, `status` 없음                      |
+
+기존 timeout/abort cause 매핑은 새 read/close 신호보다 우선하고, 오프라인 힌트는 귀속된 `NET_UNREACHABLE`을 여전히 억제해요. 없는 `wasClean`은 false가 아니에요. 깨끗한 1000/1001/1005/1011/1012/1013과 private 4xxx close는 자동으로 실패가 아니에요. 애플리케이션과 재연결 정책 오류 자체는 네트워크 실패 샘플을 만들지 않아요. 정책이 나중에 거절하거나 throw해도, 실제 물리적 실패는 샘플 하나로 남아요. SSE 읽기 실패 샘플은 예전의 핸드셰이크만 있던 status를 의도적으로 바꿔요. 정상 EOF와 애플리케이션 실패는 그 status를 유지해요. 주입한 SSE Fetch provider는 자기 read 오류를 소유해요. 이것은 헬스 신호이지, 원격 endpoint가 그 fault를 냈다는 증거가 아니에요.
+
+이 샘플은 기본 pick-first를 진행시키거나 기존 헬스 임계값에 공급해요. 재연결을 켜거나, 그 예산을 바꾸거나, 업무 재전송을 허가하거나, 네이티브 error 이벤트를 합성하거나, WebSocket의 논리적 `closed.kind`/`cause`를 다시 쓰지 **않아요**. 재연결이 없으면 새 endpoint 선택은 나중의 명시적 호출에서 적용돼요.
 
 ## 클라이언트 파생하기
 

@@ -61,6 +61,10 @@ struct 인코딩 뒤에 JSON이 충실히 표현할 수 없는 값은 보내거�
 
 `shouldReconnect`는 다음 재시도 횟수, close cause, code, reason, `wasClean`을 받아요. 수동 `session.close(...)`는 predicate에 들어가지 않아요. 준비/정책이 throw하면 논리 세션이 오류로 끝나요.
 
+endpoint 헬스는 별개의 결정이에요. `end`는 소켓 `open`을 한 번 보고해요. 네이티브 cause가 없을 때, 열린 소켓에서 관찰한 close code가 **1006**이거나 **`wasClean === false`**이면, 최종 `done`은 `{ attempted: true, code: "NET_UNREACHABLE" }`를 보고해요. 런타임이 `error`가 아니라 `close`만 내도 같아요. 기존 네이티브 cause는 원래 매핑을 유지해요. 호출자 취소/수동 닫기는 `{ attempted: false }`로, 호출자 데드라인은 `NET_TIMEOUT`으로 남고, 비정상 close보다 앞이에요. [오프라인 힌트](/ko-KR/docs/client#multiple-endpoints)는 여전히 귀속을 억제해요.
+
+없는 `wasClean`은 false가 아니에요. 깨끗한 1000, 1001, 1005, 1011, 1012, 1013과 private 4xxx close 자체는 endpoint를 실패로 표시하지 않아요. 1000이 아닌 code만으로는 부족해요. 애플리케이션 검증, 큐, heartbeat, 정책 오류는 자동으로 전송 실패가 아니에요. 메시지를 비우거나 정책이 나중에 실패해도, 실제 비정상 close는 물리적 샘플 하나로 남아요. 바뀌는 것은 밸런서 피드백이지, 논리적인 `session.closed.kind`/`cause`가 아니고, 두 번째 error 이벤트도 합성하지 않아요. 기본 pick-first는 이미 허가된 재연결이나 다음 명시적 호출에서 백업을 고를 수 있어요. 어떤 헬스 신호도 재연결을 켜거나, 그 예산을 바꾸거나, 애플리케이션 메시지 재전송을 허가하지 않아요.
+
 WebSocket backoff jitter는 **곱셈**이에요 (`jitter: 0.2`는 상한이 걸린 기준을 반올림 전에 `0.8x`–`1.2x`로 늘리거나 줄여요). 최종 지연은 다시 `maxDelayMs`와 플랫폼 타이머 한계 `2_147_483_647` ms로 제한되므로, 그 범위의 위쪽은 잘릴 수 있어요. 기준이 0이면 0으로 남고, 유효한 숫자의 오버플로는 throw하지 않고 잘려요. SSE도 같은 0–1 jitter 규칙을 써요. 재연결 옵션은 생성자 전에 검증돼요. `attempts`는 음이 아닌 안전한 정수여야 하고, `delayMs`는 유한하고 음이 아니어야 해요. `maxDelayMs`는 음이 아닌 유한한 수 또는 양의 `Infinity`일 수 있어요. `Infinity`는 설정한 상한만 없애며 최종 대기 시간에는 플랫폼의 `2_147_483_647` ms 한계가 그대로 적용돼요. `factor`는 유한하고 양수여야 하고, `jitter`는 유한하고 0–1 범위여야 해요. 잘못된 값은 `REQ_OPTIONS_INVALID`를 반환해요. WebSocket `attempts: 0`은 이후 재시도를 끄지만, 명시적으로 제공한 모든 재연결 필드는 SSE와 마찬가지로 최초 연결 전에 검증돼요.
 
 `beforeConnect({ attempt, signal })`는 처음 생성자와 모든 재연결 전에 돌아요. 취소가 준비와 연결을 모두 멈추게 하려면 그 signal을 토큰 갱신에 넘기세요.
@@ -93,6 +97,8 @@ WebSocket backoff jitter는 **곱셈**이에요 (`jitter: 0.2`는 상한이 걸�
 HTTP, SSE와 같이, 없거나 상대적이거나 잘못된 base endpoint나 불법 path는 만드는 동안, 인터셉터나 전송이 돌기 전에 `REQ_BUILD_FAILED`로 실패해요. interceptor가 단축하더라도 마찬가지예요. 해석된 URL은 base origin을 유지하고 그 디렉터리 안에 머물러야 해요. path의 C0 제어 문자(탭, CR, LF 포함), 백슬래시, `?`, `#`, 디렉터리 탈출은 거부돼요. 앞에 공백이 있어도 스킴 형태와 프로토콜 상대 형식은 거부돼요. 경로 내부의 일반 공백은 허용되고 `%20`으로 전송돼요. 인터셉터의 최종 `req.endpoint`는 최종 `req.baseEndpoint`에 같은 규칙으로 검증되지만, base를 다른 유효한 절대 URL로 일부러 바꿀 수는 있어요. 결정적인 URL 오류는 재시도하지 않아요.
 
 `withCredentials(true)`는 HTTP/SSE의 Fetch credentials예요. WebSocket 인증이 아니에요. 검토된 쿠키/세션 정책, 서브프로토콜, 또는 짧은 수명의 연결 티켓을 쓰세요. 일반적인 자격 증명이나 오래 사는 비밀을 query 문자열에 넣지 마세요.
+
+builder와 interceptor는 논리 세션마다 한 번만 실행돼요. 귀속된 재연결은 그것들을 다시 실행하지 않고 다른 base URL/origin을 고를 수 있어요. 자격 증명은 고른 모든 endpoint에 유효하거나, 물리적 전송 시도마다 갱신되어야 해요. `beforeConnect`는 외부 인증 상태를 갱신할 수 있지만, 고른 URL을 받지 못하고, 만들어진 URL이나 고정된 서브프로토콜 목록도 다시 쓸 수 없어요. endpoint별 작업은 `withWebSocketHandle`에 넘기는 검토된 생성자에 두세요. 브라우저 생성자는 여전히 사용자 지정 handshake 헤더를 지원하지 않아요. query나 서브프로토콜에 한 번 넣은 티켓이 새 endpoint를 위해 다시 만들어진다고 가정하지 마세요.
 
 ## 종료와 소유권
 

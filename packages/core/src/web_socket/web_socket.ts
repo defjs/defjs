@@ -839,6 +839,7 @@ async function runWebSocketCommand<
             opened: boolean,
             cause: unknown,
             connectTimedOut: boolean,
+            closeInfo: WebSocketCloseSnapshot,
           ): EndpointDoneInfo {
             if (manualClose) {
               return { attempted: false };
@@ -854,7 +855,9 @@ async function runWebSocketCommand<
               return { attempted: true, code: "NET_UNREACHABLE" };
             }
             if (opened && cause === undefined) {
-              return { attempted: true };
+              return closeInfo.code === 1006 || closeInfo.wasClean === false
+                ? { attempted: true, code: "NET_UNREACHABLE" }
+                : { attempted: true };
             }
             return doneInfoForNetworkCause(
               cause ?? new Error("WebSocket closed before open"),
@@ -1162,6 +1165,7 @@ async function runWebSocketCommand<
                       outcome.opened,
                       outcome.cause,
                       connectTimedOut,
+                      outcome.closeInfo,
                     ),
                   );
                   cleanup(keepCurrentSocket);
@@ -1390,8 +1394,9 @@ async function runWebSocketCommand<
                     }
                   },
                   cancel(keepCurrentSocket = false) {
+                    // A locally failed message pump must not discard an already observed close.
                     settleAttempt(
-                      {
+                      closeOutcome ?? {
                         closeInfo: extractCloseInfo(undefined, runtimeCause),
                         connection: connectionInfo(),
                         cause: runtimeCause,

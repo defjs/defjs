@@ -5,6 +5,7 @@ import {
   type EndpointPickInfo,
   ERR_NO_ENDPOINT,
   pickFirstBalancer,
+  outlierDetection,
 } from "../balancer";
 import {
   createClient,
@@ -13,6 +14,7 @@ import {
   withInterceptors,
   withWebSocketHandle,
 } from "../client";
+import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
 import { createWebSocketInterceptor } from "../interceptor";
 import { struct } from "../struct";
 import { defineWebSocket } from "./index";
@@ -33,12 +35,14 @@ type ScriptStep = { endpoint: string } | { error: Error };
 function scriptedBalancer(script: readonly ScriptStep[]): {
   balancer: EndpointBalancer;
   dones: EndpointDoneInfo[];
+  ends: EndpointDoneInfo[];
   pending: () => number;
   pendingAtPick: number[];
   picks: EndpointPickInfo[];
 } {
   const picks: EndpointPickInfo[] = [];
   const dones: EndpointDoneInfo[] = [];
+  const ends: EndpointDoneInfo[] = [];
   const pendingAtPick: number[] = [];
   let pending = 0;
   let index = 0;
@@ -56,6 +60,9 @@ function scriptedBalancer(script: readonly ScriptStep[]): {
         null,
         {
           endpoint: step.endpoint,
+          end(report) {
+            ends.push(report);
+          },
           done(report) {
             pending -= 1;
             dones.push(report);
@@ -67,6 +74,7 @@ function scriptedBalancer(script: readonly ScriptStep[]): {
   return {
     balancer,
     dones,
+    ends,
     pending: () => pending,
     pendingAtPick,
     picks,
@@ -141,6 +149,15 @@ class ControllableSocket {
     this.emit("error", {});
   }
 
+  disconnect(code: number, wasClean?: boolean): void {
+    this.readyState = 3;
+    this.emit("close", { code, reason: "peer closed", wasClean });
+  }
+
+  message(data: unknown): void {
+    this.emit("message", { data });
+  }
+
   private emit(type: string, event: unknown): void {
     for (const listener of [...(this.listeners[type] ?? [])]) {
       listener(event);
@@ -200,6 +217,7 @@ async function flush(): Promise<void> {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
   resetSockets();
 });
 
@@ -694,20 +712,334 @@ describe("web socket endpoint balancer", () => {
     expect(record.pending()).toBe(0);
   });
 
-  test("should count an error after open as unreachable exactly once", async () => {
+  test.each([
+    [1006, false],
+    [1006, undefined],
+    [1006, true],
+    [1000, false],
+  ])(
+    "default pick-first advances on close-only code %s with wasClean %s",
+    async (code, wasClean) => {
+      const child = pickFirstBalancer();
+      const dones: EndpointDoneInfo[] = [];
+      const ends: EndpointDoneInfo[] = [];
+      const balancer: EndpointBalancer = {
+        pick(info) {
+          const [error, choice] = child.pick(info);
+          if (error) return [error, undefined];
+          return [
+            null,
+            {
+              ...choice,
+              end(report) {
+                ends.push(report);
+                choice.end?.(report);
+              },
+              done(report) {
+                dones.push(report);
+                choice.done?.(report);
+              },
+            },
+          ];
+        },
+      };
+      const pending = room(
+        clientFor(balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
+      );
+      await flush();
+      socketAt(0).open();
+      const [error, session] = await pending;
+      expect(error).toBeNull();
+      if (!session) throw new Error("expected session");
+      const runtimeError = vi.fn();
+      session.onRuntimeError(runtimeError);
+      try {
+        socketAt(0).disconnect(code, wasClean);
+        await vi.waitFor(() => expect(sockets).toHaveLength(2));
+        expect(dones).toEqual([{ attempted: true, code: "NET_UNREACHABLE" }]);
+        expect(ends).toEqual([{ attempted: true }]);
+        expect(socketAt(1).url).toBe("ws://127.0.0.1:2/ws");
+        socketAt(1).open();
+        expect(ends).toEqual([{ attempted: true }, { attempted: true }]);
+        expect(runtimeError).not.toHaveBeenCalled();
+      } finally {
+        session.close(1000, "stop");
+        await session.closed;
+      }
+      expect(dones).toEqual([
+        { attempted: true, code: "NET_UNREACHABLE" },
+        { attempted: false },
+      ]);
+    },
+  );
+
+  test.each([
+    [1000, true],
+    [1001, true],
+    [1005, true],
+    [1011, true],
+    [1012, true],
+    [1013, true],
+    [4001, true],
+    [1000, undefined],
+    [1011, undefined],
+  ])(
+    "does not add a network failure for code %s with wasClean %s",
+    async (code, wasClean) => {
+      const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+      const pending = room(clientFor(record.balancer));
+      await flush();
+      socketAt(0).open();
+      const [, session] = await pending;
+      if (!session) throw new Error("expected session");
+      socketAt(0).disconnect(code, wasClean);
+      expect(await session.closed).toMatchObject({ kind: "closed", code });
+      expect(record.dones).toEqual([{ attempted: true }]);
+      expect(record.ends).toEqual([{ attempted: true }]);
+      expect(record.pending()).toBe(0);
+    },
+  );
+
+  test.each(["cancel", "manual", "timeout"])(
+    "%s takes priority over a late close-only abnormal snapshot",
+    async (mode) => {
+      class AbnormalOnClose extends ControllableSocket {
+        override close(): void {
+          this.disconnect(1006, false);
+        }
+      }
+      const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+      const controller = new AbortController();
+      const pending = room(
+        clientFor(
+          record.balancer,
+          AbnormalOnClose,
+        )({
+          reconnect: { attempts: 1, delayMs: 0 },
+          signal: controller.signal,
+        }),
+      );
+      await flush();
+      socketAt(0).open();
+      const [, session] = await pending;
+      if (!session) throw new Error("expected session");
+      if (mode === "manual") session.close(1000, "owner");
+      else controller.abort(mode === "timeout" ? ERR_TIMEOUT : ERR_ABORTED);
+      await session.closed;
+      expect(record.dones).toEqual([
+        mode === "timeout"
+          ? { attempted: true, code: "NET_TIMEOUT" }
+          : { attempted: false },
+      ]);
+      expect(record.ends).toEqual([{ attempted: true }]);
+      expect(sockets).toHaveLength(1);
+      expect(record.pending()).toBe(0);
+    },
+  );
+
+  test("does not treat application termination without a native close snapshot as a network failure", async () => {
+    class SilentOnClose extends ControllableSocket {
+      override close(): void {}
+    }
+    const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+    const pending = room(clientFor(record.balancer, SilentOnClose));
+    await flush();
+    socketAt(0).open();
+    const [, session] = await pending;
+    if (!session) throw new Error("expected session");
+    for (let index = 0; index < 6; index += 1) socketAt(0).message("null");
+    expect(await session.closed).toMatchObject({ kind: "error" });
+    expect(record.dones).toEqual([{ attempted: true }]);
+    expect(record.ends).toEqual([{ attempted: true }]);
+    expect(record.pending()).toBe(0);
+  });
+
+  test("keeps an observed abnormal close sample if the draining message pump later overflows", async () => {
+    const bytes = Promise.withResolvers<ArrayBuffer>();
+    const read = vi.fn(() => bytes.promise);
+    class PendingBlob extends Blob {
+      override arrayBuffer(): Promise<ArrayBuffer> {
+        return read();
+      }
+    }
     const record = scriptedBalancer([{ endpoint: PRIMARY }]);
     const pending = room(clientFor(record.balancer));
+    await flush();
+    socketAt(0).open();
+    const [, session] = await pending;
+    if (!session) throw new Error("expected session");
+    const runtimeError = vi.fn();
+    session.onRuntimeError(runtimeError);
+    socketAt(0).message(new PendingBlob());
+    expect(read).toHaveBeenCalledOnce();
+    for (let index = 0; index < 4; index += 1) socketAt(0).message("{}");
+    socketAt(0).disconnect(1006, false);
+    expect(record.dones).toEqual([]);
+    bytes.resolve(new TextEncoder().encode("{}").buffer);
+    const closed = await session.closed;
+    expect(closed).toMatchObject({
+      kind: "error",
+      cause: new Error("AsyncQueue overflow"),
+    });
+    expect(runtimeError).toHaveBeenCalledExactlyOnceWith(
+      new Error("AsyncQueue overflow"),
+    );
+    expect(record.dones).toEqual([
+      { attempted: true, code: "NET_UNREACHABLE" },
+    ]);
+    expect(record.ends).toEqual([{ attempted: true }]);
+    expect(record.pending()).toBe(0);
+  });
+
+  test("default health filtering receives close-only failures and breaks after five samples", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(0);
+    const picked: string[] = [];
+    const dones: EndpointDoneInfo[] = [];
+    const balancer = outlierDetection({
+      pick(info) {
+        const endpoint = info.endpoints[0] ?? "";
+        picked.push(endpoint);
+        return [
+          null,
+          {
+            endpoint,
+            done(report) {
+              dones.push(report);
+            },
+          },
+        ];
+      },
+    });
+    const client = clientFor(balancer);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const pending = room(client);
+      await flush();
+      socketAt(attempt).open();
+      const [error, session] = await pending;
+      expect(error).toBeNull();
+      if (!session) throw new Error("expected session");
+      socketAt(attempt).disconnect(attempt < 5 ? 1006 : 1000, attempt >= 5);
+      await session.closed;
+    }
+    expect(picked).toEqual([
+      PRIMARY,
+      PRIMARY,
+      PRIMARY,
+      PRIMARY,
+      PRIMARY,
+      SECONDARY,
+    ]);
+    expect(dones).toEqual([
+      ...Array.from({ length: 5 }, () => ({
+        attempted: true,
+        code: "NET_UNREACHABLE",
+      })),
+      { attempted: true },
+    ]);
+  });
+
+  test.each(["offline", "replaced"])(
+    "does not attribute a close-only failure when %s",
+    async (mode) => {
+      if (mode === "offline") vi.stubGlobal("navigator", { onLine: false });
+      const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+      const client = createClient(
+        withEndpoint(PRIMARY),
+        withEndpointBalancer(record.balancer),
+        withWebSocketHandle(ControllableSocket as never),
+        ...(mode === "replaced"
+          ? [
+              withInterceptors(
+                createWebSocketInterceptor((req, next) =>
+                  next({ ...req, baseEndpoint: REPLACED }),
+                ),
+              ),
+            ]
+          : []),
+      );
+      const pending = room(client);
+      await flush();
+      socketAt(0).open();
+      const [error, session] = await pending;
+      expect(error).toBeNull();
+      if (!session) throw new Error("expected session");
+      socketAt(0).disconnect(1006, false);
+      expect(await session.closed).toMatchObject({
+        kind: "closed",
+        code: 1006,
+        wasClean: false,
+      });
+      expect(record.dones).toEqual([{ attempted: false }]);
+      expect(record.ends).toEqual(
+        mode === "offline" ? [{ attempted: true }] : [],
+      );
+      expect(record.pending()).toBe(0);
+    },
+  );
+
+  test.each(["false", "throw"])(
+    "keeps the physical close failure when shouldReconnect returns %s",
+    async (mode) => {
+      const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+      const policyError = new Error("application policy");
+      const policy = vi.fn(() => {
+        if (mode === "throw") throw policyError;
+        return false;
+      });
+      const pending = room(
+        clientFor(record.balancer)({
+          reconnect: { attempts: 1, delayMs: 0, shouldReconnect: policy },
+        }),
+      );
+      await flush();
+      socketAt(0).open();
+      const [, session] = await pending;
+      if (!session) throw new Error("expected session");
+      socketAt(0).disconnect(1006, false);
+      expect(await session.closed).toMatchObject(
+        mode === "throw"
+          ? { kind: "error", cause: policyError }
+          : { kind: "closed", code: 1006 },
+      );
+      expect(policy).toHaveBeenCalledOnce();
+      expect(record.dones).toEqual([
+        { attempted: true, code: "NET_UNREACHABLE" },
+      ]);
+      expect(record.ends).toEqual([{ attempted: true }]);
+      expect(sockets).toHaveLength(1);
+    },
+  );
+
+  test("should count an error after open as unreachable exactly once", async () => {
+    class AbnormalOnError extends ControllableSocket {
+      override close(): void {
+        this.disconnect(1006, false);
+      }
+    }
+    const record = scriptedBalancer([{ endpoint: PRIMARY }]);
+    const pending = room(clientFor(record.balancer, AbnormalOnError));
     await flush();
     socketAt(0).open();
     const [, session] = await pending;
     if (!session) {
       throw new Error("expected session");
     }
+    const runtimeError = vi.fn();
+    session.onRuntimeError(runtimeError);
     socketAt(0).failConnect();
-    await session.closed;
+    expect(await session.closed).toMatchObject({
+      kind: "error",
+      code: 1006,
+      wasClean: false,
+    });
     expect(record.dones).toEqual([
       { attempted: true, code: "NET_UNREACHABLE" },
     ]);
+    expect(record.ends).toEqual([{ attempted: true }]);
+    expect(runtimeError).toHaveBeenCalledExactlyOnceWith(
+      new Error("WebSocket connection error"),
+    );
     expect(record.pending()).toBe(0);
   });
 });

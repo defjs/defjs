@@ -61,6 +61,10 @@ Startup failure → `[error, undefined, connection?]`。Pre-open constructor fai
 
 `shouldReconnect` 拎 next retry attempt、close cause、code、reason 同 `wasClean`。Manual `session.close(...)` 唔入 predicate。Throwing preparation/policy 會以 error 完結 logical session。
 
+Endpoint health 係另一個決定。`end` 只報告一次 socket `open`。冇 native cause 嗰陣，已 open socket 觀察到嘅 close code **1006**，或者 **`wasClean === false`**，而家會令最終 `done` 報告 `{ attempted: true, code: "NET_UNREACHABLE" }`，就算 runtime 只 emit `close`、唔 emit `error` 都一樣。現有 native cause 保持原來嘅 mapping；caller 取消／手動關閉仍然係 `{ attempted: false }`，caller deadline 仍然係 `NET_TIMEOUT`，而且優先過異常 close。[offline hint](/zh-Hant-HK/docs/client#multiple-endpoints) 仍然會抑制歸因。
+
+缺失嘅 `wasClean` 唔係 false。乾淨嘅 1000、1001、1005、1011、1012、1013 同 private 4xxx close 本身唔會將 endpoint 標成失敗；單憑非 1000 code 唔夠。Application validation、queue、heartbeat 同 policy error 唔會自動變成 transport failure。就算之後 drain messages 或者 policy 失敗，一次真實嘅異常 close 仍然只係一個實體 sample。呢個改嘅係 balancer feedback，唔係邏輯上嘅 `session.closed.kind`/`cause`，亦唔會合成第二個 error event。預設 pick-first 可以喺已經授權嘅 reconnect 或者下一次明確 call 上改揀 backup；冇任何 health signal 會開啟 reconnect、改佢嘅 budget，或者授權 application message replay。
+
 WebSocket backoff jitter 係 **乘數式**（`jitter: 0.2` 會喺四捨五入之前，用 `0.8x`–`1.2x` 縮放已設上限嘅 base）。最終延遲會再限制喺 `maxDelayMs` 同平台 timer 上限 `2_147_483_647` ms，所以範圍上方可能被截短。Base 係零就會維持零；有效數值運算溢位時會限制喺上限，唔會 throw。SSE 用同一個 0–1 jitter 規則。重連選項會喺 constructor 執行之前驗證：`attempts` 係非負安全整數；`delayMs` 必須係有限非負數；`maxDelayMs` 可以係有限非負數或者正 `Infinity`，後者會移除設定上限，但最終等待仍然唔會超過 `2_147_483_647` ms；`factor` 係有限正數；`jitter` 係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`。WebSocket `attempts: 0` 會停用之後嘅重試，但所有明確提供嘅重連欄位仍然會喺首次連線之前驗證，同 SSE 一樣。
 
 `beforeConnect({ attempt, signal })` 喺 initial constructor 同每次 reconnect 之前 run。將佢嘅 signal 傳入 token refresh，等 cancel 同時停 prep 同 connect。
@@ -93,6 +97,8 @@ Browser WebSocket constructors 唔接受 arbitrary handshake headers，builder �
 同 HTTP 同 SSE 一樣，缺少、相對或無效嘅 base endpoint，以及非法 path，都會喺 building 時以 `REQ_BUILD_FAILED` 失敗，早於任何 interceptor 或 transport 執行，包括會 short-circuit 嘅 interceptor。解析後嘅 URL 必須保持 base origin，並留喺佢嘅目錄之下；path 入面嘅C0 控制字元（包括 tab、CR 同 LF）、反斜線、`?`、`#`，以及逃出目錄嘅路徑都會被拒絕。形似 scheme 同 protocol-relative 嘅形式，就算前面有空格都會被拒絕；路徑入面嘅普通空格允許，並會以 `%20` 送出。Interceptor 最終嘅 `req.endpoint` 會按最終嘅 `req.baseEndpoint` 用同一個規則驗證，但容許刻意將 base 換成另一個有效嘅絕對 URL。確定嘅 URL 錯誤永遠唔會重試。
 
 `withCredentials(true)` 係 HTTP/SSE 嘅 Fetch credentials — 唔係 WebSocket auth。用 reviewed cookie/session policy、subprotocol，或者 short-lived connection ticket。唔好將一般 credentials 或者 long-lived secrets 放 query string。
+
+Builder 同 interceptors 每個邏輯 session 只 run 一次；被歸因嘅 reconnect 可以改揀另一個 base URL/origin，而唔再 run 佢哋。Credentials 必須對每一個揀中嘅 endpoint 都有效，或者喺每一次實體 transport attempt refresh。`beforeConnect` 可以 refresh 外部 auth state，但收唔到揀中嘅 URL，亦唔可以改寫已經 build 好嘅 URL 或者固定嘅 subprotocol list。屬於特定 endpoint 嘅工作應放喺傳俾 `withWebSocketHandle` 嘅、reviewed constructor 入面；browser constructor 仍然唔支援自訂 handshake headers。唔好假定只放一次喺 query 或者 subprotocols 入面嘅 ticket，會為新 endpoint 重新產生。
 
 ## Closure 同 ownership
 

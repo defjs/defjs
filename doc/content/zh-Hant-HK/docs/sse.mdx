@@ -71,13 +71,17 @@ Observer 喺 transform boundary run。除非 active attempt signal aborted，否
 
 重連選項會喺 interceptors 或 Fetch 執行之前檢查：`attempts` 必須係非負安全整數；`delayMs` 必須係有限非負數；`maxDelayMs` 可以係有限非負數或者正 `Infinity`，後者會移除設定上限，但最終等待仍然唔會超過 `2_147_483_647` ms；`factor` 必須係有限正數；`jitter` 必須係有限數，而且喺 0–1 之內。無效值會回傳 `REQ_OPTIONS_INVALID`，唔會開啟 stream。
 
-`id:` 欄位只會更新 buffer；只有處理到結尾空行先會提交重連 cursor，即使個 frame 只有 ID、唔會派發 message 都一樣。如果 stream 喺嗰個空行之前結束，cursor 會維持不變。已提交嘅 ID 會喺之後嘅嘗試放喺 `Last-Event-ID`，在線上編碼為 UTF-8 bytes，非 ASCII IDs 亦一樣。空 `id:` 會喺嗰個空行清除 header；包含 NUL 嘅 ID 會被忽略。除咗呢個 header，之後嘅嘗試重送嘅係第一次嘗試建立嘅 request：`builder` 同 interceptors 每次呼叫只會執行一次，所以 method、URL、headers 同 body 都維持不變。如果某個 header 每次嘗試都必須更新，例如有效期短嘅 token，就要喺傳俾 `withSSEHandle` 嘅 Fetch 入面處理；呢個 Fetch 每次嘗試都會執行一次。如果 credential 仍然過期，stream 開啟之後嘅非 2xx 重連 handshake 會令佢以 `RES_DECODE_FAILED` 結束；status 請睇 `stream.open.response.status`。非 2xx 初始 handshake 就會喺已聲明嘅 error body 解碼成功時，回傳 startup `HTTP_STATUS` fault。
+`id:` 欄位只會更新 buffer；只有處理到結尾空行先會提交重連 cursor，即使個 frame 只有 ID、唔會派發 message 都一樣。如果 stream 喺嗰個空行之前結束，cursor 會維持不變。已提交嘅 ID 會喺之後嘅嘗試放喺 `Last-Event-ID`，在線上編碼為 UTF-8 bytes，非 ASCII IDs 亦一樣。空 `id:` 會喺嗰個空行清除 header；包含 NUL 嘅 ID 會被忽略。除咗呢個 header，之後嘅嘗試重用嘅係第一次嘗試建立嘅 request：`builder` 同 interceptors 每個邏輯呼叫只會執行一次，所以 method、relative path 同 query、headers 同 body 都維持不變。仍然歸因嘅 stream 會喺重連時重新選擇 base endpoint，所以最終 URL 同 origin 可以變。如果某個 header 每次嘗試都必須係新嘅，或者必須屬於該 endpoint，例如有效期短或者綁定 origin 嘅 token，就要喺傳俾 `withSSEHandle` 嘅 Fetch 入面處理；呢個 Fetch 每次嘗試都會帶住該次嘗試解析出嚟嘅 URL 執行一次。附加 credentials 之前先檢查揀中嘅 origin；唔好重用只綁定第一個 endpoint 嘅 token。如果 credential 仍然過期，stream 開啟之後嘅非 2xx 重連 handshake 會令佢以 `RES_DECODE_FAILED` 結束；status 請睇 `stream.open.response.status`。非 2xx 初始 handshake 就會喺已聲明嘅 error body 解碼成功時，回傳 startup `HTTP_STATUS` fault。
 
 重連只會喺安全嘅時候重送 request：
 
 - `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` 都係冪等嘅（RFC 9110 §9.2.2），會喺重試額度之內重連。
 - 其他 method，例如 `POST` 或 `PATCH`，只有 `shouldReconnect` 回傳 `true` 先會重連。連線失敗時，無法判斷 server 係咪已經執行咗操作：一個啟動 LLM 生成嘅 `POST` 會再執行一次、再計一次費，新 events 會喺同一條 stream 入面接住舊 events 出現。傳入 `shouldReconnect` 會取代呢個預設規則，對每種 method 都生效，所以當同一個 client 處理呢兩類 endpoint 時，要喺 callback 嘅 context 入面檢查 `method`。
 - `ReadableStream` body 會喺第一次 attempt 被消耗。無論喺 stream 開啟之前定之後，任何失敗都會以原本嘅 error 結束呢條 stream；唔會呼叫 `shouldReconnect`，亦唔會等待重試延遲。如果 request 需要重連，就用字串、位元組、`Blob`、表單或者 JSON body。
+
+**Endpoint health feedback：** `end` 只報告一次 handshake（`{ attempted: true, status }`）。成功 handshake 之後，response body 嘅 `reader.read()` 被拒絕，而家會將最終 `done` sample 更新成 `{ attempted: true, code: "NET_UNREACHABLE" }`，冇 `status`；適用時仍然用現有嘅 timeout/abort mapping。呢個係刻意取代原先只有 handshake status 嘅 `done`；`open` metadata 同已經發出嘅 `end` 維持不變。`done` 喺任何 reconnect pick 之前只 settle 一次。之後 `shouldReconnect` decline、throw 或者 rejection，既唔會抹走，亦唔會重複呢個真實嘅 read-failure sample。
+
+只有 read 邊界提供呢個新 signal。Normal EOF、非 2xx handshake error-body 失敗、`getReader` 誤用、parser/queue limits、transforms、hooks 同 observers 唔會自動變成 network failure，endpoint accounting 仍然保留 handshake status。Caller 取消／手動關閉仍然未歸因，caller deadline 仍然係 `NET_TIMEOUT`，[offline hint](/zh-Hant-HK/docs/client#multiple-endpoints) 仍然適用。自訂 Fetch provider 嘅 read rejection 會當成 transport failure，唔係 remote server 造成佢嘅證明。Health feedback 同 replay permission 係分開嘅：預設 pick-first 可以為已經授權嘅 reconnect 或者之後嘅明確 call 改去 backup，但佢唔會開啟 reconnect、改 budget，亦唔會令非冪等 request 可以安全 replay。
 
 ## Buffer 同 queue limits
 

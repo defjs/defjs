@@ -71,13 +71,17 @@ Observer 跑在 transform 边界。除非当前尝试的 signal 已 abort，它�
 
 重连 options 会在 interceptor 或 Fetch 之前检查：`attempts` 必须是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 可以是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 必须是有限的正数；`jitter` 必须是 0–1 范围内的有限数。无效值会返回 `REQ_OPTIONS_INVALID`，不会打开流。
 
-`id:` 字段只更新缓冲区；只有处理到终止空行时才提交重连游标，即使该帧只有 ID、不会分发消息也一样。如果流在该空行之前结束，游标保持不变。已提交的 ID 会通过后续尝试的 `Last-Event-ID` 请求头发送，在网络上编码为 UTF-8 字节，非 ASCII ID 也一样。空 `id:` 会在该空行处清除请求头；包含 NUL 的 ID 会被忽略。除了这个请求头，后续尝试会重发首次尝试时构建的请求：`builder` 和拦截器在每次调用中只运行一次，因此请求方法、URL、请求头和请求体都保持不变。如果某个请求头需要在每次尝试时更新，例如有效期较短的令牌，就应在传给 `withSSEHandle` 的 Fetch 实现中设置；该实现会在每次尝试时运行一次。如果凭证仍然过期，流打开之后的非 2xx 重连握手会以 `RES_DECODE_FAILED` 结束这条流；状态可从 `stream.open.response.status` 查看。初始握手非 2xx 时，若声明的错误 body 解码成功，则返回启动 `HTTP_STATUS` fault。
+`id:` 字段只更新缓冲区；只有处理到终止空行时才提交重连游标，即使该帧只有 ID、不会分发消息也一样。如果流在该空行之前结束，游标保持不变。已提交的 ID 会通过后续尝试的 `Last-Event-ID` 请求头发送，在网络上编码为 UTF-8 字节，非 ASCII ID 也一样。空 `id:` 会在该空行处清除请求头；包含 NUL 的 ID 会被忽略。除了这个请求头，后续尝试会复用首次尝试时构建的请求：`builder` 和拦截器在每个逻辑调用中只运行一次，因此请求方法、相对路径和查询、请求头和请求体都保持不变。仍被归因的流会在重连时重新选择基础端点，因此最终 URL 及其源可以变化。如果某个请求头在每次尝试时都必须是新的，或必须属于该端点，例如有效期较短或绑定源的令牌，就应在传给 `withSSEHandle` 的 Fetch 实现中设置；该实现会在每次尝试时、带着这次尝试解析出的 URL 运行一次。附加凭证之前先检查选中的源；不要复用只绑定第一个端点的令牌。如果凭证仍然过期，流打开之后的非 2xx 重连握手会以 `RES_DECODE_FAILED` 结束这条流；状态可从 `stream.open.response.status` 查看。初始握手非 2xx 时，若声明的错误 body 解码成功，则返回启动 `HTTP_STATUS` fault。
 
 重连只在安全时重发请求：
 
 - `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 是幂等的（RFC 9110 §9.2.2），会在预算内重连。
 - 其他请求方法（例如 `POST` 或 `PATCH`）只有在 `shouldReconnect` 返回 `true` 时才会重连。连接失败并不能说明服务端是否已经执行了请求：重发用于启动大语言模型生成的 `POST` 请求，会再次执行生成并再次计费，新事件也会在同一条流中接在旧事件后面。传入 `shouldReconnect` 会替换所有请求方法的默认重连策略，因此，当同一个客户端同时用于这两类端点时，应检查回调上下文中的 `method`。
 - `ReadableStream` 请求体会在首次尝试时被消耗。无论失败发生在流打开之前还是之后，都会以原始错误结束这条流；不会调用 `shouldReconnect`，也不会等待重连延迟。请求需要重连时，请使用字符串、字节、`Blob`、表单或 JSON 请求体。
+
+**端点健康反馈：** `end` 只报告一次握手（`{ attempted: true, status }`）。握手成功之后，响应 body 的 `reader.read()` 被拒绝，会把最终的 `done` 样本更新为 `{ attempted: true, code: "NET_UNREACHABLE" }`，不带 `status`；适用时仍使用既有的超时/中止映射。这是有意替换原先仅含握手状态的 `done`；`open` 元数据和已经发出的 `end` 保持不变。`done` 在任何重连 pick 之前只结算一次。之后 `shouldReconnect` 回绝、抛出或 rejection，既不会抹掉也不会重复这份真实的读取失败样本。
+
+只有 read 边界提供这个新信号。正常 EOF、非 2xx 握手的错误 body 失败、`getReader` 误用、parser/队列上限、transform、hook 和 observer 不会自动变成网络失败，端点记账仍保留握手状态。调用方取消/手动关闭仍然未归因，调用方期限仍然是 `NET_TIMEOUT`，[离线提示](/zh-Hans/docs/client#multiple-endpoints) 仍然适用。自定义 Fetch provider 的 read 拒绝被当作传输失败，不是远端服务器造成它的证明。健康反馈和重放许可是分开的：默认 pick-first 可以为已授权的重连或之后的显式调用改到备份，但它不会打开重连、改变预算，也不会让非幂等请求可以安全重放。
 
 ## 缓冲区与队列上限
 

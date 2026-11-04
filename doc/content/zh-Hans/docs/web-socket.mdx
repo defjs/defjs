@@ -61,6 +61,10 @@ Struct 编码之后，JSON 无法忠实表示的值会在发送或进入重连�
 
 `shouldReconnect` 拿到下一次重试的 attempt、关闭 cause、code、reason、`wasClean`。手动 `session.close(...)` 不进这个谓词。准备或策略抛错会以 error 结束逻辑 session。
 
+端点健康是另一项决定。`end` 只报告一次 socket `open`。没有原生 cause 时，已打开 socket 观察到的关闭 code **1006**，或 **`wasClean === false`**，现在会使最终 `done` 报告 `{ attempted: true, code: "NET_UNREACHABLE" }`，即使运行时只发出 `close`、不发出 `error` 也一样。既有的原生 cause 保持原来的映射；调用方取消/手动关闭仍然是 `{ attempted: false }`，调用方期限仍然是 `NET_TIMEOUT`，并且优先于异常关闭。[离线提示](/zh-Hans/docs/client#multiple-endpoints) 仍会抑制归因。
+
+缺失的 `wasClean` 不是 false。干净的 1000、1001、1005、1011、1012、1013 以及私有 4xxx 关闭本身不会把端点标成失败；单凭非 1000 的 code 不够。应用校验、队列、心跳和策略错误不会自动变成传输失败。即使之后排空消息或策略失败，一次真实的异常关闭仍然只是一个物理样本。这改变的是均衡器反馈，不是逻辑上的 `session.closed.kind`/`cause`，也不会合成第二个 error 事件。默认 pick-first 可以在已经授权的重连或下一次显式调用上改选备份；没有任何健康信号会打开重连、改变其预算，或授权应用消息重放。
+
 WebSocket 退避 jitter 是**乘性**的（`jitter: 0.2` 会在取整前，把已限制上限的基数乘以 `0.8x`–`1.2x`）。最终延迟还会再次限制在 `maxDelayMs` 和平台定时器上限 `2_147_483_647` ms 内，因此该范围的上半部分可能被截断。基数为零时仍保持零；有效数值计算时发生溢出，结果会被限制在上限，而不是抛错。SSE 使用同样的 0–1 jitter 规则。重连 options 会在构造函数之前校验：`attempts` 是非负安全整数；`delayMs` 必须是非负有限数；`maxDelayMs` 可以是非负有限数或正 `Infinity`，后者移除配置上限，但最终等待仍不超过 `2_147_483_647` ms；`factor` 是有限的正数；`jitter` 是 0–1 范围内的有限数。无效值返回 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 禁用后续重试，但所有显式提供的重连字段仍会在首次连接前校验，与 SSE 一样。
 
 `beforeConnect({ attempt, signal })` 在初次构造和每次重连之前跑。把这个 signal 传进 token 刷新，取消才能同时停住准备和连接。
@@ -93,6 +97,8 @@ Definition 的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及�
 与 HTTP 和 SSE 一样，基础端点缺失、相对或无效，或者路径非法时，会在构建时、任何 interceptor 或传输运行前以 `REQ_BUILD_FAILED` 失败，即使 interceptor 本来会短路请求也一样。解析后的 URL 必须与基础端点同源，并位于其目录内；路径中的 C0 控制字符（包括制表符、CR 和 LF）、反斜杠、`?`、`#` 或越出目录的路径都会被拒绝。形似 scheme 的形式和协议相对形式即使带前导空格也会被拒绝；路径内部的普通空格允许，并按 `%20` 发送。interceptor 的最终 `req.endpoint` 会相对于最终 `req.baseEndpoint` 按相同规则校验，但可以有意把基础端点换成另一个有效的绝对 URL。确定性的 URL 错误不会重试。
 
 `withCredentials(true)` 是 HTTP/SSE 的 Fetch credentials——不是 WebSocket 鉴权。用审过的 cookie/session 策略、子协议，或短命连接 ticket。别把通用凭证或长命密钥放进 query string。
+
+builder 和 interceptor 每个逻辑会话只运行一次；被归因的重连可以改选另一个基础 URL/源，而不再运行它们。凭证必须对每一个选中的端点都有效，或在每一次物理传输尝试时刷新。`beforeConnect` 可以刷新外部鉴权状态，但收不到选中的 URL，也不能改写已构建的 URL 或固定的子协议列表。属于特定端点的工作应放在传给 `withWebSocketHandle` 的、经过审查的构造函数里；浏览器构造函数仍然不支持自定义握手 headers。不要假定只放进 query 或子协议一次的 ticket，会为新端点重新生成。
 
 ## 关闭与所有权
 

@@ -17,14 +17,19 @@ export async function readStreamBytes(
   stream: ReadableStream<Uint8Array>,
   onChunk: (chunk: Uint8Array) => void | Promise<void>,
   signal?: AbortSignal,
+  onReadError?: (error: unknown) => void,
 ): Promise<void> {
   const reader = stream.getReader();
   try {
     for (;;) {
       const read = () => reader.read();
-      const result = signal
-        ? await awaitWithSignal(read, signal)
-        : await read();
+      let result: Awaited<ReturnType<typeof read>>;
+      try {
+        result = signal ? await awaitWithSignal(read, signal) : await read();
+      } catch (error) {
+        onReadError?.(error);
+        throw error;
+      }
       if (result.done) return;
       await onChunk(result.value);
     }

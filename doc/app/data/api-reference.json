@@ -8730,7 +8730,7 @@
     "slug": "core/endpointfaultcode-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Transport failure codes a balancer can observe through `end` and `done`.\n\nA response that arrived has no `code`. `pickFirstBalancer` moves to the next\nendpoint for `NET_UNREACHABLE` or an uncoded 502, 503, or 504 response.",
+    "description": "Transport failure codes a balancer can observe through `end` and `done`.\n\n`end` reports headers or socket open; later transport failures can still give\n`done` a `code`. HTTP incomplete bodies keep their status with `NET_BODY_INCOMPLETE`.\nAn SSE response-body read rejection or an opened WebSocket's close code 1006\nor strictly false `wasClean` reports `NET_UNREACHABLE`, without a status, unless\ntimeout or cancellation takes priority. Normal EOF, clean closes, and application\nerrors do not themselves create network failure samples.\n`pickFirstBalancer` moves to the next endpoint for `NET_UNREACHABLE` or an\nuncoded 502, 503, or 504 response.",
     "signatures": [
       "type EndpointFaultCode =\n  \"NET_UNREACHABLE\" | \"NET_TIMEOUT\" | \"NET_BODY_INCOMPLETE\";"
     ],
@@ -8777,7 +8777,7 @@
       },
       {
         "name": "code",
-        "description": "Transport failure, when the attempt did not get a response.",
+        "description": "Transport failure, including a body-read or socket-close failure after a response.",
         "type": "EndpointFaultCode | undefined",
         "simplifiedType": "union",
         "required": false,
@@ -8786,7 +8786,7 @@
       },
       {
         "name": "status",
-        "description": "Status code from the peer. Absent when a WebSocket handshake succeeded.",
+        "description": "HTTP/SSE status. Kept with NET_BODY_INCOMPLETE; absent for network/timeout codes and WebSocket open.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,

@@ -97,9 +97,11 @@ Penalty 跟 Linkerd 嘅 consecutive-failure breaker：`minPenaltyMs: 1000`、`ma
 
 Pending 喺 Fetch 或者 socket construction 之前即刻由 `start` 開始，並喺 `end` 結束，而唔係喺 post-interceptor 之後，亦唔係 session 關閉之後。呢個邊界上嘅 RTT 係 `Date.now() - startTime`，**所有 transport 同所有結果**都計，包括快速失敗。冇 synthetic penalty，亦冇 p2c 嘅 `isFailure`；快速失敗嘅 endpoint 交俾 health filtering。更大嘅 sample 會即刻替換估計；否則用 tower 嘅更新式 `old × exp(-Δt/decayMs) + sample × (1-exp(-Δt/decayMs))`。冇 `end` 嘅 `done` 只釋放 pending，唔產生 RTT sample。從未 start 嘅 attempt 唔改變 pending。
 
-呢個跟 tower 嘅 `CompleteOnResponse`，並保留 Linkerd 將 load completion 同最終健康分類分開嘅做法。Fetch 暴露 headers，WebSocket 暴露 `open`；Defjs 觀察唔到 Linkerd 嘅 first body frame 邊界，亦觀察唔到 Envoy 嘅 stream-level completion。Headers 之後嘅 body failure 影響 `done`，唔影響已經發出嘅 `end`。p2c 偏向抽到嘅較輕 candidate，唔一定係全局最快嘅 host。
+呢個跟 tower 嘅 `CompleteOnResponse`，並保留 Linkerd 將 load completion 同最終健康分類分開嘅做法。Fetch 暴露 headers，WebSocket 暴露 `open`；Defjs 觀察唔到 Linkerd 嘅 first body frame 邊界，亦觀察唔到 Envoy 嘅 stream-level completion。Headers 之後嘅 HTTP body-reading failure，同 SSE response body 嘅 read rejection，影響 `done`，唔影響已經發出嘅 `end`。`open` 之後嘅 WebSocket transport failure 同樣只影響 `done`。p2c 偏向抽到嘅較輕 candidate，唔一定係全局最快嘅 host。
 
 SSE 同 WebSocket 喺 reconnect 時再揀一次，而唔係喺已經建立嘅 connection 裡面。佢哋 opt-in 嘅 reconnect policy 接受 `connectTimeoutMs`，用嚟限制 handshake。健康嘅長連線唔會喺 deployment 之後再均衡。喺 server 上設定 connection 嘅最長存活時間，等 client 重連並再 pick 一次。SSE 嘅 normal EOF 係 terminal；持續嘅 subscription 應該觀察 `closed`，並開始一次帶住 application cursor 嘅新 call。
+
+同 HTTP failover 唔同，stream reconnect 唔會再 run builder 或者 interceptor。佢哋重用已經 build 好嘅 request，而被歸因嘅 reconnect 可能改揀另一個 base URL/origin。綁定 endpoint 嘅 credentials 必須對**每一次實體嘗試**都有效，或者每次嘗試都 refresh，唔可以只為第一個 base capture 一次：用 [SSE 嘅 Fetch 邊界](/zh-Hant-HK/docs/sse#重連) 或者 [WebSocket 嘅 transport/authentication 邊界](/zh-Hant-HK/docs/web-socket#protocols-同-authentication)。
 
 自訂 balancer 係一個有 `pick` 嘅 object。Return 一個 error-first tuple。唔好因為份 list 係空就 throw。
 
@@ -110,6 +112,22 @@ SSE 同 WebSocket 喺 reconnect 時再揀一次，而唔係喺已經建立嘅 co
 `pick`、可選嘅 `start`、可選嘅 `end` 同可選嘅 `done` 都同步運行。`start` 至多喺 Fetch 或者 socket construction 之前即刻運行一次。Build failure、interceptor short-circuit（包括 `makeResponse`）、被換走嘅 base，以及 transport 開始前嘅取消，都唔會 call `start` 或者 `end`。`end(info)` 喺 `start` 之後至多運行一次，喺 Fetch return headers 或者 socket open 時同步運行，或者 transport 喺呢個邊界之前失敗時運行。HTTP/SSE headers 收到 `{ attempted: true, status }`，socket open 收到 `{ attempted: true }`，response 之前嘅失敗收到該階段嘅 fault，caller 取消收到 `{ attempted: false }`。Health filtering 將呢兩個 signal 都轉發俾 child。用佢哋做 in-flight accounting，而唔係喺 pick 時計數。攔截器喺同一次嘗試入面 call 多過一次 `next()`，多出嚟嘅 Fetch 會共用呢次 pick，所以 `start`、`end` 同 `done` 仍然各自最多行一次；想轉去第二個 endpoint，就用 `withEndpointFailover`。
 
 每一次成功嘅 pick，`done` 恰好運行一次，時機係 HTTP call 結束之後，或者實體上嘅 stream/socket attempt 結束之後。佢同 `end` 共用 `EndpointDoneInfo` 嘅形狀（冇 duration field），並保留最終嘅健康分類，包括 headers 之後讀 body 失敗或者取消。所有 hook 嘅 throw，同被拒絕嘅 thenable，都會被接住。`pick` return 嘅 promise 仍然無效；畸形嘅結果同 throw 會變成 `REQ_BUILD_FAILED`，無效嘅內建設定會變成 `REQ_OPTIONS_INVALID`，喺操作嘅 call site 都唔會 throw。唔需要記帳就省略呢啲 hook。Interceptor 見到嘅係揀中嘅 `baseEndpoint`，而唔係 candidate list。
+
+最終嘅 transport sample 同 logical session 結果係分開嘅：
+
+| 實體結果                                                                                                                        | `done` sample                                                             |
+| ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| HTTP response body 提前結束                                                                                                     | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }`                |
+| SSE handshake 成功，跟住一次普通嘅 response body `read` 被拒絕                                                                  | `{ attempted: true, code: "NET_UNREACHABLE" }`，冇 `status`               |
+| SSE normal EOF、media／已聲明 handshake body 解碼失敗、parser/queue limit、transform/hook/observer error，或者 `getReader` 失敗 | 收到嘅 `{ attempted: true, status }`；冇新嘅 network code                 |
+| 已 open 嘅 WebSocket，冇 native cause，觀察到 code 1006 或者 `wasClean === false`                                               | `{ attempted: true, code: "NET_UNREACHABLE" }`，就算冇 native error event |
+| 已 open 嘅 WebSocket，冇 native cause，亦冇異常 close 證據                                                                      | `{ attempted: true }`                                                     |
+| Caller 取消，或者手動關閉 stream/socket                                                                                         | `{ attempted: false }`                                                    |
+| 嘗試已經開始之後嘅 caller deadline                                                                                              | `{ attempted: true, code: "NET_TIMEOUT" }`，冇 `status`                   |
+
+現有嘅 timeout/abort cause mapping 優先過新嘅 read/close signal，offline hint 仍然會抑制已歸因嘅 `NET_UNREACHABLE`。缺失嘅 `wasClean` 唔係 false；乾淨嘅 1000/1001/1005/1011/1012/1013 同 private 4xxx close 唔會自動當失敗。Application 同 reconnect-policy error 本身唔會產生 network-failure sample。如果 policy 之後 decline 或者 throw，一次真實嘅實體失敗仍然只係一個 sample。SSE read-failure sample 會刻意取代原先只有 handshake status 嘅 sample；normal EOF 同 application failure 保留該 status。注入嘅 SSE Fetch provider 擁有自己嘅 read error：呢個係 health signal，唔係 remote endpoint 造成該 fault 嘅證明。
+
+呢啲 sample 會推進預設 pick-first，或者餵俾現有嘅 health threshold；佢哋**唔會**開啟 reconnect、改佢嘅 budget、授權業務 replay、合成 native error event，或者改寫 WebSocket 邏輯上嘅 `closed.kind`/`cause`。冇 reconnect 嗰陣，新嘅 endpoint 選擇要到下一次明確 call 先生效。
 
 ## 派生一個 client
 

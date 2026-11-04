@@ -81,6 +81,87 @@ describe("sse parser", () => {
     expect(seen).toEqual(["first", "second", "third"]);
   });
 
+  test.each([false, true])(
+    "should observe only the read rejection with a signal: %s",
+    async (withSignal) => {
+      const cause = new TypeError("response stream lost");
+      const onReadError = vi.fn();
+      const stream = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          controller.error(cause);
+        },
+      });
+
+      await expect(
+        readStreamBytes(
+          stream,
+          noop,
+          withSignal ? new AbortController().signal : undefined,
+          onReadError,
+        ),
+      ).rejects.toBe(cause);
+
+      expect(onReadError).toHaveBeenCalledExactlyOnceWith(cause);
+      expect(stream.locked).toBe(false);
+    },
+  );
+
+  test("should not observe getReader, onChunk, cancel, or releaseLock failures as read rejections", async () => {
+    const onReadError = vi.fn();
+    const locked = new ReadableStream<Uint8Array>();
+    const owner = locked.getReader();
+    await expect(
+      readStreamBytes(locked, noop, undefined, onReadError),
+    ).rejects.toBeInstanceOf(TypeError);
+    owner.releaseLock();
+
+    const cause = new TypeError("application callback");
+    const chunks = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode("data"));
+      },
+      cancel() {
+        return Promise.reject(new TypeError("provider cancel"));
+      },
+    });
+    await expect(
+      readStreamBytes(
+        chunks,
+        () => {
+          throw cause;
+        },
+        undefined,
+        onReadError,
+      ),
+    ).rejects.toBe(cause);
+
+    const complete = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.close();
+      },
+    });
+    const reader = complete.getReader();
+    const release = reader.releaseLock.bind(reader);
+    const getReader = vi.spyOn(complete, "getReader").mockReturnValue(reader);
+    const releaseLock = vi
+      .spyOn(reader, "releaseLock")
+      .mockImplementation(() => {
+        release();
+        throw cause;
+      });
+    try {
+      await expect(
+        readStreamBytes(complete, noop, undefined, onReadError),
+      ).rejects.toBe(cause);
+    } finally {
+      releaseLock.mockRestore();
+      getReader.mockRestore();
+    }
+    expect(onReadError).not.toHaveBeenCalled();
+    expect(chunks.locked).toBe(false);
+    expect(complete.locked).toBe(false);
+  });
+
   test("should release reader lock on error", async () => {
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {

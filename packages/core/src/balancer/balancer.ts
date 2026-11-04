@@ -93,8 +93,14 @@ export interface EndpointPickResult {
 /**
  * Transport failure codes a balancer can observe through `end` and `done`.
  *
- * A response that arrived has no `code`. `pickFirstBalancer` moves to the next
- * endpoint for `NET_UNREACHABLE` or an uncoded 502, 503, or 504 response.
+ * `end` reports headers or socket open; later transport failures can still give
+ * `done` a `code`. HTTP incomplete bodies keep their status with `NET_BODY_INCOMPLETE`.
+ * An SSE response-body read rejection or an opened WebSocket's close code 1006
+ * or strictly false `wasClean` reports `NET_UNREACHABLE`, without a status, unless
+ * timeout or cancellation takes priority. Normal EOF, clean closes, and application
+ * errors do not themselves create network failure samples.
+ * `pickFirstBalancer` moves to the next endpoint for `NET_UNREACHABLE` or an
+ * uncoded 502, 503, or 504 response.
  *
  * @group client
  */
@@ -114,9 +120,9 @@ export type EndpointFaultCode =
 export interface EndpointDoneInfo {
   /** Whether a transport attempt reached the selected endpoint. */
   readonly attempted: boolean;
-  /** Transport failure, when the attempt did not get a response. */
+  /** Transport failure, including a body-read or socket-close failure after a response. */
   readonly code?: EndpointFaultCode;
-  /** Status code from the peer. Absent when a WebSocket handshake succeeded. */
+  /** HTTP/SSE status. Kept with NET_BODY_INCOMPLETE; absent for network/timeout codes and WebSocket open. */
   readonly status?: number;
 }
 

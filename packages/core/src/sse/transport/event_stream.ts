@@ -693,7 +693,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     });
 
     try {
-      await readStreamBytes(stream, parseLine, signal);
+      await readStreamBytes(stream, parseLine, signal, noteFetchError);
     } catch (error) {
       if (error instanceof SSEParserLimitError) {
         throw new EventStreamFatalError("CAP_BUFFER_EXCEEDED", error.message, {

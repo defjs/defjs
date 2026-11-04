@@ -8,7 +8,8 @@ import {
   vi,
 } from "vitest";
 import { createServer, type Socket } from "node:net";
-import { ERR_ABORTED } from "../../error";
+import { ERR_ABORTED, ERR_TIMEOUT } from "../../error";
+import { struct } from "../../struct";
 import type { HttpRequest } from "../../http";
 import {
   __resetStreamingRequestBodySupportForTests,
@@ -654,6 +655,213 @@ describe("fetchEventStream", () => {
 
     await expect(fetchEventStream(request)).rejects.toBe(ERR_ABORTED);
   });
+});
+
+describe("SSE final endpoint attribution", () => {
+  test.each([
+    {
+      cause: new TypeError("reader failed"),
+      want: { attempted: true, code: "NET_UNREACHABLE" },
+    },
+    { cause: ERR_TIMEOUT, want: { attempted: true, code: "NET_TIMEOUT" } },
+    { cause: ERR_ABORTED, want: { attempted: false } },
+  ])("maps a read rejection with cause $cause", async ({ cause, want }) => {
+    const done = vi.fn();
+    const stream = await fetchEventStream(
+      {
+        baseEndpoint: "https://example.com",
+        endpoint: "/events",
+        method: "GET",
+      },
+      {
+        fetch: async () =>
+          new Response(
+            new ReadableStream<Uint8Array>({
+              pull(controller) {
+                controller.error(cause);
+              },
+            }),
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+        endpointAttempt: {
+          done,
+          pickNext() {
+            throw new Error("unexpected reconnect");
+          },
+        },
+      },
+    );
+    await stream.closed;
+    expect(stream.open.response.status).toBe(200);
+    expect(done).toHaveBeenCalledExactlyOnceWith(want);
+  });
+
+  test.each(["false", "throw", "reject"])(
+    "keeps one physical read failure when shouldReconnect returns %s",
+    async (policy) => {
+      const done = vi.fn();
+      const pickNext = vi.fn(() => {
+        throw new Error("unexpected reconnect");
+      });
+      const policyError = new TypeError("application policy");
+      const shouldReconnect = vi.fn(() => {
+        if (policy === "throw") throw policyError;
+        if (policy === "reject") return Promise.reject(policyError);
+        return false;
+      });
+      const stream = await fetchEventStream(
+        {
+          baseEndpoint: "https://example.com",
+          endpoint: "/events",
+          method: "GET",
+        },
+        {
+          fetch: async () => scriptedConnection([], "drop"),
+          endpointAttempt: { done, pickNext },
+          reconnect: { attempts: 1, delayMs: 0, shouldReconnect },
+        },
+      );
+      expect(await stream.closed).toMatchObject({
+        kind: "error",
+        code: "NET_UNREACHABLE",
+      });
+      expect(shouldReconnect).toHaveBeenCalledOnce();
+      expect(pickNext).not.toHaveBeenCalled();
+      expect(done).toHaveBeenCalledExactlyOnceWith({
+        attempted: true,
+        code: "NET_UNREACHABLE",
+      });
+    },
+  );
+
+  test.each([
+    { mode: "eof", code: undefined, startup: false, status: 200 },
+    { mode: "onopen", code: "EXT_HOOK_FAILED", startup: true, status: 200 },
+    { mode: "onclose", code: "EXT_HOOK_FAILED", startup: false, status: 200 },
+    {
+      mode: "transform",
+      code: "EXT_OBSERVER_FAILED",
+      startup: false,
+      status: 200,
+    },
+    {
+      mode: "parser",
+      code: "CAP_BUFFER_EXCEEDED",
+      startup: false,
+      status: 200,
+    },
+    { mode: "queue", code: "CAP_QUEUE_OVERFLOW", startup: false, status: 200 },
+    { mode: "getReader", code: "NET_UNREACHABLE", startup: false, status: 200 },
+    {
+      mode: "error-observer",
+      code: "NET_UNREACHABLE",
+      startup: false,
+      status: 200,
+    },
+    { mode: "policy", code: "NET_UNREACHABLE", startup: false, status: 200 },
+    {
+      mode: "media",
+      code: "RES_MEDIA_TYPE_INVALID",
+      startup: true,
+      status: 200,
+    },
+    {
+      mode: "handshake-body",
+      code: "RES_DECODE_FAILED",
+      startup: true,
+      status: 503,
+    },
+    {
+      mode: "handshake-status",
+      code: "RES_DECODE_FAILED",
+      startup: true,
+      status: 503,
+    },
+  ])(
+    "does not misattribute $mode as a new network failure",
+    async ({ mode, code, startup, status }) => {
+      const done = vi.fn();
+      const pickNext = vi.fn(() => {
+        throw new Error("unexpected reconnect");
+      });
+      const cause = new TypeError("not a native read failure");
+      const policy = vi.fn(() => {
+        if (mode === "policy") throw cause;
+        return false;
+      });
+      const response = new Response(
+        mode === "handshake-body"
+          ? new ReadableStream<Uint8Array>({
+              pull(controller) {
+                controller.error(cause);
+              },
+            })
+          : mode === "parser"
+            ? `data: ${"x".repeat(32)}`
+            : "data: first\n\ndata: second\n\n",
+        {
+          headers: {
+            "content-type":
+              mode === "media" ? "text/plain" : "text/event-stream",
+          },
+          status,
+        },
+      );
+      const owner = ["getReader", "error-observer", "policy"].includes(mode)
+        ? response.body?.getReader()
+        : undefined;
+      try {
+        const pending = fetchEventStream(
+          {
+            baseEndpoint: "https://example.com",
+            endpoint: "/events",
+            method: "GET",
+          },
+          {
+            fetch: async () => response,
+            endpointAttempt: { done, pickNext },
+            reconnect: { attempts: 1, delayMs: 0, shouldReconnect: policy },
+            handshakeError:
+              mode === "handshake-body" ? struct.string() : undefined,
+            maxBufferSize: mode === "parser" ? 8 : 1024,
+            maxQueueSize: mode === "queue" ? 1 : 16,
+            onopen() {
+              if (mode === "onopen") throw cause;
+            },
+            onclose() {
+              if (mode === "onclose") throw cause;
+            },
+            onerror() {
+              if (mode === "error-observer") throw cause;
+            },
+            transformMessage(message) {
+              if (mode === "transform") throw cause;
+              return message;
+            },
+          },
+        );
+        if (startup) {
+          await expect(pending).rejects.toMatchObject({ code });
+        } else {
+          const stream = await pending;
+          const closed = await stream.closed;
+          expect(closed).toMatchObject(
+            code ? { kind: "error", code } : { kind: "eof" },
+          );
+        }
+        expect(done).toHaveBeenCalledExactlyOnceWith({
+          attempted: true,
+          status,
+        });
+        expect(pickNext).not.toHaveBeenCalled();
+        expect(policy).toHaveBeenCalledTimes(
+          mode === "getReader" || mode === "policy" ? 1 : 0,
+        );
+      } finally {
+        owner?.releaseLock();
+      }
+    },
+  );
 });
 
 describe("unsupported streaming request body", () => {

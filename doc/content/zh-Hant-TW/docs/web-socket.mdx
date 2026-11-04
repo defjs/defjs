@@ -61,6 +61,10 @@ Struct 編碼之後，JSON 無法忠實表示的值會在送出或進入重連�
 
 `shouldReconnect` 拿到下一次重試 attempt、close cause、code、reason、`wasClean`。手動 `session.close(...)` 不會進 predicate。Preparation／策略 throw 會以錯誤結束邏輯 session。
 
+端點健康是另一項決定。`end` 只回報一次 socket `open`。沒有原生 cause 時，已開啟 socket 觀察到的關閉 code **1006**，或 **`wasClean === false`**，現在會使最終 `done` 回報 `{ attempted: true, code: "NET_UNREACHABLE" }`，即使執行環境只發出 `close`、不發出 `error` 也一樣。既有的原生 cause 保持原來的對應；呼叫方取消／手動關閉仍然是 `{ attempted: false }`，呼叫方期限仍然是 `NET_TIMEOUT`，並且優先於異常關閉。[離線提示](/zh-Hant-TW/docs/client#multiple-endpoints) 仍會抑制歸因。
+
+缺失的 `wasClean` 不是 false。乾淨的 1000、1001、1005、1011、1012、1013 以及私有 4xxx 關閉本身不會把端點標成失敗；單憑非 1000 的 code 不夠。應用程式驗證、queue、heartbeat 和策略錯誤不會自動變成傳輸失敗。即使之後排空訊息或策略失敗，一次真實的異常關閉仍然只是一個實體樣本。這改變的是平衡器回饋，不是邏輯上的 `session.closed.kind`/`cause`，也不會合成第二個 error 事件。預設 pick-first 可以在已經授權的重連或下一次明確呼叫上改選備援；沒有任何健康訊號會開啟重連、改變其預算，或授權應用程式訊息重放。
+
 WebSocket backoff jitter 是**乘法**（`jitter: 0.2` 會在捨入前，把已設上限的基底縮放成 `0.8x`–`1.2x`）。最終延遲會再次被 `maxDelayMs` 與平台 timer 上限 `2_147_483_647` ms 卡住，所以那個範圍的上端可能被截掉。基底為零就維持零；有效數字的溢位會被夾住，而不是丟出錯誤。SSE 用同一套 0–1 jitter 規則。重連選項會在 constructor 之前驗證：`attempts` 是非負的 safe integer；`delayMs` 必須是非負有限數；`maxDelayMs` 可以是非負有限數或正 `Infinity`，後者移除設定上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 是有限且為正；`jitter` 是有限且落在 0–1。無效的值會回傳 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 停用後續重試，但所有明確提供的重連欄位仍會在首次連線前驗證，與 SSE 一樣。
 
 `beforeConnect({ attempt, signal })` 在初始 constructor 與每次重連前跑。把它的 signal 傳進 token refresh，讓取消同時停掉 prep 與 connect。
@@ -93,6 +97,8 @@ WebSocket backoff jitter 是**乘法**（`jitter: 0.2` 會在捨入前，把已�
 跟 HTTP 與 SSE 一樣，缺少、相對或無效的 base endpoint，或非法 path，會在建構期間、任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 也一樣。解析後的 URL 必須維持 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 最終的 `req.endpoint` 會按其最終的 `req.baseEndpoint`、用同一條規則驗證，但它可以刻意把 base 換成另一個有效的絕對 URL。確定性的 URL 錯誤絕不會重試。
 
 `withCredentials(true)` 是 HTTP／SSE 的 Fetch credentials — 不是 WebSocket auth。用審過的 cookie／session 策略、subprotocol，或短效 connection ticket。別把一般憑證或長效 secrets 放進 query string。
+
+builder 與 interceptor 每個邏輯 session 只執行一次；被歸因的重連可以改選另一個基礎 URL/origin，而不再執行它們。憑證必須對每一個選中的端點都有效，或在每一次實體傳輸嘗試時刷新。`beforeConnect` 可以刷新外部認證狀態，但收不到選中的 URL，也不能改寫已建好的 URL 或固定的 subprotocol 清單。屬於特定端點的工作應放在傳給 `withWebSocketHandle` 的、審過的 constructor 裡；瀏覽器 constructor 仍然不支援自訂 handshake headers。不要假定只放進 query 或 subprotocols 一次的 ticket，會為新端點重新產生。
 
 ## 關閉與擁有權
 
