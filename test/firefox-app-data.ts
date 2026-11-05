@@ -4,7 +4,6 @@
 // with "Could not find profile folder." even when Playwright passes -profile.
 //
 // TODO(remove-workaround): delete this file once playwright-core bundles Firefox >= 158.
-// Check with: bun -e "console.log(require('playwright-core/browsers.json').browsers.find(b=>b.name==='firefox'))"
 // Still needed as of 2026-10-09 against playwright-core@latest (1.64.0, Firefox 157) and the
 // newest alpha (1.65.0-alpha-2026-10-08, still Firefox 157).
 // When it's fixed upstream, also remove:

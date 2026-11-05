@@ -39,6 +39,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
@@ -62,6 +64,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
@@ -88,6 +92,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2
@@ -114,6 +120,8 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
+      # npm is the registry's trusted-publishing CLI. Bun publish does not support
+      # npm OIDC trusted publishing (oven-sh/bun#22423), so publishing keeps npm.
       - name: Install npm with trusted publishing support
         run: npm install --global npm@12.2.1
       - uses: oven-sh/setup-bun@v2

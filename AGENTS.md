@@ -209,7 +209,7 @@ The build stamps its input fingerprint into `doc/build/client/build-stamp.txt` a
 
 ## Release and packaging
 
-- The **Release** workflow is manual and pick-what-you-want. Versions come from the committed package manifests; nothing bumps them and no changesets are involved.
+- The **Release** workflow is manual and pick-what-you-want. Versions come from the committed package manifests; nothing bumps them and no changesets are involved. Publishing invokes npm because it is the registry's OIDC trusted-publishing CLI; `bun publish` does not support npm trusted publishing (oven-sh/bun#22423). Node is not installed or used by any other step.
 - **Release tags are mandatory.** After confirming that a package was published successfully, create its own lightweight Git tag on the exact commit used for publication. A package release is not complete until its tag has been pushed and verified on the remote to point to that commit.
 - Tag names are the package name without its `@defjs/` scope, `@`, then the published version: `core@0.6.0`, `react@0.0.3`, `vue@0.0.3`, `opentelemetry-server@0.0.3`. One tag per package, not one per release, because the packages version independently. Push explicit refs (`git push origin refs/tags/core@0.6.0`). The workflow neither reads nor creates tags, so a tag records a release and never drives one. `0.1.0`–`0.3.3` are the pre-convention core-only series; leave them in place.
 - Each package builds with `tsdown`, publishes from `dist`, and uses `publishConfig.directory`. The build writes `dist/package.json`, copies `LICENSE` and the package `README.md`. The `build` scripts call `bun --bun tsdown`, so they run on Bun from any directory, not only the repository root.
