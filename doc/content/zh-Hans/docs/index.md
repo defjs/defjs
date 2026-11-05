@@ -12,23 +12,18 @@ Defjs 把团队发布的 API 和应用使用的 client 分开。这组指南围�
 - [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)
 - [为何定义与执行彼此独立](/zh-Hans/docs/design-decisions)
 
-## 契约与执行 [#calls-and-contracts]
+## 核心概念 [#core-concepts]
 
-SDK 作者拥有 Struct 和端点定义。应用提供 Client，并用它调用操作。
-
-- [数据契约 / Struct](/zh-Hans/docs/struct)
-- [客户端配置 / Client](/zh-Hans/docs/client)
+- [数据结构 / Struct](/zh-Hans/docs/struct)
+- [Client](/zh-Hans/docs/client)
+- [中间件](/zh-Hans/docs/interceptors)
+- [错误](/zh-Hans/docs/errors)
 
 ## 请求与实时通信
 
 - [HTTP 请求](/zh-Hans/docs/http)
 - [SSE 事件流](/zh-Hans/docs/sse)
 - [WebSocket 会话](/zh-Hans/docs/web-socket)
-
-## 错误与拦截
-
-- [错误处理](/zh-Hans/docs/errors)
-- [拦截器](/zh-Hans/docs/interceptors)
 
 ## 插件
 

@@ -18,16 +18,17 @@ interface NavigationGroup {
 const guideGroups = [
   { titleKey: "nav.guide.preface", paths: ["", "/docs/start"] },
   {
-    titleKey: "nav.guide.contractsExecution",
-    paths: ["/docs/struct", "/docs/client"],
+    titleKey: "nav.guide.coreConcepts",
+    paths: [
+      "/docs/struct",
+      "/docs/client",
+      "/docs/interceptors",
+      "/docs/errors",
+    ],
   },
   {
     titleKey: "nav.guide.requestsRealtime",
     paths: ["/docs/http", "/docs/sse", "/docs/web-socket"],
-  },
-  {
-    titleKey: "nav.guide.errorsInterception",
-    paths: ["/docs/errors", "/docs/interceptors"],
   },
   {
     titleKey: "nav.guide.plugins",
@@ -118,7 +119,13 @@ export function getNavigationTree(
       area === "docs"
         ? [
             index,
-            ...grouped(guideGroups, { "": t("nav.home") }),
+            ...grouped(guideGroups, {
+              "": t("nav.home"),
+              "/docs/struct": t("nav.guide.dataStructures"),
+              "/docs/client": t("nav.guide.client"),
+              "/docs/interceptors": t("nav.guide.middleware"),
+              "/docs/errors": t("nav.guide.errors"),
+            }),
             {
               type: "separator" as const,
               $id: `${locale}:navigation:standalone`,

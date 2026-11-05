@@ -12,23 +12,18 @@ Defjs 分開兩樣嘢：團隊發佈嘅 API，同應用程式用嘅 client。跟
 - [建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)
 - [點解定義同執行要分開](/zh-Hant-HK/docs/design-decisions)
 
-## 契約與執行 [#calls-and-contracts]
+## 核心概念 [#core-concepts]
 
-SDK 作者擁有 Struct 同端點定義。應用程式提供 Client，再用佢呼叫操作。
-
-- [資料契約 / Struct](/zh-Hant-HK/docs/struct)
-- [客戶端設定 / Client](/zh-Hant-HK/docs/client)
+- [資料結構 / Struct](/zh-Hant-HK/docs/struct)
+- [Client](/zh-Hant-HK/docs/client)
+- [中介層](/zh-Hant-HK/docs/interceptors)
+- [錯誤](/zh-Hant-HK/docs/errors)
 
 ## 請求與即時通訊
 
 - [HTTP 請求](/zh-Hant-HK/docs/http)
 - [SSE 事件流](/zh-Hant-HK/docs/sse)
 - [WebSocket 會話](/zh-Hant-HK/docs/web-socket)
-
-## 錯誤與攔截
-
-- [錯誤處理](/zh-Hant-HK/docs/errors)
-- [攔截器](/zh-Hant-HK/docs/interceptors)
 
 ## 插件
 

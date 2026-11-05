@@ -12,23 +12,18 @@ Defjs는 팀이 배포하는 API와 애플리케이션이 쓰는 클라이언트
 - [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)
 - [정의와 실행을 나누는 이유](/ko-KR/docs/design-decisions)
 
-## 계약과 실행 [#calls-and-contracts]
+## 핵심 개념 [#core-concepts]
 
-SDK 작성자는 Struct와 엔드포인트 정의를 소유합니다. 애플리케이션은 Client를 제공하고 그것으로 작업을 호출합니다.
-
-- [데이터 계약 / Struct](/ko-KR/docs/struct)
-- [클라이언트 설정 / Client](/ko-KR/docs/client)
+- [데이터 구조 / Struct](/ko-KR/docs/struct)
+- [Client](/ko-KR/docs/client)
+- [미들웨어](/ko-KR/docs/interceptors)
+- [오류](/ko-KR/docs/errors)
 
 ## 요청과 실시간 통신
 
 - [HTTP 요청](/ko-KR/docs/http)
 - [SSE 이벤트 스트림](/ko-KR/docs/sse)
 - [WebSocket 세션](/ko-KR/docs/web-socket)
-
-## 오류와 인터셉터
-
-- [오류 처리](/ko-KR/docs/errors)
-- [인터셉터](/ko-KR/docs/interceptors)
 
 ## 플러그인
 

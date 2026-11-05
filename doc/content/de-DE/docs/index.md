@@ -12,23 +12,18 @@ Defjs trennt die API, die ein Team veröffentlicht, vom Client, den eine Anwendu
 - [SDK entwickeln und veröffentlichen](/de-DE/recipes/publish-http-sdk)
 - [Warum Definitionen und Ausführung getrennt sind](/de-DE/docs/design-decisions)
 
-## Verträge und Ausführung [#calls-and-contracts]
+## Kernkonzepte [#core-concepts]
 
-SDK-Autoren besitzen Structs und Endpoint-Definitionen. Anwendungen stellen den Client bereit und rufen Operationen damit auf.
-
-- [Datenverträge / Struct](/de-DE/docs/struct)
-- [Client-Konfiguration / Client](/de-DE/docs/client)
+- [Datenstrukturen / Struct](/de-DE/docs/struct)
+- [Client](/de-DE/docs/client)
+- [Middleware](/de-DE/docs/interceptors)
+- [Fehler](/de-DE/docs/errors)
 
 ## Anfragen und Echtzeit
 
 - [HTTP-Anfragen](/de-DE/docs/http)
 - [SSE-Ereignisströme](/de-DE/docs/sse)
 - [WebSocket-Sitzungen](/de-DE/docs/web-socket)
-
-## Fehler und Abfangen
-
-- [Fehlerbehandlung](/de-DE/docs/errors)
-- [Interceptors](/de-DE/docs/interceptors)
 
 ## Plugins
 

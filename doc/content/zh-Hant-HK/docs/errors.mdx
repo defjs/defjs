@@ -1,9 +1,9 @@
 ---
-title: "錯誤處理"
+title: "錯誤"
 description: SDK 聲明錯誤資料契約，應用程式透過 error-first tuple 區分業務狀態及執行失敗。
 ---
 
-# 錯誤處理
+# 錯誤
 
 SDK 作者在定義中描述錯誤 body 的 Struct，應用程式在呼叫點保留對狀態及故障的判斷。例如，HTTP 聲明的錯誤 body 成功解碼後，`HTTP_STATUS` 的 `data` 帶有類型；取消、逾時和解碼失敗仍使用 Defjs 的 fault 契約。
 

@@ -12,23 +12,18 @@ description: صمّم عقود SDK وعملياته، وانشرها، واضب�
 - [بناء SDK ونشره](/ar/recipes/publish-http-sdk)
 - [لماذا التعريف والتنفيذ منفصلان](/ar/docs/design-decisions)
 
-## العقود والتنفيذ [#calls-and-contracts]
+## المفاهيم الأساسية [#core-concepts]
 
-يملك مؤلفو SDK الـ Structs وتعريفات نقاط النهاية. توفّر التطبيقات العميل وتستدعي العمليات به.
-
-- [عقود البيانات / Struct](/ar/docs/struct)
-- [إعداد العميل / Client](/ar/docs/client)
+- [بنى البيانات / Struct](/ar/docs/struct)
+- [Client](/ar/docs/client)
+- [الوسيط](/ar/docs/interceptors)
+- [الأخطاء](/ar/docs/errors)
 
 ## الطلبات والزمن الحقيقي
 
 - [طلبات HTTP](/ar/docs/http)
 - [تدفقات أحداث SSE](/ar/docs/sse)
 - [جلسات WebSocket](/ar/docs/web-socket)
-
-## الأخطاء والاعتراض
-
-- [معالجة الأخطاء](/ar/docs/errors)
-- [المعترضات](/ar/docs/interceptors)
 
 ## الإضافات
 

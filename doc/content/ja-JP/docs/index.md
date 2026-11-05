@@ -12,23 +12,18 @@ Defjs は、チームが公開する API と、アプリケーションが使う
 - [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
 - [定義と実行を分ける理由](/ja-JP/docs/design-decisions)
 
-## 契約と実行 [#calls-and-contracts]
+## コア概念 [#core-concepts]
 
-SDK の作成者は Struct とエンドポイント定義を所有します。アプリケーションは Client を用意し、それを渡して操作を呼びます。
-
-- [データ契約 / Struct](/ja-JP/docs/struct)
-- [クライアント設定 / Client](/ja-JP/docs/client)
+- [データ構造 / Struct](/ja-JP/docs/struct)
+- [Client](/ja-JP/docs/client)
+- [ミドルウェア](/ja-JP/docs/interceptors)
+- [エラー](/ja-JP/docs/errors)
 
 ## リクエストとリアルタイム通信
 
 - [HTTP リクエスト](/ja-JP/docs/http)
 - [SSE イベントストリーム](/ja-JP/docs/sse)
 - [WebSocket セッション](/ja-JP/docs/web-socket)
-
-## エラーとインターセプター
-
-- [エラー処理](/ja-JP/docs/errors)
-- [インターセプター](/ja-JP/docs/interceptors)
 
 ## プラグイン
 

@@ -120,11 +120,11 @@ const guidePaths = [
   "/docs/start",
   "/docs/struct",
   "/docs/client",
+  "/docs/interceptors",
+  "/docs/errors",
   "/docs/http",
   "/docs/sse",
   "/docs/web-socket",
-  "/docs/errors",
-  "/docs/interceptors",
   "/docs/integrations",
   "/docs/integrations/react",
   "/docs/integrations/vue",
@@ -177,7 +177,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
     expect(
       guide.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
-    ).toBe(6);
+    ).toBe(5);
     expect(
       recipes.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
@@ -313,24 +313,12 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     guide.children
       .filter((n) => n.type === "separator" && Boolean(n.name))
       .map((n) => n.name),
-  ).toEqual([
-    "前言",
-    "契约与执行",
-    "请求与实时通信",
-    "错误与拦截",
-    "插件",
-    "AI",
-  ]);
+  ).toEqual(["前言", "核心概念", "请求与实时通信", "插件", "AI"]);
   expect(
     flattenTree(guide.children)
       .slice(1, 5)
       .map((n) => n.name),
-  ).toEqual([
-    "项目概览",
-    "快速开始",
-    "数据契约 / Struct",
-    "客户端配置 / Client",
-  ]);
+  ).toEqual(["项目概览", "快速开始", "数据结构 / Struct", "Client"]);
 });
 
 test("SSR mobile directory resolves a trailing-slash article from the same navigation tree", () => {
@@ -371,7 +359,7 @@ test("design decisions stand outside the framework group and native previous/nex
     );
     expect(
       findNeighbour(tree, `${prefix}/docs/integrations`).previous?.url,
-    ).toBe(`${prefix}/docs/interceptors`);
+    ).toBe(`${prefix}/docs/web-socket`);
     expect(
       findNeighbour(tree, `${prefix}/docs/integrations/react`).previous?.url,
     ).toBe(`${prefix}/docs/integrations`);

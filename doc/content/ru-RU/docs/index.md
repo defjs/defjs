@@ -12,23 +12,18 @@ Defjs отделяет API, который публикует группа, от
 - [Создание и публикация SDK](/ru-RU/recipes/publish-http-sdk)
 - [Почему определения и выполнение разделены](/ru-RU/docs/design-decisions)
 
-## Контракты и выполнение [#calls-and-contracts]
+## Основные понятия [#core-concepts]
 
-Авторы SDK владеют Struct и определениями эндпоинтов. Приложения дают Client и вызывают с ним операции.
-
-- [Контракты данных / Struct](/ru-RU/docs/struct)
-- [Настройка клиента / Client](/ru-RU/docs/client)
+- [Структуры данных / Struct](/ru-RU/docs/struct)
+- [Client](/ru-RU/docs/client)
+- [Промежуточное ПО](/ru-RU/docs/interceptors)
+- [Ошибки](/ru-RU/docs/errors)
 
 ## Запросы и реальное время
 
 - [HTTP-запросы](/ru-RU/docs/http)
 - [Потоки событий SSE](/ru-RU/docs/sse)
 - [Сессии WebSocket](/ru-RU/docs/web-socket)
-
-## Ошибки и перехват
-
-- [Обработка ошибок](/ru-RU/docs/errors)
-- [Перехватчики](/ru-RU/docs/interceptors)
 
 ## Плагины
 
