@@ -1,36 +1,22 @@
 ---
-title: "AI API 호출"
-description: "제공자 자격 증명을 브라우저에 노출하지 않고 애플리케이션에서 AI 서비스를 호출하고, 가상의 오프라인 이벤트 스트림을 읽습니다."
+title: "llms.txt"
+description: "대규모 언어 모델을 위해 생성된 영어 Markdown 색인과 페이지별 원본을 안내합니다."
 ---
 
-애플리케이션에서 AI 서비스를 호출하는 일과 도우미에게 Defjs를 맡기는 일은 서로 다릅니다. [AI 지원 개발](/ko-KR/docs/ai)이 도우미 작업 흐름입니다. API와 SSE 이벤트 형식은 제공자마다 다릅니다. 이 페이지의 스트림은 가상 백엔드이며, 특정 제공자의 프로토콜이 아닙니다.
+이 사이트는 어시스턴트를 위한 영어 Markdown을 제공합니다. 아래 주소에는 로케일 접두사가 없으며, 번역된 가이드가 아닙니다.
 
-## 애플리케이션에서 AI API 호출하기 [#call-an-api]
+## 페이지 색인 [#llms-txt]
 
-이미 쓰는 HTTP 또는 SSE 계약으로 호출을 정의한 뒤, 애플리케이션이 소유한 client로 작업을 호출합니다. 출발점은 [HTTP 요청](/ko-KR/docs/http)과 [SSE 이벤트 스트림](/ko-KR/docs/sse)입니다. [JSON 보내기](/ko-KR/recipes/post-json)는 JSON 본문 예제입니다. [SSE 이벤트 소비](/ko-KR/recipes/consume-sse)는 스트림을 읽고 닫는 예제지만 첫 이벤트에서 멈춥니다. 그 예제는 완전한 AI 응답이 아닙니다. 전체 AI 응답을 얻으려면 제공자의 완료 신호나 EOF까지 계속 읽고, 읽기 오류를 처리하며 스트림을 닫으세요. 이벤트 이름과 데이터 스키마도 제공자의 형식에 맞게 조정하세요. [취소와 시간 제한](/ko-KR/recipes/cancel-http)은 HTTP 호출을 멈추는 방법입니다.
+[llms.txt](/llms.txt)는 영어 페이지 목록과 해당 웹 페이지 링크입니다. 어시스턴트가 먼저 페이지를 찾아야 할 때 시작점입니다.
 
-제공자 비밀은 그 비용이 발생해도 되는 서버에 둡니다. 브라우저 번들, 공개 빌드 변수, 브라우저로 전달되는 client에는 넣지 마세요. 자격 증명은 애플리케이션의 것입니다. 서버의 client에 두거나, 그 서버 경계 안에서만 실행되는 인터셉터로 붙입니다. 자리는 [클라이언트 설정](/ko-KR/docs/client)과 [인터셉터](/ko-KR/docs/interceptors)입니다. `withCredentials`는 Fetch의 cookie 모드만 고르며, 제공자 비밀을 보관하지 않습니다.
+## 합본 가이드 [#llms-full]
 
-작업이 반환된 뒤 스트림의 주인은 애플리케이션입니다. SSE는 이벤트를 읽고, 핸들을 닫고, 닫힐 때까지 기다립니다. HTTP는 답이 더 필요 없으면 호출을 중단합니다. 중단이 서비스가 이미 받은 작업을 되돌렸다는 증거는 아닙니다.
+[llms-full.txt](/llms-full.txt)는 영어 가이드를 하나의 파일로 합칩니다. 한 번의 컨텍스트에 넓은 배경이 필요하고 토큰 예산이 충분할 때 사용하세요.
 
-스트리밍 POST가 실패했다는 이유만으로 다시 보내지 마세요. Defjs는 HTTP를 스스로 재시도하지 않습니다. SSE 재연결은 애플리케이션이 켤 때까지 꺼져 있고, 켠 뒤에도 POST 같은 메서드는 그 정책이 분명히 허용하지 않으면 다시 보내지지 않습니다. 실패한 시도에서도 서비스가 과금하는 작업이 이미 시작됐을 수 있습니다. 같은 POST를 다시 보내면 그 작업이 한 번 더 시작될 수 있습니다. 재시도를 넣기 전에 [HTTP 요청](/ko-KR/docs/http)의 재생 규칙과 [SSE 이벤트 스트림](/ko-KR/docs/sse)의 재연결 규칙을 읽으세요.
+## 페이지별 Markdown [#page-markdown]
 
-## 가상의 오프라인 스트림 [#fictional-stream]
+모든 영어 페이지는 `/llms.mdx/<path>/content.md`에서도 Markdown으로 받을 수 있습니다. 예를 들어 [빠른 시작 Markdown](/llms.mdx/docs/start/content.md)은 빠른 시작 페이지의 영어 본문입니다.
 
-아래 와이어 형식은 가상입니다. 특정 제공자의 이벤트 형식이 아닙니다. `withSSEHandle`이 응답을 주므로 이 예제에는 네트워크도 실제 자격 증명도 필요 없습니다. 본문은 `delta` 이벤트 두 개와 그 다음의 완료 이벤트입니다. 루프는 두 텍스트를 모두 남기고, 첫 이벤트에서 멈추지 않습니다.
+## 버전 확인 [#version]
 
-<include cwd lang="typescript">
-  examples/ai/fictional-completion.ts#example
-</include>
-
-`@defjs/core`가 설치된 프로젝트에 예제를 `fictional-completion.ts`로 저장한 뒤 실행하세요.
-
-```sh
-bun fictional-completion.ts
-```
-
-예상 출력:
-
-```txt
-Hello there
-```
+이 사이트는 기본 브랜치를 기록합니다. 프로젝트에 설치된 `@defjs/core` 버전은 다를 수 있습니다. 제안을 적용하기 전에 설치된 패키지 기준으로 API를 확인하세요. AI 도구에 코드나 컨텍스트를 제공하기 전에 비밀을 제거하고 프로젝트 정책을 확인하세요.

@@ -36,7 +36,7 @@ Defjs 把團隊發佈的 API，與應用程式使用的 client 分開。從 SDK 
 
 ## AI
 
-- [AI 輔助開發](/zh-Hant-TW/docs/ai)
-- [呼叫 AI API](/zh-Hant-TW/docs/ai-api)
+- [Skill](/zh-Hant-TW/docs/ai)
+- [llms.txt](/zh-Hant-TW/docs/ai-api)
 
 [設計決策](/zh-Hant-TW/docs/design-decisions)

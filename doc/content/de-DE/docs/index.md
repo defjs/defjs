@@ -36,7 +36,7 @@ Optionale Pakete für den Client der konsumierenden Anwendung. SDK-Definitionen 
 
 ## KI
 
-- [KI-gestützte Entwicklung](/de-DE/docs/ai)
-- [KI-APIs aufrufen](/de-DE/docs/ai-api)
+- [Skill](/de-DE/docs/ai)
+- [llms.txt](/de-DE/docs/ai-api)
 
 [Entwurfsentscheidungen](/de-DE/docs/design-decisions)

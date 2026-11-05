@@ -1,36 +1,22 @@
 ---
-title: "呼叫 AI API"
-description: "從應用程式呼叫 AI 服務，唔好將提供者憑證暴露畀瀏覽器，並閱讀一段虛構嘅離線事件流。"
+title: "llms.txt"
+description: "將助手指向為大型語言模型產生嘅英文 Markdown 索引同單頁原始檔。"
 ---
 
-從應用程式呼叫 AI 服務，同讓助手編寫 Defjs，係兩件不同嘅事。[AI 輔助開發](/zh-Hant-HK/docs/ai) 係助手工作流程。API 同 SSE 嘅事件格式由提供者各自規定。呢頁嘅流係虛構後端，唔係某個提供者嘅協定。
+本站發佈面向助手嘅英文 Markdown。呢啲地址冇語言前綴，亦唔係本地化指南嘅譯文。
 
-## 在應用程式裡呼叫 AI 介面 [#call-an-api]
+## 頁面索引 [#llms-txt]
 
-用你已經用緊嘅 HTTP 或 SSE 契約定義呢次呼叫，再喺應用程式自己嘅 client 上呼叫操作。由 [HTTP 請求](/zh-Hant-HK/docs/http) 同 [SSE 事件流](/zh-Hant-HK/docs/sse) 讀起。[發送 JSON](/zh-Hant-HK/recipes/post-json) 係常見嘅 JSON 本文。[使用 SSE 事件流](/zh-Hant-HK/recipes/consume-sse) 示範點樣讀取同關閉事件流，但例子只消費第一個事件。嗰個例子唔係一份完整嘅 AI 回答。要取得完整 AI 回答，應按服務協定繼續讀取，直到完成訊號或 EOF，處理讀取錯誤並關閉事件流；事件名稱同資料契約亦要按服務供應商嘅格式調整。[取消與逾時](/zh-Hant-HK/recipes/cancel-http) 講呼叫方點樣停低一次 HTTP 呼叫。
+[llms.txt](/llms.txt) 列出英文頁面，並連去對應網頁。助手需要先搵到頁面時，由呢度開始。
 
-將服務密鑰留喺有權消耗佢嘅伺服器。唔好寫入瀏覽器套件、公開嘅建置變數，或者會送到瀏覽器嘅 client。憑證歸應用程式所有：配喺伺服器上嘅 client，或者只喺該伺服器邊界入面行嘅攔截器附加。客戶端嘅設定位置係[客戶端設定](/zh-Hant-HK/docs/client)同[攔截器](/zh-Hant-HK/docs/interceptors)。`withCredentials` 只選擇 Fetch 嘅 cookie 模式，並唔保存服務密鑰。
+## 彙編指南 [#llms-full]
 
-操作返回之後，流歸應用程式所有。SSE 要按需要讀取事件、關閉控制代碼，並等到佢關閉。HTTP 喺唔再需要答案時中止呼叫。中止並不能證明服務已經撤銷佢接受過嘅工作。
+[llms-full.txt](/llms-full.txt) 將英文指南合成一個檔案。需要喺一次上下文提供較廣背景，而 token 預算夠一份大文件時用。
 
-唔好因為一次串流 POST 失敗就即刻重試。Defjs 唔會代你重試 HTTP。SSE 重新連線預設關閉，要由應用程式明確開啟；就算開啟，POST 呢類方法都唔會再送出，除非該策略明確允許。失敗嗰一次可能已經令服務開始咗會計費嘅工作。將同一個 POST 再送一次，可能將份工作再做一遍。加入重試之前，先讀 [HTTP 請求](/zh-Hant-HK/docs/http) 入面嘅重送規則同 [SSE 事件流](/zh-Hant-HK/docs/sse) 入面嘅重新連線規則。
+## 單頁 Markdown [#page-markdown]
 
-## 虛構嘅離線流 [#fictional-stream]
+每個英文頁面亦可以透過 `/llms.mdx/<path>/content.md` 取得 Markdown。例如，[快速開始嘅 Markdown](/llms.mdx/docs/start/content.md) 就係快速開始頁嘅英文正文。
 
-下面嘅事件格式係虛構嘅，唔係某個具體提供者嘅事件格式。`withSSEHandle` 提供回應，所以例子唔需要網絡，亦唔需要真實憑證。本文係兩個 `delta` 事件，然後係一個完成事件。迴圈會保留兩段文字，唔會喺第一個事件之後停低。
+## 核對版本 [#version]
 
-<include cwd lang="typescript">
-  examples/ai/fictional-completion.ts#example
-</include>
-
-喺已安裝 `@defjs/core` 嘅項目中，將例子儲存為 `fictional-completion.ts`，然後執行：
-
-```sh
-bun fictional-completion.ts
-```
-
-預期輸出：
-
-```txt
-Hello there
-```
+本站記錄預設分支；項目安裝嘅 `@defjs/core` 版本可能唔同。採用建議之前，先按已安裝嘅套件核對 API。向 AI 工具提供程式碼或上下文之前，先移除密鑰並確認項目嘅資料使用政策。

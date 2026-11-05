@@ -36,7 +36,7 @@ Defjs отделяет API, который публикует группа, от
 
 ## ИИ
 
-- [Разработка с помощью ИИ](/ru-RU/docs/ai)
-- [Вызов API ИИ](/ru-RU/docs/ai-api)
+- [Skill](/ru-RU/docs/ai)
+- [llms.txt](/ru-RU/docs/ai-api)
 
 [Проектные решения](/ru-RU/docs/design-decisions)

@@ -36,7 +36,7 @@ Defjs 分開兩樣嘢：團隊發佈嘅 API，同應用程式用嘅 client。跟
 
 ## AI
 
-- [AI 輔助開發](/zh-Hant-HK/docs/ai)
-- [呼叫 AI API](/zh-Hant-HK/docs/ai-api)
+- [Skill](/zh-Hant-HK/docs/ai)
+- [llms.txt](/zh-Hant-HK/docs/ai-api)
 
 [設計決策](/zh-Hant-HK/docs/design-decisions)

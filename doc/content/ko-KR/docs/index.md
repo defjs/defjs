@@ -36,7 +36,7 @@ Defjs는 팀이 배포하는 API와 애플리케이션이 쓰는 클라이언트
 
 ## AI
 
-- [AI 지원 개발](/ko-KR/docs/ai)
-- [AI API 호출](/ko-KR/docs/ai-api)
+- [Skill](/ko-KR/docs/ai)
+- [llms.txt](/ko-KR/docs/ai-api)
 
 [설계 결정](/ko-KR/docs/design-decisions)

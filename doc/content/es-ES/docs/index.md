@@ -36,7 +36,7 @@ Paquetes opcionales para el cliente de la aplicación consumidora. Las definicio
 
 ## IA
 
-- [Desarrollo asistido por IA](/es-ES/docs/ai)
-- [Llamar a API de IA](/es-ES/docs/ai-api)
+- [Skill](/es-ES/docs/ai)
+- [llms.txt](/es-ES/docs/ai-api)
 
 [Decisiones de diseño](/es-ES/docs/design-decisions)

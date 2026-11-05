@@ -36,7 +36,7 @@ description: صمّم عقود SDK وعملياته، وانشرها، واضب�
 
 ## الذكاء الاصطناعي
 
-- [التطوير بمساعدة الذكاء الاصطناعي](/ar/docs/ai)
-- [استدعاء واجهات الذكاء الاصطناعي](/ar/docs/ai-api)
+- [Skill](/ar/docs/ai)
+- [llms.txt](/ar/docs/ai-api)
 
 [قرارات التصميم](/ar/docs/design-decisions)

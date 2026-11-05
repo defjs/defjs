@@ -27,12 +27,12 @@ test("exposes grouped navigation and the current reading area", async () => {
   ).toBe(1);
   expect(
     await navigation
-      .getByRole("link", { name: "AI 辅助开发", exact: true })
+      .getByRole("link", { name: "Skill", exact: true })
       .getAttribute("href"),
   ).toBe("/zh-Hans/docs/ai");
   expect(
     await navigation
-      .getByRole("link", { name: "调用 AI API", exact: true })
+      .getByRole("link", { name: "llms.txt", exact: true })
       .getAttribute("href"),
   ).toBe("/zh-Hans/docs/ai-api");
   expect(

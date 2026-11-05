@@ -36,7 +36,7 @@ Defjs 把团队发布的 API 和应用使用的 client 分开。这组指南围�
 
 ## AI
 
-- [AI 辅助开发](/zh-Hans/docs/ai)
-- [调用 AI API](/zh-Hans/docs/ai-api)
+- [Skill](/zh-Hans/docs/ai)
+- [llms.txt](/zh-Hans/docs/ai-api)
 
 [设计决策](/zh-Hans/docs/design-decisions)

@@ -36,7 +36,7 @@ Defjs は、チームが公開する API と、アプリケーションが使う
 
 ## AI
 
-- [AI を活用した開発](/ja-JP/docs/ai)
-- [AI API の呼び出し](/ja-JP/docs/ai-api)
+- [Skill](/ja-JP/docs/ai)
+- [llms.txt](/ja-JP/docs/ai-api)
 
 [設計上の判断](/ja-JP/docs/design-decisions)

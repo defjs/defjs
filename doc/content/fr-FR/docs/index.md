@@ -36,7 +36,7 @@ Paquets facultatifs pour le client de l’application consommatrice. Les défini
 
 ## IA
 
-- [Développement assisté par IA](/fr-FR/docs/ai)
-- [Appeler des API d’IA](/fr-FR/docs/ai-api)
+- [Skill](/fr-FR/docs/ai)
+- [llms.txt](/fr-FR/docs/ai-api)
 
 [Décisions de conception](/fr-FR/docs/design-decisions)

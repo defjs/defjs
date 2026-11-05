@@ -232,21 +232,17 @@ test("top tabs stay at three areas and the AI guide sits inside Guide", () => {
 
 test("every locale names the Guide AI group and both of its pages", () => {
   const labels = {
-    "en-US": ["AI", "AI-assisted development", "Calling AI APIs"],
-    "zh-Hans": ["AI", "AI 辅助开发", "调用 AI API"],
-    "zh-Hant-TW": ["AI", "AI 輔助開發", "呼叫 AI API"],
-    "zh-Hant-HK": ["AI", "AI 輔助開發", "呼叫 AI API"],
-    "ja-JP": ["AI", "AI を活用した開発", "AI API の呼び出し"],
-    "ko-KR": ["AI", "AI 지원 개발", "AI API 호출"],
-    "de-DE": ["KI", "KI-gestützte Entwicklung", "KI-APIs aufrufen"],
-    "fr-FR": ["IA", "Développement assisté par IA", "Appeler des API d’IA"],
-    "es-ES": ["IA", "Desarrollo asistido por IA", "Llamar a API de IA"],
-    "ru-RU": ["ИИ", "Разработка с помощью ИИ", "Вызов API ИИ"],
-    ar: [
-      "الذكاء الاصطناعي",
-      "التطوير بمساعدة الذكاء الاصطناعي",
-      "استدعاء واجهات الذكاء الاصطناعي",
-    ],
+    "en-US": ["AI", "Skill", "llms.txt"],
+    "zh-Hans": ["AI", "Skill", "llms.txt"],
+    "zh-Hant-TW": ["AI", "Skill", "llms.txt"],
+    "zh-Hant-HK": ["AI", "Skill", "llms.txt"],
+    "ja-JP": ["AI", "Skill", "llms.txt"],
+    "ko-KR": ["AI", "Skill", "llms.txt"],
+    "de-DE": ["KI", "Skill", "llms.txt"],
+    "fr-FR": ["IA", "Skill", "llms.txt"],
+    "es-ES": ["IA", "Skill", "llms.txt"],
+    "ru-RU": ["ИИ", "Skill", "llms.txt"],
+    ar: ["الذكاء الاصطناعي", "Skill", "llms.txt"],
   } as const;
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;

@@ -36,7 +36,7 @@ Optional packages for the consuming application's client. SDK definitions stay i
 
 ## AI
 
-- [AI-assisted development](/docs/ai)
-- [Calling AI APIs](/docs/ai-api)
+- [Skill](/docs/ai)
+- [llms.txt](/docs/ai-api)
 
 [Design decisions](/docs/design-decisions)
