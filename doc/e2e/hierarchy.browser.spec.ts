@@ -76,7 +76,7 @@ test("distinguishes navigation groups from their children in both reading direct
         rtl ? standalone.right - group.right : standalone.left - group.left,
       ),
     ).toBeLessThanOrEqual(2);
-    expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(6);
+    expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(5);
     const aiLabel = {
       "/zh-Hans": "AI",
       "/ar": "الذكاء الاصطناعي",

@@ -12,7 +12,7 @@ import { openSite } from "./support/site";
 
 // Prose queries absent from each overview's title and description.
 const overviewQueries: Record<string, { docs: string; recipes: string }> = {
-  "en-US": { docs: "interception", recipes: "individual" },
+  "en-US": { docs: "middleware", recipes: "individual" },
   "zh-Hans": { docs: "围绕", recipes: "掌握" },
   "zh-Hant-TW": { docs: "讀到", recipes: "掌握" },
   "zh-Hant-HK": { docs: "讀到", recipes: "掌握" },
