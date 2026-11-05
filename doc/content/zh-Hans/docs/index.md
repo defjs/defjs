@@ -21,14 +21,13 @@ Defjs 把团队发布的 API 和应用使用的 client 分开。这组指南围�
 
 ## 最佳实践 [#best-practices]
 
-- [总览](/zh-Hans/docs/best-practices)
 - [SDK 设计](/zh-Hans/docs/best-practices/sdk-design)
 - [应用集成](/zh-Hans/docs/best-practices/application)
+- [中间件](/zh-Hans/docs/best-practices/middleware)
 - [错误处理](/zh-Hans/docs/best-practices/errors)
-- [流式与实时](/zh-Hans/docs/best-practices/streaming)
+- [SSE](/zh-Hans/docs/best-practices/sse)
+- [WebSocket](/zh-Hans/docs/best-practices/web-socket)
 - [测试](/zh-Hans/docs/best-practices/testing)
-- [安全](/zh-Hans/docs/best-practices/security)
-- [性能](/zh-Hans/docs/best-practices/performance)
 
 ## 请求与实时通信
 

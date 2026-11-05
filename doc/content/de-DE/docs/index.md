@@ -21,14 +21,13 @@ Defjs trennt die API, die ein Team veröffentlicht, vom Client, den eine Anwendu
 
 ## Best Practices [#best-practices]
 
-- [Übersicht](/de-DE/docs/best-practices)
 - [SDK-Design](/de-DE/docs/best-practices/sdk-design)
 - [Anwendungsintegration](/de-DE/docs/best-practices/application)
+- [Middleware](/de-DE/docs/best-practices/middleware)
 - [Fehlerbehandlung](/de-DE/docs/best-practices/errors)
-- [Streaming und Echtzeit](/de-DE/docs/best-practices/streaming)
+- [SSE](/de-DE/docs/best-practices/sse)
+- [WebSocket](/de-DE/docs/best-practices/web-socket)
 - [Tests](/de-DE/docs/best-practices/testing)
-- [Sicherheit](/de-DE/docs/best-practices/security)
-- [Leistung](/de-DE/docs/best-practices/performance)
 
 ## Anfragen und Echtzeit
 

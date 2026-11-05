@@ -21,14 +21,13 @@ description: صمّم عقود SDK وعملياته، وانشرها، واضب�
 
 ## أفضل الممارسات [#best-practices]
 
-- [نظرة عامة](/ar/docs/best-practices)
 - [تصميم SDK](/ar/docs/best-practices/sdk-design)
 - [دمج التطبيق](/ar/docs/best-practices/application)
+- [الوسيط](/ar/docs/best-practices/middleware)
 - [معالجة الأخطاء](/ar/docs/best-practices/errors)
-- [البث والزمن الحقيقي](/ar/docs/best-practices/streaming)
+- [SSE](/ar/docs/best-practices/sse)
+- [WebSocket](/ar/docs/best-practices/web-socket)
 - [الاختبارات](/ar/docs/best-practices/testing)
-- [الأمان](/ar/docs/best-practices/security)
-- [الأداء](/ar/docs/best-practices/performance)
 
 ## الطلبات والزمن الحقيقي
 

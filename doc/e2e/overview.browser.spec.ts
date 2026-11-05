@@ -19,14 +19,13 @@ const guideArticles = [
   "/docs/ai",
   "/docs/ai-api",
   "/docs/design-decisions",
-  "/docs/best-practices",
   "/docs/best-practices/sdk-design",
   "/docs/best-practices/application",
+  "/docs/best-practices/middleware",
   "/docs/best-practices/errors",
-  "/docs/best-practices/streaming",
+  "/docs/best-practices/sse",
+  "/docs/best-practices/web-socket",
   "/docs/best-practices/testing",
-  "/docs/best-practices/security",
-  "/docs/best-practices/performance",
 ];
 const recipeArticles = [
   "/recipes/post-json",

@@ -21,14 +21,13 @@ Defjs 分開兩樣嘢：團隊發佈嘅 API，同應用程式用嘅 client。跟
 
 ## 最佳實踐 [#best-practices]
 
-- [總覽](/zh-Hant-HK/docs/best-practices)
 - [SDK 設計](/zh-Hant-HK/docs/best-practices/sdk-design)
 - [應用整合](/zh-Hant-HK/docs/best-practices/application)
+- [中介層](/zh-Hant-HK/docs/best-practices/middleware)
 - [錯誤處理](/zh-Hant-HK/docs/best-practices/errors)
-- [串流與即時](/zh-Hant-HK/docs/best-practices/streaming)
+- [SSE](/zh-Hant-HK/docs/best-practices/sse)
+- [WebSocket](/zh-Hant-HK/docs/best-practices/web-socket)
 - [測試](/zh-Hant-HK/docs/best-practices/testing)
-- [安全](/zh-Hant-HK/docs/best-practices/security)
-- [效能](/zh-Hant-HK/docs/best-practices/performance)
 
 ## 請求與即時通訊
 

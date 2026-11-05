@@ -123,14 +123,13 @@ const guidePaths = [
   "/docs/client",
   "/docs/interceptors",
   "/docs/errors",
-  "/docs/best-practices",
   "/docs/best-practices/sdk-design",
   "/docs/best-practices/application",
+  "/docs/best-practices/middleware",
   "/docs/best-practices/errors",
-  "/docs/best-practices/streaming",
+  "/docs/best-practices/sse",
+  "/docs/best-practices/web-socket",
   "/docs/best-practices/testing",
-  "/docs/best-practices/security",
-  "/docs/best-practices/performance",
   "/docs/http",
   "/docs/sse",
   "/docs/web-socket",
@@ -167,7 +166,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
         .map((p) => p.url)
         .sort(),
     );
-    expect(new Set(pages.map((p) => p.url)).size).toBe(230);
+    expect(new Set(pages.map((p) => p.url)).size).toBe(229);
     for (const page of pages) {
       expect(source.getPageByUrl(page.url, locale)?.path).toBe(
         `${locale}/${page.$ref}`,

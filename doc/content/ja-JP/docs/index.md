@@ -21,14 +21,13 @@ Defjs は、チームが公開する API と、アプリケーションが使う
 
 ## ベストプラクティス [#best-practices]
 
-- [概要](/ja-JP/docs/best-practices)
 - [SDK 設計](/ja-JP/docs/best-practices/sdk-design)
 - [アプリケーション統合](/ja-JP/docs/best-practices/application)
+- [ミドルウェア](/ja-JP/docs/best-practices/middleware)
 - [エラー処理](/ja-JP/docs/best-practices/errors)
-- [ストリーミングとリアルタイム](/ja-JP/docs/best-practices/streaming)
+- [SSE](/ja-JP/docs/best-practices/sse)
+- [WebSocket](/ja-JP/docs/best-practices/web-socket)
 - [テスト](/ja-JP/docs/best-practices/testing)
-- [セキュリティ](/ja-JP/docs/best-practices/security)
-- [パフォーマンス](/ja-JP/docs/best-practices/performance)
 
 ## リクエストとリアルタイム通信
 
