@@ -29,7 +29,7 @@ description: 應用程式在自己的伺服器 Client 上觀測 SDK 呼叫，使
 
 SDK init、providers、exporters、processors、context、sampling、redaction、flush、shutdown 由你負責。這個套件消費你傳入的選填 `Tracer`、選填 `Meter`、選填 `Logger`、選填 `TextMapPropagator`。它不提供內建 redactor 或敏感 key 策略。
 
-不提供快取、重試、訊息層級 span 或應用結果策略。伺服器執行環境須符合所選 SDK 與 bridge 的要求；本文可執行的 Winston 範例使用 Bun。peers 為 `@defjs/core`、`@opentelemetry/api` 1.x、`@opentelemetry/core` 2.x/3.x。`@opentelemetry/api-logs` 是套件的一般相依項；應用自行安裝 SDK 與 bridge。
+不提供快取、重試、訊息層級 span 或應用結果策略。伺服器執行環境須符合所選 SDK 與 bridge 的要求。peers 為 `@defjs/core`、`@opentelemetry/api` 1.x、`@opentelemetry/core` 2.x/3.x。`@opentelemetry/api-logs` 是套件的一般相依項；應用自行安裝 SDK 與 bridge。
 
 公開 API：`withOpenTelemetryServer`，以及 `OpenTelemetryServerOptions`、`OpenTelemetryServerHttpOptions`、`OpenTelemetryServerSSEOptions`、`OpenTelemetryServerWebSocketOptions`。
 
@@ -127,43 +127,6 @@ Plugin 不會 init／shut down SDK，也不會 dispose core client 或傳輸 han
 </include>
 
 匯出的診斷嚴重度為 `WARN`（13），event name 是 `http.client.request.exception`，帶固定的訊息和一個 exception type。flush 與 shutdown 由應用程式負責；Defjs 絕不會替你 shut down provider。真實應用會在啟動時設定一次 exporter，並在請求和串流都結束後再關閉它。
-
-### Winston：保留業務程式的 logging API
-
-業務程式碼繼續呼叫 `appLogger.info()` 或 `appLogger.error()`。官方 transport 會把這些記錄轉成 OTel Logs；Defjs 則從同一個 provider 拿到另一個獨立的原生 Logger。請在第一次 log 呼叫前註冊 provider。Transport 是延遲解析全域 Logger 的，所以建構順序無關緊要，但在註冊之前記錄的內容會被丟掉：
-
-<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
-
-這段程式碼只展示啟動時的接線。應用程式結束前，要先做完進行中的工作、等待 Winston 寫入完成、關閉 logger，再 await `provider.shutdown()`。[可執行的 Winston 範例](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging)包含完整的清理流程與一次本機失敗請求。在 repository checkout 中執行 `bun doc/examples/opentelemetry-logging/winston.ts`。
-
-範例用一個示範用的父 context 來展示關聯，而不需要 Trace SDK；那些固定 ID 不是正式環境的 request ID。正式環境的 context manager 必須帶著真正 active 的 request context。Defjs 會明確把它儲存的出站 context 附加到每筆診斷上，包括非同步的串流關閉。業務 logs 則留在它們自己的 active context：可以和 Defjs 共用同一個 trace ID，但 span ID 不同。
-
-Winston 的 OTel transport 與自動 Winston log 傳送，二選一。兩者都開會送出重複的 LogRecords。Console 輸出與 OTel 輸出是不同的目的地；如果會造成重複匯入，就避免把同一筆 console 記錄再收集一次。
-
-### Pino：Node.js instrumentation
-
-在 Node.js 應用程式裡，要在載入 Pino 之前先初始化 SDK 與 instrumentation。這個範例在 `sdk.start()` 之後才用 CommonJS 載入 Pino，讓它的 instrumentation 能觀察到模組載入；在最上方 import Pino 會破壞這個順序。這是 Node 的參考範例，不代表已驗證 Bun 的自動 instrumentation。
-
-<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
-
-`PinoInstrumentation` 預設會啟用 log 傳送與 log 關聯。傳送會把記錄轉進應用程式的 Logs SDK；關聯則在有有效 span context 為 active 時加上 trace 欄位。兩者是各自獨立的功能。另一個選項 `pino-opentelemetry-transport` 會在 worker 裡建立 provider，獨立於主執行緒的 provider。見[官方 Pino 指南](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino)。
-
-### 嚴重度與過濾
-
-OTel 把原本的標籤保留在 `severityText`，並對應到 `severityNumber`。以下使用 Pino 的預設值與 Winston 預設的 npm levels：
-
-| OTel 嚴重度／基準值 | Pino 方法／值 | Winston level |
-| ------------------- | ------------- | ------------- |
-| TRACE / 1           | trace / 10    | silly         |
-| DEBUG / 5           | debug / 20    | debug         |
-| INFO / 9            | info / 30     | info          |
-| WARN / 13           | warn / 40     | warn          |
-| ERROR / 17          | error / 50    | error         |
-| FATAL / 21          | fatal / 60    | 沒有預設對應  |
-
-OTel 為每個嚴重度群組保留四個數值。Winston 的 `http` 對應到 7，`verbose` 對應到 6。自訂 level 要檢查對應：函式庫自己的數值不是 OTel 嚴重度數值，未知的 Winston 標籤可能是未指定的嚴重度。TRACE 這個 log level 與 Tracer API 無關。
-
-嚴重度描述的是事件本身；門檻則決定某個目的地是否接收它。在 Winston 範例中，console 接收 DEBUG 及以上，而它的 OTel transport 接收 INFO 及以上。明確設定的 transport level 會覆蓋 Winston 預設的 logger level。這兩個設定都不會控制 Defjs 直接使用的 OTel Logger。想讓兩條路徑套用同一套策略時，請用 processor 或 Collector 過濾；下游的過濾無法救回上游已經丟掉的記錄。
 
 ### Defjs 診斷契約
 

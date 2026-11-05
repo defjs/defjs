@@ -29,7 +29,7 @@ SDK は別途初期化します。その API オブジェクトを渡します�
 
 SDK の init、プロバイダ、exporter、プロセッサ、コンテキスト、サンプリング、redaction、flush、shutdown は呼び出し側の所有です。このパッケージは、渡された任意の `Tracer`、任意の `Meter`、任意の `Logger`、任意の `TextMapPropagator` を消費します。redactor や sensitive-key policy は内蔵しません。
 
-キャッシュ、リトライ、メッセージ単位の span、アプリケーションの結果ポリシーは提供しません。使用する SDK と bridge が対応するサーバー実行環境を選んでください。実行可能な Winston の例は Bun を使います。peer は `@defjs/core`、`@opentelemetry/api` 1.x、`@opentelemetry/core` 2.x/3.x です。`@opentelemetry/api-logs` は通常の依存関係で、SDK と bridge はアプリ側でインストールします。
+キャッシュ、リトライ、メッセージ単位の span、アプリケーションの結果ポリシーは提供しません。使用する SDK と bridge が対応するサーバー実行環境を選んでください。peer は `@defjs/core`、`@opentelemetry/api` 1.x、`@opentelemetry/core` 2.x/3.x です。`@opentelemetry/api-logs` は通常の依存関係で、SDK と bridge はアプリ側でインストールします。
 
 公開 API: `withOpenTelemetryServer` と `OpenTelemetryServerOptions`、`OpenTelemetryServerHttpOptions`、`OpenTelemetryServerSSEOptions`、`OpenTelemetryServerWebSocketOptions`。
 
@@ -127,43 +127,6 @@ WebSocket の query 伝播は、トレースコンテキストと baggage をブ
 </include>
 
 エクスポートされる診断は、severity が `WARN`（13）、イベント名が `http.client.request.exception`、固定のメッセージと例外タイプを持ちます。flush と shutdown はアプリケーションの責任で、Defjs があなたの provider を shutdown することはありません。実際のアプリケーションでは、exporter を起動時に一度だけ設定し、リクエストとストリームがすべて終わってから shutdown します。
-
-### Winston: ビジネスログの API はそのまま
-
-ビジネスコードは引き続き `appLogger.info()` や `appLogger.error()` を呼びます。公式の transport がそれらのレコードを OTel Logs に変換し、Defjs は同じ provider から別のネイティブ Logger を受け取ります。最初のログ呼び出しの前に provider を登録してください。transport はグローバル Logger を遅延して解決するので、構築の順序は問題になりませんが、登録前にログされたレコードは破棄されます。
-
-<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
-
-このスニペットは起動時の配線を示します。アプリケーション終了の前に、保留中の作業を終え、Winston の書き込みを待ち、logger を閉じて `provider.shutdown()` を await してください。[実行可能な Winston の例](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging)には、完全なクリーンアップとローカルで失敗するリクエストが含まれます。リポジトリのチェックアウトからは `bun doc/examples/opentelemetry-logging/winston.ts` で実行できます。
-
-この例では、Trace SDK なしで相関を示すためにデモ用の親 context を使っています。その固定 ID は本番のリクエスト ID ではありません。本番の context manager は、実際のアクティブなリクエストの context を運ばなければなりません。Defjs は、保存したアウトバウンドの context を、非同期のストリーム終了を含む各診断に明示的に付けます。ビジネスログは自分のアクティブな context に残るので、Defjs と同じ trace ID を共有しつつ、span ID は異なることがあります。
-
-明示的な Winston OTel transport か、Winston のログの自動送信のどちらか一方を使ってください。両方を有効にすると LogRecord が重複して送られます。コンソール出力と OTel 出力は別の送り先です。同じコンソールレコードを再び収集して取り込みが重複するなら、避けてください。
-
-### Pino: Node.js のインストルメンテーション
-
-Node.js アプリケーションでは、Pino を読み込む前に SDK とインストルメンテーションを初期化します。この例は `sdk.start()` のあとで CommonJS 経由で Pino を読み込み、インストルメンテーションがモジュールの読み込みを観測できるようにしています。先頭で Pino を import すると、この順序が崩れます。これは Node 向けのリファレンスであり、Bun の自動インストルメンテーションが検証済みだという主張ではありません。
-
-<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
-
-`PinoInstrumentation` は、ログの送信とログの相関をデフォルトで有効にします。送信はレコードをアプリケーションの Logs SDK に変換し、相関は有効な span context があるとき trace フィールドを付けます。この二つは別の機能です。代替の `pino-opentelemetry-transport` は worker の中で provider を作り、メインスレッドの provider とは独立しています。[公式の Pino ガイド](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino)を参照してください。
-
-### Severity とフィルタリング
-
-OTel は元のラベルを `severityText` に保ち、`severityNumber` に対応付けます。以下は Pino のデフォルトと Winston のデフォルトの npm レベルを使った対応です。
-
-| OTel の severity / 基準値 | Pino のメソッド / 値 | Winston のレベル       |
-| ------------------------- | -------------------- | ---------------------- |
-| TRACE / 1                 | trace / 10           | silly                  |
-| DEBUG / 5                 | debug / 20           | debug                  |
-| INFO / 9                  | info / 30            | info                   |
-| WARN / 13                 | warn / 40            | warn                   |
-| ERROR / 17                | error / 50           | error                  |
-| FATAL / 21                | fatal / 60           | デフォルトの対応はなし |
-
-OTel は severity グループごとに 4 つの数値を予約しています。Winston の `http` は 7、`verbose` は 6 に対応します。カスタムレベルは対応を確認してください。ライブラリの数値は OTel の severity number ではなく、未知の Winston ラベルは severity が未規定になることがあります。TRACE というログレベルは Tracer API とは無関係です。
-
-Severity はイベントを表し、閾値は送り先がそれを受け取るかを決めます。Winston の例では、コンソールは DEBUG 以上を、OTel transport は INFO 以上を受け取ります。transport に明示したレベルは、Winston のデフォルトの logger レベルを上書きします。どちらの設定も、Defjs が直接使う OTel Logger には効きません。両方の経路に一つの方針を適用したいときは、プロセッサか Collector でフィルターしてください。下流のフィルターは、上流で破棄済みのレコードを取り戻せません。
 
 ### Defjs の診断契約
 

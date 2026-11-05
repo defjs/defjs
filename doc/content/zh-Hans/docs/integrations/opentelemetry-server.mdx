@@ -29,7 +29,7 @@ Plugin 即使在传输层请求失败时也能创建传输 telemetry。导出与
 
 SDK 初始化、providers、exporters、processors、context、采样、脱敏、flush、shutdown 归你。这个包消费你传入的可选 `Tracer`、可选 `Meter`、可选 `Logger`、可选 `TextMapPropagator`。它不提供内建 redactor 或敏感 key 策略。
 
-不提供缓存、重试、消息级 span 或应用结果策略。服务端运行时须符合所选 SDK 和 bridge 的要求；本文可运行的 Winston 示例使用 Bun。peers 为 `@defjs/core`、`@opentelemetry/api` 1.x、`@opentelemetry/core` 2.x/3.x。`@opentelemetry/api-logs` 是包的普通依赖；应用自行安装 SDK 和 bridge。
+不提供缓存、重试、消息级 span 或应用结果策略。服务端运行时须符合所选 SDK 和 bridge 的要求。peers 为 `@defjs/core`、`@opentelemetry/api` 1.x、`@opentelemetry/core` 2.x/3.x。`@opentelemetry/api-logs` 是包的普通依赖；应用自行安装 SDK 和 bridge。
 
 公开 API：`withOpenTelemetryServer`，以及 `OpenTelemetryServerOptions`、`OpenTelemetryServerHttpOptions`、`OpenTelemetryServerSSEOptions`、`OpenTelemetryServerWebSocketOptions`。
 
@@ -127,43 +127,6 @@ Plugin 不 init/shut down SDK，也不释放 core Client 或传输 handle。你 
 </include>
 
 导出的诊断等级为 `WARN`（13），事件名为 `http.client.request.exception`，包含固定消息和异常类型。应用负责 flush 和 shutdown，Defjs 不会关闭 provider。真实应用应在启动时配置 exporter，在请求和流结束后再关闭遥测资源。
-
-### Winston：保留业务日志调用方式
-
-业务仍然调用 `appLogger.info()`、`appLogger.error()`。官方 transport 将业务日志转换为 OTel Logs；Defjs 使用同一个 provider 提供的另一个原生 Logger。请在第一次打日志前注册 provider。transport 会惰性解析全局 Logger，所以构造顺序无关紧要，但注册之前记录的日志会被丢弃：
-
-<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
-
-这段代码展示启动装配。应用退出前，应先结束业务、等待 Winston 写入完成、关闭 logger，再等待 `provider.shutdown()`。[可运行 Winston 示例](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging) 包含完整清理流程和本地失败请求。在仓库中运行 `bun doc/examples/opentelemetry-logging/winston.ts` 即可观察输出。
-
-示例使用演示用父 context，在不安装 Trace SDK 的情况下展示关联；固定 ID 不能当作生产请求 ID。生产环境的 context manager 应传递真实请求上下文。Defjs 每次记录诊断时会显式使用保存的出站 context，包括异步关闭。业务日志仍使用自己的活跃 context，因此两路日志可以有相同 trace ID，但 span ID 不同。
-
-Winston 显式 OTel transport 与自动 log sending 选择一种；同时开启会重复发送 LogRecord。控制台和 OTel 是两个输出目标，如果再次采集同一份控制台日志，也应避免重复入库。
-
-### Pino：Node.js 自动插桩
-
-Node.js 应用应在加载 Pino 前初始化 SDK 和插桩。下面在 `sdk.start()` 后通过 CommonJS 加载 Pino，让插桩观察模块加载；不能改成顶部提前导入 Pino。这是 Node 参考接法，不代表已经验证 Bun 自动插桩。
-
-<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
-
-`PinoInstrumentation` 默认同时开启 log sending 和 log correlation。前者将记录发送给应用的 Logs SDK；后者在存在有效活跃 span context 时补充 trace 字段，两项能力相互独立。另一种方案 `pino-opentelemetry-transport` 会在 worker 中创建独立 provider，不自动共享主线程 provider。参见 [Pino 官方说明](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino)。
-
-### 日志等级与输出阈值
-
-OTel 用 `severityText` 保留原始等级名称，用 `severityNumber` 表达统一严重程度。下表使用 Pino 默认等级与 Winston 默认 npm 等级：
-
-| OTel 等级 / 基础值 | Pino 方法 / 数值 | Winston 等级   |
-| ------------------ | ---------------- | -------------- |
-| TRACE / 1          | trace / 10       | silly          |
-| DEBUG / 5          | debug / 20       | debug          |
-| INFO / 9           | info / 30        | info           |
-| WARN / 13          | warn / 40        | warn           |
-| ERROR / 17         | error / 50       | error          |
-| FATAL / 21         | fatal / 60       | 无默认对应等级 |
-
-OTel 每组等级预留四个数值。Winston 的 `http` 映射为 7，`verbose` 映射为 6。自定义等级需要检查转换规则，不能直接把第三方数值当作 OTel severity；未知的 Winston 名称可能没有指定 severity。日志 `TRACE` 等级与 `Tracer` API 是两回事。
-
-等级描述事件本身，阈值决定哪些事件输出到某个目标。Winston 示例的控制台保留 DEBUG 及以上，OTel transport 保留 INFO 及以上。显式 transport level 可以覆盖 Winston 的默认 logger level；这两处设置都不控制 Defjs 直接发出的 OTel 日志。需要统一过滤两路时，在应用 processor 或 Collector 中配置；上游已丢弃的日志无法由下游找回。
 
 ### Defjs 诊断日志契约
 

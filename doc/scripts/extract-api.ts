@@ -24,8 +24,8 @@ import type {
   Node,
   VariableDeclaration,
 } from "typescript/ast";
-import type { DocEntry } from "fumadocs-typescript";
 import { compareApiIdentity } from "./api-order";
+import { tableEntries } from "./type-tables";
 import { loadExample } from "./api-examples";
 import {
   catalogKind,
@@ -73,8 +73,6 @@ import {
   unique,
   validateReference,
 } from "./api-validate";
-import { requestTypeTables } from "./api-worker";
-import type { WorkerDoc } from "./api-worker";
 
 const repoRoot = Bun.fileURLToPath(new URL("../..", import.meta.url));
 const docRoot = Bun.fileURLToPath(new URL("..", import.meta.url));
@@ -92,6 +90,7 @@ const compilerOptions = {
   noEmit: true,
   strict: true,
   target: 9,
+  lib: ["ESNext", "DOM", "DOM.Iterable"],
   module: ModuleKind.ESNext,
   moduleResolution: ModuleResolutionKind.Bundler,
   skipLibCheck: true,
@@ -100,80 +99,14 @@ const compilerOptions = {
   verbatimModuleSyntax: true,
   baseUrl: repoRoot,
   paths: {
-    "@defjs/core": ["packages/core/src/index.ts"],
-    "@defjs/react": ["packages/react/src/index.ts"],
-    "@defjs/vue": ["packages/vue/src/index.ts"],
+    "@defjs/core": [joinPath(repoRoot, "packages/core/src/index.ts")],
+    "@defjs/react": [joinPath(repoRoot, "packages/react/src/index.ts")],
+    "@defjs/vue": [joinPath(repoRoot, "packages/vue/src/index.ts")],
     "@defjs/opentelemetry-server": [
-      "packages/opentelemetry-server/src/index.ts",
+      joinPath(repoRoot, "packages/opentelemetry-server/src/index.ts"),
     ],
   },
 } satisfies RawCompilerOptions;
-
-/** Node child. `fumadocs-typescript` uses `typescript/sync`, which crashes inside Bun. */
-export const workerSource = `
-import { createGenerator } from "fumadocs-typescript";
-import { readFileSync } from "node:fs";
-const chunks = [];
-for await (const chunk of process.stdin) chunks.push(chunk);
-const payload = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-const generator = createGenerator({ tsconfigPath: payload.tsconfigPath });
-const docs = [];
-for (const job of payload.jobs) {
-  const content = readFileSync(job.file, "utf8") + "\\n" + job.suffix;
-  for (const name of job.queries) {
-    let generated;
-    try {
-      generated = await generator.generateDocumentation({ path: job.file, content }, name, {
-        transform: function (entry, _type, symbol) {
-          const declaration = symbol.valueDeclaration ?? (symbol.declarations ? symbol.declarations[0] : undefined);
-          if (!declaration || typeof declaration.resolve !== "function") return;
-          const node = declaration.resolve(this.program);
-          if (node && typeof node.then === "function") {
-            console.error("declaration.resolve returned a promise for " + name);
-            process.exit(1);
-          }
-          const printed = node && node.name && typeof node.name.getText === "function" ? node.name.getText() : "";
-          if (printed) entry.name = printed;
-          const fileName = node && typeof node.getSourceFile === "function" ? node.getSourceFile().fileName : "";
-          if (fileName && !fileName.includes("/packages/") && !fileName.includes("\\\\packages\\\\")) entry.name = "";
-        },
-      });
-    } catch (error) {
-      console.error("generateDocumentation failed for " + name + " in " + job.file + ": " + (error && error.message ? error.message : error));
-      process.exit(1);
-    }
-    if (!generated || generated.length === 0) {
-      console.error("no export " + name + " in " + job.file);
-      process.exit(1);
-    }
-    const entries = [];
-    for (const doc of generated) {
-      for (const entry of doc.entries ?? []) {
-        if (!entry.name) continue;
-        const plain = {
-          name: String(entry.name),
-          description: String(entry.description ?? ""),
-          type: String(entry.type ?? ""),
-          simplifiedType: String(entry.simplifiedType ?? ""),
-          required: Boolean(entry.required),
-          deprecated: Boolean(entry.deprecated),
-          tags: (entry.tags ?? []).map((tag) => ({ name: String(tag.name), text: String(tag.text ?? "") })),
-          typeHref: entry.typeHref ? String(entry.typeHref) : undefined,
-        };
-        entries.push(plain);
-      }
-    }
-    entries.sort((left, right) => {
-      const leftIndex = /^p(\\d+)$/.exec(left.name);
-      const rightIndex = /^p(\\d+)$/.exec(right.name);
-      if (leftIndex && rightIndex) return Number(leftIndex[1]) - Number(rightIndex[1]);
-      return 0;
-    });
-    docs.push({ file: job.file, name, entries });
-  }
-}
-process.stdout.write(JSON.stringify({ docs }), () => process.exit(0));
-`;
 
 export function declarationCategory(
   kind: SyntaxKind,
@@ -304,7 +237,7 @@ function parameterPieces(
   const fileText = node.getSourceFile().text;
   const drafts: ParamDraft[] = [];
   const lines: string[] = [];
-  for (const [index, param] of node.parameters.entries()) {
+  for (const param of node.parameters) {
     const sourceName = param.name.getText();
     const rest = param.dotDotDotToken !== undefined;
     const display = rest ? `...${sourceName}` : sourceName;
@@ -328,7 +261,9 @@ function parameterPieces(
       typeText,
       description,
     });
-    lines.push(`  /** ${description} */\n  p${index}: ${typeText};`);
+    lines.push(
+      `  /** ${description} */\n  p${drafts.length - 1}: ${typeText};`,
+    );
   }
   return {
     drafts,
@@ -568,10 +503,8 @@ function tableKey(file: string, name: string): string {
 
 export async function assemblePages(
   drafts: readonly PageDraft[],
-  docs: readonly WorkerDoc[],
+  tables: ReadonlyMap<string, readonly WorkerEntry[]>,
 ): Promise<ApiReferenceEntry[]> {
-  const tables = new Map<string, WorkerEntry[]>();
-  for (const doc of docs) tables.set(tableKey(doc.file, doc.name), doc.entries);
   const identities = identityIndex(drafts);
   const entries: ApiReferenceEntry[] = [];
   for (const draft of drafts) {
@@ -773,19 +706,44 @@ async function loadApiEntries(): Promise<ApiReferenceEntry[]> {
         } else drafts.push(page);
       }
     }
-    const tables = await requestTypeTables(
-      workerSource,
-      {
-        tsconfigPath: joinPath(docRoot, "tsconfig.json"),
-        jobs: [...jobs.values()].map((job) => ({
-          file: job.file,
-          suffix: job.suffix.join("\n"),
-          queries: job.queries,
-        })),
-      },
-      docRoot,
-    );
-    return await assemblePages(drafts, tables.docs);
+    const tables = new Map<string, readonly WorkerEntry[]>();
+    const roots: string[] = [];
+    const tempFiles: string[] = [];
+    const fileForJob = new Map<string, string>();
+    try {
+      for (const [index, job] of [...jobs.values()].entries()) {
+        if (job.suffix.length === 0) {
+          roots.push(job.file);
+          fileForJob.set(job.file, job.file);
+          continue;
+        }
+        const source = await Bun.file(job.file).text();
+        const temp = `${job.file}.__api_gen_${index}.ts`;
+        await Bun.write(temp, `${source}\n${job.suffix.join("\n")}`);
+        roots.push(temp);
+        tempFiles.push(temp);
+        fileForJob.set(job.file, temp);
+      }
+      const tableProgram = await api.createProgram(roots, compilerOptions);
+      const tableChecker = projectChecker(
+        // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: read the existing project field without invoking getProject or changing lookup side effects
+        tableProgram as unknown as { project?: { checker?: Checker } },
+      );
+      for (const job of jobs.values()) {
+        const root = defined(fileForJob.get(job.file), job.file);
+        for (const query of job.queries) {
+          tables.set(
+            tableKey(job.file, query),
+            await tableEntries(root, query, tableProgram, tableChecker),
+          );
+        }
+      }
+    } finally {
+      for (const temp of tempFiles) {
+        await Bun.file(temp).delete();
+      }
+    }
+    return await assemblePages(drafts, tables);
   } finally {
     await api.close();
   }
@@ -859,21 +817,6 @@ export async function writeExtractedApi(
     joinPath(target, "api-summaries.json"),
     serializeSummaries(entries),
   );
-}
-
-/** Reference so the type-table entry shape stays tied to fumadocs-typescript. */
-export function fumadocsEntry(entry: DocEntry): WorkerEntry {
-  const stored: WorkerEntry = {
-    name: entry.name,
-    description: entry.description,
-    type: entry.type,
-    simplifiedType: entry.simplifiedType,
-    required: entry.required,
-    deprecated: entry.deprecated,
-    tags: entry.tags.map((tag) => ({ name: tag.name, text: tag.text })),
-    typeHref: entry.typeHref || undefined,
-  };
-  return stored;
 }
 
 /* istanbul ignore next -- @preserve: command-line entry point */

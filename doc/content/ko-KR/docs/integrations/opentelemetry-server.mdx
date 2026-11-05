@@ -29,7 +29,7 @@ SDK는 다른 곳에서 초기화해요. API 객체를 넘겨요.
 
 SDK 초기화, provider, exporter, processor, context, sampling, 마스킹, flush, shutdown은 호출하는 쪽이 소유해요. 이 패키지는 넘긴 선택적 `Tracer`, 선택 `Meter`, 선택 `Logger`, 선택 `TextMapPropagator`를 소비해요. 내장 redactor나 민감 key 정책은 제공하지 않아요.
 
-캐시, 재시도, 메시지별 span, 애플리케이션 결과 정책은 없어요. 선택한 SDK와 bridge가 지원하는 서버 런타임을 쓰세요. 여기서 실행 가능한 Winston 예제는 Bun을 써요. peer는 `@defjs/core`, `@opentelemetry/api` 1.x, `@opentelemetry/core` 2.x/3.x예요. `@opentelemetry/api-logs`는 일반 패키지 의존성이고, SDK와 bridge는 애플리케이션이 직접 설치해요.
+캐시, 재시도, 메시지별 span, 애플리케이션 결과 정책은 없어요. 선택한 SDK와 bridge가 지원하는 서버 런타임을 쓰세요. peer는 `@defjs/core`, `@opentelemetry/api` 1.x, `@opentelemetry/core` 2.x/3.x예요. `@opentelemetry/api-logs`는 일반 패키지 의존성이고, SDK와 bridge는 애플리케이션이 직접 설치해요.
 
 공개 API: `withOpenTelemetryServer`와 `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
 
@@ -127,43 +127,6 @@ WebSocket query 전파는 브라우저, 프록시, access log, 텔레메트리�
 </include>
 
 내보내진 진단은 severity `WARN` (13), 이벤트 이름 `http.client.request.exception`, 고정된 메시지, 예외 타입을 가져요. flush와 shutdown은 애플리케이션이 소유해요. Defjs는 provider를 절대 shutdown하지 않아요. 실제 애플리케이션은 시작할 때 exporter를 한 번 구성하고, 요청과 스트림이 끝난 뒤에 shutdown해요.
-
-### Winston: 비즈니스 로깅 API 유지하기
-
-비즈니스 코드는 계속 `appLogger.info()`나 `appLogger.error()`를 호출해요. 공식 transport가 이 레코드를 OTel Logs로 변환하고, Defjs는 같은 provider에서 별도의 네이티브 Logger를 받아요. 첫 로그 호출 전에 provider를 등록하세요. transport는 전역 Logger를 지연해서 가져오므로 생성 순서는 상관없지만, 등록 전에 로그된 레코드는 버려져요.
-
-<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
-
-이 스니펫은 시작 시점의 연결을 보여 줘요. 애플리케이션이 끝나기 전에 진행 중인 작업을 마치고, Winston 쓰기를 기다리고, logger를 닫고, `provider.shutdown()`을 await 하세요. [실행 가능한 Winston 예제](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging)에는 완전한 정리 과정과 로컬에서 실패하는 요청이 들어 있어요. 저장소 체크아웃에서 `bun doc/examples/opentelemetry-logging/winston.ts`을 실행하세요.
-
-예제는 Trace SDK 없이 상관관계를 보여 주려고 시연용 부모 context를 써요. 그 고정 ID는 프로덕션 요청 ID가 아니에요. 프로덕션 context manager는 실제 활성 요청 context를 전달해야 해요. Defjs는 비동기 스트림 종료를 포함해, 저장해 둔 아웃바운드 context를 각 진단에 명시적으로 붙여요. 비즈니스 로그는 자기 활성 context에 남아요. Defjs와 trace ID를 공유하면서 span ID는 다를 수 있어요.
-
-명시적인 Winston OTel transport와 Winston 자동 로그 전송 중 하나만 쓰세요. 둘 다 켜면 LogRecord가 중복 전송돼요. 콘솔 출력과 OTel 출력은 별개의 목적지예요. 같은 콘솔 레코드를 다시 수집해서 중복 인제스트가 생기지 않게 하세요.
-
-### Pino: Node.js 계측
-
-Node.js 애플리케이션에서는 Pino를 로드하기 전에 SDK와 계측을 초기화하세요. 이 예제는 `sdk.start()` 뒤에 CommonJS로 Pino를 로드해서 계측이 모듈 로딩을 관찰할 수 있게 해요. 맨 위에서 Pino를 import하면 그 순서가 깨져요. 이건 Node 참고 예제이지, Bun 자동 계측이 검증됐다는 주장이 아니에요.
-
-<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
-
-`PinoInstrumentation`은 로그 전송과 로그 상관관계를 기본으로 켜요. 전송은 레코드를 애플리케이션의 Logs SDK로 변환하고, 상관관계는 유효한 span context가 활성일 때 trace 필드를 더해요. 둘은 별개의 기능이에요. 대안인 `pino-opentelemetry-transport`는 워커에서 provider를 만들고, 메인 스레드 provider와는 독립이에요. [공식 Pino 가이드](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino)를 보세요.
-
-### Severity와 필터링
-
-OTel은 원래 레이블을 `severityText`에 보존하고 `severityNumber`로 매핑해요. 아래는 Pino 기본값과 Winston의 기본 npm 레벨을 써요.
-
-| OTel severity / 기준 값 | Pino 메서드 / 값 | Winston 레벨   |
-| ----------------------- | ---------------- | -------------- |
-| TRACE / 1               | trace / 10       | silly          |
-| DEBUG / 5               | debug / 20       | debug          |
-| INFO / 9                | info / 30        | info           |
-| WARN / 13               | warn / 40        | warn           |
-| ERROR / 17              | error / 50       | error          |
-| FATAL / 21              | fatal / 60       | 기본 대응 없음 |
-
-OTel은 severity 그룹마다 숫자 네 개를 예약해요. Winston `http`는 7, `verbose`는 6에 매핑돼요. 커스텀 레벨은 매핑을 확인하세요. 라이브러리의 숫자 값은 OTel severity 숫자가 아니고, 알 수 없는 Winston 레이블은 severity가 지정되지 않을 수 있어요. TRACE 로그 레벨은 Tracer API와 무관해요.
-
-Severity는 이벤트를 설명하고, 임계값은 목적지가 그 이벤트를 받을지 정해요. Winston 예제에서 콘솔은 DEBUG 이상을 받고 OTel transport는 INFO 이상을 받아요. 명시적인 transport 레벨은 Winston 기본 logger 레벨을 덮어써요. 어느 설정도 Defjs의 직접 OTel Logger는 제어하지 않아요. 두 경로에 하나의 정책을 적용하고 싶다면 processor나 Collector 필터를 쓰세요. 하류 필터는 상류에서 이미 버려진 레코드를 되살릴 수 없어요.
 
 ### Defjs 진단 계약
 

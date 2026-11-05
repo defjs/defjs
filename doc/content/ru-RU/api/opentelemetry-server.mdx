@@ -66,7 +66,7 @@ Hooks для span вызываются только при переданном 
 
 ## Диагностика через Logger
 
-Опция верхнего уровня `logger?: Logger` принимает интерфейс из `@opentelemetry/api-logs`, а не Logger Winston/Pino. Она необязательна и может использоваться отдельно. Defjs не получает глобальный logger и не управляет provider. Он отправляет не более одной записи LogRecord уровня `WARN` (severity number 13) на request или логическое соединение, с фиксированным сообщением и attributes `server.address` и `server.port` (когда известны), `defjs.phase`, `exception.type`, а также `http.request.method` для HTTP, `defjs.sse.fault.code` при завершении SSE-потока с ошибкой и `websocket.close.code`, когда информация о закрытии WebSocket содержит числовой код:
+Опция верхнего уровня `logger?: Logger` принимает интерфейс из `@opentelemetry/api-logs`, а не Logger приложения. Она необязательна и может использоваться отдельно. Defjs не получает глобальный logger и не управляет provider. Он отправляет не более одной записи LogRecord уровня `WARN` (severity number 13) на request или логическое соединение, с фиксированным сообщением и attributes `server.address` и `server.port` (когда известны), `defjs.phase`, `exception.type`, а также `http.request.method` для HTTP, `defjs.sse.fault.code` при завершении SSE-потока с ошибкой и `websocket.close.code`, когда информация о закрытии WebSocket содержит числовой код:
 
 | Исход                                                                | Событие                                                           | `defjs.phase` |
 | -------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

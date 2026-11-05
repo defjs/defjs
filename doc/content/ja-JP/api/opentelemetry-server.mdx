@@ -66,7 +66,7 @@ span フックは `tracer` が渡された場合にのみ呼び出されます�
 
 ## Logger 診断
 
-トップレベルの `logger?: Logger` は `@opentelemetry/api-logs` のインターフェイスを受け取り、Winston/Pino Logger は受け取りません。省略も単独での使用も可能です。Defjs はグローバル logger を取得せず、provider も所有しません。リクエストまたは論理的な接続ごとに、`WARN` の LogRecord（severity number 13）を最大 1 件だけ出力します。メッセージは固定で、属性は `server.address` と `server.port`（わかる場合）、`defjs.phase`、`exception.type`、HTTP ではさらに `http.request.method`、SSE ストリームがエラーで終わる場合は `defjs.sse.fault.code`、WebSocket の close 情報に数値の code がある場合は `websocket.close.code` です。
+トップレベルの `logger?: Logger` は `@opentelemetry/api-logs` のインターフェイスを受け取り、アプリケーション Logger は受け取りません。省略も単独での使用も可能です。Defjs はグローバル logger を取得せず、provider も所有しません。リクエストまたは論理的な接続ごとに、`WARN` の LogRecord（severity number 13）を最大 1 件だけ出力します。メッセージは固定で、属性は `server.address` と `server.port`（わかる場合）、`defjs.phase`、`exception.type`、HTTP ではさらに `http.request.method`、SSE ストリームがエラーで終わる場合は `defjs.sse.fault.code`、WebSocket の close 情報に数値の code がある場合は `websocket.close.code` です。
 
 | 結果                                                                      | イベント                                                          | `defjs.phase` |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

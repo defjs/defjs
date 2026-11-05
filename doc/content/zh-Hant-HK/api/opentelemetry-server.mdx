@@ -66,7 +66,7 @@ Span hooks 只會喺有傳入 `tracer` 時運行。`startSpanHook` 會喺所屬 
 
 ## Logger 診斷
 
-頂層 `logger?: Logger` option 用嘅係 `@opentelemetry/api-logs`，而唔係 Winston/Pino Logger。佢係可選嘅，亦可以單獨使用。Defjs 永遠唔會攞全域 logger，亦唔擁有佢嘅 provider。每個 request 或者邏輯連線最多發出一個 `WARN` LogRecord（severity number 13），message 固定，attributes 有 `server.address` 同 `server.port`（已知時）、`defjs.phase`、`exception.type`，HTTP 另外有 `http.request.method`，SSE stream 以 error 結束時有 `defjs.sse.fault.code`，WebSocket close 資料帶數字 code 時有 `websocket.close.code`：
+頂層 `logger?: Logger` option 用嘅係 `@opentelemetry/api-logs`，而唔係 應用層 Logger。佢係可選嘅，亦可以單獨使用。Defjs 永遠唔會攞全域 logger，亦唔擁有佢嘅 provider。每個 request 或者邏輯連線最多發出一個 `WARN` LogRecord（severity number 13），message 固定，attributes 有 `server.address` 同 `server.port`（已知時）、`defjs.phase`、`exception.type`，HTTP 另外有 `http.request.method`，SSE stream 以 error 結束時有 `defjs.sse.fault.code`，WebSocket close 資料帶數字 code 時有 `websocket.close.code`：
 
 | 結果                                                    | Event                                                             | `defjs.phase` |
 | ------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

@@ -29,7 +29,7 @@ SDK инициализируй в другом месте. Передай его
 
 SDK init, провайдеры, exporter’ы, процессоры, context, sampling, redaction, flush и shutdown — на тебе. Этот пакет потребляет необязательный `Tracer`, необязательный `Meter`, необязательный `Logger` и необязательный `TextMapPropagator`, которые ты передал. Redactor и политики sensitive keys в нём нет.
 
-Не предоставляет кэш, повторные попытки, spans для каждого сообщения или политику исхода приложения. Используй серверную среду, которую поддерживают выбранные SDK и bridge; исполняемый пример Winston использует Bun. Peer-зависимости: `@defjs/core`, `@opentelemetry/api` 1.x и `@opentelemetry/core` 2.x/3.x. `@opentelemetry/api-logs` — обычная зависимость пакета; SDK и bridges устанавливает приложение.
+Не предоставляет кэш, повторные попытки, spans для каждого сообщения или политику исхода приложения. Используй серверную среду, которую поддерживают выбранные SDK и bridge. Peer-зависимости: `@defjs/core`, `@opentelemetry/api` 1.x и `@opentelemetry/core` 2.x/3.x. `@opentelemetry/api-logs` — обычная зависимость пакета; SDK и bridges устанавливает приложение.
 
 Публичное API: `withOpenTelemetryServer` плюс `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
 
@@ -127,43 +127,6 @@ Query propagation WebSocket может раскрыть trace context и baggage
 </include>
 
 Экспортированная диагностика имеет severity `WARN` (13), имя события `http.client.request.exception`, фиксированное сообщение и тип исключения. Flush и shutdown — на приложении; Defjs никогда не гасит твой provider. Настоящее приложение один раз настраивает exporter при старте и гасит его после того, как запросы и стримы завершились.
-
-### Winston: оставь API бизнес-логирования
-
-Бизнес-код продолжает звать `appLogger.info()` или `appLogger.error()`. Официальный transport преобразует эти записи в OTel Logs; Defjs получает отдельный нативный Logger от того же provider. Зарегистрируй provider до первого вызова лога. Transport резолвит глобальный Logger лениво, так что порядок конструирования не важен, но записи, залогированные до регистрации, теряются:
-
-<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
-
-Этот фрагмент показывает подключение на старте. Перед выходом из приложения доведи до конца отложенную работу, дождись записей Winston, закрой logger и сделай `await provider.shutdown()`. [Исполняемый пример Winston](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging) включает полный cleanup и локальный падающий запрос. Из checkout репозитория запусти `bun doc/examples/opentelemetry-logging/winston.ts`.
-
-Пример использует демонстрационный родительский context, чтобы показать корреляцию без Trace SDK; эти фиксированные ID — не production request ID. Production context manager должен нести настоящий активный context запроса. Defjs явно прикрепляет к каждой диагностике свой сохранённый исходящий context, в том числе при асинхронном закрытии стрима. Бизнес-логи остаются в своём активном context: у них может быть общий с Defjs trace ID, но другой span ID.
-
-Используй либо явный OTel transport Winston, либо автоматическую отправку логов Winston. Включить оба значит слать дублирующиеся LogRecords. Вывод в консоль и вывод в OTel — разные получатели; не собирай ту же консольную запись повторно, если это продублирует приём.
-
-### Pino: инструментировка Node.js
-
-В приложении Node.js инициализируй SDK и инструментировку до загрузки Pino. Этот пример загружает Pino через CommonJS после `sdk.start()`, чтобы инструментировка видела загрузку модуля; импорт Pino в начале файла нарушил бы этот порядок. Это справочный пример для Node, а не утверждение, что автоматическая инструментация в Bun проверена.
-
-<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
-
-`PinoInstrumentation` по умолчанию включает отправку логов и корреляцию логов. Отправка преобразует записи для Logs SDK приложения; корреляция добавляет поля trace, когда активен валидный span context. Это отдельные возможности. Альтернативный `pino-opentelemetry-transport` создаёт provider в worker, независимый от provider основного потока. См. [официальное руководство по Pino](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino).
-
-### Severity и фильтрация
-
-OTel сохраняет исходную метку в `severityText` и сопоставляет её с `severityNumber`. Ниже — значения по умолчанию Pino и уровни npm по умолчанию Winston:
-
-| OTel severity / базовое значение | Метод Pino / значение | Уровень Winston          |
-| -------------------------------- | --------------------- | ------------------------ |
-| TRACE / 1                        | trace / 10            | silly                    |
-| DEBUG / 5                        | debug / 20            | debug                    |
-| INFO / 9                         | info / 30             | info                     |
-| WARN / 13                        | warn / 40             | warn                     |
-| ERROR / 17                       | error / 50            | error                    |
-| FATAL / 21                       | fatal / 60            | Нет аналога по умолчанию |
-
-OTel резервирует четыре числовых значения на группу severity. Winston `http` сопоставляется с 7, а `verbose` — с 6. Для собственных уровней проверяй сопоставление: числовые значения библиотеки — не severity numbers OTel, а неизвестные метки Winston могут получить неопределённую severity. Уровень лога TRACE не связан с API Tracer.
-
-Severity описывает событие; порог решает, получит ли его получатель. В примере с Winston консоль получает DEBUG и выше, а его OTel transport — INFO и выше. Явный уровень transport перекрывает уровень logger Winston по умолчанию. Ни одна из этих настроек не управляет прямым OTel Logger Defjs. Применяй processor или фильтр Collector, когда нужна единая политика для обоих путей; фильтр ниже по потоку не вернёт записи, уже отброшенные выше.
 
 ### Контракт диагностики Defjs
 

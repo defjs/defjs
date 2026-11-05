@@ -66,7 +66,7 @@ Standardmäßig löst `url.full` nur `request.endpoint` gegen das optionale `req
 
 ## Logger-Diagnosen
 
-Die oberste Option `logger?: Logger` erwartet die Schnittstelle aus `@opentelemetry/api-logs`, keinen Winston/Pino Logger. Sie ist optional und allein nutzbar. Defjs holt sich nie einen globalen Logger und besitzt dessen Provider nicht. Pro Request oder logischer Verbindung wird höchstens ein `WARN`-LogRecord (Severity Number 13) ausgegeben, mit fester Message und den Attributen `server.address` und `server.port` (wenn bekannt), `defjs.phase`, `exception.type` sowie `http.request.method` bei HTTP, `defjs.sse.fault.code`, wenn ein SSE-Stream mit einem Fehler endet, und `websocket.close.code`, wenn die WebSocket-Close-Informationen einen numerischen Code haben:
+Die oberste Option `logger?: Logger` erwartet die Schnittstelle aus `@opentelemetry/api-logs`, keinen Anwendungs-Logger. Sie ist optional und allein nutzbar. Defjs holt sich nie einen globalen Logger und besitzt dessen Provider nicht. Pro Request oder logischer Verbindung wird höchstens ein `WARN`-LogRecord (Severity Number 13) ausgegeben, mit fester Message und den Attributen `server.address` und `server.port` (wenn bekannt), `defjs.phase`, `exception.type` sowie `http.request.method` bei HTTP, `defjs.sse.fault.code`, wenn ein SSE-Stream mit einem Fehler endet, und `websocket.close.code`, wenn die WebSocket-Close-Informationen einen numerischen Code haben:
 
 | Ergebnis                                                                   | Event                                                             | `defjs.phase` |
 | -------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

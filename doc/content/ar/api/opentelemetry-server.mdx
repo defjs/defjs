@@ -66,7 +66,7 @@ HTTP وSSE وWebSocket مفعّلة افتراضيًا. مرّر `{ enabled: fal
 
 ## تشخيص المسجّل
 
-يستخدم خيار `logger?: Logger` في المستوى الأعلى `@opentelemetry/api-logs`، لا Logger من Winston/Pino. وهو اختياري ويجوز استخدامه وحده. لا يحصل Defjs أبدًا على مسجّل عام ولا يملك موفّره. يُصدر على الأكثر `LogRecord` واحدًا بمستوى `WARN` (رقم الشدة 13) لكل طلب أو اتصال منطقي، برسالة ثابتة والسمات `server.address` و`server.port` (عند المعرفة) و`defjs.phase` و`exception.type`، إضافة إلى `http.request.method` لـ HTTP، و`defjs.sse.fault.code` عندما ينتهي تدفق SSE بخطأ، و`websocket.close.code` عندما تحمل معلومات إغلاق WebSocket رمزًا عدديًا:
+يستخدم خيار `logger?: Logger` في المستوى الأعلى `@opentelemetry/api-logs`، لا Logger للتطبيق. وهو اختياري ويجوز استخدامه وحده. لا يحصل Defjs أبدًا على مسجّل عام ولا يملك موفّره. يُصدر على الأكثر `LogRecord` واحدًا بمستوى `WARN` (رقم الشدة 13) لكل طلب أو اتصال منطقي، برسالة ثابتة والسمات `server.address` و`server.port` (عند المعرفة) و`defjs.phase` و`exception.type`، إضافة إلى `http.request.method` لـ HTTP، و`defjs.sse.fault.code` عندما ينتهي تدفق SSE بخطأ، و`websocket.close.code` عندما تحمل معلومات إغلاق WebSocket رمزًا عدديًا:
 
 | النتيجة                                                      | الحدث                                                             | `defjs.phase` |
 | ------------------------------------------------------------ | ----------------------------------------------------------------- | ------------- |

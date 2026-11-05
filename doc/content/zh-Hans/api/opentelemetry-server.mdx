@@ -66,7 +66,7 @@ HTTP、SSE、WebSocket 默认开。某个传输传 `{ enabled: false }` 就跳�
 
 ## Logger 诊断
 
-顶层 `logger?: Logger` 使用 `@opentelemetry/api-logs` 的接口，不接收 Winston/Pino Logger。它可省略，也可单独使用。Defjs 不自动获取全局 logger，不管理 provider。每个请求或逻辑连接最多发出一条 `WARN` LogRecord（severity number 13），message 固定，属性为 `server.address` 和 `server.port`（已知时）、`defjs.phase`、`exception.type`，HTTP 另有 `http.request.method`，SSE 流以错误结束时另有 `defjs.sse.fault.code`，WebSocket 的 close 信息带数值 code 时另有 `websocket.close.code`：
+顶层 `logger?: Logger` 使用 `@opentelemetry/api-logs` 的接口，不接收 应用层 Logger。它可省略，也可单独使用。Defjs 不自动获取全局 logger，不管理 provider。每个请求或逻辑连接最多发出一条 `WARN` LogRecord（severity number 13），message 固定，属性为 `server.address` 和 `server.port`（已知时）、`defjs.phase`、`exception.type`，HTTP 另有 `http.request.method`，SSE 流以错误结束时另有 `defjs.sse.fault.code`，WebSocket 的 close 信息带数值 code 时另有 `websocket.close.code`：
 
 | 结果                                                 | 事件                                                              | `defjs.phase` |
 | ---------------------------------------------------- | ----------------------------------------------------------------- | ------------- |

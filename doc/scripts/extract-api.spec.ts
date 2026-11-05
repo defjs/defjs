@@ -9,7 +9,6 @@ import {
   ambientDeclaration,
   assertSignatureSyntax,
   declarationCategory,
-  fumadocsEntry,
   functionTypeOf,
   specifierIsTypeOnly,
   syntaxOffender,
@@ -121,20 +120,6 @@ test("function types unwrap parentheses and ignore other types", () => {
     kind: SyntaxKind.ConstructorType,
   });
   expect(functionTypeOf({ kind: SyntaxKind.TypeLiteral })).toBeUndefined();
-});
-
-test("fumadocs entries keep a type link only when one was generated", () => {
-  const base = {
-    name: "id",
-    description: "Identifier.",
-    type: "string",
-    simplifiedType: "string",
-    required: true,
-    deprecated: false,
-    tags: [{ name: "example", text: "n" }],
-  };
-  expect(fumadocsEntry(base).typeHref).toBeUndefined();
-  expect(fumadocsEntry({ ...base, typeHref: "#id" }).typeHref).toBe("#id");
 });
 
 test("empty parameter lists, hidden tables, and non-aliases stay inert", async () => {

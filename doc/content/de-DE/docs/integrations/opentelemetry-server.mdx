@@ -29,7 +29,7 @@ Das Plugin kann Transport-Telemetrie erzeugen, auch wenn der Request auf der Tra
 
 Du besitzt SDK-Init, Provider, Exporter, Processor, Context, Sampling, Redaction, Flush und Shutdown. Dieses Paket konsumiert den optionalen `Tracer`, optionalen `Meter`, optionalen `Logger` und optionalen `TextMapPropagator`, die du übergibst. Es enthält keinen Redactor und keine Richtlinie für sensible Keys.
 
-Kein Caching, keine Retries, keine Spans pro Nachricht und keine Richtlinie für Anwendungsergebnisse. Verwende eine vom SDK und Bridge unterstützte Server-Laufzeit; das ausführbare Winston-Beispiel verwendet Bun. Peers sind `@defjs/core`, `@opentelemetry/api` 1.x und `@opentelemetry/core` 2.x/3.x. `@opentelemetry/api-logs` ist eine reguläre Abhängigkeit; SDK und Bridges installiert die Anwendung.
+Kein Caching, keine Retries, keine Spans pro Nachricht und keine Richtlinie für Anwendungsergebnisse. Verwende eine vom SDK und Bridge unterstützte Server-Laufzeit. Peers sind `@defjs/core`, `@opentelemetry/api` 1.x und `@opentelemetry/core` 2.x/3.x. `@opentelemetry/api-logs` ist eine reguläre Abhängigkeit; SDK und Bridges installiert die Anwendung.
 
 Public API: `withOpenTelemetryServer` plus `OpenTelemetryServerOptions`, `OpenTelemetryServerHttpOptions`, `OpenTelemetryServerSSEOptions`, `OpenTelemetryServerWebSocketOptions`.
 
@@ -127,43 +127,6 @@ Dieses vollständige Beispiel erzeugt ein Logs-SDK im Besitz der Anwendung und l
 </include>
 
 Die exportierte Diagnose hat die Severity `WARN` (13), den Event-Namen `http.client.request.exception`, eine feste Message und einen Exception-Type. Flush und Shutdown gehören der Anwendung; Defjs fährt deinen Provider nie herunter. Eine echte Anwendung konfiguriert ihren Exporter einmal beim Start und fährt ihn herunter, nachdem Requests und Streams beendet sind.
-
-### Winston: die Business-Logging-API behalten
-
-Business-Code ruft weiterhin `appLogger.info()` oder `appLogger.error()` auf. Der offizielle Transport konvertiert diese Records in OTel Logs; Defjs bekommt vom selben Provider einen separaten nativen Logger. Registriere den Provider vor dem ersten Log-Aufruf. Der Transport löst den globalen Logger lazy auf, die Reihenfolge der Konstruktion spielt also keine Rolle, aber Records, die vor der Registrierung geloggt werden, gehen verloren:
-
-<include cwd>examples/opentelemetry-server/winston-logger.ts#example</include>
-
-Dieser Ausschnitt zeigt die Startup-Verdrahtung. Beende vor dem Programmende ausstehende Arbeit, warte auf Winston-Writes, schließe den Logger und warte auf `provider.shutdown()`. Das [ausführbare Winston-Beispiel](https://github.com/defjs/defjs/tree/main/doc/examples/opentelemetry-logging) enthält das vollständige Cleanup und einen lokal scheiternden Request. Aus einem Repository-Checkout führst du `bun doc/examples/opentelemetry-logging/winston.ts` aus.
-
-Das Beispiel nutzt einen Demonstrations-Parent-Context, um Korrelation ohne Trace-SDK zu zeigen; diese festen IDs sind keine Produktions-Request-IDs. Ein Produktions-Context-Manager muss den echten aktiven Request-Context tragen. Defjs hängt seinen gespeicherten ausgehenden Context ausdrücklich an jede Diagnose an, auch bei asynchronem Stream-Closure. Business-Logs bleiben in ihrem eigenen aktiven Context: Sie können mit Defjs eine Trace-ID teilen, aber eine andere Span-ID haben.
-
-Nutze entweder einen expliziten Winston-OTel-Transport oder das automatische Senden von Winston-Logs. Sind beide aktiviert, werden doppelte LogRecords gesendet. Konsolenausgabe und OTel-Ausgabe sind getrennte Ziele; vermeide, denselben Konsolen-Record erneut einzusammeln, wenn das die Ingestion verdoppeln würde.
-
-### Pino: Node.js-Instrumentierung
-
-Initialisiere in einer Node.js-Anwendung das SDK und die Instrumentierung, bevor du Pino lädst. Dieses Beispiel lädt Pino per CommonJS nach `sdk.start()`, damit die Instrumentierung das Laden des Moduls beobachten kann; ein Import von Pino ganz oben würde diese Reihenfolge aushebeln. Es ist eine Node-Referenz, keine Behauptung, dass automatische Instrumentierung unter Bun verifiziert wurde.
-
-<include cwd>examples/opentelemetry-server/pino-logger.ts#example</include>
-
-`PinoInstrumentation` aktiviert Log-Senden und Log-Korrelation standardmäßig. Das Senden konvertiert Records in das Logs-SDK der Anwendung; die Korrelation fügt Trace-Felder hinzu, wenn ein gültiger Span-Context aktiv ist. Das sind getrennte Fähigkeiten. Die Alternative `pino-opentelemetry-transport` erzeugt in einem Worker einen Provider, der unabhängig vom Provider des Main-Threads ist. Siehe den [offiziellen Pino-Leitfaden](https://github.com/open-telemetry/opentelemetry-js-contrib/tree/main/packages/instrumentation-pino).
-
-### Severity und Filterung
-
-OTel bewahrt das ursprüngliche Label in `severityText` und mappt es auf `severityNumber`. Das Folgende nutzt die Pino-Defaults und die Standard-npm-Levels von Winston:
-
-| OTel-Severity / Basiswert | Pino-Methode / Wert | Winston-Level           |
-| ------------------------- | ------------------- | ----------------------- |
-| TRACE / 1                 | trace / 10          | silly                   |
-| DEBUG / 5                 | debug / 20          | debug                   |
-| INFO / 9                  | info / 30           | info                    |
-| WARN / 13                 | warn / 40           | warn                    |
-| ERROR / 17                | error / 50          | error                   |
-| FATAL / 21                | fatal / 60          | Kein Default-Äquivalent |
-
-OTel reserviert vier numerische Werte pro Severity-Gruppe. Winston `http` mappt auf 7 und `verbose` auf 6. Prüfe die Mappings für eigene Levels: Die Zahlenwerte einer Bibliothek sind keine OTel-Severity-Nummern, und unbekannte Winston-Labels können eine unspezifizierte Severity haben. Das TRACE-Log-Level hat nichts mit der Tracer-API zu tun.
-
-Die Severity beschreibt das Ereignis; ein Threshold entscheidet, ob ein Ziel es erhält. Im Winston-Beispiel erhält die Konsole DEBUG und höher, während der OTel-Transport INFO und höher erhält. Ein explizites Transport-Level überschreibt das Default-Logger-Level von Winston. Keine der beiden Einstellungen steuert den direkten OTel-Logger von Defjs. Setze einen Processor- oder Collector-Filter ein, wenn du eine einheitliche Policy für beide Pfade willst; ein nachgelagerter Filter kann Records, die upstream schon verworfen wurden, nicht zurückholen.
 
 ### Defjs-Diagnostikvertrag
 
