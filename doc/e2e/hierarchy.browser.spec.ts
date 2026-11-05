@@ -70,12 +70,10 @@ test("distinguishes navigation groups from their children in both reading direct
       ),
     ).toBeGreaterThan(0);
     const decision = sidebar.locator(`a[href="${path}/docs/design-decisions"]`);
-    const standalone = await textBox(decision);
+    const decisionBox = await textBox(decision);
     expect(
-      Math.abs(
-        rtl ? standalone.right - group.right : standalone.left - group.left,
-      ),
-    ).toBeLessThanOrEqual(2);
+      rtl ? group.right - decisionBox.right : decisionBox.left - group.left,
+    ).toBeGreaterThanOrEqual(INDENT);
     expect(await sidebar.getByRole("heading", { level: 2 }).count()).toBe(5);
     const aiLabel = {
       "/zh-Hans": "AI",

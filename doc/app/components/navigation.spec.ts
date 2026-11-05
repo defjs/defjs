@@ -118,6 +118,7 @@ const source = loader({ source: { files }, baseUrl: "/", i18n });
 const guidePaths = [
   "",
   "/docs/start",
+  "/docs/design-decisions",
   "/docs/struct",
   "/docs/client",
   "/docs/interceptors",
@@ -131,7 +132,6 @@ const guidePaths = [
   "/docs/integrations/opentelemetry-server",
   "/docs/ai",
   "/docs/ai-api",
-  "/docs/design-decisions",
 ];
 const recipePaths = [
   "/recipes/post-json",
@@ -219,7 +219,7 @@ test("top tabs stay at three areas and the AI guide sits inside Guide", () => {
     );
     expect(urls.indexOf(aiApi)).toBe(urls.indexOf(ai) + 1);
     expect(urls.indexOf(`${prefix}/docs/design-decisions`)).toBe(
-      urls.indexOf(aiApi) + 1,
+      urls.indexOf(`${prefix}/docs/start`) + 1,
     );
     expect(
       tabs.filter((tab) => isLayoutTabActive(tab, ai)).map((tab) => tab.url),
@@ -318,7 +318,7 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     flattenTree(guide.children)
       .slice(1, 5)
       .map((n) => n.name),
-  ).toEqual(["项目概览", "快速开始", "数据结构 / Struct", "Client"]);
+  ).toEqual(["项目概览", "快速开始", "设计决策", "数据结构 / Struct"]);
 });
 
 test("SSR mobile directory resolves a trailing-slash article from the same navigation tree", () => {
@@ -338,7 +338,7 @@ test("SSR mobile directory resolves a trailing-slash article from the same navig
   expect(html).toContain('href="/zh-Hans/docs/http" aria-current="page"');
 });
 
-test("design decisions stand outside the framework group and native previous/next follows the reading order", () => {
+test("design decisions sit in the preface group and native previous/next follows the reading order", () => {
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     const tree = getNavigationTree(source.getPageTree(locale), locale);
@@ -350,13 +350,16 @@ test("design decisions stand outside the framework group and native previous/nex
     expect(
       path?.filter((node) => node.type === "separator" && Boolean(node.name))
         .length,
-    ).toBe(0);
+    ).toBe(1);
     expect(findNeighbour(tree, `${prefix}/docs/start`).previous?.url).toBe(
       prefix || "/",
     );
     expect(findNeighbour(tree, `${prefix}/docs/start`).next?.url).toBe(
-      `${prefix}/docs/struct`,
+      `${prefix}/docs/design-decisions`,
     );
+    expect(
+      findNeighbour(tree, `${prefix}/docs/design-decisions`).next?.url,
+    ).toBe(`${prefix}/docs/struct`);
     expect(
       findNeighbour(tree, `${prefix}/docs/integrations`).previous?.url,
     ).toBe(`${prefix}/docs/web-socket`);

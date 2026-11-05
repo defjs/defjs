@@ -16,7 +16,10 @@ interface NavigationGroup {
 }
 
 const guideGroups = [
-  { titleKey: "nav.guide.preface", paths: ["", "/docs/start"] },
+  {
+    titleKey: "nav.guide.preface",
+    paths: ["", "/docs/start", "/docs/design-decisions"],
+  },
   {
     titleKey: "nav.guide.coreConcepts",
     paths: [
@@ -126,11 +129,6 @@ export function getNavigationTree(
               "/docs/interceptors": t("nav.guide.middleware"),
               "/docs/errors": t("nav.guide.errors"),
             }),
-            {
-              type: "separator" as const,
-              $id: `${locale}:navigation:standalone`,
-            },
-            page("/docs/design-decisions"),
           ]
         : area === "recipes"
           ? [index, ...grouped(exampleGroups)]

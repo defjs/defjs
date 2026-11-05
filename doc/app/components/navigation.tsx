@@ -127,7 +127,6 @@ function NavigationItem({ item }: { item: Item }) {
   const depth = useFolderDepth();
   if (/\/(docs|recipes)$/.test(item.url)) return null;
   const active = pathname.replace(/\/$/, "") === item.url.replace(/\/$/, "");
-  const standalone = item.url.endsWith("/docs/design-decisions");
   const parts = typeof item.name === "string" ? item.name.split(" / ") : [];
   return (
     <SidebarItem
@@ -136,10 +135,9 @@ function NavigationItem({ item }: { item: Item }) {
       active={active}
       aria-current={active ? "page" : undefined}
       icon={item.icon}
-      data-navigation-standalone={standalone || undefined}
       // eslint-disable-next-line @typescript-eslint/consistent-type-assertions -- INTENT: keep the local CSS custom property without globally augmenting accepted React style properties
       style={{ "--navigation-depth": depth } as CSSProperties}
-      className={`navigation-item relative flex flex-wrap items-center gap-x-1 rounded-lg p-2 text-start text-fd-muted-foreground hover:bg-fd-accent/50 hover:text-fd-accent-foreground data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary ${standalone ? "mt-4" : ""}`}
+      className="navigation-item relative flex flex-wrap items-center gap-x-1 rounded-lg p-2 text-start text-fd-muted-foreground hover:bg-fd-accent/50 hover:text-fd-accent-foreground data-[active=true]:bg-fd-primary/10 data-[active=true]:text-fd-primary"
     >
       {parts.length === 2 ? (
         <>
@@ -156,7 +154,6 @@ function NavigationItem({ item }: { item: Item }) {
   );
 }
 function NavigationHeading({ item }: { item: Separator }) {
-  if (item.$id?.endsWith(":navigation:standalone")) return null;
   return <h2 className="navigation-group-heading">{item.name}</h2>;
 }
 export const navigationSlots = {
@@ -189,26 +186,14 @@ export function StaticNavigation({ tree }: { tree: Root }) {
         {nodes
           .filter(
             (node) =>
-              !node.$id?.endsWith(":navigation:standalone") &&
-              (node.type !== "page" || !/\/(docs|recipes)$/.test(node.url)),
+              node.type !== "page" || !/\/(docs|recipes)$/.test(node.url),
           )
           .map((node, i) => (
-            <li
-              key={i}
-              className={
-                node.type === "page" &&
-                node.url.endsWith("/docs/design-decisions")
-                  ? "mt-4"
-                  : undefined
-              }
-            >
+            <li key={i}>
               {node.type === "page" ? (
                 <a
                   href={node.url}
                   aria-current={node.url === pathname ? "page" : undefined}
-                  data-navigation-standalone={
-                    node.url.endsWith("/docs/design-decisions") || undefined
-                  }
                   className="navigation-item relative block p-2"
                 >
                   {node.name}
