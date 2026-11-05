@@ -19,6 +19,17 @@ Defjs отделяет API, который публикует группа, от
 - [Промежуточное ПО](/ru-RU/docs/interceptors)
 - [Ошибки](/ru-RU/docs/errors)
 
+## Лучшие практики [#best-practices]
+
+- [Обзор](/ru-RU/docs/best-practices)
+- [Проектирование SDK](/ru-RU/docs/best-practices/sdk-design)
+- [Интеграция в приложении](/ru-RU/docs/best-practices/application)
+- [Обработка ошибок](/ru-RU/docs/best-practices/errors)
+- [Потоки и реальное время](/ru-RU/docs/best-practices/streaming)
+- [Тестирование](/ru-RU/docs/best-practices/testing)
+- [Безопасность](/ru-RU/docs/best-practices/security)
+- [Производительность](/ru-RU/docs/best-practices/performance)
+
 ## Запросы и реальное время
 
 - [HTTP-запросы](/ru-RU/docs/http)

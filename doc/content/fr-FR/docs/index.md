@@ -19,6 +19,17 @@ Defjs sépare l’API qu’une équipe publie du client qu’une application uti
 - [Middleware](/fr-FR/docs/interceptors)
 - [Erreurs](/fr-FR/docs/errors)
 
+## Bonnes pratiques [#best-practices]
+
+- [Vue d’ensemble](/fr-FR/docs/best-practices)
+- [Conception du SDK](/fr-FR/docs/best-practices/sdk-design)
+- [Intégration applicative](/fr-FR/docs/best-practices/application)
+- [Gestion des erreurs](/fr-FR/docs/best-practices/errors)
+- [Streaming et temps réel](/fr-FR/docs/best-practices/streaming)
+- [Tests](/fr-FR/docs/best-practices/testing)
+- [Sécurité](/fr-FR/docs/best-practices/security)
+- [Performance](/fr-FR/docs/best-practices/performance)
+
 ## Requêtes et temps réel
 
 - [Requêtes HTTP](/fr-FR/docs/http)

@@ -21,7 +21,7 @@ test("exposes grouped navigation and the current reading area", async () => {
       .getByRole("heading", { name: "核心概念", exact: true })
       .count(),
   ).toBe(1);
-  expect(await navigation.getByRole("heading", { level: 2 }).count()).toBe(5);
+  expect(await navigation.getByRole("heading", { level: 2 }).count()).toBe(6);
   expect(
     await navigation.getByRole("heading", { name: "AI", exact: true }).count(),
   ).toBe(1);

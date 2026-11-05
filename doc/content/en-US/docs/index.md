@@ -19,6 +19,17 @@ Defjs separates the API a team publishes from the client an application uses. Fo
 - [Middleware](/docs/interceptors)
 - [Errors](/docs/errors)
 
+## Best practices [#best-practices]
+
+- [Overview](/docs/best-practices)
+- [SDK design](/docs/best-practices/sdk-design)
+- [Application integration](/docs/best-practices/application)
+- [Error handling](/docs/best-practices/errors)
+- [Streaming and realtime](/docs/best-practices/streaming)
+- [Testing](/docs/best-practices/testing)
+- [Security](/docs/best-practices/security)
+- [Performance](/docs/best-practices/performance)
+
 ## Requests and realtime
 
 - [HTTP requests](/docs/http)

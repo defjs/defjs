@@ -66,6 +66,7 @@ export default {
   "nav.guide.middleware": "Промежуточное ПО",
   "nav.guide.errors": "Ошибки",
   "nav.guide.preface": "Предисловие",
+  "nav.guide.bestPractices": "Лучшие практики",
   "nav.guide.requestsRealtime": "Запросы и реальное время",
   "nav.guide.plugins": "Плагины",
   "nav.guide.ai": "ИИ",

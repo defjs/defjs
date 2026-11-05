@@ -65,6 +65,7 @@ export default {
   "nav.guide.middleware": "中介層",
   "nav.guide.errors": "錯誤",
   "nav.guide.preface": "前言",
+  "nav.guide.bestPractices": "最佳實踐",
   "nav.guide.requestsRealtime": "請求與即時通訊",
   "nav.guide.plugins": "外掛",
   "nav.guide.ai": "AI",

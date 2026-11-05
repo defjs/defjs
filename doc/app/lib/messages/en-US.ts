@@ -63,6 +63,7 @@ const messages = {
   "nav.guide.middleware": "Middleware",
   "nav.guide.errors": "Errors",
   "nav.guide.preface": "Preface",
+  "nav.guide.bestPractices": "Best practices",
   "nav.guide.requestsRealtime": "Requests and realtime",
   "nav.guide.plugins": "Plugins",
   "nav.guide.ai": "AI",

@@ -65,6 +65,7 @@ export default {
   "nav.guide.middleware": "Middleware",
   "nav.guide.errors": "Fehler",
   "nav.guide.preface": "Vorwort",
+  "nav.guide.bestPractices": "Best Practices",
   "nav.guide.requestsRealtime": "Anfragen und Echtzeit",
   "nav.guide.plugins": "Plugins",
   "nav.guide.ai": "KI",

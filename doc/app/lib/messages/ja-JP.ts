@@ -65,6 +65,7 @@ export default {
   "nav.guide.middleware": "ミドルウェア",
   "nav.guide.errors": "エラー",
   "nav.guide.preface": "はじめに",
+  "nav.guide.bestPractices": "ベストプラクティス",
   "nav.guide.requestsRealtime": "リクエストとリアルタイム通信",
   "nav.guide.plugins": "プラグイン",
   "nav.guide.ai": "AI",

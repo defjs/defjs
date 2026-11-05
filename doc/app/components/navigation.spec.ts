@@ -123,6 +123,14 @@ const guidePaths = [
   "/docs/client",
   "/docs/interceptors",
   "/docs/errors",
+  "/docs/best-practices",
+  "/docs/best-practices/sdk-design",
+  "/docs/best-practices/application",
+  "/docs/best-practices/errors",
+  "/docs/best-practices/streaming",
+  "/docs/best-practices/testing",
+  "/docs/best-practices/security",
+  "/docs/best-practices/performance",
   "/docs/http",
   "/docs/sse",
   "/docs/web-socket",
@@ -159,7 +167,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
         .map((p) => p.url)
         .sort(),
     );
-    expect(new Set(pages.map((p) => p.url)).size).toBe(222);
+    expect(new Set(pages.map((p) => p.url)).size).toBe(230);
     for (const page of pages) {
       expect(source.getPageByUrl(page.url, locale)?.path).toBe(
         `${locale}/${page.$ref}`,
@@ -177,7 +185,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
     expect(
       guide.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
-    ).toBe(5);
+    ).toBe(6);
     expect(
       recipes.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
@@ -309,7 +317,7 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     guide.children
       .filter((n) => n.type === "separator" && Boolean(n.name))
       .map((n) => n.name),
-  ).toEqual(["前言", "核心概念", "请求与实时通信", "插件", "AI"]);
+  ).toEqual(["前言", "核心概念", "最佳实践", "请求与实时通信", "插件", "AI"]);
   expect(
     flattenTree(guide.children)
       .slice(1, 5)

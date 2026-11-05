@@ -64,6 +64,7 @@ export default {
   "nav.guide.middleware": "미들웨어",
   "nav.guide.errors": "오류",
   "nav.guide.preface": "머리말",
+  "nav.guide.bestPractices": "모범 사례",
   "nav.guide.requestsRealtime": "요청과 실시간 통신",
   "nav.guide.plugins": "플러그인",
   "nav.guide.ai": "AI",

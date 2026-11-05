@@ -64,6 +64,7 @@ export default {
   "nav.guide.middleware": "الوسيط",
   "nav.guide.errors": "الأخطاء",
   "nav.guide.preface": "مقدمة",
+  "nav.guide.bestPractices": "أفضل الممارسات",
   "nav.guide.requestsRealtime": "الطلبات والاتصال الآني",
   "nav.guide.plugins": "الإضافات",
   "nav.guide.ai": "الذكاء الاصطناعي",

@@ -64,6 +64,7 @@ export default {
   "nav.guide.middleware": "中间件",
   "nav.guide.errors": "错误",
   "nav.guide.preface": "前言",
+  "nav.guide.bestPractices": "最佳实践",
   "nav.guide.requestsRealtime": "请求与实时通信",
   "nav.guide.plugins": "插件",
   "nav.guide.ai": "AI",

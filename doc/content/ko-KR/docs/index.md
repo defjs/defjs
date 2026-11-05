@@ -19,6 +19,17 @@ Defjs는 팀이 배포하는 API와 애플리케이션이 쓰는 클라이언트
 - [미들웨어](/ko-KR/docs/interceptors)
 - [오류](/ko-KR/docs/errors)
 
+## 모범 사례 [#best-practices]
+
+- [개요](/ko-KR/docs/best-practices)
+- [SDK 설계](/ko-KR/docs/best-practices/sdk-design)
+- [애플리케이션 통합](/ko-KR/docs/best-practices/application)
+- [오류 처리](/ko-KR/docs/best-practices/errors)
+- [스트리밍과 실시간](/ko-KR/docs/best-practices/streaming)
+- [테스트](/ko-KR/docs/best-practices/testing)
+- [보안](/ko-KR/docs/best-practices/security)
+- [성능](/ko-KR/docs/best-practices/performance)
+
 ## 요청과 실시간 통신
 
 - [HTTP 요청](/ko-KR/docs/http)

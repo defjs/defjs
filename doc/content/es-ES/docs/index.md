@@ -19,6 +19,17 @@ Defjs separa la API que publica un equipo del cliente que usa una aplicación. S
 - [Middleware](/es-ES/docs/interceptors)
 - [Errores](/es-ES/docs/errors)
 
+## Buenas prácticas [#best-practices]
+
+- [Descripción general](/es-ES/docs/best-practices)
+- [Diseño del SDK](/es-ES/docs/best-practices/sdk-design)
+- [Integración de la aplicación](/es-ES/docs/best-practices/application)
+- [Gestión de errores](/es-ES/docs/best-practices/errors)
+- [Streaming y tiempo real](/es-ES/docs/best-practices/streaming)
+- [Pruebas](/es-ES/docs/best-practices/testing)
+- [Seguridad](/es-ES/docs/best-practices/security)
+- [Rendimiento](/es-ES/docs/best-practices/performance)
+
 ## Solicitudes y tiempo real
 
 - [Solicitudes HTTP](/es-ES/docs/http)

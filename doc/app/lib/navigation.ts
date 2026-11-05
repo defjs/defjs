@@ -30,6 +30,19 @@ const guideGroups = [
     ],
   },
   {
+    titleKey: "nav.guide.bestPractices",
+    paths: [
+      "/docs/best-practices",
+      "/docs/best-practices/sdk-design",
+      "/docs/best-practices/application",
+      "/docs/best-practices/errors",
+      "/docs/best-practices/streaming",
+      "/docs/best-practices/testing",
+      "/docs/best-practices/security",
+      "/docs/best-practices/performance",
+    ],
+  },
+  {
     titleKey: "nav.guide.requestsRealtime",
     paths: ["/docs/http", "/docs/sse", "/docs/web-socket"],
   },
