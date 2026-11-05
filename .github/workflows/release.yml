@@ -31,7 +31,20 @@ permissions:
   contents: read
 
 jobs:
+  # Runs on every manual dispatch, including one with no publish targets.
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun ci
+      - run: bun run typecheck
+      - run: bun run build
+
   core:
+    needs: validate
     if: ${{ inputs.core }}
     runs-on: ubuntu-latest
     permissions:
@@ -57,6 +70,7 @@ jobs:
         run: npm publish --access public
 
   opentelemetry-server:
+    needs: validate
     if: ${{ inputs.opentelemetry-server }}
     runs-on: ubuntu-latest
     permissions:
@@ -85,6 +99,7 @@ jobs:
         run: npm publish --access public
 
   react:
+    needs: validate
     if: ${{ inputs.react }}
     runs-on: ubuntu-latest
     permissions:
@@ -113,6 +128,7 @@ jobs:
         run: npm publish --access public
 
   vue:
+    needs: validate
     if: ${{ inputs.vue }}
     runs-on: ubuntu-latest
     permissions:
@@ -141,6 +157,7 @@ jobs:
         run: npm publish --access public
 
   docs:
+    needs: validate
     if: ${{ inputs.docs }}
     runs-on: ubuntu-latest
     permissions:
