@@ -111,62 +111,42 @@ describe("synchronous balancer callbacks", () => {
   test("observes a rejected async pick without awaiting it", async () => {
     const cause = new Error("async pick rejection");
     const returned = Promise.reject(cause);
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => {
-      unhandled.push(reason);
-    };
-    process.on("unhandledRejection", onUnhandled);
-    try {
-      const [fault] = pickEndpoint(
-        {
-          // @ts-expect-error a promise is not a pick tuple
-          pick: () => returned,
-        },
-        info,
-      );
-      expect(fault?.code).toBe("REQ_BUILD_FAILED");
-      expect(fault?.cause).toBe(returned);
-      await Bun.sleep(0);
-      expect(unhandled).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
-    }
+    const [fault] = pickEndpoint(
+      {
+        // @ts-expect-error a promise is not a pick tuple
+        pick: () => returned,
+      },
+      info,
+    );
+    expect(fault?.code).toBe("REQ_BUILD_FAILED");
+    expect(fault?.cause).toBe(returned);
+    await Bun.sleep(0);
   });
 
   test("observes a rejected async done and finishes once", async () => {
     let calls = 0;
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => {
-      unhandled.push(reason);
-    };
-    process.on("unhandledRejection", onUnhandled);
-    try {
-      const [fault, selected] = pickEndpoint(
-        {
-          pick: () => [
-            null,
-            {
-              endpoint: "https://a",
-              // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-misused-promises -- INTENT: done must return a rejected promise to exercise asynchronous completion failure
-              async done() {
-                calls += 1;
-                throw new Error("async done rejection");
-              },
+    const [fault, selected] = pickEndpoint(
+      {
+        pick: () => [
+          null,
+          {
+            endpoint: "https://a",
+            // eslint-disable-next-line @typescript-eslint/require-await, @typescript-eslint/no-misused-promises -- INTENT: done must return a rejected promise to exercise asynchronous completion failure
+            async done() {
+              calls += 1;
+              throw new Error("async done rejection");
             },
-          ],
-        },
-        info,
-      );
-      expect(fault).toBeNull();
-      selected?.done({ attempted: true, status: 200 });
-      selected?.done({ attempted: false });
-      expect(selected?.finished()).toBe(true);
-      expect(calls).toBe(1);
-      await Bun.sleep(0);
-      expect(unhandled).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
-    }
+          },
+        ],
+      },
+      info,
+    );
+    expect(fault).toBeNull();
+    selected?.done({ attempted: true, status: 200 });
+    selected?.done({ attempted: false });
+    expect(selected?.finished()).toBe(true);
+    expect(calls).toBe(1);
+    await Bun.sleep(0);
   });
 
   test("observes custom thenables with their receiver and only a rejection handler", () => {

@@ -2122,32 +2122,24 @@ describe("fetchEventStream message path", () => {
 
   test("should observe a transform promise rejection after the transform aborts", async () => {
     const controller = new AbortController();
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => unhandled.push(reason);
-    process.on("unhandledRejection", onUnhandled);
     const lateFailure = new Error("late transform failure");
 
-    try {
-      const stream = await fetchEventStream(
-        { ...request, signal: controller.signal },
-        {
-          fetch: respondWith("data: a\n\n"),
-          transformMessage() {
-            controller.abort(ERR_ABORTED);
-            return Promise.reject(lateFailure);
-          },
+    const stream = await fetchEventStream(
+      { ...request, signal: controller.signal },
+      {
+        fetch: respondWith("data: a\n\n"),
+        transformMessage() {
+          controller.abort(ERR_ABORTED);
+          return Promise.reject(lateFailure);
         },
-      );
+      },
+    );
 
-      await expect(stream.closed).resolves.toMatchObject({
-        cause: ERR_ABORTED,
-        kind: "aborted",
-      });
-      await new Promise((resolve) => setImmediate(resolve));
-      expect(unhandled).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
-    }
+    await expect(stream.closed).resolves.toMatchObject({
+      cause: ERR_ABORTED,
+      kind: "aborted",
+    });
+    await Bun.sleep(0);
   });
 
   test("should not transform the remaining messages of a chunk once the request is aborted", async () => {

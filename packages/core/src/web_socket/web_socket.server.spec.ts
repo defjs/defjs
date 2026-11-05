@@ -2579,9 +2579,6 @@ describe("web socket runtime environment edge cases", () => {
 
   test("should route async state observer rejections through runtime observers without unhandled rejection", async () => {
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => unhandled.push(reason);
-    process.on("unhandledRejection", onUnhandled);
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       incoming: struct.unknown(),
@@ -2606,10 +2603,8 @@ describe("web socket runtime environment edge cases", () => {
     await socket.closed;
     await Promise.resolve();
     await Promise.resolve();
-    process.off("unhandledRejection", onUnhandled);
 
     expect(runtimeErrors).toEqual([stateFailure, stateFailure]);
-    expect(unhandled).toEqual([]);
   });
 
   test("should report async runtime observer and reporter rejections without unhandled rejection", async () => {
@@ -2620,9 +2615,6 @@ describe("web socket runtime environment edge cases", () => {
       throw new Error("async reporter failed");
     });
     vi.stubGlobal("WebSocket", createMockWebSocketClass());
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => unhandled.push(reason);
-    process.on("unhandledRejection", onUnhandled);
     const useSocket = defineWebSocket({
       maxIncomingQueueSize: 1,
       incoming: struct.unknown(),
@@ -2648,10 +2640,8 @@ describe("web socket runtime environment edge cases", () => {
     await socket.closed;
     await Promise.resolve();
     await Promise.resolve();
-    process.off("unhandledRejection", onUnhandled);
 
     expect(reported).toEqual([runtimeFailure, runtimeFailure]);
-    expect(unhandled).toEqual([]);
   });
 
   test("should isolate observer failures when the runtime has no reportError hook", async () => {

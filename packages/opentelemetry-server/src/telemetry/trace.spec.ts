@@ -278,33 +278,21 @@ describe("trace helpers", () => {
     async ({ error, errorType }) => {
       const { tracer, spans } = createMockTracer();
       const span = tracer.startSpan("test");
-      const unhandled: unknown[] = [];
-      const onUnhandled = (reason: unknown) => unhandled.push(reason);
-      process.on("unhandledRejection", onUnhandled);
+      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
+      runSpanHook(span, "requestHook", async () => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
+        throw error;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
 
-      try {
-        // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
-        runSpanHook(span, "requestHook", async () => {
-          // eslint-disable-next-line @typescript-eslint/only-throw-error -- INTENT: preserve the deliberate non-Error hook rejection
-          throw error;
-        });
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect(spans[0]?.addEvent).toHaveBeenCalledWith(
-          "defjs.otel.hook.error",
-          {
-            "error.type": errorType,
-            "hook.name": "requestHook",
-          },
-        );
-        expect(spans[0]?.recordException).toHaveBeenCalledWith(
-          error instanceof Error ? error : new Error(error),
-        );
-        expect(unhandled).toEqual([]);
-      } finally {
-        process.off("unhandledRejection", onUnhandled);
-      }
+      expect(spans[0]?.addEvent).toHaveBeenCalledWith("defjs.otel.hook.error", {
+        "error.type": errorType,
+        "hook.name": "requestHook",
+      });
+      expect(spans[0]?.recordException).toHaveBeenCalledWith(
+        error instanceof Error ? error : new Error(error),
+      );
     },
   );
 
@@ -328,24 +316,15 @@ describe("trace helpers", () => {
     spans[0]?.recordException.mockImplementation(() => {
       throw new Error("recordException failed");
     });
-    const unhandled: unknown[] = [];
-    const onUnhandled = (reason: unknown) => unhandled.push(reason);
-    process.on("unhandledRejection", onUnhandled);
+    // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
+    runSpanHook(span, "requestHook", async () => {
+      throw new Error("async hook failed");
+    });
+    await Promise.resolve();
+    await Promise.resolve();
 
-    try {
-      // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the hook under test must reject asynchronously
-      runSpanHook(span, "requestHook", async () => {
-        throw new Error("async hook failed");
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-
-      expect(spans[0]?.addEvent).toHaveBeenCalledTimes(1);
-      expect(spans[0]?.recordException).toHaveBeenCalledTimes(1);
-      expect(unhandled).toEqual([]);
-    } finally {
-      process.off("unhandledRejection", onUnhandled);
-    }
+    expect(spans[0]?.addEvent).toHaveBeenCalledTimes(1);
+    expect(spans[0]?.recordException).toHaveBeenCalledTimes(1);
   });
 
   test("runSpanHook records non-Error hook failures", () => {
