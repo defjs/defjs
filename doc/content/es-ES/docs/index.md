@@ -5,7 +5,7 @@ description: Diseña contratos y operaciones de SDK, publícalos y configura la 
 
 Defjs separa la API que publica un equipo del cliente que usa una aplicación. Sigue el camino de autoría del SDK para definir y empaquetar operaciones; sigue el camino de la aplicación para configurar la ejecución y tratar los resultados.
 
-## Desarrollo de SDK [#getting-started]
+## Prefacio [#getting-started]
 
 - [Resumen del proyecto](/es-ES)
 - [Inicio rápido](/es-ES/docs/start)

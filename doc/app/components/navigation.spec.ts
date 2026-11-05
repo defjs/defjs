@@ -314,7 +314,7 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
       .filter((n) => n.type === "separator" && Boolean(n.name))
       .map((n) => n.name),
   ).toEqual([
-    "SDK 开发",
+    "前言",
     "契约与执行",
     "请求与实时通信",
     "错误与拦截",

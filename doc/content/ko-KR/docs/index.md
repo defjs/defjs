@@ -5,7 +5,7 @@ description: SDK 계약과 작업을 설계하고 배포한 뒤, 사용하는 �
 
 Defjs는 팀이 배포하는 API와 애플리케이션이 쓰는 클라이언트를 나눕니다. SDK 작성 경로는 작업을 정의하고 패키지로 묶는 일을 맡습니다. 애플리케이션 경로는 실행을 구성하고 결과를 처리하는 일을 맡습니다.
 
-## SDK 개발 [#getting-started]
+## 머리말 [#getting-started]
 
 - [프로젝트 개요](/ko-KR)
 - [빠른 시작](/ko-KR/docs/start)

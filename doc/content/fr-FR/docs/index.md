@@ -5,7 +5,7 @@ description: Concevoir les contrats et les opérations du SDK, les publier, et c
 
 Defjs sépare l’API qu’une équipe publie du client qu’une application utilise. Suis le parcours d’écriture du SDK pour définir et empaqueter les opérations ; suis le parcours de l’application pour configurer l’exécution et traiter les résultats.
 
-## Développement de SDK [#getting-started]
+## Préface [#getting-started]
 
 - [Présentation du projet](/fr-FR)
 - [Démarrage rapide](/fr-FR/docs/start)

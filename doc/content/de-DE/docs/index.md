@@ -5,7 +5,7 @@ description: SDK-Verträge und Operationen entwerfen, sie veröffentlichen und d
 
 Defjs trennt die API, die ein Team veröffentlicht, vom Client, den eine Anwendung nutzt. Folge dem Pfad für SDK-Autoren, um Operationen zu definieren und zu paketieren; folge dem Anwendungspfad, um die Ausführung zu konfigurieren und Ergebnisse zu behandeln.
 
-## SDK-Entwicklung [#getting-started]
+## Vorwort [#getting-started]
 
 - [Projektübersicht](/de-DE)
 - [Schnellstart](/de-DE/docs/start)

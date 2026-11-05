@@ -58,7 +58,7 @@ export default {
   "nav.home": "نظرة عامة على المشروع",
   "nav.related": "قراءة ذات صلة",
   "nav.apiIndex": "فهرس API",
-  "nav.guide.sdkDevelopment": "تطوير SDK",
+  "nav.guide.preface": "مقدمة",
   "nav.guide.contractsExecution": "العقود والتنفيذ",
   "nav.guide.requestsRealtime": "الطلبات والاتصال الآني",
   "nav.guide.errorsInterception": "الأخطاء والاعتراض",

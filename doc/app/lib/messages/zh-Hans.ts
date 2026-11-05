@@ -58,7 +58,7 @@ export default {
   "nav.home": "项目概览",
   "nav.related": "相关阅读",
   "nav.apiIndex": "API 索引",
-  "nav.guide.sdkDevelopment": "SDK 开发",
+  "nav.guide.preface": "前言",
   "nav.guide.contractsExecution": "契约与执行",
   "nav.guide.requestsRealtime": "请求与实时通信",
   "nav.guide.errorsInterception": "错误与拦截",

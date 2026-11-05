@@ -59,7 +59,7 @@ export default {
   "nav.home": "Présentation du projet",
   "nav.related": "Pages liées",
   "nav.apiIndex": "Index API",
-  "nav.guide.sdkDevelopment": "Développement de SDK",
+  "nav.guide.preface": "Préface",
   "nav.guide.contractsExecution": "Contrats et exécution",
   "nav.guide.requestsRealtime": "Requêtes et temps réel",
   "nav.guide.errorsInterception": "Erreurs et interception",

@@ -60,7 +60,7 @@ export default {
   "nav.home": "Обзор проекта",
   "nav.related": "Связанные страницы",
   "nav.apiIndex": "Индекс API",
-  "nav.guide.sdkDevelopment": "Разработка SDK",
+  "nav.guide.preface": "Предисловие",
   "nav.guide.contractsExecution": "Контракты и выполнение",
   "nav.guide.requestsRealtime": "Запросы и реальное время",
   "nav.guide.errorsInterception": "Ошибки и перехват",

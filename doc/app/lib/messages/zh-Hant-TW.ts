@@ -59,7 +59,7 @@ export default {
   "nav.home": "專案概覽",
   "nav.related": "相關閱讀",
   "nav.apiIndex": "API 索引",
-  "nav.guide.sdkDevelopment": "SDK 開發",
+  "nav.guide.preface": "前言",
   "nav.guide.contractsExecution": "契約與執行",
   "nav.guide.requestsRealtime": "請求與即時通訊",
   "nav.guide.errorsInterception": "錯誤與攔截",

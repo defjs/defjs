@@ -16,7 +16,7 @@ interface NavigationGroup {
 }
 
 const guideGroups = [
-  { titleKey: "nav.guide.sdkDevelopment", paths: ["", "/docs/start"] },
+  { titleKey: "nav.guide.preface", paths: ["", "/docs/start"] },
   {
     titleKey: "nav.guide.contractsExecution",
     paths: ["/docs/struct", "/docs/client"],

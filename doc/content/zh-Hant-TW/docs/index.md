@@ -5,7 +5,7 @@ description: 設計並發佈 SDK 契約與操作，並在使用端的應用程�
 
 Defjs 把團隊發佈的 API，與應用程式使用的 client 分開。從 SDK 撰寫路徑讀到如何定義並打包操作；從應用程式路徑設定執行並處理結果。
 
-## SDK 開發 [#getting-started]
+## 前言 [#getting-started]
 
 - [專案概覽](/zh-Hant-TW)
 - [快速開始](/zh-Hant-TW/docs/start)

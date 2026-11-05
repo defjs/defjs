@@ -58,7 +58,7 @@ export default {
   "nav.home": "프로젝트 개요",
   "nav.related": "관련 문서",
   "nav.apiIndex": "API 색인",
-  "nav.guide.sdkDevelopment": "SDK 개발",
+  "nav.guide.preface": "머리말",
   "nav.guide.contractsExecution": "계약과 실행",
   "nav.guide.requestsRealtime": "요청과 실시간 통신",
   "nav.guide.errorsInterception": "오류와 인터셉터",

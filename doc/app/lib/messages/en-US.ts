@@ -57,7 +57,7 @@ const messages = {
   "nav.home": "Project overview",
   "nav.related": "Related reading",
   "nav.apiIndex": "API index",
-  "nav.guide.sdkDevelopment": "SDK development",
+  "nav.guide.preface": "Preface",
   "nav.guide.contractsExecution": "Contracts and execution",
   "nav.guide.requestsRealtime": "Requests and realtime",
   "nav.guide.errorsInterception": "Errors and interception",

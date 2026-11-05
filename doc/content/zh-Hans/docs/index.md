@@ -5,7 +5,7 @@ description: 设计 SDK 契约与操作、发布它们，并在消费方应用�
 
 Defjs 把团队发布的 API 和应用使用的 client 分开。这组指南围绕两条路径：沿 SDK 编写路径定义并打包操作；沿应用路径配置执行并处理结果。
 
-## SDK 开发 [#getting-started]
+## 前言 [#getting-started]
 
 - [项目概览](/zh-Hans)
 - [快速开始](/zh-Hans/docs/start)

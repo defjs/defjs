@@ -5,7 +5,7 @@ description: Design SDK contracts and operations, publish them, and configure ex
 
 Defjs separates the API a team publishes from the client an application uses. Follow the SDK authoring path to define and package operations; follow the application path to configure execution and handle results.
 
-## SDK development [#getting-started]
+## Preface [#getting-started]
 
 - [Project overview](/)
 - [Quick start](/docs/start)

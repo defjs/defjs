@@ -59,7 +59,7 @@ export default {
   "nav.home": "プロジェクト概要",
   "nav.related": "関連ページ",
   "nav.apiIndex": "API 索引",
-  "nav.guide.sdkDevelopment": "SDK 開発",
+  "nav.guide.preface": "はじめに",
   "nav.guide.contractsExecution": "契約と実行",
   "nav.guide.requestsRealtime": "リクエストとリアルタイム通信",
   "nav.guide.errorsInterception": "エラーとインターセプター",

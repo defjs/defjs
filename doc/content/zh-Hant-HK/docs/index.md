@@ -5,7 +5,7 @@ description: 設計 SDK 契約同操作、發佈出去，並喺使用方應用�
 
 Defjs 分開兩樣嘢：團隊發佈嘅 API，同應用程式用嘅 client。跟 SDK 作者嗰條路，可以讀到點樣定義同封裝操作；跟應用程式嗰條路，設定執行同處理結果。
 
-## SDK 開發 [#getting-started]
+## 前言 [#getting-started]
 
 - [項目概覽](/zh-Hant-HK)
 - [快速開始](/zh-Hant-HK/docs/start)
