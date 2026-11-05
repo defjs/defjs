@@ -3,138 +3,128 @@ title: "資料結構 / Struct"
 description: 用 Struct 定義 SDK 的輸入、輸出、錯誤及訊息，同時提供類型推斷與執行時驗證。
 ---
 
-# Struct 資料契約
+# 資料結構與 Schema / Struct
 
-Struct 是 SDK 作者描述資料契約的入口：輸入、HTTP 輸出與錯誤、SSE 事件及 WebSocket 訊息都可以在定義時確定形狀。應用程式使用這些端點時取得推斷類型，Defjs 在執行邊界驗證實際資料。
+`struct` 用嚟宣告 SDK 同使用方之間共享嘅網絡資料契約：包括呼叫端嘅 input、`2xx` 輸出、宣告過嘅服務錯誤、SSE 事件，以及 WebSocket frame。
 
-`Infer` 提供 TypeScript 類型，`struct.parse(...)` 可以獨立驗證未知值，以 error-first tuple 返回結果而不拋出錯誤。Struct 負責值的編碼及解碼；值在請求中的位置由 `builder` 決定。
+- **靜態型別推斷**：透過 `Infer<typeof Schema>` 推斷 TypeScript 型別。
+- **Error-first 執行時驗證**：用 `struct.parse(Schema, value)` 喺執行時驗證數值 — 回傳 `[null, data]` 或 `[StructError, undefined]`，唔會拋出例外。
 
-## 基本用法
+## 1. 喺 SDK 定義 Schema，喺應用程式驗證
+
+<Tabs items={["sdk/schema.ts", "app/validate.ts"]}>
+<Tab value="sdk/schema.ts">
+
+```ts
+import { struct, type Infer } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.enum(["pending", "paid", "shipped"] as const),
+  customerName: struct.string().alias("customer_name"),
+  notes: struct.string().optional(),
+});
+
+export type Order = Infer<typeof Order>;
+```
+
+</Tab>
+<Tab value="app/validate.ts">
 
 <include cwd lang="typescript">
   examples/struct/basic-setup.ts#example
 </include>
 
-Parsed output 只會保留已聲明嘅欄位。缺少必填欄位、primitive 類型錯誤、巢狀值錯誤、tuple 長度錯誤，或者唔容許嘅 `null` → `StructError`，唔會有部分結果。Structs 係 immutable；`.optional()` 等 modifiers 都會回傳新 Struct。
+</Tab>
+</Tabs>
 
-## Required、optional、null
+解析出嚟嘅物件只會保留宣告過嘅欄位（未宣告嘅未知屬性會自動被剔除），並且採用 `null` prototype。只要缺少必要 key、基本型別唔啱，或者分支無效，就會直接產生 `StructError`，絕唔會產出殘缺不全嘅部分結果。
 
-Presence 同 nullability 係分開嘅：
+## 2. 必填、可選與 Nullable 欄位
 
-| 聲明                         | 缺少／`undefined`            | `null` | 有效值     |
-| ---------------------------- | ---------------------------- | ------ | ---------- |
-| `struct.string()`            | 拒絕                         | 拒絕   | 接受字串   |
-| `struct.string().optional()` | 接受；省略缺失嘅 object 欄位 | 拒絕   | 接受字串   |
-| `struct.string().null()`     | 拒絕                         | 接受   | 接受字串   |
-| `struct.string().nullish()`  | 接受；省略缺失嘅 object 欄位 | 接受   | 接受字串   |
-| `struct.null()`              | 拒絕                         | 接受   | 拒絕其他值 |
+Defjs 將**欄位存在與否**（`undefined`）同**空值**（`null`）分得清清楚楚。預設情況下，每個 struct 建構子都係嚴格必填而且唔接受 null：
+
+| 宣告方式                     | 缺少 / `undefined`       | `null` | 有效數值      |
+| ---------------------------- | ------------------------ | ------ | ------------- |
+| `struct.string()`            | 拒絕                     | 拒絕   | 接受 `string` |
+| `struct.string().optional()` | 接受（物件序列化時省略） | 拒絕   | 接受 `string` |
+| `struct.string().null()`     | 拒絕                     | 接受   | 接受 `string` |
+| `struct.string().nullish()`  | 接受（物件序列化時省略） | 接受   | 接受 `string` |
+| `struct.null()`              | 拒絕                     | 接受   | 拒絕非 `null` |
 
 <include cwd lang="typescript">
   examples/struct/required-optional-null.ts#example
 </include>
 
-`struct.any()` 同 `struct.unknown()` 連 `null` 同 `undefined` 都會拒絕。要接受佢哋，就 chain `.null()`、`.optional()` 或者 `.nullish()`。
+`struct.any()` 同 `struct.unknown()` 亦都會預設拒絕 `null` 同 `undefined`，除非你後面鏈式呼叫 `.null()`、`.optional()` 或 `.nullish()`。
 
-喺 root，optional 可以係 `undefined`。喺 object 入面，omitted optional/nullish fields 保持 absent。巢狀 object field 都係咁：caller 可以 omit 就 mark `.optional()`。Object field required 就仍然 required，即使入面每個 field 都 optional。
+## 3. 雙向網絡別名（`.alias()`）
 
-## Request 擺放位置
+當後端 API 習慣用 `snake_case` 或者特定 header 名稱，但你嘅 TypeScript SDK 想保持乾淨嘅 `camelCase` 嗰陣，就可以用 `.alias("wire_name")`。你只需喺欄位宣告一次 alias，佢就可以喺兩個方向自動轉換：
 
-Path、query、headers 同 body 係 builder return 嘅 fields，唔係一個 request struct。只要聲明咗 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放喺邊度只由 builder 決定。只有冇 `input` 嘅定義先可以省略 `builder`。`struct.urlencoded(shape)` 同 `struct.formData(shape)` 係帶 codec tag 嘅 object structs。個 tag 只會喺個 value 係 body root 嘅時候 run：keys 用 aliases，arrays 會重複 field name。
-
-<include cwd lang="typescript">
-  examples/struct/request-placement.ts#example
-</include>
-
-| Body root                                           | 送出點樣          | Default content type                              |
-| --------------------------------------------------- | ----------------- | ------------------------------------------------- |
-| typed object、array、finite number、boolean、`null` | JSON text         | `application/json`                                |
-| `string` struct 或者 raw string                     | text              | `text/plain;charset=UTF-8`                        |
-| root 嘅 `struct.urlencoded(shape)`                  | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
-| root 嘅 `struct.formData(shape)`                    | `FormData`        | platform multipart boundary                       |
-| `Blob` / `File`                                     | 嗰個 blob         | blob type 或者 `application/octet-stream`         |
-| `ArrayBuffer` / view / stream                       | bytes             | `application/octet-stream`                        |
-
-`NaN` 同 `±Infinity`，包括喺 array 或者 object 入面，都會以 `REQ_BUILD_FAILED` 失敗。
-
-`struct.file()` 係 form field 同 raw file body 用嘅 value struct。WebSocket builders 唔可以 return `headers` 或者 `body`。HTTP 同 SSE 可以。`GET` 同 `HEAD` 唔可以。
-
-## 別名
-
-`.alias(...)` 分開 logical names 同 wire names。`struct.parse(...)` 用 logical keys，除非你傳 `{ aliases: true }`。JSON 同 flat request codecs encode aliases；JSON response decoding 會將 wire keys map 返去 logical fields。
+| 邊界                                                             | 使用嘅 Key 名稱                            |
+| ---------------------------------------------------------------- | ------------------------------------------ |
+| 操作 `input` 與 `struct.parse(Schema, value)`                    | 邏輯名稱（`customerName`）                 |
+| `builder` 回傳嘅帶型別 struct 數值（`body`、`query`、`headers`） | 網絡 alias（`customer_name`）              |
+| 解碼 JSON 回應 / SSE 事件 / WebSocket frame                      | 網絡 `customer_name` → 邏輯 `customerName` |
+| 喺 `builder` 入面直接手寫嘅匿名物件 key                          | 手寫乜就係乜，保持字面值                   |
 
 <include cwd lang="typescript">
   examples/struct/aliases.ts#example
 </include>
 
-| 邊界                                    | 欄位                          |
-| --------------------------------------- | ----------------------------- |
-| `struct.parse(Order, ...)` 同操作 input | Logical `customerName`        |
-| Builder return 嘅 typed object          | Wire `customer_name`          |
-| JSON / SSE / WebSocket decoding         | Wire → logical `customerName` |
-| Builder 入面手寫嘅 anonymous object     | 你寫嘅嗰個 key                |
+喺 `builder` 入面展開帶型別嘅物件（例如 `{ ...input.order, extra: 1 }`）會保留佢嘅 struct 編碼同別名設定。但如果你喺同一個物件同時寫入邏輯 key 同網絡 alias，就會拋出 `REQ_BUILD_FAILED`。
 
-Builder 本身讀嘅係 logical names（`input.order.customerName`）；wire name 只會喺 serializer encode builder return 嘅 typed object 嗰陣出現。
+## 4. 請求放置與表單編碼
 
-Aliases 對 nested fields、arrays、objects、unions 同 discriminators 都有效。App code 用 logical names；external name 喺 struct 上面放一次。Spread 一個 typed object 會保留嗰種 encoding。同一個 object 同時 set logical field 同佢嘅 wire key 就係 `REQ_BUILD_FAILED`。你自己 `JSON.stringify` 一個 value 就離開呢條路：serializer 見到嘅係 logical names。
+`input` 負責定義參數；`builder` 則負責將佢哋放到 `{ path, query, headers, body }`。針對表單編碼嘅 body，`struct.urlencoded(shape)` 同 `struct.formData(shape)` 會標記根物件，等傳輸層自動將佢序列化做 `URLSearchParams` 或者 `FormData`：
 
-引導喺每個節點決定，唔只喺 root。Anonymous parent 下面新寫嘅 object 保留你寫落嘅 key。Typed parent 下面，同一個 object 改用嗰個 field 嘅 struct。
+<include cwd lang="typescript">
+  examples/struct/request-placement.ts#example
+</include>
 
-```ts
-body: { row: { id: '42' } }              // Anonymous root: emits id
-body: { ...input, row: { id: '42' } }    // Typed root, row field declares alias: emits wire_id
-```
+| `builder` 回傳嘅 Body 根數值                | 網絡傳輸格式      | 預設 `Content-Type`                               |
+| ------------------------------------------- | ----------------- | ------------------------------------------------- |
+| 帶型別物件、陣列、有限數值、boolean、`null` | JSON 字串         | `application/json`                                |
+| `string` struct 或原生 `string`             | UTF-8 純文字      | `text/plain;charset=UTF-8`                        |
+| 位於 body 根部嘅 `struct.urlencoded(shape)` | `URLSearchParams` | `application/x-www-form-urlencoded;charset=UTF-8` |
+| 位於 body 根部嘅 `struct.formData(shape)`   | `FormData`        | `multipart/form-data; boundary=...`               |
+| `Blob` / `File` (`struct.file()`)           | 二進制 blob       | `blob.type` 或 `application/octet-stream`         |
+| `ArrayBuffer` / view / `ReadableStream`     | 原始位元組串流    | `application/octet-stream`                        |
 
-union 引導同時 match 多過一個 branch 嘅時候，每個 branch 都 encode 再比較。Wire 結果一樣就採用；有分別就係 `REQ_BUILD_FAILED`。
+## 5. 處理 `StructError` 與錯誤細項
 
-混合 intersection（包含非 object 部分）解析嗰陣，標籤係各匹配部分已有標籤嘅合取；未經解析、新寫嘅混合 intersection 值就當匿名 object 處理。
-
-## 解析失敗
-
-`struct.parse(...)` return `[null, value]` 或者 `[StructError, undefined]`。`StructError` extends `Error`，暴露 `issues`，再加 `format()`、`flatten()` 同 `prettify()`。
+當驗證失敗時，`struct.parse(Schema, data, { aliases?, errorMap? })` 會回傳 `[StructError, undefined]`。`StructError` 繼承自原生 `Error`，並提供 `issues`、`format()`、`flatten()` 同 `prettify()`：
 
 <include cwd lang="typescript">
   examples/struct/parse-failures.ts#example
 </include>
 
-`StructIssue` 有 `code`、`expected`、`message`、`path` 同 `received`。`code` 係 `custom`、`invalid_enum`、`invalid_intersection`、`invalid_literal`、`invalid_type`、`invalid_union` 或者 `missing_key`。預設訊息只會寫收到嘅種類，永遠唔會包含值：`Expected number at id, received string`。Issue path 係結構性嘅，會保留 record 嘅 key：`struct.record(...)` 可以產生 `Expected number at alice@example.com, received string`，所以 key 喺預設訊息、`prettify()` 同 `String(fault)` 入面仍然可能敏感。所以 `message` 同 `prettify()` 唔會包含收到嘅 payloads；`received` 保留原始值，寫 log 或回傳之前需要遮蓋敏感資料。`struct.parse(..., { errorMap })` 只改寫該次 call 嘅訊息，包括另一份 Core 嘅 struct 所產生嘅 bigint/date 轉換失敗。任何回傳嘅 string（包括 `''`）都會取代預設值；只有 `undefined` 先會保留佢。自訂文字會原樣使用，如果 map 加入咗值，就可能洩露資料。
+每個 `StructIssue` 都包含 `code`（`invalid_type`、`missing_key`、`invalid_literal`、`invalid_enum`、`invalid_union`、`invalid_intersection` 或 `custom`）、`path`、`expected`、`received` 同埋 `message`。預設錯誤訊息只會報告接收到嘅*型別*（絕唔會直接輸出原始 payload 數值），確保 `String(error)` 同 `error.prettify()` 唔會唔小心將敏感資料印落 log。
 
-Struct validation 淨係 structural。冇 public range、format、refinement、auth 或者 state-transition rules。嗰啲 checks 喺你呼叫操作之前自己做。
-
-## 參考
-
-`@defjs/core` 上嘅 public constructors（internals 唔係 facade APIs）：
+## 6. 建構子參考
 
 <include cwd lang="typescript">
   examples/struct/any.ts#example
 </include>
 
-| Constructor                      | Input                                               | 推斷輸出                   |
-| -------------------------------- | --------------------------------------------------- | -------------------------- |
-| `struct.number()`                | 除咗 `NaN` 以外嘅 number                            | `number`，包括 ±`Infinity` |
-| `struct.date()`                  | `Date`、number，或者 date string                    | 有效嘅 `Date`              |
-| `struct.bigint()`                | `bigint` 或者 `BigInt(...)` 接受嘅 string           | `bigint`                   |
-| `struct.enum(...)`               | Declared string 或者 number member                  | 嗰個 literal union         |
-| `struct.discriminatedUnion(...)` | 帶 required literal discriminator 嘅 object         | 被選中嘅 object 分支       |
-| `struct.or(...)`                 | 第一個 matching branch；encoding 會 check ambiguity | Branch outputs 嘅 union    |
-| `struct.intersection(...)`       | 每個 member 都接受嘅 values                         | Outputs 嘅 intersection    |
-| `struct.record(value)`           | Values 符合 `value` 嘅 plain object                 | Parsed values 嘅 record    |
-| `struct.tuple(items)`            | 長度同聲明完全一致嘅 array                          | 定長 tuple                 |
+| 建構子                                                     | 接受嘅輸入                         | 推斷出嘅輸出型別                                      |
+| ---------------------------------------------------------- | ---------------------------------- | ----------------------------------------------------- |
+| `struct.string()` / `struct.boolean()`                     | 吻合嘅基本型別                     | `string` / `boolean`                                  |
+| `struct.number()`                                          | 除咗 `NaN` 以外嘅任何 `number`     | `number`（拒絕 `NaN`；喺 JSON body 拒絕 `±Infinity`） |
+| `struct.bigint()`                                          | `bigint` 或數字字串                | `bigint`                                              |
+| `struct.date()`                                            | 有效 `Date`、timestamp 或 ISO 字串 | `Date`                                                |
+| `struct.literal(value)`                                    | 完全精確嘅基本型別字面值           | 字面值型別                                            |
+| `struct.enum(values)`                                      | 宣告過嘅字串或數字成員             | 字面值嘅 Union                                        |
+| `struct.array(item)` / `struct.tuple(items)`               | 陣列 / 固定長度 tuple              | `T[]` / `[...]`                                       |
+| `struct.object(shape)` / `struct.record(val)`              | 純物件                             | 帶型別物件 / `Record<string, V>`                      |
+| `struct.discriminatedUnion(key, options)`                  | 帶有字面值 `key` 判別器嘅物件      | 各物件分支嘅 Union                                    |
+| `struct.or(branches)`                                      | 第一個吻合嘅分支                   | 各分支型別嘅 Union                                    |
+| `struct.intersection(members)`                             | 同時滿足所有成員嘅數值             | 深度合併嘅 Intersection                               |
+| `struct.file()` / `struct.blob()` / `struct.arrayBuffer()` | `File` / `Blob` / `ArrayBuffer`    | 二進制表示                                            |
 
-每個 Struct 都支援 `.alias(name)`、`.optional()`、`.null()` 同 `.nullish()`。`struct.discriminatedUnion` 要有 required literal discriminator 嘅 object options，並 reject duplicates。
+## 延伸閱讀
 
-由 `@defjs/core` import `struct`、`Infer`、`Struct`、`StructError` 同 related public types。用 `struct.parse(...)` 做 parser。唔好 import `createObjectStruct`、definition symbols、codec internals，或者 `packages/core/src`。
-
-Facade 唔承諾嘅嘢：
-
-- Object/record outputs 用 null prototype — 唔好假設有 `Object.prototype` methods。
-- Unknown object keys 會被 drop。
-- `struct.number()` reject `NaN`，accept infinities。
-- `struct.or(...)` 按次序試 branches；branches 意見唔同時 reject ambiguous encodings。
-- `struct.intersection(...)` 按 declaration order parse members。
-- intersection 會 deep-merge members 嘅 outputs（`Object.is` 相等嘅 values 同時間相同嘅 Date 保留，plain objects 同等長 arrays 遞迴 merge，其他衝突係該 path 嘅 `invalid_intersection`），`unknown` / `any` 唔貢獻 output，同一個 logical key 可以對應多個 wire key；只有同一個 wire key 上面寫入咗唔相等嘅值先算衝突。
-- Struct validate 一個 boundary；佢唔會 cache、authorize，或者 own transport resource。
-
-## 相關配方
-
-- [POST JSON](/zh-Hant-HK/recipes/post-json)
-- [GET 配 declared 404](/zh-Hant-HK/recipes/get-declared-404)
+- [HTTP 操作](/zh-Hant-HK/docs/http)
+- [錯誤處理](/zh-Hant-HK/docs/errors)
+- [發送與驗證 JSON](/zh-Hant-HK/recipes/post-json)

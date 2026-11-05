@@ -80,6 +80,13 @@ function guideFolder(children: readonly Node[]): Folder {
   return guide;
 }
 
+function integrationsFolder(children: readonly Node[]): Folder {
+  const integrations = children[1];
+  if (integrations?.type !== "folder")
+    throw new Error("expected an integrations folder");
+  return integrations;
+}
+
 const files: VirtualFile[] = [];
 for await (const path of new Bun.Glob("**/*.{md,mdx,json}").scan(
   new URL("../../content/", import.meta.url).pathname,
@@ -120,25 +127,22 @@ const guidePaths = [
   "/docs/start",
   "/docs/design-decisions",
   "/docs/struct",
-  "/docs/client",
-  "/docs/interceptors",
-  "/docs/errors",
-  "/docs/best-practices/sdk-design",
-  "/docs/best-practices/application",
-  "/docs/best-practices/middleware",
-  "/docs/best-practices/errors",
-  "/docs/best-practices/sse",
-  "/docs/best-practices/web-socket",
-  "/docs/best-practices/testing",
   "/docs/http",
   "/docs/sse",
   "/docs/web-socket",
+  "/docs/client",
+  "/docs/errors",
+  "/docs/interceptors",
+  "/docs/load-balancing",
+  "/docs/testing",
+  "/docs/ai",
+  "/docs/ai-api",
+];
+const integrationPaths = [
   "/docs/integrations",
   "/docs/integrations/react",
   "/docs/integrations/vue",
   "/docs/integrations/opentelemetry-server",
-  "/docs/ai",
-  "/docs/ai-api",
 ];
 const recipePaths = [
   "/recipes/post-json",
@@ -166,7 +170,7 @@ test("actual eleven-language content trees preserve every unique URL and page re
         .map((p) => p.url)
         .sort(),
     );
-    expect(new Set(pages.map((p) => p.url)).size).toBe(229);
+    expect(new Set(pages.map((p) => p.url)).size).toBe(224);
     for (const page of pages) {
       expect(source.getPageByUrl(page.url, locale)?.path).toBe(
         `${locale}/${page.$ref}`,
@@ -178,13 +182,23 @@ test("actual eleven-language content trees preserve every unique URL and page re
       ).toBe(1);
     }
     const guide = tree.children[0];
-    const recipes = tree.children[1];
-    if (guide?.type !== "folder" || recipes?.type !== "folder")
-      throw new Error("Missing guide or example reading area");
+    const integrations = tree.children[1];
+    const recipes = tree.children[2];
+    if (
+      guide?.type !== "folder" ||
+      integrations?.type !== "folder" ||
+      recipes?.type !== "folder"
+    )
+      throw new Error("Missing guide, integrations, or example reading area");
     expect(
       guide.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
-    ).toBe(6);
+    ).toBe(4);
+    expect(
+      integrations.children.filter(
+        (n) => n.type === "separator" && Boolean(n.name),
+      ).length,
+    ).toBe(2);
     expect(
       recipes.children.filter((n) => n.type === "separator" && Boolean(n.name))
         .length,
@@ -193,13 +207,18 @@ test("actual eleven-language content trees preserve every unique URL and page re
       `${prefix}/docs`,
       ...guidePaths.map((path) => prefix + path || "/"),
     ]);
+    expect(flattenTree(integrations.children).map((n) => n.url)).toEqual(
+      integrationPaths.map((path) => prefix + path),
+    );
     expect(flattenTree(recipes.children).map((n) => n.url)).toEqual([
       `${prefix}/recipes`,
       ...recipePaths.map((path) => prefix + path),
     ]);
     const tabs = getNavigationTabs(tree);
     expect(tabs.map((tab) => tab.url)).toEqual(
-      ["docs", "recipes", "api"].map((area) => `${prefix}/${area}`),
+      ["docs", "docs/integrations", "recipes", "api"].map(
+        (area) => `${prefix}/${area}`,
+      ),
     );
     for (const page of pages)
       expect(
@@ -209,25 +228,27 @@ test("actual eleven-language content trees preserve every unique URL and page re
   }
 });
 
-test("top tabs stay at three areas and the AI guide sits inside Guide", () => {
+test("top tabs expose four areas and the AI guide sits inside Guide", () => {
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     const tree = getNavigationTree(source.getPageTree(locale), locale);
     const tabs = getNavigationTabs(tree);
     expect(tabs.map((tab) => tab.url)).toEqual(
-      ["docs", "recipes", "api"].map((area) => `${prefix}/${area}`),
+      ["docs", "docs/integrations", "recipes", "api"].map(
+        (area) => `${prefix}/${area}`,
+      ),
     );
     const guide = guideFolder(tree.children);
-    const urls = flattenTree(guide.children).map((node) => node.url);
+    const guideUrls = flattenTree(guide.children).map((node) => node.url);
+    expect(guideUrls.indexOf(`${prefix}/docs/design-decisions`)).toBe(
+      guideUrls.indexOf(`${prefix}/docs/start`) + 1,
+    );
     const ai = `${prefix}/docs/ai`;
     const aiApi = `${prefix}/docs/ai-api`;
-    expect(urls.indexOf(ai)).toBe(
-      urls.indexOf(`${prefix}/docs/integrations/opentelemetry-server`) + 1,
+    expect(guideUrls.indexOf(ai)).toBe(
+      guideUrls.indexOf(`${prefix}/docs/testing`) + 1,
     );
-    expect(urls.indexOf(aiApi)).toBe(urls.indexOf(ai) + 1);
-    expect(urls.indexOf(`${prefix}/docs/design-decisions`)).toBe(
-      urls.indexOf(`${prefix}/docs/start`) + 1,
-    );
+    expect(guideUrls.indexOf(aiApi)).toBe(guideUrls.indexOf(ai) + 1);
     expect(
       tabs.filter((tab) => isLayoutTabActive(tab, ai)).map((tab) => tab.url),
     ).toEqual([`${prefix}/docs`]);
@@ -237,7 +258,7 @@ test("top tabs stay at three areas and the AI guide sits inside Guide", () => {
   }
 });
 
-test("every locale names the Guide AI group and both of its pages", () => {
+test("every locale names the AI group and both of its pages", () => {
   const labels = {
     "en-US": ["AI", "Skill", "llms.txt"],
     "zh-Hans": ["AI", "Skill", "llms.txt"],
@@ -288,14 +309,21 @@ test("navigation uses the active translator rather than selecting another dictio
   ).toBe("Provider AI heading");
 });
 
-test("reading-area and chapter labels come from page frontmatter, except the guide home and API index overrides", () => {
+test("reading-area and chapter labels come from page frontmatter, except the guide home, integrations tab, and API index overrides", () => {
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
+    const t = getTranslator(locale);
     const tree = getNavigationTree(source.getPageTree(locale), locale);
-    for (const [i, area] of ["docs", "recipes", "api"].entries())
-      expect(tree.children[i]?.name).toBe(
-        source.getPageByUrl(`${prefix}/${area}`, locale)?.data.title,
-      );
+    expect(tree.children[0]?.name).toBe(
+      source.getPageByUrl(`${prefix}/docs`, locale)?.data.title,
+    );
+    expect(tree.children[1]?.name).toBe(t("nav.integrations"));
+    expect(tree.children[2]?.name).toBe(
+      source.getPageByUrl(`${prefix}/recipes`, locale)?.data.title,
+    );
+    expect(tree.children[3]?.name).toBe(
+      source.getPageByUrl(`${prefix}/api`, locale)?.data.title,
+    );
     for (const page of flattenTree(tree.children))
       if (page.url !== (prefix || "/") && page.url !== `${prefix}/api`)
         expect(page.name).toBe(
@@ -308,6 +336,7 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
   const tree = getNavigationTree(source.getPageTree("zh-Hans"), "zh-Hans");
   expect(tree.children.map((n) => n.name)).toEqual([
     "指南",
+    "插件",
     "操作示例",
     "API 参考",
   ]);
@@ -316,7 +345,13 @@ test("simplified Chinese navigation names describe tasks instead of repeating ra
     guide.children
       .filter((n) => n.type === "separator" && Boolean(n.name))
       .map((n) => n.name),
-  ).toEqual(["前言", "核心概念", "最佳实践", "请求与实时通信", "插件", "AI"]);
+  ).toEqual(["前言", "定义 SDK", "客户端与执行", "AI"]);
+  const integrations = integrationsFolder(tree.children);
+  expect(
+    integrations.children
+      .filter((n) => n.type === "separator" && Boolean(n.name))
+      .map((n) => n.name),
+  ).toEqual(["概览", "官方插件"]);
   expect(
     flattenTree(guide.children)
       .slice(1, 5)
@@ -363,9 +398,12 @@ test("design decisions sit in the preface group and native previous/next follows
     expect(
       findNeighbour(tree, `${prefix}/docs/design-decisions`).next?.url,
     ).toBe(`${prefix}/docs/struct`);
+    expect(findNeighbour(tree, `${prefix}/docs/testing`).previous?.url).toBe(
+      `${prefix}/docs/load-balancing`,
+    );
     expect(
       findNeighbour(tree, `${prefix}/docs/integrations`).previous?.url,
-    ).toBe(`${prefix}/docs/web-socket`);
+    ).toBeUndefined();
     expect(
       findNeighbour(tree, `${prefix}/docs/integrations/react`).previous?.url,
     ).toBe(`${prefix}/docs/integrations`);
@@ -469,7 +507,7 @@ test("the SSR directory keeps one current AI page when the URL has a trailing sl
       expect(html).toContain(`aria-label="${t("nav.readingAreas")}"`);
       expect(html).toContain(`aria-label="${t("nav.navigation")}"`);
       expect(html).toContain(`>${t("nav.guide.ai")}</h2>`);
-      for (const area of ["docs", "recipes", "api"])
+      for (const area of ["docs", "docs/integrations", "recipes", "api"])
         expect(html).toContain(`href="${prefix}/${area}"`);
       expect(html.match(/aria-current="page"/g)).toEqual([
         'aria-current="page"',

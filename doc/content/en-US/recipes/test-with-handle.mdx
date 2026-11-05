@@ -5,16 +5,55 @@ description: Swap Fetch for one client with withHTTPHandle and keep the operatio
 
 # Test with a local Fetch handle
 
-`withHTTPHandle(...)` replaces Fetch for that client only. You still get URL building, interceptors, status dispatch, and Struct decoding — without DNS, TLS, or a real server.
+`withHTTPHandle(...)` replaces the underlying `fetch` function for a single client instance while exercising the entire Defjs pipeline—input validation, `builder` mapping, URL resolution, interceptors, status classification, and Struct decoding—without opening a network socket:
 
-See [Client](/docs/client) for details.
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+```
+  </Tab>
+  <Tab value="test/orders.spec.ts">
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+const client = createClient(
+withEndpoint("https://fixture.invalid"),
+withHTTPHandle(async (input, init) => {
+const request = new Request(input, init);
+const id = new URL(request.url).pathname.split("/").at(-1);
+if (id === "7") {
+return Response.json({ id: 7, status: "paid" }, { status: 200 });
+}
+return Response.json({ message: "Order not found" }, { status: 404 });
+}),
+);
+
+const [error, order, response] = await getOrder(client, { id: 7 });
+if (error) throw error;
+console.log(order.status, response.status);
+
+````
+  </Tab>
+  <Tab value="get-order.test.ts">
 <include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 paid 200
-```
+````
 
-Use the same `getOrder` operation against a real `withEndpoint(...)` client in production — only the handle changes.
+In production, pass a client configured with `withEndpoint(...)` to the exact same `getOrder` definition. See [Testing](/docs/testing) and [Client](/docs/client).

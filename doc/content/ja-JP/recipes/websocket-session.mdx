@@ -1,22 +1,77 @@
 ---
 title: "WebSocket セッションの管理"
-description: 接続し、型付きエンベロープを 1 つ送り、1 つ受け取り、close して closed を await します。
+description: 接続を確立し、型付けされたエンベロープを送信して受信し、クローズして closed を待機します。
 ---
 
-# WebSocket セッションを開く
+# WebSocket セッションの管理 (Open a WebSocket session)
 
-方向ごとに struct は 1 つです。購読解除、`close`、`await session.closed` は呼び出し側の責任です。不正なフレームは `onRuntimeError` へ行きます。
+`defineWebSocket` で `incoming` と `outgoing` の Struct スキーマを、適切な `maxIncomingQueueSize` とともに宣言します。アプリケーション側では、`session.onRuntimeError(...)` を購読し、`session.receive` を消費し、`finally` ブロック内で必ず購読解除、`session.close(...)` の呼び出し、および `await session.closed` を行います。
 
-詳細は [WebSocket](/ja-JP/docs/web-socket) を見てください。
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab value="sdk/quotes.ts">
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
 
+export const quotes = defineWebSocket({
+  maxIncomingQueueSize: 100,
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { quotes } from "../sdk/quotes.ts";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+
+async function main() {
+const [error, session] = await quotes(client);
+if (error) {
+console.error(error.code);
+return;
+}
+const unsubscribe = session.onRuntimeError((cause) =>
+console.error("runtime", cause),
+);
+try {
+session.send({ type: "subscribe", symbol: "ACME" });
+for await (const message of session.receive) {
+console.log(message.symbol, message.price);
+break;
+}
+} finally {
+unsubscribe();
+session.close(1000, "consumer-finished");
+await session.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`quotes.example.com` はプレースホルダーです。`{ "type": "subscribe", "symbol": "ACME" }` に `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` で応答するサーバーに対して、このスニペットは次のように出力します。
+サーバーが `{ "type": "subscribe", "symbol": "ACME" }` に対して `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` を返した場合、スクリプトの出力は以下のようになります。
 
 ```txt
 ACME 142.5
-```
+````
 
-再接続はオプトインです（`withWebSocketReconnect`）。ハートビートもオプトインです。ブラウザーの WebSocket は任意のハンドシェイクヘッダーを取れません — cookie、サブプロトコル、短命チケットを使ってください。
+- 自動再接続（`withWebSocketReconnect`）およびハートビート（`withWebSocketHeartbeat`）は、クライアント側のオプトイン設定です。
+- ブラウザの WebSocket はアップグレードハンドシェイク時に任意の HTTP ヘッダーを送信できません。Cookie、サブプロトコル、または短寿命のチケットを使用してください。詳細は [WebSocket セッション](/ja-JP/docs/web-socket) を参照してください。

@@ -1,52 +1,36 @@
 ---
 title: "指南"
-description: 設計並發佈 SDK 契約與操作，並在使用端的應用程式裡設定執行。
+description: 設計 SDK 契約與各類操作並發布，並在取用端應用程式中設定請求執行與生命週期。
 ---
 
-Defjs 把團隊發佈的 API，與應用程式使用的 client 分開。從 SDK 撰寫路徑讀到如何定義並打包操作；從應用程式路徑設定執行並處理結果。
+Defjs 將 SDK 開發團隊發布的 API 契約，與應用程式在執行時期使用的 Client 設定完全分開。你可以從各章節讀到如何理解整體架構、定義各類操作，並透過 Client 選項與中介層攔截器精準治理請求執行。
 
-## 前言 [#getting-started]
+## 快速開始 [#getting-started]
 
-- [專案概覽](/zh-Hant-TW)
+- [概覽](/zh-Hant-TW)
 - [快速開始](/zh-Hant-TW/docs/start)
-- [建置並發佈 SDK](/zh-Hant-TW/recipes/publish-http-sdk)
-- [為什麼定義與執行要分開](/zh-Hant-TW/docs/design-decisions)
+- [核心架構](/zh-Hant-TW/docs/design-decisions)
 
-## 核心概念 [#core-concepts]
+## 定義 SDK [#defining-sdks]
 
 - [資料結構 / Struct](/zh-Hant-TW/docs/struct)
-- [Client](/zh-Hant-TW/docs/client)
-- [中介層](/zh-Hant-TW/docs/interceptors)
-- [錯誤](/zh-Hant-TW/docs/errors)
-
-## 最佳實踐 [#best-practices]
-
-- [SDK 設計](/zh-Hant-TW/docs/best-practices/sdk-design)
-- [應用整合](/zh-Hant-TW/docs/best-practices/application)
-- [中介層](/zh-Hant-TW/docs/best-practices/middleware)
-- [錯誤處理](/zh-Hant-TW/docs/best-practices/errors)
-- [SSE](/zh-Hant-TW/docs/best-practices/sse)
-- [WebSocket](/zh-Hant-TW/docs/best-practices/web-socket)
-- [測試](/zh-Hant-TW/docs/best-practices/testing)
-
-## 請求與即時通訊
-
 - [HTTP 請求](/zh-Hant-TW/docs/http)
 - [SSE 事件串流](/zh-Hant-TW/docs/sse)
 - [WebSocket 工作階段](/zh-Hant-TW/docs/web-socket)
 
-## 外掛
+## Client 與請求執行 [#client-execution]
 
-給使用端應用程式 client 的選用套件。SDK 定義與它們保持獨立。
+- [Client](/zh-Hant-TW/docs/client)
+- [錯誤處理](/zh-Hant-TW/docs/errors)
+- [中介層](/zh-Hant-TW/docs/interceptors)
+- [負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)
+- [測試](/zh-Hant-TW/docs/testing)
 
-- [外掛](/zh-Hant-TW/docs/integrations)
+## 整合套件與 AI [#integrations-and-ai]
+
+- [整合套件概覽](/zh-Hant-TW/docs/integrations)
 - [React](/zh-Hant-TW/docs/integrations/react)
 - [Vue](/zh-Hant-TW/docs/integrations/vue)
 - [OpenTelemetry server](/zh-Hant-TW/docs/integrations/opentelemetry-server)
-
-## AI
-
 - [Skill](/zh-Hant-TW/docs/ai)
 - [llms.txt](/zh-Hant-TW/docs/ai-api)
-
-[設計決策](/zh-Hant-TW/docs/design-decisions)

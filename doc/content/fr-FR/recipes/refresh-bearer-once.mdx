@@ -1,20 +1,82 @@
 ---
 title: "Renouveler un jeton après 401"
-description: Pose Authorization et rejoue une fois dans un seul intercepteur ; next() ne va que vers l’intérieur.
+description: Attachez Authorization et rejouez une seule fois dans un unique intercepteur ; next() ne se propage que vers l'intérieur.
 ---
 
 # Renouveler un Bearer une fois sur 401
 
-`next()` est le reste de **cet** oignon — pas un `axios(config)` redistribué depuis l’extérieur. Place l’attache, le refresh single-flight et un seul rejeu dans **un** intercepteur HTTP pour que les couches extérieures ne tournent pas deux fois.
+Dans Defjs, `next(request)` invoque la portion restante de la chaîne d'intercepteurs vers l'intérieur — sans jamais relancer le flux depuis l'intercepteur le plus externe. Regroupez l'injection du jeton, la déduplication du rafraîchissement (single-flight) et le rejeu unique suite à une réponse `401` dans **un seul** intercepteur HTTP afin que les intercepteurs externes de journalisation ou de mesure ne s'exécutent pas deux fois :
 
-Voir [Intercepteurs](/fr-FR/docs/interceptors).
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab value="sdk/billing.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getInvoice = defineRequest({
+  method: "GET",
+  path: "/v1/invoice",
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal("expired_token") }),
+});
+```
+  </Tab>
+  <Tab value="app/auth-interceptor.ts">
+```ts
+import { createHttpInterceptor } from "@defjs/core";
+
+export type Credential = { accessToken: string };
+
+export function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+return createHttpInterceptor(async (request, next) => {
+const authorize = (credential: Credential) => {
+const headers = new Headers(request.headers);
+headers.set("authorization", `Bearer ${credential.accessToken}`);
+return { ...request, headers };
+};
+
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
+
+    const current = read();
+    if (current.accessToken !== used.accessToken) {
+      return next(authorize(current));
+    }
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+
+});
+}
+
+````
+  </Tab>
+  <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 42
-```
+````
 
-Appeler `next` à nouveau ne réentre que dans les intercepteurs **à l’intérieur** de cette couche (et le handler Fetch). Cela ne relance pas les wrappers extérieurs de timing ou d’auth — c’est pourquoi le traitement du 401 appartient à un seul intercepteur, pas à un second appel de l’opération.
+Consultez [Intercepteurs](/fr-FR/docs/interceptors) pour approfondir le modèle en oignon et les frontières de rejeu.

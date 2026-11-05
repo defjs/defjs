@@ -1,22 +1,86 @@
 ---
 title: "ETag 条件请求"
-description: 把 304 当成 HTTP 状态 fault；缓存 Map 放在操作调用外面。
+description: 将 304 视为预期的 HTTP 状态码错误分支，并在接口调用外层通过 Map 维护应用缓存。
 ---
 
-# 用 ETag 和 304 再验证
+# 基于 ETag 与 304 的缓存重验证
 
-`ok` 表示 2xx，所以 `304` 是 `HTTP_STATUS` fault。重定向状态也不是错误 body，所以别声明 `error`：body 根本不会被读，fault 带着状态，你自己把缓存里的商品返回去。
+在 Defjs 中，只有 `2xx` 状态码才会进入成功分支，因此 `304 Not Modified` 响应会作为预期的 `HTTP_STATUS` 错误返回。在 `defineRequest` 中不要声明 `error`，这样空的 `304` 响应体完全不会被读取；同时在业务调用外层的辅助函数中维护一个 `Map` 缓存：
 
-见 [HTTP](/zh-Hans/docs/http)。
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+<Tab value="sdk/catalog.ts">
+
+```ts
+import { defineRequest, struct, type Infer } from "@defjs/core";
+
+export const Product = struct.object({
+  sku: struct.string(),
+  name: struct.string(),
+  priceCents: struct.number(),
+});
+
+export type Product = Infer<typeof Product>;
+
+export const readProduct = defineRequest({
+  method: "GET",
+  path: "/catalog/:sku",
+  input: struct.object({
+    sku: struct.string(),
+    etag: struct.string().optional(),
+  }),
+  builder: (input) => ({
+    path: { sku: input.sku },
+    headers: { "If-None-Match": input.etag },
+  }),
+  output: Product,
+});
+```
+
+</Tab>
+<Tab value="app/reader.ts">
+
+```ts
+import type { DerivableClient } from "@defjs/core";
+import { readProduct, type Product } from "../sdk/catalog.ts";
+
+export function createReader(client: DerivableClient) {
+  const cache = new Map<string, { etag: string; product: Product }>();
+
+  return async (sku: string): Promise<Product> => {
+    const cached = cache.get(sku);
+    const [error, product, response] = await readProduct(client, {
+      sku,
+      etag: cached?.etag,
+    });
+
+    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
+      return cached.product;
+    }
+    if (error) throw error;
+
+    const etag = response.headers.get("etag");
+    if (!etag) throw new Error("missing ETag");
+    cache.set(sku, { etag, product });
+    return product;
+  };
+}
+```
+
+</Tab>
+<Tab value="etag-cache.ts">
 
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
 
+</Tab>
+</Tabs>
+
+运行输出：
+
 ```txt
 Flask
 ```
 
-304 分支之后的 `throw error` 是这个读取函数的边界。函数仍然返回 `Promise<Product>`；非 304 的 fault 不会从这个边界以 Defjs 元组返回。
-
-别在 Core 里把 `304` 改写成假的 `200`。缓存所有权留在操作调用周围的应用代码里。
+- 在检查完 `304` 分支之后的 `if (error) throw error`，属于包装函数 `createReader` 所特有的显式契约边界，因为它向上返回 `Promise<Product>`。
+- 切勿在拦截器内部把 `304` 强行篡改为合成的 `200`；请始终将缓存状态管理保留在操作调用周围的应用代码中。更多细节请参阅 [HTTP 请求](/zh-Hans/docs/http)。

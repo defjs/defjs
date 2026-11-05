@@ -1,45 +1,62 @@
 ---
 title: "البدء السريع"
-description: صدّر أول عملية في SDK، واستدعها من تطبيق منفصل، وأعد استخدام التعريف مع عميل آخر.
+description: صدّر أول عملية في حزمة SDK الخاصة بك، واستدعها من تطبيق منفصل، وأعد استخدام التعريف مع عملاء مختلفين.
 ---
 
-# البدء: أول عملية في SDK [#getting-started-one-http-request]
+# البدء السريع: عمليتك الأولى في حزمة SDK [#getting-started-one-http-request]
 
-ستكتب ملفين: وحدة SDK تصدّر `GET /orders/:id`، وتطبيقًا يستوردها ويملك العميل. معالج Fetch المحلي يُبقي التشغيل الأول دون شبكة. ثم يعمل تعريف API نفسه مع عميل موجَّه إلى خدمتك.
+في هذا الدليل، ستنشئ وحدة SDK برمجية تعرّف العملية `GET /orders/:id` وتستدعيها من وحدتي تطبيق منفصلتين: الأولى تستخدم وسيلة نقل محلية للمحاكاة دون اتصال بالشبكة، والثانية تتصل بواجهة برمجة تطبيقات (API) حية.
 
-## الممارسة الموصى بها
+## 1. تثبيت `@defjs/core`
 
-يبقى التعريف مستقلاً عن العميل. استدعِ العملية بعميل التطبيق، كما في `getOrder(client, { id: 7 })`. لا وسيط ثالث للخيارات. استدعاء العملية يبدأها؛ و`await` ينتظر فقط. يملك التطبيق أيضًا عنوان الخدمة وبيانات الاعتماد. افحص صف error-first أولًا. عندما تكون `error` موجودة، أبلغ `error.code` وعُد من الدالة قبل قراءة قيمة النجاح.
-
-## الخطوة 1 — التثبيت
-
-`@defjs/core` هو ESM ويعمل على Node.js أو Bun. يشغّل Node.js 22.18+ (أو 24+) ملف `.ts` مباشرة عبر type stripping؛ أما إصدارات 22.x الأقدم فتحتاج `--experimental-strip-types`. أبقِ `"type": "module"` في package.json. في المتصفح ما زلت تحتاج المُجمّع وFetch.
+حزمة `@defjs/core` هي حزمة ESM خالصة لا تحتوي على أي اعتماديات خارجية، وتعمل في المتصفحات وبيئات Bun وNode.js (الإصدارات 22.18+ أو 24+ تشغّل ملفات `.ts` مباشرة). تأكد من ضبط `"type": "module"` في ملف `package.json` لديك.
 
 ```sh
 bun add @defjs/core
 ```
 
-## الخطوة 2 — عرّف الطلب
+## 2. تعريف SDK واستدعاؤه من تطبيقك
 
-أنشئ `src/define-request.ts`. هذه وحدة مؤلف SDK: تصدّر `getOrder` دون إنشاء عميل. struct المدخل هو قيمة المستدعي. يضع `builder` تلك القيمة على الطلب. هنا المدخل كاملًا هو كائن المسار، فتملأ الحقول ذات القيم المفردة بلا alias الموضع `:id`.
+احرص على إبقاء تعريف العملية في وحدة SDK المستقلة الخاصة بها (`src/define-request.ts`)، وأنشئ العميل داخل تطبيقك المستهلك (`src/execute-locally.ts` أو `src/real-api.ts`):
 
-<include cwd meta="define-request.ts">
+<Tabs items={["src/define-request.ts", "src/execute-locally.ts", "src/real-api.ts"]}>
+<Tab value="src/define-request.ts">
+
+<include cwd meta="src/define-request.ts">
   examples/start/define-request.ts#example
 </include>
 
-`output` هو جسم 2xx. `error` هو كل حالة أخرى. struct واحد لكل منهما. استخدم `struct.or(...)` أو اتحادًا مميّزًا عندما تختلف تلك الأجسام.
+</Tab>
+<Tab value="src/execute-locally.ts">
 
-`defineRequest(...)` يُرجع عملية. استدعاء `getOrder(client, input)` يبدأ الطلب. الـ `builder` أعلاه هو الدالة التي تضع المدخل؛ وليس العملية. حيث يُعلَن `input`، يكون `builder` مطلوبًا ومتزامنًا ونقيًا.
-
-## الخطوة 3 — استدعها محليًا
-
-أنشئ `src/execute-locally.ts` بجانب التعريف. هذا هو التطبيق المستهلك: يستورد `getOrder`، وينشئ عميله، ويوفّر معالج Fetch محليًا. يظل Defjs يتحقق من المدخل، ويبني `Request`، ويتفرّع بحسب الحالة، ويحلّل الجسم.
-
-<include cwd meta="execute-locally.ts">
+<include cwd meta="src/execute-locally.ts">
   examples/start/execute-locally.ts#example
 </include>
 
-شغّله:
+</Tab>
+<Tab value="src/real-api.ts">
+
+<include cwd meta="src/real-api.ts">
+  examples/start/real-api.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### كيف تعمل الملفات الثلاثة معاً
+
+1. **`src/define-request.ts` (تعريف حزمة SDK)**:
+   - يصرّح عن مخططات المدخلات `input`، والمخرجات `output` (لاستجابات النجاح `2xx`)، والأخطاء `error` (للاستجابات غير `2xx`) باستخدام `struct`.
+   - يوفّر دالة بناء `builder` تزامنية ونقية تُحوّل `input` إلى `{ path }`. متى ما تم الإعلان عن `input`، يلزم تقديم دالة `builder` صريحة.
+   - يصدّر العملية `getOrder` دون إنشاء أو التقاط أي عميل.
+2. **`src/execute-locally.ts` (تنفيذ الاختبار دون اتصال بالشبكة)**:
+   - يضبط عميلاً باستخدام `withHTTPHandle(...)` لتشغيل خط أنابيب Defjs بالكامل (التحقق من المدخلات، وتحديد الروابط، وتوزيع حالات الاستجابة، وتفكيك بنية كائنات الاستجابة) دون إجراء أي اتصال بالشبكة.
+3. **`src/real-api.ts` (التنفيذ الفعلي للإنتاج)**:
+   - يستورد نفس العملية `getOrder` تماماً ويستدعيها مقابل عنوان أساسي فعّال تم ضبطه عبر `withEndpoint(...)`.
+
+## 3. تشغيل المثال المحلي
+
+شغّل ملف `src/execute-locally.ts` باستخدام Bun:
 
 ```sh
 bun src/execute-locally.ts
@@ -49,42 +66,28 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-جرّب طلبًا مفقودًا — غيّر معرّف المسار إلى `8` وشغّل مجددًا:
+إذا قمت بتغيير المدخلات من `{ id: 7 }` إلى `{ id: 8 }`، فستُرجع المحاكاة استجابة `404`، وسيقوم Defjs بفك تشفير بنية `error` المعلنة ووضعها داخل `error.data`:
 
 ```txt
 Order not found
 ```
 
-عند النجاح: `error` هو `null`، و`order` هو مخرج Struct لـ `200`، و`response` هو `DecodedResponse<Order>`. عند `404` معلَن: `error.code` هو `'HTTP_STATUS'`، و`error.status` هو `404`، و`error.data` محدَّد النوع كـ `NotFound`. العنصر الثاني في الـ tuple هو `undefined` عند الفشل.
+## 4. فهم مصفوفة الخطأ أولاً (Error-First Tuple)
 
-## الخطوة 4 — وجّه إلى API حقيقي
+تُرجع كل عملية استدعاء لطلب HTTP مصفوفة من الشكل `[error, data, response]`:
 
-في `src/real-api.ts`، استورد `getOrder` نفسه وأنشئ عميلًا بعنوان الأساس لخدمتك. شغّل هذه النسخة فقط بعد استبدال عنوان المثال بخدمة تنفّذ `GET /v1/orders/:id` بتلك الأجسام.
+- **عند النجاح بحالة `2xx`**: تكون قيمة `error` هي `null`، وتكون `data` هي القيمة المفكوكة والمطابقة لمخطط `output` المحدد (`Order`)، وتكون `response` من نوع `DecodedResponse<Order>`.
+- **عند استلام حالة خطأ معلنة غير `2xx`**: يحمل `error.code` القيمة `'HTTP_STATUS'`، ويحتوي `error.status` على رقم الحالة (مثل `404`)، وتحتوي `error.data` على كائن الخطأ المطابق لمخطط `error` المعلن (`NotFound`).
+- **عند حدوث أخطاء في المدخلات أو فك التشفير أو الشبكة**: يحدد رمز `error.code` المرحلة الدقيقة التي وقع فيها الفشل:
+  - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — مدخلات مستدعي غير صالحة أو فشل/خطأ داخل دالة `builder`.
+  - `RES_MEDIA_TYPE_INVALID` — تم استلام استجابة معلنة كـ JSON ولكن بترويسة `Content-Type` غير مطابقة لـ JSON (يتم الرفض قبل قراءة جسم الاستجابة).
+  - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — جسم الاستجابة غير قابل للقراءة أو غير متطابق مع مخطط البنية المعلن.
+  - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` — خطأ في وسيلة النقل، أو إلغاء يدوي للطلب، أو انتهاء المهلة المحددة عبر `AbortSignal.timeout(ms)`.
 
-<include cwd>examples/start/real-api.ts#example</include>
+يمكنك تمرير مهلة زمنية أو إشارة إلغاء لكل استدعاء منفرد عبر اشتقاق عميل مخصص للاستدعاء: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`.
 
-يبقى تعريف API في وحدة SDK. تبقى عناوين الخدمة وبيانات الاعتماد والمعترضات وعمر التنفيذ مع التطبيق. يستخدم العميلان عقد نقطة نهاية Defjs نفسه.
+## الخطوات التالية
 
-## انشر التعريف
-
-انقل التعريف إلى حزمة SDK عندما تحتاجه تطبيقات أكثر. صدّر `getOrder`، وأدرج تصريحات TypeScript، وأعلن إصدار Core المتوافق. يستورد المستهلكون بعد ذلك من الحزمة بدل `./define-request.ts`؛ ويبقى إعداد عميلهم ملكهم. اتبع [بناء SDK ونشره](/ar/recipes/publish-http-sdk) لإعداد الحزمة كاملًا.
-
-## عندما تختلف النتيجة
-
-- مدخل سيئ ← `REQ_INPUT_INVALID`؛ فشل `builder` ← `REQ_BUILD_FAILED`
-- حالة غير-2xx ← `HTTP_STATUS`، مع `error.data` محدَّد النوع عندما يُعلَن `error` ويُفك جسمه
-- جسم JSON معلَن بنوع وسائط آخر ← `RES_MEDIA_TYPE_INVALID`، يُبلَّغ قبل قراءة الجسم
-- جسم معلَن (`output` لـ 2xx، و`error` فيما عداها) لا يُفك ← `RES_DECODE_FAILED` أو `RES_STRUCT_MISMATCH`، أيًّا كانت الحالة
-- فشل Fetch / إلغاء / مهلة ← `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
-
-المهلة هي `client({ signal: AbortSignal.timeout(ms) })` وتُصنَّف `NET_TIMEOUT`. الإجهاض اليدوي هو `NET_ABORTED`. لا توجد مهلة افتراضية على مستوى العميل. اشتق عميلًا عندما يحتاج استدعاء واحد إلى `signal` خاص به؛ انظر [العميل](/ar/docs/client). يخبرك الإلغاء بما رآه المستدعي — لا ما إذا كانت كتابة الخادم قد اكتملت.
-
-## الوصفات التالية
-
-- [بناء SDK ونشره](/ar/recipes/publish-http-sdk)
-- [GET مع 404 معلَن](/ar/recipes/get-declared-404)
-- [POST JSON](/ar/recipes/post-json)
-- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)
-- [استهلاك تدفق SSE](/ar/recipes/consume-sse)
-- [فتح جلسة WebSocket](/ar/recipes/websocket-session)
-- [الاختبار بـ Fetch محلي](/ar/recipes/test-with-handle)
+- تعرّف على القواعد البنيوية والمعمارية في [الهندسة المعمارية وقرارات التصميم](/ar/docs/design-decisions).
+- صمّم حمولات معقدة وأسماء بديلة للحقول في [Struct والمخططات](/ar/docs/struct).
+- احزم تعريفاتك وانشرها على npm في [بناء حزمة SDK ونشرها](/ar/recipes/publish-http-sdk).

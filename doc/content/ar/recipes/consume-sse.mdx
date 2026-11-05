@@ -1,22 +1,67 @@
 ---
 title: "استهلاك أحداث SSE"
-description: افتح تدفق أحداث محدَّد النوع، مرّ على أحداثه مرة واحدة، ثم أغلق وانتظر closed.
+description: افتح تدفق أحداث محدد الأنواع، وكرر عليه مرة واحدة، ثم أغلق وانتظر اكتمال الإغلاق.
 ---
 
-# استهلاك تدفق SSE
+# استهلاك تدفق أحداث SSE
 
-مكرّر غير متزامن واحد لكل تدفق. ضع `close` + `await stream.closed` في `finally` حتى لا تسرّب محاولة Fetch عند الخروج المبكر.
+يوفر كل مقبض تدفق `EventStreamHandle` مكرراً غير متزامن مفرد الاستهلاك. احرص دائماً على وضع `stream.close(...)` متبوعاً بـ `await stream.closed` داخل كتلة `finally` حتى لا تؤدي عبارات `break` أو `return` المبكرة إلى تسريب تدفق Fetch الأساسي:
 
-انظر [SSE](/ar/docs/sse) للتفاصيل.
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab value="sdk/deployments.ts">
+```ts
+import { defineEventStream, struct } from "@defjs/core";
 
+export const deployEvents = defineEventStream({
+  path: "/deployments/events",
+  events: {
+    line: struct.object({ text: struct.string() }),
+  },
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { deployEvents } from "../sdk/deployments.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+const [error, stream] = await deployEvents(client);
+if (error) {
+console.error(error.code);
+return;
+}
+try {
+for await (const event of stream) {
+if (event.event === "line") {
+console.log(event.data.text);
+break;
+}
+}
+} finally {
+stream.close("consumer-finished");
+await stream.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="deploy-events.ts">
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` عنوان توضيحي. مع خادم يكون أول حدث فيه `line` وبياناته `{ "text": "build started" }`، تطبع الشيفرة:
+عندما يرسل الخادم الحدث الأول كـ `line` مع بيانات `{ "text": "build started" }`، يطبع البرنامج:
 
 ```txt
 build started
-```
+````
 
-لا تعيد SSE المحاولة عند فشل الشبكة أو القراءة إلا إذا فعّلت `withSSEReconnect(...)`. عند ضبط كائن إعادة اتصال تكون القيمة الافتراضية لـ `attempts` هي `3` لكل انقطاع؛ وتعيد المصافحة الناجحة ضبط الميزانية وأُسّ التراجع. تعطّل `attempts: 0` إعادة المحاولة. تفشل خيارات إعادة الاتصال الرقمية غير الصالحة قبل إرسال أي طلب بـ `REQ_OPTIONS_INVALID`؛ راجع [قواعد التحقق](/ar/api/core/withssereconnect). في غياب `shouldReconnect`، تقتصر إعادة الاتصال على طلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE`، ولا تُعاد محاولة الاتصال لأي طلب جسمه `ReadableStream`.
+- لا يُعيد SSE الاتصال تلقائياً عند حدوث إخفاقات في الشبكة أو القراءة ما لم تضبط [`withSSEReconnect(...)`](/ar/api/core/withssereconnect) على العميل.
+- عند تفعيل `withSSEReconnect` بتمرير كائن خيارات، تكون القيمة الافتراضية لـ `attempts` هي `3` لكل انقطاع وتُعاد ضبطها عند كل مصافحة ناجحة (بينما تعطل `attempts: 0` إعادة الاتصال). ودون دالة `shouldReconnect` مخصصة، يُعاد الاتصال تلقائياً لطلبات `GET` و`HEAD` و`OPTIONS` و`PUT` و`DELETE` ذات الأجسام القابلة لإعادة الإرسال فقط. راجع [تدفقات أحداث SSE](/ar/docs/sse).

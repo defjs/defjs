@@ -1,0 +1,73 @@
+---
+title: "測試"
+description: 使用注入的傳輸控制代碼、Tuple 斷言與確定性計時器，離線測試 SDK 定義與應用程式策略。
+---
+
+# 測試
+
+因為 Defjs 將操作定義與 Client 執行徹底分開，你可以在離線環境下完整測試真實的 SDK 定義與應用程式攔截器，不需要啟動實體網路伺服器，也不必 Mock 內部函式庫。
+
+## 1. 注入本機傳輸層控制代碼
+
+在 `createClient(...)` 上使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 來替換底層的平台傳輸層。Defjs 依然會執行完整的操作管線：輸入 `struct` 驗證、`builder` 參數對應、URL 限制檢查、中介層攔截器、狀態碼分派以及回應 `struct` 解碼。
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. 測試最佳實踐
+
+### 斷言 error-first tuple，而不是內部實作細節
+
+始終使用測試 Client 呼叫匯出的 SDK 操作，並對回傳的 `[error, data, response]` tuple 進行斷言：
+
+- 針對 `2xx` 成功案例，斷言 `expect(error).toBeNull()`，並驗證解碼後的 `data` 欄位（包含 `.alias()` 從網路到邏輯名稱的轉換）。
+- 針對失敗案例，若屬於公開契約的一部分，斷言 `error?.code`、`error?.status`、`error?.data` 與 `error?.cause`。
+
+### 驗證出站請求的網路位元組
+
+在你的 `withHTTPHandle(async (input, init) => ...)` 函式內部，建構 `const request = new Request(input, init)`，並檢查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），以驗證你的 `builder` 與 struct 別名是否正確序列化出後端預期的通訊格式。
+
+### 使用虛擬計時器（Fake Timers）進行確定性時間控制
+
+當測試請求逾時（`AbortSignal.timeout`）、攔截器重試退避、SSE/WebSocket 重新連線延遲或 WebSocket 心跳檢測時：
+
+- 使用虛擬計時器（Vitest 中的 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` 或 Bun test 中的 `jest.useFakeTimers()`）。
+- 在等待的階段啟動後推進時間（`advanceTimersByTimeAsync`），並斷言狀態轉換或嘗試次數——絕不要斷言實際流逝的牆上時鐘時間（wall-clock time）。
+
+## 相關閱讀
+
+- [使用本機 Fetch Handle 進行測試](/zh-Hant-TW/recipes/test-with-handle)
+- [建置並發布 SDK](/zh-Hant-TW/recipes/publish-http-sdk)
+- [Client 設定](/zh-Hant-TW/docs/client)

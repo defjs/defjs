@@ -1,22 +1,77 @@
 ---
 title: "WebSocket-Sitzungen verwalten"
-description: Verbinden, einen typisierten Envelope senden, einmal empfangen, dann schließen und auf closed warten.
+description: Verbinden, einen typisierten Envelope senden, einmalig empfangen, dann schließen und auf closed warten.
 ---
 
-# WebSocket-Session öffnen
+# Eine WebSocket-Sitzung öffnen
 
-Jede Richtung ist ein Struct. Du besitzt das Abmelden, `close` und `await session.closed`. Ungültige Frames gehen an `onRuntimeError`.
+Deklariere `incoming`- und `outgoing`-Structs an `defineWebSocket` zusammen mit einer begrenzten `maxIncomingQueueSize`. Abonniere in deiner Anwendung `session.onRuntimeError(...)`, konsumiere `session.receive` und melde Listener immer ab, rufe `session.close(...)` auf und warte im `finally`-Block auf `await session.closed`:
 
-Details siehe [WebSocket](/de-DE/docs/web-socket).
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab value="sdk/quotes.ts">
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
 
+export const quotes = defineWebSocket({
+  maxIncomingQueueSize: 100,
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { quotes } from "../sdk/quotes.ts";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+
+async function main() {
+const [error, session] = await quotes(client);
+if (error) {
+console.error(error.code);
+return;
+}
+const unsubscribe = session.onRuntimeError((cause) =>
+console.error("runtime", cause),
+);
+try {
+session.send({ type: "subscribe", symbol: "ACME" });
+for await (const message of session.receive) {
+console.log(message.symbol, message.price);
+break;
+}
+} finally {
+unsubscribe();
+session.close(1000, "consumer-finished");
+await session.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`quotes.example.com` ist ein Platzhalter. Bei einem Server, der `{ "type": "subscribe", "symbol": "ACME" }` mit `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` beantwortet, gibt das Snippet aus:
+Antwortet der Server auf `{ "type": "subscribe", "symbol": "ACME" }` mit `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, gibt das Skript folgendes aus:
 
 ```txt
 ACME 142.5
-```
+````
 
-Reconnect ist opt-in (`withWebSocketReconnect`). Heartbeat ebenfalls. Browser-WebSockets können keine beliebigen Handshake-Headers nehmen — nutze Cookies, Subprotocols oder ein short-lived Ticket.
+- Sowohl Reconnect (`withWebSocketReconnect`) als auch Heartbeat (`withWebSocketHeartbeat`) sind am Client Opt-in.
+- Browser-WebSockets können beim Upgrade-Handshake keine beliebigen HTTP-Header senden; nutze stattdessen Cookies, Subprotokolle oder kurzlebige Tickets. Siehe [WebSocket-Sitzungen](/de-DE/docs/web-socket).

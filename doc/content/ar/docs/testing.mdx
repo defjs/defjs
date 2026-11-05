@@ -1,0 +1,73 @@
+---
+title: "الاختبارات"
+description: اختبر تعريفات SDK وسياسات التطبيق محلياً عبر حقن مقابض وسائل النقل وتوكيدات المصفوفات والمؤقتات القطعية.
+---
+
+# الاختبارات
+
+نظراً لأن Defjs يفصل تعريفات العمليات عن تنفيذ العميل، يمكنك اختبار تعريفات SDK الحقيقية ومعترضات التطبيق دون اتصال بالشبكة تماماً دون الحاجة لتشغيل خادم شبكي أو محاكاة دوال المكتبة الداخلية.
+
+## 1. حقن مقبض نقل محلي للاختبار
+
+استخدم `withHTTPHandle` أو `withSSEHandle` أو `withWebSocketHandle` عند استدعاء `createClient(...)` لاستبدال وسيلة النقل الأصلية في بيئة التشغيل. يظل Defjs يشغل خط الأنابيب الكامل للعملية: التحقق من مخطط `struct` للمدخلات، وتطبيق دالة `builder`، وفحوصات نطاق الروابط، والمعترضات، وتوزيع حالات الاستجابة، وفك تشفير كائنات `struct` للاستجابة.
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. أفضل ممارسات الاختبار
+
+### التوكيد على مصفوفة الخطأ أولاً، وليس على التفاصيل الداخلية
+
+استدعِ دائماً عملية SDK المصدّرة باستخدام عميل الاختبار الخاص بك وقم بالتوكيد على مصفوفة النتائج المُرجعة `[error, data, response]`:
+
+- لحالات النجاح `2xx`، أكّد أن `expect(error).toBeNull()` وافحص حقول `data` المفكوكة (بما في ذلك التحويل السلكي إلى المنطقي للحقول ذات الأسماء البديلة `.alias()`).
+- لحالات الفشل، أكّد على `error?.code` و`error?.status` و`error?.data` و`error?.cause` عندما تكون جزءاً من العقد البرمجي.
+
+### التحقق من بايتات الطلبات الصادرة سلكياً
+
+داخل دالة `withHTTPHandle(async (input, init) => ...)`، أنشئ كائن الطلب `const request = new Request(input, init)` وافحص `request.url` و`request.method` و`request.headers` واستدعِ `await request.text()` (أو `await request.json()`) للتأكد من أن دالة `builder` والأسماء البديلة في struct قد قامت بتسلسل نفس التنسيق السلكي الدقيق الذي تتوقعه الواجهة الخلفية.
+
+### التحكم في الوقت بشكل قطعي باستخدام المؤقتات الوهمية (Fake Timers)
+
+عند اختبار مهل الطلبات الزمنية (`AbortSignal.timeout`)، أو التراجع الزمني لإعادة المحاولة في المعترضات، أو تأخيرات إعادة اتصال SSE/WebSocket، أو نبضات قلب WebSocket:
+
+- استخدم المؤقتات الوهمية (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` في Vitest أو `jest.useFakeTimers()` في اختبارات Bun).
+- قدّم المؤقتات بعد بدء المرحلة المنتظرة (`advanceTimersByTimeAsync`) وتحقق من تغيرات الحالة أو عدد المحاولات — ولا تقم أبداً بالتوكيد على انقضاء الوقت الفعلي للساعة الجدارية.
+
+## قراءات ذات صلة
+
+- [اختبار الطلبات محلياً عبر مقبض Fetch](/ar/recipes/test-with-handle)
+- [بناء حزمة SDK ونشرها](/ar/recipes/publish-http-sdk)
+- [إعدادات العميل](/ar/docs/client)

@@ -1,0 +1,105 @@
+---
+title: "Lastverteilung & Failover"
+description: Verteile Traffic über mehrere Endpunkte, isoliere fehlerhafte Replikate und führe bei sicheren HTTP-Requests automatische Failovers innerhalb desselben Aufrufs durch.
+---
+
+# Lastverteilung & Failover
+
+Wenn eine Anwendung mehrere Basis-URLs über `withEndpoint(...urls)` konfiguriert, kann Defjs Anfragen auf Replikate verteilen, fehlerhafte Hosts durch passives Circuit-Breaking oder aktive Health-Checks vorübergehend ausschließen und bei sicheren HTTP-Methoden automatisch innerhalb desselben Aufrufs ein Failover ausführen.
+
+## 1. Load-Balancer-Strategie wählen
+
+| Strategie                                                                       | Am besten geeignet für                                                                  | Standard-Health-Filterung                           |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/de-DE/api/core/pickfirstbalancer) _(Standard)_ | Browser-Apps mit geordneter Liste aus primärer Region und Backup-Regionen               | Deaktiviert (Opt-in über Option `outlierDetection`) |
+| [`roundRobinBalancer(options?)`](/de-DE/api/core/roundrobinbalancer)            | Server-zu-Server-Aufrufe über gleichwertige Replikate (unterstützt optionale `weights`) | Aktiviert (`5` aufeinanderfolgende Fehler)          |
+| [`p2cBalancer(options?)`](/de-DE/api/core/p2cbalancer)                          | Server-Aufrufe mit schwankender Replikats-Latenz oder variierender In-Flight-Last       | Aktiviert (`5` aufeinanderfolgende Fehler)          |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### Wie `pickFirstBalancer` und `p2cBalancer` funktionieren
+
+- **`pickFirstBalancer`**: Verbleibt auf der ersten URL, bis ein Verbindungsfehler (`NET_UNREACHABLE`) oder eine undeklarierte `502`-, `503`- oder `504`-Antwort zur nächsten URL weiterschaltet. Konfiguriere `failbackMs: 30_000`, um nach Ablauf dieser Zeit auf einem Backup den primären Endpunkt erneut zu prüfen.
+- **`p2cBalancer` (Power of Two Choices)**: Zieht zwei unterschiedliche Kandidaten zufällig ohne Zurücklegen und wählt denjenigen mit dem niedrigeren Score: `PeakEwma RTT × (pending + 1)` (oder reine In-Flight-Anzahl `pending`, wenn `load: "pending"` gesetzt ist). Die Standardwerte (`defaultRttMs: 30`, `decayMs: 10000`) folgen bewährten Linkerd/Tower-Konventionen.
+
+## 2. Same-Call-HTTP-Failover und Retry-Budget
+
+Standardmäßig aktiviert HTTP für sichere Methoden (`GET`, `HEAD`, `OPTIONS`, `TRACE`) ein **Failover innerhalb desselben Aufrufs**: Schlägt der zuerst gewählte Endpunkt mit `NET_UNREACHABLE` fehl, wählt Defjs einen noch unversuchten Backup-Endpunkt und durchläuft Builder, Interceptor-Kette und Transport innerhalb desselben Operationsaufrufs erneut.
+
+Passe diese Richtlinie mit [`withEndpointFailover(options)`](/de-DE/api/core/withendpointfailover) an oder deaktiviere sie:
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **Bedingungen für Wiederholungen (`retryOn`)**: Standardmäßig `["connect-failure"]`. Du kannst `"gateway-error"` (undeklarierte `502`/`503`/`504` oder ein `502`/`503`/`504`, dessen Fehler-Body die `RES_*`-Dekodierung verfehlt hat) sowie `"attempt-timeout"` (sofern `attemptTimeoutMs` gesetzt ist) ergänzen.
+- **Timeout pro Versuch vs. Gesamtaufruf**: `attemptTimeoutMs` begrenzt einen einzelnen Versuch vom Fetch-Aufruf bis zur Body-Dekodierung; das aufruferseitige `client({ signal: AbortSignal.timeout(ms) })` begrenzt den gesamten Aufruf über alle Versuche hinweg.
+- **Finagle- / Linkerd-Retry-Budget**: Alle Aufrufe eines Clients teilen sich ein Token-Bucket-Retry-Budget (`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`), sodass Retries den Traffic während eines Ausfalls um nicht mehr als ~20 % verstärken können. Setze `retryBudget: false`, um die Obergrenze aufzuheben.
+- **Browser-Offline-Erkennung**: Wenn `navigator.onLine === false` ist, werden Verbindungsfehler als `{ attempted: false }` gemeldet und schalten weder Balancer weiter noch lösen sie Failover aus.
+
+## 3. Passives Circuit-Breaking und aktive Health-Checks (`outlierDetection`)
+
+`roundRobinBalancer()` und `p2cBalancer()` kapseln ihre Kandidatenauswahl standardmäßig in [`outlierDetection`](/de-DE/api/core/outlierdetection):
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **Aufeinanderfolgende Fehler**: Nach `consecutiveFailures` (standardmäßig `5`) von `NET_UNREACHABLE` oder HTTP `500+` wird der Endpunkt für `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` bis `60000ms`) zuzüglich bis zu `50%` gleichmäßigem positivem Jitter ausgeschlossen.
+2. **Erholung durch Einzelprüfung (Single-Probe Recovery)**: Nach Ablauf der Sperrzeit prüft ein einzelner Request den Host. Ist der Transport-Handshake (`end`: HTTP/SSE-Header oder WebSocket-`open`) erfolgreich, wird der normale Traffic sofort wieder aufgenommen und das Penalty-Level auf `0` zurückgesetzt; schlägt er fehl, verdoppelt sich die Sperrzeit.
+3. **Panikmodus / Fail-Open**: Werden sämtliche konfigurierten Endpunkte ausgeschlossen oder als ungesund eingestuft, schaltet der Balancer auf Fail-Open und lässt den gesamten Traffic auf die Kandidatenliste zu, anstatt alle Aufrufe lokal abzuweisen.
+
+## 4. Lifecycle der Transport-Abrechnung (`pick` → `start` → `end` → `done`)
+
+Eigene Balancer implementieren ein synchrones `pick(context)` sowie optionale Callbacks für `start()`, `end(info)` und `done(info)`:
+
+| Physisches Transport-Ergebnis                                            | Finales `done(info)`-Sample                                |
+| ------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| HTTP-Response-Body bricht mitten im Stream ab                            | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE-Handshake gelingt, danach schlägt Stream `reader.read()` fehl        | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Reguläres SSE-EOF, Handshake-Dekodierungsfehler oder Warteschlangenlimit | `{ attempted: true, status }`                              |
+| Geöffneter WebSocket schließt mit Code `1006` oder `wasClean === false`  | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Geöffneter WebSocket schließt regulär                                    | `{ attempted: true }`                                      |
+| Abbruch durch den Aufrufer oder manuelles Schließen von Stream/Socket    | `{ attempted: false }`                                     |
+| Deadline des Aufrufers läuft ab, nachdem der Versuch gestartet wurde     | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## Weiterführende Links
+
+- [Client-Konfiguration](/de-DE/docs/client)
+- [SSE-Wiederverbindung](/de-DE/docs/sse#reconnect)
+- [WebSocket-Sitzungen](/de-DE/docs/web-socket)

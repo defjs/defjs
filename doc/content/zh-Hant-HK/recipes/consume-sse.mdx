@@ -3,20 +3,65 @@ title: "使用 SSE 事件流"
 description: 開 typed event stream，iterate 一次，之後 close 同 await closed。
 ---
 
-# Consume 一條 SSE stream
+# 消費 SSE 事件流
 
-每條 stream 淨係一個 async iterator。將 `close` + `await stream.closed` 放喺 `finally`，提早 exit 都唔會 leak Fetch attempt。
+每個 `EventStreamHandle` 都只提供單一嘅非同步迭代器（async iterator）。請務必將 `stream.close(...)` 與 `await stream.closed` 擺喺 `finally` 區塊入面，確保就算提早 `break` 或 `return` 亦絕唔會洩漏底層嘅 Fetch 串流資源：
 
-詳情睇 [SSE](/zh-Hant-HK/docs/sse)。
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+  <Tab value="sdk/deployments.ts">
+```ts
+import { defineEventStream, struct } from "@defjs/core";
 
+export const deployEvents = defineEventStream({
+  path: "/deployments/events",
+  events: {
+    line: struct.object({ text: struct.string() }),
+  },
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { deployEvents } from "../sdk/deployments.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+const [error, stream] = await deployEvents(client);
+if (error) {
+console.error(error.code);
+return;
+}
+try {
+for await (const event of stream) {
+if (event.event === "line") {
+console.log(event.data.text);
+break;
+}
+}
+} finally {
+stream.close("consumer-finished");
+await stream.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="deploy-events.ts">
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` 係 placeholder。如果 server 嘅第一個 event 係 `line`，data 係 `{ "text": "build started" }`，snippet 會 print：
+如果伺服器發出嘅第一個事件係 `line` 且資料為 `{ "text": "build started" }`，腳本會輸出：
 
 ```txt
 build started
-```
+````
 
-除非你啟用 `withSSEReconnect(...)`，否則 SSE 唔會重試 network/read failures。有 reconnect object 嘅時候，`attempts` 預設係每次斷線 `3` 次；成功握手會重設預算同退避指數。`attempts: 0` 停用重試。無效嘅重連數值選項會喺任何 request 執行之前以 `REQ_OPTIONS_INVALID` 失敗；見[驗證規則](/zh-Hant-HK/api/core/withssereconnect)。冇 `shouldReconnect` 嘅時候，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` request 會重連；用 `ReadableStream` 做 request body 嘅 request 永遠唔會重連。
+- 除非你喺 client 設定咗 [`withSSEReconnect(...)`](/zh-Hant-HK/api/core/withssereconnect)，否則 SSE 喺遇到網絡中斷或讀取錯誤時**唔會**自動重連。
+- 當傳入選項物件啟用 `withSSEReconnect` 時，每次故障嘅重試次數 `attempts` 預設為 `3` 次，並會喺握手成功後重設（設為 `attempts: 0` 即停用重連）。如果冇提供自訂嘅 `shouldReconnect` 函式，預設淨係會為帶有可重放 body 嘅 `GET`、`HEAD`、`OPTIONS`、`PUT` 同 `DELETE` 請求進行重連。詳情請參閱 [SSE 事件流](/zh-Hant-HK/docs/sse)。

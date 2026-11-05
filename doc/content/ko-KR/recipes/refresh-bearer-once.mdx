@@ -1,20 +1,82 @@
 ---
 title: "401 후 토큰 갱신"
-description: Authorization 첨부와 한 번의 재전송을 interceptor 하나에 두고, next()는 안쪽으로만 가요.
+description: 인증 헤더를 첨부하고 단일 인터셉터 내부에서 1회 재요청합니다. next()는 오직 안쪽으로만 진행합니다.
 ---
 
-# 401에서 Bearer 토큰을 한 번 갱신하기
+# 401 발생 시 Bearer 토큰 1회 갱신
 
-`next()`는 **이** onion의 나머지예요. 바깥에서 `axios(config)`로 다시 디스패치하는 게 아니에요. 첨부, single-flight 갱신, 재전송 한 번을 HTTP interceptor **하나**에 두어야 바깥 층이 두 번 돌지 않아요.
+Defjs에서 `next(request)`는 인터셉터 체인의 남은 안쪽 단계들을 호출하며, 가장 바깥쪽 인터셉터부터 전체 체인을 다시 디스패치하지 않습니다. 토큰 첨부, 동시 요청 갱신 단일화(single-flight deduplication), 그리고 `401` 수신 시 1회 재요청 처리를 **단일** HTTP 인터셉터 내부에 배치하세요. 이렇게 하면 바깥쪽의 로깅이나 타이밍 인터셉터가 중복으로 두 번 실행되는 문제를 방지할 수 있습니다:
 
-[인터셉터](/ko-KR/docs/interceptors)를 보세요.
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab value="sdk/billing.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getInvoice = defineRequest({
+  method: "GET",
+  path: "/v1/invoice",
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal("expired_token") }),
+});
+```
+  </Tab>
+  <Tab value="app/auth-interceptor.ts">
+```ts
+import { createHttpInterceptor } from "@defjs/core";
+
+export type Credential = { accessToken: string };
+
+export function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+return createHttpInterceptor(async (request, next) => {
+const authorize = (credential: Credential) => {
+const headers = new Headers(request.headers);
+headers.set("authorization", `Bearer ${credential.accessToken}`);
+return { ...request, headers };
+};
+
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
+
+    const current = read();
+    if (current.accessToken !== used.accessToken) {
+      return next(authorize(current));
+    }
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+
+});
+}
+
+````
+  </Tab>
+  <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 42
-```
+````
 
-`next`를 다시 호출하면 이 층 **안쪽**의 interceptor(그리고 Fetch 핸들러)만 다시 들어가요. 바깥의 타이밍/인증 wrapper는 다시 돌지 않아요. 그래서 401 배치는 작업을 두 번 호출하는 게 아니라 interceptor 하나에 있어야 해요.
+인터셉터의 양파 껍질 실행 순서와 재시도 경계에 대한 자세한 내용은 [미들웨어](/ko-KR/docs/interceptors) 문서를 참조하세요.

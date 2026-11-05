@@ -5,18 +5,73 @@ description: Conecta, envía un envelope tipado, recibe una vez, luego cierra y 
 
 # Abrir una sesión WebSocket
 
-Cada dirección es un struct. Tú gestionas el unsubscribe, `close` y `await session.closed`. Los frames inválidos van a `onRuntimeError`.
+Declara structs de `incoming` y `outgoing` en `defineWebSocket`, junto con un valor acotado de `maxIncomingQueueSize`. En tu aplicación, suscríbete a `session.onRuntimeError(...)`, consume `session.receive` y asegúrate siempre de cancelar la suscripción, llamar a `session.close(...)` y esperar con `await session.closed` en un bloque `finally`:
 
-Ver detalles en [WebSocket](/es-ES/docs/web-socket).
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab value="sdk/quotes.ts">
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
 
+export const quotes = defineWebSocket({
+  maxIncomingQueueSize: 100,
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { quotes } from "../sdk/quotes.ts";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+
+async function main() {
+const [error, session] = await quotes(client);
+if (error) {
+console.error(error.code);
+return;
+}
+const unsubscribe = session.onRuntimeError((cause) =>
+console.error("runtime", cause),
+);
+try {
+session.send({ type: "subscribe", symbol: "ACME" });
+for await (const message of session.receive) {
+console.log(message.symbol, message.price);
+break;
+}
+} finally {
+unsubscribe();
+session.close(1000, "consumer-finished");
+await session.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`quotes.example.com` es un placeholder. Con un servidor que responde a `{ "type": "subscribe", "symbol": "ACME" }` con `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, el snippet imprime:
+Con un servidor que responda a `{ "type": "subscribe", "symbol": "ACME" }` con `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, el script imprime:
 
 ```txt
 ACME 142.5
-```
+````
 
-La reconexión es opt-in (`withWebSocketReconnect`). El heartbeat también. Los WebSockets del navegador no admiten cabeceras arbitrarias de handshake — usa cookies, subprotocolos o un ticket de corta duración.
+- Tanto la reconexión (`withWebSocketReconnect`) como los latidos (`withWebSocketHeartbeat`) son opcionales (opt-in) en el cliente.
+- Las conexiones WebSocket en el navegador no pueden enviar cabeceras HTTP arbitrarias durante el handshake de actualización; usa cookies, subprotocolos o tokens de corta duración en su lugar. Consulta [Sesiones WebSocket](/es-ES/docs/web-socket).

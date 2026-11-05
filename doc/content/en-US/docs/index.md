@@ -3,50 +3,34 @@ title: "Guide"
 description: Design SDK contracts and operations, publish them, and configure execution in consuming applications.
 ---
 
-Defjs separates the API a team publishes from the client an application uses. Follow the SDK authoring path to define and package operations; follow the application path to configure execution and handle results.
+Defjs separates the API contract an SDK team publishes from the client configuration an application uses at runtime. Follow the sections below to learn the architecture, define operations, and govern execution through client options and middleware interceptors.
 
-## Preface [#getting-started]
+## Getting started [#getting-started]
 
-- [Project overview](/)
+- [Overview](/)
 - [Quick start](/docs/start)
-- [Build and publish an SDK](/recipes/publish-http-sdk)
-- [Why definitions and execution are separate](/docs/design-decisions)
+- [Core architecture](/docs/design-decisions)
 
-## Core concepts [#core-concepts]
+## Defining SDKs [#defining-sdks]
 
-- [Data structures / Struct](/docs/struct)
-- [Client](/docs/client)
-- [Middleware](/docs/interceptors)
-- [Errors](/docs/errors)
-
-## Best practices [#best-practices]
-
-- [SDK design](/docs/best-practices/sdk-design)
-- [Application integration](/docs/best-practices/application)
-- [Middleware](/docs/best-practices/middleware)
-- [Error handling](/docs/best-practices/errors)
-- [SSE](/docs/best-practices/sse)
-- [WebSocket](/docs/best-practices/web-socket)
-- [Testing](/docs/best-practices/testing)
-
-## Requests and realtime
-
-- [HTTP requests](/docs/http)
+- [Struct & schemas](/docs/struct)
+- [HTTP operations](/docs/http)
 - [SSE event streams](/docs/sse)
 - [WebSocket sessions](/docs/web-socket)
 
-## Plugins
+## Client & execution [#client-execution]
 
-Optional packages for the consuming application's client. SDK definitions stay independent of them.
+- [Client](/docs/client)
+- [Error handling](/docs/errors)
+- [Interceptors](/docs/interceptors)
+- [Load balancing & failover](/docs/load-balancing)
+- [Testing](/docs/testing)
 
-- [Plugins](/docs/integrations)
+## Integrations & AI [#integrations-and-ai]
+
+- [Integrations overview](/docs/integrations)
 - [React](/docs/integrations/react)
 - [Vue](/docs/integrations/vue)
 - [OpenTelemetry server](/docs/integrations/opentelemetry-server)
-
-## AI
-
 - [Skill](/docs/ai)
 - [llms.txt](/docs/ai-api)
-
-[Design decisions](/docs/design-decisions)

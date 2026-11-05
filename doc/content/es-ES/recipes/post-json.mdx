@@ -3,18 +3,79 @@ title: "Enviar JSON"
 description: Envía un cuerpo JSON tipado y decodifica un 201 declarado.
 ---
 
-# POST JSON
+# Enviar JSON con POST
 
-Entrega el cuerpo tipado al builder. Los nombres lógicos de campo se quedan en TypeScript; los alias de cable del struct se convierten en claves JSON. Un cuerpo objeto es `application/json`.
+Pasa un objeto de entrada tipado al `builder` y devuelve `{ body: input }`. Declarar `.alias("customer_name")` conserva `customerName` en TypeScript mientras codifica `"customer_name"` en la red y lo decodifica de vuelta desde la respuesta `201`.
 
-Ver detalles en [HTTP](/es-ES/docs/http) y [Cliente](/es-ES/docs/client).
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const ApiError = struct.object({
+  code: struct.string(),
+  message: struct.string(),
+});
+
+export const NewOrder = struct.object({
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const createOrder = defineRequest({
+  method: "POST",
+  path: "/orders",
+  input: NewOrder,
+  builder: (input) => ({ body: input }),
+  output: Order,
+  error: ApiError,
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { createOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com/v1"));
+
+async function main() {
+const [error, order, response] = await createOrder(client, {
+status: "paid",
+customerName: "Ada",
+});
+if (error?.code === "HTTP_STATUS") {
+console.error(error.status, error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Created ${order.status} → ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="create-order.ts">
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` es un placeholder. Con un servidor que responde `201` y `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, el snippet imprime:
+Con un servidor que responda `201` y `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, el script imprime:
 
 ```txt
 Created paid → 201
-```
+````
+
+Consulta [Operaciones HTTP](/es-ES/docs/http) y [Struct y esquemas](/es-ES/docs/struct) para conocer más detalles.

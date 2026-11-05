@@ -1,52 +1,36 @@
 ---
 title: "Руководство"
-description: Проектируй контракты и операции SDK, публикуй их и настраивай выполнение в приложениях-потребителях.
+description: Проектируйте контракты и операции SDK, публикуйте их и настраивайте выполнение в приложениях-потребителях.
 ---
 
-Defjs отделяет API, который публикует группа, от клиента, которым пользуется приложение. Иди путём автора SDK, чтобы описать и упаковать операции; иди путём приложения, чтобы настроить выполнение и обработать результаты.
+Defjs отделяет контракт API, который публикует команда SDK, от конфигурации клиента, которую приложение использует во время выполнения. Следуйте разделам ниже, чтобы изучить архитектуру, объявить операции, упаковать их в SDK и настроить выполнение с помощью опций клиента и перехватчиков.
 
-## Предисловие [#getting-started]
+## Первые шаги [#getting-started]
 
 - [Обзор проекта](/ru-RU)
 - [Быстрый старт](/ru-RU/docs/start)
-- [Создание и публикация SDK](/ru-RU/recipes/publish-http-sdk)
-- [Почему определения и выполнение разделены](/ru-RU/docs/design-decisions)
+- [Архитектура ядра](/ru-RU/docs/design-decisions)
 
-## Основные понятия [#core-concepts]
+## Определение SDK [#defining-sdks]
 
-- [Структуры данных / Struct](/ru-RU/docs/struct)
-- [Client](/ru-RU/docs/client)
-- [Промежуточное ПО](/ru-RU/docs/interceptors)
-- [Ошибки](/ru-RU/docs/errors)
-
-## Лучшие практики [#best-practices]
-
-- [Проектирование SDK](/ru-RU/docs/best-practices/sdk-design)
-- [Интеграция в приложении](/ru-RU/docs/best-practices/application)
-- [Промежуточное ПО](/ru-RU/docs/best-practices/middleware)
-- [Обработка ошибок](/ru-RU/docs/best-practices/errors)
-- [SSE](/ru-RU/docs/best-practices/sse)
-- [WebSocket](/ru-RU/docs/best-practices/web-socket)
-- [Тестирование](/ru-RU/docs/best-practices/testing)
-
-## Запросы и реальное время
-
-- [HTTP-запросы](/ru-RU/docs/http)
+- [Struct и схемы](/ru-RU/docs/struct)
+- [HTTP-операции](/ru-RU/docs/http)
 - [Потоки событий SSE](/ru-RU/docs/sse)
 - [Сессии WebSocket](/ru-RU/docs/web-socket)
 
-## Плагины
+## Клиент и выполнение [#client-execution]
 
-Необязательные пакеты для клиента приложения-потребителя. Определения SDK от них не зависят.
+- [Клиент](/ru-RU/docs/client)
+- [Обработка ошибок](/ru-RU/docs/errors)
+- [Перехватчики](/ru-RU/docs/interceptors)
+- [Балансировка нагрузки и отказоустойчивость](/ru-RU/docs/load-balancing)
+- [Тестирование](/ru-RU/docs/testing)
 
-- [Плагины](/ru-RU/docs/integrations)
+## Интеграции и ИИ [#integrations-and-ai]
+
+- [Обзор интеграций](/ru-RU/docs/integrations)
 - [React](/ru-RU/docs/integrations/react)
 - [Vue](/ru-RU/docs/integrations/vue)
-- [OpenTelemetry на сервере](/ru-RU/docs/integrations/opentelemetry-server)
-
-## ИИ
-
+- [OpenTelemetry Server](/ru-RU/docs/integrations/opentelemetry-server)
 - [Skill](/ru-RU/docs/ai)
 - [llms.txt](/ru-RU/docs/ai-api)
-
-[Проектные решения](/ru-RU/docs/design-decisions)

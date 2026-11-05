@@ -3,50 +3,34 @@ title: "Guía"
 description: Diseña contratos y operaciones de SDK, publícalos y configura la ejecución en las aplicaciones que los consumen.
 ---
 
-Defjs separa la API que publica un equipo del cliente que usa una aplicación. Sigue el camino de autoría del SDK para definir y empaquetar operaciones; sigue el camino de la aplicación para configurar la ejecución y tratar los resultados.
+Defjs separa el contrato de API que publica el equipo de autoría del SDK de la configuración del cliente que la aplicación utiliza en tiempo de ejecución. Sigue las secciones a continuación para conocer la arquitectura, definir operaciones y gestionar la ejecución mediante opciones de cliente e interceptores de middleware.
 
-## Prefacio [#getting-started]
+## Primeros pasos [#getting-started]
 
-- [Resumen del proyecto](/es-ES)
+- [Visión general](/es-ES)
 - [Inicio rápido](/es-ES/docs/start)
-- [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
-- [Por qué las definiciones y la ejecución están separadas](/es-ES/docs/design-decisions)
+- [Arquitectura central](/es-ES/docs/design-decisions)
 
-## Conceptos básicos [#core-concepts]
+## Definir SDKs [#defining-sdks]
 
-- [Estructuras de datos / Struct](/es-ES/docs/struct)
-- [Client](/es-ES/docs/client)
-- [Middleware](/es-ES/docs/interceptors)
-- [Errores](/es-ES/docs/errors)
-
-## Buenas prácticas [#best-practices]
-
-- [Diseño del SDK](/es-ES/docs/best-practices/sdk-design)
-- [Integración de la aplicación](/es-ES/docs/best-practices/application)
-- [Middleware](/es-ES/docs/best-practices/middleware)
-- [Gestión de errores](/es-ES/docs/best-practices/errors)
-- [SSE](/es-ES/docs/best-practices/sse)
-- [WebSocket](/es-ES/docs/best-practices/web-socket)
-- [Pruebas](/es-ES/docs/best-practices/testing)
-
-## Solicitudes y tiempo real
-
-- [Solicitudes HTTP](/es-ES/docs/http)
+- [Struct y esquemas](/es-ES/docs/struct)
+- [Operaciones HTTP](/es-ES/docs/http)
 - [Flujos de eventos SSE](/es-ES/docs/sse)
 - [Sesiones WebSocket](/es-ES/docs/web-socket)
 
-## Plugins
+## Cliente y ejecución [#client-execution]
 
-Paquetes opcionales para el cliente de la aplicación consumidora. Las definiciones del SDK siguen siendo independientes de ellos.
+- [Cliente](/es-ES/docs/client)
+- [Tratamiento de errores](/es-ES/docs/errors)
+- [Middleware](/es-ES/docs/interceptors)
+- [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing)
+- [Pruebas](/es-ES/docs/testing)
 
-- [Plugins](/es-ES/docs/integrations)
+## Integraciones e IA [#integrations-and-ai]
+
+- [Visión general de integraciones](/es-ES/docs/integrations)
 - [React](/es-ES/docs/integrations/react)
 - [Vue](/es-ES/docs/integrations/vue)
 - [OpenTelemetry en el servidor](/es-ES/docs/integrations/opentelemetry-server)
-
-## IA
-
 - [Skill](/es-ES/docs/ai)
 - [llms.txt](/es-ES/docs/ai-api)
-
-[Decisiones de diseño](/es-ES/docs/design-decisions)

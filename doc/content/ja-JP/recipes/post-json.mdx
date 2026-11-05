@@ -1,20 +1,81 @@
 ---
 title: "JSON の送信"
-description: 型付きの JSON ボディを送り、宣言済みの 201 をデコードします。
+description: 型付けされた JSON リクエストボディを送信し、宣言された 201 レスポンスをデコードします。
 ---
 
-# POST JSON
+# JSON の送信 (POST JSON)
 
-型付きのボディをビルダーに渡します。論理フィールド名は TypeScript 側に残り、struct 上のワイヤエイリアスが JSON のキーになります。オブジェクトのボディは `application/json` です。
+型付けされた入力オブジェクトを `builder` に渡し、`{ body: input }` を返します。`.alias("customer_name")` を指定することで、TypeScript 上では `customerName` というプロパティ名を維持したまま、ネットワーク電送上では `"customer_name"` としてエンコードし、`201` レスポンスからも元の論理名へとデコードして復元します。
 
-詳細は [HTTP](/ja-JP/docs/http) と [Client](/ja-JP/docs/client) を見てください。
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const ApiError = struct.object({
+  code: struct.string(),
+  message: struct.string(),
+});
+
+export const NewOrder = struct.object({
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const createOrder = defineRequest({
+  method: "POST",
+  path: "/orders",
+  input: NewOrder,
+  builder: (input) => ({ body: input }),
+  output: Order,
+  error: ApiError,
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { createOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com/v1"));
+
+async function main() {
+const [error, order, response] = await createOrder(client, {
+status: "paid",
+customerName: "Ada",
+});
+if (error?.code === "HTTP_STATUS") {
+console.error(error.status, error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Created ${order.status} → ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="create-order.ts">
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` はプレースホルダーです。`201` と `{ "id": 1, "status": "paid", "customer_name": "Ada" }` を返すサーバーに対して、このスニペットは次のように出力します。
+サーバーが `201` と `{ "id": 1, "status": "paid", "customer_name": "Ada" }` を返した場合、スクリプトの出力は以下のようになります。
 
 ```txt
 Created paid → 201
-```
+````
+
+詳細は [HTTP 操作](/ja-JP/docs/http) および [Struct とスキーマ](/ja-JP/docs/struct) を参照してください。

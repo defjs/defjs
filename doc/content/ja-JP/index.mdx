@@ -1,92 +1,81 @@
 ---
 title: Defjs
-description: よりよい SDK のために。型付き API 定義を設計・作成・公開し、アプリケーション側で Defjs Client を構成して実行します。
+description: TypeScript SDK の設計と公開をシンプルに。再利用可能な API 契約の定義と、アプリケーションが所有するクライアント実行を明確に分離します。
 ---
 
 # Defjs
 
-**よりよい SDK のために設計されています。**
+**API 契約は一度だけ定義。実行制御はアプリケーションごとに構成。**
 
-Defjs は、チームが API を再利用できる TypeScript SDK にするのを助けます。`def` は `define` です。サービスが提供する操作を記述し、モジュールまたは npm パッケージから export し、各アプリケーションが自分のクライアントを構成してそれらを呼びます。
+Defjs は、TypeScript SDK における 2 つの責務を明確に分離します。
 
-## SDK を定義し、アプリケーションを構成する
+- **SDK の定義 (`@defjs/core`)** — SDK 開発者は、`struct` スキーマとともに、型付けされた HTTP、SSE、WebSocket の各操作を宣言します。定義自体は純粋なデータであり、import してもネットワーク通信は開始されず、グローバルクライアントにもバインドされません。
+- **アプリケーションでの実行** — 利用側アプリケーションは独自の `Client` を作成し（`createClient(withEndpoint(...))`）、認証情報、インターセプター、ロードバランサーを構成した上で、操作を呼び出す際にそのクライアントを渡します。
 
-| SDK の作成者                                               | SDK の利用者                                                       |
-| ---------------------------------------------------------- | ------------------------------------------------------------------ |
-| 操作、入力、リクエストの配置、レスポンス、エラーを定義する | サービスアドレス、認証情報、インターセプター、トランスポートを選ぶ |
-| 型付きの HTTP、SSE、WebSocket エンドポイントを export する | それらのエンドポイントを import し、Defjs のクライアントで呼び出す |
-| API 契約を保守して公開する                                 | 結果を扱い、キャンセル、ストリーム、セッションを所有する           |
+## クイックビュー: SDK の定義 vs アプリケーションでの実行
 
-SDK の定義はアプリケーションのクライアントを捕まえません。同じ export されたエンドポイントが、異なるクライアント設定で、ブラウザーアプリケーション、サーバー、ローカルテストに使えます。どちらも Defjs の実行契約と互換性のある Core の版を使います。
+<Tabs items={["sdk/health.ts", "app/main.ts"]}>
+<Tab value="sdk/health.ts">
 
-SDK は操作を export します。
-
-<include cwd meta="get-health.ts">
+<include cwd meta="sdk/health.ts">
   examples/home/get-health.ts#example
 </include>
 
-アプリケーションはそれを import し、実行を所有します。
+</Tab>
+<Tab value="app/main.ts">
 
-<include cwd meta="app.ts">
+<include cwd meta="app/main.ts">
   examples/home/app.ts#example
 </include>
 
-`getHealth(client)` を呼ぶとリクエストが始まります。定義を公開すると、利用者はローカルファイルではなく SDK パッケージから import します。
+</Tab>
+</Tabs>
 
-## ベストプラクティス
+`getHealth(client)` を呼び出すと実際の I/O が実行され、エラーファーストのタプルが返されます。デコードされた成功結果を読み出す前に、必ず `if (error)` をチェックして処理を抜ける（return する）設計になっています。
 
-定義は client から独立しています。アプリケーションの client を第一引数として渡します。たとえば `getHealth(client)` です。サービスアドレスと認証情報もアプリケーションのものです。先に error-first のタプルを確認します。`error` があるときは `error.code` を報告し、成功値を読む前に関数から return します。
+## なぜ定義とクライアントを分離するのか？
 
-## SDK を作る
+| 責務             | SDK 開発者（定義）                                                                                                  | アプリケーション（実行）                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| **所有するもの** | HTTP メソッド、パステンプレート、`input` / `output` / `error` スキーマ、`builder` マッピング、静的な `operation` 名 | ベース URL、認証情報、認証インターセプター、ロードバランシング、タイムアウト、リソースの解放 |
+| **配布するもの** | 再利用可能な ESM モジュールおよび `.d.ts` 型定義                                                                    | ブラウザ、サーバー、テスト環境それぞれの実行時設定                                           |
+| **メリット**     | 実行環境への依存がゼロ。ブラウザ、SSR、テストのどこでも同じ定義が動作                                               | リトライ、フェイルオーバー、テレメトリ、ライフサイクル管理を完全に制御可能                   |
 
-1. [最初の操作を定義して動かす](/ja-JP/docs/start) を、SDK とアプリケーションの別ファイルで行います。
-2. SDK が export する [データ契約](/ja-JP/docs/struct) と [HTTP 操作](/ja-JP/docs/http) を記述します。
-3. JavaScript、型宣言、互換性のある Core 依存とともに [SDK パッケージをテストして公開します](/ja-JP/recipes/publish-http-sdk)。
-4. 利用アプリケーションの [Client](/ja-JP/docs/client) を構成し、必要ならフレームワークや可観測性の連携を足します。
+## 次のステップを選ぶ
 
-[設計上の判断](/ja-JP/docs/design-decisions) は、API 定義と実行の所有者が分かれている理由を説明します。パッケージを公開する前に、同じ構成を一つのアプリケーションの中で使うこともできます。
+1. **[クイックスタート](/ja-JP/docs/start)** — 操作を定義し、ローカル Fetch ハンドルを使ってオフラインでテストした上で、実際のライブサービスに接続してみましょう。
+2. **[コアアーキテクチャ](/ja-JP/docs/design-decisions)** — 6 つのレスポンスデコード規則、エラーファーストのタプル、リソース所有権の考え方を理解します。
+3. **[SDK の定義](/ja-JP/docs/struct)** — [Struct](/ja-JP/docs/struct) で通信契約を宣言し、[HTTP](/ja-JP/docs/http)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) の各操作を export します。
+4. **[クライアントと実行](/ja-JP/docs/client)** — [Client](/ja-JP/docs/client) の構成、型付けされた [エラーハンドリング](/ja-JP/docs/errors)、[インターセプター](/ja-JP/docs/interceptors) の追加、[ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) の設定、決定論的な [テスト](/ja-JP/docs/testing) の手法を学びます。
 
-## トランスポートを選ぶ
+## サポートされているトランスポートと結果タプル
 
-| やりたいこと                         | ここから                            | 成功時の結果                                                                         |
-| ------------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------------ |
-| リクエストと status ごとのレスポンス | [HTTP](/ja-JP/docs/http)            | デコード済みデータ + `DecodedResponse`（`output` を宣言していないときは `HttpMeta`） |
-| 長寿命のサーバーイベントフィード     | [SSE](/ja-JP/docs/sse)              | 1 つのストリーム + 起動時の `open` スナップショット                                  |
-| 双方向セッション                     | [WebSocket](/ja-JP/docs/web-socket) | 1 つのセッション + 起動時の `connection` スナップショット                            |
+すべての操作は、各トランスポートのライフサイクルに合わせた 3 要素のエラーファーストタプルを返します。
 
-3 つのトランスポートは同じ順序です。操作を定義し、アプリケーションのクライアントと呼び出し側の入力を渡して呼びます。
+| トランスポート                          | エントリポイント    | タプルの形状                   | ライフサイクルの管理責任                                               |
+| --------------------------------------- | ------------------- | ------------------------------ | ---------------------------------------------------------------------- |
+| **[HTTP](/ja-JP/docs/http)**            | `defineRequest`     | `[error, data, response]`      | 実行中のリクエストは `client({ signal })` 経由でキャンセル             |
+| **[SSE](/ja-JP/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | `await using` または `stream.close()` + `await stream.closed` で解放   |
+| **[WebSocket](/ja-JP/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | `await using` または `session.close()` + `await session.closed` で解放 |
 
-## パッケージを選ぶ
+HTTP の失敗時、タプルは `[error, undefined, undefined]` になります。これは、レスポンスのメタデータ（`HttpMeta`）を `error` 自身がすでに保持しているためです。SSE と WebSocket の場合、失敗前に接続初期化スナップショットが取得できていれば、3 番目のスロットにそのスナップショットが格納されます。
 
-| パッケージ                    | いつ                                                                                                                    |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | SDK の操作と契約を定義し、クライアントを作って HTTP、SSE、WebSocket の操作を呼びます                                    |
-| `@defjs/react`                | `ClientProvider` / `useClient` — [React](/ja-JP/docs/integrations/react) を参照                                         |
-| `@defjs/vue`                  | プラグイン + `injectClient` — [Vue](/ja-JP/docs/integrations/vue) を参照                                                |
-| `@defjs/opentelemetry-server` | アウトバウンドのスパン・メトリクス・ログ — [OpenTelemetry Server](/ja-JP/docs/integrations/opentelemetry-server) を参照 |
+## 公式パッケージ
 
-## 結果の形
+| パッケージ                    | 役割                                                                       | ガイド                                                                  |
+| ----------------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `@defjs/core`                 | 依存関係ゼロの SDK 定義、`struct` スキーマ、クライアント、インターセプター | [クイックスタート](/ja-JP/docs/start)                                   |
+| `@defjs/react`                | React 18+ 向けの `ClientProvider` および `useClient()` コンテキスト注入    | [React 連携](/ja-JP/docs/integrations/react)                            |
+| `@defjs/vue`                  | Vue 3.2+ 向けの `createClientPlugin`、`HTTP_CLIENT`、`injectClient()`      | [Vue 連携](/ja-JP/docs/integrations/vue)                                |
+| `@defjs/opentelemetry-server` | サーバーサイドのアウトバウンドスパン、メトリクス、診断ログ                 | [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server) |
 
-3 つのトランスポートとも、エラーファーストの 3 要素タプルを返します。位置は揃っていますが、意味は違います。
-
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`
-- WebSocket → `[error, session, connection]`
-
-失敗したとき、2 番目は `undefined` です。HTTP では、フォールトがレスポンスのメタデータを持つため 3 番目も `undefined` です。SSE と WebSocket では、失敗より前にスナップショットが取れていれば、3 番目は起動時のスナップショットです。[Errors](/ja-JP/docs/errors) を見てください。
-
-## 所有権をひと息で
-
-古くなった HTTP は abort します。SSE は close して `await stream.closed`。WebSocket も close して `await session.closed`。サーバーでは、options が cookie・認証・テナントデータを掴むなら、クライアントをリクエスト境界の中で作ります。ログに出す前に URL・ヘッダー・ボディを redact してください。
-
-Defjs が提供するのは定義、検証、実行です。キャッシュとリトライの方針はアプリケーションが選び、ストリームの再接続はオプトインです。手書きの SDK パッケージは現在サポートされています。CLI ツールと OpenAPI / SDK 生成は計画中のままです。
-
-## 関連レシピ
+## 人気の実践レシピ
 
 - [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
-- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
-- [POST JSON](/ja-JP/recipes/post-json)
-- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
-- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
-- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)
-- [ローカル Fetch ハンドルでテストする](/ja-JP/recipes/test-with-handle)
+- [JSON の送信とバリデーション](/ja-JP/recipes/post-json)
+- [宣言済み 404 の処理](/ja-JP/recipes/get-declared-404)
+- [HTTP 呼び出しのキャンセル](/ja-JP/recipes/cancel-http)
+- [401 発生時の Bearer トークン自動更新](/ja-JP/recipes/refresh-bearer-once)
+- [SSE イベントストリームの受信](/ja-JP/recipes/consume-sse)
+- [WebSocket セッションの管理](/ja-JP/recipes/websocket-session)
+- [ローカル Fetch ハンドルによるテスト](/ja-JP/recipes/test-with-handle)

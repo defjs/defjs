@@ -1,0 +1,105 @@
+---
+title: "ロードバランシングとフェイルオーバー"
+description: 複数エンドポイントへトラフィックを分散し、障害ホストを一時隔離し、安全な HTTP リクエストを単一呼び出し内で自動フェイルオーバーします。
+---
+
+# ロードバランシングとフェイルオーバー
+
+アプリケーションが `withEndpoint(...urls)` を使用して複数のベース URL を構成すると、Defjs はリクエストをレプリカ群に分散させ、パッシブなサーキットブレイクやアクティブなヘルスチェックにより異常ホストを隔離し、安全な HTTP メソッドを同一呼び出し内で自動的にフェイルオーバーさせることができます。
+
+## 1. ロードバランサー戦略の選択
+
+| 戦略                                                                              | 最適な用途                                                                | デフォルトのヘルスフィルタリング                      |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/ja-JP/api/core/pickfirstbalancer) _(デフォルト)_ | プライマリとバックアップのリージョン一覧を持つブラウザアプリ              | オフ（`outlierDetection` オプションでオプトイン可能） |
+| [`roundRobinBalancer(options?)`](/ja-JP/api/core/roundrobinbalancer)              | 対等なレプリカ群に対するサーバー間通信（任意の `weights` 重み付けに対応） | 有効（`5` 回の連続失敗で発動）                        |
+| [`p2cBalancer(options?)`](/ja-JP/api/core/p2cbalancer)                            | レプリカごとのレイテンシや処理中負荷が変動するサーバー間通信              | 有効（`5` 回の連続失敗で発動）                        |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### `pickFirstBalancer` と `p2cBalancer` の動作原理
+
+- **`pickFirstBalancer`**: 接続失敗（`NET_UNREACHABLE`）またはステータスコード未処理の `502`、`503`、`504` レスポンスが発生するまで最初の URL に固定され、障害発生時に次の URL へ切り替わります。`failbackMs: 30_000` を設定すると、バックアップ先で指定時間を経過した後にプライマリを再度プローブします。
+- **`p2cBalancer` (Power of Two Choices)**: 候補から重複なしで 2 つをランダムサンプリングし、スコア（`PeakEwma RTT × (pending + 1)`、または `load: "pending"` 指定時は処理中の `pending` 数）が低いほうを選択します。デフォルト値（`defaultRttMs: 30`、`decayMs: 10000`）は Linkerd / tower の規約に準拠しています。
+
+## 2. 同一呼び出し内での HTTP フェイルオーバーとリトライバジェット
+
+デフォルトでは、安全な HTTP メソッド（`GET`、`HEAD`、`OPTIONS`、`TRACE`）に対して **同一呼び出し内フェイルオーバー** が有効になっています。最初に選択されたエンドポイントが `NET_UNREACHABLE` で失敗した場合、Defjs は未試行のバックアップエンドポイントを 1 つ選択し、同じ操作呼び出しの中で builder、インターセプターチェーン、トランスポートを再実行します。
+
+このポリシーは [`withEndpointFailover(options)`](/ja-JP/api/core/withendpointfailover) でカスタマイズまたは無効化できます。
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **再試行条件 (`retryOn`)**: デフォルトは `["connect-failure"]` です。`"gateway-error"`（未処理の `502`/`503`/`504`、またはエラーボディの `RES_*` デコードに失敗した `502`/`503`/`504`）や `"attempt-timeout"`（`attemptTimeoutMs` 設定時）を追加できます。
+- **試行ごとのタイムアウト vs 呼び出し全体のタイムアウト**: `attemptTimeoutMs` は Fetch の呼び出しからボディデコードまでの単一の試行に制限時間を設けます。一方、呼び出し元の `client({ signal: AbortSignal.timeout(ms) })` は、すべての試行を含めた呼び出し全体の上限時間を定めます。
+- **Finagle / Linkerd スタイルのリトライバジェット**: クライアント上のすべての呼び出しは、トークンバケット方式のリトライバジェット（`percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`）を共有します。これにより、クラスタ全体の大規模障害時に再試行トラフィックが 20% 以上増幅されるのを防ぎます。上限を無効にするには `retryBudget: false` を設定します。
+- **ブラウザのオフライン検知**: `navigator.onLine === false` の場合、接続失敗は `{ attempted: false }` として記録され、バランサーの切り替えやフェイルオーバーは行われません。
+
+## 3. パッシブサーキットブレイクとアクティブヘルスチェック (`outlierDetection`)
+
+`roundRobinBalancer()` および `p2cBalancer()` は、デフォルトで候補の選択処理を [`outlierDetection`](/ja-JP/api/core/outlierdetection) でラップしています。
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **連続失敗による隔離**: `NET_UNREACHABLE` または HTTP `500+` のエラーが `consecutiveFailures` 回（デフォルト `5` 回）連続して発生すると、そのエンドポイントは `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 〜 `60000ms`）に最大 50% の正のランダムジッターを加えた期間だけ一時隔離（イジェクト）されます。
+2. **単一プローブによる復旧（Single-probe recovery）**: ペナルティ期間が満了すると、単一のリクエストがプローブとしてホストに送られます。トランスポートハンドシェイク（`end`: HTTP/SSE ヘッダー受信または WebSocket の `open`）が成功すれば即座に通常トラフィックが再開され、ペナルティレベルは `0` にリセットされます。失敗した場合はペナルティ期間が倍増します。
+3. **パニックモード（フェイルオープン）**: 設定されているすべてのエンドポイントが隔離または異常と判定された場合、クライアントはローカルでリクエストを破棄するのではなく、候補リスト全体へ向けてフェイルオープン（パニックモード）となり通信を継続します。
+
+## 4. トランスポートのアカウンティングライフサイクル (`pick` → `start` → `end` → `done`)
+
+カスタムバランサーを実装する際は、同期的関数 `pick(context)` と、任意のコールバック `start()`、`end(info)`、`done(info)` を定義します。
+
+| 物理トランスポートの結果                                              | 最終的な `done(info)` サンプル                             |
+| --------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP レスポンスボディがストリーム途中で切断                           | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE ハンドシェイクに成功後、ストリームの `reader.read()` が reject    | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE の正常 EOF、ハンドシェイクのデコード失敗、またはキュー上限超過    | `{ attempted: true, status }`                              |
+| 接続済み WebSocket がコード `1006` または `wasClean === false` で切断 | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 接続済み WebSocket が正常にクローズ                                   | `{ attempted: true }`                                      |
+| 呼び出し元のキャンセル、またはストリーム/ソケットの手動クローズ       | `{ attempted: false }`                                     |
+| 試行開始後に呼び出し元の期限（deadline）が超過                        | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## 関連ドキュメント
+
+- [Client の構成](/ja-JP/docs/client)
+- [SSE 再接続](/ja-JP/docs/sse#reconnect)
+- [WebSocket セッション](/ja-JP/docs/web-socket)

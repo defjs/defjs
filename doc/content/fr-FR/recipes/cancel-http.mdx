@@ -1,20 +1,69 @@
 ---
 title: "Annulation et délais"
-description: Abandonne ou borne un appel dans le temps et lis NET_ABORTED / NET_TIMEOUT.
+description: Annulez ou fixez un délai d'attente pour un appel et lisez NET_ABORTED / NET_TIMEOUT.
 ---
 
 # Annuler un appel HTTP
 
-Combine le signal de l’appelant et une échéance sur `signal`. `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` est un seul signal. Un abort manuel se classe en `NET_ABORTED`. Une échéance se classe en `NET_TIMEOUT`.
+Combinez un `AbortController` appelant avec un délai d'expiration à l'aide de `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` et transmettez le signal combiné via `client({ signal })`. Defjs classe une annulation manuelle en `NET_ABORTED` et une expiration de délai en `NET_TIMEOUT`.
 
-Voir [HTTP](/fr-FR/docs/http#cancel-the-work) pour les détails.
+<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+  <Tab value="sdk/reports.ts">
+```ts
+import { defineRequest } from "@defjs/core";
 
+export const getReport = defineRequest({
+  method: "GET",
+  path: "/report",
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { getReport } from "../sdk/reports.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+const controller = new AbortController();
+const pending = getReport(
+client({
+signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
+}),
+);
+
+controller.abort("screen closed");
+
+async function main() {
+const [error] = await pending;
+if (error?.code === "NET_ABORTED") {
+console.log("caller cancelled");
+return;
+}
+if (error?.code === "NET_TIMEOUT") {
+console.log("timed out");
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log("got the report");
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="cancel-report.ts">
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
-```
+````
 
-L’annulation te dit ce que l’appelant a observé. Elle ne prouve pas qu’une écriture côté serveur a été annulée — garde les nouvelles tentatives de mutation derrière un contrat d’idempotence.
+L'annulation rapporte ce que le client a observé — elle ne garantit en rien qu'une écriture côté serveur ait été annulée. Protégez les rejeux de mutation par une clé d'idempotence. Consultez [Annuler le travail et fixer des délais d'attente](/fr-FR/docs/http#cancel-the-work).

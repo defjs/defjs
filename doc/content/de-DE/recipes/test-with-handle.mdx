@@ -1,20 +1,59 @@
 ---
 title: "Lokale HTTP-Tests"
-description: Fetch für einen Client mit withHTTPHandle tauschen und die Operation unverändert lassen.
+description: Fetch für einen einzelnen Client mit withHTTPHandle austauschen und die Operation unverändert belassen.
 ---
 
 # Mit lokalem Fetch-Handle testen
 
-`withHTTPHandle(...)` ersetzt Fetch nur für diesen Client. Du bekommst weiterhin URL-Building, Interceptors, Status-Dispatch und Struct-Decoding — ohne DNS, TLS oder echten Server.
+`withHTTPHandle(...)` ersetzt die zugrundeliegende `fetch`-Funktion für eine einzelne Client-Instanz und durchläuft dabei die gesamte Defjs-Pipeline – Input-Validierung, `builder`-Mapping, URL-Auflösung, Interceptors, Status-Klassifizierung und Struct-Dekodierung – ganz ohne einen Netzwerk-Socket zu öffnen:
 
-Details siehe [Client](/de-DE/docs/client).
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+```
+  </Tab>
+  <Tab value="test/orders.spec.ts">
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+const client = createClient(
+withEndpoint("https://fixture.invalid"),
+withHTTPHandle(async (input, init) => {
+const request = new Request(input, init);
+const id = new URL(request.url).pathname.split("/").at(-1);
+if (id === "7") {
+return Response.json({ id: 7, status: "paid" }, { status: 200 });
+}
+return Response.json({ message: "Order not found" }, { status: 404 });
+}),
+);
+
+const [error, order, response] = await getOrder(client, { id: 7 });
+if (error) throw error;
+console.log(order.status, response.status);
+
+````
+  </Tab>
+  <Tab value="get-order.test.ts">
 <include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 paid 200
-```
+````
 
-Nutze dieselbe `getOrder`-Operation gegen einen echten `withEndpoint(...)`-Client in Production — nur das Handle ändert sich.
+In der Produktion übergibst du einen mit `withEndpoint(...)` konfigurierten Client an exakt dieselbe `getOrder`-Definition. Siehe [Tests](/de-DE/docs/testing) und [Client](/de-DE/docs/client).

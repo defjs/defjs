@@ -1,22 +1,77 @@
 ---
 title: "إدارة جلسات WebSocket"
-description: اتصل، أرسل غلافًا محدَّد النوع واحدًا، استقبل مرة، ثم أغلق وانتظر closed.
+description: اتصل وأرسل غلافاً محدد الأنواع واستقبل مرة واحدة، ثم أغلق وانتظر اكتمال الإغلاق.
 ---
 
-# فتح جلسة WebSocket
+# فتح جلسة WebSocket وإدارتها
 
-كل اتجاه هو struct واحد. أنت تملك إلغاء الاشتراك و`close` و`await session.closed`. الإطارات غير الصالحة تذهب إلى `onRuntimeError`.
+صرّح عن بنيتي الرسائل الواردة `incoming` والصادرة `outgoing` في `defineWebSocket`، إلى جانب حد أقصى مقيد لقائمة الانتظار `maxIncomingQueueSize`. وفي تطبيقك، اشترك في أحداث `session.onRuntimeError(...)`، واستهلك مكرر `session.receive`، واحرص دائماً على إلغاء الاشتراك، واستدعاء `session.close(...)`، وانتظار `await session.closed` داخل كتلة `finally`:
 
-انظر [WebSocket](/ar/docs/web-socket) للتفاصيل.
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab value="sdk/quotes.ts">
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
 
+export const quotes = defineWebSocket({
+  maxIncomingQueueSize: 100,
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { quotes } from "../sdk/quotes.ts";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+
+async function main() {
+const [error, session] = await quotes(client);
+if (error) {
+console.error(error.code);
+return;
+}
+const unsubscribe = session.onRuntimeError((cause) =>
+console.error("runtime", cause),
+);
+try {
+session.send({ type: "subscribe", symbol: "ACME" });
+for await (const message of session.receive) {
+console.log(message.symbol, message.price);
+break;
+}
+} finally {
+unsubscribe();
+session.close(1000, "consumer-finished");
+await session.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`quotes.example.com` عنوان توضيحي. مع خادم يرد على `{ "type": "subscribe", "symbol": "ACME" }` بالرسالة `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`، تطبع الشيفرة:
+عندما يجيب الخادم على `{ "type": "subscribe", "symbol": "ACME" }` بـ `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`، يطبع البرنامج:
 
 ```txt
 ACME 142.5
-```
+````
 
-إعادة الاتصال اختيارية (`withWebSocketReconnect`). نبض القلب اختياري أيضًا. WebSocket في المتصفح لا يقبل رؤوس مصافحة عشوائية — استخدم ملفات تعريف الارتباط أو البروتوكولات الفرعية أو تذكرة قصيرة العمر.
+- ميزتا إعادة الاتصال (`withWebSocketReconnect`) ونبضات القلب (`withWebSocketHeartbeat`) اختياريتان تماماً على العميل.
+- لا يمكن لمقابس WebSocket في المتصفح إرسال ترويسات HTTP عشوائية أثناء مصافحة الترقية؛ استخدم ملفات تعريف الارتباط، أو البروتوكولات الفرعية، أو تذاكر الاتصال قصيرة العمر بدلاً من ذلك. راجع [جلسات WebSocket](/ar/docs/web-socket).

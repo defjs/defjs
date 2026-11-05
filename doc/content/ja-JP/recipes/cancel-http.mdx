@@ -1,20 +1,69 @@
 ---
 title: "キャンセルとタイムアウト"
-description: 呼び出しを abort またはタイムアウトさせ、NET_ABORTED / NET_TIMEOUT を読み取ります。
+description: 呼び出しの中断やタイムアウトを制御し、NET_ABORTED や NET_TIMEOUT を明確に判別します。
 ---
 
-# HTTP 呼び出しをキャンセルする
+# HTTP 呼び出しのキャンセル
 
-呼び出し側のシグナルと期限を `signal` に合成します。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` は一つのシグナルです。手動の abort は `NET_ABORTED` に分類されます。期限は `NET_TIMEOUT` に分類されます。
+呼び出し元の `AbortController` と期限指定を `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` で結合し、`client({ signal })` 経由で渡します。Defjs は、呼び出し元による手動の中断を `NET_ABORTED`、タイムアウトによる中断を `NET_TIMEOUT` として明確に分類して返します。
 
-詳細は [HTTP](/ja-JP/docs/http#cancel-the-work) を見てください。
+<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+  <Tab value="sdk/reports.ts">
+```ts
+import { defineRequest } from "@defjs/core";
 
+export const getReport = defineRequest({
+  method: "GET",
+  path: "/report",
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { getReport } from "../sdk/reports.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+const controller = new AbortController();
+const pending = getReport(
+client({
+signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
+}),
+);
+
+controller.abort("screen closed");
+
+async function main() {
+const [error] = await pending;
+if (error?.code === "NET_ABORTED") {
+console.log("caller cancelled");
+return;
+}
+if (error?.code === "NET_TIMEOUT") {
+console.log("timed out");
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log("got the report");
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="cancel-report.ts">
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
-```
+````
 
-キャンセルは呼び出し側が観測したことを伝えます。サーバー側の書き込みがロールバックされたことの証明にはなりません — ミューテーションのリトライは冪等性の契約の後ろに置いてください。
+キャンセルの通知は「クライアント側が待機を中止した」ことを表すのみであり、サーバー側で更新処理がロールバックされたことまで保証するものではありません。書き込み操作の再試行を行う場合は、冪等性キー（Idempotency Key）で保護してください。詳細は [HTTP のキャンセルとタイムアウト](/ja-JP/docs/http#cancel-the-work) を参照してください。

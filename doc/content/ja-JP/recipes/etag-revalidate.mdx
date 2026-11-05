@@ -1,22 +1,80 @@
 ---
 title: "ETag 条件付きリクエスト"
-description: 304 は HTTP status の fault として扱い、キャッシュの Map は操作の呼び出しの外に置きます。
+description: 304 を HTTP ステータスフォールトとして扱い、キャッシュ Map を操作呼び出しの外部で安全に管理します。
 ---
 
-# ETag と 304 で再検証する
+# ETag と 304 によるキャッシュ再検証
 
-`ok` は 2xx を意味するので、`304` は `HTTP_STATUS` の fault として届きます。リダイレクト status もエラーボディではないので、`error` は宣言しないでください。ボディは読まれず、fault が status を運び、キャッシュした商品は自分で返します。
+Defjs では、成功分岐を通過するのは `2xx` レスポンスのみであるため、`304 Not Modified` は `HTTP_STATUS` フォールトとして到着します。空の `304` ボディが読み取られないように `defineRequest` で `error` を未宣言のままにしておき、キャッシュ用の `Map` は操作呼び出しをラップするアプリケーションコード側で保持します。
 
-詳細は [HTTP](/ja-JP/docs/http) を見てください。
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+  <Tab value="sdk/catalog.ts">
+```ts
+import { defineRequest, struct, type Infer } from "@defjs/core";
 
+export const Product = struct.object({
+  sku: struct.string(),
+  name: struct.string(),
+  priceCents: struct.number(),
+});
+
+export type Product = Infer<typeof Product>;
+
+export const readProduct = defineRequest({
+  method: "GET",
+  path: "/catalog/:sku",
+  input: struct.object({
+    sku: struct.string(),
+    etag: struct.string().optional(),
+  }),
+  builder: (input) => ({
+    path: { sku: input.sku },
+    headers: { "If-None-Match": input.etag },
+  }),
+  output: Product,
+});
+```
+  </Tab>
+  <Tab value="app/reader.ts">
+```ts
+import type { DerivableClient } from "@defjs/core";
+import { readProduct, type Product } from "../sdk/catalog.ts";
+
+export function createReader(client: DerivableClient) {
+  const cache = new Map<string, { etag: string; product: Product }>();
+
+return async (sku: string): Promise<Product> => {
+const cached = cache.get(sku);
+const [error, product, response] = await readProduct(client, {
+sku,
+etag: cached?.etag,
+});
+
+    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
+      return cached.product;
+    }
+    if (error) throw error;
+
+    const etag = response.headers.get("etag");
+    if (!etag) throw new Error("missing ETag");
+    cache.set(sku, { etag, product });
+    return product;
+
+};
+}
+
+````
+  </Tab>
+  <Tab value="etag-cache.ts">
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
-```
+````
 
-304 の分岐のあとの `throw error` は、この読み取り関数の境界です。関数は引き続き `Promise<Product>` を返します。304 以外の fault は、その境界から Defjs のタプルとしては返りません。
-
-Core の中で `304` を偽の `200` に書き換えないでください。キャッシュの所有は、操作の呼び出しの周りのアプリケーションコードに残します。
+- `304` のチェック後に記述されている `if (error) throw error` は、`Promise<Product>` を返す `createReader` のための明示的な境界処理です。
+- インターセプター内で `304` を擬似的な `200` へと書き換えることは避けてください。キャッシュの状態は、操作呼び出しを囲むアプリケーションコード側で管理するのが原則です。詳細は [HTTP 操作](/ja-JP/docs/http) を参照してください。

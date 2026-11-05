@@ -1,20 +1,81 @@
 ---
 title: "發送 JSON"
-description: 送 typed JSON body，再 decode declared 201。
+description: "發送帶型別嘅 JSON body，並將宣告過嘅 201 回應順利解碼。"
 ---
 
 # POST JSON
 
-將 typed body 交畀 builder。Logical field names 留喺 TypeScript；struct 上面嘅 wire aliases 會變成 JSON keys。Object body 係 `application/json`。
+將帶型別嘅 input 物件交畀 `builder`，並回傳 `{ body: input }`。`.alias("customer_name")` 畀你喺 TypeScript 入面繼續用 `customerName`，同時喺網絡傳輸時自動編碼成 `"customer_name"`，並喺收到 `201` 回應時將佢解碼返出嚟。
 
-詳情睇 [HTTP](/zh-Hant-HK/docs/http) 同 [Client](/zh-Hant-HK/docs/client)。
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const ApiError = struct.object({
+  code: struct.string(),
+  message: struct.string(),
+});
+
+export const NewOrder = struct.object({
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const createOrder = defineRequest({
+  method: "POST",
+  path: "/orders",
+  input: NewOrder,
+  builder: (input) => ({ body: input }),
+  output: Order,
+  error: ApiError,
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { createOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com/v1"));
+
+async function main() {
+const [error, order, response] = await createOrder(client, {
+status: "paid",
+customerName: "Ada",
+});
+if (error?.code === "HTTP_STATUS") {
+console.error(error.status, error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Created ${order.status} → ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="create-order.ts">
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` 係 placeholder。如果 server 回應 `201` 同 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`，snippet 會 print：
+如果伺服器回傳 `201` 同埋 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`，腳本會輸出：
 
 ```txt
 Created paid → 201
-```
+````
+
+詳情請參閱 [HTTP 操作](/zh-Hant-HK/docs/http) 與 [Struct 與 Schema](/zh-Hant-HK/docs/struct)。

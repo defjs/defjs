@@ -1,45 +1,62 @@
 ---
 title: "Быстрый старт"
-description: Экспортируй первую операцию SDK, вызови её из отдельного приложения и переиспользуй определение с другим клиентом.
+description: Экспортируйте первую операцию SDK, вызовите её из отдельного приложения и используйте это же определение с другим клиентом.
 ---
 
 # Начало работы: первая операция SDK [#getting-started-one-http-request]
 
-Напиши два файла: модуль SDK, который экспортирует `GET /orders/:id`, и приложение, которое его импортирует и владеет клиентом. Локальный Fetch handle держит первый запуск без сети. То же определение API затем заработает с клиентом, направленным на твой сервис.
+В этом руководстве вы создадите модуль SDK с операцией `GET /orders/:id` и вызовете его из двух разных модулей приложения: один использует локальный мок без сети, а второй обращается к реальному API.
 
-## Рекомендуемая практика
+## 1. Установите `@defjs/core`
 
-Определение не зависит от клиента. Вызывай операцию клиентом приложения, как в `getOrder(client, { id: 7 })`. Третьего аргумента с опциями нет. Вызов операции её начинает; `await` только ждёт. Адрес сервиса и учётные данные тоже принадлежат приложению. Сначала прочитай кортеж error-first. Если `error` задан, сообщи `error.code` и вернись из функции до чтения успешного значения.
-
-## Шаг 1 — Установка
-
-`@defjs/core` — ESM и работает на Node.js или Bun. Node.js 22.18+ (или 24+) запускает `.ts` напрямую через type stripping; более ранним релизам 22.x нужен `--experimental-strip-types`. Оставь в package.json `"type": "module"`. В браузере по-прежнему нужны бандлер и Fetch.
+`@defjs/core` — это ESM-пакет без зависимостей, работающий в браузерах, Bun и Node.js (версии 22.18+ и 24+ умеют запускать `.ts` напрямую). Убедитесь, что в вашем `package.json` указано `"type": "module"`.
 
 ```sh
 bun add @defjs/core
 ```
 
-## Шаг 2 — Опиши запрос
+## 2. Объявите SDK и вызовите его из приложения
 
-Создай `src/define-request.ts`. Это модуль автора SDK: он экспортирует `getOrder` и не создаёт клиент. Входной struct — значение вызывающего. `builder` размещает это значение в запросе. Здесь весь input — объект пути, поэтому скалярные поля без алиасов заполняют `:id`.
+Храните определение операции в отдельном модуле SDK (`src/define-request.ts`), а клиент создавайте на стороне приложения (`src/execute-locally.ts` или `src/real-api.ts`):
 
-<include cwd meta="define-request.ts">
+<Tabs items={["src/define-request.ts", "src/execute-locally.ts", "src/real-api.ts"]}>
+<Tab value="src/define-request.ts">
+
+<include cwd meta="src/define-request.ts">
   examples/start/define-request.ts#example
 </include>
 
-`output` — тело 2xx. `error` — любой другой status. По одному struct. Когда эти тела различаются, используй `struct.or(...)` или размеченное объединение.
+</Tab>
+<Tab value="src/execute-locally.ts">
 
-`defineRequest(...)` возвращает операцию. Вызов `getOrder(client, input)` начинает запрос. `builder` выше — функция, которая размещает input; это не операция. Где объявлен `input`, `builder` обязателен, синхронен и чист.
-
-## Шаг 3 — Вызови локально
-
-Рядом создай `src/execute-locally.ts`. Это приложение-потребитель: оно импортирует `getOrder`, создаёт собственный клиент и передаёт локальный Fetch handle. Defjs по-прежнему проверяет входные данные, собирает `Request`, выбирает контракт по статусу и разбирает тело.
-
-<include cwd meta="execute-locally.ts">
+<include cwd meta="src/execute-locally.ts">
   examples/start/execute-locally.ts#example
 </include>
 
-Запусти:
+</Tab>
+<Tab value="src/real-api.ts">
+
+<include cwd meta="src/real-api.ts">
+  examples/start/real-api.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### Как эти три файла работают вместе
+
+1. **`src/define-request.ts` (определение SDK)**:
+   - Объявляет входные данные `input`, успешный ответ `output` (для кодов `2xx`) и ошибку `error` (для ответов, отличных от `2xx`) с помощью `struct`.
+   - Предоставляет синхронную чистую функцию `builder`, которая преобразует `input` в `{ path }`. Если объявлен `input`, явный `builder` обязателен.
+   - Экспортирует операцию `getOrder`, не создавая и не захватывая клиент.
+2. **`src/execute-locally.ts` (локальное выполнение без сети)**:
+   - Настраивает клиент с помощью `withHTTPHandle(...)`, чтобы запустить полный конвейер Defjs (валидацию входа, построение URL, маршрутизацию по статусам и разбор структур ответа) без обращения к сети.
+3. **`src/real-api.ts` (выполнение в продакшене)**:
+   - Импортирует ту же самую операцию `getOrder` и вызывает её с реальным базовым URL, настроенным через `withEndpoint(...)`.
+
+## 3. Запустите локальный пример
+
+Выполните `src/execute-locally.ts` с помощью Bun:
 
 ```sh
 bun src/execute-locally.ts
@@ -49,42 +66,28 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-Попробуй отсутствующий заказ — смени path id на `8` и запусти снова:
+Если изменить входные данные с `{ id: 7 }` на `{ id: 8 }`, мок вернёт статус `404`, и Defjs декодирует объявленную структуру `error` в поле `error.data`:
 
 ```txt
 Order not found
 ```
 
-При успехе: `error` — `null`, `order` — output Struct для `200`, `response` — `DecodedResponse<Order>`. При объявленном `404`: `error.code` — `'HTTP_STATUS'`, `error.status` — `404`, а `error.data` типизирован как `NotFound`. Второй элемент кортежа при провале — `undefined`.
+## 4. Разберитесь с error-first кортежем
 
-## Шаг 4 — Укажи на реальный API
+Каждый HTTP-вызов возвращает кортеж `[error, data, response]`:
 
-В `src/real-api.ts` импортируй тот же `getOrder` и создай клиент с базовым URL сервиса. Запускай эту версию только после того, как заменишь адрес из примера сервисом, который реализует `GET /v1/orders/:id` с этими телами.
+- **При успехе (`2xx`)**: `error` равен `null`, `data` содержит валидированное значение `output` (`Order`), а `response` — это `DecodedResponse<Order>`.
+- **При объявленном статусе вне `2xx`**: `error.code` равен `'HTTP_STATUS'`, `error.status` содержит код ответа (`404`), а `error.data` — валидированную структуру `error` (`NotFound`).
+- **При ошибках входа, декодирования или сети**: `error.code` точно указывает на этап сбоя:
+  - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — невалидные входные данные или выброс исключения в `builder`
+  - `RES_MEDIA_TYPE_INVALID` — ожидалось тело JSON, но пришёл неподдерживаемый `Content-Type` (отклоняется до чтения тела)
+  - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — невозможно прочитать тело или структура ответа не совпадает со схемой
+  - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` — сбой транспорта, ручная отмена или срабатывание `AbortSignal.timeout(ms)`
 
-<include cwd>examples/start/real-api.ts#example</include>
+Передавайте дедлайны или сигналы отмены для конкретного вызова, порождая клиент на один запрос: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`.
 
-Определение API остаётся в модуле SDK. Адреса сервиса, учётные данные, перехватчики и время жизни выполнения остаются у приложения. Оба клиента используют один контракт эндпоинта Defjs.
+## Что дальше
 
-## Опубликуй определение
-
-Перенеси определение в пакет SDK, когда оно нужно нескольким приложениям. Экспортируй `getOrder`, включи его декларации TypeScript и объяви совместимую версию Core. Потребители тогда импортируют из пакета, а не из `./define-request.ts`; настройка их клиента остаётся их собственной. Полную сборку пакета смотри в [Создании и публикации SDK](/ru-RU/recipes/publish-http-sdk).
-
-## Когда результат другой
-
-- Плохой input → `REQ_INPUT_INVALID`; упавший `builder` → `REQ_BUILD_FAILED`
-- Non-2xx статус → `HTTP_STATUS`, с типизированным `error.data`, если `error` был объявлен и его тело декодируется
-- Объявленное JSON-тело с другим media type → `RES_MEDIA_TYPE_INVALID`, сообщается до чтения тела
-- Объявленное тело (`output` для 2xx, иначе `error`), которое не декодируется → `RES_DECODE_FAILED` или `RES_STRUCT_MISMATCH`, каким бы ни был статус
-- Сбой Fetch / отмена / дедлайн → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
-
-Дедлайн — это `client({ signal: AbortSignal.timeout(ms) })`, и он классифицируется как `NET_TIMEOUT`. Ручной abort — `NET_ABORTED`. Дедлайна по умолчанию на уровне клиента нет. Выведи клиент, когда одному вызову нужен свой `signal`; см. [Клиент](/ru-RU/docs/client). Отмена говорит, что увидел вызывающий, — не то, закоммитилась ли серверная запись.
-
-## Дальше по рецептам
-
-- [Создание и публикация SDK](/ru-RU/recipes/publish-http-sdk)
-- [GET с объявленным 404](/ru-RU/recipes/get-declared-404)
-- [POST JSON](/ru-RU/recipes/post-json)
-- [Отменить HTTP-вызов](/ru-RU/recipes/cancel-http)
-- [Читать SSE-стрим](/ru-RU/recipes/consume-sse)
-- [Открыть WebSocket-сессию](/ru-RU/recipes/websocket-session)
-- [Тест с локальным Fetch handle](/ru-RU/recipes/test-with-handle)
+- Изучите архитектурные принципы в разделе [Архитектура ядра](/ru-RU/docs/design-decisions).
+- Описывайте сложные структуры данных и алиасы полей в разделе [Struct и схемы](/ru-RU/docs/struct).
+- Упакуйте свои определения для npm с помощью руководства [Сборка и публикация SDK](/ru-RU/recipes/publish-http-sdk).

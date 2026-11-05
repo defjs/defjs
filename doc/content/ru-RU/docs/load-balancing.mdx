@@ -1,0 +1,105 @@
+---
+title: "Балансировка нагрузки и отказоустойчивость"
+description: Распределяйте трафик по нескольким эндпоинтам, исключайте сбойные реплики и переключайте безопасные HTTP-запросы в рамках одного вызова.
+---
+
+# Балансировка нагрузки и отказоустойчивость
+
+Когда приложение настраивает несколько базовых URL с помощью `withEndpoint(...urls)`, Defjs может распределять запросы между репликами, временно исключать сбойные узлы через пассивный circuit breaker или активные проверки доступности (health checks), а также автоматически переключать безопасные HTTP-запросы на резервный узел в рамках одного вызова.
+
+## 1. Выбор стратегии балансировки нагрузки
+
+| Стратегия                                                                           | Лучше всего подходит для                                                    | Фильтрация по доступности по умолчанию                |
+| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/ru-RU/api/core/pickfirstbalancer) _(По умолчанию)_ | Браузерных приложений с упорядоченным списком «основной + резервный регион» | Отключена (включается через опцию `outlierDetection`) |
+| [`roundRobinBalancer(options?)`](/ru-RU/api/core/roundrobinbalancer)                | Вызовов между серверами по равноправным репликам (поддерживает `weights`)   | Включена (`5` последовательных ошибок)                |
+| [`p2cBalancer(options?)`](/ru-RU/api/core/p2cbalancer)                              | Серверных вызовов с разбросом задержек реплик или нагрузки в процессе       | Включена (`5` последовательных ошибок)                |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### Как работают `pickFirstBalancer` и `p2cBalancer`
+
+- **`pickFirstBalancer`**: остаётся на первом URL до тех пор, пока ошибка сетевого подключения (`NET_UNREACHABLE`) или необъявленный ответ со статусом `502`, `503` или `504` не переключит его на следующий URL. Опция `failbackMs: 30_000` позволяет периодически проверять основной эндпоинт после пребывания на резервном узле указанное время.
+- **`p2cBalancer` (Power of Two Choices)**: случайным образом выбирает двух независимых кандидатов без повторений и берёт узел с наименьшим весом: `PeakEwma RTT × (pending + 1)` (или только количество активных запросов `pending`, если указано `load: "pending"`). Значения по умолчанию (`defaultRttMs: 30`, `decayMs: 10000`) соответствуют соглашениям Linkerd и библиотеки tower.
+
+## 2. Переключение HTTP при сбое и бюджет повторов
+
+По умолчанию для безопасных HTTP-методов (`GET`, `HEAD`, `OPTIONS`, `TRACE`) включено **переключение на резервный узел в рамках одного вызова** (same-call failover): если первый выбранный эндпоинт завершается сетевым сбоем `NET_UNREACHABLE`, Defjs выбирает один из неопробованных резервных эндпоинтов и заново запускает builder, цепочку перехватчиков и транспорт без прерывания вызова операции.
+
+Настройте или отключите эту политику с помощью [`withEndpointFailover(options)`](/ru-RU/api/core/withendpointfailover):
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **Условия повтора (`retryOn`)**: по умолчанию `["connect-failure"]`. Можно добавить `"gateway-error"` (необъявленный статус `502`/`503`/`504` или ошибка декодирования тела `RES_*` на этих статусах) и `"attempt-timeout"` (если задан `attemptTimeoutMs`).
+- **Таймаут на попытку против общего таймаута вызова**: параметр `attemptTimeoutMs` ограничивает длительность одной попытки от вызова Fetch до декодирования тела; сигнал вызывающего кода `client({ signal: AbortSignal.timeout(ms) })` ограничивает всё время операции целиком с учётом всех попыток.
+- **Бюджет повторов Finagle / Linkerd**: все вызовы одного клиента делят общий token-bucket бюджет повторов (`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`), благодаря чему повторные запросы не могут увеличить трафик более чем на ~20% во время масштабных сбоев кластера. Передайте `retryBudget: false`, чтобы отключить ограничение.
+- **Подсказка браузерного офлайна**: если `navigator.onLine === false`, сетевые сбои помечаются как `{ attempted: false }`, не переключают балансировщики и не вызывают переключения на резервные узлы.
+
+## 3. Пассивный circuit breaking и активные проверки (`outlierDetection`)
+
+Балансировщики `roundRobinBalancer()` и `p2cBalancer()` по умолчанию оборачивают выбор узлов в [`outlierDetection`](/ru-RU/api/core/outlierdetection):
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **Последовательные ошибки**: после `consecutiveFailures` (по умолчанию `5`) подряд ошибок `NET_UNREACHABLE` или статусов HTTP `500+` эндпоинт исключается на период `min(minPenaltyMs × 2^level, maxPenaltyMs)` (от `1000ms` до `60000ms`) плюс до `50%` равномерного положительного джиттера.
+2. **Восстановление через одну пробу**: по истечении штрафа ровно один запрос направляется на проверку хоста. Если транспортный хэндшейк (`end`: заголовки HTTP/SSE или `open` у WebSocket) завершается успехом, хост немедленно возвращается в строй, а уровень штрафа сбрасывается в `0`; при сбое штраф удваивается.
+3. **Аварийный режим fail-open**: если все настроенные эндпоинты исключены или признаны нездоровыми, балансировщик переходит в режим fail-open, пропуская запросы ко всему списку кандидатов, вместо локального сброса всего трафика.
+
+## 4. Жизненный цикл учёта транспорта (`pick` → `start` → `end` → `done`)
+
+Пользовательские балансировщики реализуют синхронный метод `pick(context)` и опциональные колбэки `start()`, `end(info)` и `done(info)`:
+
+| Физический исход транспорта                                                | Финальный замер `done(info)`                               |
+| -------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Тело HTTP-ответа оборвалось на середине                                    | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| Хэндшейк SSE прошёл, затем `reader.read()` упал с ошибкой                  | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Обычный EOF у SSE, ошибка декодирования хэндшейка или переполнение очереди | `{ attempted: true, status }`                              |
+| Открытый WebSocket закрылся с кодом `1006` или `wasClean === false`        | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Открытый WebSocket закрылся штатно                                         | `{ attempted: true }`                                      |
+| Отмена пользователем или ручное закрытие потока/сокета                     | `{ attempted: false }`                                     |
+| Дедлайн вызывающего истёк после старта попытки                             | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## Связанные материалы
+
+- [Настройка клиента](/ru-RU/docs/client)
+- [Переподключение SSE](/ru-RU/docs/sse#reconnect)
+- [Переподключение WebSocket](/ru-RU/docs/web-socket)

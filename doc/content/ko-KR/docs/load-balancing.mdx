@@ -1,0 +1,105 @@
+---
+title: "로드 밸런싱 및 장애 조치"
+description: 여러 엔드포인트로 트래픽을 분산하고 비정상 레플리카를 제외하며, 단일 호출 내에서 안전한 HTTP 요청을 자동 장애 조치합니다.
+---
+
+# 로드 밸런싱 및 장애 조치
+
+애플리케이션이 `withEndpoint(...urls)`를 사용해 여러 기본 URL을 구성하면, Defjs는 여러 레플리카에 요청을 분산하고, 수동 서킷 브레이킹이나 능동 헬스 체크를 통해 비정상 호스트를 제외하며, 안전한 HTTP 메서드를 동일 호출 내에서 자동으로 다른 엔드포인트로 장애 조치(failover)할 수 있습니다.
+
+## 1. 로드 밸런서 전략 선택
+
+| 전략                                                                          | 적합한 환경                                                           | 기본 헬스 필터링                               |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/ko-KR/api/core/pickfirstbalancer) _(기본값)_ | 순서가 지정된 기본/백업 리전 목록을 사용하는 브라우저 앱              | 꺼짐 (`outlierDetection` 옵션으로 선택 활성화) |
+| [`roundRobinBalancer(options?)`](/ko-KR/api/core/roundrobinbalancer)          | 동일한 사양의 레플리카 간 서버 간 호출 (선택적 `weights` 가중치 지원) | 활성화 (`5`회 연속 실패 시)                    |
+| [`p2cBalancer(options?)`](/ko-KR/api/core/p2cbalancer)                        | 레플리카별 레이턴시나 진행 중인 부하 차이가 큰 서버 환경              | 활성화 (`5`회 연속 실패 시)                    |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### `pickFirstBalancer`와 `p2cBalancer`의 동작 방식
+
+- **`pickFirstBalancer`**: 연결 실패(`NET_UNREACHABLE`)나 코드화되지 않은 `502`, `503`, `504` 응답이 발생해 다음 URL로 이동하기 전까지 첫 번째 URL을 계속 사용합니다. `failbackMs: 30_000`을 설정하면 백업 엔드포인트에서 해당 시간 동안 머문 후 기본 엔드포인트를 다시 프로브합니다.
+- **`p2cBalancer` (Power of Two Choices)**: 복원 추출 없이 무작위로 두 개의 후보를 뽑아 더 낮은 점수를 가진 엔드포인트를 선택합니다: `PeakEwma RTT × (pending + 1)` (또는 `load: "pending"`인 경우 진행 중인 요청 수). 기본값(`defaultRttMs: 30`, `decayMs: 10000`)은 Linkerd/tower 관례를 따릅니다.
+
+## 2. 동일 호출 내 HTTP 장애 조치 및 재시도 예산
+
+기본적으로 HTTP는 안전한 메서드(`GET`, `HEAD`, `OPTIONS`, `TRACE`)에 대해 **동일 호출 내 자동 장애 조치(same-call failover)**를 활성화합니다. 처음 선택한 엔드포인트가 `NET_UNREACHABLE`로 실패하면, Defjs는 아직 시도하지 않은 백업 엔드포인트 하나를 선택해 동일한 작업 호출 내에서 builder, 인터셉터 체인, 전송 계층을 다시 실행합니다.
+
+[`withEndpointFailover(options)`](/ko-KR/api/core/withendpointfailover)를 통해 이 정책을 맞춤 설정하거나 비활성화할 수 있습니다:
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **재시도 조건 (`retryOn`)**: 기본값은 `["connect-failure"]`입니다. `"gateway-error"`(코드화되지 않은 `502`/`503`/`504`, 또는 오류 본문이 `RES_*` 디코딩에 실패한 `502`/`503`/`504`) 및 `"attempt-timeout"`(`attemptTimeoutMs`가 설정된 경우)을 추가할 수 있습니다.
+- **시도별 vs. 전체 호출 타임아웃**: `attemptTimeoutMs`는 Fetch 호출부터 본문 디코딩까지 단일 시도의 시간을 제한합니다. 반면 호출자의 `client({ signal: AbortSignal.timeout(ms) })`는 모든 시도를 아우르는 전체 호출 시간을 제한합니다.
+- **Finagle / Linkerd 재시도 예산**: 클라이언트의 모든 호출은 토큰 버킷 기반의 재시도 예산(`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`)을 공유하므로, 클러스터 전체 장애 상황에서도 재시도로 인해 트래픽이 20% 이상 증폭되지 않습니다. 이 상한선을 해제하려면 `retryBudget: false`로 설정하세요.
+- **브라우저 오프라인 감지**: `navigator.onLine === false`인 경우 연결 실패는 `{ attempted: false }`로 보고되며, 밸런서를 다음으로 넘기거나 장애 조치를 트리거하지 않습니다.
+
+## 3. 수동 서킷 브레이킹 및 능동 헬스 체크 (`outlierDetection`)
+
+`roundRobinBalancer()`와 `p2cBalancer()`는 기본적으로 후보 선택 로직을 [`outlierDetection`](/ko-KR/api/core/outlierdetection)으로 감싸서 제공합니다:
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **연속 실패 감지**: `NET_UNREACHABLE` 또는 HTTP `500+` 오류가 `consecutiveFailures`(기본값 `5`)만큼 연속으로 발생하면, 해당 엔드포인트는 `min(minPenaltyMs × 2^level, maxPenaltyMs)`(`1000ms` ~ `60000ms`)에 최대 `50%`의 균등 양수 지터가 더해진 시간 동안 후보에서 제외(격리)됩니다.
+2. **단일 프로브 복구**: 패널티 기간이 만료되면 단 하나의 요청이 해당 호스트를 프로브합니다. 전송 핸드셰이크(`end`: HTTP/SSE 헤더 수신 또는 WebSocket `open`)가 성공하면 즉시 정상 트래픽을 재개하고 패널티 레벨을 `0`으로 초기화합니다. 실패하면 패널티 시간이 두 배로 늘어납니다.
+3. **패닉 모드 오픈(Fail-open)**: 설정된 모든 엔드포인트가 격리되거나 비정상으로 판정되면, 밸런서는 로컬에서 모든 트래픽을 즉시 드롭하는 대신 클라이언트의 전체 후보 목록을 개방(fail-open)하여 요청을 시도합니다.
+
+## 4. 전송 통계 수명 주기 (`pick` → `start` → `end` → `done`)
+
+커스텀 밸런서는 동기 `pick(context)` 메서드와 선택적 `start()`, `end(info)`, `done(info)` 콜백을 구현합니다:
+
+| 물리적 전송 결과                                            | 최종 `done(info)` 샘플                                     |
+| ----------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP 응답 본문이 스트림 도중 끊김                           | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 핸드셰이크 성공 후 스트림 `reader.read()` 실패          | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 정상 EOF, 핸드셰이크 디코딩 실패, 또는 큐 한도 초과     | `{ attempted: true, status }`                              |
+| 열린 WebSocket이 1006 코드 또는 `wasClean === false`로 종료 | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 열린 WebSocket이 정상적으로 닫힘                            | `{ attempted: true }`                                      |
+| 호출자 취소 또는 수동 스트림/소켓 종료                      | `{ attempted: false }`                                     |
+| 시도 시작 후 호출자 마감 시간 만료                          | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## 관련 문서
+
+- [클라이언트 구성](/ko-KR/docs/client)
+- [SSE 재연결](/ko-KR/docs/sse#reconnect)
+- [WebSocket 세션](/ko-KR/docs/web-socket)

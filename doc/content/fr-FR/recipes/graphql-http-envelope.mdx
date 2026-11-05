@@ -1,22 +1,68 @@
 ---
 title: "Requêtes GraphQL"
-description: Garde GraphQL en HTTP 200 plus un déballage applicatif ; Core ne livre pas de protocole GraphQL.
+description: Traitez GraphQL comme un HTTP 200 avec extraction applicative ; le cœur Defjs n'embarque aucun protocole GraphQL.
 ---
 
 # Déballer une enveloppe GraphQL HTTP
 
-Defjs n’implémente pas de `errorPolicy` GraphQL. Modélise le wire comme un POST HTTP dont le builder place le document de query et les variables. Déclare le `data` de l’enveloppe en `.nullish()` pour que l’absence de `data` et `data: null` atteignent tous deux ton helper, puis déballe `errors[]` avant de vérifier `data`.
+Defjs n'intègre aucun client GraphQL ni politique `errorPolicy`. Modélisez GraphQL sur HTTP comme une opération `POST` standard dont le `builder` transmet `{ query, operationName, variables }`. Déclarez `data` comme `.nullish()` sur le Struct de l'enveloppe afin qu'une propriété `data` omise ou valant `data: null` satisfasse la validation structurelle, puis extrayez `errors[]` dans une fonction utilitaire applicative :
 
-Voir [Décisions de conception](/fr-FR/docs/design-decisions).
+<Tabs items={["sdk/viewer.ts", "app/load-viewer.ts", "graphql-viewer.ts"]}>
+  <Tab value="sdk/viewer.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+const VIEWER_QUERY = "query Viewer { viewer { id login } }" as const;
+
+export const runViewer = defineRequest({
+  method: "POST",
+  path: "/graphql",
+  builder: () => ({
+    body: { query: VIEWER_QUERY, operationName: "Viewer" },
+  }),
+  output: struct.object({
+    data: struct
+      .object({
+        viewer: struct
+          .object({ id: struct.string(), login: struct.string() })
+          .null(),
+      })
+      .nullish(),
+    errors: struct
+      .array(struct.object({ message: struct.string() }))
+      .optional(),
+  }),
+});
+```
+  </Tab>
+  <Tab value="app/load-viewer.ts">
+```ts
+import type { Client } from "@defjs/core";
+import { runViewer } from "../sdk/viewer.ts";
+
+export async function loadViewer(client: Client) {
+  const [error, result] = await runViewer(client);
+  if (error) throw error;
+  if (result.errors?.length) {
+    throw new Error(result.errors.map((item) => item.message).join("; "));
+  }
+  if (!result.data) {
+    throw new Error("GraphQL response contained neither data nor errors");
+  }
+  return result.data.viewer;
+}
+```
+  </Tab>
+  <Tab value="graphql-viewer.ts">
 <include cwd meta="graphql-viewer.ts">
   examples/recipes/graphql-http-envelope.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 ada viewer unavailable viewer unavailable
 ```
 
-Un succès HTTP veut seulement dire que l’enveloppe est arrivée. Les erreurs applicatives restent dans `errors[]` jusqu’à ce que ton déballage lève une erreur ou renvoie, y compris une réponse avec `data: null`. L’exemple traite l’absence de `data` et `data: null` avec `errors[]` comme des erreurs applicatives, pas comme des écarts de Struct.
-
-`if (error) throw error` adapte un fault Defjs à ce helper. Les échecs GraphQL en HTTP 200 restent des erreurs applicatives dans `errors[]` et sont levés à part.
+- Un code HTTP `200` signifie uniquement que l'enveloppe GraphQL a été reçue intacte. Les erreurs métier présentes dans `errors[]` (même accompagnées de `data: null`) sont des résultats applicatifs et non des faults `RES_STRUCT_MISMATCH`.
+- Consultez [Architecture du cœur](/fr-FR/docs/design-decisions) pour comprendre pourquoi les enveloppes propres à un protocole sont confiées à des helpers applicatifs.

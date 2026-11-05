@@ -5,203 +5,130 @@ description: Configura cómo llama tu aplicación a las operaciones importadas d
 
 # Cliente
 
-Un `Client` es la configuración de ejecución de la aplicación consumidora. `createClient(...)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type). Llamar a la fábrica con opciones de solicitud devuelve un valor `Client`, y un valor `Client` es lo que aceptan las operaciones. No es invocable. Importa operaciones de tu SDK, elige la dirección del servicio, las credenciales, los interceptores y el transporte, y llama a una operación con el cliente. `getOrder(client({ signal }), { id: 1 })` arranca una llamada que declara entrada. `health(client)` arranca una que no la declara. Cuando todo el struct de entrada es opcional, tanto `search(client)` como `search(client, input)` son válidos. No hay un tercer argumento de opciones. Llamar a la operación la arranca. `await` solo espera la tupla error-first.
+Un `Client` almacena la configuración de ejecución de la aplicación consumidora: URLs base, cabeceras predeterminadas, credenciales, interceptores, serialización de consultas y manejadores de transporte.
 
-Las definiciones del SDK no atan esta instancia. Un navegador, una solicitud de servidor y una prueba local pueden usar la misma operación exportada con clientes distintos. Todos siguen el mismo contrato de Defjs y versiones compatibles de Core. Configura la dirección de servicio de cada cliente para las operaciones que llames a través de él.
+`createClient(...options)` devuelve un [`DerivableClient`](/es-ES/api/core/derivableclient-type):
 
-El mismo valor de cliente puede pasarse a muchas operaciones. Las aplicaciones eligen las políticas de caché y de reintento y son dueñas del trabajo que arrancan. Los fallos de conexión HTTP tienen un failover limitado para métodos seguros, descrito más abajo. La reconexión de streams es opt-in.
+- Pasa `client` directamente a una operación (`getOrder(client, { id: 1 })`) cuando no se requieran opciones de petición por llamada.
+- Llama a `client(requestOptions)` para derivar un valor de `Client` de un solo uso (`getOrder(client({ signal }), { id: 1 })`). La derivación no ejecuta E/S y el valor resultante es un objeto plano (no invocable).
 
-La fábrica es una función y también es un `Client` sin opciones de solicitud. No pases la fábrica a un setter de estado de React: `setState(factory)` la llamaría como updater. No la uses como fuente de `watch` o `computed` de Vue: esos llaman a una función. Un valor de cliente derivado es un objeto simple.
+## 1. Configurar un cliente y llamar a una operación del SDK
 
-## Configuración básica
+<Tabs items={["sdk/orders.ts", "app/client.ts", "app/main.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  operation: "orders.read",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+});
+```
+
+</Tab>
+<Tab value="app/client.ts">
 
 <include cwd lang="typescript">
   examples/client/basic-setup.ts#example
 </include>
 
-`createClient(...)` devuelve una fábrica invocable que también es un [`Client`](/es-ES/api/core/client-type). No es un conjunto de sobrecargas por transporte.
-
-## Componer opciones
-
-Las opciones se aplican de izquierda a derecha. Los setters sustituyen; `withInterceptors(...items)` añade.
+</Tab>
+<Tab value="app/main.ts">
 
 <include cwd lang="typescript">
   examples/client/compose-options.ts#example
 </include>
 
-Los interceptores mixtos se filtran por transporte cuando corre la operación; el orden relativo entre los del kind elegido se mantiene.
+</Tab>
+</Tabs>
 
-## Varios endpoints [#multiple-endpoints]
+### Reglas de composición de opciones
 
-`withEndpoint` toma una o más URLs base. Los argumentos se copian en orden, y una copia posterior de la misma cadena se descarta. Un `withEndpoint` posterior sustituye la lista; no la fusiona. Aquí no se comprueban las URLs. Una base no válida hace fallar la llamada con `REQ_BUILD_FAILED`. Una lista vacía es un valor admitido y falla igual, con [`ERR_NO_ENDPOINT`](/es-ES/api/core/err-no-endpoint) como `cause`.
+- Las opciones se aplican de **izquierda a derecha**.
+- Los configuradores de valor único (`withEndpoint`, `withHeaders`, `withQuerySerializer`, `withCredentials`, `withXSRF`) **reemplazan** los valores previos.
+- `withInterceptors(...items)` **añade** elementos a la lista existente de interceptores y los filtra por transporte (`http`, `sse`, `web-socket`) cuando se ejecuta una operación.
 
-<include cwd lang="typescript">
-  examples/client/multiple-endpoints.ts#example
-</include>
+## 2. Derivar un cliente por llamada (`client(options)`)
 
-Omitir `withEndpointBalancer` da a cada cliente su propio [`pickFirstBalancer`](/es-ES/api/core/pickfirstbalancer). Se queda en el primer endpoint hasta un fallo de conexión (`NET_UNREACHABLE`) o una respuesta con estado 502, 503 o 504, luego avanza y da la vuelta a la lista configurada. Un resultado que lleva un `code` de fault ignora su estado: `NET_BODY_INCOMPLETE` con 503 no avanza. Las demás respuestas, los timeouts y las cancelaciones no lo avanzan.
-
-HTTP también activa el **failover en la misma llamada de forma predeterminada**: un fallo de conexión en `GET`, `HEAD`, `OPTIONS` o `TRACE` puede probar un endpoint adicional, aún no intentado, antes de devolver la tupla del último intento. Los métodos se comparan sin distinguir mayúsculas. Cada intento ejecuta de nuevo `pick`, el builder, toda la cadena de interceptores y el transporte; la autenticación específica del endpoint ve por tanto el nuevo `baseEndpoint`. Cada pick recibe su propio `done` de un solo uso, y los picks posteriores excluyen los endpoints ya intentados en esta llamada.
-
-[`withEndpointFailover`](/es-ES/api/core/withendpointfailover) sustituye esa política, sin fusionarla. Los campos omitidos toman sus valores por defecto. Pon `attempts: 0` o `methods: []` para desactivar el failover. Un cuerpo de solicitud `ReadableStream` nunca hace failover. Añade un método no seguro a `methods` solo cuando la aplicación pueda enviarlo dos veces sin riesgo: un fallo de conexión no puede probar que el servidor no actuó sobre la primera solicitud.
-
-<include cwd lang="typescript">
-  examples/client/endpoint-failover.ts#example
-</include>
-
-`retryOn: ["connect-failure", "gateway-error", "attempt-timeout"]` también permite el failover en la misma llamada después de 502/503/504 y después del `attemptTimeoutMs` configurado. El failover de gateway también se aplica cuando una respuesta 502/503/504 falla al decodificar su cuerpo de error declarado con un fault `RES_*`, por ejemplo una página de error HTML frente a un struct JSON. Un interceptor que se recupera a éxito o falla con `EXT_*` no dispara el failover de gateway. Una respuesta de gateway descartada se drena o se cancela antes de seguir. Sin `gateway-error`, esa llamada HTTP fallida se devuelve y `pickFirstBalancer` avanza para la llamada siguiente. HTTP 500 no provoca failover dentro de la misma llamada ni hace avanzar `pickFirstBalancer`.
-
-Los reintentos de la misma llamada comparten un **presupuesto de retry Finagle/Linkerd** entre todas las llamadas y los valores derivados de un cliente: `percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`. Cada llamada original deposita crédito; cada intento adicional de endpoint lo retira. El agotamiento devuelve el resultado del intento actual sin otro pick. `retryBudget: false` quita solo este límite de presupuesto. El ratio es finito en `[0, 1000]`, el mínimo es un entero seguro no negativo y el TTL es finito en `[1000, 60000]` ms. La escala de tokens de Finagle deposita 1000 tokens y cobra `min(2147483647, floor(1000 / ratio))` por retry (un ratio de cero no deposita nada y cobra uno). La reserva es `minimum × floor(ttlMs / 1000) × charge`; como en Finagle, el TTL cuenta segundos enteros. Los créditos y los débitos caducan de forma perezosa en diez cortes fijos de `ttlMs / 10`, hasta un corte antes; ni un timer ni un historial por solicitud crecen sin límite. Durante una caída amplia, el presupuesto puede hacer fallar una llamada que habría funcionado en otro endpoint; ese es justamente su propósito: mantener los reintentos cerca del 20 % del tráfico. Si los backends aguantan todos los reintentos, sube `percentCanRetry` o establece `retryBudget: false`.
-
-Defjs deja activado por defecto el failover de conexión de los métodos seguros; Linkerd/Envoy normalmente exigen retries explícitos, y el retry transparente de gRPC depende de una prueba de que no hubo procesamiento. El `gateway-error` de Defjs significa **solo 502/503/504 sin `code` de fault**; la condición del mismo nombre en Envoy incluye también desconexiones y resets sin respuesta.
-
-No hay un plazo por defecto ni un timeout por intento. `attemptTimeoutMs` es un número positivo finito medido desde la invocación de Fetch hasta la lectura y la decodificación del cuerpo de ese intento; su expiración informa `NET_TIMEOUT`. El `signal: AbortSignal.timeout(ms)` del llamador cubre la **llamada entera**, a través de todos los intentos, y no puede causar failover después de expirar. Un timeout de intento solo permite failover cuando `retryOn` incluye `attempt-timeout`; no avanza `pickFirstBalancer` por sí mismo.
-
-Cuando `navigator.onLine === false`, los fallos de conexión se informan al balanceador como `{ attempted: false }` y HTTP no hace failover. Solo un `false` estricto suprime la atribución; un navigator ausente o un getter que lanza se trata como en línea. Esto es un indicio de offline, no una comprobación de salud.
-
-Configura `pickFirstBalancer({ failbackMs: 30_000 })` para sondear el primer endpoint después de pasar ese tiempo fuera de él. El primer pick elegible sondea; los picks concurrentes siguen usando el fallback sticky. Una sonda que responde y no cumple una condición de avance restaura el primer endpoint, una sonda fallida reinicia el intervalo, y una sonda no atribuida deja el estado sin cambios. No corre ningún temporizador de fondo. Con `shuffle: true`, «primero» significa el orden barajado.
-
-[`roundRobinBalancer`](/es-ES/api/core/roundrobinbalancer) recorre la lista desde un índice inicial aleatorio. Su mapa `weights` opcional usa números positivos finitos; un candidato no listado tiene peso 1 y los pesos de candidatos ausentes se ignoran. Los pesos 2 y 1 se repiten como el más pesado, el más ligero, el más pesado. Usa el valor por defecto para el primario/respaldo regional ordenado de un navegador; usa round robin para los peers iguales de un servidor.
-
-### Filtrado de salud y p2c [#health-filtering-and-p2c]
-
-`roundRobinBalancer()` y [`p2cBalancer`](/es-ES/api/core/p2cbalancer) activan el filtrado de salud pasivo de forma predeterminada. A diferencia del pick-first sticky, reparten el tráfico entre los peers, así que una réplica parada o que falla de forma persistente no debe seguir recibiendo su parte normal. `pickFirstBalancer()` deja el filtrado de salud apagado, salvo que pases un objeto `outlierDetection`. La aplicación sigue siendo dueña del descubrimiento de endpoints.
-
-Pon `outlierDetection: false` para desactivar el filtrado. Un objeto, incluido `{}`, lo activa con los valores por defecto de los campos omitidos. Otros valores hacen fallar las llamadas con `REQ_OPTIONS_INVALID`. El round robin sin filtrar omite `done`; el round robin por defecto lo devuelve en cada pick correcto. [`outlierDetection(child, options)`](/es-ES/api/core/outlierdetection) envuelve una estrategia propia con la misma implementación. Desactiva el filtro de una fábrica interna cuando la envuelves de forma explícita.
-
-<include cwd lang="typescript">
-  examples/client/endpoint-health.ts#passive
-</include>
-
-El criterio pasivo son los **fallos consecutivos**, cinco de forma predeterminada (como en Finagle). Un no-fallo reinicia la racha; `attempted: false` ni la incrementa ni la reinicia. Pon `consecutiveFailures: 0` para desactivar la interrupción pasiva. El filtrado de salud está activado de forma predeterminada, como en Finagle; las configuraciones de Linkerd, Envoy y gRPC difieren.
-
-De forma predeterminada, `NET_UNREACHABLE` y los estados 500 o superiores cuentan como fallos. Los `NET_TIMEOUT` y `NET_BODY_INCOMPLETE` con código tienen prioridad sobre el estado y no son fallos. El `isFailure` del filtrado de salud puede personalizar esta clasificación. Un resultado lanzado o no booleano descarta la muestra. Cada intento de failover se contabiliza por separado; los fallos de conexión offline ya están sin atribuir. La indicación offline y `failbackMs` son adaptaciones de Defjs orientadas al navegador.
-
-Las penalizaciones siguen el breaker de fallos consecutivos de Linkerd: `minPenaltyMs: 1000`, `maxPenaltyMs: 60000` y `jitterRatio: 0.5`. La base es `min(minPenaltyMs × 2^level, maxPenaltyMs)`, desde el nivel cero. Suma jitter positivo uniforme hasta `base × jitterRatio`, con tope en `maxPenaltyMs`. A diferencia de Envoy y gRPC A50, **no hay cuota de expulsión ni protección del último host**: cualquier endpoint puede cortar. No hay rejilla de evaluación, criterio de porcentaje, slow start ni timer de fondo.
-
-La expiración admite **una sola sonda**. Una estrategia interna que elige otro host deja el hueco libre. La sonda se decide en el `end` del transporte: cabeceras de respuesta HTTP/SSE o `open` de WebSocket, según la recuperación por future de respuesta de Finagle y el límite de completado de respuesta de tower. Un no-fallo restaura el tráfico normal y devuelve la penalización al primer nivel; un fallo duplica la penalización siguiente. Un resultado sin atribuir libera el hueco. Si no llega ningún `end`, decide `done`. Un `done` posterior es una muestra ordinaria. Otras muestras mientras está cortado o en sonda no alteran los contadores. Un clasificador terminal inválido libera el hueco sin decidir la salud. No hay un timeout de sonda que suponga éxito; un handshake correcto y de larga duración restaura el tráfico de inmediato. La sonda `failbackMs` de pick-first sigue siendo independiente.
-
-<include cwd lang="typescript">
-  examples/client/endpoint-health.ts#recovery
-</include>
-
-En las **comprobaciones activas**, la aplicación sondea y guarda los resultados en caché; `isHealthy` lee esa caché de forma síncrona, una vez por endpoint, en `pick`. Tiene que ser barato y no debe hacer E/S. Un resultado lanzado o no booleano rechaza solo ese pick con `REQ_OPTIONS_INVALID`. Devolver true nunca anula una expulsión pasiva. Para usar solo comprobaciones activas, pon `consecutiveFailures: 0`
-
-<include cwd lang="typescript">
-  examples/client/endpoint-health.ts#active
-</include>
-
-Si el filtrado quita a todos los candidatos, el balanceador primero ignora las comprobaciones activas y mantiene las expulsiones pasivas; si sigue vacío, usa la lista actual original. Esto es un fail-open en modo pánico al estilo de Finagle, no la política de espera/503 de Linkerd. Nunca introduce endpoints de la lista de otro cliente.
-
-Elige round robin para réplicas de servidor iguales; elige p2c cuando varían la carga o la latencia. p2c muestrea dos candidatos distintos de forma predeterminada y compara el RTT en decaimiento × (pending + 1) del PeakEwma de tower; el empate favorece el primer sorteo. A diferencia de Envoy y gRPC A48, muestrea **sin reemplazo**. `choiceCount` es un entero de al menos 2, con tope en 10. Los valores por defecto `defaultRttMs: 30` y `decayMs: 10000` vienen de Linkerd. Ambos son finitos y positivos. Las estimaciones en reposo decaen hacia cero para explorar. `load: "pending"` compara intentos en curso; solo es least-connections global cuando se muestrea cada candidato.
-
-Pending empieza en `start`, justo antes de Fetch o de construir el socket, y termina en `end`, no después de los post-interceptores ni al cerrar la sesión. El RTT es `Date.now() - startTime` en ese límite para **todos los transportes y resultados**, incluidos los fallos rápidos. No hay penalización sintética ni `isFailure` de p2c; el filtrado de salud trata los endpoints que fallan rápido. Una muestra mayor sustituye la estimación de inmediato; si no, la actualización de tower es `old × exp(-Δt/decayMs) + sample × (1-exp(-Δt/decayMs))`. Un `done` sin `end` libera pending sin hacer una muestra de RTT. Los intentos no iniciados no cambian pending.
-
-Esto sigue `CompleteOnResponse` de tower, con la separación de Linkerd entre el completado de la carga y la clasificación final de salud. Fetch expone las cabeceras y WebSocket expone `open`; Defjs no puede observar el límite del primer frame de cuerpo de Linkerd ni el completado a nivel de stream de Envoy. Los fallos al leer el cuerpo HTTP y los rechazos al leer el cuerpo de la respuesta SSE después de las cabeceras afectan a `done`, no al `end` ya emitido. Los fallos de transporte de WebSocket después de `open` afectan igualmente solo a `done`. p2c favorece candidatos muestreados más ligeros, no necesariamente el host más rápido en global.
-
-SSE y WebSocket vuelven a elegir en la reconexión, no dentro de una conexión establecida. Sus políticas de reconexión opt-in aceptan `connectTimeoutMs` para acotar el handshake. Una conexión sana de larga duración no se rebalancea después de un despliegue. Pon una vida máxima de conexión en el servidor para animar a los clientes a reconectarse y elegir de nuevo. El EOF normal de SSE es terminal; una suscripción en curso debe observar `closed` y hacer una llamada nueva que lleve su cursor de la aplicación.
-
-A diferencia del failover de HTTP, las reconexiones de un stream no vuelven a ejecutar el builder ni los interceptores. Reutilizan la solicitud ya construida, mientras que una reconexión que sigue atribuida puede elegir otra URL base u otro origen. Las credenciales ligadas a un endpoint tienen que ser válidas o renovarse en **cada intento físico**, no capturarse solo para la primera base: usa el [límite Fetch de SSE](/es-ES/docs/sse#reconexión) o el [límite de transporte y autenticación de WebSocket](/es-ES/docs/web-socket#protocolos-y-autenticación).
-
-Un balanceador propio es un objeto con `pick`. Devuelve una tupla error-first. No lances porque la lista está vacía.
-
-<include cwd lang="typescript">
-  examples/client/custom-endpoint-balancer.ts#example
-</include>
-
-`pick`, `start` opcional, `end` opcional y `done` opcional son síncronos. `start` se ejecuta como máximo una vez, justo antes de Fetch o de construir el socket. Los fallos de build, los cortocircuitos de un interceptor (incluido `makeResponse`), las bases sustituidas y la cancelación antes del transporte no llaman a `start` ni a `end`. `end(info)` se ejecuta como máximo una vez después de `start`, de forma síncrona cuando Fetch devuelve las cabeceras, cuando el socket se abre, o cuando el transporte falla antes de ese límite. Recibe `{ attempted: true, status }` para cabeceras HTTP/SSE, `{ attempted: true }` para la apertura del socket, el fault propio de la fase si hay un fallo antes de la respuesta, y `{ attempted: false }` para la cancelación del llamador. El filtrado de salud reenvía ambas señales a su hijo. Úsalas para la contabilidad en curso, no para contar en la selección. Si un interceptor llama a `next()` más de una vez dentro de un mismo intento, las llamadas Fetch adicionales comparten esa selección, así que `start`, `end` y `done` siguen ejecutándose como mucho una vez; para probar otro endpoint, usa `withEndpointFailover`.
-
-`done` se ejecuta exactamente una vez por pick correcto, después de que termina la llamada HTTP o el intento físico de stream o socket. Comparte la forma `EndpointDoneInfo` con `end` (sin campo de duración) y conserva la clasificación final de salud, incluido un fallo al leer el cuerpo o una cancelación después de las cabeceras. Las excepciones y los thenables rechazados de todos los hooks quedan contenidos. Una promesa de `pick` sigue siendo inválida; los resultados mal formados y las excepciones se vuelven `REQ_BUILD_FAILED`, una configuración integrada inválida se vuelve `REQ_OPTIONS_INVALID`, y ninguno de los dos lanza en el sitio de llamada de la operación. Omite los hooks si no hace falta contabilidad. Los interceptores ven el `baseEndpoint` elegido, no la lista de candidatos.
-
-Las muestras finales de transporte son distintas de los resultados de la sesión lógica:
-
-| Resultado físico                                                                                                                                                             | Muestra de `done`                                                                    |
-| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| El cuerpo de la respuesta HTTP se corta antes de tiempo                                                                                                                      | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }`                           |
-| Handshake SSE correcto y después un rechazo ordinario al leer el cuerpo de la respuesta                                                                                      | `{ attempted: true, code: "NET_UNREACHABLE" }`, sin `status`                         |
-| EOF normal de SSE, fallo al decodificar el cuerpo de handshake de medio o declarado, límite de parser o de cola, error de transform, hook u observer, o fallo de `getReader` | El `{ attempted: true, status }` recibido; ningún código de red nuevo                |
-| WebSocket abierto, sin cause nativa, código observado 1006 o `wasClean === false`                                                                                            | `{ attempted: true, code: "NET_UNREACHABLE" }`, incluso sin un evento `error` nativo |
-| WebSocket abierto, sin cause nativa ni prueba de cierre anómalo                                                                                                              | `{ attempted: true }`                                                                |
-| Cancelación del llamador o cierre manual del stream o del socket                                                                                                             | `{ attempted: false }`                                                               |
-| Plazo del llamador después de que el intento ya empezó                                                                                                                       | `{ attempted: true, code: "NET_TIMEOUT" }`, sin `status`                             |
-
-La correspondencia ya existente de causas de timeout y abort tiene prioridad sobre las señales nuevas de lectura y de cierre, y el indicio de offline sigue suprimiendo el `NET_UNREACHABLE` atribuido. Un `wasClean` ausente no es false; los cierres limpios 1000, 1001, 1005, 1011, 1012, 1013 y los 4xxx privados no son fallos automáticamente. Los errores de la aplicación y de la política de reconexión no crean por sí mismos muestras de fallo de red. Un fallo físico real sigue siendo una sola muestra si la política luego rechaza o lanza. La muestra de fallo de lectura SSE sustituye a propósito el estado anterior, que solo reflejaba el handshake; el EOF normal y los fallos de la aplicación conservan ese estado. Los proveedores Fetch de SSE inyectados poseen sus errores de lectura: es una señal de salud, no una prueba de que el endpoint remoto causó el fault.
-
-Estas muestras hacen avanzar el pick-first por defecto o alimentan los umbrales de salud ya existentes; **no** activan la reconexión, no cambian su presupuesto, no autorizan un replay de negocio, no sintetizan un evento `error` nativo ni reescriben el `closed.kind`/`cause` lógico de un WebSocket. Sin reconexión, la nueva elección de endpoint surte efecto en una llamada explícita posterior.
-
-## Derivar un cliente
-
-`client(options?)` devuelve un valor `Client` para una sola llamada. `client()` y `client(undefined)` no guardan opciones de solicitud. `client({})` conserva una instantánea vacía; Defjs no la descarta mediante una inspección de claves. Al llamar a `client(options)`, cada campo de solicitud de nivel superior se lee una vez y se coloca en un objeto de opciones nuevo. Un array `protocols` se copia. `heartbeat` copia `intervalMs`, `isAck`, `message` y `timeoutMs`. `reconnect` copia `attempts`, `delayMs`, `factor`, `jitter`, `maxDelayMs` y `shouldReconnect`. Los bloques anidados que faltan siguen faltando, así que no activan el heartbeat ni el reintento. `signal`, `beforeConnect` y cada callback conservan su identidad. El mismo objeto de opciones se puede volver a pasar; cada llamada captura sus propios contenedores. Derivar no hace E/S. Un getter de estos campos fijos se ejecuta durante `client(options)`. Si lanza, la excepción sale de esa llamada y deja la fábrica utilizable. No se convierte en un fault. Los números fuera de rango se siguen comprobando cuando se ejecuta la operación y siguen devolviendo `REQ_OPTIONS_INVALID`. El valor de cliente no es invocable; crea uno por llamada.
-
-`signal` no se combina. Reutilizar un valor de cliente que lleva `signal` comparte ese signal entre llamadas, así que crea un valor de cliente por llamada. Combina signals con `AbortSignal.any` en el código de la aplicación.
+Crea un nuevo valor derivado de cliente para cada llamada que necesite su propia señal `signal`, callbacks de progreso o sobreescritura de opciones de sesión WebSocket:
 
 <include cwd lang="typescript">
   examples/client/derive-client.ts#example
 </include>
 
-La configuración base de `createClient` la comparte cada valor de cliente y no está congelada en tiempo de ejecución. Queda fija por convención: nada en la biblioteca la cambia, y las aplicaciones tampoco deberían. Los helpers estándar, como `withWebSocketHeartbeat`, `withWebSocketReconnect`, `withSSEReconnect` y `withWebSocketProtocols`, copian sus records fijos cuando se aplica el helper. Una opción de cliente personalizada puede seguir guardando su propia referencia. `withInterceptors` añade un record `{ kind, fn }` nuevo por cada entrada y conserva `fn` en sí. Un cliente derivado lleva un objeto [`RequestOptions`](/es-ES/api/core/requestoptions-type) capturado solo cuando se suministraron opciones. La fábrica, `client()` y `client(undefined)` no tienen ninguno. El código de la aplicación pasa el cliente a una operación. No lee ese estado interno.
+> [!IMPORTANT]
+> Dado que `createClient(...)` devuelve una función invocable (`DerivableClient`), **no** la pases directamente a un actualizador `setState(client)` de React ni como fuente de `watch(client)` / `computed(client)` en Vue, ya que estos frameworks interpretan las funciones como actualizadores de estado o _getters_.
 
-## Opciones de la solicitud
+### Referencia de `RequestOptions` por llamada
 
-[`RequestOptions`](/es-ES/api/core/requestoptions-type) tiene siete campos planos. Cada protocolo lee solo los campos que conoce e ignora el resto. Pasar `heartbeat` a una operación HTTP se ignora, no es un fault. SSE solo lee `signal` de las opciones de la solicitud. La reconexión de SSE viene de la configuración del cliente (`withSSEReconnect`), así que `client({ reconnect })` afecta solo a WebSocket. No hay un filtro de protocolo en tiempo de compilación.
+`RequestOptions` contiene siete campos planos. Cada transporte lee únicamente los campos que le corresponden e ignora el resto:
 
-| Campo                | Lo usa               | Regla                                                                                                       |
-| -------------------- | -------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `signal`             | HTTP, SSE, WebSocket | Aborta la llamada. Un plazo es `AbortSignal.timeout(ms)` (`NET_TIMEOUT`). Un abort manual es `NET_ABORTED`. |
-| `onUploadProgress`   | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                 |
-| `onDownloadProgress` | HTTP                 | Lo ignoran SSE y WebSocket.                                                                                 |
-| `beforeConnect`      | WebSocket            | Sustituye el ajuste del cliente para esa llamada.                                                           |
-| `protocols`          | WebSocket            | Sustituye la lista del cliente. No se añade.                                                                |
-| `heartbeat`          | WebSocket            | Se sustituye entero. `timeoutMs` es la espera del acuse del heartbeat, no un plazo de la solicitud.         |
-| `reconnect`          | WebSocket            | Se sustituye entero.                                                                                        |
+| Campo                | Usado por            | Comportamiento                                                                                                                              |
+| -------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `signal`             | HTTP, SSE, WebSocket | Aborta la llamada (`AbortSignal.timeout(ms)` → `NET_TIMEOUT`; abort manual → `NET_ABORTED`).                                                |
+| `onUploadProgress`   | HTTP                 | Notifica el progreso de subida del cuerpo de la petición en streaming.                                                                      |
+| `onDownloadProgress` | HTTP                 | Notifica el progreso de descarga del cuerpo declarado en la respuesta.                                                                      |
+| `beforeConnect`      | WebSocket            | Reemplaza el hook `beforeConnect` definido a nivel de cliente para esta sesión.                                                             |
+| `protocols`          | WebSocket            | Reemplaza la lista de subprotocolos definida a nivel de cliente para esta sesión.                                                           |
+| `heartbeat`          | WebSocket            | Reemplaza la configuración de latidos (_heartbeat_) definida a nivel de cliente para esta sesión.                                           |
+| `reconnect`          | WebSocket            | Reemplaza la política de reconexión WebSocket a nivel de cliente para esta sesión. (La reconexión SSE se configura con `withSSEReconnect`). |
 
-No hay campo `timeout`, ni campo `abort`, ni un plazo por defecto a nivel de cliente. En SSE y WebSocket, `signal` cubre toda la conexión, también después de abrirse. No hay un plazo solo de arranque. Una aplicación que quiera uno crea su propio `AbortController`, lo aborta con `new DOMException("...", "TimeoutError")` desde un temporizador y limpia el temporizador cuando el await regresa. Consulta [SSE](/es-ES/docs/sse#close-and-dispose).
+## 3. Singleton en el navegador frente a ámbito por petición en servidor
 
-`HttpExecuteOptions` es el recorte HTTP: `signal` más los callbacks de progreso. `EventStreamExecuteOptions` es `{ signal? }`. `WebSocketExecuteOptions` es el recorte WebSocket más `signal`.
+- **Aplicaciones de navegador**: comparte un único `DerivableClient` a nivel de módulo cuando el endpoint, los interceptores y las credenciales sean globales en la aplicación.
+- **Servidor y aplicaciones SSR**: crea un cliente nuevo **dentro del límite de cada petición entrante** siempre que las cabeceras, cookies, tokens de autenticación o datos del tenant sean específicos de la petición. Nunca guardes credenciales de usuario en un cliente global del proceso.
 
-## Resultados por transporte
+## 4. Múltiples endpoints y balanceo de carga [#multiple-endpoints]
 
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`. `open` es la instantánea del primer handshake correcto de la conexión devuelta para handles nativos de Defjs o wrappers que reenvían el mismo objeto `open` en vivo; los handles personalizados o los wrappers que sustituyen `open` usan su `open` público actual incluso después de reconectar, mientras que `stream.open` sigue en vivo (consulta [SSE](/es-ES/docs/sse)).
-- WebSocket → `[error, session, connection]`
+`withEndpoint(...urls)` acepta una o más URLs base candidatas. Por defecto:
 
-Vuelve antes de usar el valor de éxito cuando `error` está presente.
+- Cada cliente utiliza [`pickFirstBalancer`](/es-ES/api/core/pickfirstbalancer), manteniéndose en la primera URL hasta que un fallo `NET_UNREACHABLE` o una respuesta no controlada `502`/`503`/`504` lo avance a la siguiente.
+- Los métodos HTTP seguros (`GET`, `HEAD`, `OPTIONS`, `TRACE`) realizan automáticamente un **failover dentro de la misma llamada** hacia un endpoint de respaldo no probado en caso de fallo de conexión (`NET_UNREACHABLE`), regulado por un presupuesto de reintentos compartido estilo Finagle (`withEndpointFailover`).
 
-Tú eres dueño de la limpieza: aborta HTTP, cierra SSE + `await stream.closed`, cierra WebSocket + `await session.closed`.
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
 
-## Inyectar un transporte de prueba
+### Filtrado por salud y P2C [#health-filtering-and-p2c]
+
+Para réplicas equivalentes entre servidores, [`roundRobinBalancer`](/es-ES/api/core/roundrobinbalancer) y [`p2cBalancer`](/es-ES/api/core/p2cbalancer) (PeakEwma RTT × carga en vuelo) habilitan por defecto un disyuntor por fallos consecutivos estilo Linkerd (`outlierDetection`).
+
+Consulta la guía específica de [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing) para conocer todos los detalles sobre presupuestos de reintento, sondas de salud activas/pasivas, estimación de carga P2C y balanceadores personalizados.
+
+## 5. Inyectar un transporte de prueba
+
+Sustituye la implementación de plataforma de `fetch` o `WebSocket` en un cliente con `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` para ejecutar pruebas completas de contrato sin conexión de red:
 
 <include cwd lang="typescript">
   examples/client/inject-test-transport.ts#example
 </include>
 
-## Ámbito en servidor frente a navegador
+Consulta [Pruebas](/es-ES/docs/testing) para ver los patrones completos de testing.
 
-En un servidor, crea el cliente dentro del límite de la solicitud cuando las opciones o los cierres de un interceptor capturan auth, cookies, usuarios o tenants. La identidad del cliente no es por sí sola un límite de seguridad.
+## 6. Referencia de configuradores de opciones de cliente
 
-## Referencia
+| Configurador                                                                                                  | Propósito                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | Establece una o más URLs base candidatas (reemplaza la lista anterior).                                       |
+| `withHeaders(HeadersInit)`                                                                                    | Establece cabeceras predeterminadas estáticas para HTTP y SSE (las cabeceras del builder prevalecen).         |
+| `withInterceptors(...items)`                                                                                  | Añade interceptores HTTP, SSE y WebSocket en orden de capas concéntricas (cebolla).                           |
+| `withQuerySerializer(fn)`                                                                                     | Serializa objetos de consulta con alias aplicados a una cadena query string.                                  |
+| `withCredentials(boolean)`                                                                                    | Configura `credentials: "include"` en Fetch para HTTP y SSE cuando es `true`.                                 |
+| `withXSRF(options?)`                                                                                          | Copia la cookie XSRF a una cabecera en peticiones HTTP mutantes de mismo origen.                              |
+| `withEndpointBalancer(balancer)`                                                                              | Reemplaza la estrategia de selección de endpoints (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`). |
+| `withEndpointFailover(options?)`                                                                              | Configura el failover HTTP en la misma llamada y el presupuesto de reintentos del cliente.                    |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Configura la reconexión de SSE y la observación de eventos no válidos.                                        |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Configura los valores predeterminados para sesiones WebSocket.                                                |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Inyecta implementaciones de transporte personalizadas o simuladas para pruebas.                               |
 
-| Helper                                                                                                        | Efecto                                                                                                           |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | URLs base candidatas; una llamada posterior sustituye la lista                                                   |
-| `withEndpointBalancer(balancer)`                                                                              | Sustituye el balanceador; el valor por defecto es pick-first                                                     |
-| `roundRobinBalancer(options?)`                                                                                | Round robin con pesos opcionales y filtrado de salud por defecto                                                 |
-| `p2cBalancer(options?)`                                                                                       | PeakEwma o carga pending en el límite de respuesta de tower, filtrado de salud por defecto                       |
-| `outlierDetection(child, options?)`                                                                           | breaker de Linkerd con recuperación de sonda única de Finagle y fail-open                                        |
-| `OutlierDetectionOptions`                                                                                     | Umbrales pasivos y callbacks de salud síncronos                                                                  |
-| `withEndpointFailover(options?)`                                                                              | Failover HTTP dentro de la misma llamada; por defecto, un endpoint más para métodos seguros si falla la conexión |
-| `withHeaders(HeadersInit)`                                                                                    | Cabeceras estáticas por defecto para HTTP/SSE; las del builder ganan                                             |
-| `withHTTPHandle(fetch)`                                                                                       | Sustituye Fetch para HTTP                                                                                        |
-| `withSSEHandle(fetch)`                                                                                        | Sustituye Fetch para SSE                                                                                         |
-| `withWebSocketHandle(WebSocket)`                                                                              | Sustituye el constructor de WebSocket                                                                            |
-| `withInterceptors(...items)`                                                                                  | Añade interceptores mixtos                                                                                       |
-| `withQuerySerializer(fn)`                                                                                     | Codifica un objeto de query ya con alias en un query string                                                      |
-| `withCredentials(boolean)`                                                                                    | Fetch `credentials: 'include'` para HTTP/SSE cuando es true                                                      |
-| `withXSRF(options?)`                                                                                          | Cookie XSRF de HTTP → cabecera                                                                                   |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Mandos de SSE                                                                                                    |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Mandos de WebSocket                                                                                              |
+## Lecturas relacionadas
 
-## Recetas relacionadas
-
-- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)
-- [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
+- [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing)
+- [Middleware](/es-ES/docs/interceptors)
+- [Pruebas](/es-ES/docs/testing)
+- [Probar con un manejador Fetch local](/es-ES/recipes/test-with-handle)

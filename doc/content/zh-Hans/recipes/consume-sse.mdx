@@ -1,22 +1,72 @@
 ---
 title: "消费 SSE 事件流"
-description: 打开类型化事件流，迭代一次，再 close 并 await closed。
+description: 打开强类型的 Server-Sent Events 流，通过异步迭代器消费，并在 finally 中优雅释放连接。
 ---
 
-# 消费 SSE 流
+# 消费 SSE 服务端推送流
 
-一条流只配一个 async iterator。把 `close` + `await stream.closed` 放进 `finally`，避免提前退出时泄漏这次 Fetch 尝试的资源。
+每个 `EventStreamHandle` 句柄仅暴露单一消费者的异步迭代器。请务必将 `stream.close(...)` 与 `await stream.closed` 放置在 `finally` 代码块中，确保即使遇到中途 `break` 提前跳出或 `return` 返回时，底层的 Fetch 数据流也能得到绝对可靠的释放：
 
-细节见 [SSE](/zh-Hans/docs/sse)。
+<Tabs items={["sdk/deployments.ts", "app/main.ts", "deploy-events.ts"]}>
+<Tab value="sdk/deployments.ts">
+
+```ts
+import { defineEventStream, struct } from "@defjs/core";
+
+export const deployEvents = defineEventStream({
+  path: "/deployments/events",
+  events: {
+    line: struct.object({ text: struct.string() }),
+  },
+});
+```
+
+</Tab>
+<Tab value="app/main.ts">
+
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { deployEvents } from "../sdk/deployments.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+  const [error, stream] = await deployEvents(client);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  try {
+    for await (const event of stream) {
+      if (event.event === "line") {
+        console.log(event.data.text);
+        break;
+      }
+    }
+  } finally {
+    stream.close("consumer-finished");
+    await stream.closed;
+  }
+}
+
+void main();
+```
+
+</Tab>
+<Tab value="deploy-events.ts">
 
 <include cwd meta="deploy-events.ts">
   examples/recipes/consume-sse.ts#example
 </include>
 
-`api.example.com` 是占位地址。假设服务器的第一个事件是 `line`，数据为 `{ "text": "build started" }`，这段代码会输出：
+</Tab>
+</Tabs>
+
+若服务端的第一个推送事件为 `line` 且数据载荷为 `{ "text": "build started" }`，该脚本将打印：
 
 ```txt
 build started
 ```
 
-SSE 默认不重试网络或读取失败；必须用 `withSSEReconnect(...)` 显式启用。提供 reconnect 配置后，每次连接中断的 `attempts` 默认是 `3`；握手成功会重置重连预算和退避指数。`attempts: 0` 禁用重试。重连选项中的无效数值会在发出任何请求前以 `REQ_OPTIONS_INVALID` 失败；参见[校验规则](/zh-Hans/api/core/withssereconnect)。未提供 `shouldReconnect` 时，只有 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求会重连；请求体为 `ReadableStream` 的请求不会重连。
+- 除非在 Client 上显式配置了 [`withSSEReconnect(...)`](/zh-Hans/api/core/withssereconnect)，否则 SSE 在遇到网络抖动或流读取故障时默认不会自动重连。
+- 当传入配置对象开启 `withSSEReconnect` 时，单次断线的重试预算 `attempts` 默认为 `3` 次，并在握手成功后重置（设置 `attempts: 0` 则关闭重试）。在未提供自定义 `shouldReconnect` 的情况下，仅有携带可重放请求体的 `GET`、`HEAD`、`OPTIONS`、`PUT` 和 `DELETE` 请求支持自动重连。更多细节请参阅 [SSE 事件流](/zh-Hans/docs/sse)。

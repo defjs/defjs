@@ -1,0 +1,73 @@
+---
+title: "Тестирование"
+description: Тестируйте определения SDK и политики приложений офлайн с подменяемыми хэндлами транспорта, проверками кортежей и детерминированными таймерами.
+---
+
+# Тестирование
+
+Поскольку Defjs разделяет определение операций и выполнение в клиенте, вы можете тестировать настоящие определения SDK и перехватчики приложения офлайн — без запуска сетевого сервера и без мокирования внутренних функций библиотеки.
+
+## 1. Внедрение локального хэндла транспорта
+
+Используйте `withHTTPHandle`, `withSSEHandle` или `withWebSocketHandle` в `createClient(...)`, чтобы заменить базовый платформенный транспорт. Defjs по-прежнему выполняет полный конвейер операции: валидацию входной структуры `struct`, маппинг в `builder`, проверки ограничения URL, перехватчики, маршрутизацию статусов и декодирование структуры ответа `struct`.
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. Лучшие практики тестирования
+
+### Проверяйте error-first кортеж, а не внутренности библиотеки
+
+Всегда вызывайте экспортированную операцию SDK с вашим тестовым клиентом и проверяйте возвращаемый кортеж `[error, data, response]`:
+
+- Для успешных сценариев `2xx` проверяйте `expect(error).toBeNull()` и поля декодированного объекта `data` (включая работу маппинга `.alias()` из сетевых имён в логические).
+- Для сценариев сбоя проверяйте `error?.code`, `error?.status`, `error?.data` и `error?.cause`, если они входят в контракт.
+
+### Проверяйте сырые байты исходящих запросов
+
+Внутри функции `withHTTPHandle(async (input, init) => ...)` создайте `const request = new Request(input, init)` и проверяйте `request.url`, `request.method`, `request.headers`, а также `await request.text()` (или `await request.json()`), чтобы убедиться, что `builder` и алиасы структуры сформировали ровно тот сетевой формат, который ожидает ваш бэкенд.
+
+### Детерминированное управление временем через фейковые таймеры
+
+При тестировании таймаутов запросов (`AbortSignal.timeout`), задержек повтора в перехватчиках, пауз переподключения SSE/WebSocket или периодических сигналов heartbeat:
+
+- Используйте фейковые таймеры (`vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` в Vitest или `jest.useFakeTimers()` в Bun test).
+- Сдвигайте время вперёд после старта ожидаемой фазы (`advanceTimersByTimeAsync`) и проверяйте переходы состояний или счётчики попыток — никогда не делайте проверок на основе реального прошедшего системного времени.
+
+## Связанные материалы
+
+- [Тестирование с локальным Fetch-хэндлом](/ru-RU/recipes/test-with-handle)
+- [Сборка и публикация SDK](/ru-RU/recipes/publish-http-sdk)
+- [Настройка клиента](/ru-RU/docs/client)

@@ -1,20 +1,82 @@
 ---
 title: "Обновление токена после 401"
-description: Повесь Authorization и один replay внутри одного interceptor; next() идёт только внутрь.
+description: Добавьте Authorization и выполните один повтор внутри одного перехватчика; next() идёт только внутрь.
 ---
 
-# Обнови Bearer-токен один раз на 401
+# Однократное обновление Bearer-токена при 401
 
-`next()` — оставшаяся часть **этой** цепочки перехватчиков, а не повторная отправка `axios(config)` снаружи. Помести добавление заголовка, обновление токена с объединением одновременных запросов (single-flight) и один повтор в **один** HTTP interceptor, чтобы внешние слои не выполнялись дважды.
+В Defjs вызов `next(request)` передаёт управление внутрь оставшейся цепочки перехватчиков — он не перезапускает конвейер с самого внешнего перехватчика. Поместите установку токена, дедупликацию параллельных запросов на обновление (single-flight) и однократный повтор запроса при `401` внутрь **одного** HTTP-перехватчика, чтобы внешние перехватчики логирования или замера времени не выполнялись дважды:
 
-См. [Interceptors](/ru-RU/docs/interceptors).
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab value="sdk/billing.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getInvoice = defineRequest({
+  method: "GET",
+  path: "/v1/invoice",
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal("expired_token") }),
+});
+```
+  </Tab>
+  <Tab value="app/auth-interceptor.ts">
+```ts
+import { createHttpInterceptor } from "@defjs/core";
+
+export type Credential = { accessToken: string };
+
+export function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+return createHttpInterceptor(async (request, next) => {
+const authorize = (credential: Credential) => {
+const headers = new Headers(request.headers);
+headers.set("authorization", `Bearer ${credential.accessToken}`);
+return { ...request, headers };
+};
+
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
+
+    const current = read();
+    if (current.accessToken !== used.accessToken) {
+      return next(authorize(current));
+    }
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+
+});
+}
+
+````
+  </Tab>
+  <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 42
-```
+````
 
-Повторный вызов `next` выполняет заново только interceptors **внутри** этого слоя (и обработчик Fetch). Внешние обёртки измерения времени и аутентификации повторно не выполняются — поэтому обработка 401 должна находиться в одном interceptor, а не во втором вызове операции.
+См. раздел [Перехватчики](/ru-RU/docs/interceptors) для изучения луковичной модели вызовов и границ повторных попыток.

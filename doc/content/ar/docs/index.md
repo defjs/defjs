@@ -1,52 +1,36 @@
 ---
 title: "الدليل"
-description: صمّم عقود SDK وعملياته، وانشرها، واضبط التنفيذ في التطبيقات المستهلكة.
+description: صمّم عقود حزم SDK وعملياتها، وانشرها، واضبط سلوك التنفيذ في التطبيقات المستهلكة.
 ---
 
-يفصل Defjs بين واجهة API التي ينشرها الفريق والعميل الذي يستخدمه التطبيق. اتبع مسار تأليف SDK لتعريف العمليات وتغليفها؛ واتبع مسار التطبيق لضبط التنفيذ ومعالجة النتائج.
+يفصل Defjs بين عقد واجهة برمجة التطبيقات (API) الذي ينشره فريق تطوير SDK وبين إعدادات العميل التي يخصصها التطبيق المستهلك وقت التشغيل. اتبع مسار تأليف SDK لتعريف العمليات وتغليفها، واتبع الأقسام أدناه لضبط سلوك التنفيذ عبر خيارات العميل والوسائط المعترضة.
 
-## مقدمة [#getting-started]
+## البدء والانطلاق [#getting-started]
 
-- [نظرة عامة على المشروع](/ar)
+- [نظرة عامة](/ar)
 - [البدء السريع](/ar/docs/start)
-- [بناء SDK ونشره](/ar/recipes/publish-http-sdk)
-- [لماذا التعريف والتنفيذ منفصلان](/ar/docs/design-decisions)
+- [الهندسة المعمارية وقرارات التصميم](/ar/docs/design-decisions)
 
-## المفاهيم الأساسية [#core-concepts]
+## تعريف حزم SDK [#defining-sdks]
 
-- [بنى البيانات / Struct](/ar/docs/struct)
-- [Client](/ar/docs/client)
-- [الوسيط](/ar/docs/interceptors)
-- [الأخطاء](/ar/docs/errors)
-
-## أفضل الممارسات [#best-practices]
-
-- [تصميم SDK](/ar/docs/best-practices/sdk-design)
-- [دمج التطبيق](/ar/docs/best-practices/application)
-- [الوسيط](/ar/docs/best-practices/middleware)
-- [معالجة الأخطاء](/ar/docs/best-practices/errors)
-- [SSE](/ar/docs/best-practices/sse)
-- [WebSocket](/ar/docs/best-practices/web-socket)
-- [الاختبارات](/ar/docs/best-practices/testing)
-
-## الطلبات والزمن الحقيقي
-
-- [طلبات HTTP](/ar/docs/http)
+- [Struct والمخططات](/ar/docs/struct)
+- [عمليات HTTP](/ar/docs/http)
 - [تدفقات أحداث SSE](/ar/docs/sse)
 - [جلسات WebSocket](/ar/docs/web-socket)
 
-## الإضافات
+## العميل والتنفيذ [#client-execution]
 
-حزم اختيارية لعميل التطبيق المستهلك. تبقى تعريفات SDK مستقلة عنها.
+- [العميل (Client)](/ar/docs/client)
+- [معالجة الأخطاء](/ar/docs/errors)
+- [الوسائط (Interceptors)](/ar/docs/interceptors)
+- [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing)
+- [الاختبارات](/ar/docs/testing)
 
-- [الإضافات](/ar/docs/integrations)
+## التكاملات والذكاء الاصطناعي [#integrations-and-ai]
+
+- [نظرة عامة على التكاملات](/ar/docs/integrations)
 - [React](/ar/docs/integrations/react)
 - [Vue](/ar/docs/integrations/vue)
 - [خادم OpenTelemetry](/ar/docs/integrations/opentelemetry-server)
-
-## الذكاء الاصطناعي
-
 - [Skill](/ar/docs/ai)
 - [llms.txt](/ar/docs/ai-api)
-
-[قرارات التصميم](/ar/docs/design-decisions)

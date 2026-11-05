@@ -1,0 +1,73 @@
+---
+title: "테스트"
+description: 주입된 전송 계층 핸들, 튜플 단언, 결정론적 가짜 타이머를 사용하여 SDK 정의와 애플리케이션 정책을 오프라인에서 테스트합니다.
+---
+
+# 테스트
+
+Defjs는 작업 정의와 클라이언트 실행을 명확히 분리하기 때문에, 별도의 네트워크 서버를 띄우거나 라이브러리 내부 함수를 모킹하지 않고도 실제 SDK 정의와 애플리케이션 인터셉터를 오프라인에서 완전하게 테스트할 수 있습니다.
+
+## 1. 로컬 전송 핸들 주입하기
+
+`createClient(...)`에서 `withHTTPHandle`, `withSSEHandle`, 또는 `withWebSocketHandle`을 사용하여 기저 플랫폼 전송 계층을 교체하세요. 이때도 Defjs는 입력값 `struct` 검증, `builder` 매핑, URL 격리 검사, 인터셉터, 상태 디스패치, 응답 `struct` 디코딩 등 전체 파이프라인을 그대로 실행합니다.
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. 테스트 모범 사례
+
+### 내부 구현이 아닌 error-first 튜플을 단언하세요
+
+항상 테스트 클라이언트로 export된 SDK 작업을 호출하고, 반환된 `[error, data, response]` 튜플의 결과를 검증하세요:
+
+- `2xx` 성공 케이스: `expect(error).toBeNull()`을 확인하고 디코딩된 `data` 필드(`.alias()` 통신 별칭 매핑 포함)를 검증합니다.
+- 실패 케이스: 계약의 일부라면 `error?.code`, `error?.status`, `error?.data`, `error?.cause`를 명시적으로 단언합니다.
+
+### 아웃바운드 요청의 통신 바이트를 직접 검증하세요
+
+`withHTTPHandle(async (input, init) => ...)` 함수 내부에서 `const request = new Request(input, init)`를 생성하고 `request.url`, `request.method`, `request.headers`, `await request.text()`(또는 `await request.json()`)를 검사하여 `builder`와 struct 별칭이 백엔드가 기대하는 정확한 통신 형식으로 직렬화되었는지 확인하세요.
+
+### 가짜 타이머(Fake Timers)로 시간을 결정론적으로 제어하세요
+
+요청 마감 시간(`AbortSignal.timeout`), 인터셉터 재시도 백오프, SSE/WebSocket 재연결 지연 시간, WebSocket 하트비트 등을 테스트할 때는:
+
+- 가짜 타이머(Vitest의 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` 또는 Bun test의 `jest.useFakeTimers()`)를 사용하세요.
+- 대기 중인 비동기 단계가 시작된 후에 타이머를 진행시키고(`advanceTimersByTimeAsync`), 상태 전이나 시도 횟수를 단언하세요. 경과된 실제 벽시계 시간(wall-clock time)에 의존하는 단언은 절대 작성하지 마세요.
+
+## 관련 문서
+
+- [로컬 HTTP 테스트](/ko-KR/recipes/test-with-handle)
+- [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)
+- [Client 구성](/ko-KR/docs/client)

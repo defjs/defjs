@@ -1,20 +1,134 @@
 ---
-title: Plugins
-description: Optionale Pakete, die eine Anwendung an ihren eigenen Defjs-Client anschließt.
+title: Plugins entwickeln
+description: Erweitere einen anwendungseigenen Defjs-Client mit Framework-Injektion, Server-Observability und KI-Assistant-Skills, ohne deine SDK-Definitionen daran zu binden.
 ---
 
-# Plugins
+# Übersicht der Integrationen
 
-Plugins sind optionale Pakete, die die konsumierende Anwendung an ihrem eigenen Defjs-Client installiert. `@defjs/core` importiert sie nicht, SDK-Definitionen ebenfalls nicht. Client, Endpoint, Zugangsdaten und die Auswahl der Plugins gehören der Anwendung.
+Eine Integration erweitert den `Client` der Anwendung an einem klar definierten Erweiterungspunkt, ohne `@defjs/core` zu verändern oder eine SDK-Definition an ein Framework oder einen Telemetrie-Stack zu koppeln. Deine SDK-Definitionen bleiben reine `@defjs/core`-Module; die konsumierende Anwendung entscheidet selbst, welche Integrationen installiert werden.
 
-Es gibt zwei Arten. **Framework-Plugins** geben einen bestehenden `Client` an den Framework-Baum. Ein **Middleware-Plugin** ist die Plugin-Form einer Interceptor-Kette: Es hängt Interceptors an den Client der Anwendung. Siehe [Interceptors](/de-DE/docs/interceptors).
+Jedes Defjs-Plugin folgt dem **Thin-Plugin-Vertrag**:
 
-| Plugin                                                                             | Paket                         | Was es hinzufügt                                                                                       | Was es nicht tut                                                                                      |
-| ---------------------------------------------------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| [React](/de-DE/docs/integrations/react) · Framework                                | `@defjs/react`                | `ClientProvider` und `useClient()` für einen bestehenden Client                                        | Erzeugt, cached, wiederholt oder gibt den Client nicht frei. Keine Query- oder State-Bibliothek       |
-| [Vue](/de-DE/docs/integrations/vue) · Framework                                    | `@defjs/vue`                  | Ein Vue-Plugin, `HTTP_CLIENT` und `injectClient()`                                                     | Erzeugt, cached oder wiederholt nicht. Schließt Transporte beim Unmount nicht. Keine Query-Bibliothek |
-| [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) · Middleware | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`, eine Client-Option, die HTTP-, SSE- und WebSocket-Interceptors anhängt | Initialisiert kein OpenTelemetry-SDK und keine eingehende Server-Instrumentierung                     |
+- **Kein verstecktes Caching oder State-Management**: Plugins speichern niemals Antworten zwischen, wiederholen Requests nicht eigenmächtig und verwalten keinen Query-Zustand.
+- **Kein Austausch des Transports**: Plugins wrappen oder ersetzen niemals den zugrundeliegenden HTTP-, SSE- oder WebSocket-Transport.
+- **Vollständige Lifecycle-Kontrolle beim Aufrufer**: Das Unmounten eines UI-Providers oder das Herunterfahren eines Telemetrie-SDKs bricht laufende Anfragen nicht automatisch ab und schließt keine aktiven Streams.
 
-React und Vue geben einen bestehenden `Client` an den Framework-Baum. Die Anwendung erzeugt ihn mit `createClient` aus `@defjs/core`. Das React-Plugin stellt ihn über Context bereit. Das Vue-Plugin stellt ihn über `app.use(createClientPlugin(client))` bereit. Keines der Pakete startet einen Request.
+---
 
-Das OpenTelemetry-Server-Middleware-Plugin ist eine `ClientOption`. Übergib `withOpenTelemetryServer(...)` an `createClient`. Es hängt pro aktiviertem Transport einen Interceptor an, in der Reihenfolge HTTP, SSE, WebSocket. Siehe [Interceptors](/de-DE/docs/interceptors). Das Paket initialisiert das OpenTelemetry-SDK nicht.
+## Veröffentlichte Integrationen & Tools
+
+| Bereich                                                               | Paket / Ressource                 | Kategorie         | Was es bereitstellt                                                                                             | Was in der Anwendung verbleibt                                                            |
+| --------------------------------------------------------------------- | --------------------------------- | ----------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [React](/de-DE/docs/integrations/react)                               | `@defjs/react`                    | Framework-Plugin  | `ClientProvider` und `useClient(override?)` für React 18+                                                       | Client-Erstellung, `AbortController`-Cleanup, Query-Caching (z. B. TanStack Query)        |
+| [Vue](/de-DE/docs/integrations/vue)                                   | `@defjs/vue`                      | Framework-Plugin  | `createClientPlugin`, `HTTP_CLIENT` und `injectClient(key?)` für Vue 3.2+                                       | Client-Erstellung, `onCleanup`- / `onScopeDispose`-Abbruch, Query-State                   |
+| [OpenTelemetry Server](/de-DE/docs/integrations/opentelemetry-server) | `@defjs/opentelemetry-server`     | Middleware-Plugin | `withOpenTelemetryServer(...)`-`ClientOption` für ausgehende HTTP-, SSE- und WebSocket-Spans, Metriken und Logs | Initialisierung des OpenTelemetry-SDKs, Exporter, Sampling, Redaktion und Flush           |
+| [KI-Skill](/de-DE/docs/ai) & [llms.txt](/de-DE/docs/ai-api)           | `defjs/defjs`-Skill & `/llms.txt` | KI-Werkzeuge      | Agent-Skill (`SKILL.md`) und maschinenlesbare Markdown-Dokumentation                                            | Verifikation gegen die installierte `@defjs/core`-Version des Projekts und die Test-Suite |
+
+---
+
+## Zwei Plugin-Architekturen
+
+### 1. Framework-Plugins (`@defjs/react`, `@defjs/vue`)
+
+Ein Framework-Plugin reicht einen bestehenden [`DerivableClient`](/de-DE/api/core/derivableclient-type) über native Dependency-Injection (React Context oder Vue `provide` / `inject`) im Komponentenbaum nach unten:
+
+<Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: Order,
+});
+```
+
+</Tab>
+<Tab value="app/main.tsx">
+
+```tsx
+import { createClient, withEndpoint } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { OrderCard } from "./OrderCard.tsx";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+export function App() {
+  return (
+    <ClientProvider client={client}>
+      <OrderCard id={42} />
+    </ClientProvider>
+  );
+}
+```
+
+</Tab>
+<Tab value="app/OrderCard.tsx">
+
+```tsx
+import { useClient } from "@defjs/react";
+import { getOrder } from "../sdk/orders.ts";
+
+export function OrderCard({ id }: { id: number }) {
+  const client = useClient();
+  // Übergib `client` oder `client({ signal })` innerhalb eines Effects oder Query-Hooks an `getOrder(...)`
+  void id;
+  void getOrder;
+  void client;
+  return null;
+}
+```
+
+</Tab>
+</Tabs>
+
+### 2. Middleware-Plugins (`@defjs/opentelemetry-server`)
+
+Ein Middleware-Plugin ist eine Factory, die eine [`ClientOption`](/de-DE/api/core/clientoption-type) zurückgibt. Wird diese an `createClient(...)` übergeben, hängt sie HTTP-, SSE- und/oder WebSocket-Interceptors über `withHttpInterceptors`, `withSSEInterceptors` und `withWebSocketInterceptors` an:
+
+<Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
+<Tab value="plugins/request-id.ts">
+
+```ts
+import type { ClientOption } from "@defjs/core";
+import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
+
+export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
+  const interceptor = createHttpInterceptor(async (request, next) => {
+    const headers = new Headers(request.headers);
+    if (!headers.has(headerName)) {
+      headers.set(headerName, crypto.randomUUID());
+    }
+    return next({ ...request, headers });
+  });
+
+  return withHttpInterceptors(interceptor);
+}
+```
+
+</Tab>
+<Tab value="app/client.ts">
+
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { withRequestIdHeader } from "../plugins/request-id.ts";
+
+export const client = createClient(
+  withEndpoint("https://api.example.com"),
+  withRequestIdHeader(),
+);
+```
+
+</Tab>
+</Tabs>
+
+Siehe [Interceptors](/de-DE/docs/interceptors) für Reihenfolgeregeln, Retry-Grenzen und Streaming-Lifecycle-Hooks.

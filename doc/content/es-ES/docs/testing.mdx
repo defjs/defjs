@@ -1,0 +1,73 @@
+---
+title: "Pruebas"
+description: Prueba definiciones de SDK y aplicaciones en memoria con withHTTPHandle, withSSEHandle y withWebSocketHandle.
+---
+
+# Pruebas
+
+Dado que Defjs separa las definiciones de operaciones de la ejecución del cliente, puedes probar las definiciones reales de tu SDK y los interceptores de la aplicación sin conexión, sin necesidad de levantar un servidor de red ni falsear (_mockear_) funciones internas de la biblioteca.
+
+## 1. Inyectar un manejador de transporte local
+
+Utiliza `withHTTPHandle`, `withSSEHandle` o `withWebSocketHandle` en `createClient(...)` para sustituir el transporte subyacente de la plataforma. Defjs sigue ejecutando el flujo completo de la operación: validación de `input` con `struct`, mapeo en `builder`, comprobaciones de confinamiento de URL, interceptores, despacho de código de estado y decodificación de `struct` en la respuesta.
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. Buenas prácticas de pruebas
+
+### Comprueba la tupla con error por delante, no las funciones internas
+
+Invoca siempre la operación exportada del SDK pasando tu cliente de prueba y realiza aserciones sobre la tupla devuelta `[error, data, response]`:
+
+- Para casos `2xx`, comprueba `expect(error).toBeNull()` y verifica los campos decodificados en `data` (incluyendo la conversión de claves de red a nombres lógicos mediante `.alias()`).
+- Para casos de fallo, comprueba `error?.code`, `error?.status`, `error?.data` y `error?.cause` cuando formen parte del contrato.
+
+### Verifica los bytes de red en las peticiones salientes
+
+Dentro de tu función `withHTTPHandle(async (input, init) => ...)`, construye `const request = new Request(input, init)` e inspecciona `request.url`, `request.method`, `request.headers` y `await request.text()` (o `await request.json()`) para asegurarte de que tu `builder` y los alias de struct serializaron exactamente el formato que espera tu backend.
+
+### Controla el tiempo de forma determinista con temporizadores simulados
+
+Al probar límites de tiempo (`AbortSignal.timeout`), backoff de reintentos en interceptores, demoras de reconexión en SSE/WebSocket o latidos de WebSocket:
+
+- Emplea temporizadores simulados (_fake timers_), como `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` en Vitest o `jest.useFakeTimers()` en Bun test.
+- Avanza los temporizadores una vez iniciada la fase esperada (`advanceTimersByTimeAsync`) y comprueba transiciones de estado o recuentos de intentos; nunca hagas aserciones sobre el tiempo de reloj real transcurrido.
+
+## Lecturas relacionadas
+
+- [Pruebas HTTP locales](/es-ES/recipes/test-with-handle)
+- [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
+- [Configuración del cliente](/es-ES/docs/client)

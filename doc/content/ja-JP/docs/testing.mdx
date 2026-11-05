@@ -1,0 +1,73 @@
+---
+title: "テスト"
+description: モックトランスポートハンドルの注入、タプルアサーション、決定論的なフェイクタイマーを用いて、SDK 定義とアプリケーションポリシーをオフラインでテストします。
+---
+
+# テスト
+
+Defjs は操作の定義とクライアントの実行を明確に分離しているため、実際のネットワークサーバーを起動したり内部ライブラリ関数をモックしたりすることなく、本物の SDK 定義やアプリケーションのインターセプターをオフラインでテストできます。
+
+## 1. ローカルトランスポートハンドルの注入
+
+`createClient(...)` で `withHTTPHandle`、`withSSEHandle`、`withWebSocketHandle` を使用すると、内部のプラットフォーム標準トランスポートを差し替えることができます。Defjs は通常通り、入力の `struct` バリデーション、`builder` による配置、URL のディレクトリ拘束チェック、インターセプター、ステータス分岐、レスポンスの `struct` デコードといったパイプライン全体を完全に実行します。
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. テストのベストプラクティス
+
+### 内部状態ではなくエラーファーストタプルを検証する
+
+テスト用クライアントを用いて export された SDK 操作を呼び出し、返された `[error, data, response]` タプルに対してアサーションを行います。
+
+- **`2xx` 正常系**: `expect(error).toBeNull()` を確認し、デコードされた `data` の各フィールド（`.alias()` による通信キーから論理プロパティへのマッピングを含む）を検証します。
+- **異常系**: 契約に含まれる `error?.code`、`error?.status`、`error?.data`、`error?.cause` を検証します。
+
+### 送信されるリクエストのバイト列を検証する
+
+`withHTTPHandle(async (input, init) => ...)` 関数内で `const request = new Request(input, init)` を構築し、`request.url`、`request.method`、`request.headers`、および `await request.text()`（または `await request.json()`）を調べることで、`builder` や struct エイリアスがバックエンドの期待する正確な形式でシリアライズされているかを確認できます。
+
+### フェイクタイマーによる決定論的な時間制御
+
+リクエストのタイムアウト期限（`AbortSignal.timeout`）、インターセプターのリトライバックオフ、SSE/WebSocket の再接続遅延、WebSocket のハートビートなどをテストする場合:
+
+- フェイクタイマーを使用します（Vitest の `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })` や Bun test の `jest.useFakeTimers()`）。
+- 待機対象の処理フェーズが開始された後にタイマーを進め（`advanceTimersByTimeAsync`）、状態遷移や試行回数を検証します（実際の経過時間に対してアサーションを行ってはいけません）。
+
+## 関連ドキュメント
+
+- [ローカル Fetch ハンドルによるテスト](/ja-JP/recipes/test-with-handle)
+- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
+- [Client の構成](/ja-JP/docs/client)

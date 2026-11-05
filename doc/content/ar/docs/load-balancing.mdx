@@ -1,0 +1,105 @@
+---
+title: "توزيع الحمل والتبديل عند الفشل"
+description: وزّع حركة المرور عبر نقاط نهاية متعددة، واستبعد النسخ غير السليمة، وبدّل تلقائياً عند فشل طلبات HTTP الآمنة.
+---
+
+# توزيع الحمل والتبديل عند الفشل
+
+عندما يضبط تطبيق مستهلك عناوين أساسية متعددة عبر `withEndpoint(...urls)`، يمكن لـ Defjs توزيع الطلبات عبر النسخ المتماثلة، واستبعاد الخوادم غير السليمة باستخدام قواطع الدوائر السلبية أو فحوصات السلامة النشطة، والتبديل التلقائي عند الفشل لطرق HTTP الآمنة في نفس الاستدعاء.
+
+## 1. اختيار استراتيجية موزع الحمل
+
+| الاستراتيجية                                                                   | الأنسب لـ                                                                | تصفية السلامة الافتراضية                          |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------ | ------------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/ar/api/core/pickfirstbalancer) _(الافتراضية)_ | تطبيقات المتصفح ذات القائمة المرتبة للمناطق الأساسية والاحتياطية         | معطلة (تفعيل اختياري عبر خيار `outlierDetection`) |
+| [`roundRobinBalancer(options?)`](/ar/api/core/roundrobinbalancer)              | اتصالات الخادم بالخادم بين نسخ متكافئة (تدعم أوزاناً اختيارية `weights`) | مفعلة (`5` إخفاقات متتالية)                       |
+| [`p2cBalancer(options?)`](/ar/api/core/p2cbalancer)                            | اتصالات الخادم حيث يتباين زمن الاستجابة أو الحمل اللحظي بين النسخ        | مفعلة (`5` إخفاقات متتالية)                       |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### كيف تعمل `pickFirstBalancer` و`p2cBalancer`
+
+- **`pickFirstBalancer`**: يلتزم بالعنوان الأول حتى يؤدي فشل اتصال (`NET_UNREACHABLE`) أو استجابة غير مشفرة بحالات `502` أو `503` أو `504` إلى التقدم إلى العنوان التالي. اضبط `failbackMs: 30_000` لإعادة فحص نقطة النهاية الأساسية بعد قضاء تلك المدة على النسخة الاحتياطية.
+- **`p2cBalancer` (خوارزمية القوة المزدوجة لاختيارين)**: تأخذ عينتين لمرشحين متمايزين دون إحلال وتختار المرشح ذا النتيجة الأقل: `PeakEwma RTT × (pending + 1)` (أو عدد العمليات قيد التنفيذ `pending` عندما يكون `load: "pending"`). الإعدادات الافتراضية (`defaultRttMs: 30` و`decayMs: 10000`) تتبع معايير Linkerd/tower.
+
+## 2. التبديل عند الفشل لنفس الاستدعاء وميزانية إعادة المحاولة
+
+افتراضياً، يُفعل HTTP **التبديل عند الفشل في نفس الاستدعاء (same-call failover)** للطرق الآمنة (`GET` و`HEAD` و`OPTIONS` و`TRACE`): فإذا فشلت أول نقطة نهاية تم اختيارها بخطأ `NET_UNREACHABLE`، يختار Defjs نقطة نهاية احتياطية لم تُجرب بعد ويشغّل دالة التجميع وسلسلة المعترضات ووسيلة النقل مجدداً داخل نفس استدعاء العملية.
+
+يمكنك تخصيص هذه السياسة أو تعطيلها باستخدام [`withEndpointFailover(options)`](/ar/api/core/withendpointfailover):
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **شروط إعادة المحاولة (`retryOn`)**: القيمة الافتراضية هي `["connect-failure"]`. ويمكنك إضافة `"gateway-error"` (أخطاء البوابة غير المشفرة `502`/`503`/`504` أو الاستجابات التي فشل فك تشفير جسم الخطأ فيها بخطأ `RES_*`) وإضافة `"attempt-timeout"` (عند ضبط `attemptTimeoutMs`).
+- **مهلة المحاولة الواحدة مقابل مهلة الاستدعاء الكامل**: تقيّد `attemptTimeoutMs` المحاولة الواحدة بدءاً من استدعاء Fetch حتى اكتمال فك تشفير الجسم؛ بينما تقيّد إشارة المستدعي `client({ signal: AbortSignal.timeout(ms) })` الاستدعاء بأكمله عبر جميع المحاولات.
+- **ميزانية إعادة المحاولة بنمط Finagle / Linkerd**: تشترك جميع الاستدعاءات على العميل في ميزانية بنمط دلو الرموز (token-bucket) (`percentCanRetry: 0.2` و`minRetriesPerSecond: 10` و`ttlMs: 10000`) حتى لا تتسبب المحاولات في تضخيم حركة المرور بأكثر من 20% تقريباً أثناء انقطاع على مستوى الكتلة بأكملها. عيّن `retryBudget: false` لإلغاء هذا القيد.
+- **تلميح انقطاع اتصال المتصفح**: عندما تكون `navigator.onLine === false`، تُبلّغ إخفاقات الاتصال كـ `{ attempted: false }` ولا تؤدي إلى تبديل الموزع أو إطلاق التبديل عند الفشل.
+
+## 3. قواطع الدوائر السلبية وفحوصات السلامة النشطة (`outlierDetection`)
+
+تُغلّف `roundRobinBalancer()` و`p2cBalancer()` اختيار المرشحين داخل [`outlierDetection`](/ar/api/core/outlierdetection) افتراضياً:
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **الإخفاقات المتتالية**: بعد حدوث `consecutiveFailures` (افتراضياً `5`) من أخطاء `NET_UNREACHABLE` أو حالات HTTP `500+`، تُستبعد نقطة النهاية لمدة `min(minPenaltyMs × 2^level, maxPenaltyMs)` (من `1000ms` إلى `60000ms`) بالإضافة إلى تذبذب إيجابي منتظم يصل إلى `50%`.
+2. **التعافي بفحص مفرد**: بمجرد انتهاء مدة العقوبة، يُرسل طلب استكشافي وحيد إلى الخادم. فإذا نجحت مصافحة وسيلة النقل (`end`: ترويسات HTTP/SSE أو حدث `open` في WebSocket)، تُستأنف حركة المرور العادية فوراً ويُعاد ضبط مستوى العقوبة إلى `0`؛ أما إذا فشلت، فتتضاعف مدة العقوبة.
+3. **وضع الطوارئ (Fail-Open)**: إذا تم استبعاد جميع نقاط النهاية المهيأة أو تصنيفها كغير سليمة، ينتقل موزع الحمل إلى وضع الطوارئ ويفتح المرور لقائمة المرشحين بدلاً من إسقاط كافة الطلبات محلياً.
+
+## 4. دورة حياة محاسبة وسيلة النقل (`pick` ← `start` ← `end` ← `done`)
+
+تُنفّذ موزعات الحمل المخصصة دالة الاختيار التزامنية `pick(context)` ودوال رد النداء الاختيارية `start()` و`end(info)` و`done(info)`:
+
+| النتيجة الفيزيائية لوسيلة النقل                                        | العينة النهائية المسلمة لـ `done(info)`                    |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------- |
+| انقطاع جسم استجابة HTTP في منتصف التدفق                                | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| نجاح مصافحة SSE ثم رفض قراءة `reader.read()`                           | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| نهاية ملف طبيعية في SSE، أو فشل فك تشفير المصافحة، أو تجاوز حد القائمة | `{ attempted: true, status }`                              |
+| إغلاق WebSocket مفتوح برمز `1006` أو `wasClean === false`              | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| إغلاق WebSocket مفتوح بشكل نظيف                                        | `{ attempted: true }`                                      |
+| إلغاء من قِبل المستدعي أو إغلاق يدوي للتدفق/المقبس                     | `{ attempted: false }`                                     |
+| انتهاء مهلة المستدعي بعد بدء المحاولة                                  | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## قراءات ذات صلة
+
+- [إعدادات العميل](/ar/docs/client)
+- [إعادة اتصال SSE](/ar/docs/sse#reconnect)
+- [إعادة اتصال WebSocket](/ar/docs/web-socket)

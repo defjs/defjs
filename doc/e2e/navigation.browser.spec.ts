@@ -43,19 +43,6 @@ const aiApiTitle = {
   "ru-RU": "llms.txt",
   ar: "llms.txt",
 } as const;
-const guideTitle = {
-  "en-US": "Guide",
-  "zh-Hans": "指南",
-  "zh-Hant-TW": "指南",
-  "zh-Hant-HK": "指南",
-  "ja-JP": "ガイド",
-  "ko-KR": "가이드",
-  "de-DE": "Leitfaden",
-  "fr-FR": "Guide",
-  "es-ES": "Guía",
-  "ru-RU": "Руководство",
-  ar: "الدليل",
-} as const;
 
 function titleFor(table: object, locale: string): string {
   if (!Object.hasOwn(table, locale))
@@ -75,7 +62,7 @@ test("makes the current reading area and starting point visible", async () => {
     waitUntil: "networkidle",
   });
   await waitForHydration(page);
-  for (const name of ["指南", "操作示例", "API 参考"]) {
+  for (const name of ["指南", "插件", "操作示例", "API 参考"]) {
     const link = page.getByRole("link", { name, exact: true });
     expect(await link.count()).toBe(1);
     expect(await link.isVisible()).toBe(true);
@@ -253,11 +240,10 @@ test("every locale shows both AI guides under Guide", async () => {
         name: t("nav.readingAreas"),
         exact: true,
       });
-      expect(await areas.getByRole("link").count()).toBe(3);
+      expect(await areas.getByRole("link").count()).toBe(4);
       const selected = areas.locator('[aria-current="location"]');
       expect(await selected.count()).toBe(1);
       expect(await selected.getAttribute("href")).toBe(`${prefix}/docs`);
-      expect(await selected.textContent()).toBe(titleFor(guideTitle, locale));
       const sidebar = page.locator("#nd-sidebar");
       expect(
         await sidebar
@@ -331,7 +317,9 @@ test("the mobile drawer opens the AI guide inside Guide", async () => {
     viewport: { width: 390, height: 844 },
   });
   const errors = await captureBrowserErrors(page);
-  await page.goto(site.url("/zh-Hans"), { waitUntil: "networkidle" });
+  await page.goto(site.url("/zh-Hans/docs"), {
+    waitUntil: "networkidle",
+  });
   await waitForHydration(page);
   await page.getByRole("button", { name: "打开侧栏", exact: true }).click();
   const mobile = page.locator("#nd-sidebar-mobile");
@@ -363,7 +351,7 @@ test("the AI guide stays inside Guide without JavaScript", async () => {
     name: "阅读分区",
     exact: true,
   });
-  expect(await areas.getByRole("link").count()).toBe(3);
+  expect(await areas.getByRole("link").count()).toBe(4);
   expect(
     await areas
       .getByRole("link", { name: "指南", exact: true })
@@ -414,7 +402,7 @@ test("the AI guide stays inside Guide without JavaScript", async () => {
   expect(
     await fallback
       .locator("xpath=ancestor::details[1]")
-      .locator('a[href="/zh-Hans/docs"]')
+      .getByRole("link", { name: "指南", exact: true })
       .isVisible(),
   ).toBe(true);
 });

@@ -3,26 +3,26 @@ title: "Examples"
 description: Build and publish a reusable SDK, then configure authentication, calls, and realtime work in consuming applications.
 ---
 
-Start with [Build and publish an SDK](/recipes/publish-http-sdk) for the full path from exported definition to npm package and consuming application. The recipes below show individual operation contracts and application policies you can compose around that SDK.
+Start with [Build and publish an SDK](/recipes/publish-http-sdk) for the end-to-end journey from exported SDK definition to npm package and consuming application. Each recipe below presents an individual operation contract and application policy with multi-file code tabs showing how the SDK definition and application execution modules fit together.
 
 ## HTTP
 
-- [Send JSON](/recipes/post-json)
-- [Handle a declared 404](/recipes/get-declared-404)
-- [Cancellation and timeouts](/recipes/cancel-http)
-- [ETag conditional requests](/recipes/etag-revalidate)
-- [GraphQL requests](/recipes/graphql-http-envelope)
+- [Send JSON](/recipes/post-json) — map logical camelCase fields to wire `snake_case` keys and decode a typed `201` response.
+- [Handle a declared 404](/recipes/get-declared-404) — branch on a typed `200` output vs. a declared `404` `HTTP_STATUS` error body.
+- [Cancellation and timeouts](/recipes/cancel-http) — combine a caller `AbortController` with `AbortSignal.timeout(...)` and distinguish `NET_ABORTED` from `NET_TIMEOUT`.
+- [ETag conditional requests](/recipes/etag-revalidate) — send `If-None-Match`, handle `304 Not Modified` as an `HTTP_STATUS` fault, and keep the cache `Map` in application code.
+- [GraphQL requests](/recipes/graphql-http-envelope) — send a GraphQL query over HTTP `POST` and unwrap `errors[]` vs. `.nullish()` `data` in an application helper.
 
 ## Authentication
 
-- [Refresh a token after 401](/recipes/refresh-bearer-once)
+- [Refresh a token after 401](/recipes/refresh-bearer-once) — attach a `Bearer` token, deduplicate concurrent refreshes, and replay once inside a single HTTP interceptor.
 
 ## Realtime
 
-- [Consume SSE events](/recipes/consume-sse)
-- [Manage WebSocket sessions](/recipes/websocket-session)
+- [Consume SSE events](/recipes/consume-sse) — open a typed Server-Sent Events stream, iterate once, and guarantee `stream.close()` + `await stream.closed` in `finally`.
+- [Manage WebSocket sessions](/recipes/websocket-session) — exchange typed incoming/outgoing JSON frames, subscribe to `onRuntimeError`, and close cleanly.
 
 ## SDK testing and publishing [#testing-and-packaging]
 
-- [Local HTTP tests](/recipes/test-with-handle)
-- [Build and publish an SDK](/recipes/publish-http-sdk)
+- [Local HTTP tests](/recipes/test-with-handle) — test URL building, interceptors, and Struct decoding in-memory with `withHTTPHandle(...)`.
+- [Build and publish an SDK](/recipes/publish-http-sdk) — package and publish a zero-client SDK with `tsdown` and consume it from an application.

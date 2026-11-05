@@ -1,89 +1,84 @@
 ---
 title: "Vue"
-description: SDK の API 定義を Vue で使い、アプリケーションの Client を提供して結果とキャンセルを管理します。
+description: フレームワーク非依存の SDK を、アプリケーションから注入された Vue クライアントと呼び出し元所有のクリーンアップ処理で利用します。
 ---
 
 # Vue
 
-Vue アプリケーションは SDK から API 定義を import し、自身で構成した Defjs Client を provide します。SDK の定義は Vue に依存せず、コンポーネントや composable が操作を呼び、始めた作業を所有します。`injectClient()` のクライアントは操作に渡します。
+`@defjs/vue` は、アプリケーションが所有する `@defjs/core` のクライアントを、`createClientPlugin(client)`、`HTTP_CLIENT`、および `injectClient()` を通じて Vue 3.2+ アプリケーションに組み込みます。SDK 定義は Vue に一切依存しない純粋な `@defjs/core` モジュールのまま保たれます。
 
-これらのプラグインは、既存の `Client` の提供と取得を補助する任意の仕組みです。アプリ所有の固定クライアントを直接 import する、再利用するロジックに明示的な Client を渡す、ツリーの既定値やサブツリーの上書きにフレームワークの注入を使う、独自の構成を選ぶ、どれも有効です。SDK の定義にプラグインは必須ではありません。
+```sh
+bun add @defjs/core @defjs/vue vue
+```
 
-既存の `@defjs/core` クライアントを Vue に繋ぎます。得られるのはプラグイン、injection key、`injectClient()` です。このパッケージはクライアントを**作らず**、結果をキャッシュせず、操作をリトライせず、unmount でトランスポートリソースも閉じません。注入される値は、提供された[`DerivableClient`](/ja-JP/api/core/derivableclient-type)です。操作を実行する場所でリクエスト options を付けて呼ぶと、`Client` 値が派生します。`watch` や `computed` のソースには使わないでください。それらは関数を呼びます。派生した `Client` 値はプラグインにも `injectClient` にも渡せません。
+## `@defjs/vue` が提供するもの vs 開発者が所有するもの
 
-## 基本セットアップ
+- **`@defjs/vue` が提供するもの**: `createClientPlugin(client)`、`HTTP_CLIENT`（`InjectionKey<Client>`）、および `injectClient(key?)`。
+- **アプリケーション側が所有するもの**: [`DerivableClient`](/ja-JP/api/core/derivableclient-type) の生成、ウォッチャー（`onCleanup`）やコンポーザブル（`onScopeDispose`）内での通信キャンセル、SSE/WebSocket ハンドルのクローズ、Vue Query などのクエリライブラリとの連携。
+- **重要**: `injectClient()` は `DerivableClient` 関数オブジェクトを返します。操作を実行する箇所で `client({ signal })` を呼び出してください（`getOrder(client({ signal }), input)`）。Vue は関数引数をリアクティブなゲッターとして解釈するため、`client` を `watch(client, ...)` や `computed(client)` の第 1 引数に直接渡してはいけません。
 
-`@defjs/core`、`@defjs/vue`、Vue 3.2+ を入れます（プラグインに必要なのは `provide` / `inject` だけですが、例では `<script setup>` と `onScopeDispose` を使い、これらは 3.2 で導入されました）。ESM です。
+---
 
-`bun add @defjs/core @defjs/vue vue`
+## 1. プラグインのインストールと Watcher 内でのデータ取得
 
-クライアントを作り、プラグインを入れ、変更時 abort で取得します。
+アプリケーションのエントリポイントでクライアントを作成し、`createClientPlugin(client)` をインストールします。Watcher 内で非同期処理を開始する前に `onCleanup` を登録します。
 
-<include cwd lang="typescript">
-  examples/vue/main.ts#example
-</include>
+<Tabs items={["src/main.ts", "src/OrderView.vue"]}>
+  <Tab value="src/main.ts">
+    <include cwd lang="typescript">
+      examples/vue/main.ts#example
+    </include>
+  </Tab>
+  <Tab value="src/OrderView.vue">
+    <include cwd>examples/vue/basic-setup.vue#example</include>
+  </Tab>
+</Tabs>
 
-<include cwd>examples/vue/basic-setup.vue#example</include>
+- `createClientPlugin(client)` は、渡された `DerivableClient` インスタンスを複製したりアンマウント破棄フックを登録したりすることなく、そのまま `HTTP_CLIENT` として提供します。
+- `onCleanup` は、Watcher が再実行される直前、およびコンポーネントがアンマウントされる時の両方で実行されます。
 
-`createClientPlugin(client)` は渡したオブジェクトそのものを提供します。クローンも破棄フックもありません。core の options とインターセプターは、クライアントを作るときに設定してください。
+---
 
-`onCleanup` は watcher の再実行前と停止時に走ります。非同期作業を始める前に登録してください。エラーファーストのタプルはアプリケーションデータのままです。
+## 2. `injectClient` による注入とサブツリーでのオーバーライド
 
-## 注入と上書き
+`injectClient(key?)` は、指定された `key`（デフォルトは `HTTP_CLIENT`）に最も近いプロバイダーを探索し、アクティブな Vue インジェクションコンテキスト（`setup()` または `app.runWithContext()`）の外部で呼び出された場合や、そのキーに対応するクライアントが見つからない場合に `Error` を throw します。
 
-`injectClient(key)` はそのキーの最も近い provider を読み、省略または `undefined` なら `HTTP_CLIENT` を使います。同期的な `setup()` や `app.runWithContext()`（Vue 3.3+）など、有効な Vue の注入コンテキストで呼んでください。後者は同期的なアプリレベルのコンテキストのみで、サブツリーの上書きを引き継がず、通常の `await` もまたぎません。`<script setup>` のトップレベル `await` 後にコンパイラが復元したコンテキストは引き続き有効です。
-
-カスタムの `InjectionKey<Client>` は `app.provide(key, client)` または祖先の `provide(key, client)` で設定します。提供側と取得側で同じ `Symbol` オブジェクトを共有してください。説明が同じでも別のキーです。`createClientPlugin(client)` は引き続きクライアントだけを受け取り、`HTTP_CLIENT` のみを提供します。
-
-有効な注入コンテキストがない場合や、選択したキーのクライアントがない場合に `Error` を throw します。カスタムキーが見つからなくても `HTTP_CLIENT` にはフォールバックしません。プラグインのインストールだけでは注入コンテキストはできません。
-
-クライアント取得だけを包むアプリ関数では `explicitClient ?? injectClient()` を使えます。注入コンテキストが必要なのはフォールバック側だけです。同じコンポーザブル内のほかのライフサイクル API には、それぞれのコンテキスト要件が残ります。非同期作業の前に有効なコンテキストでクライアントを取得し、そのオブジェクトを再利用してください。
-
-サブツリーは Vue の `provide(HTTP_CLIENT, childClient)` で上書きできます。
+Vue ネイティブの `provide(HTTP_CLIENT, childClient)` を使用して、特定のコンポーネントサブツリーに対してクライアントをオーバーライドできます。
 
 <include cwd>examples/vue/inject-and-override.vue#example</include>
 
-最も近いプロバイダが勝ちます。子孫は `childClient` を受け取り、サブツリー外の兄弟はアプリレベルのクライアントのままです。 provide するコンポーネント自身は、引き続き祖先から読み取ります。
+- 子孫コンポーネントは `childClient` を受け取りますが、兄弟サブツリーはルートクライアントを維持します。
+- ヘルパー関数が任意の明示的クライアントを受け取る設計にする場合（`explicitClient ?? injectClient()`）、フォールバック側のみがアクティブな Vue インジェクションコンテキストを必要とします。クライアントの取得は、`await` を呼ぶ前の `setup()` 内で同期的に行ってください。
 
-## watcher の外で HTTP 作業を所有する
+---
 
-composable やコンポーネントが watcher の外で始めた作業には、`AbortController` + `onScopeDispose` を使います。起動と進行中の作業を abort し、リアクティブ状態を代入する前に signal を確認してください。プラグインや注入スコープは、誰が操作を所有するかを推論しません。一覧ページでは Vue Query（または類似のもの）から操作を呼んでください — `@defjs/vue` は DI だけのままで、`useRequest` は**出しません**。
+## 3. スコープ破棄時における SSE と WebSocket のクリーンアップ
 
-スコープがクライアントを所有するとき、ブラウザー全体で再利用するならリクエスト非依存に保ってください。ヘッダー・cookie・ユーザー・テナント・資格情報を掴むなら、関連するアプリ/SSR のリクエスト境界で作り、そこで provide してください。
-
-## リアルタイムスコープを片付ける
-
-スコープが接続途中で消えても、ストリームやセッションは閉じます。起動を abort し、遅く届いたハンドルを閉じ、単一イテレータを消費し、終端 promise を await します。
+Watcher の外側のコンポーザブルやコンポーネント内で処理を開始する場合、`AbortController` と `onScopeDispose` を組み合わせます。接続開始処理を中断し、破棄後に解決されたハンドルも確実にクローズし、単一の非同期イテレーターを消費して `.closed` を await します。
 
 <include cwd>examples/vue/realtime-scope.vue#example</include>
 
-致命的なストリームエラーとキューのオーバーフローはイテレータを reject するので、ループには `catch` があります。無いと、その reject は未処理になります。例では直近 100 件のメッセージだけを保持し、同一のペイロードだとキーが重複するため、行を id でキー付けしています。スコープを止めると、SSE ではイテレーションが通常どおり終了します。一方、abort された WebSocket セッションは `receive` を `AbortError` で reject するので、同じように `catch` で判別してください。
+- スコープの停止によって、SSE の `for await` ループは通常通り終了します。
+- WebSocket セッションを abort すると、セッションは `aborted` として終了し、`session.receive` は `AbortError` で reject されます。そのため、破棄後は `catch` ブロックでエラーをガードし、`finally` で `onStateChange` / `onRuntimeError` のリスナーを確実に解除（unsubscribe）してください。
 
-WebSocket も同じ順序です — 準備を abort、遅いセッションを close、`session.receive` を消費、`onStateChange` / `onRuntimeError` を購読解除、close、`session.closed` を await。クリーンアップは冪等に保ってください。破棄とイテレータ完了は同時に起き得ます。
+---
 
-## SSR スコープ
+## 4. SSR とアプリケーションスコープ
 
-`createClientPlugin(client)` は 1 つの Vue アプリに 1 インスタンスを提供します。ブラウザーでは、エンドポイント・インターセプター・掴んだ状態を共有してよいとき共有します。SSR 中は、ヘッダー・cookie・ユーザー・テナント・資格情報が違うとき、リクエストごとに別のクライアントを作って入れます。
+- **ブラウザ**: エンドポイントやインターセプターがリクエストに依存しない場合、Vue アプリケーションごとに単一クライアントを共有します。
+- **SSR**: ヘッダー、Cookie、テナント、認証情報がリクエストごとに異なる場合、SSR リクエストごとに新しいクライアントを作成してインストールします。
+- Vue アプリケーションのアンマウントやコンポーネントスコープの破棄によって、HTTP リクエストが自動中止されたり、SSE/WebSocket ストリームが切断されたり、コアクライアントが破棄されることはありません。
 
-アプリ unmount、プラグイン削除、コンポーネントスコープ破棄は、HTTP を abort せず、SSE/WebSocket を閉じず、リスナーを購読解除せず、core クライアントも破棄しません。作業を始めた所有者が終わらせる必要があります。
+---
 
-## リファレンス
-
-`@defjs/vue` からの公開エクスポート:
+## 公開エクスポートと関連ドキュメント
 
 <include cwd lang="typescript">
   examples/vue/exports.ts#example
 </include>
 
-- `HTTP_CLIENT` — ネイティブ `provide` / `inject` 用の `InjectionKey<Client>`
-- `createClientPlugin(client)` — そのクライアントを provide する Vue `Plugin`
-- `injectClient` — 選択したキー（既定は `HTTP_CLIENT`）の最も近いクライアント、なければ throw
-
-クライアントと options は `@defjs/core` で作ります。[Client](/ja-JP/docs/client)、[HTTP](/ja-JP/docs/http)、[Interceptors](/ja-JP/docs/interceptors)、[SSE](/ja-JP/docs/sse)、[WebSocket](/ja-JP/docs/web-socket) を見てください。
-
-## 関連レシピ
-
-- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
-- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
-- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
-- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)
+- `HTTP_CLIENT` — ネイティブな `provide` / `inject` 用の `InjectionKey<Client>`
+- `createClientPlugin(client)` — `client` を `HTTP_CLIENT` のキーで提供する Vue `Plugin`
+- `injectClient(key?)` — `key`（デフォルトは `HTTP_CLIENT`）に対応する最も近いクライアントを解決
+- 関連ガイド: [Client](/ja-JP/docs/client)、[HTTP 操作](/ja-JP/docs/http)、[ミドルウェア](/ja-JP/docs/interceptors)、[SSE イベントストリーム](/ja-JP/docs/sse)、[WebSocket セッション](/ja-JP/docs/web-socket)
+- 関連レシピ: [宣言済み 404 の処理](/ja-JP/recipes/get-declared-404)、[HTTP 呼び出しのキャンセル](/ja-JP/recipes/cancel-http)、[SSE イベントの受信](/ja-JP/recipes/consume-sse)、[WebSocket セッションの管理](/ja-JP/recipes/websocket-session)

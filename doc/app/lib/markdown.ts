@@ -41,7 +41,7 @@ export function readableMarkdown(text: string, locale: string): string {
     const converted = line
       .replace(/^(#{1,6} .*?)\s*\[#[^\]]+\]$/, "$1")
       .replace(/<Tabs\b[^>]*>|<\/Tabs>|<\/Tab>/g, "")
-      .replace(/<Tab value="([^"]+)"\s*>/g, "### $1")
+      .replace(/^\s*<Tab value="([^"]+)"\s*>/g, "### $1")
       .replace(/<ApiIndex\s*\/>/g, () =>
         apiEntries
           .map(

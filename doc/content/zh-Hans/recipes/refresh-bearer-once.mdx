@@ -1,20 +1,88 @@
 ---
 title: "401 后刷新令牌"
-description: 在一个 interceptor 里挂上 Authorization 并重放一次；next() 只往里走。
+description: 在单个拦截器内部注入 Authorization 并在 401 失败时合并刷新请求且安全重放一次。
 ---
 
-# 401 时把 Bearer token 刷新一次
+# 401 后自动单次刷新 Bearer 令牌
 
-`next()` 是**这一层**洋葱的剩余部分——不是从外面再 `axios(config)` 派发一次。把挂 header、单飞刷新、一次重放放进**同一个** HTTP interceptor，外层才不会跑两遍。
+在 Defjs 中，`next(request)` 调用的是当前拦截器链向内深入的剩余逻辑——它绝不会从最外层的拦截器重新发起调用。因此，请将 Token 注入、并发刷新请求合并（Single-flight Deduplication）以及 `401` 后的单次重放逻辑封装在**同一个** HTTP 拦截器内，从而避免外层的耗时统计或日志记录拦截器被重复执行两次：
 
-见 [Interceptors](/zh-Hans/docs/interceptors)。
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+<Tab value="sdk/billing.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const getInvoice = defineRequest({
+  method: "GET",
+  path: "/v1/invoice",
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal("expired_token") }),
+});
+```
+
+</Tab>
+<Tab value="app/auth-interceptor.ts">
+
+```ts
+import { createHttpInterceptor } from "@defjs/core";
+
+export type Credential = { accessToken: string };
+
+export function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+  return createHttpInterceptor(async (request, next) => {
+    const authorize = (credential: Credential) => {
+      const headers = new Headers(request.headers);
+      headers.set("authorization", `Bearer ${credential.accessToken}`);
+      return { ...request, headers };
+    };
+
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
+
+    const current = read();
+    if (current.accessToken !== used.accessToken) {
+      return next(authorize(current));
+    }
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+  });
+}
+```
+
+</Tab>
+<Tab value="refresh-bearer.ts">
 
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
 
+</Tab>
+</Tabs>
+
+运行输出：
+
 ```txt
 42
 ```
 
-再调一次 `next` 只会重新进入**这一层里面**的 interceptor（以及 Fetch handler）。它不会重跑外层的计时/鉴权包装——所以 401 的处理应放在同一个 interceptor 里，而不是再调用一次该操作。
+关于洋葱拦截链顺序与重试边界的详细说明，请参阅[中间件](/zh-Hans/docs/interceptors)。

@@ -3,50 +3,34 @@ title: "指南"
 description: 設計 SDK 契約同操作、發佈出去，並喺使用方應用程式設定執行。
 ---
 
-Defjs 分開兩樣嘢：團隊發佈嘅 API，同應用程式用嘅 client。跟 SDK 作者嗰條路，可以讀到點樣定義同封裝操作；跟應用程式嗰條路，設定執行同處理結果。
+Defjs 將 SDK 團隊發佈嘅 API 契約，同應用程式喺 runtime 使用嘅 client 設定徹底分開。跟住以下章節，你可以讀到點樣掌握核心架構、定義各類操作，並透過 client 選項同中介層（interceptor）嚟管控執行流程。
 
-## 前言 [#getting-started]
+## 入門 [#getting-started]
 
 - [項目概覽](/zh-Hant-HK)
 - [快速開始](/zh-Hant-HK/docs/start)
-- [建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)
-- [點解定義同執行要分開](/zh-Hant-HK/docs/design-decisions)
+- [核心架構](/zh-Hant-HK/docs/design-decisions)
 
-## 核心概念 [#core-concepts]
+## 定義 SDK [#defining-sdks]
 
-- [資料結構 / Struct](/zh-Hant-HK/docs/struct)
-- [Client](/zh-Hant-HK/docs/client)
-- [中介層](/zh-Hant-HK/docs/interceptors)
-- [錯誤](/zh-Hant-HK/docs/errors)
-
-## 最佳實踐 [#best-practices]
-
-- [SDK 設計](/zh-Hant-HK/docs/best-practices/sdk-design)
-- [應用整合](/zh-Hant-HK/docs/best-practices/application)
-- [中介層](/zh-Hant-HK/docs/best-practices/middleware)
-- [錯誤處理](/zh-Hant-HK/docs/best-practices/errors)
-- [SSE](/zh-Hant-HK/docs/best-practices/sse)
-- [WebSocket](/zh-Hant-HK/docs/best-practices/web-socket)
-- [測試](/zh-Hant-HK/docs/best-practices/testing)
-
-## 請求與即時通訊
-
-- [HTTP 請求](/zh-Hant-HK/docs/http)
+- [Struct 與 Schema](/zh-Hant-HK/docs/struct)
+- [HTTP 操作](/zh-Hant-HK/docs/http)
 - [SSE 事件流](/zh-Hant-HK/docs/sse)
 - [WebSocket 會話](/zh-Hant-HK/docs/web-socket)
 
-## 插件
+## Client 與執行 [#client-execution]
 
-可選套件，用喺使用方應用程式嘅 client。SDK 定義唔依賴佢哋。
+- [Client](/zh-Hant-HK/docs/client)
+- [錯誤處理](/zh-Hant-HK/docs/errors)
+- [中介層](/zh-Hant-HK/docs/interceptors)
+- [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)
+- [測試](/zh-Hant-HK/docs/testing)
 
-- [插件](/zh-Hant-HK/docs/integrations)
+## 整合與 AI [#integrations-and-ai]
+
+- [整合概覽](/zh-Hant-HK/docs/integrations)
 - [React](/zh-Hant-HK/docs/integrations/react)
 - [Vue](/zh-Hant-HK/docs/integrations/vue)
 - [OpenTelemetry 伺服器端](/zh-Hant-HK/docs/integrations/opentelemetry-server)
-
-## AI
-
 - [Skill](/zh-Hant-HK/docs/ai)
 - [llms.txt](/zh-Hant-HK/docs/ai-api)
-
-[設計決策](/zh-Hant-HK/docs/design-decisions)

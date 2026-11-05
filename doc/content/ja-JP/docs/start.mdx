@@ -1,45 +1,62 @@
 ---
 title: "クイックスタート"
-description: 最初の SDK 操作を export し、別のアプリケーションから呼び出し、別のクライアントで同じ定義を再利用します。
+description: 最初の SDK 操作を export し、別のアプリケーションから呼び出し、オフラインモックと実サービスのそれぞれで同じ定義を再利用します。
 ---
 
 # はじめに: 最初の SDK 操作 [#getting-started-one-http-request]
 
-書くファイルは二つです。`GET /orders/:id` を export する SDK モジュールと、それを import してクライアントを所有するアプリケーションです。ローカル Fetch ハンドルが最初の実行をオフラインに保ちます。同じ API 定義は、そのあとサービスを向いたクライアントでも動きます。
+このガイドでは、`GET /orders/:id` を定義する SDK モジュールを作成し、それを 2 つの異なるアプリケーションモジュールから呼び出します。1 つはオフラインのモックトランスポートを使用し、もう 1 つは実際のライブ API にリクエストを送信します。
 
-## ベストプラクティス
+## 1. `@defjs/core` のインストール
 
-定義は client から独立しています。アプリケーションの client を渡して操作を呼びます。たとえば `getOrder(client, { id: 7 })` です。第 3 の options 引数はありません。操作を呼ぶと処理が始まり、`await` は待つだけです。サービスアドレスと認証情報もアプリケーションのものです。先に error-first のタプルを確認します。`error` があるときは `error.code` を報告し、成功値を読む前に関数から return します。
-
-## Step 1 — インストール
-
-`@defjs/core` は ESM で、Node.js、Bun で動きます。Node.js 22.18+（または 24+）は type stripping により `.ts` をそのまま実行します。それより古い 22.x では `--experimental-strip-types` が要ります。package.json に `"type": "module"` を書いてください。ブラウザーでもバンドラーと Fetch は要ります。
+`@defjs/core` は依存関係ゼロの ESM パッケージであり、ブラウザ、Bun、Node.js（22.18+ または 24+ では `.ts` ファイルを直接実行可能）で動作します。`package.json` に `"type": "module"` が設定されていることを確認してください。
 
 ```sh
 bun add @defjs/core
 ```
 
-## Step 2 — リクエストを定義する
+## 2. SDK の定義とアプリケーションからの呼び出し
 
-`src/define-request.ts` を作ります。これは SDK 作成者のモジュールです。クライアントを作らずに `getOrder` を export します。入力 struct は呼び出し側の値です。`builder` はその値をリクエストに配置します。ここでは入力全体が path オブジェクトなので、エイリアスのないスカラーフィールドが `:id` を埋めます。
+操作の定義は独自の SDK モジュール（`src/define-request.ts`）に記述し、クライアントの作成はアプリケーションモジュール（`src/execute-locally.ts` や `src/real-api.ts`）で行います。
 
-<include cwd meta="define-request.ts">
+<Tabs items={["src/define-request.ts", "src/execute-locally.ts", "src/real-api.ts"]}>
+<Tab value="src/define-request.ts">
+
+<include cwd meta="src/define-request.ts">
   examples/start/define-request.ts#example
 </include>
 
-`output` は 2xx のボディです。`error` はそれ以外のすべての status です。それぞれ struct は 1 つです。ボディの形が違うときは `struct.or(...)` か判別可能な union を使います。
+</Tab>
+<Tab value="src/execute-locally.ts">
 
-`defineRequest(...)` は操作を返します。`getOrder(client, input)` を呼ぶとリクエストが始まります。上の `builder` は入力を配置する関数であり、操作そのものではありません。`input` を宣言したところでは、`builder` は必須で、同期的な純粋関数です。
-
-## Step 3 — ローカルで呼び出す
-
-定義の隣に `src/execute-locally.ts` を作ります。これは利用アプリケーションです。`getOrder` を import し、自分のクライアントを作り、ローカル Fetch ハンドルを渡します。Defjs はそれでも入力を検証し、`Request` を組み立て、status で振り分け、ボディをパースします。
-
-<include cwd meta="execute-locally.ts">
+<include cwd meta="src/execute-locally.ts">
   examples/start/execute-locally.ts#example
 </include>
 
-実行します。
+</Tab>
+<Tab value="src/real-api.ts">
+
+<include cwd meta="src/real-api.ts">
+  examples/start/real-api.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### 3 つのファイルが連携する仕組み
+
+1. **`src/define-request.ts`（SDK の定義）**:
+   - `struct` を使用して `input`、`output`（`2xx` レスポンス用）、`error`（`2xx` 以外のレスポンス用）を宣言します。
+   - `input` を `{ path }` にマッピングする同期的で純粋な関数 `builder` を指定します。`input` を宣言した場合は、明示的な `builder` が必須です。
+   - クライアントを作成したりキャプチャしたりすることなく、純粋な操作として `getOrder` を export します。
+2. **`src/execute-locally.ts`（オフラインテストでの実行）**:
+   - `withHTTPHandle(...)` を使用してクライアントを構成し、ネットワーク通信を行わずに Defjs のパイプライン全体（入力検証、URL 解決、ステータスに応じたディスパッチ、レスポンス struct のパース）を実行します。
+3. **`src/real-api.ts`（本番環境での実行）**:
+   - まったく同じ `getOrder` 操作を import し、`withEndpoint(...)` で設定した実際のベース URL に対して呼び出します。
+
+## 3. ローカルサンプルの実行
+
+Bun で `src/execute-locally.ts` を実行します。
 
 ```sh
 bun src/execute-locally.ts
@@ -49,42 +66,28 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-いない注文も試してみましょう — path の id を `8` にしてもう一度実行します。
+入力を `{ id: 7 }` から `{ id: 8 }` に変更すると、モックは `404` を返し、Defjs は宣言された `error` struct をデコードして `error.data` に格納します。
 
 ```txt
 Order not found
 ```
 
-成功時は `error` が `null`、`order` が `200` の Struct 出力、`response` が `DecodedResponse<Order>` です。宣言済み `404` では `error.code` が `'HTTP_STATUS'`、`error.status` が `404`、`error.data` は型付きの `NotFound` です。失敗時、タプルの 2 番目は `undefined` です。
+## 4. エラーファーストタプルの理解
 
-## Step 4 — 実 API に向ける
+すべての HTTP 呼び出しは `[error, data, response]` を解決します。
 
-`src/real-api.ts` で同じ `getOrder` を import し、サービスのベース URL でクライアントを作ります。例のアドレスを、それらのボディで `GET /v1/orders/:id` を実装しているサービスに置き換えてから、この版を実行してください。
+- **`2xx` の成功時**: `error` は `null`、`data` は検証済みの `output` 値（`Order`）、`response` は `DecodedResponse<Order>` になります。
+- **宣言された非 `2xx` ステータス時**: `error.code` は `'HTTP_STATUS'`、`error.status` はステータスコード数値（`404`）、`error.data` は検証済みの `error` struct（`NotFound`）になります。
+- **入力値エラー、デコード失敗、ネットワーク障害時**: `error.code` が失敗した正確なステージを特定します。
+  - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — 呼び出し元入力値の不正、または `builder` 内での例外発生
+  - `RES_MEDIA_TYPE_INVALID` — 宣言された JSON ボディに対して非 JSON の `Content-Type` が返された場合（ボディの読み取り前に即座に拒否）
+  - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — ボディの読み取り不可またはスキーマの不一致
+  - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` — トランスポートエラー、手動キャンセル、または `AbortSignal.timeout(ms)` によるタイムアウト
 
-<include cwd>examples/start/real-api.ts#example</include>
+呼び出しごとの締め切りやキャンセルシグナルは、単一呼び出し用の一時クライアントを派生させて渡します: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`。
 
-API 定義は SDK モジュールに残ります。サービスアドレス、認証情報、インターセプター、実行の寿命はアプリケーションに残ります。どちらのクライアントも同じ Defjs のエンドポイント契約を使います。
+## 次のステップ
 
-## 定義を公開する
-
-より多くのアプリケーションが必要になったら、定義を SDK パッケージへ移します。`getOrder` を export し、その TypeScript 宣言を含め、互換性のある Core の版を宣言します。利用者はそのとき `./define-request.ts` ではなくパッケージから import します。クライアント設定は利用者自身のものです。パッケージ構成の全体は [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) に従ってください。
-
-## 結果が違うとき
-
-- 悪い入力 → `REQ_INPUT_INVALID`。失敗する `builder` → `REQ_BUILD_FAILED`
-- non-2xx の status → `HTTP_STATUS`。`error` を宣言していてそのボディがデコードできれば、`error.data` に型が付きます
-- 宣言された JSON ボディのメディアタイプ違い → `RES_MEDIA_TYPE_INVALID`。ボディを読む前に報告されます
-- 宣言済みボディ（2xx なら `output`、それ以外は `error`）がデコードできない → `RES_DECODE_FAILED` または `RES_STRUCT_MISMATCH`。status は問いません
-- Fetch 失敗 / キャンセル / 期限 → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
-
-期限は `client({ signal: AbortSignal.timeout(ms) })` で、`NET_TIMEOUT` に分類されます。手動の abort は `NET_ABORTED` です。クライアント単位の既定の期限はありません。1 回の呼び出しに独自の `signal` が要るときはクライアントを派生させてください。[Client](/ja-JP/docs/client) を参照してください。キャンセルは呼び出し側が見たことを伝えます — サーバー側の書き込みがコミットしたかどうかではありません。
-
-## 次のレシピ
-
-- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
-- [宣言済み 404 付きの GET](/ja-JP/recipes/get-declared-404)
-- [POST JSON](/ja-JP/recipes/post-json)
-- [HTTP 呼び出しをキャンセルする](/ja-JP/recipes/cancel-http)
-- [SSE ストリームを消費する](/ja-JP/recipes/consume-sse)
-- [WebSocket セッションを開く](/ja-JP/recipes/websocket-session)
-- [ローカル Fetch ハンドルでテストする](/ja-JP/recipes/test-with-handle)
+- [コアアーキテクチャ](/ja-JP/docs/design-decisions) で設計原則を学ぶ
+- [Struct とスキーマ](/ja-JP/docs/struct) で複雑なペイロードやフィールドエイリアスをモデル化する
+- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk) で定義を npm パッケージとして配布する

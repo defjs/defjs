@@ -1,28 +1,28 @@
 ---
 title: "أمثلة عملية"
-description: ابنِ وانشر SDK قابلًا لإعادة الاستخدام، ثم اضبط المصادقة والاستدعاءات والعمل الآني في التطبيقات المستهلكة.
+description: ابنِ وانشر حزمة SDK قابلة لإعادة الاستخدام، ثم اضبط المصادقة والاستدعاءات والاتصال في الوقت الفعلي داخل التطبيقات المستهلكة.
 ---
 
-ابدأ من [بناء SDK ونشره](/ar/recipes/publish-http-sdk) للمسار الكامل من التعريف المصدَّر إلى حزمة npm والتطبيق المستهلك. تُظهر الوصفات أدناه عقود عمليات منفردة وسياسات تطبيق يمكنك تركيبها حول ذلك الـ SDK.
+ابدأ بدليل [بناء حزمة SDK ونشرها](/ar/recipes/publish-http-sdk) للاطلاع على المسار الكامل والشامل؛ بدءاً من تصدير تعريف SDK ووصولاً إلى نشر حزمة npm واستهلاكها داخل التطبيق. يقدّم كل مثال عملي أدناه عقداً برمجياً مستقلاً لعملية ما مع سياسة تطبيقية محددة، وتوضح تبويبات الكود متعددة الملفات كيفية كتابة تعريفات العمليات وطريقة تركيبها مع العميل داخل التطبيق.
 
 ## HTTP
 
-- [إرسال JSON](/ar/recipes/post-json)
-- [معالجة 404 معلَن](/ar/recipes/get-declared-404)
-- [الإلغاء والمهلة](/ar/recipes/cancel-http)
-- [طلبات ETag الشرطية](/ar/recipes/etag-revalidate)
-- [طلبات GraphQL](/ar/recipes/graphql-http-envelope)
+- [إرسال بيانات JSON](/ar/recipes/post-json) — ربط الحقول المنطقية بنمط camelCase مع مفاتيح `snake_case` السلكية، وفك تشفير استجابة `201` محددة الأنواع.
+- [معالجة استجابة 404 معلنة](/ar/recipes/get-declared-404) — التفريع بين ناتج النجاح `200` ومحتوى خطأ `404` المعلن كخطأ `HTTP_STATUS`.
+- [الإلغاء والمهل الزمنية](/ar/recipes/cancel-http) — الجمع بين `AbortController` الخاص بالمستدعي و`AbortSignal.timeout(...)`، والتمييز بين `NET_ABORTED` و`NET_TIMEOUT`.
+- [طلبات ETag الشرطية](/ar/recipes/etag-revalidate) — إرسال `If-None-Match`، ومعالجة `304 Not Modified` كخطأ `HTTP_STATUS`، والاحتفاظ بذاكرة التخزين المؤقت `Map` داخل كود التطبيق.
+- [طلبات GraphQL](/ar/recipes/graphql-http-envelope) — إرسال استعلام GraphQL عبر طلب HTTP `POST` وفك تغليف `errors[]` مقابل بيانات `data` القابلة للغياب (`.nullish()`) عبر دالة مساعدة في التطبيق.
 
 ## المصادقة
 
-- [تحديث الرمز بعد 401](/ar/recipes/refresh-bearer-once)
+- [تحديث رمز الوصول بعد 401](/ar/recipes/refresh-bearer-once) — إرفاق رمز `Bearer`، وإلغاء تكرار عمليات التحديث المتزامنة، وإعادة المحاولة مرة واحدة داخل معترض HTTP وحيد.
 
-## الاتصال الآني
+## الوقت الفعلي
 
-- [استهلاك أحداث SSE](/ar/recipes/consume-sse)
-- [إدارة جلسات WebSocket](/ar/recipes/websocket-session)
+- [استهلاك تدفق أحداث SSE](/ar/recipes/consume-sse) — فتح تدفق أحداث من الخادم محدد الأنواع، والتكرار عليه مرة واحدة، وضمان استدعاء `stream.close()` متبوعاً بـ `await stream.closed` في كتلة `finally`.
+- [إدارة جلسات WebSocket](/ar/recipes/websocket-session) — تبادل إطارات JSON الصادرة والواردة محددة الأنواع، والاشتراك في `onRuntimeError`، والإغلاق النظيف للجلسة.
 
-## اختبار SDK ونشره [#testing-and-packaging]
+## اختبار حزمة SDK ونشرها [#testing-and-packaging]
 
-- [اختبارات HTTP المحلية](/ar/recipes/test-with-handle)
-- [بناء SDK ونشره](/ar/recipes/publish-http-sdk)
+- [اختبارات HTTP المحلية](/ar/recipes/test-with-handle) — اختبار بناء الروابط والمعترضات وفك تشفير كائنات Struct في الذاكرة باستخدام `withHTTPHandle(...)`.
+- [بناء حزمة SDK ونشرها](/ar/recipes/publish-http-sdk) — حزم ونشر SDK خالٍ من العملاء عبر `tsdown` واستهلاكه مباشرة في التطبيق.

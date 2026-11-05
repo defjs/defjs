@@ -1,20 +1,86 @@
 ---
 title: "发送 JSON"
-description: 把带类型的 JSON body 交给 builder，并解码声明过的 201。
+description: 发送强类型的 JSON 请求体，自动处理字段网络别名，并解码声明的 201 成功响应。
 ---
 
-# POST JSON
+# 发送 JSON 数据
 
-把带类型的 body 交给 builder。逻辑字段名留在 TypeScript；struct 上的传输字段别名会变成 JSON key。对象 body 是 `application/json`。
+将类型化的输入对象传递给 `builder` 并返回 `{ body: input }`。字段声明的 `.alias("customer_name")` 让你在 TypeScript 代码中始终使用优雅的 `customerName`，而在底层网络传输中自动编码为 `"customer_name"`，并在收到 `201` 响应时自动解码还原为小驼峰属性。
 
-细节见 [HTTP](/zh-Hans/docs/http) 和 [Client](/zh-Hans/docs/client)。
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const ApiError = struct.object({
+  code: struct.string(),
+  message: struct.string(),
+});
+
+export const NewOrder = struct.object({
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const createOrder = defineRequest({
+  method: "POST",
+  path: "/orders",
+  input: NewOrder,
+  builder: (input) => ({ body: input }),
+  output: Order,
+  error: ApiError,
+});
+```
+
+</Tab>
+<Tab value="app/main.ts">
+
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { createOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com/v1"));
+
+async function main() {
+  const [error, order, response] = await createOrder(client, {
+    status: "paid",
+    customerName: "Ada",
+  });
+  if (error?.code === "HTTP_STATUS") {
+    console.error(error.status, error.data.message);
+    return;
+  }
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  console.log(`Created ${order.status} → ${response.status}`);
+}
+
+void main();
+```
+
+</Tab>
+<Tab value="create-order.ts">
 
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
 
-`api.example.com` 是占位地址。假设服务器返回 `201` 和 `{ "id": 1, "status": "paid", "customer_name": "Ada" }`，这段代码会输出：
+</Tab>
+</Tabs>
+
+当服务端返回 `201` 状态码以及 `{ "id": 1, "status": "paid", "customer_name": "Ada" }` 响应体时，终端将打印：
 
 ```txt
 Created paid → 201
 ```
+
+更多细节请参阅 [HTTP 请求](/zh-Hans/docs/http) 与 [数据结构 / Struct](/zh-Hans/docs/struct)。

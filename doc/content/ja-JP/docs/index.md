@@ -1,52 +1,36 @@
 ---
 title: "ガイド"
-description: SDK の契約と操作を設計して公開し、利用するアプリケーションで実行を構成します。
+description: SDK の契約と操作を設計して公開し、利用するアプリケーション側で実行環境を構成します。
 ---
 
-Defjs は、チームが公開する API と、アプリケーションが使うクライアントを分けます。操作を定義してパッケージにする経路は SDK 作成が担当し、実行を構成して結果を扱う経路はアプリケーションが担当します。
+Defjs は、SDK チームが公開する API 契約（定義）と、アプリケーションが実行時に行うクライアント設定を明確に分離します。SDK の定義を担当する開発者も、クライアントの実行設定を担当する開発者も、以下のセクションを通じて設計思想、操作の定義、インターセプターやクライアントオプションによる実行制御を学ぶことができます。
 
 ## はじめに [#getting-started]
 
-- [プロジェクト概要](/ja-JP)
+- [概要](/ja-JP)
 - [クイックスタート](/ja-JP/docs/start)
-- [SDK の作成と公開](/ja-JP/recipes/publish-http-sdk)
-- [定義と実行を分ける理由](/ja-JP/docs/design-decisions)
+- [コアアーキテクチャ](/ja-JP/docs/design-decisions)
 
-## コア概念 [#core-concepts]
+## SDK の定義 [#defining-sdks]
 
-- [データ構造 / Struct](/ja-JP/docs/struct)
-- [Client](/ja-JP/docs/client)
-- [ミドルウェア](/ja-JP/docs/interceptors)
-- [エラー](/ja-JP/docs/errors)
-
-## ベストプラクティス [#best-practices]
-
-- [SDK 設計](/ja-JP/docs/best-practices/sdk-design)
-- [アプリケーション統合](/ja-JP/docs/best-practices/application)
-- [ミドルウェア](/ja-JP/docs/best-practices/middleware)
-- [エラー処理](/ja-JP/docs/best-practices/errors)
-- [SSE](/ja-JP/docs/best-practices/sse)
-- [WebSocket](/ja-JP/docs/best-practices/web-socket)
-- [テスト](/ja-JP/docs/best-practices/testing)
-
-## リクエストとリアルタイム通信
-
-- [HTTP リクエスト](/ja-JP/docs/http)
+- [Struct とスキーマ](/ja-JP/docs/struct)
+- [HTTP 操作](/ja-JP/docs/http)
 - [SSE イベントストリーム](/ja-JP/docs/sse)
 - [WebSocket セッション](/ja-JP/docs/web-socket)
 
-## プラグイン
+## Client と実行 [#client-execution]
 
-利用アプリケーションのクライアント向けの任意パッケージです。SDK の定義はそれらから独立したままです。
+- [Client](/ja-JP/docs/client)
+- [エラーハンドリング](/ja-JP/docs/errors)
+- [インターセプター](/ja-JP/docs/interceptors)
+- [ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing)
+- [テスト](/ja-JP/docs/testing)
 
-- [プラグイン](/ja-JP/docs/integrations)
+## 統合と AI [#integrations-and-ai]
+
+- [プラグイン統合の概要](/ja-JP/docs/integrations)
 - [React](/ja-JP/docs/integrations/react)
 - [Vue](/ja-JP/docs/integrations/vue)
-- [OpenTelemetry server](/ja-JP/docs/integrations/opentelemetry-server)
-
-## AI
-
+- [OpenTelemetry サーバー](/ja-JP/docs/integrations/opentelemetry-server)
 - [Skill](/ja-JP/docs/ai)
 - [llms.txt](/ja-JP/docs/ai-api)
-
-[設計上の判断](/ja-JP/docs/design-decisions)

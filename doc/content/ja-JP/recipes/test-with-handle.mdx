@@ -1,20 +1,59 @@
 ---
 title: "ローカル HTTP テスト"
-description: withHTTPHandle で 1 クライアント分の Fetch を差し替え、操作はそのままにします。
+description: withHTTPHandle で単一クライアントの Fetch 実装を差し替え、操作定義には一切手を加えずにテストを実行します。
 ---
 
-# ローカル Fetch ハンドルでテストする
+# ローカル Fetch ハンドルによるテスト
 
-`withHTTPHandle(...)` はそのクライアントだけ Fetch を差し替えます。URL 組み立て、インターセプター、status 振り分け、Struct デコードはそのまま — DNS・TLS・実サーバーは不要です。
+`withHTTPHandle(...)` は、単一のクライアントインスタンスに対して基底の `fetch` 関数を差し替えます。実際のネットワークソケットを開くことなく、入力値のバリデーション、`builder` による配置、URL 解決、インターセプター、ステータスに応じた振り分け、Struct デコードといった Defjs のパイプライン全体を完全にテストできます。
 
-詳細は [Client](/ja-JP/docs/client) を見てください。
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+```
+  </Tab>
+  <Tab value="test/orders.spec.ts">
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+const client = createClient(
+withEndpoint("https://fixture.invalid"),
+withHTTPHandle(async (input, init) => {
+const request = new Request(input, init);
+const id = new URL(request.url).pathname.split("/").at(-1);
+if (id === "7") {
+return Response.json({ id: 7, status: "paid" }, { status: 200 });
+}
+return Response.json({ message: "Order not found" }, { status: 404 });
+}),
+);
+
+const [error, order, response] = await getOrder(client, { id: 7 });
+if (error) throw error;
+console.log(order.status, response.status);
+
+````
+  </Tab>
+  <Tab value="get-order.test.ts">
 <include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 paid 200
-```
+````
 
-本番では同じ `getOrder` 操作を、本物の `withEndpoint(...)` クライアントに対して使います — 変わるのはハンドルだけです。
+本番環境では、`withEndpoint(...)` で設定したクライアントをまったく同一の `getOrder` 定義に渡して実行します。詳細は [テスト](/ja-JP/docs/testing) および [Client](/ja-JP/docs/client) を参照してください。

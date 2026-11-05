@@ -1,0 +1,73 @@
+---
+title: "测试"
+description: 使用注入式传输句柄在离线环境下完整测试 SDK 契约、断言错误元组并利用虚拟时钟确定性验证时间逻辑。
+---
+
+# 测试
+
+由于 Defjs 将接口操作定义与 Client 执行完全解耦，你可以直接在本地单测中对真实的 SDK 定义及应用层拦截器进行离线测试，而无需启动真实的 HTTP 服务器，更无需侵入式 Mock 库的内部函数。
+
+## 1. 注入本地传输句柄
+
+在调用 `createClient(...)` 时，通过 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 替换底层的平台原生网络传输。Defjs 依然会严格跑通整个操作的完整处理流水线：入参 `struct` 校验、`builder` 参数映射、URL 目录安全检查、中间件拦截器链、HTTP 状态码分流，以及最终的响应 `struct` 解码。
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. 测试最佳实践
+
+### 断言错误优先元组，而非内部实现细节
+
+始终使用测试专用的 Client 调用导出的 SDK 操作函数，并对返回的 `[error, data, response]` 元组进行严格断言：
+
+- 对于 `2xx` 成功场景，断言 `expect(error).toBeNull()`，并检查解码后的 `data` 属性（包括 `.alias()` 从网络下划线到逻辑小驼峰的映射是否正确）。
+- 对于异常失败场景，根据契约要求断言 `error?.code`、`error?.status`、`error?.data` 以及 `error?.cause`。
+
+### 校验出站请求的原始网络字节
+
+在你的 `withHTTPHandle(async (input, init) => ...)` 函数内部，构造 `const request = new Request(input, init)` 并审查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），以此验证你的 `builder` 和 struct 别名是否精确序列化为后端接口所期望的网络格式。
+
+### 使用虚拟时钟实现确定性的时间测试
+
+当测试请求超时（`AbortSignal.timeout`）、拦截器退避重试、SSE/WebSocket 重连延迟或 WebSocket 心跳保活逻辑时：
+
+- 请使用假定时钟（在 Vitest 中使用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`，在 Bun test 中使用 `jest.useFakeTimers()`）。
+- 在触发了被等待的异步阶段后再快进时钟（`advanceTimersByTimeAsync`），并断言状态流转或尝试调用次数——切勿直接基于机器的实际物理流逝时间编写脆弱的断言。
+
+## 相关阅读
+
+- [本地 HTTP 测试](/zh-Hans/recipes/test-with-handle)
+- [构建并发布 SDK](/zh-Hans/recipes/publish-http-sdk)
+- [Client 客户端配置](/zh-Hans/docs/client)

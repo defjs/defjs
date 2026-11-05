@@ -1,124 +1,148 @@
 ---
 title: "SSE 事件串流"
-description: SDK 定義具型別的事件串流，應用程式開啟並使用它，負責取消、關閉與等待終態。
+description: 在 SDK 中匯出具型別的事件串流定義，由取用端應用程式負責開啟、消費與關閉串流。
 ---
 
-# Server-Sent Events
+# SSE 事件串流
 
-SDK 匯出帶有 input、事件契約與緩衝上限的事件串流操作。應用程式在自己的 client 上設定身分驗證與選用的重連，需要串流時呼叫匯入的操作。
+SDK 開發者使用 `defineEventStream` 宣告 Server-Sent Events 端點：指定路徑、選用的 input 與 builder、定義事件 struct 對照表的 `events` 物件，以及緩衝區與佇列大小上限。取用端應用程式則在 Client 上設定身分驗證與選用的自動重連機制，開啟串流、迭代接收具型別的事件，並負責最終關閉串流。
 
-開啟串流、迭代它，再用 `await using` 釋放自有 handle。手動 `close()` 與 `closed` 仍可使用；Client 和外掛不會替你釋放回傳的串流。
+## 1. 定義事件串流並使用它
 
-## 基本用法
+開啟的 `EventStreamHandle` 務必使用 `await using`（或在 `finally` 區塊中使用 `stream.close()` + `await stream.closed`）進行釋放：
+
+<Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
+<Tab value="sdk/orders-stream.ts">
+
+```ts
+import { defineEventStream, struct } from "@defjs/core";
+
+export const watchOrders = defineEventStream({
+  path: "/orders/events",
+  operation: "orders.watch",
+  events: {
+    updated: struct.object({
+      id: struct.number(),
+      status: struct.string(),
+    }),
+  },
+});
+```
+
+</Tab>
+<Tab value="app/watch-orders.ts">
+
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { watchOrders } from "../sdk/orders-stream.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+  const [error, stream] = await watchOrders(client);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+
+  await using active = stream;
+  for await (const event of active) {
+    console.log(event.event, event.data.id, event.data.status);
+    break;
+  }
+}
+
+void main();
+```
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
 </include>
 
-## 定義串流
+</Tab>
+</Tabs>
 
-`defineEventStream(...)` 需要 `events` 與相對 `path`。Method 預設是 `GET`。這次呼叫複製已知的定義欄位。`events` 字典容器會連同其自有屬性一起複製，包括不可列舉屬性，以及用計算屬性名稱宣告的 `__proto__` 屬性。繼承而來的名稱不會被複製。Struct 值仍是原來的物件。該字典上的 accessor 仍在訊息到達時執行，而且 `this` 是原來的字典。缺失的字典按傳入原樣保留，解析事件時仍會被回報。
+## 2. 開啟連線交握與 Tuple 結構
 
-Request 形狀跟 HTTP 一樣：`builder` 回傳 `path`、`query`、`headers`、`body`。`GET`／`HEAD` 不能回傳 body。宣告的 `error` struct 會給啟動 fault 定型，並依 struct kind 解碼非 2xx 的握手 body（`string` 是文字，`blob`／`file` 是 blob，`arrayBuffer` 是 bytes，其餘是 JSON）。你沒設 `Accept` 時，Defjs 會送 `Accept: text/event-stream`。只要宣告了 `input`，就必須明確提供 `builder`。`input` 只定義入參，每個值放在哪裡只由 builder 決定。只有沒有 `input` 的定義可以省略 `builder`。`ReadableStream` 主體遵循 HTTP 的規則：在無法串流請求主體的執行環境（例如 Firefox）中，啟動會在任何內容送出之前以 `ENV_UNSUPPORTED` 失敗。在 Chromium 中，這類主體需要 HTTP/2 或更新版本；透過 HTTP/1.1 時，啟動會以 `NET_UNREACHABLE` 失敗。串流主體只會送出一次，使用它的請求絕不會重新連線（見「重連」）。
+呼叫該操作僅會在初始 HTTP 回應為 `2xx`、媒體型別為 `text/event-stream` 且帶有可讀取本文時，才會成功解析為 `[error, stream, startupOpen]`：
 
-**只有**你選擇重連時，一個邏輯串流才可能跨多次實體 Fetch attempt。沒有 `withSSEReconnect`，暫時的網路與串流讀取失敗會結束邏輯串流。Open 成功時，你仍拿到一個 handle 與一個 async iterator。
-
-## 開啟與檢查
-
-操作只有在 status、content-type、body 檢查通過後才會 resolve：
+<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tab value="Handshake inspection">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
-回應必須成功、media type essence 是 `text/event-stream`，且有 body。非 2xx 啟動 → `HTTP_STATUS`。宣告了 `error` 時，那個 fault 帶著解碼後的握手 body；媒體類型不對是 `RES_MEDIA_TYPE_INVALID`，body 無法按宣告的 kind 讀取是 `RES_DECODE_FAILED`。回應抵達後驗證失敗時，第三格 tuple 仍可能放著回應快照。
-
-缺少、相對或無效的 base endpoint，或非法 path，會在建構期間、任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 也一樣。解析後的 URL 必須維持 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 最終的 `req.endpoint` 會按其最終的 `req.baseEndpoint`、用同一條規則檢查；刻意把 base 換成另一個有效的絕對 URL 是允許的。確定性的 URL 錯誤絕不會重試。
-
-`startupOpen` 是該次呼叫的初始快照；新的呼叫絕不會重用前一次呼叫的快照，即使它在回應抵達前就失敗也一樣。`stream.open` 是 live 的，之後的實體 opens 會變。第一個回應重要時，留住 tuple 那個值。 `startupOpen` 僅對回傳的 Defjs 原生 handle 或直接傳遞同一 live `open` 物件的 wrapper 保證是所屬連線首次成功握手的快照；自訂 handle 或明確覆寫 `open` 的 wrapper 則保留其目前公開的 `open`，即使已發生重連也一樣，因此共用 `closed` 不能繞過 URL 淨化或標頭過濾，Defjs 也不從任意中繼資料轉換反推首次握手。
+</Tab>
+<Tab value="Stream handle lifecycle">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
 </include>
 
-## 解碼事件
+</Tab>
+</Tabs>
 
-Wire event name → `events[eventName]`；否則 `events.default`。沒有相符 Struct → 事件不會交付。缺少 SSE `event` 欄位 → 邏輯名稱 `message`。
+- **非 `2xx` 交握失敗**：回傳 `HTTP_STATUS`（若定義中宣告了 `error` struct，則會包含解碼後的 `error.data`）。
+- **Content-Type 錯誤或本文無法讀取**：回傳 `RES_MEDIA_TYPE_INVALID` 或 `RES_DECODE_FAILED`。
+- **`startupOpen` vs. `stream.open`**：Tuple 中的第三項（`startupOpen`）保存首次交握成功的靜態快照；而 `stream.open` 則會在串流後續重新連線時即時更新。
 
-SSE `data` 一開始是文字。`string` struct 保留那段文字。其餘 kind 都是 JSON：先 parse 文字，再用 struct 解碼。`struct.object`、`struct.number`、`struct.boolean`、`struct.any`、`struct.unknown` 是 JSON，不是 trim 過的文字。像 `ping` 這種裸 token 不滿足 `struct.literal('ping')`；data 必須是 JSON。伺服器送出 JSON 字串 `"abc"` 時仍然滿足 `struct.string()`：交付的值就是那段原始文字，引號也在，不會 JSON 解碼成 `abc`。
+## 3. 事件分派與解碼
 
-剖析遵循 WHATWG 的 SSE 行與欄位規則：CR、LF 與 CRLF 結束一行；空行會送出帶 data 的事件；多行 `data:` 以 `\n` 接起來。註解與未知欄位會被忽略，而 EOF 時尚未完成的事件不會送出。每個實體串流開頭只會移除一個前導 UTF-8 BOM。`data` 或 `id` 值裡的 U+FEFF 會保留；較晚出現、以 BOM 為前綴的欄位名稱，例如 `﻿data`，屬於未知欄位，會被忽略。
+當 SSE 封包抵達時（根據 WHATWG 規範以連續空行結尾）：
 
-發出的值：`event`、解碼後的 `data`、選填的非空 `id`。有 `default` 時，未知 event names 在推導的 union 裡是 `string`。
-
-## 觀察無效事件
-
-無效／未宣告事件會被丟掉，不會進 queue。`withSSEOnInvalidEvent(...)` 可觀察 raw ID、名稱、文字 data，以及 `missing-struct` 或 `validation-failed` 與選填 cause。
+1. **事件路由**：網路傳送的 `event:` 欄位會比對 `events[eventName]`；若未比對成功，則會降級使用宣告的 `events.default`。省略 `event:` 欄位時，事件名稱預設為 `"message"`。未宣告且無 `events.default` 的未知事件會被自動忽略。
+2. **負載解碼**：`struct.string()` schema 會直接接收原始文字 `data:`；所有其他 struct 種類都會先將 `data:` 剖析為 JSON，接著再透過 struct 進行結構驗證。
+3. **觀察無效事件**：無效或未宣告的事件會被丟棄，而不會中斷整個串流。可以在 Client 上掛載 `withSSEOnInvalidEvent(...)` 以進行受控的診斷：
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
-Observer 跑在 transform 邊界。除非 active attempt signal 已 aborted，否則它的失敗是隔離的。保持短小；別把 raw event data 當可信資料。
+## 4. 重新連線與 Last-Event-ID [#reconnect]
 
-## 重連
-
-在重連策略裡設定 `connectTimeoutMs`，把每次握手限制在從呼叫 Fetch 到回應標頭。它必須是有限正數；無效值會回傳 `REQ_OPTIONS_INVALID`。它沒有預設值，握手之後會被清掉，所以已經建立的 session 不受影響。逾時的握手會向平衡器回報 `NET_UNREACHABLE`，並沿用現有的重連預算；重試耗盡時以 `NET_TIMEOUT` 結束。
-
-**行為變更：** SSE 重連是選擇性開啟。沒有 `withSSEReconnect(...)` 時，網路與串流讀取失敗**不會**重試（等同 `attempts: 0`）。傳 `withSSEReconnect({ attempts: 3 })`（或另一個審過的預算）才會重試那些失敗。正常 EOF 不會重試。對於持續訂閱，觀察 `stream.closed`，並用最後的應用程式游標開始一次新操作；重連不會把 EOF 變成沒有盡頭的訂閱。Status／content-type 驗證、parser 限制、message transform 失敗、queue overflow、正常 EOF，對邏輯串流都是終端。
+SSE 的自動重新連線機制屬於**選擇性啟用（opt-in）**。若未設定 `withSSEReconnect(...)`，任何網路斷線或串流讀取錯誤都會直接終止串流。
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-`attempts` 是每次斷線的重試預算；設定了 reconnect 物件時預設是 `3`。成功的握手會重設預算、callback 的 attempt 與 backoff 指數，所以各次斷線不會消耗同一個終身預算。`attempts: 0` 停用重試。省略 `withSSEReconnect` 也會停用重試。`delayMs` 是起始間隔（預設 `1000`）；`factor` 放大它（預設 `1`，即固定延遲）；`maxDelayMs` 是 jitter 與捨入之後、最終延遲的硬上限（預設：沒有設定上限）。SSE 的 `jitter` 是 **0–1 乘性因子**，跟 WebSocket 一樣。即使沒有設定上限，平台 timer 上限仍是 `2_147_483_647` ms。基底為零就維持零；其他本來有效的數字若溢位，會飽和在這些上限。只含數字的串流 `retry:` 欄位會更新目前的基底間隔，包括復原之後。策略 callback 回傳 false／throw／reject 會結束邏輯串流。反覆成功開啟後立即發生可重試的串流失敗時，可能持續以目前的基底延遲重新連線（仍受 jitter 與上限約束），因為每次開啟都會重設預算；請用 `shouldReconnect` 停止這種情況。正常 EOF 仍會結束串流。
+- **斷線重試預算（`attempts`）**：傳入設定物件至 `withSSEReconnect` 時，預設為 `3` 次。交握成功後會重設重試次數與退避指數。伺服器正常的 EOF 結束**不屬於**失敗，不會觸發重新連線。
+- **游標追蹤（`Last-Event-ID`）**：在事件結尾的空白行完成剖析時確認並提交，重新連線時會自動作為 `Last-Event-ID` 標頭送出。
+- **冪等安全性**：預設情況下，只有冪等方法（`GET`、`HEAD`、`OPTIONS`、`PUT`、`DELETE`）會自動重新連線。非冪等方法（`POST`、`PATCH`，例如 LLM 串流生成請求）只有在自訂 `shouldReconnect` 回呼明確回傳 `true` 時才會重連。使用 `ReadableStream` 請求本文的請求在第一次嘗試時即會消耗串流，因此絕不會重連。
+- **交握逾時（`connectTimeoutMs`）**：限制從呼叫 Fetch 到接收回應標頭之間的交握時間，而不會限制已建立串流的存活時長。
 
-重連選項會在 interceptor 或 Fetch 之前檢查：`attempts` 必須是非負的 safe integer；`delayMs` 必須是非負有限數；`maxDelayMs` 可以是非負有限數或正 `Infinity`，後者移除設定上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 必須是有限且為正；`jitter` 必須是有限且落在 0–1。無效的值會回傳 `REQ_OPTIONS_INVALID`，且不會開啟串流。
+## 5. 緩衝區與佇列上限
 
-`id:` 欄位只更新緩衝區；只有處理到結尾空白行時才提交重連游標，即使該框架只有 ID、不會派送訊息也一樣。如果串流在該空白行之前結束，游標維持不變。已提交的 ID 會在後續嘗試中成為 `Last-Event-ID`，在線上以 UTF-8 位元組編碼，包括非 ASCII 的 ID。空的 `id:` 會在該空白行處清掉標頭；含有 NUL 的 ID 會被忽略。除了這個標頭，後續嘗試重用的都是第一次嘗試時建好的請求：builder 與攔截器在每個邏輯呼叫中只會執行一次，因此請求方法、相對路徑與查詢、標頭與主體維持不變。仍被歸因的串流會在重連時重新選擇 base endpoint，因此最終 URL 與其 origin 可以改變。如果某個標頭在每次嘗試時都必須是新的，或必須屬於該端點，例如短效或綁定 origin 的權杖，請在傳給 `withSSEHandle` 的 Fetch 實作中處理；這個 Fetch 實作會在每次嘗試時、帶著這次嘗試解析出的 URL 執行一次。附加憑證之前先檢查選中的 origin；不要重用只綁定第一個端點的權杖。如果憑證仍然過期，串流已經開啟之後的非 2xx 重連握手會以 `RES_DECODE_FAILED` 結束它；狀態請看 `stream.open.response.status`。非 2xx 的初始握手則會在已宣告的錯誤 body 解碼成功時，回傳啟動期的 `HTTP_STATUS` fault。
+兩項上限值皆必須為大於零的安全整數。超過任一上限皆屬於嚴重錯誤（`stream.closed` 會以 `kind: "error"` 解析且迭代器會被拒絕——事件絕不會被靜默丟棄）：
 
-重連只在安全時重送請求：
+| 定義選項        | 限制項目                                  | 致命錯誤碼            |
+| --------------- | ----------------------------------------- | --------------------- |
+| `maxBufferSize` | 遇到空行前未完成或過大的 SSE 封包位元組數 | `CAP_BUFFER_EXCEEDED` |
+| `maxQueueSize`  | 等待 `for await` 消費端處理的已驗證事件數 | `CAP_QUEUE_OVERFLOW`  |
 
-- `GET`、`HEAD`、`OPTIONS`、`PUT` 與 `DELETE` 具有冪等性（RFC 9110 §9.2.2），會在重試額度內重新連線。
-- 其他請求方法，例如 `POST` 或 `PATCH`，只有在 `shouldReconnect` 回傳 `true` 時才會重新連線。連線失敗時，無法判斷伺服器是否已執行請求：若 `POST` 會啟動 LLM 生成，重送就會再次執行並再次計費，新事件也會接在舊事件之後，出現在同一條串流中。傳入 `shouldReconnect` 會取代所有請求方法的這項預設規則，因此當同一個用戶端同時服務這兩類端點時，請檢查傳入的情境物件中的 `method`。
-- `ReadableStream` 主體會在第一次嘗試時被消耗。無論串流開啟之前或之後發生失敗，都會以原始錯誤結束串流；不會呼叫 `shouldReconnect`，也不會等待重試延遲。若請求需要重新連線，請使用字串、位元組、`Blob`、表單或 JSON 主體。
+## 6. 關閉與釋放資源 [#close-and-dispose]
 
-**端點健康回饋：** `end` 只回報一次握手（`{ attempted: true, status }`）。握手成功之後，回應 body 的 `reader.read()` 被拒絕，會把最終的 `done` 樣本更新為 `{ attempted: true, code: "NET_UNREACHABLE" }`，不帶 `status`；適用時仍使用既有的逾時／中止對應。這是有意替換原先只有握手狀態的 `done`；`open` 中繼資料和已經發出的 `end` 保持不變。`done` 在任何重連 pick 之前只結算一次。之後 `shouldReconnect` 回絕、拋出或 rejection，既不會抹掉也不會重複這份真實的讀取失敗樣本。
+開啟串流的呼叫端負責其關閉與銷毀工作。透過 `break`、`return` 或拋出例外跳出 `for await` 迴圈會自動關閉串流，你也可以使用 `await using` 或 `stream.close()`：
 
-只有 read 邊界提供這個新訊號。正常 EOF、非 2xx 握手的錯誤 body 失敗、`getReader` 誤用、parser／佇列上限、transform、hook 和 observer 不會自動變成網路失敗，端點記帳仍保留握手狀態。呼叫方取消／手動關閉仍然未歸因，呼叫方期限仍然是 `NET_TIMEOUT`，[離線提示](/zh-Hant-TW/docs/client#multiple-endpoints) 仍然適用。自訂 Fetch provider 的 read 拒絕被當作傳輸失敗，不是遠端伺服器造成它的證明。健康回饋和重放許可是分開的：預設 pick-first 可以為已授權的重連或之後的明確呼叫改到備援，但它不會開啟重連、改變預算，也不會讓非冪等請求可以安全重放。
-
-## Buffer 與 queue 限制
-
-兩者都必須是正的 safe integers。Overflow 是致命的 — 不會默默丟掉較舊事件。
-
-| 限制            | 保護什麼                             | 終端 code             |
-| --------------- | ------------------------------------ | --------------------- |
-| `maxBufferSize` | 剖析時不完整／過大的 SSE line／event | `CAP_BUFFER_EXCEEDED` |
-| `maxQueueSize`  | 事件產出快過單一消費者讀取           | `CAP_QUEUE_OVERFLOW`  |
-
-致命串流也會清掉 buffered events、取消 active body、reject iterator，並以 `kind: 'error'` resolve `stream.closed`。
-
-## Close 與 dispose [#close-and-dispose]
-
-`EventStreamHandle`：一個 live opening 快照、一個終端 promise、一個 `close`、一個 async iterator，以及一個標準 async disposer。
+<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
+<Tab value="Dispose with await using">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
-終端 kinds（`closed.kind`）：`eof`、`aborted` 或 `error`。`error` 結果還帶 `closed.code`，也就是 `EventStreamFaultCode`：`CAP_BUFFER_EXCEEDED`、`CAP_QUEUE_OVERFLOW`、`EXT_HOOK_FAILED`、`EXT_OBSERVER_FAILED`、`NET_TIMEOUT`、`NET_UNREACHABLE`、`REQ_BUILD_FAILED`、`REQ_OPTIONS_INVALID`、`RES_DECODE_FAILED` 或 `RES_MEDIA_TYPE_INVALID`。`REQ_BUILD_FAILED` 與 `REQ_OPTIONS_INVALID` 表示串流已經打開之後，重連時挑選端點失敗。它們不會被改寫成 `NET_UNREACHABLE`。
-
-`close(reason)` 會 abort active attempt、關閉 queue、以 `aborted` settle，即使 reason 是 `TimeoutError` 也一樣。傳給操作的 `signal` 在串流開啟之後仍附著，並涵蓋整條連線。Abort 它通常會讓 iterator 結束並回報 `aborted`。若 abort reason 是 `TimeoutError` 或 `ERR_TIMEOUT`（例如 `AbortSignal.timeout(...)`），iterator 會丟出 `ERR_TIMEOUT`，`closed` 則回報 `kind: 'error'` 且 `code: 'NET_TIMEOUT'`。Client 上沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器：
+</Tab>
+<Tab value="Startup-only deadline">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 
-迴圈 `break`／`return`／throw 會觸發 iterator return，並以 `iterator-return` 關閉。啟動操作的程式碼擁有關閉責任。
+</Tab>
+</Tabs>
 
-`await using` 會呼叫同一條自有 close 路徑，並等待 Defjs 讀取／重連工作停止，以及 active reader lock 釋放。它刻意設有界限，不會無限等待永遠不 settle 的 provider-controlled `ReadableStream.cancel()` promise，因此不保證這類 provider promise 已完成。需要 reason 或終端結果時，仍可明確呼叫 `stream.close(reason)`，再 `await stream.closed`。
+透過 `client({ signal })` 傳入的 `signal` 會控管串流的整個生命週期。若只想限制初始連線交握的時間而不影響後續連線，請在 `await watchOrders(...)` 回傳後清除計時器（如上方第二個標籤頁所示），或在 `withSSEReconnect` 中使用 `connectTimeoutMs`。
 
-結構化實作 `EventStreamHandle` 的程式碼必須提供 `[Symbol.asyncDispose](): PromiseLike<void>`，並接到同一個 lifecycle。
+## 相關閱讀
 
-支援的最低 lib 集合是 `ES2022`、`ESNext.Disposable`、`DOM` 與 `DOM.Iterable`。儲存庫的宣告工具使用 TypeScript 7，但沒有自動化的 packed-consumer 或 minimum-lib 驗證關卡，也不承諾較舊的 compiler。這組 lib 提供的是型別，不是執行階段的 Web API polyfill。`Client` 不是 `AsyncDisposable`；每個請求用它的 `AbortSignal` 管理。
-
-Credentials、event data、event IDs、causes、stream URLs 別進日常 logs。`withCredentials(true)` 影響 SSE 的 Fetch cookies；它不會設定 WebSocket auth。
-
-## 相關操作範例
-
-- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse)
 - [取消 HTTP 呼叫](/zh-Hant-TW/recipes/cancel-http)
+- [負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)

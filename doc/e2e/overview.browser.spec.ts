@@ -5,27 +5,22 @@ import { openSite } from "./support/site";
 
 const guideArticles = [
   "/docs/start",
+  "/docs/design-decisions",
   "/docs/struct",
-  "/docs/client",
   "/docs/http",
   "/docs/sse",
   "/docs/web-socket",
+  "/docs/client",
   "/docs/errors",
   "/docs/interceptors",
+  "/docs/load-balancing",
+  "/docs/testing",
   "/docs/integrations",
   "/docs/integrations/react",
   "/docs/integrations/vue",
   "/docs/integrations/opentelemetry-server",
   "/docs/ai",
   "/docs/ai-api",
-  "/docs/design-decisions",
-  "/docs/best-practices/sdk-design",
-  "/docs/best-practices/application",
-  "/docs/best-practices/middleware",
-  "/docs/best-practices/errors",
-  "/docs/best-practices/sse",
-  "/docs/best-practices/web-socket",
-  "/docs/best-practices/testing",
 ];
 const recipeArticles = [
   "/recipes/post-json",
@@ -77,7 +72,7 @@ test("grouped overview articles stay visible and clickable in every language", a
   for (const locale of locales) {
     const prefix = locale === "en-US" ? "" : `/${locale}`;
     for (const [area, paths, groups] of [
-      ["docs", guideArticles, 6],
+      ["docs", guideArticles, 4],
       ["recipes", recipeArticles, 4],
     ] as const) {
       await page.goto(site.url(`${prefix}/${area}`), {
@@ -105,7 +100,7 @@ test("grouped overview articles export as Markdown", async () => {
   const site = await openSite();
   const page = await site.browser.newPage();
   for (const [area, paths, groups] of [
-    ["docs", guideArticles, 6],
+    ["docs", guideArticles, 4],
     ["recipes", recipeArticles, 4],
   ] as const) {
     const exported = await page.request.get(

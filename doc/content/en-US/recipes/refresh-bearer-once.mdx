@@ -5,16 +5,78 @@ description: Attach Authorization and replay once inside one interceptor; next()
 
 # Refresh a Bearer token once on 401
 
-`next()` is the rest of **this** onion — not `axios(config)` re-dispatch from the outside. Put attach + single-flight refresh + one replay in **one** HTTP interceptor so outer layers do not run twice.
+In Defjs, `next(request)` invokes the remainder of the interceptor chain inward—it does not re-dispatch from the outermost interceptor. Place token attachment, single-flight refresh deduplication, and the one-time `401` replay inside **one** HTTP interceptor so outer logging or timing interceptors do not run twice:
 
-See [Interceptors](/docs/interceptors).
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab value="sdk/billing.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getInvoice = defineRequest({
+  method: "GET",
+  path: "/v1/invoice",
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal("expired_token") }),
+});
+```
+  </Tab>
+  <Tab value="app/auth-interceptor.ts">
+```ts
+import { createHttpInterceptor } from "@defjs/core";
+
+export type Credential = { accessToken: string };
+
+export function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+return createHttpInterceptor(async (request, next) => {
+const authorize = (credential: Credential) => {
+const headers = new Headers(request.headers);
+headers.set("authorization", `Bearer ${credential.accessToken}`);
+return { ...request, headers };
+};
+
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
+
+    const current = read();
+    if (current.accessToken !== used.accessToken) {
+      return next(authorize(current));
+    }
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+
+});
+}
+
+````
+  </Tab>
+  <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 42
-```
+````
 
-Calling `next` again only re-enters interceptors **inside** this layer (and the Fetch handler). It does not re-run outer timing/auth wrappers — that is why 401 layout belongs in one interceptor, not a second call of the operation.
+See [Interceptors](/docs/interceptors) for onion ordering and retry boundaries.

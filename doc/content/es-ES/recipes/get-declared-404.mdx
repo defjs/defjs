@@ -5,18 +5,61 @@ description: Llama a un GET y ramifica entre un 200 tipado y un 404 declarado.
 
 # GET con un 404 declarado
 
-Declara los cuerpos de éxito y de 404. Ramifica por `error.code` y `error.status`: obtienes `error.data` tipado para el fallo declarado.
+Declara tanto `output` (para respuestas 2xx) como `error` (para respuestas no 2xx) en `defineRequest`. En el punto de llamada, comprueba `error?.code === "HTTP_STATUS" && error.status === 404` para leer la carga tipada en `error.data`.
 
-Ver detalles en [HTTP](/es-ES/docs/http) y [Errores](/es-ES/docs/errors).
+<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+const [error, order, response] = await getOrder(client, { id: 7 });
+if (error?.code === "HTTP_STATUS" && error.status === 404) {
+console.log(error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Loaded ${order.status} from ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` es un placeholder. Con un servidor que responde a `GET /orders/7` con `200` y `{ "id": 7, "status": "paid" }`, el snippet imprime:
+Con un servidor que responda a `GET /orders/7` con `200` y `{ "id": 7, "status": "paid" }`, el script imprime:
 
 ```txt
 Loaded paid from 200
-```
+````
 
-Un estado no-2xx es `HTTP_STATUS`. Declarar `error` da un tipo a su cuerpo; omitir `error` deja `error.data` como `undefined` y el cuerpo sin leer. Si un cuerpo `error` declarado no se puede leer (media type incorrecto, JSON inválido, forma incorrecta), el resultado es un fault `RES_*`. Un único Struct `error` cubre todos los estados no-2xx, así que usa `struct.or(...)` o una unión discriminada cuando las formas difieren.
+- Todo código de estado no 2xx produce `HTTP_STATUS`. Declarar `error` decodifica y valida el cuerpo del error en `error.data`; omitir `error` deja `error.data` como `undefined` sin leer el cuerpo.
+- Si un cuerpo de `error` declarado llega con el tipo de medio incorrecto, JSON inválido o no supera la validación del Struct, la operación devuelve en su lugar un fallo `RES_*`. Puesto que un único Struct de `error` abarca todos los estados no 2xx, utiliza `struct.or(...)` cuando diferentes estados de error presenten formas distintas.
+
+Consulta [Operaciones HTTP](/es-ES/docs/http) y [Tratamiento de errores](/es-ES/docs/errors).

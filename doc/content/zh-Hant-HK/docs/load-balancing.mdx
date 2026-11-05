@@ -1,0 +1,105 @@
+---
+title: "負載平衡與故障轉移"
+description: "設定多端點客戶端、選擇器策略、P2C 熔斷健康探測同冪等故障轉移。"
+---
+
+# 負載平衡與故障轉移
+
+當應用程式用 `withEndpoint(...urls)` 設定咗多個 base URL 嗰陣，Defjs 可以將請求分流到唔同節點複本、透過被動熔斷（passive circuit breaking）或主動健康檢查剔除唔健康嘅主機，並喺同一次呼叫內自動為安全嘅 HTTP 方法執行故障轉移（failover）。
+
+## 1. 揀選負載平衡策略
+
+| 策略                                                                               | 最適用場景                                           | 預設健康狀態過濾                           |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------ |
+| [`pickFirstBalancer(options?)`](/zh-Hant-HK/api/core/pickfirstbalancer) _（預設）_ | 帶有主從備用順序嘅瀏覽器前端應用程式                 | 關閉（可透過 `outlierDetection` 選項開啟） |
+| [`roundRobinBalancer(options?)`](/zh-Hant-HK/api/core/roundrobinbalancer)          | 對等伺服器節點之間嘅內部呼叫（支援可選嘅 `weights`） | 預設開啟（連續 `5` 次失敗即熔斷）          |
+| [`p2cBalancer(options?)`](/zh-Hant-HK/api/core/p2cbalancer)                        | 節點延遲或在途負載差異較大嘅伺服器呼叫               | 預設開啟（連續 `5` 次失敗即熔斷）          |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### `pickFirstBalancer` 與 `p2cBalancer` 點樣運作
+
+- **`pickFirstBalancer`**：持續固定使用第一個 URL，直至遇到連線失敗（`NET_UNREACHABLE`）或無特定結構嘅 `502`、`503`、`504` 回應時，先會切換到下一個 URL。你可以設定 `failbackMs: 30_000`，等佢喺備用節點運行咗一段時間後，自動嘗試切返去主要端點。
+- **`p2cBalancer`（兩者隨機取優，Power of Two Choices）**：每次隨機抽取兩個唔同嘅候選端點，並揀選得分較低嗰個：`PeakEwma RTT × (pending + 1)`（若設定 `load: "pending"` 則單純比較在途請求數）。預設值（`defaultRttMs: 30`、`decayMs: 10000`）遵循 Linkerd/tower 開源標準慣例。
+
+## 2. 同次呼叫內嘅 HTTP 故障轉移與重試預算
+
+預設情況下，HTTP 會為安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）啟用**同次呼叫內故障轉移**：如果第一個被揀中嘅端點因 `NET_UNREACHABLE` 連線失敗，Defjs 會自動挑選另一個未試過嘅備用端點，並喺同一個操作呼叫內重新執行 builder、中介層鏈同傳輸層。
+
+你可以透過 [`withEndpointFailover(options)`](/zh-Hant-HK/api/core/withendpointfailover) 自訂或停用呢個策略：
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **重試觸發條件（`retryOn`）**：預設為 `["connect-failure"]`。你亦可以加入 `"gateway-error"`（無特定結構嘅 `502`/`503`/`504`，或者錯誤 body 通唔過 `RES_*` 解碼嘅 `502`/`503`/`504`）同埋 `"attempt-timeout"`（當設定咗 `attemptTimeoutMs` 嗰陣）。
+- **單次嘗試 vs. 整體呼叫逾時**：`attemptTimeoutMs` 淨係用嚟限制從發起 Fetch 到 body 解碼嘅單次嘗試；而呼叫端傳入嘅 `client({ signal: AbortSignal.timeout(ms) })` 則會限制跨越所有重試嘗試嘅成個呼叫總時間。
+- **Finagle / Linkerd 重試預算（Retry Budget）**：Client 上面嘅所有呼叫共享一個 token-bucket 重試預算池（`percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`），避免喺全集群故障時重試流量將伺服器打沉（流量放大唔會超過約 20%）。設為 `retryBudget: false` 可以停用上限。
+- **瀏覽器離線提示**：當 `navigator.onLine === false` 嗰陣，連線失敗會被標記為 `{ attempted: false }`，唔會推動負載平衡器指標，亦唔會觸發故障轉移。
+
+## 3. 被動熔斷與主動健康檢查（`outlierDetection`）
+
+`roundRobinBalancer()` 同 `p2cBalancer()` 預設會將候選端點包裝喺 [`outlierDetection`](/zh-Hant-HK/api/core/outlierdetection) 入面：
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **連續失敗熔斷**：當遇到 `NET_UNREACHABLE` 或 HTTP `500+` 達到 `consecutiveFailures`（預設 `5` 次）之後，該端點會被熔斷剔除，隔離時間為 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（介乎 `1000ms` 至 `60000ms`）加上最多 `50%` 嘅均勻正向抖動（jitter）。
+2. **單次探針復原**：隔離懲罰期屆滿後，系統只會放行一個請求去探測該主機。如果佢嘅傳輸握手（`end`：HTTP/SSE 收到 headers 或 WebSocket 變成 `open`）成功，就會即時恢復正常流量，並將懲罰等級重設為 `0`；若失敗，懲罰時間加倍。
+3. **恐慌模式降級（Panic-mode fail-open）**：如果所有設定嘅端點全部被熔斷剔除或標記為唔健康，負載平衡器會自動降級為全開狀態（fail-open），繼續嘗試所有端點，而唔會直接喺本地丟棄全部流量。
+
+## 4. 傳輸監測生命週期（`pick` → `start` → `end` → `done`）
+
+自訂負載平衡器需要實作同步嘅 `pick(context)` 函式，以及可選嘅 `start()`、`end(info)` 同 `done(info)` 回呼：
+
+| 實體傳輸層最終結果                                                 | 最終傳入 `done(info)` 嘅採樣數據                           |
+| ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| HTTP 回應 body 喺串流中途被截斷                                    | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 握手成功，隨後串流 `reader.read()` reject                      | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 正常 EOF、握手解碼失敗，或超出佇列上限                         | `{ attempted: true, status }`                              |
+| 已開啟嘅 WebSocket 異常關閉（代碼 `1006` 或 `wasClean === false`） | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已開啟嘅 WebSocket 正常關閉                                        | `{ attempted: true }`                                      |
+| 呼叫端主動中斷或手動關閉串流／socket                               | `{ attempted: false }`                                     |
+| 呼叫端逾時期限喺嘗試開始後屆滿                                     | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## 延伸閱讀
+
+- [Client 設定](/zh-Hant-HK/docs/client)
+- [SSE 重新連線](/zh-Hant-HK/docs/sse#reconnect)
+- [WebSocket 會話](/zh-Hant-HK/docs/web-socket)

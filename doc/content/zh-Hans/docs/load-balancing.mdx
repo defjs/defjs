@@ -1,0 +1,105 @@
+---
+title: "负载均衡与故障转移"
+description: 在多端点间分发流量，自动熔断剔除异常节点，并在单次调用中对幂等请求实现无缝故障转移。
+---
+
+# 负载均衡与故障转移
+
+当应用程序通过 `withEndpoint(...urls)` 配置了多个服务基地址时，Defjs 能够智能地在对等副本间分发流量，借助被动连续熔断或主动健康检查剔除不健康节点，并在同一次调用内部对安全的 HTTP 方法自动执行无感故障转移。
+
+## 1. 选择负载均衡策略
+
+| 均衡策略                                                                        | 适用场景                                              | 默认健康检测机制                                   |
+| ------------------------------------------------------------------------------- | ----------------------------------------------------- | -------------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/zh-Hans/api/core/pickfirstbalancer) _（默认）_ | 前端浏览器应用，配置了有序的“主节点 + 备用区域”列表   | 默认关闭（可通过 `outlierDetection` 选项显式开启） |
+| [`roundRobinBalancer(options?)`](/zh-Hans/api/core/roundrobinbalancer)          | 服务端对等副本间调用（支持配置可选的 `weights` 权重） | 默认开启（连续 `5` 次失败后熔断剔除）              |
+| [`p2cBalancer(options?)`](/zh-Hans/api/core/p2cbalancer)                        | 服务端调用，各副本间响应耗时或在途负载不均衡的场景    | 默认开启（连续 `5` 次失败后熔断剔除）              |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### `pickFirstBalancer` 与 `p2cBalancer` 的工作机制
+
+- **`pickFirstBalancer`（主备粘性）**：始终粘性访问列表中的第一个 URL，直到遇到连接失败（`NET_UNREACHABLE`）或未编码的 `502`、`503`、`504` 网关错误，才会切换前进到下一个 URL。配置 `failbackMs: 30_000` 可以在使用备用节点达到指定时长后，自动尝试切回主节点进行探测。
+- **`p2cBalancer`（双选择随机 P2C 算法）**：不放回地随机抽取两个不同的候选端点，并选出综合评分更低的一个：`PeakEwma RTT × (pending + 1)`（或在配置 `load: "pending"` 时直接比较在途 `pending` 请求数）。其默认参数（`defaultRttMs: 30`、`decayMs: 10000`）完全遵循 Linkerd 与 tower 的业界成熟标准。
+
+## 2. 单次调用内的 HTTP 故障转移与重试预算
+
+默认情况下，HTTP 请求对安全幂等方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）开启了**同次调用故障转移**：如果选中的首个端点发生 `NET_UNREACHABLE` 连接异常，Defjs 会自动挑选一个尚未尝试过的备用节点，并在同一次操作调用中重新运行 `builder`、中间件拦截链与底层网络请求。
+
+你可以使用 [`withEndpointFailover(options)`](/zh-Hans/api/core/withendpointfailover) 对其进行深度定制或直接禁用：
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **重试触发条件（`retryOn`）**：默认为 `["connect-failure"]`。你可以按需追加 `"gateway-error"`（未编码的 `502` / `503` / `504`，或是返回了错误体但解码失败的网关错误）以及 `"attempt-timeout"`（当配置了单次超时 `attemptTimeoutMs` 时生效）。
+- **单次尝试超时 vs. 全局调用超时**：`attemptTimeoutMs` 仅限制单次物理请求（从发起 Fetch 到完整读取并解码响应体）；而调用方通过 `client({ signal: AbortSignal.timeout(ms) })` 传入的 Signal 则管控覆盖所有尝试的全局总时长。
+- **Finagle / Linkerd 令牌桶重试预算**：同一个 Client 发起的所有调用共享一个令牌桶重试预算（`percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`），从而在大面积集群级故障时将重试流量严格限制在原有流量的 20% 以内，彻底避免重试风暴引发雪崩。若后端服务容量充裕，可设置 `retryBudget: false` 关闭此限制。
+- **浏览器离线环境感知**：当检测到 `navigator.onLine === false` 时，网络故障将被标记为 `{ attempted: false }`，此时不会推进均衡器指针，也不会触发无意义的故障转移。
+
+## 3. 被动熔断剔除与主动健康检查（`outlierDetection`）
+
+`roundRobinBalancer()` 和 `p2cBalancer()` 默认在节点选择器外层自动包裹了 [`outlierDetection`](/zh-Hans/api/core/outlierdetection) 熔断机制：
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **连续失败熔断**：当一个节点连续出现 `consecutiveFailures` 次（默认 `5` 次）`NET_UNREACHABLE` 或 HTTP `500+` 错误时，该节点将被熔断剔除，惩罚冷却时长为 `min(minPenaltyMs × 2^level, maxPenaltyMs)`（在 `1000ms` 至 `60000ms` 之间），并叠加最高 `50%` 的正向随机抖动。
+2. **单次探测恢复机制**：当冷却时间到期后，系统会分配一个探测请求尝试访问该节点。若传输握手（`end` 边界：HTTP/SSE 收到响应头，或 WebSocket 触发 `open`）成功，该节点立即恢复接收正常流量，且惩罚等级重置为 `0`；若探测失败，惩罚时间翻倍。
+3. **熔断兜底防雪崩（Panic-mode Fail-open）**：如果配置的所有节点均被熔断或被判定为不健康，负载均衡器会立即进入放行兜底模式，直接使用初始候选列表分发流量，而绝不在客户端本地自毁式拒绝所有请求。
+
+## 4. 传输层生命周期记账（`pick` → `start` → `end` → `done`）
+
+自定义负载均衡器需要实现同步的 `pick(context)` 方法，并可按需实现 `start()`、`end(info)` 以及 `done(info)` 回调钩子：
+
+| 物理传输实际结果                                                     | 最终 `done(info)` 统计样本                                 |
+| -------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP 响应体在传输流中途中断                                          | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE 握手成功，随后流 `reader.read()` 发生 reject                     | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE 正常 EOF、握手响应解码失败，或队列满                             | `{ attempted: true, status }`                              |
+| 已建立的 WebSocket 异常断开，关闭码为 `1006` 或 `wasClean === false` | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 已建立的 WebSocket 正常平稳关闭                                      | `{ attempted: true }`                                      |
+| 调用方主动取消请求，或手动关闭长连接流/Socket                        | `{ attempted: false }`                                     |
+| 请求尝试开始后调用方设置的超时期限到期                               | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## 相关阅读
+
+- [Client 客户端配置](/zh-Hans/docs/client)
+- [SSE 自动重连](/zh-Hans/docs/sse#reconnect)
+- [WebSocket 自动重连](/zh-Hans/docs/web-socket)

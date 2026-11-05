@@ -1,43 +1,30 @@
 ---
 title: "SDK entwickeln und veröffentlichen"
-description: API-Definitionen als npm-Paket mit Typen exportieren und jeder Anwendung ihren eigenen Client überlassen.
+description: API-Definitionen als npm-Paket mit Typen exportieren und jede Anwendung ihren eigenen Client konfigurieren lassen.
 ---
 
 # SDK entwickeln und veröffentlichen [#publish-an-http-sdk-without-hiding-execute]
 
-Ein SDK paketiert die API, die dein Team anbietet. Mit Defjs exportierst du Endpoint-Definitionen und ihre Datenverträge; konsumierende Anwendungen liefern die Client-Konfiguration und entscheiden, wann sie aufgerufen werden. Dieses Rezept nutzt HTTP, und dieselbe Paketgrenze gilt für SSE- und WebSocket-Definitionen.
+Ein Defjs-SDK exportiert reine Operationsdefinitionen und Struct-Schemas als npm-Paket, während `createClient(...)`, Endpunkte, Zugangsdaten und Interceptors vollständig in der konsumierenden Anwendung verbleiben.
 
-## 1. Die Operationen des SDKs definieren
+---
 
-Lege `src/orders.ts` in deinem SDK-Projekt an. Pfade, Input-Abbildung, Responses und Service-Fehler gehören hierher. Um diese Operation zu definieren, brauchst du keine Client-Instanz, keine Deployment-Adresse und kein aktuelles Credential.
+## 1. Das SDK-Paket aufbauen
 
+Halte deine Operationsdefinitionen, Barrel-Exporte, `package.json` und `tsconfig.json` in einem dedizierten Paketverzeichnis und deklariere `@defjs/core` als `peerDependency`:
+
+<Tabs items={["src/orders.ts", "src/index.ts", "package.json", "tsconfig.json"]}>
+  <Tab value="src/orders.ts">
 <include cwd meta='title="src/orders.ts"'>
   examples/recipes/publish-http-sdk/orders-sdk.ts#example
 </include>
-
-Stelle sie aus `src/index.ts` bereit:
-
+  </Tab>
+  <Tab value="src/index.ts">
 ```ts
 export { getOrder } from "./orders";
 ```
-
-Füge weitere Operationsmodule hinzu und re-exportiere ihre Endpoints, wenn das SDK wächst.
-
-## 2. JavaScript und Deklarationen paketieren
-
-Das SDK-Projekt hat seine eigene Paketgrenze:
-
-```txt
-orders-sdk/
-  package.json
-  tsconfig.json
-  src/
-    index.ts
-    orders.ts
-```
-
-Nutze diese `package.json` und ersetze den Beispielnamen durch einen Paket-Scope, den du besitzt:
-
+  </Tab>
+  <Tab value="package.json">
 ```json
 {
   "name": "@company/orders-sdk",
@@ -64,11 +51,8 @@ Nutze diese `package.json` und ersetze den Beispielnamen durch einen Paket-Scope
   }
 }
 ```
-
-Core bleibt eine externe Laufzeitabhängigkeit, die du mit der Anwendung teilst. Der Peer-Bereich sagt, welche Core-Releases dein SDK unterstützt; die Development-Abhängigkeit lässt dich gegen diesen Bereich bauen und testen. Dieses Beispiel entspricht dem aktuellen `0.4.x`-Vertrag. Wähle und teste den Bereich für dein SDK, bevor du veröffentlichst; Deklarationen und Laufzeitverhalten hängen beide davon ab.
-
-Füge `tsconfig.json` hinzu:
-
+  </Tab>
+  <Tab value="tsconfig.json">
 ```json
 {
   "compilerOptions": {
@@ -82,12 +66,17 @@ Füge `tsconfig.json` hinzu:
   "include": ["src/**/*.ts"]
 }
 ```
+  </Tab>
+</Tabs>
 
-Diese Library-Deklarationen liefern Typen, keine Laufzeit-Polyfills. Die Anwendung braucht weiterhin die Web-APIs der Transports, die sie wählt.
+- `@defjs/core` bleibt eine externe Laufzeit-`peerDependency`, die mit der konsumierenden Anwendung geteilt wird.
+- `"sideEffects": false` erlaubt es Bundlern, ungenutzte Endpunkte per Tree-Shaking zu entfernen, wenn eine Anwendung nur einen Teil der Operationen importiert.
 
-`tsdown` bündelt den Einstieg in `dist/index.js` und erzeugt `dist/index.d.ts`.
+---
 
-Baue das Paket und sieh es dir an:
+## 2. Bauen und den Tarball überprüfen
+
+Bündle `dist/index.js` und `dist/index.d.ts` mit `tsdown` und prüfe die Paketinhalte vor der Veröffentlichung:
 
 ```sh
 bun install
@@ -96,11 +85,19 @@ bun pm pack --dry-run
 bun pm pack
 ```
 
-Prüfe, dass das Tarball `dist/index.js` und `dist/index.d.ts` enthält. Installiere dieses Tarball in einer separaten Anwendung und prüfe Typen und Ausführung, bevor du veröffentlichst. Das README des SDKs sollte die Service-API, kompatible Core-Versionen, die erwartete Authentifizierung und optionale Defaults dokumentieren.
+Überprüfe, dass `dist/index.js` und `dist/index.d.ts` im Tarball enthalten sind.
 
-## 3. Aus der konsumierenden Anwendung aufrufen
+---
 
-Das lokale Beispiel hält die Definition in `orders-sdk.ts` neben `app.ts`, damit es offline laufen kann. Sein Import erzeugt keinen Client; die Anwendung konfiguriert einen lokalen Fetch-Handler und ruft die importierte Operation auf:
+## 3. Das SDK in einer Anwendung konsumieren
+
+Installiere dein SDK zusammen mit `@defjs/core`:
+
+```sh
+bun add @company/orders-sdk @defjs/core@^0.6.0
+```
+
+Die Anwendung erstellt ihren eigenen `Client` und übergibt ihn an die importierte Operation:
 
 <include cwd meta='title="app.ts"'>
   examples/recipes/publish-http-sdk/app.ts#example
@@ -110,32 +107,16 @@ Das lokale Beispiel hält die Definition in `orders-sdk.ts` neben `app.ts`, dami
 paid
 ```
 
-Für das paketierte SDK installierst du es zusammen mit einem kompatiblen Core-Release:
+Im Produktionscode ersetzt du den relativen Import `./orders-sdk` durch `@company/orders-sdk` und entfernst `withHTTPHandle(...)`, um das plattformnative `fetch` zu verwenden.
 
-```sh
-bun add @company/orders-sdk @defjs/core@^0.6.0
-```
+---
 
-Ersetze den relativen Import des Beispiels durch:
+## 4. Testen und veröffentlichen
 
-```ts
-import { getOrder } from "@company/orders-sdk";
-```
-
-Konfiguriere Service-Adresse und Authentifizierung am Anwendungsclient. Behalte `withHTTPHandle(...)` für lokale Tests; entferne es, um das Fetch der Plattform zu nutzen. Eine zweite Anwendung kann denselben Endpoint importieren und andere Client-Einstellungen wählen, ohne die SDK-Definition zu ändern.
-
-## 4. Prüfen und veröffentlichen
-
-Nutze [Tests mit lokalem Client](/de-DE/recipes/test-with-handle), um die exportierte Definition, die Request-Abbildung, die Response-Validierung und deklarierte Fehler auszuführen. Prüfe denselben Endpoint mit zwei Clients, die für unterschiedliche Service-Adressen und Zugangsdaten konfiguriert sind. Halte die typisierte `HTTP_STATUS`-Behandlung an der Aufrufstelle verfügbar und teste Abbruch sowie Stream-Cleanup für die Transports, die dein SDK exportiert.
-
-Wenn das Paket deine Prüfungen bestanden hat, veröffentliche aus dem SDK-Verzeichnis mit deinem npm-Konto:
+Prüfe deine exportierten Definitionen mit [In-Memory-Handle-Tests](/de-DE/recipes/test-with-handle), die Request-Mapping, `output`-Dekodierung, deklarierte `HTTP_STATUS`-Fehler und Abbruchszenarien abdecken. Nach erfolgreicher Verifikation veröffentlichst du das Paket:
 
 ```sh
 bun publish --access public
 ```
 
-Dieser Befehl veröffentlicht ein öffentliches Paket. Nutze die Registry und die Zugriffsregeln deiner Organisation für ein privates SDK. Defjs erzeugt oder veröffentlicht das Paket nicht für dich.
-
-Client-Factories und Komfortmethoden sind optionale Ergänzungen. Sie können Service-Defaults oder Domänenverhalten anbieten, Konfiguration des Aufrufers annehmen und die direkten Endpoint-Exporte erhalten. Dokumentiere jede Fehlerabbildung oder Lifecycle-Regel, die sie einführen. Für ein wiederverwendbares SDK ist keines von beiden erforderlich.
-
-Siehe [HTTP](/de-DE/docs/http), [Client](/de-DE/docs/client) und [Entwurfsentscheidungen](/de-DE/docs/design-decisions) für die zugrunde liegenden Verträge.
+Siehe [HTTP-Operationen](/de-DE/docs/http), [Client](/de-DE/docs/client), [Tests](/de-DE/docs/testing) und [Kernarchitektur](/de-DE/docs/design-decisions).

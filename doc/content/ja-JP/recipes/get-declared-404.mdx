@@ -1,22 +1,65 @@
 ---
 title: "宣言済み 404 の処理"
-description: GET を 1 回呼び出し、型付き 200 と宣言済み 404 で分岐します。
+description: 単一の GET リクエストを呼び出し、型付けされた 200 と宣言された 404 エラーを適切に分岐処理します。
 ---
 
-# 宣言済み 404 付きの GET
+# 宣言済み 404 の処理 (GET with a declared 404)
 
-成功と 404 のボディの両方を宣言します。`error.code` と `error.status` で分岐すると、宣言済みの miss に対して型付きの `error.data` が得られます。
+`defineRequest` で `output`（`2xx` レスポンス用）と `error`（`2xx` 以外のレスポンス用）の両方を宣言します。呼び出し側では、`error?.code === "HTTP_STATUS" && error.status === 404` で分岐し、型付けされた `error.data` ペイロードを安全に読み取ります。
 
-詳細は [HTTP](/ja-JP/docs/http) と [Errors](/ja-JP/docs/errors) を見てください。
+<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+const [error, order, response] = await getOrder(client, { id: 7 });
+if (error?.code === "HTTP_STATUS" && error.status === 404) {
+console.log(error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Loaded ${order.status} from ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` はプレースホルダーです。`GET /orders/7` に `200` と `{ "id": 7, "status": "paid" }` で応答するサーバーに対して、このスニペットは次のように出力します。
+サーバーが `GET /orders/7` に対して `200` と `{ "id": 7, "status": "paid" }` を返した場合、スクリプトの出力は以下のようになります。
 
 ```txt
 Loaded paid from 200
-```
+````
 
-2xx 以外の status は `HTTP_STATUS` です。`error` を宣言すればそのボディに型が付き、`error` を省けば `error.data` は `undefined` のまま、ボディは読まれません。宣言した `error` のボディを読み取れない場合（media type の不一致、不正な JSON、形の不一致）は、代わりに `RES_*` フォールトになります。ひとつの `error` Struct が 2xx 以外のすべての status を受け持つので、形が異なるときは `struct.or(...)` か判別可能な union を使ってください。
+- すべての非 `2xx` ステータスは `HTTP_STATUS` を生成します。`error` を宣言すると、エラーボディがデコード・検証されて `error.data` に格納されます。`error` の宣言を省略した場合は、ボディを一切読み取ることなく `error.data` は `undefined` となります。
+- 宣言された `error` ボディが不正なメディアタイプである場合、壊れた JSON である場合、または Struct バリデーションに失敗した場合は、代わりに `RES_*` Fault が返されます。単一の `error` Struct がすべての非 `2xx` ステータスをカバーするため、ステータスごとにエラーボディの形式が異なる場合は `struct.or(...)` を使用してください。
+
+詳細は [HTTP 操作](/ja-JP/docs/http) および [エラーハンドリング](/ja-JP/docs/errors) を参照してください。

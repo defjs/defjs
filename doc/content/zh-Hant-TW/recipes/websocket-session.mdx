@@ -1,22 +1,77 @@
 ---
 title: "管理 WebSocket 工作階段"
-description: 連線、送一個型別化 envelope、收一次，然後 close 並 await closed。
+description: 建立連線、發送單個具型別的封包、接收一次訊息，隨後關閉並等待 closed 狀態確立。
 ---
 
-# 開啟 WebSocket session
+# 建立 WebSocket 工作階段
 
-每個方向各一個 struct。Unsubscribe、`close`、`await session.closed` 由你負責。無效 frames 走 `onRuntimeError`。
+在 `defineWebSocket` 上宣告 `incoming` 與 `outgoing` 的 Struct，並設定有上限的 `maxIncomingQueueSize`。在應用程式端，訂閱 `session.onRuntimeError(...)`、消費 `session.receive`，並始終在 `finally` 區塊中取消訂閱、呼叫 `session.close(...)` 並等待 `await session.closed`：
 
-細節見 [WebSocket](/zh-Hant-TW/docs/web-socket)。
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab value="sdk/quotes.ts">
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
 
+export const quotes = defineWebSocket({
+  maxIncomingQueueSize: 100,
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { quotes } from "../sdk/quotes.ts";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+
+async function main() {
+const [error, session] = await quotes(client);
+if (error) {
+console.error(error.code);
+return;
+}
+const unsubscribe = session.onRuntimeError((cause) =>
+console.error("runtime", cause),
+);
+try {
+session.send({ type: "subscribe", symbol: "ACME" });
+for await (const message of session.receive) {
+console.log(message.symbol, message.price);
+break;
+}
+} finally {
+unsubscribe();
+session.close(1000, "consumer-finished");
+await session.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`quotes.example.com` 是 placeholder。若 server 以 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` 回應 `{ "type": "subscribe", "symbol": "ACME" }`，這段 snippet 會印出：
+當伺服器針對 `{ "type": "subscribe", "symbol": "ACME" }` 回應 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` 時，該腳本會輸出：
 
 ```txt
 ACME 142.5
-```
+````
 
-重連是選擇性開啟（`withWebSocketReconnect`）。Heartbeat 也是。瀏覽器 WebSocket 不能帶任意 handshake headers — 改用 cookies、subprotocols，或短效 ticket。
+- 斷線重連（`withWebSocketReconnect`）與心跳檢測（`withWebSocketHeartbeat`）在 Client 上皆屬於選擇性啟用。
+- 瀏覽器端 WebSocket 無法在升級交握期間發送自訂 HTTP 標頭；請改用 Cookie、子協定或短期票證。請參閱 [WebSocket 工作階段](/zh-Hant-TW/docs/web-socket)。

@@ -1,0 +1,105 @@
+---
+title: "Load balancing & failover"
+description: Distribute traffic across multiple endpoints, eject unhealthy replicas, and fail over safe HTTP requests within a single call.
+---
+
+# Load balancing & failover
+
+When an application configures multiple base URLs with `withEndpoint(...urls)`, Defjs can distribute requests across replicas, eject unhealthy hosts using passive circuit breaking or active health checks, and automatically fail over safe HTTP methods within the same call.
+
+## 1. Choose a load balancer strategy
+
+| Strategy                                                                 | Best for                                                                   | Default health filtering                   |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------------------------ |
+| [`pickFirstBalancer(options?)`](/api/core/pickfirstbalancer) _(Default)_ | Browser apps with an ordered primary + backup region list                  | Off (opt-in via `outlierDetection` option) |
+| [`roundRobinBalancer(options?)`](/api/core/roundrobinbalancer)           | Server-to-server calls across equal replicas (supports optional `weights`) | Enabled (`5` consecutive failures)         |
+| [`p2cBalancer(options?)`](/api/core/p2cbalancer)                         | Server calls where replica latency or in-flight load varies                | Enabled (`5` consecutive failures)         |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### How `pickFirstBalancer` and `p2cBalancer` work
+
+- **`pickFirstBalancer`**: Stays on the first URL until a connection failure (`NET_UNREACHABLE`) or an uncoded `502`, `503`, or `504` response advances it to the next URL. Configure `failbackMs: 30_000` to probe the primary endpoint again after spending that duration on a backup.
+- **`p2cBalancer` (Power of Two Choices)**: Samples two distinct candidates without replacement and picks the one with the lower score: `PeakEwma RTT × (pending + 1)` (or in-flight `pending` count when `load: "pending"`). Defaults (`defaultRttMs: 30`, `decayMs: 10000`) follow Linkerd/tower conventions.
+
+## 2. Same-call HTTP failover and retry budget
+
+By default, HTTP enables **same-call failover** for safe methods (`GET`, `HEAD`, `OPTIONS`, `TRACE`): if the first picked endpoint fails with `NET_UNREACHABLE`, Defjs picks one untried backup endpoint and runs the builder, interceptor chain, and transport again within the same operation call.
+
+Customize or disable this policy with [`withEndpointFailover(options)`](/api/core/withendpointfailover):
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **Retry conditions (`retryOn`)**: Defaults to `["connect-failure"]`. You can add `"gateway-error"` (uncoded `502`/`503`/`504`, or a `502`/`503`/`504` whose error body failed `RES_*` decoding) and `"attempt-timeout"` (when `attemptTimeoutMs` is set).
+- **Per-attempt vs. whole-call timeout**: `attemptTimeoutMs` bounds a single attempt from Fetch invocation through body decoding; the caller's `client({ signal: AbortSignal.timeout(ms) })` bounds the entire call across all attempts.
+- **Finagle / Linkerd retry budget**: All calls on a client share a token-bucket retry budget (`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`) so retries cannot amplify traffic by more than ~20% during a cluster-wide outage. Set `retryBudget: false` to disable the cap.
+- **Browser offline hint**: When `navigator.onLine === false`, connection failures are reported as `{ attempted: false }` and do not advance balancers or trigger failover.
+
+## 3. Passive circuit breaking and active health checks (`outlierDetection`)
+
+`roundRobinBalancer()` and `p2cBalancer()` wrap their candidate selection in [`outlierDetection`](/api/core/outlierdetection) by default:
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **Consecutive failures**: After `consecutiveFailures` (default `5`) of `NET_UNREACHABLE` or HTTP `500+`, the endpoint is ejected for `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` to `60000ms`) plus up to `50%` uniform positive jitter.
+2. **Single-probe recovery**: Once the penalty expires, a single request probes the host. If its transport handshake (`end`: HTTP/SSE headers or WebSocket `open`) succeeds, normal traffic resumes immediately and the penalty level resets to `0`; if it fails, the penalty doubles.
+3. **Panic-mode fail-open**: If every configured endpoint is ejected or marked unhealthy, the balancer fails open to the client's candidate list rather than dropping all traffic locally.
+
+## 4. Transport accounting lifecycle (`pick` → `start` → `end` → `done`)
+
+Custom balancers implement synchronous `pick(context)` and optional `start()`, `end(info)`, and `done(info)` callbacks:
+
+| Physical transport outcome                                       | Final `done(info)` sample                                  |
+| ---------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP response body truncates mid-stream                          | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE handshake succeeds, then stream `reader.read()` rejects      | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE normal EOF, handshake decode failure, or queue limit         | `{ attempted: true, status }`                              |
+| Opened WebSocket closes with code `1006` or `wasClean === false` | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Opened WebSocket closes cleanly                                  | `{ attempted: true }`                                      |
+| Caller cancellation or manual stream/socket close                | `{ attempted: false }`                                     |
+| Caller deadline expires after attempt started                    | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## Related reading
+
+- [Client configuration](/docs/client)
+- [SSE reconnect](/docs/sse#reconnect)
+- [WebSocket reconnect](/docs/web-socket)

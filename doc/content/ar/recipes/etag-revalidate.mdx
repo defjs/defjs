@@ -1,22 +1,80 @@
 ---
 title: "طلبات ETag الشرطية"
-description: عُدّ 304 عطل حالة HTTP؛ وأبقِ خريطة التخزين المؤقت خارج استدعاء العملية.
+description: تعامل مع 304 كخطأ في حالة HTTP، واحتفظ بذاكرة التخزين المؤقت Map خارج استدعاء العملية.
 ---
 
-# أعد التحقق بـ ETag و304
+# إعادة التحقق عبر ETag واستجابة 304
 
-`ok` يعني 2xx، لذلك يصل `304` كعطل `HTTP_STATUS`. وحالة إعادة التوجيه ليست جسم خطأ أيضًا، فاترك `error` غير معلَن: لا يُقرأ الجسم أبدًا، ويحمل الخطأ الحالة، وتُرجع أنت المنتج المخزَّن بنفسك.
+في Defjs، تسلك استجابات `2xx` فقط فرع النجاح، لذا تصل استجابة `304 Not Modified` كخطأ `HTTP_STATUS`. اترك `error` غير معلن في `defineRequest` حتى لا يُقرأ جسم استجابة `304` الفارغ أبداً، واحتفظ بذاكرة التخزين المؤقت `Map` داخل غلاف تطبيقي حول استدعاء العملية:
 
-انظر [HTTP](/ar/docs/http).
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+  <Tab value="sdk/catalog.ts">
+```ts
+import { defineRequest, struct, type Infer } from "@defjs/core";
 
+export const Product = struct.object({
+  sku: struct.string(),
+  name: struct.string(),
+  priceCents: struct.number(),
+});
+
+export type Product = Infer<typeof Product>;
+
+export const readProduct = defineRequest({
+  method: "GET",
+  path: "/catalog/:sku",
+  input: struct.object({
+    sku: struct.string(),
+    etag: struct.string().optional(),
+  }),
+  builder: (input) => ({
+    path: { sku: input.sku },
+    headers: { "If-None-Match": input.etag },
+  }),
+  output: Product,
+});
+```
+  </Tab>
+  <Tab value="app/reader.ts">
+```ts
+import type { DerivableClient } from "@defjs/core";
+import { readProduct, type Product } from "../sdk/catalog.ts";
+
+export function createReader(client: DerivableClient) {
+  const cache = new Map<string, { etag: string; product: Product }>();
+
+return async (sku: string): Promise<Product> => {
+const cached = cache.get(sku);
+const [error, product, response] = await readProduct(client, {
+sku,
+etag: cached?.etag,
+});
+
+    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
+      return cached.product;
+    }
+    if (error) throw error;
+
+    const etag = response.headers.get("etag");
+    if (!etag) throw new Error("missing ETag");
+    cache.set(sku, { etag, product });
+    return product;
+
+};
+}
+
+````
+  </Tab>
+  <Tab value="etag-cache.ts">
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
-```
+````
 
-`throw error` بعد فرع 304 هو حد هذا القارئ. ما زالت الدالة تُرجع `Promise<Product>`؛ وعطل غير 304 لا يُرجَع كـ tuple من Defjs من ذلك الحد.
-
-لا تُعد كتابة `304` إلى `200` مزيّف داخل Core. تبقى ملكية التخزين المؤقت في شيفرة التطبيق حول استدعاء العملية.
+- يمثل استدعاء `if (error) throw error` بعد التحقق من `304` حداً فاصلاً صريحاً لدالة `createReader` التي تُرجع `Promise<Product>`.
+- لا تقم أبداً بإعادة كتابة استجابة `304` إلى `200` مصطنعة داخل معترض؛ بل احتفظ بحالة التخزين المؤقت في كود التطبيق حول استدعاء العملية. راجع [عمليات HTTP](/ar/docs/http).

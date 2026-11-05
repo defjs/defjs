@@ -1,20 +1,66 @@
 ---
 title: "本地 HTTP 测试"
-description: 用 withHTTPHandle 只换这一个 Client 的 Fetch，操作保持不变。
+description: 使用 withHTTPHandle 仅为单个测试 Client 替换底层 Fetch，无须改动任何 SDK 操作定义。
 ---
 
-# 用本地 Fetch handle 做测试
+# 使用本地 Fetch Handle 编写测试
 
-`withHTTPHandle(...)` 只替换该 Client 的 Fetch。URL 拼装、interceptor、状态分派、Struct 解码都还在——不用 DNS、TLS、真服务。
+`withHTTPHandle(...)` 仅针对单个 Client 实例替换其底层的 `fetch` 实现，同时完整跑通入参校验、`builder` 参数映射、URL 目录安全检查、中间件拦截链、HTTP 状态码分流以及 Struct 解码等全部流程，期间完全无需打开任何真实网络 Socket：
 
-细节见 [Client](/zh-Hans/docs/client)。
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts", "get-order.test.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+```ts
+import { createClient, withEndpoint, withHTTPHandle } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+const client = createClient(
+  withEndpoint("https://fixture.invalid"),
+  withHTTPHandle(async (input, init) => {
+    const request = new Request(input, init);
+    const id = new URL(request.url).pathname.split("/").at(-1);
+    if (id === "7") {
+      return Response.json({ id: 7, status: "paid" }, { status: 200 });
+    }
+    return Response.json({ message: "Order not found" }, { status: 404 });
+  }),
+);
+
+const [error, order, response] = await getOrder(client, { id: 7 });
+if (error) throw error;
+console.log(order.status, response.status);
+```
+
+</Tab>
+<Tab value="get-order.test.ts">
 
 <include cwd meta="get-order.test.ts">
   examples/recipes/test-with-handle.ts#example
 </include>
 
+</Tab>
+</Tabs>
+
+运行输出：
+
 ```txt
 paid 200
 ```
 
-生产里用同一个 `getOrder` 操作对着真实 `withEndpoint(...)` Client——变的只是 handle。
+在生产环境中，只需将配置了真实服务基地址 `withEndpoint(...)` 的 Client 传入完全相同的 `getOrder` 接口定义即可。更多细节请参阅 [测试](/zh-Hans/docs/testing) 与 [Client](/zh-Hans/docs/client)。

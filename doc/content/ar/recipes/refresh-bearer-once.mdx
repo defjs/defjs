@@ -1,20 +1,82 @@
 ---
 title: "تحديث الرمز بعد 401"
-description: أرفق Authorization وأعد التشغيل مرة واحدة داخل معترض واحد؛ next() يتجه إلى الداخل فقط.
+description: أرفق ترويسة Authorization وأعد المحاولة مرة واحدة داخل معترض واحد؛ دالة next() تتجه نحو الداخل فقط.
 ---
 
-# حدّث رمز Bearer مرة واحدة عند 401
+# تحديث رمز Bearer مرة واحدة عند استلام 401
 
-`next()` هو بقية بصلة **هذا** المعترض — وليس إعادة إرسال من الخارج مثل `axios(config)`. ضع الإرفاق وتحديث الرحلة الواحدة وإعادة التشغيل الواحدة في معترض HTTP **واحد** حتى لا تعمل الطبقات الخارجية مرتين.
+في Defjs، يستدعي `next(request)` بقية سلسلة المعترضات باتجاه الداخل فقط — ولا يعيد توزيع الطلب من المعترض الخارجي الأول مجدداً. ضع إرفاق الرمز، وإلغاء تكرار التحديث المتزامن لرحلة مفردة (single-flight)، وإعادة المحاولة لمرة واحدة عند استلام `401` داخل معترض HTTP **واحد** حتى لا تعمل معترضات السجلات أو التوقيت الخارجية مرتين:
 
-انظر [المعترضات](/ar/docs/interceptors).
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab value="sdk/billing.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getInvoice = defineRequest({
+  method: "GET",
+  path: "/v1/invoice",
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal("expired_token") }),
+});
+```
+  </Tab>
+  <Tab value="app/auth-interceptor.ts">
+```ts
+import { createHttpInterceptor } from "@defjs/core";
+
+export type Credential = { accessToken: string };
+
+export function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+return createHttpInterceptor(async (request, next) => {
+const authorize = (credential: Credential) => {
+const headers = new Headers(request.headers);
+headers.set("authorization", `Bearer ${credential.accessToken}`);
+return { ...request, headers };
+};
+
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
+
+    const current = read();
+    if (current.accessToken !== used.accessToken) {
+      return next(authorize(current));
+    }
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+
+});
+}
+
+````
+  </Tab>
+  <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 42
-```
+````
 
-استدعاء `next` مرة أخرى يعيد الدخول فقط إلى المعترضات **داخل** هذه الطبقة (ومعالِج Fetch). وهو لا يعيد تشغيل أغلفة التوقيت أو المصادقة الخارجية — ولهذا ينتمي تخطيط 401 إلى معترض واحد، لا إلى استدعاء ثانٍ للعملية.
+راجع دليل [الوسائط (Interceptors)](/ar/docs/interceptors) للتعرف على ترتيب طبقات البصلة وحدود إعادة المحاولة.

@@ -1,20 +1,82 @@
 ---
 title: "401 後のトークン更新"
-description: Authorization の付与と 1 回の再送を 1 つのインターセプターに入れます。next() は内側へしか進みません。
+description: 単一のインターセプター内で Authorization ヘッダーを付与し、1 度だけ再試行します。next() は常に内側へ向かって進みます。
 ---
 
-# 401 で Bearer トークンを一度だけ更新する
+# 401 発生時の Bearer トークン自動更新
 
-`next()` は**この**オニオンの残りです — 外から `axios(config)` のように再ディスパッチするものではありません。付与と single-flight の更新と 1 回の再送を、**1 つ**の HTTP インターセプターに置いて、外側の層が二度走らないようにします。
+Defjs では、`next(request)` はインターセプターチェーンの残りの内側のみを呼び出し、最外層から再ディスパッチすることはありません。トークンの付与、並行リフレッシュの重複排除（シングルフライト）、そして `401` 発生時の 1 度限りの再実行処理を **単一の** HTTP インターセプター内に集約することで、外側のロギングやレイテンシ計測のインターセプターが 2 度実行されるのを防ぎます。
 
-詳細は [Interceptors](/ja-JP/docs/interceptors) を見てください。
+<Tabs items={["sdk/billing.ts", "app/auth-interceptor.ts", "refresh-bearer.ts"]}>
+  <Tab value="sdk/billing.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getInvoice = defineRequest({
+  method: "GET",
+  path: "/v1/invoice",
+  output: struct.object({ total: struct.number() }),
+  error: struct.object({ code: struct.literal("expired_token") }),
+});
+```
+  </Tab>
+  <Tab value="app/auth-interceptor.ts">
+```ts
+import { createHttpInterceptor } from "@defjs/core";
+
+export type Credential = { accessToken: string };
+
+export function refreshingBearer(
+  read: () => Credential,
+  refresh: (stale: Credential) => Promise<Credential>,
+) {
+  let flight: Promise<Credential> | undefined;
+
+return createHttpInterceptor(async (request, next) => {
+const authorize = (credential: Credential) => {
+const headers = new Headers(request.headers);
+headers.set("authorization", `Bearer ${credential.accessToken}`);
+return { ...request, headers };
+};
+
+    const used = read();
+    const response = await next(authorize(used));
+    const body = response.body;
+    if (
+      response.status !== 401 ||
+      typeof body !== "object" ||
+      body === null ||
+      !("code" in body) ||
+      body.code !== "expired_token"
+    ) {
+      return response;
+    }
+
+    const current = read();
+    if (current.accessToken !== used.accessToken) {
+      return next(authorize(current));
+    }
+
+    flight ??= refresh(used).finally(() => {
+      flight = undefined;
+    });
+    const refreshed = await flight;
+    return next(authorize(refreshed));
+
+});
+}
+
+````
+  </Tab>
+  <Tab value="refresh-bearer.ts">
 <include cwd meta="refresh-bearer.ts">
   examples/recipes/refresh-bearer-once.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 42
-```
+````
 
-`next` を再び呼んでも、再入するのはこの層の**内側**のインターセプター（と Fetch ハンドラ）だけです。外側の計時や認証のラッパーは再実行されません — だから 401 の組み立ては、操作の 2 回目の呼び出しではなく 1 つのインターセプターに置きます。
+インターセプターのオニオン実行順序やリトライ境界の詳細は、[ミドルウェア](/ja-JP/docs/interceptors) を参照してください。

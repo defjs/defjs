@@ -1,20 +1,126 @@
 ---
-title: الإضافات
-description: حزم اختيارية يركّبها التطبيق المستهلك على عميل Defjs الذي يملكه.
+title: تطوير الإضافات
+description: وسّع عميل Defjs المملوك للتطبيق بحقن أطر العمل ومراقبة الخادم وأدوات الذكاء الاصطناعي دون ربط تعريفات SDK الخاصة بك.
 ---
 
-# الإضافات
+# نظرة عامة على التكاملات وتطوير الإضافات
 
-الإضافات حزم اختيارية يركّبها التطبيق المستهلك على عميل Defjs الذي يملكه. `@defjs/core` لا يستوردها، وتعريفات SDK لا تستوردها أيضًا. يملك التطبيق العميل ونقطة النهاية وبيانات الاعتماد واختيار الإضافات.
+يُوسّع التكامل عميل التطبيق `Client` عند نقاط تمديد محددة بدقة دون تعديل حزمة `@defjs/core` ودون ربط تعريفات SDK بأي إطار عمل أو حزمة قياس ومراقبة. تبقى تعريفات SDK لديك وحدات ESM نقية تتبع `@defjs/core` فقط؛ بينما يختار التطبيق المستهلك التكاملات التي يرغب في تثبيتها واستخدامها.
 
-الإضافات نوعان. **إضافات الإطار** تسلّم `Client` موجودًا إلى شجرة الإطار. **الإضافة الوسيطة** هي شكل الإضافة لسلسلة المعترضات: تُلحق معترضات بعميل التطبيق. انظر [المعترضات](/ar/docs/interceptors).
+تخضع كل إضافة في Defjs لـ **عقد الإضافات الرشيقة (thin plugin contract)**:
 
-| الإضافة                                                                 | الحزمة                        | ما تضيفه                                                                     | ما لا تفعله                                                                              |
-| ----------------------------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| [React](/ar/docs/integrations/react) · إطار                             | `@defjs/react`                | `ClientProvider` و`useClient()` لعميل موجود                                  | لا تنشئ العميل ولا تخزّنه ولا تعيد المحاولة ولا تتخلص منه. ليست مكتبة استعلام أو حالة    |
-| [Vue](/ar/docs/integrations/vue) · إطار                                 | `@defjs/vue`                  | إضافة Vue و`HTTP_CLIENT` و`injectClient()`                                   | لا تنشئ ولا تخزّن ولا تعيد المحاولة. لا تغلق النقل عند إلغاء التركيب. ليست مكتبة استعلام |
-| [خادم OpenTelemetry](/ar/docs/integrations/opentelemetry-server) · وسيط | `@defjs/opentelemetry-server` | `withOpenTelemetryServer(...)`، خيار عميل يُلحق معترضات HTTP وSSE وWebSocket | لا تهيئ OpenTelemetry SDK ولا ترصد الطلبات الواردة إلى الخادم                            |
+- **لا تخزين مؤقت خفي ولا إدارة حالة ضمنية**: لا تخزن الإضافات أي استجابات، ولا تعيد محاولة الطلبات تلقائياً، ولا تدير حالة استعلامات البيانات.
+- **لا استبدال لوسيلة النقل**: لا تغلف الإضافات وسيلة النقل الأساسية لـ HTTP أو SSE أو WebSocket ولا تستبدلها أبداً.
+- **دورة حياة مملوكة للمستدعي**: إلغاء تثبيت موفر واجهة المستخدم (UI Provider) أو إيقاف تشغيل حزمة القياس عن بُعد لا يُلغي تلقائياً الطلبات الجارية ولا يُغلق التدفقات النشطة.
 
-تسلّم React وVue عميلًا موجودًا إلى شجرة الإطار. ينشئ التطبيق ذلك العميل بـ `createClient` من `@defjs/core`. توفّر إضافة React العميل عبر Context. توفّر إضافة Vue العميل عبر `app.use(createClientPlugin(client))`. لا تبدأ أي الحزمتين طلبًا.
+---
 
-إضافة خادم OpenTelemetry الوسيطة هي `ClientOption`. مرّر `withOpenTelemetryServer(...)` إلى `createClient`. تُلحق معترضًا واحدًا لكل وسيلة نقل مفعّلة، بالترتيب HTTP ثم SSE ثم WebSocket. انظر [المعترضات](/ar/docs/interceptors). لا تهيئ الحزمة OpenTelemetry SDK.
+## التكاملات والأدوات المنشورة
+
+| المجال                                                                        | الحزمة / المورد                  | الفئة                    | ما توفره الإضافة                                                                              | ما يبقى ملكاً للتطبيق                                                                     |
+| ----------------------------------------------------------------------------- | -------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| [React](/ar/docs/integrations/react)                                          | `@defjs/react`                   | إضافة إطار عمل           | موفر `ClientProvider` وخطاف `useClient(override?)` لـ React 18+                               | إنشاء العميل، تنظيف `AbortController`، تخزين الاستعلامات مؤقتاً (مثل TanStack Query)      |
+| [Vue](/ar/docs/integrations/vue)                                              | `@defjs/vue`                     | إضافة إطار عمل           | إضافة `createClientPlugin`، والرمز `HTTP_CLIENT`، ودالة `injectClient(key?)` لـ Vue 3.2+      | إنشاء العميل، إلغاء الطلبات عبر `onCleanup` / `onScopeDispose`، حالة الاستعلامات          |
+| [خادم OpenTelemetry](/ar/docs/integrations/opentelemetry-server)              | `@defjs/opentelemetry-server`    | إضافة وسيطة (Middleware) | خيار `withOpenTelemetryServer(...)` لتتبع طلبات HTTP وSSE وWebSocket وتوليد القياسات والسجلات | تهيئة حزمة OpenTelemetry SDK، والمصدّرات، وأخذ العينات، وتنقيح البيانات الحساسة، والتفريغ |
+| [مهارة الذكاء الاصطناعي (AI Skill)](/ar/docs/ai) و[llms.txt](/ar/docs/ai-api) | مهارة `defjs/defjs` و`/llms.txt` | أدوات الذكاء الاصطناعي   | مهارة المساعد الذكي (`SKILL.md`) وتوثيق Markdown المقروء آلياً                                | التحقق مقابل إصدار `@defjs/core` المثبت في المشروع ومجموعة اختباراته                      |
+
+---
+
+## بنيتان أساسيتان لتطوير الإضافات
+
+### 1. إضافات أطر العمل (`@defjs/react`، `@defjs/vue`)
+
+تمرر إضافة إطار العمل عميل [`DerivableClient`](/ar/api/core/derivableclient-type) الحالي عبر شجرة المكونات باستخدام آليات حقن الاعتمادية الأصلية (React Context أو Vue `provide` / `inject`):
+
+<Tabs items={["sdk/orders.ts", "app/main.tsx", "app/OrderCard.tsx"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: Order,
+});
+```
+  </Tab>
+  <Tab value="app/main.tsx">
+```tsx
+import { createClient, withEndpoint } from "@defjs/core";
+import { ClientProvider } from "@defjs/react";
+import { OrderCard } from "./OrderCard.tsx";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+export function App() {
+  return (
+    <ClientProvider client={client}>
+      <OrderCard id={42} />
+    </ClientProvider>
+  );
+}
+```
+  </Tab>
+  <Tab value="app/OrderCard.tsx">
+```tsx
+import { useClient } from "@defjs/react";
+import { getOrder } from "../sdk/orders.ts";
+
+export function OrderCard({ id }: { id: number }) {
+  const client = useClient();
+  // مرّر `client` أو `client({ signal })` إلى `getOrder(...)` داخل أثر جانبي أو خطاف استعلام
+  void id;
+  void getOrder;
+  void client;
+  return null;
+}
+```
+  </Tab>
+</Tabs>
+
+### 2. الإضافات الوسيطة (`@defjs/opentelemetry-server`)
+
+الإضافة الوسيطة هي دالة مصنع تُرجع خيار عميل [`ClientOption`](/ar/api/core/clientoption-type). وعند تمريرها إلى `createClient(...)`، تقوم بإلحاق معترضات HTTP وSSE و/أو WebSocket عبر `withHttpInterceptors` و`withSSEInterceptors` و`withWebSocketInterceptors`:
+
+<Tabs items={["plugins/request-id.ts", "app/client.ts"]}>
+  <Tab value="plugins/request-id.ts">
+```ts
+import type { ClientOption } from "@defjs/core";
+import { createHttpInterceptor, withHttpInterceptors } from "@defjs/core";
+
+export function withRequestIdHeader(headerName = "x-request-id"): ClientOption {
+  const interceptor = createHttpInterceptor(async (request, next) => {
+    const headers = new Headers(request.headers);
+    if (!headers.has(headerName)) {
+      headers.set(headerName, crypto.randomUUID());
+    }
+    return next({ ...request, headers });
+  });
+
+return withHttpInterceptors(interceptor);
+}
+
+````
+  </Tab>
+  <Tab value="app/client.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { withRequestIdHeader } from "../plugins/request-id.ts";
+
+export const client = createClient(
+  withEndpoint("https://api.example.com"),
+  withRequestIdHeader(),
+);
+````
+
+  </Tab>
+</Tabs>
+
+راجع دليل [الوسائط (Interceptors)](/ar/docs/interceptors) للتعرف على قواعد الترتيب، وحدود إعادة المحاولة، وخطافات دورة حياة التدفق.

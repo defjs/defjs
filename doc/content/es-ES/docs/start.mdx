@@ -5,41 +5,58 @@ description: Exporta tu primera operación de SDK, llámala desde una aplicació
 
 # Primeros pasos: tu primera operación de SDK [#getting-started-one-http-request]
 
-Escribirás dos archivos: un módulo de SDK que exporta `GET /orders/:id` y una aplicación que lo importa y es dueña del cliente. El handle Fetch local mantiene la primera ejecución sin red. La misma definición de API funcionará después con un cliente apuntando a tu servicio.
+En esta guía crearás un módulo de SDK que define `GET /orders/:id` y lo llamarás desde dos módulos de aplicación distintos: uno con un transporte de prueba local sin conexión a internet y otro apuntando a una API real.
 
-## Práctica recomendada
+## 1. Instalar `@defjs/core`
 
-Una definición permanece independiente del cliente. Llama a la operación con el cliente de la aplicación, como en `getOrder(client, { id: 7 })`. No hay un tercer argumento de opciones. Llamar a la operación la arranca; `await` solo espera. La aplicación también es dueña de la dirección del servicio y de las credenciales. Inspecciona primero la tupla error-first. Si `error` está presente, informa `error.code` y sal de la función antes de leer el valor de éxito.
-
-## Paso 1 — Instalar
-
-`@defjs/core` es ESM y funciona en Node.js o Bun. Node.js 22.18+ (o 24+) ejecuta el archivo `.ts` directamente mediante type stripping; las versiones 22.x anteriores necesitan `--experimental-strip-types`. Mantén `"type": "module"` en package.json. En el navegador sigues necesitando tu bundler y Fetch.
+`@defjs/core` es un paquete ESM sin dependencias que funciona en navegadores, Bun y Node.js (las versiones 22.18+ o 24+ ejecutan archivos `.ts` directamente). Asegúrate de tener `"type": "module"` en tu `package.json`.
 
 ```sh
 bun add @defjs/core
 ```
 
-## Paso 2 — Definir la solicitud
+## 2. Definir el SDK y llamarlo desde tu aplicación
 
-Crea `src/define-request.ts`. Este es el módulo del autor del SDK: exporta `getOrder` sin crear un cliente. El struct de entrada es el valor de quien llama. `builder` coloca ese valor en la solicitud. Aquí toda la entrada es el objeto de path, así que los campos escalares sin alias rellenan `:id`.
+Mantén la definición de la operación en su propio módulo de SDK (`src/define-request.ts`) y crea el cliente en tu aplicación (`src/execute-locally.ts` o `src/real-api.ts`):
 
-<include cwd meta="define-request.ts">
+<Tabs items={["src/define-request.ts", "src/execute-locally.ts", "src/real-api.ts"]}>
+<Tab value="src/define-request.ts">
+
+<include cwd meta="src/define-request.ts">
   examples/start/define-request.ts#example
 </include>
 
-`output` es el cuerpo 2xx. `error` es cualquier otro estado. Un struct cada uno. Usa `struct.or(...)` o una unión discriminada cuando esos cuerpos difieran.
+</Tab>
+<Tab value="src/execute-locally.ts">
 
-`defineRequest(...)` devuelve una operación. Llamar a `getOrder(client, input)` arranca la solicitud. El `builder` de arriba es la función que coloca el input; no es la operación. Donde se declara `input`, `builder` es obligatorio, síncrono y puro.
-
-## Paso 3 — Llámalo en local
-
-Crea `src/execute-locally.ts` junto a la definición. Esta es la aplicación consumidora: importa `getOrder`, crea su propio cliente y aporta un handle Fetch local. Defjs sigue validando la entrada, construyendo el `Request`, despachando por estado y parseando el cuerpo.
-
-<include cwd meta="execute-locally.ts">
+<include cwd meta="src/execute-locally.ts">
   examples/start/execute-locally.ts#example
 </include>
 
-Ejecútalo:
+</Tab>
+<Tab value="src/real-api.ts">
+
+<include cwd meta="src/real-api.ts">
+  examples/start/real-api.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### Cómo colaboran los tres archivos
+
+1. **`src/define-request.ts` (Definición del SDK)**:
+   - Declara `input`, `output` (para respuestas `2xx`) y `error` (para respuestas no `2xx`) usando `struct`.
+   - Proporciona un `builder` síncrono y puro que mapea `input` a `{ path }`. Siempre que se declare `input`, es obligatorio incluir un `builder` explícito.
+   - Exporta `getOrder` sin crear ni capturar ningún cliente.
+2. **`src/execute-locally.ts` (Ejecución de prueba local)**:
+   - Configura un cliente con `withHTTPHandle(...)` para ejecutar todo el flujo de Defjs (validación de entrada, resolución de URL, despacho por código de estado y análisis de estructuras en la respuesta) sin tocar la red.
+3. **`src/real-api.ts` (Ejecución en producción)**:
+   - Importa exactamente la misma operación `getOrder` y la invoca contra una URL base real configurada mediante `withEndpoint(...)`.
+
+## 3. Ejecutar el ejemplo local
+
+Ejecuta `src/execute-locally.ts` con Bun:
 
 ```sh
 bun src/execute-locally.ts
@@ -49,42 +66,28 @@ bun src/execute-locally.ts
 Loaded paid from 200
 ```
 
-Prueba un pedido que falta — cambia el id del path a `8` y vuelve a ejecutar:
+Si cambias la entrada de `{ id: 7 }` a `{ id: 8 }`, el mock devuelve `404` y Defjs decodifica la estructura `error` declarada en `error.data`:
 
 ```txt
 Order not found
 ```
 
-En éxito: `error` es `null`, `order` es la salida Struct del `200`, `response` es un `DecodedResponse<Order>`. En un `404` declarado: `error.code` es `'HTTP_STATUS'`, `error.status` es `404` y `error.data` está tipado como `NotFound`. El segundo elemento de la tupla es `undefined` en fallo.
+## 4. Comprender la tupla con error por delante
 
-## Paso 4 — Apuntar a una API real
+Cada llamada HTTP resuelve una tupla `[error, data, response]`:
 
-En `src/real-api.ts`, importa el mismo `getOrder` y crea un cliente con la URL base de tu servicio. Ejecuta esta versión solo después de sustituir la dirección de ejemplo por un servicio que implemente `GET /v1/orders/:id` con esos cuerpos.
+- **En éxito `2xx`**: `error` es `null`, `data` es el valor de `output` validado (`Order`) y `response` es `DecodedResponse<Order>`.
+- **En un estado no `2xx` declarado**: `error.code` es `'HTTP_STATUS'`, `error.status` es el código numérico (`404`) y `error.data` es la estructura `error` validada (`NotFound`).
+- **En fallos de entrada, decodificación o red**: `error.code` identifica la etapa exacta del fallo:
+  - `REQ_INPUT_INVALID` / `REQ_BUILD_FAILED` — entrada no válida o una excepción lanzada en el `builder`.
+  - `RES_MEDIA_TYPE_INVALID` — el cuerpo JSON declarado llegó con un `Content-Type` que no es JSON (se rechaza antes de leer el cuerpo).
+  - `RES_DECODE_FAILED` / `RES_STRUCT_MISMATCH` — cuerpo ilegible o discordancia con el esquema.
+  - `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT` — fallo de transporte, cancelación manual o límite alcanzado con `AbortSignal.timeout(ms)`.
 
-<include cwd>examples/start/real-api.ts#example</include>
+Pasa límites de tiempo o señales de cancelación por llamada derivando un valor de cliente de un solo uso: `getOrder(client({ signal: AbortSignal.timeout(5_000) }), { id: 7 })`.
 
-La definición de API se queda en el módulo del SDK. Las direcciones del servicio, las credenciales, los interceptores y el tiempo de vida de la ejecución se quedan en la aplicación. Los dos clientes usan el mismo contrato de endpoint de Defjs.
+## Siguientes pasos
 
-## Publica la definición
-
-Mueve la definición a un paquete de SDK cuando más aplicaciones la necesiten. Exporta `getOrder`, incluye sus declaraciones de TypeScript y declara la versión compatible de Core. Los consumidores importan entonces desde el paquete en lugar de `./define-request.ts`; la configuración de su cliente sigue siendo suya. Sigue [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk) para el montaje completo del paquete.
-
-## Cuando el resultado cambia
-
-- Entrada mala → `REQ_INPUT_INVALID`; un `builder` que falla → `REQ_BUILD_FAILED`
-- Un estado no-2xx → `HTTP_STATUS`, con `error.data` tipado cuando se declaró `error` y su cuerpo decodifica
-- Un cuerpo JSON declarado con otro media type → `RES_MEDIA_TYPE_INVALID`, avisado antes de leer el cuerpo
-- Un cuerpo declarado (`output` para 2xx, `error` en el resto) que no decodifica → `RES_DECODE_FAILED` o `RES_STRUCT_MISMATCH`, sea cual sea el estado
-- Fallo de Fetch / cancelación / plazo → `NET_UNREACHABLE` / `NET_ABORTED` / `NET_TIMEOUT`
-
-Un plazo es `client({ signal: AbortSignal.timeout(ms) })` y se clasifica como `NET_TIMEOUT`. Un abort manual es `NET_ABORTED`. No hay un plazo por defecto a nivel de cliente. Deriva un cliente cuando una llamada necesita su propio `signal`; consulta [Cliente](/es-ES/docs/client). La cancelación te dice lo que vio quien llama — no si una escritura en el servidor se confirmó.
-
-## Siguientes recetas
-
-- [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk)
-- [GET con un 404 declarado](/es-ES/recipes/get-declared-404)
-- [POST JSON](/es-ES/recipes/post-json)
-- [Cancelar una llamada HTTP](/es-ES/recipes/cancel-http)
-- [Consumir un stream SSE](/es-ES/recipes/consume-sse)
-- [Abrir una sesión WebSocket](/es-ES/recipes/websocket-session)
-- [Probar con un handle Fetch local](/es-ES/recipes/test-with-handle)
+- Conoce las reglas arquitectónicas en [Arquitectura central](/es-ES/docs/design-decisions).
+- Modela cargas complejas y alias de campos en [Struct y esquemas](/es-ES/docs/struct).
+- Empaqueta tus definiciones para npm en [Crear y publicar un SDK](/es-ES/recipes/publish-http-sdk).

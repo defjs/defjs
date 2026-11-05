@@ -1,22 +1,65 @@
 ---
 title: "선언된 404 처리"
-description: GET 하나를 호출하고 타입이 있는 200과 선언된 404로 분기해요.
+description: 단일 GET을 호출하고 타입화된 200과 선언된 404 응답으로 분기합니다.
 ---
 
 # 선언된 404가 있는 GET
 
-성공 body와 404 body를 둘 다 선언해요. `error.code`와 `error.status`로 분기하면, 선언된 miss의 타입이 있는 `error.data`를 받아요.
+`defineRequest`에 `output`(`2xx` 응답용)과 `error`(비`2xx` 응답용)를 모두 선언합니다. 호출 지점에서는 `error?.code === "HTTP_STATUS" && error.status === 404` 조건으로 분기하여 타입화된 `error.data` 페이로드를 읽습니다.
 
-자세한 내용은 [HTTP](/ko-KR/docs/http)와 [오류](/ko-KR/docs/errors)를 보세요.
+<Tabs items={["sdk/orders.ts", "app/main.ts", "get-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: { id: input.id } }),
+  output: struct.object({ id: struct.number(), status: struct.string() }),
+  error: struct.object({ message: struct.string() }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { getOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+const [error, order, response] = await getOrder(client, { id: 7 });
+if (error?.code === "HTTP_STATUS" && error.status === 404) {
+console.log(error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Loaded ${order.status} from ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="get-order.ts">
 <include cwd meta="get-order.ts">
   examples/recipes/get-declared-404.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com`은 placeholder예요. `GET /orders/7`에 `200`과 `{ "id": 7, "status": "paid" }`로 응답하는 서버에서는 이 스니펫이 다음을 출력해요.
+`GET /orders/7` 요청에 대해 `200` 상태 코드와 함께 `{ "id": 7, "status": "paid" }`를 반환하는 서버를 대상으로 이 스크립트를 실행하면 다음과 같이 출력됩니다:
 
 ```txt
 Loaded paid from 200
-```
+````
 
-2xx가 아닌 status는 `HTTP_STATUS`예요. `error`를 선언하면 그 body에 타입이 생기고, `error`를 빼면 `error.data`는 `undefined`이고 body는 읽히지 않아요. 선언한 `error` body를 읽을 수 없으면 (잘못된 미디어 타입, 잘못된 JSON, 잘못된 모양) 대신 `RES_*` fault가 돼요. `error` Struct 하나가 모든 non-2xx status를 덮으니, 모양이 달라지면 `struct.or(...)`나 discriminated union을 쓰세요.
+- 모든 비`2xx` 상태 코드는 `HTTP_STATUS` 결함을 생성합니다. `error`를 선언해 두면 오류 본문이 파싱 및 검증되어 `error.data`에 채워집니다. `error` 선언을 생략하면 응답 본문을 읽지 않고 `error.data`는 `undefined`로 남습니다.
+- 선언된 `error` 본문의 미디어 타입이 잘못되었거나 JSON 형식이 올바르지 않거나 Struct 스키마 검증에 실패하면 `RES_*` 결함이 반환됩니다. 단일 `error` Struct가 모든 비`2xx` 상태 코드를 처리하므로, 상태 코드별로 오류 응답 형태가 다르다면 `struct.or(...)`나 `struct.discriminatedUnion(...)`을 사용하세요.
+
+자세한 내용은 [HTTP 요청](/ko-KR/docs/http) 및 [오류 처리](/ko-KR/docs/errors) 문서를 참조하세요.

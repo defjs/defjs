@@ -1,0 +1,105 @@
+---
+title: "Balanceo de carga y conmutación por error"
+description: Configura clientes con múltiples endpoints, estrategias de selección, disyuntores P2C con sondas de salud y failover idempotente.
+---
+
+# Balanceo de carga y conmutación por error
+
+Cuando una aplicación configura múltiples URLs base con `withEndpoint(...urls)`, Defjs puede distribuir las peticiones entre réplicas, expulsar hosts no saludables mediante disyuntores (_circuit breakers_) pasivos o comprobaciones activas de salud, y realizar conmutación por error (_failover_) automática para métodos HTTP seguros dentro de la misma llamada.
+
+## 1. Elegir una estrategia de balanceo de carga
+
+| Estrategia                                                                            | Ideal para                                                                  | Filtrado de salud por defecto               |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------- |
+| [`pickFirstBalancer(options?)`](/es-ES/api/core/pickfirstbalancer) _(Predeterminado)_ | Apps de navegador con lista ordenada de región primaria y de respaldo       | Desactivado (opt-in con `outlierDetection`) |
+| [`roundRobinBalancer(options?)`](/es-ES/api/core/roundrobinbalancer)                  | Llamadas servidor a servidor entre réplicas equivalentes (admite `weights`) | Activado (`5` fallos consecutivos)          |
+| [`p2cBalancer(options?)`](/es-ES/api/core/p2cbalancer)                                | Llamadas de servidor donde la latencia o la carga en vuelo varían           | Activado (`5` fallos consecutivos)          |
+
+<Tabs items={["Primary / backup (Pick-first)", "Server peers (Round-robin & P2C)", "Custom balancer"]}>
+<Tab value="Primary / backup (Pick-first)">
+
+<include cwd lang="typescript">
+  examples/client/multiple-endpoints.ts#example
+</include>
+
+</Tab>
+<Tab value="Server peers (Round-robin & P2C)">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#passive
+</include>
+
+</Tab>
+<Tab value="Custom balancer">
+
+<include cwd lang="typescript">
+  examples/client/custom-endpoint-balancer.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+### Cómo funcionan `pickFirstBalancer` y `p2cBalancer`
+
+- **`pickFirstBalancer`**: permanece en la primera URL hasta que un fallo de conexión (`NET_UNREACHABLE`) o una respuesta no controlada `502`, `503` o `504` lo avanza a la siguiente URL. Configura `failbackMs: 30_000` para sondear de nuevo el endpoint primario tras pasar ese periodo en uno de respaldo.
+- **`p2cBalancer` (Power of Two Choices)**: toma dos candidatos distintos sin reemplazo y elige el que tenga la puntuación más baja: `PeakEwma RTT × (pending + 1)` (o solo el recuento de peticiones en vuelo cuando `load: "pending"`). Los valores predeterminados (`defaultRttMs: 30`, `decayMs: 10000`) siguen las convenciones de Linkerd/tower.
+
+## 2. Failover HTTP en la misma llamada y presupuesto de reintentos
+
+Por defecto, HTTP habilita el **failover dentro de la misma llamada** para métodos seguros (`GET`, `HEAD`, `OPTIONS`, `TRACE`): si el primer endpoint seleccionado falla con `NET_UNREACHABLE`, Defjs elige un endpoint de respaldo no probado y vuelve a ejecutar el builder, la cadena de interceptores y el transporte en la misma invocación de la operación.
+
+Personaliza o deshabilita esta política con [`withEndpointFailover(options)`](/es-ES/api/core/withendpointfailover):
+
+<include cwd lang="typescript">
+  examples/client/endpoint-failover.ts#example
+</include>
+
+- **Condiciones de reintento (`retryOn`)**: por defecto es `["connect-failure"]`. Puedes añadir `"gateway-error"` (`502`/`503`/`504` sin código o cuyo cuerpo de error falló la decodificación `RES_*`) y `"attempt-timeout"` (cuando se configura `attemptTimeoutMs`).
+- **Límite por intento frente a límite de llamada completa**: `attemptTimeoutMs` acota un único intento desde la invocación de Fetch hasta la decodificación del cuerpo; la señal del llamador `client({ signal: AbortSignal.timeout(ms) })` limita la llamada completa a través de todos los intentos.
+- **Presupuesto de reintentos estilo Finagle / Linkerd**: todas las llamadas en un cliente comparten un presupuesto de reintentos con cubo de fichas (`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`) para que los reintentos no amplifiquen el tráfico en más de un ~20% durante una caída masiva. Establece `retryBudget: false` para desactivar este límite.
+- **Indicador de desconexión en navegador**: cuando `navigator.onLine === false`, los fallos de conexión se notifican como `{ attempted: false }` y no avanzan los balanceadores ni disparan el failover.
+
+## 3. Disyuntor pasivo y comprobaciones activas de salud (`outlierDetection`)
+
+`roundRobinBalancer()` y `p2cBalancer()` envuelven su selección de candidatos en [`outlierDetection`](/es-ES/api/core/outlierdetection) de forma predeterminada:
+
+<Tabs items={["Single-probe recovery", "Active health cache"]}>
+<Tab value="Single-probe recovery">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#recovery
+</include>
+
+</Tab>
+<Tab value="Active health cache">
+
+<include cwd lang="typescript">
+  examples/client/endpoint-health.ts#active
+</include>
+
+</Tab>
+</Tabs>
+
+1. **Fallos consecutivos**: tras alcanzar `consecutiveFailures` (por defecto `5`) de `NET_UNREACHABLE` o HTTP `500+`, el endpoint se expulsa durante `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` a `60000ms`) más hasta un `50%` de fluctuación (_jitter_) positiva uniforme.
+2. **Recuperación con sonda única**: una vez expira la penalización, una única petición sondea el host. Si su handshake de transporte (`end`: cabeceras HTTP/SSE o `open` de WebSocket) tiene éxito, el tráfico normal se reanuda de inmediato y el nivel de penalización se reinicia a `0`; si falla, la penalización se duplica.
+3. **Apertura de emergencia (fail-open)**: si todos los endpoints configurados están expulsados o marcados como no saludables, el balanceador se abre a la lista completa de candidatos en lugar de descartar localmente todo el tráfico.
+
+## 4. Ciclo de vida contable del transporte (`pick` → `start` → `end` → `done`)
+
+Los balanceadores personalizados implementan `pick(context)` sincrónico y los callbacks opcionales `start()`, `end(info)` y `done(info)`:
+
+| Resultado físico del transporte                                      | Muestra final `done(info)`                                 |
+| -------------------------------------------------------------------- | ---------------------------------------------------------- |
+| El cuerpo de la respuesta HTTP se trunca a mitad del flujo           | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| El handshake SSE tiene éxito, pero `reader.read()` rechaza           | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Fin normal de SSE (EOF), fallo al decodificar o límite de cola       | `{ attempted: true, status }`                              |
+| WebSocket abierto se cierra con código `1006` o `wasClean === false` | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| WebSocket abierto se cierra limpiamente                              | `{ attempted: true }`                                      |
+| Cancelación de quien llama o cierre manual del stream/socket         | `{ attempted: false }`                                     |
+| El plazo del llamador expira tras haberse iniciado el intento        | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+## Lecturas relacionadas
+
+- [Configuración del cliente](/es-ES/docs/client)
+- [Reconexión SSE](/es-ES/docs/sse#reconnect)
+- [Sesiones WebSocket](/es-ES/docs/web-socket)

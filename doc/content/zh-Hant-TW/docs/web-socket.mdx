@@ -1,126 +1,152 @@
 ---
 title: "WebSocket 工作階段"
-description: SDK 定義收發訊息契約，應用程式開啟 WebSocket 工作階段並負責監聽、傳送與釋放。
+description: 在 SDK 中定義 WebSocket 訊息通訊契約，由應用程式端控管連線設定與工作階段生命週期。
 ---
 
-# WebSocket
+# WebSocket 工作階段
 
-SDK 定義 WebSocket 操作的 path、inputs、進來與出去的訊息，以及 queue 上限。使用端的應用程式設定自己的 client，呼叫操作，並在衍生的 client 上選擇該次呼叫的連線 options。把這項操作跟 SDK 的 HTTP 或 SSE 操作一起匯出。
+`defineWebSocket` 用於在 SDK 中宣告雙向 WebSocket 契約：包含路徑模板、選用的 `input` 與 `builder`（僅限 `path` 與 `query`）、`incoming` 與 `outgoing` 訊息 struct、佇列大小邊界以及靜態子協定。取用端應用程式則在 Client 上設定心跳機制、斷線重連以及生命週期清理。
 
-啟動、接收、傳送後，用 `await using` 釋放 session，或手動 `close()` 並等待 `closed`。取消訂閱和資源釋放屬於呼叫端；Client、provider、interceptor 不會自動關閉成功回傳的 session。
+## 1. 定義契約並執行工作階段
 
-## 基本用法
+在 `incoming` 或 `outgoing` 上使用 `struct.discriminatedUnion(...)` 為多種封包型別建立模型。釋放回傳的 `WebSocketSession` 時，可以使用 `await using` 或明確呼叫 `session.close()` + `await session.closed`：
+
+<Tabs items={["sdk/ticks-socket.ts", "app/session.ts", "Single-file quick look"]}>
+<Tab value="sdk/ticks-socket.ts">
+
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
+
+export const TickFrame = struct.discriminatedUnion("type", [
+  struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  struct.object({
+    type: struct.literal("subscribed"),
+    symbol: struct.string(),
+  }),
+]);
+
+export const SubscribeCommand = struct.object({
+  type: struct.literal("subscribe"),
+  symbol: struct.string(),
+});
+
+export const openTicker = defineWebSocket({
+  path: "/market/ws",
+  operation: "market.ticker",
+  incoming: TickFrame,
+  outgoing: SubscribeCommand,
+  maxIncomingQueueSize: 64,
+});
+```
+
+</Tab>
+<Tab value="app/session.ts">
+
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { openTicker } from "../sdk/ticks-socket.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+  const [error, session] = await openTicker(client);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+
+  await using active = session;
+  active.send({ type: "subscribe", symbol: "ACME" });
+
+  for await (const message of active.receive) {
+    if (message.type === "tick") {
+      console.log(message.symbol, message.price);
+      break;
+    }
+  }
+}
+
+void main();
+```
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/web-socket/basic-setup.ts#example
 </include>
 
-## 每個方向一個 struct
+</Tab>
+</Tabs>
 
-`incoming` 是每一個文字 frame 的一個 struct。`outgoing` 是 `session.send(...)` 的一個 struct。多種訊息用 `struct.discriminatedUnion`。那些欄位上的 alias 就是雙向的 wire 名稱。沒有另外的 type envelope，也沒有 normalizer。
+## 2. 訊息驗證與方向性規範
 
-```json
-{ "type": "tick", "symbol": "ACME", "price": 142.5 }
-```
+- **接收封包（`session.receive`）**：文字、`ArrayBuffer`、型別化陣列以及 `Blob` 封包皆會被解碼為 UTF-8、剖析為 JSON，並對照 `incoming` 進行驗證。格式錯誤的 JSON 或結構不符會回報給 `session.onRuntimeError` 並直接丟棄，而不會中斷工作階段。`session.receive` 屬於單一消費者；重複請求第二個迭代器會拋出 `TypeError`。
+- **發送封包（`session.send(payload)`）**：同步對照 `outgoing` 進行驗證，套用 `.alias()` 與編解碼器，並透過 `JSON.stringify` 序列化。在 `open` 狀態下會立即發送；在 `reconnecting` 重新連線期間會進入佇列緩衝（若 `maxOutgoingQueueSize > 0`）；若負載無效、佇列已滿/停用，或工作階段已關閉，則會同步拋出例外。
 
-進來的文字、`ArrayBuffer`、typed-array、`Blob` frames 會讀成 UTF-8，再 JSON parse，然後對 `incoming` 檢查。畸形 JSON 與 struct 失敗走 `session.onRuntimeError`，而且不會進 queue。Session 維持開著。不是文字、bytes 或 `Blob` 的 frames 會被忽略。
+## 3. 工作階段狀態與觀察者
 
-`session.send(...)` 同步驗證並序列化：先 struct encode，再 `JSON.stringify`。Open 時立刻送；有啟用 outgoing queue 時，在 `reconnecting` 期間會排隊；不可寫時丟 `InvalidStateError`。沒有 outgoing struct、payload 驗證失敗、停用／滿的 outgoing queue，或原生 send 失敗時也會 throw。定義上的靜態 `protocols` list 是 endpoint 契約（例如 `graphql-transport-ws`）。衍生 client 的 `protocols` 與 `withWebSocketProtocols` 仍可覆寫它。只有這些 options 能選 subprotocols：builder、`beforeConnect` 與 interceptors 都改不了，所以把 token 放進 subprotocol 時，要在該次呼叫的衍生 client 上傳 `protocols`。Builder 只能回傳 `path` 與 `query`。
-
-Struct 編碼之後，JSON 無法忠實表示的值會在送出或進入重連佇列之前丟出 `TypeError`：非有限數字、函式、symbol、`Map`、`Set`、串流，以及沒有 JSON 表示的類別實例。巢狀值跟 HTTP JSON body 同一套規則。`struct.number()` 仍然接受 infinities 並拒絕 `NaN`；在 struct 層被接受，不代表它是有效的 JSON。Heartbeat 用同一個 serializer；它的序列化失敗會結束邏輯 session。
-
-`receive` 是單消費者。要求第二個 iterator 會丟出 `TypeError`。
-
-## State 快照
-
-| Member                     | 意義                                                                                    |
-| -------------------------- | --------------------------------------------------------------------------------------- |
-| `state`                    | `idle`、`connecting`、`open`、`reconnecting`、`closing`、`closed`、`aborted` 或 `error` |
-| `connection`               | 最新實體連線：`generation`、URL、協商到的 protocol、可用時的 extensions                 |
-| `bufferedAmount`           | 原生未送出的 byte 數；沒有實體 socket 時是 `0`                                          |
-| `receive`                  | 單消費者的 async iterable，產出已驗證的進來訊息                                         |
-| `onStateChange(listener)`  | 訂閱邏輯 state 轉換；回傳 unsubscribe                                                   |
-| `onRuntimeError(listener)` | 訂閱非啟動的 runtime 錯誤；回傳 unsubscribe                                             |
-| `closed`                   | 邏輯終端 close 結果的 Promise                                                           |
-
-`open` = 實體 socket 已開。`reconnecting` 包含替換前的準備 + delay。`connection.generation` 在每個到達 `open` 的實體 socket 遞增。`session.connection` 會在重連時更新。只有 Defjs 原生 session，或直接傳遞同一 live `connection` 物件的 wrapper，tuple 的 `startupConnection` 才會保留首次成功連線的快照。自訂 session 或轉換 `connection` 的 wrapper，則以回傳 session 目前公開的 `connection` 為準。共用 `closed` 不能略過 URL 清理或中繼資料過濾，Defjs 也不會從任意轉換重建首次連線的中繼資料。
-
-啟動失敗 → `[error, undefined, connection?]`。開之前的 constructor 失敗可能沒有 connection；啟動期間的 abort 或 close 仍可能提供快照。Session 回傳後，runtime 錯誤走 observers、`receive`、`closed` — 不是第二次結果 tuple。
+| 成員                 | 說明                                                                                                  |
+| -------------------- | ----------------------------------------------------------------------------------------------------- |
+| `state`              | `'idle' \| 'connecting' \| 'open' \| 'reconnecting' \| 'closing' \| 'closed' \| 'aborted' \| 'error'` |
+| `connection`         | 最新實體 Socket 的即時快照（`generation`、`url`、`protocol`、`extensions`）                           |
+| `bufferedAmount`     | 當前實體 Socket 上未傳送的位元組數（未連線時為 `0`）                                                  |
+| `receive`            | 經由驗證的 `incoming` 訊息單一消費者非同步可迭代物件                                                  |
+| `onStateChange(fn)`  | 訂閱狀態轉換事件；回傳 `unsubscribe` 取消訂閱函式                                                     |
+| `onRuntimeError(fn)` | 訂閱連線建立後的封包/剖析錯誤；回傳 `unsubscribe` 取消訂閱函式                                        |
+| `closed`             | 解析為最終終結結果的 Promise（`kind: 'closed' \| 'aborted' \| 'error'`）                              |
 
 <include cwd lang="typescript">
   examples/web-socket/state-snapshots.ts#example
 </include>
 
-## 重連
+## 4. 重新連線、心跳檢測與佇列控制
 
-在重連策略裡設定 `connectTimeoutMs`，把每次握手限制在從建構 socket 到 `open`。它必須是有限正數；無效值會回傳 `REQ_OPTIONS_INVALID`。它沒有預設值，握手之後會被清掉，所以已經建立的 session 不受影響。逾時的握手會向平衡器回報 `NET_UNREACHABLE`，並沿用現有的重連預算；重試耗盡時以 `NET_TIMEOUT` 結束。
+重新連線與心跳檢測皆屬於選擇性啟用，可透過 Client 選項（`withWebSocketReconnect`、`withWebSocketHeartbeat`）或單次呼叫的衍生 Client 選項（`client({ reconnect, heartbeat })`）設定：
 
-重連是選擇性開啟。沒有 `reconnect` 物件 → 實體 close 結束邏輯 session。設定後，預設是 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。`attempts` 是每次斷線的重試預算；成功的 `open` 會重設預算與 backoff 指數。因此之後每一次斷線都從 retry 1 與 `delayMs` 基底重新開始。`attempts: 0` 關掉。預設 predicate 接受該次斷線預算內的每一個非手動 close 結果。反覆成功的 open 沒有終身重試上限。socket 若成功開啟後立刻又被伺服器關閉，可能持續以基底延遲重新連線（仍受 jitter 與上限約束），因為每次開啟都會重設預算；請用 `shouldReconnect` 停止這種情況。
+<Tabs items={["Reconnect policy", "Application heartbeat"]}>
+<Tab value="Reconnect policy">
 
 <include cwd>examples/web-socket/reconnect.ts#example</include>
 
-`shouldReconnect` 拿到下一次重試 attempt、close cause、code、reason、`wasClean`。手動 `session.close(...)` 不會進 predicate。Preparation／策略 throw 會以錯誤結束邏輯 session。
-
-端點健康是另一項決定。`end` 只回報一次 socket `open`。沒有原生 cause 時，已開啟 socket 觀察到的關閉 code **1006**，或 **`wasClean === false`**，現在會使最終 `done` 回報 `{ attempted: true, code: "NET_UNREACHABLE" }`，即使執行環境只發出 `close`、不發出 `error` 也一樣。既有的原生 cause 保持原來的對應；呼叫方取消／手動關閉仍然是 `{ attempted: false }`，呼叫方期限仍然是 `NET_TIMEOUT`，並且優先於異常關閉。[離線提示](/zh-Hant-TW/docs/client#multiple-endpoints) 仍會抑制歸因。
-
-缺失的 `wasClean` 不是 false。乾淨的 1000、1001、1005、1011、1012、1013 以及私有 4xxx 關閉本身不會把端點標成失敗；單憑非 1000 的 code 不夠。應用程式驗證、queue、heartbeat 和策略錯誤不會自動變成傳輸失敗。即使之後排空訊息或策略失敗，一次真實的異常關閉仍然只是一個實體樣本。這改變的是平衡器回饋，不是邏輯上的 `session.closed.kind`/`cause`，也不會合成第二個 error 事件。預設 pick-first 可以在已經授權的重連或下一次明確呼叫上改選備援；沒有任何健康訊號會開啟重連、改變其預算，或授權應用程式訊息重放。
-
-WebSocket backoff jitter 是**乘法**（`jitter: 0.2` 會在捨入前，把已設上限的基底縮放成 `0.8x`–`1.2x`）。最終延遲會再次被 `maxDelayMs` 與平台 timer 上限 `2_147_483_647` ms 卡住，所以那個範圍的上端可能被截掉。基底為零就維持零；有效數字的溢位會被夾住，而不是丟出錯誤。SSE 用同一套 0–1 jitter 規則。重連選項會在 constructor 之前驗證：`attempts` 是非負的 safe integer；`delayMs` 必須是非負有限數；`maxDelayMs` 可以是非負有限數或正 `Infinity`，後者移除設定上限，但最終等待仍不超過 `2_147_483_647` ms；`factor` 是有限且為正；`jitter` 是有限且落在 0–1。無效的值會回傳 `REQ_OPTIONS_INVALID`。WebSocket 的 `attempts: 0` 停用後續重試，但所有明確提供的重連欄位仍會在首次連線前驗證，與 SSE 一樣。
-
-`beforeConnect({ attempt, signal })` 在初始 constructor 與每次重連前跑。把它的 signal 傳進 token refresh，讓取消同時停掉 prep 與 connect。
-
-## Heartbeat
-
-在 client 或衍生的 client 上選擇性開啟。Interval 透過 outgoing struct 送 `message()`。選填的 `isAck(message)` 辨識 ack — 該訊息會清掉確認等待，且**不會**交付給 `receive`。`heartbeat` 整份替換。`timeoutMs` 是等待該確認的時間。它不是請求期限。
+</Tab>
+<Tab value="Application heartbeat">
 
 <include cwd>examples/web-socket/heartbeat.ts#example</include>
 
-`intervalMs` 與 `timeoutMs` 必須是正的 finite timers，且 ≤ `2_147_483_647`。Heartbeat 訊息必須對 outgoing struct 有效。序列化、原生 send、ack 分類、逾時失敗對邏輯 session 是致命的 — 不會變成一般重連。
+</Tab>
+</Tabs>
 
-## Queues
+- **重新連線**：啟用時的預設值為 `attempts: 3`、`delayMs: 1000`、`factor: 2`、`maxDelayMs: 30000`、`jitter: 0`。每次實體連線 `open` 都會重設斷線重試預算。`beforeConnect({ attempt, signal })` 會在初始連線與每次重連嘗試之前執行。
+- **心跳檢測**：定期透過 `outgoing` struct 發送 `message()`，並在 `timeoutMs` 內等待符合 `isAck(msg)` 的確認封包。相符的 ACK 封包會被心跳監控器消耗，不會轉發至 `session.receive`。遺漏 ACK 會終結該工作階段。
+- **佇列邊界**：
+  - `maxIncomingQueueSize`（必填正整數）：佇列溢位會以 `CAP_QUEUE_OVERFLOW` 終止工作階段。在工作階段開啟期間請持續消費 `session.receive`。
+  - `maxOutgoingQueueSize`（選用非負整數，預設為 `0`）：僅在 `state === 'reconnecting'` 期間緩衝 `session.send()` 呼叫，並在發布下一次 `open` 之前將它們排空發出。
 
-| 設定                   | 必要值                            | 行為                                                                                           |
-| ---------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `maxIncomingQueueSize` | 正的 safe integer                 | 限制等著 `receive` 的已剖析訊息，以及等著 transform 的 raw frames。Overflow → `state: 'error'` |
-| `maxOutgoingQueueSize` | 選填的非負 safe integer；預設 `0` | 只在 `state === 'reconnecting'` 時 FIFO。滿／停用 → `send(...)` throw                          |
+## 5. 子協定與身分驗證 [#protocols-and-authentication]
 
-排隊的 outgoing frames 會在替換 socket 發佈 `open` 前 flush。已在較早 socket 送出的 frames 不會自動重放。重連 queues 是給你在重連期間送出的訊息 — 不是重建應用狀態用。
+瀏覽器環境中的 WebSocket 不支援在交握期間自訂任意 HTTP 標頭，因此 WebSocket 的 `builder` 函式僅能回傳 `{ path?, query? }`。
 
-進來的 overflow 會清掉 pending sequence、讓 `receive` 失敗、停掉 session，並以 `kind: 'error'` resolve `session.closed`。讓消費者夠快，或依量測到的大小／記憶體提高上限。
+- **子協定優先權順序**：`client({ protocols })` 覆蓋 `withWebSocketProtocols(...)`，後者再覆蓋 `defineWebSocket({ protocols })`。
+- **URL 協定轉換**：Defjs 會自動將解析後的端點從 `http:` 轉為 `ws:`，或從 `https:` 轉為 `wss:`。
+- **憑證**：`withCredentials(true)` 僅適用於 Fetch（HTTP/SSE）。請使用 Cookie / Session 機制、子協定或短期連線票證（Ticket）驗證 WebSocket——避免將長期密鑰放入 query string。
 
-## Protocols 與認證
+## 6. 關閉機制與擁有權
 
-定義的 `protocols`、client 的 `withWebSocketProtocols(...)`，以及衍生 client 上的 `protocols`，設定 constructor subprotocol list。優先序：衍生 client → client → definition。衍生的清單會取代 client 的清單，不會追加。`defineWebSocket` 在建立定義時複製 protocols 陣列。`withWebSocketProtocols` 在套用該選項時複製它，`client({ protocols })` 在建立 client 值時複製它。之後再改原來的陣列，不會改到已捕獲的容器。為某次呼叫選出的清單會再複製一份給邏輯 session，並在重連時重用。非陣列的值在捕獲邊界不會被 spread；執行時仍會驗證它。
-
-瀏覽器 WebSocket constructors 不接受任意 handshake headers，而且 builder 不能回傳 `headers` 或 `body`。Defjs 把 `http:` → `ws:`、`https:` → `wss:`，path placeholders encode 一次，並使用跟 HTTP 一樣的 query 規則：預設是 scalars 與重複的 keys，巢狀物件用 `withQuerySerializer`，沒有 query 時不呼叫 serializer。
-
-跟 HTTP 與 SSE 一樣，缺少、相對或無效的 base endpoint，或非法 path，會在建構期間、任何 interceptor 或傳輸跑之前以 `REQ_BUILD_FAILED` 失敗，即使 interceptor 本來會 short-circuit 也一樣。解析後的 URL 必須維持 base 的 origin，並留在其目錄之下；path 裡的 C0 控制字元（包括 tab、CR 與 LF）、反斜線、`?`、`#` 與目錄跳脫都會被拒絕。即使前面有空格，類似 scheme 或 protocol-relative 的形式仍會被拒絕；路徑內的一般空格則允許使用，並以 `%20` 送出。Interceptor 最終的 `req.endpoint` 會按其最終的 `req.baseEndpoint`、用同一條規則驗證，但它可以刻意把 base 換成另一個有效的絕對 URL。確定性的 URL 錯誤絕不會重試。
-
-`withCredentials(true)` 是 HTTP／SSE 的 Fetch credentials — 不是 WebSocket auth。用審過的 cookie／session 策略、subprotocol，或短效 connection ticket。別把一般憑證或長效 secrets 放進 query string。
-
-builder 與 interceptor 每個邏輯 session 只執行一次；被歸因的重連可以改選另一個基礎 URL/origin，而不再執行它們。憑證必須對每一個選中的端點都有效，或在每一次實體傳輸嘗試時刷新。`beforeConnect` 可以刷新外部認證狀態，但收不到選中的 URL，也不能改寫已建好的 URL 或固定的 subprotocol 清單。屬於特定端點的工作應放在傳給 `withWebSocketHandle` 的、審過的 constructor 裡；瀏覽器 constructor 仍然不支援自訂 handshake headers。不要假定只放進 query 或 subprotocols 一次的 ticket，會為新端點重新產生。
-
-## 關閉與擁有權
-
-`session.close(code?, reason?)` 請求終端關閉並停掉 heartbeat。Code 必須是 `1000` 或 `3000..4999`；reason ≤ 123 UTF-8 bytes。無效的 close 參數會在改 state 前 throw。需要手動 close reason 或邏輯終端結果時，搭配 `await session.closed` 使用。
-
-傳給操作的 `signal` 會一直附著在已開啟的 session 上，並涵蓋整條連線，包含開啟之後。逾時形狀的 abort（`TimeoutError` 或 `ERR_TIMEOUT`，包括 `AbortSignal.timeout(...)`）會以 `'error'`（`NET_TIMEOUT`）結束。其他 reason 則以 `'aborted'` 結束，而且 `receive` 會以該 reason 本身 reject，不是新的 `AbortError`。沒有只涵蓋啟動期的期限。應用程式若要一個，就自己建立 `AbortController`，用計時器以 `new DOMException("...", "TimeoutError")` abort 它，並在 await 回傳後清掉計時器。見 [SSE](/zh-Hant-TW/docs/sse#close-and-dispose)。
+呼叫 `session.close(code?, reason?)`（其中 `code` 為 `1000` 或 `3000..4999`，`reason` 不超過 123 個 UTF-8 位元組）並等待 `await session.closed`，或者使用 `await using`：
 
 <include cwd lang="typescript">
   examples/web-socket/closure-and-ownership.ts#example
 </include>
 
-`session.closed` 是邏輯終端快照：`'closed'`、`'aborted'` 或 `'error'`，可帶選填的原生 `code`／`reason`／`wasClean`，以及 aborted／error 的 `cause`。觀察到的原生 close 欄位勝過擁有者請求的 fallback。
+當你的元件或背景 Worker 執行完畢時，務必呼叫取消訂閱函式以移除 `onStateChange` 與 `onRuntimeError` 監聽器。
 
-標準 async disposer 會要求 best-effort 原生 close，再等待 Defjs 自有 lifecycle、message pump、timers、listeners、queues 與 socket references teardown。若一秒內始終沒有觀察到 close event，teardown 會被強制完成，disposer 可能用名為 `TimeoutError` 的 `DOMException` reject；這無法證明實體 TCP 連線已經關閉。重複呼叫 disposer 會共用同一個 teardown。結構化實作 session 的程式碼現在必須提供同一份 `[Symbol.asyncDispose](): PromiseLike<void>` 契約。
+## 相關閱讀
 
-## GraphQL 邊界
-
-Defjs 提供一個 incoming struct、一個 outgoing struct，以及邏輯 session 生命週期。它**不會**實作 WebSocket 應用協定。GraphQL-over-WebSocket 功能 — connection init、operation IDs、`next`／`error`／`complete`、disposal、subscription replay — 都在核心契約之外。
-
-伺服器要求該協定時，用像 `graphql-ws` 這類協定 client，或用 `defineWebSocket(...)` 建模 frames。把 `graphql-transport-ws` 這類靜態 subprotocol 放在 `protocols` 上。單靠 struct 協商不出 GraphQL 語意。
-
-## 相關操作範例
-
-- [開啟 WebSocket session](/zh-Hant-TW/recipes/websocket-session)
-- [消費 SSE 串流](/zh-Hant-TW/recipes/consume-sse)
+- [建立 WebSocket 工作階段](/zh-Hant-TW/recipes/websocket-session)
+- [使用 SSE 事件串流](/zh-Hant-TW/recipes/consume-sse)
+- [負載平衡與容錯移轉](/zh-Hant-TW/docs/load-balancing)

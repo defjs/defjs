@@ -1,20 +1,81 @@
 ---
 title: "إرسال JSON"
-description: أرسل جسم JSON محدَّد النوع وفكّ 201 معلَنًا.
+description: أرسل جسم طلب JSON محدد الأنواع وفك تشفير استجابة 201 معلنة بدقة.
 ---
 
-# POST JSON
+# إرسال بيانات JSON (POST JSON)
 
-سلّم الجسم محدَّد النوع إلى الـ builder. تبقى أسماء الحقول المنطقية في TypeScript؛ وتصبح الأسماء المستعارة على الـ struct مفاتيح JSON. جسم الكائن هو `application/json`.
+مرّر كائن مدخلات ذا نوع محدد إلى دالة `builder` وأرجع `{ body: input }`. تحافظ الدالة `.alias("customer_name")` على استخدام اسم `customerName` داخل TypeScript، بينما تضمن تشفير `"customer_name"` سلكياً عبر الشبكة وفك تشفيره مجدداً من استجابة `201`.
 
-انظر [HTTP](/ar/docs/http) و[العميل](/ar/docs/client) للتفاصيل.
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const ApiError = struct.object({
+  code: struct.string(),
+  message: struct.string(),
+});
+
+export const NewOrder = struct.object({
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const createOrder = defineRequest({
+  method: "POST",
+  path: "/orders",
+  input: NewOrder,
+  builder: (input) => ({ body: input }),
+  output: Order,
+  error: ApiError,
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { createOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com/v1"));
+
+async function main() {
+const [error, order, response] = await createOrder(client, {
+status: "paid",
+customerName: "Ada",
+});
+if (error?.code === "HTTP_STATUS") {
+console.error(error.status, error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Created ${order.status} → ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="create-order.ts">
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` عنوان توضيحي. مع خادم يجيب بـ `201` و`{ "id": 1, "status": "paid", "customer_name": "Ada" }`، تطبع الشيفرة:
+عندما يستجيب الخادم بحالة `201` مع `{ "id": 1, "status": "paid", "customer_name": "Ada" }`، يطبع البرنامج:
 
 ```txt
 Created paid → 201
-```
+````
+
+راجع دليلي [عمليات HTTP](/ar/docs/http) و[Struct والمخططات](/ar/docs/struct) للمزيد من التفاصيل.

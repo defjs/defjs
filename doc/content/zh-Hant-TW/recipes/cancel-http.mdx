@@ -1,20 +1,69 @@
 ---
 title: "取消與逾時"
-description: Abort 或為一次呼叫設定期限，並讀取 NET_ABORTED / NET_TIMEOUT。
+description: 主動中斷或逾時 HTTP 呼叫，並判讀 NET_ABORTED 與 NET_TIMEOUT 錯誤碼。
 ---
 
 # 取消 HTTP 呼叫
 
-把呼叫端的 signal 與期限組合在 `signal` 上。`AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 是一個 signal。手動取消歸類為 `NET_ABORTED`。期限歸類為 `NET_TIMEOUT`。
+使用 `AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)])` 將呼叫端的 `AbortController` 與期限計時器結合，並透過 `client({ signal })` 傳入該組合訊號。Defjs 會將呼叫端手動取消明確歸類為 `NET_ABORTED`，而逾時過期則歸類為 `NET_TIMEOUT`。
 
-細節見 [HTTP](/zh-Hant-TW/docs/http#cancel-the-work)。
+<Tabs items={["sdk/reports.ts", "app/main.ts", "cancel-report.ts"]}>
+  <Tab value="sdk/reports.ts">
+```ts
+import { defineRequest } from "@defjs/core";
 
+export const getReport = defineRequest({
+  method: "GET",
+  path: "/report",
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { getReport } from "../sdk/reports.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+const controller = new AbortController();
+const pending = getReport(
+client({
+signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5_000)]),
+}),
+);
+
+controller.abort("screen closed");
+
+async function main() {
+const [error] = await pending;
+if (error?.code === "NET_ABORTED") {
+console.log("caller cancelled");
+return;
+}
+if (error?.code === "NET_TIMEOUT") {
+console.log("timed out");
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log("got the report");
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="cancel-report.ts">
 <include cwd meta="cancel-report.ts">
   examples/recipes/cancel-http.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 caller cancelled
-```
+````
 
-取消告訴你的是呼叫端觀察到的結果。它不能證明伺服器端寫入已回滾 — mutation 重試請放在 idempotency 契約後面。
+取消僅回報 Client 端觀察到的狀態——並不保證伺服器端的寫入操作已成功復原。請在變更性質的請求重試前加上冪等性金鑰（Idempotency key）。詳細資訊請參閱 [HTTP 取消與逾時期限](/zh-Hant-TW/docs/http#cancel-the-work)。

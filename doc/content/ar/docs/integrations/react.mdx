@@ -1,81 +1,84 @@
 ---
 title: "React"
-description: استهلك SDK مستقلًا عن الإطار بعميل يوفّره React وعمر طلب يملكه المكوّن.
+description: استهلك حزمة SDK مستقلة عن أطر العمل باستخدام عميل موفر في React ودورة حياة طلبات يملكها المكون.
 ---
 
 # React
 
-استورد العمليات من SDK أو من وحدة تعريف مشتركة. يملك تطبيق React العميل ويوفّره عبر إضافة الإطار هذه؛ ويمكن أن تبقى حزمة SDK مستقلة عن React ويعيد استخدامها تطبيقات أخرى.
+تربط حزمة `@defjs/react` عميل `@defjs/core` المملوك للتطبيق بشجرة مكونات React 18+ عبر React Context وخطاف `useClient()`. تبقى تعريفات SDK لديك وحدات `@defjs/core` نقية دون أي اعتمادية على React.
 
-هذه الإضافات مساعدات اختيارية لتوفير عميل موجود وقراءته. استورد عميلًا ثابتًا يملكه التطبيق، أو مرّر `Client` صراحة إلى المنطق القابل لإعادة الاستخدام، أو استخدم حقن الإطار للافتراضيات والتجاوزات على مستوى الشجرة، أو اختر تنظيمك. تعريفات SDK لا تتطلب هذه الإضافات.
+```sh
+bun add @defjs/core @defjs/react react
+```
 
-اربط عميل `@defjs/core` موجودًا في شجرة React. تحصل على Context و`useClient()`. الحزمة **لا** تنشئ عميلًا، ولا تضيف تخزينًا مؤقتًا، ولا تعيد محاولة العمليات، ولا تتخلص من موارد النقل. المكوّن أو التأثير أو مكتبة البيانات التي تبدأ العمل تملكه. يُمرَّر العميل من `useClient()` إلى العملية. يُرجع الـ Hook [`DerivableClient`](/ar/api/core/derivableclient-type) الذي جرى توفيره. لخيارات كل استدعاء مثل `signal`، استدعِه حيث تعمل العملية: `getOrder(client({ signal }), input)`. لا تمرّره إلى ضابط حالة، لأن `setState(client)` سيستدعيه كمُحدِّث. قيمة `Client` المشتقة لا يقبلها `ClientProvider` ولا `useClient`.
+## ما توفره `@defjs/react` مقابل ما يملكه تطبيقك
 
-## الإعداد الأساسي
+- **ما توفره `@defjs/react`**: المكون `ClientProvider` والخطاف `useClient(overrideClient?)`.
+- **ما يملكه تطبيقك**: إنشاء عميل [`DerivableClient`](/ar/api/core/derivableclient-type)، وإلغاء الطلبات الجارية عند تفكيك المكون أو تغير الاعتماديات (`AbortController`)، وإغلاق مقابض SSE/WebSocket، ودمج أدوات التخزين المؤقت للاستعلامات مثل TanStack Query.
+- **تنبيه هام**: يُرجع `useClient()` كائن-دالة `DerivableClient`. استدعِ `client({ signal })` حيث تُشغّل العملية (`getOrder(client({ signal }), input)`). ولا تمرر `client` أبداً مباشرة إلى `setState(client)` لأن React يعامل وسيط الدالة الممرر لمغير الحالة كدالة تحديث (updater function).
 
-ثبّت `@defjs/core` و`@defjs/react` وReact 18+. ESM:
+---
 
-`bun add @defjs/core @defjs/react react`
+## 1. توفير العميل وجلب البيانات داخل Effect
 
-وفّر العميل، ثم اجلب طلبًا وأجهض عند التغيّر:
+أنشئ العميل عند حدود التطبيق، وغلف شجرة مكوناتك بـ `<ClientProvider client={client}>`، وألغِ العمل الجاري عند تنظيف الـ Effect:
 
-<include cwd>examples/react/client-provider.tsx#example</include>
+<Tabs items={["app/App.tsx", "app/OrderCard.tsx"]}>
+  <Tab value="app/App.tsx">
+    <include cwd>examples/react/client-provider.tsx#example</include>
+  </Tab>
+  <Tab value="app/OrderCard.tsx">
+    <include cwd>examples/react/basic-setup.tsx#example</include>
+  </Tab>
+</Tabs>
 
-<include cwd>examples/react/basic-setup.tsx#example</include>
+- يُعد `ClientProvider` موفر سياق (Context provider) خفيفاً ورشيقاً. يؤدي تمرير خاصية `client` مختلفة إلى تحديث ما تقرأه المكونات التابعة دون استنساخ العميل السابق أو التخلص منه.
+- في بيئة التطوير (`StrictMode`)، يُركّب React الآثار الجانبية (effects) ويقوم بتنظيفها أكثر من مرة. يمنع التحقق من `controller.signal.aborted` الاستجابة القديمة من استبدال الحالة الحالية.
 
-`ClientProvider` موفّر سياق عادي. خاصية `client` مختلفة تغيّر ما يراه الأحفاد — بلا نسخ أو استبدال أو تخلص. تنشئ الموفّرون المتداخلون حدودًا صريحة.
+---
 
-قد يُعد React التأثير وينظفه أكثر من مرة في التطوير. يوقف فحص الإشارة وعدًا قديمًا من الكتابة في التصيير الحالي. خطأ الـ tuple ما زال بيانات.
+## 2. القراءة والتجاوز باستخدام `useClient`
 
-## اقرأ بـ `useClient`
-
-يفضّل `useClient(overrideClient)` العميل الصريح؛ والقيمة المحذوفة أو `undefined` تقرأ أقرب `ClientProvider`. يُرمى `Error` فقط عندما لا يوفّر أي المصدرين عميلًا. تبقى استدعاءات `useClient()` بلا وسائط صالحة.
-
-استدعِ `useClient(explicitClient)` دائمًا في المستوى الأعلى لمكوّن أو Hook مخصص، حتى مع عميل صريح؛ لا في دالة عادية أو ردّ نداء حدث. لا تكتب `explicitClient ?? useClient()`، فهذا يستدعي Hook شرطيًا. التجاوز لا يكتب السياق ولا ينشئ موفّرًا، ويظل Hook مشتركًا في السياق.
+تُرجع الدالة `useClient(overrideClient)` العميل `overrideClient` عند تمريره، أو تقرأ من أقرب `ClientProvider` عند إغفاله أو تعيينه كـ `undefined`. وتلقي خطأ `Error` فقط إذا لم يوفر أيٌّ من المصدرين عميلاً صالحاً.
 
 <include cwd>examples/react/read-with-use-client.tsx#example</include>
 
-الـ hook يوفّر العميل فقط. وهو لا يبدأ عملًا، ولا يشترك في نقل، ولا يحوّل الـ tuple الذي يضع الخطأ أولًا إلى استثناء.
+- استدعِ دائماً `useClient(explicitClient)` دون شروط في المستوى الأعلى للمكون أو الخطاف المخصص. ولا تكتب أبداً `explicitClient ?? useClient()` لأن ذلك يخالف قواعد الخطافات (Rules of Hooks).
 
-## املِك عمل الاستعلام
+---
 
-يمكن لمكتبة استعلام أن تملك التخزين المؤقت وإعادة المحاولة وقمع النتائج القديمة والإلغاء. مرّر الإشارة التي توفّرها كـ `signal` على عميل مشتق. لصفحات القوائم، استدعِ العملية من TanStack Query (أو ما يشبهها) — يبقى `@defjs/react` حقن اعتماد فقط و**لا** يُشحن مع `useRequest`.
+## 3. التكامل مع TanStack Query
+
+تقتصر حزمة `@defjs/react` على حقن الاعتماديات فقط، وهي **لا** تشحن خطاف `useRequest`. وعند استخدام مكتبة لجلب البيانات مثل TanStack Query، مرّر خاصية `signal` الخاصة بدالة الاستعلام عبر `client({ signal })` وحوّل مصفوفة الخطأ أولاً داخل محول الاستعلام:
 
 <include cwd>examples/react/own-query-work.tsx#example</include>
 
-`throw error` في هذا الـ hook هو قناة رفض دالة الاستعلام، لا استدعاء Defjs الافتراضي. يُفحص الـ tuple أولًا؛ وهذا المُهايئ وحده يرفض، فيستطيع مكتبة الاستعلام تسجيل الفشل.
+يُعد استدعاء `throw error` هنا حداً فاصلاً صريحاً للمحول تفرضه عقود الرفض في TanStack Query — وليس أسلوب الاستدعاء الافتراضي في Defjs.
 
-لا تبدأ العملية نفسها في تأثير ثانٍ — مالكان يجعلان الإلغاء ومعالجة النتائج القديمة غامضين.
+---
 
-## املِك العمل الآني
+## 4. إدارة دورات حياة SSE وWebSocket في Effects
 
-تعيش مقابض SSE وWebSocket أطول من استدعاء العملية. سجّل التنظيف قبل انتظار البدء، وأغلق مقبضًا يصل بعد التخلص، واستهلك مكرّره الواحد، وانتظر وعده النهائي:
+تعيش مقابض SSE وWebSocket لفترة أطول من استدعاء `openStream(...)` أو `connectChat(...)` الأولي. سجّل كود التنظيف قبل انتظار بدء التشغيل، وأغلق أي مقبض يُحل بعد تفكيك المكون، واستهلك مكرره غير المتزامن المفرد، وانتظر `.closed`:
 
 <include cwd>examples/react/own-realtime-work.tsx#example</include>
 
-تظل إشارة `signal` الممرَّرة إلى العملية حاكمة للجلسة المفتوحة. إجهاضها في التنظيف ينهي الجلسة كـ `aborted` ويرفض `receive` بـ `AbortError`، فيتجاهل `catch` أعلاه الأخطاء بعد التخلص من التأثير ولا يبلّغ إلا عن الإخفاقات الحقيقية (فيض الطابور، مهلة إقرار النبض). أما تدفق SSE المُجهَض فينتهي مكرّره انتهاءً عاديًا. وبدون `catch` سيكون رفض الحلقة رفض وعد غير معالَج.
+- يؤدي إلغاء إشارة `signal` الممررة إلى عملية WebSocket إلى إنهاء الجلسة كـ `aborted` ورفض `session.receive` بخطأ `AbortError`. قم بحماية كتلة `catch` عند تفكيك المكون حتى لا تطفو إلا أخطاء وقت التشغيل الحقيقية (مثل فيضان قائمة الانتظار أو مهلة نبضات القلب).
+- يؤدي إلغاء تدفق SSE إلى إنهاء حلقة `for await (const msg of stream)` بنظافة ودون إلقاء أي استثناءات.
 
-القاعدة نفسها لـ `EventStreamHandle`: أغلق في `finally`، وانتظر `stream.closed`. يجب على مستهلكي WebSocket أيضًا إلغاء اشتراك مستمعي الحالة/خطأ وقت التشغيل ومواصلة قراءة `session.receive` — يمكن أن يفيض طابور محدود غير مقروء.
+---
 
-## SSR ونطاق العميل
+## 5. العرض من الخادم (SSR) ونطاق الموفر
 
-مدخل الحزمة حد Client Component. يمكن لتطبيق متصفح مشاركة عميل بنطاق الوحدة عندما تكون نقطة النهاية والمعترضات والحالة الملتقطة آمنة للمتصفح ومستقلة عن الطلب. في SSR، أنشئ عميلًا منفصلًا داخل كل حد طلب عندما تختلف الرؤوس أو ملفات تعريف الارتباط أو المستخدمون أو المستأجرون أو بيانات الاعتماد.
+- **المتصفح**: شارك عميلاً واحداً على نطاق الوحدة عندما تكون نقطة النهاية والمعترضات مستقلة عن الطلب.
+- **الخادم (SSR)**: أنشئ عميلاً جديداً داخل حدود كل طلب خادم كلما كانت الترويسات أو ملفات تعريف الارتباط أو المستأجرون أو بيانات الاعتماد تختلف بين طلب وآخر.
+- إلغاء تثبيت `<ClientProvider>` **لا** يُلغي تلقائياً طلبات HTTP النشطة، ولا يُغلق اتصالات SSE/WebSocket، ولا يستدعي `disposeClient`.
 
-إلغاء تركيب الموفّر **لا** يجهض HTTP، ولا يغلق SSE/WebSocket، ولا يلغي اشتراك المستمعين، ولا يستدعي `dispose`. ليس لـ `@defjs/react` واجهة دورة حياة كهذه. الشيفرة التي تبدأ كل عملية يجب أن تنهيها أو تلغيها.
+---
 
-## مرجع
+## الصادرات العامة والأدلة ذات الصلة
 
-التصديرات العامة من `@defjs/react`:
-
-- `ClientProvider` — يقبل `ClientProviderProps`، ويوفّر العميل الممرَّر
-- `useClient` — العميل الصريح أولًا، وإلا أقرب عميل موفَّر؛ يرمي إذا لم يوجد أي منهما
-- `ClientProviderProps` — `{ client: Client; children?: ReactNode }`
-
-أنشئ العملاء والخيارات في `@defjs/core`. انظر [العميل](/ar/docs/client) و[الأخطاء](/ar/docs/errors) و[SSE](/ar/docs/sse) و[WebSocket](/ar/docs/web-socket).
-
-## وصفات ذات صلة
-
-- [GET مع 404 معلَن](/ar/recipes/get-declared-404)
-- [إلغاء استدعاء HTTP](/ar/recipes/cancel-http)
-- [استهلاك تدفق SSE](/ar/recipes/consume-sse)
-- [فتح جلسة WebSocket](/ar/recipes/websocket-session)
+- `ClientProvider` — يوفر عميل `DerivableClient` (`ClientProviderProps: { client: Client; children?: ReactNode }`).
+- `useClient(overrideClient?)` — يقرأ العميل المتجاوز الصريح أو أقرب عميل موفر.
+- أدلة ذات صلة: [العميل](/ar/docs/client)، [معالجة الأخطاء](/ar/docs/errors)، [تدفقات أحداث SSE](/ar/docs/sse)، [جلسات WebSocket](/ar/docs/web-socket).
+- أمثلة عملية ذات صلة: [GET مع 404 معلَن](/ar/recipes/get-declared-404)، [إلغاء طلب HTTP وإدارته بالمهلة الزمنية](/ar/recipes/cancel-http), [استهلاك تدفق أحداث SSE](/ar/recipes/consume-sse)، [إدارة جلسات WebSocket](/ar/recipes/websocket-session).

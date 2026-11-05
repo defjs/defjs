@@ -1,92 +1,81 @@
 ---
 title: Defjs
-description: 재사용 가능한 API 정의와 애플리케이션이 소유하는 클라이언트로 TypeScript SDK를 설계하고 배포합니다.
+description: 재사용 가능한 API 정의와 애플리케이션 소유 클라이언트로 TypeScript SDK를 설계하고 배포합니다.
 ---
 
 # Defjs
 
-**더 나은 SDK를 위해 설계했습니다.**
+**API 계약은 한 번만 정의하고, 실행 환경은 애플리케이션마다 구성하세요.**
 
-Defjs는 팀이 API를 재사용 가능한 TypeScript SDK로 만들도록 돕습니다. `def`는 `define`입니다. 서비스가 제공하는 작업을 기술하고, 모듈이나 npm 패키지에서 export하고, 각 애플리케이션이 자신의 클라이언트를 구성해 그 작업을 호출하게 합니다.
+Defjs는 TypeScript SDK를 두 가지 영역으로 명확히 분리합니다:
 
-## SDK를 정의하고, 애플리케이션을 구성하기
+- **SDK 정의 (`@defjs/core`)** — SDK 작성자는 `struct` 스키마와 함께 타입이 부여된 HTTP, SSE, WebSocket 작업을 선언합니다. 정의는 순수한 데이터입니다. 정의를 import한다고 해서 네트워크 호출이 시작되거나 전역 클라이언트가 바인딩되지 않습니다.
+- **애플리케이션 실행** — SDK를 사용하는 애플리케이션은 자체 `Client`를 직접 생성하고(`createClient(withEndpoint(...))`), 자격 증명, 인터셉터, 로드 밸런서를 연결한 뒤, 작업을 호출할 때 이 클라이언트를 전달합니다.
 
-| SDK 작성자                                                 | SDK 사용자                                               |
-| ---------------------------------------------------------- | -------------------------------------------------------- |
-| 작업, 입력, 요청 매핑, 응답, 오류를 정의합니다             | 서비스 주소, 자격 증명, 인터셉터, 전송 수단을 고릅니다   |
-| 타입이 있는 HTTP, SSE, WebSocket 엔드포인트를 export합니다 | 그 엔드포인트를 import하고 Defjs 클라이언트로 호출합니다 |
-| API 계약을 유지하고 배포합니다                             | 결과를 처리하고 취소, 스트림, 세션을 소유합니다          |
+## 한눈에 보기: SDK 정의 vs. 애플리케이션 실행
 
-SDK 정의는 애플리케이션 클라이언트를 담지 않습니다. 같은 export된 엔드포인트가 브라우저 애플리케이션, 서버, 로컬 테스트에서 서로 다른 클라이언트 설정으로 쓰일 수 있습니다. 양쪽 모두 Defjs 실행 계약과 호환되는 Core 버전을 사용합니다.
+<Tabs items={["sdk/health.ts", "app/main.ts"]}>
+<Tab value="sdk/health.ts">
 
-SDK가 export하는 작업:
-
-<include cwd meta="get-health.ts">
+<include cwd meta="sdk/health.ts">
   examples/home/get-health.ts#example
 </include>
 
-애플리케이션이 import하고 실행을 소유합니다:
+</Tab>
+<Tab value="app/main.ts">
 
-<include cwd meta="app.ts">
+<include cwd meta="app/main.ts">
   examples/home/app.ts#example
 </include>
 
-`getHealth(client)`를 호출하면 요청이 시작됩니다. 정의를 배포하면 소비자는 로컬 파일 대신 SDK 패키지에서 import합니다.
+</Tab>
+</Tabs>
 
-## 모범 사례
+`getHealth(client)`를 호출하면 실제 I/O가 수행되며 error-first 튜플로 반환됩니다. 디코딩된 결과를 읽기 전에 항상 `if (error)`를 확인하고 먼저 반환하세요.
 
-정의는 client와 독립입니다. 애플리케이션의 client를 첫 인자로 넘깁니다. `getHealth(client)`처럼요. 서비스 주소와 자격 증명도 애플리케이션의 것입니다. error-first 튜플을 먼저 확인합니다. `error`가 있으면 `error.code`를 보고하고, 성공 값을 읽기 전에 함수에서 return 합니다.
+## 정의와 클라이언트를 분리하는 이유
 
-## SDK 만들기
+| 책임 구분     | SDK 작성자 (정의)                                                                               | 애플리케이션 (실행)                                                    |
+| ------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| **소유 항목** | 메서드, 경로 템플릿, `input` / `output` / `error` 스키마, `builder` 매핑, 고정 `operation` 이름 | 기본 URL, 자격 증명, 인증 인터셉터, 로드 밸런싱, 타임아웃, 리소스 정리 |
+| **배포 단위** | 재사용 가능한 ESM 모듈 및 `.d.ts` 타입 선언                                                     | 브라우저, 서버, 테스트 런타임별 실행 환경 설정                         |
+| **얻는 이점** | 특정 환경에 종속되지 않음; 브라우저, SSR, 테스트 어디서나 동작                                  | 재시도, 장애 복구, 원격 측정, 수명 주기에 대한 완전한 제어권           |
 
-1. 별도의 SDK 파일과 애플리케이션 파일에서 [첫 작업을 정의하고 실행](/ko-KR/docs/start)합니다.
-2. SDK가 export하는 [데이터 계약](/ko-KR/docs/struct)과 [HTTP 작업](/ko-KR/docs/http)을 기술합니다.
-3. JavaScript, 선언, 호환되는 Core 의존성으로 [SDK 패키지를 테스트하고 배포](/ko-KR/recipes/publish-http-sdk)합니다.
-4. 사용하는 애플리케이션의 [클라이언트](/ko-KR/docs/client)를 구성한 다음, 필요한 곳에 프레임워크나 관측 통합을 더합니다.
+## 시작 가이드 선택
 
-[설계 결정](/ko-KR/docs/design-decisions)은 API 정의와 실행의 소유자가 나뉜 이유를 설명합니다. 패키지를 배포하기 전에 같은 구조를 한 애플리케이션 안에서 쓸 수도 있습니다.
+1. **[빠른 시작](/ko-KR/docs/start)** — 작업을 정의하고, 로컬 Fetch 핸들로 오프라인 테스트를 진행한 뒤, 실제 서비스에 연결해 봅니다.
+2. **[핵심 아키텍처](/ko-KR/docs/design-decisions)** — 6가지 응답 디코딩 규칙, error-first 튜플, 리소스 소유권 모델을 이해합니다.
+3. **[SDK 정의하기](/ko-KR/docs/struct)** — [Struct](/ko-KR/docs/struct)로 통신 계약을 선언하고 [HTTP](/ko-KR/docs/http), [SSE](/ko-KR/docs/sse), [WebSocket](/ko-KR/docs/web-socket) 작업을 export합니다.
+4. **[클라이언트 및 실행](/ko-KR/docs/client)** — [Client](/ko-KR/docs/client)를 구성하고, 타입화된 [오류](/ko-KR/docs/errors)를 처리하며, [인터셉터](/ko-KR/docs/interceptors)를 연결하고, [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing)와 결정론적 [테스트](/ko-KR/docs/testing)를 설정합니다.
 
-## 전송 방식 고르기
+## 지원되는 전송 방식 및 결과 튜플
 
-| 필요한 것                      | 여기서 시작                         | 성공 시 결과                                                                   |
-| ------------------------------ | ----------------------------------- | ------------------------------------------------------------------------------ |
-| 요청 + status별 응답           | [HTTP](/ko-KR/docs/http)            | 디코딩된 data + `DecodedResponse` (output struct를 선언하지 않으면 `HttpMeta`) |
-| 오래 유지되는 서버 이벤트 피드 | [SSE](/ko-KR/docs/sse)              | 스트림 하나 + 시작 시점 `open` 스냅샷                                          |
-| 양방향 세션                    | [WebSocket](/ko-KR/docs/web-socket) | 세션 하나 + 시작 시점 `connection` 스냅샷                                      |
+모든 작업은 각 전송 수단의 수명 주기에 최적화된 3개 항목의 error-first 튜플을 반환합니다:
 
-세 전송 모두 같은 순서를 따릅니다. 작업을 정의한 다음, 애플리케이션의 클라이언트와 호출자의 입력으로 호출합니다.
+| 전송 방식                               | 진입 함수           | 튜플 형태                      | 수명 주기 소유권                                                     |
+| --------------------------------------- | ------------------- | ------------------------------ | -------------------------------------------------------------------- |
+| **[HTTP](/ko-KR/docs/http)**            | `defineRequest`     | `[error, data, response]`      | `client({ signal })`을 통해 진행 중인 요청 취소                      |
+| **[SSE](/ko-KR/docs/sse)**              | `defineEventStream` | `[error, stream, open]`        | `await using` 또는 `stream.close()` + `await stream.closed`로 해제   |
+| **[WebSocket](/ko-KR/docs/web-socket)** | `defineWebSocket`   | `[error, session, connection]` | `await using` 또는 `session.close()` + `await session.closed`로 해제 |
 
-## 패키지 고르기
+HTTP 요청 실패 시 튜플은 `[error, undefined, undefined]`가 됩니다. `error` 자체가 이미 `HttpMeta` 응답 메타데이터를 담고 있기 때문입니다. SSE와 WebSocket의 경우, 실패 전 초기 스냅샷이 수집되었다면 세 번째 자리에 해당 스냅샷이 반환됩니다.
 
-| 패키지                        | 언제                                                                                                 |
-| ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `@defjs/core`                 | SDK 작업과 계약을 정의하고, 클라이언트를 만들어 HTTP, SSE, WebSocket 작업을 호출합니다               |
-| `@defjs/react`                | `ClientProvider` / `useClient` — [React](/ko-KR/docs/integrations/react)                             |
-| `@defjs/vue`                  | 플러그인 + `injectClient` — [Vue](/ko-KR/docs/integrations/vue)                                      |
-| `@defjs/opentelemetry-server` | 아웃바운드 span, metric, log — [OpenTelemetry Server](/ko-KR/docs/integrations/opentelemetry-server) |
+## 공식 패키지
 
-## 결과 형태
+| 패키지                        | 역할                                                                  | 가이드                                                                |
+| ----------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `@defjs/core`                 | 런타임 의존성이 없는 SDK 정의, `struct`, 클라이언트, 인터셉터         | [빠른 시작](/ko-KR/docs/start)                                        |
+| `@defjs/react`                | React 18+를 위한 `ClientProvider` 및 `useClient()` 컨텍스트 주입      | [React 통합](/ko-KR/docs/integrations/react)                          |
+| `@defjs/vue`                  | Vue 3.2+를 위한 `createClientPlugin`, `HTTP_CLIENT`, `injectClient()` | [Vue 통합](/ko-KR/docs/integrations/vue)                              |
+| `@defjs/opentelemetry-server` | 서버 사이드 아웃바운드 span, 메트릭, 진단 로그 수집                   | [OpenTelemetry Server](/ko-KR/docs/integrations/opentelemetry-server) |
 
-세 전송 모두 error-first 세 항목 튜플을 돌려줘요. 위치는 같고, 의미는 달라요.
-
-- HTTP → `[error, data, response]`
-- SSE → `[error, stream, open]`
-- WebSocket → `[error, session, connection]`
-
-실패하면 두 번째 항목은 `undefined`예요. HTTP는 세 번째 항목도 `undefined`인데, fault가 응답 메타데이터를 가지고 있기 때문이에요. SSE와 WebSocket은 실패 전에 잡힌 시작 스냅샷이 있으면 세 번째 항목이 그 스냅샷이에요. [오류](/ko-KR/docs/errors)를 보세요.
-
-## 소유권을 한 호흡으로
-
-HTTP는 낡았을 때 abort 해요. SSE는 닫고 `await stream.closed` 해요. WebSocket은 닫고 `await session.closed` 해요. 서버에서는 옵션이 쿠키, 인증, 테넌트 데이터를 담을 때 요청 경계 안에서 클라이언트를 만들어요. 로그하기 전에 URL, 헤더, body를 마스킹해요.
-
-Defjs는 정의, 검증, 실행을 제공합니다. 캐시와 재시도 정책은 애플리케이션이 고르고, 스트림 재연결은 opt-in입니다. 손으로 작성한 SDK 패키지는 지금 지원됩니다. CLI 도구와 OpenAPI/SDK 생성은 아직 계획입니다.
-
-## 관련 레시피
+## 인기 실전 레시피
 
 - [SDK 작성과 배포](/ko-KR/recipes/publish-http-sdk)
-- [선언된 404가 있는 GET](/ko-KR/recipes/get-declared-404)
-- [POST JSON](/ko-KR/recipes/post-json)
+- [JSON 데이터 전송 및 유효성 검증](/ko-KR/recipes/post-json)
+- [선언된 404 상태 코드 처리](/ko-KR/recipes/get-declared-404)
 - [HTTP 호출 취소하기](/ko-KR/recipes/cancel-http)
-- [SSE 스트림 소비하기](/ko-KR/recipes/consume-sse)
+- [401 발생 시 Bearer 토큰 1회 갱신](/ko-KR/recipes/refresh-bearer-once)
+- [SSE 스트림 이벤트 소비](/ko-KR/recipes/consume-sse)
 - [WebSocket 세션 열기](/ko-KR/recipes/websocket-session)
 - [로컬 Fetch 핸들로 테스트하기](/ko-KR/recipes/test-with-handle)

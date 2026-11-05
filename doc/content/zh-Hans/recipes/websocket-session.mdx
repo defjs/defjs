@@ -1,22 +1,82 @@
 ---
 title: "管理 WebSocket 会话"
-description: 连上、发一个类型化信封、收一次，再 close 并 await closed。
+description: 打开 WebSocket 连接，收发强类型数据帧，并在任务结束时安全退订且优雅关闭会话。
 ---
 
-# 打开 WebSocket 会话
+# 打开并管理 WebSocket 会话
 
-每个方向一个 struct。退订、`close`、`await session.closed` 都归你。非法 frame 进 `onRuntimeError`。
+在 `defineWebSocket` 中分别为入站和出站消息声明强类型的 `incoming` 与 `outgoing` Struct，并配置有界的 `maxIncomingQueueSize` 队列容量上限。在应用程序中，监听 `session.onRuntimeError(...)`，通过 `for await` 消费 `session.receive`，并始终在 `finally` 中执行退订、调用 `session.close(...)` 以及等待 `await session.closed`：
 
-细节见 [WebSocket](/zh-Hans/docs/web-socket)。
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+<Tab value="sdk/quotes.ts">
+
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
+
+export const quotes = defineWebSocket({
+  maxIncomingQueueSize: 100,
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
+```
+
+</Tab>
+<Tab value="app/main.ts">
+
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { quotes } from "../sdk/quotes.ts";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+
+async function main() {
+  const [error, session] = await quotes(client);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+  const unsubscribe = session.onRuntimeError((cause) =>
+    console.error("runtime", cause),
+  );
+  try {
+    session.send({ type: "subscribe", symbol: "ACME" });
+    for await (const message of session.receive) {
+      console.log(message.symbol, message.price);
+      break;
+    }
+  } finally {
+    unsubscribe();
+    session.close(1000, "consumer-finished");
+    await session.closed;
+  }
+}
+
+void main();
+```
+
+</Tab>
+<Tab value="quotes.ts">
 
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
 
-`quotes.example.com` 是占位地址。假设服务器用 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` 回应 `{ "type": "subscribe", "symbol": "ACME" }`，这段代码会输出：
+</Tab>
+</Tabs>
+
+当服务端对 `{ "type": "subscribe", "symbol": "ACME" }` 回复推送 `{ "type": "tick", "symbol": "ACME", "price": 142.5 }` 时，终端将打印：
 
 ```txt
 ACME 142.5
 ```
 
-重连是可选的（`withWebSocketReconnect`）。Heartbeat 也是可选的。浏览器 WebSocket 不能随意设置握手 headers——用 cookie、子协议或短命 ticket。
+- 自动重连（`withWebSocketReconnect`）与心跳保活（`withWebSocketHeartbeat`）在 Client 端均为显式开启（opt-in）。
+- 浏览器环境下的 WebSocket 原生不支持在升级握手阶段传递任意自定义 Header；鉴权请改用 Cookie、协商子协议或短期 Ticket。更多细节请参阅 [WebSocket 会话](/zh-Hans/docs/web-socket)。

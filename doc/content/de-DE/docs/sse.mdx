@@ -1,124 +1,148 @@
 ---
 title: "SSE-Ereignisströme"
-description: Typisierte Event-Stream-Definitionen aus deinem SDK exportieren und konsumierenden Anwendungen das Öffnen, Konsumieren und Schließen überlassen.
+description: Exportiere typisierte Event-Stream-Definitionen aus deinem SDK und lass konsumierende Anwendungen sie öffnen, verarbeiten und schließen.
 ---
 
-# Server-Sent Events
+# SSE-Ereignisströme
 
-Ein SDK exportiert eine Event-Stream-Operation mit Input, Event-Verträgen und Buffer-Limits. Anwendungen konfigurieren Authentifizierung und optionales Reconnect an ihren eigenen Clients und rufen die importierte Operation auf, wenn sie einen Stream brauchen.
+Ein SDK deklariert einen Server-Sent-Events-Endpunkt mit `defineEventStream`: inklusive Pfad, optionalem Input und Builder, einem `events`-Dictionary aus Structs sowie Puffer- und Warteschlangenlimits. Die konsumierende Anwendung konfiguriert Authentifizierung und optionale Wiederverbindung an ihrem Client, öffnet den Stream, iteriert über typisierte Ereignisse und besitzt das Schließen des Streams.
 
-Öffne einen Stream, iteriere ihn, dann gib das owned Handle mit `await using` frei. Manuelles `close()` und `closed` bleiben verfügbar; Clients und Plugins geben einen zurückgegebenen Stream nicht für dich frei.
+## 1. Event-Stream definieren und konsumieren
 
-## Grundeinrichtung
+Gib ein geöffnetes `EventStreamHandle` immer mit `await using` (oder `stream.close()` + `await stream.closed` in einem `finally`-Block) frei:
+
+<Tabs items={["sdk/orders-stream.ts", "app/watch-orders.ts", "Single-file quick look"]}>
+<Tab value="sdk/orders-stream.ts">
+
+```ts
+import { defineEventStream, struct } from "@defjs/core";
+
+export const watchOrders = defineEventStream({
+  path: "/orders/events",
+  operation: "orders.watch",
+  events: {
+    updated: struct.object({
+      id: struct.number(),
+      status: struct.string(),
+    }),
+  },
+});
+```
+
+</Tab>
+<Tab value="app/watch-orders.ts">
+
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { watchOrders } from "../sdk/orders-stream.ts";
+
+const client = createClient(withEndpoint("https://api.example.com"));
+
+async function main() {
+  const [error, stream] = await watchOrders(client);
+  if (error) {
+    console.error(error.code);
+    return;
+  }
+
+  await using active = stream;
+  for await (const event of active) {
+    console.log(event.event, event.data.id, event.data.status);
+    break;
+  }
+}
+
+void main();
+```
+
+</Tab>
+<Tab value="Single-file quick look">
 
 <include cwd lang="typescript">
   examples/sse/basic-setup.ts#example
 </include>
 
-## Stream definieren
+</Tab>
+</Tabs>
 
-`defineEventStream(...)` braucht `events` und einen relativen `path`. Method defaultet auf `GET`. Der Aufruf kopiert die bekannten Definitionsfelder. Der `events`-Dictionary-Container wird mit seinen eigenen Eigenschaften kopiert, einschließlich nicht aufzählbarer Eigenschaften und einer mit berechnetem Eigenschaftsnamen definierten `__proto__`-Eigenschaft. Geerbte Namen werden nicht kopiert. Struct-Werte bleiben dieselben Objekte. Ein Accessor auf diesem Dictionary läuft weiterhin, wenn eine Nachricht ankommt, mit dem ursprünglichen Dictionary als `this`. Ein fehlendes Dictionary bleibt, wie es übergeben wurde, und wird weiterhin gemeldet, wenn ein Event aufgelöst wird.
+## 2. Handshake beim Öffnen und Tupel-Form
 
-Die Request-Shape entspricht HTTP: `builder`, der `path`, `query`, `headers` und `body` zurückgibt. `GET` / `HEAD` können keinen Body zurückgeben. Ein deklarierter `error`-Struct typisiert den Startup-Fault und dekodiert einen Non-2xx-Handshake-Body nach Struct-Kind (`string` Text, `blob` / `file` Blob, `arrayBuffer` Bytes, sonst JSON). Defjs sendet `Accept: text/event-stream`, wenn du `Accept` nicht schon gesetzt hast. Ein deklarierter `input` erfordert immer einen expliziten `builder`. `input` definiert nur die Parameter; wohin jeder Wert geht, entscheidet allein der Builder. Nur Definitionen ohne `input` dürfen `builder` weglassen. Für einen `ReadableStream`-Body gelten dieselben Regeln wie bei HTTP: In einer Runtime ohne Unterstützung für das Streaming von Request-Bodys, etwa Firefox, scheitert der Verbindungsaufbau mit `ENV_UNSUPPORTED`, bevor etwas gesendet wird. In Chromium ist dafür HTTP/2 oder höher erforderlich; über HTTP/1.1 scheitert der Verbindungsaufbau mit `NET_UNREACHABLE`. Ein Stream-Body wird nur einmal gesendet; für einen solchen Request gibt es keinen Reconnect (siehe Reconnect).
+Der Aufruf der Operation liefert `[error, stream, startupOpen]` erst zurück, nachdem die anfängliche HTTP-Antwort `2xx` ist, den Medientyp `text/event-stream` aufweist und einen lesbaren Body bereitstellt:
 
-Ein logischer Stream kann mehrere physische Fetch-Attempts umspannen, **wenn** du Reconnect opt-in machst. Ohne `withSSEReconnect` beenden transiente Network- und Stream-Read-Failures den logischen Stream. Du bekommst trotzdem ein Handle und einen Async-Iterator, wenn das Open gelingt.
-
-## Öffnen und inspizieren
-
-Die Operation wird erst aufgelöst, nachdem Status-, Content-Type- und Body-Checks passen:
+<Tabs items={["Handshake inspection", "Stream handle lifecycle"]}>
+<Tab value="Handshake inspection">
 
 <include cwd lang="typescript">
   examples/sse/open-and-inspect.ts#example
 </include>
 
-Response muss erfolgreich sein, Media-Type-Essence `text/event-stream` und einen Body haben. Non-2xx-Startup → `HTTP_STATUS`. Ist `error` deklariert, trägt dieser Fault den dekodierten Handshake-Body; ein schlechter Media-Type ist `RES_MEDIA_TYPE_INVALID`, und ein Body, der sich nicht als der deklarierte Kind lesen lässt, ist `RES_DECODE_FAILED`. Ein Response-Snapshot kann trotzdem im dritten Tupel-Slot sitzen, wenn die Validierung nach Response-Ankunft fehlschlägt.
-
-Ein fehlender, relativer oder ungültiger Basis-Endpoint oder ein unzulässiger Pfad scheitert mit `REQ_BUILD_FAILED` während des Bauens, bevor ein Interceptor oder Transport läuft, auch wenn ein Interceptor kurzschließen würde. Die aufgelöste URL muss den Basis-Origin behalten und unter dessen Verzeichnis bleiben; C0-Steuerzeichen (einschließlich Tab, CR und LF), Backslashes, `?`, `#` und Verzeichnis-Escapes im Pfad werden abgelehnt. Schemaähnliche und protokollrelative Formen werden auch mit führenden Leerzeichen abgelehnt; ein normales Leerzeichen im Pfadinneren ist erlaubt und wird als `%20` gesendet. Das endgültige `req.endpoint` eines Interceptors wird mit derselben Regel gegen sein endgültiges `req.baseEndpoint` geprüft; die Basis absichtlich durch eine andere gültige absolute URL zu ersetzen ist erlaubt. Deterministische URL-Fehler werden nie erneut versucht.
-
-`startupOpen` ist der initiale Snapshot dieses Aufrufs; ein neuer Aufruf verwendet nie den Snapshot eines früheren Aufrufs wieder, auch wenn er scheitert, bevor eine Response ankommt. `stream.open` ist live und wechselt bei späteren physischen Opens. Behalte den Tupel-Wert, wenn die erste Response zählt. `startupOpen` ist nur bei einem nativen Defjs-Handle oder einem Wrapper, der dasselbe Live-`open`-Objekt durchreicht, der Snapshot des ersten erfolgreichen Handshakes der Verbindung des zurückgegebenen Handles; eigene Handles und Wrapper, die `open` überschreiben, behalten auch nach einem Reconnect ihr aktuelles öffentliches `open`, sodass ein gemeinsames `closed` weder URL-Bereinigung noch Header-Filterung umgeht und Defjs die Metadaten des ersten Handshakes nicht aus beliebigen Transformationen rekonstruiert.
+</Tab>
+<Tab value="Stream handle lifecycle">
 
 <include cwd lang="typescript">
   examples/sse/stream-result.ts#example
 </include>
 
-## Events dekodieren
+</Tab>
+</Tabs>
 
-Wire-Event-Name → `events[eventName]`; sonst `events.default`. Kein matching Struct → Event nicht delivered. Fehlendes SSE-`event`-Feld → logischer Name `message`.
+- **Nicht-`2xx`-Handshake**: Gibt `HTTP_STATUS` zurück (mit dekodiertem `error.data`, falls ein `error`-Struct an der Definition deklariert ist).
+- **Falscher Content-Type oder unlesbarer Body**: Gibt `RES_MEDIA_TYPE_INVALID` oder `RES_DECODE_FAILED` zurück.
+- **`startupOpen` vs. `stream.open`**: Das dritte Element des Tupels (`startupOpen`) hält die erste Handshake-Antwort als Snapshot fest; `stream.open` aktualisiert sich dynamisch, falls sich der Stream später neu verbindet.
 
-SSE-`data` startet als Text. Ein `string`-Struct behält diesen Text. Jeder andere Kind ist JSON: Text parsen, dann mit dem Struct dekodieren. `struct.object`, `struct.number`, `struct.boolean`, `struct.any` und `struct.unknown` sind JSON, kein getrimmter Text. Ein bloßes Token wie `ping` erfüllt `struct.literal('ping')` nicht; die Data muss JSON sein. Ein Server, der den JSON-String `"abc"` sendet, erfüllt `struct.string()` weiterhin: der gelieferte Wert ist dieser Rohtext einschließlich der Anführungszeichen und wird nicht per JSON zu `abc` dekodiert.
+## 3. Event-Dispatching und Dekodierung
 
-Das Parsen folgt den WHATWG-SSE-Regeln für Zeilen und Felder: CR, LF und CRLF beenden Zeilen; eine Leerzeile dispatcht ein Event mit Data; mehrere `data:`-Zeilen werden mit `\n` zusammengefügt. Kommentare und unbekannte Felder werden ignoriert, und ein unfertiges Event bei EOF wird nicht dispatcht. Nur ein führendes UTF-8-BOM am Anfang jedes physischen Streams wird entfernt. U+FEFF innerhalb von `data`- oder `id`-Werten bleibt erhalten; ein späterer Feldname mit BOM-Präfix wie `﻿data` ist unbekannt und wird ignoriert.
+Wenn ein SSE-Frame eintrifft (nach WHATWG-Regeln durch eine Leerzeile abgeschlossen):
 
-Emittierter Wert: `event`, dekodiertes `data`, optionale non-empty `id`. Mit `default` sind unknown Event-Namen `string` in der inferierten Union.
-
-## Ungültige Events beobachten
-
-Ungültige oder nicht deklarierte Events werden verworfen, nicht in die Queue gestellt. `withSSEOnInvalidEvent(...)` kann Raw-ID, Name, Text-Data plus `missing-struct` oder `validation-failed` und optional Cause beobachten.
+1. **Event-Routing**: Das Wire-Feld `event:` wählt `events[eventName]` aus und fällt auf `events.default` zurück, falls deklariert. Ein weggelassenes `event:`-Feld hat standardmäßig den Wert `"message"`. Undeklarierte Events ohne `events.default` werden verworfen.
+2. **Payload-Dekodierung**: Ein `struct.string()`-Schema empfängt den rohen Text von `data:`. Jede andere Struct-Art parst `data:` zuerst als JSON und validiert anschließend gegen das Struct.
+3. **Ungültige Events beobachten**: Ungültige oder undeklarierte Events werden ignoriert, ohne den Stream zu beenden. Hänge `withSSEOnInvalidEvent(...)` an den Client für eine gezielte Diagnose:
 
 <include cwd>examples/sse/invalid-events.ts#example</include>
 
-Observer läuft an der Transform-Grenze. Sein Failure ist isoliert, außer das Signal des aktiven Versuchs ist abgebrochen. Halte ihn kurz; behandle Raw-Event-Data nicht als trusted.
+## 4. Wiederverbindung und `Last-Event-ID` [#reconnect]
 
-## Reconnect
-
-Setze `connectTimeoutMs` in der Reconnect-Policy, um jeden Handshake vom Fetch-Aufruf bis zu den Response-Headern zu begrenzen. Es muss endlich und positiv sein; ungültige Werte liefern `REQ_OPTIONS_INVALID`. Es hat keinen Default und wird nach dem Handshake gelöscht, bestehende Sessions bleiben also unberührt. Ein abgelaufener Handshake meldet dem Balancer `NET_UNREACHABLE` und folgt dem bestehenden Reconnect-Budget; erschöpfte Retries enden mit `NET_TIMEOUT`.
-
-**Verhaltensänderung:** SSE-Reconnect ist opt-in. Ohne `withSSEReconnect(...)` werden Network- und Stream-Read-Failures **nicht** wiederholt (wie `attempts: 0`). Gib `withSSEReconnect({ attempts: 3 })` (oder ein anderes geprüftes Budget) an, um diese Failures zu wiederholen. Normales EOF wird nicht wiederholt. Für ein laufendes Abonnement beobachte `stream.closed` und starte eine neue Operation mit dem letzten Anwendungs-Cursor; Reconnect macht aus EOF kein endloses Abonnement. Status-/Content-Type-Validierung, Parser-Limits, Message-Transform-Failures, Queue-Overflow und normales EOF bleiben terminal für den logischen Stream.
+Die SSE-Wiederverbindung ist **Opt-in**. Ohne `withSSEReconnect(...)` beendet jeder Netzwerkabbruch oder Stream-Lesefehler den Stream dauerhaft.
 
 <include cwd>examples/sse/reconnect.ts#example</include>
 
-`attempts` ist das Retry-Budget je Ausfall; der Default ist `3`, wenn ein Reconnect-Object gesetzt ist. Ein erfolgreicher Handshake setzt Budget, Callback-Versuch und Backoff-Exponenten zurück, daher verbrauchen getrennte Ausfälle kein Lebenszeit-Budget. `attempts: 0` schaltet Retry aus. `withSSEReconnect` wegzulassen schaltet Retry ebenfalls aus. `delayMs` ist das initiale Interval (Default `1000`); `factor` wächst es (Default `1`, ein konstantes Delay); `maxDelayMs` ist ein hartes Cap der endgültigen Wartezeit, nach Jitter und Rundung (Default: kein konfiguriertes Cap). SSE-`jitter` ist ein **multiplikativer Faktor von 0–1**, wie WebSocket. Das Plattform-Timer-Limit ist `2_147_483_647` ms, auch ohne konfiguriertes Cap. Eine Basis von null bleibt null; ein Überlauf ansonsten gültiger Zahlen sättigt an den Caps. Ein Stream-`retry:`-Feld, das nur aus Ziffern besteht, aktualisiert das aktuelle Basis-Interval, auch nach einer Erholung. Ein Policy-Callback, der false zurückgibt, einen Fehler wirft oder abgelehnt wird, beendet den logischen Stream. Wenn auf wiederholte erfolgreiche Opens unmittelbar Stream-Failures folgen, für die ein Retry zulässig ist, kann der Reconnect mit der aktuellen Basisverzögerung fortlaufend weitergehen (unter Berücksichtigung von Jitter und Caps), weil jedes Open das Budget zurücksetzt; nutze `shouldReconnect`, um dies zu stoppen. Normales EOF bleibt terminal.
+- **Ausfallbudget (`attempts`)**: Standardmäßig `3`, wenn ein Optionen-Objekt an `withSSEReconnect` übergeben wird. Ein erfolgreicher Handshake setzt den Versuchszähler und den Backoff-Exponenten zurück. Ein reguläres Server-EOF gilt **nicht** als Fehler und löst keinen Reconnect aus.
+- **Cursor-Tracking (`Last-Event-ID`)**: Wird gespeichert, sobald die abschließende Leerzeile eines Events geparst ist, und beim Reconnect automatisch als `Last-Event-ID` mitgesendet.
+- **Idempotenz-Sicherheit**: Standardmäßig verbinden sich nur idempotente Methoden (`GET`, `HEAD`, `OPTIONS`, `PUT`, `DELETE`) automatisch wieder. Nicht-idempotente Methoden (`POST`, `PATCH` – wie etwa LLM-Streaming-Requests) verbinden sich nur dann neu, wenn ein benutzerdefinierter `shouldReconnect`-Callback explizit `true` zurückgibt. `ReadableStream`-Request-Bodys werden beim ersten Versuch verbraucht und bauen niemals einen Reconnect auf.
+- **Handshake-Timeout (`connectTimeoutMs`)**: Begrenzt jeden einzelnen Handshake vom Fetch-Aufruf bis zu den Response-Headern, ohne die Offenhaltezeit eines bereits etablierten Streams einzuschränken.
 
-Reconnect-Optionen werden vor Interceptors oder Fetch geprüft: `attempts` muss eine nicht negative sichere Ganzzahl sein; `delayMs` muss endlich und nicht negativ sein; `maxDelayMs` muss eine endliche nicht negative Zahl oder positives `Infinity` sein, das das konfigurierte Cap aufhebt, nicht aber das Plattformlimit von `2_147_483_647` ms für die endgültige Wartezeit; `factor` muss endlich und positiv sein; `jitter` muss endlich sein und in 0–1 liegen. Ungültige Werte liefern `REQ_OPTIONS_INVALID`, ohne einen Stream zu öffnen.
+## 5. Puffer- und Warteschlangenlimits
 
-Ein `id:`-Feld aktualisiert nur einen Puffer; der Reconnect-Cursor wird erst beim Verarbeiten der abschließenden Leerzeile übernommen, auch bei einem Frame nur mit ID, der keine Nachricht ausliefert. Endet der Stream vor dieser Leerzeile, bleibt der Cursor unverändert. Die übernommene ID wird bei einem späteren Versuch als `Last-Event-ID` gesendet, auf der Leitung als UTF-8-Bytes kodiert, auch bei Nicht-ASCII-IDs. Ein leeres `id:` löscht den Header an dieser Leerzeile; eine ID mit NUL wird ignoriert. Abgesehen von diesem Header verwendet ein späterer Versuch den für den ersten Versuch erstellten Request wieder: Builder und Interceptors laufen einmal pro logischem Aufruf, sodass Methode, relativer Pfad und Query, Header und Body unverändert bleiben. Ein Stream, der noch zugeordnet ist, wählt beim Reconnect den Basis-Endpoint erneut, sodass sich die endgültige URL und der Origin ändern können. Ein Header, dessen Wert bei jedem Versuch aktuell oder endpointspezifisch sein muss, etwa ein kurzlebiges oder an den Origin gebundenes Token, gehört in die Fetch-Implementierung, die du an `withSSEHandle` übergibst; sie wird einmal pro Versuch mit der aufgelösten URL dieses Versuchs aufgerufen. Prüfe den gewählten Origin, bevor du Authentifizierungsnachweise anhängst; verwende kein Token wieder, das nur an den ersten Endpoint gebunden ist. Läuft ein Authentifizierungsnachweis dennoch ab, beendet ein Non-2xx-Reconnect-Handshake, nachdem der Stream geöffnet wurde, ihn mit `RES_DECODE_FAILED`; den Status liest du an `stream.open.response.status`. Ein initialer Non-2xx-Handshake liefert stattdessen einen Startup-`HTTP_STATUS`-Fault, wenn sein deklarierter Error-Body dekodiert.
+Beide Limits müssen positive, sichere Ganzzahlen sein. Das Überschreiten eines Limits ist fatal (`stream.closed` löst mit `kind: "error"` auf und der Iterator schlägt fehl – Ereignisse werden niemals stillschweigend verworfen):
 
-Reconnect sendet einen Request nur dann erneut, wenn das sicher ist:
+| Definitions-Option | Was sie begrenzt                                                  | Fataler Fehlercode    |
+| ------------------ | ----------------------------------------------------------------- | --------------------- |
+| `maxBufferSize`    | Unvollständige oder zu große SSE-Frame-Bytes vor einer Leerzeile  | `CAP_BUFFER_EXCEEDED` |
+| `maxQueueSize`     | Validierte Ereignisse, die auf den `for await`-Konsumenten warten | `CAP_QUEUE_OVERFLOW`  |
 
-- `GET`, `HEAD`, `OPTIONS`, `PUT` und `DELETE` sind idempotent (RFC 9110 §9.2.2); für diese Methoden wird die Verbindung innerhalb des Retry-Budgets erneut hergestellt.
-- Bei jeder anderen Methode, etwa `POST` oder `PATCH`, wird die Verbindung nur dann erneut hergestellt, wenn `shouldReconnect` `true` zurückgibt. Aus einer fehlgeschlagenen Verbindung lässt sich nicht ableiten, ob der Server die Aktion bereits ausgeführt hat: Ein `POST`, der eine LLM-Generierung startet, würde erneut ausgeführt und abgerechnet werden, und seine neuen Events würden im selben Stream auf die alten folgen. Wenn du `shouldReconnect` übergibst, ersetzt dessen Rückgabewert dieses Standardverhalten für jede Methode; prüfe `method` im Kontext, wenn ein Client beide Arten von Endpoints bedient.
-- Ein `ReadableStream`-Body wird beim ersten Versuch verbraucht. Jeder Fehler vor oder nach dem Öffnen des Streams beendet diesen mit dem ursprünglichen Fehler; `shouldReconnect` wird nicht aufgerufen, und es wird keine Wartezeit eingelegt. Nutze als Body einen String, Bytes, einen `Blob`, Formulardaten oder JSON, wenn für den Request ein Reconnect möglich sein muss.
+## 6. Schließen und Freigeben [#close-and-dispose]
 
-**Rückmeldung zur Endpoint-Health:** `end` meldet den Handshake einmal (`{ attempted: true, status }`). Nach einem erfolgreichen Handshake aktualisiert eine Ablehnung von `reader.read()` auf dem Response-Body das endgültige `done`-Sample jetzt auf `{ attempted: true, code: "NET_UNREACHABLE" }`, ohne `status`, und nutzt dabei die bestehende Timeout-/Abort-Zuordnung, wenn sie greift. Das ersetzt absichtlich den früheren `done`-Status, der nur den Handshake abbildete; die `open`-Metadaten und das schon ausgesendete `end` bleiben unverändert. `done` wird einmal festgelegt, bevor ein Reconnect erneut wählt. Ein späteres Ablehnen, Werfen oder abgelehntes Thenable von `shouldReconnect` löscht dieses echte Lesefehler-Sample nicht und verdoppelt es nicht.
+Der Aufrufer, der einen Stream öffnet, ist für dessen Beendigung verantwortlich. Das Verlassen einer `for await`-Schleife über `break`, `return` oder eine geworfene Exception schließt den Stream automatisch; alternativ kannst du `await using` / `stream.close()` nutzen:
 
-Nur die Lesegrenze liefert dieses neue Signal. Normales EOF, Fehler-Bodies eines Non-2xx-Handshakes, Missbrauch von `getReader`, Parser- oder Queue-Limits, Transforms, Hooks und Observer sind nicht automatisch Network-Failures und behalten den Handshake-Status für die Endpoint-Buchhaltung. Abbruch durch den Aufrufer und manuelles Schließen bleiben nicht zugeordnet, Deadlines des Aufrufers bleiben `NET_TIMEOUT`, und der [Offline-Hinweis](/de-DE/docs/client#multiple-endpoints) gilt weiter. Die Ablehnung eines Reads durch einen eigenen Fetch-Provider gilt als Transportfehler, nicht als Beweis, dass der entfernte Server ihn verursacht hat. Health-Rückmeldung und Replay-Erlaubnis sind getrennt: der Default Pick-first kann für einen bereits erlaubten Reconnect oder einen späteren expliziten Aufruf auf ein Backup wechseln, schaltet Reconnect aber nicht ein, ändert keine Budgets und macht einen nicht idempotenten Request nicht sicher wiederholbar.
-
-## Buffer- und Queue-Limits
-
-Beide müssen positive Safe Integers sein. Overflow ist fatal — kein silent Discard älterer Events.
-
-| Limit           | Schützt                                                             | Terminal-Code         |
-| --------------- | ------------------------------------------------------------------- | --------------------- |
-| `maxBufferSize` | Incomplete/oversized SSE-Line/Event während Parsing                 | `CAP_BUFFER_EXCEEDED` |
-| `maxQueueSize`  | Events, die schneller produziert werden als der eine Consumer liest | `CAP_QUEUE_OVERFLOW`  |
-
-Ein fataler Stream leert auch gepufferte Events, bricht den aktiven Body ab, lehnt den Iterator ab und löst `stream.closed` mit `kind: 'error'` auf.
-
-## Schließen und freigeben [#close-and-dispose]
-
-`EventStreamHandle`: ein live Opening-Snapshot, ein Terminal-Promise, ein `close`, ein Async-Iterator und ein Standard-Async-Disposer.
+<Tabs items={["Dispose with await using", "Startup-only deadline"]}>
+<Tab value="Dispose with await using">
 
 <include cwd lang="typescript">
   examples/sse/close-and-dispose.ts#example
 </include>
 
-Terminale Arten (`closed.kind`): `eof`, `aborted` oder `error`. Ein `error`-Result trägt außerdem `closed.code`, ein `EventStreamFaultCode`: `CAP_BUFFER_EXCEEDED`, `CAP_QUEUE_OVERFLOW`, `EXT_HOOK_FAILED`, `EXT_OBSERVER_FAILED`, `NET_TIMEOUT`, `NET_UNREACHABLE`, `REQ_BUILD_FAILED`, `REQ_OPTIONS_INVALID`, `RES_DECODE_FAILED` oder `RES_MEDIA_TYPE_INVALID`. `REQ_BUILD_FAILED` und `REQ_OPTIONS_INVALID` bedeuten, dass ein Pick beim Reconnect fehlgeschlagen ist, nachdem der Stream geöffnet wurde. Sie werden nicht zu `NET_UNREACHABLE` umgeschrieben.
-
-`close(reason)` bricht den aktiven Versuch ab, schließt die Queue und schließt mit `aborted` ab, auch wenn der Grund ein `TimeoutError` ist. Das `signal`, das an die Operation übergeben wurde, bleibt nach dem Öffnen des Streams gebunden und deckt die ganze Verbindung ab. Es abzubrechen beendet den Iterator im Normalfall und meldet `aborted`. Ist der Abort-Grund ein `TimeoutError` oder `ERR_TIMEOUT` (zum Beispiel `AbortSignal.timeout(...)`), wirft der Iterator `ERR_TIMEOUT` und `closed` meldet `kind: 'error'` mit `code: 'NET_TIMEOUT'`. Es gibt keine Deadline nur für den Start auf dem Client. Eine Anwendung, die eine will, erzeugt ihren eigenen `AbortController`, bricht ihn mit `new DOMException("...", "TimeoutError")` aus einem Timer ab und löscht den Timer, nachdem das await zurückkehrt:
+</Tab>
+<Tab value="Startup-only deadline">
 
 <include cwd>examples/sse/startup-deadline.ts#example</include>
 
-Loop-`break` / `return` / ein geworfener Fehler ruft Iterator-Return auf und schließt mit `iterator-return`. Der Code, der die Operation startet, besitzt Closure.
+</Tab>
+</Tabs>
 
-`await using` ruft denselben owned Close-Pfad auf und wartet, bis Defjs-Lese-/Reconnect-Arbeit gestoppt ist und der Active Reader-Lock freigegeben wurde. Es ist absichtlich um ein beim Provider hängendes `ReadableStream.cancel()`-Promise begrenzt, das nie abgeschlossen wird, und garantiert deshalb nicht, dass so ein Provider-Promise fertig wurde. Explizites `stream.close(reason)` plus `await stream.closed` bleibt gültig, wenn du einen Grund oder das Terminal-Result brauchst.
+Das über `client({ signal })` übergebene `signal` steuert die gesamte Lebensdauer des Streams. Möchtest du nur den anfänglichen Verbindungs-Handshake zeitlich begrenzen, ohne einen bestehenden Stream später abzuwürgen, setze deinen Timer zurück, sobald `await watchOrders(...)` zurückkehrt (wie im zweiten Tab oben gezeigt), oder nutze `connectTimeoutMs` in `withSSEReconnect`.
 
-Eigene strukturelle `EventStreamHandle`-Implementierungen müssen `[Symbol.asyncDispose](): PromiseLike<void>` liefern und ihn an denselben Lifecycle hängen.
+## Weiterführende Links
 
-Die unterstützte Mindestmenge an Libs ist `ES2022`, `ESNext.Disposable`, `DOM` und `DOM.Iterable`. Das Declaration-Tooling des Repositorys nutzt TypeScript 7, aber es gibt kein automatisiertes Gate für gepackte Consumer oder die Mindest-Lib, und ältere Compiler sind nicht zugesagt. Diese Menge liefert Typen, keine Runtime-Polyfills für Web-APIs. Ein `Client` ist kein `AsyncDisposable`; verwalte jeden Request mit seinem `AbortSignal`.
-
-Halte Credentials, Event-Data, Event-IDs, Causes und Stream-URLs aus Routine-Logs. `withCredentials(true)` betrifft Fetch-Cookies für SSE; es konfiguriert keine WebSocket-Auth.
-
-## Verwandte Rezepte
-
-- [SSE-Stream konsumieren](/de-DE/recipes/consume-sse)
+- [SSE-Stream verarbeiten](/de-DE/recipes/consume-sse)
 - [HTTP-Aufruf abbrechen](/de-DE/recipes/cancel-http)
+- [Lastverteilung & Failover](/de-DE/docs/load-balancing)

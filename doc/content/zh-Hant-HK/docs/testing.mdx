@@ -1,0 +1,73 @@
+---
+title: "測試"
+description: "用記憶體傳輸句柄（withHTTPHandle、withSSEHandle、withWebSocketHandle）測試 SDK 定義同應用程式。"
+---
+
+# 測試
+
+正因為 Defjs 將操作定義同 client 執行徹底分離，你可以喺離線環境下直接測試真實嘅 SDK 定義同應用程式中介層，完全唔需要啟動本地網絡伺服器，亦唔使 mock 函式庫內部嘅實作細節。
+
+## 1. 注入本地傳輸 Handle
+
+喺 `createClient(...)` 上面使用 `withHTTPHandle`、`withSSEHandle` 或 `withWebSocketHandle` 嚟替換底層嘅平台傳輸實作。Defjs 依然會跑齊完整嘅操作流程：input `struct` 驗證、`builder` 參數映射、URL 目錄邊界檢查、中介層鏈、狀態碼分發，以及 response `struct` 解碼。
+
+<Tabs items={["sdk/orders.ts", "test/orders.spec.ts"]}>
+<Tab value="sdk/orders.ts">
+
+```ts
+import { defineRequest, struct } from "@defjs/core";
+
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+});
+
+export const NotFound = struct.object({
+  message: struct.string(),
+});
+
+export const getOrder = defineRequest({
+  method: "GET",
+  path: "/orders/:id",
+  input: struct.object({ id: struct.number() }),
+  builder: (input) => ({ path: input }),
+  output: Order,
+  error: NotFound,
+});
+```
+
+</Tab>
+<Tab value="test/orders.spec.ts">
+
+<include cwd lang="typescript">
+  examples/recipes/test-with-handle.ts#example
+</include>
+
+</Tab>
+</Tabs>
+
+## 2. 測試最佳實踐
+
+### 斷言 Error-First Tuple，而唔係內部私有狀態
+
+一定要用你嘅測試 client 呼叫匯出嘅 SDK 操作，並針對回傳嘅 `[error, data, response]` tuple 進行斷言：
+
+- 對於 `2xx` 成功情況，斷言 `expect(error).toBeNull()` 並驗證解碼後嘅 `data` 欄位（包括 `.alias()` 網絡欄位到邏輯命名嘅自動轉換）。
+- 對於失敗情況，如果屬於契約一部分，請斷言 `error?.code`、`error?.status`、`error?.data` 同埋 `error?.cause`。
+
+### 驗證傳出請求嘅網絡原始 Bytes
+
+喺 `withHTTPHandle(async (input, init) => ...)` 函式入面，建構 `const request = new Request(input, init)` 並檢查 `request.url`、`request.method`、`request.headers` 以及 `await request.text()`（或 `await request.json()`），確認你的 `builder` 同 struct 別名正確序列化出後端預期嘅傳輸格式。
+
+### 用 Fake Timers 實現確定性時間控制
+
+當測試請求逾時期限（`AbortSignal.timeout`）、中介層重試退避延遲、SSE/WebSocket 重連間隔，或者 WebSocket 心跳偵測嗰陣：
+
+- 請使用假計時器（Vitest 入面用 `vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] })`，或 Bun 測試中用 `jest.useFakeTimers()`）。
+- 等被測試階段開始後先快進計時器（`advanceTimersByTimeAsync`），然後斷言狀態轉換或嘗試次數——千祈唔好依賴真實經過嘅牆上時間（wall-clock time）。
+
+## 延伸閱讀
+
+- [使用本地 Fetch Handle 進行測試](/zh-Hant-HK/recipes/test-with-handle)
+- [建置並發佈 SDK](/zh-Hant-HK/recipes/publish-http-sdk)
+- [Client 設定](/zh-Hant-HK/docs/client)

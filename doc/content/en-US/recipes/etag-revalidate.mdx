@@ -5,20 +5,76 @@ description: Treat 304 as an HTTP status fault; keep the cache Map outside the o
 
 # Revalidate with ETag and a 304
 
-`ok` means 2xx, so a `304` arrives as an `HTTP_STATUS` fault. A redirect status is not an error
-body either, so leave `error` undeclared: the body is never read, the fault carries the status,
-and you return the cached product yourself.
+In Defjs, only `2xx` responses take the success branch, so `304 Not Modified` arrives as an `HTTP_STATUS` fault. Leave `error` undeclared on `defineRequest` so the empty `304` body is never read, and keep your `Map` cache in an application wrapper around the operation call:
 
-See [HTTP](/docs/http).
+<Tabs items={["sdk/catalog.ts", "app/reader.ts", "etag-cache.ts"]}>
+  <Tab value="sdk/catalog.ts">
+```ts
+import { defineRequest, struct, type Infer } from "@defjs/core";
 
+export const Product = struct.object({
+  sku: struct.string(),
+  name: struct.string(),
+  priceCents: struct.number(),
+});
+
+export type Product = Infer<typeof Product>;
+
+export const readProduct = defineRequest({
+  method: "GET",
+  path: "/catalog/:sku",
+  input: struct.object({
+    sku: struct.string(),
+    etag: struct.string().optional(),
+  }),
+  builder: (input) => ({
+    path: { sku: input.sku },
+    headers: { "If-None-Match": input.etag },
+  }),
+  output: Product,
+});
+```
+  </Tab>
+  <Tab value="app/reader.ts">
+```ts
+import type { DerivableClient } from "@defjs/core";
+import { readProduct, type Product } from "../sdk/catalog.ts";
+
+export function createReader(client: DerivableClient) {
+  const cache = new Map<string, { etag: string; product: Product }>();
+
+return async (sku: string): Promise<Product> => {
+const cached = cache.get(sku);
+const [error, product, response] = await readProduct(client, {
+sku,
+etag: cached?.etag,
+});
+
+    if (error?.code === "HTTP_STATUS" && error.status === 304 && cached) {
+      return cached.product;
+    }
+    if (error) throw error;
+
+    const etag = response.headers.get("etag");
+    if (!etag) throw new Error("missing ETag");
+    cache.set(sku, { etag, product });
+    return product;
+
+};
+}
+
+````
+  </Tab>
+  <Tab value="etag-cache.ts">
 <include cwd meta="etag-cache.ts">
   examples/recipes/etag-revalidate.ts#example
 </include>
+  </Tab>
+</Tabs>
 
 ```txt
 Flask
-```
+````
 
-`throw error` after the 304 branch is this reader's boundary. The function still returns `Promise<Product>`; a non-304 fault is not returned as a Defjs tuple from that boundary.
-
-Do not rewrite `304` into a fake `200` inside Core. Cache ownership stays in application code around the operation call.
+- `if (error) throw error` after the `304` check is an explicit boundary for `createReader`, which returns `Promise<Product>`.
+- Never rewrite `304` into a synthetic `200` inside an interceptor; keep cache state in application code around the operation call. See [HTTP operations](/docs/http).

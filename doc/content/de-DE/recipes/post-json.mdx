@@ -1,20 +1,81 @@
 ---
 title: "JSON senden"
-description: Typisierten JSON-Body senden und ein deklariertes 201 dekodieren.
+description: Einen typisierten JSON-Body senden und eine deklarierte 201-Antwort dekodieren.
 ---
 
-# POST JSON
+# JSON senden (POST)
 
-Reich den typisierten Body an den Builder. Logische Feldnamen bleiben in TypeScript; Wire-Aliasse auf dem Struct werden JSON-Keys. Ein Object-Body ist `application/json`.
+Übergib ein typisiertes Eingabeobjekt an den `builder` und gib `{ body: input }` zurück. Mit `.alias("customer_name")` verwendest du in TypeScript weiterhin `customerName`, während auf Wire-Ebene automatisch `"customer_name"` kodiert und aus der `201`-Antwort dekodiert wird.
 
-Details siehe [HTTP](/de-DE/docs/http) und [Client](/de-DE/docs/client).
+<Tabs items={["sdk/orders.ts", "app/main.ts", "create-order.ts"]}>
+  <Tab value="sdk/orders.ts">
+```ts
+import { defineRequest, struct } from "@defjs/core";
 
+export const Order = struct.object({
+  id: struct.number(),
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const ApiError = struct.object({
+  code: struct.string(),
+  message: struct.string(),
+});
+
+export const NewOrder = struct.object({
+  status: struct.string(),
+  customerName: struct.string().alias("customer_name"),
+});
+
+export const createOrder = defineRequest({
+  method: "POST",
+  path: "/orders",
+  input: NewOrder,
+  builder: (input) => ({ body: input }),
+  output: Order,
+  error: ApiError,
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { createOrder } from "../sdk/orders.ts";
+
+const client = createClient(withEndpoint("https://api.example.com/v1"));
+
+async function main() {
+const [error, order, response] = await createOrder(client, {
+status: "paid",
+customerName: "Ada",
+});
+if (error?.code === "HTTP_STATUS") {
+console.error(error.status, error.data.message);
+return;
+}
+if (error) {
+console.error(error.code);
+return;
+}
+console.log(`Created ${order.status} → ${response.status}`);
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="create-order.ts">
 <include cwd meta="create-order.ts">
   examples/recipes/post-json.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`api.example.com` ist ein Platzhalter. Bei einem Server, der mit `201` und `{ "id": 1, "status": "paid", "customer_name": "Ada" }` antwortet, gibt das Snippet aus:
+Antwortet der Server mit Status `201` und `{ "id": 1, "status": "paid", "customer_name": "Ada" }`, gibt das Skript folgendes aus:
 
 ```txt
 Created paid → 201
-```
+````
+
+Details findest du unter [HTTP-Operationen](/de-DE/docs/http) und [Struct & Schemas](/de-DE/docs/struct).

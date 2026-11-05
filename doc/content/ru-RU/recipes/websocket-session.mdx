@@ -1,22 +1,77 @@
 ---
 title: "Управление сессиями WebSocket"
-description: Подключись, отправь один типизированный envelope, получи один раз, потом close и await closed.
+description: Подключитесь, отправьте типизированное сообщение, прочитайте ответ, затем закройте сессию и дождитесь closed.
 ---
 
-# Открыть WebSocket-сессию
+# Открытие WebSocket-сессии
 
-Каждое направление — один struct. Отмена подписок, `close` и `await session.closed` — на тебе. Невалидные кадры идут в `onRuntimeError`.
+Объявите структуры `incoming` и `outgoing` в `defineWebSocket` вместе с ограничением `maxIncomingQueueSize`. В приложении подпишитесь на `session.onRuntimeError(...)`, читайте `session.receive` и всегда отписывайтесь, вызывайте `session.close(...)` и дожидайтесь `await session.closed` в блоке `finally`:
 
-Подробности — в [WebSocket](/ru-RU/docs/web-socket).
+<Tabs items={["sdk/quotes.ts", "app/main.ts", "quotes.ts"]}>
+  <Tab value="sdk/quotes.ts">
+```ts
+import { defineWebSocket, struct } from "@defjs/core";
 
+export const quotes = defineWebSocket({
+  maxIncomingQueueSize: 100,
+  path: "/quotes",
+  incoming: struct.object({
+    type: struct.literal("tick"),
+    symbol: struct.string(),
+    price: struct.number(),
+  }),
+  outgoing: struct.object({
+    type: struct.literal("subscribe"),
+    symbol: struct.string(),
+  }),
+});
+```
+  </Tab>
+  <Tab value="app/main.ts">
+```ts
+import { createClient, withEndpoint } from "@defjs/core";
+import { quotes } from "../sdk/quotes.ts";
+
+const client = createClient(withEndpoint("https://quotes.example.com"));
+
+async function main() {
+const [error, session] = await quotes(client);
+if (error) {
+console.error(error.code);
+return;
+}
+const unsubscribe = session.onRuntimeError((cause) =>
+console.error("runtime", cause),
+);
+try {
+session.send({ type: "subscribe", symbol: "ACME" });
+for await (const message of session.receive) {
+console.log(message.symbol, message.price);
+break;
+}
+} finally {
+unsubscribe();
+session.close(1000, "consumer-finished");
+await session.closed;
+}
+}
+
+void main();
+
+````
+  </Tab>
+  <Tab value="quotes.ts">
 <include cwd meta="quotes.ts">
   examples/recipes/websocket-session.ts#example
 </include>
+  </Tab>
+</Tabs>
 
-`quotes.example.com` — placeholder. Если сервер на `{ "type": "subscribe", "symbol": "ACME" }` отвечает `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, сниппет выведет:
+Если сервер отвечает на `{ "type": "subscribe", "symbol": "ACME" }` сообщением `{ "type": "tick", "symbol": "ACME", "price": 142.5 }`, скрипт выведет:
 
 ```txt
 ACME 142.5
-```
+````
 
-Переподключение включается явно (`withWebSocketReconnect`), как и heartbeat. Браузерные WebSocket’ы не принимают произвольные заголовки при установлении соединения — используй cookies, подпротоколы или билет с коротким сроком действия.
+- И переподключение (`withWebSocketReconnect`), и heartbeat (`withWebSocketHeartbeat`) подключаются на клиенте опционально.
+- Браузерные WebSocket не могут отправлять произвольные HTTP-заголовки во время хэндшейка обновления протокола; используйте cookies, субпротоколы или короткоживущие тикеты подключения. См. раздел [Сессии WebSocket](/ru-RU/docs/web-socket).
