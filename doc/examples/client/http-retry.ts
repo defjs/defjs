@@ -5,8 +5,8 @@ import {
   pickFirstBalancer,
   struct,
   withEndpoint,
-  withEndpointBalancer,
-  withEndpointFailover,
+  withBalancer,
+  withRetry,
 } from "@defjs/core";
 
 const getOrder = defineRequest({
@@ -18,12 +18,14 @@ const getOrder = defineRequest({
 });
 const client = createClient(
   withEndpoint("https://api-us.example.com", "https://api-eu.example.com"),
-  withEndpointBalancer(pickFirstBalancer({ failbackMs: 30_000 })),
-  withEndpointFailover({
-    attempts: 1,
-    retryOn: ["connect-failure", "gateway-error", "attempt-timeout"],
+  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),
+  withRetry({
+    maxAttempts: 3,
+    on: ["connect-failure", "gateway-error", "attempt-timeout"],
     attemptTimeoutMs: 2_000,
-    retryBudget: {
+    delayMs: 25,
+    maxDelayMs: 250,
+    budget: {
       percentCanRetry: 0.2,
       minRetriesPerSecond: 10,
       ttlMs: 10_000,

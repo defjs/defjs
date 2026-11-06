@@ -5,17 +5,16 @@ import {
   defineEventStream,
   defineWebSocket,
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
   withHTTPHandle,
   withSSEHandle,
   withSSEReconnect,
   withWebSocketHandle,
-  withEndpointFailover,
   withInterceptors,
   struct,
   ERR_TIMEOUT,
 } from "../src";
-import type { EndpointBalancer, EndpointDoneInfo } from "../src";
+import type { Balancer, DoneInfo } from "../src";
 import { createControllableSocketClass } from "./regression/controllable_socket";
 import { makeResponse } from "../src/internal/http_response";
 afterEach(() => {
@@ -24,8 +23,8 @@ afterEach(() => {
 });
 function recorder() {
   const events: string[] = [];
-  const ends: EndpointDoneInfo[] = [];
-  const b: EndpointBalancer = {
+  const ends: DoneInfo[] = [];
+  const b: Balancer = {
     pick({ endpoints }) {
       return [
         null,
@@ -53,7 +52,7 @@ test("HTTP end is synchronous at response headers before body decoding or post-i
   const ready = Promise.withResolvers<void>();
   const client = createClient(
     withEndpoint("https://test.invalid"),
-    withEndpointBalancer(h.b),
+    withBalancer(h.b),
     withHTTPHandle(() =>
       Promise.resolve(
         new Response(
@@ -112,8 +111,8 @@ test.each(["failure", "cancel", "timeout"])(
     const controller = new AbortController();
     const client = createClient(
       withEndpoint("https://test.invalid"),
-      withEndpointBalancer(h.b),
-      withEndpointFailover({ attempts: 0 }),
+      withBalancer(h.b),
+
       // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withHTTPHandle(async () => {
         if (mode === "failure") throw new TypeError("refused");
@@ -141,7 +140,7 @@ test.each(["builder", "short-circuit", "makeResponse"])(
     const h = recorder();
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withEndpointBalancer(h.b),
+      withBalancer(h.b),
       withInterceptors({
         kind: "http",
         fn: () => Promise.resolve(makeResponse({ status: 204 })),
@@ -159,7 +158,7 @@ test.each(["builder", "short-circuit", "makeResponse"])(
     expect(h.ends).toEqual([]);
     const live = createClient(
       withEndpoint(inject("testServerHost")),
-      withEndpointBalancer(h.b),
+      withBalancer(h.b),
     );
     await defineRequest({ method: "GET", path: "/json" })(live);
     expect(h.events).toEqual(["done", "start", "end", "done"]);
@@ -168,7 +167,7 @@ test.each(["builder", "short-circuit", "makeResponse"])(
 test("SSE end occurs at handshake while the real event stream remains open", async () => {
   const h = recorder();
   const host = inject("testServerHost");
-  const client = createClient(withEndpoint(host), withEndpointBalancer(h.b));
+  const client = createClient(withEndpoint(host), withBalancer(h.b));
   const [error, stream] = await defineEventStream({
     path: "/sse/infinite",
     events: { tick: struct.string() },
@@ -191,7 +190,7 @@ test.each(["failure", "cancel", "timeout"])(
     const controller = new AbortController();
     const client = createClient(
       withEndpoint("https://test.invalid"),
-      withEndpointBalancer(h.b),
+      withBalancer(h.b),
       // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         if (mode === "failure") throw new TypeError("refused");
@@ -217,7 +216,7 @@ test("WebSocket end occurs on open while the real session remains open", async (
   const h = recorder();
   const client = createClient(
     withEndpoint(inject("testServerHost")),
-    withEndpointBalancer(h.b),
+    withBalancer(h.b),
   );
   const [error, session] = await defineWebSocket({
     path: "/ws/basic",
@@ -245,7 +244,7 @@ test("WebSocket constructor failure ends before done", async () => {
   }
   const client = createClient(
     withEndpoint(inject("testServerHost")),
-    withEndpointBalancer(h.b),
+    withBalancer(h.b),
     withWebSocketHandle(Broken),
   );
   await defineWebSocket({
@@ -262,7 +261,7 @@ test("a replaced base failing before headers never ends the selected endpoint", 
   const h = recorder();
   const client = createClient(
     withEndpoint("https://first.test"),
-    withEndpointBalancer(h.b),
+    withBalancer(h.b),
     // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withHTTPHandle(async () => {
       throw new TypeError("refused");
@@ -289,7 +288,7 @@ test.each(["failure", "cancel", "caller-timeout", "handshake-timeout"])(
     const h = recorder();
     const client = createClient(
       withEndpoint("https://socket.test"),
-      withEndpointBalancer(h.b),
+      withBalancer(h.b),
       withWebSocketHandle(Socket),
     );
     const pending = defineWebSocket({
@@ -327,7 +326,7 @@ test("SSE handshake timeout ends as unreachable while the operation reports time
   let fetched = false;
   const client = createClient(
     withEndpoint("https://sse.test"),
-    withEndpointBalancer(h.b),
+    withBalancer(h.b),
     withSSEReconnect({ attempts: 0, connectTimeoutMs: 100 }),
     withSSEHandle(async () => {
       fetched = true;

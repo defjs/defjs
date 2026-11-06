@@ -57,6 +57,8 @@ Execute 把一个可判别的 `Fault` 放在 tuple 第一项——声明过的�
 
 所有可能在响应存在之前就失败的情况：`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。传输层有元数据可报之前，`response` 是 `undefined`，比如下载中途被截断的 body。
 
+无效的 `withRetry` 选项会在 HTTP 传输开始之前返回 `REQ_OPTIONS_INVALID`，消息为 `Invalid retry options`。这包括非对象的策略、不是至少为 1 的安全整数的 `maxAttempts`，以及无效的条件、方法、超时、退避或预算设置。省略 `withRetry` 会关闭重试。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。`withRetry({ maxAttempts: 1 })` 会在启用之后关闭重试。
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -101,12 +103,12 @@ abort 和 timeout 共享的 `Error` 哨兵对象，用作 `cause`。从 HTTP int
 
 [`isAbortCause`](/zh-Hans/api/core/isabortcause) 识别带中止标记的 `Error` 或名为 `AbortError` 的 `DOMException`。[`isTimeoutCause`](/zh-Hans/api/core/istimeoutcause) 识别带超时标记的 `Error`，或名为 `TimeoutError` 的 `DOMException` / `Error`。传入 `fault.cause` 来分类底层值；这些函数不会解包 fault，也能识别另一份 Core 的哨兵。
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-没有候选端点可选时，`ERR_NO_ENDPOINT` 只作为 `REQ_BUILD_FAILED` 的 `cause` 出现。它不新增 `FaultCode`。这个哨兵带有不可枚举的 `Symbol.for('defjs.cause.no-endpoint')` 标记。[`isNoEndpointCause`](/zh-Hans/api/core/isnoendpointcause) 能识别另一份 Core 副本上的该标记，方式与 [`isAbortCause`](/zh-Hans/api/core/isabortcause) 识别中止相同。传入 `fault.cause`。它不会解包 fault。
+没有候选端点可选时，`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause` 出现。它不新增 `FaultCode`。这个哨兵带有不可枚举的 `Symbol.for('defjs.cause.no-endpoint')` 标记。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 能识别另一份 Core 副本上的该标记，方式与 [`isAbortCause`](/zh-Hans/api/core/isabortcause) 识别中止相同。传入 `fault.cause`。它不会解包 fault。
 
 见 [错误指南](/zh-Hans/docs/errors)。

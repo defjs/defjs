@@ -57,6 +57,8 @@ description: أنواع الأخطاء ودوال المصانع.
 
 كل ما كان يمكن أن يفشل قبل وجود استجابة: `REQ_*` و`NET_*` و`EXT_*` و`CAP_*` و`ENV_UNSUPPORTED`. وتبقى قيمة `response` هي `undefined` إلى أن تتوفر لدى طبقة النقل بيانات وصفية تُبلِّغ عنها، كجسم انقطع في منتصف التنزيل.
 
+تُرجع خيارات `withRetry` غير الصالحة `REQ_OPTIONS_INVALID` قبل أن يبدأ نقل HTTP، مع الرسالة `Invalid retry options`. يشمل ذلك سياسة ليست كائنًا، وقيمة `maxAttempts` ليست عددًا صحيحًا آمنًا لا يقل عن 1، وإعدادات غير صالحة للشروط أو الطرق أو المُهل أو backoff أو الميزانية. حذف `withRetry` يعطّل إعادات المحاولة. `withRetry()` و`withRetry(undefined)` يتصرفان مثل `withRetry({})`. `withRetry({ maxAttempts: 1 })` يوقف إعادات المحاولة بعد أن كانت مفعّلة.
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -101,12 +103,12 @@ description: أنواع الأخطاء ودوال المصانع.
 
 تتعرف [`isAbortCause`](/ar/api/core/isabortcause) على `Error` موسوم بالإلغاء أو `DOMException` باسم `AbortError`. وتتعرف [`isTimeoutCause`](/ar/api/core/istimeoutcause) على `Error` موسوم بالمهلة أو `DOMException` / `Error` باسم `TimeoutError`. مرّر `fault.cause` لتصنيف القيمة المسبِّبة؛ لا تفكّ هاتان الدالتان غلاف الخطأ. وتعملان مع علامات من نسخة أخرى من Core.
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-يظهر `ERR_NO_ENDPOINT` فقط كـ `cause` لـ `REQ_BUILD_FAILED`، عندما لا يمكن اختيار نقطة نهاية مرشحة. لا يضيف `FaultCode`. تحمل العلامة وسم `Symbol.for('defjs.cause.no-endpoint')` غير القابل للتعداد. تتعرف [`isNoEndpointCause`](/ar/api/core/isnoendpointcause) على ذلك الوسم من نسخة أخرى من Core، بالطريقة نفسها التي تتعرف بها [`isAbortCause`](/ar/api/core/isabortcause) على إلغاء. مرّر `fault.cause`. وهي لا تفك غلاف الخطأ.
+يظهر `ERR_NO_CANDIDATE` فقط كـ `cause` لـ `REQ_BUILD_FAILED`، عندما لا يمكن اختيار نقطة نهاية مرشحة. لا يضيف `FaultCode`. تحمل العلامة وسم `Symbol.for('defjs.cause.no-endpoint')` غير القابل للتعداد. تتعرف [`isNoCandidateCause`](/ar/api/core/isnocandidatecause) على ذلك الوسم من نسخة أخرى من Core، بالطريقة نفسها التي تتعرف بها [`isAbortCause`](/ar/api/core/isabortcause) على إلغاء. مرّر `fault.cause`. وهي لا تفك غلاف الخطأ.
 
 راجع [دليل الأخطاء](/ar/docs/errors).

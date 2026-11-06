@@ -1,5 +1,4 @@
-import type { EndpointFailoverOptions } from "./option";
-import type { EndpointBalancer } from "../balancer/balancer";
+import type { Balancer } from "../balancer/balancer";
 import { pickFirstBalancer } from "../balancer/balancer";
 import type { Interceptor } from "../interceptor/interceptor";
 import type { HttpRequest } from "../internal/http_request";
@@ -196,6 +195,61 @@ export interface ClientSSEConfig extends ClientSSEOptions {
   handle: FetchHandle;
 }
 
+/** Conditions that allow HTTP to try a different endpoint within one call.
+ * @group client
+ */
+export type RetryCondition =
+  "connect-failure" | "gateway-error" | "attempt-timeout";
+
+/** Opt-in same-call HTTP retry policy. Omitted fields use defaults.
+ *
+ * Call {@link withRetry}() or pass `{}` to enable retries. Omission disables retries
+ * and creates no retry budget. Streaming request bodies are
+ * never replayed. Invalid options return `REQ_OPTIONS_INVALID` at HTTP execution.
+ * @exampleFile examples/client/http-retry.ts#example
+ * @group client
+ */
+export interface RetryOptions {
+  /** Total attempts including the original (gRPC retryPolicy.maxAttempts / go-kit lb.Retry max). Safe integer at least 1; defaults to 2. One disables retries; there is no configured upper bound, but each endpoint is tried at most once. */
+  readonly maxAttempts?: number;
+  /**
+   * Retryable outcomes. Defaults to connection failures only. Gateway errors
+   * include NET_UNAVAILABLE responses, including those whose declared error body fails with
+   * a response-side RES_* fault. Successful or extension-failed interceptor
+   * results never trigger gateway retry.
+   */
+  readonly on?: readonly RetryCondition[];
+  /** Allowed methods, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE. */
+  readonly methods?: readonly string[];
+  /** Positive finite timeout from Fetch invocation through body reading and decoding, per attempt. */
+  readonly attemptTimeoutMs?: number;
+  /** Initial finite non-negative backoff delay in milliseconds; defaults to 25. Zero skips waiting. */
+  readonly delayMs?: number;
+  /** Finite positive multiplier per retry; defaults to 2. The first retry uses exponent zero. */
+  readonly factor?: number;
+  /** Finite multiplicative jitter in [0, 1]; defaults to 0.2 (plus or minus twenty percent). */
+  readonly jitter?: number;
+  /** Non-negative finite cap on the final delay, or positive Infinity; defaults to 250. The platform timer cap still applies. */
+  readonly maxDelayMs?: number;
+  /**
+   * Client-owned Finagle retry budget; false removes the cap.
+   * Derived clients sharing one configuration share its budget. Separate clients
+   * keep independent budgets, even when they share a balancer. Credits and debits
+   * expire lazily in ten TTL/10 slices (at most one slice early).
+   * Defaults: 20% plus 10 retries/second of reserve over a 10000 ms TTL.
+   */
+  readonly budget?:
+    | false
+    | {
+        /** Finite ratio in [0, 1000]; defaults to 0.2. Finagle integer token scaling (including Int cost saturation) applies. */
+        readonly percentCanRetry?: number;
+        /** Nonnegative safe integer; defaults to 10. */
+        readonly minRetriesPerSecond?: number;
+        /** Finite TTL in [1000, 60000] ms; defaults to 10000. */
+        readonly ttlMs?: number;
+      };
+}
+
 /** User-facing HTTP client options before defaults are applied. */
 export interface HttpClientOptions {
   /**
@@ -206,7 +260,7 @@ export interface HttpClientOptions {
   /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport overrides; the default resolves global `fetch` on each call. */
-  http?: { handle?: FetchHandle };
+  http?: { handle?: FetchHandle; retry?: RetryOptions };
   /** Interceptors applied in registration order. */
   interceptors?: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
@@ -250,7 +304,7 @@ export interface HttpClientConfig {
   /** Static default headers merged under headers returned by the builder for HTTP/SSE. */
   headers?: Headers;
   /** HTTP transport with a required fetch handle. */
-  http: { handle: FetchHandle };
+  http: { handle: FetchHandle; retry?: RetryOptions };
   /** Interceptors applied in registration order. */
   interceptors: Interceptor[];
   /** Serializes encoded query objects. Omit to use `URLSearchParams`. */
@@ -275,15 +329,13 @@ export interface HttpClientConfig {
  *
  * The snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.
  *
- * Before any option applies, `endpoints` is `[]`, `endpointBalancer` is a new `pickFirstBalancer()`, `interceptors` is empty, and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.
+ * Before any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.
  *
  * @group client
  */
 export interface ClientConfig extends HttpClientConfig {
   /** Selects one candidate per call. Defaults to a fresh {@link pickFirstBalancer}. */
-  endpointBalancer: EndpointBalancer;
-  /** HTTP same-call failover settings. Defaults to one connection-failure retry for safe methods. */
-  endpointFailover: EndpointFailoverOptions;
+  balancer: Balancer;
   /** Resolved SSE configuration. */
   sse: ClientSSEConfig;
   /** Resolved WebSocket configuration. */
@@ -329,7 +381,7 @@ export function createHttpClientConfig(): HttpClientConfig {
   return {
     endpoints: [],
     headers: undefined,
-    http: { handle: DEFAULT_HTTP_OPTIONS.handle },
+    http: { handle: DEFAULT_HTTP_OPTIONS.handle, retry: undefined },
     interceptors: [],
     querySerializer: undefined,
     xsrf: undefined,
@@ -341,12 +393,7 @@ export function createClientConfig(): ClientConfig {
   const http = createHttpClientConfig();
   return {
     endpoints: http.endpoints,
-    endpointBalancer: pickFirstBalancer(),
-    endpointFailover: {
-      attempts: 1,
-      retryOn: ["connect-failure"],
-      methods: ["GET", "HEAD", "OPTIONS", "TRACE"],
-    },
+    balancer: pickFirstBalancer(),
     headers: http.headers,
     http: http.http,
     interceptors: http.interceptors,

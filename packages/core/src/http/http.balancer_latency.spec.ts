@@ -3,7 +3,7 @@ import { p2cBalancer } from "../balancer/p2c";
 import { createClient } from "../client/client";
 import {
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
   withHTTPHandle,
   withInterceptors,
 } from "../client/option";
@@ -25,7 +25,6 @@ test("80 ms of interceptor work on either side does not contaminate p2c HTTP lat
   });
   const [, slower] = balancer.pick({
     endpoints: ["https://slower.test"],
-    transport: "http",
   });
   slower?.start?.();
   vi.setSystemTime(50);
@@ -33,7 +32,7 @@ test("80 ms of interceptor work on either side does not contaminate p2c HTTP lat
   slower?.done?.({ attempted: true, status: 200 });
   const client = createClient(
     withEndpoint("https://fast.test"),
-    withEndpointBalancer(balancer),
+    withBalancer(balancer),
     withHTTPHandle(() => {
       vi.setSystemTime(Date.now() + 10);
       return Promise.resolve(new Response(null));
@@ -54,7 +53,6 @@ test("80 ms of interceptor work on either side does not contaminate p2c HTTP lat
   expect(
     balancer.pick({
       endpoints: ["https://fast.test", "https://slower.test"],
-      transport: "http",
     })[1]?.endpoint,
   ).toBe("https://fast.test");
 });
@@ -68,7 +66,7 @@ test("p2c slow-host traffic stays close to baseline with 80ms before and after i
     const b = p2cBalancer({ defaultRttMs: 1, outlierDetection: false });
     const client = createClient(
       withEndpoint("https://slow.test", "https://fast.test"),
-      withEndpointBalancer(b),
+      withBalancer(b),
       withHTTPHandle((input) => {
         const isSlow = new Request(input).url.startsWith("https://slow.test");
         if (isSlow) slow++;

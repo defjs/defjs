@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { p2cBalancer } from "./p2c";
 import { pickEndpoint } from "./runtime";
-import type { EndpointBalancer, EndpointTransport } from "./balancer";
+import type { Balancer } from "./balancer";
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(0);
@@ -11,12 +11,8 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-function pick(
-  b: EndpointBalancer,
-  endpoints = ["a", "b"],
-  transport: EndpointTransport = "http",
-) {
-  const [, p] = pickEndpoint(b, { endpoints, transport });
+function pick(b: Balancer, endpoints = ["a", "b"]) {
+  const [, p] = pickEndpoint(b, { endpoints });
   if (!p) throw new Error("pick");
   return p;
 }
@@ -32,13 +28,13 @@ test("pending is released at end, not at done, including a single candidate", ()
 });
 test.each(["http", "sse", "websocket"] as const)(
   "%s RTT uses start to end, never interceptor or session lifetime",
-  (transport) => {
+  () => {
     const b = p2cBalancer({ defaultRttMs: 1, outlierDetection: false });
-    const slow = pick(b, ["b"], transport);
+    const slow = pick(b, ["b"]);
     slow.start();
     vi.setSystemTime(50);
     slow.end({ attempted: true });
-    const fast = pick(b, ["a"], transport);
+    const fast = pick(b, ["a"]);
     vi.setSystemTime(130);
     fast.start();
     vi.setSystemTime(140);
@@ -83,22 +79,22 @@ test("done without end releases pending but cannot produce an RTT sample", () =>
 test("removed p2c classifier is an option error even when it is a function", () => {
   // @ts-expect-error isFailure was removed from p2c options
   const b = p2cBalancer({ isFailure: () => true });
-  expect(
-    pickEndpoint(b, { endpoints: ["a"], transport: "http" })[0]?.code,
-  ).toBe("REQ_OPTIONS_INVALID");
+  expect(pickEndpoint(b, { endpoints: ["a"] })[0]?.code).toBe(
+    "REQ_OPTIONS_INVALID",
+  );
 });
 
 // Coverage-only: direct callers bypassing the runtime's lifecycle guards.
 test("raw p2c end ignores unstarted, ended and terminal attempts", () => {
   const b = p2cBalancer({ load: "pending", outlierDetection: false });
-  const [, raw] = b.pick({ endpoints: ["a"], transport: "http" });
+  const [, raw] = b.pick({ endpoints: ["a"] });
   raw?.end?.({ attempted: true });
   raw?.start?.();
   raw?.end?.({ attempted: true });
   raw?.end?.({ attempted: true });
   raw?.done?.({ attempted: true });
   raw?.end?.({ attempted: true });
-  const [, terminal] = b.pick({ endpoints: ["a"], transport: "http" });
+  const [, terminal] = b.pick({ endpoints: ["a"] });
   terminal?.start?.();
   terminal?.done?.({ attempted: false });
   terminal?.end?.({ attempted: true });

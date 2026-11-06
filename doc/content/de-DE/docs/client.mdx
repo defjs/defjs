@@ -87,8 +87,8 @@ Erzeuge für jeden Aufruf, der ein eigenes `signal`, Progress-Callbacks oder Web
 
 `withEndpoint(...urls)` akzeptiert eine oder mehrere Basis-URLs. Standardmäßig gilt:
 
-- Jeder Client verwendet [`pickFirstBalancer`](/de-DE/api/core/pickfirstbalancer) und bleibt bei der ersten URL, bis ein `NET_UNREACHABLE`-Fehler oder eine undeklarierte `502`/`503`/`504`-Antwort zur nächsten URL wechselt.
-- Sichere HTTP-Methoden (`GET`, `HEAD`, `OPTIONS`, `TRACE`) führen bei Verbindungsfehlern (`NET_UNREACHABLE`) automatisch ein **Failover innerhalb desselben Aufrufs** zu einem noch nicht getesteten Backup-Endpunkt durch – gesteuert durch ein gemeinsames Finagle-Retry-Budget (`withEndpointFailover`).
+- Jeder Client verwendet [`pickFirstBalancer`](/de-DE/api/core/pickfirstbalancer) und bleibt bei der ersten URL, bis er bei `NET_UNREACHABLE` oder `NET_UNAVAILABLE` (HTTP 502, 503 oder 504) weiterschaltet.
+- **Same-Call-HTTP-Retry ist standardmäßig aus.** `withRetry()` entspricht `withRetry({})` und aktiviert einen zweiten Versuch auf einem noch nicht versuchten Endpunkt bei Verbindungsfehlern sicherer Methoden (`GET`, `HEAD`, `OPTIONS`, `TRACE`), mit Backoff. Ein Finagle-Retry-Budget gehört zur Client-Konfiguration und wird von deren abgeleiteten Clients geteilt, unabhängig von der Balancer-Identität.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ Erzeuge für jeden Aufruf, der ein eigenes `signal`, Progress-Callbacks oder Web
 
 ### Health-Filterung und P2C [#health-filtering-and-p2c]
 
-Für Peer-Server-Replikate aktivieren [`roundRobinBalancer`](/de-DE/api/core/roundrobinbalancer) und [`p2cBalancer`](/de-DE/api/core/p2cbalancer) (PeakEwma RTT × In-Flight-Last) standardmäßig ein Circuit-Breaking im Linkerd-Stil für aufeinanderfolgende Fehler (`outlierDetection`).
+Für Peer-Server-Replikate aktivieren [`roundRobinBalancer`](/de-DE/api/core/roundrobinbalancer) und [`p2cBalancer`](/de-DE/api/core/p2cbalancer) (PeakEwma RTT × In-Flight-Last) standardmäßig ein Circuit-Breaking im Linkerd-Stil für aufeinanderfolgende Fehler (`outlierDetection`). Es zählt `NET_UNREACHABLE`, `NET_UNAVAILABLE` und `NET_SERVER_ERROR`; der rohe Antwort-`status` ist nur für eigene Balancer bestimmt.
 
 Im dedizierten Leitfaden [Lastverteilung & Failover](/de-DE/docs/load-balancing) findest du alle Details zu Retry-Budgets, aktiven/passiven Health-Checks, P2C-Lastabschätzung und eigenen Balancern.
 
@@ -112,19 +112,19 @@ Vollständige Testmuster findest du unter [Tests](/de-DE/docs/testing).
 
 ## 6. Übersicht der Client-Options-Helfer
 
-| Helfer                                                                                                        | Zweck                                                                                             |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | Setzt eine oder mehrere Basis-URLs (ersetzt frühere Listen).                                      |
-| `withHeaders(HeadersInit)`                                                                                    | Setzt statische Standard-Header für HTTP und SSE (Builder-Header haben Vorrang).                  |
-| `withInterceptors(...items)`                                                                                  | Hängt HTTP-, SSE- und WebSocket-Interceptors in Onion-Reihenfolge an.                             |
-| `withQuerySerializer(fn)`                                                                                     | Serialisiert bereits mit Aliasen versehene Query-Objekte in einen Query-String.                   |
-| `withCredentials(boolean)`                                                                                    | Setzt bei `true` Fetch `credentials: "include"` für HTTP und SSE.                                 |
-| `withXSRF(options?)`                                                                                          | Kopiert das XSRF-Cookie in einen Header bei Same-Origin-mutierenden HTTP-Requests.                |
-| `withEndpointBalancer(balancer)`                                                                              | Ersetzt die Endpunkt-Auswahlstrategie (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`). |
-| `withEndpointFailover(options?)`                                                                              | Konfiguriert Same-Call-HTTP-Failover und das Client-Retry-Budget.                                 |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Konfiguriert SSE-Wiederverbindung und die Beobachtung ungültiger Ereignisse.                      |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Konfiguriert WebSocket-Standardwerte für Sitzungen.                                               |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Injiziert eigene oder Mock-Transport-Implementierungen.                                           |
+| Helfer                                                                                                        | Zweck                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | Setzt eine oder mehrere Basis-URLs (ersetzt frühere Listen).                                                    |
+| `withHeaders(HeadersInit)`                                                                                    | Setzt statische Standard-Header für HTTP und SSE (Builder-Header haben Vorrang).                                |
+| `withInterceptors(...items)`                                                                                  | Hängt HTTP-, SSE- und WebSocket-Interceptors in Onion-Reihenfolge an.                                           |
+| `withQuerySerializer(fn)`                                                                                     | Serialisiert bereits mit Aliasen versehene Query-Objekte in einen Query-String.                                 |
+| `withCredentials(boolean)`                                                                                    | Setzt bei `true` Fetch `credentials: "include"` für HTTP und SSE.                                               |
+| `withXSRF(options?)`                                                                                          | Kopiert das XSRF-Cookie in einen Header bei Same-Origin-mutierenden HTTP-Requests.                              |
+| `withBalancer(balancer)`                                                                                      | Ersetzt die Endpunkt-Auswahlstrategie (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).               |
+| `withRetry(options?)`                                                                                         | Konfiguriert optionale HTTP-Retry-Bedingungen, Methoden, Backoff, Versuch-Timeout und ein clienteigenes Budget. |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Konfiguriert SSE-Wiederverbindung und die Beobachtung ungültiger Ereignisse.                                    |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Konfiguriert WebSocket-Standardwerte für Sitzungen.                                                             |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Injiziert eigene oder Mock-Transport-Implementierungen.                                                         |
 
 ## Weiterführende Links
 

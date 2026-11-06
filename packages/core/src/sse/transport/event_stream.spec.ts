@@ -900,6 +900,7 @@ describe("SSE final endpoint attribution", () => {
         expect(done).toHaveBeenCalledExactlyOnceWith({
           attempted: true,
           status,
+          ...(status === 503 ? { code: "NET_UNAVAILABLE" } : {}),
         });
         expect(pickNext).not.toHaveBeenCalled();
         expect(policy).toHaveBeenCalledTimes(

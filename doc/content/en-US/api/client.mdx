@@ -28,17 +28,11 @@ All helpers return `ClientOption`. A later call replaces an earlier one for the 
 
 Copies candidate base URLs in first-seen order and drops a later copy of the same string. A later `withEndpoint` replaces the list. It does not check URLs and does not replace the balancer. An empty list is legal and fails the call with `REQ_BUILD_FAILED`.
 
-### withEndpointBalancer()
+### withBalancer()
 
-<ApiSignature name="withEndpointBalancer" />
+<ApiSignature name="withBalancer" />
 
 Replaces the balancer used for later calls. The object is stored by reference. Without this option, each client gets its own `pickFirstBalancer()`.
-
-### withEndpointFailover()
-
-<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
-
-Controls HTTP failover within one call. A client-shared Finagle/Linkerd retry budget defaults to 20% plus a reserve of 10 retries/second over a 10s TTL; `retryBudget: false` disables that limit. Both credits and debits expire lazily in ten TTL/10 slices. Defaults to one additional attempt on connection failure for GET, HEAD, OPTIONS, and TRACE. `attempts: 0` or `methods: []` disables it. A later option replaces the policy; omitted fields use defaults. Streaming request bodies are never replayed. `attemptTimeoutMs` covers Fetch, body reading, and decoding of one attempt, while the caller signal covers all attempts. See [Multiple endpoints](/docs/client#multiple-endpoints).
 
 ### withInterceptors()
 
@@ -201,7 +195,7 @@ The shown fields are `sse` and `webSocket`. The other seven — `endpoints`, `he
 
 ### ClientConfig
 
-The resolved snapshot that option helpers mutate and an operation reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`), `webSocket`, `endpointBalancer`, and `endpointFailover` always present. `endpointBalancer` defaults to a new `pickFirstBalancer()` for that client. It is not a [`RequestOptions`](/api/core/requestoptions-type) field.
+The resolved snapshot that option helpers mutate and an operation reads: `ClientOptions` after defaults, with `http.handle`, `interceptors`, `sse` (a `ClientSSEConfig`), `webSocket`, and `balancer` always present. `http.retry` is optional and defaults to `undefined` (one attempt, no budget); `withRetry(options?)` configures it. `balancer` defaults to a new `pickFirstBalancer()` for that client. It is not a [`RequestOptions`](/api/core/requestoptions-type) field.
 
 ### ClientSSEConfig
 
@@ -227,7 +221,7 @@ The constructor passed to `withWebSocketHandle`. It must expose the `OPEN` ready
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` advances on `NET_UNREACHABLE` or an uncoded 502/503/504 response. Its optional positive finite `failbackMs` enables a single concurrent probe of the first endpoint after the interval. HTTP safe-method connection failures also fail over within the same call by default. `roundRobinBalancer` walks the list. `weights` is optional. See [Multiple endpoints](/docs/client#multiple-endpoints).
+`pickFirstBalancer` advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504). Its optional positive finite `failbackMs` enables a single concurrent probe of the first endpoint after the interval. HTTP retries are a separate client policy configured with `withRetry`. `roundRobinBalancer` walks the list. `weights` is optional. See [Multiple endpoints](/docs/client#multiple-endpoints).
 
 ### p2cBalancer()
 
@@ -239,12 +233,26 @@ Samples distinct candidates without replacement (unlike Envoy/gRPC A48), choosin
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-Wraps a child with Linkerd-style consecutive-failure circuit breaking. Round robin and p2c enable it by default (as in Finagle); `false` disables it. Pick-first enables it with an object. After five failures, penalties start at 1000ms, double after failed probes, add positive jitter up to 0.5 times the base, and cap at 60000ms. Expiry admits a single probe decided at `end`, or at `done` if no `end` arrived. Success resets backoff; cancellation only releases the slot. There is no assumed-success timeout, quota, last-host protection, settlement grid, percentage criterion, or slow start. `isHealthy` reads application-owned cached state and never cancels a penalty. All hosts may break; Finagle-style list-local fail-open still sends requests. Unlike Envoy/gRPC A50 there is no ejection quota. See [Health filtering and p2c](/docs/client#health-filtering-and-p2c).
+Wraps a child with Linkerd-style consecutive-failure circuit breaking. Round robin and p2c enable it by default (as in Finagle); `false` disables it. Pick-first enables it with an object. The default classifier counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`. After five failures, penalties start at 1000ms, double after failed probes, add positive jitter up to 0.5 times the base, and cap at 60000ms. Expiry admits a single probe decided at `end`, or at `done` if no `end` arrived. Success resets backoff; cancellation only releases the slot. There is no assumed-success timeout, quota, last-host protection, settlement grid, percentage criterion, or slow start. `isHealthy` reads application-owned cached state and never cancels a penalty. All hosts may break; Finagle-style list-local fail-open still sends requests. Unlike Envoy/gRPC A50 there is no ejection quota. See [Health filtering and p2c](/docs/client#health-filtering-and-p2c).
 
-### EndpointBalancer
+### withRetry()
 
-<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-`pick` returns an error-first tuple. Optional `start` runs synchronously at most once immediately before the selected transport starts; optional `end` runs once after `start` at Fetch headers or WebSocket `open` (or pre-response failure), and optional `done` runs once at completion. Fetch cannot expose Linkerd first-body-frame or Envoy stream boundaries. Throws and thenable rejections from all hooks are contained. `ERR_NO_ENDPOINT` is only a `cause` of `REQ_BUILD_FAILED`. It is not a `FaultCode`. [`isNoEndpointCause`](/api/core/isnoendpointcause) recognizes it across Core copies.
+Enables same-call HTTP retry independently of endpoint selection. Omitting `withRetry` means one attempt and no budget. `withRetry()` is equivalent to `withRetry({})` and defaults to `maxAttempts: 2` (including the original), `on: ["connect-failure"]`, and safe methods `GET`, `HEAD`, `OPTIONS`, `TRACE`. Methods are case-insensitive; `[]` disables retries. `maxAttempts` is a safe integer at least 1, and each endpoint is tried at most once. `"gateway-error"` includes `NET_UNAVAILABLE` (HTTP 502/503/504) and gateway bodies rejected by `RES_*` decoding; `"attempt-timeout"` uses `attemptTimeoutMs`. Streaming request bodies never retry.
+
+Backoff defaults to `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, with the same field semantics as SSE/WebSocket reconnect. `delayMs: 0` skips waiting. `attemptTimeoutMs` bounds Fetch, body reading, and decoding of one attempt; the caller signal covers the whole call, including backoff waits.
+
+The client-owned Finagle budget defaults to 20% plus 10 retries/second of reserve over a 10s TTL. Credits and debits expire lazily in ten TTL/10 slices. `budget: false` removes the limit. Derived clients sharing a configuration share its budget; separate clients do not, even with one shared balancer. Invalid options return `REQ_OPTIONS_INVALID` with `Invalid retry options` when HTTP runs. The option captures owned fields, arrays, and the nested budget at application time. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. A later `withRetry` replaces the policy; `withRetry({ maxAttempts: 1 })` turns retries off after they were enabled. Balancers and health wrappers have no retry settings. See [Load balancing & failover](/docs/load-balancing).
+
+<include cwd>examples/client/http-retry.ts#example</include>
+
+### Balancer
+
+<ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`pick` returns an error-first tuple. Optional `start` runs synchronously at most once immediately before the selected transport starts; optional `end` runs once after `start` when the peer response begins (or a pre-response failure occurs), and optional `done` runs once at completion. Fetch cannot expose Linkerd first-body-frame or Envoy stream boundaries. Throws and thenable rejections from all hooks are contained. `ERR_NO_CANDIDATE` is only a `cause` of `REQ_BUILD_FAILED`. It is not a `FaultCode`. [`isNoCandidateCause`](/api/core/isnocandidatecause) recognizes it across Core copies.
+
+The balancer sees only neutral outcomes; each transport translates its own facts into `DoneInfo.code`. Default outlier detection counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`. The raw `DoneInfo.status` is retained for custom balancers only and is never read by built-in strategies. `PickInfo` contains `endpoints` and optional `operation`, with no transport discriminator.
 
 See [Client guide](/docs/client).

@@ -1,11 +1,11 @@
 ---
 title: "ロードバランシングとフェイルオーバー"
-description: 複数エンドポイントへトラフィックを分散し、障害ホストを一時隔離し、安全な HTTP リクエストを単一呼び出し内で自動フェイルオーバーします。
+description: 複数エンドポイントへトラフィックを分散し、障害ホストを一時隔離し、安全な HTTP リクエストを単一呼び出し内で任意にフェイルオーバーします。
 ---
 
 # ロードバランシングとフェイルオーバー
 
-アプリケーションが `withEndpoint(...urls)` を使用して複数のベース URL を構成すると、Defjs はリクエストをレプリカ群に分散させ、パッシブなサーキットブレイクやアクティブなヘルスチェックにより異常ホストを隔離し、安全な HTTP メソッドを同一呼び出し内で自動的にフェイルオーバーさせることができます。
+アプリケーションが `withEndpoint(...urls)` を使用して複数のベース URL を構成すると、Defjs はリクエストをレプリカ群に分散させ、パッシブなサーキットブレイクやアクティブなヘルスチェックにより異常ホストを隔離し、安全な HTTP メソッドを同一呼び出し内で任意にフェイルオーバーさせることができます。
 
 ## 1. ロードバランサー戦略の選択
 
@@ -41,23 +41,29 @@ description: 複数エンドポイントへトラフィックを分散し、障�
 
 ### `pickFirstBalancer` と `p2cBalancer` の動作原理
 
-- **`pickFirstBalancer`**: 接続失敗（`NET_UNREACHABLE`）またはステータスコード未処理の `502`、`503`、`504` レスポンスが発生するまで最初の URL に固定され、障害発生時に次の URL へ切り替わります。`failbackMs: 30_000` を設定すると、バックアップ先で指定時間を経過した後にプライマリを再度プローブします。
+- **`pickFirstBalancer`**: 最初の URL に留まり、`NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）で進みます。`failbackMs: 30_000` を設定すると、バックアップでその時間を過ごしたあと、プライマリを再びプローブします。
 - **`p2cBalancer` (Power of Two Choices)**: 候補から重複なしで 2 つをランダムサンプリングし、スコア（`PeakEwma RTT × (pending + 1)`、または `load: "pending"` 指定時は処理中の `pending` 数）が低いほうを選択します。デフォルト値（`defaultRttMs: 30`、`decayMs: 10000`）は Linkerd / tower の規約に準拠しています。
 
-## 2. 同一呼び出し内での HTTP フェイルオーバーとリトライバジェット
+## 2. 同一呼び出し内の HTTP リトライ
 
-デフォルトでは、安全な HTTP メソッド（`GET`、`HEAD`、`OPTIONS`、`TRACE`）に対して **同一呼び出し内フェイルオーバー** が有効になっています。最初に選択されたエンドポイントが `NET_UNREACHABLE` で失敗した場合、Defjs は未試行のバックアップエンドポイントを 1 つ選択し、同じ操作呼び出しの中で builder、インターセプターチェーン、トランスポートを再実行します。
+リトライは三つの別々の判断で決まります。**もう一度試すか**（`withRetry`）、**どこへ送るか**（ランタイムがバランサーに、試行済みのエンドポイントを除いて再び pick させます）、**どれだけ待つか**（バックオフ）です。HTTP の `withRetry`、SSE の `withSSEReconnect`、WebSocket の `withWebSocketReconnect` は、対称なトランスポート単位の方針です。フラットなバックオフフィールドは、名前も検証も遅延の計算も同じです。バランサーはリトライ方針を知りません。カスタムバランサーに特別な協力は要りません。
 
-このポリシーは [`withEndpointFailover(options)`](/ja-JP/api/core/withendpointfailover) でカスタマイズまたは無効化できます。
+同一呼び出し内の HTTP リトライは**デフォルトでオフ**です。`withRetry` を省くと、呼び出しごとに試行は 1 回だけで、リトライバジェットは作られず、クレジットも計上されません。後続の呼び出しでの選択は変わりません。失敗した呼び出しのあとでも、`pickFirstBalancer` は先へ進むことができます。`withRetry()` は `withRetry({})` と同等で、`GET`、`HEAD`、`OPTIONS`、`TRACE` の接続失敗に対して、合計 2 回の試行を有効にします。
+
+これは Go のエコシステムに従います。[gRPC は `retryPolicy` を service configuration に置き](https://grpc.io/docs/guides/retry/)、ロードバランシングの構成と並べます。[go-kit の `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) はバランサーを明示的に包みます。どちらも、アプリケーションの再試行方針をデフォルトでは適用しません。gRPC のリトライ方針はバックオフの設定を必須とし、±0.2 のジッターを使います。[Envoy の既定は 25 ミリ秒の基数で、上限はその基数の 10 倍です](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-retry-policy-retrybackoff)。Defjs は 25 ミリ秒、係数 2、250 ミリ秒の上限、±20% のジッターを使います。gRPC は低レベルの競合に対して透過的な再試行を行うことがあります。Defjs はそれらを模倣しません。
 
 <include cwd lang="typescript">
-  examples/client/endpoint-failover.ts#example
+  examples/client/http-retry.ts#example
 </include>
 
-- **再試行条件 (`retryOn`)**: デフォルトは `["connect-failure"]` です。`"gateway-error"`（未処理の `502`/`503`/`504`、またはエラーボディの `RES_*` デコードに失敗した `502`/`503`/`504`）や `"attempt-timeout"`（`attemptTimeoutMs` 設定時）を追加できます。
-- **試行ごとのタイムアウト vs 呼び出し全体のタイムアウト**: `attemptTimeoutMs` は Fetch の呼び出しからボディデコードまでの単一の試行に制限時間を設けます。一方、呼び出し元の `client({ signal: AbortSignal.timeout(ms) })` は、すべての試行を含めた呼び出し全体の上限時間を定めます。
-- **Finagle / Linkerd スタイルのリトライバジェット**: クライアント上のすべての呼び出しは、トークンバケット方式のリトライバジェット（`percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000`）を共有します。これにより、クラスタ全体の大規模障害時に再試行トラフィックが 20% 以上増幅されるのを防ぎます。上限を無効にするには `retryBudget: false` を設定します。
-- **ブラウザのオフライン検知**: `navigator.onLine === false` の場合、接続失敗は `{ attempted: false }` として記録され、バランサーの切り替えやフェイルオーバーは行われません。
+- **試行回数の合計 (`maxAttempts`)**: 最初の試行を含み、gRPC の `retryPolicy.maxAttempts` および go-kit `lb.Retry` の `max` と一致します。値は 1 以上の安全な整数でなければなりません。`1` はリトライしないことを意味します。設定上の上限はありませんが、各エンドポイントは多くて 1 回だけ試されます。ストリーミングのリクエストボディはリトライしません。`methods` は大文字と小文字を区別しません。`methods: []` はすべてのメソッドのリトライを無効にします。
+- **リトライ条件 (`on`)**: デフォルトは `["connect-failure"]` です。`"gateway-error"` は `NET_UNAVAILABLE`（HTTP `502`/`503`/`504`）を加えます。これには、`RES_*` のデコードで拒否されたゲートウェイのエラーボディも含みます。`attemptTimeoutMs` を設定しているときは `"attempt-timeout"` も追加できます。条件を満たすリトライはリクエストを作り直し、インターセプターチェーン全体を一番外側から再実行します。
+- **バックオフ (`delayMs`、`factor`、`jitter`、`maxDelayMs`)**: n 回目のリトライの前に、`delayMs × factor^(n−1)` を乗法ジッター付きで待ち、ジッターと丸めのあとで上限を適用します。既定は `25`、`2`、`0.2`、`250` です。`delayMs: 0` は待ちを省きます。再接続と同じく、`delayMs` は有限で非負、`factor` は有限で正、`jitter` は `[0, 1]` の有限値、`maxDelayMs` は非負の有限値か正の `Infinity` でなければなりません。プラットフォームのタイマー上限は引き続き適用されます。
+- **試行ごとと呼び出し全体のタイムアウト**: `attemptTimeoutMs` は、Fetch の呼び出しからボディのデコードまで、1 回の試行を制限します。呼び出し元の `client({ signal: AbortSignal.timeout(ms) })` は、すべての試行**とバックオフの待ち**を覆います。待ちのあいだにキャンセルすると、呼び出し元のキャンセル fault が返り、次の pick は行われません。
+- **Finagle / Linkerd のリトライバジェット (`budget`)**: 各クライアント構成がバジェットを所有し、同じ構成を使う派生クライアントだけがそれを共有します。バランサーを共有するクライアントは共有しません。既定は `percentCanRetry: 0.2`、`minRetriesPerSecond: 10`、`ttlMs: 10000` で、元のトラフィックの 20% に予約分を加えたものです。クレジットとデビットは、10 個の TTL/10 スライスで遅延して期限切れになります。リトライは待つ前に引き出します。バジェットを使い切ると、待たず、リトライもしません。上限を外すには `budget: false` を設定します。
+- **ブラウザのオフライン検知**: `navigator.onLine === false` の場合、接続失敗は `{ attempted: false }` と報告され、バランサーは進まず、リトライも起きません。
+
+後から渡した `withRetry` は方針を置き換えます。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。有効にしたあとリトライを無効にするには、`withRetry({ maxAttempts: 1 })` を渡します。無効なリトライ設定は、HTTP 操作の実行時に `Invalid retry options` を伴う `REQ_OPTIONS_INVALID` を返します。
 
 ## 3. パッシブサーキットブレイクとアクティブヘルスチェック (`outlierDetection`)
 
@@ -80,23 +86,28 @@ description: 複数エンドポイントへトラフィックを分散し、障�
 </Tab>
 </Tabs>
 
-1. **連続失敗による隔離**: `NET_UNREACHABLE` または HTTP `500+` のエラーが `consecutiveFailures` 回（デフォルト `5` 回）連続して発生すると、そのエンドポイントは `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` 〜 `60000ms`）に最大 50% の正のランダムジッターを加えた期間だけ一時隔離（イジェクト）されます。
-2. **単一プローブによる復旧（Single-probe recovery）**: ペナルティ期間が満了すると、単一のリクエストがプローブとしてホストに送られます。トランスポートハンドシェイク（`end`: HTTP/SSE ヘッダー受信または WebSocket の `open`）が成功すれば即座に通常トラフィックが再開され、ペナルティレベルは `0` にリセットされます。失敗した場合はペナルティ期間が倍増します。
+1. **連続失敗による隔離**: 既定の分類子は `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` を数えます。数えられる結果が `consecutiveFailures` 回（デフォルト `5` 回）連続すると、そのエンドポイントは `min(minPenaltyMs × 2^level, maxPenaltyMs)`（`1000ms` から `60000ms`）に、最大 `50%` の一様な正のジッターを加えた期間だけ隔離されます。
+2. **単一プローブによる復旧（Single-probe recovery）**: ペナルティ期間が満了すると、単一のリクエストがプローブとしてホストに送られます。ピアの応答が、数えられる失敗なしに `end` で始まれば、通常のトラフィックはすぐに再開し、ペナルティレベルは `0` に戻ります。失敗すればペナルティは倍になります。
 3. **パニックモード（フェイルオープン）**: 設定されているすべてのエンドポイントが隔離または異常と判定された場合、クライアントはローカルでリクエストを破棄するのではなく、候補リスト全体へ向けてフェイルオープン（パニックモード）となり通信を継続します。
 
 ## 4. トランスポートのアカウンティングライフサイクル (`pick` → `start` → `end` → `done`)
 
-カスタムバランサーを実装する際は、同期的関数 `pick(context)` と、任意のコールバック `start()`、`end(info)`、`done(info)` を定義します。
+カスタムバランサーは、同期の `pick(info)` と、任意の `start()`、`end(info)`、`done(info)` を実装します。`PickInfo` にあるのは候補の `endpoints` と、任意の定義 `operation` だけで、トランスポートを区別するフィールドはありません。トランスポートは自分の事実を中立な `DoneInfo.code` へ翻訳します。組み込みバランサーは `status` を読みません。この生のレスポンス情報は、カスタムバランサーのためだけに残されます。`start` は試行の前、`end` はピアの応答が始まるときか応答前の失敗のとき、`done` は完了時に実行されます。したがって、後から起きたボディの失敗は、それ以前の `end` のサンプルを変えずに、最終的な code を変えることがあります。
 
-| 物理トランスポートの結果                                              | 最終的な `done(info)` サンプル                             |
-| --------------------------------------------------------------------- | ---------------------------------------------------------- |
-| HTTP レスポンスボディがストリーム途中で切断                           | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
-| SSE ハンドシェイクに成功後、ストリームの `reader.read()` が reject    | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| SSE の正常 EOF、ハンドシェイクのデコード失敗、またはキュー上限超過    | `{ attempted: true, status }`                              |
-| 接続済み WebSocket がコード `1006` または `wasClean === false` で切断 | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| 接続済み WebSocket が正常にクローズ                                   | `{ attempted: true }`                                      |
-| 呼び出し元のキャンセル、またはストリーム/ソケットの手動クローズ       | `{ attempted: false }`                                     |
-| 試行開始後に呼び出し元の期限（deadline）が超過                        | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+| 物理トランスポートの結果                                               | 最終的な `done(info)` サンプル                             |
+| ---------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE のレスポンスステータス 502、503 または 504                    | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE の、500 以上であるその他のレスポンスステータス                | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE のレスポンスステータス 2xx、3xx または 4xx（429 を含む）      | `{ attempted: true, status }`                              |
+| HTTP レスポンスボディがストリーム途中で切断                            | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE ハンドシェイクに成功後、ストリームの `reader.read()` が reject     | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE の正常な EOF、ハンドシェイク成功後のデコード失敗、またはキュー上限 | `{ attempted: true, status }`                              |
+| 接続済み WebSocket がコード `1006` または `wasClean === false` で切断  | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| 接続済み WebSocket が正常にクローズ                                    | `{ attempted: true }`                                      |
+| 呼び出し元のキャンセル、またはストリーム/ソケットの手動クローズ        | `{ attempted: false }`                                     |
+| 試行開始後に呼び出し元の期限（deadline）が超過                         | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+ハンドシェイクのデコード失敗は、ハンドシェイクのステータスから導いた中立な結果を残します（たとえばステータス `503` の `NET_UNAVAILABLE`）。不完全な HTTP ボディは、ゲートウェイ応答であっても、代わりに `NET_BODY_INCOMPLETE` とその生の status を残します。既定の outlier detection はこれを数えません。
 
 ## 関連ドキュメント
 

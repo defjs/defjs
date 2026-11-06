@@ -28,17 +28,11 @@ Options 按次序套用。如果 interceptors 會捕獲 auth 或 tenant 資料�
 
 按第一次見到嘅次序複製候選 base URL，之後再出現嘅同一個字串會丟掉。後面一次 `withEndpoint` 會取代成份 list。佢唔檢查 URL，亦唔會換走 balancer。空 list 係合法值，該次 call 會以 `REQ_BUILD_FAILED` 失敗。
 
-### withEndpointBalancer()
+### withBalancer()
 
-<ApiSignature name="withEndpointBalancer" />
+<ApiSignature name="withBalancer" />
 
 換走之後啲 call 所用嘅 balancer。個 object 按 reference 儲起。冇呢個 option 嘅時候，每個 client 各自有自己嘅 `pickFirstBalancer()`。
-
-### withEndpointFailover()
-
-<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
-
-控制一次 call 入面嘅 HTTP failover。同一個 client 共享嘅 Finagle/Linkerd retry budget 預設係 20%，再加每秒 10 次嘅 reserve，TTL 係 10 秒；`retryBudget: false` 拎走呢個限制。Credit 同 debit 都喺十個 TTL/10 slice 上 lazy 過期。預設係連線失敗時，對 GET、HEAD、OPTIONS 同 TRACE 再多試一次。`attempts: 0` 或者 `methods: []` 會關掉佢。後面嘅 option 會取代成份策略；省略嘅 field 用預設值。Streaming request body 永遠唔會重放。`attemptTimeoutMs` 覆蓋單次 attempt 嘅 Fetch、讀 body 同 decode，caller 嘅 signal 就覆蓋所有 attempts。睇 [多個 endpoints](/zh-Hant-HK/docs/client#multiple-endpoints)。
 
 ### withInterceptors()
 
@@ -201,7 +195,7 @@ SSE 嘅 `onInvalidEvent` 處理冇對應 struct（包括冇 `default`）嘅 even
 
 ### ClientConfig
 
-Option helpers 修改、操作讀取嘅 resolved snapshot：套用預設值之後嘅 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）、`webSocket`、`endpointBalancer` 同 `endpointFailover` 一定存在。`endpointBalancer` 預設係嗰個 client 新建嘅 `pickFirstBalancer()`。佢唔係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) field。
+Option helpers 修改、操作讀取嘅 resolved snapshot：套用預設值之後嘅 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一個 `ClientSSEConfig`）、`webSocket` 同 `balancer` 一定存在。`http.retry` 可選，預設係 `undefined`（一次 attempt，冇 budget）；`withRetry(options?)` 設定佢。`balancer` 預設係嗰個 client 新建嘅 `pickFirstBalancer()`。佢唔係 [`RequestOptions`](/zh-Hant-HK/api/core/requestoptions-type) field。
 
 ### ClientSSEConfig
 
@@ -227,7 +221,7 @@ Transport 使用嘅 WebSocket instance surface：`WebSocket` 去掉 `binaryType`
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 會喺 `NET_UNREACHABLE`，或者未帶 fault code 嘅 502/503/504 response 上前進。可選嘅有限正數 `failbackMs` 離開呢段間隔之後，對第一個 endpoint 做至多一個同時進行嘅 probe。HTTP safe method 嘅連線失敗，預設亦會喺同一次 call 入面 failover。`roundRobinBalancer` 順住份 list 行。`weights` 可選。睇 [多個 endpoints](/zh-Hant-HK/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 會喺 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前進。可選嘅有限正數 `failbackMs` 喺呢段間隔之後，對第一個 endpoint 做至多一個同時進行嘅 probe。HTTP 重試係用 `withRetry` 設定嘅另一份 client 策略。`roundRobinBalancer` 順住份 list 行。`weights` 可選。睇 [多個 endpoints](/zh-Hant-HK/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
@@ -239,12 +233,26 @@ Transport 使用嘅 WebSocket instance surface：`WebSocket` 去掉 `binaryType`
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-用 Linkerd 式嘅 consecutive-failure circuit breaking 包住 child。Round robin 同 p2c 預設開啟（同 Finagle 一樣）；`false` 關掉佢。Pick-first 傳入 object 先至開啟。五次失敗之後，penalty 由 1000 ms 起，probe 失敗再加倍，並加上唔超過 base 0.5 倍嘅正 jitter，上限 60000 ms。到期接納一次 probe，喺 `end` 判定；如果冇 `end` 到達，就喺 `done` 判定。成功會重置 backoff；取消只釋放 slot。冇假定成功嘅 timeout、quota、last-host protection、settlement grid、percentage criterion 或者 slow start。`isHealthy` 讀應用程式自己持有嘅 cached state，永遠唔會取消 penalty。所有 host 都可以熔斷；Finagle 式、只限目前 list 嘅 fail-open 仍然會送 request。同 Envoy/gRPC A50 唔同，冇 ejection quota。睇 [Health filtering 同 p2c](/zh-Hant-HK/docs/client#health-filtering-and-p2c)。
+用 Linkerd 式嘅 consecutive-failure circuit breaking 包住 child。Round robin 同 p2c 預設開啟（同 Finagle 一樣）；`false` 關掉佢。Pick-first 傳入 object 先至開啟。預設分類器計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。五次失敗之後，penalty 由 1000 ms 起，probe 失敗再加倍，並加上唔超過 base 0.5 倍嘅正 jitter，上限 60000 ms。到期接納一次 probe，喺 `end` 判定；如果冇 `end` 到達，就喺 `done` 判定。成功會重置 backoff；取消只釋放 slot。冇假定成功嘅 timeout、quota、last-host protection、settlement grid、percentage criterion 或者 slow start。`isHealthy` 讀應用程式自己持有嘅 cached state，永遠唔會取消 penalty。所有 host 都可以熔斷；Finagle 式、只限目前 list 嘅 fail-open 仍然會送 request。同 Envoy/gRPC A50 唔同，冇 ejection quota。睇 [Health filtering 同 p2c](/zh-Hant-HK/docs/client#health-filtering-and-p2c)。
 
-### EndpointBalancer
+### withRetry()
 
-<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-`pick` return 一個 error-first tuple。可選嘅 `start` 喺所選 transport 開始之前至多同步運行一次；可選嘅 `end` 喺 `start` 之後運行一次，時機係 Fetch headers 或者 WebSocket `open`（或者 response 之前嘅失敗）；可選嘅 `done` 喺完成時運行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw，同 thenable 嘅 rejection，都會被接住。`ERR_NO_ENDPOINT` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoEndpointCause`](/zh-Hant-HK/api/core/isnoendpointcause) 亦可以識別另一份 Core 副本入面嘅佢。
+獨立於 endpoint 選擇，啟用同一次 call 入面嘅 HTTP 重試。省略 `withRetry` 代表一次 attempt，亦冇 budget。`withRetry()` 等同 `withRetry({})`，預設係 `maxAttempts: 2`（包括最初嗰次）、`on: ["connect-failure"]`，以及 safe method `GET`、`HEAD`、`OPTIONS`、`TRACE`。method 名唔分大小寫；`[]` 停用重試。`maxAttempts` 係至少為 1 嘅安全整數，而且每個 endpoint 最多試一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` decode 拒絕嘅 gateway body；`"attempt-timeout"` 用 `attemptTimeoutMs`。Streaming request body 永遠唔會重試。
+
+Backoff 預設係 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，欄位語義同 SSE/WebSocket 重連一樣。`delayMs: 0` 跳過等待。`attemptTimeoutMs` 限制單次 attempt 嘅 Fetch、讀 body 同 decode；caller 嘅 signal 覆蓋成次 call，包括 backoff 等待。
+
+歸 client 所有嘅 Finagle budget 預設係 20%，再加 10 秒 TTL 上面每秒 10 次嘅 reserve。Credit 同 debit 都喺十個 TTL/10 slice 上 lazy 過期。`budget: false` 拎走呢個限制。共享同一份配置嘅派生 client 共享佢嘅 budget；各自獨立嘅 client 唔共享，即使共用一個 balancer 都係。無效 option 喺 HTTP 運行時 return `REQ_OPTIONS_INVALID`，訊息係 `Invalid retry options`。呢個 option 喺套用時捕獲自己擁有嘅 field、array 同嵌套嘅 budget。`withRetry()` 同 `withRetry(undefined)` 嘅行為同 `withRetry({})` 一樣。後一次 `withRetry` 會替換呢份策略；`withRetry({ maxAttempts: 1 })` 會喺啟用之後關閉重試。balancer 同 health wrapper 冇重試設定。睇 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing)。
+
+<include cwd>examples/client/http-retry.ts#example</include>
+
+### Balancer
+
+<ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`pick` return 一個 error-first tuple。可選嘅 `start` 喺所選 transport 開始之前至多同步運行一次；可選嘅 `end` 喺 `start` 之後運行一次，時機係對端 response 開始（或者 response 之前發生失敗）；可選嘅 `done` 喺完成時運行一次。Fetch 暴露唔到 Linkerd 嘅 first body frame，亦暴露唔到 Envoy 嘅 stream boundary。所有 hook 嘅 throw，同 thenable 嘅 rejection，都會被接住。`ERR_NO_CANDIDATE` 只係 `REQ_BUILD_FAILED` 嘅 `cause`。佢唔係 `FaultCode`。[`isNoCandidateCause`](/zh-Hant-HK/api/core/isnocandidatecause) 亦可以識別另一份 Core 副本入面嘅佢。
+
+balancer 只見到中立結果；每種 transport 將自己嘅事實翻譯成 `DoneInfo.code`。預設嘅 outlier detection 計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`。原始嘅 `DoneInfo.status` 只留給自訂 balancer，內建策略從不讀取佢。`PickInfo` 包含 `endpoints` 同可選嘅 `operation`，冇 transport 判別欄位。
 
 睇 [Client guide](/zh-Hant-HK/docs/client)。

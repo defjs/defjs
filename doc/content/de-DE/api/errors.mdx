@@ -57,6 +57,8 @@ Eine Response kam an, ließ sich aber nicht wie deklariert lesen. `response` sin
 
 Alles, was fehlschlagen konnte, bevor eine Response existierte: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` ist `undefined`, bis der Transport Metadaten zu melden hat — etwa einen Body, der mitten im Download abbrach.
 
+Ungültige `withRetry`-Optionen geben `REQ_OPTIONS_INVALID` zurück, bevor der HTTP-Transport startet, mit `Invalid retry options`. Dazu zählen eine Policy, die kein Objekt ist, ein `maxAttempts`-Wert, der keine sichere Ganzzahl von mindestens 1 ist, sowie ungültige Bedingungen, Methoden, Timeouts, Backoff- oder Budget-Einstellungen. `withRetry` wegzulassen schaltet Retries ab. `withRetry()` und `withRetry(undefined)` verhalten sich wie `withRetry({})`. `withRetry({ maxAttempts: 1 })` schaltet Retries aus, nachdem sie aktiviert wurden.
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -101,12 +103,12 @@ Die Sentinels tragen nicht enumerierbare Brands `Symbol.for('defjs.cause.aborted
 
 [`isAbortCause`](/de-DE/api/core/isabortcause) erkennt einen mit Abort gebrandeten `Error` oder eine `DOMException` namens `AbortError`. [`isTimeoutCause`](/de-DE/api/core/istimeoutcause) erkennt einen mit Timeout gebrandeten `Error` oder eine `DOMException` / einen `Error` namens `TimeoutError`. Übergib `fault.cause`, um den zugrunde liegenden Wert zu klassifizieren; diese Funktionen packen einen Fault nicht aus. Sie funktionieren mit Sentinels aus einer anderen Core-Kopie.
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`ERR_NO_ENDPOINT` erscheint nur als `cause` von `REQ_BUILD_FAILED`, wenn kein Kandidaten-Endpoint ausgewählt werden kann. Es fügt keinen `FaultCode` hinzu. Der Sentinel trägt ein nicht enumerierbares Brand `Symbol.for('defjs.cause.no-endpoint')`. [`isNoEndpointCause`](/de-DE/api/core/isnoendpointcause) erkennt dieses Brand aus einer anderen Core-Kopie, so wie [`isAbortCause`](/de-DE/api/core/isabortcause) einen Abort erkennt. Übergib `fault.cause`. Die Funktion packt einen Fault nicht aus.
+`ERR_NO_CANDIDATE` erscheint nur als `cause` von `REQ_BUILD_FAILED`, wenn kein Kandidaten-Endpoint ausgewählt werden kann. Es fügt keinen `FaultCode` hinzu. Der Sentinel trägt ein nicht enumerierbares Brand `Symbol.for('defjs.cause.no-endpoint')`. [`isNoCandidateCause`](/de-DE/api/core/isnocandidatecause) erkennt dieses Brand aus einer anderen Core-Kopie, so wie [`isAbortCause`](/de-DE/api/core/isabortcause) einen Abort erkennt. Übergib `fault.cause`. Die Funktion packt einen Fault nicht aus.
 
 Siehe [Errors-Guide](/de-DE/docs/errors).

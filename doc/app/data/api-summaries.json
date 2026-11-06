@@ -825,49 +825,44 @@
     "description": "Callable root client returned by createClient."
   },
   {
-    "slug": "core/endpointbalancer-type",
-    "name": "EndpointBalancer",
+    "slug": "core/balancer-type",
+    "name": "Balancer",
     "description": "Chooses one endpoint for a call."
   },
   {
-    "slug": "core/endpointpickoutcome-type",
-    "name": "EndpointPickOutcome",
-    "description": "Error-first result of EndpointBalancer.pick."
+    "slug": "core/pickoutcome-type",
+    "name": "PickOutcome",
+    "description": "Error-first result of Balancer.pick."
   },
   {
-    "slug": "core/endpointtransport-type",
-    "name": "EndpointTransport",
-    "description": "Transport that is about to use the selected endpoint."
-  },
-  {
-    "slug": "core/endpointpickinfo-type",
-    "name": "EndpointPickInfo",
+    "slug": "core/pickinfo-type",
+    "name": "PickInfo",
     "description": "What the runtime tells pick about this call."
   },
   {
-    "slug": "core/endpointpickresult-type",
-    "name": "EndpointPickResult",
+    "slug": "core/pickresult-type",
+    "name": "PickResult",
     "description": "Endpoint selected for one call."
   },
   {
-    "slug": "core/endpointfaultcode-type",
-    "name": "EndpointFaultCode",
-    "description": "Transport failure codes a balancer can observe through end and done."
+    "slug": "core/pickfaultcode-type",
+    "name": "PickFaultCode",
+    "description": "Neutral attempt outcome codes observed through end and done."
   },
   {
-    "slug": "core/endpointdoneinfo-type",
-    "name": "EndpointDoneInfo",
+    "slug": "core/doneinfo-type",
+    "name": "DoneInfo",
     "description": "Outcome of the attempt that used the selected endpoint."
   },
   {
-    "slug": "core/err-no-endpoint",
-    "name": "ERR_NO_ENDPOINT",
+    "slug": "core/err-no-candidate",
+    "name": "ERR_NO_CANDIDATE",
     "description": "Sentinel for an empty candidate list."
   },
   {
-    "slug": "core/isnoendpointcause",
-    "name": "isNoEndpointCause",
-    "description": "Whether cause is ERR_NO_ENDPOINT, including a copy from another Core build."
+    "slug": "core/isnocandidatecause",
+    "name": "isNoCandidateCause",
+    "description": "Whether cause is ERR_NO_CANDIDATE, including a copy from another Core build."
   },
   {
     "slug": "core/pickfirstbalancer",
@@ -880,24 +875,24 @@
     "description": "Round-robin balancer, with nginx smooth weighting when weights is set."
   },
   {
-    "slug": "core/withendpointbalancer",
-    "name": "withEndpointBalancer",
+    "slug": "core/withbalancer",
+    "name": "withBalancer",
     "description": "Replaces the balancer that selects one candidate per call."
   },
   {
-    "slug": "core/endpointfailovercondition-type",
-    "name": "EndpointFailoverCondition",
+    "slug": "core/withretry",
+    "name": "withRetry",
+    "description": "Configures opt-in same-call HTTP retries independently of endpoint balancing."
+  },
+  {
+    "slug": "core/retrycondition-type",
+    "name": "RetryCondition",
     "description": "Conditions that allow HTTP to try a different endpoint within one call."
   },
   {
-    "slug": "core/endpointfailoveroptions-type",
-    "name": "EndpointFailoverOptions",
-    "description": "HTTP failover policy. Omitted fields use the default policy."
-  },
-  {
-    "slug": "core/withendpointfailover",
-    "name": "withEndpointFailover",
-    "description": "Replaces HTTP endpoint failover settings; omitted fields use defaults."
+    "slug": "core/retryoptions-type",
+    "name": "RetryOptions",
+    "description": "Opt-in same-call HTTP retry policy. Omitted fields use defaults."
   },
   {
     "slug": "core/outlierdetectionoptions-type",
@@ -907,7 +902,7 @@
   {
     "slug": "core/outlierdetection",
     "name": "outlierDetection",
-    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking. Five attributed failures break an endpoint by default. Penalties start at 1s, double after failed probes, add uniform positive jitter of up to 0.5 times the base, and cap at 60s. A successful probe resets the backoff. Expiry admits one probe, decided at transport end (headers or socket open), as in Finagle. done without end decides the probe instead; later done is an ordinary sample. NET_UNREACHABLE and 5xx fail by default, not timeouts or incomplete bodies. Active true cannot cancel a penalty. Empty candidates first ignore active checks, then fall back to the original current list (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer is created. Configuration is captured at construction."
+    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking. Five attributed failures break an endpoint by default. Penalties start at 1s, double after failed probes, add uniform positive jitter of up to 0.5 times the base, and cap at 60s. A successful probe resets the backoff. Expiry admits one probe, decided at end (the peer response begins), as in Finagle. done without end decides the probe instead; later done is an ordinary sample. NET_UNREACHABLE, NET_UNAVAILABLE, and NET_SERVER_ERROR fail by default, not timeouts or incomplete bodies. Active true cannot cancel a penalty. Empty candidates first ignore active checks, then fall back to the original current list (Finagle panic mode). Unlike Envoy and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer is created. Configuration is captured at construction."
   },
   {
     "slug": "core/p2cbalancer",

@@ -57,6 +57,8 @@ Response пришёл, но прочитать его как объявлено 
 
 Всё, что могло провалиться до того, как response вообще появился: `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` равен `undefined`, пока у транспорта нет метаданных для сообщения — например, тела, обрезанного посреди загрузки.
 
+Недопустимые опции `withRetry` возвращают `REQ_OPTIONS_INVALID` до запуска HTTP-транспорта, с сообщением `Invalid retry options`. Сюда входят политика, которая не является объектом, значение `maxAttempts`, которое не является безопасным целым числом не меньше 1, а также недопустимые условия, методы, таймауты, backoff или настройки бюджета. Если опустить `withRetry`, повторы выключены. `withRetry()` и `withRetry(undefined)` ведут себя как `withRetry({})`. `withRetry({ maxAttempts: 1 })` выключает повторы после того, как они были включены.
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -101,12 +103,12 @@ Response пришёл, но прочитать его как объявлено 
 
 [`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт `Error` с меткой отмены или `DOMException` с именем `AbortError`. [`isTimeoutCause`](/ru-RU/api/core/istimeoutcause) распознаёт `Error` с меткой таймаута или `DOMException` / `Error` с именем `TimeoutError`. Передавай `fault.cause`, чтобы классифицировать исходное значение; эти функции не извлекают причину из fault. Они работают и с сигнальными ошибками из другой копии Core.
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`ERR_NO_ENDPOINT` появляется только как `cause` у `REQ_BUILD_FAILED`, когда нельзя выбрать ни одного эндпоинта-кандидата. Он не добавляет `FaultCode`. Сигнальная ошибка несёт неперечислимую метку `Symbol.for('defjs.cause.no-endpoint')`. [`isNoEndpointCause`](/ru-RU/api/core/isnoendpointcause) распознаёт эту метку из другой копии Core, так же как [`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт отмену. Передавай `fault.cause`. Функция не извлекает причину из fault.
+`ERR_NO_CANDIDATE` появляется только как `cause` у `REQ_BUILD_FAILED`, когда нельзя выбрать ни одного эндпоинта-кандидата. Он не добавляет `FaultCode`. Сигнальная ошибка несёт неперечислимую метку `Symbol.for('defjs.cause.no-endpoint')`. [`isNoCandidateCause`](/ru-RU/api/core/isnocandidatecause) распознаёт эту метку из другой копии Core, так же как [`isAbortCause`](/ru-RU/api/core/isabortcause) распознаёт отмену. Передавай `fault.cause`. Функция не извлекает причину из fault.
 
 См. [гайд Errors](/ru-RU/docs/errors).

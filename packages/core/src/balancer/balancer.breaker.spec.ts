@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { EndpointDoneInfo } from "./balancer";
+import type { DoneInfo } from "./balancer";
 import { pickFirstBalancer, roundRobinBalancer } from "./balancer";
 import { outlierDetection } from "./outlier_detection";
 import { p2cBalancer } from "./p2c";
@@ -14,8 +14,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 const list = ["a", "b", "c"];
-const bad: EndpointDoneInfo = { attempted: true, status: 503 };
-const ok: EndpointDoneInfo = { attempted: true, status: 200 };
+const bad: DoneInfo = { attempted: true, code: "NET_UNAVAILABLE" };
+const ok: DoneInfo = { attempted: true, status: 200 };
 function setup(options = {}) {
   let desired = "a";
   let candidates: readonly string[] = [];
@@ -42,7 +42,7 @@ function setup(options = {}) {
     { consecutiveFailures: 1, ...options },
   );
   function pick(endpoints = list) {
-    const [e, p] = pickEndpoint(b, { endpoints, transport: "http" });
+    const [e, p] = pickEndpoint(b, { endpoints });
     expect(e).toBeNull();
     if (!p) throw new Error("missing pick");
     return p;
@@ -106,13 +106,13 @@ test("a lone broken host is excluded when a healthy candidate is later discovere
 test("expiry admits only one of sixty picks and end restores traffic before done", () => {
   const b = roundRobinBalancer();
   for (let i = 0; i < 15; i++) {
-    const [, p] = b.pick({ endpoints: list, transport: "http" });
+    const [, p] = b.pick({ endpoints: list });
     p?.done?.(p.endpoint === "a" ? bad : ok);
   }
   vi.setSystemTime(1000);
   const wave = Array.from(
     { length: 60 },
-    () => pickEndpoint(b, { endpoints: list, transport: "http" })[1],
+    () => pickEndpoint(b, { endpoints: list })[1],
   );
   const probes = wave.filter((p) => p?.endpoint === "a");
   expect(probes).toHaveLength(1);
@@ -121,7 +121,7 @@ test("expiry admits only one of sixty picks and end restores traffic before done
   expect(
     Array.from(
       { length: 60 },
-      () => b.pick({ endpoints: list, transport: "http" })[1]?.endpoint,
+      () => b.pick({ endpoints: list })[1]?.endpoint,
     ).filter((e) => e === "a"),
   ).toHaveLength(20);
 });
@@ -140,11 +140,11 @@ test("probe end failure immediately reopens the breaker without waiting for done
 });
 test.each(["sse", "websocket"] as const)(
   "%s probe is decided by handshake end rather than session lifetime",
-  (transport) => {
+  () => {
     const h = setup();
     h.pick().done(bad);
     vi.setSystemTime(1000);
-    const [, probe] = pickEndpoint(h.b, { endpoints: list, transport });
+    const [, probe] = pickEndpoint(h.b, { endpoints: list });
     probe?.start();
     vi.setSystemTime(100000);
     expect(h.pick().endpoint).toBe("b");
@@ -228,9 +228,9 @@ test.each([
       // @ts-expect-error invalid health options are rejected at runtime
       p2cBalancer({ outlierDetection: options }),
     ])
-      expect(
-        pickEndpoint(b, { endpoints: list, transport: "http" })[0]?.code,
-      ).toBe("REQ_OPTIONS_INVALID");
+      expect(pickEndpoint(b, { endpoints: list })[0]?.code).toBe(
+        "REQ_OPTIONS_INVALID",
+      );
   },
 );
 

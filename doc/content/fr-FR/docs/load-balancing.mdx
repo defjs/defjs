@@ -1,11 +1,11 @@
 ---
 title: "Équilibrage de charge et basculement"
-description: Répartissez le trafic sur plusieurs endpoints, éjectez les réplicas défaillants et basculez automatiquement les requêtes HTTP sûres au sein d'un même appel.
+description: Répartissez le trafic sur plusieurs endpoints, éjectez les réplicas défaillants et basculez de façon optionnelle les requêtes HTTP sûres au sein d'un même appel.
 ---
 
 # Équilibrage de charge et basculement
 
-Lorsqu'une application configure plusieurs URL de base avec `withEndpoint(...urls)`, Defjs peut distribuer les requêtes entre les différents réplicas, éjecter les hôtes défaillants par coupure de circuit passive ou vérifications de santé actives, et basculer automatiquement les méthodes HTTP sûres au sein d'un même appel.
+Lorsqu'une application configure plusieurs URL de base avec `withEndpoint(...urls)`, Defjs peut distribuer les requêtes entre les différents réplicas, éjecter les hôtes défaillants par coupure de circuit passive ou vérifications de santé actives, et basculer de façon optionnelle les méthodes HTTP sûres au sein d'un même appel.
 
 ## 1. Choisir une stratégie de répartition de charge
 
@@ -41,23 +41,29 @@ Lorsqu'une application configure plusieurs URL de base avec `withEndpoint(...url
 
 ### Fonctionnement de `pickFirstBalancer` et `p2cBalancer`
 
-- **`pickFirstBalancer`** : Reste positionné sur la première URL jusqu'à ce qu'un échec de connexion (`NET_UNREACHABLE`) ou une réponse `502`, `503` ou `504` sans code ne fasse basculer vers l'URL suivante. Configurez `failbackMs: 30_000` pour sonder à nouveau l'endpoint primaire après avoir passé cette durée sur un secours.
-- **`p2cBalancer` (Power of Two Choices)** : Tire au sort deux candidats distincts sans remise et sélectionne celui affichant le score le plus faible : `RTT PeakEwma × (en_cours + 1)` (ou le compte `pending` en cours lorsque `load: "pending"`). Les valeurs par défaut (`defaultRttMs: 30`, `decayMs: 10000`) suivent les conventions de Linkerd/tower.
+- **`pickFirstBalancer`** : Reste sur la première URL et avance sur `NET_UNREACHABLE` ou `NET_UNAVAILABLE` (HTTP 502, 503 ou 504). Configurez `failbackMs: 30_000` pour sonder à nouveau l'endpoint primaire après avoir passé cette durée sur un secours.
+- **`p2cBalancer` (Power of Two Choices)** : Tire au sort deux candidats distincts sans remise et sélectionne celui affichant le score le plus faible : `PeakEwma RTT × (pending + 1)` (ou le compte `pending` en cours lorsque `load: "pending"`). Les valeurs par défaut (`defaultRttMs: 30`, `decayMs: 10000`) suivent les conventions de Linkerd/tower.
 
-## 2. Basculement HTTP au sein d'un même appel et budget de retry
+## 2. Retry HTTP au sein d'un même appel
 
-Par défaut, HTTP active le **basculement au sein du même appel** pour les méthodes sûres (`GET`, `HEAD`, `OPTIONS`, `TRACE`) : si le premier endpoint sélectionné échoue avec `NET_UNREACHABLE`, Defjs choisit un endpoint de secours non encore tenté et réexécute le builder, la chaîne d'intercepteurs et le transport au sein du même appel d'opération.
+Trois décisions distinctes régissent un retry : **s'il faut réessayer** (`withRetry`), **où l'envoyer** (le runtime demande au répartiteur de sélectionner à nouveau, en excluant les endpoints déjà tentés) et **combien de temps attendre** (backoff). `withRetry` pour HTTP, `withSSEReconnect` pour SSE et `withWebSocketReconnect` pour WebSocket sont des politiques symétriques au niveau du transport. Leurs champs de backoff plats partagent les mêmes noms, la même validation et le même calcul de délai. Le répartiteur ignore la politique de retry ; un répartiteur personnalisé n'a besoin d'aucune coopération particulière.
 
-Personnalisez ou désactivez cette politique via [`withEndpointFailover(options)`](/fr-FR/api/core/withendpointfailover) :
+Le retry HTTP au sein d'un même appel est **désactivé par défaut**. Omettre `withRetry` signifie une seule tentative par appel, sans budget de retry créé ni crédité. La sélection des appels suivants est inchangée : `pickFirstBalancer` peut encore avancer après un appel échoué. `withRetry()` équivaut à `withRetry({})` et active deux tentatives au total pour les échecs de connexion de `GET`, `HEAD`, `OPTIONS` et `TRACE`.
+
+Cela suit l'écosystème Go : [gRPC place `retryPolicy` dans la configuration de service](https://grpc.io/docs/guides/retry/), à côté de la configuration de répartition de charge, tandis que [go-kit `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) enveloppe explicitement un répartiteur. Aucun des deux n'applique par défaut une politique de retry applicative. La politique de retry de gRPC exige des réglages de backoff et utilise un jitter de ±0.2 ; [Envoy utilise par défaut une base de 25 ms et un maximum de dix fois cette base](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-retry-policy-retrybackoff). Defjs utilise 25 ms, un facteur 2, un plafond de 250 ms et un jitter de ±20 %. gRPC peut effectuer des retries transparents pour des courses de bas niveau ; Defjs ne les reproduit pas.
 
 <include cwd lang="typescript">
-  examples/client/endpoint-failover.ts#example
+  examples/client/http-retry.ts#example
 </include>
 
-- **Conditions de rejeu (`retryOn`)** : Vaut par défaut `["connect-failure"]`. Vous pouvez y ajouter `"gateway-error"` (`502`/`503`/`504` non codé, ou `502`/`503`/`504` dont le corps d'erreur a échoué au décodage `RES_*`) et `"attempt-timeout"` (lorsque `attemptTimeoutMs` est configuré).
-- **Délai par tentative vs délai pour tout l'appel** : `attemptTimeoutMs` borne une tentative unique de l'invocation Fetch jusqu'au décodage du corps ; le `client({ signal: AbortSignal.timeout(ms) })` de l'appelant borne l'ensemble de l'appel à travers toutes ses tentatives.
-- **Budget de retry Finagle / Linkerd** : Tous les appels sur un client partagent un budget de retry à seau de jetons (`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`) afin que les rejeux ne puissent amplifier le trafic de plus de ~20 % en cas d'incident généralisé. Spécifiez `retryBudget: false` pour désactiver ce plafond.
-- **Indication hors ligne navigateur** : Lorsque `navigator.onLine === false`, les échecs de connexion sont notifiés avec `{ attempted: false }` et ne font pas avancer les répartiteurs ni ne déclenchent de basculement.
+- **Nombre total de tentatives (`maxAttempts`)** : Inclut la tentative d'origine, comme `retryPolicy.maxAttempts` de gRPC et le `max` de `lb.Retry` de go-kit. La valeur doit être un entier sûr d'au moins 1 ; `1` signifie aucun retry. Il n'y a pas de plafond configuré, mais chaque endpoint n'est tenté qu'une fois au plus. Les corps de requête en flux ne font jamais l'objet d'un retry. `methods` ignore la casse ; `methods: []` désactive les retries pour toutes les méthodes.
+- **Conditions de retry (`on`)** : Vaut par défaut `["connect-failure"]`. Ajoutez `"gateway-error"` pour `NET_UNAVAILABLE` (HTTP `502`/`503`/`504`), y compris les corps d'erreur de passerelle rejetés par le décodage `RES_*`, et `"attempt-timeout"` lorsque `attemptTimeoutMs` est configuré. Un retry éligible reconstruit la requête et réexécute toute la chaîne d'intercepteurs depuis sa couche la plus externe.
+- **Backoff (`delayMs`, `factor`, `jitter`, `maxDelayMs`)** : Avant le retry n, attendre `delayMs × factor^(n−1)` avec un jitter multiplicatif, plafonné après jitter et arrondi. Les défauts sont `25`, `2`, `0.2` et `250`. `delayMs: 0` saute l'attente. Comme pour la reconnexion, `delayMs` doit être fini et non négatif, `factor` fini et positif, `jitter` fini dans `[0, 1]`, et `maxDelayMs` fini non négatif ou `Infinity` positif. Le plafond du minuteur de la plateforme s'applique toujours.
+- **Délai par tentative vs délai pour tout l'appel** : `attemptTimeoutMs` borne une tentative unique de l'invocation Fetch jusqu'au décodage du corps. Le `client({ signal: AbortSignal.timeout(ms) })` de l'appelant couvre chaque tentative **et l'attente de backoff**. Une annulation pendant une attente renvoie le fault d'annulation de l'appelant, sans autre pick.
+- **Budget de retry Finagle / Linkerd (`budget`)** : Chaque configuration de client possède un budget, partagé seulement par les clients dérivés de cette même configuration, et non par les clients qui partagent un répartiteur. Les défauts sont `percentCanRetry: 0.2`, `minRetriesPerSecond: 10` et `ttlMs: 10000` : 20 % du trafic d'origine plus la réserve. Les crédits et les débits expirent paresseusement en dix tranches de TTL/10. Un retry prélève avant d'attendre ; un budget épuisé n'attend pas et ne réessaie pas. Définissez `budget: false` pour retirer le plafond.
+- **Indication hors ligne du navigateur** : Lorsque `navigator.onLine === false`, les échecs de connexion sont notifiés avec `{ attempted: false }` et ne font pas avancer les répartiteurs ni ne déclenchent de retry.
+
+Un `withRetry` ultérieur remplace la politique. `withRetry()` et `withRetry(undefined)` se comportent comme `withRetry({})`. `withRetry({ maxAttempts: 1 })` désactive les retries après qu'ils ont été activés. Des réglages de retry invalides renvoient `REQ_OPTIONS_INVALID` avec `Invalid retry options` lorsque l'opération HTTP s'exécute.
 
 ## 3. Détection passive des anomalies et contrôles de santé actifs (`outlierDetection`)
 
@@ -80,23 +86,28 @@ Personnalisez ou désactivez cette politique via [`withEndpointFailover(options)
 </Tab>
 </Tabs>
 
-1. **Échecs consécutifs** : Après `consecutiveFailures` (par défaut `5`) erreurs `NET_UNREACHABLE` ou statuts HTTP `500+`, l'endpoint est éjecté pendant `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` à `60000ms`) additionné d'un jitter uniforme positif pouvant atteindre `50 %`.
-2. **Rétablissement par sonde unique** : Dès expiration de la pénalité, une unique requête sonde l'hôte. Si son handshake de transport (`end` : en-têtes HTTP/SSE ou `open` WebSocket) réussit, le trafic normal reprend immédiatement et le niveau de pénalité retombe à `0` ; en cas d'échec, la pénalité est doublée.
+1. **Échecs consécutifs** : Le classificateur par défaut compte `NET_UNREACHABLE`, `NET_UNAVAILABLE` et `NET_SERVER_ERROR`. Après `consecutiveFailures` (par défaut `5`) issues comptées consécutives, l'endpoint est éjecté pendant `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` à `60000ms`) additionné d'un jitter uniforme positif pouvant atteindre `50%`.
+2. **Rétablissement par sonde unique** : Dès expiration de la pénalité, une unique requête sonde l'hôte. Si sa réponse du pair commence (`end`) sans échec compté, le trafic normal reprend immédiatement et le niveau de pénalité retombe à `0` ; en cas d'échec, la pénalité est doublée.
 3. **Mode panique fail-open** : Si chaque endpoint configuré est éjecté ou déclaré défaillant, le répartiteur bascule en fail-open sur l'ensemble de la liste des candidats du client plutôt que d'abandonner localement tout le trafic.
 
 ## 4. Cycle de comptabilité du transport (`pick` → `start` → `end` → `done`)
 
-Les répartiteurs personnalisés implémentent la méthode synchrone `pick(context)` et les callbacks optionnels `start()`, `end(info)` et `done(info)` :
+Les répartiteurs personnalisés implémentent `pick(info)` synchrone et les callbacks optionnels `start()`, `end(info)` et `done(info)`. `PickInfo` ne contient que les `endpoints` candidats et l'`operation` facultative de la définition ; il n'a pas de discriminateur de transport. Le transport traduit ses faits en issues neutres `DoneInfo.code`. Les répartiteurs intégrés ne lisent jamais `status` ; cette information de réponse brute n'est conservée que pour les répartiteurs personnalisés. `start` s'exécute avant la tentative, `end` quand la réponse du pair commence ou qu'un échec avant la réponse survient, et `done` à l'achèvement. Un échec de corps ultérieur peut donc changer le code final sans changer l'échantillon `end` antérieur :
 
-| Issue physique du transport                                               | Échantillon final `done(info)`                             |
-| ------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Le corps de réponse HTTP est tronqué en cours de flux                     | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
-| Handshake SSE réussi, puis rejet de `reader.read()`                       | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| EOF normal de SSE, échec de décodage du handshake ou file saturée         | `{ attempted: true, status }`                              |
-| WebSocket ouvert se refermant avec le code `1006` ou `wasClean === false` | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| WebSocket ouvert se refermant proprement                                  | `{ attempted: true }`                                      |
-| Annulation par l'appelant ou fermeture manuelle du flux/socket            | `{ attempted: false }`                                     |
-| Expiration du délai de l'appelant après démarrage de la tentative         | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+| Issue physique du transport                                                       | Échantillon final `done(info)`                             |
+| --------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| Statut de réponse HTTP/SSE 502, 503 ou 504                                        | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| Autre statut de réponse HTTP/SSE d'au moins 500                                   | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| Statut de réponse HTTP/SSE 2xx, 3xx ou 4xx (y compris 429)                        | `{ attempted: true, status }`                              |
+| Le corps de réponse HTTP est tronqué en cours de flux                             | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| Handshake SSE réussi, puis `reader.read()` du flux rejette                        | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| EOF normal de SSE, échec de décodage après un handshake réussi, ou limite de file | `{ attempted: true, status }`                              |
+| WebSocket ouvert se refermant avec le code `1006` ou `wasClean === false`         | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| WebSocket ouvert se refermant proprement                                          | `{ attempted: true }`                                      |
+| Annulation par l'appelant ou fermeture manuelle du flux/socket                    | `{ attempted: false }`                                     |
+| Expiration du délai de l'appelant après démarrage de la tentative                 | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+Les échecs de décodage du handshake conservent l'issue neutre dérivée du statut du handshake (par exemple `NET_UNAVAILABLE` avec le statut `503`). Un corps HTTP incomplet conserve au contraire `NET_BODY_INCOMPLETE` et son statut brut, même pour une réponse de passerelle ; la détection d'outliers par défaut ne le compte pas.
 
 ## Lectures connexes
 

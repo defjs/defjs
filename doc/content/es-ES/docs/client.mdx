@@ -87,8 +87,8 @@ Crea un nuevo valor derivado de cliente para cada llamada que necesite su propia
 
 `withEndpoint(...urls)` acepta una o más URLs base candidatas. Por defecto:
 
-- Cada cliente utiliza [`pickFirstBalancer`](/es-ES/api/core/pickfirstbalancer), manteniéndose en la primera URL hasta que un fallo `NET_UNREACHABLE` o una respuesta no controlada `502`/`503`/`504` lo avance a la siguiente.
-- Los métodos HTTP seguros (`GET`, `HEAD`, `OPTIONS`, `TRACE`) realizan automáticamente un **failover dentro de la misma llamada** hacia un endpoint de respaldo no probado en caso de fallo de conexión (`NET_UNREACHABLE`), regulado por un presupuesto de reintentos compartido estilo Finagle (`withEndpointFailover`).
+- Cada cliente utiliza [`pickFirstBalancer`](/es-ES/api/core/pickfirstbalancer), manteniéndose en la primera URL hasta avanzar ante `NET_UNREACHABLE` o `NET_UNAVAILABLE` (HTTP 502, 503 o 504).
+- **El reintento HTTP en la misma llamada está desactivado por defecto.** `withRetry()` equivale a `withRetry({})` y habilita un segundo intento en un endpoint no probado ante fallos de conexión en los métodos seguros (`GET`, `HEAD`, `OPTIONS`, `TRACE`), con backoff. El presupuesto de reintentos de Finagle pertenece a la configuración del cliente y lo comparten sus clientes derivados, con independencia de la identidad del balanceador.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ Crea un nuevo valor derivado de cliente para cada llamada que necesite su propia
 
 ### Filtrado por salud y P2C [#health-filtering-and-p2c]
 
-Para réplicas equivalentes entre servidores, [`roundRobinBalancer`](/es-ES/api/core/roundrobinbalancer) y [`p2cBalancer`](/es-ES/api/core/p2cbalancer) (PeakEwma RTT × carga en vuelo) habilitan por defecto un disyuntor por fallos consecutivos estilo Linkerd (`outlierDetection`).
+Para réplicas equivalentes entre servidores, [`roundRobinBalancer`](/es-ES/api/core/roundrobinbalancer) y [`p2cBalancer`](/es-ES/api/core/p2cbalancer) (PeakEwma RTT × carga en vuelo) habilitan por defecto un disyuntor por fallos consecutivos estilo Linkerd (`outlierDetection`). Cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`; el `status` crudo de la respuesta es solo para balanceadores personalizados.
 
 Consulta la guía específica de [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing) para conocer todos los detalles sobre presupuestos de reintento, sondas de salud activas/pasivas, estimación de carga P2C y balanceadores personalizados.
 
@@ -112,19 +112,19 @@ Consulta [Pruebas](/es-ES/docs/testing) para ver los patrones completos de testi
 
 ## 6. Referencia de configuradores de opciones de cliente
 
-| Configurador                                                                                                  | Propósito                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | Establece una o más URLs base candidatas (reemplaza la lista anterior).                                       |
-| `withHeaders(HeadersInit)`                                                                                    | Establece cabeceras predeterminadas estáticas para HTTP y SSE (las cabeceras del builder prevalecen).         |
-| `withInterceptors(...items)`                                                                                  | Añade interceptores HTTP, SSE y WebSocket en orden de capas concéntricas (cebolla).                           |
-| `withQuerySerializer(fn)`                                                                                     | Serializa objetos de consulta con alias aplicados a una cadena query string.                                  |
-| `withCredentials(boolean)`                                                                                    | Configura `credentials: "include"` en Fetch para HTTP y SSE cuando es `true`.                                 |
-| `withXSRF(options?)`                                                                                          | Copia la cookie XSRF a una cabecera en peticiones HTTP mutantes de mismo origen.                              |
-| `withEndpointBalancer(balancer)`                                                                              | Reemplaza la estrategia de selección de endpoints (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`). |
-| `withEndpointFailover(options?)`                                                                              | Configura el failover HTTP en la misma llamada y el presupuesto de reintentos del cliente.                    |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Configura la reconexión de SSE y la observación de eventos no válidos.                                        |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Configura los valores predeterminados para sesiones WebSocket.                                                |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Inyecta implementaciones de transporte personalizadas o simuladas para pruebas.                               |
+| Configurador                                                                                                  | Propósito                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `withEndpoint(...urls)`                                                                                       | Establece una o más URLs base candidatas (reemplaza la lista anterior).                                                  |
+| `withHeaders(HeadersInit)`                                                                                    | Establece cabeceras predeterminadas estáticas para HTTP y SSE (las cabeceras del builder prevalecen).                    |
+| `withInterceptors(...items)`                                                                                  | Añade interceptores HTTP, SSE y WebSocket en orden de capas concéntricas (cebolla).                                      |
+| `withQuerySerializer(fn)`                                                                                     | Serializa objetos de consulta con alias aplicados a una cadena query string.                                             |
+| `withCredentials(boolean)`                                                                                    | Configura `credentials: "include"` en Fetch para HTTP y SSE cuando es `true`.                                            |
+| `withXSRF(options?)`                                                                                          | Copia la cookie XSRF a una cabecera en peticiones HTTP mutantes de mismo origen.                                         |
+| `withBalancer(balancer)`                                                                                      | Reemplaza la estrategia de selección de endpoints (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).            |
+| `withRetry(options?)`                                                                                         | Configura el reintento HTTP opt-in: condiciones, métodos, backoff, timeout por intento y presupuesto propio del cliente. |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Configura la reconexión de SSE y la observación de eventos no válidos.                                                   |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Configura los valores predeterminados para sesiones WebSocket.                                                           |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Inyecta implementaciones de transporte personalizadas o simuladas para pruebas.                                          |
 
 ## Lecturas relacionadas
 

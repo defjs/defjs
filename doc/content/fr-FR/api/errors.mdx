@@ -57,6 +57,8 @@ Une réponse est arrivée mais n’a pas pu être lue telle que déclarée. `res
 
 Tout ce qui a pu échouer avant qu’une réponse existe : `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. `response` vaut `undefined` tant que le transport n’a pas de métadonnées à rapporter, comme un corps tronqué en pleine descente.
 
+Des options `withRetry` invalides renvoient `REQ_OPTIONS_INVALID` avant que le transport HTTP ne démarre, avec `Invalid retry options`. Cela comprend une politique qui n’est pas un objet, une valeur de `maxAttempts` qui n’est pas un entier sûr d’au moins 1, ainsi que des conditions, méthodes, timeouts, backoff ou réglages de budget invalides. Omettre `withRetry` désactive les retries. `withRetry()` et `withRetry(undefined)` se comportent comme `withRetry({})`. `withRetry({ maxAttempts: 1 })` désactive les retries après qu’ils ont été activés.
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -101,12 +103,12 @@ Les sentinelles portent des marques non énumérables `Symbol.for('defjs.cause.a
 
 [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît une `Error` marquée abort ou une `DOMException` nommée `AbortError`. [`isTimeoutCause`](/fr-FR/api/core/istimeoutcause) reconnaît une `Error` marquée timeout ou une `DOMException` / `Error` nommée `TimeoutError`. Passe `fault.cause` pour classer la valeur sous-jacente ; ces fonctions ne déballent pas un fault. Elles fonctionnent avec les sentinelles d’une autre copie de Core.
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`ERR_NO_ENDPOINT` n’apparaît que comme `cause` de `REQ_BUILD_FAILED`, quand aucun endpoint candidat ne peut être sélectionné. Il n’ajoute pas de `FaultCode`. La sentinelle porte une marque non énumérable `Symbol.for('defjs.cause.no-endpoint')`. [`isNoEndpointCause`](/fr-FR/api/core/isnoendpointcause) reconnaît cette marque depuis une autre copie de Core, de la même façon que [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît un abort. Passe `fault.cause`. La fonction ne déballe pas un fault.
+`ERR_NO_CANDIDATE` n’apparaît que comme `cause` de `REQ_BUILD_FAILED`, quand aucun endpoint candidat ne peut être sélectionné. Il n’ajoute pas de `FaultCode`. La sentinelle porte une marque non énumérable `Symbol.for('defjs.cause.no-endpoint')`. [`isNoCandidateCause`](/fr-FR/api/core/isnocandidatecause) reconnaît cette marque depuis une autre copie de Core, de la même façon que [`isAbortCause`](/fr-FR/api/core/isabortcause) reconnaît un abort. Passe `fault.cause`. La fonction ne déballe pas un fault.
 
 Voir le [guide Gestion des erreurs](/fr-FR/docs/errors).

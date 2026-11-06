@@ -28,17 +28,11 @@ Options 按顺序生效。interceptor 闭包会捕获鉴权或租户时，把 cl
 
 按首次出现的顺序复制候选 base URL，并丢掉同一字符串的后续重复。后一次 `withEndpoint` 会替换整份列表。它不检查 URL，也不替换均衡器。空列表是合法值，调用会以 `REQ_BUILD_FAILED` 失败。
 
-### withEndpointBalancer()
+### withBalancer()
 
-<ApiSignature name="withEndpointBalancer" />
+<ApiSignature name="withBalancer" />
 
 替换此后调用所用的均衡器。对象按引用保存。没有这个选项时，每个 client 各自得到一个 `pickFirstBalancer()`。
-
-### withEndpointFailover()
-
-<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
-
-控制一次调用内的 HTTP 故障转移。同一 client 共享的 Finagle/Linkerd 重试预算默认为 20%，外加每秒 10 次的储备，TTL 为 10 秒；`retryBudget: false` 去掉这一限制。存入和取出都在十个 TTL/10 切片上惰性过期。默认是连接失败时，对 GET、HEAD、OPTIONS 和 TRACE 再多试一次。`attempts: 0` 或 `methods: []` 会关掉它。后一次选项替换整份策略；省略的字段用默认值。流式请求 body 从不重放。`attemptTimeoutMs` 覆盖单次尝试的 Fetch、读取 body 和解码，调用方的 signal 则覆盖所有尝试。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
 
 ### withInterceptors()
 
@@ -201,7 +195,7 @@ SSE 的 `onInvalidEvent` 处理没有匹配 struct 的事件（包括没有 `def
 
 ### ClientConfig
 
-option helpers 修改、操作读取的解析后快照：应用默认值之后的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一个 `ClientSSEConfig`）、`webSocket`、`endpointBalancer` 和 `endpointFailover` 始终存在。`endpointBalancer` 默认为该 client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 字段。
+option helpers 修改、操作读取的解析后快照：应用默认值之后的 `ClientOptions`，其中 `http.handle`、`interceptors`、`sse`（一个 `ClientSSEConfig`）、`webSocket` 和 `balancer` 始终存在。`http.retry` 可选，默认为 `undefined`（一次尝试，没有预算）；`withRetry(options?)` 配置它。`balancer` 默认为该 client 新建的 `pickFirstBalancer()`。它不是 [`RequestOptions`](/zh-Hans/api/core/requestoptions-type) 字段。
 
 ### ClientSSEConfig
 
@@ -227,7 +221,7 @@ option helpers 修改、操作读取的解析后快照：应用默认值之后�
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` 会在 `NET_UNREACHABLE`，或未带 fault code 的 502/503/504 响应上前进。可选的有限正数 `failbackMs` 在离开这段间隔之后，对第一个端点做至多一个同时进行的探测。HTTP 安全方法的连接失败，默认也会在同一次调用内故障转移。`roundRobinBalancer` 沿列表走。`weights` 可选。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
+`pickFirstBalancer` 会在 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）上前进。可选的有限正数 `failbackMs` 在这段间隔之后，对第一个端点做至多一个同时进行的探测。HTTP 重试是用 `withRetry` 配置的另一份 client 策略。`roundRobinBalancer` 沿列表走。`weights` 可选。见 [多个端点](/zh-Hans/docs/client#multiple-endpoints)。
 
 ### p2cBalancer()
 
@@ -239,12 +233,26 @@ option helpers 修改、操作读取的解析后快照：应用默认值之后�
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-用 Linkerd 式的连续失败熔断包装子策略。Round robin 和 p2c 默认启用（与 Finagle 相同）；`false` 关闭它。Pick-first 在传入对象时启用。五次失败之后，惩罚从 1000 ms 起，探测失败后再加倍，并加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。到期接纳一次探测，在 `end` 上判定；若没有 `end` 到达，则在 `done` 上判定。成功会重置退避；取消只释放名额。没有假定成功的超时、配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 读取应用自己持有的缓存状态，从不会取消一次惩罚。所有主机都可以熔断；Finagle 式、仅限当前列表的失败时放行仍会发出请求。与 Envoy/gRPC A50 不同，没有驱逐配额。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
+用 Linkerd 式的连续失败熔断包装子策略。Round robin 和 p2c 默认启用（与 Finagle 相同）；`false` 关闭它。Pick-first 在传入对象时启用。默认分类器计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`。五次失败之后，惩罚从 1000 ms 起，探测失败后再加倍，并加上不超过基数 0.5 倍的正抖动，上限为 60000 ms。到期接纳一次探测，在 `end` 上判定；若没有 `end` 到达，则在 `done` 上判定。成功会重置退避；取消只释放名额。没有假定成功的超时、配额、最后一台主机保护、结算网格、百分比判据或慢启动。`isHealthy` 读取应用自己持有的缓存状态，从不会取消一次惩罚。所有主机都可以熔断；Finagle 式、仅限当前列表的失败时放行仍会发出请求。与 Envoy/gRPC A50 不同，没有驱逐配额。见 [健康过滤与 p2c](/zh-Hans/docs/client#health-filtering-and-p2c)。
 
-### EndpointBalancer
+### withRetry()
 
-<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-`pick` 返回 error-first tuple。可选的 `start` 在所选传输开始之前至多同步运行一次；可选的 `end` 在 `start` 之后运行一次，时机是 Fetch 的响应头或 WebSocket 的 `open`（或响应之前的失败）；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有钩子的抛出，以及 thenable 的 rejection，都会被接住。`ERR_NO_ENDPOINT` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoEndpointCause`](/zh-Hans/api/core/isnoendpointcause) 也能识别另一份 Core 副本中的它。
+独立于端点选择，启用同一次调用内的 HTTP 重试。省略 `withRetry` 表示一次尝试，也没有预算。`withRetry()` 与 `withRetry({})` 等价，默认值是 `maxAttempts: 2`（含首次）、`on: ["connect-failure"]`，以及安全方法 `GET`、`HEAD`、`OPTIONS`、`TRACE`。方法名不区分大小写；`[]` 关闭重试。`maxAttempts` 是至少为 1 的安全整数，且每个端点最多尝试一次。`"gateway-error"` 包括 `NET_UNAVAILABLE`（HTTP 502/503/504），以及被 `RES_*` 解码拒绝的网关 body；`"attempt-timeout"` 使用 `attemptTimeoutMs`。流式请求 body 从不重试。
+
+退避默认为 `delayMs: 25`、`factor: 2`、`jitter: 0.2`、`maxDelayMs: 250`，字段语义与 SSE/WebSocket 重连相同。`delayMs: 0` 跳过等待。`attemptTimeoutMs` 限制单次尝试的 Fetch、读取 body 和解码；调用方的 signal 覆盖整次调用，包括退避等待。
+
+归 client 所有的 Finagle 预算默认为 20%，外加 10 秒 TTL 上每秒 10 次的储备。存入和取出都在十个 TTL/10 切片上惰性过期。`budget: false` 去掉这一限制。共享同一份配置的派生 client 共享它的预算；各自独立的 client 不共享，即使共用一个均衡器也一样。无效选项在 HTTP 运行时返回 `REQ_OPTIONS_INVALID`，消息为 `Invalid retry options`。该选项在应用时捕获自己拥有的字段、数组和嵌套的 budget。`withRetry()` 与 `withRetry(undefined)` 的行为与 `withRetry({})` 相同。后一次 `withRetry` 会替换先前的策略；`withRetry({ maxAttempts: 1 })` 会在启用之后关闭重试。均衡器和健康包装器没有重试设置。见 [负载均衡与故障转移](/zh-Hans/docs/load-balancing)。
+
+<include cwd>examples/client/http-retry.ts#example</include>
+
+### Balancer
+
+<ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`pick` 返回 error-first tuple。可选的 `start` 在所选传输开始之前至多同步运行一次；可选的 `end` 在 `start` 之后运行一次，时机是对端响应开始（或响应之前发生失败）；可选的 `done` 在完成时运行一次。Fetch 暴露不了 Linkerd 的首个 body 帧，也暴露不了 Envoy 的流边界。所有钩子的抛出，以及 thenable 的 rejection，都会被接住。`ERR_NO_CANDIDATE` 只作为 `REQ_BUILD_FAILED` 的 `cause`。它不是 `FaultCode`。[`isNoCandidateCause`](/zh-Hans/api/core/isnocandidatecause) 也能识别另一份 Core 副本中的它。
+
+均衡器只看见中立结果；每种传输把自己的事实翻译成 `DoneInfo.code`。默认的 outlier detection 计入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 和 `NET_SERVER_ERROR`。原始的 `DoneInfo.status` 只留给自定义均衡器，内置策略从不读取它。`PickInfo` 包含 `endpoints` 和可选的 `operation`，没有传输类型判别字段。
 
 见 [Client 指南](/zh-Hans/docs/client)。

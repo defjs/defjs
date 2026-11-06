@@ -87,8 +87,8 @@ export const getOrder = defineRequest({
 
 `withEndpoint(...urls)`는 하나 이상의 후보 기본 URL을 전달받을 수 있습니다. 기본 동작은 다음과 같습니다:
 
-- 각 클라이언트는 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 기본으로 사용하여, `NET_UNREACHABLE` 실패나 코드화되지 않은 `502`/`503`/`504` 응답이 발생하여 다음 엔드포인트로 넘어가기 전까지 첫 번째 URL을 계속 유지합니다.
-- 안전한 HTTP 메서드(`GET`, `HEAD`, `OPTIONS`, `TRACE`)는 연결 실패(`NET_UNREACHABLE`) 시 공유 Finagle 재시도 예산(`withEndpointFailover`)의 통제하에 아직 시도하지 않은 백업 엔드포인트로 **동일 호출 내 자동 장애 조치(same-call failover)**를 수행합니다.
+- 각 클라이언트는 [`pickFirstBalancer`](/ko-KR/api/core/pickfirstbalancer)를 사용하여, `NET_UNREACHABLE` 또는 `NET_UNAVAILABLE`(HTTP 502, 503, 504)에서 다음으로 넘어가기 전까지 첫 번째 URL을 계속 유지합니다.
+- **동일 호출 내 HTTP 재시도는 기본적으로 꺼져 있습니다.** `withRetry()`는 `withRetry({})`와 같으며, 안전한 메서드(`GET`, `HEAD`, `OPTIONS`, `TRACE`)의 연결 실패에 대해 아직 시도하지 않은 엔드포인트로의 두 번째 시도를 백오프와 함께 켭니다. Finagle 재시도 예산은 클라이언트 설정에 속하고, 그 설정의 파생 클라이언트가 공유하며, 밸런서의 동일성과는 무관합니다.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ export const getOrder = defineRequest({
 
 ### 헬스 필터링 및 p2c [#health-filtering-and-p2c]
 
-동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)가 기본적으로 Linkerd 스타일의 연속 실패 기반 서킷 브레이킹(`outlierDetection`)을 활성화합니다.
+동일한 역할을 하는 서버 레플리카 집합의 경우, [`roundRobinBalancer`](/ko-KR/api/core/roundrobinbalancer) 및 [`p2cBalancer`](/ko-KR/api/core/p2cbalancer)(PeakEwma RTT × 진행 중인 부하)가 기본적으로 Linkerd 스타일의 연속 실패 기반 서킷 브레이킹(`outlierDetection`)을 활성화합니다. 그것은 `NET_UNREACHABLE`, `NET_UNAVAILABLE`, `NET_SERVER_ERROR`를 세며, 원시 응답 `status`는 커스텀 밸런서만을 위한 것입니다.
 
 재시도 예산, 능동/수동 헬스 체크, P2C 부하 추정, 커스텀 밸런서에 대한 자세한 내용은 [로드 밸런싱 및 장애 조치](/ko-KR/docs/load-balancing) 가이드를 참조하세요.
 
@@ -112,19 +112,19 @@ export const getOrder = defineRequest({
 
 ## 6. 클라이언트 옵션 헬퍼 레퍼런스
 
-| 헬퍼                                                                                                          | 목적                                                                                  |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | 하나 이상의 후보 기본 URL 설정 (이전 목록을 완전히 대체).                             |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP 및 SSE용 정적 기본 헤더 설정 (builder 헤더가 우선).                              |
-| `withInterceptors(...items)`                                                                                  | 양파 껍질 순서로 HTTP, SSE, WebSocket 인터셉터 추가.                                  |
-| `withQuerySerializer(fn)`                                                                                     | 이미 별칭이 적용된 쿼리 객체를 쿼리 스트링으로 직렬화.                                |
-| `withCredentials(boolean)`                                                                                    | `true`일 때 HTTP 및 SSE 요청에 대해 Fetch `credentials: "include"` 설정.              |
-| `withXSRF(options?)`                                                                                          | 동일 출처의 변경 HTTP 요청에 XSRF 쿠키 값을 헤더로 복사.                              |
-| `withEndpointBalancer(balancer)`                                                                              | 엔드포인트 선택 전략 교체 (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`). |
-| `withEndpointFailover(options?)`                                                                              | 동일 호출 내 HTTP 장애 조치 및 클라이언트 재시도 예산 구성.                           |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 재연결 및 유효하지 않은 이벤트 관측 구성.                                         |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 세션 기본 동작 구성.                                                        |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 커스텀 또는 테스트 모의 전송 구현체 주입.                                             |
+| 헬퍼                                                                                                          | 목적                                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | 하나 이상의 후보 기본 URL 설정 (이전 목록을 완전히 대체).                                           |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP 및 SSE용 정적 기본 헤더 설정 (builder 헤더가 우선).                                            |
+| `withInterceptors(...items)`                                                                                  | 양파 껍질 순서로 HTTP, SSE, WebSocket 인터셉터 추가.                                                |
+| `withQuerySerializer(fn)`                                                                                     | 이미 별칭이 적용된 쿼리 객체를 쿼리 스트링으로 직렬화.                                              |
+| `withCredentials(boolean)`                                                                                    | `true`일 때 HTTP 및 SSE 요청에 대해 Fetch `credentials: "include"` 설정.                            |
+| `withXSRF(options?)`                                                                                          | 동일 출처의 변경 HTTP 요청에 XSRF 쿠키 값을 헤더로 복사.                                            |
+| `withBalancer(balancer)`                                                                                      | 엔드포인트 선택 전략 교체 (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).               |
+| `withRetry(options?)`                                                                                         | 선택적 HTTP 재시도의 조건, 메서드, 백오프, 시도 제한 시간, 클라이언트가 소유하는 예산을 구성합니다. |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE 재연결 및 유효하지 않은 이벤트 관측 구성.                                                       |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket 세션 기본 동작 구성.                                                                      |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 커스텀 또는 테스트 모의 전송 구현체 주입.                                                           |
 
 ## 관련 문서
 

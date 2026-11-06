@@ -70,6 +70,8 @@ Everything that may have failed before a response existed: `REQ_*`, `NET_*`, `EX
 `ENV_UNSUPPORTED`. `response` is `undefined` until the transport has metadata to report,
 such as a body that truncated mid-download.
 
+Invalid `withRetry` options return `REQ_OPTIONS_INVALID` before HTTP transport starts, with `Invalid retry options`. This includes a non-object policy, a `maxAttempts` value that is not a safe integer at least 1, and invalid conditions, methods, timeouts, backoff, or budget settings. Omitting `withRetry` disables retries. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. `withRetry({ maxAttempts: 1 })` turns retries off after they were enabled.
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -121,12 +123,12 @@ The sentinels carry non-enumerable `Symbol.for('defjs.cause.aborted')` and `Symb
 
 [`isAbortCause`](/api/core/isabortcause) recognizes an abort-branded `Error` or a `DOMException` named `AbortError`. [`isTimeoutCause`](/api/core/istimeoutcause) recognizes a timeout-branded `Error` or a `DOMException` / `Error` named `TimeoutError`. Pass `fault.cause` to classify the underlying value; these functions do not unwrap a fault. They work with sentinels from another Core copy.
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`ERR_NO_ENDPOINT` appears only as the `cause` of `REQ_BUILD_FAILED`, when no candidate endpoint can be selected. It does not add a `FaultCode`. The sentinel carries a non-enumerable `Symbol.for('defjs.cause.no-endpoint')` brand. [`isNoEndpointCause`](/api/core/isnoendpointcause) recognizes that brand from another Core copy, the same way [`isAbortCause`](/api/core/isabortcause) recognizes an abort. Pass `fault.cause`. It does not unwrap a fault.
+`ERR_NO_CANDIDATE` appears only as the `cause` of `REQ_BUILD_FAILED`, when no candidate endpoint can be selected. It does not add a `FaultCode`. The sentinel carries a non-enumerable `Symbol.for('defjs.cause.no-endpoint')` brand. [`isNoCandidateCause`](/api/core/isnocandidatecause) recognizes that brand from another Core copy, the same way [`isAbortCause`](/api/core/isabortcause) recognizes an abort. Pass `fault.cause`. It does not unwrap a fault.
 
 See [Errors guide](/docs/errors).

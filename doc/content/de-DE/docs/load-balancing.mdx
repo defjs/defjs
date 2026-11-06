@@ -1,11 +1,11 @@
 ---
 title: "Lastverteilung & Failover"
-description: Verteile Traffic über mehrere Endpunkte, isoliere fehlerhafte Replikate und führe bei sicheren HTTP-Requests automatische Failovers innerhalb desselben Aufrufs durch.
+description: Verteile Traffic über mehrere Endpunkte, isoliere fehlerhafte Replikate und führe bei sicheren HTTP-Requests optionale Failovers innerhalb desselben Aufrufs durch.
 ---
 
 # Lastverteilung & Failover
 
-Wenn eine Anwendung mehrere Basis-URLs über `withEndpoint(...urls)` konfiguriert, kann Defjs Anfragen auf Replikate verteilen, fehlerhafte Hosts durch passives Circuit-Breaking oder aktive Health-Checks vorübergehend ausschließen und bei sicheren HTTP-Methoden automatisch innerhalb desselben Aufrufs ein Failover ausführen.
+Wenn eine Anwendung mehrere Basis-URLs über `withEndpoint(...urls)` konfiguriert, kann Defjs Anfragen auf Replikate verteilen, fehlerhafte Hosts durch passives Circuit-Breaking oder aktive Health-Checks vorübergehend ausschließen und bei sicheren HTTP-Methoden optional innerhalb desselben Aufrufs ein Failover ausführen.
 
 ## 1. Load-Balancer-Strategie wählen
 
@@ -41,23 +41,29 @@ Wenn eine Anwendung mehrere Basis-URLs über `withEndpoint(...urls)` konfigurier
 
 ### Wie `pickFirstBalancer` und `p2cBalancer` funktionieren
 
-- **`pickFirstBalancer`**: Verbleibt auf der ersten URL, bis ein Verbindungsfehler (`NET_UNREACHABLE`) oder eine undeklarierte `502`-, `503`- oder `504`-Antwort zur nächsten URL weiterschaltet. Konfiguriere `failbackMs: 30_000`, um nach Ablauf dieser Zeit auf einem Backup den primären Endpunkt erneut zu prüfen.
+- **`pickFirstBalancer`**: Bleibt auf der ersten URL und schaltet bei `NET_UNREACHABLE` oder `NET_UNAVAILABLE` (HTTP 502, 503 oder 504) weiter. Konfiguriere `failbackMs: 30_000`, um den primären Endpunkt erneut zu prüfen, nachdem diese Dauer auf einem Backup vergangen ist.
 - **`p2cBalancer` (Power of Two Choices)**: Zieht zwei unterschiedliche Kandidaten zufällig ohne Zurücklegen und wählt denjenigen mit dem niedrigeren Score: `PeakEwma RTT × (pending + 1)` (oder reine In-Flight-Anzahl `pending`, wenn `load: "pending"` gesetzt ist). Die Standardwerte (`defaultRttMs: 30`, `decayMs: 10000`) folgen bewährten Linkerd/Tower-Konventionen.
 
-## 2. Same-Call-HTTP-Failover und Retry-Budget
+## 2. Same-Call-HTTP-Retry
 
-Standardmäßig aktiviert HTTP für sichere Methoden (`GET`, `HEAD`, `OPTIONS`, `TRACE`) ein **Failover innerhalb desselben Aufrufs**: Schlägt der zuerst gewählte Endpunkt mit `NET_UNREACHABLE` fehl, wählt Defjs einen noch unversuchten Backup-Endpunkt und durchläuft Builder, Interceptor-Kette und Transport innerhalb desselben Operationsaufrufs erneut.
+Drei getrennte Entscheidungen steuern einen Retry: **ob erneut versucht wird** (`withRetry`), **wohin er geht** (die Laufzeit bittet den Balancer erneut zu picken und schließt bereits versuchte Endpunkte aus) und **wie lange gewartet wird** (Backoff). `withRetry` für HTTP, `withSSEReconnect` für SSE und `withWebSocketReconnect` für WebSocket sind symmetrische Policies auf Transportebene. Ihre flachen Backoff-Felder teilen Namen, Validierung und Verzögerungsberechnung. Der Balancer weiß nichts von der Retry-Policy; ein eigener Balancer braucht keine besondere Mitwirkung.
 
-Passe diese Richtlinie mit [`withEndpointFailover(options)`](/de-DE/api/core/withendpointfailover) an oder deaktiviere sie:
+Same-Call-HTTP-Retry ist **standardmäßig aus**. `withRetry` wegzulassen heißt: ein Versuch pro Aufruf, und es wird kein Retry-Budget angelegt oder gutgeschrieben. Die Auswahl späterer Aufrufe bleibt unverändert: `pickFirstBalancer` kann nach einem fehlgeschlagenen Aufruf weiterhin weiterschalten. `withRetry()` entspricht `withRetry({})` und aktiviert insgesamt zwei Versuche bei Verbindungsfehlern von `GET`, `HEAD`, `OPTIONS` und `TRACE`.
+
+Das folgt dem Go-Ökosystem: [gRPC legt `retryPolicy` in die Service-Konfiguration](https://grpc.io/docs/guides/retry/), neben die Lastverteilungs-Konfiguration, während [go-kit `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) einen Balancer ausdrücklich umhüllt. Keines von beiden wendet standardmäßig eine anwendungsseitige Retry-Policy an. Die Retry-Policy von gRPC verlangt Backoff-Einstellungen und nutzt Jitter von ±0.2; [Envoy verwendet standardmäßig eine Basis von 25 ms und ein Maximum vom Zehnfachen dieser Basis](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-retry-policy-retrybackoff). Defjs verwendet 25 ms, Faktor 2, eine Obergrenze von 250 ms und Jitter von ±20 %. gRPC kann bei Low-Level-Races transparente Retries ausführen; Defjs bildet das nicht nach.
 
 <include cwd lang="typescript">
-  examples/client/endpoint-failover.ts#example
+  examples/client/http-retry.ts#example
 </include>
 
-- **Bedingungen für Wiederholungen (`retryOn`)**: Standardmäßig `["connect-failure"]`. Du kannst `"gateway-error"` (undeklarierte `502`/`503`/`504` oder ein `502`/`503`/`504`, dessen Fehler-Body die `RES_*`-Dekodierung verfehlt hat) sowie `"attempt-timeout"` (sofern `attemptTimeoutMs` gesetzt ist) ergänzen.
-- **Timeout pro Versuch vs. Gesamtaufruf**: `attemptTimeoutMs` begrenzt einen einzelnen Versuch vom Fetch-Aufruf bis zur Body-Dekodierung; das aufruferseitige `client({ signal: AbortSignal.timeout(ms) })` begrenzt den gesamten Aufruf über alle Versuche hinweg.
-- **Finagle- / Linkerd-Retry-Budget**: Alle Aufrufe eines Clients teilen sich ein Token-Bucket-Retry-Budget (`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`), sodass Retries den Traffic während eines Ausfalls um nicht mehr als ~20 % verstärken können. Setze `retryBudget: false`, um die Obergrenze aufzuheben.
-- **Browser-Offline-Erkennung**: Wenn `navigator.onLine === false` ist, werden Verbindungsfehler als `{ attempted: false }` gemeldet und schalten weder Balancer weiter noch lösen sie Failover aus.
+- **Versuche insgesamt (`maxAttempts`)**: Schließt den ursprünglichen Versuch ein, entsprechend gRPC `retryPolicy.maxAttempts` und `max` von go-kit `lb.Retry`. Der Wert muss eine sichere Ganzzahl von mindestens 1 sein; `1` bedeutet kein Retry. Eine konfigurierte Obergrenze gibt es nicht, jeder Endpunkt wird aber höchstens einmal versucht. Streaming-Request-Bodies werden nie erneut versucht. `methods` ist unabhängig von der Großschreibung; `methods: []` schaltet Retries für alle Methoden ab.
+- **Retry-Bedingungen (`on`)**: Standardmäßig `["connect-failure"]`. Ergänze `"gateway-error"` für `NET_UNAVAILABLE` (HTTP `502`/`503`/`504`), einschließlich Gateway-Fehler-Bodies, die die `RES_*`-Dekodierung zurückweist, und `"attempt-timeout"`, wenn `attemptTimeoutMs` gesetzt ist. Ein zulässiger Retry baut den Request neu und führt die gesamte Interceptor-Kette von ihrer äußersten Schicht an erneut aus.
+- **Backoff (`delayMs`, `factor`, `jitter`, `maxDelayMs`)**: Vor Retry n wird `delayMs × factor^(n−1)` mit multiplikativem Jitter gewartet, gedeckelt nach Jitter und Rundung. Die Defaults sind `25`, `2`, `0.2` und `250`. `delayMs: 0` überspringt das Warten. Wie beim Reconnect muss `delayMs` endlich und nicht negativ sein, `factor` endlich und positiv, `jitter` endlich in `[0, 1]` und `maxDelayMs` nicht negativ endlich oder positiv `Infinity`. Die Timer-Obergrenze der Plattform gilt weiterhin.
+- **Timeout pro Versuch vs. Gesamtaufruf**: `attemptTimeoutMs` begrenzt einen einzelnen Versuch vom Fetch-Aufruf bis zur Body-Dekodierung. Das aufruferseitige `client({ signal: AbortSignal.timeout(ms) })` deckt jeden Versuch **und die Backoff-Wartezeit** ab. Abbruch während einer Wartezeit gibt den Abbruchfehler des Aufrufers zurück, ohne erneut zu picken.
+- **Finagle- / Linkerd-Retry-Budget (`budget`)**: Jede Client-Konfiguration besitzt ein Budget, geteilt nur von abgeleiteten Clients derselben Konfiguration, nicht von Clients, die einen Balancer teilen. Die Defaults sind `percentCanRetry: 0.2`, `minRetriesPerSecond: 10` und `ttlMs: 10000`: 20 % des ursprünglichen Traffics plus die Reserve. Gutschriften und Belastungen laufen träge in zehn Scheiben von TTL/10 ab. Ein Retry bucht vor dem Warten ab; ein erschöpftes Budget wartet weder noch versucht es erneut. Setze `budget: false`, um die Obergrenze aufzuheben.
+- **Browser-Offline-Hinweis**: Wenn `navigator.onLine === false` ist, werden Verbindungsfehler als `{ attempted: false }` gemeldet und schalten weder Balancer weiter noch lösen sie Retries aus.
+
+Ein späteres `withRetry` ersetzt die Policy. `withRetry()` und `withRetry(undefined)` verhalten sich wie `withRetry({})`. `withRetry({ maxAttempts: 1 })` schaltet Retries aus, nachdem sie aktiviert wurden. Ungültige Retry-Einstellungen geben `REQ_OPTIONS_INVALID` mit `Invalid retry options` zurück, wenn die HTTP-Operation läuft.
 
 ## 3. Passives Circuit-Breaking und aktive Health-Checks (`outlierDetection`)
 
@@ -80,26 +86,31 @@ Passe diese Richtlinie mit [`withEndpointFailover(options)`](/de-DE/api/core/wit
 </Tab>
 </Tabs>
 
-1. **Aufeinanderfolgende Fehler**: Nach `consecutiveFailures` (standardmäßig `5`) von `NET_UNREACHABLE` oder HTTP `500+` wird der Endpunkt für `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` bis `60000ms`) zuzüglich bis zu `50%` gleichmäßigem positivem Jitter ausgeschlossen.
-2. **Erholung durch Einzelprüfung (Single-Probe Recovery)**: Nach Ablauf der Sperrzeit prüft ein einzelner Request den Host. Ist der Transport-Handshake (`end`: HTTP/SSE-Header oder WebSocket-`open`) erfolgreich, wird der normale Traffic sofort wieder aufgenommen und das Penalty-Level auf `0` zurückgesetzt; schlägt er fehl, verdoppelt sich die Sperrzeit.
+1. **Aufeinanderfolgende Fehler**: Der Standard-Klassifikator zählt `NET_UNREACHABLE`, `NET_UNAVAILABLE` und `NET_SERVER_ERROR`. Nach `consecutiveFailures` (standardmäßig `5`) aufeinanderfolgenden gezählten Ergebnissen wird der Endpunkt für `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` bis `60000ms`) zuzüglich bis zu `50%` gleichmäßigem positivem Jitter ausgeschlossen.
+2. **Erholung durch Einzelprüfung (Single-Probe Recovery)**: Nach Ablauf der Sperrzeit prüft ein einzelner Request den Host. Beginnt seine Peer-Antwort (`end`) ohne gezählten Fehler, wird der normale Traffic sofort wieder aufgenommen und das Penalty-Level auf `0` zurückgesetzt; schlägt sie fehl, verdoppelt sich die Sperrzeit.
 3. **Panikmodus / Fail-Open**: Werden sämtliche konfigurierten Endpunkte ausgeschlossen oder als ungesund eingestuft, schaltet der Balancer auf Fail-Open und lässt den gesamten Traffic auf die Kandidatenliste zu, anstatt alle Aufrufe lokal abzuweisen.
 
 ## 4. Lifecycle der Transport-Abrechnung (`pick` → `start` → `end` → `done`)
 
-Eigene Balancer implementieren ein synchrones `pick(context)` sowie optionale Callbacks für `start()`, `end(info)` und `done(info)`:
+Eigene Balancer implementieren synchrones `pick(info)` und optionale Callbacks `start()`, `end(info)` und `done(info)`. `PickInfo` enthält nur die Kandidaten-`endpoints` und die optionale Definitions-`operation`; einen Transport-Diskriminator gibt es nicht. Der Transport übersetzt seine Fakten in neutrale `DoneInfo.code`-Ergebnisse. Eingebaute Balancer lesen `status` nie; diese rohe Antwortinformation bleibt nur für eigene Balancer erhalten. `start` läuft vor dem Versuch, `end`, wenn die Peer-Antwort beginnt oder ein Fehler vor der Antwort auftritt, und `done` beim Abschluss. Ein späterer Body-Fehler kann daher den finalen Code ändern, ohne das frühere `end`-Sample zu ändern:
 
-| Physisches Transport-Ergebnis                                            | Finales `done(info)`-Sample                                |
-| ------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| HTTP-Response-Body bricht mitten im Stream ab                            | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
-| SSE-Handshake gelingt, danach schlägt Stream `reader.read()` fehl        | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| Reguläres SSE-EOF, Handshake-Dekodierungsfehler oder Warteschlangenlimit | `{ attempted: true, status }`                              |
-| Geöffneter WebSocket schließt mit Code `1006` oder `wasClean === false`  | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| Geöffneter WebSocket schließt regulär                                    | `{ attempted: true }`                                      |
-| Abbruch durch den Aufrufer oder manuelles Schließen von Stream/Socket    | `{ attempted: false }`                                     |
-| Deadline des Aufrufers läuft ab, nachdem der Versuch gestartet wurde     | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+| Physisches Transport-Ergebnis                                                               | Finales `done(info)`-Sample                                |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE-Antwortstatus 502, 503 oder 504                                                    | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| Anderer HTTP/SSE-Antwortstatus ab 500                                                       | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE-Antwortstatus 2xx, 3xx oder 4xx (einschließlich 429)                               | `{ attempted: true, status }`                              |
+| HTTP-Response-Body bricht mitten im Stream ab                                               | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE-Handshake gelingt, danach lehnt Stream `reader.read()` ab                               | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Reguläres SSE-EOF, Dekodierungsfehler nach erfolgreichem Handshake oder Warteschlangenlimit | `{ attempted: true, status }`                              |
+| Geöffneter WebSocket schließt mit Code `1006` oder `wasClean === false`                     | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Geöffneter WebSocket schließt regulär                                                       | `{ attempted: true }`                                      |
+| Abbruch durch den Aufrufer oder manuelles Schließen von Stream/Socket                       | `{ attempted: false }`                                     |
+| Deadline des Aufrufers läuft ab, nachdem der Versuch gestartet wurde                        | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+Dekodierungsfehler beim Handshake behalten das neutrale Ergebnis, das sich aus dem Handshake-Status ableitet (zum Beispiel `NET_UNAVAILABLE` mit Status `503`). Ein unvollständiger HTTP-Body behält stattdessen `NET_BODY_INCOMPLETE` und seinen rohen Status, auch bei einer Gateway-Antwort; die Standard-Outlier-Detection zählt ihn nicht.
 
 ## Weiterführende Links
 
 - [Client-Konfiguration](/de-DE/docs/client)
 - [SSE-Wiederverbindung](/de-DE/docs/sse#reconnect)
-- [WebSocket-Sitzungen](/de-DE/docs/web-socket)
+- [WebSocket-Wiederverbindung](/de-DE/docs/web-socket)

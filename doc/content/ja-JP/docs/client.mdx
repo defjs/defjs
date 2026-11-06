@@ -87,8 +87,8 @@ export const getOrder = defineRequest({
 
 `withEndpoint(...urls)` は 1 つ以上の候補ベース URL を受け取ります。デフォルトでは以下の動作になります。
 
-- 各クライアントは [`pickFirstBalancer`](/ja-JP/api/core/pickfirstbalancer) を使用し、`NET_UNREACHABLE` 障害または未ハンドルの `502`/`503`/`504` レスポンスが発生するまで最初の URL に固定します。
-- 安全な HTTP メソッド（`GET`、`HEAD`、`OPTIONS`、`TRACE`）は、接続失敗時（`NET_UNREACHABLE`）に Finagle スタイルの共有リトライバジェット（`withEndpointFailover`）に基づき、未試行のバックアップエンドポイントへの **同一呼び出し内フェイルオーバー** を自動実行します。
+- 各クライアントは [`pickFirstBalancer`](/ja-JP/api/core/pickfirstbalancer) を使い、`NET_UNREACHABLE` または `NET_UNAVAILABLE`（HTTP 502、503、504）まで最初の URL に留まります。
+- **同一呼び出し内の HTTP リトライはデフォルトでオフです。** `withRetry()` は `withRetry({})` と同等で、安全なメソッド（`GET`、`HEAD`、`OPTIONS`、`TRACE`）の接続失敗に対し、バックオフ付きで未試行のエンドポイントへもう 1 回の試行を有効にします。Finagle のリトライバジェットはクライアント構成に属し、その派生クライアントが共有します。バランサーの同一性とは無関係です。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ export const getOrder = defineRequest({
 
 ### ヘルスフィルタリングと P2C [#health-filtering-and-p2c]
 
-ピアサーバーのレプリカ群に対しては、[`roundRobinBalancer`](/ja-JP/api/core/roundrobinbalancer) や [`p2cBalancer`](/ja-JP/api/core/p2cbalancer)（PeakEwma RTT × 処理中負荷）により、Linkerd スタイルの連続失敗サーキットブレーカー（`outlierDetection`）がデフォルトで有効化されます。
+ピアサーバーのレプリカ群に対しては、[`roundRobinBalancer`](/ja-JP/api/core/roundrobinbalancer) や [`p2cBalancer`](/ja-JP/api/core/p2cbalancer)（PeakEwma RTT × 処理中負荷）により、Linkerd スタイルの連続失敗サーキットブレーカー（`outlierDetection`）がデフォルトで有効化されます。数えられるのは `NET_UNREACHABLE`、`NET_UNAVAILABLE`、`NET_SERVER_ERROR` です。生のレスポンス `status` はカスタムバランサー専用です。
 
 リトライバジェット、アクティブ／パッシブヘルスチェック、P2C 負荷推定、カスタムバランサーの詳細は、専用の [ロードバランシングとフェイルオーバー](/ja-JP/docs/load-balancing) ガイドを参照してください。
 
@@ -112,19 +112,19 @@ export const getOrder = defineRequest({
 
 ## 6. クライアントオプションヘルパーリファレンス
 
-| ヘルパー                                                                                                      | 役割                                                                                         |
-| ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | 1 つ以上の候補ベース URL を設定（以前のリストを上書き）                                      |
-| `withHeaders(HeadersInit)`                                                                                    | HTTP および SSE 向けの静的デフォルトヘッダーを設定（builder のヘッダーが優先）               |
-| `withInterceptors(...items)`                                                                                  | HTTP、SSE、WebSocket のインターセプターをオニオン順で末尾に追加                              |
-| `withQuerySerializer(fn)`                                                                                     | エイリアス適用済みのクエリオブジェクトをクエリ文字列にシリアライズ                           |
-| `withCredentials(boolean)`                                                                                    | `true` の場合、HTTP および SSE の Fetch に `credentials: "include"` を設定                   |
-| `withXSRF(options?)`                                                                                          | 同一オリジンに対するデータ変更 HTTP リクエストで XSRF クッキーをヘッダーにコピー             |
-| `withEndpointBalancer(balancer)`                                                                              | エンドポイント選択戦略を置き換え（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`） |
-| `withEndpointFailover(options?)`                                                                              | 同一呼び出し内の HTTP フェイルオーバーおよびクライアントリトライバジェットを設定             |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE の再接続および無効イベントの観測を設定                                                   |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket セッションのデフォルト設定を構成                                                   |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | カスタムまたはモックのトランスポート実装を注入                                               |
+| ヘルパー                                                                                                      | 役割                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `withEndpoint(...urls)`                                                                                       | 1 つ以上の候補ベース URL を設定（以前のリストを上書き）                                                            |
+| `withHeaders(HeadersInit)`                                                                                    | HTTP および SSE 向けの静的デフォルトヘッダーを設定（builder のヘッダーが優先）                                     |
+| `withInterceptors(...items)`                                                                                  | HTTP、SSE、WebSocket のインターセプターをオニオン順で末尾に追加                                                    |
+| `withQuerySerializer(fn)`                                                                                     | エイリアス適用済みのクエリオブジェクトをクエリ文字列にシリアライズ                                                 |
+| `withCredentials(boolean)`                                                                                    | `true` の場合、HTTP および SSE の Fetch に `credentials: "include"` を設定                                         |
+| `withXSRF(options?)`                                                                                          | 同一オリジンに対するデータ変更 HTTP リクエストで XSRF クッキーをヘッダーにコピー                                   |
+| `withBalancer(balancer)`                                                                                      | エンドポイント選択戦略を置き換え（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）                       |
+| `withRetry(options?)`                                                                                         | オプトインの HTTP リトライ条件、メソッド、バックオフ、試行タイムアウト、クライアント所有のバジェットを構成します。 |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | SSE の再接続および無効イベントの観測を設定                                                                         |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | WebSocket セッションのデフォルト設定を構成                                                                         |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | カスタムまたはモックのトランスポート実装を注入                                                                     |
 
 ## 関連ドキュメント
 

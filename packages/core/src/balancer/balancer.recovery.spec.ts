@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { EndpointBalancer, EndpointDoneInfo } from "./balancer";
+import type { Balancer, DoneInfo } from "./balancer";
 import { pickFirstBalancer, roundRobinBalancer } from "./balancer";
 import {
   outlierDetection,
@@ -17,11 +17,11 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-const failed: EndpointDoneInfo = { attempted: true, status: 503 };
-const ok: EndpointDoneInfo = { attempted: true, status: 200 };
+const failed: DoneInfo = { attempted: true, code: "NET_UNAVAILABLE" };
+const ok: DoneInfo = { attempted: true, status: 200 };
 const list = ["a", "b", "c"];
-function pick(b: EndpointBalancer, endpoints = list) {
-  const [err, result] = b.pick({ endpoints, transport: "http" });
+function pick(b: Balancer, endpoints = list) {
+  const [err, result] = b.pick({ endpoints });
   expect(err).toBeNull();
   if (!result) throw new Error("missing selection");
   return result;
@@ -179,9 +179,9 @@ test.each([
       // @ts-expect-error invalid recovery options are rejected at runtime
       p2cBalancer({ outlierDetection: options }),
     ]) {
-      expect(
-        pickEndpoint(b, { endpoints: list, transport: "http" })[0]?.code,
-      ).toBe("REQ_OPTIONS_INVALID");
+      expect(pickEndpoint(b, { endpoints: list })[0]?.code).toBe(
+        "REQ_OPTIONS_INVALID",
+      );
     }
   },
 );

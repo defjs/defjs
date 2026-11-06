@@ -57,6 +57,8 @@ Execute は判別可能な `Fault` をタプルの第一要素に返します。
 
 レスポンスが存在する前に失敗しえたものすべてです。`REQ_*`、`NET_*`、`EXT_*`、`CAP_*`、`ENV_UNSUPPORTED`。トランスポートが報告できるメタデータを持つまで、`response` は `undefined` です。たとえばダウンロード途中で切れたボディです。
 
+無効な `withRetry` の option は、HTTP トランスポートが始まる前に `REQ_OPTIONS_INVALID` を返します。メッセージは `Invalid retry options` です。これには、オブジェクトでない方針、1 以上の安全な整数でない `maxAttempts`、それに無効な条件、メソッド、タイムアウト、バックオフ、予算の設定が含まれます。`withRetry` を省くとリトライは無効になります。`withRetry()` と `withRetry(undefined)` は `withRetry({})` と同じように振る舞います。`withRetry({ maxAttempts: 1 })` は、有効にしたあとリトライを無効にします。
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -101,12 +103,12 @@ abort と timeout で共有される `Error` センチネルで、`cause` とし
 
 [`isAbortCause`](/ja-JP/api/core/isabortcause) は、中止のブランドを持つ `Error` または `AbortError` という名前の `DOMException` を認識します。[`isTimeoutCause`](/ja-JP/api/core/istimeoutcause) は、タイムアウトのブランドを持つ `Error` または `TimeoutError` という名前の `DOMException` / `Error` を認識します。原因となった値を分類するには `fault.cause` を渡してください。これらの関数は fault の中身を取り出しません。別の Core のコピーから来たセンチネルでも使えます。
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`ERR_NO_ENDPOINT` は、候補のエンドポイントを選べないとき、`REQ_BUILD_FAILED` の `cause` としてだけ現れます。`FaultCode` は増えません。センチネルには、列挙されない `Symbol.for('defjs.cause.no-endpoint')` のブランドが付いています。[`isNoEndpointCause`](/ja-JP/api/core/isnoendpointcause) は、別の Core のコピーから来たそのブランドを認識します。[`isAbortCause`](/ja-JP/api/core/isabortcause) が中止を認識するのと同じです。`fault.cause` を渡してください。fault の中身は取り出しません。
+`ERR_NO_CANDIDATE` は、候補のエンドポイントを選べないとき、`REQ_BUILD_FAILED` の `cause` としてだけ現れます。`FaultCode` は増えません。センチネルには、列挙されない `Symbol.for('defjs.cause.no-endpoint')` のブランドが付いています。[`isNoCandidateCause`](/ja-JP/api/core/isnocandidatecause) は、別の Core のコピーから来たそのブランドを認識します。[`isAbortCause`](/ja-JP/api/core/isabortcause) が中止を認識するのと同じです。`fault.cause` を渡してください。fault の中身は取り出しません。
 
 [Errors ガイド](/ja-JP/docs/errors) を参照してください。

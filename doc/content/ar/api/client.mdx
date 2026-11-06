@@ -28,17 +28,11 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 ينسخ عناوين URL الأساسية المرشحة بترتيب أول ظهور ويُسقط نسخة لاحقة من السلسلة نفسها. يستبدل `withEndpoint` لاحق القائمة. لا يفحص عناوين URL ولا يستبدل الموازن. القائمة الفارغة قانونية وتُفشل الاستدعاء بـ `REQ_BUILD_FAILED`.
 
-### withEndpointBalancer()
+### withBalancer()
 
-<ApiSignature name="withEndpointBalancer" />
+<ApiSignature name="withBalancer" />
 
 يستبدل الموازن المستخدم للاستدعاءات اللاحقة. يُخزَّن الكائن بالمرجع. دون هذا الخيار، يحصل كل عميل على `pickFirstBalancer()` خاص به.
-
-### withEndpointFailover()
-
-<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
-
-يتحكم في تجاوز فشل HTTP داخل استدعاء واحد. ميزانية إعادة محاولة Finagle/Linkerd المشتركة للعميل افتراضها 20% زائد احتياطي 10 إعادات في الثانية عبر TTL من 10 ثوانٍ؛ ويعطّل `retryBudget: false` ذلك الحد. تنتهي الأرصدة والخصوم كلاهما بكسل في عشر شرائح من TTL/10. الافتراضي محاولة إضافية واحدة عند فشل الاتصال لـ GET وHEAD وOPTIONS وTRACE. تعطّله `attempts: 0` أو `methods: []`. يستبدل خيار لاحق السياسة؛ وتستخدم الحقول المحذوفة الافتراضيات. لا تُعاد أجسام الطلب المتدفقة أبدًا. تغطي `attemptTimeoutMs` جلب Fetch وقراءة الجسم وفكه لمحاولة واحدة، بينما تغطي إشارة المستدعي كل المحاولات. انظر [نقاط نهاية متعددة](/ar/docs/client#multiple-endpoints).
 
 ### withInterceptors()
 
@@ -201,7 +195,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 ### ClientConfig
 
-اللقطة المحلولة التي تعدّلها مساعدات الخيارات وتقرأها العملية: `ClientOptions` بعد الافتراضيات، مع وجود `http.handle` و`interceptors` و`sse` (`ClientSSEConfig`) و`webSocket` و`endpointBalancer` و`endpointFailover` دائمًا. الافتراضي لـ `endpointBalancer` هو `pickFirstBalancer()` جديد لذلك العميل. وهو ليس حقل [`RequestOptions`](/ar/api/core/requestoptions-type).
+اللقطة المحلولة التي تعدّلها مساعدات الخيارات وتقرأها العملية: `ClientOptions` بعد الافتراضيات، مع وجود `http.handle` و`interceptors` و`sse` (`ClientSSEConfig`) و`webSocket` و`balancer` دائمًا. `http.retry` اختياري وافتراضه `undefined` (محاولة واحدة، بلا ميزانية)؛ ويضبطه `withRetry(options?)`. الافتراضي لـ `balancer` هو `pickFirstBalancer()` جديد لذلك العميل. وهو ليس حقل [`RequestOptions`](/ar/api/core/requestoptions-type).
 
 ### ClientSSEConfig
 
@@ -227,7 +221,7 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-يتقدّم `pickFirstBalancer` عند `NET_UNREACHABLE` أو استجابة 502/503/504 بلا رمز عطل. يمكّن `failbackMs` الموجب المنتهي الاختياري سبرًا متزامنًا واحدًا لنقطة النهاية الأولى بعد الفترة. تتجاوز إخفاقات اتصال طرق HTTP الآمنة الفشل داخل الاستدعاء نفسه افتراضيًا. يمشي `roundRobinBalancer` على القائمة. `weights` اختياري. انظر [نقاط نهاية متعددة](/ar/docs/client#multiple-endpoints).
+يتقدّم `pickFirstBalancer` عند `NET_UNREACHABLE` أو `NET_UNAVAILABLE` (HTTP 502 أو 503 أو 504). يمكّن `failbackMs` الموجب المنتهي الاختياري سبرًا متزامنًا واحدًا لنقطة النهاية الأولى بعد الفترة. إعادات محاولة HTTP سياسة مستقلة للعميل تُضبط بـ `withRetry`. يمشي `roundRobinBalancer` على القائمة. `weights` اختياري. انظر [نقاط نهاية متعددة](/ar/docs/client#multiple-endpoints).
 
 ### p2cBalancer()
 
@@ -239,12 +233,26 @@ description: createClient، ومساعدات الخيارات، ونوع Client.
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-يغلّف ابنًا بقطع دائرة للإخفاقات المتتالية على طراز Linkerd. يفعّله round robin وp2c افتراضيًا (كما في Finagle)؛ ويعطّله `false`. يفعّله pick-first بكائن. بعد خمسة إخفاقات تبدأ العقوبات عند 1000ms، وتتضاعف بعد السبر الفاشل، وتضيف jitter موجبًا حتى 0.5 من الأساس، وتُسقَف عند 60000ms. يقبل الانتهاء سبرًا واحدًا يُقرَّر عند `end`، أو عند `done` إن لم يصل `end`. النجاح يصفّر التراجع؛ والإلغاء يحرّر الفتحة فقط. لا مهلة تفترض النجاح، ولا حصة، ولا حماية لآخر مضيف، ولا شبكة تسوية، ولا معيار نسبة، ولا بدء بطيء. يقرأ `isHealthy` حالة مخزّنة يملكها التطبيق ولا يلغي عقوبة أبدًا. يجوز أن ينقطع كل المضيفين؛ والفشل المفتوح المحلي للقائمة على طراز Finagle يظل يرسل الطلبات. بخلاف Envoy/gRPC A50 لا توجد حصة طرد. انظر [تصفية الصحة وp2c](/ar/docs/client#health-filtering-and-p2c).
+يغلّف ابنًا بقطع دائرة للإخفاقات المتتالية على طراز Linkerd. يفعّله round robin وp2c افتراضيًا (كما في Finagle)؛ ويعطّله `false`. يفعّله pick-first بكائن. يحصي المصنّف الافتراضي `NET_UNREACHABLE` و`NET_UNAVAILABLE` و`NET_SERVER_ERROR`. بعد خمسة إخفاقات تبدأ العقوبات عند 1000ms، وتتضاعف بعد السبر الفاشل، وتضيف jitter موجبًا حتى 0.5 من الأساس، وتُسقَف عند 60000ms. يقبل الانتهاء سبرًا واحدًا يُقرَّر عند `end`، أو عند `done` إن لم يصل `end`. النجاح يصفّر التراجع؛ والإلغاء يحرّر الفتحة فقط. لا مهلة تفترض النجاح، ولا حصة، ولا حماية لآخر مضيف، ولا شبكة تسوية، ولا معيار نسبة، ولا بدء بطيء. يقرأ `isHealthy` حالة مخزّنة يملكها التطبيق ولا يلغي عقوبة أبدًا. يجوز أن ينقطع كل المضيفين؛ والفشل المفتوح المحلي للقائمة على طراز Finagle يظل يرسل الطلبات. بخلاف Envoy/gRPC A50 لا توجد حصة طرد. انظر [تصفية الصحة وp2c](/ar/docs/client#health-filtering-and-p2c).
 
-### EndpointBalancer
+### withRetry()
 
-<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-يُرجع `pick` tuple يضع الخطأ أولًا. يعمل `start` الاختياري بشكل متزامن مرة واحدة على الأكثر مباشرة قبل أن يبدأ النقل المختار؛ ويعمل `end` الاختياري مرة واحدة بعد `start` عند رؤوس Fetch أو `open` في WebSocket (أو إخفاق قبل الاستجابة)، ويعمل `done` الاختياري مرة واحدة عند الاكتمال. لا يستطيع Fetch كشف حد أول إطار جسم في Linkerd ولا حدود تدفق Envoy. الرمي ورفض الـ thenable من كل الخطافات محتويان. `ERR_NO_ENDPOINT` ليس إلا `cause` لـ `REQ_BUILD_FAILED`. وهو ليس `FaultCode`. تتعرف [`isNoEndpointCause`](/ar/api/core/isnoendpointcause) عليه عبر نسخ Core.
+يفعّل إعادة محاولة HTTP في نفس الاستدعاء بمعزل عن اختيار نقطة النهاية. حذف `withRetry` يعني محاولة واحدة وبلا ميزانية. `withRetry()` يعادل `withRetry({})` وافتراضه `maxAttempts: 2` (بما فيها الأصلية) و`on: ["connect-failure"]` والطرق الآمنة `GET` و`HEAD` و`OPTIONS` و`TRACE`. الطرق غير حساسة لحالة الأحرف؛ ويعطّل `[]` إعادات المحاولة. `maxAttempts` عدد صحيح آمن لا يقل عن 1، وكل نقطة نهاية تُجرَّب مرة واحدة على الأكثر. يشمل `"gateway-error"` القيمة `NET_UNAVAILABLE` (HTTP 502/503/504) وأجسام البوابة التي رفضها فك `RES_*`؛ ويستخدم `"attempt-timeout"` الخيار `attemptTimeoutMs`. لا تُعاد أجسام الطلب المتدفقة أبدًا.
+
+افتراض backoff هو `delayMs: 25` و`factor: 2` و`jitter: 0.2` و`maxDelayMs: 250`، بدلالة الحقول نفسها التي لإعادة اتصال SSE/WebSocket. يتخطى `delayMs: 0` الانتظار. تقيّد `attemptTimeoutMs` جلب Fetch وقراءة الجسم وفكه لمحاولة واحدة؛ وتغطي إشارة المستدعي الاستدعاء كله، بما فيه انتظار backoff.
+
+ميزانية Finagle التي يملكها العميل افتراضها 20% زائد احتياطي 10 إعادات في الثانية عبر TTL من 10 ثوانٍ. تنتهي الأرصدة والخصوم كلاهما بكسل في عشر شرائح من TTL/10. يزيل `budget: false` الحد. العملاء المشتقون الذين يشاركون إعدادًا واحدًا يتشاركون ميزانيته؛ والعملاء المنفصلون لا يتشاركونها، حتى مع موازن واحد مشترك. تُرجع الخيارات غير الصالحة `REQ_OPTIONS_INVALID` مع `Invalid retry options` عند تشغيل HTTP. يلتقط الخيار الحقول المملوكة والمصفوفات والميزانية المتداخلة لحظة التطبيق. `withRetry()` و`withRetry(undefined)` يتصرفان مثل `withRetry({})`. `withRetry` لاحق يستبدل السياسة؛ و`withRetry({ maxAttempts: 1 })` يوقف إعادات المحاولة بعد أن كانت مفعّلة. ليس للموازنات ولا لأغلفة السلامة إعدادات إعادة محاولة. انظر [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing).
+
+<include cwd>examples/client/http-retry.ts#example</include>
+
+### Balancer
+
+<ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+يُرجع `pick` tuple يضع الخطأ أولًا. يعمل `start` الاختياري بشكل متزامن مرة واحدة على الأكثر مباشرة قبل أن يبدأ النقل المختار؛ ويعمل `end` الاختياري مرة واحدة بعد `start` عندما تبدأ استجابة الطرف المقابل (أو عند إخفاق قبل الاستجابة)، ويعمل `done` الاختياري مرة واحدة عند الاكتمال. لا يستطيع Fetch كشف حد أول إطار جسم في Linkerd ولا حدود تدفق Envoy. الرمي ورفض الـ thenable من كل الخطافات محتويان. `ERR_NO_CANDIDATE` ليس إلا `cause` لـ `REQ_BUILD_FAILED`. وهو ليس `FaultCode`. تتعرف [`isNoCandidateCause`](/ar/api/core/isnocandidatecause) عليه عبر نسخ Core.
+
+لا يرى الموازن إلا نتائج محايدة؛ وتترجم كل وسيلة نقل وقائعها إلى `DoneInfo.code`. تحصي outlier detection الافتراضية `NET_UNREACHABLE` و`NET_UNAVAILABLE` و`NET_SERVER_ERROR`. يُحتفظ بـ `DoneInfo.status` الخام لموزعات الحمل المخصصة فقط، ولا تقرأه الاستراتيجيات المدمجة أبدًا. يحتوي `PickInfo` على `endpoints` و`operation` الاختياري، بلا مميّز للنقل.
 
 انظر [دليل العميل](/ar/docs/client).

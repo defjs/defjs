@@ -1,5 +1,5 @@
 import type { BackoffConfig } from "../internal/backoff";
-import type { ClientWebSocketOptions } from "./config";
+import type { ClientWebSocketOptions, RetryOptions } from "./config";
 
 /** Plain fixed-configuration record. Falsy values and non-objects pass through. */
 function isShapeRecord(value: unknown): value is Record<string, unknown> {
@@ -62,4 +62,55 @@ export function snapshotProtocols(
     return value.slice();
   }
   return value;
+}
+
+/** Captures owned HTTP retry records and array containers without enabling an absent policy. */
+export function snapshotRetry(
+  value: RetryOptions | undefined,
+): RetryOptions | undefined {
+  if (
+    value === undefined ||
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  )
+    return value;
+  const {
+    maxAttempts,
+    on,
+    methods,
+    attemptTimeoutMs,
+    delayMs,
+    factor,
+    jitter,
+    maxDelayMs,
+    budget,
+  } = value;
+  return {
+    maxAttempts,
+    on: isRetryList(on) ? [...on] : on,
+    methods: isRetryList(methods) ? [...methods] : methods,
+    attemptTimeoutMs,
+    delayMs,
+    factor,
+    jitter,
+    maxDelayMs,
+    budget:
+      budget !== undefined &&
+      budget !== false &&
+      budget !== null &&
+      typeof budget === "object" &&
+      !Array.isArray(budget)
+        ? {
+            percentCanRetry: budget.percentCanRetry,
+            minRetriesPerSecond: budget.minRetriesPerSecond,
+            ttlMs: budget.ttlMs,
+          }
+        : budget,
+  };
+}
+function isRetryList<T>(
+  value: readonly T[] | undefined,
+): value is readonly T[] {
+  return Array.isArray(value);
 }

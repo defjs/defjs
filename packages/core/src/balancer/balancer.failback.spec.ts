@@ -1,13 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { createClient } from "../client/client";
-import { withEndpoint, withEndpointBalancer } from "../client/option";
+import { withEndpoint, withBalancer } from "../client/option";
 import { defineRequest } from "../http";
-import { pickFirstBalancer, type EndpointBalancer } from "./balancer";
+import { pickFirstBalancer, type Balancer } from "./balancer";
 import { pickEndpoint } from "./runtime";
 
 const endpoints = ["https://first.test", "https://second.test"];
-function pick(balancer: EndpointBalancer) {
-  const [error, selected] = balancer.pick({ endpoints, transport: "http" });
+function pick(balancer: Balancer) {
+  const [error, selected] = balancer.pick({ endpoints });
   if (error) throw error;
   return selected;
 }
@@ -24,7 +24,7 @@ test("gateway errors advance pick_first but coded body failures do not", () => {
     status: 503,
   });
   expect(pick(balancer).endpoint).toBe(endpoints[0]);
-  pick(balancer).done?.({ attempted: true, status: 503 });
+  pick(balancer).done?.({ attempted: true, code: "NET_UNAVAILABLE" });
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
 });
 
@@ -34,7 +34,6 @@ test("offline connect failures are unattributed; online and absent navigator sti
     const balancer = pickFirstBalancer();
     const [, selected] = pickEndpoint(balancer, {
       endpoints,
-      transport: "http",
     });
     selected?.done({ attempted: true, code: "NET_UNREACHABLE" });
     expect(pick(balancer).endpoint).toBe(
@@ -53,7 +52,7 @@ test("failback permits one probe, retries failed probes, ignores unattributed pr
   const probe = pick(balancer);
   expect(probe.endpoint).toBe(endpoints[0]);
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
-  probe.done?.({ attempted: true, status: 503 });
+  probe.done?.({ attempted: true, code: "NET_UNAVAILABLE" });
   vi.setSystemTime(199);
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
   vi.setSystemTime(200);
@@ -70,7 +69,7 @@ test.each([0, -1, Infinity, NaN])(
   async (failbackMs) => {
     const client = createClient(
       withEndpoint(...endpoints),
-      withEndpointBalancer(pickFirstBalancer({ failbackMs })),
+      withBalancer(pickFirstBalancer({ failbackMs })),
     );
     const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
     expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
@@ -84,7 +83,7 @@ test("throwing navigator access is treated as online", () => {
     },
   });
   const balancer = pickFirstBalancer();
-  const [, selected] = pickEndpoint(balancer, { endpoints, transport: "http" });
+  const [, selected] = pickEndpoint(balancer, { endpoints });
   selected?.done({ attempted: true, code: "NET_UNREACHABLE" });
   expect(pick(balancer).endpoint).toBe(endpoints[1]);
 });

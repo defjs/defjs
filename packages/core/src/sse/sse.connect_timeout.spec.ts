@@ -2,11 +2,11 @@ import { afterEach, expect, test, vi } from "vitest";
 import { createClient } from "../client/client";
 import {
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
   withSSEHandle,
   withSSEReconnect,
 } from "../client/option";
-import { pickFirstBalancer, type EndpointDoneInfo } from "../balancer/balancer";
+import { pickFirstBalancer, type DoneInfo } from "../balancer/balancer";
 import { defineEventStream } from "./sse";
 import { struct } from "../struct";
 import { ERR_ABORTED, ERR_TIMEOUT } from "../error";
@@ -19,11 +19,11 @@ test.each([false, true])(
   async (customPolicy) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const urls: string[] = [];
-    const reports: EndpointDoneInfo[] = [];
+    const reports: DoneInfo[] = [];
     const balancer = pickFirstBalancer();
     const client = createClient(
       withEndpoint(...endpoints),
-      withEndpointBalancer({
+      withBalancer({
         pick(info) {
           const [error, result] = balancer.pick(info);
           if (error) return [error, undefined];
@@ -147,14 +147,14 @@ test.each([
   async ({ cause, code }) => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const controller = new AbortController();
-    const reports: EndpointDoneInfo[] = [];
+    const reports: DoneInfo[] = [];
     let picks = 0;
     let calls = 0;
     let settled = false;
     const balancer = pickFirstBalancer();
     const client = createClient(
       withEndpoint(...endpoints),
-      withEndpointBalancer({
+      withBalancer({
         pick(info) {
           picks++;
           const [error, result] = balancer.pick(info);

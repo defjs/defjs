@@ -8,19 +8,17 @@ export type {
   ClientWebSocketOptions,
   FetchHandle,
   QuerySerializer,
+  RetryCondition,
+  RetryOptions,
   WebSocketHandle,
   WebSocketHandleConstructor,
 } from "./config";
-export type {
-  EndpointFailoverCondition,
-  EndpointFailoverOptions,
-  ClientOption,
-} from "./option";
+export type { ClientOption } from "./option";
 export {
   withCredentials,
   withEndpoint,
-  withEndpointBalancer,
-  withEndpointFailover,
+  withBalancer,
+  withRetry,
   withHeaders,
   withHTTPHandle,
   withInterceptors,

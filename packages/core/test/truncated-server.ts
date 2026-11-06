@@ -4,7 +4,7 @@ import type { Socket } from "bun";
  * Serves one chunked body without its terminating chunk. A JS ReadableStream error is
  * surfaced differently by each fetch path in Firefox; a real socket truncation is not.
  */
-export function startTruncatedServer(): {
+export function startTruncatedServer(status = 200): {
   url: string;
   close(): void;
 } {
@@ -22,7 +22,7 @@ export function startTruncatedServer(): {
       data(socket) {
         const body = '{"partial":';
         socket.write(
-          "HTTP/1.1 200 OK\r\n" +
+          `HTTP/1.1 ${status} Response\r\n` +
             "access-control-allow-origin: *\r\n" +
             "content-type: application/json\r\n" +
             "transfer-encoding: chunked\r\n" +

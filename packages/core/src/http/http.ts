@@ -1,13 +1,17 @@
+import { statusOutcome } from "../internal/attempt_outcome";
 import { retryBudgetFor } from "../balancer/retry_budget";
 import type { Client } from "../client/client";
 import { CLIENT } from "../client/client";
-import type {
-  EndpointFailoverCondition,
-  EndpointFailoverOptions,
-} from "../client/option";
+import type { RetryCondition, RetryOptions } from "../client/config";
+import {
+  computeReconnectDelay,
+  wait,
+  type BackoffConfig,
+} from "../internal/backoff";
+import { normalizeBackoffOptions } from "../internal/reconnect_options";
 import type { ClientConfig } from "../client/config";
 import { ERR_FETCH_UNSUPPORTED } from "../client/config";
-import type { EndpointDoneInfo } from "../balancer/balancer";
+import type { DoneInfo } from "../balancer/balancer";
 import { isOffline, pickEndpoint } from "../balancer/runtime";
 import type {
   AnyFault,
@@ -292,9 +296,9 @@ type HttpExecutionDefinition<
   error?: TError;
 };
 
-type FailoverAttempt = {
+type RetryAttempt = {
   endpoint?: string;
-  info?: EndpointDoneInfo;
+  info?: DoneInfo;
   replayable: boolean;
   timedOut: boolean;
 };
@@ -309,7 +313,7 @@ async function executeHttpCommand<
   input: EndpointInput<TInput> | undefined,
   options: HttpExecuteOptions | undefined,
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
-  const policy = normalizeFailoverOptions(clientConfig.endpointFailover);
+  const policy = normalizeRetryOptions(clientConfig.http.retry);
   if (policy instanceof Error) {
     return [
       createPreflightFault("REQ_OPTIONS_INVALID", policy),
@@ -317,18 +321,32 @@ async function executeHttpCommand<
       undefined,
     ];
   }
+  if (policy === undefined) {
+    return executeHttpAttempt(
+      clientConfig,
+      definition,
+      input,
+      options,
+      clientConfig.endpoints,
+      { replayable: true, timedOut: false },
+      undefined,
+    );
+  }
   const budget = retryBudgetFor(clientConfig);
   if (budget instanceof Error)
     return [
-      createPreflightFault("REQ_OPTIONS_INVALID", budget),
+      createPreflightFault(
+        "REQ_OPTIONS_INVALID",
+        new RangeError("Invalid retry options"),
+      ),
       undefined,
       undefined,
     ];
   budget.deposit();
-  const { attempts, retryOn, methods, attemptTimeoutMs } = policy;
+  const { maxAttempts, on, methods, attemptTimeoutMs } = policy;
   let candidates = clientConfig.endpoints;
   for (let index = 0; ; index++) {
-    const state: FailoverAttempt = { replayable: true, timedOut: false };
+    const state: RetryAttempt = { replayable: true, timedOut: false };
     const result = await executeHttpAttempt(
       clientConfig,
       definition,
@@ -338,16 +356,16 @@ async function executeHttpCommand<
       state,
       attemptTimeoutMs,
     );
-    const condition = failoverCondition(state, result[0]);
+    const condition = retryCondition(state, result[0]);
     candidates = candidates.filter((endpoint) => endpoint !== state.endpoint);
     const allowed =
       condition !== undefined &&
-      retryOn.includes(condition) &&
+      on.includes(condition) &&
       methods.some(
         (method) => method.toUpperCase() === definition.method.toUpperCase(),
       );
     const stopped =
-      index >= attempts ||
+      index + 1 >= maxAttempts ||
       !state.replayable ||
       options?.signal?.aborted ||
       isOffline();
@@ -359,26 +377,38 @@ async function executeHttpCommand<
       !budget.tryWithdraw()
     )
       return result;
+    const delay = computeReconnectDelay(policy, index + 1);
+    if (delay > 0) {
+      const signal = options?.signal ?? new AbortController().signal;
+      try {
+        await wait(delay, signal);
+      } catch {
+        return [resolveAbortedFault(signal), undefined, undefined];
+      }
+    }
   }
 }
 
-function normalizeFailoverOptions(
-  policy: EndpointFailoverOptions,
+function normalizeRetryOptions(
+  policy: RetryOptions | undefined,
 ):
-  | (Required<
-      Omit<EndpointFailoverOptions, "attemptTimeoutMs" | "retryBudget">
-    > &
-      Pick<EndpointFailoverOptions, "attemptTimeoutMs">)
+  | (Required<Pick<RetryOptions, "maxAttempts" | "on" | "methods">> &
+      Pick<RetryOptions, "attemptTimeoutMs"> &
+      BackoffConfig)
+  | undefined
   | Error {
-  const attempts = policy.attempts ?? 1;
-  const retryOn = policy.retryOn ?? ["connect-failure"];
+  if (policy === undefined) return undefined;
+  if (policy === null || typeof policy !== "object" || Array.isArray(policy))
+    return new RangeError("Invalid retry options");
+  const { maxAttempts = 2 } = policy;
+  const on = policy.on ?? ["connect-failure"];
   const methods = policy.methods ?? ["GET", "HEAD", "OPTIONS", "TRACE"];
   const attemptTimeoutMs = policy.attemptTimeoutMs;
   if (
-    !Number.isSafeInteger(attempts) ||
-    attempts < 0 ||
-    !Array.isArray(retryOn) ||
-    retryOn.some(
+    !Number.isSafeInteger(maxAttempts) ||
+    maxAttempts < 1 ||
+    !Array.isArray(on) ||
+    on.some(
       (value) =>
         !["connect-failure", "gateway-error", "attempt-timeout"].includes(
           // eslint-disable-next-line @typescript-eslint/no-unsafe-argument -- INTENT: preserve original includes dispatch and validation of arbitrary runtime failover entries
@@ -390,23 +420,31 @@ function normalizeFailoverOptions(
     (attemptTimeoutMs !== undefined &&
       (!Number.isFinite(attemptTimeoutMs) || attemptTimeoutMs <= 0))
   ) {
-    return new RangeError("Invalid endpoint failover options");
+    return new RangeError("Invalid retry options");
   }
-  return { attempts, retryOn, methods, attemptTimeoutMs };
+  try {
+    const backoff = normalizeBackoffOptions(
+      policy,
+      { delayMs: 25, factor: 2, jitter: 0.2, maxDelayMs: 250 },
+      "HTTP retry",
+    );
+    return { maxAttempts, on, methods, attemptTimeoutMs, ...backoff };
+  } catch {
+    return new RangeError("Invalid retry options");
+  }
 }
 
-function failoverCondition(
-  state: FailoverAttempt,
+function retryCondition(
+  state: RetryAttempt,
   fault: AnyFault | null,
-): EndpointFailoverCondition | undefined {
+): RetryCondition | undefined {
   if (state.timedOut && fault?.code === "NET_TIMEOUT") return "attempt-timeout";
   const info = state.info;
   if (info?.code === "NET_UNREACHABLE" && fault?.code === "NET_UNREACHABLE")
     return "connect-failure";
   if (
     (fault?.code === "HTTP_STATUS" || fault?.code.startsWith("RES_")) &&
-    info?.code === undefined &&
-    (info?.status === 502 || info?.status === 503 || info?.status === 504)
+    info?.code === "NET_UNAVAILABLE"
   )
     return "gateway-error";
   return undefined;
@@ -422,7 +460,7 @@ async function executeHttpAttempt<
   input: EndpointInput<TInput> | undefined,
   options: HttpExecuteOptions | undefined,
   candidates: readonly string[],
-  state: FailoverAttempt,
+  state: RetryAttempt,
   attemptTimeoutMs: number | undefined,
 ): Promise<HttpExecuteAwaitResult<TOutput, TError>> {
   const config = options;
@@ -478,10 +516,9 @@ async function executeHttpAttempt<
     return stopBeforeTransport(parsedCancellation);
   }
 
-  const picked = pickEndpoint(clientConfig.endpointBalancer, {
+  const picked = pickEndpoint(clientConfig.balancer, {
     endpoints: candidates,
     operation: definition.operation,
-    transport: "http",
   });
   if (picked[0] !== null) {
     return stopBeforeTransport(picked[0]);
@@ -619,7 +656,11 @@ async function executeHttpAttempt<
           },
           response(response) {
             if (matches)
-              resolved.end({ attempted: true, status: response.status });
+              resolved.end({
+                attempted: true,
+                status: response.status,
+                code: statusOutcome(response.status),
+              });
           },
         },
       )
@@ -627,7 +668,11 @@ async function executeHttpAttempt<
           (settled) => {
             note({
               landed: true,
-              info: { attempted: true, status: settled.status },
+              info: {
+                attempted: true,
+                status: settled.status,
+                code: statusOutcome(settled.status),
+              },
             });
             return settled;
           },
@@ -828,7 +873,7 @@ async function executeHttpAttempt<
 
 type HttpAttempt = {
   landed: boolean;
-  info?: EndpointDoneInfo;
+  info?: DoneInfo;
 };
 
 /** Map a fetchHandler rejection onto the attempt that reached the selected endpoint. */
@@ -856,7 +901,11 @@ function classifyHttpAttempt(error: unknown): HttpAttempt {
     ) {
       return {
         landed: true,
-        info: { attempted: true, status: error.meta.status },
+        info: {
+          attempted: true,
+          status: error.meta.status,
+          code: statusOutcome(error.meta.status),
+        },
       };
     }
     if (error.meta === undefined) {
@@ -864,7 +913,11 @@ function classifyHttpAttempt(error: unknown): HttpAttempt {
     }
     return {
       landed: true,
-      info: { attempted: true, status: error.meta.status },
+      info: {
+        attempted: true,
+        status: error.meta.status,
+        code: statusOutcome(error.meta.status),
+      },
     };
   }
   if (createNetworkFault(error).code === "NET_UNREACHABLE") {
@@ -887,7 +940,7 @@ function classifyHttpAttempt(error: unknown): HttpAttempt {
 function httpAttemptDone(
   attempt: HttpAttempt | undefined,
   fault: AnyFault | null | undefined,
-): EndpointDoneInfo {
+): DoneInfo {
   if (fault?.code === "NET_ABORTED") {
     return { attempted: false };
   }

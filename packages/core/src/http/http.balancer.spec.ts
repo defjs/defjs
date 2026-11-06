@@ -1,15 +1,10 @@
 import { describe, expect, test } from "vitest";
-import type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  EndpointPickInfo,
-} from "../balancer";
-import { ERR_NO_ENDPOINT, pickFirstBalancer } from "../balancer";
+import type { Balancer, DoneInfo, PickInfo } from "../balancer";
+import { ERR_NO_CANDIDATE, pickFirstBalancer } from "../balancer";
 import {
   createClient,
   withEndpoint,
-  withEndpointBalancer,
-  withEndpointFailover,
+  withBalancer,
   withHTTPHandle,
   withInterceptors,
 } from "../client";
@@ -78,10 +73,10 @@ async function closedOrigins(count: number): Promise<string[]> {
   return urls;
 }
 
-function watch(inner: EndpointBalancer) {
-  const picks: EndpointPickInfo[] = [];
-  const dones: EndpointDoneInfo[] = [];
-  const balancer: EndpointBalancer = {
+function watch(inner: Balancer) {
+  const picks: PickInfo[] = [];
+  const dones: DoneInfo[] = [];
+  const balancer: Balancer = {
     pick(info) {
       picks.push(info);
       const outcome = inner.pick(info);
@@ -128,8 +123,8 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(dead, live.url),
-        withEndpointFailover({ attempts: 0 }),
-        withEndpointBalancer(watched.balancer),
+
+        withBalancer(watched.balancer),
       );
 
       const [first] = await get(client);
@@ -163,7 +158,7 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(primary.url, backup.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
       );
 
       const [first] = await get(client);
@@ -174,8 +169,8 @@ describe("HTTP endpoint balancer", () => {
       expect(primary.hits).toEqual(["/", "/"]);
       expect(backup.hits).toEqual([]);
       expect(watched.dones).toEqual([
-        { attempted: true, status: 500 },
-        { attempted: true, status: 500 },
+        { attempted: true, code: "NET_SERVER_ERROR", status: 500 },
+        { attempted: true, code: "NET_SERVER_ERROR", status: 500 },
       ]);
     });
   });
@@ -192,7 +187,7 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(hang.url, backup.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withInterceptors(
           createHttpInterceptor(async (request, next) => {
             if (!trap) {
@@ -234,8 +229,8 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(firstDead, secondDead, live.url),
-        withEndpointFailover({ attempts: 0 }),
-        withEndpointBalancer(watched.balancer),
+
+        withBalancer(watched.balancer),
       );
 
       const [left, right] = await Promise.all([get(client), get(client)]);
@@ -258,7 +253,7 @@ describe("HTTP endpoint balancer", () => {
     const reason = { why: "pick" };
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer({
+      withBalancer({
         pick() {
           // eslint-disable-next-line @typescript-eslint/only-throw-error -- the value under test is thrown or rejected unchanged
           throw reason;
@@ -278,7 +273,7 @@ describe("HTTP endpoint balancer", () => {
     const illegal = { endpoint: 1 };
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer({
+      withBalancer({
         pick: () =>
           // @ts-expect-error pick must return an error-first outcome
           illegal,
@@ -300,7 +295,7 @@ describe("HTTP endpoint balancer", () => {
     );
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
     );
 
     const [fault] = await get(client);
@@ -311,14 +306,14 @@ describe("HTTP endpoint balancer", () => {
     expect(watched.picks).toHaveLength(1);
   });
 
-  test("returns REQ_BUILD_FAILED with ERR_NO_ENDPOINT when no endpoint is configured", async () => {
+  test("returns REQ_BUILD_FAILED with ERR_NO_CANDIDATE when no endpoint is configured", async () => {
     const watched = watch(pickFirstBalancer());
-    const client = createClient(withEndpointBalancer(watched.balancer));
+    const client = createClient(withBalancer(watched.balancer));
 
     const [fault] = await get(client);
 
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBe(ERR_NO_ENDPOINT);
+    expect(fault?.cause).toBe(ERR_NO_CANDIDATE);
     expect(watched.dones).toEqual([]);
   });
 
@@ -338,7 +333,7 @@ describe("HTTP endpoint balancer", () => {
       };
       const client = createClient(
         withEndpoint(live.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withInterceptors(
           createHttpInterceptor(() => Promise.resolve(makeResponse(copied))),
         ),
@@ -370,7 +365,7 @@ describe("HTTP endpoint balancer", () => {
       });
       const client = createClient(
         withEndpoint(primary.url, backup.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
       );
 
       const [first] = await read(client);
@@ -396,7 +391,7 @@ describe("HTTP endpoint balancer", () => {
     });
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withHTTPHandle(() =>
         Promise.resolve(
           new Response("nope", {
@@ -422,7 +417,7 @@ describe("HTTP endpoint balancer", () => {
     });
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withHTTPHandle(() =>
         Promise.resolve(
           new Response("not-json", {
@@ -453,7 +448,7 @@ describe("HTTP endpoint balancer", () => {
     });
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
     );
 
     const [fault] = await read(client, {});
@@ -473,7 +468,7 @@ describe("HTTP endpoint balancer", () => {
     const controller = new AbortController();
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withInterceptors(
         createHttpInterceptor(
           () =>
@@ -500,7 +495,7 @@ describe("HTTP endpoint balancer", () => {
     controller.abort();
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
     );
 
     const [fault] = await get(client({ signal: controller.signal }));
@@ -520,7 +515,7 @@ describe("HTTP endpoint balancer", () => {
       const controller = new AbortController();
       const client = createClient(
         withEndpoint(live.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withInterceptors(
           createHttpInterceptor(async (request, next) => {
             controller.abort();
@@ -542,7 +537,7 @@ describe("HTTP endpoint balancer", () => {
     const controller = new AbortController();
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withInterceptors(
         createHttpInterceptor(async (request, next) => {
           controller.abort(ERR_TIMEOUT);
@@ -566,7 +561,7 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(live.url, "https://backup.example"),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withInterceptors(
           createHttpInterceptor(async (request, next) => {
             await next(request);
@@ -592,7 +587,7 @@ describe("HTTP endpoint balancer", () => {
     const watched = watch(pickFirstBalancer());
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withInterceptors(
         createHttpInterceptor(() =>
           Promise.resolve(makeResponse({ status: 204 })),
@@ -611,7 +606,7 @@ describe("HTTP endpoint balancer", () => {
     const watched = watch(pickFirstBalancer());
     const client = createClient(
       withEndpoint("https://primary.example"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withHTTPHandle(() => Promise.reject(cause)),
       withInterceptors(
         createHttpInterceptor((request, next) =>
@@ -640,7 +635,7 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(primary.url, backup.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withInterceptors(
           createHttpInterceptor((request, next) =>
             next({ ...request, baseEndpoint: backup.url }),
@@ -655,13 +650,12 @@ describe("HTTP endpoint balancer", () => {
       expect(backup.hits).toEqual(["/"]);
       expect(watched.picks[0]).toMatchObject({
         endpoints: [primary.url, backup.url],
-        transport: "http",
       });
       expect(watched.dones).toEqual([{ attempted: false }]);
     });
   });
 
-  test("passes transport http and the definition operation to every pick", async () => {
+  test("passes candidates and the definition operation without transport metadata to every pick", async () => {
     const live = await serve((_req, res) => {
       res.writeHead(204);
       res.end();
@@ -676,20 +670,20 @@ describe("HTTP endpoint balancer", () => {
       const plain = defineRequest({ method: "GET", path: "/health" });
       const client = createClient(
         withEndpoint(live.url, "https://backup.example"),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
       );
 
       await named(client);
       await plain(client);
+      for (const picked of watched.picks)
+        expect(picked).not.toHaveProperty("transport");
 
       expect(watched.picks[0]).toMatchObject({
         endpoints: [live.url, "https://backup.example"],
         operation: "loadOrder",
-        transport: "http",
       });
       expect(watched.picks[1]).toMatchObject({
         operation: undefined,
-        transport: "http",
       });
     });
   });
@@ -703,7 +697,7 @@ describe("HTTP endpoint balancer", () => {
     });
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withHTTPHandle(() => {
         const body = new ReadableStream<Uint8Array>({
           start(controller) {
@@ -740,7 +734,7 @@ describe("HTTP endpoint balancer", () => {
     });
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withHTTPHandle(() =>
         Promise.resolve(
           new Response("hello", {
@@ -773,7 +767,7 @@ describe("HTTP endpoint balancer", () => {
     });
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withHTTPHandle(() => {
         fetched = true;
         return Promise.resolve(new Response(null, { status: 204 }));
@@ -802,7 +796,7 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint("https://example.com"),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withHTTPHandle(() => {
           throw sentinel;
         }),
@@ -838,7 +832,7 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(live.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withInterceptors(
           createHttpInterceptor(async (request, next) => {
             const first = next(request);
@@ -867,7 +861,7 @@ describe("HTTP endpoint balancer", () => {
       const watched = watch(pickFirstBalancer());
       const client = createClient(
         withEndpoint(live.url),
-        withEndpointBalancer(watched.balancer),
+        withBalancer(watched.balancer),
         withInterceptors(
           createHttpInterceptor((request, next) =>
             next({ ...request, endpoint: "http://[" }),
@@ -886,7 +880,7 @@ describe("HTTP endpoint balancer", () => {
   test("returns a build-failure tuple when the picked endpoint getter throws", async () => {
     const cause = new Error("endpoint getter");
     const client = createClient(
-      withEndpointBalancer({
+      withBalancer({
         pick: () => [
           null,
           {
@@ -910,10 +904,10 @@ describe("HTTP endpoint balancer", () => {
       res.end();
     });
     await using([live], async () => {
-      const reports: EndpointDoneInfo[] = [];
+      const reports: DoneInfo[] = [];
       const client = createClient(
         withEndpoint(live.url),
-        withEndpointBalancer({
+        withBalancer({
           pick: () => [
             null,
             {
@@ -940,7 +934,7 @@ describe("HTTP endpoint balancer", () => {
   test("still returns the tuple when done throws", async () => {
     const client = createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer({
+      withBalancer({
         pick: () => [
           null,
           {

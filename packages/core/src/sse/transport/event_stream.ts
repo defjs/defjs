@@ -1,3 +1,4 @@
+import { statusOutcome } from "../../internal/attempt_outcome";
 import type { ClientSSEOptions, FetchHandle } from "../../client/config";
 import type { FaultCode, PreflightFault } from "../../error";
 import {
@@ -6,7 +7,7 @@ import {
   ERR_TIMEOUT,
   isTimeoutCause,
 } from "../../error";
-import type { EndpointDoneInfo } from "../../balancer/balancer";
+import type { DoneInfo } from "../../balancer/balancer";
 import {
   createFetchInitBase,
   isReadableStreamBody,
@@ -175,8 +176,8 @@ export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
    */
   endpointAttempt?: {
     start?(): void;
-    end?(info: EndpointDoneInfo): void;
-    done(info: EndpointDoneInfo): void;
+    end?(info: DoneInfo): void;
+    done(info: DoneInfo): void;
     pickNext():
       | readonly [PreflightFault, undefined]
       | readonly [
@@ -184,8 +185,8 @@ export interface FetchEventStreamOptions<TEvent = EventStreamMessage> {
           {
             endpoint: string;
             start?(): void;
-            end?(info: EndpointDoneInfo): void;
-            done(info: EndpointDoneInfo): void;
+            end?(info: DoneInfo): void;
+            done(info: DoneInfo): void;
           },
         ];
   };
@@ -320,17 +321,17 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
   };
 
   // Cleared after the one report for this attempt. Absent when the stream is not attributed.
-  let reportAttempt: ((info: EndpointDoneInfo) => void) | undefined;
+  let reportAttempt: ((info: DoneInfo) => void) | undefined;
   let startAttempt: (() => void) | undefined;
-  let endAttempt: ((info: EndpointDoneInfo) => void) | undefined;
+  let endAttempt: ((info: DoneInfo) => void) | undefined;
   let fetchStarted = false;
-  let handshake: EndpointDoneInfo | undefined;
+  let handshake: DoneInfo | undefined;
   let reconnectPick = false;
 
   function beginAttempt(
-    done: ((info: EndpointDoneInfo) => void) | undefined,
+    done: ((info: DoneInfo) => void) | undefined,
     start?: () => void,
-    end?: (info: EndpointDoneInfo) => void,
+    end?: (info: DoneInfo) => void,
   ): void {
     reportAttempt = done;
     startAttempt = start;
@@ -339,7 +340,7 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
     handshake = undefined;
   }
 
-  function currentAttemptInfo(): EndpointDoneInfo {
+  function currentAttemptInfo(): DoneInfo {
     if (closeController.signal.aborted) {
       return { attempted: false };
     }
@@ -497,7 +498,11 @@ export async function fetchEventStream<TEvent = EventStreamMessage>(
           cancelLateResponseBody,
         );
         clearTimeout(connectTimer);
-        handshake = { attempted: true, status: response.status };
+        handshake = {
+          attempted: true,
+          status: response.status,
+          code: statusOutcome(response.status),
+        };
         endAttempt?.(handshake);
         // The JSON media-type precheck throws before an open info exists. Attach the response
         // first so the startup fault can still report that status.

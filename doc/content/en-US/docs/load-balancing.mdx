@@ -5,7 +5,7 @@ description: Distribute traffic across multiple endpoints, eject unhealthy repli
 
 # Load balancing & failover
 
-When an application configures multiple base URLs with `withEndpoint(...urls)`, Defjs can distribute requests across replicas, eject unhealthy hosts using passive circuit breaking or active health checks, and automatically fail over safe HTTP methods within the same call.
+When an application configures multiple base URLs with `withEndpoint(...urls)`, Defjs can distribute requests across replicas, eject unhealthy hosts using passive circuit breaking or active health checks, and optionally fail over safe HTTP methods within the same call.
 
 ## 1. Choose a load balancer strategy
 
@@ -41,23 +41,29 @@ When an application configures multiple base URLs with `withEndpoint(...urls)`, 
 
 ### How `pickFirstBalancer` and `p2cBalancer` work
 
-- **`pickFirstBalancer`**: Stays on the first URL until a connection failure (`NET_UNREACHABLE`) or an uncoded `502`, `503`, or `504` response advances it to the next URL. Configure `failbackMs: 30_000` to probe the primary endpoint again after spending that duration on a backup.
+- **`pickFirstBalancer`**: Stays on the first URL and advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504). Configure `failbackMs: 30_000` to probe the primary endpoint again after spending that duration on a backup.
 - **`p2cBalancer` (Power of Two Choices)**: Samples two distinct candidates without replacement and picks the one with the lower score: `PeakEwma RTT × (pending + 1)` (or in-flight `pending` count when `load: "pending"`). Defaults (`defaultRttMs: 30`, `decayMs: 10000`) follow Linkerd/tower conventions.
 
-## 2. Same-call HTTP failover and retry budget
+## 2. Same-call HTTP retry
 
-By default, HTTP enables **same-call failover** for safe methods (`GET`, `HEAD`, `OPTIONS`, `TRACE`): if the first picked endpoint fails with `NET_UNREACHABLE`, Defjs picks one untried backup endpoint and runs the builder, interceptor chain, and transport again within the same operation call.
+Three separate decisions govern a retry: **whether to try again** (`withRetry`), **where to send it** (the runtime asks the balancer to pick again, excluding already-tried endpoints), and **how long to wait** (backoff). HTTP's `withRetry`, SSE's `withSSEReconnect`, and WebSocket's `withWebSocketReconnect` are symmetric transport-level policies. Their flat backoff fields share the same names, validation, and delay calculation. The balancer knows nothing about retry policy; a custom balancer needs no special cooperation.
 
-Customize or disable this policy with [`withEndpointFailover(options)`](/api/core/withendpointfailover):
+Same-call HTTP retry is **off by default**. Omitting `withRetry` means one attempt per call, with no retry budget created or credited. Selection on later calls is unchanged: `pickFirstBalancer` can still advance after a failed call. `withRetry()` is equivalent to `withRetry({})` and enables two total attempts for connection failures on `GET`, `HEAD`, `OPTIONS`, and `TRACE`.
+
+This follows the Go ecosystem: [gRPC places `retryPolicy` in service configuration](https://grpc.io/docs/guides/retry/), alongside load-balancing configuration, while [go-kit `lb.Retry(max, timeout, balancer)`](https://pkg.go.dev/github.com/go-kit/kit/sd/lb#Retry) explicitly wraps a balancer. Neither applies an application retry policy by default. gRPC's retry policy requires backoff settings and uses ±0.2 jitter; [Envoy defaults to a 25 ms base and a maximum ten times that base](https://www.envoyproxy.io/docs/envoy/latest/api-v3/config/route/v3/route_components.proto#config-route-v3-retry-policy-retrybackoff). Defjs uses 25 ms, factor 2, a 250 ms cap, and ±20% jitter. gRPC can perform transparent retries for low-level races; Defjs does not emulate those.
 
 <include cwd lang="typescript">
-  examples/client/endpoint-failover.ts#example
+  examples/client/http-retry.ts#example
 </include>
 
-- **Retry conditions (`retryOn`)**: Defaults to `["connect-failure"]`. You can add `"gateway-error"` (uncoded `502`/`503`/`504`, or a `502`/`503`/`504` whose error body failed `RES_*` decoding) and `"attempt-timeout"` (when `attemptTimeoutMs` is set).
-- **Per-attempt vs. whole-call timeout**: `attemptTimeoutMs` bounds a single attempt from Fetch invocation through body decoding; the caller's `client({ signal: AbortSignal.timeout(ms) })` bounds the entire call across all attempts.
-- **Finagle / Linkerd retry budget**: All calls on a client share a token-bucket retry budget (`percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, `ttlMs: 10000`) so retries cannot amplify traffic by more than ~20% during a cluster-wide outage. Set `retryBudget: false` to disable the cap.
-- **Browser offline hint**: When `navigator.onLine === false`, connection failures are reported as `{ attempted: false }` and do not advance balancers or trigger failover.
+- **Total attempts (`maxAttempts`)**: Includes the original, matching gRPC `retryPolicy.maxAttempts` and go-kit `lb.Retry`'s `max`. It must be a safe integer at least 1; `1` means no retry. There is no configured upper bound, but every endpoint is tried at most once. Streaming request bodies never retry. `methods` is case-insensitive; `methods: []` disables retries for all methods.
+- **Retry conditions (`on`)**: Defaults to `["connect-failure"]`. Add `"gateway-error"` for `NET_UNAVAILABLE` (HTTP `502`/`503`/`504`), including gateway error bodies rejected by `RES_*` decoding, and `"attempt-timeout"` when `attemptTimeoutMs` is configured. An eligible retry rebuilds the request and reruns the entire interceptor chain from its outermost layer.
+- **Backoff (`delayMs`, `factor`, `jitter`, `maxDelayMs`)**: Before retry n, wait for `delayMs × factor^(n−1)` with multiplicative jitter, capped after jitter and rounding. Defaults are `25`, `2`, `0.2`, and `250`. `delayMs: 0` skips waiting. As with reconnect, `delayMs` must be finite and non-negative, `factor` finite and positive, `jitter` finite in `[0, 1]`, and `maxDelayMs` non-negative finite or positive `Infinity`. The platform timer cap still applies.
+- **Per-attempt vs. whole-call timeout**: `attemptTimeoutMs` bounds one attempt from Fetch invocation through body decoding. The caller's `client({ signal: AbortSignal.timeout(ms) })` covers every attempt **and backoff wait**. Cancellation during a wait returns the caller's cancellation fault without another pick.
+- **Finagle / Linkerd retry budget (`budget`)**: Each client configuration owns a budget, shared only by derived clients using that same configuration, not by clients sharing a balancer. Defaults are `percentCanRetry: 0.2`, `minRetriesPerSecond: 10`, and `ttlMs: 10000`: 20% of original traffic plus the reserve. Credits and debits expire lazily in ten TTL/10 slices. A retry withdraws before waiting; an exhausted budget neither waits nor retries. Set `budget: false` to remove the cap.
+- **Browser offline hint**: When `navigator.onLine === false`, connection failures report `{ attempted: false }` and do not advance balancers or trigger retries.
+
+A later `withRetry` replaces the policy. `withRetry()` and `withRetry(undefined)` behave like `withRetry({})`. To turn retries off after enabling them, pass `withRetry({ maxAttempts: 1 })`. Invalid retry settings return `REQ_OPTIONS_INVALID` with `Invalid retry options` when the HTTP operation runs.
 
 ## 3. Passive circuit breaking and active health checks (`outlierDetection`)
 
@@ -80,23 +86,28 @@ Customize or disable this policy with [`withEndpointFailover(options)`](/api/cor
 </Tab>
 </Tabs>
 
-1. **Consecutive failures**: After `consecutiveFailures` (default `5`) of `NET_UNREACHABLE` or HTTP `500+`, the endpoint is ejected for `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` to `60000ms`) plus up to `50%` uniform positive jitter.
-2. **Single-probe recovery**: Once the penalty expires, a single request probes the host. If its transport handshake (`end`: HTTP/SSE headers or WebSocket `open`) succeeds, normal traffic resumes immediately and the penalty level resets to `0`; if it fails, the penalty doubles.
+1. **Consecutive failures**: The default classifier counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`. After `consecutiveFailures` (default `5`) consecutive counted outcomes, the endpoint is ejected for `min(minPenaltyMs × 2^level, maxPenaltyMs)` (`1000ms` to `60000ms`) plus up to `50%` uniform positive jitter.
+2. **Single-probe recovery**: Once the penalty expires, a single request probes the host. If its peer response begins (`end`) without a counted failure, normal traffic resumes immediately and the penalty level resets to `0`; if it fails, the penalty doubles.
 3. **Panic-mode fail-open**: If every configured endpoint is ejected or marked unhealthy, the balancer fails open to the client's candidate list rather than dropping all traffic locally.
 
 ## 4. Transport accounting lifecycle (`pick` → `start` → `end` → `done`)
 
-Custom balancers implement synchronous `pick(context)` and optional `start()`, `end(info)`, and `done(info)` callbacks:
+Custom balancers implement synchronous `pick(info)` and optional `start()`, `end(info)`, and `done(info)` callbacks. `PickInfo` contains only candidate `endpoints` and the optional definition `operation`; it has no transport discriminator. The transport translates its facts into neutral `DoneInfo.code` outcomes. Built-in balancers never read `status`; this raw response information is retained only for custom balancers. `start` runs before the attempt, `end` when the peer response begins or a pre-response failure occurs, and `done` at completion. A later body failure can therefore change the final code without changing the earlier `end` sample:
 
-| Physical transport outcome                                       | Final `done(info)` sample                                  |
-| ---------------------------------------------------------------- | ---------------------------------------------------------- |
-| HTTP response body truncates mid-stream                          | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
-| SSE handshake succeeds, then stream `reader.read()` rejects      | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| SSE normal EOF, handshake decode failure, or queue limit         | `{ attempted: true, status }`                              |
-| Opened WebSocket closes with code `1006` or `wasClean === false` | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
-| Opened WebSocket closes cleanly                                  | `{ attempted: true }`                                      |
-| Caller cancellation or manual stream/socket close                | `{ attempted: false }`                                     |
-| Caller deadline expires after attempt started                    | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+| Physical transport outcome                                          | Final `done(info)` sample                                  |
+| ------------------------------------------------------------------- | ---------------------------------------------------------- |
+| HTTP/SSE response status 502, 503, or 504                           | `{ attempted: true, code: "NET_UNAVAILABLE", status }`     |
+| HTTP/SSE other response status at least 500                         | `{ attempted: true, code: "NET_SERVER_ERROR", status }`    |
+| HTTP/SSE response status 2xx, 3xx, or 4xx (including 429)           | `{ attempted: true, status }`                              |
+| HTTP response body truncates mid-stream                             | `{ attempted: true, code: "NET_BODY_INCOMPLETE", status }` |
+| SSE handshake succeeds, then stream `reader.read()` rejects         | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| SSE normal EOF, successful-handshake decode failure, or queue limit | `{ attempted: true, status }`                              |
+| Opened WebSocket closes with code `1006` or `wasClean === false`    | `{ attempted: true, code: "NET_UNREACHABLE" }`             |
+| Opened WebSocket closes cleanly                                     | `{ attempted: true }`                                      |
+| Caller cancellation or manual stream/socket close                   | `{ attempted: false }`                                     |
+| Caller deadline expires after attempt started                       | `{ attempted: true, code: "NET_TIMEOUT" }`                 |
+
+Handshake decoding failures retain the neutral outcome derived from the handshake status (for example, `NET_UNAVAILABLE` with status `503`). An incomplete HTTP body instead retains `NET_BODY_INCOMPLETE` and its raw status, even for a gateway response; it is not counted by default outlier detection.
 
 ## Related reading
 

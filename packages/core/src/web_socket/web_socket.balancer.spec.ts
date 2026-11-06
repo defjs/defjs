@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import {
-  type EndpointBalancer,
-  type EndpointDoneInfo,
-  type EndpointPickInfo,
-  ERR_NO_ENDPOINT,
+  type Balancer,
+  type DoneInfo,
+  type PickInfo,
+  ERR_NO_CANDIDATE,
   pickFirstBalancer,
   outlierDetection,
 } from "../balancer";
 import {
   createClient,
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
   withInterceptors,
   withWebSocketHandle,
   type WebSocketHandleConstructor,
@@ -34,27 +34,27 @@ const room = defineWebSocket({
 type ScriptStep = { endpoint: string } | { error: Error };
 
 function scriptedBalancer(script: readonly ScriptStep[]): {
-  balancer: EndpointBalancer;
-  dones: EndpointDoneInfo[];
-  ends: EndpointDoneInfo[];
+  balancer: Balancer;
+  dones: DoneInfo[];
+  ends: DoneInfo[];
   pending: () => number;
   pendingAtPick: number[];
-  picks: EndpointPickInfo[];
+  picks: PickInfo[];
 } {
-  const picks: EndpointPickInfo[] = [];
-  const dones: EndpointDoneInfo[] = [];
-  const ends: EndpointDoneInfo[] = [];
+  const picks: PickInfo[] = [];
+  const dones: DoneInfo[] = [];
+  const ends: DoneInfo[] = [];
   const pendingAtPick: number[] = [];
   let pending = 0;
   let index = 0;
-  const balancer: EndpointBalancer = {
+  const balancer: Balancer = {
     pick(info) {
       picks.push(info);
       pendingAtPick.push(pending);
       const step = script[index] ?? script[script.length - 1];
       index += 1;
       if (step === undefined || "error" in step) {
-        return [step?.error ?? ERR_NO_ENDPOINT, undefined];
+        return [step?.error ?? ERR_NO_CANDIDATE, undefined];
       }
       pending += 1;
       return [
@@ -205,12 +205,12 @@ function resetSockets(): void {
 }
 
 function clientFor(
-  balancer: EndpointBalancer,
+  balancer: Balancer,
   handle: WebSocketHandleConstructor = ControllableSocket,
 ) {
   return createClient(
     withEndpoint(PRIMARY, SECONDARY),
-    withEndpointBalancer(balancer),
+    withBalancer(balancer),
     withWebSocketHandle(handle),
   );
 }
@@ -248,9 +248,8 @@ describe("web socket endpoint balancer", () => {
 
     expect(fault?.code).toBe("NET_UNREACHABLE");
     expect(record.picks).toHaveLength(2);
-    expect(record.picks.every((info) => info.transport === "websocket")).toBe(
-      true,
-    );
+    for (const info of record.picks)
+      expect(info).not.toHaveProperty("transport");
     expect(record.picks.every((info) => info.operation === "room.join")).toBe(
       true,
     );
@@ -266,10 +265,10 @@ describe("web socket endpoint balancer", () => {
 
     resetSockets();
     const replaced = scriptedBalancer([{ endpoint: PRIMARY }]);
-    let donesWhenNextReturned: EndpointDoneInfo[] = [];
+    let donesWhenNextReturned: DoneInfo[] = [];
     const switched = createClient(
       withEndpoint(PRIMARY),
-      withEndpointBalancer(replaced.balancer),
+      withBalancer(replaced.balancer),
       withWebSocketHandle(ControllableSocket),
       withInterceptors(
         createWebSocketInterceptor((request, next) => {
@@ -380,7 +379,7 @@ describe("web socket endpoint balancer", () => {
     const [fault] = await failing(clientFor(built.balancer));
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
     expect(built.picks).toHaveLength(1);
-    expect(built.picks[0]?.transport).toBe("websocket");
+    expect(built.picks[0]).not.toHaveProperty("transport");
     expect(built.picks[0]?.operation).toBe("room.join");
     expect(built.dones).toEqual([{ attempted: false }]);
     expect(built.pending()).toBe(0);
@@ -480,10 +479,10 @@ describe("web socket endpoint balancer", () => {
 
   test("should keep a single done when a replaced base is an illegal URL or closes cleanly", async () => {
     const illegal = scriptedBalancer([{ endpoint: PRIMARY }]);
-    let seenAtReturn: EndpointDoneInfo[] = [];
+    let seenAtReturn: DoneInfo[] = [];
     const illegalClient = createClient(
       withEndpoint(PRIMARY),
-      withEndpointBalancer(illegal.balancer),
+      withBalancer(illegal.balancer),
       withWebSocketHandle(ControllableSocket),
       withInterceptors(
         createWebSocketInterceptor((request, next) => {
@@ -504,7 +503,7 @@ describe("web socket endpoint balancer", () => {
     const clean = scriptedBalancer([{ endpoint: PRIMARY }]);
     const cleanClient = createClient(
       withEndpoint(PRIMARY),
-      withEndpointBalancer(clean.balancer),
+      withBalancer(clean.balancer),
       withWebSocketHandle(ControllableSocket),
       withInterceptors(
         createWebSocketInterceptor((request, next) =>
@@ -634,7 +633,7 @@ describe("web socket endpoint balancer", () => {
     behaviors = ["close-before-open"];
     const beforeOpen = scriptedBalancer([
       { endpoint: PRIMARY },
-      { error: ERR_NO_ENDPOINT },
+      { error: ERR_NO_CANDIDATE },
     ]);
     const [fault] = await room(
       clientFor(beforeOpen.balancer)({
@@ -642,7 +641,7 @@ describe("web socket endpoint balancer", () => {
       }),
     );
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBe(ERR_NO_ENDPOINT);
+    expect(fault?.cause).toBe(ERR_NO_CANDIDATE);
     expect(beforeOpen.dones).toEqual([
       { attempted: true, code: "NET_UNREACHABLE" },
     ]);
@@ -652,7 +651,7 @@ describe("web socket endpoint balancer", () => {
     // @ts-expect-error shuffle is a boolean, not a string
     const invalid = pickFirstBalancer({ shuffle: "no" });
     let picks = 0;
-    const afterOpen: EndpointBalancer = {
+    const afterOpen: Balancer = {
       pick(info) {
         picks += 1;
         if (picks === 1) {
@@ -669,7 +668,7 @@ describe("web socket endpoint balancer", () => {
         return invalid.pick(info);
       },
     };
-    const afterOpenDones: EndpointDoneInfo[] = [];
+    const afterOpenDones: DoneInfo[] = [];
     const pending = room(
       clientFor(afterOpen)({ reconnect: { attempts: 1, delayMs: 0 } }),
     );
@@ -692,7 +691,7 @@ describe("web socket endpoint balancer", () => {
     resetSockets();
     const opened = scriptedBalancer([
       { endpoint: PRIMARY },
-      { error: ERR_NO_ENDPOINT },
+      { error: ERR_NO_CANDIDATE },
     ]);
     const openedPending = room(
       clientFor(opened.balancer)({ reconnect: { attempts: 1, delayMs: 0 } }),
@@ -714,16 +713,16 @@ describe("web socket endpoint balancer", () => {
     if (typeof nested !== "object" || nested === null || !("cause" in nested)) {
       throw new Error("expected a nested cause");
     }
-    expect(nested.cause).toBe(ERR_NO_ENDPOINT);
+    expect(nested.cause).toBe(ERR_NO_CANDIDATE);
     expect(opened.dones).toEqual([{ attempted: true }]);
     expect(opened.pending()).toBe(0);
   });
 
   test("should not call done when the initial pick fails", async () => {
-    const record = scriptedBalancer([{ error: ERR_NO_ENDPOINT }]);
+    const record = scriptedBalancer([{ error: ERR_NO_CANDIDATE }]);
     const [fault] = await room(clientFor(record.balancer));
     expect(fault?.code).toBe("REQ_BUILD_FAILED");
-    expect(fault?.cause).toBe(ERR_NO_ENDPOINT);
+    expect(fault?.cause).toBe(ERR_NO_CANDIDATE);
     expect(record.dones).toEqual([]);
     expect(record.picks).toHaveLength(1);
     expect(record.pending()).toBe(0);
@@ -738,9 +737,9 @@ describe("web socket endpoint balancer", () => {
     "default pick-first advances on close-only code %s with wasClean %s",
     async (code, wasClean) => {
       const child = pickFirstBalancer();
-      const dones: EndpointDoneInfo[] = [];
-      const ends: EndpointDoneInfo[] = [];
-      const balancer: EndpointBalancer = {
+      const dones: DoneInfo[] = [];
+      const ends: DoneInfo[] = [];
+      const balancer: Balancer = {
         pick(info) {
           const [error, choice] = child.pick(info);
           if (error) return [error, undefined];
@@ -912,7 +911,7 @@ describe("web socket endpoint balancer", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(0);
     const picked: string[] = [];
-    const dones: EndpointDoneInfo[] = [];
+    const dones: DoneInfo[] = [];
     const balancer = outlierDetection({
       pick(info) {
         const endpoint = info.endpoints[0] ?? "";
@@ -963,7 +962,7 @@ describe("web socket endpoint balancer", () => {
       const record = scriptedBalancer([{ endpoint: PRIMARY }]);
       const client = createClient(
         withEndpoint(PRIMARY),
-        withEndpointBalancer(record.balancer),
+        withBalancer(record.balancer),
         withWebSocketHandle(ControllableSocket),
         ...(mode === "replaced"
           ? [

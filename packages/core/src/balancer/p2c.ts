@@ -1,5 +1,5 @@
-import type { EndpointBalancer } from "./balancer";
-import { ERR_NO_ENDPOINT, balancerOptionError } from "./balancer";
+import type { Balancer } from "./balancer";
+import { ERR_NO_CANDIDATE, balancerOptionError } from "./balancer";
 import {
   isBalancerOptionRecord,
   positiveOption,
@@ -27,7 +27,7 @@ interface LoadState {
  * favor the first draw. `choiceCount` is an integer at least 2, capped at 10.
  * `defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be
  * positive and finite. Pending starts at transport `start` and releases at `end`,
- * the response-header or socket-open boundary (tower CompleteOnResponse).
+ * the beginning of a peer response (tower CompleteOnResponse).
  * RTT is the real start-to-end duration for every transport, including failures.
  * Higher samples replace the estimate; lower samples blend exponentially, as in
  * tower PeakEwma. Idle estimates decay toward zero. A done without end releases
@@ -35,15 +35,18 @@ interface LoadState {
  * quickly failing endpoints; there is no synthetic failure penalty.
  * Unlike Envoy and gRPC A48, draws are without replacement.
  *
- * @param options - Captured load settings and optional health filtering.
+ * @param options - Captured load settings, optional health filtering.
  * @returns A new independent balancer; invalid options are returned by every pick.
  * @group client
  * @see {@link outlierDetection}
  * @see {@link roundRobinBalancer}
  */
-export function p2cBalancer(options?: P2cOptions): EndpointBalancer {
+export function p2cBalancer(options?: P2cOptions): Balancer {
   const invalid = invalidP2c(options);
-  if (invalid !== undefined) return { pick: () => [invalid, undefined] };
+  if (invalid !== undefined)
+    return {
+      pick: () => [invalid, undefined],
+    };
   const load = options?.load ?? "peakEwma";
   const choiceCount = Math.min(options?.choiceCount ?? 2, 10);
   const defaultRttMs = options?.defaultRttMs ?? 30;
@@ -63,9 +66,9 @@ export function p2cBalancer(options?: P2cOptions): EndpointBalancer {
     state.updatedAt = now;
     return state.rttMs * (state.pending + 1);
   }
-  const child: EndpointBalancer = {
+  const child: Balancer = {
     pick(info) {
-      if (info.endpoints.length === 0) return [ERR_NO_ENDPOINT, undefined];
+      if (info.endpoints.length === 0) return [ERR_NO_CANDIDATE, undefined];
       const now = Date.now();
       for (const endpoint of info.endpoints) stateFor(endpoint, now);
       if (states.size > 256) {
@@ -91,7 +94,7 @@ export function p2cBalancer(options?: P2cOptions): EndpointBalancer {
         if (chosen === undefined || value < chosen.cost)
           chosen = { endpoint, state, cost: value };
       }
-      if (chosen === undefined) return [ERR_NO_ENDPOINT, undefined];
+      if (chosen === undefined) return [ERR_NO_CANDIDATE, undefined];
       const state = chosen.state;
       let startedAt: number | undefined;
       let ended = false;

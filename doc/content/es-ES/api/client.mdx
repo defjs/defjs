@@ -28,17 +28,11 @@ Todos los helpers devuelven `ClientOption`. Una llamada posterior sustituye a un
 
 Copia las URLs base candidatas en el orden de primera aparición y descarta una copia posterior de la misma cadena. Un `withEndpoint` posterior sustituye la lista. No comprueba las URLs y no sustituye el balanceador. Una lista vacía es un valor admitido y hace fallar la llamada con `REQ_BUILD_FAILED`.
 
-### withEndpointBalancer()
+### withBalancer()
 
-<ApiSignature name="withEndpointBalancer" />
+<ApiSignature name="withBalancer" />
 
 Sustituye el balanceador usado en las llamadas posteriores. El objeto se conserva por referencia. Sin esta opción, cada cliente recibe su propio `pickFirstBalancer()`.
-
-### withEndpointFailover()
-
-<ApiSignature name="withEndpointFailover, EndpointFailoverCondition, EndpointFailoverOptions" />
-
-Controla el failover HTTP dentro de una llamada. Un presupuesto de retry Finagle/Linkerd compartido por el cliente vale de forma predeterminada el 20 % más una reserva de 10 retries por segundo durante un TTL de 10 s; `retryBudget: false` desactiva ese límite. Los créditos y los débitos caducan de forma perezosa en diez cortes de TTL/10. El valor por defecto es un intento adicional ante un fallo de conexión para GET, HEAD, OPTIONS y TRACE. `attempts: 0` o `methods: []` lo desactiva. Una opción posterior sustituye la política; los campos omitidos usan los valores por defecto. Los cuerpos de solicitud en streaming nunca se reproducen. `attemptTimeoutMs` cubre Fetch, la lectura del cuerpo y la decodificación de un intento, mientras que la señal del llamador cubre todos los intentos. Consulta [Varios endpoints](/es-ES/docs/client#multiple-endpoints).
 
 ### withInterceptors()
 
@@ -201,7 +195,7 @@ Los campos mostrados son `sse` y `webSocket`. Los otros siete — `endpoints`, `
 
 ### ClientConfig
 
-La instantánea resuelta que mutan los helpers de opción y lee una operación: `ClientOptions` después de los valores por defecto, con `http.handle`, `interceptors`, `sse` (un `ClientSSEConfig`), `webSocket`, `endpointBalancer` y `endpointFailover` siempre presentes. `endpointBalancer` vale por defecto un `pickFirstBalancer()` nuevo para ese cliente. No es un campo de [`RequestOptions`](/es-ES/api/core/requestoptions-type).
+La instantánea resuelta que mutan los helpers de opción y lee una operación: `ClientOptions` después de los valores por defecto, con `http.handle`, `interceptors`, `sse` (un `ClientSSEConfig`), `webSocket` y `balancer` siempre presentes. `http.retry` es opcional y vale por defecto `undefined` (un intento, sin presupuesto); `withRetry(options?)` lo configura. `balancer` vale por defecto un `pickFirstBalancer()` nuevo para ese cliente. No es un campo de [`RequestOptions`](/es-ES/api/core/requestoptions-type).
 
 ### ClientSSEConfig
 
@@ -227,7 +221,7 @@ El constructor que se pasa a `withWebSocketHandle`. Debe exponer la constante de
 
 <ApiSignature name="pickFirstBalancer, roundRobinBalancer" />
 
-`pickFirstBalancer` avanza ante `NET_UNREACHABLE` o una respuesta 502/503/504 sin `code` de fault. Su `failbackMs` opcional, positivo y finito, habilita una sola sonda concurrente del primer endpoint tras el intervalo. Los fallos de conexión de los métodos HTTP seguros también hacen failover dentro de la misma llamada de forma predeterminada. `roundRobinBalancer` recorre la lista. `weights` es opcional. Consulta [Varios endpoints](/es-ES/docs/client#multiple-endpoints).
+`pickFirstBalancer` avanza ante `NET_UNREACHABLE` o `NET_UNAVAILABLE` (HTTP 502, 503 o 504). Su `failbackMs` opcional, positivo y finito, habilita una sola sonda concurrente del primer endpoint tras el intervalo. Los reintentos HTTP son una política aparte del cliente, configurada con `withRetry`. `roundRobinBalancer` recorre la lista. `weights` es opcional. Consulta [Varios endpoints](/es-ES/docs/client#multiple-endpoints).
 
 ### p2cBalancer()
 
@@ -239,12 +233,26 @@ Muestrea candidatos distintos sin reemplazo (a diferencia de Envoy/gRPC A48) y e
 
 <ApiSignature name="outlierDetection, OutlierDetectionOptions" />
 
-Envuelve un hijo con circuit breaking de fallos consecutivos al estilo de Linkerd. Round robin y p2c lo activan de forma predeterminada (como en Finagle); `false` lo desactiva. Pick-first lo activa con un objeto. Tras cinco fallos, las penalizaciones empiezan en 1000 ms, se duplican tras una sonda fallida, suman jitter positivo de hasta 0,5 veces la base y tienen un tope de 60000 ms. La expiración admite una sola sonda, decidida en `end`, o en `done` si no llegó ningún `end`. El éxito reinicia el backoff; la cancelación solo libera el hueco. No hay timeout que suponga éxito, ni cuota, ni protección del último host, ni rejilla de evaluación, ni criterio de porcentaje, ni slow start. `isHealthy` lee el estado en caché de la aplicación y nunca cancela una penalización. Todos los hosts pueden cortar; el fail-open local a la lista, al estilo de Finagle, sigue enviando solicitudes. A diferencia de Envoy/gRPC A50, no hay cuota de expulsión. Consulta [Filtrado de salud y p2c](/es-ES/docs/client#health-filtering-and-p2c).
+Envuelve un hijo con circuit breaking de fallos consecutivos al estilo de Linkerd. Round robin y p2c lo activan de forma predeterminada (como en Finagle); `false` lo desactiva. Pick-first lo activa con un objeto. El clasificador por defecto cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`. Tras cinco fallos, las penalizaciones empiezan en 1000 ms, se duplican tras una sonda fallida, suman jitter positivo de hasta 0,5 veces la base y tienen un tope de 60000 ms. La expiración admite una sola sonda, decidida en `end`, o en `done` si no llegó ningún `end`. El éxito reinicia el backoff; la cancelación solo libera el hueco. No hay timeout que suponga éxito, ni cuota, ni protección del último host, ni rejilla de evaluación, ni criterio de porcentaje, ni slow start. `isHealthy` lee el estado en caché de la aplicación y nunca cancela una penalización. Todos los hosts pueden cortar; el fail-open local a la lista, al estilo de Finagle, sigue enviando solicitudes. A diferencia de Envoy/gRPC A50, no hay cuota de expulsión. Consulta [Filtrado de salud y p2c](/es-ES/docs/client#health-filtering-and-p2c).
 
-### EndpointBalancer
+### withRetry()
 
-<ApiSignature name="EndpointBalancer, EndpointPickOutcome, EndpointTransport, EndpointPickInfo, EndpointPickResult, EndpointFaultCode, EndpointDoneInfo, ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="withRetry, RetryCondition, RetryOptions" />
 
-`pick` devuelve una tupla error-first. `start` opcional se ejecuta de forma síncrona como máximo una vez, justo antes de que arranque el transporte elegido; `end` opcional se ejecuta una vez después de `start`, en las cabeceras de Fetch o en el `open` de WebSocket (o ante un fallo antes de la respuesta), y `done` opcional se ejecuta una vez al completar. Fetch no puede exponer el primer frame de cuerpo de Linkerd ni los límites de stream de Envoy. Las excepciones y los rechazos de thenable de todos los hooks quedan contenidos. `ERR_NO_ENDPOINT` es solo una `cause` de `REQ_BUILD_FAILED`. No es un `FaultCode`. [`isNoEndpointCause`](/es-ES/api/core/isnoendpointcause) lo reconoce entre copias de Core.
+Habilita el reintento HTTP en la misma llamada, con independencia de la selección de endpoint. Omitir `withRetry` significa un intento y ningún presupuesto. `withRetry()` equivale a `withRetry({})` y vale por defecto `maxAttempts: 2` (incluido el original), `on: ["connect-failure"]` y los métodos seguros `GET`, `HEAD`, `OPTIONS`, `TRACE`. Los métodos no distinguen mayúsculas y minúsculas; `[]` desactiva los reintentos. `maxAttempts` es un entero seguro de al menos 1, y cada endpoint se prueba como máximo una vez. `"gateway-error"` incluye `NET_UNAVAILABLE` (HTTP 502/503/504) y los cuerpos de pasarela rechazados por la decodificación `RES_*`; `"attempt-timeout"` usa `attemptTimeoutMs`. Los cuerpos de solicitud en streaming nunca se reintentan.
+
+El backoff vale por defecto `delayMs: 25`, `factor: 2`, `jitter: 0.2`, `maxDelayMs: 250`, con la misma semántica de campos que la reconexión de SSE/WebSocket. `delayMs: 0` omite la espera. `attemptTimeoutMs` acota Fetch, la lectura del cuerpo y la decodificación de un intento; la señal del llamador cubre la llamada entera, incluidas las esperas del backoff.
+
+El presupuesto de Finagle, propio del cliente, vale por defecto el 20 % más una reserva de 10 reintentos por segundo durante un TTL de 10 s. Los créditos y los débitos caducan de forma perezosa en diez cortes de TTL/10. `budget: false` quita el límite. Los clientes derivados que comparten una configuración comparten su presupuesto; los clientes distintos no, aunque compartan un balanceador. Las opciones no válidas devuelven `REQ_OPTIONS_INVALID` con `Invalid retry options` cuando se ejecuta HTTP. La opción captura los campos propios, los arrays y el presupuesto anidado en el momento de aplicarla. `withRetry()` y `withRetry(undefined)` se comportan como `withRetry({})`. Un `withRetry` posterior sustituye la política; `withRetry({ maxAttempts: 1 })` desactiva los reintentos después de haberlos habilitado. Los balanceadores y los envoltorios de salud no tienen ajustes de reintento. Consulta [Balanceo de carga y conmutación por error](/es-ES/docs/load-balancing).
+
+<include cwd>examples/client/http-retry.ts#example</include>
+
+### Balancer
+
+<ApiSignature name="Balancer, PickOutcome, PickInfo, PickResult, PickFaultCode, DoneInfo, ERR_NO_CANDIDATE, isNoCandidateCause" />
+
+`pick` devuelve una tupla error-first. `start` opcional se ejecuta de forma síncrona como máximo una vez, justo antes de que arranque el transporte elegido; `end` opcional se ejecuta una vez después de `start`, cuando comienza la respuesta del par (o se produce un fallo previo a la respuesta), y `done` opcional se ejecuta una vez al completar. Fetch no puede exponer el primer frame de cuerpo de Linkerd ni los límites de stream de Envoy. Las excepciones y los rechazos de thenable de todos los hooks quedan contenidos. `ERR_NO_CANDIDATE` es solo una `cause` de `REQ_BUILD_FAILED`. No es un `FaultCode`. [`isNoCandidateCause`](/es-ES/api/core/isnocandidatecause) lo reconoce entre copias de Core.
+
+El balanceador solo ve resultados neutros; cada transporte traduce sus propios hechos a `DoneInfo.code`. La detección de outliers por defecto cuenta `NET_UNREACHABLE`, `NET_UNAVAILABLE` y `NET_SERVER_ERROR`. El `DoneInfo.status` crudo se conserva solo para balanceadores personalizados y las estrategias integradas nunca lo leen. `PickInfo` contiene `endpoints` y un `operation` opcional, sin discriminador de transporte.
 
 Consulta la [guía del Cliente](/es-ES/docs/client).

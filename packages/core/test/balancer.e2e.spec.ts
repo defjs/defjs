@@ -1,7 +1,7 @@
 import type { ServerWebSocket } from "bun";
 import { expect, inject, test } from "vitest";
 import {
-  ERR_NO_ENDPOINT,
+  ERR_NO_CANDIDATE,
   createClient,
   createHttpInterceptor,
   defineEventStream,
@@ -9,15 +9,13 @@ import {
   defineWebSocket,
   struct,
   withEndpoint,
-  withEndpointBalancer,
+  withRetry,
+  withBalancer,
+  pickFirstBalancer,
   withInterceptors,
   withSSEReconnect,
 } from "../src";
-import type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  EndpointPickInfo,
-} from "../src";
+import type { Balancer, DoneInfo, PickInfo } from "../src";
 
 async function refusedUrl(): Promise<string> {
   const server = Bun.serve({
@@ -31,17 +29,17 @@ async function refusedUrl(): Promise<string> {
 }
 
 function recordingBalancer(): {
-  balancer: EndpointBalancer;
-  dones: EndpointDoneInfo[];
+  balancer: Balancer;
+  dones: DoneInfo[];
   picks: string[];
 } {
   const picks: string[] = [];
-  const dones: EndpointDoneInfo[] = [];
-  const balancer: EndpointBalancer = {
-    pick(info: EndpointPickInfo) {
+  const dones: DoneInfo[] = [];
+  const balancer: Balancer = {
+    pick(info: PickInfo) {
       const endpoint = info.endpoints[0];
       if (endpoint === undefined) {
-        return [ERR_NO_ENDPOINT, undefined];
+        return [ERR_NO_CANDIDATE, undefined];
       }
       picks.push(endpoint);
       return [
@@ -58,12 +56,14 @@ function recordingBalancer(): {
   return { balancer, dones, picks };
 }
 
-test("default GET fails over to the fixture within the same call", async () => {
+test("opted-in GET fails over to the fixture within the same call", async () => {
   const refused = await refusedUrl();
   const fixture = inject("testServerHost");
   const seen: string[] = [];
   const client = createClient(
     withEndpoint(refused, fixture),
+    withBalancer(pickFirstBalancer()),
+    withRetry({ delayMs: 0 }),
     withInterceptors(
       createHttpInterceptor(async (request, next) => {
         const endpoint = request.baseEndpoint;
@@ -95,7 +95,7 @@ test("re-picks after an event-stream read failure and the next attempt hits the 
   const recorded = recordingBalancer();
   const client = createClient(
     withEndpoint(fixture),
-    withEndpointBalancer(recorded.balancer),
+    withBalancer(recorded.balancer),
     withSSEReconnect({ attempts: 1, delayMs: 0 }),
   );
   const useDrop = defineEventStream({
@@ -149,7 +149,7 @@ test("re-picks on reconnect and reports the opened attempt once", async () => {
   const recorded = recordingBalancer();
   const client = createClient(
     withEndpoint(fixture),
-    withEndpointBalancer(recorded.balancer),
+    withBalancer(recorded.balancer),
   );
   const useSocket = defineWebSocket({
     builder: (input) => ({ query: input }),
@@ -256,7 +256,7 @@ test("health filtering attributes each same-call failover attempt to its own end
   const { outlierDetection } = await import("../src");
   const refused = await refusedUrl();
   const fixture = inject("testServerHost");
-  const samples: { endpoint: string; report: EndpointDoneInfo }[] = [];
+  const samples: { endpoint: string; report: DoneInfo }[] = [];
   const choices: string[][] = [];
   let selected = "";
   const balancer = outlierDetection(
@@ -276,8 +276,9 @@ test("health filtering attributes each same-call failover attempt to its own end
     },
   );
   const client = createClient(
+    withRetry({ delayMs: 0 }),
     withEndpoint(refused, fixture),
-    withEndpointBalancer(balancer),
+    withBalancer(balancer),
   );
   const get = defineRequest({
     method: "GET",
@@ -300,15 +301,15 @@ test("health filtering attributes each same-call failover attempt to its own end
 });
 
 test("default round robin stops routing a persistent 503 replica after five failures", async () => {
-  const { roundRobinBalancer, withEndpointFailover } = await import("../src");
+  const { roundRobinBalancer } = await import("../src");
   const fixture = inject("testServerHost");
   const good = `${fixture}/balancer/good`;
   const bad = `${fixture}/balancer/bad`;
   const hits: string[] = [];
   const client = createClient(
     withEndpoint(bad, good),
-    withEndpointBalancer(roundRobinBalancer()),
-    withEndpointFailover({ attempts: 0 }),
+    withBalancer(roundRobinBalancer()),
+
     withInterceptors(
       createHttpInterceptor(async (request, next) => {
         hits.push(request.baseEndpoint ?? "");

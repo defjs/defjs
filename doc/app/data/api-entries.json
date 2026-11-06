@@ -1186,66 +1186,59 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointBalancer",
+    "name": "Balancer",
     "kind": "type",
-    "slug": "core/endpointbalancer-type",
+    "slug": "core/balancer-type",
     "related": []
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointPickOutcome",
+    "name": "PickOutcome",
     "kind": "type",
-    "slug": "core/endpointpickoutcome-type",
+    "slug": "core/pickoutcome-type",
     "related": []
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointTransport",
+    "name": "PickInfo",
     "kind": "type",
-    "slug": "core/endpointtransport-type",
+    "slug": "core/pickinfo-type",
     "related": []
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointPickInfo",
+    "name": "PickResult",
     "kind": "type",
-    "slug": "core/endpointpickinfo-type",
+    "slug": "core/pickresult-type",
     "related": []
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointPickResult",
+    "name": "PickFaultCode",
     "kind": "type",
-    "slug": "core/endpointpickresult-type",
+    "slug": "core/pickfaultcode-type",
     "related": []
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointFaultCode",
+    "name": "DoneInfo",
     "kind": "type",
-    "slug": "core/endpointfaultcode-type",
+    "slug": "core/doneinfo-type",
     "related": []
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointDoneInfo",
-    "kind": "type",
-    "slug": "core/endpointdoneinfo-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "ERR_NO_ENDPOINT",
+    "name": "ERR_NO_CANDIDATE",
     "kind": "constant",
-    "slug": "core/err-no-endpoint",
-    "related": ["@defjs/core:isNoEndpointCause"]
+    "slug": "core/err-no-candidate",
+    "related": ["@defjs/core:isNoCandidateCause"]
   },
   {
     "package": "@defjs/core",
-    "name": "isNoEndpointCause",
+    "name": "isNoCandidateCause",
     "kind": "function",
-    "slug": "core/isnoendpointcause",
-    "related": ["@defjs/core:ERR_NO_ENDPOINT"]
+    "slug": "core/isnocandidatecause",
+    "related": ["@defjs/core:ERR_NO_CANDIDATE"]
   },
   {
     "package": "@defjs/core",
@@ -1263,30 +1256,34 @@
   },
   {
     "package": "@defjs/core",
-    "name": "withEndpointBalancer",
+    "name": "withBalancer",
     "kind": "function",
-    "slug": "core/withendpointbalancer",
+    "slug": "core/withbalancer",
     "related": []
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointFailoverCondition",
-    "kind": "type",
-    "slug": "core/endpointfailovercondition-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EndpointFailoverOptions",
-    "kind": "type",
-    "slug": "core/endpointfailoveroptions-type",
-    "related": []
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withEndpointFailover",
+    "name": "withRetry",
     "kind": "function",
-    "slug": "core/withendpointfailover",
+    "slug": "core/withretry",
+    "related": [
+      "@defjs/core:RetryOptions",
+      "@defjs/core:withSSEReconnect",
+      "@defjs/core:withWebSocketReconnect"
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryCondition",
+    "kind": "type",
+    "slug": "core/retrycondition-type",
+    "related": []
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryOptions",
+    "kind": "type",
+    "slug": "core/retryoptions-type",
     "related": []
   },
   {

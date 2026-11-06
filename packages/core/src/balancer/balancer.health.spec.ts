@@ -1,11 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  EndpointPickInfo,
-} from "./balancer";
+import type { Balancer, DoneInfo, PickInfo } from "./balancer";
 import {
-  ERR_NO_ENDPOINT,
+  ERR_NO_CANDIDATE,
   pickFirstBalancer,
   roundRobinBalancer,
 } from "./balancer";
@@ -24,20 +20,20 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-const failure: EndpointDoneInfo = { attempted: true, code: "NET_UNREACHABLE" };
-const success: EndpointDoneInfo = { attempted: true, status: 200 };
+const failure: DoneInfo = { attempted: true, code: "NET_UNREACHABLE" };
+const success: DoneInfo = { attempted: true, status: 200 };
 function setup(options?: OutlierDetectionOptions) {
   let desired = "a";
   let candidates: readonly string[] = [];
   const childDone = vi.fn();
-  const child: EndpointBalancer = {
+  const child: Balancer = {
     pick(info) {
       candidates = info.endpoints;
       const endpoint = info.endpoints.includes(desired)
         ? desired
         : info.endpoints[0];
       return endpoint === undefined
-        ? [ERR_NO_ENDPOINT, undefined]
+        ? [ERR_NO_CANDIDATE, undefined]
         : [null, { endpoint, done: childDone }];
     },
   };
@@ -45,7 +41,7 @@ function setup(options?: OutlierDetectionOptions) {
   function pick(endpoints: readonly string[] = ["a", "b", "c"]) {
     const result = balancer.pick({
       endpoints,
-      transport: "http",
+
       operation: "read",
     });
     expect(result[0]).toBeNull();
@@ -53,7 +49,7 @@ function setup(options?: OutlierDetectionOptions) {
   }
   function report(
     endpoint: string,
-    info: EndpointDoneInfo = failure,
+    info: DoneInfo = failure,
     endpoints?: readonly string[],
   ) {
     desired = endpoint;
@@ -75,10 +71,9 @@ test("active true never cancels passive ejection and invalid active results only
   h.pick();
   expect(h.candidates()).toEqual(["b", "c"]);
   active = "true";
-  expect(
-    pickEndpoint(h.balancer, { endpoints: ["a", "b"], transport: "http" })[0]
-      ?.code,
-  ).toBe("REQ_OPTIONS_INVALID");
+  expect(pickEndpoint(h.balancer, { endpoints: ["a", "b"] })[0]?.code).toBe(
+    "REQ_OPTIONS_INVALID",
+  );
   active = true;
   h.pick();
   expect(h.candidates()).toEqual(["b", "c"]);
@@ -127,10 +122,9 @@ test("last-available and done never consult isHealthy; a thrown active check onl
   throws = true;
   result?.done?.(failure);
   expect(active).toHaveBeenCalledTimes(calls);
-  expect(
-    pickEndpoint(h.balancer, { endpoints: ["a", "b"], transport: "http" })[0]
-      ?.code,
-  ).toBe("REQ_OPTIONS_INVALID");
+  expect(pickEndpoint(h.balancer, { endpoints: ["a", "b"] })[0]?.code).toBe(
+    "REQ_OPTIONS_INVALID",
+  );
   throws = false;
   h.pick();
   expect(h.candidates()).not.toContain("a");
@@ -139,7 +133,7 @@ test("last-available and done never consult isHealthy; a thrown active check onl
 test("active filtering calls once, preserves full-list identity and forwards metadata", () => {
   const list = Object.freeze(["a", "b"]);
   const active = vi.fn(() => true);
-  let received: EndpointPickInfo | undefined;
+  let received: PickInfo | undefined;
   const h = outlierDetection(
     {
       pick(info) {
@@ -149,15 +143,14 @@ test("active filtering calls once, preserves full-list identity and forwards met
     },
     { isHealthy: active },
   );
-  const info: EndpointPickInfo = {
+  const info: PickInfo = {
     endpoints: list,
     operation: "read",
-    transport: "sse",
   };
   expect(h.pick(info)[0]).toBeNull();
   expect(received?.endpoints).toBe(list);
   expect(received?.operation).toBe("read");
-  expect(received?.transport).toBe("sse");
+  expect(received).not.toHaveProperty("transport");
   expect(active).toHaveBeenCalledTimes(2);
 });
 
@@ -172,9 +165,9 @@ test("active-all-false falls back but still respects passive ejections", () => {
 
 test("uncoded 5xx ejects by default; timeout, incomplete body and unattributed outcomes do not", () => {
   const h = setup({ consecutiveFailures: 2 });
-  h.report("a", { attempted: true, status: 503 });
+  h.report("a", { attempted: true, code: "NET_UNAVAILABLE" });
   h.report("a", { attempted: false });
-  h.report("a", { attempted: true, status: 503 });
+  h.report("a", { attempted: true, code: "NET_UNAVAILABLE" });
   h.pick();
   expect(h.candidates()).not.toContain("a");
   for (const code of ["NET_TIMEOUT", "NET_BODY_INCOMPLETE"] as const) {
@@ -189,18 +182,15 @@ test("built-in configuration matches the exported wrapper and false restores no-
   expect(
     roundRobinBalancer({ outlierDetection: false }).pick({
       endpoints: ["a"],
-      transport: "http",
     })[1]?.done,
   ).toBeUndefined();
   const balancer = pickFirstBalancer({
     outlierDetection: { consecutiveFailures: 1 },
   });
   balancer
-    .pick({ endpoints: ["a", "b"], transport: "http" })[1]
-    ?.done?.({ attempted: true, status: 500 });
-  expect(
-    balancer.pick({ endpoints: ["a", "b"], transport: "http" })[1]?.endpoint,
-  ).toBe("b");
+    .pick({ endpoints: ["a", "b"] })[1]
+    ?.done?.({ attempted: true, code: "NET_SERVER_ERROR" });
+  expect(balancer.pick({ endpoints: ["a", "b"] })[1]?.endpoint).toBe("b");
 });
 
 test("invalid health option types and ranges become persistent REQ_OPTIONS_INVALID", () => {
@@ -238,15 +228,12 @@ test("invalid health option types and ranges become persistent REQ_OPTIONS_INVAL
       // @ts-expect-error invalid health options are rejected at runtime
       pickFirstBalancer({ outlierDetection: options }),
     ]) {
-      const [first] = balancer.pick({ endpoints: ["a"], transport: "http" });
+      const [first] = balancer.pick({ endpoints: ["a"] });
       expect(first).toBeInstanceOf(Error);
-      expect(balancer.pick({ endpoints: [], transport: "http" })[0]).toBe(
-        first,
+      expect(balancer.pick({ endpoints: [] })[0]).toBe(first);
+      expect(pickEndpoint(balancer, { endpoints: ["a"] })[0]?.code).toBe(
+        "REQ_OPTIONS_INVALID",
       );
-      expect(
-        pickEndpoint(balancer, { endpoints: ["a"], transport: "http" })[0]
-          ?.code,
-      ).toBe("REQ_OPTIONS_INVALID");
     }
   }
 });
@@ -269,21 +256,20 @@ test("child errors pass through and unknown child selections still receive their
   expect(
     outlierDetection({ pick: () => [err, undefined] }).pick({
       endpoints: [],
-      transport: "http",
     }),
   ).toEqual([err, undefined]);
   const done = vi.fn();
   const b = outlierDetection({
     pick: () => [null, { endpoint: "external", done }],
   });
-  b.pick({ endpoints: ["a"], transport: "http" })[1]?.done?.(failure);
+  b.pick({ endpoints: ["a"] })[1]?.done?.(failure);
   expect(done).toHaveBeenCalledWith(failure);
 });
 
 test("unfiltered round robin resolves and finishes once without a done callback", () => {
   const [, resolved] = pickEndpoint(
     roundRobinBalancer({ outlierDetection: false }),
-    { endpoints: ["a"], transport: "http" },
+    { endpoints: ["a"] },
   );
   expect(resolved?.finished()).toBe(false);
   resolved?.done({ attempted: false });

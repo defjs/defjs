@@ -5,15 +5,15 @@ import {
   defineEventStream,
   defineWebSocket,
   withEndpoint,
-  withEndpointBalancer,
+  withRetry,
+  withBalancer,
   withInterceptors,
   withHTTPHandle,
-  withEndpointFailover,
   withSSEHandle,
   withWebSocketHandle,
   struct,
 } from "../src";
-import type { EndpointBalancer } from "../src";
+import type { Balancer } from "../src";
 import { makeResponse } from "../src/internal/http_response";
 import { p2cBalancer } from "../src/balancer/p2c";
 
@@ -21,7 +21,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-function recording(events: string[]): EndpointBalancer {
+function recording(events: string[]): Balancer {
   return {
     pick({ endpoints }) {
       const endpoint = endpoints[0] ?? "";
@@ -44,8 +44,9 @@ test("HTTP failover starts and finishes each physical attempt separately", async
   const host = inject("testServerHost");
   const events: string[] = [];
   const client = createClient(
+    withRetry({ delayMs: 0 }),
     withEndpoint("http://127.0.0.1:1", host),
-    withEndpointBalancer(recording(events)),
+    withBalancer(recording(events)),
   );
   expect(
     (await defineRequest({ method: "GET", path: "/json" })(client))[0],
@@ -61,7 +62,7 @@ test.each(["throw", "reject"])(
   "throwing or rejected HTTP start (%s) cannot replace the result",
   async (mode) => {
     let calls = 0;
-    const b: EndpointBalancer = {
+    const b: Balancer = {
       pick: () => [
         null,
         {
@@ -77,7 +78,7 @@ test.each(["throw", "reject"])(
     };
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withEndpointBalancer(b),
+      withBalancer(b),
     );
     expect(
       (await defineRequest({ method: "GET", path: "/json" })(client))[0],
@@ -90,7 +91,7 @@ test("SSE starts immediately before Fetch and closes its one attributed attempt"
   const events: string[] = [];
   const client = createClient(
     withEndpoint(host),
-    withEndpointBalancer(recording(events)),
+    withBalancer(recording(events)),
     withSSEHandle(async (...args) => {
       expect(events).toEqual([`start:${host}`]);
       return fetch(...args);
@@ -120,7 +121,7 @@ test("WebSocket starts before constructing the native socket", async () => {
   }
   const client = createClient(
     withEndpoint(host),
-    withEndpointBalancer(recording(events)),
+    withBalancer(recording(events)),
     withWebSocketHandle(ObservedSocket),
   );
   const [err, session] = await defineWebSocket({
@@ -141,7 +142,7 @@ test.each(["builder", "short-circuit", "abort", "replacement"])(
     const controller = new AbortController();
     const client = createClient(
       withEndpoint(host),
-      withEndpointBalancer(recording(events)),
+      withBalancer(recording(events)),
       withInterceptors({
         kind: "http",
         async fn(req, next) {
@@ -167,7 +168,7 @@ test.each(["builder", "short-circuit", "abort", "replacement"])(
     events.length = 0;
     const live = createClient(
       withEndpoint(host),
-      withEndpointBalancer(recording(events)),
+      withBalancer(recording(events)),
     );
     await defineRequest({ method: "GET", path: "/json" })(live);
     expect(events).toEqual([`start:${host}`, `done:${host}`]);
@@ -180,19 +181,17 @@ test("p2c excludes both 80ms interceptor phases while a slow physical request re
   const b = p2cBalancer({ load: "pending", outlierDetection: false });
   const [, slow] = b.pick({
     endpoints: ["https://slow.test"],
-    transport: "http",
   });
   slow?.start?.();
   const selections: string[] = [];
   const client = createClient(
     withEndpoint("https://fast.test", "https://slow.test"),
-    withEndpointFailover({ attempts: 0 }),
-    withEndpointBalancer(b),
+
+    withBalancer(b),
     withHTTPHandle(() => {
       selections.push(
         b.pick({
           endpoints: ["https://fast.test", "https://slow.test"],
-          transport: "http",
         })[1]?.endpoint ?? "",
       );
       return Promise.resolve(new Response(null));
@@ -204,7 +203,6 @@ test("p2c excludes both 80ms interceptor phases while a slow physical request re
         selections.push(
           b.pick({
             endpoints: ["https://fast.test", "https://slow.test"],
-            transport: "http",
           })[1]?.endpoint ?? "",
         );
         const response = await next(req);
@@ -212,7 +210,6 @@ test("p2c excludes both 80ms interceptor phases while a slow physical request re
         selections.push(
           b.pick({
             endpoints: ["https://fast.test", "https://slow.test"],
-            transport: "http",
           })[1]?.endpoint ?? "",
         );
         return response;

@@ -1,10 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  EndpointTransport,
-} from "./balancer";
-import { ERR_NO_ENDPOINT } from "./balancer";
+import type { Balancer, DoneInfo } from "./balancer";
+import { ERR_NO_CANDIDATE } from "./balancer";
 import { p2cBalancer } from "./p2c";
 import { pickEndpoint } from "./runtime";
 
@@ -17,12 +13,8 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
-function pick(
-  balancer: EndpointBalancer,
-  endpoints = ["a", "b"],
-  transport: EndpointTransport = "http",
-) {
-  const [error, result] = balancer.pick({ endpoints, transport });
+function pick(balancer: Balancer, endpoints = ["a", "b"]) {
+  const [error, result] = balancer.pick({ endpoints });
   expect(error).toBeNull();
   if (result === undefined) throw new Error("missing pick");
   expect(result.done).toBeTypeOf("function");
@@ -30,12 +22,11 @@ function pick(
   return result;
 }
 function complete(
-  balancer: EndpointBalancer,
+  balancer: Balancer,
   endpoint: string,
-  report: EndpointDoneInfo & { sampleMs?: number },
-  transport: EndpointTransport = "http",
+  report: DoneInfo & { sampleMs?: number },
 ) {
-  const result = pick(balancer, [endpoint], transport);
+  const result = pick(balancer, [endpoint]);
   vi.setSystemTime(Date.now() + (report.sampleMs ?? 0));
   result.end?.(report);
   result.done?.(report);
@@ -124,7 +115,7 @@ test("choiceCount is capped at ten and captured at construction", () => {
 test("default p2c health filtering ejects a failing host and preserves another", () => {
   const b = p2cBalancer();
   for (let i = 0; i < 5; i += 1)
-    complete(b, "a", { attempted: true, status: 503 });
+    complete(b, "a", { attempted: true, code: "NET_UNAVAILABLE" });
   // A lone host can break too; fallback is local to each pick list.
   expect(pick(b).endpoint).toBe("b");
 });
@@ -149,16 +140,14 @@ test("invalid p2c options are remembered, branded, and never throw", () => {
   for (const options of cases) {
     // @ts-expect-error invalid p2c options are rejected at runtime
     const b = p2cBalancer(options);
-    const first = b.pick({ endpoints: ["a"], transport: "http" })[0];
+    const first = b.pick({ endpoints: ["a"] })[0];
     expect(first).toBeInstanceOf(Error);
-    expect(b.pick({ endpoints: [], transport: "http" })[0]).toBe(first);
-    expect(
-      pickEndpoint(b, { endpoints: ["a"], transport: "http" })[0]?.code,
-    ).toBe("REQ_OPTIONS_INVALID");
+    expect(b.pick({ endpoints: [] })[0]).toBe(first);
+    expect(pickEndpoint(b, { endpoints: ["a"] })[0]?.code).toBe(
+      "REQ_OPTIONS_INVALID",
+    );
   }
-  expect(p2cBalancer().pick({ endpoints: [], transport: "http" })[0]).toBe(
-    ERR_NO_ENDPOINT,
-  );
+  expect(p2cBalancer().pick({ endpoints: [] })[0]).toBe(ERR_NO_CANDIDATE);
 });
 
 test("state pruning forgets idle absent hosts but retains outstanding picks", () => {
@@ -179,9 +168,7 @@ test("state pruning forgets idle absent hosts but retains outstanding picks", ()
 test("sparse runtime candidate arrays cannot produce an undefined endpoint", () => {
   const b = p2cBalancer({ outlierDetection: false });
   const empty = new Array<string>(1);
-  expect(b.pick({ endpoints: empty, transport: "http" })[0]).toBe(
-    ERR_NO_ENDPOINT,
-  );
+  expect(b.pick({ endpoints: empty })[0]).toBe(ERR_NO_CANDIDATE);
   const sparse = new Array<string>(2);
   sparse[1] = "a";
   expect(pick(b, sparse).endpoint).toBe("a");

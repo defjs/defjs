@@ -1,15 +1,14 @@
 export type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  EndpointFaultCode,
-  EndpointPickInfo,
-  EndpointPickOutcome,
-  EndpointPickResult,
-  EndpointTransport,
+  Balancer,
+  DoneInfo,
+  PickFaultCode,
+  PickInfo,
+  PickOutcome,
+  PickResult,
 } from "./balancer";
 export {
-  ERR_NO_ENDPOINT,
-  isNoEndpointCause,
+  ERR_NO_CANDIDATE,
+  isNoCandidateCause,
   pickFirstBalancer,
   roundRobinBalancer,
 } from "./balancer";

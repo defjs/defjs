@@ -87,8 +87,8 @@ export const getOrder = defineRequest({
 
 تقبل الدالة `withEndpoint(...urls)` عنواناً أساسياً واحداً أو أكثر كمرشحين. وافتراضياً:
 
-- يستخدم كل عميل [`pickFirstBalancer`](/ar/api/core/pickfirstbalancer)، حيث يلتزم بالعنوان الأول حتى يؤدي فشل اتصال `NET_UNREACHABLE` أو استجابة غير مشفرة بحالات `502` أو `503` أو `504` إلى الانتقال للعنوان التالي.
-- تقوم طرق HTTP الآمنة (`GET` و`HEAD` و`OPTIONS` و`TRACE`) تلقائياً بـ **التبديل عند الفشل في نفس الاستدعاء (same-call failover)** إلى نقطة نهاية احتياطية لم تُجرب بعد عند فشل الاتصال (`NET_UNREACHABLE`)، وذلك وفق ميزانية إعادة محاولة مشتركة بنمط Finagle يتم التحكم بها عبر (`withEndpointFailover`).
+- يستخدم كل عميل [`pickFirstBalancer`](/ar/api/core/pickfirstbalancer)، ويلتزم بالعنوان الأول حتى يتقدّم عند `NET_UNREACHABLE` أو `NET_UNAVAILABLE` (HTTP 502 أو 503 أو 504).
+- **إعادة محاولة HTTP في نفس الاستدعاء معطّلة افتراضياً.** `withRetry()` يعادل `withRetry({})` ويفعّل محاولة ثانية على نقطة نهاية لم تُجرَّب عند فشل الاتصال للطرق الآمنة (`GET` و`HEAD` و`OPTIONS` و`TRACE`)، مع backoff. ميزانية إعادة المحاولة بنمط Finagle ملك لإعداد العميل، ويشاركها العملاء المشتقون من ذلك الإعداد، بمعزل عن هوية الموازن.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ export const getOrder = defineRequest({
 
 ### فحص السلامة وخوارزمية p2c [#health-filtering-and-p2c]
 
-بالنسبة للنسخ المتطابقة من الخوادم النظيرة، تُفعل أدوات التوزيع [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) قاطع الدائرة للأخطاء المتتالية بنمط Linkerd عبر (`outlierDetection`) افتراضياً.
+بالنسبة للنسخ المتطابقة من الخوادم النظيرة، تُفعل أدوات التوزيع [`roundRobinBalancer`](/ar/api/core/roundrobinbalancer) و[`p2cBalancer`](/ar/api/core/p2cbalancer) (خوارزمية ذروة Ewma لزمن الرحلة RTT × الحمل اللحظي) قاطع الدائرة للأخطاء المتتالية بنمط Linkerd عبر (`outlierDetection`) افتراضياً. يحصي `NET_UNREACHABLE` و`NET_UNAVAILABLE` و`NET_SERVER_ERROR`؛ و`status` الخام للاستجابة مخصص فقط لموزعات الحمل المخصصة.
 
 راجع دليل [توزيع الحمل والتبديل عند الفشل](/ar/docs/load-balancing) المخصص للاطلاع على التفاصيل الكاملة لميزانيات إعادة المحاولة، وفحوصات السلامة النشطة والسلبية، وتقدير الحمل بخوارزمية P2C، وموزعات الحمل المخصصة.
 
@@ -120,8 +120,8 @@ export const getOrder = defineRequest({
 | `withQuerySerializer(fn)`                                                                                     | تُسلسل كائنات معلمات الاستعلام ذات الأسماء البديلة إلى نص استعلام سلكي.                             |
 | `withCredentials(boolean)`                                                                                    | تضبط خيار Fetch على `credentials: "include"` لـ HTTP وSSE عند التعيين إلى `true`.                   |
 | `withXSRF(options?)`                                                                                          | تنسخ ملف تعريف ارتباط XSRF إلى ترويسة الطلب لطلبات HTTP المعدِّلة من نفس المصدر.                    |
-| `withEndpointBalancer(balancer)`                                                                              | تستبدل استراتيجية اختيار نقطة النهاية (`pickFirstBalancer`، و`roundRobinBalancer`، و`p2cBalancer`). |
-| `withEndpointFailover(options?)`                                                                              | تضبط التبديل عند الفشل لنفس الاستدعاء في HTTP وميزانية إعادة المحاولة للعميل.                       |
+| `withBalancer(balancer)`                                                                                      | تستبدل استراتيجية اختيار نقطة النهاية (`pickFirstBalancer`، و`roundRobinBalancer`، و`p2cBalancer`). |
+| `withRetry(options?)`                                                                                         | تضبط شروط إعادة محاولة HTTP الاختيارية، والطرق، وbackoff، ومهلة المحاولة، وميزانية يملكها العميل.   |
 | `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | تضبط إعادة اتصال SSE ومراقبة الأحداث غير الصالحة.                                                   |
 | `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | تضبط الخيارات الافتراضية لجلسة WebSocket.                                                           |
 | `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | تحقن تطبيقات وسائل نقل مخصصة أو وهمية للاختبار.                                                     |

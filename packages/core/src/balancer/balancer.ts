@@ -13,47 +13,38 @@ import {
  *
  * @group client
  */
-export interface EndpointBalancer {
+export interface Balancer {
   /**
    * Selects an endpoint synchronously, or returns an error when none can be selected.
    * Must be synchronous: a returned promise is not awaited and its rejection is ignored.
    * A promise is an invalid pick outcome and becomes `REQ_BUILD_FAILED`.
    */
-  pick(info: EndpointPickInfo): EndpointPickOutcome;
+  pick(info: PickInfo): PickOutcome;
 }
 
 /**
- * Error-first result of {@link EndpointBalancer.pick}.
+ * Error-first result of {@link Balancer.pick}.
  *
  * `[Error, undefined]` selects nothing. `[null, result]` is the selected
  * endpoint. The error comes first, matching operation results.
  *
  * @group client
  */
-export type EndpointPickOutcome =
+export type PickOutcome =
   | readonly [err: Error, result: undefined]
-  | readonly [err: null, result: EndpointPickResult];
-
-/**
- * Transport that is about to use the selected endpoint.
- *
- * @group client
- */
-export type EndpointTransport = "http" | "sse" | "websocket";
+  | readonly [err: null, result: PickResult];
 
 /**
  * What the runtime tells `pick` about this call.
  *
  * `endpoints` is the candidate list in first-seen order. It may be empty and
- * must not be modified. An empty list returns `[ERR_NO_ENDPOINT, undefined]`.
+ * must not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.
  *
  * @group client
  */
-export interface EndpointPickInfo {
+export interface PickInfo {
   /** Candidate endpoints. Already deduplicated by first occurrence. Do not modify. */
   readonly endpoints: readonly string[];
-  /** Transport that will use the selected endpoint. */
-  readonly transport: EndpointTransport;
   /** `operation` from the definition, when it has one. */
   readonly operation?: string;
 }
@@ -67,45 +58,52 @@ export interface EndpointPickInfo {
  *
  * @group client
  */
-export interface EndpointPickResult {
+export interface PickResult {
   /** Selected endpoint string. It is not validated as a URL here. */
   readonly endpoint: string;
   /**
-   * Called synchronously at most once immediately before Fetch or socket construction.
+   * Called synchronously at most once immediately before the attempt begins.
    * Not called for build failures, interceptor short-circuits, or pre-transport cancellation.
    * A throw or returned thenable is contained exactly like `done`.
    */
   readonly start?: () => void;
   /**
-   * Called synchronously at most once after start, when Fetch returns headers or a socket opens,
+   * Called synchronously at most once after start, when the peer response begins,
    * or when transport fails before that response. Caller cancellation is unattributed.
    * A throw or returned thenable is contained exactly like `done`.
    */
-  readonly end?: (info: EndpointDoneInfo) => void;
+  readonly end?: (info: DoneInfo) => void;
   /**
    * Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.
    * Must be synchronous: a returned promise is not awaited and its rejection is ignored.
    * A throw does not replace the operation tuple.
    */
-  readonly done?: (info: EndpointDoneInfo) => void;
+  readonly done?: (info: DoneInfo) => void;
 }
 
 /**
- * Transport failure codes a balancer can observe through `end` and `done`.
+ * Neutral attempt outcome codes observed through `end` and `done`.
  *
- * `end` reports headers or socket open; later transport failures can still give
- * `done` a `code`. HTTP incomplete bodies keep their status with `NET_BODY_INCOMPLETE`.
- * An SSE response-body read rejection or an opened WebSocket's close code 1006
- * or strictly false `wasClean` reports `NET_UNREACHABLE`, without a status, unless
- * timeout or cancellation takes priority. Normal EOF, clean closes, and application
- * errors do not themselves create network failure samples.
- * `pickFirstBalancer` moves to the next endpoint for `NET_UNREACHABLE` or an
- * uncoded 502, 503, or 504 response.
+ * `end` reports the beginning of a peer response; later failures can still give
+ * `done` a different `code`. Unavailability and server failures describe a peer
+ * that answered, while unreachable and timeout outcomes describe transport failures.
+ * Normal completion and application errors do not themselves create failure samples.
+ *
+ * Transport mapping: HTTP and SSE statuses 502, 503, and 504 map to
+ * `NET_UNAVAILABLE`; other statuses at least 500 map to `NET_SERVER_ERROR`.
+ * Incomplete HTTP bodies retain `NET_BODY_INCOMPLETE` and their status.
+ * An SSE body-read rejection or an opened WebSocket's close code 1006 or
+ * strictly false `wasClean` maps to `NET_UNREACHABLE`, without a status,
+ * unless timeout or cancellation takes priority.
  *
  * @group client
  */
-export type EndpointFaultCode =
-  "NET_UNREACHABLE" | "NET_TIMEOUT" | "NET_BODY_INCOMPLETE";
+export type PickFaultCode =
+  | "NET_UNREACHABLE"
+  | "NET_UNAVAILABLE"
+  | "NET_SERVER_ERROR"
+  | "NET_TIMEOUT"
+  | "NET_BODY_INCOMPLETE";
 
 /**
  * Outcome of the attempt that used the selected endpoint.
@@ -113,16 +111,17 @@ export type EndpointFaultCode =
  * `attempted: false` means no attempt is attributed to that endpoint: nothing
  * was sent, or the attempt ended by caller cancellation or `close()`. Both
  * `code` and `status` are then absent. `attempted: true` with no `code` means the peer
- * answered.
+ * answered without a classified failure. Built-in balancers read only the neutral
+ * `code`, never `status`.
  *
  * @group client
  */
-export interface EndpointDoneInfo {
+export interface DoneInfo {
   /** Whether a transport attempt reached the selected endpoint. */
   readonly attempted: boolean;
-  /** Transport failure, including a body-read or socket-close failure after a response. */
-  readonly code?: EndpointFaultCode;
-  /** HTTP/SSE status. Kept with NET_BODY_INCOMPLETE; absent for network/timeout codes and WebSocket open. */
+  /** Neutral attempt outcome, including failures after a peer response begins. */
+  readonly code?: PickFaultCode;
+  /** Raw response status for custom balancers; built-in balancers never read it. */
   readonly status?: number;
 }
 
@@ -131,30 +130,30 @@ const NO_ENDPOINT_BRAND = Symbol.for("defjs.cause.no-endpoint");
 /**
  * Sentinel for an empty candidate list.
  *
- * Built-in balancers return it as `[ERR_NO_ENDPOINT, undefined]`. The runtime
+ * Built-in balancers return it as `[ERR_NO_CANDIDATE, undefined]`. The runtime
  * reports that as `REQ_BUILD_FAILED` and keeps this error as `cause`. It is not
  * a `FaultCode`. The non-enumerable `Symbol.for("defjs.cause.no-endpoint")`
- * brand lets {@link isNoEndpointCause} recognize the sentinel from another
+ * brand lets {@link isNoCandidateCause} recognize the sentinel from another
  * Core copy.
  *
  * @group client
- * @see {@link isNoEndpointCause}
+ * @see {@link isNoCandidateCause}
  */
-export const ERR_NO_ENDPOINT: Error = brandSentinel(
+export const ERR_NO_CANDIDATE: Error = brandSentinel(
   new Error("No endpoint available"),
 );
 
 /**
- * Whether `cause` is {@link ERR_NO_ENDPOINT}, including a copy from another Core build.
+ * Whether `cause` is {@link ERR_NO_CANDIDATE}, including a copy from another Core build.
  *
  * Returns `true` when `cause` carries the non-enumerable
  * `Symbol.for("defjs.cause.no-endpoint")` brand. Other values return `false`.
  * Pass `fault.cause`; this does not unwrap faults.
  *
  * @group client
- * @see {@link ERR_NO_ENDPOINT}
+ * @see {@link ERR_NO_CANDIDATE}
  */
-export function isNoEndpointCause(cause: unknown): boolean {
+export function isNoCandidateCause(cause: unknown): boolean {
   return (
     typeof cause === "object" && cause !== null && NO_ENDPOINT_BRAND in cause
   );
@@ -199,8 +198,8 @@ interface PickFirstOptions {
  * Sticky failover balancer. The default when a client sets no balancer.
  *
  * Uses the first candidate until `done` reports
- * `{ attempted: true, code: "NET_UNREACHABLE" }` for the endpoint that is still
- * sticky, or an uncoded 502, 503, or 504 response. The next `pick` then moves
+ * `{ attempted: true, code: "NET_UNREACHABLE" }` or `NET_UNAVAILABLE` for the
+ * endpoint that is still sticky. The next `pick` then moves
  * to the following candidate and wraps to the first. Other results, including timeouts and
  * `attempted: false`, keep the current endpoint. Overlapping failures advance
  * one step: a `done` that finds the sticky endpoint already changed does nothing.
@@ -215,19 +214,17 @@ interface PickFirstOptions {
  * release the probe slot. No background timer is created.
  *
  * Every successful `pick` returns `done`. An empty candidate list returns
- * `[ERR_NO_ENDPOINT, undefined]`. Invalid options are remembered here and
+ * `[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and
  * returned from every `pick` without throwing.
  *
  * Health filtering is off by default. Supply `outlierDetection: {}` to enable
  * default ejection, or configure its thresholds and application health callback.
  *
- * @param options - Optional shuffled order, failback interval, and health filtering.
+ * @param options - Optional shuffled order, failback interval, health filtering.
  * @returns A new balancer. Each call has its own sticky endpoint.
  * @group client
  */
-export function pickFirstBalancer(
-  options?: PickFirstOptions,
-): EndpointBalancer {
+export function pickFirstBalancer(options?: PickFirstOptions): Balancer {
   const invalid = invalidPickFirst(options);
   const shuffle = options?.shuffle === true;
   const keys = new Map<string, number>();
@@ -236,7 +233,7 @@ export function pickFirstBalancer(
   let probing = false;
   const failbackMs = options?.failbackMs;
 
-  const child: EndpointBalancer = {
+  const child: Balancer = {
     pick(info) {
       if (invalid !== undefined) {
         return [invalid, undefined];
@@ -244,7 +241,7 @@ export function pickFirstBalancer(
       const order = candidateOrder(info.endpoints, shuffle, keys);
       const first = order[0];
       if (first === undefined) {
-        return [ERR_NO_ENDPOINT, undefined];
+        return [ERR_NO_CANDIDATE, undefined];
       }
       let chosen = sticky;
       if (chosen === undefined || !order.includes(chosen)) {
@@ -269,10 +266,7 @@ export function pickFirstBalancer(
             const advance =
               report.attempted === true &&
               (report.code === "NET_UNREACHABLE" ||
-                (report.code === undefined &&
-                  (report.status === 502 ||
-                    report.status === 503 ||
-                    report.status === 504)));
+                report.code === "NET_UNAVAILABLE");
             if (probe) {
               probing = false;
               if (!report.attempted) return;
@@ -379,16 +373,14 @@ interface RoundRobinOptions {
  * Health filtering is enabled by default: five consecutive attributed failures
  * eject an endpoint temporarily. Set `outlierDetection: false` to disable it;
  * only those unfiltered successful picks omit `done`. An empty
- * candidate list returns `[ERR_NO_ENDPOINT, undefined]`. Invalid options are
+ * candidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are
  * remembered here and returned from every `pick` without throwing.
  *
- * @param options - Optional positive finite weights and health filtering configuration.
+ * @param options - Optional positive finite weights, health filtering.
  * @returns A new balancer. Each call has its own counter and weight state.
  * @group client
  */
-export function roundRobinBalancer(
-  options?: RoundRobinOptions,
-): EndpointBalancer {
+export function roundRobinBalancer(options?: RoundRobinOptions): Balancer {
   const invalid = invalidRoundRobin(options);
   const weights =
     invalid === undefined && options?.weights !== undefined
@@ -400,20 +392,20 @@ export function roundRobinBalancer(
       : 0;
   const current = new Map<string, number>();
 
-  const child: EndpointBalancer = {
+  const child: Balancer = {
     pick(info) {
       if (invalid !== undefined) {
         return [invalid, undefined];
       }
       const endpoints = info.endpoints;
       if (endpoints.length === 0) {
-        return [ERR_NO_ENDPOINT, undefined];
+        return [ERR_NO_CANDIDATE, undefined];
       }
       if (weights === undefined) {
         const endpoint = endpoints[counter % endpoints.length];
         counter = (counter + 1) >>> 0;
         if (endpoint === undefined) {
-          return [ERR_NO_ENDPOINT, undefined];
+          return [ERR_NO_CANDIDATE, undefined];
         }
         return [null, { endpoint }];
       }

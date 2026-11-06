@@ -57,6 +57,8 @@ Execute는 판별 가능한 `Fault`를 튜플 첫 자리에 돌려줘요. 선언
 
 응답이 존재하기 전에 실패할 수 있었던 모든 것이에요. `REQ_*`, `NET_*`, `EXT_*`, `CAP_*`, `ENV_UNSUPPORTED`. 전송이 보고할 메타데이터를 갖기 전까지 `response`는 `undefined`예요. 예를 들어 다운로드 중간에 잘린 body예요.
 
+잘못된 `withRetry` 옵션은 HTTP 전송이 시작되기 전에 `REQ_OPTIONS_INVALID`를 돌려요. 메시지는 `Invalid retry options`예요. 객체가 아닌 정책, 1 이상의 안전한 정수가 아닌 `maxAttempts` 값, 그리고 잘못된 조건, 메서드, 타임아웃, 백오프, 예산 설정이 여기 포함돼요. `withRetry`를 생략하면 재시도가 꺼져요. `withRetry()`와 `withRetry(undefined)`는 `withRetry({})`와 같이 동작해요. `withRetry({ maxAttempts: 1 })`는 재시도를 켠 뒤 꺼요.
+
 ### AnyFault
 
 <ApiSignature name="AnyFault" />
@@ -101,12 +103,12 @@ abort와 timeout이 공유하는 `Error` 센티넬이며, `cause`로 써요. HTT
 
 [`isAbortCause`](/ko-KR/api/core/isabortcause)는 abort 브랜드를 가진 `Error` 또는 이름이 `AbortError`인 `DOMException`을 알아봐요. [`isTimeoutCause`](/ko-KR/api/core/istimeoutcause)는 timeout 브랜드를 가진 `Error` 또는 이름이 `TimeoutError`인 `DOMException` / `Error`를 알아봐요. 밑바탕 값을 분류하려면 `fault.cause`를 넘기세요. 이 함수들은 fault를 풀지 않아요. 다른 Core 사본의 센티넬과도 동작해요.
 
-## ERR_NO_ENDPOINT
+## ERR_NO_CANDIDATE
 
-## isNoEndpointCause
+## isNoCandidateCause
 
-<ApiSignature name="ERR_NO_ENDPOINT, isNoEndpointCause" />
+<ApiSignature name="ERR_NO_CANDIDATE, isNoCandidateCause" />
 
-`ERR_NO_ENDPOINT`은 후보 endpoint를 고를 수 없을 때 `REQ_BUILD_FAILED`의 `cause`로만 나타나요. `FaultCode`는 늘리지 않아요. 센티넬은 열거되지 않는 `Symbol.for('defjs.cause.no-endpoint')` 브랜드를 가져요. [`isNoEndpointCause`](/ko-KR/api/core/isnoendpointcause)는 다른 Core 사본의 그 브랜드를 알아봐요. [`isAbortCause`](/ko-KR/api/core/isabortcause)가 abort를 알아보는 것과 같아요. `fault.cause`를 넘기세요. fault는 풀지 않아요.
+`ERR_NO_CANDIDATE`은 후보 endpoint를 고를 수 없을 때 `REQ_BUILD_FAILED`의 `cause`로만 나타나요. `FaultCode`는 늘리지 않아요. 센티넬은 열거되지 않는 `Symbol.for('defjs.cause.no-endpoint')` 브랜드를 가져요. [`isNoCandidateCause`](/ko-KR/api/core/isnocandidatecause)는 다른 Core 사본의 그 브랜드를 알아봐요. [`isAbortCause`](/ko-KR/api/core/isabortcause)가 abort를 알아보는 것과 같아요. `fault.cause`를 넘기세요. fault는 풀지 않아요.
 
 [오류 가이드](/ko-KR/docs/errors)를 보세요.

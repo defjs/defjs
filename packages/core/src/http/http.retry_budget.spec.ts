@@ -4,11 +4,12 @@ import { createClientConfig } from "../client/config";
 import { retryBudgetFor } from "../balancer/retry_budget";
 import {
   withEndpoint,
-  withEndpointFailover,
   withHTTPHandle,
-  withEndpointBalancer,
+  withBalancer,
+  withRetry,
 } from "../client/option";
 import { defineRequest } from "./http";
+import { pickFirstBalancer, type Balancer } from "../balancer/balancer";
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(0);
@@ -18,17 +19,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 const op = defineRequest({ method: "GET", path: "/" });
-function fixture(retryBudget: unknown, attempts = 1) {
+function fixture(retryBudget: unknown, maxAttempts = 2) {
   let calls = 0;
   const client = createClient(
     withEndpoint("https://a.test", "https://b.test", "https://c.test"),
-    withEndpointBalancer({
-      pick: (info) => [null, { endpoint: info.endpoints[0] ?? "" }],
-    }),
-    withEndpointFailover(
-      // @ts-expect-error invalid retry budget is rejected at execution
-      { retryBudget, attempts },
-    ),
+    // @ts-expect-error invalid retry budget is rejected at execution
+    withRetry({ budget: retryBudget, maxAttempts, delayMs: 0 }),
     // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
     withHTTPHandle(async () => {
       calls++;
@@ -53,7 +49,7 @@ test("shared budget limits a broad outage and restores its reserve after TTL", a
 test("each original call deposits, every failover withdraws, and debits expire too", async () => {
   const h = fixture(
     { percentCanRetry: 0.5, minRetriesPerSecond: 0, ttlMs: 1000 },
-    2,
+    3,
   );
   await op(h.client);
   expect(h.calls()).toBe(1);
@@ -63,7 +59,7 @@ test("each original call deposits, every failover withdraws, and debits expire t
   await op(h.client);
   expect(h.calls()).toBe(4);
 });
-test("budgets are per-client, whereas a derived client shares the same reserve", async () => {
+test("separate clients have independent budgets; derived clients share their configuration", async () => {
   const options = { percentCanRetry: 0, minRetriesPerSecond: 1, ttlMs: 1000 };
   const a = fixture(options);
   const b = fixture(options);
@@ -129,11 +125,36 @@ test("tiny positive retry ratios saturate Finagle's integer retry cost instead o
 
 test("fractional-second TTL reserves only Finagle whole seconds without deposits", () => {
   const config = createClientConfig();
-  withEndpointFailover({
-    retryBudget: { ttlMs: 1500, minRetriesPerSecond: 10, percentCanRetry: 0.2 },
-  })(config);
+  config.http.retry = {
+    budget: { ttlMs: 1500, minRetriesPerSecond: 10, percentCanRetry: 0.2 },
+  };
   const budget = retryBudgetFor(config);
   if (budget instanceof Error) throw budget;
   for (let i = 0; i < 10; i++) expect(budget.tryWithdraw()).toBe(true);
   expect(budget.tryWithdraw()).toBe(false);
+});
+
+test("two clients sharing one balancer keep independent retry reserves", async () => {
+  const balancer = pickFirstBalancer();
+  let calls = 0;
+  function clientFor(shared: Balancer) {
+    return createClient(
+      withEndpoint("https://a.test", "https://b.test"),
+      withBalancer(shared),
+      withRetry({
+        delayMs: 0,
+        budget: { percentCanRetry: 0, minRetriesPerSecond: 1, ttlMs: 1000 },
+      }),
+      withHTTPHandle(() => {
+        calls++;
+        return Promise.reject(new TypeError("refused"));
+      }),
+    );
+  }
+  const a = clientFor(balancer);
+  const b = clientFor(balancer);
+  expect((await op(a))[0]?.code).toBe("NET_UNREACHABLE");
+  expect(calls).toBe(2);
+  expect((await op(b))[0]?.code).toBe("NET_UNREACHABLE");
+  expect(calls).toBe(4);
 });

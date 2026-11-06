@@ -5,7 +5,7 @@ import {
   p2cBalancer,
   roundRobinBalancer,
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
 } from "@defjs/core";
 
 const endpoints = ["https://api-a.example.com", "https://api-b.example.com"];
@@ -14,7 +14,7 @@ const getStatus = defineRequest({ method: "GET", path: "/status" });
 // #region passive
 const client = createClient(
   withEndpoint(...endpoints),
-  withEndpointBalancer(
+  withBalancer(
     roundRobinBalancer({
       outlierDetection: {
         consecutiveFailures: 5,
@@ -67,7 +67,7 @@ async function withHealthChecks() {
   }
   const activeClient = createClient(
     withEndpoint(...endpoints),
-    withEndpointBalancer(
+    withBalancer(
       roundRobinBalancer({
         outlierDetection: {
           consecutiveFailures: 0,

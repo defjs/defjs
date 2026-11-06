@@ -1,15 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  EndpointPickInfo,
-  EndpointPickOutcome,
-} from "../balancer";
+import type { Balancer, DoneInfo, PickInfo, PickOutcome } from "../balancer";
 import { outlierDetection, pickFirstBalancer } from "../balancer";
 import {
   createClient,
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
   withInterceptors,
   withSSEHandle,
   withSSEOnInvalidEvent,
@@ -156,22 +151,19 @@ function writeEvent(res: ProbeResponse): void {
 }
 
 interface Recorded {
-  balancer: EndpointBalancer;
-  picks: EndpointPickInfo[];
-  dones: Array<{ endpoint: string; info: EndpointDoneInfo }>;
-  ends: Array<{ endpoint: string; info: EndpointDoneInfo }>;
+  balancer: Balancer;
+  picks: PickInfo[];
+  dones: Array<{ endpoint: string; info: DoneInfo }>;
+  ends: Array<{ endpoint: string; info: DoneInfo }>;
   pending(): number;
 }
 
 function track(
-  choose: (
-    index: number,
-    info: EndpointPickInfo,
-  ) => string | EndpointPickOutcome,
+  choose: (index: number, info: PickInfo) => string | PickOutcome,
 ): Recorded {
-  const picks: EndpointPickInfo[] = [];
-  const dones: Array<{ endpoint: string; info: EndpointDoneInfo }> = [];
-  const ends: Array<{ endpoint: string; info: EndpointDoneInfo }> = [];
+  const picks: PickInfo[] = [];
+  const dones: Array<{ endpoint: string; info: DoneInfo }> = [];
+  const ends: Array<{ endpoint: string; info: DoneInfo }> = [];
   let pending = 0;
   return {
     picks,
@@ -207,7 +199,7 @@ function track(
 function expectPicks(recorded: Recorded, operation = "orders"): void {
   expect(recorded.picks.length).toBeGreaterThan(0);
   for (const pick of recorded.picks) {
-    expect(pick.transport).toBe("sse");
+    expect(pick).not.toHaveProperty("transport");
     expect(pick.operation).toBe(operation);
   }
 }
@@ -246,7 +238,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   );
   const client = createClient(
     withEndpoint(primary.url, secondary.url),
-    withEndpointBalancer(recorded.balancer),
+    withBalancer(recorded.balancer),
     withSSEReconnect(RECONNECT),
   );
   const [error, stream] = await orders(client);
@@ -282,7 +274,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const eofRecord = track(() => eof.url);
   const eofClient = createClient(
     withEndpoint(eof.url),
-    withEndpointBalancer(eofRecord.balancer),
+    withBalancer(eofRecord.balancer),
     withSSEReconnect(RECONNECT),
   );
   const [eofError, eofStream] = await orders(eofClient);
@@ -321,7 +313,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
     const [terminalError] = await definition(
       createClient(
         withEndpoint(server.url),
-        withEndpointBalancer(terminal.balancer),
+        withBalancer(terminal.balancer),
         withSSEReconnect(RECONNECT),
       ),
     );
@@ -345,7 +337,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const [hugeError, hugeHandle] = await hugeStream(
     createClient(
       withEndpoint(huge.url),
-      withEndpointBalancer(hugeRecord.balancer),
+      withBalancer(hugeRecord.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -366,10 +358,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   });
   const quiet = track(() => dropped.url);
   const [quietError, quietStream] = await orders(
-    createClient(
-      withEndpoint(dropped.url),
-      withEndpointBalancer(quiet.balancer),
-    ),
+    createClient(withEndpoint(dropped.url), withBalancer(quiet.balancer)),
   );
   expect(quietError).toBeNull();
   await quietStream?.closed;
@@ -390,7 +379,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const [postError, postStream] = await post(
     createClient(
       withEndpoint(postServer.url),
-      withEndpointBalancer(postRecord.balancer),
+      withBalancer(postRecord.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -413,7 +402,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const [allowedError, allowedStream] = await post(
     createClient(
       withEndpoint(allowed.url),
-      withEndpointBalancer(allowedRecord.balancer),
+      withBalancer(allowedRecord.balancer),
       withSSEReconnect({ ...RECONNECT, shouldReconnect: () => true }),
     ),
   );
@@ -443,7 +432,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const [streamError] = await streamBody(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(streamRecord.balancer),
+      withBalancer(streamRecord.balancer),
       withSSEHandle(handle),
       withSSEReconnect({ ...RECONNECT, shouldReconnect: () => true }),
     ),
@@ -459,7 +448,7 @@ test("repicks after a read failure when reconnect is on, and does not pick on te
   const pending = orders(
     createClient(
       withEndpoint(held.url),
-      withEndpointBalancer(cancelRecord.balancer),
+      withBalancer(cancelRecord.balancer),
       withSSEReconnect(RECONNECT),
     )({ signal: controller.signal }),
   );
@@ -535,7 +524,7 @@ test("default health filtering receives read failures and breaks only after five
   const seen: string[] = [];
   const client = createClient(
     withEndpoint(primary, secondary),
-    withEndpointBalancer(outlierDetection(recorded.balancer)),
+    withBalancer(outlierDetection(recorded.balancer)),
     withSSEHandle((input) => {
       const origin = new URL(new Request(input).url).origin;
       seen.push(origin);
@@ -583,7 +572,7 @@ test("invalid event validation and a throwing observer do not become endpoint fa
   const [error, stream] = await events(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withSSEHandle(() => Promise.resolve(sseResponse("data: not-json\n\n"))),
       withSSEOnInvalidEvent(observer),
     ),
@@ -602,7 +591,7 @@ test("does not attribute a post-handshake read rejection while offline", async (
   const [error, stream] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withSSEHandle(() => Promise.resolve(readFailureResponse())),
     ),
   );
@@ -628,7 +617,7 @@ test("keeps read failures on a replaced base and a second next unattributed", as
   const [error, stream] = await orders(
     createClient(
       withEndpoint(primary),
-      withEndpointBalancer(replaced.balancer),
+      withBalancer(replaced.balancer),
       withSSEReconnect(RECONNECT),
       withSSEHandle((input) => {
         seen.push(new Request(input).url);
@@ -659,7 +648,7 @@ test("keeps read failures on a replaced base and a second next unattributed", as
   const [extraError, first] = await orders(
     createClient(
       withEndpoint(primary),
-      withEndpointBalancer(extra.balancer),
+      withBalancer(extra.balancer),
       withSSEHandle(() =>
         Promise.resolve(
           ++fetches === 1
@@ -696,10 +685,7 @@ test("calls done when the connection ends, not when the handshake succeeds", asy
   });
   const recorded = track(() => held.url);
   const [error, stream] = await orders(
-    createClient(
-      withEndpoint(held.url),
-      withEndpointBalancer(recorded.balancer),
-    ),
+    createClient(withEndpoint(held.url), withBalancer(recorded.balancer)),
   );
   expect(error).toBeNull();
   if (!stream) {
@@ -727,7 +713,7 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
   const [error] = await orders(
     createClient(
       withEndpoint(down.url),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -751,7 +737,7 @@ test("reports REQ_BUILD_FAILED when a reconnect pick fails before open", async (
   const [optionError] = await orders(
     createClient(
       withEndpoint(down.url),
-      withEndpointBalancer(options.balancer),
+      withBalancer(options.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -773,7 +759,7 @@ test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open"
   const [error, stream] = await orders(
     createClient(
       withEndpoint(dropped.url),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -804,7 +790,7 @@ test("reports REQ_BUILD_FAILED on closed when a reconnect pick fails after open"
   const [optionError, optionStream] = await orders(
     createClient(
       withEndpoint(dropped.url),
-      withEndpointBalancer(options.balancer),
+      withBalancer(options.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -826,7 +812,7 @@ test("calls done once when a reconnect url fails and releases the in-flight coun
   const [error] = await orders(
     createClient(
       withEndpoint(down.url, bad),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -847,7 +833,7 @@ test("calls done once when a reconnect url fails and releases the in-flight coun
   const [openError, stream] = await orders(
     createClient(
       withEndpoint(opened.url, bad),
-      withEndpointBalancer(afterOpen.balancer),
+      withBalancer(afterOpen.balancer),
       withSSEReconnect(RECONNECT),
     ),
   );
@@ -868,7 +854,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [timeoutBefore] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(beforeTimeoutRecord.balancer),
+      withBalancer(beforeTimeoutRecord.balancer),
       withSSEHandle(handle),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -890,7 +876,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [cancelBefore] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(beforeCancelRecord.balancer),
+      withBalancer(beforeCancelRecord.balancer),
       withSSEHandle(handle),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -914,7 +900,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [timeoutDuring] = await orders(
     createClient(
       withEndpoint(timeoutServer.url),
-      withEndpointBalancer(timeoutHeadersRecord.balancer),
+      withBalancer(timeoutHeadersRecord.balancer),
     )({ signal: timeoutHeaders.signal }),
   );
   expect(timeoutDuring?.code).toBe("NET_TIMEOUT");
@@ -935,7 +921,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [cancelDuring] = await orders(
     createClient(
       withEndpoint(cancelServer.url),
-      withEndpointBalancer(cancelHeadersRecord.balancer),
+      withBalancer(cancelHeadersRecord.balancer),
     )({ signal: cancelHeaders.signal }),
   );
   expect(cancelDuring?.code).toBe("NET_ABORTED");
@@ -951,7 +937,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [heldTimeoutError, heldTimeoutStream] = await orders(
     createClient(
       withEndpoint(heldTimeout.url),
-      withEndpointBalancer(heldTimeoutRecord.balancer),
+      withBalancer(heldTimeoutRecord.balancer),
     )({ signal: timeoutAfter.signal }),
   );
   expect(heldTimeoutError).toBeNull();
@@ -976,7 +962,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [heldCancelError, heldCancelStream] = await orders(
     createClient(
       withEndpoint(heldCancel.url),
-      withEndpointBalancer(heldCancelRecord.balancer),
+      withBalancer(heldCancelRecord.balancer),
     ),
   );
   expect(heldCancelError).toBeNull();
@@ -991,7 +977,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [thrownTimeoutError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(thrownTimeout.balancer),
+      withBalancer(thrownTimeout.balancer),
       // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw ERR_TIMEOUT;
@@ -1010,7 +996,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [thrownAbortError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(thrownAbort.balancer),
+      withBalancer(thrownAbort.balancer),
       // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw ERR_ABORTED;
@@ -1027,7 +1013,7 @@ test("attributes timeouts and cancellations before fetch, before headers, and af
   const [codedError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(thrownCoded.balancer),
+      withBalancer(thrownCoded.balancer),
       // eslint-disable-next-line @typescript-eslint/require-await -- INTENT: the callback under test must reject asynchronously
       withSSEHandle(async () => {
         throw coded;
@@ -1058,7 +1044,7 @@ test("calls done once when sseHandler sees a replaced base and does not record i
   const [error, stream, open] = await orders(
     createClient(
       withEndpoint(origin.url),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withSSEReconnect(RECONNECT),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -1086,7 +1072,7 @@ test("calls done once when sseHandler sees a replaced base and does not record i
   const [againError, againStream] = await orders(
     createClient(
       withEndpoint(origin.url),
-      withEndpointBalancer(again.balancer),
+      withBalancer(again.balancer),
       withSSEReconnect(RECONNECT),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -1122,7 +1108,7 @@ test("does not pick or call done for a second next, and repicks the first stream
   const pending = orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withSSEHandle(handle),
       withSSEReconnect({ attempts: 1, delayMs: 1000, factor: 1 }),
       withInterceptors(
@@ -1170,7 +1156,7 @@ test("calls done once for each sseHandler exit before fetchEventStream", async (
   const [urlError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(urlRecord.balancer),
+      withBalancer(urlRecord.balancer),
       withSSEHandle(handle),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -1193,7 +1179,7 @@ test("calls done once for each sseHandler exit before fetchEventStream", async (
   const [cancelError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(cancelRecord.balancer),
+      withBalancer(cancelRecord.balancer),
       withSSEHandle(handle),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -1214,7 +1200,7 @@ test("calls done once for each sseHandler exit before fetchEventStream", async (
   const [deadlineError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(deadlineRecord.balancer),
+      withBalancer(deadlineRecord.balancer),
       withSSEHandle(handle),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -1235,7 +1221,7 @@ test("calls done once for each sseHandler exit before fetchEventStream", async (
   const [missingError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(missing.balancer),
+      withBalancer(missing.balancer),
     ),
   );
   expect(missingError?.code).toBe("ENV_UNSUPPORTED");
@@ -1254,7 +1240,7 @@ test("calls done once when the base was replaced and the signal is aborted or th
   const [cancelError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(cancelRecord.balancer),
+      withBalancer(cancelRecord.balancer),
       withSSEHandle(handle),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -1276,7 +1262,7 @@ test("calls done once when the base was replaced and the signal is aborted or th
   const [urlError] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(urlRecord.balancer),
+      withBalancer(urlRecord.balancer),
       withSSEHandle(handle),
       withInterceptors(
         createSSEInterceptor((req, next) => {
@@ -1301,7 +1287,7 @@ test("does not call done when the initial pick fails, and calls it once when bui
   const [error] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(failed.balancer),
+      withBalancer(failed.balancer),
     ),
   );
   expect(error?.code).toBe("REQ_BUILD_FAILED");
@@ -1322,7 +1308,7 @@ test("does not call done when the initial pick fails, and calls it once when bui
   const [buildError] = await built(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
     ),
     {},
   );
@@ -1343,7 +1329,7 @@ test("keeps EXT_INTERCEPTOR_FAILED when an interceptor throws a REQ_BUILD_FAILED
   const [error] = await orders(
     createClient(
       withEndpoint("https://example.com"),
-      withEndpointBalancer(recorded.balancer),
+      withBalancer(recorded.balancer),
       withInterceptors(
         createSSEInterceptor(() => {
           throw thrown;

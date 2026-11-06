@@ -1,10 +1,10 @@
 import type { PreflightFault } from "../error/types";
 import { createPreflightFault } from "../error/factory";
 import {
-  type EndpointBalancer,
-  type EndpointDoneInfo,
-  type EndpointPickInfo,
-  type EndpointPickResult,
+  type Balancer,
+  type DoneInfo,
+  type PickInfo,
+  type PickResult,
   isBalancerOptionError,
 } from "./balancer";
 
@@ -21,14 +21,14 @@ export interface ResolvedEndpoint {
   /** Starts the selected transport at most once; ignored after completion. Callback failures are contained. */
   start(): void;
   /** Reports the transport response once, only after start and before done. */
-  end(info: EndpointDoneInfo): void;
+  end(info: DoneInfo): void;
   /**
    * Reports the attempt outcome. The first call invokes the balancer's `done`
    * synchronously and swallows a throw. `done` must be synchronous; a returned
    * promise is not awaited and its rejection is ignored. Later calls do nothing.
    * When `pick` omitted `done`, the first call only marks this attempt finished.
    */
-  done(info: EndpointDoneInfo): void;
+  done(info: DoneInfo): void;
   /** Whether `done` has already been entered. */
   finished(): boolean;
 }
@@ -37,7 +37,7 @@ export interface ResolvedEndpoint {
  * Calls `balancer.pick` and normalizes the result. Never throws.
  *
  * - `[Error, undefined]` with the internal option-error brand becomes
- *   `REQ_OPTIONS_INVALID`. Any other error, including `ERR_NO_ENDPOINT`,
+ *   `REQ_OPTIONS_INVALID`. Any other error, including `ERR_NO_CANDIDATE`,
  *   becomes `REQ_BUILD_FAILED`. The original error is `cause`.
  * - A throw from `pick` or outcome normalization becomes
  *   `createPreflightFault("REQ_BUILD_FAILED", thrown)`. Result fields are read once.
@@ -50,12 +50,12 @@ export interface ResolvedEndpoint {
  *   wrapper, not the function on the raw pick result.
  *
  * @param balancer - Client balancer, built-in or custom.
- * @param info - Candidates, transport, and the definition's `operation`.
+ * @param info - Candidates and the definition's `operation`.
  * @returns An error-first tuple. The fault is a `PreflightFault`.
  */
 export function pickEndpoint(
-  balancer: EndpointBalancer,
-  info: EndpointPickInfo,
+  balancer: Balancer,
+  info: PickInfo,
 ): readonly [PreflightFault, undefined] | readonly [null, ResolvedEndpoint] {
   try {
     const outcome: unknown = balancer.pick(info);
@@ -76,9 +76,9 @@ export function pickEndpoint(
         const end = "end" in result ? result.end : undefined;
         if (
           typeof endpoint === "string" &&
-          isOptionalCallback<(info: EndpointDoneInfo) => void>(done) &&
+          isOptionalCallback<(info: DoneInfo) => void>(done) &&
           isOptionalCallback<() => void>(start) &&
-          isOptionalCallback<(info: EndpointDoneInfo) => void>(end)
+          isOptionalCallback<(info: DoneInfo) => void>(end)
         ) {
           // The callable check is the runtime boundary for custom balancers.
           return [null, resolve({ endpoint, done, start, end })];
@@ -92,7 +92,7 @@ export function pickEndpoint(
   }
 }
 
-function resolve(result: EndpointPickResult): ResolvedEndpoint {
+function resolve(result: PickResult): ResolvedEndpoint {
   let settled = false;
   let started = false;
   let ended = false;
@@ -173,7 +173,7 @@ export function isOffline(): boolean {
   }
 }
 
-function attributed(info: EndpointDoneInfo): EndpointDoneInfo {
+function attributed(info: DoneInfo): DoneInfo {
   return info.attempted && info.code === "NET_UNREACHABLE" && isOffline()
     ? { attempted: false }
     : info;

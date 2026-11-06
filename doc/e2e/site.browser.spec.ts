@@ -97,9 +97,9 @@ test("API labels, counts and links follow Provider language switches", async () 
   await waitForHydration(page);
   let selected = "en-US";
   for (const [target, label, count] of [
-    ["zh-Hans", "名称", "结果：3"],
-    ["ar", "الاسم", "النتائج: 3"],
-    ["en-US", "Name", "Results: 3"],
+    ["zh-Hans", "名称", "结果：1"],
+    ["ar", "الاسم", "النتائج: 1"],
+    ["en-US", "Name", "Results: 1"],
   ] as const) {
     await page
       .getByRole("button", {

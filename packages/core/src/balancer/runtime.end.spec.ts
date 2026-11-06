@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { pickEndpoint } from "./runtime";
-import type { EndpointPickResult } from "./balancer";
-const info = { endpoints: ["a"], transport: "http" as const };
+import type { PickResult } from "./balancer";
+const info = { endpoints: ["a"] };
 afterEach(() => vi.restoreAllMocks());
 test("end is snapshotted once and runs synchronously once only after start and before done", () => {
   let reads = 0;
@@ -48,7 +48,7 @@ test("a throwing end getter preserves its cause", () => {
           null,
           {
             endpoint: "a",
-            get end(): EndpointPickResult["end"] {
+            get end(): PickResult["end"] {
               throw cause;
             },
           },
@@ -62,7 +62,7 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
   "end contains %s and still completes",
   async (mode) => {
     const done = vi.fn();
-    const raw: EndpointPickResult & { end(): unknown } = {
+    const raw: PickResult & { end(): unknown } = {
       endpoint: "a",
       done,
       end() {

@@ -20,29 +20,47 @@ export function normalizeReconnectOptions(
       `${transport} reconnect attempts must be a non-negative safe integer`,
     );
   }
+  const { delayMs, factor, jitter, maxDelayMs } = normalizeBackoffOptions(
+    config,
+    defaults,
+    `${transport} reconnect`,
+  );
+  const connectTimeoutMs = config.connectTimeoutMs;
+  if (connectTimeoutMs !== undefined)
+    assertFiniteRange(
+      `${transport} reconnect`,
+      "connectTimeoutMs",
+      connectTimeoutMs,
+      Number.MIN_VALUE,
+    );
+  return { attempts, delayMs, factor, jitter, maxDelayMs, connectTimeoutMs };
+}
+
+export function normalizeBackoffOptions(
+  config: Partial<BackoffConfig>,
+  defaults: BackoffConfig,
+  label: string,
+): BackoffConfig {
   const delayMs = config.delayMs ?? defaults.delayMs;
   const factor = config.factor ?? defaults.factor;
   const jitter = config.jitter ?? defaults.jitter;
   const maxDelayMs = config.maxDelayMs ?? defaults.maxDelayMs;
-  assertFiniteRange("delayMs", delayMs, 0);
-  assertFiniteRange("factor", factor, Number.MIN_VALUE);
-  assertFiniteRange("jitter", jitter, 0, 1);
+  assertFiniteRange(label, "delayMs", delayMs, 0);
+  assertFiniteRange(label, "factor", factor, Number.MIN_VALUE);
+  assertFiniteRange(label, "jitter", jitter, 0, 1);
   if (maxDelayMs !== Number.POSITIVE_INFINITY)
-    assertFiniteRange("maxDelayMs", maxDelayMs, 0);
+    assertFiniteRange(label, "maxDelayMs", maxDelayMs, 0);
 
-  const connectTimeoutMs = config.connectTimeoutMs;
-  if (connectTimeoutMs !== undefined)
-    assertFiniteRange("connectTimeoutMs", connectTimeoutMs, Number.MIN_VALUE);
-  return { attempts, delayMs, factor, jitter, maxDelayMs, connectTimeoutMs };
-
-  function assertFiniteRange(
-    field: string,
-    value: number,
-    minimum: number,
-    maximum = Number.POSITIVE_INFINITY,
-  ): void {
-    if (!Number.isFinite(value) || value < minimum || value > maximum) {
-      throw new RangeError(`${transport} reconnect ${field} is out of range`);
-    }
+  return { delayMs, factor, jitter, maxDelayMs };
+}
+function assertFiniteRange(
+  label: string,
+  field: string,
+  value: number,
+  minimum: number,
+  maximum = Number.POSITIVE_INFINITY,
+): void {
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new RangeError(`${label} ${field} is out of range`);
   }
 }

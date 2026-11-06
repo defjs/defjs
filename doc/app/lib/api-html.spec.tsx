@@ -167,7 +167,7 @@ test("server rendering highlights like the MDX code blocks and keeps prose", asy
 }, 30_000);
 
 test("every entry page and its processed text hide raw doc links", async () => {
-  expect(apiReference).toHaveLength(183);
+  expect(apiReference).toHaveLength(182);
   expect(apiReference.map((entry) => entry.name)).not.toContain("ClientState");
   for (const item of apiReference) {
     const view = buildApiEntryView(item, "en-US", apiTargets());
@@ -193,7 +193,7 @@ test("every entry page and its processed text hide raw doc links", async () => {
     (slug, locale) =>
       Promise.resolve(renderApiEntryMarkdownBySlug(slug, locale)),
   );
-  expect(files).toHaveLength(183);
+  expect(files).toHaveLength(182);
   for (const file of files) {
     expect(file.type).toBe("page");
     if (file.type !== "page") continue;

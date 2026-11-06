@@ -7,7 +7,7 @@ import type {
   WebSocketHandle,
 } from "../client/config";
 
-import type { EndpointDoneInfo } from "../balancer/balancer";
+import type { DoneInfo } from "../balancer/balancer";
 import { pickEndpoint, type ResolvedEndpoint } from "../balancer/runtime";
 import type { AnyFault, Fault, PreflightFault } from "../error";
 import {
@@ -676,9 +676,9 @@ async function runWebSocketCommand<
     return stopBeforeTransport(parsedCancellation);
   }
 
-  const [pickFault, initialPick] = pickEndpoint(clientConfig.endpointBalancer, {
+  const [pickFault, initialPick] = pickEndpoint(clientConfig.balancer, {
     endpoints: clientConfig.endpoints,
-    transport: "websocket",
+
     operation: endpoint.operation,
   });
   if (pickFault) {
@@ -811,7 +811,7 @@ async function runWebSocketCommand<
             disposeSession,
           );
 
-          function report(info: EndpointDoneInfo): void {
+          function report(info: DoneInfo): void {
             if (!attributable || attemptReported) {
               return;
             }
@@ -825,7 +825,7 @@ async function runWebSocketCommand<
             cause: unknown,
             connectTimedOut: boolean,
             closeInfo: WebSocketCloseSnapshot,
-          ): EndpointDoneInfo {
+          ): DoneInfo {
             if (manualClose) {
               return { attempted: false };
             }
@@ -996,14 +996,11 @@ async function runWebSocketCommand<
           > {
             let urlRequest = req;
             if (attributable && attempt > 0) {
-              const [fault, picked] = pickEndpoint(
-                clientConfig.endpointBalancer,
-                {
-                  endpoints: clientConfig.endpoints,
-                  transport: "websocket",
-                  operation: endpoint.operation,
-                },
-              );
+              const [fault, picked] = pickEndpoint(clientConfig.balancer, {
+                endpoints: clientConfig.endpoints,
+
+                operation: endpoint.operation,
+              });
               if (fault) {
                 attributable = false;
                 return { aborted: false, error: fault, ok: false };
@@ -2068,7 +2065,7 @@ function toErrorInfo(
   };
 }
 
-function doneInfoForNetworkCause(cause: unknown): EndpointDoneInfo {
+function doneInfoForNetworkCause(cause: unknown): DoneInfo {
   const code = createNetworkFault(cause).code;
   if (code === "NET_TIMEOUT") {
     return { attempted: true, code: "NET_TIMEOUT" };

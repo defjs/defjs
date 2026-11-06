@@ -1,4 +1,4 @@
-import type { EndpointBalancer, EndpointDoneInfo } from "./balancer";
+import type { Balancer, DoneInfo } from "./balancer";
 import { balancerOptionError } from "./balancer";
 
 /**
@@ -18,7 +18,7 @@ export interface OutlierDetectionOptions {
   /** Finite positive-jitter ratio in [0, 1]; defaults to 0.5 (Linkerd). */
   readonly jitterRatio?: number;
   /** Synchronous classifier. Throws and non-booleans discard the sample. */
-  readonly isFailure?: (info: EndpointDoneInfo) => boolean;
+  readonly isFailure?: (info: DoneInfo) => boolean;
   /** Synchronous cached check. Invalid results reject only that pick with REQ_OPTIONS_INVALID. */
   readonly isHealthy?: (endpoint: string) => boolean;
 }
@@ -29,18 +29,18 @@ interface HealthState {
   consecutive: number;
   probe: object | undefined;
 }
-/** Default classifier: coded timeouts and incomplete bodies take precedence over status. */
-export function defaultEndpointFailure(info: EndpointDoneInfo): boolean {
+/** Default classifier uses only neutral unavailability and server-failure outcomes. */
+export function defaultEndpointFailure(info: DoneInfo): boolean {
   return (
-    info.code !== "NET_TIMEOUT" &&
-    info.code !== "NET_BODY_INCOMPLETE" &&
-    (info.code === "NET_UNREACHABLE" || (info.status ?? 0) >= 500)
+    info.code === "NET_UNREACHABLE" ||
+    info.code === "NET_UNAVAILABLE" ||
+    info.code === "NET_SERVER_ERROR"
   );
 }
 /** Invalid application classifiers discard samples. */
 export function classifyEndpointFailure(
-  classifier: (info: EndpointDoneInfo) => boolean,
-  info: EndpointDoneInfo,
+  classifier: (info: DoneInfo) => boolean,
+  info: DoneInfo,
 ): boolean | undefined {
   try {
     const result: unknown = classifier(info);
@@ -54,9 +54,10 @@ export function classifyEndpointFailure(
  * Five attributed failures break an endpoint by default. Penalties start at 1s,
  * double after failed probes, add uniform positive jitter of up to 0.5 times the
  * base, and cap at 60s. A successful probe resets the backoff. Expiry admits one
- * probe, decided at transport `end` (headers or socket open), as in Finagle.
+ * probe, decided at `end` (the peer response begins), as in Finagle.
  * `done` without `end` decides the probe instead; later done is an ordinary sample.
- * NET_UNREACHABLE and 5xx fail by default, not timeouts or incomplete bodies.
+ * NET_UNREACHABLE, NET_UNAVAILABLE, and NET_SERVER_ERROR fail by default,
+ * not timeouts or incomplete bodies.
  * Active true cannot cancel a penalty. Empty candidates first ignore active checks,
  * then fall back to the original current list (Finagle panic mode). Unlike Envoy
  * and gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer
@@ -70,9 +71,9 @@ export function classifyEndpointFailure(
  * @see {@link p2cBalancer}
  */
 export function outlierDetection(
-  child: EndpointBalancer,
+  child: Balancer,
   options?: OutlierDetectionOptions,
-): EndpointBalancer {
+): Balancer {
   const invalid = invalidHealthOptions(options);
   if (invalid !== undefined) return { pick: () => [invalid, undefined] };
   const minimum = options?.minPenaltyMs ?? 1000;
@@ -113,7 +114,7 @@ export function outlierDetection(
   }
   function sample(
     state: HealthState,
-    report: EndpointDoneInfo,
+    report: DoneInfo,
     probe: object | undefined,
     terminal: boolean,
   ): void {
@@ -300,10 +301,10 @@ export function callbackOption(
 
 /** Applies factory health defaults without a second implementation of the filter. */
 export function withHealthFilter(
-  child: EndpointBalancer,
+  child: Balancer,
   option: OutlierDetectionOptions | false | undefined,
   enabledByDefault: boolean,
-): EndpointBalancer {
+): Balancer {
   if (option === false || (option === undefined && !enabledByDefault))
     return child;
   return outlierDetection(child, option);

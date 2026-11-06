@@ -87,8 +87,8 @@ Create a new derived client value for each call that needs its own `signal`, pro
 
 `withEndpoint(...urls)` accepts one or more candidate base URLs. By default:
 
-- Each client uses [`pickFirstBalancer`](/api/core/pickfirstbalancer), sticking to the first URL until a `NET_UNREACHABLE` failure or uncoded `502`/`503`/`504` response advances it.
-- Safe HTTP methods (`GET`, `HEAD`, `OPTIONS`, `TRACE`) automatically perform **same-call failover** to one untried backup endpoint on connection failure (`NET_UNREACHABLE`), governed by a shared Finagle retry budget (`withEndpointFailover`).
+- Each client uses [`pickFirstBalancer`](/api/core/pickfirstbalancer), sticking to the first URL until it advances on `NET_UNREACHABLE` or `NET_UNAVAILABLE` (HTTP 502, 503, or 504).
+- **Same-call HTTP retry is off by default.** `withRetry()` is equivalent to `withRetry({})` and enables a second attempt on an untried endpoint for connection failures on safe methods (`GET`, `HEAD`, `OPTIONS`, `TRACE`), with backoff. A Finagle retry budget belongs to the client configuration and is shared by its derived clients, independently of balancer identity.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ Create a new derived client value for each call that needs its own `signal`, pro
 
 ### Health filtering and p2c [#health-filtering-and-p2c]
 
-For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default.
+For peer server replicas, [`roundRobinBalancer`](/api/core/roundrobinbalancer) and [`p2cBalancer`](/api/core/p2cbalancer) (PeakEwma RTT × in-flight load) enable Linkerd-style consecutive-failure circuit breaking (`outlierDetection`) by default. It counts `NET_UNREACHABLE`, `NET_UNAVAILABLE`, and `NET_SERVER_ERROR`; raw response `status` is only for custom balancers.
 
 See the dedicated [Load balancing & failover](/docs/load-balancing) guide for full details on retry budgets, active/passive health checks, P2C load estimation, and custom balancers.
 
@@ -112,19 +112,19 @@ See [Testing](/docs/testing) for complete testing patterns.
 
 ## 6. Client option helpers reference
 
-| Helper                                                                                                        | Purpose                                                                                              |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | Sets one or more candidate base URLs (replaces earlier list).                                        |
-| `withHeaders(HeadersInit)`                                                                                    | Sets static default headers for HTTP and SSE (builder headers override).                             |
-| `withInterceptors(...items)`                                                                                  | Appends HTTP, SSE, and WebSocket interceptors in onion order.                                        |
-| `withQuerySerializer(fn)`                                                                                     | Serializes already-aliased query objects into a query string.                                        |
-| `withCredentials(boolean)`                                                                                    | Sets Fetch `credentials: "include"` for HTTP and SSE when `true`.                                    |
-| `withXSRF(options?)`                                                                                          | Copies the XSRF cookie into a header on same-origin mutating HTTP requests.                          |
-| `withEndpointBalancer(balancer)`                                                                              | Replaces the endpoint selection strategy (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`). |
-| `withEndpointFailover(options?)`                                                                              | Configures same-call HTTP failover and the client retry budget.                                      |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Configures SSE reconnection and invalid-event observation.                                           |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Configures WebSocket session defaults.                                                               |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Injects custom or mock transport implementations.                                                    |
+| Helper                                                                                                        | Purpose                                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `withEndpoint(...urls)`                                                                                       | Sets one or more candidate base URLs (replaces earlier list).                                          |
+| `withHeaders(HeadersInit)`                                                                                    | Sets static default headers for HTTP and SSE (builder headers override).                               |
+| `withInterceptors(...items)`                                                                                  | Appends HTTP, SSE, and WebSocket interceptors in onion order.                                          |
+| `withQuerySerializer(fn)`                                                                                     | Serializes already-aliased query objects into a query string.                                          |
+| `withCredentials(boolean)`                                                                                    | Sets Fetch `credentials: "include"` for HTTP and SSE when `true`.                                      |
+| `withXSRF(options?)`                                                                                          | Copies the XSRF cookie into a header on same-origin mutating HTTP requests.                            |
+| `withBalancer(balancer)`                                                                                      | Replaces the endpoint selection strategy (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).   |
+| `withRetry(options?)`                                                                                         | Configures opt-in HTTP retry conditions, methods, backoff, attempt timeout, and a client-owned budget. |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Configures SSE reconnection and invalid-event observation.                                             |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Configures WebSocket session defaults.                                                                 |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Injects custom or mock transport implementations.                                                      |
 
 ## Related reading
 

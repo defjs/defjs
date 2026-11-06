@@ -370,9 +370,8 @@ async function runEventStreamCommand<
     return stopBeforeTransport(parsedCancellation);
   }
 
-  const picked = pickEndpoint(clientConfig.endpointBalancer, {
+  const picked = pickEndpoint(clientConfig.balancer, {
     endpoints: clientConfig.endpoints,
-    transport: "sse",
     operation: endpoint.operation,
   });
   if (picked[0] !== null) {
@@ -511,9 +510,8 @@ async function runEventStreamCommand<
                 // eslint-disable-next-line @typescript-eslint/unbound-method -- INTENT: preserve callback identity and bare invocation; undefined passes through unchanged
                 done: resolved.done,
                 pickNext: () =>
-                  pickEndpoint(clientConfig.endpointBalancer, {
+                  pickEndpoint(clientConfig.balancer, {
                     endpoints: clientConfig.endpoints,
-                    transport: "sse",
                     operation: endpoint.operation,
                   }),
               }

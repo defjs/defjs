@@ -1,9 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { pickEndpoint } from "./runtime";
 import { p2cBalancer } from "./p2c";
-import type { EndpointBalancer } from "./balancer";
+import type { Balancer } from "./balancer";
 
-const info = { endpoints: ["a", "b"], transport: "http" as const };
+const info = { endpoints: ["a", "b"] };
 afterEach(() => vi.restoreAllMocks());
 test("start is snapshotted once, invoked synchronously at most once, and never after done", () => {
   let reads = 0;
@@ -113,7 +113,7 @@ test.each(["throw", "reject", "then-getter", "then-call"])(
     expect(done).toHaveBeenCalledWith({ attempted: true });
   },
 );
-function pick(b: EndpointBalancer, endpoints = ["a", "b"]) {
+function pick(b: Balancer, endpoints = ["a", "b"]) {
   const [, p] = pickEndpoint(b, { ...info, endpoints });
   if (!p) throw new Error("missing pick");
   return p;

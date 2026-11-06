@@ -2,36 +2,35 @@ import { afterEach, expect, test, vi } from "vitest";
 import { createClient } from "../client/client";
 import {
   withEndpoint,
-  withEndpointBalancer,
-  withEndpointFailover,
-  type EndpointFailoverCondition,
-  type EndpointFailoverOptions,
+  withRetry,
+  withBalancer,
   withHTTPHandle,
   withInterceptors,
   type ClientOption,
 } from "../client/option";
-import type { EndpointDoneInfo, EndpointPickInfo } from "../balancer/balancer";
+import type { DoneInfo, PickInfo } from "../balancer/balancer";
+import type { RetryCondition, RetryOptions } from "../client/config";
 import { defineRequest } from "./http";
 import { struct } from "../struct";
 import { ERR_TIMEOUT } from "../error";
 import { makeResponse } from "../internal/http_response";
 
 const endpoints = ["https://first.test", "https://second.test"];
-// Some cases deliberately supply invalid runtime values at this typed boundary.
-const policy = (options: EndpointFailoverOptions): ClientOption =>
-  withEndpointFailover(options);
+const policy = (options: RetryOptions = {}): ClientOption =>
+  withRetry({ delayMs: 0, ...options });
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 function fixture(...options: ClientOption[]) {
   const requests: Request[] = [];
-  const picks: EndpointPickInfo[] = [];
-  const reports: EndpointDoneInfo[] = [];
+  const picks: PickInfo[] = [];
+  const reports: DoneInfo[] = [];
   const client = createClient(
     withEndpoint(...endpoints),
-    withEndpointBalancer({
+    withBalancer({
       pick(info) {
         picks.push(info);
         return [
@@ -51,12 +50,13 @@ function fixture(...options: ClientOption[]) {
         throw new TypeError("connection refused");
       return new Response("ok");
     }),
+    policy(),
     ...options,
   );
   return { client, requests, picks, reports };
 }
 
-test("default GET fails over immediately; POST does not", async () => {
+test("explicit empty failover enables GET connection failover; POST does not", async () => {
   const { client, requests } = fixture();
   const get = await defineRequest({
     method: "GET",
@@ -72,7 +72,7 @@ test("default GET fails over immediately; POST does not", async () => {
 
 test("ReadableStream requests never fail over even for an opted-in POST", async () => {
   const { client, requests } = fixture(
-    policy({ attempts: 1, methods: ["POST"], retryOn: ["connect-failure"] }),
+    policy({ maxAttempts: 2, methods: ["POST"], on: ["connect-failure"] }),
   );
   const [fault] = await defineRequest({
     method: "POST",
@@ -137,7 +137,7 @@ test("gateway-error retries a released 503 response but 500 does not retry", asy
     let cancelled = false;
     const client = createClient(
       withEndpoint(...endpoints),
-      policy({ attempts: 1, methods: ["GET"], retryOn: ["gateway-error"] }),
+      policy({ maxAttempts: 2, methods: ["GET"], on: ["gateway-error"] }),
       withHTTPHandle(() => {
         calls++;
         return Promise.resolve(
@@ -197,9 +197,9 @@ test("attempt timeout fails over while caller deadline covers the whole call", a
     const controller = new AbortController();
     const { client, reports } = fixture(
       policy({
-        attempts: 1,
+        maxAttempts: 2,
         methods: ["GET"],
-        retryOn: ["attempt-timeout"],
+        on: ["attempt-timeout"],
         attemptTimeoutMs: 100,
       }),
       withHTTPHandle(async () => {
@@ -225,9 +225,9 @@ test("attempt timeout fails over while caller deadline covers the whole call", a
 });
 
 test.each([
-  { attempts: -1 },
-  { attempts: 0.5 },
-  { attempts: Infinity },
+  { maxAttempts: -1 },
+  { maxAttempts: 1.5 },
+  { maxAttempts: Infinity },
   { methods: [""] },
   { attemptTimeoutMs: 0 },
   { attemptTimeoutMs: -1 },
@@ -239,7 +239,7 @@ test.each([
   ).toBe("REQ_OPTIONS_INVALID");
 });
 
-test.each([{ retryOn: ["bad"] }, { methods: [1] }])(
+test.each([{ on: ["bad"] }, { methods: [1] }])(
   "invalid typed failover option %j fails at execution",
   async (options) => {
     const { client } = fixture(
@@ -257,8 +257,8 @@ test("attempt timeout covers headers followed by a stalled declared body", async
   let calls = 0;
   const { client, reports } = fixture(
     policy({
-      attempts: 1,
-      retryOn: ["attempt-timeout"],
+      maxAttempts: 2,
+      on: ["attempt-timeout"],
       attemptTimeoutMs: 100,
     }),
     withHTTPHandle(() => {
@@ -302,11 +302,11 @@ test("an interceptor-recovered transport failure does not discard a successful t
 
 test("failover option snapshots arrays and reads each owned field once", async () => {
   let reads = 0;
-  const conditions: EndpointFailoverCondition[] = ["connect-failure"];
+  const conditions: RetryCondition[] = ["connect-failure"];
   const methods = ["get"];
   const { client } = fixture(
-    withEndpointFailover({
-      get retryOn() {
+    policy({
+      get on() {
         reads++;
         return conditions;
       },
@@ -322,16 +322,13 @@ test("failover option snapshots arrays and reads each owned field once", async (
 });
 
 test("later failover policy replaces earlier settings and empty methods disables it", async () => {
-  const disabled = fixture(withEndpointFailover({ methods: [] }));
+  const disabled = fixture(policy({ methods: [] }));
   expect(
     (await defineRequest({ method: "GET", path: "/" })(disabled.client))[0]
       ?.code,
   ).toBe("NET_UNREACHABLE");
   expect(disabled.requests).toHaveLength(1);
-  const reset = fixture(
-    withEndpointFailover({ attempts: 0, methods: [] }),
-    withEndpointFailover(),
-  );
+  const reset = fixture(policy({ maxAttempts: 1, methods: [] }), policy());
   expect(
     (await defineRequest({ method: "GET", path: "/" })(reset.client))[0],
   ).toBeNull();
@@ -339,7 +336,7 @@ test("later failover policy replaces earlier settings and empty methods disables
 
 test("custom option with omitted failover fields retains safe connection-failure defaults", async () => {
   const { client } = fixture((config) => {
-    config.endpointFailover = {};
+    config.http.retry = { delayMs: 0 };
   });
   expect(
     (await defineRequest({ method: "GET", path: "/" })(client))[0],
@@ -350,7 +347,7 @@ test("gateway failover accepts a 503 HTML response rejected by its JSON error st
   let calls = 0;
   let released = false;
   const { client } = fixture(
-    withEndpointFailover({ retryOn: ["gateway-error"] }),
+    policy({ on: ["gateway-error"] }),
     withHTTPHandle(() => {
       calls++;
       if (calls === 1)
@@ -388,7 +385,7 @@ test.each(["recover", "throw"])(
   "gateway failover preserves an interceptor %s result",
   async (mode) => {
     const { client, picks } = fixture(
-      withEndpointFailover({ retryOn: ["gateway-error"] }),
+      policy({ on: ["gateway-error"] }),
       withHTTPHandle(() =>
         Promise.resolve(new Response(null, { status: 503 })),
       ),
@@ -423,4 +420,107 @@ test("non-stream failover does not require a global ReadableStream constructor",
   expect(
     (await defineRequest({ method: "GET", path: "/" })(client))[0],
   ).toBeNull();
+});
+
+test("default clients do not fail over GET or create or deposit a retry budget", async () => {
+  const budget = vi.spyOn(
+    await import("../balancer/retry_budget"),
+    "retryBudgetFor",
+  );
+  const requests: string[] = [];
+  const client = createClient(
+    withEndpoint(...endpoints),
+    withHTTPHandle((input) => {
+      requests.push(new Request(input).url);
+      return Promise.reject(new TypeError("connection refused"));
+    }),
+  );
+  expect(
+    (await defineRequest({ method: "GET", path: "/" })(client))[0]?.code,
+  ).toBe("NET_UNREACHABLE");
+  expect(requests).toEqual([`${endpoints[0]}/`]);
+  expect(budget).not.toHaveBeenCalled();
+});
+
+test.each([1, 2, 3, Number.MAX_SAFE_INTEGER])(
+  "maxAttempts %i counts the original and never repeats endpoints",
+  async (maxAttempts) => {
+    const seen: string[] = [];
+    const candidates = [...endpoints, "https://third.test"];
+    const client = createClient(
+      withEndpoint(...candidates),
+      policy({ maxAttempts, budget: false }),
+      withHTTPHandle((input) => {
+        seen.push(new Request(input).url);
+        return Promise.reject(new TypeError("connection refused"));
+      }),
+    );
+    expect(
+      (await defineRequest({ method: "GET", path: "/" })(client))[0]?.code,
+    ).toBe("NET_UNREACHABLE");
+    expect(seen).toEqual(
+      candidates
+        .slice(0, Math.min(maxAttempts, 3))
+        .map((endpoint) => `${endpoint}/`),
+    );
+  },
+);
+
+test.each([0, -1, 1.5, NaN, "2", Number.MAX_SAFE_INTEGER + 1, null, true])(
+  "invalid maxAttempts %j fails before transport",
+  async (maxAttempts) => {
+    const handle = vi.fn(() => Promise.resolve(new Response("ok")));
+    const client = createClient(
+      withEndpoint(...endpoints),
+      // @ts-expect-error invalid runtime attempt limits must be validated
+      withRetry({ maxAttempts }),
+      withHTTPHandle(handle),
+    );
+    const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
+    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+    expect(fault?.cause).toEqual(new RangeError("Invalid retry options"));
+    expect(handle).not.toHaveBeenCalled();
+  },
+);
+
+test.each([[], "enabled", null, true, 1, () => ({})])(
+  "invalid custom failover block %j fails before transport",
+  async (failover) => {
+    const handle = vi.fn(() => Promise.resolve(new Response("ok")));
+    const client = createClient(
+      withEndpoint(...endpoints),
+      // @ts-expect-error invalid runtime retry containers must be validated
+      withRetry(failover),
+      withHTTPHandle(handle),
+    );
+    const [fault] = await defineRequest({ method: "GET", path: "/" })(client);
+    expect(fault?.code).toBe("REQ_OPTIONS_INVALID");
+    expect(fault?.cause).toEqual(new RangeError("Invalid retry options"));
+    expect(handle).not.toHaveBeenCalled();
+  },
+);
+
+test("custom option retry configuration is read anew for every HTTP call", async () => {
+  let calls = 0;
+  let setRetry: (() => void) | undefined;
+  const client = createClient(
+    withEndpoint(...endpoints),
+    (config) => {
+      setRetry = () => {
+        config.http.retry = { delayMs: 0 };
+      };
+    },
+    withHTTPHandle(() => {
+      calls++;
+      return calls === 3
+        ? Promise.resolve(new Response("ok"))
+        : Promise.reject(new TypeError("refused"));
+    }),
+  );
+  const op = defineRequest({ method: "GET", path: "/" });
+  expect((await op(client))[0]?.code).toBe("NET_UNREACHABLE");
+  expect(calls).toBe(1);
+  setRetry?.();
+  expect((await op(client))[0]).toBeNull();
+  expect(calls).toBe(3);
 });

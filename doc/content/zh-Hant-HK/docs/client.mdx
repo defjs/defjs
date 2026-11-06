@@ -87,8 +87,8 @@ export const getOrder = defineRequest({
 
 `withEndpoint(...urls)` 接受傳入一個或多個候選 base URL。預設情況下：
 
-- 每個 client 預設使用 [`pickFirstBalancer`](/zh-Hant-HK/api/core/pickfirstbalancer)，固定使用第一個 URL，直至遇到 `NET_UNREACHABLE` 斷線錯誤或無特定結構嘅 `502`/`503`/`504` 回應時，先會切換到下一個。
-- 安全嘅 HTTP 方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）喺遇到連線失敗（`NET_UNREACHABLE`）時，會喺**同一次呼叫內自動故障轉移（same-call failover）**到未試過嘅備用端點，並受共用嘅 Finagle 重試預算（`withEndpointFailover`）管控。
+- 每個 client 預設使用 [`pickFirstBalancer`](/zh-Hant-HK/api/core/pickfirstbalancer)，停喺第一個 URL，直至遇到 `NET_UNREACHABLE` 或 `NET_UNAVAILABLE`（HTTP 502、503 或 504）先至前進。
+- **同一次呼叫內嘅 HTTP 重試預設關閉。** `withRetry()` 等同 `withRetry({})`，會喺安全方法（`GET`、`HEAD`、`OPTIONS`、`TRACE`）嘅連線失敗上，帶住 backoff，對一個未試過嘅端點再試一次。Finagle 重試預算屬於 client 配置，由佢派生出嚟嘅 client 共享，同 balancer 嘅 identity 無關。
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ export const getOrder = defineRequest({
 
 ### 健康檢查過濾與 P2C [#health-filtering-and-p2c]
 
-對於對等伺服器節點，[`roundRobinBalancer`](/zh-Hant-HK/api/core/roundrobinbalancer) 同 [`p2cBalancer`](/zh-Hant-HK/api/core/p2cbalancer)（結合 PeakEwma RTT 與進行中請求負載）預設開啟 Linkerd 風格嘅連續失敗熔斷斷路器（`outlierDetection`）。
+對於對等伺服器節點，[`roundRobinBalancer`](/zh-Hant-HK/api/core/roundrobinbalancer) 同 [`p2cBalancer`](/zh-Hant-HK/api/core/p2cbalancer)（結合 PeakEwma RTT 與進行中請求負載）預設開啟 Linkerd 風格嘅連續失敗熔斷斷路器（`outlierDetection`）。佢計入 `NET_UNREACHABLE`、`NET_UNAVAILABLE` 同 `NET_SERVER_ERROR`；原始 response `status` 只供自訂 balancer 使用。
 
 關於重試預算、主動／被動健康檢查、P2C 負載估算以及自訂負載平衡器嘅完整細節，請參閱 [負載平衡與故障轉移](/zh-Hant-HK/docs/load-balancing) 指南。
 
@@ -112,19 +112,19 @@ export const getOrder = defineRequest({
 
 ## 6. Client 選項輔助函式參考
 
-| 輔助函式                                                                                                      | 用途                                                                           |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `withEndpoint(...urls)`                                                                                       | 設定一個或多個候選 base URL（會覆寫先前嘅清單）。                              |
-| `withHeaders(HeadersInit)`                                                                                    | 為 HTTP 同 SSE 設定靜態預設 headers（會被 builder headers 覆寫）。             |
-| `withInterceptors(...items)`                                                                                  | 以洋蔥模型順序追加 HTTP、SSE 同 WebSocket 中介層。                             |
-| `withQuerySerializer(fn)`                                                                                     | 將已套用別名嘅 query 物件序列化成 query string。                               |
-| `withCredentials(boolean)`                                                                                    | 設為 `true` 時，為 HTTP 同 SSE 請求設定 Fetch 嘅 `credentials: "include"`。    |
-| `withXSRF(options?)`                                                                                          | 喺同源嘅變更類 HTTP 請求中，自動將 XSRF cookie 複製到 header。                 |
-| `withEndpointBalancer(balancer)`                                                                              | 替換端點選取策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。 |
-| `withEndpointFailover(options?)`                                                                              | 設定同次呼叫內嘅 HTTP 故障轉移以及 client 重試預算。                           |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | 設定 SSE 重新連線機制同無效事件監聽。                                          |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 設定 WebSocket 會話嘅各項預設參數。                                            |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 注入自訂或 mock 傳輸實作。                                                     |
+| 輔助函式                                                                                                      | 用途                                                                                              |
+| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | 設定一個或多個候選 base URL（會覆寫先前嘅清單）。                                                 |
+| `withHeaders(HeadersInit)`                                                                                    | 為 HTTP 同 SSE 設定靜態預設 headers（會被 builder headers 覆寫）。                                |
+| `withInterceptors(...items)`                                                                                  | 以洋蔥模型順序追加 HTTP、SSE 同 WebSocket 中介層。                                                |
+| `withQuerySerializer(fn)`                                                                                     | 將已套用別名嘅 query 物件序列化成 query string。                                                  |
+| `withCredentials(boolean)`                                                                                    | 設為 `true` 時，為 HTTP 同 SSE 請求設定 Fetch 嘅 `credentials: "include"`。                       |
+| `withXSRF(options?)`                                                                                          | 喺同源嘅變更類 HTTP 請求中，自動將 XSRF cookie 複製到 header。                                    |
+| `withBalancer(balancer)`                                                                                      | 替換端點選取策略（`pickFirstBalancer`、`roundRobinBalancer`、`p2cBalancer`）。                    |
+| `withRetry(options?)`                                                                                         | 設定要自己開嘅 HTTP 重試條件、方法、backoff、單次 attempt 逾時，以及一份歸 client 所有嘅 budget。 |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | 設定 SSE 重新連線機制同無效事件監聽。                                                             |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | 設定 WebSocket 會話嘅各項預設參數。                                                               |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | 注入自訂或 mock 傳輸實作。                                                                        |
 
 ## 延伸閱讀
 

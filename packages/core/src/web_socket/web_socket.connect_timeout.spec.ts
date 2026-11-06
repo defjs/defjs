@@ -2,12 +2,12 @@ import { afterEach, expect, test, vi } from "vitest";
 import { createClient } from "../client/client";
 import {
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
   withWebSocketHandle,
   withWebSocketReconnect,
 } from "../client/option";
 import { createControllableSocketClass } from "../../test/regression/controllable_socket";
-import type { EndpointDoneInfo } from "../balancer/balancer";
+import type { DoneInfo } from "../balancer/balancer";
 import { struct } from "../struct";
 import { defineWebSocket } from "./web_socket";
 
@@ -92,7 +92,7 @@ test.each([0, -1, Infinity, NaN])(
 test("caller cancellation during timed-out socket teardown remains unattributed", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
   const controller = new AbortController();
-  const reports: EndpointDoneInfo[] = [];
+  const reports: DoneInfo[] = [];
   const { Socket, latest } = createControllableSocketClass();
   class CancellingSocket extends Socket {
     override close() {
@@ -102,7 +102,7 @@ test("caller cancellation during timed-out socket teardown remains unattributed"
   }
   const client = createClient(
     withEndpoint(...endpoints),
-    withEndpointBalancer({
+    withBalancer({
       pick() {
         return [
           null,

@@ -35,8 +35,7 @@ function makeConfig(): ClientConfig {
 
   return {
     endpoints: ["https://api.example.com"],
-    endpointBalancer: pickFirstBalancer(),
-    endpointFailover: {},
+    balancer: pickFirstBalancer(),
     http: { handle: sharedFetch },
     interceptors: [],
     sse: { handle: sharedFetch },

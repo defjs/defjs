@@ -1,13 +1,9 @@
 import { describe, expect, inject, test } from "vitest";
-import type {
-  EndpointBalancer,
-  EndpointDoneInfo,
-  EndpointPickInfo,
-} from "../balancer";
+import type { Balancer, DoneInfo, PickInfo } from "../balancer";
 import {
   createClient,
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
   withInterceptors,
 } from "../client";
 import { createHttpInterceptor } from "../interceptor";
@@ -17,13 +13,13 @@ import { defineRequest } from "./index";
 const getJson = defineRequest({ method: "GET", path: "/json" });
 
 function recordingBalancer(): {
-  balancer: EndpointBalancer;
-  dones: EndpointDoneInfo[];
-  picks: EndpointPickInfo[];
+  balancer: Balancer;
+  dones: DoneInfo[];
+  picks: PickInfo[];
 } {
-  const picks: EndpointPickInfo[] = [];
-  const dones: EndpointDoneInfo[] = [];
-  const balancer: EndpointBalancer = {
+  const picks: PickInfo[] = [];
+  const dones: DoneInfo[] = [];
+  const balancer: Balancer = {
     pick(info) {
       picks.push(info);
       const endpoint = info.endpoints[0];
@@ -45,17 +41,17 @@ function recordingBalancer(): {
 }
 
 describe("http balancer in browsers", () => {
-  test("reports a 200 attempt and the http transport after a successful response", async () => {
+  test("reports a 200 attempt without transport metadata after a successful response", async () => {
     const watched = recordingBalancer();
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
     );
 
     const [error] = await getJson(client);
 
     expect(error).toBeNull();
-    expect(watched.picks[0]).toMatchObject({ transport: "http" });
+    expect(watched.picks[0]).not.toHaveProperty("transport");
     expect(watched.dones).toEqual([{ attempted: true, status: 200 }]);
   });
 
@@ -63,7 +59,7 @@ describe("http balancer in browsers", () => {
     const watched = recordingBalancer();
     const client = createClient(
       withEndpoint(inject("testServerHost")),
-      withEndpointBalancer(watched.balancer),
+      withBalancer(watched.balancer),
       withInterceptors(
         createHttpInterceptor(() =>
           Promise.resolve(makeResponse({ status: 204 })),
@@ -86,7 +82,7 @@ test("default health-filtered round robin stops selecting the 503 browser fixtur
   const hits: string[] = [];
   const client = createClient(
     withEndpoint(bad, good),
-    withEndpointBalancer(roundRobinBalancer()),
+    withBalancer(roundRobinBalancer()),
     withInterceptors(
       createHttpInterceptor(async (request, next) => {
         hits.push(request.baseEndpoint ?? "");

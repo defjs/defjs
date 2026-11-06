@@ -1,8 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
-import type { EndpointPickInfo } from "./balancer";
+import type { PickInfo } from "./balancer";
 import { pickEndpoint } from "./runtime";
 
-const info: EndpointPickInfo = { endpoints: ["https://a"], transport: "http" };
+const info: PickInfo = { endpoints: ["https://a"] };
 
 describe("pick outcome normalization", () => {
   test.each(["endpoint", "done"])("contains a throwing %s getter", (field) => {

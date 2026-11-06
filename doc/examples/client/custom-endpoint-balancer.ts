@@ -2,12 +2,12 @@
 import {
   createClient,
   defineRequest,
-  ERR_NO_ENDPOINT,
+  ERR_NO_CANDIDATE,
   struct,
   withEndpoint,
-  withEndpointBalancer,
+  withBalancer,
 } from "@defjs/core";
-import type { EndpointBalancer } from "@defjs/core";
+import type { Balancer } from "@defjs/core";
 
 const getOrder = defineRequest({
   method: "GET",
@@ -17,20 +17,20 @@ const getOrder = defineRequest({
   output: struct.object({ id: struct.number(), status: struct.string() }),
 });
 
-const fixed: EndpointBalancer = {
+const fixed: Balancer = {
   pick({ endpoints }) {
     const endpoint = endpoints[0];
     return endpoint === undefined
-      ? [ERR_NO_ENDPOINT, undefined]
+      ? [ERR_NO_CANDIDATE, undefined]
       : [
           null,
           {
             endpoint,
             start() {
-              console.log("Transport started", endpoint);
+              console.log("Attempt started", endpoint);
             },
             end(info) {
-              console.log("Transport responded", endpoint, info.status);
+              console.log("Peer responded", endpoint, info.code);
             },
             done(info) {
               console.log("Attempt finished", endpoint, info.attempted);
@@ -42,7 +42,7 @@ const fixed: EndpointBalancer = {
 
 const client = createClient(
   withEndpoint("https://api-us.example.com", "https://api-eu.example.com"),
-  withEndpointBalancer(fixed),
+  withBalancer(fixed),
 );
 
 async function main() {

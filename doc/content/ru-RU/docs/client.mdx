@@ -87,8 +87,8 @@ export const getOrder = defineRequest({
 
 Функция `withEndpoint(...urls)` принимает один или несколько базовых URL-кандидатов. По умолчанию:
 
-- Каждый клиент использует стратегию [`pickFirstBalancer`](/ru-RU/api/core/pickfirstbalancer), оставаясь на первом URL до тех пор, пока сбой связи `NET_UNREACHABLE` или ответ со статусом `502`/`503`/`504` без объявленного кода ошибки не переключит его на следующий.
-- Безопасные HTTP-методы (`GET`, `HEAD`, `OPTIONS`, `TRACE`) автоматически выполняют **переключение на резервный узел в рамках одного вызова** (failover) при сбое сетевого подключения (`NET_UNREACHABLE`), согласно общему бюджету повторов в стиле Finagle (`withEndpointFailover`).
+- Каждый клиент использует стратегию [`pickFirstBalancer`](/ru-RU/api/core/pickfirstbalancer) и остаётся на первом URL, пока не сдвинется на `NET_UNREACHABLE` или `NET_UNAVAILABLE` (HTTP 502, 503 или 504).
+- **Повтор HTTP в рамках одного вызова выключен по умолчанию.** `withRetry()` эквивалентен `withRetry({})` и включает вторую попытку на неопробованном эндпоинте при сбое соединения для безопасных методов (`GET`, `HEAD`, `OPTIONS`, `TRACE`), с backoff. Бюджет повторов Finagle принадлежит конфигурации клиента, и его делят производные клиенты этой конфигурации, независимо от идентичности балансировщика.
 
 <include cwd lang="typescript">
   examples/client/multiple-endpoints.ts#example
@@ -96,7 +96,7 @@ export const getOrder = defineRequest({
 
 ### Фильтрация доступности и P2C [#health-filtering-and-p2c]
 
-Для пула равноправных реплик сервера балансировщики [`roundRobinBalancer`](/ru-RU/api/core/roundrobinbalancer) и [`p2cBalancer`](/ru-RU/api/core/p2cbalancer) (PeakEwma RTT × нагрузка в процессе) по умолчанию активируют автоматическое отключение сбойных узлов по серии последовательных ошибок (`outlierDetection`) в стиле Linkerd.
+Для пула равноправных реплик сервера балансировщики [`roundRobinBalancer`](/ru-RU/api/core/roundrobinbalancer) и [`p2cBalancer`](/ru-RU/api/core/p2cbalancer) (PeakEwma RTT × нагрузка в процессе) по умолчанию активируют автоматическое отключение сбойных узлов по серии последовательных ошибок (`outlierDetection`) в стиле Linkerd. Считаются `NET_UNREACHABLE`, `NET_UNAVAILABLE` и `NET_SERVER_ERROR`; сырой `status` ответа нужен только пользовательским балансировщикам.
 
 Подробные сведения о бюджетах повторов, активных и пассивных проверках доступности, оценке нагрузки P2C и написании собственных балансировщиков см. в руководстве [Балансировка нагрузки и отказоустойчивость](/ru-RU/docs/load-balancing).
 
@@ -112,19 +112,19 @@ export const getOrder = defineRequest({
 
 ## 6. Справочник хелперов опций клиента
 
-| Хелпер                                                                                                        | Назначение                                                                                        |
-| ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `withEndpoint(...urls)`                                                                                       | Задаёт один или несколько базовых URL-кандидатов (заменяет предыдущий список).                    |
-| `withHeaders(HeadersInit)`                                                                                    | Задаёт статические заголовки по умолчанию для HTTP и SSE (заголовки из builder имеют приоритет).  |
-| `withInterceptors(...items)`                                                                                  | Добавляет перехватчики HTTP, SSE и WebSocket в порядке луковичной модели.                         |
-| `withQuerySerializer(fn)`                                                                                     | Сериализует объекты query с уже применёнными алиасами в строку запроса.                           |
-| `withCredentials(boolean)`                                                                                    | Устанавливает для Fetch `credentials: "include"` для HTTP и SSE при значении `true`.              |
-| `withXSRF(options?)`                                                                                          | Копирует XSRF cookie в заголовок для мутирующих HTTP-запросов одного origin.                      |
-| `withEndpointBalancer(balancer)`                                                                              | Заменяет стратегию выбора эндпоинта (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).   |
-| `withEndpointFailover(options?)`                                                                              | Настраивает переключение на резервный URL в рамках одного вызова и общий бюджет повторов клиента. |
-| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Настраивает повторное подключение SSE и наблюдение за невалидными событиями.                      |
-| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Задаёт параметры сессии WebSocket по умолчанию.                                                   |
-| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Внедряет пользовательские или моковые реализации транспорта.                                      |
+| Хелпер                                                                                                        | Назначение                                                                                            |
+| ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `withEndpoint(...urls)`                                                                                       | Задаёт один или несколько базовых URL-кандидатов (заменяет предыдущий список).                        |
+| `withHeaders(HeadersInit)`                                                                                    | Задаёт статические заголовки по умолчанию для HTTP и SSE (заголовки из builder имеют приоритет).      |
+| `withInterceptors(...items)`                                                                                  | Добавляет перехватчики HTTP, SSE и WebSocket в порядке луковичной модели.                             |
+| `withQuerySerializer(fn)`                                                                                     | Сериализует объекты query с уже применёнными алиасами в строку запроса.                               |
+| `withCredentials(boolean)`                                                                                    | Устанавливает для Fetch `credentials: "include"` для HTTP и SSE при значении `true`.                  |
+| `withXSRF(options?)`                                                                                          | Копирует XSRF cookie в заголовок для мутирующих HTTP-запросов одного origin.                          |
+| `withBalancer(balancer)`                                                                                      | Заменяет стратегию выбора эндпоинта (`pickFirstBalancer`, `roundRobinBalancer`, `p2cBalancer`).       |
+| `withRetry(options?)`                                                                                         | Задаёт opt-in условия повтора HTTP, методы, backoff, таймаут попытки и бюджет, принадлежащий клиенту. |
+| `withSSEReconnect` / `withSSEOnInvalidEvent`                                                                  | Настраивает повторное подключение SSE и наблюдение за невалидными событиями.                          |
+| `withWebSocketReconnect` / `withWebSocketHeartbeat` / `withWebSocketProtocols` / `withWebSocketBeforeConnect` | Задаёт параметры сессии WebSocket по умолчанию.                                                       |
+| `withHTTPHandle` / `withSSEHandle` / `withWebSocketHandle`                                                    | Внедряет пользовательские или моковые реализации транспорта.                                          |
 
 ## Связанные материалы
 

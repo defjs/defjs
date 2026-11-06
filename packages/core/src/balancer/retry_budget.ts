@@ -11,7 +11,7 @@ const budgets = new WeakMap<ClientConfig, RetryBudget | Error>();
 export function retryBudgetFor(config: ClientConfig): RetryBudget | Error {
   const existing = budgets.get(config);
   if (existing !== undefined) return existing;
-  const budget = createBudget(config.endpointFailover.retryBudget);
+  const budget = createBudget(config.http.retry?.budget);
   budgets.set(config, budget);
   return budget;
 }

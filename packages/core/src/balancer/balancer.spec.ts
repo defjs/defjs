@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { CLIENT, createClient } from "../client/client";
 import { createClientConfig } from "../client/config";
-import { withEndpoint, withEndpointBalancer } from "../client/option";
+import { withEndpoint, withBalancer } from "../client/option";
 import { defineRequest } from "../http";
 import { defineEventStream } from "../sse";
 import { struct } from "../struct";
 import { defineWebSocket } from "../web_socket";
 import {
-  type EndpointBalancer,
-  type EndpointDoneInfo,
-  type EndpointPickInfo,
-  ERR_NO_ENDPOINT,
-  isNoEndpointCause,
+  type Balancer,
+  type DoneInfo,
+  type PickInfo,
+  ERR_NO_CANDIDATE,
+  isNoCandidateCause,
   pickFirstBalancer,
   roundRobinBalancer,
 } from "./balancer";
@@ -21,14 +21,11 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function info(endpoints: readonly string[]): EndpointPickInfo {
-  return { endpoints, operation: "getOrder", transport: "http" };
+function info(endpoints: readonly string[]): PickInfo {
+  return { endpoints, operation: "getOrder" };
 }
 
-function endpointOf(
-  balancer: EndpointBalancer,
-  endpoints: readonly string[],
-): string {
+function endpointOf(balancer: Balancer, endpoints: readonly string[]): string {
   const [error, result] = balancer.pick(info(endpoints));
   if (error !== null || result === undefined) {
     throw error ?? new Error("missing endpoint");
@@ -37,15 +34,15 @@ function endpointOf(
 }
 
 function report(
-  balancer: EndpointBalancer,
+  balancer: Balancer,
   endpoints: readonly string[],
-  done: EndpointDoneInfo,
+  done: DoneInfo,
 ): void {
   const [, result] = balancer.pick(info(endpoints));
   result?.done?.(done);
 }
 
-describe("isNoEndpointCause", () => {
+describe("isNoCandidateCause", () => {
   test("recognizes the sentinel and a branded error from another copy", () => {
     const foreign = new Error("foreign");
     Object.defineProperty(foreign, Symbol.for("defjs.cause.no-endpoint"), {
@@ -55,20 +52,20 @@ describe("isNoEndpointCause", () => {
       writable: false,
     });
 
-    expect(isNoEndpointCause(ERR_NO_ENDPOINT)).toBe(true);
-    expect(isNoEndpointCause(foreign)).toBe(true);
-    expect(foreign).not.toBe(ERR_NO_ENDPOINT);
-    expect(ERR_NO_ENDPOINT.message).toBe("No endpoint available");
+    expect(isNoCandidateCause(ERR_NO_CANDIDATE)).toBe(true);
+    expect(isNoCandidateCause(foreign)).toBe(true);
+    expect(foreign).not.toBe(ERR_NO_CANDIDATE);
+    expect(ERR_NO_CANDIDATE.message).toBe("No endpoint available");
     expect(
       Object.getOwnPropertyDescriptor(
-        ERR_NO_ENDPOINT,
+        ERR_NO_CANDIDATE,
         Symbol.for("defjs.cause.no-endpoint"),
       )?.enumerable,
     ).toBe(false);
-    expect(isNoEndpointCause(new Error("No endpoint available"))).toBe(false);
-    expect(isNoEndpointCause(null)).toBe(false);
-    expect(isNoEndpointCause("ERR_NO_ENDPOINT")).toBe(false);
-    expect(isNoEndpointCause({})).toBe(false);
+    expect(isNoCandidateCause(new Error("No endpoint available"))).toBe(false);
+    expect(isNoCandidateCause(null)).toBe(false);
+    expect(isNoCandidateCause("ERR_NO_CANDIDATE")).toBe(false);
+    expect(isNoCandidateCause({})).toBe(false);
   });
 });
 
@@ -87,7 +84,7 @@ describe("pickFirstBalancer", () => {
       { attempted: false },
       { attempted: true, code: "NET_TIMEOUT" as const },
       { attempted: true, code: "NET_BODY_INCOMPLETE" as const },
-      { attempted: true, status: 500 },
+      { attempted: true, code: "NET_SERVER_ERROR" as const },
     ]) {
       const current = pickFirstBalancer();
       report(current, ["https://a", "https://b"], done);
@@ -146,13 +143,13 @@ describe("pickFirstBalancer", () => {
 
     const empty: string[] = [];
     empty.length = 1;
-    expect(balancer.pick(info(empty))[0]).toBe(ERR_NO_ENDPOINT);
+    expect(balancer.pick(info(empty))[0]).toBe(ERR_NO_CANDIDATE);
   });
 
-  test("returns ERR_NO_ENDPOINT for an empty list without modifying it", () => {
+  test("returns ERR_NO_CANDIDATE for an empty list without modifying it", () => {
     const endpoints = Object.freeze<string[]>([]);
     const balancer = pickFirstBalancer({ shuffle: false });
-    expect(balancer.pick(info(endpoints))[0]).toBe(ERR_NO_ENDPOINT);
+    expect(balancer.pick(info(endpoints))[0]).toBe(ERR_NO_CANDIDATE);
     expect(endpoints).toEqual([]);
   });
 
@@ -228,7 +225,7 @@ describe("roundRobinBalancer", () => {
     hole.length = 2;
     const sparse = roundRobinBalancer({ outlierDetection: false });
     expect(sparse.pick(info(hole))[1]?.endpoint).toBe("a");
-    expect(sparse.pick(info(hole))[0]).toBe(ERR_NO_ENDPOINT);
+    expect(sparse.pick(info(hole))[0]).toBe(ERR_NO_CANDIDATE);
   });
 
   test("does not share counters between instances", () => {
@@ -287,9 +284,9 @@ describe("roundRobinBalancer", () => {
     expect(endpoints).toEqual(["a", "b"]);
   });
 
-  test("returns ERR_NO_ENDPOINT for an empty list", () => {
-    expect(roundRobinBalancer().pick(info([]))[0]).toBe(ERR_NO_ENDPOINT);
-    expect(roundRobinBalancer({}).pick(info([]))[0]).toBe(ERR_NO_ENDPOINT);
+  test("returns ERR_NO_CANDIDATE for an empty list", () => {
+    expect(roundRobinBalancer().pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
+    expect(roundRobinBalancer({}).pick(info([]))[0]).toBe(ERR_NO_CANDIDATE);
   });
 
   test("remembers invalid options and does not throw", () => {
@@ -341,45 +338,45 @@ describe("roundRobinBalancer", () => {
 describe("endpoint configuration", () => {
   test("copies, dedupes, and replaces endpoints without touching the balancer", () => {
     const config = createClientConfig();
-    const balancer = config.endpointBalancer;
+    const balancer = config.balancer;
     const list = ["https://a", "https://a", "https://b", "not a url"];
     withEndpoint(...list)(config);
     list.push("https://c");
     expect(config.endpoints).toEqual(["https://a", "https://b", "not a url"]);
-    expect(config.endpointBalancer).toBe(balancer);
+    expect(config.balancer).toBe(balancer);
 
     withEndpoint()(config);
     expect(config.endpoints).toEqual([]);
     withEndpoint("https://c", "https://c")(config);
     expect(config.endpoints).toEqual(["https://c"]);
-    expect(config.endpointBalancer).toBe(balancer);
+    expect(config.balancer).toBe(balancer);
   });
 
   test("stores the balancer by reference and gives each client its own", () => {
     const balancer = pickFirstBalancer();
     const config = createClientConfig();
-    withEndpointBalancer(balancer)(config);
+    withBalancer(balancer)(config);
     withEndpoint("https://a", "https://b")(config);
-    expect(config.endpointBalancer).toBe(balancer);
+    expect(config.balancer).toBe(balancer);
 
     const first = createClient(withEndpoint("https://a", "https://b"));
     const second = createClient(withEndpoint("https://a", "https://b"));
-    expect(first[CLIENT].config.endpointBalancer).not.toBe(
-      second[CLIENT].config.endpointBalancer,
+    expect(first[CLIENT].config.balancer).not.toBe(
+      second[CLIENT].config.balancer,
     );
-    const picked = first[CLIENT].config.endpointBalancer.pick(
+    const picked = first[CLIENT].config.balancer.pick(
       info(first[CLIENT].config.endpoints),
     );
     expect(picked[1]?.endpoint).toBe("https://a");
     expect(typeof picked[1]?.done).toBe("function");
     picked[1]?.done?.({ attempted: true, code: "NET_UNREACHABLE" });
     expect(
-      first[CLIENT].config.endpointBalancer.pick(
+      first[CLIENT].config.balancer.pick(
         info(first[CLIENT].config.endpoints),
       )[1]?.endpoint,
     ).toBe("https://b");
     expect(
-      second[CLIENT].config.endpointBalancer.pick(
+      second[CLIENT].config.balancer.pick(
         info(second[CLIENT].config.endpoints),
       )[1]?.endpoint,
     ).toBe("https://a");
@@ -420,7 +417,7 @@ describe("pickEndpoint", () => {
 
     const [emptyFault] = pickEndpoint(pickFirstBalancer(), info([]));
     expect(emptyFault?.code).toBe("REQ_BUILD_FAILED");
-    expect(emptyFault?.cause).toBe(ERR_NO_ENDPOINT);
+    expect(emptyFault?.cause).toBe(ERR_NO_CANDIDATE);
 
     const plain = new Error("custom");
     const [plainFault] = pickEndpoint({ pick: () => [plain, undefined] }, base);
@@ -523,7 +520,7 @@ describe("pickEndpoint", () => {
           null,
           {
             endpoint: "https://a",
-            done(doneInfo: EndpointDoneInfo) {
+            done(doneInfo: DoneInfo) {
               calls += 1;
               expect(doneInfo).toEqual({
                 attempted: true,
@@ -577,4 +574,20 @@ describe("pickEndpoint", () => {
     throwing?.done({ attempted: false });
     expect(exploded).toBe(1);
   });
+});
+
+test.each(["NET_UNREACHABLE", "NET_UNAVAILABLE"] as const)(
+  "pick_first advances on neutral %s without a status",
+  (code) => {
+    const b = pickFirstBalancer({ outlierDetection: false });
+    const candidates = info(["a", "b"]);
+    b.pick(candidates)[1]?.done?.({ attempted: true, code });
+    expect(b.pick(candidates)[1]?.endpoint).toBe("b");
+  },
+);
+test("pick_first ignores a raw 503 without a neutral outcome", () => {
+  const b = pickFirstBalancer({ outlierDetection: false });
+  const candidates = info(["a", "b"]);
+  b.pick(candidates)[1]?.done?.({ attempted: true, status: 503 });
+  expect(b.pick(candidates)[1]?.endpoint).toBe("a");
 });

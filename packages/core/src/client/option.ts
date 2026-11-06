@@ -1,9 +1,10 @@
-import type { EndpointBalancer } from "../balancer/balancer";
+import type { Balancer } from "../balancer/balancer";
 import type { Interceptor } from "../interceptor/interceptor";
 import {
   snapshotHeartbeat,
   snapshotProtocols,
   snapshotReconnect,
+  snapshotRetry,
 } from "./capture";
 import type {
   ClientConfig,
@@ -12,6 +13,7 @@ import type {
   FetchHandle,
   HttpClientOptions,
   QuerySerializer,
+  RetryOptions,
   WebSocketHandleConstructor,
 } from "./config";
 
@@ -29,7 +31,7 @@ export type ClientOption = (config: ClientConfig) => void;
  * Replaces the candidate base URLs prepended to relative request paths.
  *
  * The arguments are copied in order and later duplicates of the same string are
- * dropped. This does not validate URLs and does not change `endpointBalancer`.
+ * dropped. This does not validate URLs and does not change `balancer`.
  * A later `withEndpoint` replaces the list; it does not merge. Zero arguments
  * are legal and store `[]`. The default list is empty.
  *
@@ -59,100 +61,49 @@ export function withEndpoint(...endpoints: string[]): ClientOption {
  * Replaces the balancer that selects one candidate per call.
  *
  * The object is stored by reference and is not copied. A later
- * `withEndpointBalancer` replaces it. `withEndpoint` does not. Without this
+ * `withBalancer` replaces it. `withEndpoint` does not. Without this
  * option, each client gets its own `pickFirstBalancer()`.
+ * This helper only stores the instance. HTTP retries are configured separately
+ * with {@link withRetry}; the balancer knows nothing about retry policy.
  *
  * @param balancer - Balancer whose `pick` chooses one endpoint per call.
- * @returns An option that writes `config.endpointBalancer`.
+ * @returns An option that writes `config.balancer`.
  * @group client
  */
-export function withEndpointBalancer(balancer: EndpointBalancer): ClientOption {
+export function withBalancer(balancer: Balancer): ClientOption {
   return (config) => {
-    config.endpointBalancer = balancer;
+    config.balancer = balancer;
   };
 }
 
-/** Conditions that allow HTTP to try a different endpoint within one call.
- * @group client
- */
-export type EndpointFailoverCondition =
-  "connect-failure" | "gateway-error" | "attempt-timeout";
-
-/** HTTP failover policy. Omitted fields use the default policy.
- * @group client
- */
-export interface EndpointFailoverOptions {
-  /** Additional attempts. Defaults to 1; 0 disables failover. */
-  readonly attempts?: number;
-  /**
-   * Retryable outcomes. Defaults to connection failures only. Gateway errors
-   * include uncoded 502/503/504 responses whose declared error body fails with
-   * a response-side RES_* fault. Successful or extension-failed interceptor
-   * results never trigger gateway failover.
-   */
-  readonly retryOn?: readonly EndpointFailoverCondition[];
-  /** Allowed methods, case-insensitive. Defaults to GET, HEAD, OPTIONS, TRACE. */
-  readonly methods?: readonly string[];
-  /** Positive finite timeout from Fetch invocation through body reading and decoding, per attempt. */
-  readonly attemptTimeoutMs?: number;
-  /**
-   * Client-shared Finagle retry budget; false disables it. Credits and debits
-   * expire lazily in ten TTL/10 slices (at most one slice early).
-   * Defaults: 20% plus 10 retries/second of reserve over a 10000 ms TTL.
-   */
-  readonly retryBudget?:
-    | false
-    | {
-        /** Finite ratio in [0, 1000]; defaults to 0.2. Finagle integer token scaling (including Int cost saturation) applies. */
-        readonly percentCanRetry?: number;
-        /** Nonnegative safe integer; defaults to 10. */
-        readonly minRetriesPerSecond?: number;
-        /** Finite TTL in [1000, 60000] ms; defaults to 10000. */
-        readonly ttlMs?: number;
-      };
-}
-
-/** Replaces HTTP endpoint failover settings; omitted fields use defaults.
+/**
+ * Configures opt-in same-call HTTP retries independently of endpoint balancing.
  *
- * By default one additional endpoint is tried for connection failures on
- * GET, HEAD, OPTIONS, and TRACE. Streaming request bodies never fail over.
- * Set `attempts: 0` or `methods: []` to disable failover. Invalid fields
- * return `REQ_OPTIONS_INVALID` when an HTTP operation runs.
- * @exampleFile examples/client/endpoint-failover.ts#example
- * @param options - Additional attempt budget, conditions, methods, and per-attempt timeout.
- * @returns An option that replaces the previous failover policy, without merging.
+ * Without this option HTTP tries once and creates no retry budget. Calling it
+ * with no argument, `undefined`, or `{}` enables two total attempts for GET,
+ * HEAD, OPTIONS, and TRACE connection failures.
+ * Each retry rebuilds the request and reruns the complete interceptor chain,
+ * selecting an untried endpoint. Streaming request bodies and offline failures
+ * never retry. SSE and WebSocket use their separate reconnect policies instead.
+ *
+ * Defaults are 25 ms delay, factor 2, 250 ms cap, and jitter 0.2. The caller's
+ * signal covers all attempts and waits; `attemptTimeoutMs` covers each transport
+ * attempt. Invalid policy values return `REQ_OPTIONS_INVALID` at HTTP execution.
+ * Owned fields, arrays, and the budget record are captured when the option is
+ * applied. A later option replaces the policy. `undefined` does not clear it;
+ * pass `{ maxAttempts: 1 }` to turn retries off after enabling them.
+ *
+ * @param options - Retry policy; omitted or `undefined` behaves like `{}`.
+ * @returns An option that writes `config.http.retry`.
+ * @exampleFile examples/client/http-retry.ts#example
  * @group client
+ * @see {@link RetryOptions}
+ * @see {@link withSSEReconnect}
+ * @see {@link withWebSocketReconnect}
  */
-export function withEndpointFailover(
-  options?: EndpointFailoverOptions,
-): ClientOption {
+export function withRetry(options?: RetryOptions): ClientOption {
   return (config) => {
-    const attempts = options?.attempts;
-    const retryOn = options?.retryOn;
-    const methods = options?.methods;
-    const attemptTimeoutMs = options?.attemptTimeoutMs;
-    const retryBudget = options?.retryBudget;
-    config.endpointFailover = {
-      attempts: attempts ?? 1,
-      retryOn: retryOn === undefined ? ["connect-failure"] : [...retryOn],
-      methods:
-        methods === undefined
-          ? ["GET", "HEAD", "OPTIONS", "TRACE"]
-          : [...methods],
-      attemptTimeoutMs,
-      retryBudget:
-        retryBudget !== undefined &&
-        retryBudget !== false &&
-        retryBudget !== null &&
-        typeof retryBudget === "object" &&
-        !Array.isArray(retryBudget)
-          ? {
-              percentCanRetry: retryBudget.percentCanRetry,
-              minRetriesPerSecond: retryBudget.minRetriesPerSecond,
-              ttlMs: retryBudget.ttlMs,
-            }
-          : retryBudget,
-    };
+    config.http.retry = snapshotRetry(options === undefined ? {} : options);
   };
 }
 

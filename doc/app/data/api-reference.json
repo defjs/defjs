@@ -67,7 +67,7 @@
     "slug": "core/withendpoint",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Replaces the candidate base URLs prepended to relative request paths.\n\nThe arguments are copied in order and later duplicates of the same string are\ndropped. This does not validate URLs and does not change `endpointBalancer`.\nA later `withEndpoint` replaces the list; it does not merge. Zero arguments\nare legal and store `[]`. The default list is empty.\n\nThe selected endpoint's pathname is kept as a directory; its query and hash are discarded. For WebSocket operations, an `http:` base becomes `ws:` and `https:` becomes `wss:`.\n\nA missing, relative, or invalid endpoint, or an illegal request path, fails with `REQ_BUILD_FAILED` during building, before any interceptor or transport runs, even when an interceptor would short-circuit. HTTP, SSE, and WebSocket share this rule. The resolved request must keep the base origin and stay under its directory; C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes in a path are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. An interceptor's final `req.endpoint` is checked against its final `req.baseEndpoint` with the same rule, but it may deliberately replace the base with another valid absolute URL. Deterministic URL errors are never retried.",
+    "description": "Replaces the candidate base URLs prepended to relative request paths.\n\nThe arguments are copied in order and later duplicates of the same string are\ndropped. This does not validate URLs and does not change `balancer`.\nA later `withEndpoint` replaces the list; it does not merge. Zero arguments\nare legal and store `[]`. The default list is empty.\n\nThe selected endpoint's pathname is kept as a directory; its query and hash are discarded. For WebSocket operations, an `http:` base becomes `ws:` and `https:` becomes `wss:`.\n\nA missing, relative, or invalid endpoint, or an illegal request path, fails with `REQ_BUILD_FAILED` during building, before any interceptor or transport runs, even when an interceptor would short-circuit. HTTP, SSE, and WebSocket share this rule. The resolved request must keep the base origin and stay under its directory; C0 control characters (including tab, CR, and LF), backslashes, `?`, `#`, and directory escapes in a path are rejected. Scheme-like and protocol-relative forms are rejected even with leading spaces; a plain inner space is allowed and sent as `%20`. An interceptor's final `req.endpoint` is checked against its final `req.baseEndpoint` with the same rule, but it may deliberately replace the base with another valid absolute URL. Deterministic URL errors are never retried.",
     "signatures": [
       "function withEndpoint(...endpoints: string[]): ClientOption;"
     ],
@@ -926,7 +926,7 @@
       {
         "name": "http",
         "description": "HTTP transport overrides; the default resolves global `fetch` on each call.",
-        "type": "{ handle?: FetchHandle; } | undefined",
+        "type": "{ handle?: FetchHandle; retry?: RetryOptions; } | undefined",
         "simplifiedType": "object",
         "required": false,
         "deprecated": false,
@@ -985,9 +985,9 @@
     "slug": "core/clientconfig-type",
     "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `endpointBalancer` is a new `pickFirstBalancer()`, `interceptors` is empty, and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.",
+    "description": "Resolved client configuration after option helpers have been applied.\n\nThe snapshot that `createClient` builds, that every option helper mutates, and that instances from `createClient` hold. The HTTP members come from a non-exported `HttpClientConfig` base and are shown inline.\n\nBefore any option applies, `endpoints` is `[]`, `balancer` is a new `pickFirstBalancer()`, `interceptors` is empty, `http.retry` is undefined (retries disabled), and `http.handle` and `sse.handle` share a default wrapper that resolves `globalThis.fetch` on each call. Replacing Fetch after import affects both defaults. Core can be imported without Fetch; a default HTTP/SSE execution fails with `ENV_UNSUPPORTED` if it is still missing. Custom handles do not require a global Fetch. `webSocket.handle` is `globalThis.WebSocket`, and the other `webSocket` settings are unset. `withXSRF` fills `xsrf.cookieName` with `XSRF-TOKEN` and `xsrf.headerName` with `X-XSRF-TOKEN` when they are omitted.",
     "signatures": [
-      "interface ClientConfig extends HttpClientConfig {\n  endpointBalancer: EndpointBalancer;\n  endpointFailover: EndpointFailoverOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}"
+      "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -996,18 +996,9 @@
     "tags": [],
     "typeTable": [
       {
-        "name": "endpointBalancer",
+        "name": "balancer",
         "description": "Selects one candidate per call. Defaults to a fresh pickFirstBalancer.",
-        "type": "EndpointBalancer",
-        "simplifiedType": "object",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
-        "name": "endpointFailover",
-        "description": "HTTP same-call failover settings. Defaults to one connection-failure retry for safe methods.",
-        "type": "EndpointFailoverOptions",
+        "type": "Balancer",
         "simplifiedType": "object",
         "required": true,
         "deprecated": false,
@@ -1052,7 +1043,7 @@
       {
         "name": "http",
         "description": "HTTP transport with a required fetch handle.",
-        "type": "{ handle: FetchHandle; }",
+        "type": "{ handle: FetchHandle; retry?: RetryOptions; }",
         "simplifiedType": "object",
         "required": true,
         "deprecated": false,
@@ -1098,7 +1089,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface ClientConfig extends HttpClientConfig {\n  endpointBalancer: EndpointBalancer;\n  endpointFailover: EndpointFailoverOptions;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
+        "signature": "interface ClientConfig extends HttpClientConfig {\n  balancer: Balancer;\n  sse: ClientSSEConfig;\n  webSocket: ClientWebSocketOptions;\n}",
         "parameters": [],
         "returns": []
       }
@@ -8520,14 +8511,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointBalancer",
+    "name": "Balancer",
     "kind": "type",
-    "slug": "core/endpointbalancer-type",
+    "slug": "core/balancer-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
     "description": "Chooses one endpoint for a call.\n\n`pick` is synchronous and returns an error-first tuple. It does not throw\nfor an empty candidate list or for invalid factory options. Built-in\nfactories record invalid options at construction and return that error from\nevery later `pick`.",
     "signatures": [
-      "interface EndpointBalancer {\n  pick(info: EndpointPickInfo): EndpointPickOutcome;\n}"
+      "interface Balancer {\n  pick(info: PickInfo): PickOutcome;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8538,7 +8529,7 @@
       {
         "name": "pick",
         "description": "Selects an endpoint synchronously, or returns an error when none can be selected.\nMust be synchronous: a returned promise is not awaited and its rejection is ignored.\nA promise is an invalid pick outcome and becomes `REQ_BUILD_FAILED`.",
-        "type": "(info: EndpointPickInfo) => EndpointPickOutcome",
+        "type": "(info: PickInfo) => PickOutcome",
         "simplifiedType": "function",
         "required": true,
         "deprecated": false,
@@ -8548,7 +8539,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface EndpointBalancer {\n  pick(info: EndpointPickInfo): EndpointPickOutcome;\n}",
+        "signature": "interface Balancer {\n  pick(info: PickInfo): PickOutcome;\n}",
         "parameters": [],
         "returns": []
       }
@@ -8556,14 +8547,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointPickOutcome",
+    "name": "PickOutcome",
     "kind": "type",
-    "slug": "core/endpointpickoutcome-type",
+    "slug": "core/pickoutcome-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Error-first result of {@link EndpointBalancer.pick}.\n\n`[Error, undefined]` selects nothing. `[null, result]` is the selected\nendpoint. The error comes first, matching operation results.",
+    "description": "Error-first result of {@link Balancer.pick}.\n\n`[Error, undefined]` selects nothing. `[null, result]` is the selected\nendpoint. The error comes first, matching operation results.",
     "signatures": [
-      "type EndpointPickOutcome =\n  | readonly [err: Error, result: undefined]\n  | readonly [err: null, result: EndpointPickResult];"
+      "type PickOutcome =\n  | readonly [err: Error, result: undefined]\n  | readonly [err: null, result: PickResult];"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8574,7 +8565,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type EndpointPickOutcome =\n  | readonly [err: Error, result: undefined]\n  | readonly [err: null, result: EndpointPickResult];",
+        "signature": "type PickOutcome =\n  | readonly [err: Error, result: undefined]\n  | readonly [err: null, result: PickResult];",
         "parameters": [],
         "returns": []
       }
@@ -8582,40 +8573,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointTransport",
+    "name": "PickInfo",
     "kind": "type",
-    "slug": "core/endpointtransport-type",
+    "slug": "core/pickinfo-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Transport that is about to use the selected endpoint.",
+    "description": "What the runtime tells `pick` about this call.\n\n`endpoints` is the candidate list in first-seen order. It may be empty and\nmust not be modified. An empty list returns `[ERR_NO_CANDIDATE, undefined]`.",
     "signatures": [
-      "type EndpointTransport = \"http\" | \"sse\" | \"websocket\";"
-    ],
-    "related": [],
-    "exampleFiles": [],
-    "returns": [],
-    "throws": [],
-    "tags": [],
-    "typeTable": null,
-    "parameters": [],
-    "overloads": [
-      {
-        "signature": "type EndpointTransport = \"http\" | \"sse\" | \"websocket\";",
-        "parameters": [],
-        "returns": []
-      }
-    ]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "EndpointPickInfo",
-    "kind": "type",
-    "slug": "core/endpointpickinfo-type",
-    "source": "packages/core/src/balancer/balancer.ts",
-    "group": "client",
-    "description": "What the runtime tells `pick` about this call.\n\n`endpoints` is the candidate list in first-seen order. It may be empty and\nmust not be modified. An empty list returns `[ERR_NO_ENDPOINT, undefined]`.",
-    "signatures": [
-      "interface EndpointPickInfo {\n  readonly endpoints: readonly string[];\n  readonly transport: EndpointTransport;\n  readonly operation?: string;\n}"
+      "interface PickInfo {\n  readonly endpoints: readonly string[];\n  readonly operation?: string;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8633,15 +8598,6 @@
         "tags": []
       },
       {
-        "name": "transport",
-        "description": "Transport that will use the selected endpoint.",
-        "type": "EndpointTransport",
-        "simplifiedType": "EndpointTransport",
-        "required": true,
-        "deprecated": false,
-        "tags": []
-      },
-      {
         "name": "operation",
         "description": "`operation` from the definition, when it has one.",
         "type": "string | undefined",
@@ -8654,7 +8610,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface EndpointPickInfo {\n  readonly endpoints: readonly string[];\n  readonly transport: EndpointTransport;\n  readonly operation?: string;\n}",
+        "signature": "interface PickInfo {\n  readonly endpoints: readonly string[];\n  readonly operation?: string;\n}",
         "parameters": [],
         "returns": []
       }
@@ -8662,14 +8618,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointPickResult",
+    "name": "PickResult",
     "kind": "type",
-    "slug": "core/endpointpickresult-type",
+    "slug": "core/pickresult-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
     "description": "Endpoint selected for one call.\n\n`done` is optional. When present, the runtime calls it once, synchronously,\nwith the outcome of this pick, or `{ attempted: false }` when no attempt can\nbe attributed to the endpoint.",
     "signatures": [
-      "interface EndpointPickResult {\n  readonly endpoint: string;\n  readonly start?: () => void;\n  readonly end?: (info: EndpointDoneInfo) => void;\n  readonly done?: (info: EndpointDoneInfo) => void;\n}"
+      "interface PickResult {\n  readonly endpoint: string;\n  readonly start?: () => void;\n  readonly end?: (info: DoneInfo) => void;\n  readonly done?: (info: DoneInfo) => void;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8688,7 +8644,7 @@
       },
       {
         "name": "start",
-        "description": "Called synchronously at most once immediately before Fetch or socket construction.\nNot called for build failures, interceptor short-circuits, or pre-transport cancellation.\nA throw or returned thenable is contained exactly like `done`.",
+        "description": "Called synchronously at most once immediately before the attempt begins.\nNot called for build failures, interceptor short-circuits, or pre-transport cancellation.\nA throw or returned thenable is contained exactly like `done`.",
         "type": "(() => void) | undefined",
         "simplifiedType": "function",
         "required": false,
@@ -8697,8 +8653,8 @@
       },
       {
         "name": "end",
-        "description": "Called synchronously at most once after start, when Fetch returns headers or a socket opens,\nor when transport fails before that response. Caller cancellation is unattributed.\nA throw or returned thenable is contained exactly like `done`.",
-        "type": "((info: EndpointDoneInfo) => void) | undefined",
+        "description": "Called synchronously at most once after start, when the peer response begins,\nor when transport fails before that response. Caller cancellation is unattributed.\nA throw or returned thenable is contained exactly like `done`.",
+        "type": "((info: DoneInfo) => void) | undefined",
         "simplifiedType": "function",
         "required": false,
         "deprecated": false,
@@ -8707,7 +8663,7 @@
       {
         "name": "done",
         "description": "Called once with the attempt outcome. Omit when the balancer keeps no per-pick state.\nMust be synchronous: a returned promise is not awaited and its rejection is ignored.\nA throw does not replace the operation tuple.",
-        "type": "((info: EndpointDoneInfo) => void) | undefined",
+        "type": "((info: DoneInfo) => void) | undefined",
         "simplifiedType": "function",
         "required": false,
         "deprecated": false,
@@ -8717,7 +8673,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface EndpointPickResult {\n  readonly endpoint: string;\n  readonly start?: () => void;\n  readonly end?: (info: EndpointDoneInfo) => void;\n  readonly done?: (info: EndpointDoneInfo) => void;\n}",
+        "signature": "interface PickResult {\n  readonly endpoint: string;\n  readonly start?: () => void;\n  readonly end?: (info: DoneInfo) => void;\n  readonly done?: (info: DoneInfo) => void;\n}",
         "parameters": [],
         "returns": []
       }
@@ -8725,14 +8681,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointFaultCode",
+    "name": "PickFaultCode",
     "kind": "type",
-    "slug": "core/endpointfaultcode-type",
+    "slug": "core/pickfaultcode-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Transport failure codes a balancer can observe through `end` and `done`.\n\n`end` reports headers or socket open; later transport failures can still give\n`done` a `code`. HTTP incomplete bodies keep their status with `NET_BODY_INCOMPLETE`.\nAn SSE response-body read rejection or an opened WebSocket's close code 1006\nor strictly false `wasClean` reports `NET_UNREACHABLE`, without a status, unless\ntimeout or cancellation takes priority. Normal EOF, clean closes, and application\nerrors do not themselves create network failure samples.\n`pickFirstBalancer` moves to the next endpoint for `NET_UNREACHABLE` or an\nuncoded 502, 503, or 504 response.",
+    "description": "Neutral attempt outcome codes observed through `end` and `done`.\n\n`end` reports the beginning of a peer response; later failures can still give\n`done` a different `code`. Unavailability and server failures describe a peer\nthat answered, while unreachable and timeout outcomes describe transport failures.\nNormal completion and application errors do not themselves create failure samples.\n\nTransport mapping: HTTP and SSE statuses 502, 503, and 504 map to\n`NET_UNAVAILABLE`; other statuses at least 500 map to `NET_SERVER_ERROR`.\nIncomplete HTTP bodies retain `NET_BODY_INCOMPLETE` and their status.\nAn SSE body-read rejection or an opened WebSocket's close code 1006 or\nstrictly false `wasClean` maps to `NET_UNREACHABLE`, without a status,\nunless timeout or cancellation takes priority.",
     "signatures": [
-      "type EndpointFaultCode =\n  \"NET_UNREACHABLE\" | \"NET_TIMEOUT\" | \"NET_BODY_INCOMPLETE\";"
+      "type PickFaultCode =\n  | \"NET_UNREACHABLE\"\n  | \"NET_UNAVAILABLE\"\n  | \"NET_SERVER_ERROR\"\n  | \"NET_TIMEOUT\"\n  | \"NET_BODY_INCOMPLETE\";"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8743,7 +8699,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type EndpointFaultCode =\n  \"NET_UNREACHABLE\" | \"NET_TIMEOUT\" | \"NET_BODY_INCOMPLETE\";",
+        "signature": "type PickFaultCode =\n  | \"NET_UNREACHABLE\"\n  | \"NET_UNAVAILABLE\"\n  | \"NET_SERVER_ERROR\"\n  | \"NET_TIMEOUT\"\n  | \"NET_BODY_INCOMPLETE\";",
         "parameters": [],
         "returns": []
       }
@@ -8751,14 +8707,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointDoneInfo",
+    "name": "DoneInfo",
     "kind": "type",
-    "slug": "core/endpointdoneinfo-type",
+    "slug": "core/doneinfo-type",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Outcome of the attempt that used the selected endpoint.\n\n`attempted: false` means no attempt is attributed to that endpoint: nothing\nwas sent, or the attempt ended by caller cancellation or `close()`. Both\n`code` and `status` are then absent. `attempted: true` with no `code` means the peer\nanswered.",
+    "description": "Outcome of the attempt that used the selected endpoint.\n\n`attempted: false` means no attempt is attributed to that endpoint: nothing\nwas sent, or the attempt ended by caller cancellation or `close()`. Both\n`code` and `status` are then absent. `attempted: true` with no `code` means the peer\nanswered without a classified failure. Built-in balancers read only the neutral\n`code`, never `status`.",
     "signatures": [
-      "interface EndpointDoneInfo {\n  readonly attempted: boolean;\n  readonly code?: EndpointFaultCode;\n  readonly status?: number;\n}"
+      "interface DoneInfo {\n  readonly attempted: boolean;\n  readonly code?: PickFaultCode;\n  readonly status?: number;\n}"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8777,8 +8733,8 @@
       },
       {
         "name": "code",
-        "description": "Transport failure, including a body-read or socket-close failure after a response.",
-        "type": "EndpointFaultCode | undefined",
+        "description": "Neutral attempt outcome, including failures after a peer response begins.",
+        "type": "PickFaultCode | undefined",
         "simplifiedType": "union",
         "required": false,
         "deprecated": false,
@@ -8786,7 +8742,7 @@
       },
       {
         "name": "status",
-        "description": "HTTP/SSE status. Kept with NET_BODY_INCOMPLETE; absent for network/timeout codes and WebSocket open.",
+        "description": "Raw response status for custom balancers; built-in balancers never read it.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -8797,7 +8753,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface EndpointDoneInfo {\n  readonly attempted: boolean;\n  readonly code?: EndpointFaultCode;\n  readonly status?: number;\n}",
+        "signature": "interface DoneInfo {\n  readonly attempted: boolean;\n  readonly code?: PickFaultCode;\n  readonly status?: number;\n}",
         "parameters": [],
         "returns": []
       }
@@ -8805,14 +8761,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "ERR_NO_ENDPOINT",
+    "name": "ERR_NO_CANDIDATE",
     "kind": "constant",
-    "slug": "core/err-no-endpoint",
+    "slug": "core/err-no-candidate",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Sentinel for an empty candidate list.\n\nBuilt-in balancers return it as `[ERR_NO_ENDPOINT, undefined]`. The runtime\nreports that as `REQ_BUILD_FAILED` and keeps this error as `cause`. It is not\na `FaultCode`. The non-enumerable `Symbol.for(\"defjs.cause.no-endpoint\")`\nbrand lets {@link isNoEndpointCause} recognize the sentinel from another\nCore copy.",
-    "signatures": ["const ERR_NO_ENDPOINT: Error;"],
-    "related": ["@defjs/core:isNoEndpointCause"],
+    "description": "Sentinel for an empty candidate list.\n\nBuilt-in balancers return it as `[ERR_NO_CANDIDATE, undefined]`. The runtime\nreports that as `REQ_BUILD_FAILED` and keeps this error as `cause`. It is not\na `FaultCode`. The non-enumerable `Symbol.for(\"defjs.cause.no-endpoint\")`\nbrand lets {@link isNoCandidateCause} recognize the sentinel from another\nCore copy.",
+    "signatures": ["const ERR_NO_CANDIDATE: Error;"],
+    "related": ["@defjs/core:isNoCandidateCause"],
     "exampleFiles": [],
     "returns": [],
     "throws": [],
@@ -8821,7 +8777,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "const ERR_NO_ENDPOINT: Error;",
+        "signature": "const ERR_NO_CANDIDATE: Error;",
         "parameters": [],
         "returns": []
       }
@@ -8829,14 +8785,14 @@
   },
   {
     "package": "@defjs/core",
-    "name": "isNoEndpointCause",
+    "name": "isNoCandidateCause",
     "kind": "function",
-    "slug": "core/isnoendpointcause",
+    "slug": "core/isnocandidatecause",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Whether `cause` is {@link ERR_NO_ENDPOINT}, including a copy from another Core build.\n\nReturns `true` when `cause` carries the non-enumerable\n`Symbol.for(\"defjs.cause.no-endpoint\")` brand. Other values return `false`.\nPass `fault.cause`; this does not unwrap faults.",
-    "signatures": ["function isNoEndpointCause(cause: unknown): boolean;"],
-    "related": ["@defjs/core:ERR_NO_ENDPOINT"],
+    "description": "Whether `cause` is {@link ERR_NO_CANDIDATE}, including a copy from another Core build.\n\nReturns `true` when `cause` carries the non-enumerable\n`Symbol.for(\"defjs.cause.no-endpoint\")` brand. Other values return `false`.\nPass `fault.cause`; this does not unwrap faults.",
+    "signatures": ["function isNoCandidateCause(cause: unknown): boolean;"],
+    "related": ["@defjs/core:ERR_NO_CANDIDATE"],
     "exampleFiles": [],
     "returns": [],
     "throws": [],
@@ -8855,7 +8811,7 @@
     ],
     "overloads": [
       {
-        "signature": "function isNoEndpointCause(cause: unknown): boolean;",
+        "signature": "function isNoCandidateCause(cause: unknown): boolean;",
         "parameters": [
           {
             "name": "cause",
@@ -8878,9 +8834,9 @@
     "slug": "core/pickfirstbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first candidate until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` for the endpoint that is still\nsticky, or an uncoded 502, 503, or 504 response. The next `pick` then moves\nto the following candidate and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter candidate list. The default is\n`false`.\n\n`failbackMs`, when finite and positive, permits one concurrent probe of the\nfirst candidate after that interval away from it. A successful probe restores\nthe first; an advance outcome restarts the interval. Unattributed probes only\nrelease the probe slot. No background timer is created.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_ENDPOINT, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health callback.",
+    "description": "Sticky failover balancer. The default when a client sets no balancer.\n\nUses the first candidate until `done` reports\n`{ attempted: true, code: \"NET_UNREACHABLE\" }` or `NET_UNAVAILABLE` for the\nendpoint that is still sticky. The next `pick` then moves\nto the following candidate and wraps to the first. Other results, including timeouts and\n`attempted: false`, keep the current endpoint. Overlapping failures advance\none step: a `done` that finds the sticky endpoint already changed does nothing.\n\n`shuffle: true` assigns each endpoint a random sort key on first sight and\nsticks to that order. Keys survive a shorter candidate list. The default is\n`false`.\n\n`failbackMs`, when finite and positive, permits one concurrent probe of the\nfirst candidate after that interval away from it. A successful probe restores\nthe first; an advance outcome restarts the interval. Unattributed probes only\nrelease the probe slot. No background timer is created.\n\nEvery successful `pick` returns `done`. An empty candidate list returns\n`[ERR_NO_CANDIDATE, undefined]`. Invalid options are remembered here and\nreturned from every `pick` without throwing.\n\nHealth filtering is off by default. Supply `outlierDetection: {}` to enable\ndefault ejection, or configure its thresholds and application health callback.",
     "signatures": [
-      "function pickFirstBalancer(\n  options?: PickFirstOptions,\n): EndpointBalancer;"
+      "function pickFirstBalancer(options?: PickFirstOptions): Balancer;"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8891,7 +8847,7 @@
     "parameters": [
       {
         "name": "options",
-        "description": "Optional shuffled order, failback interval, and health filtering.",
+        "description": "Optional shuffled order, failback interval, health filtering.",
         "type": "PickFirstOptions",
         "simplifiedType": "object",
         "required": false,
@@ -8901,11 +8857,11 @@
     ],
     "overloads": [
       {
-        "signature": "function pickFirstBalancer(\n  options?: PickFirstOptions,\n): EndpointBalancer;",
+        "signature": "function pickFirstBalancer(options?: PickFirstOptions): Balancer;",
         "parameters": [
           {
             "name": "options",
-            "description": "Optional shuffled order, failback interval, and health filtering.",
+            "description": "Optional shuffled order, failback interval, health filtering.",
             "type": "PickFirstOptions",
             "simplifiedType": "object",
             "required": false,
@@ -8924,9 +8880,9 @@
     "slug": "core/roundrobinbalancer",
     "source": "packages/core/src/balancer/balancer.ts",
     "group": "client",
-    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. A missing weight is 1. Weights for\nendpoints not in the list are ignored. Current values for endpoints that\nleft the list are dropped.\n\nHealth filtering is enabled by default: five consecutive attributed failures\neject an endpoint temporarily. Set `outlierDetection: false` to disable it;\nonly those unfiltered successful picks omit `done`. An empty\ncandidate list returns `[ERR_NO_ENDPOINT, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
+    "description": "Round-robin balancer, with nginx smooth weighting when `weights` is set.\n\nWithout `weights`, a counter starts at a random `uint32` and each `pick`\nreturns `endpoints[counter % length]`, then increments the counter modulo\n2^32. With `weights`, each pick adds an endpoint's weight to its current\nvalue, selects the highest value (earlier candidate on a tie), and subtracts\nthe total weight of this candidate list. A missing weight is 1. Weights for\nendpoints not in the list are ignored. Current values for endpoints that\nleft the list are dropped.\n\nHealth filtering is enabled by default: five consecutive attributed failures\neject an endpoint temporarily. Set `outlierDetection: false` to disable it;\nonly those unfiltered successful picks omit `done`. An empty\ncandidate list returns `[ERR_NO_CANDIDATE, undefined]`. Invalid options are\nremembered here and returned from every `pick` without throwing.",
     "signatures": [
-      "function roundRobinBalancer(\n  options?: RoundRobinOptions,\n): EndpointBalancer;"
+      "function roundRobinBalancer(options?: RoundRobinOptions): Balancer;"
     ],
     "related": [],
     "exampleFiles": [],
@@ -8939,7 +8895,7 @@
     "parameters": [
       {
         "name": "options",
-        "description": "Optional positive finite weights and health filtering configuration.",
+        "description": "Optional positive finite weights, health filtering.",
         "type": "RoundRobinOptions",
         "simplifiedType": "object",
         "required": false,
@@ -8949,11 +8905,11 @@
     ],
     "overloads": [
       {
-        "signature": "function roundRobinBalancer(\n  options?: RoundRobinOptions,\n): EndpointBalancer;",
+        "signature": "function roundRobinBalancer(options?: RoundRobinOptions): Balancer;",
         "parameters": [
           {
             "name": "options",
-            "description": "Optional positive finite weights and health filtering configuration.",
+            "description": "Optional positive finite weights, health filtering.",
             "type": "RoundRobinOptions",
             "simplifiedType": "object",
             "required": false,
@@ -8969,18 +8925,16 @@
   },
   {
     "package": "@defjs/core",
-    "name": "withEndpointBalancer",
+    "name": "withBalancer",
     "kind": "function",
-    "slug": "core/withendpointbalancer",
+    "slug": "core/withbalancer",
     "source": "packages/core/src/client/option.ts",
     "group": "client",
-    "description": "Replaces the balancer that selects one candidate per call.\n\nThe object is stored by reference and is not copied. A later\n`withEndpointBalancer` replaces it. `withEndpoint` does not. Without this\noption, each client gets its own `pickFirstBalancer()`.",
-    "signatures": [
-      "function withEndpointBalancer(balancer: EndpointBalancer): ClientOption;"
-    ],
+    "description": "Replaces the balancer that selects one candidate per call.\n\nThe object is stored by reference and is not copied. A later\n`withBalancer` replaces it. `withEndpoint` does not. Without this\noption, each client gets its own `pickFirstBalancer()`.\nThis helper only stores the instance. HTTP retries are configured separately\nwith {@link withRetry}; the balancer knows nothing about retry policy.",
+    "signatures": ["function withBalancer(balancer: Balancer): ClientOption;"],
     "related": [],
     "exampleFiles": [],
-    "returns": ["An option that writes `config.endpointBalancer`."],
+    "returns": ["An option that writes `config.balancer`."],
     "throws": [],
     "tags": [],
     "typeTable": null,
@@ -8988,7 +8942,7 @@
       {
         "name": "balancer",
         "description": "Balancer whose `pick` chooses one endpoint per call.",
-        "type": "EndpointBalancer",
+        "type": "Balancer",
         "simplifiedType": "object",
         "required": true,
         "deprecated": false,
@@ -8997,32 +8951,86 @@
     ],
     "overloads": [
       {
-        "signature": "function withEndpointBalancer(balancer: EndpointBalancer): ClientOption;",
+        "signature": "function withBalancer(balancer: Balancer): ClientOption;",
         "parameters": [
           {
             "name": "balancer",
             "description": "Balancer whose `pick` chooses one endpoint per call.",
-            "type": "EndpointBalancer",
+            "type": "Balancer",
             "simplifiedType": "object",
             "required": true,
             "deprecated": false,
             "tags": []
           }
         ],
-        "returns": ["An option that writes `config.endpointBalancer`."]
+        "returns": ["An option that writes `config.balancer`."]
       }
     ]
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointFailoverCondition",
-    "kind": "type",
-    "slug": "core/endpointfailovercondition-type",
+    "name": "withRetry",
+    "kind": "function",
+    "slug": "core/withretry",
     "source": "packages/core/src/client/option.ts",
+    "group": "client",
+    "description": "Configures opt-in same-call HTTP retries independently of endpoint balancing.\n\nWithout this option HTTP tries once and creates no retry budget. Calling it\nwith no argument, `undefined`, or `{}` enables two total attempts for GET,\nHEAD, OPTIONS, and TRACE connection failures.\nEach retry rebuilds the request and reruns the complete interceptor chain,\nselecting an untried endpoint. Streaming request bodies and offline failures\nnever retry. SSE and WebSocket use their separate reconnect policies instead.\n\nDefaults are 25 ms delay, factor 2, 250 ms cap, and jitter 0.2. The caller's\nsignal covers all attempts and waits; `attemptTimeoutMs` covers each transport\nattempt. Invalid policy values return `REQ_OPTIONS_INVALID` at HTTP execution.\nOwned fields, arrays, and the budget record are captured when the option is\napplied. A later option replaces the policy. `undefined` does not clear it;\npass `{ maxAttempts: 1 }` to turn retries off after enabling them.",
+    "signatures": ["function withRetry(options?: RetryOptions): ClientOption;"],
+    "related": [
+      "@defjs/core:RetryOptions",
+      "@defjs/core:withSSEReconnect",
+      "@defjs/core:withWebSocketReconnect"
+    ],
+    "exampleFiles": [
+      {
+        "path": "examples/client/http-retry.ts",
+        "region": "example",
+        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxAttempts: 3,\n    on: [\"connect-failure\", \"gateway-error\", \"attempt-timeout\"],\n    attemptTimeoutMs: 2_000,\n    delayMs: 25,\n    maxDelayMs: 250,\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [error, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (error) {\n    console.error(error.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
+      }
+    ],
+    "returns": ["An option that writes `config.http.retry`."],
+    "throws": [],
+    "tags": [],
+    "typeTable": null,
+    "parameters": [
+      {
+        "name": "options",
+        "description": "Retry policy; omitted or `undefined` behaves like `{}`.",
+        "type": "RetryOptions",
+        "simplifiedType": "object",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      }
+    ],
+    "overloads": [
+      {
+        "signature": "function withRetry(options?: RetryOptions): ClientOption;",
+        "parameters": [
+          {
+            "name": "options",
+            "description": "Retry policy; omitted or `undefined` behaves like `{}`.",
+            "type": "RetryOptions",
+            "simplifiedType": "object",
+            "required": false,
+            "deprecated": false,
+            "tags": []
+          }
+        ],
+        "returns": ["An option that writes `config.http.retry`."]
+      }
+    ]
+  },
+  {
+    "package": "@defjs/core",
+    "name": "RetryCondition",
+    "kind": "type",
+    "slug": "core/retrycondition-type",
+    "source": "packages/core/src/client/config.ts",
     "group": "client",
     "description": "Conditions that allow HTTP to try a different endpoint within one call.",
     "signatures": [
-      "type EndpointFailoverCondition =\n  \"connect-failure\" | \"gateway-error\" | \"attempt-timeout\";"
+      "type RetryCondition =\n  \"connect-failure\" | \"gateway-error\" | \"attempt-timeout\";"
     ],
     "related": [],
     "exampleFiles": [],
@@ -9033,7 +9041,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "type EndpointFailoverCondition =\n  \"connect-failure\" | \"gateway-error\" | \"attempt-timeout\";",
+        "signature": "type RetryCondition =\n  \"connect-failure\" | \"gateway-error\" | \"attempt-timeout\";",
         "parameters": [],
         "returns": []
       }
@@ -9041,24 +9049,30 @@
   },
   {
     "package": "@defjs/core",
-    "name": "EndpointFailoverOptions",
+    "name": "RetryOptions",
     "kind": "type",
-    "slug": "core/endpointfailoveroptions-type",
-    "source": "packages/core/src/client/option.ts",
+    "slug": "core/retryoptions-type",
+    "source": "packages/core/src/client/config.ts",
     "group": "client",
-    "description": "HTTP failover policy. Omitted fields use the default policy.",
+    "description": "Opt-in same-call HTTP retry policy. Omitted fields use defaults.\n\nCall {@link withRetry}() or pass `{}` to enable retries. Omission disables retries\nand creates no retry budget. Streaming request bodies are\nnever replayed. Invalid options return `REQ_OPTIONS_INVALID` at HTTP execution.",
     "signatures": [
-      "interface EndpointFailoverOptions {\n  readonly attempts?: number;\n  readonly retryOn?: readonly EndpointFailoverCondition[];\n  readonly methods?: readonly string[];\n  readonly attemptTimeoutMs?: number;\n  readonly retryBudget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}"
+      "interface RetryOptions {\n  readonly maxAttempts?: number;\n  readonly on?: readonly RetryCondition[];\n  readonly methods?: readonly string[];\n  readonly attemptTimeoutMs?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly jitter?: number;\n  readonly maxDelayMs?: number;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}"
     ],
     "related": [],
-    "exampleFiles": [],
+    "exampleFiles": [
+      {
+        "path": "examples/client/http-retry.ts",
+        "region": "example",
+        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withBalancer,\n  withRetry,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withRetry({\n    maxAttempts: 3,\n    on: [\"connect-failure\", \"gateway-error\", \"attempt-timeout\"],\n    attemptTimeoutMs: 2_000,\n    delayMs: 25,\n    maxDelayMs: 250,\n    budget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [error, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (error) {\n    console.error(error.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
+      }
+    ],
     "returns": [],
     "throws": [],
     "tags": [],
     "typeTable": [
       {
-        "name": "attempts",
-        "description": "Additional attempts. Defaults to 1; 0 disables failover.",
+        "name": "maxAttempts",
+        "description": "Total attempts including the original (gRPC retryPolicy.maxAttempts / go-kit lb.Retry max). Safe integer at least 1; defaults to 2. One disables retries; there is no configured upper bound, but each endpoint is tried at most once.",
         "type": "number | undefined",
         "simplifiedType": "number",
         "required": false,
@@ -9066,9 +9080,9 @@
         "tags": []
       },
       {
-        "name": "retryOn",
-        "description": "Retryable outcomes. Defaults to connection failures only. Gateway errors\ninclude uncoded 502/503/504 responses whose declared error body fails with\na response-side RES_* fault. Successful or extension-failed interceptor\nresults never trigger gateway failover.",
-        "type": "readonly EndpointFailoverCondition[] | undefined",
+        "name": "on",
+        "description": "Retryable outcomes. Defaults to connection failures only. Gateway errors\ninclude NET_UNAVAILABLE responses, including those whose declared error body fails with\na response-side RES_* fault. Successful or extension-failed interceptor\nresults never trigger gateway retry.",
+        "type": "readonly RetryCondition[] | undefined",
         "simplifiedType": "array",
         "required": false,
         "deprecated": false,
@@ -9093,8 +9107,44 @@
         "tags": []
       },
       {
-        "name": "retryBudget",
-        "description": "Client-shared Finagle retry budget; false disables it. Credits and debits\nexpire lazily in ten TTL/10 slices (at most one slice early).\nDefaults: 20% plus 10 retries/second of reserve over a 10000 ms TTL.",
+        "name": "delayMs",
+        "description": "Initial finite non-negative backoff delay in milliseconds; defaults to 25. Zero skips waiting.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "factor",
+        "description": "Finite positive multiplier per retry; defaults to 2. The first retry uses exponent zero.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "jitter",
+        "description": "Finite multiplicative jitter in [0, 1]; defaults to 0.2 (plus or minus twenty percent).",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "maxDelayMs",
+        "description": "Non-negative finite cap on the final delay, or positive Infinity; defaults to 250. The platform timer cap still applies.",
+        "type": "number | undefined",
+        "simplifiedType": "number",
+        "required": false,
+        "deprecated": false,
+        "tags": []
+      },
+      {
+        "name": "budget",
+        "description": "Client-owned Finagle retry budget; false removes the cap.\nDerived clients sharing one configuration share its budget. Separate clients\nkeep independent budgets, even when they share a balancer. Credits and debits\nexpire lazily in ten TTL/10 slices (at most one slice early).\nDefaults: 20% plus 10 retries/second of reserve over a 10000 ms TTL.",
         "type": "false | { readonly percentCanRetry?: number; readonly minRetriesPerSecond?: number; readonly ttlMs?: number; } | undefined",
         "simplifiedType": "union",
         "required": false,
@@ -9105,65 +9155,9 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface EndpointFailoverOptions {\n  readonly attempts?: number;\n  readonly retryOn?: readonly EndpointFailoverCondition[];\n  readonly methods?: readonly string[];\n  readonly attemptTimeoutMs?: number;\n  readonly retryBudget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}",
+        "signature": "interface RetryOptions {\n  readonly maxAttempts?: number;\n  readonly on?: readonly RetryCondition[];\n  readonly methods?: readonly string[];\n  readonly attemptTimeoutMs?: number;\n  readonly delayMs?: number;\n  readonly factor?: number;\n  readonly jitter?: number;\n  readonly maxDelayMs?: number;\n  readonly budget?:\n    | false\n    | {\n        readonly percentCanRetry?: number;\n        readonly minRetriesPerSecond?: number;\n        readonly ttlMs?: number;\n      };\n}",
         "parameters": [],
         "returns": []
-      }
-    ]
-  },
-  {
-    "package": "@defjs/core",
-    "name": "withEndpointFailover",
-    "kind": "function",
-    "slug": "core/withendpointfailover",
-    "source": "packages/core/src/client/option.ts",
-    "group": "client",
-    "description": "Replaces HTTP endpoint failover settings; omitted fields use defaults.\n\nBy default one additional endpoint is tried for connection failures on\nGET, HEAD, OPTIONS, and TRACE. Streaming request bodies never fail over.\nSet `attempts: 0` or `methods: []` to disable failover. Invalid fields\nreturn `REQ_OPTIONS_INVALID` when an HTTP operation runs.",
-    "signatures": [
-      "function withEndpointFailover(\n  options?: EndpointFailoverOptions,\n): ClientOption;"
-    ],
-    "related": [],
-    "exampleFiles": [
-      {
-        "path": "examples/client/endpoint-failover.ts",
-        "region": "example",
-        "code": "import {\n  createClient,\n  defineRequest,\n  pickFirstBalancer,\n  struct,\n  withEndpoint,\n  withEndpointBalancer,\n  withEndpointFailover,\n} from \"@defjs/core\";\n\nconst getOrder = defineRequest({\n  method: \"GET\",\n  path: \"/orders/:id\",\n  input: struct.object({ id: struct.number() }),\n  builder: (input) => ({ path: input }),\n  output: struct.object({ id: struct.number(), status: struct.string() }),\n});\nconst client = createClient(\n  withEndpoint(\"https://api-us.example.com\", \"https://api-eu.example.com\"),\n  withEndpointBalancer(pickFirstBalancer({ failbackMs: 30_000 })),\n  withEndpointFailover({\n    attempts: 1,\n    retryOn: [\"connect-failure\", \"gateway-error\", \"attempt-timeout\"],\n    attemptTimeoutMs: 2_000,\n    retryBudget: {\n      percentCanRetry: 0.2,\n      minRetriesPerSecond: 10,\n      ttlMs: 10_000,\n    },\n  }),\n);\nasync function main() {\n  const [error, order] = await getOrder(\n    client({ signal: AbortSignal.timeout(5_000) }),\n    { id: 1 },\n  );\n  if (error) {\n    console.error(error.code);\n    return;\n  }\n  console.log(order.status);\n}\nvoid main();"
-      }
-    ],
-    "returns": [
-      "An option that replaces the previous failover policy, without merging."
-    ],
-    "throws": [],
-    "tags": [],
-    "typeTable": null,
-    "parameters": [
-      {
-        "name": "options",
-        "description": "Additional attempt budget, conditions, methods, and per-attempt timeout.",
-        "type": "EndpointFailoverOptions",
-        "simplifiedType": "object",
-        "required": false,
-        "deprecated": false,
-        "tags": []
-      }
-    ],
-    "overloads": [
-      {
-        "signature": "function withEndpointFailover(\n  options?: EndpointFailoverOptions,\n): ClientOption;",
-        "parameters": [
-          {
-            "name": "options",
-            "description": "Additional attempt budget, conditions, methods, and per-attempt timeout.",
-            "type": "EndpointFailoverOptions",
-            "simplifiedType": "object",
-            "required": false,
-            "deprecated": false,
-            "tags": []
-          }
-        ],
-        "returns": [
-          "An option that replaces the previous failover policy, without merging."
-        ]
       }
     ]
   },
@@ -9176,7 +9170,7 @@
     "group": "client",
     "description": "Linkerd-style consecutive-failure circuit breaking and optional cached health checks.\nAll endpoints may break; Finagle-style fail-open falls back to the current list.\nNo timers, ejection quotas, settlement grid, or slow start are used.",
     "signatures": [
-      "interface OutlierDetectionOptions {\n  readonly consecutiveFailures?: number;\n  readonly minPenaltyMs?: number;\n  readonly maxPenaltyMs?: number;\n  readonly jitterRatio?: number;\n  readonly isFailure?: (info: EndpointDoneInfo) => boolean;\n  readonly isHealthy?: (endpoint: string) => boolean;\n}"
+      "interface OutlierDetectionOptions {\n  readonly consecutiveFailures?: number;\n  readonly minPenaltyMs?: number;\n  readonly maxPenaltyMs?: number;\n  readonly jitterRatio?: number;\n  readonly isFailure?: (info: DoneInfo) => boolean;\n  readonly isHealthy?: (endpoint: string) => boolean;\n}"
     ],
     "related": ["@defjs/core:outlierDetection"],
     "exampleFiles": [],
@@ -9223,7 +9217,7 @@
       {
         "name": "isFailure",
         "description": "Synchronous classifier. Throws and non-booleans discard the sample.",
-        "type": "((info: EndpointDoneInfo) => boolean) | undefined",
+        "type": "((info: DoneInfo) => boolean) | undefined",
         "simplifiedType": "function",
         "required": false,
         "deprecated": false,
@@ -9242,7 +9236,7 @@
     "parameters": [],
     "overloads": [
       {
-        "signature": "interface OutlierDetectionOptions {\n  readonly consecutiveFailures?: number;\n  readonly minPenaltyMs?: number;\n  readonly maxPenaltyMs?: number;\n  readonly jitterRatio?: number;\n  readonly isFailure?: (info: EndpointDoneInfo) => boolean;\n  readonly isHealthy?: (endpoint: string) => boolean;\n}",
+        "signature": "interface OutlierDetectionOptions {\n  readonly consecutiveFailures?: number;\n  readonly minPenaltyMs?: number;\n  readonly maxPenaltyMs?: number;\n  readonly jitterRatio?: number;\n  readonly isFailure?: (info: DoneInfo) => boolean;\n  readonly isHealthy?: (endpoint: string) => boolean;\n}",
         "parameters": [],
         "returns": []
       }
@@ -9255,9 +9249,9 @@
     "slug": "core/outlierdetection",
     "source": "packages/core/src/balancer/outlier_detection.ts",
     "group": "client",
-    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking.\nFive attributed failures break an endpoint by default. Penalties start at 1s,\ndouble after failed probes, add uniform positive jitter of up to 0.5 times the\nbase, and cap at 60s. A successful probe resets the backoff. Expiry admits one\nprobe, decided at transport `end` (headers or socket open), as in Finagle.\n`done` without `end` decides the probe instead; later done is an ordinary sample.\nNET_UNREACHABLE and 5xx fail by default, not timeouts or incomplete bodies.\nActive true cannot cancel a penalty. Empty candidates first ignore active checks,\nthen fall back to the original current list (Finagle panic mode). Unlike Envoy\nand gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer\nis created. Configuration is captured at construction.",
+    "description": "Wraps a strategy with Linkerd-style consecutive-failure circuit breaking.\nFive attributed failures break an endpoint by default. Penalties start at 1s,\ndouble after failed probes, add uniform positive jitter of up to 0.5 times the\nbase, and cap at 60s. A successful probe resets the backoff. Expiry admits one\nprobe, decided at `end` (the peer response begins), as in Finagle.\n`done` without `end` decides the probe instead; later done is an ordinary sample.\nNET_UNREACHABLE, NET_UNAVAILABLE, and NET_SERVER_ERROR fail by default,\nnot timeouts or incomplete bodies.\nActive true cannot cancel a penalty. Empty candidates first ignore active checks,\nthen fall back to the original current list (Finagle panic mode). Unlike Envoy\nand gRPC A50 there is no ejection quota. All callbacks are synchronous; no timer\nis created. Configuration is captured at construction.",
     "signatures": [
-      "function outlierDetection(\n  child: EndpointBalancer,\n  options?: OutlierDetectionOptions,\n): EndpointBalancer;"
+      "function outlierDetection(\n  child: Balancer,\n  options?: OutlierDetectionOptions,\n): Balancer;"
     ],
     "related": [
       "@defjs/core:OutlierDetectionOptions",
@@ -9275,7 +9269,7 @@
       {
         "name": "child",
         "description": "Selection strategy retaining its identity and state.",
-        "type": "EndpointBalancer",
+        "type": "Balancer",
         "simplifiedType": "object",
         "required": true,
         "deprecated": false,
@@ -9293,12 +9287,12 @@
     ],
     "overloads": [
       {
-        "signature": "function outlierDetection(\n  child: EndpointBalancer,\n  options?: OutlierDetectionOptions,\n): EndpointBalancer;",
+        "signature": "function outlierDetection(\n  child: Balancer,\n  options?: OutlierDetectionOptions,\n): Balancer;",
         "parameters": [
           {
             "name": "child",
             "description": "Selection strategy retaining its identity and state.",
-            "type": "EndpointBalancer",
+            "type": "Balancer",
             "simplifiedType": "object",
             "required": true,
             "deprecated": false,
@@ -9327,10 +9321,8 @@
     "slug": "core/p2cbalancer",
     "source": "packages/core/src/balancer/p2c.ts",
     "group": "client",
-    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is an integer at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be\npositive and finite. Pending starts at transport `start` and releases at `end`,\nthe response-header or socket-open boundary (tower CompleteOnResponse).\nRTT is the real start-to-end duration for every transport, including failures.\nHigher samples replace the estimate; lower samples blend exponentially, as in\ntower PeakEwma. Idle estimates decay toward zero. A done without end releases\npending without creating a sample. Health filtering, enabled by default, breaks\nquickly failing endpoints; there is no synthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.",
-    "signatures": [
-      "function p2cBalancer(options?: P2cOptions): EndpointBalancer;"
-    ],
+    "description": "Samples candidates without replacement and selects the least loaded draw.\n\nDefaults to two choices and PeakEwma load: decaying RTT times (pending + 1).\n`load: \"pending\"` selects the fewest in-flight attempts in the sample. Ties\nfavor the first draw. `choiceCount` is an integer at least 2, capped at 10.\n`defaultRttMs` defaults to 30 and `decayMs` to 10000 (Linkerd); both must be\npositive and finite. Pending starts at transport `start` and releases at `end`,\nthe beginning of a peer response (tower CompleteOnResponse).\nRTT is the real start-to-end duration for every transport, including failures.\nHigher samples replace the estimate; lower samples blend exponentially, as in\ntower PeakEwma. Idle estimates decay toward zero. A done without end releases\npending without creating a sample. Health filtering, enabled by default, breaks\nquickly failing endpoints; there is no synthetic failure penalty.\nUnlike Envoy and gRPC A48, draws are without replacement.",
+    "signatures": ["function p2cBalancer(options?: P2cOptions): Balancer;"],
     "related": [
       "@defjs/core:outlierDetection",
       "@defjs/core:roundRobinBalancer"
@@ -9345,7 +9337,7 @@
     "parameters": [
       {
         "name": "options",
-        "description": "Captured load settings and optional health filtering.",
+        "description": "Captured load settings, optional health filtering.",
         "type": "P2cOptions",
         "simplifiedType": "object",
         "required": false,
@@ -9355,11 +9347,11 @@
     ],
     "overloads": [
       {
-        "signature": "function p2cBalancer(options?: P2cOptions): EndpointBalancer;",
+        "signature": "function p2cBalancer(options?: P2cOptions): Balancer;",
         "parameters": [
           {
             "name": "options",
-            "description": "Captured load settings and optional health filtering.",
+            "description": "Captured load settings, optional health filtering.",
             "type": "P2cOptions",
             "simplifiedType": "object",
             "required": false,
